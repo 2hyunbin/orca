@@ -6,7 +6,8 @@ import type { SecretStore } from '../../shared/secret-store'
 import { _resetSecretStoreForTests, setSecretStore } from '../../shared/secret-store'
 import { readStoredCredentialToken } from '../integration-credential-file'
 import { migratePlaintextCredentials } from './orcad-plaintext-credential-migration'
-import { createOrcadSecretStore, orcadSecretStateFileName } from './orcad-secret-store'
+import { orcadSecretStateFileName } from './orcad-secret-key-record'
+import { createOrcadSecretStore } from './orcad-secret-store'
 
 describe('migratePlaintextCredentials', () => {
   let dir: string

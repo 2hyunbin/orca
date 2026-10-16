@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
@@ -14,7 +15,8 @@ import { classifyUnenvelopedCredential } from '../../shared/secret-at-rest-prote
 import { _resetSecretStoreForTests, setSecretStore } from '../../shared/secret-store'
 import { readStoredCredentialToken, writeEncryptedCredential } from '../integration-credential-file'
 import type { OrcadKeyringLookup, OrcadOsKeyring } from './orcad-os-keyring'
-import { createOrcadSecretStore, orcadSecretStateFileName } from './orcad-secret-store'
+import { orcadSecretStateFileName } from './orcad-secret-key-record'
+import { createOrcadSecretStore } from './orcad-secret-store'
 
 const MACHINE_A = '0123456789abcdef0123456789abcdef'
 const MACHINE_B = 'fedcba9876543210fedcba9876543210'
@@ -193,6 +195,41 @@ describe('createOrcadSecretStore', () => {
     const { store, ready } = await prepare({ keyring })
     expect(ready).toBe(true)
     expect(store.describeProtectionGap()).toContain('private credential directory')
+  })
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'treats a record it cannot read as unavailable, never as missing',
+    async () => {
+      const sealed = (await prepare()).store.encryptString('lin_api_secret')
+      const statePath = join(keyDir, STATE_A)
+      const before = readFileSync(statePath)
+      chmodSync(statePath, 0o000)
+      try {
+        const { store, ready } = await prepare()
+        expect(ready).toBe(false)
+        expect(() => store.decryptString(sealed)).toThrow(/could not be read/)
+      } finally {
+        chmodSync(statePath, 0o600)
+      }
+      expect(readFileSync(statePath)).toEqual(before)
+    }
+  )
+
+  it('agrees on one key when two servers start against the same home at once', async () => {
+    const keyring = fakeKeyring()
+    const [first, second] = await Promise.all([prepare({ keyring }), prepare({ keyring })])
+    expect(first.ready && second.ready).toBe(true)
+    expect(keyring.items.size).toBe(1)
+    expect(second.store.decryptString(first.store.encryptString('a'))).toBe('a')
+    expect((await prepare({ keyring })).store.decryptString(second.store.encryptString('b'))).toBe(
+      'b'
+    )
+
+    const [fileA, fileB] = await Promise.all([
+      prepare({ machine: MACHINE_B }),
+      prepare({ machine: MACHINE_B })
+    ])
+    expect(fileB.store.decryptString(fileA.store.encryptString('c'))).toBe('c')
   })
 
   it('never regenerates over an unreadable key record', async () => {

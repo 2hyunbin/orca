@@ -71,10 +71,11 @@ function macosKeychain(runner: OrcadKeyringRunner): OrcadOsKeyring {
     },
     async store(account, value) {
       // Why `security -i` over stdin: `-w <value>` on argv is visible to every user in `ps`.
+      // Why no -U: an item that already exists must never be replaced under a sealed record.
       const result = await run(runner, {
         program,
         args: ['-i'],
-        input: `add-generic-password -U -s ${SERVICE} -a ${account} -w ${value}\n`
+        input: `add-generic-password -s ${SERVICE} -a ${account} -w ${value}\n`
       })
       return typeof result !== 'string' && result.code === 0 && !result.timedOut
     }

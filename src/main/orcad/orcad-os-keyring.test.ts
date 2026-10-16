@@ -38,6 +38,8 @@ describe('resolveOrcadOsKeyring', () => {
     const [spec] = runner.mock.calls[0]
     expect(spec.args).toEqual(['-i'])
     expect(spec.input).toContain('-w SECRETKEY=')
+    // Never -U: an existing item must not be replaced.
+    expect(spec.input).not.toContain('-U')
   })
 
   it('Linux: passes the key on stdin and treats a silent exit 1 as missing', async () => {
