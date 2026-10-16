@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SleepingAgentSessionRecord } from '../../../../shared/agent-session-resume'
-import type { sendLayoutApply } from '@/runtime/layout-apply-send'
+import type { recordLayoutApply } from '@/runtime/layout-apply-send'
 import {
   recordPaneSleepThroughLayoutOwner,
   recordPaneWakeThroughLayoutOwner
 } from './terminal-sleep-layout-owner'
 
-const mocks = vi.hoisted(() => ({ send: vi.fn<typeof sendLayoutApply>() }))
+const mocks = vi.hoisted(() => ({ send: vi.fn<typeof recordLayoutApply>() }))
 
-vi.mock('@/runtime/layout-apply-send', () => ({ sendLayoutApply: mocks.send }))
+vi.mock('@/runtime/layout-apply-send', () => ({ recordLayoutApply: mocks.send }))
 
 const WT = 'repo1::/path/wt1'
 const STATE = {}
@@ -32,7 +32,6 @@ function record(paneKey: string): SleepingAgentSessionRecord {
 describe('sleep and wake through the layout owner', () => {
   beforeEach(() => {
     mocks.send.mockReset()
-    mocks.send.mockReturnValue(true)
   })
 
   it('sends one sleep per tab naming only the panes it stopped', () => {
@@ -61,11 +60,10 @@ describe('sleep and wake through the layout owner', () => {
   it('wakes the one pane the window resumed', () => {
     recordPaneWakeThroughLayoutOwner(STATE, WT, A2)
 
-    expect(mocks.send).toHaveBeenCalledWith(
-      STATE,
-      WT,
-      { type: 'wake', tabId: 'tab-a', paneKeys: [A2] },
-      expect.anything()
-    )
+    expect(mocks.send).toHaveBeenCalledWith(STATE, WT, {
+      type: 'wake',
+      tabId: 'tab-a',
+      paneKeys: [A2]
+    })
   })
 })

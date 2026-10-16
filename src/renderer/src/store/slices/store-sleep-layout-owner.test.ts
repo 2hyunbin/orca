@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type * as AgentStatusModule from '@/lib/agent-status'
-import type { sendLayoutApply } from '@/runtime/layout-apply-send'
+import type { recordLayoutApply } from '@/runtime/layout-apply-send'
 import { clearRuntimeCompatibilityCacheForTests } from '../../runtime/runtime-rpc-client'
 import { createTestStore, makeTab, makeWorktree, seedStore } from './store-test-helpers'
 import { shutdownBufferCaptures } from '@/components/terminal-pane/shutdown-buffer-captures'
@@ -9,10 +9,10 @@ import {
   createStoreCascadesMockApi
 } from './store-cascades-test-harness'
 
-const mocks = vi.hoisted(() => ({ send: vi.fn<typeof sendLayoutApply>(() => true) }))
+const mocks = vi.hoisted(() => ({ send: vi.fn<typeof recordLayoutApply>() }))
 
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
-vi.mock('@/runtime/layout-apply-send', () => ({ sendLayoutApply: mocks.send }))
+vi.mock('@/runtime/layout-apply-send', () => ({ recordLayoutApply: mocks.send }))
 vi.mock('sonner', () => ({
   toast: { info: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn() }
 }))

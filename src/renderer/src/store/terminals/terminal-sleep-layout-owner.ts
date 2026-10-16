@@ -1,11 +1,7 @@
 import type { SleepingAgentSessionRecord } from '../../../../shared/agent-session-resume'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import type { WorktreeRuntimeOwnerState } from '@/lib/worktree-runtime-owner-state'
-import { sendLayoutApply } from '@/runtime/layout-apply-send'
-
-// Why no fallback: the window keeps its own records and still saves them, so whatever main
-// answers, the window's state is today's.
-const keep = (): void => {}
+import { recordLayoutApply } from '@/runtime/layout-apply-send'
 
 /**
  * A layout-owner build's record of panes this window put to sleep and already stopped: main
@@ -26,17 +22,12 @@ export function recordPaneSleepThroughLayoutOwner(
     }
   }
   for (const [tabId, tabRecords] of recordsByTabId) {
-    sendLayoutApply(
-      state,
-      worktreeId,
-      {
-        type: 'sleep',
-        tabId,
-        paneKeys: tabRecords.map((record) => record.paneKey),
-        records: tabRecords
-      },
-      { apply: keep, asToday: keep }
-    )
+    recordLayoutApply(state, worktreeId, {
+      type: 'sleep',
+      tabId,
+      paneKeys: tabRecords.map((record) => record.paneKey),
+      records: tabRecords
+    })
   }
 }
 
@@ -48,11 +39,6 @@ export function recordPaneWakeThroughLayoutOwner(
 ): void {
   const tabId = parsePaneKey(paneKey)?.tabId
   if (tabId) {
-    sendLayoutApply(
-      state,
-      worktreeId,
-      { type: 'wake', tabId, paneKeys: [paneKey] },
-      { apply: keep, asToday: keep }
-    )
+    recordLayoutApply(state, worktreeId, { type: 'wake', tabId, paneKeys: [paneKey] })
   }
 }
