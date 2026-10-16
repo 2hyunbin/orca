@@ -56,48 +56,48 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
     const { leaf } = this.getLiveLeafForHandle(handle)
     const direction = opts.direction ?? 'horizontal'
     // Switch point: main writes the split first; the window then mounts main's pane.
-    const [hostId] = ORCA_LAYOUT_OWNER_IS_MAIN
-      ? this.getWorkspaceSessionHostIdsForTab(leaf.worktreeId, leaf.tabId)
-      : []
-    if (hostId && parseExecutionHostId(hostId)?.kind !== 'runtime') {
-      const newLeafId = randomUUID()
-      this.awaitedSplitLeafIds.set(newLeafId, false)
-      const { result: newHandle } = await startInAdmittedPane(
-        this.store,
-        {
-          type: 'splitPane',
-          workspace: leaf.worktreeId,
-          tabId: leaf.tabId,
-          leafId: leaf.leafId,
-          direction,
-          newLeafId
-        },
-        hostId,
-        // A refused or failed write splits as today; the window records the pane it mounts.
-        () => {
-          this.notifier?.splitTerminal(leaf.tabId, leaf.paneRuntimeId, {
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      const [hostId] = this.getWorkspaceSessionHostIdsForTab(leaf.worktreeId, leaf.tabId)
+      if (hostId && parseExecutionHostId(hostId)?.kind !== 'runtime') {
+        const newLeafId = randomUUID()
+        this.awaitedSplitLeafIds.set(newLeafId, false)
+        const { result: newHandle } = await startInAdmittedPane(
+          this.store,
+          {
+            type: 'splitPane',
+            workspace: leaf.worktreeId,
+            tabId: leaf.tabId,
+            leafId: leaf.leafId,
             direction,
-            command: opts.command,
-            worktreeId: leaf.worktreeId,
-            sourceLeafId: leaf.leafId,
-            telemetrySource: opts.telemetrySource,
             newLeafId
-          })
-          return this.waitForLeafInTab(leaf.tabId, newLeafId)
-        },
-        {
-          // A pane the window holds but whose terminal is still starting (a slow SSH start) stays.
-          shown: () =>
-            this.awaitedSplitLeafIds.get(newLeafId) === true ||
-            this.leaves.has(this.getLeafKey(leaf.tabId, newLeafId)),
-          startIfWriteFails: true
+          },
+          hostId,
+          // A refused or failed write splits as today; the window records the pane it mounts.
+          () => {
+            this.notifier?.splitTerminal(leaf.tabId, leaf.paneRuntimeId, {
+              direction,
+              command: opts.command,
+              worktreeId: leaf.worktreeId,
+              sourceLeafId: leaf.leafId,
+              telemetrySource: opts.telemetrySource,
+              newLeafId
+            })
+            return this.waitForLeafInTab(leaf.tabId, newLeafId)
+          },
+          {
+            // A pane the window holds but whose terminal is still starting (a slow SSH start) stays.
+            shown: () =>
+              this.awaitedSplitLeafIds.get(newLeafId) === true ||
+              this.leaves.has(this.getLeafKey(leaf.tabId, newLeafId)),
+            startIfWriteFails: true
+          }
+        ).finally(() => this.awaitedSplitLeafIds.delete(newLeafId))
+        return {
+          handle: newHandle,
+          tabId: leaf.tabId,
+          paneRuntimeId: leaf.paneRuntimeId,
+          leafId: newLeafId
         }
-      ).finally(() => this.awaitedSplitLeafIds.delete(newLeafId))
-      return {
-        handle: newHandle,
-        tabId: leaf.tabId,
-        paneRuntimeId: leaf.paneRuntimeId,
-        leafId: newLeafId
       }
     }
 

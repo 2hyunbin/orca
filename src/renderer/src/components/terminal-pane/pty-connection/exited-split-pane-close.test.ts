@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaneManager } from '@/lib/pane-manager/pane-manager'
 import type { LayoutApplyHandlers } from '@/runtime/layout-apply-send'
 import type { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
+import {
+  _resetLayoutOwnerPaneIntentsForTests,
+  takePaneCloseIntent
+} from '@/runtime/layout-owner-pane-intents'
 import { closeExitedSplitPaneThroughLayoutOwner } from './exited-split-pane-close'
 
 const mocks = vi.hoisted(() => ({
@@ -52,11 +56,12 @@ function close(paneCount = 2) {
 
 describe('closeExitedSplitPaneThroughLayoutOwner', () => {
   beforeEach(() => {
+    _resetLayoutOwnerPaneIntentsForTests()
     mocks.sendLayoutCommandToOwner.mockReset()
     mocks.sendLayoutCommandToOwner.mockReturnValue(true)
   })
 
-  it('asks main to close the exited pane, and removes it only once main answers', () => {
+  it('asks main to close the exited pane, leaving its removal to main’s frame', () => {
     const c = close()
 
     expect(c.sent).toBe(true)
@@ -65,28 +70,27 @@ describe('closeExitedSplitPaneThroughLayoutOwner', () => {
       { type: 'closePane', tabId: 'tab-1', leafId: LEAF, automatic: true },
       expect.any(Object)
     )
-    expect(c.closePane).not.toHaveBeenCalled()
-
     c.handlers().apply({})
-    expect(c.closePane).toHaveBeenCalledWith(1)
-    expect(c.closeTab).not.toHaveBeenCalled()
+
+    expect(c.closePane).not.toHaveBeenCalled()
+    expect(takePaneCloseIntent('tab-1', LEAF)).toBe('exit')
   })
 
-  it('closes the tab instead when a sibling went while main answered', () => {
+  it('closes the tab instead when main refuses the pane as its last and the window agrees', () => {
     const c = close()
     c.loseSibling()
 
-    c.handlers().apply({})
+    c.handlers().refused?.('last_pane')
 
     expect(c.closePane).not.toHaveBeenCalled()
     expect(c.closeTab).toHaveBeenCalledOnce()
+    expect(takePaneCloseIntent('tab-1', LEAF)).toBeNull()
   })
 
   it('does nothing when the pane already went', () => {
     const c = close()
     c.lose()
 
-    c.handlers().apply({})
     c.handlers().asToday()
 
     expect(c.closePane).not.toHaveBeenCalled()
