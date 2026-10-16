@@ -33,9 +33,9 @@ import {
   historyEntryBytes,
   conversationWindow,
   oversizedHistoryItem,
-  submissionBytesByItemId
+  submissionBytesByItemId,
+  resolveHistoryLimit
 } from './agent-session-history-page-bounds'
-import { resolveHistoryLimit } from './agent-session-history-page-bounds'
 import { offPageSubagentRoster } from './agent-session-history-subagent-roster'
 
 export { AGENT_SESSION_HISTORY_MAX_PAGE_BYTES, resolveHistoryLimit } from './agent-session-history-page-bounds'
