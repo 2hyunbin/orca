@@ -83,7 +83,10 @@ export function releaseHiddenAgentResumeHold(session: ConnectPanePtySession): vo
 /** A pane whose process ended is asleep again: a background wake's release and any held resume are over. */
 export function noteHiddenAgentResumePtyEnded(session: ConnectPanePtySession): void {
   session.hiddenAgentResumeReleased = false
-  releaseHiddenAgentResumeHold(session)
+  // Why: while the held wake is still armed nothing it started has run, so this exit is not its process.
+  if (session.hibernatedWakeTarget !== session.hiddenAgentResumeHeldTarget) {
+    releaseHiddenAgentResumeHold(session)
+  }
 }
 
 /**

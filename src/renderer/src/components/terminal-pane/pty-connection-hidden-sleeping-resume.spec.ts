@@ -368,5 +368,21 @@ export function registerPtyConnectionHiddenSleepingResumeTests(): void {
       await flushAsyncTicks(10)
       expect(isPaneSpawnDeferred(PANE_KEY)).toBe(false)
     })
+
+    it('keeps holding when an exit lands that its held wake did not start', async () => {
+      seedSleepingPane(null)
+      const { isPaneSpawnDeferred } = await import('@/lib/pane-spawn-deferral-registry')
+      connectHiddenPane(null)
+      await flushAsyncTicks(10)
+      const onPtyExit = createdTransportOptions[0]?.onPtyExit
+      if (typeof onPtyExit !== 'function') {
+        throw new Error('expected the transport exit handler')
+      }
+
+      onPtyExit('stale-restored-pty')
+      await flushAsyncTicks(10)
+
+      expect(isPaneSpawnDeferred(PANE_KEY)).toBe(true)
+    })
   })
 }
