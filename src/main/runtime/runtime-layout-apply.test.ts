@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { applyWindowLayoutCommand } from './runtime-layout-apply'
+import { applyWindowLayoutCommand, type WindowLayoutCommand } from './runtime-layout-apply'
 import type { RuntimeStore } from './runtime-store-contract'
+import type { LayoutApplyOutcome } from '../../shared/workspace-layout/workspace-layout-command-types'
 
 const mocks = vi.hoisted(() => ({ markAgentLaunchesClosedByUser: vi.fn() }))
 vi.mock('../agent-launch/agent-launch-pane-attachment', () => ({
@@ -10,7 +11,10 @@ vi.mock('../agent-launch/agent-launch-pane-attachment', () => ({
 const CLOSE = { type: 'closePane', workspace: 'wt-1', tabId: 'tab-1', leafId: 'leaf-1' } as const
 
 function storeWith() {
-  const applyLayoutCommand = vi.fn(async () => ({ ok: true as const, result: {} }))
+  const applyLayoutCommand = vi.fn(async (): Promise<LayoutApplyOutcome> => ({
+    ok: true,
+    result: {}
+  }))
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the apply path reads only applyLayoutCommand.
   const store = { applyLayoutCommand } as unknown as RuntimeStore
   return { store, applyLayoutCommand }
@@ -58,6 +62,44 @@ describe('applyWindowLayoutCommand', () => {
 
     expect(hostIdsFor).toHaveBeenCalledWith('wt-1', null)
     expect(applyLayoutCommand).toHaveBeenCalledWith(ratios, ['ssh:target-1'])
+  })
+
+  it('records the window’s tab close in every holder, forced, stopping no terminal', async () => {
+    const { store, applyLayoutCommand } = storeWith()
+    const close: WindowLayoutCommand = {
+      type: 'closeTabs',
+      workspace: 'wt-1',
+      tabIds: ['tab-1'],
+      recordClose: 'user'
+    }
+
+    await applyWindowLayoutCommand(store, () => ['local', 'runtime:env-1', 'ssh:target-1'], close)
+
+    expect(applyLayoutCommand).toHaveBeenCalledWith({ ...close, force: true }, [
+      'local',
+      'ssh:target-1'
+    ])
+    expect(mocks.markAgentLaunchesClosedByUser).toHaveBeenCalledWith('wt-1', {
+      kind: 'tab',
+      tabId: 'tab-1'
+    })
+  })
+
+  it('leaves a cleanup close’s launches alone, and a workspace main lacks to today’s close', async () => {
+    const { store, applyLayoutCommand } = storeWith()
+    applyLayoutCommand.mockResolvedValueOnce({ ok: true, result: { alreadyClosed: true } })
+    const close: WindowLayoutCommand = {
+      type: 'closeTabs',
+      workspace: 'wt-1',
+      tabIds: ['tab-1'],
+      recordClose: 'cleanup'
+    }
+
+    await expect(applyWindowLayoutCommand(store, () => ['local'], close)).resolves.toEqual({
+      ok: false,
+      code: 'workspace_not_found'
+    })
+    expect(mocks.markAgentLaunchesClosedByUser).not.toHaveBeenCalled()
   })
 
   it('refuses a tab a paired server routes, touching nothing', async () => {

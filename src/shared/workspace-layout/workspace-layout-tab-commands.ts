@@ -1,3 +1,4 @@
+import { pruneClosedTerminalTabTombstones } from '../closed-terminal-tab-tombstones'
 import { filterRecord, omitStoredFields, withoutKey } from './stored-record-fields'
 import { canReplacePreviewContentType, partitionPinnedTabOrder } from './tab-order'
 import { getNextTerminalOrdinal } from './terminal-tab-ordinal'
@@ -21,6 +22,7 @@ import type {
 } from './workspace-layout-command-types'
 import {
   paneKeyOf,
+  type LayoutClosedTab,
   type LayoutContentTab,
   type LayoutTerminalTab,
   type WorkspaceLayout,
@@ -98,15 +100,21 @@ export function closeTab(
   return withWorkspace(model, key, next)
 }
 
-export function closeTabs(model: WorkspaceLayoutModel, command: CommandOf<'closeTabs'>): Applied {
+export function closeTabs(
+  model: WorkspaceLayoutModel,
+  command: CommandOf<'closeTabs'>,
+  context?: LayoutContext
+): Applied {
   let next = model
   const closed: string[] = []
+  const recorded: string[] = []
   const refused: RefusedClose[] = []
   const stopPtyIds: string[] = []
   for (const tabId of command.tabIds) {
     const tab = findTab(next.workspaces[command.workspace]!, tabId)
     if (!tab) {
       closed.push(tabId)
+      recorded.push(tabId)
       continue
     }
     if (!command.force && command.refusePinned && tab.isPinned) {
@@ -120,8 +128,41 @@ export function closeTabs(model: WorkspaceLayoutModel, command: CommandOf<'close
     stopPtyIds.push(...boundPtyIds(next.workspaces[command.workspace]!, tab))
     next = closeTab(next, command.workspace, tabId)
     closed.push(tabId)
+    if (tab.kind === 'terminal') {
+      recorded.push(tab.entityId)
+    }
+  }
+  if (command.recordClose && context && recorded.length > 0) {
+    next = recordClosedTerminalTabs(next, command.workspace, recorded, {
+      reason: command.recordClose,
+      closedAt: context.now()
+    })
   }
   return applied(next, { closed, refused }, { stopPtyIds })
+}
+
+function recordClosedTerminalTabs(
+  model: WorkspaceLayoutModel,
+  key: string,
+  tabIds: readonly string[],
+  record: LayoutClosedTab
+): WorkspaceLayoutModel {
+  const workspace = model.workspaces[key]!
+  const records = { ...workspace.closedTerminalTabs }
+  for (const tabId of tabIds) {
+    records[tabId] = record
+  }
+  // Pruned as a host partition's records are when a close is recorded there.
+  const pruned = pruneClosedTerminalTabTombstones(
+    Object.fromEntries(
+      Object.entries(records).map(([id, entry]) => [id, { ...entry, worktreeId: key }])
+    ),
+    record.closedAt
+  )
+  const closedTerminalTabs = Object.fromEntries(
+    Object.entries(pruned).map(([id, { worktreeId: _key, ...entry }]) => [id, entry])
+  )
+  return withWorkspace(model, key, { ...workspace, closedTerminalTabs })
 }
 
 export function renameTab(model: WorkspaceLayoutModel, command: CommandOf<'renameTab'>): Applied {
