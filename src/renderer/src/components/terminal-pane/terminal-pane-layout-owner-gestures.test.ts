@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaneManager } from '@/lib/pane-manager/pane-manager'
 import { layoutOwnerPaneGestures } from './terminal-pane-layout-owner-gestures'
-import type { sendPaneCommandToLayoutOwner } from './terminal-pane-layout-owner-commands'
+import type { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
 
 const mocks = vi.hoisted(() => ({
   root: {
@@ -11,11 +11,11 @@ const mocks = vi.hoisted(() => ({
     first: { type: 'leaf', leafId: 'leaf-1' },
     second: { type: 'leaf', leafId: 'leaf-2' }
   },
-  send: vi.fn<typeof sendPaneCommandToLayoutOwner>()
+  send: vi.fn<typeof sendLayoutCommandToOwner>()
 }))
 
-vi.mock('./terminal-pane-layout-owner-commands', () => ({
-  sendPaneCommandToLayoutOwner: mocks.send
+vi.mock('@/runtime/layout-owner-command', () => ({
+  sendLayoutCommandToOwner: mocks.send
 }))
 vi.mock('@/store', () => ({
   useAppStore: { getState: () => ({ terminalLayoutsByTabId: { 'tab-1': { root: mocks.root } } }) }
@@ -52,9 +52,72 @@ describe('layoutOwnerPaneGestures', () => {
     expect(mocks.send).toHaveBeenCalledWith(
       'worktree-1',
       { type: 'movePane', tabId: 'tab-1', leafId: 'leaf-2', targetLeafId: 'leaf-1', side: 'left' },
-      { apply: move, asToday: move }
+      {
+        apply: expect.any(Function),
+        asToday: expect.any(Function),
+        refused: expect.any(Function)
+      }
     )
     expect(move).not.toHaveBeenCalled()
+
+    mocks.send.mock.calls[0]?.[2].apply({})
+    expect(move).toHaveBeenCalledOnce()
+  })
+
+  it.each(['asToday', 'refused'] as const)(
+    'moves the pane as today when main answers %s',
+    (outcome) => {
+      const move = vi.fn()
+      gestures().takePaneDrop?.({ sourcePaneId: 2, targetPaneId: 1, zone: 'left' }, move)
+      const handlers = mocks.send.mock.calls[0]?.[2]
+
+      if (outcome === 'refused') {
+        handlers?.refused?.('same_pane')
+      } else {
+        handlers?.asToday()
+      }
+
+      expect(move).toHaveBeenCalledOnce()
+    }
+  )
+
+  it('holds divider ratios until every move in flight has settled, even one that threw', () => {
+    const view = gestures()
+    const failingMove = vi.fn(() => {
+      throw new Error('pane gone')
+    })
+    view.takePaneDrop?.({ sourcePaneId: 2, targetPaneId: 1, zone: 'left' }, failingMove)
+    view.takePaneDrop?.({ sourcePaneId: 1, targetPaneId: 2, zone: 'top' }, vi.fn())
+    view.onDividerRatiosCommitted?.()
+    const [first, second] = mocks.send.mock.calls.map(([, , on]) => on)
+
+    expect(() => first?.refused?.('pane_structure_changed')).toThrow('pane gone')
+    expect(mocks.send).toHaveBeenCalledTimes(2)
+
+    second?.apply({})
+    expect(mocks.send).toHaveBeenCalledTimes(3)
+    expect(mocks.send).toHaveBeenLastCalledWith(
+      'worktree-1',
+      { type: 'setPaneRatios', tabId: 'tab-1', root: mocks.root },
+      { apply: expect.any(Function), asToday: expect.any(Function) }
+    )
+  })
+
+  it('holds divider ratios sent during a move until the window has moved too', () => {
+    const view = gestures()
+    const move = vi.fn()
+    view.takePaneDrop?.({ sourcePaneId: 2, targetPaneId: 1, zone: 'left' }, move)
+
+    view.onDividerRatiosCommitted?.()
+    expect(mocks.send).toHaveBeenCalledOnce()
+
+    mocks.send.mock.calls[0]?.[2].apply({})
+    expect(move).toHaveBeenCalledOnce()
+    expect(mocks.send).toHaveBeenLastCalledWith(
+      'worktree-1',
+      { type: 'setPaneRatios', tabId: 'tab-1', root: mocks.root },
+      { apply: expect.any(Function), asToday: expect.any(Function) }
+    )
   })
 
   it('leaves the drop to the window when main cannot take it', () => {

@@ -34,6 +34,8 @@ import { loadWorkspaceLayoutWithoutReport } from '../../../shared/workspace-layo
 import { stableJson } from '../../../shared/workspace-layout/workspace-layout-load-report'
 import { nameBasedLoadContext } from '../../../shared/workspace-layout/workspace-layout-minted-ids'
 import type { PublishedWorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-published'
+import { endLayoutFramePositions, noteLayoutFramePosition } from './layout-frame-position'
+import { provideLayoutFrameTerminalPanes } from './layout-frame-terminal-panes'
 import { subscribeRuntimeLayout } from './runtime-layout-client'
 
 type FrameSyncStore = {
@@ -45,6 +47,12 @@ export type WorkspaceLayoutFrameSync = {
   /** Shows every workspace the frames own once the snapshot is in, then keeps them current. */
   start: () => void
   close: () => void
+  /** Whether main's latest frames show this terminal in this pane, drawn yet or not. An unbound
+   *  pane does not count: nothing binds a frame-drawn pane to a live terminal later. */
+  holdsTerminalPane: (
+    worktreeId: string,
+    pane: { tabId: string; leafId: string; ptyId: string }
+  ) => boolean
 }
 
 /** A bucket, not a host: the view read-back routes the workspaces a rebuild skips here. */
@@ -113,6 +121,7 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
   let live = false
   let snapshotReceived = false
   let flushQueued = false
+  let streamOpen = true
 
   const rebuild = (state: AppState, keys: string[]): void => {
     // The view and content facts are this window's: read them back out of what it saves.
@@ -210,7 +219,13 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
       if (status.state === 'lost' || status.state === 'refused') {
         console.warn('[layout-owner] layout stream stopped:', status)
       }
-    }
+      if (status.state !== 'connecting' && status.state !== 'live') {
+        streamOpen = false
+        endLayoutFramePositions()
+      }
+    },
+    // After the frame's flush: a waiting reply runs once the store shows the frame, unless held.
+    (seq) => queueMicrotask(() => streamOpen && noteLayoutFramePosition(seq))
   )
   const stopIdleListener = onWindowSessionWriteIdle(scheduleFlush)
 
@@ -227,7 +242,14 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
       live = false
       stopIdleListener()
       stream.close()
-    }
+    },
+    holdsTerminalPane: (worktreeId, { tabId, leafId, ptyId }) =>
+      cache[worktreeId]?.tabs.some(
+        (tab) =>
+          tab.entityId === tabId &&
+          (tab.terminal?.panes.some((pane) => pane.leafId === leafId && pane.ptyId === ptyId) ??
+            false)
+      ) ?? false
   }
 }
 
@@ -236,6 +258,9 @@ let startupFrames: WorkspaceLayoutFrameSync | null = null
 /** After restore: the window's one layout stream shows the frames' workspaces from now on. */
 export function showStartupLayoutFrames(): void {
   // Kept for the document's life: a local stream ends only with main, and a re-run boot reuses it.
-  startupFrames ??= openWorkspaceLayoutFrameSync(useAppStore)
+  if (!startupFrames) {
+    startupFrames = openWorkspaceLayoutFrameSync(useAppStore)
+    provideLayoutFrameTerminalPanes(startupFrames.holdsTerminalPane)
+  }
   startupFrames.start()
 }

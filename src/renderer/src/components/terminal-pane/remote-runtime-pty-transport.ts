@@ -72,6 +72,7 @@ import {
 import {
   REMOTE_RUNTIME_AUTO_RECOVERY_TIMEOUT_MS,
   RemoteRuntimePtyRecoveryState,
+  registerRemoteRuntimePtyControlReadyReviver,
   type RemoteRuntimePtyRecoveryPhase
 } from './remote-runtime-pty-recovery-state'
 import { createBrowserUuid } from '@/lib/browser-uuid'
@@ -113,6 +114,7 @@ import {
 
 const REMOTE_TERMINAL_INPUT_FLUSH_MS = 8
 const REMOTE_TERMINAL_VIEWPORT_FLUSH_MS = 33
+const REMOTE_VIEWPORT_CLAIM_CONFIRM_WINDOW_MS = 1_000
 const REMOTE_RUNTIME_MAX_PENDING_QUERY_REPLIES = 64
 const HOST_SESSION_ATTACH_POLL_MS = 150
 const HOST_SESSION_POLL_MAX_MS = 1_000
@@ -316,6 +318,10 @@ export function createRemoteRuntimePtyTransport(
   }
 
   const recoveryInputHold = createRemoteRuntimeRecoveryInputHold({ holdBeforeFirstConnect: true })
+  let heldInputRelease: {
+    stream: RemoteRuntimeMultiplexedTerminal
+    waitingForValidation: boolean
+  } | null = null
   const inputJournal = createRemoteRuntimeInputJournal({
     currentStream: sequencedInputTarget,
     // Why: a refusal that never clears would drop every keystroke behind a connected-looking pane.
@@ -323,7 +329,23 @@ export function createRemoteRuntimePtyTransport(
   })
   const disconnectedInputGrace = createRemoteRuntimeDisconnectedInputGrace()
   let previousRecoveryPhase: RemoteRuntimePtyRecoveryPhase = 'idle'
+  let unregisterControlReadyReviver: (() => void) | null = null
+  // Why registered only while recovering: detach and destroy go idle, so a discarded transport is never retained.
+  function syncControlReadyReviver(): void {
+    const wantsRevival = recovery.isActive || recovery.currentPhase === 'disconnected'
+    if (wantsRevival && !unregisterControlReadyReviver) {
+      // Why: a backoff advances and a latched pane replays its attach, exactly as online/resume/Reconnect would.
+      unregisterControlReadyReviver = registerRemoteRuntimePtyControlReadyReviver(
+        runtimeEnvironmentId,
+        () => !destroyed && (recovery.retryNow() || (transport.retryRecovery?.() ?? false))
+      )
+    } else if (!wantsRevival && unregisterControlReadyReviver) {
+      unregisterControlReadyReviver()
+      unregisterControlReadyReviver = null
+    }
+  }
   const recovery = new RemoteRuntimePtyRecoveryState(() => {
+    syncControlReadyReviver()
     // Why: any recovery transition after the ack (a stale send, a close, the deadline) re-holds typing.
     inputReadySubscription = null
     const leftLatchForRetry = previousRecoveryPhase === 'disconnected' && recovery.isActive
@@ -1046,6 +1068,27 @@ export function createRemoteRuntimePtyTransport(
     }
   }
 
+  async function resolveHostSessionPane(
+    hostTabId: string
+  ): Promise<RuntimeTerminalResolvePane | null> {
+    if (!leafId || !worktreeId || resolvePaneUnavailable) {
+      return null
+    }
+    try {
+      const resolved = await callRuntime<{ terminal: RuntimeTerminalResolvePane }>(
+        'terminal.resolvePane',
+        { paneKey: `${hostTabId}:${leafId}`, worktreeId }
+      )
+      // Why: wire data; an answer without a pane must read as unresolved, not throw past this catch.
+      return resolved.terminal ?? null
+    } catch (error) {
+      if (error instanceof RuntimeRpcCallError && error.code === 'method_not_found') {
+        resolvePaneUnavailable = true
+      }
+      return null
+    }
+  }
+
   async function attachHostSessionMirror(
     options: { cols?: number; rows?: number },
     notifySpawn = true,
@@ -1061,6 +1104,8 @@ export function createRemoteRuntimePtyTransport(
       (expectedLifecycleEpoch === undefined || expectedLifecycleEpoch === lifecycleEpoch)
     const hostTabId = toHostSessionTabId(tabId)
     const waitOutcome = { boundedWaitEnded: false }
+    // Why overlap: resolvePane is a read keyed only by the pane, so it need not wait an activation round trip.
+    const earlyPaneResolution = resolveHostSessionPane(hostTabId)
     const hostHandle = await waitForHostSessionHandleWithRecovery(hostTabId, isCurrent, waitOutcome)
     if (!isCurrent()) {
       return undefined
@@ -1094,26 +1139,26 @@ export function createRemoteRuntimePtyTransport(
       return undefined
     }
 
-    if (leafId && worktreeId && !resolvePaneUnavailable) {
-      try {
-        const resolved = await callRuntime<{ terminal: RuntimeTerminalResolvePane }>(
-          'terminal.resolvePane',
-          { paneKey: `${hostTabId}:${leafId}`, worktreeId }
-        )
-        const terminal = resolved.terminal
-        if (
-          terminal.handle === hostHandle &&
-          terminal.tabId === hostTabId &&
-          terminal.leafId === leafId &&
-          (!terminal.worktreeId || terminal.worktreeId === worktreeId)
-        ) {
-          adoptExecutionMetadata(terminal)
-        }
-      } catch (error) {
-        if (error instanceof RuntimeRpcCallError && error.code === 'method_not_found') {
-          resolvePaneUnavailable = true
-        }
-      }
+    const matchesHostHandle = (
+      terminal: RuntimeTerminalResolvePane | null
+    ): terminal is RuntimeTerminalResolvePane =>
+      terminal !== null &&
+      terminal.handle === hostHandle &&
+      terminal.tabId === hostTabId &&
+      terminal.leafId === leafId &&
+      (!terminal.worktreeId || terminal.worktreeId === worktreeId)
+    let resolvedPane = await earlyPaneResolution
+    const activationIncarnationId = authoritativePtyIncarnationId
+    if (
+      !matchesHostHandle(resolvedPane) ||
+      (activationIncarnationId !== null &&
+        (resolvedPane.incarnationId ?? null) !== activationIncarnationId)
+    ) {
+      // Why: activation can materialize the surface or learn its incarnation, so an earlier read may be stale.
+      resolvedPane = await resolveHostSessionPane(hostTabId)
+    }
+    if (matchesHostHandle(resolvedPane)) {
+      adoptExecutionMetadata(resolvedPane)
     }
 
     if (!isCurrent() || recovery.currentPhase === 'disconnected') {
@@ -1553,6 +1598,7 @@ export function createRemoteRuntimePtyTransport(
       return !discardExpiredDisconnectedInput()
     }
     return (
+      heldInputRelease?.waitingForValidation === true ||
       (recovery.isActive && !subscriptionAcceptsInput()) ||
       (connecting && !connected) ||
       recoveryInputHold.isHolding()
@@ -1568,6 +1614,7 @@ export function createRemoteRuntimePtyTransport(
   }
 
   function discardPendingInput(): void {
+    heldInputRelease = null
     recoveryInputHold.discard()
     inputJournal.discard()
   }
@@ -1683,16 +1730,89 @@ export function createRemoteRuntimePtyTransport(
     ) {
       return
     }
+    if (heldInputRelease?.stream === stream) {
+      return
+    }
+    if (!recoveryInputHold.isHolding()) {
+      resumeSequencedInput(stream, boundHandle)
+      return
+    }
+    const release = { stream, waitingForValidation: inputBatcher.hasPendingValidation() }
+    heldInputRelease = release
+    if (release.waitingForValidation) {
+      const targetLifecycleEpoch = lifecycleEpoch
+      void (async () => {
+        do {
+          await inputBatcher.drain()
+        } while (heldInputRelease === release && inputBatcher.hasPendingValidation())
+        if (heldInputRelease !== release) {
+          return
+        }
+        release.waitingForValidation = false
+        if (
+          lifecycleEpoch === targetLifecycleEpoch &&
+          handle === boundHandle &&
+          getCurrentMultiplexedStream(boundHandle) === stream
+        ) {
+          releaseValidatedHeldInput(stream, boundHandle)
+        } else {
+          heldInputRelease = null
+        }
+      })()
+      return
+    }
+    releaseValidatedHeldInput(stream, boundHandle)
+  }
+
+  function releaseValidatedHeldInput(
+    stream: RemoteRuntimeMultiplexedTerminal,
+    boundHandle: string
+  ): void {
+    const release = heldInputRelease
+    if (
+      destroyed ||
+      terminalEnded ||
+      !connected ||
+      handle !== boundHandle ||
+      inputBlocked() ||
+      !(attachmentReady || subscriptionAcceptsInput())
+    ) {
+      heldInputRelease = null
+      return
+    }
+    // Why: the debounce suffix belongs after the held prefix, never ahead of its replay.
+    const pending = inputBatcher.takePending()
+    if (pending) {
+      recoveryInputHold.enqueue(holdEndpoint(), pending, 'driving')
+    }
     // Why first: journaled bytes were typed before anything in the hold.
     resumeSequencedInput(stream, boundHandle)
-    recoveryInputHold.release(heldInputEndpoint(boundHandle), {
+    const active = recoveryInputHold.release(heldInputEndpoint(boundHandle), {
       isCurrent: () => connected && handle === boundHandle && !inputBlocked(),
-      sendInput: (data) => sendInputNow(data),
+      // Why: the 1 Mi-code-unit hold fits the 16 MiB ceiling; one journal batch survives a mid-send outage.
+      sendInput: (data) => {
+        const current = getCurrentMultiplexedStream(boundHandle)
+        if (!current?.acknowledgesInput()) {
+          return sendInputNow(data)
+        }
+        inputJournal.send(current, heldInputEndpoint(boundHandle), inputSegments(data))
+        return true
+      },
       sendInputImmediate: (data) => sendInputImmediateNow(data),
       sendInputAccepted: sendInputAcceptedToRuntime,
       continuesAfterFailedWrite: () =>
         getCurrentMultiplexedStream(boundHandle)?.acknowledgesInput() === true
     })
+    const settle = (): void => {
+      if (heldInputRelease === release) {
+        heldInputRelease = null
+      }
+    }
+    if (active) {
+      void active.done.then(settle, settle)
+    } else {
+      settle()
+    }
   }
 
   async function sendInputAcceptedToRuntime(
@@ -1792,6 +1912,10 @@ export function createRemoteRuntimePtyTransport(
     }
   }
 
+  // Why: one-shot terminal.send (hosts without input acks) bypasses the journal, so a remount
+  // must learn of its in-flight or refused input here to warn that it may be lost.
+  let fallbackSendsInFlight = 0
+  let fallbackInputRefused = false
   const sendUnacknowledgedInput = (text: string, queryReply = false): boolean => {
     const targetHandle = handle
     const targetLifecycleEpoch = lifecycleEpoch
@@ -1799,6 +1923,12 @@ export function createRemoteRuntimePtyTransport(
       return false
     }
     const stream = getCurrentMultiplexedStream(targetHandle)
+    if (
+      !queryReply &&
+      (heldInputRelease?.waitingForValidation || (!stream && recoveryInputHold.isHolding()))
+    ) {
+      return recoveryInputHold.enqueue(holdEndpoint(), text, 'driving')
+    }
     if (stream?.acknowledgesInput()) {
       // Why true even if unsent: a failed write closes this stream, and the reattach replays the journal.
       inputJournal.send(stream, heldInputEndpoint(targetHandle), [{ text, queryReply }])
@@ -1812,6 +1942,7 @@ export function createRemoteRuntimePtyTransport(
       queuePendingClaimInput(text, queryReply)
       return true
     }
+    fallbackSendsInFlight += 1
     void trackTerminalSend(
       targetHandle,
       callRuntime<{ send: RuntimeTerminalSend }>('terminal.send', {
@@ -1822,6 +1953,7 @@ export function createRemoteRuntimePtyTransport(
       })
     )
       .then((result) => {
+        fallbackInputRefused = result.send.accepted !== true
         if (
           connected &&
           lifecycleEpoch === targetLifecycleEpoch &&
@@ -1836,10 +1968,14 @@ export function createRemoteRuntimePtyTransport(
           return
         }
         if (runtimeTerminalErrorMessage(error).includes('terminal_not_writable')) {
+          fallbackInputRefused = true
           notifyWriteUnavailable()
         } else {
           handleRemoteTerminalError(error)
         }
+      })
+      .finally(() => {
+        fallbackSendsInFlight -= 1
       })
     return true
   }
@@ -1856,9 +1992,18 @@ export function createRemoteRuntimePtyTransport(
       return
     }
     const stream = getCurrentMultiplexedStream(targetHandle)
+    if (claim && stream && isUnconfirmedClaim(stream, cols, rows)) {
+      // Why: a reveal's resume and its layout observer each claim the same grid one frame apart.
+      flushPendingClaimInput(stream)
+      return
+    }
     if (claim ? stream?.claimViewport(cols, rows) : stream?.resize(cols, rows)) {
       if (claim && stream) {
+        unconfirmedClaim = { stream, cols, rows, sentAt: Date.now() }
         flushPendingClaimInput(stream)
+      } else if (unconfirmedClaim && !isUnconfirmedClaim(unconfirmedClaim.stream, cols, rows)) {
+        // Why: the host now holds a different grid, so a later claim of the old one is new again.
+        unconfirmedClaim = null
       }
       return
     }
@@ -1871,6 +2016,28 @@ export function createRemoteRuntimePtyTransport(
       viewport: { cols, rows },
       ...(claim ? { claim: true } : {})
     }).catch(() => {})
+  }
+
+  // The host answers a claim with a fit-override event; until then a repeat of the same grid is a no-op.
+  let unconfirmedClaim: {
+    stream: RemoteRuntimeMultiplexedTerminal
+    cols: number
+    rows: number
+    sentAt: number
+  } | null = null
+  function isUnconfirmedClaim(
+    stream: RemoteRuntimeMultiplexedTerminal,
+    cols: number,
+    rows: number
+  ): boolean {
+    return (
+      unconfirmedClaim !== null &&
+      unconfirmedClaim.stream === stream &&
+      unconfirmedClaim.cols === cols &&
+      unconfirmedClaim.rows === rows &&
+      // Why bounded: a claim the host dropped must stay retryable by the next activity.
+      Date.now() - unconfirmedClaim.sentAt < REMOTE_VIEWPORT_CLAIM_CONFIRM_WINDOW_MS
+    )
   }
 
   const viewportBatcher = createRemoteRuntimeViewportBatcher(
@@ -2105,10 +2272,20 @@ export function createRemoteRuntimePtyTransport(
       return false
     }
     if (recovery.currentPhase === 'disconnected') {
+      parkResubscribeAfterDeadline(targetHandle)
       return true
     }
     scheduleResubscribeAfterTransportClose()
     return true
+  }
+
+  // Why: a recoverable failure that lands after the auto-recovery deadline latched has no live epoch
+  // to join; without a parked retry, resume/online have nothing to fire and the pane stays
+  // disconnected until the user clicks Reconnect (#9092). Mirrors the connect path's park.
+  function parkResubscribeAfterDeadline(targetHandle: string): void {
+    recovery.parkRetryAfterDeadline((nextEpoch) =>
+      scheduleResubscribeAfterTransportClose(getRecoveryReplacementPolicy(targetHandle), nextEpoch)
+    )
   }
 
   // Why: after a transport drop the host may have re-minted this handle; re-derive from the snapshot so we don't mirror/type into whatever PTY now sits behind the stale one (#7718).
@@ -2268,6 +2445,17 @@ export function createRemoteRuntimePtyTransport(
     let retryScheduled = false
     void resubscribeAfterTransportClose(resubscribeHandle, replacementPolicy, recoveryEpoch)
       .catch((error) => {
+        if (
+          !destroyed &&
+          connected &&
+          handle &&
+          recovery.currentPhase === 'disconnected' &&
+          recovery.ownsEpoch(recoveryEpoch) &&
+          isRecoverableRemoteRuntimeConnectionError(toRemoteRuntimeClientErrorLike(error))
+        ) {
+          parkResubscribeAfterDeadline(handle)
+          return
+        }
         if (!destroyed && connected && handle && recovery.isCurrent(recoveryEpoch)) {
           clearPendingViewportClaim()
           if (isRecoverablePaneBindingError(error)) {
@@ -2506,17 +2694,28 @@ export function createRemoteRuntimePtyTransport(
           }
         },
         onFitOverrideChanged: (event) => {
+          // Why: desktop-fit answers our claim (its grid is the host's target, not ours); a hold means a peer owns it.
+          if (event.mode !== 'desktop-fit') {
+            unconfirmedClaim = null
+          }
           if (isCurrentSubscription() && subscribedPtyId) {
             setFitOverride(subscribedPtyId, event.mode, event.cols, event.rows)
           }
         },
         onDriverChanged: (driver) => {
+          if (driver.kind === 'mobile') {
+            unconfirmedClaim = null
+          }
           if (isCurrentSubscription() && subscribedPtyId) {
             setDriverForPty(subscribedPtyId, driver)
           }
         },
         onWriteUnavailable: () => {
           if (isCurrentSubscription()) {
+            // Without input acks the frame answers refused input, which the journal never held.
+            if (handle && getCurrentMultiplexedStream(handle)?.acknowledgesInput() !== true) {
+              fallbackInputRefused = true
+            }
             notifyWriteUnavailable()
           }
         },
@@ -2566,6 +2765,17 @@ export function createRemoteRuntimePtyTransport(
       remotePtyId !== subscribedPtyId
     ) {
       nextStream.close()
+      // Why: a stream that opened after the deadline latched is discarded like its late failure would be,
+      // so park it too or resume/online find nothing to revive (#9092).
+      if (
+        !destroyed &&
+        connected &&
+        handle === subscribedHandle &&
+        recovery.currentPhase === 'disconnected' &&
+        (expectedRecoveryEpoch === undefined || recovery.ownsEpoch(expectedRecoveryEpoch))
+      ) {
+        parkResubscribeAfterDeadline(subscribedHandle)
+      }
       return
     }
     closeMultiplexedStream()
@@ -2578,7 +2788,10 @@ export function createRemoteRuntimePtyTransport(
     }
     // Why: a viewport change during the subscribe round-trip hit the no-op one-shot fallback; replay the latest viewport so the PTY isn't stuck at subscribe-time size.
     if (pendingViewportClaim && desiredViewport) {
-      nextStream.claimViewport(desiredViewport.cols, desiredViewport.rows)
+      if (!isUnconfirmedClaim(nextStream, desiredViewport.cols, desiredViewport.rows)) {
+        nextStream.claimViewport(desiredViewport.cols, desiredViewport.rows)
+        unconfirmedClaim = { stream: nextStream, ...desiredViewport, sentAt: Date.now() }
+      }
     } else if (
       desiredViewport &&
       (desiredViewport.cols !== subscribedViewport?.cols ||
@@ -2773,6 +2986,7 @@ export function createRemoteRuntimePtyTransport(
       return
     }
 
+    let releasePrewarmedStream: (() => void) | null = null
     try {
       if (isWebTerminalSurfaceTabId(tabId ?? '')) {
         // Reattach callbacks must not publish the replacement as a fresh
@@ -2784,6 +2998,12 @@ export function createRemoteRuntimePtyTransport(
           connectLifecycleEpoch
         )
       }
+
+      // Why: every path below subscribes after its host RPCs; opening the stream alongside saves a round trip.
+      releasePrewarmedStream =
+        currentPaneRevision() === getRuntimeEnvironmentRevision(createEnvironmentId)
+          ? getRemoteRuntimeTerminalMultiplexer(createEnvironmentId).prewarm()
+          : null
 
       if (options.sessionId && !getRemoteRuntimeTerminalHandle(options.sessionId)) {
         // Why: a HUB session persists host-native PTY ids; resolve its pane handle without exposing that SSH identity as a client transport id.
@@ -3011,6 +3231,9 @@ export function createRemoteRuntimePtyTransport(
         }
       }
       return undefined
+    } finally {
+      // A subscribed stream keeps the connection; only an abandoned warm-up closes it.
+      releasePrewarmedStream?.()
     }
   }
 
@@ -3116,6 +3339,16 @@ export function createRemoteRuntimePtyTransport(
     // Why: a transport with an armed retry or a parked one owns this pane's recovery; a remount would race it (#21195).
     ownsRecovery() {
       return !destroyed && !terminalEnded && recoveryBlocksIo()
+    },
+
+    hasUndeliveredInput() {
+      return (
+        inputJournal.hasUnacknowledgedInput() ||
+        inputBatcher.hasPendingInput() ||
+        recoveryInputHold.hasPendingInput() ||
+        fallbackSendsInFlight > 0 ||
+        fallbackInputRefused
+      )
     },
 
     claimViewport(cols: number, rows: number): boolean {

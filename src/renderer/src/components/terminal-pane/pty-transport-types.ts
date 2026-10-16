@@ -20,7 +20,10 @@ import type { TuiAgent } from '../../../../shared/tui-agent'
 import type { TerminalPanePlacement } from '../../../../shared/terminal-pane-placement'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { PtyDataMeta } from './pty-dispatcher'
-import type { RemoteRuntimeSnapshotOutcome } from '../../runtime/remote-runtime-terminal-multiplexer-types'
+import type {
+  RemoteRuntimeSnapshotOutcome,
+  RemoteRuntimeSnapshotRequestOptions
+} from '../../runtime/remote-runtime-terminal-multiplexer-types'
 import type { AcceptedInputOptions, PtyPreconnectInputEntry } from './pty-preconnect-input-buffer'
 import type { AgentPaneLaunchRequest } from '../../../../shared/agent-pane-launch-request'
 
@@ -236,6 +239,8 @@ export type PtyTransport = {
   retryRecovery?: () => boolean
   /** True while the transport has a retry armed or parked; pane-level remounts must defer to it. */
   ownsRecovery?: () => boolean
+  /** Typed input the host has not applied yet, which a remount would discard. */
+  hasUndeliveredInput?: () => boolean
   /** The user dismissed the error surface; the next occurrence of the same message must surface again. */
   notifyErrorSurfaceDismissed?: () => void
   getPtyId: () => string | null
@@ -254,10 +259,12 @@ export type PtyTransport = {
    *  model-restore marker reports dropped bytes — a carry spanning the gap
    *  would corrupt the next live chunk. IPC transports only. */
   resetCrossChunkParserState?: () => void
-  serializeBuffer?: (opts?: { scrollbackRows?: number }) => Promise<PtyBufferSnapshot | null>
-  serializeBufferOutcome?: (opts?: {
-    scrollbackRows?: number
-  }) => Promise<RemoteRuntimeSnapshotOutcome>
+  serializeBuffer?: (
+    opts?: RemoteRuntimeSnapshotRequestOptions
+  ) => Promise<PtyBufferSnapshot | null>
+  serializeBufferOutcome?: (
+    opts?: RemoteRuntimeSnapshotRequestOptions
+  ) => Promise<RemoteRuntimeSnapshotOutcome>
   preserve?: () => void
   /** Hand the live PTY to a successor without process teardown. Terminal for this instance:
    *  it also drops the transport's output processor from the pty side-effect memory census,
