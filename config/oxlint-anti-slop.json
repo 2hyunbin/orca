@@ -79,6 +79,13 @@
         "anti-slop/no-module-mocking": "off"
       }
     },
+    // Native leaf mocks are shared by the mobile chat view tests; product code never imports this harness.
+    {
+      "files": ["**/mobile/src/session/MobileNativeChatView.harness.test-fixture.ts"],
+      "rules": {
+        "anti-slop/no-module-mocking": "off"
+      }
+    },
     // The exemptions below are file-scoped rather than inline `oxlint-disable` comments
     // because the root lint scan does not load this plugin, so an inline directive naming
     // an anti-slop rule always reads back as an unused directive there.
