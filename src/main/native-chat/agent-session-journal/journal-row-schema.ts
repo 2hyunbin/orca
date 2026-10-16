@@ -144,7 +144,12 @@ export function isJournalStopOrResumeRow<T extends {
   queueResume?: unknown
   queueReopen?: unknown
   queueClear?: unknown
-}>(row: T): row is T & { kind: 'tombstone' } {
+}>(row: T): row is T & { kind: 'tombstone' } & (
+  | { stopEvent: unknown }
+  | { queueResume: unknown }
+  | { queueReopen: unknown }
+  | { queueClear: unknown }
+) {
   return (
     row.kind === 'tombstone' &&
     (row.stopEvent !== undefined ||
