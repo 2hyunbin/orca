@@ -10,7 +10,7 @@ import type { RuntimeStore } from './runtime-store-contract'
 
 type LineageParent =
   | {
-      type: 'worktree'
+      type: 'worktree' | 'external'
       workspaceKey: WorkspaceKey
       worktree: Pick<Worktree, 'id'>
       instanceId: string | null
@@ -36,7 +36,7 @@ export type WorktreeLineageRecordingResolution =
   | { kind: 'none'; warnings: WorktreeLineageWarning[] }
 
 export function recordCreatedWorktreeLineage(
-  store: RuntimeStore | null,
+  store: Pick<RuntimeStore, 'setWorktreeLineage' | 'setWorkspaceLineage'> | null,
   worktree: Pick<Worktree, 'id' | 'instanceId'>,
   resolution: WorktreeLineageRecordingResolution
 ): {
@@ -55,7 +55,7 @@ export function recordCreatedWorktreeLineage(
   const parentInstanceId = resolution.parent.instanceId
   const createdAt = Date.now()
   if (
-    resolution.parent.type === 'worktree' &&
+    resolution.parent.type !== 'folder' &&
     childInstanceId &&
     parentInstanceId &&
     store?.setWorktreeLineage
@@ -77,7 +77,7 @@ export function recordCreatedWorktreeLineage(
         : {}),
       createdAt
     })
-  } else if (resolution.parent.type === 'worktree') {
+  } else if (resolution.parent.type !== 'folder') {
     warnings.push({
       code: 'LINEAGE_PARENT_CONTEXT_MISSING',
       message:

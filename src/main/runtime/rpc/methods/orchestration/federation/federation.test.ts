@@ -1,3 +1,5 @@
+import { mergeWorktree } from '../../../../../ipc/worktree-metadata-merge'
+import { WORKTREE_CROSS_MACHINE_PARENT_RUNTIME_CAPABILITY } from '../../../../../../shared/runtime-capability-constants'
 import '../../../unused-default-rpc-methods.test-fixture'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -110,6 +112,49 @@ describe('orchestration federation', () => {
     })
     workerCapabilities = [...(workerRuntime.getStatus().capabilities ?? [])]
   }
+
+  it('carries the coordinator instance through remote new-child creation', async () => {
+    const task = createHomeTask()
+    const git = { path: '/coordinator', head: '', branch: '', isBare: false, isMainWorktree: false }
+    const parent = {
+      ...mergeWorktree('home-repo', git, { instanceId: 'coordinator-instance', hostId: 'local' }),
+      git,
+      lineage: null,
+      parentWorktreeId: null,
+      childWorktreeIds: [],
+      linkedItems: []
+    }
+    vi.spyOn(homeRuntime, 'showTerminal').mockResolvedValue({
+      ...(await workerRuntime.showTerminal('term_worker')),
+      worktreeId: parent.id
+    })
+    vi.spyOn(homeRuntime, 'showManagedWorktree').mockResolvedValue(parent)
+    const response = await homeDispatcher.dispatch(startRequest(task.id, { worktree: 'new-child' }))
+    expect(response).toMatchObject({ ok: true, result: { state: 'ready' } })
+    expect(workerRuntime.createManagedWorktree).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lineage: {
+          parentWorktreeRef: {
+            worktreeId: parent.id,
+            instanceId: parent.instanceId,
+            origin: 'orchestration',
+            capture: { source: 'orchestration-context', confidence: 'explicit' }
+          }
+        }
+      })
+    )
+  })
+
+  it('refuses new-child on an old server before creating a Dispatch', async () => {
+    const task = createHomeTask()
+    workerCapabilities = workerCapabilities.filter(
+      (capability) => capability !== WORKTREE_CROSS_MACHINE_PARENT_RUNTIME_CAPABILITY
+    )
+    const response = await homeDispatcher.dispatch(startRequest(task.id, { worktree: 'new-child' }))
+    expect(response).toMatchObject({ ok: false, error: { code: 'capability_unsupported' } })
+    expect(homeDb.getDispatchContext(task.id)).toBeUndefined()
+    expect(workerRuntime.createManagedWorktree).not.toHaveBeenCalled()
+  })
 
   it('starts a remote worker while keeping authoritative Task state at home', async () => {
     const task = createHomeTask()

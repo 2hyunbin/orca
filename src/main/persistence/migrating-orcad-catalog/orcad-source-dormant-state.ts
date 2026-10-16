@@ -94,11 +94,7 @@ export function collectOrcadMigrationSourceDormantState(
         blockedCounts['worktree-lineage'] += 1
         return []
       }
-      // Cross-host history belongs to the desktop and stays in its retained source profile.
-      if (
-        !orcadMigrationOwnerMatchesScope(lineage.worktreeId, scope) ||
-        !orcadMigrationOwnerMatchesScope(lineage.parentWorktreeId, scope)
-      ) {
+      if (!orcadMigrationOwnerMatchesScope(lineage.worktreeId, scope)) {
         return []
       }
       return [{ sourceKey, worktreeId, lineage: structuredClone(lineage) }]
@@ -119,10 +115,7 @@ export function collectOrcadMigrationSourceDormantState(
         blockedCounts['workspace-lineage'] += 1
         return []
       }
-      if (
-        !orcadMigrationOwnerMatchesScope(lineage.childWorkspaceKey, scope) ||
-        !orcadMigrationOwnerMatchesScope(lineage.parentWorkspaceKey, scope)
-      ) {
+      if (!orcadMigrationOwnerMatchesScope(lineage.childWorkspaceKey, scope)) {
         return []
       }
       return [

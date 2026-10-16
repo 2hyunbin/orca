@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ParentWorktreeRefSchema } from './worktree-params'
 import { OptionalFiniteNumber, OptionalString, requiredString } from './rpc-param-primitives'
 import { OptionalWorkerLaunchPreference } from './orchestration-worker-start-params'
 
@@ -12,6 +13,7 @@ export const FederationAttachStartParams = z.object({
   depth: z.number().int().min(1).optional(),
   protocolVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   worktree: requiredString('Missing remote worktree selector'),
+  parentWorktreeRef: ParentWorktreeRefSchema.optional(),
   name: OptionalString,
   repo: OptionalString,
   baseBranch: OptionalString,

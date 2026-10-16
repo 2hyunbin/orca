@@ -16,6 +16,13 @@ export type WorktreeLineageCapture = {
   confidence: WorktreeLineageCaptureConfidence
 }
 
+export type ParentWorktreeRef = {
+  worktreeId: string
+  instanceId: string
+  capture?: WorktreeLineageCapture
+  origin?: WorktreeLineageOrigin
+}
+
 export type WorktreeLineage = {
   worktreeId: string
   worktreeInstanceId: string

@@ -88,7 +88,7 @@ describe('createWorktree composer parent pick', () => {
 
   it('drops a stale parent pick and falls back to the active folder workspace', async () => {
     const store = createParentPickStore()
-    store.setState({ activeWorkspaceKey: folderWorkspaceKey('folder-1') } as Partial<AppState>)
+    store.setState({ activeWorkspaceKey: folderWorkspaceKey('folder-1') })
     mockApi.worktrees.create.mockResolvedValue({
       worktree: makeWorktree({ id: 'repo1::/path/child', repoId: 'repo1', path: '/path/child' })
     })
@@ -245,11 +245,12 @@ describe('createWorktree parent pick on a remote runtime', () => {
             repoId: REMOTE_REPO,
             path: '/remote/parent',
             displayName: 'parent-wt',
-            instanceId: 'parent-instance'
+            instanceId: 'parent-instance',
+            hostId: 'runtime:env-1'
           })
         ]
       }
-    } as Partial<AppState>)
+    })
     return store
   }
 
@@ -288,6 +289,43 @@ describe('createWorktree parent pick on a remote runtime', () => {
           })
     })
   }
+
+  it('sends a resolved local parent reference to the child runtime', async () => {
+    const store = createRemoteStore()
+    const parent = makeWorktree({
+      id: 'local-repo::/parent',
+      repoId: 'local-repo',
+      instanceId: 'local-parent-instance',
+      hostId: 'local'
+    })
+    store.setState({
+      worktreesByRepo: { ...store.getState().worktreesByRepo, 'local-repo': [parent] }
+    })
+    mockRuntimeCreate((id) => ({
+      id,
+      ok: true,
+      result: {
+        worktree: makeWorktree({ id: `${REMOTE_REPO}::/child`, repoId: REMOTE_REPO }),
+        lineage: makeLineage({
+          parentWorktreeId: parent.id,
+          parentWorktreeInstanceId: parent.instanceId
+        })
+      }
+    }))
+    const create = store.getState().createWorktree
+    const request: Parameters<typeof create> = [REMOTE_REPO, 'child', 'origin/main']
+    request[25] = { parentWorktreeId: parent.id }
+    await create(...request)
+    expect(createCalls()[0]?.params).toMatchObject({
+      parentWorktreeRef: {
+        worktreeId: parent.id,
+        instanceId: parent.instanceId,
+        origin: 'manual',
+        capture: { source: 'manual-action', confidence: 'explicit' }
+      }
+    })
+    expect(createCalls()[0]?.params).not.toHaveProperty('parentWorkspace')
+  })
 
   it('marks an app-selected parent as manual so the host does not record a CLI flag', async () => {
     mockRuntimeCreate((id) => ({

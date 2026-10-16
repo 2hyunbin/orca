@@ -14,6 +14,7 @@ import {
   TriStateLinkedIssue
 } from './rpc-param-primitives'
 import {
+  ParentWorktreeRefSchema,
   AutomationWorkspaceProvenanceRequest,
   CliWorkspaceProvenanceRequest,
   OptionalTuiAgent,
@@ -84,6 +85,7 @@ export const WorktreeCreate = z
     parentWorkspaceOrigin: z.literal('manual').optional(),
     envParentWorkspace: OptionalString,
     parentWorktree: OptionalString,
+    parentWorktreeRef: ParentWorktreeRefSchema.optional(),
     cwdParentWorktree: OptionalString,
     noParent: OptionalBoolean,
     callerTerminalHandle: OptionalString,
@@ -131,13 +133,19 @@ export const WorktreeCreate = z
   })
   .superRefine((params, ctx) => {
     assertLinkedWorkItemSourceContextMatch(params, ctx)
-    if ((params.parentWorkspace || params.parentWorktree) && params.noParent === true) {
+    if (
+      (params.parentWorkspace || params.parentWorktree || params.parentWorktreeRef) &&
+      params.noParent === true
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'Choose either one parent selector or --no-parent.'
       })
     }
-    if (params.parentWorkspace && params.parentWorktree) {
+    if (
+      [params.parentWorkspace, params.parentWorktree, params.parentWorktreeRef].filter(Boolean)
+        .length > 1
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'Choose either one parent selector or --no-parent.'

@@ -1,3 +1,4 @@
+import { WORKTREE_CROSS_MACHINE_PARENT_RUNTIME_CAPABILITY } from '../../../../../../shared/runtime-capability-constants'
 import { runtimeRpcTargetForAuthorityKey } from '@/runtime/runtime-client-target'
 import { repoHostId } from '../listing/worktree-host-ownership'
 import {
@@ -68,7 +69,7 @@ async function runCreateAttempt(
             ...buildLocalWorktreeCreateArgs(request, { ...attempt, parentWorkspace }),
             ...provisionedRoot
           })
-      : target.kind === 'local'
+      : target.kind === 'local' && !attempt.parentWorktreeRef
         ? // Why local can still reject on the parent: paired web clients route this API to their host.
           await window.api.worktrees.create(
             buildLocalWorktreeCreateArgs(request, { ...attempt, parentWorkspace })
@@ -189,6 +190,13 @@ export function createCreateWorktree(
       })
       // Why outside the retry loop: a branch-name conflict retry must not re-warn about the same dropped pick.
       const parent = resolveWorktreeCreateParent(get(), options?.parentWorktreeId, creationHostId)
+      if (parent.parentWorktreeRef && target.kind === 'environment') {
+        await assertRuntimeEnvironmentCapability(
+          target.environmentId,
+          WORKTREE_CROSS_MACHINE_PARENT_RUNTIME_CAPABILITY,
+          `Orca on ${target.environmentId} is too old to nest under a worktree on another machine. Update it, or pass --no-parent.`
+        )
+      }
       let warnedParentDropped = false
       const warnParentDroppedOnce = (): void => {
         if (warnedParentDropped) {
@@ -231,6 +239,7 @@ export function createCreateWorktree(
                 ? getClientWorktreeCreateCandidate(branchNameOverride, attempt)
                 : undefined,
               parentWorkspace: parent.parentWorkspace,
+              parentWorktreeRef: parent.parentWorktreeRef,
               manualOrder
             },
             target

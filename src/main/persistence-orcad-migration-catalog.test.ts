@@ -19,6 +19,7 @@ import {
 } from './persistence-orcad-migration-catalog-fixture'
 import {
   createStore,
+  closeTestStores,
   makeRepo,
   readDataFile,
   testState,
@@ -57,7 +58,8 @@ describe('orcad migration catalog persistence', () => {
     testState.dir = mkdtempSync(join(tmpdir(), 'orca-migration-catalog-'))
   })
 
-  afterEach(() => {
+  afterEach(async () => {
+    await closeTestStores()
     rmSync(testState.dir, { recursive: true, force: true })
   })
 
@@ -162,6 +164,28 @@ describe('orcad migration catalog persistence', () => {
       receipt: { repositoryIds: ['repo-1'] }
     })
     expect(readDataFile()).not.toHaveProperty('orcadMigrationStagedCatalogs.0')
+  })
+
+  it('keeps an external parent through staging, commit, and restart', async () => {
+    const store = createStore()
+    const base = manifest()
+    const dormant = dormantState()
+    dormant.worktreeLineage[0].lineage.parentWorktreeId = 'external-repo::/parent'
+    dormant.workspaceLineage[0].lineage.parentWorkspaceKey =
+      worktreeWorkspaceKey('external-repo::/parent')
+    const input = manifest({ payload: { ...base.payload, dormantState: dormant } })
+    store.stageOrcadMigrationCatalog(input)
+    await store.flushPendingOrThrowAsync()
+    const staged = createStore()
+    staged.commitStagedOrcadMigrationCatalog(input)
+    await staged.flushPendingOrThrowAsync()
+    const restored = createStore()
+    expect(restored.getWorktreeLineage(DORMANT_WORKTREE_ID)?.parentWorktreeId).toBe(
+      'external-repo::/parent'
+    )
+    expect(
+      restored.getWorkspaceLineage(worktreeWorkspaceKey(DORMANT_WORKTREE_ID))?.parentWorkspaceKey
+    ).toBe(worktreeWorkspaceKey('external-repo::/parent'))
   })
 
   it('commits dormant metadata, lineage, presets, and retirement state with the receipt', async () => {

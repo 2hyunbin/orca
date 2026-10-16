@@ -1,3 +1,6 @@
+import { requiresParentWorktreeReference } from '../../../../shared/resolved-worktree-lineage'
+import { WORKTREE_CROSS_MACHINE_PARENT_RUNTIME_CAPABILITY } from '../../../../shared/runtime-capability-constants'
+import type { RuntimeEnvironmentStatus } from '../../../../shared/runtime-host-status'
 import { getWorktreeExecutionHostId } from '../../../../shared/execution-host'
 import type { Repo } from '../../../../shared/repo-types'
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
@@ -11,7 +14,22 @@ type ParentCandidateArgs = {
   lineageById: Record<string, WorktreeLineage>
   worktreeMap: Map<string, Worktree>
   repoMap: Map<string, Pick<Repo, 'connectionId' | 'executionHostId'>>
+  runtimeStatuses?: ReadonlyMap<string, RuntimeEnvironmentStatus>
   cyclicLineageIds?: ReadonlySet<string>
+}
+
+export function canLinkWorktreeHosts(
+  childHost: string,
+  parentHost: string,
+  statuses?: ReadonlyMap<string, RuntimeEnvironmentStatus>
+): boolean {
+  return (
+    !requiresParentWorktreeReference(childHost, parentHost) ||
+    !childHost.startsWith('runtime:') ||
+    statuses
+      ?.get(childHost.slice('runtime:'.length))
+      ?.status?.capabilities?.includes(WORKTREE_CROSS_MACHINE_PARENT_RUNTIME_CAPABILITY) === true
+  )
 }
 
 function getWorktreeOwnerHostId(
@@ -28,6 +46,7 @@ export function getEligibleWorktreeParents({
   lineageById,
   worktreeMap,
   repoMap,
+  runtimeStatuses,
   cyclicLineageIds: precomputedCyclicLineageIds
 }: ParentCandidateArgs): Worktree[] {
   const childHostId = getWorktreeOwnerHostId(child, repoMap)
@@ -40,6 +59,7 @@ export function getEligibleWorktreeParents({
       lineageById,
       worktreeMap,
       repoMap,
+      runtimeStatuses,
       cyclicLineageIds,
       childHostId
     })
@@ -53,6 +73,7 @@ export function isEligibleWorktreeParent({
   worktreeMap,
   repoMap,
   cyclicLineageIds,
+  runtimeStatuses,
   childHostId = getWorktreeOwnerHostId(child, repoMap)
 }: Omit<ParentCandidateArgs, 'worktrees'> & {
   candidateParent: Worktree
@@ -60,9 +81,11 @@ export function isEligibleWorktreeParent({
 }): boolean {
   return (
     childHostId !== null &&
-    (getWorktreeOwnerHostId(candidateParent, repoMap) === childHostId ||
-      (!childHostId.startsWith('runtime:') &&
-        !getWorktreeOwnerHostId(candidateParent, repoMap)?.startsWith('runtime:'))) &&
+    canLinkWorktreeHosts(
+      childHostId,
+      getWorktreeOwnerHostId(candidateParent, repoMap) ?? '',
+      runtimeStatuses
+    ) &&
     !candidateParent.isArchived &&
     canAssignWorktreeParent({
       child,

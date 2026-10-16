@@ -8,6 +8,11 @@ export type WorktreeWithResolvedLineage<T extends Worktree = Worktree> = T & {
   lineage: WorktreeLineage | null
 }
 
+export function requiresParentWorktreeReference(childHost: string, parentHost: string): boolean {
+  const store = (host: string): string => (host.startsWith('runtime:') ? host : 'local')
+  return store(childHost) !== store(parentHost)
+}
+
 export function indexWorktreesByInstance<T extends { instanceId?: string }>(
   worktrees: Iterable<T>
 ): Map<string, T | null> {

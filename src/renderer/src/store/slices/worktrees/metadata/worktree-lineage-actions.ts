@@ -1,3 +1,4 @@
+import { getIndexedAllWorktrees } from '@/store/worktree-repo-index'
 import type { WorktreeSlice } from '../../worktree-helpers'
 import type { WorktreeSliceGet, WorktreeSliceSet } from '../listing/worktree-slice-types'
 import { parseExecutionHostId } from '../../../../../../shared/execution-host'
@@ -66,7 +67,12 @@ export function createUpdateWorktreeLineage(
       applyWorktreeLineageUpdate(
         set,
         worktreeId,
-        await setWorktreeLineageForRuntime(ownerTarget, worktreeId, args)
+        await setWorktreeLineageForRuntime(
+          ownerTarget,
+          worktreeId,
+          args,
+          getIndexedAllWorktrees(get().worktreesByRepo)
+        )
       )
     } catch (err) {
       console.error('Failed to update worktree lineage:', err)
@@ -86,7 +92,12 @@ export function createAssignWorktreeParent(
       applyWorktreeLineageUpdate(
         set,
         worktreeId,
-        await setWorktreeLineageForRuntime(ownerTarget, worktreeId, args)
+        await setWorktreeLineageForRuntime(
+          ownerTarget,
+          worktreeId,
+          args,
+          getIndexedAllWorktrees(get().worktreesByRepo)
+        )
       )
     } catch (err) {
       console.error('Failed to assign worktree parent:', err)

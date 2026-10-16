@@ -1,3 +1,4 @@
+import { worktreeWorkspaceKey } from '../../../shared/workspace-scope'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -83,6 +84,40 @@ function sourceStore(): Store {
 }
 
 describe('exporting a relay-hosted SSH target from the profile store', () => {
+  it('exports both child-owned edges when the parent is outside the migrated host', () => {
+    const store = sourceStore()
+    store.setWorktreeMetaForHost(WORKTREE_ID, toSshExecutionHostId(TARGET.id), {
+      instanceId: 'child-instance'
+    })
+    const lineage = {
+      worktreeId: WORKTREE_ID,
+      worktreeInstanceId: 'child-instance',
+      parentWorktreeId: 'external::/parent',
+      parentWorktreeInstanceId: 'parent-instance',
+      origin: 'manual' as const,
+      capture: { source: 'manual-action' as const, confidence: 'explicit' as const },
+      createdAt: 1
+    }
+    store.setWorktreeLineage(WORKTREE_ID, lineage)
+    store.setWorkspaceLineage({
+      childWorkspaceKey: worktreeWorkspaceKey(WORKTREE_ID),
+      childInstanceId: 'child-instance',
+      parentWorkspaceKey: worktreeWorkspaceKey(lineage.parentWorktreeId),
+      parentInstanceId: 'parent-instance',
+      origin: lineage.origin,
+      capture: lineage.capture,
+      createdAt: 1
+    })
+    const manifest = createOrcadMigrationManifest(store, TARGET)
+    expect(manifest.payload.dormantState?.worktreeLineage[0].lineage).toEqual(lineage)
+    expect(manifest.payload.dormantState?.workspaceLineage[0].lineage.parentInstanceId).toBe(
+      'parent-instance'
+    )
+    expect(
+      store.getWorktreeMetaForHost(WORKTREE_ID, toSshExecutionHostId(TARGET.id))?.instanceId
+    ).toBe('child-instance')
+  })
+
   it('reads the target catalog and dormant scrollback without changing the source', () => {
     const store = sourceStore()
     const before = JSON.stringify({

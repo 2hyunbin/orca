@@ -145,6 +145,7 @@ export function WorktreeParentPickerPopover({
   )
   const repoMap = useRepoMap()
   const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
+  const runtimeStatuses = useAppStore((s) => s.runtimeStatusByEnvironmentId)
   const lineageById = useAppStore((s) => s.worktreeLineageById)
   const assignWorktreeParent = useAppStore((s) => s.assignWorktreeParent)
   const suppressInitialOutsideCloseRef = useRef(false)
@@ -166,10 +167,11 @@ export function WorktreeParentPickerPopover({
             worktrees,
             lineageById,
             worktreeMap,
-            repoMap
+            repoMap,
+            runtimeStatuses
           })
         : [],
-    [child, lineageById, repoMap, worktreeMap, worktrees]
+    [child, lineageById, repoMap, worktreeMap, worktrees, runtimeStatuses]
   )
 
   useLayoutEffect(() => {

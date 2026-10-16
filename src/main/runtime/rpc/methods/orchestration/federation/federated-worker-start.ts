@@ -1,3 +1,4 @@
+import { resolveFederatedWorkerParent } from './federated-worker-parent'
 import type { OrchestrationSessionCaller } from '../../../../orchestration/orchestration-caller-identity'
 import { isTuiAgent } from '../../../../../../shared/tui-agent-config'
 import type { RuntimeStatus } from '../../../../../../shared/runtime-types'
@@ -64,13 +65,13 @@ export async function startFederatedWorker(args: {
     )
   }
   const worktree = params.worktree ?? 'current'
-  if (worktree === 'current' || worktree === 'new-child') {
+  if (worktree === 'current') {
     throw new OrchestrationError(
       'invalid_argument',
-      '--on requires an exact remote worktree selector or new-top-level.'
+      '--on requires an exact remote worktree selector, new-child, or new-top-level.'
     )
   }
-  const createsWorktree = worktree === 'new-top-level'
+  const createsWorktree = worktree === 'new-top-level' || worktree === 'new-child'
   assertWorkerLaunchPreferencesCreateTerminal(params)
   validateFederatedWorkerStartPlacement(params, createsWorktree)
   const requestedLaunch = createPendingWorkerLaunchReceipt({
@@ -118,6 +119,14 @@ export async function startFederatedWorker(args: {
       : supportsControlMail
         ? ORCHESTRATION_FEDERATION_CONTROL_MAIL_PROTOCOL_VERSION
         : 1
+
+  const parentWorktreeRef = await resolveFederatedWorkerParent({
+    runtime,
+    params,
+    status,
+    serverName: server.name,
+    callerSession: args.callerSession
+  })
 
   const setupDecision = createsWorktree ? (params.setup ?? 'run') : 'not_applicable'
   const started = db.createStartingWorkerDispatch({
@@ -177,6 +186,7 @@ export async function startFederatedWorker(args: {
           depth: started.dispatch.depth,
           protocolVersion: federationProtocolVersion,
           worktree,
+          ...(parentWorktreeRef ? { parentWorktreeRef } : {}),
           name: params.name,
           repo: params.repo,
           baseBranch: params.baseBranch,

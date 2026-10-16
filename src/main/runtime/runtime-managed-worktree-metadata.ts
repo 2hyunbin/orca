@@ -1,3 +1,5 @@
+import type { ParentWorktreeRef } from '../../shared/worktree/lineage-types'
+import type { ResolvedWorkspaceParent } from './runtime-worktree-lineage-resolution'
 import type { GitPushTarget, Worktree } from '../../shared/worktree/types'
 import type { WorktreeMeta } from '../../shared/worktree/meta-types'
 import { worktreeWorkspaceKey } from '../../shared/workspace-scope'
@@ -17,11 +19,12 @@ import type { ResolvedWorktree } from './runtime-worktree-path-identity'
 
 type Updates = Omit<Partial<WorktreeMeta>, 'pushTarget'> & {
   pushTarget?: GitPushTarget | null
-  lineage?: { parentWorktree?: string; noParent?: boolean }
+  lineage?: { parentWorktree?: string; parentWorktreeRef?: ParentWorktreeRef; noParent?: boolean }
 }
 
 type Ports = {
   resolveWorktree: (selector: string) => Promise<ResolvedWorktree>
+  resolveParentReference?: (ref: ParentWorktreeRef) => Promise<ResolvedWorkspaceParent>
   validateParent: (worktree: ResolvedWorktree, parent: ResolvedWorktree) => void
   invalidateResolved: () => void
   invalidateScan: (repoId: string) => void
@@ -52,7 +55,7 @@ export async function updateRuntimeManagedWorktreeMetadata(args: {
   ) {
     return worktree
   }
-  if (lineage?.parentWorktree) {
+  if (lineage?.parentWorktree || lineage?.parentWorktreeRef) {
     args.ports.invalidateResolved()
     args.ports.invalidateScan(worktree.repoId)
   }
@@ -76,10 +79,20 @@ export async function updateRuntimeManagedWorktreeMetadata(args: {
   if (lineage?.noParent === true) {
     args.store.removeWorktreeLineage?.(worktree.id)
     args.store.removeWorkspaceLineage?.(worktreeWorkspaceKey(worktree.id))
-  } else if (lineage?.parentWorktree) {
-    const parent = await args.ports.resolveWorktree(lineage.parentWorktree)
-    args.ports.validateParent(worktree, parent)
-    nextParentRepoId = parent.repoId
+  } else if (lineage?.parentWorktree || lineage?.parentWorktreeRef) {
+    const resolved = lineage.parentWorktreeRef
+      ? await args.ports.resolveParentReference?.(lineage.parentWorktreeRef)
+      : undefined
+    const parent =
+      resolved?.type === 'external'
+        ? { id: resolved.worktree.id, instanceId: resolved.instanceId }
+        : resolved?.type === 'worktree'
+          ? resolved.worktree
+          : await args.ports.resolveWorktree(lineage.parentWorktree ?? '')
+    if ('repoId' in parent) {
+      args.ports.validateParent(worktree, parent)
+      nextParentRepoId = parent.repoId
+    }
     if (!worktree.instanceId || !parent.instanceId) {
       throw new RuntimeLineageError(
         'LINEAGE_PARENT_CONTEXT_MISSING',
@@ -92,14 +105,23 @@ export async function updateRuntimeManagedWorktreeMetadata(args: {
         'Worktree lineage storage was unavailable.'
       )
     }
+    const origin = lineage.parentWorktreeRef
+      ? (lineage.parentWorktreeRef.origin ?? 'cli')
+      : 'manual'
+    const capture = lineage.parentWorktreeRef
+      ? (lineage.parentWorktreeRef.capture ?? {
+          source: 'explicit-cli-flag' as const,
+          confidence: 'explicit' as const
+        })
+      : { source: 'manual-action' as const, confidence: 'explicit' as const }
     const createdAt = Date.now()
     args.store.setWorktreeLineage(worktree.id, {
       worktreeId: worktree.id,
       worktreeInstanceId: worktree.instanceId,
       parentWorktreeId: parent.id,
       parentWorktreeInstanceId: parent.instanceId,
-      origin: 'manual',
-      capture: { source: 'manual-action', confidence: 'explicit' },
+      origin,
+      capture,
       createdAt
     })
     args.store.setWorkspaceLineage?.({
@@ -107,8 +129,8 @@ export async function updateRuntimeManagedWorktreeMetadata(args: {
       childInstanceId: worktree.instanceId,
       parentWorkspaceKey: worktreeWorkspaceKey(parent.id),
       parentInstanceId: parent.instanceId,
-      origin: 'manual',
-      capture: { source: 'manual-action', confidence: 'explicit' },
+      origin,
+      capture,
       createdAt
     })
   }
@@ -132,7 +154,10 @@ export async function updateRuntimeManagedWorktreeMetadata(args: {
       }
     }
   }
-  return args.ports.showWorktree(`id:${worktree.id}`)
+  const updated = await args.ports.showWorktree(`id:${worktree.id}`)
+  return lineage?.parentWorktreeRef
+    ? Object.assign(updated, { lineage: args.store.getWorktreeLineage?.(worktree.id) ?? null })
+    : updated
 }
 
 export function persistRuntimeManagedWorktreeSortOrder(args: {

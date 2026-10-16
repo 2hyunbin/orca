@@ -93,11 +93,18 @@ export async function launchFederatedWorkerAgent(args: {
           startupLaunchSource: 'orchestration',
           ...(args.launchPreferences ? { startupLaunchPreferences: args.launchPreferences } : {}),
           activate: false,
-          lineage: { noParent: true }
+          lineage:
+            params.worktree === 'new-child'
+              ? { parentWorktreeRef: params.parentWorktreeRef }
+              : { noParent: true }
         })
         created = result.worktree
         const terminalHandle = result.startupTerminal?.handle
-        effects.push({ kind: 'worktree', action: 'created_top_level', id: result.worktree.id })
+        effects.push({
+          kind: 'worktree',
+          action: params.worktree === 'new-child' ? 'created_child' : 'created_top_level',
+          id: result.worktree.id
+        })
         const setup: WorkerSetupReceipt = {
           requested: setupDecision,
           effective: setupDecision,

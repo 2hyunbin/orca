@@ -1,4 +1,8 @@
-import type { WorktreeLineage, WorkspaceLineage } from '../../shared/worktree/lineage-types'
+import type {
+  WorktreeLineage,
+  WorkspaceLineage,
+  ParentWorktreeRef
+} from '../../shared/worktree/lineage-types'
 import type { WorkspaceKey } from '../../shared/folder-workspace-types'
 import {
   folderWorkspaceKey,
@@ -36,6 +40,17 @@ export class RuntimeWorktreeLineageController {
   constructor(private readonly deps: RuntimeWorktreeLineageDependencies) {}
 
   async resolveCreate(input?: WorktreeLineageInput): Promise<WorktreeLineageResolution> {
+    if (input?.parentWorktreeRef && !input.noParent) {
+      return {
+        kind: 'lineage',
+        parent: await this.resolveParentReference(input.parentWorktreeRef),
+        origin: input.parentWorktreeRef.origin ?? 'cli',
+        capture: input.parentWorktreeRef.capture ?? {
+          source: 'explicit-cli-flag',
+          confidence: 'explicit'
+        }
+      }
+    }
     const resolution = await resolveRuntimeWorktreeCreateLineage(input, {
       resolveParent: (selector) => this.resolveParent(selector),
       resolveWorktreeParent: (selector) => this.resolveWorktreeParent(selector),
@@ -54,6 +69,31 @@ export class RuntimeWorktreeLineageController {
       }
     })
     return resolution
+  }
+
+  async resolveParentReference(ref: ParentWorktreeRef): Promise<ResolvedWorkspaceParent> {
+    const row = indexWorktreesByInstance(await this.deps.listResolvedWorktrees()).get(
+      ref.instanceId
+    )
+    if (row === null) {
+      throw new RuntimeLineageError(
+        'LINEAGE_PARENT_CONTEXT_CONFLICT',
+        'Parent instance identity is ambiguous.'
+      )
+    }
+    return row
+      ? {
+          type: 'worktree',
+          workspaceKey: worktreeWorkspaceKey(row.id),
+          worktree: row,
+          instanceId: row.instanceId ?? null
+        }
+      : {
+          type: 'external',
+          workspaceKey: worktreeWorkspaceKey(ref.worktreeId),
+          worktree: { id: ref.worktreeId },
+          instanceId: ref.instanceId
+        }
   }
 
   async resolveParent(selector: string): Promise<ResolvedWorkspaceParent> {

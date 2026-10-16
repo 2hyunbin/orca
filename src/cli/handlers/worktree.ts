@@ -1,3 +1,4 @@
+import { resolveCallerParentReference } from './worktree-caller-parent'
 import type {
   RuntimeWorktreeListResult,
   RuntimeWorktreePsResult,
@@ -142,7 +143,17 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
       process.env.ORCA_TERMINAL_HANDLE.length > 0
         ? process.env.ORCA_TERMINAL_HANDLE
         : undefined
-    const explicitParent = await resolveCreateParentSelector(flags, cwd, client)
+    const parentWorktreeRef = await resolveCallerParentReference({
+      flags,
+      cwd,
+      client,
+      infer: true
+    })
+    const callerRelative =
+      client.isRemote && ['active', 'current'].includes(String(flags.get('parent-worktree')))
+    const explicitParent = callerRelative
+      ? {}
+      : await resolveCreateParentSelector(flags, cwd, client)
     const explicitParentWorktree = explicitParent.parentWorktree
     const explicitParentWorkspace = explicitParent.parentWorkspace
     const startupAgent = getOptionalStartupAgent(flags)
@@ -153,13 +164,13 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
     const setupDecision = getOptionalSetupDecision(flags)
     const noParent = flags.get('no-parent') === true
     const envParentWorkspace =
-      !noParent && !explicitParentWorkspace && !explicitParentWorktree
+      !client.isRemote && !noParent && !explicitParentWorkspace && !explicitParentWorktree
         ? getEnvParentWorkspace()
         : undefined
     let cwdParentWorktree: string | undefined
     const needsCwdRepoInference = !flags.has('repo') && !hasWorkspaceProjectTarget(flags)
     if (
-      (!explicitParentWorktree && !explicitParentWorkspace && !noParent) ||
+      (!client.isRemote && !explicitParentWorktree && !explicitParentWorkspace && !noParent) ||
       needsCwdRepoInference
     ) {
       try {
@@ -200,12 +211,13 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
       parentWorktree: explicitParentWorktree,
       ...(explicitParentWorkspace ? { parentWorkspace: explicitParentWorkspace } : {}),
       ...(envParentWorkspace ? { envParentWorkspace } : {}),
-      ...(cwdParentWorktree ? { cwdParentWorktree } : {}),
+      ...(!client.isRemote && cwdParentWorktree ? { cwdParentWorktree } : {}),
+      ...(parentWorktreeRef ? { parentWorktreeRef } : {}),
       noParent,
-      callerTerminalHandle,
+      callerTerminalHandle: client.isRemote ? undefined : callerTerminalHandle,
       // Why: marks the workspace as CLI-created so the sidebar can badge and
       // filter it. Sent on every `worktree create` — hand-typed or agent-run.
-      cliProvenanceRequest: callerTerminalHandle ? { callerTerminalHandle } : {}
+      cliProvenanceRequest: !client.isRemote && callerTerminalHandle ? { callerTerminalHandle } : {}
     }
     if (agentLaunch) {
       await createWorktreeWithAgent({ client, flags, create, launch: agentLaunch, json, rawArgs })
@@ -228,6 +240,12 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
     const linearIssueLink = getOptionalLinearIssueLinkFlag(flags, 'linear-issue', {
       allowNull: true
     })
+    const parentWorktreeRef = await resolveCallerParentReference({
+      flags,
+      cwd,
+      client,
+      infer: false
+    })
     const worktree = await getRequiredWorktreeSelector(flags, 'worktree', cwd, client)
     await assertGitLabLinkFlagProjectsMatch(flags, client, { worktree })
     const result = await client.call<RuntimeWorktreeSetResult>('worktree.set', {
@@ -238,7 +256,10 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
       comment: getOptionalStringFlag(flags, 'comment'),
       workspaceStatus: getOptionalStringFlag(flags, 'workspace-status'),
       isUnread,
-      parentWorktree: await getOptionalWorktreeSelector(flags, 'parent-worktree', cwd, client),
+      parentWorktree: parentWorktreeRef
+        ? undefined
+        : await getOptionalWorktreeSelector(flags, 'parent-worktree', cwd, client),
+      ...(parentWorktreeRef ? { parentWorktreeRef } : {}),
       noParent: flags.get('no-parent') === true
     })
     if (!json) {

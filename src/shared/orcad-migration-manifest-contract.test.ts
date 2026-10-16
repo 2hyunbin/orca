@@ -91,6 +91,17 @@ describe('orcad migration manifest contract', () => {
     }
   )
 
+  it('permits an external parent while requiring the child in the catalog', () => {
+    const parsed = parseOrcadMigrationManifest(
+      manifest({
+        dormantState: dormantLineage('worktree:repo-1::/srv/child', 'worktree:external::/parent')
+      })
+    )
+    expect(parsed.payload.dormantState?.workspaceLineage[0].lineage.parentWorkspaceKey).toBe(
+      'worktree:external::/parent'
+    )
+  })
+
   it('validates folder workspace keys alongside worktree workspace keys', () => {
     const parsed = parseOrcadMigrationManifest(
       manifest({ dormantState: dormantLineage('folder:folder-1', 'worktree:repo-1::/srv/repo-1') })

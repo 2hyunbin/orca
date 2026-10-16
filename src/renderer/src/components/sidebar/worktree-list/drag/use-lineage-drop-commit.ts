@@ -24,6 +24,7 @@ export function useWorktreeLineageDropCommit(args: {
   worktrees: readonly Worktree[]
 }) {
   const { repoMap, worktreeMap, worktreeLineageById, worktreeDragGroups } = args
+  const runtimeStatuses = useAppStore((s) => s.runtimeStatusByEnvironmentId)
   const assignWorktreeParent = useAppStore((s) => s.assignWorktreeParent)
   const updateWorktreeLineage = useAppStore((s) => s.updateWorktreeLineage)
   const lineageWorktreeMap = useMemo(
@@ -58,13 +59,21 @@ export function useWorktreeLineageDropCommit(args: {
             lineageById: worktreeLineageById,
             worktreeMap: lineageWorktreeMap,
             repoMap,
+            runtimeStatuses,
             cyclicLineageIds
           })
         )
       })
       return canAssignAll ? target : { ...target, lineageParentId: null }
     },
-    [cyclicLineageIds, repoMap, worktreeLineageById, worktreeMap, lineageWorktreeMap]
+    [
+      cyclicLineageIds,
+      repoMap,
+      worktreeLineageById,
+      worktreeMap,
+      lineageWorktreeMap,
+      runtimeStatuses
+    ]
   )
 
   const commitWorktreeLineageParentDrop = useCallback(

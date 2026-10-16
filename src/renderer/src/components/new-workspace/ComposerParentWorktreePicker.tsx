@@ -1,3 +1,4 @@
+import { canLinkWorktreeHosts } from '../sidebar/worktree-parent-candidates'
 import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -212,6 +213,7 @@ function ParentWorktreeCandidateList({
   const worktreesByRepo = useAppStore((s) => s.worktreesByRepo)
   const repoMap = useRepoMap()
   const worktreeLineageById = useAppStore((s) => s.worktreeLineageById)
+  const runtimeStatuses = useAppStore((s) => s.runtimeStatusByEnvironmentId)
   const workspaceLineageByChildKey = useAppStore((s) => s.workspaceLineageByChildKey)
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -239,13 +241,17 @@ function ParentWorktreeCandidateList({
       .filter(
         (candidate) =>
           !candidate.isArchived &&
-          (getWorktreeExecutionHostId(candidate, repoMap.get(candidate.repoId)) === childHostId ||
-            (!childHostId.startsWith('runtime:') && !candidate.hostId?.startsWith('runtime:'))) &&
+          canLinkWorktreeHosts(
+            childHostId,
+            getWorktreeExecutionHostId(candidate, repoMap.get(candidate.repoId)),
+            runtimeStatuses
+          ) &&
           !cyclicLineageIds.has(getWorktreeHostIdentity(candidate)) &&
           (folderSubtreeIds === null || folderSubtreeIds.has(candidate.id))
       )
       .sort(compareWorktreeDisplayName)
   }, [
+    runtimeStatuses,
     activeFolderWorkspaceId,
     executionHostId,
     repoId,

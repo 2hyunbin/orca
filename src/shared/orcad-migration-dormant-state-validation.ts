@@ -124,19 +124,14 @@ export function assertOrcadMigrationDormantStateReferences(args: {
     }
   }
   for (const entry of args.dormantState.worktreeLineage) {
-    if (
-      entry.worktreeId !== entry.lineage.worktreeId ||
-      !owns(entry.worktreeId) ||
-      !owns(entry.lineage.parentWorktreeId)
-    ) {
+    if (entry.worktreeId !== entry.lineage.worktreeId || !owns(entry.worktreeId)) {
       throw new Error('orcad_migration_dormant_worktree_lineage_scope_invalid')
     }
   }
   for (const entry of args.dormantState.workspaceLineage) {
     if (
       entry.childWorkspaceKey !== entry.lineage.childWorkspaceKey ||
-      !owns(entry.childWorkspaceKey) ||
-      !owns(entry.lineage.parentWorkspaceKey)
+      !owns(entry.childWorkspaceKey)
     ) {
       throw new Error('orcad_migration_dormant_workspace_lineage_scope_invalid')
     }

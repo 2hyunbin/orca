@@ -75,7 +75,11 @@ describe('OrcaRuntimeService', () => {
       [childId]: makeWorktreeMeta({ instanceId: 'child-instance' }),
       [parentId]: makeWorktreeMeta({ instanceId: 'parent-instance' })
     }
-    const setWorktreeLineage = vi.fn((_worktreeId: string, lineage: WorktreeLineage) => lineage)
+    let saved: WorktreeLineage | undefined
+    const setWorktreeLineage = vi.fn((_worktreeId: string, lineage: WorktreeLineage) => {
+      saved = lineage
+      return lineage
+    })
     const runtimeStore = {
       ...store,
       getRepo: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined),
@@ -86,7 +90,7 @@ describe('OrcaRuntimeService', () => {
         metaById[worktreeId] = { ...(metaById[worktreeId] ?? makeWorktreeMeta()), ...meta }
         return metaById[worktreeId]
       },
-      getWorktreeLineage: () => undefined,
+      getWorktreeLineage: () => saved,
       setWorktreeLineage
     }
     const runtime = new OrcaRuntimeService(runtimeStore as never)
@@ -105,6 +109,17 @@ describe('OrcaRuntimeService', () => {
         origin: 'manual'
       })
     )
+    const updated = await runtime.updateManagedWorktreeMeta(`id:${childId}`, {
+      lineage: { parentWorktreeRef: { worktreeId: parentId, instanceId: 'external-instance' } }
+    })
+    expect(updated).toMatchObject({
+      lineage: {
+        parentWorktreeId: parentId,
+        parentWorktreeInstanceId: 'external-instance',
+        origin: 'cli',
+        capture: { source: 'explicit-cli-flag', confidence: 'explicit' }
+      }
+    })
   })
 
   it('does not resolve unknown SSH worktree ids from scan-miss fallback', async () => {

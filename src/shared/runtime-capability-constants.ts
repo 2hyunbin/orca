@@ -1,3 +1,5 @@
+export const WORKTREE_CROSS_MACHINE_PARENT_RUNTIME_CAPABILITY =
+  'worktree.cross-machine-parent.v1' as const
 export const PROJECT_HOST_SETUP_RUNTIME_CAPABILITY = 'project-host-setup.v1' as const
 export const TASK_SOURCE_CONTEXT_RUNTIME_CAPABILITY = 'task-source-context.v1' as const
 export const WORKSPACE_RUN_CONTEXT_RUNTIME_CAPABILITY = 'workspace-run-context.v1' as const

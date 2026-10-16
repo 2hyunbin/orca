@@ -12,6 +12,7 @@ export type ResolvedWorkspaceParent =
       worktree: ResolvedWorktree
       instanceId: string | null
     }
+  | { type: 'external'; workspaceKey: WorkspaceKey; worktree: { id: string }; instanceId: string }
   | {
       type: 'folder'
       workspaceKey: WorkspaceKey

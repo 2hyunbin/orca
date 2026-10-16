@@ -1,3 +1,4 @@
+import { resolveLineageParentReference } from './worktree-lineage-parent-reference'
 import { composeWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../../../types'
@@ -109,9 +110,15 @@ export function projectWorktreeLineageToWorkspaceLineage(
 export async function setWorktreeLineageForRuntime(
   target: RuntimeClientTarget,
   worktreeId: string,
-  args: { parentWorktreeId?: string; noParent?: boolean }
+  args: { parentWorktreeId?: string; noParent?: boolean },
+  worktrees: readonly Worktree[] = []
 ): Promise<WorktreeLineageUpdateResult> {
-  if (target.kind === 'local') {
+  const parentWorktreeRef = await resolveLineageParentReference(
+    target,
+    args.parentWorktreeId,
+    worktrees
+  )
+  if (target.kind === 'local' && !parentWorktreeRef) {
     return {
       target,
       lineage: await window.api.worktrees.updateLineage({ worktreeId, ...args })
@@ -122,7 +129,8 @@ export async function setWorktreeLineageForRuntime(
     'worktree.set',
     {
       worktree: toRuntimeWorktreeSelector(worktreeId),
-      ...(args.parentWorktreeId
+      ...(parentWorktreeRef ? { parentWorktreeRef } : {}),
+      ...(args.parentWorktreeId && !parentWorktreeRef
         ? {
             parentWorktree: args.parentWorktreeId.startsWith('identity:')
               ? args.parentWorktreeId

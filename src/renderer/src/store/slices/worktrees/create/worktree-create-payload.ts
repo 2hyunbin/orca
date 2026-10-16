@@ -1,3 +1,4 @@
+import type { ParentWorktreeRef } from '../../../../../../shared/worktree/lineage-types'
 import type { CreateWorktreeArgs } from '../../../../../../shared/worktree/create-types'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type { WorkspaceKey } from '../../../../../../shared/folder-workspace-types'
@@ -38,6 +39,7 @@ export type WorktreeCreateAttempt = {
   name: string
   branchNameOverride?: string
   parentWorkspace?: WorkspaceKey | `identity:${string}`
+  parentWorktreeRef?: ParentWorktreeRef
   manualOrder?: number
 }
 
@@ -122,6 +124,7 @@ export function buildRuntimeWorktreeCreateParams(
   const { startup, options } = request
   return {
     repo: request.repoId,
+    ...(attempt.parentWorktreeRef ? { parentWorktreeRef: attempt.parentWorktreeRef } : {}),
     ...sharedCreateFields(request, attempt),
     // Why: the host defaults a bare `parentWorkspace` to CLI provenance; app picks are manual.
     ...(attempt.parentWorkspace ? { parentWorkspaceOrigin: 'manual' } : {}),

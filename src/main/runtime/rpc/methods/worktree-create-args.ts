@@ -90,6 +90,7 @@ export function buildManagedWorktreeCreateArgs(
       ...(params.parentWorkspaceOrigin ? { parentWorkspaceOrigin: 'manual' as const } : {}),
       envParentWorkspace: params.envParentWorkspace,
       parentWorktree: params.parentWorktree,
+      ...(params.parentWorktreeRef ? { parentWorktreeRef: params.parentWorktreeRef } : {}),
       ...(params.cwdParentWorktree ? { cwdParentWorktree: params.cwdParentWorktree } : {}),
       noParent: params.noParent === true,
       callerTerminalHandle: params.callerTerminalHandle,

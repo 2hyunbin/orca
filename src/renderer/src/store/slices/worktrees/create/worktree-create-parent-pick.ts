@@ -1,3 +1,5 @@
+import type { ParentWorktreeRef } from '../../../../../../shared/worktree/lineage-types'
+import { requiresParentWorktreeReference } from '../../../../../../shared/resolved-worktree-lineage'
 import type { AppState } from '../../../types'
 import type { WorkspaceKey } from '../../../../../../shared/folder-workspace-types'
 import { toast } from 'sonner'
@@ -14,6 +16,7 @@ import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 export type WorktreeCreateParentPick = {
   /** Workspace the create attaches to. Undefined once a stale pick is dropped. */
   parentWorkspace?: WorkspaceKey | `identity:${string}`
+  parentWorktreeRef?: ParentWorktreeRef
   /** Set only for an accepted user pick, whose lineage row must come back from the host. */
   pickedParentWorktreeId?: string
   /** Label for the drop warning; null when the parent record is already gone, '' when it has no name. */
@@ -26,7 +29,7 @@ export type WorktreeCreateParentPick = {
 export function resolveWorktreeCreateParent(
   state: AppState,
   requestedParentWorktreeId: string | undefined,
-  _executionHostId: ExecutionHostId
+  executionHostId: ExecutionHostId
 ): WorktreeCreateParentPick {
   const matches = getIndexedAllWorktrees(state.worktreesByRepo).filter((candidate) =>
     candidate.identity && requestedParentWorktreeId?.startsWith('identity:')
@@ -37,6 +40,22 @@ export function resolveWorktreeCreateParent(
   const usable = picked && !picked.isArchived ? picked.id : undefined
   const pickedDisplayName = picked ? resolveWorktreeDisplayName(picked).trim() : null
   if (usable) {
+    if (
+      picked?.instanceId &&
+      requiresParentWorktreeReference(executionHostId, picked.hostId ?? 'local')
+    ) {
+      return {
+        parentWorktreeRef: {
+          worktreeId: picked.id,
+          instanceId: picked.instanceId,
+          origin: 'manual',
+          capture: { source: 'manual-action', confidence: 'explicit' }
+        },
+        pickedParentWorktreeId: picked.id,
+        pickedDisplayName,
+        staleBeforeCreate: false
+      }
+    }
     return {
       parentWorkspace: picked?.identity
         ? `identity:${picked.identity.key}`

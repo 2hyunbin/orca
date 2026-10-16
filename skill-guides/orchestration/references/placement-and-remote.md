@@ -52,9 +52,10 @@ only the worker's execution server and appears only on `worker-start`:
 ORCA orchestration worker-start --task <task_id> --on <environment> --worktree new-top-level --repo <exact_remote_repo_selector> --name <name> --agent codex --setup run --json
 ```
 
-Remote `current` and `new-child` are invalid because they are ambiguous across
-servers. Use an exact discovered remote workspace, or `new-top-level` with an
-exact remote repository selector. After start, route every follow-up, read,
+Remote `current` is invalid because it is ambiguous across servers. Use an exact
+discovered remote workspace, `new-child` to nest under the coordinator, or
+`new-top-level` without a parent. Both creation modes require an exact remote
+repository selector; `new-child` also requires an updated worker server. After start, route every follow-up, read,
 stop, and cleanup by Dispatch ID; never repeat `--on` or substitute a remote
 terminal handle.
 

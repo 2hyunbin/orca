@@ -111,6 +111,26 @@ export function assertLinkedWorkItemSourceContextMatch(
   }
 }
 
+export const ParentWorktreeRefSchema = z.object({
+  worktreeId: z.string().min(1),
+  instanceId: z.string().min(1),
+  origin: z.enum(['orchestration', 'cli', 'manual']).optional(),
+  capture: z
+    .object({
+      source: z.enum([
+        'explicit-cli-flag',
+        'env-workspace',
+        'cwd-context',
+        'terminal-context',
+        'orchestration-context',
+        'active-workspace',
+        'manual-action'
+      ]),
+      confidence: z.enum(['explicit', 'inferred'])
+    })
+    .optional()
+})
+
 export const WorktreeSet = WorktreeSelector.extend({
   // Why: '' is the blanking contract — "fall back to the branch/folder name".
   // OptionalString coerced it to undefined, so on remote/SSH hosts clearing the
@@ -159,10 +179,14 @@ export const WorktreeSet = WorktreeSelector.extend({
   diffComments: z.array(DiffCommentSchema).optional().catch(undefined),
   mobileDiffReview: MobileDiffReviewSchema.optional().catch(undefined),
   parentWorktree: OptionalString,
+  parentWorktreeRef: ParentWorktreeRefSchema.optional(),
   noParent: OptionalBoolean
 }).superRefine((params, ctx) => {
   assertLinkedWorkItemSourceContextMatch(params, ctx)
-  if (params.parentWorktree && params.noParent === true) {
+  if (
+    ((params.parentWorktree || params.parentWorktreeRef) && params.noParent === true) ||
+    (params.parentWorktree && params.parentWorktreeRef)
+  ) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: 'Choose either --parent-worktree or --no-parent, not both.'
