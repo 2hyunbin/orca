@@ -6,6 +6,7 @@ import pg from 'pg'
 import { RELAY_REGIONS } from '@orca-cloud/relay-contract'
 import {
   emptyPostgresPoolPressureCounts,
+  isPostgresPoolAcquireFailure,
   isPostgresPoolConnectFailure,
   PostgresPoolPressure,
   type PostgresPoolLane,
@@ -1182,6 +1183,34 @@ export function isRelayDatabaseTransientError(error: unknown): boolean {
   return isPostgresPoolConnectFailure(error)
 }
 
+// pg raises these before it writes the statement: the client was already dead at checkout.
+const NOT_QUERYABLE = /is not queryable$/
+const nothingRanErrors = new WeakSet<object>()
+
+// The server ended the session (a terminate, shutdown or idle timeout) or the socket died. pg
+// still calls such a client queryable until the socket's end arrives, so one released without
+// an error goes back to the pool and fails the next caller's statement.
+const SESSION_ENDING_CODES = new Set(['57P01', '57P02', '57P03', '25P03'])
+function endsPostgresSession(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false
+  const code = 'code' in error ? String(error.code) : ''
+  if (SESSION_ENDING_CODES.has(code) || code.startsWith('08')) return true
+  return error instanceof Error && error.message.startsWith('Connection terminated')
+}
+
+export function markRelayDatabaseNothingRan(error: unknown): void {
+  if (typeof error === 'object' && error !== null) nothingRanErrors.add(error)
+}
+
+// The operation failed before any of its statements reached the server: no session, a client
+// dead at checkout, or a failed BEGIN. Running it again cannot repeat any of its work.
+export function isRelayDatabaseNothingRanError(error: unknown): boolean {
+  return (
+    isPostgresPoolAcquireFailure(error) ||
+    (typeof error === 'object' && error !== null && nothingRanErrors.has(error))
+  )
+}
+
 async function waitForPostgresRetry(random: () => number = Math.random): Promise<void> {
   const delayMs = Math.floor(random() * (POSTGRES_RETRY_MAX_DELAY_MS + 1))
   await new Promise((resolve) => setTimeout(resolve, delayMs))
@@ -1237,6 +1266,10 @@ export class PostgresDatabase implements RelayDatabase {
     } catch (error) {
       markRelayDatabaseError(error)
       if (isPostgresReadTimeout(error)) lostReply = error
+      else if (error instanceof Error && endsPostgresSession(error)) lostReply = error
+      if (phase === 'execute' && error instanceof Error && NOT_QUERYABLE.test(error.message)) {
+        markRelayDatabaseNothingRan(error)
+      }
       reportPostgresQueryFailure({
         error,
         phase,
@@ -1284,8 +1317,14 @@ export class PostgresDatabase implements RelayDatabase {
       const connectionId = this.idOfConnection(client)
       const transaction = new PostgresTransaction(client, connectionId, this.queryTimeout)
       let lostReply: Error | undefined
+      let sessionEnded: Error | undefined
       try {
-        await timedQuery(client, connectionId, 'BEGIN', undefined, this.queryTimeout)
+        await timedQuery(client, connectionId, 'BEGIN', undefined, this.queryTimeout).catch(
+          (error: unknown) => {
+            markRelayDatabaseNothingRan(error)
+            throw error
+          }
+        )
         const result = await operation(transaction)
         // Even when the operation caught it: COMMIT must not run after a lost reply.
         if (transaction.poisonedBy) throw transaction.poisonedBy
@@ -1303,6 +1342,7 @@ export class PostgresDatabase implements RelayDatabase {
         lostReply = transaction.poisonedBy ?? (isPostgresReadTimeout(error) ? error : undefined)
         const open = transaction.open
         if (open && !lostReply) await client.query('ROLLBACK').catch(() => undefined)
+        if (error instanceof Error && endsPostgresSession(error)) sessionEnded = error
         this.holds.recordUnavailable(transaction.consumeLockUnavailable())
         this.holds.recordLockTimeout(transaction.consumeLockTimeouts())
         // Once the fused commit has ended the transaction, a retry would apply the work twice.
@@ -1335,7 +1375,7 @@ export class PostgresDatabase implements RelayDatabase {
           )
         }
       } finally {
-        client.release(lostReply)
+        client.release(lostReply ?? sessionEnded)
       }
       // A PostgreSQL transaction is unusable after an abort, so retry all work
       // on a fresh pooled client with a small full-jitter delay.
