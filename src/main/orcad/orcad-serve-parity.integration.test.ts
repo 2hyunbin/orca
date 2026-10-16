@@ -195,6 +195,7 @@ describe.skipIf(skip)('orca serve on orcad', () => {
       mkdtempSync(join(process.platform === 'win32' ? tmpdir() : '/tmp', 'orca-serve-d7-'))
     )
     roots.push(userData)
+    cleanupDiagnostics.add(new ServeCleanupDiagnostics(userData, userData))
     const client = join(userData, 'daemon-client.cjs')
     await buildDaemonSessionClient(client)
     const session = async (op: 'create' | 'attach', marker: string) => {
@@ -241,6 +242,8 @@ async function serveOnce(userData: string): Promise<number> {
   let stdout = ''
   let stderr = ''
   child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString('utf8')))
+  const diagnostics = [...cleanupDiagnostics].find((entry) => entry.owns(userData))
+  diagnostics?.observe(child, () => stderr)
   const line = await new Promise<string>((resolveLine, reject) => {
     const timer = setTimeout(() => reject(new Error(`no readiness: ${stderr}`)), 120_000)
     child.stdout.on('data', (chunk: Buffer) => {
@@ -264,10 +267,13 @@ async function stopServe(userData: string): Promise<void> {
   if (!child || child.exitCode !== null) {
     return
   }
+  const diagnostics = [...cleanupDiagnostics].find((entry) => entry.owns(userData))
+  await diagnostics?.capture('beforeServeStop')
   await recordProfileDaemons(userData)
   const exited = new Promise((settle) => child.once('exit', settle))
   child.kill('SIGTERM')
   await exited
+  await diagnostics?.capture('afterServeStop')
 }
 
 async function stopServeProfile(userData: string, shellPid: number | null): Promise<void> {

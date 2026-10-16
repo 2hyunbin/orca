@@ -22,6 +22,7 @@ import {
 import { parseOrcadReadinessOutput } from '../ssh/orcad-remote-launch'
 import { ORCAD_LOCK_FILE_NAME, readOrcadInstanceLockRecord } from './orcad-instance-lock'
 import { ORCAD_SHUTDOWN_DEADLINE_MS } from './orcad-lifecycle'
+import { ServeCleanupDiagnostics } from './orcad-serve-cleanup-diagnostics.test-fixture'
 import {
   installPackagedOrcadSlotForTests,
   locatePinnedNodeForTests,
@@ -38,6 +39,7 @@ const skip = skipForMissingInputs('artifact', [
 
 let root = ''
 const children: ReturnType<typeof spawnProcess>[] = []
+let diagnostics: ServeCleanupDiagnostics | undefined
 
 /** Without Vitest's markers: daemon-entry.js does not start its server under VITEST. */
 function hostEnv(userData: string): NodeJS.ProcessEnv {
@@ -53,13 +55,30 @@ function hostEnv(userData: string): NodeJS.ProcessEnv {
 }
 
 afterEach(async () => {
-  for (const child of children.splice(0)) {
-    await killChildAndWait(child)
-  }
-  if (root) {
-    // The terminal daemon deliberately outlives orcad; it must be gone before its profile is.
-    await killProfileDaemons(join(root, 'data'))
-    await removeTestRoot(root)
+  await diagnostics?.capture('beforeChildCleanup')
+  try {
+    for (const child of children.splice(0)) {
+      await killChildAndWait(child)
+    }
+    if (root) {
+      // The terminal daemon deliberately outlives orcad; it must be gone before its profile is.
+      await killProfileDaemons(join(root, 'data'))
+      await diagnostics?.capture('afterDaemonCleanup')
+      await removeTestRoot(root)
+      if (
+        process.env.ORCA_SERVE_CLEANUP_DIAGNOSTICS === '1' ||
+        (process.platform === 'win32' && process.env.CI)
+      ) {
+        diagnostics?.report('cleanupComplete')
+      }
+    }
+  } catch (error) {
+    await diagnostics?.capture('cleanupFailed')
+    diagnostics?.report('cleanupFailed', undefined, error)
+    throw error
+  } finally {
+    diagnostics?.dispose()
+    diagnostics = undefined
   }
   // Why: windows-11-arm runners took 15-60+ s to delete the freshly written slot and runtime here.
 }, 180_000)
@@ -82,6 +101,8 @@ describe.skipIf(skip)('packaged orcad stop request', () => {
     let stderr = ''
     child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString('utf8')))
     child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString('utf8')))
+    diagnostics = new ServeCleanupDiagnostics(slotDir, userData)
+    diagnostics.observe(child, () => stderr)
     const exited = new Promise<number | null>((resolve) => child.once('exit', resolve))
 
     await vi.waitFor(
@@ -102,10 +123,12 @@ describe.skipIf(skip)('packaged orcad stop request', () => {
     expect(Math.abs(lock!.startedAtMs! - launchedAt)).toBeLessThan(30_000)
 
     await recordProfileDaemons(userData)
+    await diagnostics.capture('beforeStopRequest')
     const requestedAt = Date.now()
     writeFileSync(join(slotDir, ORCAD_STOP_REQUEST_FILENAME), '')
     const code = await exited
     const elapsedMs = Date.now() - requestedAt
+    await diagnostics.capture('afterStopRequest')
     expect(code, stderr.slice(-2000)).toBe(0)
     // The listener polls once a second when the watcher misses the write.
     expect(elapsedMs).toBeLessThan(ORCAD_SHUTDOWN_DEADLINE_MS)

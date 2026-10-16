@@ -71,30 +71,24 @@ export class ServeCleanupDiagnostics {
 
   observe(child: ReturnType<typeof spawnProcess>, stderr: () => string): void {
     this.child = child
+    this.serveStartedAtMs = undefined
     this.stderr = stderr
     this.note('spawn', { pid: child.pid })
-    const onExit = (code: number | null, signal: NodeJS.Signals | null): void =>
-      this.note('exit', { code, signal })
-    const onClose = (code: number | null, signal: NodeJS.Signals | null): void =>
-      this.note('close', { code, signal })
+    for (const phase of ['exit', 'close'] as const) {
+      const record = (code: number | null, signal: NodeJS.Signals | null): void =>
+        this.note(phase, { pid: child.pid, code, signal })
+      child.once(phase, record)
+      this.listeners.push(() => child.off(phase, record))
+    }
     const onError = (error: Error): void => this.note('childError', errorDetails(error))
-    child.once('exit', onExit)
-    child.once('close', onClose)
     child.once('error', onError)
-    this.listeners.push(() => {
-      child.off('exit', onExit)
-      child.off('close', onClose)
-      child.off('error', onError)
-    })
-    for (const [name, stream] of [
-      ['stdout', child.stdout],
-      ['stderr', child.stderr]
-    ] as const) {
+    this.listeners.push(() => child.off('error', onError))
+    for (const [name, stream] of Object.entries({ stdout: child.stdout, stderr: child.stderr })) {
       if (!stream) {
         continue
       }
       for (const milestone of ['end', 'close'] as const) {
-        const record = (): void => this.note(`${name}.${milestone}`)
+        const record = (): void => this.note(`${name}.${milestone}`, { pid: child.pid })
         stream.once(milestone, record)
         this.listeners.push(() => stream.off(milestone, record))
       }
@@ -153,6 +147,7 @@ export class ServeCleanupDiagnostics {
       const index = buildProcessTableIndex(rows)
       const selected = new Map<number, WindowsProcessRow>()
       const verifiedRoots: number[] = []
+      const ancestryRootObservations: Record<string, unknown>[] = []
       for (const pid of [this.child?.pid, ...this.daemonIdentities.keys()]) {
         if (pid === undefined) {
           continue
@@ -164,10 +159,11 @@ export class ServeCleanupDiagnostics {
         selected.set(pid, row)
         const expected =
           pid === this.child?.pid ? this.serveStartedAtMs : this.daemonIdentities.get(pid)
-        if (expected === undefined || expected === null || row.creationTimeMs !== expected) {
-          continue
+        ancestryRootObservations.push({ pid, expected, actual: row.creationTimeMs })
+        if (row.creationTimeMs !== undefined && row.creationTimeMs === expected) {
+          verifiedRoots.push(pid)
         }
-        verifiedRoots.push(pid)
+        // Unmatched roots stay diagnostic; a PID alone cannot establish ownership.
         for (const descendant of collectDescendantsFromIndex(index, pid)) {
           if (selected.size >= ROW_LIMIT) {
             break
@@ -176,6 +172,7 @@ export class ServeCleanupDiagnostics {
         }
       }
       snapshot.verifiedAncestryRoots = verifiedRoots
+      snapshot.ancestryRootObservations = ancestryRootObservations
       for (const row of rows) {
         if (selected.size >= ROW_LIMIT) {
           break
@@ -287,7 +284,7 @@ export class ServeCleanupDiagnostics {
   rootRemoved(root: string): boolean {
     try {
       this.removed.add(root)
-      if (this.removed.size !== 2) {
+      if (this.removed.size !== new Set([this.projectRoot, this.userData]).size) {
         return false
       }
       if (
@@ -296,12 +293,16 @@ export class ServeCleanupDiagnostics {
       ) {
         this.report('cleanupComplete')
       }
-      for (const remove of this.listeners) {
-        remove()
-      }
+      this.dispose()
       return true
     } catch {
       return false
+    }
+  }
+
+  dispose(): void {
+    for (const remove of this.listeners.splice(0)) {
+      remove()
     }
   }
 
