@@ -2529,12 +2529,8 @@ export function createRemoteRuntimePtyTransport(
           }
         },
         onFitOverrideChanged: (event) => {
-          // Why: desktop-fit at our grid answers our claim; any hold (a peer owns it) re-arms one.
-          if (
-            event.mode !== 'desktop-fit' ||
-            event.cols !== unconfirmedClaim?.cols ||
-            event.rows !== unconfirmedClaim?.rows
-          ) {
+          // Why: desktop-fit answers our claim (its grid is the host's target, not ours); a hold means a peer owns it.
+          if (event.mode !== 'desktop-fit') {
             unconfirmedClaim = null
           }
           if (isCurrentSubscription() && subscribedPtyId) {
@@ -2542,7 +2538,7 @@ export function createRemoteRuntimePtyTransport(
           }
         },
         onDriverChanged: (driver) => {
-          if (driver.kind !== 'desktop') {
+          if (driver.kind === 'mobile') {
             unconfirmedClaim = null
           }
           if (isCurrentSubscription() && subscribedPtyId) {

@@ -123,11 +123,18 @@ describe('remote pane reveal round trips', () => {
     transport.claimViewport?.(100, 40)
     expect(framesOf(TerminalStreamOpcode.ClaimViewport)).toBe(2)
 
-    // The host answering our own claim (desktop-fit at our grid) is not a reason to claim again.
+    // The host answering our claim (desktop-fit, at whatever grid it reports, then an idle or
+    // desktop driver) is not a reason to claim again.
     subscriptionCallbacks?.onResponse({
       ok: true,
-      result: { type: 'fit-override-changed', streamId, mode: 'desktop-fit', cols: 100, rows: 40 }
+      result: { type: 'fit-override-changed', streamId, mode: 'desktop-fit', cols: 159, rows: 69 }
     })
+    for (const kind of ['idle', 'desktop'] as const) {
+      subscriptionCallbacks?.onResponse({
+        ok: true,
+        result: { type: 'driver-changed', streamId, driver: { kind } }
+      })
+    }
     transport.claimViewport?.(100, 40)
     expect(framesOf(TerminalStreamOpcode.ClaimViewport)).toBe(2)
 
