@@ -201,6 +201,9 @@ function createMainBootstrapPlugin() {
       if (!mainChunk || mainChunk.type !== 'chunk') {
         return
       }
+      if (!mainChunk.moduleIds.some((id) => resolve(id) === MAIN_BUILD_ENTRY_POINTS.index)) {
+        throw new Error('Main startup must stay in index.js so __dirname resolves app assets')
+      }
 
       // Why: source guards and diagnostics run after Rollup's generated require
       // prelude, too late to handle a missing bootstrap dependency.
@@ -239,8 +242,8 @@ export const electronViteConfig: UserConfig = {
       },
       rollupOptions: {
         input: MAIN_BUILD_ENTRY_POINTS,
-        // CLI builds replace these public entry files; shared code must live in separate chunks.
-        preserveEntrySignatures: 'strict',
+        // CLI builds replace exported entries; keep their internals separate without moving startup paths.
+        preserveEntrySignatures: 'exports-only',
         // Why: Rolldown's SSR default is ESM, but Electron and sidecar launchers
         // consume these stable CommonJS paths.
         output: {
