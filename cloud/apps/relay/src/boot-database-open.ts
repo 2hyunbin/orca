@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import {
   markRelayDatabaseMoveCapability,
   openRelayDatabase,
@@ -100,7 +101,11 @@ export async function openSwitchingRelayDatabaseAtBoot(
 ): Promise<{ database: SwitchingRelayDatabase; stop: () => void }> {
   const settings = {
     ...input,
-    applicationName: markRelayDatabaseMoveCapability(input.applicationName ?? 'orca-relay')
+    // One id per process, on both targets' sessions alike.
+    applicationName: markRelayDatabaseMoveCapability(
+      input.applicationName ?? 'orca-relay',
+      randomBytes(4).toString('hex')
+    )
   }
   const google = googleMetadataAccess()
   let pointerChannel: ControlFlagChannel<DatabaseTargetPointer | null> | null = null

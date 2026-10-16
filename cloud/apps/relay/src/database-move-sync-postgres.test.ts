@@ -153,6 +153,86 @@ describePostgres('database move: tracking, copy, sync and verify', () => {
     }
   })
 
+  it('stops copy and sync when a table loses its triggers', async () => {
+    await track()
+    await app.query(`DROP TRIGGER relay_move_track_upd ON relay_cells`)
+    await expect(runCopy(sessions, tables, { maxBytesPerSecond: 1e9 })).rejects.toThrow(
+      'tables_without_tracking'
+    )
+    await expect(
+      runSyncLoop(sessions, tables, { stopAtBacklog: 0, schemaCheckEveryMs: 0 })
+    ).rejects.toThrow('tables_without_tracking')
+  })
+
+  it("stops on a column added mid-run and resets that table's copy position", async () => {
+    await track()
+    await runCopy(sessions, tables, { maxBytesPerSecond: 1e9 })
+    try {
+      await app.query(`ALTER TABLE relay_audit_events ADD COLUMN mid_run TEXT`)
+      const refusal = await runSyncLoop(sessions, tables, {
+        stopAtBacklog: 0,
+        schemaCheckEveryMs: 0
+      }).catch((error: unknown) => error)
+      expect(refusal).toMatchObject({
+        reason: 'schema_changed_during_run',
+        details: { tables: ['relay_audit_events'], copyProgressReset: true }
+      })
+      const progress = await sessions.target.query(
+        `SELECT table_name FROM relay_move_copy_progress WHERE table_name = 'relay_audit_events'`
+      )
+      expect(progress.rows).toEqual([])
+      await expect(runCopy(sessions, tables, { maxBytesPerSecond: 1e9 })).rejects.toThrow(
+        'schema_changed_during_run'
+      )
+    } finally {
+      await app.query(`ALTER TABLE relay_audit_events DROP COLUMN IF EXISTS mid_run`)
+    }
+  })
+
+  it('paces the copy on what the source reads from disk, dead pages included', async (context) => {
+    // Evicting the table from shared buffers needs pg_buffercache_evict (Postgres 17+).
+    const evictable = await withPgClient(sides.primary.adminUrl, async (admin) => {
+      await admin.query('CREATE EXTENSION IF NOT EXISTS pg_buffercache')
+      const found = await admin.query(`SELECT to_regproc('pg_buffercache_evict') IS NOT NULL AS ok`)
+      return Boolean(found.rows[0]?.ok)
+    })
+    if (!evictable) context.skip()
+    await track()
+    // 20,000 rows written and 19,900 deleted: the live JSON is tiny, the pages are not.
+    await app.query(
+      `INSERT INTO relay_audit_events (id, at, type, detail_json)
+       SELECT 'b' || lpad(n::text, 6, '0'), n, 't', repeat('x', 300) FROM generate_series(1, 20000) n`
+    )
+    await app.query(`DELETE FROM relay_audit_events WHERE at > 100`)
+    const evicted = await withPgClient(sides.primary.adminUrl, async (admin) => {
+      const result = await admin.query(
+        `SELECT count(*) FILTER (WHERE pg_buffercache_evict(bufferid))::int AS n FROM pg_buffercache
+         WHERE relfilenode IN (SELECT pg_relation_filenode(oid) FROM pg_class
+                               WHERE relname LIKE 'relay_audit_events%')`
+      )
+      return Number(result.rows[0]?.n)
+    })
+    expect(evicted).toBeGreaterThan(100)
+    const budget = 2_000_000
+    const startedAt = Date.now()
+    const result = await runCopy(sessions, tables, { maxBytesPerSecond: budget, batchRows: 50 })
+    const elapsedMs = Date.now() - startedAt
+    console.error(JSON.stringify({ pacing: result, elapsedMs }))
+    expect(result.readBytes).toBeGreaterThan(result.bytes * 10)
+    expect(elapsedMs).toBeGreaterThanOrEqual((result.readBytes * 1000) / budget - 50)
+  })
+
+  it('caps the copy at the row rate', async () => {
+    await track()
+    await app.query(
+      `INSERT INTO relay_audit_events (id, at, type, detail_json)
+       SELECT 'r' || n, n, 't', '{}' FROM generate_series(1, 300) n`
+    )
+    const startedAt = Date.now()
+    await runCopy(sessions, tables, { maxBytesPerSecond: 1e9, maxRowsPerSecond: 500 })
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(550)
+  })
+
   it('keeps BIGINTs past 2^53 exact through copy and sync', async () => {
     await track()
     const big = '9223372036854775807'
@@ -257,18 +337,24 @@ describePostgres('database move: tracking, copy, sync and verify', () => {
     // A stalled copy: the target session dies after a few pages.
     const target = await connect(sides.dedicated.move.url)
     const pid = (await target.query('SELECT pg_backend_pid() AS pid')).rows[0]?.pid
-    const killer = setTimeout(() => {
-      void withPgClient(sides.dedicated.adminUrl, (admin) =>
-        admin.query('SELECT pg_terminate_backend($1)', [pid])
-      )
-    }, 150)
+    // Killed once the first pages of the table have committed.
+    const killer = setInterval(() => {
+      void withPgClient(sides.dedicated.adminUrl, async (admin) => {
+        const progress = await admin.query(
+          `SELECT rows_copied FROM relay_move_copy_progress WHERE table_name = 'relay_audit_events'`
+        )
+        if (Number(progress.rows[0]?.rows_copied ?? 0) > 0) {
+          await admin.query('SELECT pg_terminate_backend($1)', [pid])
+        }
+      })
+    }, 20)
     await expect(
       runCopy({ source: sessions.source, target }, tables, {
         batchRows: 50,
         maxBytesPerSecond: 20_000
       })
     ).rejects.toThrow()
-    clearTimeout(killer)
+    clearInterval(killer)
     await target.end().catch(() => undefined)
     const partial = await sessions.target.query(
       `SELECT rows_copied::int AS rows, done FROM relay_move_copy_progress WHERE table_name = 'relay_audit_events'`

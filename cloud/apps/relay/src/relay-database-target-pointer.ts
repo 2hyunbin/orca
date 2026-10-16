@@ -29,6 +29,8 @@ const QuiesceSchema = z
 const PointerSchema = z.object({
   version: z.literal(1),
   dedicated: DedicatedTargetSchema,
+  // The newest authority generation the tool has written; no process serves from a target below it.
+  generation: z.number().int().min(0).optional(),
   quiesce: QuiesceSchema.optional()
 })
 

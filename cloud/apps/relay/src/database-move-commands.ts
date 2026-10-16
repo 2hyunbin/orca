@@ -12,7 +12,7 @@ import { runCopy, type MoveCopyOptions } from './database-move-copy.js'
 import { logMoveEvent, MoveRefusal } from './database-move-events.js'
 import {
   replayClaims,
-  requireSentinel,
+  requireTracking,
   runSyncLoop,
   takeSyncLock,
   type MoveSyncOptions,
@@ -177,7 +177,7 @@ export async function syncCommand(
   await withMoveSessions(ctx, from, 'sync', async (sessions, tables) => {
     await takeSyncLock(sessions.source)
     await refuseWritingTheActiveSide(sessions, from)
-    await requireSentinel(sessions.source)
+    await requireTracking(sessions.source, tables)
     const replayed = await replayClaims(sessions, tables)
     logMoveEvent('sync_started', { from, replayed })
     const result = await runSyncLoop(sessions, tables, { ...options, label: { from } })

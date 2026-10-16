@@ -1,7 +1,8 @@
+import { randomBytes } from 'node:crypto'
 import { AuthTypes, Connector, IpAddressTypes } from '@google-cloud/cloud-sql-connector'
 import pg from 'pg'
 import { parse as parseConnectionString } from 'pg-connection-string'
-import { RELAY_DATABASE_MOVE_CAPABILITY_SUFFIX, type RelayPostgresConnection } from './database.js'
+import { markRelayDatabaseMoveCapability, type RelayPostgresConnection } from './database.js'
 import { MoveRefusal } from './database-move-events.js'
 import type { GoogleMetadataAccess } from './google-metadata-access-token.js'
 import { readSecretManagerText } from './relay-dedicated-database-secret.js'
@@ -26,8 +27,12 @@ export type MoveLogin = {
 const CLOUD_SQL_SOCKET_PREFIX = '/cloudsql/'
 const TOOL_STATEMENT_TIMEOUT_MS = 60_000
 
+// One id per tool run, in the relay's own mark format; the cutover's gate leaves the tool's
+// sessions out by their prefix.
+const TOOL_PROCESS_ID = randomBytes(4).toString('hex')
+
 export function moveApplicationName(purpose: string): string {
-  return `orca-relay-move/${purpose}${RELAY_DATABASE_MOVE_CAPABILITY_SUFFIX}`
+  return markRelayDatabaseMoveCapability(`orca-relay-move/${purpose}`, TOOL_PROCESS_ID)
 }
 
 export function otherMoveSide(side: MoveSide): MoveSide {
