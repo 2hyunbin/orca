@@ -44,6 +44,7 @@ const { resolveOrcadMachineHome } = await import('./orcad-remote-context')
 const {
   decideOrcadMachineHome,
   orcadMachineIdentity,
+  orcadMachineOwnershipUnresolvedMessage,
   parseOrcadMachineHomeProbe,
   ORCAD_MACHINE_CLAIM_ARBITER_DIRNAME,
   ORCAD_MACHINE_CLAIM_FILENAME,
@@ -348,6 +349,19 @@ describe.runIf(POSIX)('resolveOrcadMachineHome on a home several machines share'
     await execOrcadRemote(a, message.slice(message.indexOf('reconnect: ') + 'reconnect: '.length))
     expect(await resolveOrcadMachineHome(a, true)).toEqual(loginHomeResult())
     expect((await resolveOrcadMachineHome(b, true)).orcadHome).not.toBe(home)
+  })
+
+  it('claims a shared home whose data root no orcad ever activated, and its fix runs anywhere', async () => {
+    const a = machine('node-a', 'node-a', { homeSource: 'filer:/export/home' })
+    // Another Orca process (a CLI, say) used the data root; no managed server ever ran here.
+    mkdirp(home, '.orca', '.profile-state-access', 'participants')
+    expect(await resolveOrcadMachineHome(a, true)).toEqual(loginHomeResult())
+
+    // The printed fix also works on a home that has no `~/.orca-remote` yet.
+    rmSync(join(home, '.orca-remote'), { recursive: true })
+    const fix = orcadMachineOwnershipUnresolvedMessage('a'.repeat(16), null)
+    await execOrcadRemote(a, fix.slice(fix.indexOf('reconnect: ') + 'reconnect: '.length))
+    expect(readFileSync(claimPath(), 'utf8')).toContain('a'.repeat(16))
   })
 
   it('claims a stopped pre-claim install on a local disk, which no other machine can share', async () => {

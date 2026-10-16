@@ -82,7 +82,7 @@ export type OrcadMachineHomeProbe = {
   }[]
   /** Keys that already have a machine home under `~/.orca-remote/hosts/`. */
   machineHomeKeys: readonly string[]
-  /** An orcad already ran from the login home (its activation record or data root exists). */
+  /** An orcad was already activated from the login home. */
   loginHomeInstalled: boolean
   /** The login home sits on a local disk, so no other machine can have run that orcad. */
   homeOnLocalDisk: boolean
@@ -120,7 +120,7 @@ export function orcadMachineHomeProbeCommand(host: RemoteHostPlatform): string {
     `for f in ${access}/participants/*/*.owner ${access}/maintenance/*.owner; do`,
     `[ -f "$f" ] && { head -c ${RECORD_MAX_BYTES} "$f"; echo; }; done; echo ${SECTION};`,
     `ls -1 ${homes} 2>/dev/null; echo ${SECTION};`,
-    `{ [ -e ${activation} ] || [ -d ${access} ]; } && echo ${INSTALLED}; echo ${SECTION};`,
+    `[ -e ${activation} ] && echo ${INSTALLED}; echo ${SECTION};`,
     // macOS `stat -f` takes a format, not a filesystem; its df source still names the device.
     host.os === 'darwin' ? '' : `stat -f -c %T "$HOME" 2>/dev/null; echo ${SECTION};`,
     `df -P "$HOME" 2>/dev/null | tail -n 1; true`
@@ -307,7 +307,7 @@ export function orcadMachineOwnershipUnresolvedMessage(
     'this home may be shared by several machines, and that server left no record of its own. ' +
     'If another machine set it up, connect to that one and run the command shown there. ' +
     `If ${hostname ?? 'this machine'} set it up, run this on it, then reconnect: ` +
-    `printf '%s' '${claim}' > ${path}`
+    `mkdir -p ~/${RELAY_REMOTE_DIR} && printf '%s' '${claim}' > ${path}`
   )
 }
 
