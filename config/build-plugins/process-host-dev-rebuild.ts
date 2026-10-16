@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { runProcessSync } from '@orca/process-host'
 import ts from 'typescript-api'
 import type { Plugin } from 'rolldown'
@@ -37,9 +37,14 @@ function processHostInputs(root: string): {
     configSource && typeof configSource === 'object' && 'extendedSourceFiles' in configSource
       ? configSource.extendedSourceFiles
       : []
+  // Follow explicit imports through exclusions without loading automatic type libraries.
+  const sources = ts
+    .createProgram(parsed.fileNames, { ...parsed.options, noLib: true, types: [] })
+    .getSourceFiles()
+    .map((source) => source.fileName)
   return {
     directory,
-    files: [manifest, config, ...parsed.fileNames, ...(inheritedConfigs ?? [])],
+    files: [manifest, config, ...sources, ...(inheritedConfigs ?? [])],
     directories: parsed.wildcardDirectories ?? {}
   }
 }
@@ -49,13 +54,24 @@ export function createProcessHostDevRebuildPlugin(root = process.cwd()): Plugin 
   let signalDirectory: string | undefined
   let signalFile: string | undefined
   let signalVersion = 0
+  let packageDirty = true
+  let packageFiles = new Set<string>()
+  let cachedInputs: ReturnType<typeof processHostInputs> | undefined
   return {
     name: 'orca-process-host-dev-rebuild',
+    watchChange(id) {
+      const file = resolve(id)
+      if (packageFiles.has(file) || file === signalFile) {
+        packageDirty = true
+      }
+    },
     buildStart() {
       if (!this.meta.watchMode) {
         return
       }
-      const inputs = processHostInputs(root)
+      const inputs = packageDirty || !cachedInputs ? processHostInputs(root) : cachedInputs
+      cachedInputs = inputs
+      packageFiles = new Set(inputs.files.map((file) => resolve(file)))
       for (const file of inputs.files) {
         this.addWatchFile(file)
       }
@@ -86,7 +102,27 @@ export function createProcessHostDevRebuildPlugin(root = process.cwd()): Plugin 
         }
         const watcher = ts.sys.watchDirectory(
           directory,
-          () => {
+          (changedPath) => {
+            if (
+              !packageDirty &&
+              resolve(changedPath) !== resolve(directory) &&
+              basename(changedPath).toLowerCase() !== 'package.json' &&
+              !packageFiles.has(resolve(changedPath))
+            ) {
+              try {
+                const next = processHostInputs(root)
+                const files = new Set(next.files.map((file) => resolve(file)))
+                if (
+                  files.size === packageFiles.size &&
+                  [...files].every((file) => packageFiles.has(file))
+                ) {
+                  return
+                }
+              } catch {
+                // Let the build report invalid configuration instead of hiding the change.
+              }
+            }
+            packageDirty = true
             if (signalFile) {
               writeFileSync(signalFile, String(++signalVersion))
             }
@@ -95,6 +131,9 @@ export function createProcessHostDevRebuildPlugin(root = process.cwd()): Plugin 
           { watchDirectory: ts.WatchDirectoryKind.UseFsEvents }
         )
         directoryWatchers.set(directory, { recursive, watcher })
+      }
+      if (!packageDirty) {
+        return
       }
       // The external package must finish emitting before electron-vite restarts the app. The
       // package's own build keeps its compiler and per-file atomic dist sync identical to build:packages.
@@ -113,6 +152,7 @@ export function createProcessHostDevRebuildPlugin(root = process.cwd()): Plugin 
           `[process-host-dev-rebuild] Package compilation failed: ${result.stderr || result.stdout || result.signal || result.code}`
         )
       }
+      packageDirty = false
     },
     closeWatcher() {
       signalFile = undefined

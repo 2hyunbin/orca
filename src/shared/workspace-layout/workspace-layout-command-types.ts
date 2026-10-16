@@ -162,6 +162,7 @@ export type LayoutRefusalCode =
   | 'pane_sleeping'
   | 'pane_already_bound'
   | 'workspace_exists'
+  | 'tab_exists'
   /** A window's drag-out: another tab holds the pane, or no copy binds the window's terminal. */
   | 'pane_in_other_tab'
   | 'pty_mismatch'
