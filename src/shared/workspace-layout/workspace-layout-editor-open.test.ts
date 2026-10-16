@@ -96,4 +96,17 @@ describe('openEditorTab', () => {
     expect(entities).toEqual(expect.arrayContaining(['/w/p1.ts', '/w/p3.ts']))
     expect(entities).not.toContain('/w/p2.ts')
   })
+
+  it("refuses a group main lacks, but gives a workspace with no group the sender's", () => {
+    const { ctx, model } = twoGroups()
+    expect(applyLayoutCommand(model, open('/w/c.ts', { groupId: 'window-only' }), ctx)).toEqual({
+      ok: false,
+      code: 'group_not_found'
+    })
+
+    const fresh = build(ctx, [open('/w/c.ts', { tabId: 'window-tab', groupId: 'window-group' })])
+    expect(fresh.model.workspaces[WS]!.groups).toEqual([
+      { id: 'window-group', tabOrder: ['window-tab'] }
+    ])
+  })
 })

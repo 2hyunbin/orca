@@ -112,7 +112,7 @@ export function recordReopenedEditorTabPositionInLayoutOwner(
 }
 
 /** The fields the window's session save keeps for an edit-mode file. */
-function restorableEditorFile(file: OpenFile): LayoutEditorFile {
+export function restorableEditorFile(file: OpenFile): LayoutEditorFile {
   return {
     filePath: file.filePath,
     relativePath: file.relativePath,

@@ -1,7 +1,7 @@
 // Opening editor, browser and agent-session tabs: the tab and its content record in one apply.
 
 import type { EditorTabView } from '../editor-tab-view-types'
-import { applied, refuse, type Applied } from './workspace-layout-command-steps'
+import { applied, refuse, workspaceOrEmpty, type Applied } from './workspace-layout-command-steps'
 import type { CommandOf, LayoutContext } from './workspace-layout-command-types'
 import { admitsInitialSurface } from './workspace-layout-initial-surface'
 import type { LayoutContentTab, LayoutTab, WorkspaceLayoutModel } from './workspace-layout-model'
@@ -48,8 +48,21 @@ export function openEditorTab(
       return refuse('tab_exists')
     }
   }
+  let target = model
+  if (command.groupId && !workspace?.groups.some((entry) => entry.id === command.groupId)) {
+    if (workspace?.groups.length) {
+      // Another group would put the tab where its sender did not.
+      return refuse('group_not_found')
+    }
+    // A workspace with no group takes the sender's, as the window keeps its emptied root group.
+    target = withWorkspace(model, key, {
+      ...workspaceOrEmpty(model, key),
+      groups: [{ id: command.groupId, tabOrder: [] }]
+    })
+  }
   const group =
-    workspace?.groups.find((entry) => entry.id === command.groupId) ?? workspace?.groups[0]
+    target.workspaces[key]?.groups.find((entry) => entry.id === command.groupId) ??
+    target.workspaces[key]?.groups[0]
   const existing = workspace?.tabs.find(
     (tab) => sameFile(tab) && group?.tabOrder.includes(tab.id) === true
   )
@@ -71,7 +84,7 @@ export function openEditorTab(
     entityId: command.fileId,
     ...(command.preview ? { isPreview: true } : {})
   })
-  const placed = placeContentTab(model, key, tab, command, context)
+  const placed = placeContentTab(target, key, tab, command, context)
   let next = placed.model
   const file = command.file
   if (file) {

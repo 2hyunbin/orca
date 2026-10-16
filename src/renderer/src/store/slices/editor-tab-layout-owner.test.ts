@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppState } from '../types'
 import { createEditorTabsStore } from './editor-slice-test-harness'
 import { makeWorktree } from './worktrees-slice-test-fixtures'
+import type { OpenFile } from './editor'
+import { restorableEditorFile } from './editor/tabs/editor-tab-layout-owner'
+import { buildEditorSessionData } from '@/lib/workspace-session'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import { applyLayoutCommand } from '../../../../shared/workspace-layout/workspace-layout-commands'
 import type { LayoutCommand } from '../../../../shared/workspace-layout/workspace-layout-command-types'
@@ -237,5 +240,70 @@ describe('editor tabs in a layout-owner build', () => {
     store.getState().activateTab(tabIn('g1', b))
     store.getState().closeFile(b)
     expect(sentCommands()).toEqual([])
+  })
+
+  it('records close-all, and an open into the root group main dropped when it emptied', () => {
+    store.setState({
+      groupsByWorktree: { [WT]: [{ id: 'g1', worktreeId: WT, activeTabId: null, tabOrder: [] }] }
+    })
+    main = {
+      ...main,
+      workspaces: { [WT]: { worktreeId: WT, tabs: [], groups: [{ id: 'g1', tabOrder: [] }] } }
+    }
+    openFile('/a.ts')
+    openFile('/b.ts')
+    applySent()
+
+    store.getState().closeAllFiles()
+    expect(applySent().map((command) => command.type)).toEqual(['closeTabs', 'closeTabs'])
+    // The window keeps its emptied root group; main closed it and takes it back on the next open.
+    expect(main.workspaces[WT]!.groups).toEqual([])
+    openFile('/c.ts')
+    applySent()
+    expect(mainView()).toEqual(windowView())
+  })
+
+  it('leaves main unchanged rather than misplacing an open into a group it lacks', () => {
+    openFile('/a.ts')
+    applySent()
+    store.setState((state) => ({
+      groupsByWorktree: {
+        [WT]: [
+          ...state.groupsByWorktree[WT]!,
+          { id: 'g3', worktreeId: WT, activeTabId: null, tabOrder: [] }
+        ]
+      }
+    }))
+    const before = main
+
+    openFile('/b.ts', { targetGroupId: 'g3' })
+    const [command] = sentCommands()
+    expect(
+      applyLayoutCommand(main, command!, { mintId: () => 'x', mintLeafId: () => 'y', now: () => 1 })
+    ).toEqual({
+      ok: false,
+      code: 'group_not_found'
+    })
+    expect(main).toBe(before)
+  })
+
+  it("sends an edit-mode file's record exactly as the window's session save keeps it", () => {
+    const file = {
+      id: 'f1',
+      filePath: '/a.log',
+      relativePath: 'a.log',
+      worktreeId: WT,
+      language: 'log',
+      mode: 'edit',
+      isDirty: false,
+      isPreview: true,
+      runtimeEnvironmentId: null,
+      externalSshTargetId: 'ssh-1',
+      readOnly: true,
+      liveTail: true
+    } satisfies OpenFile
+    const saved = buildEditorSessionData([file], {}, {}, {}, {}).openFilesByWorktree?.[WT]?.[0]
+    const { worktreeId: _worktreeId, isPreview: _isPreview, ...restorable } = saved ?? {}
+    expect(restorableEditorFile(file)).toEqual(restorable)
   })
 })
