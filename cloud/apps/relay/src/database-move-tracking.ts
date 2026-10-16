@@ -51,7 +51,9 @@ const MOVE_TABLES_SQL = [
      PRIMARY KEY (claim_id, table_name, pk))`,
   `CREATE TABLE IF NOT EXISTS ${MOVE_COPY_PROGRESS_TABLE} (
      table_name TEXT PRIMARY KEY, after_pk JSONB, done BOOLEAN NOT NULL DEFAULT FALSE,
-     rows_copied BIGINT NOT NULL DEFAULT 0, updated_at BIGINT NOT NULL)`
+     rows_copied BIGINT NOT NULL DEFAULT 0, updated_at BIGINT NOT NULL)`,
+  // Which arming of the source's tracking the copy ran under; see readTrackingArm.
+  `ALTER TABLE ${MOVE_COPY_PROGRESS_TABLE} ADD COLUMN IF NOT EXISTS tracking_arm TEXT`
 ]
 
 function trackingFunctionName(table: MoveTable): string {
@@ -254,9 +256,37 @@ export async function uninstallTracking(
   )
 }
 
+// Each arming gets a fresh id in the sentinel's key. Rows copied under an earlier arming may
+// have missed changes made while tracking was off, so a copy is current only under this id.
 export function sentinelInsertSql(): string {
+  const sentinel = quoteLiteral(MOVE_SENTINEL_TABLE_NAME)
   return `INSERT INTO ${MOVE_DIRTY_TABLE} (table_name, pk, touched)
-    VALUES (${quoteLiteral(MOVE_SENTINEL_TABLE_NAME)}, '{}'::jsonb, 0) ON CONFLICT DO NOTHING`
+    SELECT ${sentinel}, jsonb_build_object('arm', gen_random_uuid()::text), 0
+    WHERE NOT EXISTS (SELECT 1 FROM ${MOVE_DIRTY_TABLE} WHERE table_name = ${sentinel})`
+}
+
+// The current arming's id; '' for a sentinel armed before ids existed, null with none.
+export async function readTrackingArm(client: pg.Client): Promise<string | null> {
+  if (!(await dirtyTableExists(client))) return null
+  const result = await client.query(
+    `SELECT coalesce(pk->>'arm', '') AS arm FROM ${MOVE_DIRTY_TABLE} WHERE table_name = $1 LIMIT 1`,
+    [MOVE_SENTINEL_TABLE_NAME]
+  )
+  const arm = result.rows[0]?.arm
+  return arm === undefined ? null : String(arm)
+}
+
+// Copy positions on the target written under another arming of the source's tracking.
+export async function readStaleCopyProgress(
+  target: pg.Client,
+  sourceArm: string | null
+): Promise<string[]> {
+  const result = await target.query(
+    `SELECT table_name FROM ${MOVE_COPY_PROGRESS_TABLE}
+     WHERE tracking_arm IS DISTINCT FROM $1 ORDER BY table_name`,
+    [sourceArm]
+  )
+  return result.rows.map((row) => String(row.table_name))
 }
 
 // False with no dirty table too: tracking was never installed, or was removed.

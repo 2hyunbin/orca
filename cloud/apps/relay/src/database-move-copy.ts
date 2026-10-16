@@ -10,6 +10,7 @@ import {
 } from './database-move-row-apply.js'
 import {
   MOVE_SCHEMA_CHECK_EVERY_MS,
+  requireCurrentCopy,
   requireTracking,
   requireUnchangedMoveState,
   type MoveSyncSessions
@@ -17,6 +18,7 @@ import {
 import {
   markSourceDirty,
   MOVE_COPY_PROGRESS_TABLE,
+  readTrackingArm,
   sentinelInsertSql
 } from './database-move-tracking.js'
 
@@ -75,6 +77,8 @@ export async function runCopy(
     logMoveEvent('copy_restarted')
   }
   await requireTracking(sessions.source, tables)
+  await requireCurrentCopy(sessions)
+  const arm = await readTrackingArm(sessions.source)
   const settings = await sessions.source.query(
     `SELECT current_setting('block_size')::int AS block_size,
        current_setting('server_version_num')::int >= 150000 AS flushes`
@@ -131,11 +135,13 @@ export async function runCopy(
           markSourceDirty(sessions.source, displaced)
         )
         await sessions.target.query(
-          `INSERT INTO ${MOVE_COPY_PROGRESS_TABLE} (table_name, after_pk, done, rows_copied, updated_at)
-           VALUES ($1, $2::jsonb, $3, $4, $5)
+          `INSERT INTO ${MOVE_COPY_PROGRESS_TABLE}
+             (table_name, after_pk, done, rows_copied, updated_at, tracking_arm)
+           VALUES ($1, $2::jsonb, $3, $4, $5, $6)
            ON CONFLICT (table_name) DO UPDATE SET after_pk = EXCLUDED.after_pk, done = EXCLUDED.done,
-             rows_copied = EXCLUDED.rows_copied, updated_at = EXCLUDED.updated_at`,
-          [table.name, afterPk, done, tableRows, Date.now()]
+             rows_copied = EXCLUDED.rows_copied, updated_at = EXCLUDED.updated_at,
+             tracking_arm = EXCLUDED.tracking_arm`,
+          [table.name, afterPk, done, tableRows, Date.now(), arm]
         )
         await sessions.target.query('COMMIT')
       } catch (error) {

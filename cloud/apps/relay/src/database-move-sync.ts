@@ -16,6 +16,8 @@ import {
   MOVE_COPY_PROGRESS_TABLE,
   MOVE_SENTINEL_TABLE_NAME,
   readDirtyBacklog,
+  readStaleCopyProgress,
+  readTrackingArm,
   readTrackingState,
   sentinelPresent
 } from './database-move-tracking.js'
@@ -54,6 +56,15 @@ export async function requireTracking(source: pg.Client, tables: MoveTable[]): P
   if (!state.sentinel) throw new MoveRefusal('dirty_set_was_emptied_recopy_needed')
   if (state.untracked.length > 0) {
     throw new MoveRefusal('tables_without_tracking', { tables: state.untracked })
+  }
+}
+
+// Tracking that was removed and installed again missed every change in between, so a copy
+// made under the earlier arming no longer counts.
+export async function requireCurrentCopy(sessions: MoveSyncSessions): Promise<void> {
+  const stale = await readStaleCopyProgress(sessions.target, await readTrackingArm(sessions.source))
+  if (stale.length > 0) {
+    throw new MoveRefusal('copy_predates_tracking', { tables: stale, run: 'copy --restart' })
   }
 }
 
