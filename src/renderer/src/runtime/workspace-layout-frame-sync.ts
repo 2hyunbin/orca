@@ -46,7 +46,7 @@ export type WorkspaceLayoutFrameSync = {
   start: () => void
   close: () => void
   /** Whether main's latest frames show this terminal in this pane, drawn yet or not. An unbound
-   *  pane counts: the window binds the terminal to it once drawn. */
+   *  pane does not count: nothing binds a frame-drawn pane to a live terminal later. */
   holdsTerminalPane: (
     worktreeId: string,
     pane: { tabId: string; leafId: string; ptyId: string }
@@ -238,9 +238,7 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
       cache[worktreeId]?.tabs.some(
         (tab) =>
           tab.entityId === tabId &&
-          (tab.terminal?.panes.some(
-            (pane) => pane.leafId === leafId && (pane.ptyId ?? ptyId) === ptyId
-          ) ??
+          (tab.terminal?.panes.some((pane) => pane.leafId === leafId && pane.ptyId === ptyId) ??
             false)
       ) ?? false
   }

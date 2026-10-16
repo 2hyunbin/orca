@@ -57,13 +57,13 @@ const RIGHT_PTY = `${GIT_KEY}@@aaaa0003`
 type TerminalSpec = {
   id: string
   entityId?: string
-  leaves: [string, string][]
+  leaves: [string, string?][]
   split?: 'vertical'
 }
 
 /** The window's copy: one shell tab. Main's: that tab and a split agent tab the window lacks,
  *  whose tab-bar id differs from its terminal id, as for a tab adopted from another window. */
-function sessions(splitPtyIds: [string, string] = [LEFT_PTY, RIGHT_PTY]): {
+function sessions(splitPtyIds: [string?, string?] = [LEFT_PTY, RIGHT_PTY]): {
   window: WorkspaceSessionState
   main: WorkspaceSessionState
 } {
@@ -155,24 +155,27 @@ describe('adopting live terminals in a layout-owner build', () => {
     ).resolves.toEqual({ surfaced: true, declinedPtyIds: [] })
   })
 
-  it('declines a terminal whose pane main binds to another terminal', async () => {
-    const { window: windowSession, main } = sessions([
-      `${GIT_KEY}@@aaaa0008`,
-      `${GIT_KEY}@@aaaa0009`
-    ])
-    const store = createTestStore()
-    await bootWindowFromPartitions(store, [{ hostId: 'local', session: windowSession }])
-    sync = openWorkspaceLayoutFrameSync(store)
-    frames.sync = sync
-    sync.start()
-    reportWindowSessionWriteActivity(true)
-    frames.onFrame!(snapshotOf(main))
-    await flushMicrotasks()
+  it.each([
+    ['binds to another terminal', [`${GIT_KEY}@@aaaa0008`, `${GIT_KEY}@@aaaa0009`]],
+    ['leaves unbound', [undefined, undefined]]
+  ] satisfies [string, [string?, string?]][])(
+    'declines a terminal whose pane main %s',
+    async (_, ptyIds) => {
+      const { window: windowSession, main } = sessions(ptyIds)
+      const store = createTestStore()
+      await bootWindowFromPartitions(store, [{ hostId: 'local', session: windowSession }])
+      sync = openWorkspaceLayoutFrameSync(store)
+      frames.sync = sync
+      sync.start()
+      reportWindowSessionWriteActivity(true)
+      frames.onFrame!(snapshotOf(main))
+      await flushMicrotasks()
 
-    await expect(
-      adoptLiveWorkspacePtySurfaces(store.getState, GIT_KEY, [LEFT_PTY], async () => owners)
-    ).resolves.toEqual({ surfaced: false, declinedPtyIds: [LEFT_PTY] })
-  })
+      await expect(
+        adoptLiveWorkspacePtySurfaces(store.getState, GIT_KEY, [LEFT_PTY], async () => owners)
+      ).resolves.toEqual({ surfaced: false, declinedPtyIds: [LEFT_PTY] })
+    }
+  )
 
   it('declines a terminal whose tab main does not hold, rather than making one', async () => {
     const { window: windowSession } = sessions()

@@ -112,7 +112,8 @@ function adoptHostOwnedSurface(
   if (ORCA_LAYOUT_OWNER_IS_MAIN && !known) {
     const pane = parsePaneKey(owner.paneKey)
     return (
-      pane !== null && layoutFramesHoldTerminalPane(worktreeId, { ...owner, leafId: pane.leafId })
+      pane?.tabId === owner.tabId &&
+      layoutFramesHoldTerminalPane(worktreeId, { ...owner, leafId: pane.leafId })
     )
   }
   if (bindLivePtyToExactSurface(store, worktreeId, owner)) {
