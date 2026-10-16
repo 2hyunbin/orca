@@ -48,7 +48,7 @@ export async function isWebHostUnreachableAtStartup(error: unknown): Promise<boo
  * Says the host could not be reached (not that the session failed) and reloads into a clean
  * hydration once the transport, which keeps reconnecting on its own, is ready again.
  */
-export function announceWebHostUnreachableAtStartup(): void {
+export function announceWebHostUnreachableAtStartup(signal: AbortSignal): void {
   const reload = (): void => {
     void window.api.app.relaunch()
   }
@@ -75,6 +75,15 @@ export function announceWebHostUnreachableAtStartup(): void {
   }
   const statusApi = window.api.runtimeEnvironments
   unsubscribe = statusApi?.onStatusChanged?.((snapshot) => reloadOnce([snapshot]))
+  // A torn-down startup pass (StrictMode, window reuse) must not reload the renderer later.
+  signal.addEventListener(
+    'abort',
+    () => {
+      reloading = true
+      unsubscribe?.()
+    },
+    { once: true }
+  )
   // A reconnect that landed between the unreachable check and subscribing publishes nothing new.
   void statusApi
     ?.getStatusSnapshots?.()

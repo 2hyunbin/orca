@@ -87,14 +87,15 @@ export async function recoverFromDegradedStartup(args: DegradedStartupRecoveryAr
   if (fallbackUI) {
     hydratePersistedUI(fallbackUI, 'startup')
   }
-  if (await isWebHostUnreachableAtStartup(error)) {
-    // Still no-save until the reload: the host's catalog never loaded, so saving now would prune it.
-    announceWebHostUnreachableAtStartup()
-  } else {
-    announceDegradedStartup()
-  }
+  const hostUnreachable = await isWebHostUnreachableAtStartup(error)
   if (isCancelled()) {
     return
+  }
+  if (hostUnreachable) {
+    // Still no-save until the reload: the host's catalog never loaded, so saving now would prune it.
+    announceWebHostUnreachableAtStartup(abortSignal)
+  } else {
+    announceDegradedStartup()
   }
   if (reconnectStarted) {
     // Why (issue #1158): re-running reconnect over its partially-mutated state would double-set ptyIds and drain pending* twice — force the flag, clear pending*.

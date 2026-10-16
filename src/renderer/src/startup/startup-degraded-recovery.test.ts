@@ -93,14 +93,17 @@ describe('recoverFromDegradedStartup', () => {
       }
     }
 
-    function recoverFrom(error: Error): Promise<void> {
+    function recoverFrom(
+      error: Error,
+      pass: { signal?: AbortSignal; isCancelled?: () => boolean } = {}
+    ): Promise<void> {
       return recoverFromDegradedStartup({
         error,
         uiHydrated: true,
         reconnectStarted: false,
         hydratePersistedUI: vi.fn(),
-        abortSignal: new AbortController().signal,
-        isCancelled: () => false,
+        abortSignal: pass.signal ?? new AbortController().signal,
+        isCancelled: pass.isCancelled ?? (() => false),
         reconnectPersistedTerminals: async () => {
           throw new Error('Could not connect to the remote Orca runtime.')
         }
@@ -156,6 +159,32 @@ describe('recoverFromDegradedStartup', () => {
       await recoverFrom(new Error(message))
 
       expect(vi.mocked(toast.error).mock.calls[0]?.[0]).toBe("Couldn't reach your Orca host")
+    })
+
+    it('stops waiting to reload once its startup pass is torn down', async () => {
+      const pass = new AbortController()
+      await recoverFrom(new Error('Could not connect to the remote Orca runtime.'), {
+        signal: pass.signal
+      })
+      pass.abort()
+
+      statusListener?.(snapshot('ready'))
+      expect(relaunch).not.toHaveBeenCalled()
+    })
+
+    it('does not announce or arm a reload for a pass cancelled during the check', async () => {
+      let cancelled = false
+      const getStatusSnapshots = window.api.runtimeEnvironments.getStatusSnapshots
+      window.api.runtimeEnvironments.getStatusSnapshots = async () => {
+        cancelled = true
+        return getStatusSnapshots()
+      }
+      await recoverFrom(new Error('Could not connect to the remote Orca runtime.'), {
+        isCancelled: () => cancelled
+      })
+
+      expect(toast.error).not.toHaveBeenCalled()
+      expect(statusListener).toBeNull()
     })
 
     it('keeps the session-restore warning when the host was connected', async () => {
