@@ -469,6 +469,39 @@ describe('retained agent exit', () => {
     expect(await overlapping).not.toBe('exited')
   })
 
+  it('keeps the exit through a delayed hook from the ended session without a process identity', async () => {
+    const server = await createServer()
+    const attachedAt = Date.now() - 1
+    await hook(server, 'SessionStart')
+    await hook(server, 'SessionEnd', 'session-a', 'prompt_input_exit')
+    await hook(server, 'Stop', 'session-a', undefined, null)
+    expect(await server.checkAgentPresenceSince(PANE, attachedAt)).toBe('exited')
+  })
+
+  it('keeps the exit readable after the hook store restarts', async () => {
+    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-presence-exit-'))
+    const first = new AgentHookServer()
+    servers.push(first)
+    await first.start({ env: 'production', userDataPath })
+    const attachedAt = Date.now() - 1
+    await hook(first, 'SessionStart')
+    await hook(first, 'SessionEnd', 'session-a', 'prompt_input_exit')
+    first.flushStatusPersistSync()
+    first.stop()
+    const restarted = new AgentHookServer()
+    servers.push(restarted)
+    await restarted.start({ env: 'production', userDataPath })
+    expect(await restarted.checkAgentPresenceSince(PANE, attachedAt)).toBe('exited')
+  })
+
+  it('forgets an earlier exit when a worker attaches to the pane', async () => {
+    const server = await createServer()
+    await hook(server, 'SessionStart')
+    await hook(server, 'SessionEnd', 'session-a', 'prompt_input_exit')
+    server.forgetAgentExit(PANE)
+    expect(await server.checkAgentPresenceSince(PANE, 0)).toBeNull()
+  })
+
   it('drops the exit once a new agent reports from the pane', async () => {
     const server = await createServer()
     const attachedAt = Date.now() - 1

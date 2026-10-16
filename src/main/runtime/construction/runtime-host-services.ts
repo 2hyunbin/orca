@@ -157,6 +157,8 @@ export abstract class OrcaRuntimeWithPreservedBranchCleanup extends OrcaRuntimeW
     | HostBindings['reconcileAgentStatusForEndedProcess']
     | null
 
+  protected readonly forgetHookAgentExitFn!: HostBindings['forgetHookAgentExit'] | null
+
   protected readonly dropAgentStatusForRemovedWorktreeFn!:
     | HostBindings['dropAgentStatusForRemovedWorktree']
     | null
