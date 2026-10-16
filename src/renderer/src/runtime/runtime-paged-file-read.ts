@@ -9,6 +9,7 @@ import {
 } from './runtime-file-range-client'
 import { RuntimeRpcCallError } from './runtime-rpc-result'
 import { callRuntimeRpc } from './runtime-rpc-client'
+import { captureRuntimeEnvironmentRequestRevision } from './runtime-environment-revision'
 
 // Why: under files.readChunk's 512 KiB cap, and a multiple of 3 so its base64 has no padding.
 const PAGED_READ_CHUNK_BYTES = 384 * 1024
@@ -29,8 +30,15 @@ export type PagedRemoteFileRead =
  * methods already exist on hosts that page CSVs and downloads.
  */
 export async function readRemoteFileInChunks(
-  remote: RuntimeRemoteFileAddress
+  address: RuntimeRemoteFileAddress
 ): Promise<PagedRemoteFileRead> {
+  const remote: RuntimeRemoteFileAddress = {
+    ...address,
+    expectedEnvironmentPairingRevision: captureRuntimeEnvironmentRequestRevision(
+      address.target.environmentId,
+      address.expectedEnvironmentPairingRevision
+    )
+  }
   const before = await nullWhenUnsupported(() => statRemoteRuntimeFile(remote))
   if (!before) {
     return { kind: 'unsupported' }
@@ -64,7 +72,12 @@ export async function readRemoteFileInChunks(
   // Why: chunks are separate reads, so a rewrite between them (a PDF rebuild) would splice two
   // versions into one corrupt file.
   const after = await statRemoteRuntimeFile(remote)
-  if (offset !== before.size || after.size !== before.size || after.mtime !== before.mtime) {
+  if (
+    offset !== before.size ||
+    after.size !== before.size ||
+    after.mtime !== before.mtime ||
+    after.ctime !== before.ctime
+  ) {
     throw new Error(REMOTE_FILE_CHANGED_DURING_READ_MESSAGE)
   }
   return { kind: 'ok', bytes }

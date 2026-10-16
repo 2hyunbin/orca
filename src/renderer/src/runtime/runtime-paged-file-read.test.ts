@@ -7,6 +7,7 @@ import {
   type RuntimeRpcRequest
 } from './runtime-file-client-test-harness'
 import { REMOTE_FILE_CHANGED_DURING_READ_MESSAGE } from './runtime-paged-file-read'
+import { replaceRuntimeEnvironmentRevisions } from './runtime-environment-revision'
 
 installRuntimeFileClientEnvironment()
 
@@ -20,7 +21,7 @@ type ChunkParams = { offset: number; length: number }
 type RemoteFile = {
   bytes: Buffer
   /** Stat replies in call order; the last one repeats. */
-  stats?: { size: number; mtime: number }[]
+  stats?: { size: number; mtime: number; ctime?: number }[]
   missingMethods?: string[]
   readChunk?: (params: ChunkParams, bytes: Buffer) => unknown
 }
@@ -238,6 +239,40 @@ describe('remote reads larger than one RPC reply', () => {
     await expect(readRuntimeFileContent(remote('report.html'))).rejects.toThrow(
       REMOTE_FILE_CHANGED_DURING_READ_MESSAGE
     )
+  })
+
+  it('rejects a same-size, same-mtime replacement the host reports through ctime', async () => {
+    const bytes = htmlBytes(2 * MB)
+    serveRemoteFile('report.html', {
+      bytes,
+      stats: [
+        { size: bytes.length, mtime: 1, ctime: 1 },
+        { size: bytes.length, mtime: 1, ctime: 2 }
+      ]
+    })
+
+    await expect(readRuntimeFileContent(remote('report.html'))).rejects.toThrow(
+      REMOTE_FILE_CHANGED_DURING_READ_MESSAGE
+    )
+  })
+
+  it('pins every call of one paged read to the pairing it started on', async () => {
+    replaceRuntimeEnvironmentRevisions([{ id: 'env-1', createdAt: 1, pairingRevision: 7 }])
+    const bytes = htmlBytes(2 * MB)
+    serveRemoteFile('report.html', {
+      bytes,
+      readChunk: (params, file) => {
+        // A re-pair mid-read must not retarget the remaining chunks.
+        replaceRuntimeEnvironmentRevisions([{ id: 'env-1', createdAt: 1, pairingRevision: 8 }])
+        return sliceChunk(params, file)
+      }
+    })
+
+    await readRuntimeFileContent(remote('report.html'))
+
+    const paged = [...methodCalls('files.stat'), ...methodCalls('files.readChunk')]
+    expect(paged.length).toBeGreaterThan(2)
+    expect(paged.every((call) => call.expectedEnvironmentPairingRevision === 7)).toBe(true)
   })
 
   it('stops when the host never reports EOF', async () => {

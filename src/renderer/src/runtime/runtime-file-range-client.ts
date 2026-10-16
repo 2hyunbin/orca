@@ -12,6 +12,8 @@ export type RuntimeRemoteFileAddress = {
   target: Extract<RuntimeClientTarget, { kind: 'environment' }>
   worktree: string
   relativePath: string
+  /** Pins a multi-call read to one pairing, so a re-pair cannot switch hosts mid-read. */
+  expectedEnvironmentPairingRevision?: number
 }
 
 function rangeReadTarget(args: RuntimeFileReadArgs): RuntimeRemoteFileAddress | null {
@@ -33,7 +35,12 @@ function rangeReadTarget(args: RuntimeFileReadArgs): RuntimeRemoteFileAddress | 
   }
 }
 
-export type RuntimeFileSnapshot = { size: number; isDirectory: boolean; mtime: number }
+export type RuntimeFileSnapshot = {
+  size: number
+  isDirectory: boolean
+  mtime: number
+  ctime?: number
+}
 
 export function statRemoteRuntimeFile(
   remote: RuntimeRemoteFileAddress
@@ -42,7 +49,10 @@ export function statRemoteRuntimeFile(
     remote.target,
     'files.stat',
     { worktree: remote.worktree, relativePath: remote.relativePath },
-    { timeoutMs: 15_000 }
+    {
+      timeoutMs: 15_000,
+      expectedEnvironmentPairingRevision: remote.expectedEnvironmentPairingRevision
+    }
   )
 }
 
@@ -55,7 +65,10 @@ export function readRemoteRuntimeFileChunk(
     remote.target,
     'files.readChunk',
     { worktree: remote.worktree, relativePath: remote.relativePath, offset, length },
-    { timeoutMs: 60_000 }
+    {
+      timeoutMs: 60_000,
+      expectedEnvironmentPairingRevision: remote.expectedEnvironmentPairingRevision
+    }
   )
 }
 
