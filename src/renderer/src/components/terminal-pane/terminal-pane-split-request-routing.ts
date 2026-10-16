@@ -142,9 +142,7 @@ function queuedMainSplitLeafIds(tabId: string, worktreeId: string): string[] {
   return queuedRequests.flatMap((request) =>
     request.tabId === tabId &&
     request.newLeafId &&
-    (worktreeId === undefined ||
-      request.worktreeId === undefined ||
-      request.worktreeId === worktreeId)
+    (request.worktreeId === undefined || request.worktreeId === worktreeId)
       ? [request.newLeafId]
       : []
   )
