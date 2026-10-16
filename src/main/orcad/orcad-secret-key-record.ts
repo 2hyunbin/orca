@@ -8,7 +8,8 @@ import {
   realpathSync,
   renameSync,
   rmSync,
-  statSync
+  statSync,
+  writeFileSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
@@ -172,15 +173,23 @@ export function publishRecordExclusively(path: string, record: StoredKeyState): 
   }
 }
 
-/** Replaces the record only while it still holds `expectedCheck`'s key; otherwise says why not. */
-export function replaceRecord(path: string, record: StoredKeyState, expectedCheck: string): string {
+/** Replaces the record only while it is still `expected`; otherwise says why not. */
+export function replaceRecord(
+  path: string,
+  record: StoredKeyState,
+  expected: StoredKeyState
+): string {
   const staging = `${path}.${process.pid}.${randomBytes(4).toString('hex')}.staging`
   try {
     if (!writeSecureFile(staging, JSON.stringify(record), { durable: true })) {
       return `its key record ${path} could not be restricted to this user`
     }
     const current = readStoredRecord(path)
-    if (current.kind !== 'record' || current.stored.check !== expectedCheck) {
+    if (
+      current.kind !== 'record' ||
+      current.stored.backend !== expected.backend ||
+      current.stored.check !== expected.check
+    ) {
       return 'changed'
     }
     renameSync(staging, path)
@@ -200,6 +209,50 @@ function isLiveProcess(pid: number): boolean {
   } catch (error) {
     // EPERM: alive, owned by someone else.
     return errorCode(error) === 'EPERM'
+  }
+}
+
+const LOCK_WAIT_MS = 15_000
+
+/**
+ * Runs `task` holding this record's lock, so concurrent starts cannot each replace the record.
+ * Resolves 'busy' when another live start keeps it longer than its bounded keyring read.
+ */
+export async function withRecordLock<T>(
+  statePath: string,
+  task: () => Promise<T>
+): Promise<T | 'busy'> {
+  const lock = `${statePath}.lock`
+  const deadline = Date.now() + LOCK_WAIT_MS
+  for (;;) {
+    try {
+      writeFileSync(lock, String(process.pid), { flag: 'wx', mode: 0o600 })
+      break
+    } catch (error) {
+      if (errorCode(error) !== 'EEXIST') {
+        throw error
+      }
+    }
+    let holder = Number.NaN
+    try {
+      holder = Number(readFileSync(lock, 'utf8'))
+    } catch {
+      continue
+    }
+    // Why only a whole dead PID: an empty read is a holder that has not written its PID yet.
+    if (Number.isInteger(holder) && holder > 0 && !isLiveProcess(holder)) {
+      rmSync(lock, { force: true })
+      continue
+    }
+    if (Date.now() > deadline) {
+      return 'busy'
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 100))
+  }
+  try {
+    return await task()
+  } finally {
+    rmSync(lock, { force: true })
   }
 }
 

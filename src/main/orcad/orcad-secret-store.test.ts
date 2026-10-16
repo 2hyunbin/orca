@@ -237,6 +237,24 @@ describe('createOrcadSecretStore', () => {
     ])
   })
 
+  it('lets the first start migrate while a concurrent one with a locked keyring waits', async () => {
+    const { encodedKey, sealed } = legacyKeyringHost()
+    const slowSuccess: OrcadLegacyKeyringReader = async () => {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 50))
+      return { key: encodedKey }
+    }
+    const fastFailure = fakeLegacyKeyring({ failure: 'exited 36' })
+    const [first, second] = await Promise.all([
+      prepare({ legacyKeyring: slowSuccess }),
+      prepare({ legacyKeyring: fastFailure.read })
+    ])
+    expect(first.store.decryptString(sealed)).toBe('lin_api_secret')
+    expect(second.store.decryptString(sealed)).toBe('lin_api_secret')
+    expect(fastFailure.reads).toEqual([])
+    expect((await prepare()).store.decryptString(second.store.encryptString('n'))).toBe('n')
+    expect(readdirSync(keyDir)).toEqual([STATE_A])
+  })
+
   it('never regenerates over an unreadable key record', async () => {
     const statePath = join(keyDir, STATE_A)
     writeFileSync(statePath, '{"version":1,"backend":"host-file"', 'utf8')

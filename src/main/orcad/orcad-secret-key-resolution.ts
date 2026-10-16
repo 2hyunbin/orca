@@ -15,6 +15,7 @@ import {
   readStoredRecord,
   replaceRecord,
   restrictExistingRecord,
+  withRecordLock,
   type StoredKeyState
 } from './orcad-secret-key-record'
 import {
@@ -99,7 +100,7 @@ async function migrateKeyringRecord(
           check: stored.check
         }
       : newFileRecord(context.machineId)
-  const replaced = replaceRecord(context.statePath, record, stored.check)
+  const replaced = replaceRecord(context.statePath, record, stored)
   if (replaced === 'changed') {
     return 'reload'
   }
@@ -121,7 +122,18 @@ async function loadStoredRecord(
   context: Context
 ): Promise<StoreState | 'reload'> {
   if (stored.backend === 'os-keyring') {
-    return migrateKeyringRecord(stored, context)
+    const migrated = await withRecordLock(context.statePath, async () => {
+      // Why re-read under the lock: another start may have migrated it while this one waited.
+      const current = readStoredRecord(context.statePath)
+      return current.kind === 'record' &&
+        current.stored.backend === 'os-keyring' &&
+        current.stored.check === stored.check
+        ? migrateKeyringRecord(current.stored, context)
+        : 'reload'
+    })
+    return migrated === 'busy'
+      ? context.unavailable('another server kept its key record locked')
+      : migrated
   }
   const { unavailable } = context
   if (!(await restrictExistingRecord(context.statePath))) {
