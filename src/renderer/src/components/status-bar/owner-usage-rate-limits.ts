@@ -1,4 +1,5 @@
 import type { ProviderRateLimits, RateLimitState } from '../../../../shared/rate-limit-types'
+import { createEmptyRateLimitState } from '../../../../shared/rate-limit-state-factory'
 import { translate } from '@/i18n/i18n'
 import {
   createPendingProviderSnapshot,
@@ -89,6 +90,9 @@ function adoptRemoteRateLimits(remote: RateLimitState): RateLimitState {
   }
 }
 
+// Why: an older host publishes no usage at all; its account services always cover these.
+const ACCOUNT_OWNED_PROVIDERS: ReadonlySet<UsageProviderKey> = new Set(['claude', 'codex'])
+
 export function resolveOwnerUsageRateLimits(
   local: RateLimitState,
   owner: OwnerUsageState
@@ -99,30 +103,34 @@ export function resolveOwnerUsageRateLimits(
   if (owner.kind === 'remote') {
     return adoptRemoteRateLimits(owner.rateLimits)
   }
-  // Why: never keep a local window under a remote owner — the viewer's numbers
-  // describe a device that runs no agents and look correct while being wrong.
+  // Why: nothing of the viewer's (numbers or setup flags) may stand in for the remote host.
   if (owner.kind === 'remote-pending') {
-    return {
-      ...local,
-      ...mapProviders((key) => createPendingProviderSnapshot(USAGE_PROVIDER_IDS[key]))
-    }
+    return createEmptyRateLimitState(
+      mapProviders((key) => createPendingProviderSnapshot(USAGE_PROVIDER_IDS[key]))
+    )
   }
   const message = describeUnverifiableOwner(owner.ownerLabel, owner.reason)
-  const base = owner.lastKnown ? adoptRemoteRateLimits(owner.lastKnown) : local
+  const base = owner.lastKnown ? adoptRemoteRateLimits(owner.lastKnown) : null
+  const stamp = (key: UsageProviderKey): ProviderRateLimits => ({
+    ...createPendingProviderSnapshot(USAGE_PROVIDER_IDS[key]),
+    error: message,
+    usageMetadata: { unverifiableOwner: true },
+    status: 'error'
+  })
+  if (!base) {
+    return createEmptyRateLimitState(
+      mapProviders((key) => (ACCOUNT_OWNED_PROVIDERS.has(key) ? stamp(key) : null))
+    )
+  }
   return {
-    ...local,
+    ...base,
     ...mapProviders((key) => {
       const provider = base[key]
       // Why: stamping a blank, unconfigured slot 'error' would invent a bar the host never had.
       if (!provider || (!isProviderConfigured(provider) && !hasUsageData(provider))) {
         return provider
       }
-      return {
-        ...createPendingProviderSnapshot(USAGE_PROVIDER_IDS[key]),
-        error: message,
-        usageMetadata: { unverifiableOwner: true },
-        status: 'error'
-      }
+      return stamp(key)
     })
   }
 }

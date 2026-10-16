@@ -91,4 +91,30 @@ describe('resolveOwnerUsageRateLimits', () => {
     expect(resolved.claude).toBeNull()
     expect(resolved.grok).toBeNull()
   })
+
+  it("never copies the viewer's setup flags into a pending or disconnected remote state", () => {
+    const pending = resolveOwnerUsageRateLimits(local, { kind: 'remote-pending' })
+    expect(pending.grokAuthConfigured).toBe(false)
+    const lastKnown = createEmptyRateLimitState({
+      codex: provider('codex', 40),
+      cursorAuthConfigured: true
+    })
+    const lost = resolveOwnerUsageRateLimits(local, {
+      kind: 'remote-unverifiable',
+      ownerLabel: 'devbox',
+      reason: 'unreachable',
+      lastKnown
+    })
+    expect(lost.grokAuthConfigured).toBe(false)
+    expect(lost.cursorAuthConfigured).toBe(true)
+    const neverAnswered = resolveOwnerUsageRateLimits(local, {
+      kind: 'remote-unverifiable',
+      ownerLabel: 'devbox',
+      reason: 'unreachable',
+      lastKnown: null
+    })
+    expect(neverAnswered.grokAuthConfigured).toBe(false)
+    expect(neverAnswered.grok).toBeNull()
+    expect(neverAnswered.codex?.status).toBe('error')
+  })
 })
