@@ -1,4 +1,5 @@
-import { getWorktreeExecutionHostId } from '../../../../shared/execution-host'
+import { selectedWorktreeTransport } from '@/lib/selected-worktree-reference'
+import { getRuntimeTargetHostId } from '@/runtime/runtime-client-target'
 import type { Repo } from '../../../../shared/repo-types'
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
@@ -19,7 +20,11 @@ function getWorktreeOwnerHostId(
   repoMap: Map<string, Pick<Repo, 'connectionId' | 'executionHostId'>>
 ): string | null {
   const repo = repoMap.get(worktree.repoId)
-  return repo ? getWorktreeExecutionHostId(worktree, repo) : (worktree.hostId ?? null)
+  const target = selectedWorktreeTransport(
+    { repos: repo ? [{ id: worktree.repoId, ...repo }] : [] },
+    worktree
+  )
+  return target ? getRuntimeTargetHostId(target) : null
 }
 
 export function getEligibleWorktreeParents({
@@ -60,9 +65,7 @@ export function isEligibleWorktreeParent({
 }): boolean {
   return (
     childHostId !== null &&
-    (getWorktreeOwnerHostId(candidateParent, repoMap) === childHostId ||
-      (!childHostId.startsWith('runtime:') &&
-        !getWorktreeOwnerHostId(candidateParent, repoMap)?.startsWith('runtime:'))) &&
+    getWorktreeOwnerHostId(candidateParent, repoMap) === childHostId &&
     !candidateParent.isArchived &&
     canAssignWorktreeParent({
       child,

@@ -30,6 +30,7 @@ export type WorktreeDropCommitContext = {
     request: WorktreeStatusDropRequest
   ) => WorktreeSidebarDropPreview | null
   refreshWorktreeDragSession: () => boolean
+  beginWorktreeLineageDrag: (rows: readonly Worktree[]) => void
   getEligibleLineageDropTarget: (
     target: WorktreeSidebarLineageDropTarget,
     draggedWorktrees: readonly Worktree[]

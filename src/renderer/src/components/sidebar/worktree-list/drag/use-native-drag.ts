@@ -49,6 +49,7 @@ export function useWorktreeNativeDrag(args: {
     ) => {
       const worktreeId = worktree.id
       const draggedIds = draggedWorktrees.map((row) => row.id)
+      ctx.beginWorktreeLineageDrag(draggedWorktrees)
       const sourceGroupKey =
         event.currentTarget.closest<HTMLElement>('[data-worktree-drag-group-key]')?.dataset
           .worktreeDragGroupKey ?? null
@@ -88,7 +89,7 @@ export function useWorktreeNativeDrag(args: {
         pointerY: null
       })
     },
-    [scrollRef, session, setWorktreeDragState]
+    [ctx, scrollRef, session, setWorktreeDragState]
   )
 
   const handleWorktreeDragOver = useCallback(

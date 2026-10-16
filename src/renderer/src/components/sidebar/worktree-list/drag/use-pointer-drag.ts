@@ -186,6 +186,7 @@ export function useWorktreePointerDrag(args: {
           ? [...selectedWorktrees]
           : [worktree]
       const draggedIds = draggedWorktrees.map((row) => row.id)
+      ctx.beginWorktreeLineageDrag(draggedWorktrees)
       const reorderDraggedIds = session.getReorderDraggedIds(draggedIds)
       const reorderUnitDraggedIds = session.getReorderUnitDraggedIds(
         sourceGroupKey,
@@ -218,6 +219,7 @@ export function useWorktreePointerDrag(args: {
     },
     [
       onWorkspaceBoardDragPreviewStart,
+      ctx,
       scrollRef,
       selectedWorktreeIds,
       selectedWorktrees,

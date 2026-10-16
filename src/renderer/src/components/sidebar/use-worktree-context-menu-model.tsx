@@ -1,4 +1,5 @@
 import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
+import { captureSelectedWorktree } from '@/lib/selected-worktree-reference'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '@/store'
 import { useAllWorktrees, useRepoById, useRepoMap } from '@/store/selectors'
@@ -317,7 +318,7 @@ export function useWorktreeContextMenuModel({
       setParentPickerOpen,
       unmountTimerRef: parentPickerUnmountTimerRef,
       worktreeId: worktree.id,
-      childIdentity: worktree.identity
+      childReference: captureSelectedWorktree(useAppStore.getState(), worktree)
     })
   const { handleRemoveParentLink, suppressOpeningPointerEvent } =
     useWorktreeContextMenuSecondaryActions({

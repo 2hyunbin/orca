@@ -64,6 +64,8 @@ function getWorktreeSnapshot(worktreesByRepo: AppState['worktreesByRepo']): Work
   const worktreesByIdentity = new Map<string, Worktree | null>()
   for (const row of allWorktrees) {
     if (row.identity) {
+      const ownerKey = JSON.stringify([row.hostId, row.identity.key])
+      worktreesByIdentity.set(ownerKey, worktreesByIdentity.has(ownerKey) ? null : row)
       worktreesByIdentity.set(
         row.identity.key,
         worktreesByIdentity.has(row.identity.key) ? null : row
@@ -109,9 +111,14 @@ export function getIndexedWorktreeById(
 
 export function getIndexedWorktreeByIdentity(
   worktreesByRepo: AppState['worktreesByRepo'],
-  identity: string
+  identity: string,
+  hostId?: Worktree['hostId']
 ): Worktree | undefined {
-  return getWorktreeSnapshot(worktreesByRepo).worktreesByIdentity.get(identity) ?? undefined
+  return (
+    getWorktreeSnapshot(worktreesByRepo).worktreesByIdentity.get(
+      hostId ? JSON.stringify([hostId, identity]) : identity
+    ) ?? undefined
+  )
 }
 
 export function getIndexedRepoMap(repos: AppState['repos']): Map<string, Repo> {
