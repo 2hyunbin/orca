@@ -196,7 +196,11 @@ describe('orcad secret store with a locked macOS login Keychain', () => {
     const record = orcadSecretStateFileName(MACHINE)
     const stale = join(keyDir, `${record}.999999999.0123abcd.staging`)
     const inFlight = join(keyDir, `${record}.${process.ppid}.0123abcd.staging`)
-    const unrelated = join(keyDir, 'other.json.999999999.0123abcd.staging')
+    // Another machine sharing this home: its writer's PID means nothing on this host.
+    const unrelated = join(
+      keyDir,
+      `${orcadSecretStateFileName('fedcba9876543210fedcba9876543210')}.999999999.0123abcd.staging`
+    )
     for (const path of [stale, inFlight, unrelated]) {
       writeFileSync(path, '{}', { mode: 0o600 })
     }

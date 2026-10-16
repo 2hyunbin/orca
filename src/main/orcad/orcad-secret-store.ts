@@ -154,7 +154,7 @@ export function createOrcadSecretStore(
     },
     async prepare(next) {
       options = next
-      sweepStaleRecordStaging(next.keyDir)
+      sweepStaleRecordStaging(resolveKeyLocation(next).statePath)
       generation += 1
       adopt(await resolveState(next))
       return state.kind === 'ready'

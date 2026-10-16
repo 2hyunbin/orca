@@ -11,7 +11,7 @@ import {
   statSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import {
   bestEffortFsyncDirectorySync,
@@ -182,8 +182,6 @@ export function replaceRecord(path: string, record: StoredKeyState, expectedChec
   }
 }
 
-const STAGING_NAME = /^orcad-secret-store-[0-9a-f]{16}\.json\.(\d+)\.[0-9a-f]{8}\.staging$/
-
 function isLiveProcess(pid: number): boolean {
   try {
     process.kill(pid, 0)
@@ -195,23 +193,28 @@ function isLiveProcess(pid: number): boolean {
 }
 
 /**
- * Removes key-record staging files a crashed write left in `keyDir`; they can hold a master key.
- * Only this user's regular files, matching the staging name, whose writer is gone.
+ * Removes staging files a crashed write of this record left beside it; they can hold a master key.
+ * Why only this record's: on a shared (NFS) home another machine's writer PID means nothing here.
+ * Only this user's regular files, whose local writer is gone.
  */
-export function sweepStaleRecordStaging(keyDir: string): void {
+export function sweepStaleRecordStaging(statePath: string): void {
+  const dir = dirname(statePath)
+  const prefix = `${basename(statePath)}.`
   let names: string[]
   try {
-    names = readdirSync(keyDir)
+    names = readdirSync(dir)
   } catch {
     return
   }
   const uid = typeof process.getuid === 'function' ? process.getuid() : null
   for (const name of names) {
-    const pid = STAGING_NAME.exec(name)?.[1]
+    const pid = name.startsWith(prefix)
+      ? /^(\d+)\.[0-9a-f]{8}\.staging$/.exec(name.slice(prefix.length))?.[1]
+      : undefined
     if (!pid || Number(pid) === process.pid || isLiveProcess(Number(pid))) {
       continue
     }
-    const path = join(keyDir, name)
+    const path = join(dir, name)
     try {
       const stat = lstatSync(path)
       if (stat.isFile() && (uid === null || stat.uid === uid)) {

@@ -62,8 +62,8 @@ the machine ID, so a backup of `~/.orca`, or a copy on a shared (NFS) home, can 
 credentials on another machine.
 
 On startup the server also deletes key-record staging files (`*.staging`) that a crashed write
-left in the credential directory. It deletes only this user's regular files with that name, and
-only when the process that wrote them has exited.
+left in the credential directory. It deletes only this machine's record's staging files owned by
+this user, and only when the process that wrote them has exited.
 
 ## Limitations
 
