@@ -1,0 +1,346 @@
+import pg from 'pg'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { markRelayDatabaseMoveCapability } from './database.js'
+import {
+  copyCommand,
+  installTrackingCommand,
+  prepareTargetCommand,
+  syncCommand,
+  verifyCommand
+} from './database-move-commands.js'
+import type { MoveCutoverContext } from './database-move-cutover-commands.js'
+import {
+  readUnmarkedRelaySessions,
+  runCutover,
+  type CutoverTimings
+} from './database-move-cutover.js'
+import { readAuthorityGeneration } from './database-move-tracking.js'
+import {
+  PointerGenerationConflict,
+  type DatabaseTargetPointerStore,
+  type StoredDatabaseTargetPointer
+} from './database-move-pointer-store.js'
+import type { DatabaseTargetPointer } from './relay-database-target-pointer.js'
+import { openPrimaryRelayDatabaseTarget } from './relay-database-targets.js'
+import { SwitchingRelayDatabase } from './switching-relay-database.js'
+import {
+  createMoveTestSides,
+  withPgClient,
+  type MoveTestSides
+} from './test-fixtures/database-move-sides.js'
+
+const adminUrl = process.env.ORCA_RELAY_TEST_POSTGRES_URL
+const describePostgres = adminUrl ? describe : describe.skip
+
+// The contract's shape, scaled down: the lead still spans two pointer polls (100 ms here).
+const TIMINGS: CutoverTimings = {
+  leadMs: 800,
+  fenceAfterStartMs: 400,
+  abortAfterStartMs: 4_000,
+  holdMs: 8_000
+}
+const POLL_MS = 100
+const CELLS = ['c0', 'c1', 'c2', 'c3']
+
+class MemoryPointerStore implements DatabaseTargetPointerStore {
+  private generation = 1
+  constructor(private stored: StoredDatabaseTargetPointer | null) {}
+  current(): DatabaseTargetPointer | null {
+    return this.stored ? structuredClone(this.stored.pointer) : null
+  }
+  async read(): Promise<StoredDatabaseTargetPointer | null> {
+    return this.stored ? structuredClone(this.stored) : null
+  }
+  async write(pointer: DatabaseTargetPointer, ifGenerationMatch: string): Promise<string> {
+    if (this.stored?.generation !== ifGenerationMatch) throw new PointerGenerationConflict()
+    this.generation += 1
+    this.stored = { pointer: structuredClone(pointer), generation: String(this.generation) }
+    return this.stored.generation
+  }
+}
+
+type Fleet = {
+  processes: SwitchingRelayDatabase[]
+  failures: unknown[]
+  ackedEvents: Set<string>
+  ackedIncrements: Map<string, number>
+  stop: () => Promise<void>
+}
+
+// Two relay processes following the pointer, each with three writers doing relay-shaped work.
+async function startFleet(sides: MoveTestSides, store: MemoryPointerStore): Promise<Fleet> {
+  const processes = [0, 1].map((index) => {
+    const settings = {
+      poolMax: 4,
+      applicationName: markRelayDatabaseMoveCapability(`orca-relay/cell/p${index}`)
+    }
+    const dedicated = openPrimaryRelayDatabaseTarget(sides.dedicated.app.url, settings)
+    return new SwitchingRelayDatabase({
+      primary: openPrimaryRelayDatabaseTarget(sides.primary.app.url, settings),
+      openDedicated: () => dedicated,
+      firstPointer: async () => store.current(),
+      probeIntervalMs: 50
+    })
+  })
+  await Promise.all(processes.map((database) => database.ready()))
+  const polls = processes.map((database) =>
+    setInterval(() => database.applyPointer(store.current()), POLL_MS)
+  )
+  const fleet: Fleet = {
+    processes,
+    failures: [],
+    ackedEvents: new Set(),
+    ackedIncrements: new Map(),
+    stop: async () => undefined
+  }
+  let stopped = false
+  const writer = async (id: number): Promise<void> => {
+    const database = processes[id % processes.length]
+    if (!database) return
+    for (let n = 0; !stopped; n++) {
+      const cell = CELLS[(id + n) % CELLS.length] ?? 'c0'
+      try {
+        if (n % 3 === 0) {
+          const eventId = `w${id}-${n}`
+          await database.query(
+            `INSERT INTO relay_audit_events (id, at, type, detail_json) VALUES (?, ?, ?, ?)`,
+            [eventId, Date.now(), 'move-test', '{}']
+          )
+          fleet.ackedEvents.add(eventId)
+        } else if (n % 3 === 1) {
+          await database.transaction(async (transaction) => {
+            await transaction.query(
+              `UPDATE relay_cells SET observed_requests = observed_requests + 1, updated_at = ? WHERE cell_id = ?`,
+              [Date.now(), cell]
+            )
+          })
+          fleet.ackedIncrements.set(cell, (fleet.ackedIncrements.get(cell) ?? 0) + 1)
+        } else {
+          await database.query(
+            `INSERT INTO relay_rate_windows (scope_key, window_kind, window_started_at, count) VALUES (?, 'k', ?, 1)
+             ON CONFLICT (scope_key, window_kind, window_started_at) DO UPDATE SET count = relay_rate_windows.count + 1`,
+            [`s${id}`, Math.floor(n / 30)]
+          )
+        }
+      } catch (error) {
+        fleet.failures.push(error)
+      }
+      await new Promise((resolve) => setTimeout(resolve, 3))
+    }
+  }
+  const writers = Array.from({ length: 6 }, (_, id) => writer(id))
+  fleet.stop = async () => {
+    stopped = true
+    await Promise.all(writers)
+    for (const poll of polls) clearInterval(poll)
+    await Promise.all(processes.map((database) => database.close()))
+  }
+  return fleet
+}
+
+async function loginCode(url: string): Promise<string | null> {
+  try {
+    await withPgClient(url, async () => undefined)
+    return null
+  } catch (error) {
+    return typeof error === 'object' && error !== null && 'code' in error
+      ? String(error.code)
+      : 'unknown'
+  }
+}
+
+describePostgres('database move cutover against two PostgreSQL targets', () => {
+  let sides: MoveTestSides
+  let ctx: MoveCutoverContext
+  let store: MemoryPointerStore
+
+  beforeEach(async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined)
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    sides = await createMoveTestSides(adminUrl ?? '')
+    store = new MemoryPointerStore({
+      generation: '1',
+      pointer: {
+        version: 1,
+        dedicated: {
+          instanceConnectionName: 'test-project:us-central1:relay-db',
+          databaseUrlSecret: 'projects/test-project/secrets/relay-db-url/versions/latest'
+        }
+      }
+    })
+    ctx = { databases: sides.databases(), google: null, pointerStore: async () => store }
+    await prepareTargetCommand(ctx)
+    await installTrackingCommand(ctx, 'primary')
+    await installTrackingCommand(ctx, 'dedicated')
+    await withPgClient(sides.primary.app.url, async (client) => {
+      for (const cell of CELLS) {
+        await client.query(
+          `INSERT INTO relay_cells (cell_id, cell_url, enabled, capacity_requests, reserved_requests,
+             observed_requests, last_heartbeat_at, updated_at) VALUES ($1, $2, 1, 100, 0, 0, 0, 0)`,
+          [cell, `https://${cell}.relay.test`]
+        )
+      }
+      await client.query(
+        `INSERT INTO relay_audit_events (id, at, type, detail_json)
+         SELECT 'seed' || n, n, 'seed', '{}' FROM generate_series(1, 500) n`
+      )
+    })
+    await copyCommand(ctx, 'primary', { maxBytesPerSecond: 1e9 })
+  }, 60_000)
+
+  afterEach(async () => {
+    ctx.databases.close()
+    await sides.drop()
+    vi.restoreAllMocks()
+  })
+
+  it('moves live writers to the dedicated target with no failed operation and no lost write', async () => {
+    const fleet = await startFleet(sides, store)
+    await new Promise((resolve) => setTimeout(resolve, 300))
+
+    // A relay-role client without the capability mark blocks even a dry run.
+    const legacy = new pg.Client({
+      connectionString: sides.primary.app.url,
+      application_name: 'legacy-script'
+    })
+    await legacy.connect()
+    // Status reads it as the tool role, which sees another role's backend_type as null.
+    const seen = await withPgClient(sides.primary.move.url, (client) =>
+      readUnmarkedRelaySessions(client, sides.primary.app.user)
+    )
+    expect(seen).toEqual([{ applicationName: 'legacy-script', sessions: 1 }])
+    await expect(
+      runCutover({ databases: ctx.databases, to: 'dedicated', pointerStore: store, dryRun: true })
+    ).rejects.toThrow('relay_sessions_without_move_capability')
+    await legacy.end()
+    // A login role with its own write grant would be outside the fence.
+    const outsider = `${sides.primary.app.user}_outsider`
+    const member = `${sides.primary.app.user}_member`
+    await withPgClient(sides.primary.adminUrl, async (admin) => {
+      await admin.query(`CREATE ROLE ${outsider} LOGIN`)
+      await admin.query(`CREATE ROLE ${member} LOGIN NOINHERIT`)
+      await admin.query(`GRANT ${sides.primary.app.user} TO ${member}`)
+    })
+    await withPgClient(sides.primary.app.url, (client) =>
+      client.query(`GRANT UPDATE ON relay_cells TO ${outsider}`)
+    )
+    const refusal = await runCutover({
+      databases: ctx.databases,
+      to: 'dedicated',
+      pointerStore: store,
+      dryRun: true
+    }).catch((error: unknown) => error)
+    expect(refusal).toMatchObject({
+      reason: 'other_roles_can_write_relay_rows',
+      details: {
+        writers: [
+          { role: member, via: 'set-role' },
+          { role: outsider, via: 'privilege' }
+        ]
+      }
+    })
+    await withPgClient(sides.primary.adminUrl, async (admin) => {
+      for (const role of [outsider, member]) {
+        await admin.query(`DROP OWNED BY ${role}`)
+        await admin.query(`DROP ROLE ${role}`)
+      }
+    })
+    const before = await store.read()
+    const dry = await runCutover({
+      databases: ctx.databases,
+      to: 'dedicated',
+      pointerStore: store,
+      dryRun: true
+    })
+    expect(dry.generation).toBe(1)
+    expect(dry.hotTables).toContain('relay_cells')
+    expect(await store.read()).toEqual(before)
+
+    const result = await runCutover({
+      databases: ctx.databases,
+      to: 'dedicated',
+      pointerStore: store,
+      timings: TIMINGS
+    })
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    await fleet.stop()
+
+    expect(fleet.failures).toEqual([])
+    expect(result.generation).toBe(1)
+    expect(fleet.processes.map((database) => database.activeTargetName())).toEqual([
+      'dedicated',
+      'dedicated'
+    ])
+    expect(store.current()?.quiesce).toBeUndefined()
+    expect(await loginCode(sides.primary.app.url)).toBe('28P01')
+
+    const dedicated = await withPgClient(sides.dedicated.move.url, async (client) => ({
+      generation: await readAuthorityGeneration(client),
+      events: new Set(
+        (await client.query(`SELECT id FROM relay_audit_events WHERE type = 'move-test'`)).rows.map(
+          (row) => String(row.id)
+        )
+      ),
+      cells: new Map(
+        (
+          await client.query(`SELECT cell_id, observed_requests::int AS n FROM relay_cells`)
+        ).rows.map((row) => [String(row.cell_id), Number(row.n)])
+      )
+    }))
+    expect(dedicated.generation).toBe(1)
+    // Every acknowledged write is on the dedicated copy: synced before the switch, or written after.
+    expect([...fleet.ackedEvents].filter((id) => !dedicated.events.has(id))).toEqual([])
+    expect(dedicated.events.size).toBe(fleet.ackedEvents.size)
+    for (const cell of CELLS)
+      expect(dedicated.cells.get(cell)).toBe(fleet.ackedIncrements.get(cell) ?? 0)
+    console.error(
+      JSON.stringify({
+        cutover: result,
+        events: fleet.ackedEvents.size,
+        increments: [...fleet.ackedIncrements.values()]
+      })
+    )
+
+    // The old copy is no longer written by the forward direction.
+    await expect(copyCommand(ctx, 'primary', {})).rejects.toThrow('target_is_the_active_side')
+    // The reverse sync brings the old copy level with the new one: the rollback path.
+    await syncCommand(ctx, 'dedicated', { stopAtBacklog: 0, idleMs: 5 })
+    expect(await verifyCommand(ctx, {})).toBe(true)
+  }, 60_000)
+
+  it('aborts on a hot-table difference and leaves the processes on the restored source', async () => {
+    // A row only the dedicated copy has, written by the tool role so no trigger marks it.
+    await withPgClient(sides.dedicated.move.url, async (client) => {
+      await client.query(
+        `INSERT INTO relay_cells (cell_id, cell_url, enabled, capacity_requests, reserved_requests,
+           observed_requests, last_heartbeat_at, updated_at) VALUES ('ghost', 'https://ghost', 0, 0, 0, 0, 0, 0)`
+      )
+    })
+    const fleet = await startFleet(sides, store)
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    await expect(
+      runCutover({
+        databases: ctx.databases,
+        to: 'dedicated',
+        pointerStore: store,
+        timings: TIMINGS
+      })
+    ).rejects.toThrow('hot_tables_differ')
+    const ackedAtAbort = fleet.ackedEvents.size
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    await fleet.stop()
+
+    expect(fleet.failures).toEqual([])
+    expect(fleet.ackedEvents.size).toBeGreaterThan(ackedAtAbort)
+    expect(fleet.processes.map((database) => database.activeTargetName())).toEqual([
+      'primary',
+      'primary'
+    ])
+    expect(store.current()?.quiesce).toBeUndefined()
+    expect(await loginCode(sides.primary.app.url)).toBeNull()
+    const generation = await withPgClient(sides.dedicated.move.url, (client) =>
+      readAuthorityGeneration(client)
+    )
+    expect(generation).toBe(0)
+  }, 60_000)
+})
