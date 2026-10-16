@@ -13,6 +13,7 @@ vi.mock('@/store', () => ({ useAppStore: { getState: () => ({}) } }))
 
 let subscriptionCallbacks: MultiplexSubscriptionCallbacks = null
 let resolvedPaneHandle = 'terminal-1'
+type ActivatedSessionTab = { id: string; terminal: string; incarnationId?: string }
 
 const { runtimeCall, subscriptionSendBinary, resetRemoteRuntimeTransport } =
   createRemoteRuntimeTransportMocks({
@@ -146,7 +147,7 @@ describe('web mirror reveal: resolvePane overlaps the activation', () => {
           ...response,
           result: {
             ...response.result,
-            tabs: response.result.tabs.map((tab: object) => ({
+            tabs: response.result.tabs.map((tab: ActivatedSessionTab) => ({
               ...tab,
               incarnationId: 'incarnation-learned'
             }))
