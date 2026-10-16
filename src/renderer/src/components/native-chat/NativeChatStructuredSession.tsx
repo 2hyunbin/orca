@@ -141,7 +141,7 @@ export function NativeChatStructuredSession(
     sessionId: props.sessionId,
     journalItems: controller.journalItems,
     submissions: controller.submissions,
-    isWorking: controller.isWorking,
+    isWorking: controller.isWorking || hostPermission.sendBlockedReason !== null,
     reportComposerError
   })
   const needsFailureFacts =
