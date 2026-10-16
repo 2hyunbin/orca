@@ -10,6 +10,9 @@ import type { StructuredLaunchAttempt } from './structured-agent-session-launch-
 import type { AgentLaunchRequestId } from './agent-launch-request-id'
 
 export type StructuredAgentLaunchOptions = {
+  reservedSessionId?: string
+  stagedPrompt?: StagedStructuredLaunchPrompt
+  firstSubmissionOptions?: Readonly<Record<string, string>>
   /** The user action this start serves; only a re-delivery of it joins its chat. */
   requestId: AgentLaunchRequestId
   prompt?: string

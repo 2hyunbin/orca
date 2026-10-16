@@ -4,6 +4,7 @@
 // skipped write is repaired by the next one.
 
 import type { JSONContent } from '@tiptap/react'
+import { deleteNativeChatNewDraftsOwnedBy, resetNativeChatNewDraftsForTests } from './native-chat-new-draft'
 import {
   sameNativeChatComposerDraftDocument,
   sameNativeChatComposerDraftImages
@@ -299,6 +300,7 @@ export function deleteNativeChatComposerDraftsForTab(tabId: string): void {
 
 /** Drops every draft written in a workspace the user removed, open and closed chats alike. */
 export function deleteNativeChatComposerDraftsOwnedBy(owner: NativeChatComposerDraftOwner): void {
+  deleteNativeChatNewDraftsOwnedBy(owner)
   deleteDraftsWhere(
     (_scopeKey, draft) =>
       draft?.owner?.workspaceId === owner.workspaceId &&
@@ -307,6 +309,7 @@ export function deleteNativeChatComposerDraftsOwnedBy(owner: NativeChatComposerD
 }
 
 export function clearNativeChatComposerDraftsForTests(): void {
+  resetNativeChatNewDraftsForTests()
   clearDraftMemoryForTests()
   resetNativeChatComposerDraftPersistenceForTests()
   resetNativeChatComposerDraftLoadForTests()

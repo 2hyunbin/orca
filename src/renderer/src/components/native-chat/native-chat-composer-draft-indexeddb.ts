@@ -3,7 +3,7 @@
 
 import type {
   NativeChatComposerDraftStorage,
-  StoredNativeChatComposerDraft
+  NativeChatStoredDraft
 } from './native-chat-composer-draft-storage'
 
 const DATABASE_NAME = 'orca-native-chat-composer-drafts'
@@ -85,7 +85,7 @@ export function createIndexedDbNativeChatComposerDraftStorage(
     },
     read: async (scopeKey) =>
       settled((await database()).transaction(DRAFTS, 'readonly').objectStore(DRAFTS).get(scopeKey)),
-    write: (scopeKey, draft: StoredNativeChatComposerDraft) =>
+    write: (scopeKey, draft: NativeChatStoredDraft) =>
       change((drafts) => drafts.put(draft, scopeKey)),
     remove: (scopeKeys) =>
       change((drafts) => {

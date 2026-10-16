@@ -40,7 +40,7 @@ export function captureNativeChatComposerFocusIntent(): NativeChatComposerFocusI
     }
   }
   const pending: { tabId: string | null; cancel: () => void } = { tabId: null, cancel }
-  let timeout: ReturnType<typeof setTimeout> | undefined
+  const timeout = setTimeout(cancel, PENDING_FOCUS_MS)
   pendingFocusRequest = pending
   document.addEventListener('pointerdown', cancel, true)
   document.addEventListener('keydown', cancelForNavigation, true)
@@ -50,8 +50,6 @@ export function captureNativeChatComposerFocusIntent(): NativeChatComposerFocusI
         return
       }
       pending.tabId = tabId
-      clearTimeout(timeout)
-      timeout = setTimeout(cancel, PENDING_FOCUS_MS)
       const reclaim = revealedComposerReclaims.get(tabId)
       if (reclaim) {
         cancel()

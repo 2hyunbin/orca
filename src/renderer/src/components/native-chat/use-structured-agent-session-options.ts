@@ -1,4 +1,5 @@
 import { toast } from 'sonner'
+import { readNativeChatNewDraft, updateNativeChatNewDraft } from './native-chat-new-draft'
 import { useCallback, useMemo } from 'react'
 import type {
   AgentSessionOptionResult,
@@ -245,6 +246,14 @@ export function useStructuredAgentSessionOptions(args: {
         return false
       }
       if (!transportEnabled || fence === null) {
+        const draft = readNativeChatNewDraft(sessionId)
+        if (draft) {
+          const options = id === 'model'
+            ? { ...(draft.options[AGENT_CHAT_PERMISSION_MODE_OPTION_ID] ? { [AGENT_CHAT_PERMISSION_MODE_OPTION_ID]: draft.options[AGENT_CHAT_PERMISSION_MODE_OPTION_ID] } : {}), [id]: encoded }
+            : { ...draft.options, [id]: encoded }
+          updateNativeChatNewDraft(sessionId, { options })
+          return true
+        }
         // No fence yet: the launch holds it and applies it before anything else is sent.
         const applied = holdStructuredAgentSessionLaunchOption(sessionId, id, encoded)
         void applied?.then(settleLaunchOptionPick)

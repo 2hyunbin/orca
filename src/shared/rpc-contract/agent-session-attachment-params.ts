@@ -5,12 +5,18 @@ import {
 } from '../agent-session-attachments'
 import { isValidBase64 } from './clipboard-params'
 import { Identifier, SessionId } from './structured-agent-session-params'
+import { isTuiAgent } from '../tui-agent-config'
+import type { TuiAgent } from '../tui-agent'
 
 const UploadId = Identifier('Invalid upload id', 128)
 
 export const AttachmentUploadStartParams = z
   .object({
     sessionId: SessionId,
+    reservedSession: z.object({
+      worktree: z.string().min(1).max(4096),
+      agent: z.custom<TuiAgent>(isTuiAgent)
+    }).strict().optional(),
     name: z.string().min(1).max(1024),
     byteLength: z
       .number()

@@ -1,4 +1,5 @@
 import type { TuiAgent } from '../../../shared/tui-agent'
+import type { StructuredAgentFirstSubmission } from './structured-agent-session-launch-record'
 import {
   createStructuredAgentSessionId,
   structuredAgentSessionCreateParams,
@@ -44,6 +45,7 @@ export type StructuredAgentSessionLaunchIntent = {
   target: RuntimeClientTarget
   agent: TuiAgent
   params: StructuredAgentSessionCreateParams
+  firstSubmission?: StructuredAgentFirstSubmission
   createMessageSupport?: boolean
   createPrepared?: true
   prepareCreate?: () => void
@@ -86,20 +88,22 @@ export function createStructuredAgentSessionLaunchIntent(
   agent: TuiAgent,
   executionHostId?: ExecutionHostId,
   resumeFrom?: StructuredAgentSessionResumeSource,
-  hostSeedOptions?: LaunchSeed
+  hostSeedOptions?: LaunchSeed,
+  reservedSessionId?: string
 ): StructuredAgentSessionLaunchIntent {
   const owner = structuredAgentSessionOwnerTarget(
     worktreeId,
     executionHostId ?? resolveStructuredAgentSessionOwner(useAppStore.getState(), worktreeId)
   )
-  const sessionId = createStructuredAgentSessionId(agent, createBrowserUuid)
+  const sessionId = reservedSessionId ?? createStructuredAgentSessionId(agent, createBrowserUuid)
   return buildStructuredAgentSessionLaunchIntent(
     worktreeId,
     owner,
     agent,
     sessionId,
     resumeFrom,
-    hostSeedOptions
+    hostSeedOptions,
+    reservedSessionId === undefined
   )
 }
 
@@ -109,10 +113,11 @@ function buildStructuredAgentSessionLaunchIntent(
   agent: TuiAgent,
   sessionId: string,
   resumeFrom: StructuredAgentSessionResumeSource | undefined,
-  hostSeedOptions: LaunchSeed
+  hostSeedOptions: LaunchSeed,
+  requestFocus = true
 ): StructuredAgentSessionLaunchIntent {
   const state = useAppStore.getState()
-  recordWebSessionFocusIntent(
+  if (requestFocus) recordWebSessionFocusIntent(
     structuredAgentSessionFocusOwner(owner.target),
     worktreeId,
     `agent-session:${sessionId}`,
@@ -165,10 +170,11 @@ export function restoreStructuredAgentSessionLaunchIntent(args: {
   firstMessage?: StructuredAgentSessionFirstMessage
   options?: Readonly<Record<string, string>>
   createMessageSupport?: boolean
+  firstSubmission?: StructuredAgentFirstSubmission
 }): StructuredAgentSessionLaunchIntent {
   const state = useAppStore.getState()
   const { target } = structuredAgentSessionOwnerTarget(args.worktreeId, args.executionHostId)
-  recordWebSessionFocusIntent(
+  if (!args.firstSubmission) recordWebSessionFocusIntent(
     structuredAgentSessionFocusOwner(target),
     args.worktreeId,
     `agent-session:${args.sessionId}`,
@@ -181,6 +187,7 @@ export function restoreStructuredAgentSessionLaunchIntent(args: {
     executionHostId: args.executionHostId,
     target,
     agent: args.agent,
+    ...(args.firstSubmission ? { firstSubmission: args.firstSubmission } : {}),
     params: {
       envelope: {
         sessionId: args.sessionId,

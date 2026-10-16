@@ -5,6 +5,17 @@
 import type { JSONContent } from '@tiptap/react'
 import { parseExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
 import { createIndexedDbNativeChatComposerDraftStorage } from './native-chat-composer-draft-indexeddb'
+import { isTuiAgent } from '../../../../shared/tui-agent-config'
+import type { TuiAgent } from '../../../../shared/tui-agent'
+
+export type NativeChatNewDraft = {
+  readonly owner: NativeChatComposerDraftOwner
+  readonly agent: TuiAgent
+  readonly groupId: string
+  readonly options: Readonly<Record<string, string>>
+}
+
+export type NativeChatStoredDraft = StoredNativeChatComposerDraft | NativeChatNewDraft
 
 export type NativeChatComposerDraftImage = {
   id: string
@@ -38,12 +49,12 @@ export type StoredNativeChatComposerDraft = NativeChatComposerDraft & {
 export type NativeChatComposerDraftStorage = {
   loadAll(): Promise<ReadonlyMap<string, unknown>>
   read(scopeKey: string): Promise<unknown>
-  write(scopeKey: string, draft: StoredNativeChatComposerDraft): Promise<void>
+  write(scopeKey: string, draft: NativeChatStoredDraft): Promise<void>
   remove(scopeKeys: readonly string[]): Promise<void>
   /** Reads the stored record and writes what `apply` makes of it, as one change. */
   update(
     scopeKey: string,
-    apply: (stored: unknown) => StoredNativeChatComposerDraft | null
+    apply: (stored: unknown) => NativeChatStoredDraft | null
   ): Promise<void>
 }
 
@@ -54,36 +65,46 @@ export function createMemoryNativeChatComposerDraftStorage(): NativeChatComposer
   refuseWrites: boolean
 } {
   const drafts = new Map<string, StoredNativeChatComposerDraft>()
+  const metadata = new Map<string, NativeChatNewDraft>()
+  const put = (key: string, draft: NativeChatStoredDraft): void => {
+    if ('text' in draft) drafts.set(key, draft)
+    else metadata.set(key, draft)
+  }
   const storage = {
     drafts,
     refuseWrites: false,
-    loadAll: async () => new Map(drafts),
-    read: async (scopeKey: string) => drafts.get(scopeKey),
-    write: (scopeKey: string, draft: StoredNativeChatComposerDraft) => {
+    loadAll: async () => new Map<string, unknown>([...drafts, ...metadata]),
+    read: async (scopeKey: string) => drafts.get(scopeKey) ?? metadata.get(scopeKey),
+    write: (scopeKey: string, draft: NativeChatStoredDraft) => {
       if (storage.refuseWrites) {
         return Promise.reject(new DOMException('refused', 'QuotaExceededError'))
       }
-      drafts.set(scopeKey, draft)
+      put(scopeKey, draft)
       return Promise.resolve()
     },
     remove: (scopeKeys: readonly string[]) => {
+      if (storage.refuseWrites) {
+        return Promise.reject(new DOMException('refused', 'QuotaExceededError'))
+      }
       for (const scopeKey of scopeKeys) {
         drafts.delete(scopeKey)
+        metadata.delete(scopeKey)
       }
       return Promise.resolve()
     },
     update: (
       scopeKey: string,
-      apply: (stored: unknown) => StoredNativeChatComposerDraft | null
+      apply: (stored: unknown) => NativeChatStoredDraft | null
     ) => {
       if (storage.refuseWrites) {
         return Promise.reject(new DOMException('refused', 'QuotaExceededError'))
       }
-      const next = apply(drafts.get(scopeKey))
+      const next = apply(drafts.get(scopeKey) ?? metadata.get(scopeKey))
       if (next) {
-        drafts.set(scopeKey, next)
+        put(scopeKey, next)
       } else {
         drafts.delete(scopeKey)
+        metadata.delete(scopeKey)
       }
       return Promise.resolve()
     }
@@ -142,6 +163,21 @@ function parseOwner(value: unknown): NativeChatComposerDraftOwner | undefined {
   return typeof workspaceId === 'string' && host
     ? { workspaceId, executionHostId: host.id }
     : undefined
+}
+
+export function parseNativeChatNewDraft(value: unknown): NativeChatNewDraft | null {
+  if (!isRecord(value) || !isTuiAgent(value.agent) || typeof value.groupId !== 'string') {
+    return null
+  }
+  const owner = parseOwner(value.owner)
+  if (!owner || !isRecord(value.options) || !Object.values(value.options).every((v) => typeof v === 'string')) {
+    return null
+  }
+  const options: Record<string, string> = {}
+  for (const [key, pick] of Object.entries(value.options)) {
+    if (typeof pick === 'string') options[key] = pick
+  }
+  return { owner, agent: value.agent, groupId: value.groupId, options }
 }
 
 /** A stored value as a draft, or null when it isn't one (a newer or damaged record). */

@@ -3,6 +3,7 @@ import type { StructuredLaunchState } from './structured-agent-session-launch-re
 import { notifyStructuredLaunchListeners } from './structured-agent-session-launch-registry'
 import {
   prepareStructuredLaunchPromptForCreate,
+  structuredLaunchPromptNeedsLegacySend,
   prepareLegacyStructuredLaunchPrompts
 } from './structured-agent-session-launch-prompt'
 import type { StructuredAgentLaunchReceipt } from './structured-agent-session-launch-recovery'
@@ -29,7 +30,9 @@ export function prepareStructuredLaunchCreateMessage(state: StructuredLaunchStat
     notifyStructuredLaunchListeners()
     return
   }
-  const firstMessage = prepareStructuredLaunchPromptForCreate(intent.sessionId, intent.target)
+  const needsLegacySend = structuredLaunchPromptNeedsLegacySend(intent.sessionId)
+  if (needsLegacySend) prepareLegacyStructuredLaunchPrompts(intent.sessionId)
+  const firstMessage = needsLegacySend ? undefined : prepareStructuredLaunchPromptForCreate(intent.sessionId, intent.target)
   const options = structuredLaunchCreateOptions(state)
   const params = {
     ...intent.params,

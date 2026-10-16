@@ -35,6 +35,7 @@ export function restorePersistedStructuredLaunchState(
       ...(record.resumeFrom ? { resumeFrom: record.resumeFrom } : {}),
       ...(record.seedOptions ? { seedOptions: record.seedOptions } : {}),
       ...(record.firstMessage ? { firstMessage: record.firstMessage } : {}),
+      ...(record.firstSubmission ? { firstSubmission: record.firstSubmission } : {}),
       ...(record.options ? { options: record.options } : {}),
       ...(record.createMessageSupport === undefined
         ? {}

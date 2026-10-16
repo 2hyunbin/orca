@@ -80,7 +80,10 @@ async function uploadAttachment(
   const { uploadId } = await callAttachmentMethod<AgentSessionAttachmentUploadStartResult>(
     context,
     'agentSessionAttachment.uploadStart',
-    { sessionId: context.sessionId, name: file.name, byteLength: file.byteLength }
+    {
+      sessionId: context.sessionId, name: file.name, byteLength: file.byteLength,
+      ...(context.reservedSession ? { reservedSession: context.reservedSession } : {})
+    }
   )
   try {
     await writeBody((contentBase64, offset) =>

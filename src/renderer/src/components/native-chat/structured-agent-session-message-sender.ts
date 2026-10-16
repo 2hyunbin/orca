@@ -112,6 +112,8 @@ export function sendStructuredAgentSessionMessage(
 }
 
 export type StructuredAgentSessionReservedSend = {
+  clientMessageId: string
+  setAttachments: (attachments: NonNullable<StructuredAgentSessionSendInput['attachments']>) => void
   outcome: Promise<StructuredAgentSessionSendOutcome>
   /** Older creates wait for acquisition; their send budget still begins at send. */
   legacy: () => void
@@ -160,6 +162,17 @@ export function reserveStructuredAgentSessionSend(
     }
   }, STRUCTURED_AGENT_SESSION_SEND_BUDGET_MS)
   return {
+    clientMessageId: entry.clientMessageId,
+    setAttachments: (attachments) => {
+      const current = held()
+      if (current) updateStructuredAgentSessionPendingSend(entry.sessionId, entry.clientMessageId, {
+        body: { ...current.body, blocks: [
+          ...current.body.blocks.filter((block) => block.type !== 'image-ref'),
+          ...attachments.map((image) => ({ type: 'image-ref' as const, path: image.path }))
+        ] },
+        previewUris: attachments.map((image) => image.previewUri)
+      })
+    },
     outcome,
     legacy: () => clearTimeout(deadline),
     send: (target) => {

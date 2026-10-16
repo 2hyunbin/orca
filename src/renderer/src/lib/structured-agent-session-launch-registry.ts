@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { readNativeChatNewDraft, retireNativeChatNewDraft } from '@/components/native-chat/native-chat-new-draft'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import type { StructuredLaunchFailure } from './structured-agent-session-launch-failure'
 import type { StructuredAgentSessionResumeSource } from '../../../shared/structured-agent-session-create'
@@ -25,6 +26,7 @@ import {
 } from './structured-agent-session-launch-cancellation'
 
 export type StructuredLaunchState = StructuredLaunchRecoveryState & {
+  hostPublished?: true
   identity: string
   /** Fixed by the caller that opened this launch so coalesced prompts use one delivery mode. */
   promptDelivery: StructuredAgentLaunchOptions['promptDelivery']
@@ -93,6 +95,7 @@ export function deleteStructuredLaunchStateIfCurrent(state: StructuredLaunchStat
   if (structuredLaunchesBySessionId.get(state.intent.sessionId) !== state) {
     return false
   }
+  if (state.intent.firstSubmission && !state.cancelled) return false
   structuredLaunchesBySessionId.delete(state.intent.sessionId)
   deleteStructuredAgentLaunchRecord(state.intent.sessionId)
   return true
@@ -100,12 +103,12 @@ export function deleteStructuredLaunchStateIfCurrent(state: StructuredLaunchStat
 
 function persistStructuredLaunchState(state: StructuredLaunchState): void {
   const lifecycle = launchStateLifecycle(state)
-  if (lifecycle === 'published' || lifecycle === 'cancelled') {
+  if ((lifecycle === 'published' && !state.intent.firstSubmission) || lifecycle === 'cancelled') {
     deleteStructuredAgentLaunchRecord(state.intent.sessionId)
     return
   }
   writeStructuredAgentLaunchRecord({
-    ...structuredAgentLaunchRecordFor(state.intent, lifecycle),
+    ...structuredAgentLaunchRecordFor(state.intent, lifecycle === 'published' ? 'visibility-unknown' : lifecycle),
     ...(lifecycle === 'failed' ? { failedAt: state.callers.failedAt } : {})
   })
 }
@@ -129,6 +132,7 @@ export function launchStateLifecycle(
   if (state.callers.outcome === 'published') {
     return 'published'
   }
+  if (state.hostPublished) return 'published'
   if (state.visibilityUnknown || state.callers.outcome === 'unknown') {
     return 'visibility-unknown'
   }
@@ -214,7 +218,7 @@ export function shouldRetainStructuredAgentSessionLaunchTab(
   sessionId: string
 ): boolean {
   const lifecycle = getStructuredAgentSessionLaunchLifecycle(worktreeId, sessionId)
-  return lifecycle === 'pending' || lifecycle === 'visibility-unknown' || lifecycle === 'failed'
+  return Boolean(readNativeChatNewDraft(sessionId)) || lifecycle === 'pending' || lifecycle === 'visibility-unknown' || lifecycle === 'failed'
 }
 
 function markStructuredAgentSessionLaunchCancelledInternal(

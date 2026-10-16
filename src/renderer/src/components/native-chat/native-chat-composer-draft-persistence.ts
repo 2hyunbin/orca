@@ -2,6 +2,7 @@
 // storage has not confirmed when the window goes away, and follows other windows' writes.
 
 import { basename } from '@/lib/path'
+import { loadNativeChatNewDraft } from './native-chat-new-draft'
 import { isNativeChatKeptPastePath, isNativeChatPastedImagePath } from './native-chat-image-paste'
 import { isAgentSessionAttachmentStorePath } from '../../../../shared/agent-session-attachments'
 import {
@@ -39,6 +40,11 @@ const inFlight = new Set<Promise<boolean>>()
 // Per scope, the writes not yet settled: each resolves true once committed, false when refused.
 const scopeWrites = new Map<string, Set<Promise<boolean>>>()
 let channel: BroadcastChannel | null = null
+
+export function broadcastNativeChatComposerDraftChange(scopeKey: string): void {
+  installNativeChatComposerDraftBroadcast()
+  channel?.postMessage({ scopeKey })
+}
 
 /** An image the draft names but can no longer send, so the user can attach it again. */
 export function unavailableNativeChatComposerDraftImage(
@@ -263,6 +269,7 @@ function adoptForeignChange(message: unknown): void {
   void nativeChatComposerDraftStorage()
     .read(scopeKey)
     .then((value) => {
+      if (loadNativeChatNewDraft(scopeKey, value, true)) return
       if (hasLocalChange(scopeKey)) {
         return
       }

@@ -1,4 +1,6 @@
 import { StructuredAgentSessionCreateRefusalError } from '@/lib/launch-structured-agent-session'
+import { retireNativeChatNewDraft } from '@/components/native-chat/native-chat-new-draft'
+import { clearNativeChatComposerDraftIfUnchanged } from '@/components/native-chat/native-chat-composer-draft-store'
 import {
   settleStructuredLaunchCallers,
   structuredLaunchCallersHavePendingWork
@@ -20,8 +22,18 @@ function cleanupLaunchState(state: StructuredLaunchState): void {
   }
 }
 
+export async function finalizeStructuredLaunchFirstSubmission(state: StructuredLaunchState): Promise<void> {
+  const submission = state.intent.firstSubmission
+  if (!submission || !(await retireNativeChatNewDraft(state.intent.sessionId))) return
+  clearNativeChatComposerDraftIfUnchanged(`agent-session:${state.intent.sessionId}`, submission.draft)
+  delete state.intent.firstSubmission
+  maybeCleanupLaunchState(state)
+  notifyStructuredLaunchListeners()
+}
+
 export function maybeCleanupLaunchState(state: StructuredLaunchState): void {
   if (
+    state.intent.firstSubmission ||
     state.callers.outcome === 'failed' ||
     structuredLaunchCallersHavePendingWork(state.callers) ||
     Object.keys(state.selection.held).length > 0
@@ -48,11 +60,14 @@ export function trackLaunchSettlement(
   promise: Promise<StructuredAgentLaunchReceipt>
 ): void {
   void promise.then(
-    () => {
+    (receipt) => {
       if (state.promise !== promise) {
         return
       }
       settleStructuredLaunchCallers(state.callers, 'published')
+      if (receipt.firstMessage?.clientMessageId === state.intent.firstSubmission?.clientMessageId) {
+        void finalizeStructuredLaunchFirstSubmission(state)
+      }
       notifyStructuredLaunchListeners()
     },
     (error) => {

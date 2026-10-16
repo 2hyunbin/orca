@@ -202,12 +202,20 @@ function structuredAgentLaunchState(
     agent,
     options.executionHostId,
     options.resumeFrom,
-    options.hostSeedOptions
+    options.hostSeedOptions,
+    options.reservedSessionId
   )
   const text = launchPromptText(options)
-  const stagedPrompt = text
+  const stagedPrompt = options.stagedPrompt ?? (text
     ? stageStructuredLaunchPrompt(intent.sessionId, text, promptOwner(options))
-    : null
+    : null)
+  if (stagedPrompt?.sourceDraft && stagedPrompt.slot) {
+    intent.firstSubmission = {
+      clientMessageId: stagedPrompt.slot.clientMessageId,
+      draft: stagedPrompt.sourceDraft,
+      options: options.firstSubmissionOptions ?? {}
+    }
+  }
   launchDraft.seedStructuredAgentLaunchDraft(intent.sessionId, agent, options)
   const callers = createStructuredLaunchCallerGroup({
     kind: 'first',
@@ -223,7 +231,7 @@ function structuredAgentLaunchState(
     cancelled: false,
     onVisibilityChanged: notifyStructuredLaunchListeners,
     callers,
-    selection: { seed: intent.seedOptions, held: {} }
+    selection: { seed: intent.seedOptions, held: options.firstSubmissionOptions ?? {} }
   }
   state.onHostSeed = (seedOptions) => adoptPairedHostSeed(state, seedOptions)
   callers.onSettled = () => maybeCleanupLaunchState(state)

@@ -34,7 +34,7 @@ export function markStructuredAgentSessionLaunchPublished(
     if (persisted?.executionHostId !== executionHostId) {
       return false
     }
-    if (persisted.firstMessage) {
+    if (persisted.firstMessage || persisted.firstSubmission) {
       confirmStructuredLaunchFirstMessagePublication(worktreeId, sessionId)
       return false
     }
@@ -49,6 +49,7 @@ export function markStructuredAgentSessionLaunchPublished(
   ) {
     return false
   }
+  state.hostPublished = true
   if (state.callers.outcome === 'published') {
     return true
   }
@@ -56,7 +57,7 @@ export function markStructuredAgentSessionLaunchPublished(
   if (state.callers.outcome === 'pending') {
     return true
   }
-  if (state.intent.params.firstMessage) {
+  if (state.intent.params.firstMessage || state.intent.firstSubmission) {
     confirmStructuredLaunchFirstMessagePublication(worktreeId, sessionId)
     return false
   }

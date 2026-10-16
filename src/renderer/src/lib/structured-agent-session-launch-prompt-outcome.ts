@@ -1,5 +1,6 @@
 import type { StructuredLaunchCaller } from './structured-agent-session-launch-callers'
 import type { StructuredAgentLaunchReceipt } from './structured-agent-session-launch-recovery'
+import { finalizeStructuredLaunchFirstSubmission } from './structured-agent-session-launch-outcome-tracking'
 import { STRUCTURED_AGENT_SESSION_SEND_BUDGET_MS } from '@/components/native-chat/structured-agent-session-message-sender'
 import {
   notifyStructuredLaunchListeners,
@@ -13,6 +14,7 @@ export function trackStructuredLaunchPromptOutcome(
 ): void {
   const group = state.callers
   void caller.promptDeliveryResult?.then((outcome) => {
+    if (outcome.delivered && state.intent.firstSubmission) void finalizeStructuredLaunchFirstSubmission(state)
     if (
       state.callers !== group ||
       state.cancelled ||

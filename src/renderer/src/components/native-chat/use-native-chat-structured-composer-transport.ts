@@ -7,6 +7,9 @@ import type {
 } from './native-chat-composer-types'
 import type { NativeChatStructuredViewProps } from './native-chat-view-types'
 import type { useStructuredAgentSession } from './use-structured-agent-session'
+import type { StructuredAgentSessionAttachment } from '../../../../shared/structured-agent-session-send-mutation'
+import { structuredAgentSessionSendSelection } from '../../../../shared/structured-agent-session-option-view'
+import { readNativeChatNewDraft } from './native-chat-new-draft'
 
 /** What the composer of a structured chat sends, picks and runs through, from the chat's controller. */
 export function useNativeChatStructuredComposerTransport(args: {
@@ -16,7 +19,8 @@ export function useNativeChatStructuredComposerTransport(args: {
   sendThroughLaunch: (
     text: string,
     withImages: boolean,
-    send: () => boolean | 'queued'
+    send: () => boolean | 'queued',
+    submission?: { attachments: readonly StructuredAgentSessionAttachment[]; options: Readonly<Record<string, string>> }
   ) => boolean | 'queued'
   /** The chat is starting: it takes no send yet. */
   starting: boolean
@@ -48,7 +52,9 @@ export function useNativeChatStructuredComposerTransport(args: {
               previewUri: path,
               ...(connectionId ? { connectionId } : {})
             }))
-          )
+          ),
+          { attachments: attachments.map(({ path, connectionId }) => ({ path, previewUri: path, ...(connectionId ? { connectionId } : {}) })),
+            options: { ...readNativeChatNewDraft(props.sessionId)?.options, ...structuredAgentSessionSendSelection(props.agent, controller.optionSnapshot) } }
         ),
       dispatchCommand: (text: string) =>
         dispatchStructuredAgentSessionComposerCommand(text, {
