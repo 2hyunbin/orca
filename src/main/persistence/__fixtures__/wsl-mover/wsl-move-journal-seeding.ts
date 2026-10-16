@@ -17,7 +17,17 @@ export function seedWslMoveCutover(userDataPath: string, cutover: WslMoveCutover
   )
   const from = existing ? WSL_MOVE_CUTOVER_PHASES.indexOf(existing.phase) + 1 : 0
   const to = WSL_MOVE_CUTOVER_PHASES.indexOf(cutover.phase)
+  const rewriteFrom = WSL_MOVE_CUTOVER_PHASES.indexOf('destination-committed')
   for (const phase of WSL_MOVE_CUTOVER_PHASES.slice(from, to + 1)) {
-    writeWslMoveCutover(userDataPath, { ...cutover, phase })
+    const index = WSL_MOVE_CUTOVER_PHASES.indexOf(phase)
+    // The ledger only grows inside the rewrite phase, so earlier phases carry none of it.
+    writeWslMoveCutover(userDataPath, {
+      ...cutover,
+      phase,
+      rewrittenStores: index <= rewriteFrom ? [] : cutover.rewrittenStores
+    })
+    if (index === rewriteFrom) {
+      writeWslMoveCutover(userDataPath, { ...cutover, phase })
+    }
   }
 }
