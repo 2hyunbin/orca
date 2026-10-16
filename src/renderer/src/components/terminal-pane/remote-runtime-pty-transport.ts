@@ -1064,6 +1064,27 @@ export function createRemoteRuntimePtyTransport(
     }
   }
 
+  async function resolveHostSessionPane(
+    hostTabId: string
+  ): Promise<RuntimeTerminalResolvePane | null> {
+    if (!leafId || !worktreeId || resolvePaneUnavailable) {
+      return null
+    }
+    try {
+      const resolved = await callRuntime<{ terminal: RuntimeTerminalResolvePane }>(
+        'terminal.resolvePane',
+        { paneKey: `${hostTabId}:${leafId}`, worktreeId }
+      )
+      // Why: wire data; an answer without a pane must read as unresolved, not throw past this catch.
+      return resolved.terminal ?? null
+    } catch (error) {
+      if (error instanceof RuntimeRpcCallError && error.code === 'method_not_found') {
+        resolvePaneUnavailable = true
+      }
+      return null
+    }
+  }
+
   async function attachHostSessionMirror(
     options: { cols?: number; rows?: number },
     notifySpawn = true,
@@ -1079,6 +1100,8 @@ export function createRemoteRuntimePtyTransport(
       (expectedLifecycleEpoch === undefined || expectedLifecycleEpoch === lifecycleEpoch)
     const hostTabId = toHostSessionTabId(tabId)
     const waitOutcome = { boundedWaitEnded: false }
+    // Why overlap: resolvePane is a read keyed only by the pane, so it need not wait an activation round trip.
+    const earlyPaneResolution = resolveHostSessionPane(hostTabId)
     const hostHandle = await waitForHostSessionHandleWithRecovery(hostTabId, isCurrent, waitOutcome)
     if (!isCurrent()) {
       return undefined
@@ -1112,26 +1135,26 @@ export function createRemoteRuntimePtyTransport(
       return undefined
     }
 
-    if (leafId && worktreeId && !resolvePaneUnavailable) {
-      try {
-        const resolved = await callRuntime<{ terminal: RuntimeTerminalResolvePane }>(
-          'terminal.resolvePane',
-          { paneKey: `${hostTabId}:${leafId}`, worktreeId }
-        )
-        const terminal = resolved.terminal
-        if (
-          terminal.handle === hostHandle &&
-          terminal.tabId === hostTabId &&
-          terminal.leafId === leafId &&
-          (!terminal.worktreeId || terminal.worktreeId === worktreeId)
-        ) {
-          adoptExecutionMetadata(terminal)
-        }
-      } catch (error) {
-        if (error instanceof RuntimeRpcCallError && error.code === 'method_not_found') {
-          resolvePaneUnavailable = true
-        }
-      }
+    const matchesHostHandle = (
+      terminal: RuntimeTerminalResolvePane | null
+    ): terminal is RuntimeTerminalResolvePane =>
+      terminal !== null &&
+      terminal.handle === hostHandle &&
+      terminal.tabId === hostTabId &&
+      terminal.leafId === leafId &&
+      (!terminal.worktreeId || terminal.worktreeId === worktreeId)
+    let resolvedPane = await earlyPaneResolution
+    const activationIncarnationId = authoritativePtyIncarnationId
+    if (
+      !matchesHostHandle(resolvedPane) ||
+      (activationIncarnationId !== null &&
+        (resolvedPane.incarnationId ?? null) !== activationIncarnationId)
+    ) {
+      // Why: activation can materialize the surface or learn its incarnation, so an earlier read may be stale.
+      resolvedPane = await resolveHostSessionPane(hostTabId)
+    }
+    if (matchesHostHandle(resolvedPane)) {
+      adoptExecutionMetadata(resolvedPane)
     }
 
     if (!isCurrent() || recovery.currentPhase === 'disconnected') {
