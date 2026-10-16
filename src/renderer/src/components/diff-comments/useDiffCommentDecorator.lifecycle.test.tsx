@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
-import { renderHook } from '@testing-library/react'
+import { cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { editor as MonacoEditor } from 'monaco-editor'
 import type { DecoratedDiffComment } from './decorated-diff-comment'
 import type * as ReactDomClientModule from 'react-dom/client'
 import type * as DiffCommentZoneCardModule from './diff-comment-zone-card'
@@ -131,7 +132,9 @@ beforeEach(() => {
   rootCounts.unmounted = 0
 })
 
-afterEach(() => {
+afterEach(async () => {
+  cleanup()
+  await flushDeferredUnmounts()
   document.body.replaceChildren()
   try {
     expect(notesMenuFixture.NotesSendMenu).not.toHaveBeenCalled()
@@ -290,5 +293,59 @@ describe('useDiffCommentDecorator commentable-line churn', () => {
     expect([...fake.zones.keys()]).not.toEqual(firstZoneIds)
     expect(rootCounts.created).toBe(2)
     expect(rootCounts.unmounted).toBe(1)
+  })
+})
+
+/** No zones exist in the overlay disposal case, so the hook never reaches these. */
+const viewZoneAccessor: MonacoEditor.IViewZoneChangeAccessor = {
+  addZone: () => '',
+  removeZone: () => undefined,
+  layoutZone: () => undefined
+}
+
+describe('useDiffCommentDecorator model lifecycle', () => {
+  it('rebuilds model-scoped resources when a retained editor swaps models', () => {
+    const editorDomNode = document.createElement('div')
+    document.body.appendChild(editorDomNode)
+    const disposeMouseMove = vi.fn()
+    const disposeMouseLeave = vi.fn()
+    const disposeScroll = vi.fn()
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a partial stand-in for Monaco's ICodeEditor; useDiffCommentDecorator calls only the members defined here, and a real editor needs a laid-out DOM this suite does not build.
+    const editor = {
+      getDomNode: () => editorDomNode,
+      getContainerDomNode: () => editorDomNode,
+      getOption: () => 19,
+      createDecorationsCollection: () => ({ set: () => {}, clear: () => {} }),
+      onMouseMove: () => ({ dispose: disposeMouseMove }),
+      onMouseLeave: () => ({ dispose: disposeMouseLeave }),
+      onDidScrollChange: () => ({ dispose: disposeScroll }),
+      onDidDispose: () => ({ dispose: () => {} }),
+      changeViewZones: (callback: (accessor: MonacoEditor.IViewZoneChangeAccessor) => void) =>
+        callback(viewZoneAccessor)
+    } as unknown as MonacoEditor.ICodeEditor
+    const hook = renderHook(
+      ({ monacoModelIdentity }) =>
+        useDiffCommentDecorator({
+          editor,
+          monacoModelIdentity,
+          filePath: 'notes.ts',
+          worktreeId: 'worktree-1',
+          comments: [],
+          onAddCommentClick: vi.fn(),
+          onDeleteComment: vi.fn()
+        }),
+      { initialProps: { monacoModelIdentity: 'modified-v1' } }
+    )
+    const firstButton = editorDomNode.querySelector('.orca-diff-comment-add-btn')
+    expect(firstButton).not.toBeNull()
+
+    hook.rerender({ monacoModelIdentity: 'modified-v2' })
+
+    const replacementButton = editorDomNode.querySelector('.orca-diff-comment-add-btn')
+    expect(replacementButton).not.toBeNull()
+    expect(replacementButton).not.toBe(firstButton)
+    expect(disposeMouseMove).toHaveBeenCalledOnce()
+    expect(disposeMouseLeave).toHaveBeenCalledOnce()
+    expect(disposeScroll).toHaveBeenCalledOnce()
   })
 })
