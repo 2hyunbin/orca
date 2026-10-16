@@ -43,6 +43,10 @@ export function startRequestedInitialSnapshot(
   return image
 }
 
+function readTailData(read: { tail: string[] }): string {
+  return read.tail.length > 0 ? `${read.tail.join('\r\n')}\r\n` : ''
+}
+
 export async function publishMultiplexInitialSnapshot(
   state: TerminalMultiplexConnection,
   request: MultiplexSubscribeRequest,
@@ -72,7 +76,10 @@ export async function publishMultiplexInitialSnapshot(
     }
     return serializeBudgetedMobileSnapshot(runtime, ptyId)
   }
-  let read = await runtime.readTerminal(request.terminal)
+  // Why lazy on a served request: the text read is only the null-image fallback, and on a long
+  // transcript it costs tens of ms ahead of the image (a SnapshotRequest never paid it).
+  const readFallback = () => runtime.readTerminal(request.terminal)
+  let read = requestedScrollbackRows === undefined ? await readFallback() : null
   let serialized = await serializeInitial()
   if (!isMultiplexStreamAttached(state, stream)) {
     return null
@@ -82,7 +89,7 @@ export async function publishMultiplexInitialSnapshot(
     stream.pendingOutput.splice(0)
     stream.pendingOutputBytes = 0
     stream.pendingOutputOverflowed = false
-    read = await runtime.readTerminal(request.terminal)
+    read = requestedScrollbackRows === undefined ? await readFallback() : null
     serialized = await serializeInitial()
     if (!isMultiplexStreamAttached(state, stream)) {
       return null
@@ -93,6 +100,10 @@ export async function publishMultiplexInitialSnapshot(
       stream.pendingOutputBytes = 0
       stream.pendingOutputOverflowed = false
     }
+  }
+  const fallbackData = serialized ? '' : readTailData(read ?? (await readFallback()))
+  if (!isMultiplexStreamAttached(state, stream)) {
+    return null
   }
   const size = runtime.getTerminalSize(ptyId)
   const displayMode = runtime.getMobileDisplayMode(ptyId)
@@ -136,7 +147,7 @@ export async function publishMultiplexInitialSnapshot(
     terminalOwner: serialized?.terminalOwner,
     oscLinks: serialized?.oscLinks,
     pendingEscapeTailAnsi: serialized?.pendingEscapeTailAnsi,
-    data: serialized?.data ?? (read.tail.length > 0 ? `${read.tail.join('\r\n')}\r\n` : '')
+    data: serialized?.data ?? fallbackData
   })
   // Why: baseline for resize re-stream gating; the client already rewrapped to these cols via the initial snapshot replay.
   stream.lastResizeCols = serialized?.cols ?? size?.cols

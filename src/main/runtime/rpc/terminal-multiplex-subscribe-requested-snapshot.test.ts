@@ -32,6 +32,7 @@ async function subscribeAndCollectSnapshot(options: SubscribeOptions): Promise<{
   defaultSerializes: number
   authoritativeRows: (number | undefined)[]
   serializedBeforeViewportApplied: boolean
+  textReads: number
 }> {
   const handlers = new Map<
     number,
@@ -41,6 +42,7 @@ async function subscribeAndCollectSnapshot(options: SubscribeOptions): Promise<{
   const cleanups = new Map<string, () => void>()
   const serializeTerminalBuffer = vi.fn(async () => ({ data: 'DEFAULT', cols: 80, rows: 24 }))
   const authoritativeRows: (number | undefined)[] = []
+  const readTerminal = vi.fn().mockResolvedValue({ tail: ['TAIL'], truncated: false })
   let viewportApplied = false
   let serializedBeforeViewportApplied = false
   const serializeAuthoritativeTerminalBuffer = vi.fn(
@@ -56,7 +58,7 @@ async function subscribeAndCollectSnapshot(options: SubscribeOptions): Promise<{
   const runtime = {
     getRuntimeId: () => 'test-runtime',
     resolveLiveLeafForHandle: vi.fn().mockReturnValue({ ptyId: 'pty-1' }),
-    readTerminal: vi.fn().mockResolvedValue({ tail: [], truncated: false }),
+    readTerminal,
     serializeTerminalBuffer,
     serializeAuthoritativeTerminalBuffer,
     getTerminalSize: vi.fn().mockReturnValue({ cols: 80, rows: 24 }),
@@ -141,7 +143,8 @@ async function subscribeAndCollectSnapshot(options: SubscribeOptions): Promise<{
     snapshotStarts: starts.length,
     defaultSerializes: serializeTerminalBuffer.mock.calls.length,
     authoritativeRows,
-    serializedBeforeViewportApplied
+    serializedBeforeViewportApplied,
+    textReads: readTerminal.mock.calls.length
   }
 }
 
@@ -154,6 +157,8 @@ describe('terminal.multiplex subscribe-time scrollback request', () => {
       expect(result.authoritativeRows).toEqual([5000])
       expect(result.defaultSerializes).toBe(0)
       expect(result.data).toBe('HISTORY|SCREEN')
+      // The transcript read is only the null-image fallback; a served request never pays it.
+      expect(result.textReads).toBe(0)
       expect(result.meta).toMatchObject({
         requestedScrollbackRows: 5000,
         scrollbackRows: 5000,
@@ -185,6 +190,7 @@ describe('terminal.multiplex subscribe-time scrollback request', () => {
         authoritative: 'none'
       })
       expect(result.data).toBe('DEFAULT')
+      expect(result.textReads).toBe(0)
       expect(result.meta).not.toHaveProperty('requestedScrollbackRows')
     } finally {
       vi.useRealTimers()
