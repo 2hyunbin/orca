@@ -428,6 +428,30 @@ describePostgres('database move cutover against two PostgreSQL targets', () => {
     expect(await readSuperseded(sides.primary.move.url)).toBe(true)
     expect(store.current()?.quiesce).toBeUndefined()
 
+    // Even with primary's login open again (as during a reopen), a process that cannot read the
+    // pointer refuses the superseded copy instead of writing to it.
+    await reopenPrimary()
+    const blindSettings = {
+      poolMax: 2,
+      applicationName: markRelayDatabaseMoveCapability('orca-relay/cell/blind', '0000000b')
+    }
+    const blind = new SwitchingRelayDatabase({
+      primary: openPrimaryRelayDatabaseTarget(sides.primary.app.url, blindSettings),
+      openDedicated: () => openPrimaryRelayDatabaseTarget(sides.dedicated.app.url, blindSettings),
+      firstPointer: async () => null,
+      firstPointerWaitMs: 200
+    })
+    await expect(
+      blind.query(
+        `INSERT INTO relay_audit_events (id, at, type, detail_json) VALUES ('blind-1', 1, 't', '{}')`
+      )
+    ).rejects.toMatchObject({ code: '57P03' })
+    await blind.close()
+    const blindRows = await withPgClient(sides.primary.move.url, (client) =>
+      client.query(`SELECT 1 FROM relay_audit_events WHERE id = 'blind-1'`)
+    )
+    expect(blindRows.rows).toEqual([])
+
     const back = await runCutover(rollback)
     await sleep(300)
     await returning.stop()
