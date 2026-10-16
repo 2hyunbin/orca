@@ -251,10 +251,9 @@ export abstract class OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktr
       ...this.mobileSessionTabsByWorktree.keys(),
       ...Object.keys(this.getOwnWorkspaceSessionForWorktree(worktreeId)?.tabsByWorktree ?? {})
     ])
-    // Why: surviving renderer PTYs can be known before the first renderer graph arrives.
-    for (const ptyId of this.pairedRendererSessionOwnedPtyIds) {
-      const pty = this.ptysById.get(ptyId)
-      if (pty?.connected) {
+    // Why: live PTYs keep their registered spelling, so an exact PTY key must never be rewritten.
+    for (const pty of this.ptysById.values()) {
+      if (pty.connected) {
         knownIds.add(pty.worktreeId)
       }
     }
@@ -286,9 +285,8 @@ export abstract class OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktr
           }
         }
       }
-      for (const ptyId of this.pairedRendererSessionOwnedPtyIds) {
-        const pty = this.ptysById.get(ptyId)
-        if (pty?.connected && worktreeIdsEqual(pty.worktreeId, matchedId)) {
+      for (const [ptyId, pty] of this.ptysById) {
+        if (pty.connected && worktreeIdsEqual(pty.worktreeId, matchedId)) {
           ptyIds.add(ptyId)
         }
       }
@@ -298,7 +296,8 @@ export abstract class OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktr
           getPtyExecutionHost(ptyId) ??
           (pty && !ownerIsRuntime ? getConnectionExecutionHostId(pty.connectionId) : null)
         // Why: returning the raw alias after a conflict lets PTY rescue adopt the foreign terminal.
-        if (hostId && hostId !== 'foreign' && hostId !== owner.hostId) {
+        // An unattributed remote id is only tolerable under a runtime owner, never a local/SSH one.
+        if (hostId && hostId !== owner.hostId && (hostId !== 'foreign' || !ownerIsRuntime)) {
           throw new Error('worktree_execution_host_unresolved')
         }
       }

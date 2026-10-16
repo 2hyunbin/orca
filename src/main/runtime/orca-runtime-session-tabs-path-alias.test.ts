@@ -405,6 +405,23 @@ describe('session tab workspace path aliases', () => {
     }
   )
 
+  it('keeps a live PTY spelling exact instead of rewriting it to a published alias', () => {
+    const runtime = liveRuntime(ALIAS)
+    runtime.registerPty('pty-headless', WORKTREE, null)
+    expect(runtime.getExplicitSessionWorktreeIdSelector(`id:${WORKTREE}`)).toBe(WORKTREE)
+  })
+
+  it('refuses alias adoption of an unattributed remote PTY for a local repository', async () => {
+    const repo = { id: 'repo', path: 'G:\\git\\example' }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture only needs the local repository row.
+    const runtime = new OrcaRuntimeService({ getRepo: () => repo, getRepos: () => [repo] } as never)
+    runtime.attachWindow(1)
+    publishGraph(runtime, WORKTREE, [], toRemoteRuntimePtyId('term_1'))
+    await expect(runtime.listMobileSessionTabs(`id:${ALIAS}`)).rejects.toThrow(
+      'worktree_execution_host_unresolved'
+    )
+  })
+
   it('preserves an exact empty publication instead of adopting another spelling', async () => {
     const empty = { ...snapshot(ALIAS), activeTabId: null, activeTabType: null, tabs: [] }
     const runtime = liveRuntime(WORKTREE, [empty])
