@@ -70,15 +70,15 @@ export function resolveRunActor(db: OrchestrationDb, caller: RunCallerKey): RunA
           isEquivalentPaneKey(row.assignee_pane_key, caller.paneKey))
     )
     .filter((row) => !isSelfCreatedDispatch(row))
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Complete schema projection of remote_dispatch_attachments.
   const attachments = caller.paneKey
-    ? (db.db
+    ? db.db
         .prepare(`SELECT * FROM remote_dispatch_attachments
     WHERE ${potentiallyLiveRemoteAttachmentSql()} AND pane_key IS NOT NULL
       AND substr(pane_key, instr(pane_key, ':') + 1) = ?`)
-        .all(paneKeyMatchSuffix(caller.paneKey)) as RemoteDispatchAttachmentRow[])
+        .all(paneKeyMatchSuffix(caller.paneKey))
     : []
-  const remote = attachments.filter(
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Complete schema projection of remote_dispatch_attachments.
+  const remote = (attachments as RemoteDispatchAttachmentRow[]).filter(
     (row) => row.pane_key && caller.paneKey && isEquivalentPaneKey(row.pane_key, caller.paneKey)
   )
   if (local.length + remote.length > 1) {
