@@ -48,10 +48,16 @@ export function createUnservedSshRowTransport(
   }
   session.legacyRelayBridgePtyId = ptyId
   const bridged = createLegacyRelayBridgeTransport(ptyId, inert)
+  // Why both: an unmount detaches a bound pane, and either frees the shell for a converted row.
+  const release = (): void => releaseLegacyRelayBridgePaneClaim(ptyId, tabId, leafId)
   return {
     ...bridged,
+    detach: (options) => {
+      release()
+      bridged.detach?.(options)
+    },
     destroy: (options) => {
-      releaseLegacyRelayBridgePaneClaim(ptyId, tabId, leafId)
+      release()
       return bridged.destroy?.(options)
     }
   }

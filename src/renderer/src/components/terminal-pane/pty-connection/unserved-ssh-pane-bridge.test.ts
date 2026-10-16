@@ -84,8 +84,8 @@ describe('a relay-era ssh: row on a host that stayed unmoved for its relay termi
     expect(mocks.attach).toHaveBeenCalledWith({ ptyId: PTY })
     expect(onConnect).toHaveBeenCalled()
     expect(result).toMatchObject({ id: PTY, isReattach: true, replay: 'old screen' })
-    // Unmounting frees the shell for the converted row's pane.
-    transport.destroy?.()
+    // Unmounting (a detach, for a bound pane) frees the shell for the converted row's pane.
+    transport.detach?.()
     expect(
       legacyRelayBridgePtyIdForPane({
         tabId: 'web-terminal-tab-1',
