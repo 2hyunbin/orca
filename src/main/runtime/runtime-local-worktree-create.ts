@@ -67,7 +67,11 @@ export function createRuntimeLocalManagedWorktree<T>(args: RuntimeLocalWorktreeC
 async function performRuntimeLocalWorktreeCreate<T>(args: RuntimeLocalWorktreeCreateArgs<T>) {
   const { request, repo, store } = args
   const settings = store.getSettings()
-  const pathSettings = getWorktreePathSettings(repo, settings, getWorktreeMirrorDistro(store, repo))
+  const pathSettings = getWorktreePathSettings(
+    repo,
+    { ...settings, nestWorkspaces: request.nestWorkspaces ?? settings.nestWorkspaces },
+    getWorktreeMirrorDistro(store, repo)
+  )
   const gitExecOptions = getLocalProjectGitExecOptions(store, repo)
   const worktreeGitOptions = getLocalProjectWorktreeGitOptions(store, repo)
   args.timing.recordExecutionHost(localWorktreeCreateExecutionHost(gitExecOptions))
