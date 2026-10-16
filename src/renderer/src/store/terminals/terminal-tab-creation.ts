@@ -203,6 +203,9 @@ export function createTerminalTabCreationActions(
           color: tab.color,
           sortOrder: cleanedGroupOrder.length,
           createdAt: tab.createdAt,
+          ...(shouldActivate && options?.recordFocus !== false
+            ? { lastFocusedAt: tab.createdAt }
+            : {}),
           // Why: omit for non-agent tabs so they keep the implicit 'terminal' view mode.
           ...(options?.viewMode ? { viewMode: options.viewMode } : {})
         }
@@ -277,6 +280,7 @@ export function createTerminalTabCreationActions(
           }
         }
       })
+      get().reconcileWorktreeTabModel(worktreeId)
       if (options?.initialPtyId) {
         // Why: a tab born with a live PTY (CLI/runtime create) wakes the workspace like any other bind.
         clearWorktreeSleepIntent(worktreeId)

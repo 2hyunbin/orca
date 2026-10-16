@@ -50,6 +50,7 @@ export function applyDefaultTerminalTabs(
     const tab = store.createTab(worktreeId, undefined, undefined, {
       pendingActivationSpawn: true,
       recordInteraction: false,
+      recordFocus: false,
       ...(launchAgent ? { launchAgent } : {}),
       ...(opts?.activateCreatedTabs === false ? { activate: false } : {}),
       ...(pendingStartup ? { pendingStartup } : {})
@@ -72,7 +73,7 @@ export function applyDefaultTerminalTabs(
     return null
   }
   if (opts?.activateCreatedTabs !== false) {
-    store.setActiveTab(firstTabId)
+    store.setActiveTab(firstTabId, { recordFocus: false })
   }
   queueSetupAndIssueCommands(
     store,

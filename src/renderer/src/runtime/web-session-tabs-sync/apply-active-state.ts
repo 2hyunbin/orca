@@ -24,6 +24,7 @@ export function applyActiveStateUpdates(context: ActiveStateContext) {
     nextTerminalTabs,
     nextWorktreeOpenFileIds,
     nextActiveUnifiedTabId,
+    preferredViewerTab,
     nextTabBarOrder,
     navigationIntentTab,
     honorSnapshotActiveFocus,
@@ -42,6 +43,16 @@ export function applyActiveStateUpdates(context: ActiveStateContext) {
     intentBrowserWorkspaceId
   } = context
 
+  const activeUnifiedTab =
+    nextActiveUnifiedTabId && nextUnifiedTabs
+      ? (nextUnifiedTabs.find((tab) => tab.id === nextActiveUnifiedTabId) ?? null)
+      : null
+  const selectedSessionTabId =
+    activeUnifiedTab?.contentType === 'agent-session'
+      ? activeUnifiedTab.id
+      : activeUnifiedTab?.contentType === 'terminal'
+        ? activeUnifiedTab.entityId
+        : null
   const nextActiveGroupId = clientOwnedPlacement
     ? clientOwnedPlacement.activeGroupId
     : (nextGroups?.find((group) => group.activeTabId === nextActiveUnifiedTabId)?.id ??
@@ -135,12 +146,16 @@ export function applyActiveStateUpdates(context: ActiveStateContext) {
   )
   const nextActiveTabIdByWorktree =
     (state.activeTabIdByWorktree[worktreeId] ?? null) !==
-    (intentMirroredAgent?.unifiedTab.id ?? currentVisibleStructuredTabId ?? nextActiveTerminalId)
+    (intentMirroredAgent?.unifiedTab.id ??
+      selectedSessionTabId ??
+      currentVisibleStructuredTabId ??
+      nextActiveTerminalId)
       ? withWorktreeEntry(
           state,
           'activeTabIdByWorktree',
           worktreeId,
           intentMirroredAgent?.unifiedTab.id ??
+            selectedSessionTabId ??
             currentVisibleStructuredTabId ??
             nextActiveTerminalId,
           (current, next) => (current ?? null) === next,
@@ -213,10 +228,6 @@ export function applyActiveStateUpdates(context: ActiveStateContext) {
             : currentVisibleTabType === 'terminal' && currentActiveTerminalStillExists
               ? ('terminal' as const)
               : null
-  const activeUnifiedTab =
-    nextActiveUnifiedTabId && nextUnifiedTabs
-      ? (nextUnifiedTabs.find((tab) => tab.id === nextActiveUnifiedTabId) ?? null)
-      : null
   const fallbackVisibleTabType =
     activeUnifiedTab !== null
       ? toVisibleTabType(activeUnifiedTab)
@@ -227,12 +238,17 @@ export function applyActiveStateUpdates(context: ActiveStateContext) {
           : nextActiveEditorFileId
             ? ('editor' as const)
             : ('terminal' as const)
+  const selectedVisibleTabType = activeUnifiedTab ? toVisibleTabType(activeUnifiedTab) : null
   const nextVisibleTabType = honorSnapshotActiveFocus
     ? (focusIntentVisibleTabType ??
+      selectedVisibleTabType ??
       currentVisibleTabTypeStillValid ??
       snapshotVisibleTabType ??
       fallbackVisibleTabType)
-    : (currentVisibleTabTypeStillValid ?? snapshotVisibleTabType ?? fallbackVisibleTabType)
+    : (selectedVisibleTabType ??
+      currentVisibleTabTypeStillValid ??
+      snapshotVisibleTabType ??
+      fallbackVisibleTabType)
 
   const currentActiveTerminalStillValid =
     state.activeTabId && (nextTerminalTabs ?? []).some((tab) => tab.id === state.activeTabId)
@@ -244,6 +260,7 @@ export function applyActiveStateUpdates(context: ActiveStateContext) {
       : null
   const nextActiveTabId = isActiveWorktree
     ? (intentMirroredAgent?.unifiedTab.id ??
+      selectedSessionTabId ??
       (snapshot.activeTabType === 'terminal'
         ? nextActiveTerminalId
         : (currentActiveTerminalStillValid ?? nextActiveTerminalId)))
@@ -252,7 +269,9 @@ export function applyActiveStateUpdates(context: ActiveStateContext) {
     ? nextActiveBrowserWorkspaceId
     : state.activeBrowserTabId
   const nextActiveFileId = isActiveWorktree
-    ? snapshot.activeTabType === 'markdown' || snapshot.activeTabType === 'file'
+    ? preferredViewerTab?.contentType === 'editor' ||
+      snapshot.activeTabType === 'markdown' ||
+      snapshot.activeTabType === 'file'
       ? nextActiveEditorFileId
       : (currentActiveEditorStillValid ?? nextActiveEditorFileId)
     : state.activeFileId

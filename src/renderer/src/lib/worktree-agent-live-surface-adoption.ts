@@ -66,7 +66,8 @@ export function bindLivePtyToExactSurface(
     initialLeafId: pane.leafId,
     initialPtyId: terminal.ptyId,
     activate: false,
-    recordInteraction: false
+    recordInteraction: false,
+    recordFocus: false
   })
   return created.id === terminal.tabId
 }
@@ -197,7 +198,8 @@ export async function adoptLiveWorkspacePtySurfaces(
     getState().createTab(worktreeId, undefined, undefined, {
       initialPtyId: ptyId,
       activate: false,
-      recordInteraction: false
+      recordInteraction: false,
+      recordFocus: false
     })
   }
   return { surfaced, declinedPtyIds }

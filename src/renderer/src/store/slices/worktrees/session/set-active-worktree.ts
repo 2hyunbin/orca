@@ -51,7 +51,12 @@ export function createSetActiveWorktree(
     set((current) => {
       const transitioned = stateTransition ? { ...current, ...stateTransition.patch } : current
       const reconciliation = worktreeId
-        ? projectWorktreeTabModelReconciliation(transitioned, worktreeId)
+        ? projectWorktreeTabModelReconciliation(
+            transitioned,
+            worktreeId,
+            undefined,
+            executionHostId ?? null
+          )
         : null
       const reconciliationChanged = Boolean(
         reconciliation && Object.keys(reconciliation.patch).length > 0

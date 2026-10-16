@@ -40,8 +40,10 @@ export function openStructuredAgentSessionProvisionalTab(args: {
   agent: TuiAgent
   targetGroupId?: string
   activate?: boolean
+  recordFocus?: boolean
 }): Tab {
   const state = useAppStore.getState()
+  const activate = args.activate !== false && args.recordFocus !== false
   const tabId = structuredAgentSessionTabId(args.sessionId)
   const existing = (state.unifiedTabsByWorktree[args.worktreeId] ?? []).find(
     (candidate) =>
@@ -50,10 +52,12 @@ export function openStructuredAgentSessionProvisionalTab(args: {
       candidate.entityId === args.sessionId
   )
   if (existing) {
-    if (args.activate !== false) {
+    if (activate) {
       state.focusGroup(args.worktreeId, existing.groupId)
       state.activateTab(existing.id, { worktreeId: args.worktreeId })
       state.setActiveTabType('agent-session', args.worktreeId)
+    } else if (args.activate !== false) {
+      state.reconcileWorktreeTabModel(args.worktreeId)
     }
     return existing
   }
@@ -64,10 +68,13 @@ export function openStructuredAgentSessionProvisionalTab(args: {
     agentSessionAgent: args.agent,
     label: defaultAgentChatLabel(args.agent),
     ...(args.targetGroupId ? { targetGroupId: args.targetGroupId } : {}),
-    activate: args.activate !== false
+    activate,
+    recordFocus: args.recordFocus
   })
-  if (args.activate !== false) {
+  if (activate) {
     state.setActiveTabType('agent-session', args.worktreeId)
+  } else if (args.activate !== false) {
+    state.reconcileWorktreeTabModel(args.worktreeId)
   }
   return tab
 }
@@ -95,6 +102,7 @@ type ProvisionalLaunchArgs = {
   target?: AgentSessionLaunchTarget
   targetGroupId?: string
   activate?: boolean
+  recordFocus?: boolean
   /** Lets workspace flows reveal before the chat's tab is owned: before its host is asked, when no
    *  session id exists yet. */
   beforeOpen?: (sessionId?: string) => boolean | void
@@ -149,7 +157,7 @@ export function beginStructuredAgentSessionProvisionalLaunch(
 }
 
 function beginLocalProvisionalLaunch(args: ProvisionalLaunchArgs): LocalProvisionalLaunch | null {
-  const handle = args.plan.begin(args.hooks, args.target)
+  const handle = args.plan.begin(args.hooks, { ...args.target, recordFocus: args.recordFocus })
   if (!handle) {
     return null
   }
@@ -167,6 +175,7 @@ function beginLocalProvisionalLaunch(args: ProvisionalLaunchArgs): LocalProvisio
       executionHostId: handle.executionHostId,
       sessionId: handle.sessionId,
       agent: args.plan.agent,
+      recordFocus: args.recordFocus,
       ...(args.targetGroupId ? { targetGroupId: args.targetGroupId } : {}),
       ...(args.activate !== undefined ? { activate: args.activate } : {})
     })

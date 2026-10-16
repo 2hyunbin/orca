@@ -97,6 +97,7 @@ export function registerTerminalPresentationIpcBridge(unsubs: (() => void)[]): v
             (ptyId
               ? store.createTab(worktreeId, undefined, undefined, {
                   initialPtyId: ptyId,
+                  recordFocus: shouldActivate,
                   activate:
                     shouldActivate ||
                     agentLaunchViewer === 'focus-window' ||

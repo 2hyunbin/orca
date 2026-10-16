@@ -1,4 +1,9 @@
 import type { AppState } from '../../types'
+import type { ExecutionHostId } from '../../../../../shared/execution-host'
+import { preferredWorkspaceViewerTab } from '@/lib/workspace-creation-tab-selection'
+import { getKnownExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
+import { findKnownWorktreeById } from '../worktrees/listing/detected-worktree-meta'
+import { deriveActiveSurfaceForWorktree } from './tabs-surface'
 import type { Tab } from '../../../../../shared/tab-types'
 import { dedupeTabOrder } from '../../../../../shared/workspace-layout/tab-order'
 import { ensureGroup, sanitizeRecentTabIds, updateGroup } from '../tab-group-state'
@@ -28,7 +33,11 @@ export type WorktreeTabModelReconciliation = {
 export function projectWorktreeTabModelReconciliation(
   state: AppState,
   worktreeId: string,
-  batch?: WorktreeTabModelReconciliationBatch
+  batch?: WorktreeTabModelReconciliationBatch,
+  executionHostId: ExecutionHostId | null | undefined = getKnownExecutionHostIdForWorktree(
+    state,
+    worktreeId
+  ) ?? undefined
 ): WorktreeTabModelReconciliation {
   const unifiedTabs = state.unifiedTabsByWorktree[worktreeId] ?? []
   const groups = state.groupsByWorktree[worktreeId] ?? []
@@ -134,13 +143,20 @@ export function projectWorktreeTabModelReconciliation(
   // change (orphans, layout) does not give `unifiedTabsByWorktree` a new identity.
   const validTabs =
     renderableTabs.length === reconciledUnifiedTabs.length ? reconciledUnifiedTabs : renderableTabs
+  const preferredTab = preferredWorkspaceViewerTab(
+    validTabs,
+    runtimeTerminalTabs,
+    findKnownWorktreeById(state, worktreeId, executionHostId ?? undefined)?.createdWithAgent
+  )
   const validTabIds = new Set(validTabs.map((tab) => tab.id))
   const nextGroupsWithEmpty = reconciledGroups.map((group) => {
     const tabOrder = group.tabOrder.filter((tabId) => validTabIds.has(tabId))
     const activeTabId =
-      group.activeTabId && validTabIds.has(group.activeTabId)
-        ? group.activeTabId
-        : (tabOrder[0] ?? null)
+      preferredTab && tabOrder.includes(preferredTab.id)
+        ? preferredTab.id
+        : group.activeTabId && validTabIds.has(group.activeTabId)
+          ? group.activeTabId
+          : (tabOrder[0] ?? null)
     const tabOrderUnchanged =
       tabOrder.length === group.tabOrder.length &&
       tabOrder.every((tabId, index) => tabId === group.tabOrder[index])
@@ -164,11 +180,13 @@ export function projectWorktreeTabModelReconciliation(
     state.activeGroupIdByWorktree[worktreeId] ??
     ensuredGroupState?.activeGroupIdByWorktree[worktreeId]
   const activeGroupStillExists = nextGroups.some((group) => group.id === currentActiveGroupId)
-  const nextActiveGroupId = activeGroupStillExists
-    ? currentActiveGroupId
-    : (nextGroups.find((group) => group.activeTabId !== null)?.id ??
-      nextGroups[0]?.id ??
-      currentActiveGroupId)
+  const nextActiveGroupId =
+    preferredTab?.groupId ??
+    (activeGroupStillExists
+      ? currentActiveGroupId
+      : (nextGroups.find((group) => group.activeTabId !== null)?.id ??
+        nextGroups[0]?.id ??
+        currentActiveGroupId))
   const tabsChanged = validTabs !== unifiedTabs
   const activeGroupChanged = nextActiveGroupId !== currentActiveGroupId
   const baseNextLayout =
@@ -257,6 +275,36 @@ export function projectWorktreeTabModelReconciliation(
     }
   }
 
+  if (nextActiveGroupId) {
+    const surface = deriveActiveSurfaceForWorktree(
+      { ...state, ...patch },
+      worktreeId,
+      nextActiveGroupId,
+      { liveEditorIds }
+    )
+    for (const key of [
+      'activeTabId',
+      'activeBrowserTabId',
+      'activeFileId',
+      'activeTabType'
+    ] as const) {
+      if (state.activeWorktreeId === worktreeId && state[key] !== surface[key]) {
+        Object.assign(patch, { [key]: surface[key] })
+      }
+      const mapKey = `${key}ByWorktree` as const
+      if (state[mapKey][worktreeId] !== surface[key]) {
+        Object.assign(patch, {
+          [mapKey]: writeBatchedWorkspaceRecordEntry(
+            state[mapKey],
+            mapKey,
+            worktreeId,
+            surface[key],
+            batch
+          )
+        })
+      }
+    }
+  }
   return {
     patch,
     renderableTabCount: validTabs.length,
