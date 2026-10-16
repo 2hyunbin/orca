@@ -45,6 +45,8 @@ export type WorkspaceLayoutFrameSync = {
   /** Shows every workspace the frames own once the snapshot is in, then keeps them current. */
   start: () => void
   close: () => void
+  /** Whether main's latest frames hold this terminal tab in this workspace, shown yet or not. */
+  holdsTerminalTab: (worktreeId: string, tabId: string) => boolean
 }
 
 /** A bucket, not a host: the view read-back routes the workspaces a rebuild skips here. */
@@ -227,7 +229,9 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
       live = false
       stopIdleListener()
       stream.close()
-    }
+    },
+    holdsTerminalTab: (worktreeId, tabId) =>
+      cache[worktreeId]?.tabs.some((tab) => tab.terminal && tab.entityId === tabId) ?? false
   }
 }
 
@@ -238,4 +242,9 @@ export function showStartupLayoutFrames(): void {
   // Kept for the document's life: a local stream ends only with main, and a re-run boot reuses it.
   startupFrames ??= openWorkspaceLayoutFrameSync(useAppStore)
   startupFrames.start()
+}
+
+/** Whether main's frames will draw this terminal tab; false before the window's stream opens. */
+export function layoutFramesHoldTerminalTab(worktreeId: string, tabId: string): boolean {
+  return startupFrames?.holdsTerminalTab(worktreeId, tabId) ?? false
 }

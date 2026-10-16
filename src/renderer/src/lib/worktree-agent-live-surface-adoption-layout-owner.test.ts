@@ -1,0 +1,168 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
+import { loadWorkspaceLayoutWithoutReport } from '../../../shared/workspace-layout/workspace-layout-load'
+import { nameBasedLoadContext } from '../../../shared/workspace-layout/workspace-layout-minted-ids'
+import { publishWorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-published'
+import {
+  addWorkspace,
+  emptySession,
+  GIT_KEY,
+  leaf
+} from '../../../shared/workspace-layout/workspace-layout-session.test-fixture'
+import type { WorkspaceLayoutChangeFrame } from '../../../shared/workspace-layout/workspace-layout-stream-frames'
+import { bootWindowFromPartitions } from '../app-shell/startup-window-view.test-fixture'
+import { openWorkspaceLayoutFrameSync } from '../runtime/workspace-layout-frame-sync'
+import type * as FrameSyncModule from '../runtime/workspace-layout-frame-sync'
+import type { WorkspaceLayoutFrameSync } from '../runtime/workspace-layout-frame-sync'
+import { reportWindowSessionWriteActivity } from './window-session-write-activity'
+import { createStoreSessionMockApi } from '../store/slices/store-session-test-harness'
+import { createTestStore } from '../store/slices/store-test-helpers'
+import { adoptLiveWorkspacePtySurfaces } from './worktree-agent-live-surface-adoption'
+import type { LiveTerminalSurfaceOwnerIndex } from './worktree-live-terminal-surface-owners'
+
+vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
+
+type FrameDouble = {
+  onFrame: ((frame: WorkspaceLayoutChangeFrame) => void) | null
+  sync: Pick<WorkspaceLayoutFrameSync, 'holdsTerminalTab'> | null
+}
+const frames = vi.hoisted((): FrameDouble => ({ onFrame: null, sync: null }))
+vi.mock('../runtime/runtime-layout-client', () => ({
+  subscribeRuntimeLayout: (
+    _target: unknown,
+    _params: unknown,
+    onFrame: (frame: WorkspaceLayoutChangeFrame) => void
+  ) => {
+    frames.onFrame = onFrame
+    return { close: () => {} }
+  }
+}))
+vi.mock('../runtime/workspace-layout-frame-sync', async (importOriginal) => {
+  const actual = await importOriginal<typeof FrameSyncModule>()
+  return {
+    ...actual,
+    layoutFramesHoldTerminalTab: (worktreeId: string, tabId: string) =>
+      frames.sync?.holdsTerminalTab(worktreeId, tabId) ?? false
+  }
+})
+
+createStoreSessionMockApi()
+
+const OTHER_PTY = `${GIT_KEY}@@aaaa0001`
+const LEFT_PTY = `${GIT_KEY}@@aaaa0002`
+const RIGHT_PTY = `${GIT_KEY}@@aaaa0003`
+
+type TerminalSpec = { id: string; leaves: [string, string][]; split?: 'vertical' }
+
+/** The window's copy: one shell tab. Main's: that tab and a split agent tab the window lacks. */
+function sessions(): { window: WorkspaceSessionState; main: WorkspaceSessionState } {
+  const other: TerminalSpec = { id: 'tab-other', leaves: [[leaf(1), OTHER_PTY]] }
+  const split: TerminalSpec = {
+    id: 'tab-split',
+    leaves: [
+      [leaf(2), LEFT_PTY],
+      [leaf(3), RIGHT_PTY]
+    ],
+    split: 'vertical'
+  }
+  return {
+    window: addWorkspace(emptySession(), GIT_KEY, [{ id: 'group-a', tabs: [other] }]),
+    main: addWorkspace(emptySession(), GIT_KEY, [{ id: 'group-a', tabs: [other, split] }])
+  }
+}
+
+function snapshotOf(session: WorkspaceSessionState): WorkspaceLayoutChangeFrame {
+  const { layout } = loadWorkspaceLayoutWithoutReport('local', session, nameBasedLoadContext())
+  return {
+    type: 'snapshot',
+    workspaces: Object.entries(layout.workspaces).map(([key, workspace]) => ({
+      key,
+      layout: publishWorkspaceLayout(workspace, 'local')
+    }))
+  }
+}
+
+const owners: LiveTerminalSurfaceOwnerIndex = new Map([
+  [LEFT_PTY, { tabId: 'tab-split', paneKey: `tab-split:${leaf(2)}`, ptyId: LEFT_PTY }],
+  [RIGHT_PTY, { tabId: 'tab-split', paneKey: `tab-split:${leaf(3)}`, ptyId: RIGHT_PTY }]
+])
+
+const flushMicrotasks = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+describe('adopting live terminals in a layout-owner build', () => {
+  let sync: WorkspaceLayoutFrameSync | null = null
+
+  beforeEach(() => {
+    reportWindowSessionWriteActivity(false)
+    sync?.close()
+    sync = null
+    frames.sync = null
+  })
+
+  it('makes no tab or pane of its own while frames are held; the frame then draws the bound tab', async () => {
+    const { window: windowSession, main } = sessions()
+    const store = createTestStore()
+    await bootWindowFromPartitions(store, [{ hostId: 'local', session: windowSession }])
+    sync = openWorkspaceLayoutFrameSync(store)
+    frames.sync = sync
+    sync.start()
+    // The window owes main a save, so main's tree waits.
+    reportWindowSessionWriteActivity(true)
+    frames.onFrame!(snapshotOf(main))
+    await flushMicrotasks()
+    const createTab = vi.spyOn(store.getState(), 'createTab')
+    const setTabLayout = vi.spyOn(store.getState(), 'setTabLayout')
+
+    const adoption = await adoptLiveWorkspacePtySurfaces(
+      store.getState,
+      GIT_KEY,
+      [LEFT_PTY, RIGHT_PTY],
+      async () => owners
+    )
+
+    expect(adoption).toEqual({ surfaced: true, declinedPtyIds: [] })
+    expect(createTab).not.toHaveBeenCalled()
+    expect(setTabLayout).not.toHaveBeenCalled()
+    expect(store.getState().tabsByWorktree[GIT_KEY]!.map((tab) => tab.id)).toEqual(['tab-other'])
+
+    reportWindowSessionWriteActivity(false)
+    await flushMicrotasks()
+    const layout = store.getState().terminalLayoutsByTabId['tab-split']
+    expect(layout?.root).toMatchObject({
+      type: 'split',
+      direction: 'vertical',
+      first: { type: 'leaf', leafId: leaf(2) },
+      second: { type: 'leaf', leafId: leaf(3) }
+    })
+    expect(layout?.ptyIdsByLeafId).toEqual({ [leaf(2)]: LEFT_PTY, [leaf(3)]: RIGHT_PTY })
+    // A later sweep finds both terminals owned.
+    await expect(
+      adoptLiveWorkspacePtySurfaces(store.getState, GIT_KEY, [LEFT_PTY, RIGHT_PTY], async () => {
+        throw new Error('not asked: nothing is unbound')
+      })
+    ).resolves.toEqual({ surfaced: true, declinedPtyIds: [] })
+  })
+
+  it('declines a terminal whose tab main does not hold, rather than making one', async () => {
+    const { window: windowSession } = sessions()
+    const store = createTestStore()
+    await bootWindowFromPartitions(store, [{ hostId: 'local', session: windowSession }])
+    sync = openWorkspaceLayoutFrameSync(store)
+    frames.sync = sync
+    sync.start()
+    frames.onFrame!(snapshotOf(windowSession))
+    await flushMicrotasks()
+    const createTab = vi.spyOn(store.getState(), 'createTab')
+
+    const adoption = await adoptLiveWorkspacePtySurfaces(
+      store.getState,
+      GIT_KEY,
+      [LEFT_PTY],
+      async () => owners
+    )
+
+    expect(adoption).toEqual({ surfaced: false, declinedPtyIds: [LEFT_PTY] })
+    expect(createTab).not.toHaveBeenCalled()
+  })
+})

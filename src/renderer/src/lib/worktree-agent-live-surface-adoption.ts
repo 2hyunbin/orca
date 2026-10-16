@@ -1,6 +1,8 @@
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
 import { worktreeIdsEqual } from '../../../shared/worktree/id'
 import type { useAppStore } from '@/store'
+import { layoutFramesHoldTerminalTab } from '@/runtime/workspace-layout-frame-sync'
 import { resolveTerminalTabPtyOwnership } from './terminal-tab-for-pty-id'
 import type {
   LiveTerminalSurfaceOwner,
@@ -105,6 +107,11 @@ function adoptHostOwnedSurface(
 ): boolean {
   const store = getState()
   const known = tabExists(store, owner.tabId)
+  // Switch point: main's frames draw a tab main holds, bound to this terminal; the window makes
+  // no tab or pane of its own. A tab main lacks entirely stays declined (main-first follow-up).
+  if (ORCA_LAYOUT_OWNER_IS_MAIN && !known) {
+    return layoutFramesHoldTerminalTab(worktreeId, owner.tabId)
+  }
   if (bindLivePtyToExactSurface(store, worktreeId, owner)) {
     if (!known) {
       materializedTabIds.add(owner.tabId)
