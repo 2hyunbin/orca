@@ -72,11 +72,6 @@ export abstract class OrcaRuntimeWithSerializeAgentPromptSubmission extends Orca
     return this.ptyForegroundAgent.read(ptyId, afterTitleObservation)
   }
 
-  /** Hook-proven agent presence in a coordinator's pane; null when no hook identified an owner. */
-  coordinatorAgentPresence(paneKey: string): Promise<'live' | 'unverifiable' | 'exited' | null> {
-    return this.checkHookAgentPresenceFn?.(paneKey) ?? Promise.resolve(null)
-  }
-
   protected async recheckHookAgentPresenceForPty(
     ptyId: string,
     exitedSince?: number
