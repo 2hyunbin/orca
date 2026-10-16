@@ -193,10 +193,13 @@ export async function commitStructuredAgentSessionCreate(args: {
         hostLaunchDirectory: prepared.hostLaunchDirectory
       })
     : await prepared.host.attach(args.caller, prepared.attachParams)
+  if (!result.ok || !prepared.tab) {
+    return result
+  }
+  // A chat closed while it was being made gets no tab to show before main closes it.
   if (
-    !result.ok ||
-    !prepared.tab ||
-    (ORCA_LAYOUT_OWNER_IS_MAIN && structuredAgentSessionClosedBeforeCreate(result.value.sessionId))
+    ORCA_LAYOUT_OWNER_IS_MAIN &&
+    structuredAgentSessionClosedBeforeCreate(result.value.sessionId)
   ) {
     return result
   }
