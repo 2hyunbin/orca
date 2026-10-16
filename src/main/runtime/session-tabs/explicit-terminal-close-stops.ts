@@ -6,6 +6,7 @@ import type { RuntimePtyTabCloseAuthority } from '../runtime-terminal-state-reco
 import { parsePaneKey } from '../../../shared/stable-pane-id'
 import { errorMessage } from '../../../shared/error-message'
 import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
+import { closeTerminalOnPairedHost, getPairedHostTerminal } from './paired-host-terminal-close'
 
 /** How an explicit close's stop of its addressed PTY ended. */
 type ExplicitCloseStop = { stopped: boolean }
@@ -105,6 +106,25 @@ export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRun
       return { ...close, ptyStopVerdict: 'live' }
     }
     return close
+  }
+
+  /** null when this machine owns the PTY; a paired host's answer, possibly 'absent', otherwise. */
+  private async closeOnOwningPairedHost(
+    ptyId: string | null | undefined,
+    method: 'terminal.close' | 'terminal.closeTab'
+  ): Promise<Omit<RuntimeTerminalClose, 'handle' | 'tabId'> | null> {
+    const terminal = getPairedHostTerminal(ptyId)
+    if (!terminal) {
+      return null
+    }
+    const close = await closeTerminalOnPairedHost(
+      (environmentId, hostMethod, params, timeoutMs) =>
+        this.callOrchestrationWorkerServer(environmentId, hostMethod, params, timeoutMs),
+      terminal,
+      method
+    )
+    // The owner has no such terminal, so nothing runs there to stop.
+    return close === 'absent' ? { ptyKilled: false } : close
   }
 
   async closeTerminal(handle: string): Promise<RuntimeTerminalClose> {
@@ -217,6 +237,9 @@ export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRun
     }
     this.assertGraphReady()
     const { leaf } = this.getLiveLeafForHandle(handle)
+    // Why first: the paired runtime owns this PTY, so only its close stops the process; a failure
+    // rejects before the local mirror is retired, leaving the terminal visible to retry.
+    const hostClose = await this.closeOnOwningPairedHost(leaf.ptyId, 'terminal.close')
     const paneTarget = { kind: 'pane' as const, tabId: leaf.tabId, leafId: leaf.leafId }
     const closesTab = this.resolveTerminalCloseTarget(leaf.worktreeId, paneTarget) === 'last-pane'
     const ptyIdsToKill = closesTab
@@ -226,6 +249,14 @@ export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRun
         : []
     if (closesTab && this.notifier?.closeTerminalTab) {
       await this.notifier.closeTerminalTab(leaf.tabId, { localPtyTeardownOwnedExternally: true })
+    }
+    if (hostClose) {
+      if (!closesTab) {
+        await this.closeTerminalPane(leaf.worktreeId, paneTarget)
+      } else if (!this.notifier?.closeTerminalTab) {
+        this.notifier?.closeTerminal(leaf.tabId)
+      }
+      return { handle, tabId: leaf.tabId, ...hostClose }
     }
     const stop = leaf.ptyId
       ? await this.stopExplicitlyClosedTabPtys(ptyIdsToKill, leaf.ptyId)
@@ -264,8 +295,9 @@ export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRun
     }
     this.assertGraphReady()
     const { leaf } = this.getLiveLeafForHandle(handle)
+    const hostClose = await this.closeOnOwningPairedHost(leaf.ptyId, 'terminal.closeTab')
     await this.closeMobileSessionTab(`id:${leaf.worktreeId}`, leaf.tabId, { reason: 'user' })
     this.claudeAgentTeams.removeTeamForLeaderHandle(handle)
-    return { handle, tabId: leaf.tabId, closeMode: 'tab', ptyKilled: false }
+    return { handle, tabId: leaf.tabId, ptyKilled: false, ...hostClose, closeMode: 'tab' }
   }
 }
