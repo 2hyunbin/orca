@@ -68,11 +68,29 @@ afterEach(() => {
 })
 
 describe('WorkspaceSpaceWorktreeRow context menu', () => {
+  it('shows the existing workspace activity timestamp with its full time on hover', () => {
+    const lastActivityAt = Date.now() - 2 * 60 * 60 * 1000
+    render(
+      <WorkspaceSpaceWorktreeRow
+        worktree={{ ...worktree, lastActivityAt }}
+        selected={false}
+        inspected={false}
+        decisionDetails={decisionDetails}
+        onToggleSelected={() => {}}
+        onInspect={() => {}}
+        onOpenWorkspace={() => {}}
+        onDelete={() => {}}
+        onForceDelete={() => {}}
+      />
+    )
+
+    expect(screen.getByText('2h').getAttribute('title')).toBeTruthy()
+  })
+
   it('reveals a workspace even when deletion is unavailable', () => {
     render(
       <WorkspaceSpaceWorktreeRow
         worktree={worktree}
-        maxSize={4096}
         selected={false}
         inspected={false}
         decisionDetails={decisionDetails}
@@ -94,7 +112,6 @@ describe('WorkspaceSpaceWorktreeRow context menu', () => {
     render(
       <WorkspaceSpaceWorktreeRow
         worktree={{ ...worktree, isMainWorktree: false, canDelete: true }}
-        maxSize={4096}
         selected={false}
         inspected={false}
         decisionDetails={decisionDetails}

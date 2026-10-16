@@ -1,5 +1,4 @@
 import { ArrowLeft } from 'lucide-react'
-import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
 import { WorkspaceSpaceManagerPanel } from '../status-bar/WorkspaceSpaceManagerPanel'
 import { useAppStore } from '../../store'
@@ -17,11 +16,7 @@ export default function WorkspaceSpacePage(): React.JSX.Element {
           {translate('auto.components.workspace.space.WorkspaceSpacePage.ecf72fdc3b', 'Back')}
         </Button>
       ) : null}
-      <div className="relative mx-auto flex min-h-0 w-full max-w-[96rem] flex-1 flex-col">
-        <Badge variant="secondary" className="absolute -top-2 right-2 z-10">
-          {translate('auto.components.workspace.space.WorkspaceSpacePage.45f6302dbc', 'Space')}{' '}
-          {translate('auto.components.workspace.space.WorkspaceSpacePage.e8d6ba11ab', 'Beta')}
-        </Badge>
+      <div className="mx-auto flex min-h-0 w-full max-w-[96rem] flex-1 flex-col">
         <WorkspaceSpaceManagerPanel />
       </div>
     </div>

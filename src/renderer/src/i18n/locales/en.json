@@ -20196,6 +20196,9 @@
     }
   },
   "workspaceSpace": {
+    "table": {
+      "lastActive": "Last active"
+    },
     "breakdown": {
       "viewAll": "Show more folder details"
     },
@@ -20214,9 +20217,6 @@
     },
     "metric": {
       "linkedWorktrees": "Linked worktrees"
-    },
-    "summary": {
-      "linkedWorktrees": "{{value0}} is used by linked worktrees. Managed worktrees can be removed here."
     },
     "scan": {
       "moreErrors": "{{value0}} more scan errors"

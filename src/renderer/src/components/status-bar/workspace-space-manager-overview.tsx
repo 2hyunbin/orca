@@ -58,72 +58,41 @@ export function WorkspaceSpaceManagerOverview({
   }
   return (
     <div className="shrink-0 space-y-2.5">
-      <div className="grid grid-cols-4 divide-x divide-border/60 rounded-lg border border-border/65 bg-background/35">
-        <Metric
-          label={translate(
-            'auto.components.status.bar.WorkspaceSpaceManagerPanel.09960d86bd',
-            'Scanned'
-          )}
-          value={analysis ? formatBytes(analysis.totalSizeBytes) : '—'}
-        />
-        <Metric
-          label={translate('workspaceSpace.metric.linkedWorktrees', 'Linked worktrees')}
-          value={analysis ? formatBytes(analysis.reclaimableBytes) : '—'}
-        />
-        <Metric
-          label={translate(
-            'auto.components.status.bar.WorkspaceSpaceManagerPanel.43171f3e60',
-            'Workspaces'
-          )}
-          value={
-            analysis
-              ? analysis.unavailableWorktreeCount > 0
-                ? `${analysis.scannedWorktreeCount}/${analysis.worktreeCount}`
-                : String(analysis.scannedWorktreeCount)
-              : '—'
-          }
-        />
-        <UpdatedMetric scannedAt={analysis?.scannedAt ?? null} isScanning={isScanning} />
-      </div>
-
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-          {isScanning ? (
-            <Loader2 className="size-4 shrink-0 animate-spin" />
-          ) : (
-            <HardDrive className="size-4 shrink-0" />
-          )}
-          <span className="truncate">
-            {analysis
-              ? isScanning
-                ? translate(
-                    'auto.components.status.bar.WorkspaceSpaceManagerPanel.34174bd83d',
-                    '{{value0}}. You can leave this page; the last result stays visible.',
-                    { value0: progressLabel ?? 'Scanning workspace sizes' }
-                  )
-                : translate(
-                    'workspaceSpace.summary.linkedWorktrees',
-                    '{{value0}} is used by linked worktrees. Managed worktrees can be removed here.',
-                    { value0: formatBytes(analysis.reclaimableBytes) }
-                  )
-              : isScanning
-                ? translate(
-                    'auto.components.status.bar.WorkspaceSpaceManagerPanel.265d956765',
-                    '{{value0}}. You can leave this page.',
-                    { value0: progressLabel ?? 'Scanning workspace sizes' }
-                  )
-                : translate(
-                    'auto.components.status.bar.WorkspaceSpaceManagerPanel.e91dd2a9ae',
-                    'Run a scan to inspect workspace sizes.'
-                  )}
-          </span>
+      <div className="flex min-w-0 items-center rounded-lg border border-border/65 bg-background/35">
+        <div className="grid min-w-0 flex-1 grid-cols-4 divide-x divide-border/60">
+          <Metric
+            label={translate(
+              'auto.components.status.bar.WorkspaceSpaceManagerPanel.09960d86bd',
+              'Scanned'
+            )}
+            value={analysis ? formatBytes(analysis.totalSizeBytes) : '—'}
+          />
+          <Metric
+            label={translate('workspaceSpace.metric.linkedWorktrees', 'Linked worktrees')}
+            shortLabel={translate('workspaceSpace.compact.linked', 'Linked')}
+            value={analysis ? formatBytes(analysis.reclaimableBytes) : '—'}
+          />
+          <Metric
+            label={translate(
+              'auto.components.status.bar.WorkspaceSpaceManagerPanel.43171f3e60',
+              'Workspaces'
+            )}
+            value={
+              analysis
+                ? analysis.unavailableWorktreeCount > 0
+                  ? `${analysis.scannedWorktreeCount}/${analysis.worktreeCount}`
+                  : String(analysis.scannedWorktreeCount)
+                : '—'
+            }
+          />
+          <UpdatedMetric scannedAt={analysis?.scannedAt ?? null} isScanning={isScanning} />
         </div>
         <Button
           variant="outline"
           size="sm"
           onClick={isScanning ? cancelScan : refresh}
           disabled={progress?.state === 'cancelling'}
-          className="w-24 shrink-0"
+          className="mr-1.5 w-24 shrink-0"
         >
           {isScanning ? (
             progress?.state === 'cancelling' ? (
@@ -155,6 +124,25 @@ export function WorkspaceSpaceManagerOverview({
                 )}
         </Button>
       </div>
+
+      {isScanning ? (
+        <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="size-4 shrink-0 animate-spin" />
+          <span className="truncate">
+            {analysis
+              ? translate(
+                  'auto.components.status.bar.WorkspaceSpaceManagerPanel.34174bd83d',
+                  '{{value0}}. You can leave this page; the last result stays visible.',
+                  { value0: progressLabel ?? 'Scanning workspace sizes' }
+                )
+              : translate(
+                  'auto.components.status.bar.WorkspaceSpaceManagerPanel.265d956765',
+                  '{{value0}}. You can leave this page.',
+                  { value0: progressLabel ?? 'Scanning workspace sizes' }
+                )}
+          </span>
+        </div>
+      ) : null}
 
       {scanError ? (
         <div className="flex items-start gap-2 rounded-md border border-destructive/35 bg-destructive/8 px-2 py-1.5 text-xs text-destructive">

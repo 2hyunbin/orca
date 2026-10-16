@@ -22,7 +22,6 @@ export function WorkspaceSpaceManagerTable({
     hasRows,
     inspectedWorktree,
     isInitialScan,
-    maxSize,
     nextSelectedIds,
     getDeleteStateForWorktree,
     rows,
@@ -42,7 +41,7 @@ export function WorkspaceSpaceManagerTable({
       {hasRows || isInitialScan ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-x-auto rounded-lg border border-border/70 bg-background/30">
           <div className="flex min-h-0 min-w-[40rem] flex-1 flex-col">
-            <div className="grid shrink-0 grid-cols-[1.75rem_minmax(0,1.25fr)_minmax(9rem,0.55fr)_8rem_9.5rem] gap-3 border-b border-border/60 px-3 py-1.5 text-2xs font-medium uppercase tracking-wider text-muted-foreground">
+            <div className="grid shrink-0 grid-cols-[1.75rem_minmax(0,1.4fr)_minmax(5rem,0.55fr)_5.5rem_6rem_9.5rem] gap-2 border-b border-border/60 px-3 py-1.5 text-2xs font-medium uppercase tracking-wider text-muted-foreground">
               <div className="flex items-center">
                 <CheckButton
                   checked={visibleSelectionState}
@@ -82,6 +81,14 @@ export function WorkspaceSpaceManagerTable({
                   'Repository'
                 )}
                 <SortIndicator sortKey="repo" activeKey={sortKey} direction={sortDirection} />
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleSort('activity')}
+                className="flex items-center justify-end gap-1 text-right"
+              >
+                {translate('workspaceSpace.table.lastActive', 'Last active')}
+                <SortIndicator sortKey="activity" activeKey={sortKey} direction={sortDirection} />
               </button>
               <button
                 type="button"
@@ -129,7 +136,6 @@ export function WorkspaceSpaceManagerTable({
                     <WorkspaceSpaceWorktreeRow
                       key={identity}
                       worktree={worktree}
-                      maxSize={maxSize}
                       selected={nextSelectedIds.has(identity)}
                       inspected={
                         inspectedWorktree !== null &&
