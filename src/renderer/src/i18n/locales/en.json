@@ -20196,6 +20196,7 @@
     }
   },
   "workspaceSpace": {
+    "deleteOne": "Delete {{value0}}",
     "table": {
       "lastActive": "Last active"
     },

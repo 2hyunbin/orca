@@ -7,7 +7,6 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
-  ContextMenuSeparator,
   ContextMenuTrigger
 } from '../ui/context-menu'
 import { getRevealInFileManagerLabel, revealInFileManager } from '@/lib/reveal-in-file-manager'
@@ -153,7 +152,27 @@ export function WorkspaceSpaceWorktreeRow({
         {worktree.status === 'ok' ? formatBytes(worktree.sizeBytes) : '—'}
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-1">
+        {canDelete ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            aria-label={translate('workspaceSpace.deleteOne', 'Delete {{value0}}', {
+              value0: worktree.displayName
+            })}
+            title={translate('workspaceSpace.deleteOne', 'Delete {{value0}}', {
+              value0: worktree.displayName
+            })}
+            onClick={(event) => {
+              event.stopPropagation()
+              onDelete()
+            }}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        ) : null}
         <HoverCard openDelay={250} closeDelay={120}>
           <HoverCardTrigger asChild>
             <span
@@ -191,18 +210,13 @@ export function WorkspaceSpaceWorktreeRow({
           <FolderSearch className="size-3.5" />
           {getRevealInFileManagerLabel()}
         </ContextMenuItem>
-        {canDelete ? (
-          <>
-            <ContextMenuSeparator />
-            <ContextMenuItem variant="destructive" onSelect={onDelete}>
-              <Trash2 className="size-3.5" />
-              {translate(
-                'auto.components.status.bar.WorkspaceSpaceManagerPanel.792a214457',
-                'Delete workspace'
-              )}
-            </ContextMenuItem>
-          </>
-        ) : null}
+        <ContextMenuItem variant="destructive" disabled={!canDelete} onSelect={onDelete}>
+          <Trash2 className="size-3.5" />
+          {translate(
+            'auto.components.status.bar.WorkspaceSpaceManagerPanel.792a214457',
+            'Delete workspace'
+          )}
+        </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   )
