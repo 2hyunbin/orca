@@ -238,10 +238,12 @@ export function buildConnectConfig(
       // so only that attempt holds the host's password challenge back for them. An encrypted key
       // would swap that dialog for a passphrase one, and a file that is no usable private key
       // aborts the retry before any auth, so hold it back only if no deferred key needs input.
+      // One key only: each rejected key spends the host's MaxAuthTries, so several could exhaust
+      // the retry before it reaches the challenge this attempt skipped.
       deferKeyboardInteractive:
         keys.length === 0 &&
-        availableKeys.length > 0 &&
-        availableKeys.every((key) => isUnencryptedPrivateKey(key.contents))
+        availableKeys.length === 1 &&
+        isUnencryptedPrivateKey(availableKeys[0].contents)
     }
   )
 

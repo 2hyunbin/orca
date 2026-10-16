@@ -692,6 +692,22 @@ describe('buildConnectConfig', () => {
     ])
   })
 
+  it('keeps the challenge when several keys wait, which could spend the retry auth budget', () => {
+    mockReadFileSync.mockReturnValue(UNENCRYPTED_KEY)
+    const config = buildConnectConfig(
+      makeTarget(),
+      makeResolved({
+        identityFile: [testHomePath('.ssh', 'id_ed25519'), testHomePath('.ssh', 'id_ecdsa')]
+      })
+    )
+    expect(config.privateKey).toBeUndefined()
+    expect(walkInitialAuthLadder(config, PASSWORD_HOST_METHODS)).toEqual([
+      'none',
+      'agent',
+      'keyboard-interactive'
+    ])
+  })
+
   it('keeps the challenge on a keyboard-interactive-only host, where the deferred key cannot help', () => {
     mockExistsSync.mockImplementation(
       (p: unknown) => String(p) === testHomePath('.ssh', 'id_ed25519')
