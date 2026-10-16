@@ -17,6 +17,8 @@ import {
   connectionFor,
   coordinatorRunAndTask,
   db,
+  host,
+  observationClock,
   openChat,
   restartRuntime,
   runtime,
@@ -31,7 +33,8 @@ const WORKER = formatOrcaSessionAddress(testOrcaSessionId(PEER_CHAT))
 async function idleEdges(sessionId: string): Promise<void> {
   runtime.onStructuredSessionStatusForMail({ sessionId, status: null })
   runtime.onStructuredSessionStatusForMail({ sessionId, status: 'idle' })
-  await new Promise((resolve) => setTimeout(resolve, 400))
+  await observationClock.observe(400)
+  await host.flushStreamedEvents(sessionId)
 }
 
 /** Coordinator mail to the peer chat's Dispatch, its send lost with the provider. */
@@ -91,6 +94,7 @@ async function expectRecoveredMail(
 describe("a chat worker's held Dispatch mail is sent again", () => {
   // Also covered by the restored-mail repoint a restart schedules; this pins the end result.
   it('after a restart', async () => {
+    observationClock.start()
     const held = await heldDispatchMail()
     restartRuntime()
 
@@ -100,6 +104,7 @@ describe("a chat worker's held Dispatch mail is sent again", () => {
   })
 
   it('in the same chat after /clear', async () => {
+    observationClock.start()
     const held = await heldDispatchMail()
     const cleared = await clearChat(PEER_CHAT)
     expect(cleared).toBe(PEER_CHAT)

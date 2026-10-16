@@ -18,7 +18,8 @@ import {
 import { structuredMailBody } from './structured-mail-source'
 import type { StructuredMailOperationOwner } from './structured-mail-operation-owners'
 
-/** Sends one message, or replays its send; false when the session cannot take any. */
+/** Sends one message, or replays its send; false when the pass must stop here (the session cannot
+ *  take any, or a prompt waits on the person and later mail must not overtake this one). */
 export async function sendStructuredMailboxMessage(
   db: OrchestrationDb,
   mailboxHandle: string,
@@ -60,21 +61,34 @@ export async function sendStructuredMailboxMessage(
       messageId: message.id
     }
     deps.mintedOperations.set(attempt.key, owner)
-    const outcome = await deps.host.send({
-      sessionId: target.sessionId,
-      dispatchId: target.dispatchId,
-      operationId: resolved.operation.operationId,
-      expectedRuntimeFence: attempt.fence,
-      body: structuredMailBody({
-        db,
-        mailboxHandle,
+    const send = () =>
+      deps.host.send({
+        sessionId: target.sessionId,
         dispatchId: target.dispatchId,
-        message,
-        senderName: deps.senderName,
-        cliCommand: deps.getCliCommand()
-      }),
-      onAnswered: attempt.answered
-    })
+        operationId: resolved.operation.operationId,
+        expectedRuntimeFence: attempt.fence,
+        body: structuredMailBody({
+          db,
+          mailboxHandle,
+          dispatchId: target.dispatchId,
+          message,
+          senderName: deps.senderName,
+          cliCommand: deps.getCliCommand()
+        }),
+        onAnswered: attempt.answered
+      })
+    let outcome = await send()
+    // Nothing is recorded for a held send, so the same id is safe to retry once the prompt clears.
+    while (
+      outcome.kind === 'held' &&
+      deps.host.hasActionablePromptNow(target.sessionId) === false
+    ) {
+      outcome = await send()
+    }
+    if (outcome.kind === 'held') {
+      attempt.retain('turn-unsettled')
+      return false
+    }
     if (outcome.kind === 'unattached') {
       attempt.retain('session-not-attached')
       return false
@@ -126,15 +140,11 @@ export async function sendStructuredMailboxPage(input: {
   } = input
   const sessionId = target.sessionId
   // Oldest first, each its own send. The next is issued once the host has answered this one,
-  // never after the agent takes it in; one held in doubt does not hold back the ones after it.
+  // never after the agent takes it in; one in doubt does not hold back the ones after it, but one
+  // held for a waiting prompt stops the pass so later mail cannot overtake it.
   for (const message of unread) {
     if (!isCurrent()) {
       return false
-    }
-    if (message.type === 'heartbeat') {
-      // Already reconciled when sent; sending each beat would interrupt the chat every time.
-      db.markAsReadAndDelivered([message.id])
-      continue
     }
     const key = JSON.stringify([sessionId, contextClearOperationId ?? null, message.id])
     if (input.sendsInFlight.has(key)) {

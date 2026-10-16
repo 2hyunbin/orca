@@ -128,6 +128,7 @@ async function renderChatMail(mailbox: string): Promise<string> {
     senderName: () => null,
     host: {
       readSessionFacts: async () => ({ submissions: [] }),
+      hasActionablePromptNow: () => false,
       currentFence: () => 1,
       currentContextClearOperationId: () => undefined,
       send: async (input) => {

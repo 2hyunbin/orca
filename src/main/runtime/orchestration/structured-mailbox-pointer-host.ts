@@ -21,8 +21,7 @@ import {
   structuredSessionGateFacts,
   type StructuredSessionGateFacts
 } from './structured-session-pointer-delivery'
-import { sendAgentTurn, type AgentTurnDelivery } from './send-agent-turn'
-import type { StructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-host'
+import { sendAgentTurn, type StructuredSessionTurnOutcome } from './send-agent-turn'
 
 /** Names the dispatch a send belongs to on the operation row it writes. */
 export function structuredPointerCallerKey(dispatchId: string): string {
@@ -52,26 +51,24 @@ export async function readStructuredSessionGateFacts(
   sessionId: string
 ): Promise<StructuredSessionGateFacts | null> {
   const snapshot = await readSessionJournal(sessionId)
-  return snapshot ? structuredSessionGateFacts(snapshot.items) : null
+  if (!snapshot) {
+    return null
+  }
+  // The host's projection of current work: an agent that ended is idle, whatever its rows say.
+  const work = getStructuredAgentSessionHost()?.currentWork(sessionId)
+  return structuredSessionGateFacts(snapshot.items, work?.scope)
 }
 
 /** What each recorded send settled as, and the orchestration message it carried. */
 async function readPointerSessionFacts(
   sessionId: string
 ): Promise<StructuredPointerSessionFacts | null> {
-  // Read the queue first: a card can become a submission between these reads.
-  const queued = await getStructuredAgentSessionHost()
-    ?.history({ sessionId, direction: 'tail', limit: 1 })
-    .catch(() => null)
-  if (!queued) {
-    return null
-  }
   const snapshot = await readSessionJournal(sessionId)
   if (!snapshot) {
     return null
   }
-  const boundary =
-    getStructuredAgentSessionHost()?.deps.store.getRecord(sessionId)?.providerContextBoundary
+  const host = getStructuredAgentSessionHost()
+  const boundary = host?.deps.store.getRecord(sessionId)?.providerContextBoundary
   const mailByItemId = new Map<string, string>()
   for (const item of snapshot.items) {
     const messageId = item.body.kind === 'message' ? mailContentMessageId(item.body) : undefined
@@ -80,30 +77,14 @@ async function readPointerSessionFacts(
     }
   }
   return {
-    submissions: [
-      ...snapshot.submissions
-        .filter((submission) => !boundary || submission.fence > boundary.afterFence)
-        .map(({ clientMessageId, dispatchState, submittedAt }) => ({
-          clientMessageId,
-          dispatchState,
-          submittedAt,
-          mailMessageId: mailByItemId.get(agentJournalSubmissionKey(clientMessageId))
-        })),
-      ...(queued?.page.queuedMessages ?? []).flatMap(({ messageId, body }) => {
-        const mailMessageId = mailContentMessageId(body)
-        return mailMessageId
-          ? [
-              {
-                clientMessageId: messageId,
-                dispatchState: 'accepted' as const,
-                // Queue acceptance is a receipt, not a later provider turn.
-                submittedAt: 0,
-                mailMessageId
-              }
-            ]
-          : []
-      })
-    ]
+    submissions: snapshot.submissions
+      .filter((submission) => !boundary || submission.fence > boundary.afterFence)
+      .map(({ clientMessageId, dispatchState, submittedAt }) => ({
+        clientMessageId,
+        dispatchState,
+        submittedAt,
+        mailMessageId: mailByItemId.get(agentJournalSubmissionKey(clientMessageId))
+      }))
   }
 }
 
@@ -131,23 +112,14 @@ async function readSessionJournal(sessionId: string): Promise<AgentJournalSnapsh
   }
 }
 
-/**
- * How mail reaches a busy chat. An agent that takes a message mid-turn gets it at once, as a
- * terminal agent gets its typed nudge; one that would cancel its turn for it queues it as a card.
- * Depends on the agent alone: delivery is part of the send's fingerprint, so a retry under the same
- * operation id must ask for the same delivery.
- */
-function pointerDelivery(host: StructuredAgentSessionHost, sessionId: string): AgentTurnDelivery {
-  const provider = host.deps.store.getRecord(sessionId)?.provider
-  return provider && host.deps.agents.capabilities(provider)?.steering === 'inject'
-    ? 'now'
-    : 'queue'
-}
-
 export function createStructuredMailboxPointerHost(): StructuredMailboxPointerHost {
   return {
     readSessionFacts(sessionId) {
       return readPointerSessionFacts(sessionId)
+    },
+
+    hasActionablePromptNow(sessionId) {
+      return getStructuredAgentSessionHost()?.currentWork(sessionId)?.hasActionablePrompt() ?? null
     },
 
     currentFence(sessionId) {
@@ -166,22 +138,39 @@ export function createStructuredMailboxPointerHost(): StructuredMailboxPointerHo
       if (!host) {
         return { kind: 'unattached' }
       }
-      const outcome = await sendAgentTurn({
-        kind: 'structured-session',
-        host,
-        sessionId: input.sessionId,
-        callerKey: input.dispatchId
-          ? structuredPointerCallerKey(input.dispatchId)
-          : structuredSessionPointerCallerKey(input.sessionId),
-        onAnswered: (refusal) =>
-          input.onAnswered?.(refusal?.code !== AGENT_SESSION_NOT_ATTACHED.code),
-        turn: {
-          body: input.body,
-          delivery: pointerDelivery(host, input.sessionId),
-          operationId: input.operationId,
-          expectedRuntimeFence: input.expectedRuntimeFence
+      let outcome: StructuredSessionTurnOutcome
+      try {
+        outcome = await sendAgentTurn({
+          kind: 'structured-session',
+          host,
+          sessionId: input.sessionId,
+          callerKey: input.dispatchId
+            ? structuredPointerCallerKey(input.dispatchId)
+            : structuredSessionPointerCallerKey(input.sessionId),
+          onAnswered: (refusal) =>
+            input.onAnswered?.(refusal?.code !== AGENT_SESSION_NOT_ATTACHED.code),
+          turn: {
+            body: input.body,
+            // A person's plain send: every agent takes it the way it takes their own mid-turn message.
+            delivery: 'now',
+            operationId: input.operationId,
+            expectedRuntimeFence: input.expectedRuntimeFence,
+            beforeRun: () => {
+              if (
+                input.body.from?.orchestration?.message === 'mail-notice' &&
+                host.currentWork(input.sessionId)?.hasActionablePrompt()
+              ) {
+                throw new StructuredMailHeldError()
+              }
+            }
+          }
+        })
+      } catch (error) {
+        if (error instanceof StructuredMailHeldError) {
+          return { kind: 'held' }
         }
-      })
+        throw error
+      }
       switch (outcome.kind) {
         case 'refused':
           return outcome.refusal.code === AGENT_SESSION_NOT_ATTACHED.code
@@ -202,3 +191,5 @@ export function createStructuredMailboxPointerHost(): StructuredMailboxPointerHo
     }
   }
 }
+
+class StructuredMailHeldError extends Error {}

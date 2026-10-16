@@ -57,6 +57,8 @@ export type StructuredPointerSendOutcome =
   /** The chat's queue took it, as it takes a person's message. */
   | { kind: 'queued' }
   | { kind: 'unattached' }
+  /** Refused at admission: a prompt waits on the person. */
+  | { kind: 'held' }
 
 export type StructuredPointerSessionFacts = {
   /** Current-context sends and accepted queue receipts for the lane's mail. */
@@ -79,6 +81,8 @@ export type StructuredMailboxPointerHost = {
   /** Current lease fence; `null` when no record backs the session any more. */
   currentFence: (sessionId: string) => number | null
   currentContextClearOperationId: (sessionId: string) => string | undefined
+  /** Whether a prompt waits on the person right now; null when the session cannot be read. */
+  hasActionablePromptNow: (sessionId: string) => boolean | null
 }
 
 type StructuredPointerDeliveryDependencies<TWaiter extends OrchestrationMessageWaiter> = {
@@ -102,6 +106,10 @@ type StructuredPointerDeliveryDependencies<TWaiter extends OrchestrationMessageW
     reason: StructuredPointerRetainReason
   }) => void
 }
+
+// Liveness is recorded when a heartbeat arrives; sending each beat would interrupt the chat. Left
+// unread for `check`, which (or the worker's report) clears it.
+const NATIVE_LANE_SKIPPED_TYPES = ['heartbeat'] as const
 
 export class OrchestrationStructuredMailboxPointerDelivery<
   TWaiter extends OrchestrationMessageWaiter
@@ -221,13 +229,17 @@ export class OrchestrationStructuredMailboxPointerDelivery<
       })
       return
     }
+    // The consumer's own unacknowledged batch holds this exact mailbox until it acks.
+    if (db.hasOutstandingMailboxDelivery?.(mailboxHandle)) {
+      return
+    }
     this.prune(db, mailboxHandle)
+    const laneExcludedTypes = new Set([...(reservedTypes ?? []), ...NATIVE_LANE_SKIPPED_TYPES])
     const first = selectOrchestrationPointerBatch({
       db,
       mailboxHandle,
       waiters: this.deps.getMessageWaiters(mailboxHandle),
-      reservedTypes,
-      excludeOutstandingDelivery: true
+      reservedTypes: laneExcludedTypes
     })
     if (first.length === 0) {
       return
@@ -237,6 +249,13 @@ export class OrchestrationStructuredMailboxPointerDelivery<
       return
     }
     this.inFlight.set(mailboxHandle, target)
+    // Parked before the first await, so a journal edge during the reads is not lost.
+    this.parkedUntilJournalEdge.set(mailboxHandle, { sessionId: target.sessionId, reservedTypes })
+    let retained = false
+    const retain = (reason: StructuredPointerRetainReason) => {
+      retained = true
+      this.retain(mailboxHandle, target.sessionId, reason, reservedTypes)
+    }
     let contextKey: string | undefined
     try {
       const session = await this.deps.host.readSessionFacts(target.sessionId)
@@ -250,7 +269,7 @@ export class OrchestrationStructuredMailboxPointerDelivery<
       attemptedContexts.add(contextKey)
       const fence = session ? this.deps.host.currentFence(target.sessionId) : null
       if (!session || fence === null) {
-        this.retain(mailboxHandle, target.sessionId, 'session-not-attached', reservedTypes)
+        retain('session-not-attached')
         return
       }
       const submissionIndex = indexStructuredMailSubmissions(session.submissions)
@@ -261,7 +280,7 @@ export class OrchestrationStructuredMailboxPointerDelivery<
       await visitStructuredMailboxPages({
         db,
         mailboxHandle,
-        reservedTypes,
+        reservedTypes: laneExcludedTypes,
         throughSequence,
         getWaiters: () => this.deps.getMessageWaiters(mailboxHandle),
         isCurrent,
@@ -277,12 +296,18 @@ export class OrchestrationStructuredMailboxPointerDelivery<
             submissionIndex,
             fence,
             isCurrent,
-            retain: (reason) => this.retain(mailboxHandle, target.sessionId, reason, reservedTypes),
+            retain,
             prune: (key) => this.prune(db, mailboxHandle, key),
             mintedOperations: this.mintedOperations,
             sendsInFlight: this.sendsInFlight
           })
       })
+      if (
+        !retained &&
+        this.parkedUntilJournalEdge.get(mailboxHandle)?.sessionId === target.sessionId
+      ) {
+        this.parkedUntilJournalEdge.delete(mailboxHandle)
+      }
     } finally {
       if (this.inFlight.get(mailboxHandle) === target) {
         this.inFlight.delete(mailboxHandle)

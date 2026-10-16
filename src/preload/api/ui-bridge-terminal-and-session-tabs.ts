@@ -1,3 +1,4 @@
+import type { RuntimeFileOpenPosition } from '../../shared/runtime-file-contracts'
 import { ipcRenderer } from 'electron'
 import type { TerminalPaneSplitSource } from '../../shared/feature-education-telemetry'
 import type { TerminalTabCreateReply } from '../../shared/terminal-reveal-identity'
@@ -7,6 +8,10 @@ import type {
   AgentLaunchTabPublishRequest
 } from '../../shared/agent-launch-tab-publication'
 import type { AgentLaunchPaneVerdictEvent } from '../../shared/agent-launch-pane-verdict'
+import type {
+  TerminalPaneRevealReply,
+  TerminalPaneRevealRequest
+} from '../../shared/terminal-pane-reveal'
 import type {
   AgentProviderSessionMetadata,
   SleepingAgentLaunchConfig
@@ -110,6 +115,15 @@ export const uiTerminalAndSessionTabsApi = {
   },
   replyAgentLaunchTabPublish: (reply: AgentLaunchTabPublishReply): void => {
     ipcRenderer.send('agentLaunch:tabPublishReply', reply)
+  },
+  onRevealTerminalPane: (callback: (data: TerminalPaneRevealRequest) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, data: TerminalPaneRevealRequest) =>
+      callback(data)
+    ipcRenderer.on('ui:revealTerminalPane', listener)
+    return () => ipcRenderer.removeListener('ui:revealTerminalPane', listener)
+  },
+  replyTerminalPaneReveal: (reply: TerminalPaneRevealReply): void => {
+    ipcRenderer.send('ui:terminalPaneRevealReply', reply)
   },
   onAgentLaunchPaneVerdict: (
     callback: (data: AgentLaunchPaneVerdictEvent) => void
@@ -232,6 +246,7 @@ export const uiTerminalAndSessionTabsApi = {
       relativePath: string
       runtimeEnvironmentId?: string | null
       navigation?: RuntimeNavigationTarget
+      position?: RuntimeFileOpenPosition
     }) => void
   ): (() => void) => {
     const listener = (
@@ -242,6 +257,7 @@ export const uiTerminalAndSessionTabsApi = {
         relativePath: string
         runtimeEnvironmentId?: string | null
         navigation?: RuntimeNavigationTarget
+        position?: RuntimeFileOpenPosition
       }
     ) => callback(data)
     ipcRenderer.on('ui:openFileFromMobile', listener)

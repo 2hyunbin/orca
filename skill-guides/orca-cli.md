@@ -141,13 +141,14 @@ ORCA worktree create --name task --run-hooks --json
 ```text
 ORCA reference list --worktree name:api --json
 ORCA reference add https://github.com/acme/api/pull/5123 https://linear.app/acme/issue/STA-1234 --worktree name:api --json
+ORCA reference add ENG-123 --reference-site <jira-site-id> --worktree name:api --json
 ORCA reference remove https://github.com/acme/api/pull/5123 --worktree name:api --json
 ORCA reference remove --key <key-from-list> --worktree name:api --json
 ORCA worktree create --name fix --reference https://github.com/acme/api/pull/5123 --reference https://linear.app/acme/issue/STA-1234 --json
 ORCA reference find STA-1234 --json
 ```
 
-- Add/remove require explicit `--worktree`, including `current` or a folder selector. Writes accept full URLs; `remove --key` also accepts opaque keys from list for URL-less entries. Source-unknown legacy links cannot match exact URLs; stored native issue keys remain searchable. Duplicate adds and absent removals do nothing; unrelated links and selection survive concurrent edits. Unsupported older hosts refuse writes.
+- Add/remove require explicit `--worktree`, including `current` or a folder selector. Add and create accept full URLs or bare Jira keys. Keys resolve on the selected execution-host Jira site; use `--reference-site <id>` from `ORCA jira connection` to choose one. Other providers require full URLs, which need no Jira authentication. Every input must validate and each Jira key must resolve before writing. `remove --key` also accepts opaque keys from list for URL-less entries. Source-unknown legacy links cannot match exact URLs; stored native issue keys remain searchable. Duplicate adds and absent removals do nothing; unrelated links and selection survive concurrent edits. Unsupported older hosts refuse writes.
 - Repeat create `--reference` to seed links before setup/agent startup. Do not combine it with legacy `--pr`, `--issue`, `--linear-issue`, `--gitlab-issue`, or `--gitlab-mr` flags. Legacy `worktree set --pr` still appends/selects; `linkedItems` remains the worktree output field.
 - Find accepts a full URL or native issue key such as `STA-1234`; no bare numbers or custom shorthand. It searches stored links across sources, not conversation text (`ORCA search`). Narrow with `--worktree` or `--repo`; optionally `--include-archived`, `--limit` (default 50 workspaces). Check `truncated` before assuming complete coverage. Remote selectors refer to the execution host; never use local `current` for a paired host.
 - Find returns all known agents in each matching workspace. `linked: true` requires recorded reference/session evidence; `linked: false` means ownership is unknown. Check `liveness` (`live`, `unverifiable`, `exited`) and choose the intended agent; never infer ownership merely from workspace membership.
@@ -213,6 +214,7 @@ Terminal rules:
 - A bulk close fails when the execution host cannot confirm every PTY stopped. Treat that as `unverifiable`; do not report the processes as exited or retry against another host.
 - Use workspace Sleep, not close, when the terminals and agent sessions should resume later. `terminal stop` is legacy compatibility plumbing and should not be used in new agent workflows.
 - `terminal list --json` omits `visualLayouts` to keep the common agent payload bounded. Add `--include-visual-layouts` only when tab and pane topology is required.
+- A paired server has no window. `terminal switch --environment <name>` moves the desktop app on this machine to that server's terminal, and reports `navigated: false` when no desktop here shows that server.
 - Use `terminal read` before `terminal send` unless the next input is obvious.
 - Use `terminal send` only for direct terminal input or one-off prompts where no task state, inbox, or reply tracking is needed.
 - `accepted: true` proves input acceptance, not a started turn. Use the receipt's `turn_started` stage when submission proof is needed; never resend on silence.

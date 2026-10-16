@@ -1,3 +1,4 @@
+import { selectAgentSessionCurrentRequests } from '../../../src/shared/agent-session-current-requests'
 // The structured composer's one send seam: a slash command dispatches as a
 // conversation command, and everything else goes out as an
 // `agentSession.send` — carrying `delivery: 'queue-if-active'` only when the
@@ -22,17 +23,19 @@ import { structuredSessionOperationId } from './structured-session-operation-id'
 import { timeoutForDeadline } from './mobile-structured-agent-session-rpc'
 import { structuredAgentSessionSendSelection } from '../../../src/shared/structured-agent-session-option-view'
 import {
-  pendingStructuredApproval,
-  pendingStructuredQuestion
-} from './mobile-structured-agent-prompts'
+  actionableStructuredApproval,
+  actionableStructuredQuestion
+} from './mobile-structured-actionable-prompt'
 
 /** Whether a send made now asks the host to queue it. The host's queue waits on any pending prompt;
  *  one this build cannot answer would hold the send forever, so it starts a turn instead. */
 export function mobileStructuredSendQueues(
   queueCapable: boolean,
-  items: StructuredAgentSessionState['items']
+  state: Pick<StructuredAgentSessionState, 'items' | 'currentRequests'>
 ): boolean {
-  return queueCapable && !pendingPromptsAllUnanswerableHere(items)
+  return (
+    queueCapable && !pendingPromptsAllUnanswerableHere(selectAgentSessionCurrentRequests(state))
+  )
 }
 
 export type StructuredMobileSendAttachment = StructuredAgentSessionAttachment & {
@@ -113,9 +116,8 @@ export function useMobileStructuredSendWithOutcome(args: {
         pending: commandPending,
         controller: { agent: agent ?? undefined, ...controller },
         busy: () =>
-          stateRef.current.items.some(
-            (item) => pendingStructuredApproval(item) || pendingStructuredQuestion(item)
-          )
+          actionableStructuredApproval(stateRef.current) ||
+          actionableStructuredQuestion(stateRef.current)
             ? 'prompt'
             : runningStructuredAgentSessionTurnId(stateRef.current)
               ? 'working'
@@ -124,7 +126,7 @@ export function useMobileStructuredSendWithOutcome(args: {
         waitsInLine: (command) =>
           command === 'compact' &&
           commandsWait &&
-          !pendingPromptsAllUnanswerableHere(stateRef.current.items),
+          !pendingPromptsAllUnanswerableHere(selectAgentSessionCurrentRequests(stateRef.current)),
         onError: onSendError,
         timeoutMs
       })
@@ -153,17 +155,17 @@ export function useMobileStructuredSendWithOutcome(args: {
         expectedRuntimeFence: currentFence,
         text,
         attachments: sendAttachments,
-        ...(mobileStructuredSendQueues(queueCapable, stateRef.current.items)
+        ...(mobileStructuredSendQueues(queueCapable, stateRef.current)
           ? { delivery: 'queue-if-active' as const }
           : {}),
         ...(options ? { options } : {}),
         deadline,
         clientMessageId: send.clientMessageId,
+        onAccepted: (cursor) =>
+          accept({ ...send, ...(cursor ? { recordedCursor: cursor } : {}) }, images),
         onError: onSendError
       })
-      if (outcome === 'accepted') {
-        accept(send, images)
-      } else if (outcome === 'unknown') {
+      if (outcome === 'unknown') {
         hold(send)
       }
       return outcome

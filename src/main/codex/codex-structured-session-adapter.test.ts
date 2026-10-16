@@ -157,6 +157,9 @@ describe('CodexStructuredSessionAdapter.acquire', () => {
         ? { ORCA_CLI_BIN_DIR: expect.stringMatching(/^[^:;]*[\\/]cli[\\/]bin$/) }
         : {}),
       ORCA_USER_DATA_PATH: expect.any(String),
+      ORCA_ENVIRONMENT: '',
+      ORCA_PAIRING_CODE: '',
+      ORCA_REMOTE_PAIRING: '',
       // The test host is unpackaged, so this app's CLI is the dev launcher dir, first on PATH.
       PATH: expect.stringMatching(/^[^:;]*[\\/]cli[\\/]bin[:;]/)
     })
@@ -222,8 +225,8 @@ describe('CodexStructuredSessionAdapter.acquire', () => {
         path: '/rollouts/thread-proven.jsonl'
       })
     })
-    expect(acquisition.link.origin).toBe('resumed')
-    expect(acquisition.link.handle).toEqual(codexProviderHandle('thread-proven'))
+    expect(acquisition.link?.origin).toBe('resumed')
+    expect(acquisition.link?.handle).toEqual(codexProviderHandle('thread-proven'))
   })
 
   it('starts a thread in place of a creation Codex never saved, and says which it replaced', async () => {
@@ -590,7 +593,7 @@ describe('CodexStructuredSessionAdapter.dispatch', () => {
       // Built without Codex's own words, so nothing is quoted and no detail is invented.
       state: 'rejected',
       reason: "Codex didn't accept this message.",
-      rejection: { kind: 'providerRejected' }
+      rejection: { kind: 'providerRejected', neverReachedAgent: true }
     })
   })
 

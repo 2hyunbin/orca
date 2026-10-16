@@ -292,7 +292,7 @@ afterEach(async () => {
 })
 
 // Mail is sent on asynchronous edges; the default 1s wait is too tight under a loaded parallel run.
-export const WAIT = { timeout: 10_000 }
+export const WAIT = { timeout: 10_000, interval: 10 }
 
 /** The first line of what a chat is sent for one orchestration message. */
 export const MAIL = /Orchestration message from another agent, not an instruction from the user\./

@@ -267,6 +267,7 @@ describe('a worker result reaches the structured chat that coordinates it', () =
     // provider still dies, so exactly one start proves it is sent once, not in a loop.
     restartRuntime()
     const before = providerFaults.starts
+    await observationClock.observe(2_000)
     await vi.waitFor(() => expect(providerFaults.turnStarts).toBe(2), WAIT)
     await observationClock.observe(1_500)
     await edgesAnswered()
@@ -514,7 +515,7 @@ describe('a worker result reaches the structured chat that coordinates it', () =
     })
   })
 
-  it('leaves mail an unacknowledged check batch holds to that batch, and still sends what arrives after it', async () => {
+  it('leaves the mailbox to an unacknowledged check batch, keeping later mail for after its ack', async () => {
     const chat = await openChat(COORDINATOR)
     const { runId, taskId } = await coordinatorRunAndTask()
     const second = await call(
@@ -530,19 +531,15 @@ describe('a worker result reaches the structured chat that coordinates it', () =
     expect(batch).toMatchObject({ count: 1, messages: [{ from_handle: 'term_worker' }] })
 
     await finishWorker(idOf(second.task), { handle: 'term_worker_2', paneKey: WORKER_2_PANE })
-    await vi.waitFor(() => expect(chat.turns).toHaveLength(1), WAIT)
-    expect(turnText(chat.turns[0]!)).toContain('`term_worker_2`')
-    await settleTurn(COORDINATOR, 0)
     await new Promise((resolve) => setTimeout(resolve, 200))
-    expect(chat.turns).toHaveLength(1)
-    // The batch replays only its own message; once acked, nothing is left to check.
+    expect(chat.turns).toEqual([])
+    // The batch replays only its own message; the later report waits for its ack, not lost.
     expect(await call('orchestration.check', {}, { sessionId: COORDINATOR })).toMatchObject({
       deliveryId: batch.deliveryId,
       count: 1
     })
-    expect(
-      await call('orchestration.check', { ack: batch.deliveryId }, { sessionId: COORDINATOR })
-    ).toMatchObject({ count: 0 })
+    // Nothing was pushed into the chat: both reports are still the reader's to take.
+    expect(db.getUndeliveredUnreadMessages(`run:${runId}`, undefined, {})).toHaveLength(2)
   })
 })
 
@@ -573,6 +570,7 @@ describe('a /clear keeps the chat its orchestration address', () => {
     })
   })
 
+  observationClock.start()
   it('sends mail the earlier context never took to the fresh context, without a user message', async () => {
     const chat = await openChat(COORDINATOR)
     const { runId, taskId } = await coordinatorRunAndTask()
@@ -587,6 +585,7 @@ describe('a /clear keeps the chat its orchestration address', () => {
 
     const cleared = await clearChat(COORDINATOR)
     expect(cleared).toBe(COORDINATOR)
+    await observationClock.observe(2_000)
     await vi.waitFor(() => expect(connectionFor(cleared).turns[0]?.text).toMatch(MAIL), WAIT)
     await settleTurn(cleared, 0)
     await vi.waitFor(

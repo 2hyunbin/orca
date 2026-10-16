@@ -21,13 +21,6 @@ export function mailboxPushQuery(
     conditions.push(`type NOT IN (${options.excludeTypes.map(() => '?').join(',')})`)
     params.push(...options.excludeTypes)
   }
-  if (options?.excludeOutstandingDelivery) {
-    conditions.push(
-      `id NOT IN (SELECT ids.value FROM outstanding_deliveries d, json_each(d.message_ids) ids
-                  WHERE d.mailbox_handle = ?)`
-    )
-    params.push(toHandle)
-  }
   if (options?.afterSequence !== undefined) {
     conditions.push('sequence > ?')
     params.push(options.afterSequence)

@@ -1,5 +1,11 @@
 {
   "extends": "./tsconfig.web.json",
+  "exclude": [
+    "../src/shared/**/*.test.ts",
+    "../src/shared/**/*.test.tsx",
+    "../src/shared/**/*.spec.ts",
+    "../src/shared/**/*.spec.tsx"
+  ],
   "include": [
     "../src/renderer/src/env.d.ts",
     "../src/renderer/src/**/*",
@@ -20,6 +26,9 @@
     "../src/shared/**/*",
     "../src/packages/process-host/src/__fixtures__/**/*",
     "../src/main/gitlab/mappers.ts",
+    "../src/main/jira/adf-markdown.ts",
+    "../src/main/jira/adf-text-marks.ts",
+    "../src/main/jira/adf-media-destination.ts",
     "../src/main/ipc/deferred-emoji-shortcode-dataset.ts",
     "../src/main/ipc/worktree-branch-name.ts",
     "../src/main/ipc/worktree-logic.ts",

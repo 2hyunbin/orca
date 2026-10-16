@@ -22,7 +22,6 @@ export async function visitStructuredMailboxPages(input: {
       mailboxHandle: input.mailboxHandle,
       waiters: input.getWaiters(),
       reservedTypes: input.reservedTypes,
-      excludeOutstandingDelivery: true,
       afterSequence,
       throughSequence: input.throughSequence
     })

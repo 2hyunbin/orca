@@ -1,10 +1,12 @@
 import { getRepoExecutionHostId } from '../../shared/execution-host'
 import { isFolderRepo } from '../../shared/repo-kind'
+import { commitProvenRepoKindChange } from '../folder-repo-git-conversion'
 import type { Repo } from '../../shared/repo-types'
 import type { GhAccountBinding } from '../../shared/github/account-binding'
 import { invalidateAuthorizedRootsCache } from '../ipc/filesystem-auth'
 import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
 import type { RuntimeStore } from './runtime-store-contract'
+import { assertWslMoveRepoWritable } from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
 
 type RuntimeRepositorySettingsDependencies = {
   getStore: () => RuntimeStore | null
@@ -28,6 +30,7 @@ type RepositoryUpdates = Partial<
     | 'kind'
     | 'symlinkPaths'
     | 'issueSourcePreference'
+    | 'defaultJiraProject'
     | 'externalWorktreeVisibility'
     | 'externalWorktreeVisibilityPromptDismissedAt'
     | 'externalWorktreeInboxBaselinePaths'
@@ -59,6 +62,7 @@ export class RuntimeRepositorySettingsController {
   async setBaseRef(repoSelector: string, baseRef: string): Promise<Repo> {
     const store = this.requireStore()
     const repo = await this.deps.resolveRepo(repoSelector)
+    assertWslMoveRepoWritable(store, repo)
     if (isFolderRepo(repo)) {
       throw new Error('Folder mode does not support base refs.')
     }
@@ -74,6 +78,7 @@ export class RuntimeRepositorySettingsController {
   async update(repoSelector: string, updates: RepositoryUpdates): Promise<Repo> {
     const store = this.requireStore()
     const repo = await this.deps.resolveRepo(repoSelector)
+    assertWslMoveRepoWritable(store, repo)
     const sanitizedUpdates = omitUndefined(updates)
     if ('worktreeBasePath' in updates && updates.worktreeBasePath === undefined) {
       sanitizedUpdates.worktreeBasePath = undefined
@@ -87,7 +92,14 @@ export class RuntimeRepositorySettingsController {
     if ('sourceControlAi' in updates && updates.sourceControlAi === null) {
       sanitizedUpdates.sourceControlAi = null
     }
-    const updated = store.updateRepo(repo.id, sanitizedUpdates)
+    const write = (proven: Pick<Repo, 'folderUpgradeGitRootPath'>): Repo | null => {
+      assertWslMoveRepoWritable(store, repo)
+      return store.updateRepo(repo.id, { ...sanitizedUpdates, ...proven })
+    }
+    const updated =
+      sanitizedUpdates.kind === 'git' && isFolderRepo(repo)
+        ? await commitProvenRepoKindChange(store, repo, write, true)
+        : write({})
     if (!updated) {
       throw new Error('repo_not_found')
     }
@@ -109,7 +121,9 @@ export class RuntimeRepositorySettingsController {
       throw new Error('runtime_unavailable')
     }
     const repo = await this.deps.resolveRepo(repoSelector)
-    store.removeProjectForHost(repo.id, getRepoExecutionHostId(repo))
+    const hostId = getRepoExecutionHostId(repo)
+    assertWslMoveRepoWritable(store, repo)
+    store.removeProjectForHost(repo.id, hostId)
     this.deps.forgetTerminalTopology(repo.id)
     this.deps.invalidateResolvedWorktrees()
     this.deps.invalidateWorktreeScan(repo.id)

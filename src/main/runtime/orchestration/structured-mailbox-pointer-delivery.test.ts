@@ -28,10 +28,13 @@ function harness(options: {
   mailbox?: string
   dispatchId?: string | null
   waiters?: RuntimeMessageWaiters
+  /** The consumer holds an unacknowledged `check` batch for this mailbox. */
+  outstanding?: boolean
 }) {
   const mailbox = options.mailbox ?? 'dispatch:d1'
   const dispatchId = options.dispatchId === undefined ? 'd1' : options.dispatchId
   let attached = options.attached ?? true
+  let promptWaiting = false
   // The session's recorded sends, as its journal reports them.
   let submissions: StructuredMailSubmission[] = []
   // The mailbox's unread mail; a message the chat received is no longer selected.
@@ -43,9 +46,11 @@ function harness(options: {
     }
   })
   const send: StructuredMailboxPointerHost['send'] = vi.fn(async () =>
-    options.queued
-      ? { kind: 'queued' as const }
-      : { kind: 'sent' as const, state: options.dispatchState ?? ('accepted' as const) }
+    promptWaiting
+      ? { kind: 'held' as const }
+      : options.queued
+        ? { kind: 'queued' as const }
+        : { kind: 'sent' as const, state: options.dispatchState ?? ('accepted' as const) }
   )
   const sendMock = vi.mocked(send)
   const readContext = vi.fn<StructuredMailboxPointerHost['currentContextClearOperationId']>(
@@ -53,6 +58,7 @@ function harness(options: {
   )
   const db = {
     getDispatchContextById: () => ({ run_id: 'run_1' }),
+    hasOutstandingMailboxDelivery: () => options.outstanding ?? false,
     getUndeliveredUnreadMessages: (
       _handle: string,
       _filter: unknown,
@@ -81,6 +87,7 @@ function harness(options: {
       readSessionFacts: async () => (attached ? { submissions } : null),
       currentFence: () => 4,
       currentContextClearOperationId: readContext,
+      hasActionablePromptNow: () => promptWaiting,
       send
     }
   })
@@ -97,6 +104,9 @@ function harness(options: {
     },
     setSubmissions: (next: StructuredMailSubmission[]) => {
       submissions = next
+    },
+    setPromptWaiting: (next: boolean) => {
+      promptWaiting = next
     }
   }
 }
@@ -234,6 +244,29 @@ describe('structured mail delivery', () => {
     expect(send).not.toHaveBeenCalled()
   })
 
+  it('holds mail while a prompt waits on the person, keeps later mail behind it, then sends both in order', async () => {
+    const { delivery, send, markAsRead, receive, setPromptWaiting } = harness({})
+    receive('m2', 4)
+    setPromptWaiting(true)
+    delivery.deliverForHandle('dispatch:d1')
+    await flush()
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(markAsRead).not.toHaveBeenCalled()
+    setPromptWaiting(false)
+    delivery.onJournalActivity('session-1')
+    await vi.waitFor(() => expect(markAsRead.mock.calls).toEqual([[['m1']], [['m2']]]))
+    const sentIds = send.mock.calls.map(([input]) => input.body.from?.orchestration)
+    expect(sentIds.at(-2)).toMatchObject({ messages: [{ messageId: 'm1' }] })
+    expect(sentIds.at(-1)).toMatchObject({ messages: [{ messageId: 'm2' }] })
+  })
+
+  it('leaves a mailbox to its unacknowledged check batch', async () => {
+    const { delivery, send } = harness({ outstanding: true })
+    delivery.deliverForHandle('dispatch:d1')
+    await flush()
+    expect(send).not.toHaveBeenCalled()
+  })
+
   it('redrives a detached session when the journal replays on re-attach', async () => {
     // A transient detach parks nothing to be woken unless `session-not-attached` waits for the
     // journal edge, and the dispatch preamble tells the worker not to poll.
@@ -279,12 +312,12 @@ describe('structured mail delivery', () => {
     delivery.deliverForHandle('dispatch:d1')
     await flush()
     expect(send).toHaveBeenCalledTimes(1)
-    // A heartbeat is marked read, never sent.
+    // A heartbeat is never sent, and stays unread for `check`.
     receive('beat', 4, 'heartbeat')
     receive('m2', 5)
     delivery.deliverForHandle('dispatch:d1')
     await flush()
-    expect(markAsRead).toHaveBeenCalledWith(['beat'])
+    expect(markAsRead).not.toHaveBeenCalledWith(['beat'])
     expect(send.mock.calls.map(([input]) => input.body.from?.orchestration)).toEqual([
       expect.objectContaining({
         messages: [{ messageId: 'm1', runId: 'run_1', from: 'term_coord' }]
@@ -501,6 +534,7 @@ describe('forgetting one settled worker', () => {
         readSessionFacts: async () => (attached ? { submissions: [] } : null),
         currentFence: () => 4,
         currentContextClearOperationId: () => undefined,
+        hasActionablePromptNow: () => false,
         send
       }
     })
@@ -601,6 +635,7 @@ describe('a mailbox a /clear moves while its send is in flight', () => {
         readSessionFacts: async () => ({ submissions: [] }),
         currentFence: () => 4,
         currentContextClearOperationId: () => contextClearOperationId,
+        hasActionablePromptNow: () => false,
         send
       }
     })

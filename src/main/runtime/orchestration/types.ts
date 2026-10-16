@@ -17,8 +17,6 @@ export type MessageType = (typeof MESSAGE_TYPES)[number]
 export type UndeliveredUnreadMessageOptions = {
   excludeTypes?: readonly string[]
   limit?: number
-  /** Leave out what an unacknowledged `check` batch already handed this mailbox's reader. */
-  excludeOutstandingDelivery?: boolean
   afterSequence?: number
   throughSequence?: number
 }

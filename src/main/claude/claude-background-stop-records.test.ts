@@ -37,7 +37,16 @@ async function droppedFromRoster() {
       {
         sessionId: 'session-1',
         fence: 7,
-        journal: { snapshot: () => ({ items: [] }), submissions: () => [] },
+        journal: {
+          snapshot: () => ({ items: [] }),
+          cursor: () => ({ epoch: 'e', sequence: 0 }),
+          item: () => null,
+          submissions: () => [],
+          runningTurn: () => null,
+          itemFence: () => undefined,
+          visitItems: () => undefined,
+          wroteBeforeOpen: () => false
+        },
         adapter: run.adapter
       },
       RECORD,

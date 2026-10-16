@@ -43,7 +43,6 @@ export function selectOrchestrationPointerBatch(input: {
   mailboxHandle: string
   waiters: ReadonlySet<OrchestrationMessageWaiter> | undefined
   reservedTypes: ReadonlySet<string> | undefined
-  excludeOutstandingDelivery?: boolean
   afterSequence?: number
   throughSequence?: number
 }): MessageRow[] {
@@ -59,7 +58,6 @@ export function selectOrchestrationPointerBatch(input: {
   return input.db.getUndeliveredUnreadMessages(input.mailboxHandle, undefined, {
     excludeTypes: [...excludedTypes],
     limit: ORCHESTRATION_DELIVERY_BATCH_LIMIT,
-    excludeOutstandingDelivery: input.excludeOutstandingDelivery,
     afterSequence: input.afterSequence,
     throughSequence: input.throughSequence
   })

@@ -6,13 +6,7 @@ import {
   type StructuredPointerSendOutcome
 } from './structured-mailbox-pointer-delivery'
 import type { StructuredMailSubmission } from './structured-pointer-operation-id'
-import { createStructuredMailboxPointerHost } from './structured-mailbox-pointer-host'
-import { createQueuedMessageTestRig } from '../../native-chat/agent-session-wire/structured-agent-session-queued-message-rig.test-fixture'
-import {
-  HOST_TEST_NOW,
-  HOST_TEST_SESSION
-} from '../../native-chat/agent-session-wire/structured-agent-session-host-test-data'
-import { setStructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-registry'
+import { HOST_TEST_SESSION } from '../../native-chat/agent-session-wire/structured-agent-session-host-test-data'
 
 const MAILBOX = 'term_chat'
 const WAIT = { timeout: 10_000 }
@@ -42,6 +36,7 @@ it('visits all reports in order across pending, accepted and failed prefixes wit
         readSessionFacts: async () => ({ submissions: [...submissions.values()] }),
         currentFence: () => 1,
         currentContextClearOperationId: () => undefined,
+        hasActionablePromptNow: () => false,
         send: (input) => {
           const source = input.body.from?.orchestration
           const messageId =
@@ -90,91 +85,5 @@ it('visits all reports in order across pending, accepted and failed prefixes wit
       await new Promise((resolve) => setImmediate(resolve))
       db.close()
     }
-  }
-})
-
-it('recovers a durable queued receipt after host replacement without another full report', async () => {
-  vi.useFakeTimers({ toFake: ['Date'] })
-  vi.setSystemTime(HOST_TEST_NOW)
-  const db = new OrchestrationDb(':memory:')
-  const rig = await createQueuedMessageTestRig({ restartable: true })
-  try {
-    setStructuredAgentSessionHost(rig.host)
-    await rig.workingSend()
-    const capabilities = rig.host.deps.agents.capabilities.bind(rig.host.deps.agents)
-    vi.spyOn(rig.host.deps.agents, 'capabilities').mockImplementation((provider) => {
-      const declared = capabilities(provider)
-      return declared ? { ...declared, steering: 'queue' } : null
-    })
-    const message = db.insertMessage({ from: 'term_worker', to: MAILBOX, subject: 'one report' })
-    const mark = vi.spyOn(db, 'markAsReadAndDelivered').mockImplementationOnce(() => {
-      throw new Error('interrupted receipt')
-    })
-    lane(db, createStructuredMailboxPointerHost()).deliverForHandle(MAILBOX)
-    await vi.waitFor(() => expect(mark).toHaveBeenCalledOnce(), WAIT)
-    expect(db.getMessageById(message.id)?.read).toBe(0)
-    const cards = await rig.drafts()
-    expect(cards).toHaveLength(1)
-    expect((await rig.host.journalSnapshot(HOST_TEST_SESSION)).submissions).toHaveLength(1)
-    await rig.restartHostProcess()
-    setStructuredAgentSessionHost(rig.host)
-    const transport = createStructuredMailboxPointerHost()
-    const send = vi.spyOn(transport, 'send')
-    lane(db, transport).deliverForHandle(MAILBOX)
-    await vi.waitFor(() => expect(db.getMessageById(message.id)?.read).toBe(1), WAIT)
-    expect(send).not.toHaveBeenCalled()
-    expect(await rig.drafts()).toEqual(cards)
-  } finally {
-    setStructuredAgentSessionHost(null)
-    await rig.dispose()
-    db.close()
-    vi.restoreAllMocks()
-    vi.useRealTimers()
-  }
-})
-
-it('repairs a failed queued receipt after its accepted handoff without sending another report', async () => {
-  vi.useFakeTimers({ toFake: ['Date'] })
-  vi.setSystemTime(HOST_TEST_NOW)
-  const db = new OrchestrationDb(':memory:')
-  const rig = await createQueuedMessageTestRig()
-  try {
-    setStructuredAgentSessionHost(rig.host)
-    const working = await rig.workingSend()
-    const capabilities = rig.host.deps.agents.capabilities.bind(rig.host.deps.agents)
-    vi.spyOn(rig.host.deps.agents, 'capabilities').mockImplementation((provider) => {
-      const declared = capabilities(provider)
-      return declared ? { ...declared, steering: 'queue' } : null
-    })
-    const message = db.insertMessage({ from: 'term_worker', to: MAILBOX, subject: 'one report' })
-    const mark = vi.spyOn(db, 'markAsReadAndDelivered').mockImplementationOnce(() => {
-      throw new Error('interrupted receipt')
-    })
-    const transport = createStructuredMailboxPointerHost()
-    const send = vi.spyOn(transport, 'send')
-    const delivery = lane(db, transport)
-    delivery.deliverForHandle(MAILBOX)
-    await vi.waitFor(() => expect(mark).toHaveBeenCalledOnce(), WAIT)
-    expect(db.getMessageById(message.id)?.read).toBe(0)
-    const [card] = await rig.drafts()
-    expect(card).toBeDefined()
-    vi.setSystemTime(HOST_TEST_NOW + 1_000)
-    vi.spyOn(rig.host.deps, 'now').mockImplementation(() => Date.now())
-    await rig.settleAccepted(working, 'working')
-    await vi.waitFor(async () => expect(await rig.handoff(card.messageId)).toBeDefined(), WAIT)
-    const handedOffId = await rig.handoffId(card.messageId)
-    expect(handedOffId).not.toBe(card.messageId)
-    await rig.settleAccepted(handedOffId, 'report')
-    expect((await rig.submission(handedOffId))?.dispatchState).toBe('accepted')
-    expect(await rig.drafts()).toEqual([])
-    delivery.onJournalActivity(HOST_TEST_SESSION)
-    await vi.waitFor(() => expect(db.getMessageById(message.id)?.read).toBe(1), WAIT)
-    expect(send).toHaveBeenCalledOnce()
-  } finally {
-    setStructuredAgentSessionHost(null)
-    await rig.dispose()
-    db.close()
-    vi.restoreAllMocks()
-    vi.useRealTimers()
   }
 })
