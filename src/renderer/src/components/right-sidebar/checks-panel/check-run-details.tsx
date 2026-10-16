@@ -10,14 +10,14 @@ import type { GitHubRepositoryIdentity } from '../../../../../shared/github/pull
 import { CheckJobLogTail } from '../check-job-log-tail'
 import { translate } from '@/i18n/i18n'
 import { checkJobIdentities } from '@/components/editor/check-details-reading-cache'
+import { resolveStepOutcome } from '@/components/editor/check-job-step-status'
 import {
   type CheckDetailsLoadState,
   type CheckDetailsStickySurface,
   formatCheckTimestamp,
   getCheckConclusion,
   getCheckDetailsStickySurfaceClass,
-  getCheckStatusLabel,
-  isFailureState
+  getCheckStatusLabel
 } from './check-details-model'
 
 function ViewFullCheckDetailsButton({
@@ -64,16 +64,9 @@ export function CheckRunDetails({
     status: (details?.status as PRCheckDetail['status'] | undefined) ?? check.status,
     conclusion: (details?.conclusion as PRCheckDetail['conclusion'] | undefined) ?? check.conclusion
   }
-  const failedJobs =
-    details?.jobs.filter((job) => {
-      const state = job.conclusion ?? job.status
-      return isFailureState(state)
-    }) ?? []
   const entries = checkJobIdentities(details?.jobs ?? [])
-  const jobs =
-    failedJobs.length > 0
-      ? entries.filter(({ job }) => isFailureState(job.conclusion ?? job.status))
-      : entries
+  const failedEntries = entries.filter(({ job }) => resolveStepOutcome(job) === 'failure')
+  const jobs = failedEntries.length > 0 ? failedEntries : entries
   const hasOutput = Boolean(details?.title || details?.summary || details?.text)
   const hasAnnotations = (details?.annotations.length ?? 0) > 0
   const hasJobs = jobs.length > 0
@@ -201,7 +194,7 @@ export function CheckRunDetails({
             </div>
           )}
 
-          {(isFailureState(details?.conclusion ?? check.conclusion)
+          {(resolveStepOutcome(details ?? check) === 'failure'
             ? ['jobs', 'output', 'annotations']
             : ['output', 'annotations', 'jobs']
           ).map((section) => {
@@ -209,7 +202,7 @@ export function CheckRunDetails({
               return hasJobs ? (
                 <div key="jobs" className="min-w-0 border-t border-border/60 pt-2">
                   <div className="mb-1.5 text-3xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {failedJobs.length > 0
+                    {failedEntries.length > 0
                       ? translate(
                           'auto.components.right.sidebar.checks.panel.content.066fedd446',
                           'Failed jobs'
@@ -238,10 +231,7 @@ export function CheckRunDetails({
                         {job.steps.length > 0 && (
                           <div className="mt-1 grid gap-0.5 pl-2">
                             {job.steps
-                              .filter((step) => {
-                                const state = step.conclusion ?? step.status
-                                return isFailureState(state)
-                              })
+                              .filter((step) => resolveStepOutcome(step) === 'failure')
                               .map((step) => (
                                 <div
                                   key={step.name}

@@ -177,6 +177,34 @@ describe('ChecksList expanded check details', () => {
     expect(container.innerHTML).toContain('data-variant="outline"')
   })
 
+  it('keeps every failure outcome together before output in inline details', async () => {
+    renderChecksList({
+      onLoadCheckDetails: async () => ({
+        ...checkDetails,
+        conclusion: 'startup_failure',
+        jobs: [
+          checkDetails.jobs[0]!,
+          {
+            ...checkDetails.jobs[0]!,
+            id: 2,
+            name: 'startup',
+            conclusion: 'startup_failure',
+            logTail: null
+          }
+        ]
+      })
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    const text = container.textContent ?? ''
+    expect(text).toContain('Failed jobs')
+    expect(text).toContain('startup')
+    expect(text.indexOf('Failed jobs')).toBeLessThan(text.indexOf('Verify failed'))
+  })
+
   it('falls back to the active worktree when no worktree override is provided', async () => {
     activeWorktreeState.current = { id: 'wt-active-1' }
     renderChecksList()
