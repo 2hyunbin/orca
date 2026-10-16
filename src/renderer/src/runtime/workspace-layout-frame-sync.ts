@@ -34,6 +34,7 @@ import { loadWorkspaceLayoutWithoutReport } from '../../../shared/workspace-layo
 import { stableJson } from '../../../shared/workspace-layout/workspace-layout-load-report'
 import { nameBasedLoadContext } from '../../../shared/workspace-layout/workspace-layout-minted-ids'
 import type { PublishedWorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-published'
+import { provideLayoutFrameTerminalPanes } from './layout-frame-terminal-panes'
 import { subscribeRuntimeLayout } from './runtime-layout-client'
 
 type FrameSyncStore = {
@@ -249,14 +250,9 @@ let startupFrames: WorkspaceLayoutFrameSync | null = null
 /** After restore: the window's one layout stream shows the frames' workspaces from now on. */
 export function showStartupLayoutFrames(): void {
   // Kept for the document's life: a local stream ends only with main, and a re-run boot reuses it.
-  startupFrames ??= openWorkspaceLayoutFrameSync(useAppStore)
+  if (!startupFrames) {
+    startupFrames = openWorkspaceLayoutFrameSync(useAppStore)
+    provideLayoutFrameTerminalPanes(startupFrames.holdsTerminalPane)
+  }
   startupFrames.start()
-}
-
-/** Whether main's frames will draw this terminal's pane; false before the stream's snapshot. */
-export function layoutFramesHoldTerminalPane(
-  worktreeId: string,
-  pane: { tabId: string; leafId: string; ptyId: string }
-): boolean {
-  return startupFrames?.holdsTerminalPane(worktreeId, pane) ?? false
 }

@@ -2,7 +2,7 @@ import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
 import { worktreeIdsEqual } from '../../../shared/worktree/id'
 import type { useAppStore } from '@/store'
-import { layoutFramesHoldTerminalPane } from '@/runtime/workspace-layout-frame-sync'
+import { layoutFramesHoldTerminalPane } from '@/runtime/layout-frame-terminal-panes'
 import { resolveTerminalTabPtyOwnership } from './terminal-tab-for-pty-id'
 import type {
   LiveTerminalSurfaceOwner,

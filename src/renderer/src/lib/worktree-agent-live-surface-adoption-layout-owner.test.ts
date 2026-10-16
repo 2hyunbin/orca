@@ -11,8 +11,8 @@ import {
 } from '../../../shared/workspace-layout/workspace-layout-session.test-fixture'
 import type { WorkspaceLayoutChangeFrame } from '../../../shared/workspace-layout/workspace-layout-stream-frames'
 import { bootWindowFromPartitions } from '../app-shell/startup-window-view.test-fixture'
+import { provideLayoutFrameTerminalPanes } from '../runtime/layout-frame-terminal-panes'
 import { openWorkspaceLayoutFrameSync } from '../runtime/workspace-layout-frame-sync'
-import type * as FrameSyncModule from '../runtime/workspace-layout-frame-sync'
 import type { WorkspaceLayoutFrameSync } from '../runtime/workspace-layout-frame-sync'
 import { reportWindowSessionWriteActivity } from './window-session-write-activity'
 import { createStoreSessionMockApi } from '../store/slices/store-session-test-harness'
@@ -23,11 +23,8 @@ import type { LiveTerminalSurfaceOwnerIndex } from './worktree-live-terminal-sur
 vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
 
-type FrameDouble = {
-  onFrame: ((frame: WorkspaceLayoutChangeFrame) => void) | null
-  sync: Pick<WorkspaceLayoutFrameSync, 'holdsTerminalPane'> | null
-}
-const frames = vi.hoisted((): FrameDouble => ({ onFrame: null, sync: null }))
+type FrameDouble = { onFrame: ((frame: WorkspaceLayoutChangeFrame) => void) | null }
+const frames = vi.hoisted((): FrameDouble => ({ onFrame: null }))
 vi.mock('../runtime/runtime-layout-client', () => ({
   subscribeRuntimeLayout: (
     _target: unknown,
@@ -38,15 +35,6 @@ vi.mock('../runtime/runtime-layout-client', () => ({
     return { close: () => {} }
   }
 }))
-vi.mock('../runtime/workspace-layout-frame-sync', async (importOriginal) => {
-  const actual = await importOriginal<typeof FrameSyncModule>()
-  return {
-    ...actual,
-    layoutFramesHoldTerminalPane: (
-      ...args: Parameters<WorkspaceLayoutFrameSync['holdsTerminalPane']>
-    ) => frames.sync?.holdsTerminalPane(...args) ?? false
-  }
-})
 
 createStoreSessionMockApi()
 
@@ -108,7 +96,7 @@ describe('adopting live terminals in a layout-owner build', () => {
     reportWindowSessionWriteActivity(false)
     sync?.close()
     sync = null
-    frames.sync = null
+    provideLayoutFrameTerminalPanes(() => false)
   })
 
   it('makes no tab or pane of its own while frames are held; the frame then draws the bound tab', async () => {
@@ -116,7 +104,7 @@ describe('adopting live terminals in a layout-owner build', () => {
     const store = createTestStore()
     await bootWindowFromPartitions(store, [{ hostId: 'local', session: windowSession }])
     sync = openWorkspaceLayoutFrameSync(store)
-    frames.sync = sync
+    provideLayoutFrameTerminalPanes(sync.holdsTerminalPane)
     sync.start()
     // The window owes main a save, so main's tree waits.
     reportWindowSessionWriteActivity(true)
@@ -165,7 +153,7 @@ describe('adopting live terminals in a layout-owner build', () => {
       const store = createTestStore()
       await bootWindowFromPartitions(store, [{ hostId: 'local', session: windowSession }])
       sync = openWorkspaceLayoutFrameSync(store)
-      frames.sync = sync
+      provideLayoutFrameTerminalPanes(sync.holdsTerminalPane)
       sync.start()
       reportWindowSessionWriteActivity(true)
       frames.onFrame!(snapshotOf(main))
@@ -182,7 +170,7 @@ describe('adopting live terminals in a layout-owner build', () => {
     const store = createTestStore()
     await bootWindowFromPartitions(store, [{ hostId: 'local', session: windowSession }])
     sync = openWorkspaceLayoutFrameSync(store)
-    frames.sync = sync
+    provideLayoutFrameTerminalPanes(sync.holdsTerminalPane)
     sync.start()
     frames.onFrame!(snapshotOf(windowSession))
     await flushMicrotasks()
