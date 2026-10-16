@@ -97,10 +97,11 @@ export function createIndexedDbNativeChatComposerDraftStorage(
       const transaction = (await database()).transaction(DRAFTS, 'readwrite')
       const done = committed(transaction)
       const drafts = transaction.objectStore(DRAFTS)
+      let next: NativeChatStoredDraft | null = null
       const read = drafts.get(scopeKey)
       // Why inside the read's callback: the write must land in the same transaction as the read.
       read.onsuccess = () => {
-        const next = apply(read.result)
+        next = apply(read.result)
         if (next) {
           drafts.put(next, scopeKey)
         } else {
@@ -109,6 +110,7 @@ export function createIndexedDbNativeChatComposerDraftStorage(
         transaction.commit?.()
       }
       await done
+      return next
     }
   }
 }

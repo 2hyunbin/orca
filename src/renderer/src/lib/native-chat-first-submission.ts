@@ -29,10 +29,13 @@ export function submitNativeChatLocalDraft(
   hosted = false
 ): boolean {
   const draft = readNativeChatNewDraft(sessionId)
-  if (!draft) return false
+  if (!draft) {
+    return false
+  }
   const prior = getStructuredLaunchStateBySessionId(sessionId)
-  const issued = prior?.intent.firstSubmission ?? getPersistedStructuredAgentLaunchRecord(sessionId)?.firstSubmission
-  if (!hosted && issued && prior?.callers.outcome !== 'failed') {
+  const saved = getPersistedStructuredAgentLaunchRecord(sessionId)
+  const issued = prior?.intent.firstSubmission ?? saved?.firstSubmission
+  if (!hosted && issued && (prior?.callers.outcome ?? saved?.lifecycle) !== 'failed') {
     confirmStructuredLaunchFirstMessagePublication(draft.owner.workspaceId, sessionId)
     return false
   }
@@ -44,14 +47,20 @@ export function submitNativeChatLocalDraft(
   }
   const prepare = async (): Promise<void> => {
     const target = structuredAgentSessionTargetForHost(draft.owner.executionHostId)
-    if (!target) throw new Error('The chat host is unavailable.')
+    if (!target) {
+      throw new Error('The chat host is unavailable.')
+    }
     if (target.kind === 'environment' && attachments.length > 0) {
       const owner = resolveNativeChatRuntimeSessionAttachmentOwner({ sessionId, runtimeEnvironmentId: target.environmentId }, false)
-      if (owner.kind !== 'runtime-session') throw new Error('The chat host is unavailable.')
+      if (owner.kind !== 'runtime-session') {
+        throw new Error('The chat host is unavailable.')
+      }
       const prepared = await prepareNativeChatSessionAttachmentUpload(owner, hosted ? undefined : {
         worktree: toRuntimeWorktreeSelector(draft.owner.workspaceId), agent: draft.agent
       })
-      if (!prepared.ok) throw new Error(prepared.notice)
+      if (!prepared.ok) {
+        throw new Error(prepared.notice)
+      }
       const upload = async (): Promise<void> => {
         const result = await uploadNativeChatSessionAttachmentPaths(attachments.map((image) => image.path), prepared.target)
         if (result.failed.length || result.skipped.length || result.uploaded.length !== attachments.length) {
@@ -60,12 +69,17 @@ export function submitNativeChatLocalDraft(
         const stored = new Map(result.uploaded.map((image) => [image.sourcePath, image.path]))
         stagedPrompt.slot?.setAttachments(attachments.map((image) => {
           const path = stored.get(image.path)
-          if (!path) throw new Error('The images could not be attached. Attach them again and send.')
+          if (!path) {
+            throw new Error('The images could not be attached. Attach them again and send.')
+          }
           return { ...image, path }
         }))
       }
-      if (hosted || prepared.target.reservedSession) await upload()
-      else stagedPrompt.beforeSend = upload
+      if (hosted || prepared.target.reservedSession) {
+        await upload()
+      } else {
+        stagedPrompt.beforeSend = upload
+      }
     }
   }
   if (hosted) {

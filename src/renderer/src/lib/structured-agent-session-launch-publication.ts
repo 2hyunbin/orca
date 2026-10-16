@@ -37,7 +37,9 @@ export function markStructuredAgentSessionLaunchPublished(
     }
     if (persisted.firstSubmission) {
       state = restorePersistedStructuredLaunchState(worktreeId, sessionId)
-      if (state) state.hostPublished = true
+      if (state) {
+        state.hostPublished = true
+      }
       notifyStructuredLaunchListeners()
     }
     if (persisted.firstMessage || persisted.firstSubmission) {

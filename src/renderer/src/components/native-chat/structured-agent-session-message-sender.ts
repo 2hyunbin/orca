@@ -17,6 +17,7 @@ import {
   agentSessionUnconfirmedSendParts,
   agentSessionWriteNotDoneParts
 } from '../../../../shared/agent-session-refusal-notice'
+import type { AgentSessionWriteNoticePart } from '../../../../shared/agent-session-write-notice-copy'
 import type { AgentSessionWriteFailure } from '../../../../shared/agent-session-write-failure'
 import {
   structuredAgentSessionReadCoversSend,
@@ -123,7 +124,7 @@ export type StructuredAgentSessionReservedSend = {
   /** The same message, owned by create instead of a later send request. */
   create: (target: RuntimeClientTarget, prepared?: true) => StructuredAgentSessionCreateSend | null
   /** Gives the slot back unsent. */
-  release: () => void
+  release: (notice?: readonly AgentSessionWriteNoticePart[] | null) => void
 }
 
 export type StructuredAgentSessionCreateSend = StructuredAgentSessionSent & {
@@ -167,7 +168,9 @@ export function reserveStructuredAgentSessionSend(
     clientMessageId: entry.clientMessageId,
     prepare: () => {
       const current = held()
-      if (!current) return false
+      if (!current) {
+        return false
+      }
       if (!preparing && Date.now() - current.queuedAt >= STRUCTURED_AGENT_SESSION_SEND_BUDGET_MS) {
         handBack(current, ['unreachable', ...agentSessionWriteNotDoneParts('composer-send')])
         settleReservation('returned')
@@ -179,7 +182,9 @@ export function reserveStructuredAgentSessionSend(
     },
     setAttachments: (attachments) => {
       const current = held()
-      if (current) updateStructuredAgentSessionPendingSend(entry.sessionId, entry.clientMessageId, {
+      if (current) {
+        updateStructuredAgentSessionPendingSend(entry.sessionId, entry.clientMessageId, {
+      }
         body: { ...current.body, blocks: [
           ...current.body.blocks.filter((block) => block.type !== 'image-ref'),
           ...attachments.map((image) => ({ type: 'image-ref' as const, path: image.path }))
@@ -243,11 +248,16 @@ export function reserveStructuredAgentSessionSend(
         }
       }
     },
-    release: () => {
+    release: (notice) => {
       clearTimeout(deadline)
-      if (held()) {
-        updateStructuredAgentSessionPendingSend(entry.sessionId, entry.clientMessageId, null)
-        settleReservation('dropped')
+      const current = held()
+      if (current) {
+        if (notice === undefined) {
+          updateStructuredAgentSessionPendingSend(entry.sessionId, entry.clientMessageId, null)
+        } else {
+          handBack(current, notice)
+        }
+        settleReservation(notice === undefined ? 'dropped' : 'returned')
       }
     }
   }

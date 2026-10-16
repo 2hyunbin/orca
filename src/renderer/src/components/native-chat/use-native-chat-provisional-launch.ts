@@ -95,7 +95,9 @@ export function useNativeChatProvisionalLaunch(
       if (starting) {
         return false
       }
-      if (draft) return submitNativeChatLocalDraft(sessionId, text, submission?.attachments ?? [], submission?.options ?? {}, lifecycle === 'published')
+      if (draft) {
+        return submitNativeChatLocalDraft(sessionId, text, submission?.attachments ?? [], submission?.options ?? {}, lifecycle === 'published')
+      }
       if (lifecycle !== 'failed' || !worktreeId) {
         return send()
       }

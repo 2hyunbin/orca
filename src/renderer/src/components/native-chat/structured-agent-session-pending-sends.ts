@@ -2,6 +2,7 @@
 // chat's view reads.
 
 import type { structuredAgentSessionSendBody } from '../../../../shared/structured-agent-session-send-mutation'
+import type { NativeChatComposerDraft } from './native-chat-composer-draft-storage'
 import type { AgentJournalCursor } from '../../../../shared/agent-session-journal-types'
 
 export type StructuredAgentSessionPendingSend = {
@@ -23,6 +24,7 @@ export type StructuredAgentSessionPendingSend = {
   issued: boolean
   /** A sender outside the chat keeps its own copy, so nothing goes to the chat's composer. */
   callerKeepsText?: true
+  sourceDraft?: NativeChatComposerDraft
   /** Made while the chat read Stopping: drawn after that turn until the host records it. */
   sentWhileStopping?: true
   /** Each image's SSH connection, in body order, so a returned image still opens remotely. */

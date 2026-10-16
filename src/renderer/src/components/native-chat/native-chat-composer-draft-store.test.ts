@@ -162,7 +162,7 @@ describe('native-chat composer draft store', () => {
       ...storage,
       loadAll: () => new Promise<ReadonlyMap<string, unknown>>(() => {}),
       update: (scopeKey: string, apply: Parameters<typeof storage.update>[1]) =>
-        new Promise<void>((resolve) => {
+        new Promise<Awaited<ReturnType<typeof storage.update>>>((resolve) => {
           complete = () => {
             void storage.update(scopeKey, apply).then(resolve)
           }
@@ -302,7 +302,7 @@ describe('native-chat composer draft store', () => {
           land = () => resolve(snapshot)
         })
       },
-      update: () => new Promise<void>(() => {})
+      update: () => new Promise<Awaited<ReturnType<typeof storage.update>>>(() => {})
     }
     const crashed = await reload({ using: crashing, hydrate: false })
     await crashed.store.waitForNativeChatComposerDrafts(1)

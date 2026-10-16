@@ -126,7 +126,9 @@ export function createTabsMoveActions(
       })
       if (moved) {
         const movedTab = findTabAndWorktree(get().unifiedTabsByWorktree, tabId)?.tab
-        if (movedTab?.contentType === 'agent-session') updateNativeChatNewDraft(movedTab.entityId, { groupId: targetGroupId })
+        if (movedTab?.contentType === 'agent-session') {
+          updateNativeChatNewDraft(movedTab.entityId, { groupId: targetGroupId })
+        }
       }
       if (moved && opts?.recordInteraction !== false) {
         get().recordFeatureInteraction?.('tab-splits')

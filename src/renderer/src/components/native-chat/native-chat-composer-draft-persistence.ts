@@ -2,7 +2,7 @@
 // storage has not confirmed when the window goes away, and follows other windows' writes.
 
 import { basename } from '@/lib/path'
-import { loadNativeChatNewDraft } from './native-chat-new-draft'
+import { invalidateNativeChatNewDraft } from './native-chat-new-draft'
 import { isNativeChatKeptPastePath, isNativeChatPastedImagePath } from './native-chat-image-paste'
 import { isAgentSessionAttachmentStorePath } from '../../../../shared/agent-session-attachments'
 import {
@@ -263,13 +263,12 @@ function adoptForeignChange(message: unknown): void {
     typeof message === 'object' && message !== null && 'scopeKey' in message
       ? message.scopeKey
       : null
-  if (typeof scopeKey !== 'string' || hasLocalChange(scopeKey)) {
+  if (typeof scopeKey !== 'string' || invalidateNativeChatNewDraft(scopeKey) || hasLocalChange(scopeKey)) {
     return
   }
   void nativeChatComposerDraftStorage()
     .read(scopeKey)
     .then((value) => {
-      if (loadNativeChatNewDraft(scopeKey, value, true)) return
       if (hasLocalChange(scopeKey)) {
         return
       }

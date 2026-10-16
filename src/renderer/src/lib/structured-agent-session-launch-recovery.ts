@@ -61,7 +61,9 @@ async function verifyPublishedSession(state: StructuredLaunchRecoveryState): Pro
 export async function recoverPublishedSessionReceipt(
   state: StructuredLaunchRecoveryState
 ): Promise<StructuredAgentLaunchReceipt> {
-  if (!state.intent.firstSubmission) await verifyPublishedSession(state)
+  if (!state.intent.firstSubmission) {
+    await verifyPublishedSession(state)
+  }
   let history = await callStructuredAgentSession<AgentSessionHistoryResult>(
     state.intent.target,
     'agentSession.history',
@@ -76,7 +78,9 @@ export async function recoverPublishedSessionReceipt(
   let firstMessage = history.page.submissions.find((submission) => submission.clientMessageId === messageId)
   for (let page = 1; state.intent.firstSubmission && !firstMessage && history.page.hasOlder && page < 8; page += 1) {
     const cursor = history.page.window.oldest
-    if (!cursor) break
+    if (!cursor) {
+      break
+    }
     history = await callStructuredAgentSession<AgentSessionHistoryResult>(state.intent.target, 'agentSession.history', {
       sessionId: state.intent.sessionId, direction: 'before', cursor, limit: 200
     })

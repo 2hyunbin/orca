@@ -20,7 +20,9 @@ export function openNativeChatLocalDraft(args: {
   prompt?: string
 }): Tab | null {
   const owner = structuredLaunchOwner({ route: 'structured-native-chat', executionHostId: args.executionHostId }, args.worktreeId)
-  if (!owner) return null
+  if (!owner) {
+    return null
+  }
   const sessionId = createStructuredAgentSessionId(args.agent, () => args.requestId)
   const tab = flushSync(() => {
   const opened = openStructuredAgentSessionProvisionalTab({ ...args, ...owner, sessionId, targetGroupId: args.groupId })
@@ -29,10 +31,14 @@ export function openNativeChatLocalDraft(args: {
       owner: { workspaceId: args.worktreeId, executionHostId: owner.executionHostId },
       agent: args.agent, groupId: opened.groupId, options: {}
     })
-    if (args.prompt) updateNativeChatComposerDraft(`agent-session:${sessionId}`, { text: args.prompt }, 'immediate')
+    if (args.prompt) {
+      updateNativeChatComposerDraft(`agent-session:${sessionId}`, { text: args.prompt }, 'immediate')
+    }
   }
   return opened
   })
-  if (args.focus !== false && args.activate !== false) requestNativeChatComposerFocus(tab.id)
+  if (args.focus !== false && args.activate !== false) {
+    requestNativeChatComposerFocus(tab.id)
+  }
   return tab
 }

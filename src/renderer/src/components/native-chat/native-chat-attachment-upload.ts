@@ -134,7 +134,9 @@ export function resolveNativeChatRuntimeSessionAttachmentOwner(session: {
   sessionId: string
   runtimeEnvironmentId: string
 }, stageDraft = true): NativeChatAttachmentOwner {
-  if (stageDraft && readNativeChatNewDraft(session.sessionId)) return { kind: 'local' }
+  if (stageDraft && readNativeChatNewDraft(session.sessionId)) {
+    return { kind: 'local' }
+  }
   const pairingRevision = getRuntimeEnvironmentRevision(session.runtimeEnvironmentId)
   if (pairingRevision === undefined) {
     return { kind: 'not-ready' }

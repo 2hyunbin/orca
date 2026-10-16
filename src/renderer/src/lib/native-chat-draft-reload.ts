@@ -19,12 +19,18 @@ async function ownerConfirmedGone(draft: NativeChatNewDraft): Promise<boolean> {
   const state = useAppStore.getState()
   const host = parseExecutionHostId(executionHostId)
   if (host?.kind === 'runtime' && state.runtimeEnvironmentCatalogHydrated &&
-    !state.runtimeEnvironments.some((environment) => environment.id === host.environmentId)) return true
-  if (findKnownWorktreeById(state, workspaceId, executionHostId)) return false
+    !state.runtimeEnvironments.some((environment) => environment.id === host.environmentId)) {
+    return true
+  }
+  if (findKnownWorktreeById(state, workspaceId, executionHostId)) {
+    return false
+  }
   const scope = parseWorkspaceKey(workspaceId)
   if (scope?.type === 'folder') {
     const target = structuredAgentSessionTargetForHost(executionHostId)
-    if (!target) return false
+    if (!target) {
+      return false
+    }
     const catalog = await fetchFolderWorkspaceCatalogForTarget(target, state.projectGroups)
     return catalogOwnsHost(catalog.hostId, executionHostId) && !catalog.folderWorkspaces.some((row) =>
       row.id === scope.folderWorkspaceId && getFolderWorkspaceHostId(row, state.projectGroups) === executionHostId)
@@ -38,7 +44,9 @@ async function ownerConfirmedGone(draft: NativeChatNewDraft): Promise<boolean> {
 export async function reconcileRestoredNativeChatDrafts(): Promise<void> {
   for (const [sessionId, draft] of nativeChatNewDrafts()) {
     try {
-      if (getStructuredLaunchStateBySessionId(sessionId)) continue
+      if (getStructuredLaunchStateBySessionId(sessionId)) {
+        continue
+      }
       if (await ownerConfirmedGone(draft)) {
         if (await retireNativeChatNewDraft(sessionId)) {
           deleteNativeChatComposerDraft(`agent-session:${sessionId}`)
@@ -50,7 +58,9 @@ export async function reconcileRestoredNativeChatDrafts(): Promise<void> {
       if (issued) {
         const key = `agent-session:${sessionId}`
         const current = readNativeChatComposerDraft(key)
-        if (!current.text && !current.images.length) updateNativeChatComposerDraft(key, issued.draft, 'immediate')
+        if (!current.text && !current.images.length) {
+          updateNativeChatComposerDraft(key, issued.draft, 'immediate')
+        }
         confirmStructuredLaunchFirstMessagePublication(draft.owner.workspaceId, sessionId)
       } else if ((useAppStore.getState().groupsByWorktree[draft.owner.workspaceId] ?? []).some((group) => group.id === draft.groupId)) {
         openStructuredAgentSessionProvisionalTab({

@@ -6,6 +6,7 @@ import {
   agentSessionWriteNoticeParts,
   agentSessionWriteNotDoneParts
 } from '../../../../shared/agent-session-refusal-notice'
+import { readNativeChatComposerDraft, updateNativeChatComposerDraft } from './native-chat-composer-draft-store'
 import { readNativeChatNewDraft } from './native-chat-new-draft'
 import type { AgentSessionWriteNoticePart } from '../../../../shared/agent-session-write-notice-copy'
 import type { AgentSessionWriteFailure } from '../../../../shared/agent-session-write-failure'
@@ -58,6 +59,14 @@ export function finish(
 /** Puts the text back in the chat's composer; false, reported, when the draft write threw. */
 function returnToComposer(entry: StructuredAgentSessionPendingSend): boolean {
   try {
+    if (entry.sourceDraft) {
+      const scopeKey = `agent-session:${entry.sessionId}`
+      const current = readNativeChatComposerDraft(scopeKey)
+      if (!current.text && !current.images.length) {
+        updateNativeChatComposerDraft(scopeKey, entry.sourceDraft, 'immediate')
+      }
+      return true
+    }
     handBackStructuredAgentSessionMessage(
       entry.sessionId,
       entry.clientMessageId,

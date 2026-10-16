@@ -95,7 +95,9 @@ export function deleteStructuredLaunchStateIfCurrent(state: StructuredLaunchStat
   if (structuredLaunchesBySessionId.get(state.intent.sessionId) !== state) {
     return false
   }
-  if (state.intent.firstSubmission && !state.cancelled) return false
+  if (state.intent.firstSubmission && !state.cancelled) {
+    return false
+  }
   structuredLaunchesBySessionId.delete(state.intent.sessionId)
   deleteStructuredAgentLaunchRecord(state.intent.sessionId)
   return true
@@ -132,7 +134,9 @@ export function launchStateLifecycle(
   if (state.callers.outcome === 'published') {
     return 'published'
   }
-  if (state.hostPublished) return 'published'
+  if (state.hostPublished) {
+    return 'published'
+  }
   if (state.visibilityUnknown || state.callers.outcome === 'unknown') {
     return 'visibility-unknown'
   }

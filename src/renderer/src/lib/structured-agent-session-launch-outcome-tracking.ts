@@ -32,12 +32,16 @@ export async function finalizeStructuredLaunchConfirmedSubmission(sessionId: str
   const draft = readNativeChatNewDraft(sessionId)
   const state = getStructuredLaunchStateBySessionId(sessionId) ??
     (draft ? restorePersistedStructuredLaunchState(draft.owner.workspaceId, sessionId) : undefined)
-  if (state?.intent.firstSubmission && !state.cancelled) await finalizeStructuredLaunchFirstSubmission(state)
+  if (state?.intent.firstSubmission && !state.cancelled) {
+    await finalizeStructuredLaunchFirstSubmission(state)
+  }
 }
 
 export function finalizeStructuredLaunchFirstSubmission(state: StructuredLaunchState): Promise<void> {
   const active = finalizing.get(state)
-  if (active) return active
+  if (active) {
+    return active
+  }
   const finalized = finalizeFirstSubmission(state).finally(() => finalizing.delete(state))
   finalizing.set(state, finalized)
   return finalized
@@ -45,7 +49,9 @@ export function finalizeStructuredLaunchFirstSubmission(state: StructuredLaunchS
 
 async function finalizeFirstSubmission(state: StructuredLaunchState): Promise<void> {
   const submission = state.intent.firstSubmission
-  if (!submission || !(await retireNativeChatNewDraft(state.intent.sessionId))) return
+  if (!submission || !(await retireNativeChatNewDraft(state.intent.sessionId))) {
+    return
+  }
   clearNativeChatComposerDraftIfUnchanged(`agent-session:${state.intent.sessionId}`, submission.draft)
   delete state.intent.firstSubmission
   settleStructuredLaunchCallers(state.callers, 'published')
@@ -83,7 +89,7 @@ export function trackLaunchSettlement(
 ): void {
   void promise.then(
     (receipt) => {
-      if (state.promise !== promise) {
+      if (state.promise !== promise || getStructuredLaunchStateBySessionId(state.intent.sessionId) !== state) {
         return
       }
       settleStructuredLaunchCallers(state.callers, 'published')
@@ -93,7 +99,7 @@ export function trackLaunchSettlement(
       notifyStructuredLaunchListeners()
     },
     (error) => {
-      if (state.promise !== promise) {
+      if (state.promise !== promise || getStructuredLaunchStateBySessionId(state.intent.sessionId) !== state) {
         return
       }
       if (state.cancelled) {
@@ -106,6 +112,9 @@ export function trackLaunchSettlement(
         return
       }
       if (error instanceof StructuredAgentSessionSubmissionEndedError) {
+        state.cancelled = true
+        state.visibilityUnknown = false
+        settleStructuredLaunchCallers(state.callers, 'failed')
         delete state.intent.firstSubmission
         cleanupLaunchState(state)
         return

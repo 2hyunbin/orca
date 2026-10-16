@@ -87,7 +87,9 @@ export async function launchStructuredAgentSession(
   try {
     hostSeed = await requireHostCreateSupport(intent)
   } catch (error) {
-    if (!intent.firstSubmission || error instanceof StructuredAgentSessionCreateRefusalError) throw error
+    if (!intent.firstSubmission || error instanceof StructuredAgentSessionCreateRefusalError) {
+      throw error
+    }
     throw new StructuredAgentSessionCreateRefusalError(
       error instanceof Error ? error.message : 'The chat host is unavailable.',
       'structured_agent_session_unsupported'
@@ -110,8 +112,12 @@ export async function launchStructuredAgentSession(
         issue = await intent.prepareCreate?.()
       } catch (error) {
         // Preparation failed before create was issued, so its sources remain safe to submit again.
-        if (error instanceof StructuredAgentSessionSubmissionEndedError) throw error
-        if (intent.firstSubmission) throw new StructuredAgentSessionCreateRefusalError(
+        if (error instanceof StructuredAgentSessionSubmissionEndedError) {
+          throw error
+        }
+        if (intent.firstSubmission) {
+          throw new StructuredAgentSessionCreateRefusalError(
+        }
           error instanceof Error ? error.message : 'The message could not be prepared.',
           'agent_session_attachment_unavailable'
         )

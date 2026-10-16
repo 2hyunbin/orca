@@ -37,7 +37,9 @@ export function resolveNativeChatDraftOwner(
 ): NativeChatComposerDraftOwner | undefined {
   const sessionId = structuredAgentSessionIdOfDraftScope(scopeKey)
   const local = sessionId ? readNativeChatNewDraft(sessionId) : undefined
-  if (local) return local.owner
+  if (local) {
+    return local.owner
+  }
   const workspaceId = workspaceOfDraftScope(state, scopeKey)
   const executionHostId = workspaceId
     ? resolveWorktreeOperationRoute(state, workspaceId)?.executionHostId

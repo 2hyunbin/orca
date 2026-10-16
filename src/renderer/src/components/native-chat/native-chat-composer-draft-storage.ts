@@ -55,7 +55,7 @@ export type NativeChatComposerDraftStorage = {
   update(
     scopeKey: string,
     apply: (stored: unknown) => NativeChatStoredDraft | null
-  ): Promise<void>
+  ): Promise<NativeChatStoredDraft | null>
 }
 
 /** Drafts kept for this run only: the storage of an environment without IndexedDB (unit tests),
@@ -67,8 +67,11 @@ export function createMemoryNativeChatComposerDraftStorage(): NativeChatComposer
   const drafts = new Map<string, StoredNativeChatComposerDraft>()
   const metadata = new Map<string, NativeChatNewDraft>()
   const put = (key: string, draft: NativeChatStoredDraft): void => {
-    if ('text' in draft) drafts.set(key, draft)
-    else metadata.set(key, draft)
+    if ('text' in draft) {
+      drafts.set(key, draft)
+    } else {
+      metadata.set(key, draft)
+    }
   }
   const storage = {
     drafts,
@@ -106,7 +109,7 @@ export function createMemoryNativeChatComposerDraftStorage(): NativeChatComposer
         drafts.delete(scopeKey)
         metadata.delete(scopeKey)
       }
-      return Promise.resolve()
+      return Promise.resolve(next)
     }
   }
   return storage
@@ -175,7 +178,9 @@ export function parseNativeChatNewDraft(value: unknown): NativeChatNewDraft | nu
   }
   const options: Record<string, string> = {}
   for (const [key, pick] of Object.entries(value.options)) {
-    if (typeof pick === 'string') options[key] = pick
+    if (typeof pick === 'string') {
+      options[key] = pick
+    }
   }
   return { owner, agent: value.agent, groupId: value.groupId, options }
 }
@@ -199,6 +204,12 @@ export function parseStoredNativeChatComposerDraft(
     savedAt,
     ...(owner ? { owner } : {})
   }
+}
+
+/** Select recovery content without retaining mutable draft-store bookkeeping. */
+export function projectNativeChatComposerDraft(draft: NativeChatComposerDraft): NativeChatComposerDraft {
+  const { text, document, images } = parseStoredNativeChatComposerDraft({ ...draft, savedAt: 0 }) ?? { text: '', images: [] }
+  return { text, ...(document ? { document } : {}), images }
 }
 
 const LEGACY_LOCAL_STORAGE_PREFIX = 'orca:nativeChatComposerDraft:v1:'

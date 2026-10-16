@@ -1,3 +1,5 @@
+import { StructuredAgentSessionSubmissionEndedError } from './structured-agent-session-launch-errors'
+import type { StagedStructuredLaunchPrompt } from './structured-agent-session-launch-prompt-types'
 import type { StructuredLaunchCaller } from './structured-agent-session-launch-callers'
 import type { StructuredAgentLaunchReceipt } from './structured-agent-session-launch-recovery'
 import { finalizeStructuredLaunchFirstSubmission } from './structured-agent-session-launch-outcome-tracking'
@@ -7,6 +9,25 @@ import {
   type StructuredLaunchState
 } from './structured-agent-session-launch-registry'
 
+/** Pre-issue reservation settlement ends the command even while discovery is unresolved. */
+export function boundStructuredLaunchReservation(
+  state: StructuredLaunchState,
+  created: Promise<StructuredAgentLaunchReceipt>,
+  prompt: StagedStructuredLaunchPrompt | null
+): Promise<StructuredAgentLaunchReceipt> {
+  const { intent } = state
+  if (!intent.firstSubmission || !prompt?.slot) {
+    return created
+  }
+  return Promise.race([created, prompt.slot.outcome.then(() => {
+    if (!intent.createPrepared) {
+      intent.prepareCreate = () => { throw new StructuredAgentSessionSubmissionEndedError() }
+      throw new StructuredAgentSessionSubmissionEndedError()
+    }
+    return created
+  })])
+}
+
 /** The message deadline frees the composer and offers the existing Retry while create is unknown. */
 export function trackStructuredLaunchPromptOutcome(
   state: StructuredLaunchState,
@@ -14,7 +35,9 @@ export function trackStructuredLaunchPromptOutcome(
 ): void {
   const group = state.callers
   void caller.promptDeliveryResult?.then((outcome) => {
-    if (outcome.delivered && state.intent.firstSubmission) void finalizeStructuredLaunchFirstSubmission(state)
+    if (outcome.delivered && state.intent.firstSubmission) {
+      void finalizeStructuredLaunchFirstSubmission(state)
+    }
     if (
       state.callers !== group ||
       state.cancelled ||

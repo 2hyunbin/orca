@@ -117,7 +117,9 @@ function buildStructuredAgentSessionLaunchIntent(
   requestFocus = true
 ): StructuredAgentSessionLaunchIntent {
   const state = useAppStore.getState()
-  if (requestFocus) recordWebSessionFocusIntent(
+  if (requestFocus) {
+    recordWebSessionFocusIntent(
+  }
     structuredAgentSessionFocusOwner(owner.target),
     worktreeId,
     `agent-session:${sessionId}`,
@@ -174,7 +176,9 @@ export function restoreStructuredAgentSessionLaunchIntent(args: {
 }): StructuredAgentSessionLaunchIntent {
   const state = useAppStore.getState()
   const { target } = structuredAgentSessionOwnerTarget(args.worktreeId, args.executionHostId)
-  if (!args.firstSubmission) recordWebSessionFocusIntent(
+  if (!args.firstSubmission) {
+    recordWebSessionFocusIntent(
+  }
     structuredAgentSessionFocusOwner(target),
     args.worktreeId,
     `agent-session:${args.sessionId}`,

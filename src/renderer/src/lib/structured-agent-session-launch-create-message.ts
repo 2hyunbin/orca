@@ -64,7 +64,9 @@ function structuredLaunchCreateOptions(
   state: StructuredLaunchState
 ): Readonly<Record<string, string>> | undefined {
   const { intent, selection } = state
-  if (intent.firstSubmission) return intent.firstSubmission.options
+  if (intent.firstSubmission) {
+    return intent.firstSubmission.options
+  }
   const firstFrame = firstFrameOptionState(intent.agent, intent.target, {
     newLaunch: !intent.params.resumeFrom,
     worktree: intent.params.worktree,

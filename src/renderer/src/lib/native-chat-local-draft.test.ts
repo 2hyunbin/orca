@@ -4,7 +4,7 @@ import type { Tab } from '../../../shared/tab-types'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import { openNativeChatLocalDraft } from './native-chat-local-draft'
 import { newAgentLaunchRequestId } from './agent-launch-request-id'
-import { allocateNativeChatNewDraft, readNativeChatNewDraft, retireNativeChatNewDraft, updateNativeChatNewDraft } from '@/components/native-chat/native-chat-new-draft'
+import { allocateNativeChatNewDraft, invalidateNativeChatNewDraft, deleteNativeChatNewDraftsOwnedBy, readNativeChatNewDraft, retireNativeChatNewDraft, updateNativeChatNewDraft } from '@/components/native-chat/native-chat-new-draft'
 import { clearNativeChatComposerDraftsForTests, hydrateNativeChatComposerDrafts, readNativeChatComposerDraft, updateNativeChatComposerDraft } from '@/components/native-chat/native-chat-composer-draft-store'
 import { createMemoryNativeChatComposerDraftStorage, setNativeChatComposerDraftStorageForTests } from '@/components/native-chat/native-chat-composer-draft-storage'
 
@@ -79,5 +79,50 @@ it('keeps metadata independent of stale content and refuses to resurrect it afte
   await hydrateNativeChatComposerDrafts()
   expect(readNativeChatNewDraft(id)).toBeUndefined()
   expect(readNativeChatComposerDraft(`agent-session:${id}`).text).toBe('stale window')
+  expect(mocks.call).not.toHaveBeenCalled()
+})
+
+
+it('converges foreign retirement during a pick and adopts a recreated workspace draft', async () => {
+  const id = 'codex_foreign_retirement'
+  const key = `agent-session-new:${id}`
+  const metadata = { owner: { workspaceId: 'folder:workspace', executionHostId: 'local' as const }, agent: 'codex' as const, groupId: 'group-1', options: {} }
+  allocateNativeChatNewDraft(id, metadata)
+  await vi.waitFor(async () => expect(await storage.read(key)).toEqual(metadata))
+  const update = storage.update
+  let commit: (() => void) | undefined
+  storage.update = (scope, apply) => new Promise((resolve) => {
+    commit = () => { void update(scope, apply).then(resolve) }
+  })
+  updateNativeChatNewDraft(id, { options: { model: 'pick during removal' } })
+  await vi.waitFor(() => expect(commit).toBeDefined())
+  await storage.remove([key])
+  invalidateNativeChatNewDraft(key)
+  commit?.()
+  await vi.waitFor(() => expect(readNativeChatNewDraft(id)).toBeUndefined())
+  storage.update = update
+  allocateNativeChatNewDraft('codex_old_owner', metadata)
+  deleteNativeChatNewDraftsOwnedBy(metadata.owner)
+  await vi.waitFor(async () => expect(await storage.read('agent-session-new:codex_old_owner')).toBeUndefined())
+  await storage.write('agent-session-new:codex_recreated_owner', metadata)
+  invalidateNativeChatNewDraft('agent-session-new:codex_recreated_owner')
+  await vi.waitFor(() => expect(readNativeChatNewDraft('codex_recreated_owner')).toEqual(metadata))
+  const read = storage.read
+  let releaseRead: (() => void) | undefined
+  storage.read = async (scope) => {
+    const snapshot = await read(scope)
+    storage.read = read
+    return new Promise((resolve) => { releaseRead = () => resolve(snapshot) })
+  }
+  invalidateNativeChatNewDraft('agent-session-new:codex_recreated_owner')
+  await vi.waitFor(() => expect(releaseRead).toBeDefined())
+  updateNativeChatNewDraft('codex_recreated_owner', { options: { model: 'newer than foreign read' } })
+  await vi.waitFor(async () => expect(await read('agent-session-new:codex_recreated_owner')).toMatchObject({ options: { model: 'newer than foreign read' } }))
+  releaseRead?.()
+  await vi.waitFor(() => expect(readNativeChatNewDraft('codex_recreated_owner')?.options.model).toBe('newer than foreign read'))
+  storage.refuseWrites = true
+  allocateNativeChatNewDraft('codex_unsaved', metadata)
+  invalidateNativeChatNewDraft('agent-session-new:codex_unsaved')
+  await vi.waitFor(() => expect(readNativeChatNewDraft('codex_unsaved')).toEqual(metadata))
   expect(mocks.call).not.toHaveBeenCalled()
 })

@@ -43,9 +43,11 @@ import {
   trackLaunchSettlement
 } from './structured-agent-session-launch-outcome-tracking'
 import {
+  boundStructuredLaunchReservation,
   trackStructuredLaunchPromptOutcome,
   trackStructuredLaunchConfirmationDeadline
 } from './structured-agent-session-launch-prompt-outcome'
+import { confirmStructuredLaunchFirstMessagePublication } from './structured-agent-session-launch-publication-confirmation'
 import { repeatedStructuredLaunchAttempt } from './structured-agent-session-launch-request'
 
 export type { StructuredAgentLaunchOptions, StructuredAgentLaunchReceipt }
@@ -109,6 +111,9 @@ function adoptPairedHostSeed(
   state: StructuredLaunchState,
   seedOptions: StructuredLaunchState['selection']['seed']
 ): void {
+  if (getStructuredLaunchStateBySessionId(state.intent.sessionId) !== state) {
+    return
+  }
   if (JSON.stringify(seedOptions) === JSON.stringify(state.intent.seedOptions)) {
     return
   }
@@ -127,6 +132,10 @@ function resetStructuredLaunchCallers(state: StructuredLaunchState): void {
 }
 
 function restartStructuredLaunchState(state: StructuredLaunchState): void {
+  if (state.intent.firstSubmission) {
+    confirmStructuredLaunchFirstMessagePublication(state.intent.worktreeId, state.intent.sessionId)
+    return
+  }
   const wasVisibilityUnknown = state.visibilityUnknown
   if (!wasVisibilityUnknown && !state.intent.firstSubmission) {
     state.intent = retryStructuredAgentSessionLaunchIntent(state.intent)
@@ -140,7 +149,7 @@ function restartStructuredLaunchState(state: StructuredLaunchState): void {
   state.onHostSeed = (seedOptions) => adoptPairedHostSeed(state, seedOptions)
   state.promise = publishWithHeldOptions(
     state,
-    (wasVisibilityUnknown || state.intent.firstSubmission) ? reconcileUnknownLaunch(state) : launchAndReconcile(state)
+    wasVisibilityUnknown ? reconcileUnknownLaunch(state) : launchAndReconcile(state)
   )
   trackLaunchSettlement(state, state.promise)
   trackStructuredLaunchConfirmationDeadline(state, state.promise)
@@ -236,7 +245,8 @@ function structuredAgentLaunchState(
   state.onHostSeed = (seedOptions) => adoptPairedHostSeed(state, seedOptions)
   callers.onSettled = () => maybeCleanupLaunchState(state)
   setStructuredLaunchState(state)
-  state.promise = publishWithHeldOptions(state, launchAndReconcile(state))
+  const created = launchAndReconcile(state)
+  state.promise = publishWithHeldOptions(state, boundStructuredLaunchReservation(state, created, stagedPrompt))
   const caller = addStructuredLaunchCaller({
     group: state.callers,
     launchResult: state.promise,

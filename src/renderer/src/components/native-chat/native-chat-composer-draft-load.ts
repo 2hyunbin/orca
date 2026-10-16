@@ -60,7 +60,9 @@ function applyLoaded(
 ): void {
   const drafts = new Map<string, StoredNativeChatComposerDraft | null>()
   for (const [scopeKey, value] of loaded) {
-    if (loadNativeChatNewDraft(scopeKey, value)) continue
+    if (loadNativeChatNewDraft(scopeKey, value)) {
+      continue
+    }
     drafts.set(scopeKey, parseStoredNativeChatComposerDraft(value))
   }
   for (const scopeKey of replayNativeChatComposerDraftJournal(drafts, journal)) {

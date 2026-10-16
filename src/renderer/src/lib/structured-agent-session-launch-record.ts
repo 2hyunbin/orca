@@ -8,12 +8,16 @@ import { isAgentSessionOptions } from '../../../shared/agent-session-record'
 import { SendBodyStructure } from '../../../shared/rpc-contract/structured-agent-session-message-params'
 import { parseExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
 import type { StructuredAgentSessionLaunchIntent } from './launch-structured-agent-session'
-import { parseStoredNativeChatComposerDraft, type NativeChatComposerDraft } from '@/components/native-chat/native-chat-composer-draft-storage'
+import { parseStoredNativeChatComposerDraft, projectNativeChatComposerDraft, type NativeChatComposerDraft } from '@/components/native-chat/native-chat-composer-draft-storage'
 
 export type StructuredAgentFirstSubmission = {
   clientMessageId: string
   draft: NativeChatComposerDraft
   options: Readonly<Record<string, string>>
+}
+
+export function projectStructuredAgentFirstSubmission(submission: StructuredAgentFirstSubmission): StructuredAgentFirstSubmission {
+  return { clientMessageId: submission.clientMessageId, draft: projectNativeChatComposerDraft(submission.draft), options: { ...submission.options } }
 }
 
 export type StructuredAgentLaunchPersistedLifecycle = 'pending' | 'visibility-unknown' | 'failed'
@@ -57,7 +61,7 @@ export function structuredAgentLaunchRecordFor(
     expectedRuntimeFence: envelope.expectedRuntimeFence,
     ...(resumeFrom ? { resumeFrom } : {}),
     ...(firstMessage ? { firstMessage } : {}),
-    ...(intent.firstSubmission ? { firstSubmission: intent.firstSubmission } : {}),
+    ...(intent.firstSubmission ? { firstSubmission: projectStructuredAgentFirstSubmission(intent.firstSubmission) } : {}),
     ...(options ? { options } : {}),
     ...(intent.createMessageSupport === undefined
       ? {}

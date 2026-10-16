@@ -9,11 +9,9 @@ import {
   sendStructuredAgentSessionMessage
 } from '@/components/native-chat/structured-agent-session-message-sender'
 import { noteStructuredAgentSessionFence } from '@/components/native-chat/structured-agent-session-send-attempt'
-import { publishStructuredAgentSessionSends } from '@/components/native-chat/structured-agent-session-pending-sends'
-import { agentSessionWriteNoticeText } from '@/components/native-chat/agent-session-write-notice-text'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import type { StructuredAgentSessionSendInput } from '@/components/native-chat/structured-agent-session-send-slot'
-import type { NativeChatComposerDraft } from '@/components/native-chat/native-chat-composer-draft-storage'
+import { projectNativeChatComposerDraft, type NativeChatComposerDraft } from '@/components/native-chat/native-chat-composer-draft-storage'
 
 import type { StructuredPromptDeliveryResult, StructuredLaunchPromptOptions, StagedDelivery, StagedStructuredLaunchPrompt } from './structured-agent-session-launch-prompt-types'
 export type { StructuredPromptDeliveryResult, StructuredLaunchPromptOptions, StagedStructuredLaunchPrompt } from './structured-agent-session-launch-prompt-types'
@@ -26,6 +24,7 @@ export function stageStructuredLaunchPrompt(
   text: string,
   options: { callerKeepsText?: true; sourceDraft?: NativeChatComposerDraft } & Pick<StructuredAgentSessionSendInput, 'attachments' | 'options'> = {}
 ): StagedStructuredLaunchPrompt {
+  const source = options.sourceDraft ? { sourceDraft: projectNativeChatComposerDraft(options.sourceDraft) } : {}
   let discard = (): void => {}
   const whenDiscarded = new Promise<void>((resolve) => {
     discard = resolve
@@ -37,9 +36,9 @@ export function stageStructuredLaunchPrompt(
   const prompt: StagedStructuredLaunchPrompt = {
     sessionId,
     text,
-    slot: reserveStructuredAgentSessionSend({ sessionId, text, ...options,
-      ...(options.sourceDraft ? { callerKeepsText: true as const } : {}) }),
+    slot: reserveStructuredAgentSessionSend({ sessionId, text, ...options, ...source }),
     ...options,
+    ...source,
     whenDiscarded,
     discard,
     whenCreateSettled,
@@ -49,7 +48,6 @@ export function stageStructuredLaunchPrompt(
   forSession.add(prompt)
   staged.set(sessionId, forSession)
   void prompt.slot?.outcome.then((outcome) => {
-    if (!prompt.discarded && prompt.sourceDraft && (outcome === 'returned' || outcome === 'unconfirmed')) handBackStagedPrompt(prompt)
     const result: StagedDelivery = {
       delivered: outcome === 'recorded',
       inComposer: !prompt.callerKeepsText && (outcome === 'returned' || outcome === 'unconfirmed'),
@@ -96,8 +94,12 @@ export function takeBackLegacyStructuredLaunchPrompts(sessionId: string): void {
     if (prompt.delivery || prompt.createOwned) {
       continue
     }
+    if (prompt.slot) {
+      prompt.slot.release(null)
+    } else {
+      handBackStagedPrompt(prompt)
+    }
     releaseStagedStructuredLaunchPrompt(prompt)
-    handBackStagedPrompt(prompt)
     prompt.discarded = true
     prompt.discard()
   }
@@ -154,8 +156,12 @@ function sendStagedPrompt(
   target: RuntimeClientTarget
 ): Promise<StagedDelivery> {
   prompt.delivery ??= (async () => {
-    if (receipt) noteStructuredAgentSessionFence(prompt.sessionId, receipt.fence)
-    if (prompt.sourceDraft && !prompt.slot?.prepare()) throw new StructuredAgentSessionSubmissionEndedError()
+    if (receipt) {
+      noteStructuredAgentSessionFence(prompt.sessionId, receipt.fence)
+    }
+    if (prompt.sourceDraft && !prompt.slot?.prepare()) {
+      throw new StructuredAgentSessionSubmissionEndedError()
+    }
     await prompt.beforeSend?.()
     const sent =
       prompt.slot ? prompt.slot.send(target) :
@@ -201,23 +207,36 @@ export async function prepareStructuredLaunchFirstSubmission(
   const prompt = [...(staged.get(sessionId) ?? [])].find(
     (candidate) => candidate.slot?.clientMessageId === clientMessageId
   )
-  if (!prompt?.slot?.prepare()) throw new StructuredAgentSessionSubmissionEndedError()
+  if (!prompt?.slot?.prepare()) {
+    throw new StructuredAgentSessionSubmissionEndedError()
+  }
   await prompt.beforeCreate?.()
   return () => {
-    if (!prompt.slot?.prepare()) throw new StructuredAgentSessionSubmissionEndedError()
-    if (!atomic || prompt.beforeSend) return undefined
+    if (!prompt.slot?.prepare()) {
+      throw new StructuredAgentSessionSubmissionEndedError()
+    }
+    if (!atomic || prompt.beforeSend) {
+      return undefined
+    }
     const message = prepareStructuredLaunchPromptForCreate(sessionId, target, prompt)
-    if (!message) throw new StructuredAgentSessionSubmissionEndedError()
+    if (!message) {
+      throw new StructuredAgentSessionSubmissionEndedError()
+    }
     return message
   }
 }
 
 export function failStagedStructuredLaunchPrompt(prompt: StagedStructuredLaunchPrompt): void {
-  if (prompt.discarded) return
+  if (prompt.discarded) {
+    return
+  }
+  if (prompt.slot) {
+    prompt.slot.release(['notDoneSend'])
+  } else {
+    handBackStagedPrompt(prompt)
+  }
   releaseStagedStructuredLaunchPrompt(prompt)
-  handBackStagedPrompt(prompt)
   prompt.settleCreate({ delivered: false, inComposer: true })
-  publishStructuredAgentSessionSends(prompt.sessionId, { notice: agentSessionWriteNoticeText(['notDoneSend']) })
 }
 
 export function settleStructuredAgentLaunchPrompt(args: {
@@ -270,9 +289,7 @@ export function settleStructuredAgentLaunchPrompt(args: {
       }
       // The chat never started: its text waits in the chat's composer for the person's own Send.
       if (prompt && !prompt.discarded && !prompt.delivery) {
-        releaseStagedStructuredLaunchPrompt(prompt)
-        handBackStagedPrompt(prompt)
-        prompt.discarded = true
+        failStagedStructuredLaunchPrompt(prompt)
       }
       throw error
     }
