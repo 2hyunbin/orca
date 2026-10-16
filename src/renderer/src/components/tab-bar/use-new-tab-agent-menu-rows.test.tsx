@@ -66,7 +66,7 @@ afterEach(() => {
   cleanup()
   vi.useRealTimers()
 })
-it.each(['local', 'runtime:server'])(
+it.each(['local', 'runtime:server'] as const)(
   'shows WSL/version refusals with finite native-enabled reads on %s',
   async (host) => {
     useAppStore.setState({ activeWorkspaceExecutionHostId: host })
