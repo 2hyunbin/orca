@@ -127,6 +127,40 @@ export function buildRuntimeMobileAgentStatus(
       return { agentStatus: renewedStatus }
     }
   }
+  // Why: a turn restored across a server restart is unverifiable, not finished; a synthetic
+  // `done` told clients a running agent had stopped. Keep its own date (so it cannot outrank a
+  // client's row) and drop the question fields (#12346). Only a later shell title retires it.
+  const shellTitleRetiredRestored =
+    nonAgentTitle &&
+    hookRow.restored !== null &&
+    (pty?.lastOscTitleEpochMs ?? 0) >= hookRow.restored.updatedAt
+  const restored = !pty?.lastAgentStatus && !shellTitleRetiredRestored ? hookRow.restored : null
+  if (restored) {
+    const restoredAgentType = ownerAgent ?? restored.payload.agentType
+    return {
+      agentStatus: normalizeCompatibleAgentStatusEntryForOwner(
+        {
+          state: restored.payload.state,
+          prompt: restored.payload.prompt,
+          updatedAt: restored.updatedAt,
+          stateStartedAt: restored.stateStartedAt,
+          restoredUnconfirmed: true,
+          paneKey,
+          ...(terminalHandle ? { terminalHandle } : {}),
+          ...(restoredAgentType ? { agentType: restoredAgentType } : {}),
+          ...((pty?.worktreeId ?? restored.worktreeId)
+            ? { worktreeId: pty?.worktreeId ?? restored.worktreeId }
+            : {}),
+          tabId: tab.parentTabId,
+          terminalTitle,
+          stateHistory: [],
+          ...providerSession
+        },
+        ownerAgent,
+        ownerOptions
+      )
+    }
+  }
   // Last resort: the pane's hook evidence is identity only (resume rows, stale
   // rows, or a row the freshness gate rejected). `done` is the honest
   // projection — and it is what retires the card once the agent exits.
