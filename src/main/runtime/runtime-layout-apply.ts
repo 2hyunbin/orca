@@ -85,6 +85,10 @@ export async function applyWindowLayoutCommand(
     }
     return reply
   }
+  // A pane's sleeping record lives with the pane, in each partition that holds its tab.
+  if (command.type === 'sleep' || command.type === 'wake') {
+    return store.applyLayoutCommand(command, holders)
+  }
   if (command.type !== 'closePane') {
     return store.applyLayoutCommand(command, [hostIds[0]])
   }
