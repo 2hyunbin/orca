@@ -17,6 +17,7 @@ import {
 import { structuredQueuePauses } from './structured-agent-session-queued-pause'
 
 let rig: QueuedMessageTestRig
+const { setTimeout: realSetTimeout, clearTimeout: realClearTimeout } = globalThis
 
 afterEach(() => rig.dispose())
 
@@ -56,6 +57,19 @@ function stopEventsAtClose(onClose?: () => void): { events: JournalStopEvent[] |
   return seen
 }
 
+async function awaitCloseStep<T>(pending: Promise<T>, phase: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  // A missing host callback must fail without advancing the observation clock.
+  const deadline = new Promise<never>((_, reject) => {
+    timeout = realSetTimeout(() => reject(new Error(`Timed out awaiting ${phase}`)), 2_000)
+  })
+  try {
+    return await Promise.race([pending, deadline])
+  } finally {
+    realClearTimeout(timeout)
+  }
+}
+
 async function closePastSlowDrain(
   cause: 'user-close' | 'evict',
   prepare: () => void | Promise<void>
@@ -69,7 +83,7 @@ async function closePastSlowDrain(
   let closing: ReturnType<QueuedMessageTestRig['host']['close']> | undefined
   const flushing = vi.spyOn(runtime, 'flushEventSink')
   try {
-    await prepare()
+    await awaitCloseStep(Promise.resolve().then(prepare), 'slow sink preparation')
     flushing.mockImplementationOnce((sessionId) => {
       const pending = flush(sessionId)
       entered.resolve()
@@ -78,24 +92,24 @@ async function closePastSlowDrain(
     const atClose = stopEventsAtClose(closingProvider.resolve)
     const callsBefore = rig.closeSession.mock.calls.length
     closing = rig.host.close(HOST_TEST_SESSION, cause)
-    await entered.promise
+    await awaitCloseStep(entered.promise, 'close entering the sink drain')
     await new Promise<void>((resolve) => setImmediate(resolve))
     await vi.advanceTimersByTimeAsync(999)
     expect(rig.closeSession).toHaveBeenCalledTimes(callsBefore)
     await vi.advanceTimersByTimeAsync(1)
-    await closingProvider.promise
+    await awaitCloseStep(closingProvider.promise, 'provider close at 1,000ms')
     expect(Date.now() - began).toBe(1_000)
     return atClose
   } finally {
     try {
       // Finish the original 1,500ms sink delay before teardown drains it.
       await vi.advanceTimersByTimeAsync(Math.max(0, 1_500 - (Date.now() - began)))
-      await closing
-      await rig.host.flushStreamedEvents(HOST_TEST_SESSION)
     } finally {
       flushing.mockRestore()
       vi.useRealTimers()
     }
+    await awaitCloseStep(Promise.resolve(closing), 'host close cleanup')
+    await awaitCloseStep(rig.host.flushStreamedEvents(HOST_TEST_SESSION), 'event sink cleanup')
   }
 }
 
