@@ -159,13 +159,18 @@ export async function statusCommand(ctx: MoveCutoverContext): Promise<void> {
   logMoveEvent('status', { primary, dedicated, pointer })
 }
 
-// Two pointer polls (5 s each, plus slack): long enough that no process still acts on the
-// pointer's generation floor when primary's authority table goes.
+// Two pointer polls (5 s each, plus slack): long enough that every process holds the rewritten
+// pointer before primary's authority table goes.
 const FINISH_POINTER_DRAIN_MS = 12_000
 
-// Ends the move with the kept side serving. --keep primary: the other side's generation drops to
-// 0, the pointer is deleted, and once no process can still hold it, primary's authority and move
-// tables are dropped, so processes serve DATABASE_URL alone as before the move. --keep dedicated:
+// Ends the move with the kept side serving. --keep primary, in an order where every process
+// always has an eligible primary:
+//   1. the other side's generation drops to 0, so primary is the highest by itself;
+//   2. the pointer's generation floor goes to 0 and the fleet re-reads it (a primary without the
+//      authority table reads as generation 0, which the old floor would refuse);
+//   3. primary's authority and move tables are dropped (processes then need no pointer read);
+//   4. the pointer is deleted, so processes serve DATABASE_URL alone as before the move.
+// --keep dedicated:
 // DATABASE_URL still names primary, so the pointer and dedicated's authority stay (they are how
 // processes find and pick dedicated); only tracking and the move bookkeeping go. Either way the
 // other side's database is then dropped through the Cloud SQL API, which needs no login.
@@ -176,7 +181,7 @@ export async function finishCommand(
 ): Promise<void> {
   const other = otherMoveSide(keep)
   const store = await ctx.pointerStore()
-  const stored = await store.read()
+  let stored = await store.read()
   if (stored?.pointer.quiesce && stored.pointer.quiesce.until > Date.now()) {
     throw new MoveRefusal('quiesce_open', { id: stored.pointer.quiesce.id })
   }
@@ -206,8 +211,9 @@ export async function finishCommand(
       })
       logMoveEvent('finish_other_side_generation_cleared', { side: other })
       if (stored) {
-        await store.delete(stored.generation)
-        logMoveEvent('finish_pointer_deleted')
+        const unfloored = { ...stored.pointer, generation: 0 }
+        stored = { pointer: unfloored, generation: await store.write(unfloored, stored.generation) }
+        logMoveEvent('finish_pointer_floor_cleared')
         await sleep(options.pointerDrainMs ?? FINISH_POINTER_DRAIN_MS)
       }
     }
@@ -219,6 +225,10 @@ export async function finishCommand(
         MOVE_CLAIMED_TABLE
       ].join(', ')}`
     )
+    if (keep === 'primary' && stored) {
+      await store.delete(stored.generation)
+      logMoveEvent('finish_pointer_deleted')
+    }
     logMoveEvent('finish_done', {
       keep,
       ...(keep === 'dedicated'
