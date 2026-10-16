@@ -55,7 +55,7 @@ export const ORCHESTRATION_WORKER_START_METHODS = [
       await assertWorkerStartTaskSpecWithinPromptBudget(params.spec ?? existingTask!.spec)
       const mode = decideWorkerStartMode({
         params,
-        settings: readWorkerStartModeSettings(runtime)
+        settings: await readWorkerStartModeSettings(runtime, params.agent ?? '')
       })
       if (params.on && params.terminal?.startsWith(ORCA_SESSION_ADDRESS_PREFIX)) {
         // Refused here, before any remote call: an Orca session ID names a chat only on its own host.

@@ -1,16 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { toast } from 'sonner'
-import type { TuiAgent } from '../../../../shared/tui-agent'
-import { translate } from '@/i18n/i18n'
 import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
-import {
-  launchAgentInNewTab,
-  shouldQueueTerminalFocusAfterMenuClose
-} from '@/lib/launch-agent-in-new-tab'
-import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import type { WindowsTerminalCapabilities } from '@/lib/windows-terminal-capabilities'
 import { useAppStore } from '../../store'
 import type { TabAgentLaunchOption } from './tab-agent-launch-options'
+import { useTabAgentMenuLaunch } from './QuickLaunchButton'
+import { useNewTabAgentMenuRows, type NewTabAgentMenuModel } from './use-new-tab-agent-menu-rows'
+import { buildTabAgentLaunchOptionsFromRows } from './tab-agent-launch-options'
 import { buildTabCreateMenuOptions, type TabCreateMenuOption } from './tab-create-menu-options'
 import { resolveWindowsShellLaunchTarget } from './windows-shell-launch'
 import {
@@ -21,18 +16,19 @@ import type {
   getProjectRuntimeShellMenuMode,
   resolveWindowsPowerShellImplementationSetting
 } from './use-tab-bar-runtime-model'
-
 const NEW_TAB_MENU_TERMINAL_FOCUS_RETRY_MS = 50
 const NEW_TAB_MENU_TERMINAL_FOCUS_TIMEOUT_MS = 5000
-
 export type TabBarCreateMenuController = {
+  agentMenu: NewTabAgentMenuModel
+  agentLaunchOptions: TabAgentLaunchOption[]
+  launchAgentRow: ReturnType<typeof useTabAgentMenuLaunch>
   newTabMenuOpen: boolean
   setNewTabMenuOpen: (open: boolean) => void
   setCreateMenuQuery: (query: string) => void
   createMenuOptions: TabCreateMenuOption[]
   windowsShellEntries: WindowsShellMenuEntry[] | undefined
   handleSelectCreateMenuOption: (option: TabCreateMenuOption) => void
-  launchAgentFromNewTabEntry: (agent: TuiAgent) => void
+  launchAgentFromNewTabEntry: (option: TabAgentLaunchOption) => void
   runPendingNewTabMenuFocusAfterClose: () => void
   clearPendingNewTabMenuFocusOnUnmount: (node: HTMLDivElement | null) => void
   queueNewActiveTerminalFocusAfterNewTabMenuClose: () => void
@@ -40,11 +36,11 @@ export type TabBarCreateMenuController = {
   queueFocusAfterNewTabMenuClose: (focus: () => void) => void
   showStaticCreateMenuItems: boolean
 }
-
 export function useTabBarCreateMenuController({
   worktreeId,
   resolvedGroupId,
   terminalOnly,
+  showAgentLaunchItems = true,
   mobileEmulatorEnabled,
   managedBrowserCreationEnabled,
   mobileEmulatorCreationEnabled,
@@ -54,7 +50,6 @@ export function useTabBarCreateMenuController({
   defaultWindowsShell,
   defaultWindowsPowerShellImplementation,
   windowsTerminalCapabilities,
-  agentLaunchOptions,
   onNewTerminalTab,
   onNewTerminalWithShell,
   onNewBrowserTab,
@@ -65,6 +60,7 @@ export function useTabBarCreateMenuController({
   worktreeId: string
   resolvedGroupId: string
   terminalOnly: boolean
+  showAgentLaunchItems?: boolean
   mobileEmulatorEnabled: boolean
   managedBrowserCreationEnabled: boolean
   mobileEmulatorCreationEnabled: boolean
@@ -76,7 +72,6 @@ export function useTabBarCreateMenuController({
     typeof resolveWindowsPowerShellImplementationSetting
   >
   windowsTerminalCapabilities: WindowsTerminalCapabilities
-  agentLaunchOptions: TabAgentLaunchOption[]
   onNewTerminalTab: () => void
   onNewTerminalWithShell?: (shell: string) => void
   onNewBrowserTab: () => void
@@ -87,6 +82,9 @@ export function useTabBarCreateMenuController({
   // Why: <webview> clicks are out-of-process, so Radix's document-pointerdown outside-click check misses them; use window blur.
   const [newTabMenuOpen, setNewTabMenuOpen] = useState(false)
   const [createMenuQuery, setCreateMenuQuery] = useState('')
+  const agentMenu = useNewTabAgentMenuRows(worktreeId, newTabMenuOpen && showAgentLaunchItems)
+  const commandOverrides = useAppStore((state) => state.settings?.agentCmdOverrides)
+  const agentLaunchOptions = buildTabAgentLaunchOptionsFromRows(agentMenu.rows, commandOverrides)
   const pendingNewTabMenuFocusRef = useRef<(() => void) | null>(null)
   const pendingNewTabMenuFocusAnimationRef = useRef<number | null>(null)
   const pendingNewTabMenuFocusRetryRef = useRef<number | null>(null)
@@ -221,31 +219,16 @@ export function useTabBarCreateMenuController({
         break
     }
   }
-  const launchAgentFromNewTabEntry = (agent: TuiAgent): void => {
-    const option = agentLaunchOptions.find((candidate) => candidate.agent === agent)
-    const result = launchAgentInNewTab({
-      requestId: newAgentLaunchRequestId(),
-      agent,
-      worktreeId,
-      groupId: resolvedGroupId,
-      launchSource: 'tab_bar_quick_launch'
-    })
-    if (!result) {
-      toast.error(
-        translate(
-          'auto.components.tab.bar.TabBar.ab589350e5',
-          'Could not build launch command for {{value0}}.',
-          { value0: option?.label ?? agent }
-        )
-      )
-      return
-    }
-    if (result.surface.kind === 'local-terminal') {
-      queueTerminalTabFocusAfterNewTabMenuClose(result.surface.tabId)
-      return
-    }
-    if (shouldQueueTerminalFocusAfterMenuClose(result)) {
-      queueNewActiveTerminalFocusAfterNewTabMenuClose()
+  const launchAgentRow = useTabAgentMenuLaunch({
+    worktreeId,
+    groupId: resolvedGroupId,
+    launchSource: 'tab_bar_quick_launch',
+    onFocusTerminal: queueTerminalTabFocusAfterNewTabMenuClose,
+    onFocusHostTerminal: queueNewActiveTerminalFocusAfterNewTabMenuClose
+  })
+  const launchAgentFromNewTabEntry = (option: TabAgentLaunchOption): void => {
+    if (option.row) {
+      launchAgentRow(option.row)
     }
   }
   const runPendingNewTabMenuFocusAfterClose = (): void => {
@@ -274,7 +257,6 @@ export function useTabBarCreateMenuController({
     }
   }
   const clearPendingNewTabMenuFocusOnUnmount = clearPendingNewTabMenuFocusOnUnmountRef.current
-
   useEffect(() => {
     if (!newTabMenuOpen) {
       return
@@ -283,14 +265,15 @@ export function useTabBarCreateMenuController({
     window.addEventListener('blur', dismiss)
     return () => window.removeEventListener('blur', dismiss)
   }, [newTabMenuOpen])
-
   useEffect(() => {
     if (!newTabMenuOpen) {
       setCreateMenuQuery('')
     }
   }, [newTabMenuOpen])
-
   return {
+    agentMenu,
+    agentLaunchOptions,
+    launchAgentRow,
     newTabMenuOpen,
     setNewTabMenuOpen,
     setCreateMenuQuery,

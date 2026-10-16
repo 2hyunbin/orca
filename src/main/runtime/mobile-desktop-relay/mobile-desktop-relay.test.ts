@@ -56,7 +56,7 @@ function relayWithPhone(
 ) {
   const syncCalls: unknown[] = []
   const server = { capable: true }
-  const desktop = { nativeChatDefault: true }
+  const desktop: { nativeChatDefault: boolean | Promise<boolean> } = { nativeChatDefault: true }
   const hosts: MobileDesktopRelayHosts = {
     list: () => ({
       environments: [],
@@ -112,6 +112,26 @@ function relayWithPhone(
 }
 
 describe('MobileDesktopRelay', () => {
+  it('does not send a launch after its link retires during preference resolution', async () => {
+    sockets.length = 0
+    const { relay, phone, desktop } = relayWithPhone()
+    let resolvePreference: (value: boolean) => void = () => {}
+    desktop.nativeChatDefault = new Promise<boolean>((resolve) => {
+      resolvePreference = resolve
+    })
+    relay.forward(
+      phone,
+      'env-1',
+      { id: 'late', method: 'agent.launch' },
+      JSON.stringify({ id: 'late', method: 'agent.launch', params: { agent: 'grok' } })
+    )
+    await vi.waitFor(() => expect(sockets.length).toBe(1))
+    relay.dispose()
+    resolvePreference(true)
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    expect(sockets[0]?.sent).toEqual([])
+  })
+
   it("stamps the desktop's chat default onto relayed launches only", async () => {
     sockets.length = 0
     const { relay, phone, desktop } = relayWithPhone()
@@ -140,7 +160,9 @@ describe('MobileDesktopRelay', () => {
       frame('l3', 'terminal.list', { worktree: 'id:wt-1' })
     )
     await vi.waitFor(() => expect(sockets[0]?.sent.length).toBe(3))
-    const sent = sockets[0]!.sent.map((text) => JSON.parse(text))
+    const sent = sockets[0]!.sent
+      .map((text) => JSON.parse(text))
+      .sort((a, b) => a.id.localeCompare(b.id))
     expect(sent[0].params).toEqual({ agent: 'claude', target, nativeChatDefault: true })
     expect(sent[1].params).toEqual({
       agent: 'claude',

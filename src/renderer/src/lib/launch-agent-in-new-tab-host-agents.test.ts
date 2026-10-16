@@ -30,7 +30,11 @@ vi.mock('@/lib/web-client-location', () => ({ isWebClientLocation: () => false }
 vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: mocks.callRuntimeRpc }))
 vi.mock('@/lib/structured-agent-launch-settlement', () => ({}))
 
-import { resetHostStructuredAgentsForTests } from '@/runtime/host-structured-agents'
+import * as localCapabilities from '@/runtime/local-runtime-capabilities'
+import {
+  resetHostStructuredAgentsForTests,
+  loadHostStructuredAgents
+} from '@/runtime/host-structured-agents'
 import {
   refreshLocalRuntimeCapabilities,
   setLocalRuntimeCapabilitiesForTests
@@ -61,6 +65,7 @@ const startupPlan = { launchCommand: 'opencode' } as never
 function storeWithSettings(settings: Record<string, unknown>) {
   mocks.state.current = {
     settings,
+    localDetectedAgentIdsByContext: { host: ['opencode'] },
     runtimeStatusByEnvironmentId: new Map(),
     worktreesByRepo: {},
     folderWorkspaces: []
@@ -116,6 +121,62 @@ describe('a new tab whose chat route waits on the host agent list', () => {
       requestId: undefined,
       agentSessionLaunchPlan: { route: 'structured-native-chat', requestId: 'request-1' }
     })
+  })
+
+  it('prepares native installation before freezing a cold new-tab route', async () => {
+    const store = storeWithSettings(SETTINGS)
+    mocks.state.current.localDetectedAgentIdsByContext = {}
+    mocks.state.current.ensureNativeDetectedAgents = async () => {
+      mocks.state.current.localDetectedAgentIdsByContext = { host: ['opencode'] }
+      return ['opencode']
+    }
+    const route = routeNewTabLaunch(store, args, request)
+    if (!('awaited' in route)) {
+      throw new Error('cold inventory must be prepared')
+    }
+    const result = launchOnceHostAnswered(route, args, startupPlan, fakeRelaunch())
+    await expect(result?.structuredSettlement).resolves.toEqual({
+      kind: 'structured',
+      sessionId: 'session-1'
+    })
+  })
+
+  it.each([true, false])('cleans up the deadline with late inventory=%s', async (lateInventory) => {
+    vi.useFakeTimers()
+    setLocalRuntimeCapabilitiesForTests(null)
+    const waitForCapabilities = localCapabilities.awaitLocalRuntimeCapabilities
+    const stops: ReturnType<typeof vi.fn>[] = []
+    const acquire = vi
+      .spyOn(localCapabilities, 'awaitLocalRuntimeCapabilities')
+      .mockImplementation(() => {
+        const wait = waitForCapabilities()
+        const stop = vi.fn(wait.stop)
+        stops.push(stop)
+        return { known: wait.known, stop }
+      })
+    const store = storeWithSettings(SETTINGS)
+    let finishInventory = (_ids: string[]): void => {}
+    if (lateInventory) {
+      mocks.state.current.localDetectedAgentIdsByContext = {}
+      mocks.state.current.ensureNativeDetectedAgents = () =>
+        new Promise<string[]>((resolve) => {
+          finishInventory = resolve
+        })
+    }
+    const route = routeNewTabLaunch(store, args, request)
+    if (!('awaited' in route)) {
+      throw new Error('expected bounded preparation')
+    }
+    await vi.advanceTimersByTimeAsync(HOST_ANSWER_WAIT_MS)
+    await route.awaited
+    finishInventory(['opencode'])
+    await vi.advanceTimersByTimeAsync(1)
+    expect(acquire).toHaveBeenCalledTimes(lateInventory ? 0 : 1)
+    for (const stop of stops) {
+      expect(stop).toHaveBeenCalledOnce()
+    }
+    expect(mocks.callRuntimeRpc).not.toHaveBeenCalled()
+    expect(console.warn).not.toHaveBeenCalled()
   })
 
   it('decides without the list once the bounded wait runs out', async () => {
@@ -237,5 +298,22 @@ describe("a new tab during startup, before this computer's runtime answered", ()
     expect(console.warn).toHaveBeenCalledWith(
       expect.stringContaining('claude opens terminal-tui: runtime-capability-unknown')
     )
+  })
+})
+
+it('keeps a selected CLI terminal when native discovery and the catalog later allow chat', async () => {
+  const store = storeWithSettings(SETTINGS)
+  mocks.state.current.localDetectedAgentIdsByContext = { host: [] }
+  setLocalRuntimeCapabilitiesForTests(null)
+  const route = routeNewTabLaunch(store, args, { ...request, requestedSurface: 'terminal' })
+  if (!('plan' in route)) {
+    throw new Error('explicit surface must not wait')
+  }
+  mocks.state.current.localDetectedAgentIdsByContext = { host: ['opencode'] }
+  setLocalRuntimeCapabilitiesForTests(REGISTERED)
+  await loadHostStructuredAgents('local', REGISTERED, null)
+  expect(route.plan?.route).toBe('terminal-tui')
+  expect(routeNewTabLaunch(store, args, request)).toMatchObject({
+    plan: { route: 'structured-native-chat' }
   })
 })

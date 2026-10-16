@@ -1,4 +1,7 @@
 import type { StructuredAgentSessionResumeSource } from '../../../shared/structured-agent-session-create'
+import { isAgentSessionHandleProvider } from '../../../shared/agent-session-provider-handle'
+import { isNativeChatEnabled } from '../../../shared/structured-native-chat-launch-route'
+import { useAppStore } from '@/store'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import { parseExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
 import { STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
@@ -32,6 +35,8 @@ import { awaitLocalRuntimeCapabilities } from '@/runtime/local-runtime-capabilit
 export type AgentSessionLaunchRequest = AgentLaunchRouteArgs & {
   /** The user action this launch serves, minted where that action is handled. */
   requestId: AgentLaunchRequestId
+  requestedSurface?: 'chat' | 'terminal'
+  selectedExecutionHostId?: ExecutionHostId
   resumeFrom?: StructuredAgentSessionResumeSource
   onPromptDelivered?: () => void
   /** The caller keeps the prompt's text if it does not go out (notes), so no composer gets it. */
@@ -45,6 +50,7 @@ export type AgentSessionLaunchRequest = AgentLaunchRouteArgs & {
  */
 export type AgentSessionLaunchVerdict = {
   route: AgentLaunchRoute
+  requestedSurface?: 'chat' | 'terminal'
   /** The user action this launch serves; a re-entry with this verdict is that same action. */
   requestId: AgentLaunchRequestId
   agent: TuiAgent
@@ -232,37 +238,57 @@ export function awaitStructuredRouteHostAnswer(
   waitMs: number
 ): Promise<void> | null {
   const input = buildAgentLaunchRouteInput(store, request)
-  const awaits = structuredRouteAwaits(input)
-  if (!awaits) {
+  const needsInventory =
+    input.installedHere === null &&
+    isNativeChatEnabled(input.settings) &&
+    input.settings?.nativeChatProviders?.[request.agent] === undefined &&
+    !isAgentSessionHandleProvider(request.agent)
+  if (!needsInventory && !structuredRouteAwaits(input)) {
     return null
   }
   let stopCapabilitiesWait = (): void => {}
-  const ask = async (): Promise<void> => {
-    let capabilities = input.hostCapabilities
-    // Either route may be missing this computer's capabilities: wait for the probe that lands
-    // them, since one that failed at startup answers null at once.
-    if (capabilities === null && parseExecutionHostId(input.executionHostId)?.kind === 'local') {
-      const wait = awaitLocalRuntimeCapabilities()
-      stopCapabilitiesWait = wait.stop
-      capabilities = await wait.known
-    }
-    await relearnHostStructuredAgents(
-      input.executionHostId,
-      capabilities,
-      store.runtimeStatusByEnvironmentId
-    )
-  }
+  const timedOut = Symbol('host-answer-timeout')
   let timer: ReturnType<typeof setTimeout> | undefined
-  const answered = ask().catch((error: unknown) => {
-    console.warn('[agent-launch-route] could not ask the host', error)
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(timedOut), waitMs)
   })
-  const deadline = new Promise<void>((resolve) => {
-    timer = setTimeout(resolve, waitMs)
-  })
-  return Promise.race([answered, deadline]).finally(() => {
-    clearTimeout(timer)
-    stopCapabilitiesWait()
-  })
+  return (async (): Promise<void> => {
+    try {
+      const readyInput = needsInventory
+        ? {
+            ...input,
+            installedHere:
+              (await Promise.race([store.ensureNativeDetectedAgents?.(), deadline])) ?? null
+          }
+        : input
+      if (!structuredRouteAwaits(readyInput)) {
+        return
+      }
+      let capabilities = readyInput.hostCapabilities
+      // Either route may be missing this computer's capabilities: wait for the probe that lands
+      // them, since one that failed at startup answers null at once.
+      if (capabilities === null && parseExecutionHostId(input.executionHostId)?.kind === 'local') {
+        const wait = awaitLocalRuntimeCapabilities()
+        stopCapabilitiesWait = wait.stop
+        capabilities = await Promise.race([wait.known, deadline])
+      }
+      await Promise.race([
+        relearnHostStructuredAgents(
+          input.executionHostId,
+          capabilities,
+          store.runtimeStatusByEnvironmentId
+        ),
+        deadline
+      ])
+    } catch (error) {
+      if (error !== timedOut) {
+        console.warn('[agent-launch-route] could not ask the host', error)
+      }
+    } finally {
+      clearTimeout(timer)
+      stopCapabilitiesWait()
+    }
+  })()
 }
 
 /** The one place a launch route is decided. Delivery mode is fixed here too, so the settle loop
@@ -272,12 +298,21 @@ export function planAgentSessionLaunch(
   request: AgentSessionLaunchRequest
 ): AgentSessionLaunchPlan {
   const input = buildAgentLaunchRouteInput(store, request)
-  const route = resolveAgentLaunchRoute(input)
-  reportStructuredLaunchDowngrade(store, input, route)
+  const route = request.requestedSurface
+    ? request.requestedSurface === 'chat'
+      ? 'structured-native-chat'
+      : 'terminal-tui'
+    : resolveAgentLaunchRoute(input)
+  if (!request.requestedSurface) {
+    reportStructuredLaunchDowngrade(store, input, route)
+  }
   const executionHostId =
-    route === 'structured-native-chat' ? parseExecutionHostId(input.executionHostId)?.id : undefined
+    route === 'structured-native-chat'
+      ? (request.selectedExecutionHostId ?? parseExecutionHostId(input.executionHostId)?.id)
+      : undefined
   return adoptAgentSessionLaunchVerdict({
     route,
+    ...(request.requestedSurface ? { requestedSurface: request.requestedSurface } : {}),
     requestId: request.requestId,
     agent: request.agent,
     ...(executionHostId ? { executionHostId } : {}),
@@ -288,4 +323,12 @@ export function planAgentSessionLaunch(
     ...(request.onPromptDelivered ? { onPromptDelivered: request.onPromptDelivered } : {}),
     ...(request.promptKeptByCaller ? { promptKeptByCaller: true as const } : {})
   })
+}
+
+/** Prepare the inputs before freezing an action's route; queries stay synchronous. */
+export async function prepareAgentSessionLaunch(
+  request: AgentSessionLaunchRequest
+): Promise<AgentSessionLaunchPlan> {
+  await awaitStructuredRouteHostAnswer(useAppStore.getState(), request, 3_000)
+  return planAgentSessionLaunch(useAppStore.getState(), request)
 }

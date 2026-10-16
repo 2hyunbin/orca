@@ -15,7 +15,7 @@ import {
   getLinkedItemDisplayName,
   toFolderWorkspaceLinkedTask
 } from './folder-workspace-composer-helpers'
-import { planAgentSessionLaunch } from '@/lib/agent-session-launch-plan'
+import { prepareAgentSessionLaunch } from '@/lib/agent-session-launch-plan'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { beginStructuredAgentSessionProvisionalLaunch } from '@/lib/structured-agent-session-provisional-tab'
 import { getNewWorkspaceProjectGroupHostId } from '@/lib/new-workspace-project-options'
@@ -131,7 +131,7 @@ export async function submitFolderWorkspaceCreate({
   const launchDraftPrompt =
     quickAgent && linkedWorkItem ? resolveFolderWorkspaceLaunchDraft(linkedWorkItem, note) : null
   const plan = quickAgent
-    ? planAgentSessionLaunch(useAppStore.getState(), {
+    ? await prepareAgentSessionLaunch({
         requestId: newAgentLaunchRequestId(),
         agent: quickAgent,
         workspace: {

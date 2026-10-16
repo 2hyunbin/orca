@@ -1,12 +1,18 @@
+import { rowLabel, rowId, chatUnavailableLabel } from './tab-agent-row-presentation'
 import { getAgentCatalog } from '@/lib/agent-catalog'
 import { filterEnabledTuiAgents } from '../../../../shared/tui-agent-selection'
 import { normalizeMatchQuery, tokenizeMatchValue } from './query-token-match'
 import type { TuiAgent } from '../../../../shared/tui-agent'
+import type { NewTabAgentMenuRow } from '@/lib/new-tab-agent-menu-rows'
 
 export type TabAgentLaunchOption = {
   agent: TuiAgent
   aliases: readonly string[]
   label: string
+  disabled?: boolean
+  id?: string
+  row?: NewTabAgentMenuRow
+  reason?: string
 }
 
 function normalizeAgentAlias(value: string): string {
@@ -58,7 +64,30 @@ export function buildTabAgentLaunchOptions(
       aliases.add(normalizeAgentAlias(commandOverride))
       aliases.add(compactAgentAlias(commandOverride))
     }
-    return { agent, aliases: [...aliases], label }
+    return {
+      agent,
+      aliases: [...aliases],
+      label
+    }
+  })
+}
+
+export function buildTabAgentLaunchOptionsFromRows(
+  rows: readonly NewTabAgentMenuRow[],
+  commandOverrides: Partial<Record<TuiAgent, string>> = {}
+): TabAgentLaunchOption[] {
+  return rows.map((row) => {
+    const base = buildTabAgentLaunchOptions([row.agent], commandOverrides)[0]
+    return {
+      ...base,
+      agent: row.agent,
+      aliases: base?.aliases ?? [],
+      label: rowLabel(row),
+      disabled: row.kind === 'chat-unavailable',
+      reason: row.kind === 'chat-unavailable' ? chatUnavailableLabel(row.reason) : undefined,
+      row,
+      id: row.kind === 'terminal' ? `agent:${row.agent}` : rowId(row)
+    }
   })
 }
 

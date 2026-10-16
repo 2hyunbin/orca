@@ -81,6 +81,7 @@ describe('Chat settings page', () => {
     const { container } = renderChat(true, false)
     expect(screen.getByRole('spinbutton', { name: 'Text size' })).toBeTruthy()
     expect(container.querySelector('#chat-names')).toBeNull()
+    expect(screen.queryByRole('switch', { name: 'Open Claude as a chat' })).toBeNull()
     expect(screen.queryByRole('switch', { name: 'Name chats automatically' })).toBeNull()
     expect(screen.queryByRole('switch', { name: 'Toggle inline visuals' })).toBeNull()
     const sections = buildSettingsNavigationMetadata({
@@ -93,6 +94,7 @@ describe('Chat settings page', () => {
     const results = buildCmdJSettingsResults(sections).filter((entry) => entry.sectionId === 'chat')
     expect(results.some((entry) => entry.targetSectionId === 'chat-text-size')).toBe(true)
     expect(results.some((entry) => entry.targetSectionId === 'chat-names')).toBe(false)
+    expect(results.some((entry) => entry.targetSectionId === 'chat-providers')).toBe(false)
     expect(results.some((entry) => entry.targetSectionId === 'chat-inline-visuals')).toBe(false)
   })
 
