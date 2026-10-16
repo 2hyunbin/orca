@@ -3,17 +3,19 @@
 import { describe, expect, it, vi } from 'vitest'
 import { toRemoteRuntimePtyId } from '../../shared/remote-runtime-pty-id'
 import { OrchestrationError } from './orchestration/orchestration-error'
+import { getDefaultWorkspaceSession } from '../../shared/constants'
 
 const { OrcaRuntimeService } = await import('./orca-runtime-test-mocks.spec')
 await import('./orca-runtime-test-lifecycle.spec')
-const { store } = await import('./orca-runtime-test-fixtures.spec')
+const { store, makeRuntimeStoreWithWorkspaceSession } =
+  await import('./orca-runtime-test-fixtures.spec')
 
 const WORKTREE_ID = 'repo-1::/tmp/worktree-a'
 
 type HostCall = (environmentId: string, method: string, params: unknown) => Promise<unknown>
 
-function pairedHostLeafRuntime(hostCall: HostCall) {
-  const runtime = new OrcaRuntimeService(store)
+function pairedHostLeafRuntime(hostCall: HostCall, runtimeStore: typeof store = store) {
+  const runtime = new OrcaRuntimeService(runtimeStore)
   const localStops: string[] = []
   runtime.setPtyController({
     write: () => true,
@@ -165,6 +167,36 @@ describe('closing a terminal that a paired runtime runs', () => {
       ptyStopReason: 'its owning host no longer recognizes this terminal handle'
     })
     expect(closeTerminalTab).toHaveBeenCalledOnce()
+  })
+
+  it('refuses a pinned tab before the owning host stops anything', async () => {
+    const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession({
+      ...getDefaultWorkspaceSession(),
+      tabsByWorktree: {
+        [WORKTREE_ID]: [
+          {
+            id: 'tab-1',
+            ptyId: toRemoteRuntimePtyId('term_on_host', 'env-1'),
+            worktreeId: WORKTREE_ID,
+            title: 'Shell',
+            customTitle: null,
+            color: null,
+            sortOrder: 0,
+            createdAt: 0,
+            isPinned: true
+          }
+        ]
+      }
+    })
+    const { runtime, call } = pairedHostLeafRuntime(
+      async () => ({ close: { handle: 'term_on_host', tabId: 'host-tab', ptyKilled: true } }),
+      runtimeStore
+    )
+    const handle = await listedHandle(runtime)
+
+    await expect(runtime.closeTerminal(handle)).rejects.toThrow('terminal_tab_pinned')
+    await expect(runtime.closeTerminalTab(handle)).rejects.toThrow('terminal_tab_pinned')
+    expect(call).not.toHaveBeenCalled()
   })
 
   it('leaves a pane rebound during the host call to its new occupant', async () => {
