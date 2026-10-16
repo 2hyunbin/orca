@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
-import type { useAppStore } from '@/store'
+import { useAppStore } from '@/store'
+import { captureSelectedWorktree } from '@/lib/selected-worktree-reference'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { unnestWorktrees } from './worktree-unnest'
 import { shouldSuppressContextMenuFollowUpClick } from './worktree-context-menu-policy'
@@ -10,7 +11,12 @@ export function useWorktreeContextMenuSecondaryActions(args: {
   updateWorktreeLineage: ReturnType<typeof useAppStore.getState>['updateWorktreeLineage']
 }) {
   const handleRemoveParentLink = useCallback(() => {
-    void unnestWorktrees(args.activeContextWorktrees, args.updateWorktreeLineage)
+    void unnestWorktrees(
+      args.activeContextWorktrees.map((row) =>
+        captureSelectedWorktree(useAppStore.getState(), row)
+      ),
+      args.updateWorktreeLineage
+    )
   }, [args])
   const suppressOpeningPointerEvent = useCallback(
     (event: React.SyntheticEvent) => {

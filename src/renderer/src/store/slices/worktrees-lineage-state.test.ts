@@ -1,4 +1,5 @@
 import { unnestWorktrees } from '../../components/sidebar/worktree-unnest'
+import { captureSelectedWorktree } from '@/lib/selected-worktree-reference'
 import { composeWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeLineage, makeIdentifiedWorktree as occupant } from './worktrees-slice-test-fixtures'
@@ -44,76 +45,75 @@ describe('worktree lineage state', () => {
       const store = createTestStore()
       const lineage = makeLineage()
       const local = occupant('local', 'local-child')
-      const child = occupant(hostId, lineage.worktreeInstanceId)
-      const localLineage = { ...lineage, worktreeInstanceId: local.instanceId }
+      const child = Object.assign(
+        occupant(hostId === 'runtime:owner-env' ? 'local' : hostId, lineage.worktreeInstanceId),
+        { hostId }
+      )
+      const localLineage = { ...lineage, worktreeInstanceId: local.identity.instanceId }
       const localKey = localRowKey(local.id)
       const childKey = composeWorktreeHostIdentity(hostId, child.id)
-      const parentSelector = 'identity:wt2:local:parent-instance'
+      const parent = Object.assign(
+        occupant('ssh:parent', lineage.parentWorktreeInstanceId, lineage.parentWorktreeId),
+        { runtimeOwnerEnvironmentId: hostId === 'runtime:owner-env' ? 'owner-env' : undefined }
+      )
+      const parentSelector = `identity:${parent.identity.key}`
       store.setState({
-        worktreesByRepo: { repo1: [local, child] },
+        worktreesByRepo: { repo1: [local, child, parent] },
         activeWorktreeId: local.id,
         activeWorkspaceExecutionHostId: 'local',
         worktreeLineageById: { [localKey]: localLineage }
       })
-      mockApi.worktrees.updateLineage.mockResolvedValue(lineage)
-      runtimeEnvironmentCall.mockResolvedValue(
-        rpcReply({ worktree: { ...child, hostId: 'local', lineage } })
-      )
-      await store.getState().assignWorktreeParent(child.id, {
-        identity: child.identity,
-        parentWorktreeId: parentSelector
-      })
-      expect(store.getState().worktreeLineageById).toEqual({
-        [localKey]: localLineage,
-        [childKey]: lineage
-      })
-      expect(store.getState().worktreesByRepo.repo1[0]).toBe(local)
-      expect(store.getState().worktreesByRepo.repo1[1]).toMatchObject({ lineage })
-      if (hostId === 'ssh:remote') {
-        expect(mockApi.worktrees.updateLineage).toHaveBeenCalledWith({
-          worktreeId: `identity:${child.identity.key}`,
-          parentWorktreeId: parentSelector
-        })
-      } else {
-        expect(runtimeEnvironmentCall).toHaveBeenCalledWith(
-          expect.objectContaining({
-            selector: 'owner-env',
-            params: {
-              worktree: `identity:${child.identity.key}`,
-              parentWorktree: parentSelector
-            }
-          })
+      const reference = captureSelectedWorktree(store.getState(), child)!
+      const parentReference = captureSelectedWorktree(store.getState(), parent)!
+      for (const next of [lineage, null]) {
+        mockApi.worktrees.updateLineage.mockResolvedValue(next)
+        runtimeEnvironmentCall.mockResolvedValue(
+          rpcReply({ worktree: { ...child, hostId: 'local', lineage: next } })
         )
+        await (next
+          ? store.getState().assignWorktreeParent(reference, { parent: parentReference })
+          : unnestWorktrees([reference], store.getState().updateWorktreeLineage))
+        const expected = { [localKey]: localLineage, ...(next ? { [childKey]: next } : {}) }
+        expect(store.getState().worktreeLineageById).toEqual(expected)
+        expect(store.getState().worktreesByRepo.repo1[0]).toBe(local)
+        expect(store.getState().worktreesByRepo.repo1[1]).toMatchObject({ lineage: next })
+        expect(store.getState().worktreesByRepo.repo1[2]).toMatchObject({
+          childWorktreeIds: next || hostId === 'ssh:remote' ? [child.id] : []
+        })
+        const args = next ? { parentWorktreeId: parentSelector } : { noParent: true }
+        if (hostId === 'ssh:remote') {
+          expect(mockApi.worktrees.updateLineage).toHaveBeenLastCalledWith({
+            worktreeId: `identity:${child.identity.key}`,
+            ...args
+          })
+        } else {
+          expect(runtimeEnvironmentCall).toHaveBeenLastCalledWith(
+            expect.objectContaining({
+              selector: 'owner-env',
+              params: {
+                worktree: `identity:${child.identity.key}`,
+                ...(next ? { parentWorktree: parentSelector } : args)
+              }
+            })
+          )
+        }
+        mockApi.worktrees.listLineage.mockResolvedValue({ lineage: expected })
+        runtimeEnvironmentCall.mockResolvedValue(
+          rpcReply({ lineage: next ? { [child.id]: next } : {} })
+        )
+        await store.getState().fetchWorktreeLineage({ executionHostId: hostId })
+        expect(store.getState().worktreeLineageById).toEqual(expected)
       }
-      const refreshed = { lineage: { [local.id]: localLineage, [childKey]: lineage } }
-      mockApi.worktrees.listLineage.mockResolvedValue(refreshed)
-      runtimeEnvironmentCall.mockResolvedValue(rpcReply({ lineage: { [child.id]: lineage } }))
-      await store.getState().fetchWorktreeLineage({ executionHostId: hostId })
-      expect(store.getState().worktreeLineageById[childKey]).toEqual(lineage)
-      mockApi.worktrees.updateLineage.mockResolvedValue(null)
-      runtimeEnvironmentCall.mockResolvedValue(
-        rpcReply({ worktree: { ...child, hostId: 'local', lineage: null } })
-      )
-      await unnestWorktrees([child], store.getState().updateWorktreeLineage)
-      expect(store.getState().worktreeLineageById).toEqual({ [localKey]: localLineage })
-      expect(store.getState().worktreesByRepo.repo1[0]).toBe(local)
-      expect(store.getState().worktreesByRepo.repo1[1]).toMatchObject({
-        parentWorktreeId: null,
-        lineage: null
-      })
-      mockApi.worktrees.listLineage.mockResolvedValue({ lineage: { [local.id]: localLineage } })
-      runtimeEnvironmentCall.mockResolvedValue(rpcReply({ lineage: {} }))
-      await store.getState().fetchWorktreeLineage({ executionHostId: hostId })
-      expect(store.getState().worktreeLineageById).toEqual({ [localKey]: localLineage })
     }
   )
 
   it('refuses missing, replaced and ambiguous identities without touching another occupant', async () => {
     const store = createTestStore()
     const child = occupant('local', 'child-instance')
-    const identity = child.identity
-    const clear = () =>
-      store.getState().updateWorktreeLineage(child.id, { identity, noParent: true })
+    store.setState({ worktreesByRepo: { repo1: [child] } })
+    const reference = captureSelectedWorktree(store.getState(), child)!
+    store.setState({ worktreesByRepo: {} })
+    const clear = () => store.getState().updateWorktreeLineage(reference, { noParent: true })
     await expect(clear()).rejects.toThrow('selector_not_found')
     store.setState({
       worktreesByRepo: { repo1: [child, { ...child, id: 'repo1::/second-location' }] }

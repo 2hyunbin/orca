@@ -1,4 +1,4 @@
-import { createWorktreeIdentity } from '../../../../shared/worktree/identity'
+import type { SelectedWorktreeReference } from '@/lib/selected-worktree-reference'
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -47,11 +47,13 @@ function makeWorktree(overrides: Partial<Worktree> = {}): Worktree {
   }
 }
 
-const childIdentity = createWorktreeIdentity({
-  worktreeId: 'child',
-  executionHostId: 'ssh:remote',
-  instanceId: 'ssh-child'
-})
+const childReference: SelectedWorktreeReference = {
+  id: 'child',
+  hostId: 'ssh:remote',
+  target: { kind: 'local' },
+  kind: 'legacy'
+}
+const parentReference = { ...childReference, id: 'parent' }
 
 describe('selectWorktreeParent', () => {
   it('closes and assigns the selected parent to the captured child', () => {
@@ -60,19 +62,15 @@ describe('selectWorktreeParent', () => {
     const showError = vi.fn()
 
     selectWorktreeParent({
-      childIdentity,
-      childWorktreeId: 'child',
-      parentWorktreeId: 'parent',
+      childReference,
+      parentReference,
       assignWorktreeParent,
       close,
       showError
     })
 
     expect(close).toHaveBeenCalledTimes(1)
-    expect(assignWorktreeParent).toHaveBeenCalledWith('child', {
-      identity: childIdentity,
-      parentWorktreeId: 'parent'
-    })
+    expect(assignWorktreeParent).toHaveBeenCalledWith(childReference, { parent: parentReference })
     expect(showError).not.toHaveBeenCalled()
   })
 
@@ -83,9 +81,8 @@ describe('selectWorktreeParent', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
 
     selectWorktreeParent({
-      childIdentity,
-      childWorktreeId: 'child',
-      parentWorktreeId: 'parent',
+      childReference,
+      parentReference,
       assignWorktreeParent,
       close,
       showError
@@ -101,9 +98,8 @@ describe('selectWorktreeParent', () => {
     const close = vi.fn()
 
     selectWorktreeParent({
-      childIdentity,
-      childWorktreeId: null,
-      parentWorktreeId: 'parent',
+      childReference: null,
+      parentReference,
       assignWorktreeParent,
       close,
       showError: vi.fn()
@@ -236,7 +232,7 @@ describe('parent picker keyboard input', () => {
         preventDefault,
         stopPropagation
       } as unknown as React.KeyboardEvent<HTMLInputElement>,
-      candidates: [{ id: 'parent' }],
+      candidates: [makeWorktree({ id: 'parent' })],
       activeIndex: 0,
       moveHighlight,
       selectParent

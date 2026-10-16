@@ -39,6 +39,8 @@ export function commitTerminalShutdownState({
   tabs: readonly TerminalTab[]
   worktreeId: string
 }): void {
+  const removedTabIds = new Set(tabs.map((tab) => tab.id))
+  const partial = (get().tabsByWorktree[worktreeId] ?? []).some((tab) => !removedTabIds.has(tab.id))
   settleAttentionRemovedBy(set, get, () =>
     set((state) => {
       const tabsByWorktree = keepIdentifiers
@@ -158,16 +160,29 @@ export function commitTerminalShutdownState({
         }
       }
     })
+  } else if (partial) {
+    get().clearSleepingAgentSessionsByPaneKey(
+      Object.keys(get().sleepingAgentSessionsByPaneKey).filter((key) =>
+        tabs.some((tab) => key.startsWith(`${tab.id}:`))
+      )
+    )
   } else {
     get().clearSleepingAgentSessionsByWorktree(worktreeId)
   }
 
-  get().dropAgentStatusByWorktree(worktreeId, {
-    shutdownReason,
-    sleepingPaneKeys,
-    retainedCompletionEvidence
-  })
-  get().clearPaneForegroundAgentByWorktree(worktreeId)
+  if (partial) {
+    for (const tab of tabs) {
+      get().dropAgentStatusByTabPrefix(tab.id)
+      get().clearPaneForegroundAgentByTabPrefix(tab.id)
+    }
+  } else {
+    get().dropAgentStatusByWorktree(worktreeId, {
+      shutdownReason,
+      sleepingPaneKeys,
+      retainedCompletionEvidence
+    })
+    get().clearPaneForegroundAgentByWorktree(worktreeId)
+  }
   const settledPtyIds = exitGuardPtyIds.filter((ptyId) => !get().isPtyShutdownPending(ptyId))
   markCommittedPtyShutdowns(settledPtyIds)
   settleDeferredPtyShutdownExits(settledPtyIds, 'committed')

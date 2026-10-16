@@ -46,6 +46,17 @@ export function buildWorktreePurgeState(
     typeof target === 'string' ? { id: target } : target
   )
   const requestedIds = new Set(normalizedTargets.map((target) => target.id))
+  const lineageTargets = [
+    ...normalizedTargets,
+    ...Object.values(s.worktreesByRepo)
+      .flat()
+      .filter((row) =>
+        normalizedTargets.some(
+          (target) => row.id === target.id && matchesRemovedWorktreeOwner(s, row, target.hostId)
+        )
+      )
+      .map((row) => ({ id: row.id, hostId: row.hostId }))
+  ]
   const ownerTabIds = new Set(
     normalizedTargets.flatMap((target) => [...removedOwnerTabIds(s, target.id, target.hostId)])
   )
@@ -63,14 +74,14 @@ export function buildWorktreePurgeState(
       .map((target) => target.id)
   )
   const lineageKeys = Object.keys(s.worktreeLineageById).filter((key) =>
-    normalizedTargets.some((target) =>
+    lineageTargets.some((target) =>
       target.hostId
         ? key === composeWorktreeHostIdentity(target.hostId, target.id)
         : getWorktreeIdFromHostIdentity(key) === target.id
     )
   )
   const workspaceLineageKeys = Object.keys(s.workspaceLineageByChildKey).filter((key) =>
-    normalizedTargets.some((target) =>
+    lineageTargets.some((target) =>
       target.hostId
         ? key === composeWorktreeHostIdentity(target.hostId, `worktree:${target.id}`)
         : getWorktreeIdFromHostIdentity(key) === `worktree:${target.id}`

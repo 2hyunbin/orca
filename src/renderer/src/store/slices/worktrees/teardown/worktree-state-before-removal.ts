@@ -17,7 +17,7 @@ export type WorktreeStateBeforeRemoval = {
 export function captureWorktreeStateBeforeRemoval(
   state: Pick<
     AppState,
-    'tabsByWorktree' | 'unifiedTabsByWorktree' | 'ptyIdsByTabId' | 'worktreesByRepo'
+    'tabsByWorktree' | 'unifiedTabsByWorktree' | 'ptyIdsByTabId' | 'worktreesByRepo' | 'repos'
   >,
   worktreeId: string,
   executionHostId: ExecutionHostId | undefined

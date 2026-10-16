@@ -2,13 +2,17 @@ import { createWorktreeIdentity } from '../../../../shared/worktree/identity'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { toast } from 'sonner'
 import { unnestWorktrees } from './worktree-unnest'
+import type { SelectedWorktreeReference } from '@/lib/selected-worktree-reference'
 
 vi.mock('sonner', () => ({
   toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn(), info: vi.fn() }
 }))
 
-const rows = ['repo1::/a', 'repo1::/b'].map((id) => ({
+const rows: SelectedWorktreeReference[] = ['repo1::/a', 'repo1::/b'].map((id) => ({
   id,
+  hostId: 'ssh:remote',
+  target: { kind: 'local' },
+  kind: 'identified',
   identity: createWorktreeIdentity({
     worktreeId: id,
     executionHostId: 'ssh:remote',
@@ -28,14 +32,8 @@ describe('unnestWorktrees', () => {
     await unnestWorktrees(rows, updateWorktreeLineage)
 
     expect(updateWorktreeLineage).toHaveBeenCalledTimes(2)
-    expect(updateWorktreeLineage).toHaveBeenCalledWith('repo1::/a', {
-      noParent: true,
-      identity: rows[0].identity
-    })
-    expect(updateWorktreeLineage).toHaveBeenCalledWith('repo1::/b', {
-      noParent: true,
-      identity: rows[1].identity
-    })
+    expect(updateWorktreeLineage).toHaveBeenCalledWith(rows[0], { noParent: true })
+    expect(updateWorktreeLineage).toHaveBeenCalledWith(rows[1], { noParent: true })
     expect(toast.error).not.toHaveBeenCalled()
   })
 

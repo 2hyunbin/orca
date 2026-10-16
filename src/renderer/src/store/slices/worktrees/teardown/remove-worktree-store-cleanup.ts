@@ -9,6 +9,7 @@ import { forgetAmbiguousOwnerWarnings } from '../listing/worktree-owner-settings
 import { omitRecordKeys } from './record-key-omission'
 import { removeWorktreeLayout } from '../../tabs/worktree-layout-lifecycle'
 import { matchesRemovedWorktreeOwner, removalActiveHost } from './worktree-removal-owner'
+import { projectLocalWorktreeLineageUpdate } from '../metadata/worktree-lineage-refresh'
 
 /** Clears worktree-owned renderer state after successful removal so a reused identity cannot inherit stale preferences. */
 export function applyRemoveWorktreeSuccessState(
@@ -31,7 +32,22 @@ export function applyRemoveWorktreeSuccessState(
         : isOpenFileOwnedByWorktree(file, { id: worktreeId, hostId: executionHostId })
     const omitByWorktree = <T>(m: Record<string, T> | undefined) => omitRecordKeys(m, worktreeIds)
     const omitByTabId = <T>(m: Record<string, T> | undefined) => omitRecordKeys(m, tabIds)
-    const nextWorktreesByRepo = { ...s.worktreesByRepo }
+    let nextWorktreesByRepo = { ...s.worktreesByRepo }
+    const removedRows = Object.values(s.worktreesByRepo)
+      .flat()
+      .filter(
+        (row) => row.id === worktreeId && matchesRemovedWorktreeOwner(s, row, executionHostId)
+      )
+    for (const row of removedRows) {
+      nextWorktreesByRepo = projectLocalWorktreeLineageUpdate(
+        { ...s, worktreesByRepo: nextWorktreesByRepo },
+        worktreeId,
+        null,
+        row,
+        s.worktreeLineageById[composeWorktreeHostIdentity(row.hostId, worktreeId)]
+          ?.parentWorktreeInstanceId
+      )
+    }
     for (const repoId of Object.keys(nextWorktreesByRepo)) {
       nextWorktreesByRepo[repoId] = nextWorktreesByRepo[repoId].filter(
         (w) => w.id !== worktreeId || !matchesRemovedWorktreeOwner(s, w, executionHostId)
@@ -65,10 +81,14 @@ export function applyRemoveWorktreeSuccessState(
       }),
       worktreesByRepo: nextWorktreesByRepo,
       worktreeLineageById: omitRecordKeys(s.worktreeLineageById, [
-        composeWorktreeHostIdentity(executionHostId, worktreeId)
+        composeWorktreeHostIdentity(executionHostId, worktreeId),
+        ...removedRows.map((row) => composeWorktreeHostIdentity(row.hostId, worktreeId))
       ]),
       workspaceLineageByChildKey: omitRecordKeys(s.workspaceLineageByChildKey, [
-        composeWorktreeHostIdentity(executionHostId, worktreeWorkspaceKey(worktreeId))
+        composeWorktreeHostIdentity(executionHostId, worktreeWorkspaceKey(worktreeId)),
+        ...removedRows.map((row) =>
+          composeWorktreeHostIdentity(row.hostId, worktreeWorkspaceKey(worktreeId))
+        )
       ]),
       runtimePaneTitlesByTabId: omitByTabId(s.runtimePaneTitlesByTabId),
       automaticAgentResumeClaimsByTabId: omitByTabId(s.automaticAgentResumeClaimsByTabId),

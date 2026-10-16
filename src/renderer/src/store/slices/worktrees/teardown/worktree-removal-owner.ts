@@ -22,39 +22,35 @@ export function matchesRemovedWorktreeOwner(
 
 export function removedOwnerTabIds(
   state: Pick<AppState, 'unifiedTabsByWorktree' | 'tabsByWorktree'> &
-    Partial<
-      Pick<
-        AppState,
-        'worktreesByRepo' | 'browserTabsByWorktree' | 'restoredRuntimeHostIdByWorkspaceSessionKey'
-      >
-    >,
+    Partial<Pick<AppState, 'worktreesByRepo' | 'browserTabsByWorktree' | 'repos'>>,
   worktreeId: string,
   hostId: ExecutionHostId | undefined
 ): Set<string> {
   const rows = Object.values(state.worktreesByRepo ?? {}).flat()
+  const survivors = rows.filter(
+    (row) =>
+      row.id === worktreeId &&
+      !matchesRemovedWorktreeOwner({ repos: state.repos ?? [] }, row, hostId)
+  )
   const ambiguous = findAmbiguousWorktreeIds(rows)
   const ids = new Set<string>()
   const unified = state.unifiedTabsByWorktree[worktreeId] ?? []
   for (const tab of unified) {
     if (
       hostId === undefined ||
-      isUnifiedTabOwnedByWorktree(tab, { id: worktreeId, hostId }, ambiguous)
+      !tab.executionHostId ||
+      !survivors.some((row) => isUnifiedTabOwnedByWorktree(tab, row, ambiguous))
     ) {
       ids.add(tab.id)
       ids.add(tab.entityId)
     }
   }
-  const restored =
-    state.restoredRuntimeHostIdByWorkspaceSessionKey?.[worktreeId] ??
-    state.restoredRuntimeHostIdByWorkspaceSessionKey?.[worktreeWorkspaceKey(worktreeId)]
-  if (hostId === undefined || (restored ? restored === hostId : !ambiguous.has(worktreeId))) {
-    for (const tab of [
-      ...(state.tabsByWorktree[worktreeId] ?? []),
-      ...(state.browserTabsByWorktree?.[worktreeId] ?? [])
-    ]) {
-      if (!unified.some((row) => row.entityId === tab.id)) {
-        ids.add(tab.id)
-      }
+  for (const tab of [
+    ...(state.tabsByWorktree[worktreeId] ?? []),
+    ...(state.browserTabsByWorktree?.[worktreeId] ?? [])
+  ]) {
+    if (!unified.some((row) => row.entityId === tab.id)) {
+      ids.add(tab.id)
     }
   }
   return ids

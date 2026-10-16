@@ -63,6 +63,7 @@ function setup() {
       worktreeDragGroups: [],
       worktreeDragUnitGroups: [],
       refreshWorktreeDragSession: () => true,
+      beginWorktreeLineageDrag: vi.fn(),
       getEligibleLineageDropTarget: () => target,
       computeWorktreeDrop: () => ({
         dropIndex: 1,

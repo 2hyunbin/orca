@@ -66,7 +66,9 @@ export async function listWorktreeLineageForRuntime(
     for (const edge of response.edges) {
       const child = parseWorkspaceKey(edge.child.locator)
       const host =
-        target.kind === 'environment' ? getRuntimeTargetHostId(target) : edge.child.hostId
+        target.kind === 'environment' && (!edge.child.hostId || edge.child.hostId === 'local')
+          ? getRuntimeTargetHostId(target)
+          : edge.child.hostId
       const lineage = edgeToWorktreeLineage(edge)
       if (child?.type === 'worktree' && lineage) {
         worktreeLineageById[composeWorktreeHostIdentity(host, child.worktreeId)] = lineage

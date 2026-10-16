@@ -24,8 +24,7 @@ export function WorktreeContextMenuOverlays({ model }: { model: WorktreeContextM
       {model.parentPicker ? (
         <WorktreeParentPickerPopover
           open={model.parentPickerOpen}
-          childWorktreeId={model.parentPicker.childWorktreeId}
-          childIdentity={model.parentPicker.childIdentity}
+          childReference={model.parentPicker.childReference}
           anchorElement={model.parentPicker.anchorElement}
           onOpenChange={model.handleParentPickerOpenChange}
         />
