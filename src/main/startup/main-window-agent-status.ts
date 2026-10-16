@@ -2,7 +2,7 @@ import type { BrowserWindow } from 'electron'
 import { agentHookServer } from '../agent-hooks/server'
 import { setMigrationUnsupportedPtyListener } from '../agent-hooks/migration-unsupported-pty-state'
 import { getDashboardPopoutWindow } from '../window/dashboard-popout-window'
-import { stopAllSyntheticTitleSpinners } from './synthetic-title-runtime'
+import { stopSyntheticTitleSpinnerTimer } from './synthetic-title-runtime'
 import { mainProcessState as state } from './main-process-state'
 
 export type MainWindowAgentStatusOptions = {
@@ -111,6 +111,7 @@ export function clearMainWindowAgentStatusListeners(): void {
   agentHookServer.setListener(null)
   agentHookServer.setPaneStatusClearListener(null)
   setMigrationUnsupportedPtyListener(null)
-  // Why: stop the spinner timer here — it would fire into destroyed webContents, and per-pane teardown may never run for restored-but-untorn panes.
-  stopAllSyntheticTitleSpinners()
+  // Why timer only: it would fire into destroyed webContents, but the hook subscription has no
+  // replay, so a reopened window resumes the kept working entries on 'show'.
+  stopSyntheticTitleSpinnerTimer()
 }

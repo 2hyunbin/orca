@@ -30,21 +30,25 @@ function isSyntheticTitleWindowVisible(): boolean {
   return window !== null && !window.isDestroyed() && window.isVisible() && !window.isMinimized()
 }
 
-function sendSyntheticTitle(ptyId: string, data: string, options: { force?: boolean } = {}): void {
+function sendSyntheticTitle(
+  ptyId: string,
+  data: string,
+  options: { force?: boolean; semantic?: boolean } = {}
+): void {
   // Why: throttle decorative spinner frames (up to 80ms/agent); final/permission frames are forced because they drive BEL.
-  if (
-    !shouldSendSyntheticTitleFrame({
-      force: options.force === true,
-      windowVisible: isSyntheticTitleWindowVisible()
-    })
-  ) {
+  const deliverToWindow = shouldSendSyntheticTitleFrame({
+    force: options.force === true,
+    windowVisible: isSyntheticTitleWindowVisible()
+  })
+  // Why semantic: a state change must reach the tracker even unseen, or headless readiness keeps the stale "ready" title.
+  if (!deliverToWindow && options.semantic !== true) {
     return
   }
   // Why: feed the per-PTY tracker directly, never onPtyData — emulator/tails/transcripts/stats must not see fabricated bytes.
   // Why before the window check: headless serve has no window, yet readiness (e.g. Hermes) waits on this tracker.
   state.runtime?.ingestSyntheticTitleFrame(ptyId, data)
   const window = state.mainWindow
-  if (!window || window.isDestroyed()) {
+  if (!deliverToWindow || !window || window.isDestroyed()) {
     return
   }
   // Why: only the kill-switch-off renderer byte-parses synthetic frames; under main authority the copy mints phantom ACKs (see synthetic-title-frame-routing.ts).
@@ -64,11 +68,6 @@ export function stopSyntheticTitleSpinner(paneKey: string): void {
   if (syntheticTitleSpinnerByPaneKey.delete(paneKey)) {
     stopSyntheticTitleSpinnerTimerIfIdle()
   }
-}
-
-export function stopAllSyntheticTitleSpinners(): void {
-  syntheticTitleSpinnerByPaneKey.clear()
-  stopSyntheticTitleSpinnerTimer()
 }
 
 export function stopSyntheticTitleSpinnerTimer(): void {
@@ -132,7 +131,9 @@ export function driveSyntheticTitleFromHook(
     // Why: emit the first frame immediately so the spinner is visible now, not up to 80ms later at the next interval tick.
     const existing = syntheticTitleSpinnerByPaneKey.get(paneKey)
     const frame = existing ? existing.frame : 0
-    sendSyntheticTitle(ptyId, `\x1b]0;${SPINNER_FRAMES[frame]} ${profile.workingLabel}\x07`)
+    sendSyntheticTitle(ptyId, `\x1b]0;${SPINNER_FRAMES[frame]} ${profile.workingLabel}\x07`, {
+      semantic: true
+    })
     if (existing) {
       // Why: refresh the profile so a mid-pane agent-type change lands on the right idle/permission labels at terminal state.
       existing.profile = profile

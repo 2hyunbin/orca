@@ -58,6 +58,16 @@ describe('synthetic agent titles without a window', () => {
     expect(hooks.ingest.mock.calls[0][1]).toContain('Hermes ready')
   })
 
+  // A ready title left in the tracker outranks fresh working status, so tui-idle would pass mid-turn.
+  it('replaces the ready title with a working one when the next turn starts', () => {
+    driveSyntheticTitleFromHookStatus(hermesStatus('done'))
+    driveSyntheticTitleFromHookStatus(hermesStatus('working'))
+
+    expect(hooks.ingest).toHaveBeenCalledTimes(2)
+    expect(hooks.ingest.mock.calls[1][1]).toContain('Hermes')
+    expect(hooks.ingest.mock.calls[1][1]).not.toContain('ready')
+  })
+
   it('skips identity-only refreshes and structured rows', () => {
     driveSyntheticTitleFromHookStatus({ ...hermesStatus('done'), providerSessionOnly: true })
     driveSyntheticTitleFromHookStatus({ ...hermesStatus('done'), structuredHost: 'owned' })

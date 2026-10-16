@@ -29,8 +29,7 @@ vi.mock('../window/dashboard-popout-window', () => ({
   getDashboardPopoutWindow: () => null
 }))
 vi.mock('./synthetic-title-runtime', () => ({
-  driveSyntheticTitleFromHook: vi.fn(),
-  stopAllSyntheticTitleSpinners: vi.fn()
+  stopSyntheticTitleSpinnerTimer: vi.fn()
 }))
 
 import { installMainWindowAgentStatusListeners } from './main-window-agent-status'
