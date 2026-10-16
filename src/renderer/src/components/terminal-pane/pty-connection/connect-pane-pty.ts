@@ -112,6 +112,7 @@ export function connectPanePty(
   session.syncHiddenRendererPtyDelivery = () => {}
   session.releaseHiddenRendererPtyDelivery = () => {}
   session.handleRemoteOutputPauseChanged = () => {}
+  session.handleRemotePausedOutputDropped = () => {}
   session.handleRendererOwnedAgentStatus = () => {}
   session.remoteOutputGatedPtyId = null
   session.remoteOutputFactConsumerPtyId = null

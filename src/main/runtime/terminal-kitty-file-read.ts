@@ -14,7 +14,7 @@ import {
   type TerminalKittyFileRequest,
   type TerminalKittyFileResult
 } from '../../shared/terminal-kitty-file'
-import { localTerminalArtifactRoots } from './runtime-file-commands-terminal-artifact-access'
+import { localTerminalArtifactRoots } from './terminal/artifacts/artifact-integrity'
 
 export async function readTerminalKittyFile(
   request: TerminalKittyFileRequest,

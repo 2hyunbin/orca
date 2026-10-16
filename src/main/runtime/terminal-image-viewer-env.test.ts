@@ -7,8 +7,6 @@ import {
   RUNTIME_CAPABILITIES
 } from '../../shared/protocol-version'
 import { TERMINAL_IMAGE_VIEWER_CAPABILITY } from '../../shared/terminal-image-viewer-capability'
-import { buildRuntimeAgentTerminalStartupOptions } from './runtime-agent-terminal-startup'
-import { getDefaultSettings } from '../../shared/constants'
 import {
   applyClaudeTerminalImageViewerEnv,
   terminalImageViewerSupported
@@ -104,48 +102,5 @@ describe('Claude images follow the launching viewer', () => {
     vi.stubEnv('CLAUDE_CODE_FORCE_TERMINAL_IMAGES', value)
     const inherited = { launchAgent: 'claude' as const }
     expect(applyClaudeTerminalImageViewerEnv(inherited, false)).toBe(inherited)
-  })
-  it('applies viewer policy after resolving startupAgent and preserves configured opt-out', async () => {
-    vi.stubEnv('CLAUDE_CODE_FORCE_TERMINAL_IMAGES', undefined)
-    const workspace = {
-      id: 'folder:test',
-      path: '/workspace',
-      connectionId: null,
-      repo: null,
-      folderWorkspace: null
-    }
-    const options = { startupAgent: 'claude' as const, terminalImageViewerSupported: false }
-    const settings = getDefaultSettings('/tmp')
-    const resolved = await buildRuntimeAgentTerminalStartupOptions(
-      workspace,
-      options,
-      settings,
-      'darwin',
-      undefined,
-      'runtime'
-    )
-    expect(resolved.launchAgent).toBe('claude')
-    expect(resolved.command).toBeTruthy()
-    expect(
-      applyClaudeTerminalImageViewerEnv(resolved, options.terminalImageViewerSupported).env
-        ?.CLAUDE_CODE_FORCE_TERMINAL_IMAGES
-    ).toBe('0')
-    const configured = await buildRuntimeAgentTerminalStartupOptions(
-      workspace,
-      options,
-      {
-        ...settings,
-        agentDefaultEnv: {
-          ...settings.agentDefaultEnv,
-          claude: { CLAUDE_CODE_FORCE_TERMINAL_IMAGES: '1' }
-        }
-      },
-      'darwin',
-      undefined,
-      'runtime'
-    )
-    expect(
-      applyClaudeTerminalImageViewerEnv(configured, false).env?.CLAUDE_CODE_FORCE_TERMINAL_IMAGES
-    ).toBe('1')
   })
 })

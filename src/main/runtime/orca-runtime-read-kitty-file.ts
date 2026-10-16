@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithResolveWorktreeSelector } from './orca-runtime-resolve-worktree-selector'
+import { RuntimeWorkspaceSelectors } from './workspaces/workspace-selectors'
 import { isFloatingWorkspaceId } from '../../shared/floating-workspace-worktree'
 import { getProviderForPty } from '../ipc/pty/provider/registry'
 import { readTerminalKittyFile } from './terminal-kitty-file-read'
@@ -7,7 +7,7 @@ import type {
   TerminalKittyFileResult
 } from '../../shared/terminal-kitty-file'
 
-export class OrcaRuntimeWithReadKittyFile extends OrcaRuntimeWithResolveWorktreeSelector {
+export abstract class OrcaRuntimeWithReadKittyFile extends RuntimeWorkspaceSelectors {
   async readKittyFile(
     handle: string,
     request: TerminalKittyFileRequest,

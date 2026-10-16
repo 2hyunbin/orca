@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { runProcess } from '@orca/process-host'
 import { readTerminalKittyFile, resolveKittyFilePath } from './terminal-kitty-file-read'
 import { TERMINAL_KITTY_FILE_MAX_BYTES } from '../../shared/terminal-kitty-file'
-import * as terminalArtifacts from './runtime-file-commands-terminal-artifact-access'
+import * as terminalArtifacts from './terminal/artifacts/artifact-integrity'
 import { TerminalReadKittyFile } from '../../shared/rpc-contract/terminal-unary-params'
 
 const roots: string[] = []
