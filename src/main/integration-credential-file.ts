@@ -45,7 +45,11 @@ export function writeEncryptedCredential(
 // fails or the app dies mid-write, leaving nothing to authenticate with. Write
 // a sibling temp file, fsync it, then rename — readers only ever observe the
 // old bytes or the complete new ones.
-export function writeCredentialFileAtomic(path: string, data: Buffer): void {
+export function writeCredentialFileAtomic(
+  path: string,
+  data: Buffer,
+  shouldPublish?: () => boolean
+): boolean {
   const tempPath = `${path}.tmp`
   let handle: number | null = null
   try {
@@ -63,8 +67,13 @@ export function writeCredentialFileAtomic(path: string, data: Buffer): void {
     fsyncSync(handle)
     closeSync(handle)
     handle = null
+    if (shouldPublish && !shouldPublish()) {
+      unlinkSync(tempPath)
+      return false
+    }
     renameSync(tempPath, path)
     restrictCredentialFileToOwner(path)
+    return true
   } catch (error) {
     if (handle !== null) {
       try {

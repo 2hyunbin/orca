@@ -10,12 +10,17 @@
  * the runtime factory, but only when an Electron serve sidecar or an operator-supplied
  * Chromium proves available at startup.
  */
+import { join } from 'node:path'
 import process from 'node:process'
 import { getAppEnvironment } from '../../shared/app-environment'
 import type { ServeReadiness } from '../server/serve-readiness'
 import { resolveOrcadInstallRoot, resolveUserDataPath } from './orcad-app-paths'
 import { prepareOrcadCliLauncher } from './orcad-cli-launcher'
-import { installOrcadHostAdapters, runOrcadQuitHandlers } from './orcad-host-adapters'
+import {
+  installOrcadHostAdapters,
+  prepareOrcadSecretStore,
+  runOrcadQuitHandlers
+} from './orcad-host-adapters'
 import { describeOrcadBindExposure, resolveOrcadBindHost } from './orcad-bind-address'
 import {
   flushOrcadProfileStoreForShutdown,
@@ -92,6 +97,16 @@ export async function startOrcad(options: OrcadOptions = {}): Promise<OrcadHandl
   return { readiness, managedStop: { version, runtimeId: readiness.runtimeId, instance }, stop }
 }
 
+async function prepareOrcadSecretStoreAndMigrate(userDataPath: string): Promise<void> {
+  const { getSecretStore } = await import('../../shared/secret-store')
+  const { reportSecretProtectionGap } = await import('../host/secret-protection-report')
+  if (await prepareOrcadSecretStore(userDataPath)) {
+    const { migratePlaintextCredentials } = await import('./orcad-plaintext-credential-migration')
+    migratePlaintextCredentials(getSecretStore())
+  }
+  reportSecretProtectionGap({ dataFile: join(userDataPath, 'orca-data.json') })
+}
+
 async function startOrcadRuntime(
   options: OrcadOptions,
   registerCleanup: (cleanup: OrcadRuntimeCleanup) => void
@@ -162,6 +177,8 @@ async function startOrcadRuntime(
     console.warn('[orcad] Could not prepare the profile CLI launcher', error)
   })
   const idleExitStartup = beginOrcadIdleExit(runtimeUserDataPath)
+  // Why before the profile store: it unseals protected settings as it loads.
+  await prepareOrcadSecretStoreAndMigrate(runtimeUserDataPath)
   const { store: profileStore, authority: profileStateAuthority } =
     await createOrcadProfileStateStartup(runtimeUserDataPath)
   const observedPaneIdentities = new AgentStatusObservedPaneIdentities()
