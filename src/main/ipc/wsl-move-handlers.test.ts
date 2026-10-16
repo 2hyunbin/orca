@@ -47,7 +47,11 @@ describe('WSL move IPC', () => {
     expect(
       invoke('wslMove:recordStoreRewritten', { migrationId: 'move-1', storeId: 'renderer-a' })
     ).toEqual({ recorded: true })
-    expect(listWslMoveCutovers(userDataPath)[0]?.phase).toBe('client-rewritten')
+    // The registry is incomplete until D1b-7f, so the move stays in its rewrite phase.
+    expect(listWslMoveCutovers(userDataPath)[0]).toMatchObject({
+      phase: 'destination-committed',
+      rewrittenStores: ['renderer-a']
+    })
   })
 
   it.each([

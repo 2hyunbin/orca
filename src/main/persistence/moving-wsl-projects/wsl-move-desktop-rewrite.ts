@@ -13,6 +13,7 @@ import type {
 import { wslHostsGateOpen } from '../../wsl/wsl-host-gate'
 import { listWslMoveCutovers, writeWslMoveCutover } from './wsl-move-cutover-journal'
 import {
+  WSL_MOVE_DESKTOP_REWRITE_REGISTRY_COMPLETE,
   listWslMoveDesktopRewriteStores,
   pendingWslMoveDesktopRewriteStores,
   type WslMoveDesktopRewriteContext
@@ -50,6 +51,10 @@ function appendLedgerEntry(userDataPath: string, cutover: WslMoveCutover, storeI
 
 /** Advances once every registered store, main and renderer, is in the ledger. */
 function advanceWhenRewritten(userDataPath: string, migrationId: string): void {
+  // Stores not registered yet would never run on a move that already left the rewrite phase.
+  if (!WSL_MOVE_DESKTOP_REWRITE_REGISTRY_COMPLETE) {
+    return
+  }
   const cutover = readCommittedCutover(userDataPath, migrationId)
   if (!cutover || pendingWslMoveDesktopRewriteStores(cutover.rewrittenStores).length > 0) {
     return

@@ -35,6 +35,9 @@ export type WslMoveDesktopRewriteStore = WslMoveMainRewriteStore | WslMoveRender
 const STORE_ID_PATTERN = /^[A-Za-z0-9:._-]{1,128}$/
 const MAX_STORES = 256
 
+// 7f (the last store PR) flips this; until then no move may leave `destination-committed`.
+export const WSL_MOVE_DESKTOP_REWRITE_REGISTRY_COMPLETE: boolean = false
+
 const stores: WslMoveDesktopRewriteStore[] = []
 
 /** Registration order is run order. */

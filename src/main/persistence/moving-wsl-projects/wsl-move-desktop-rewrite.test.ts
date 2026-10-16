@@ -18,10 +18,19 @@ import {
   type WslMoveDesktopRewriteContext
 } from './wsl-move-desktop-rewrite-stores'
 
+const registry = vi.hoisted(() => ({ complete: true }))
+vi.mock('./wsl-move-desktop-rewrite-stores', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  get WSL_MOVE_DESKTOP_REWRITE_REGISTRY_COMPLETE() {
+    return registry.complete
+  }
+}))
+
 let userDataPath: string
 beforeEach(() => {
   userDataPath = mkdtempSync(join(tmpdir(), 'wsl-move-rewrite-'))
   vi.stubEnv(WSL_HOSTS_INTERNAL_GATE_ENV, '1')
+  registry.complete = true
 })
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -110,6 +119,22 @@ describe('WSL move desktop rewrite', () => {
       expect(record()?.phase).toBe('client-rewritten')
     }
   )
+
+  it('stays in the rewrite phase while the store registry is incomplete', async () => {
+    registry.complete = false
+    const trace: Trace = { events: [], failAt: new Set() }
+    mainStore('a', trace)
+    registerWslMoveDesktopRewriteStore({ id: 'r', side: 'renderer' })
+    seedWslMoveCutover(userDataPath, cutover('move-1', 'destination-committed'))
+    await runWslMoveDesktopRewritePass({ userDataPath })
+    recordWslMoveRendererStoreRewritten(userDataPath, { migrationId: 'move-1', storeId: 'r' })
+    expect(record()?.rewrittenStores).toEqual(['a', 'r'])
+    expect(record()?.phase).toBe('destination-committed')
+
+    registry.complete = true
+    await runWslMoveDesktopRewritePass({ userDataPath })
+    expect(record()?.phase).toBe('client-rewritten')
+  })
 
   it('is idempotent: a finished move is not rewritten again', async () => {
     const trace: Trace = { events: [], failAt: new Set() }
