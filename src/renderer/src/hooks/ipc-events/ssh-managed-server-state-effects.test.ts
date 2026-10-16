@@ -66,6 +66,13 @@ describe('a host kept connected for the relay bridge', () => {
     expect(mocks.remountTerminalTabForRecovery).not.toHaveBeenCalled()
     expect(mocks.toast.error).not.toHaveBeenCalled()
   })
+
+  it('still remounts when the connect reply stored the bridged status before its push', () => {
+    applySshManagedServerTransition('ssh-1', undefined, offer)
+    mocks.remountTerminalTabForRecovery.mockClear()
+    applySshManagedServerTransition('ssh-1', bridged, bridged)
+    expect(mocks.remountTerminalTabForRecovery.mock.calls).toEqual([['tab-1'], ['tab-2']])
+  })
 })
 
 describe('a host the managed server does not serve', () => {

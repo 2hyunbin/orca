@@ -9,6 +9,8 @@ import {
   type HostServerOnConnectDeps
 } from './ssh-host-server-on-connect'
 import { hostServerDepsStub } from './ssh-host-server-on-connect-test-deps'
+import { unservedServerStatus } from './ssh-host-unserved-status'
+import { admitSshManagedServerStatus } from '../../shared/ssh-managed-server-status-admission'
 
 const target: SshTarget = { id: 'ssh-1', label: 'Box', host: 'box', port: 22, username: 'me' }
 
@@ -313,6 +315,12 @@ describe('which server an SSH host runs on connect', () => {
         bridged: true
       })
       expect(result.route === 'unserved' ? result.detail : '').toContain('/root/my repo')
+      // What the renderer admits keeps the mark its bridged panes and status line read.
+      if (result.route === 'unserved') {
+        expect(admitSshManagedServerStatus(unservedServerStatus(result))).toMatchObject({
+          managedServer: { kind: 'relay', bridged: true }
+        })
+      }
       // The fence goes, so the next connect after the terminal exits links the project.
       expect(d.abandonConversion).toHaveBeenCalledWith(target)
     }
