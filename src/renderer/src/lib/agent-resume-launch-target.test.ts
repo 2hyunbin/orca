@@ -114,6 +114,17 @@ describe('resolveAgentResumeLaunchTarget on a Windows client', () => {
     ).resolves.toEqual({ platform: 'win32', shell: 'cmd' })
   })
 
+  it('keeps POSIX quoting for a WSL UNC workspace on a Windows SSH host', async () => {
+    await expect(
+      resolveWith({
+        connectionId: 'ssh-1',
+        executionHostId: 'ssh:ssh-1',
+        remotePlatform: 'win32',
+        worktreePath: '\\\\wsl.localhost\\Ubuntu\\home\\neil\\repo'
+      })
+    ).resolves.toEqual({ platform: 'linux', shell: undefined })
+  })
+
   it('quotes for the platform a remote runtime host reported', async () => {
     await expect(
       resolveWith({

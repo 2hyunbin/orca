@@ -50,7 +50,10 @@ function resolveResumeLaunchPlatform(args: AgentResumeLaunchTargetArgs): NodeJS.
     return 'linux'
   }
   if (args.remotePlatform && isRemoteResumeTarget(args)) {
-    return args.remotePlatform
+    // Why: a WSL UNC cwd on a Windows host still launches inside that distro.
+    return args.remotePlatform === 'win32' && args.worktreePath && isWslUncPath(args.worktreePath)
+      ? 'linux'
+      : args.remotePlatform
   }
   if (args.connectionId || (args.worktreePath && isWslUncPath(args.worktreePath))) {
     return 'linux'
