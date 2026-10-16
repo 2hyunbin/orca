@@ -308,6 +308,33 @@ describe('session-tabs streams across worktree switches on one host', () => {
     expect(mocks.createTerminal).not.toHaveBeenCalled()
   })
 
+  it('seeds the first terminal once the user returns to a warm empty worktree', async () => {
+    await connect()
+    const streamA = latestStream(WORKTREE_A)
+    await selectWorktree(WORKTREE_B)
+    // A's first answer lands while B is selected, so its bootstrap waits.
+    await publish(streamA, {
+      type: 'snapshot',
+      ...terminalSnapshot(WORKTREE_A, 1),
+      activeGroupId: null,
+      activeTabId: null,
+      activeTabType: null,
+      tabs: []
+    })
+    expect(mocks.createTerminal).not.toHaveBeenCalled()
+
+    await selectWorktree(WORKTREE_A)
+
+    expect(latestStream(WORKTREE_A)).toBe(streamA)
+    expect(mocks.createTerminal).toHaveBeenCalledTimes(1)
+    expect(mocks.createTerminal).toHaveBeenCalledWith(
+      expect.objectContaining({ worktreeId: WORKTREE_A, environmentId: ENV })
+    )
+    await selectWorktree(WORKTREE_B)
+    await selectWorktree(WORKTREE_A)
+    expect(mocks.createTerminal).toHaveBeenCalledTimes(1)
+  })
+
   it('does not seed a terminal on the old host after the same worktree moves to another host', async () => {
     await connect()
     const streamA = latestStream(WORKTREE_A)
