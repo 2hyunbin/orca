@@ -141,12 +141,10 @@ function adopt(
     throw new Error(`${agent} registers no transcript import`)
   }
   return resolveStructuredAgentSessionAdoptionForCreate({
-    host: null,
     settings: {},
     agent,
     transcriptImport,
     providerSessionId,
-    selfSessionId: 'chat-1',
     selectedAccountHome,
     launchEnv,
     workspaceCwd
@@ -410,7 +408,8 @@ describe('adopting an OpenCode CLI conversation', () => {
     const launch = await resolveAcpLaunchInvocation(spec, unmanaged, {
       resolveEnvironment: async () => baseEnvironment,
       resolveLaunchEnv: () => launchEnv,
-      resolveCommand: () => '/test/opencode'
+      resolveCommand: () => '/test/opencode',
+      dataDirectory: root
     })
 
     expect(adoption.transcriptPath).toBe(configuredDb)

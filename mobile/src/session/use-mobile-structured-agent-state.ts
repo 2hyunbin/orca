@@ -24,7 +24,7 @@ import {
   agentSessionReadRefusalText,
   callAgentSession
 } from './mobile-structured-agent-session-rpc'
-import { subscribeTranscriptAfterHold } from './mobile-structured-agent-session-live-feed'
+import { subscribeTranscriptAfterHold } from './mobile-structured-transcript-subscription'
 import {
   reduceMobileQueuePause,
   reduceMobileQueuedMessageFeed,
@@ -32,7 +32,10 @@ import {
   type MobileQueuePause
 } from './mobile-structured-queued-message-feed'
 
-type QueuedFeed = { messages: MobileQueuedMessageFeed; pause: MobileQueuePause }
+type QueuedFeed = {
+  messages: MobileQueuedMessageFeed
+  pause: MobileQueuePause
+}
 const NO_QUEUED_FEED: QueuedFeed = { messages: null, pause: null }
 
 const MAX_RETAINED_SESSION_STATES = 32
@@ -169,6 +172,7 @@ export function useMobileStructuredAgentState(args: {
     })
     let ended = false
     const read = startStructuredAgentSessionLiveRead({
+      applyRequests: apply,
       applyEvent: (event, options) => {
         apply({ type: 'event', event, ...options })
         applyQueued(event)
@@ -190,6 +194,8 @@ export function useMobileStructuredAgentState(args: {
         streamGenerationRef.current += 1
         setLoadingOlder(false)
       },
+      readCurrentRequests: (request) =>
+        callAgentSession(client, 'agentSession.currentRequests', request),
       sessionId,
       subscribe: subscribeTranscriptAfterHold(client, held, () => ended),
       // The app coming back (or a new network) cuts a grown reopen wait short.
@@ -240,7 +246,10 @@ export function useMobileStructuredAgentState(args: {
         // Mobile draws only the session's own rows, so a page of a subagent's rows alone
         // would land as nothing; read on until a page adds a row the reader can see. Older
         // hosts send one for any burst; current ones when the page's byte bound cuts it short.
-        const pages: { requestedCursor: AgentJournalCursor; page: AgentSessionHistoryPage }[] = []
+        const pages: {
+          requestedCursor: AgentJournalCursor
+          page: AgentSessionHistoryPage
+        }[] = []
         let requestedCursor = cursor
         while (pages.length < OLDER_PAGES_PER_LOAD) {
           const result = await callAgentSession<AgentSessionHistoryResult>(

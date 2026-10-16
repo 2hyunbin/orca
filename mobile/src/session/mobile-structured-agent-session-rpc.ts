@@ -3,6 +3,7 @@ import type {
   AgentSessionWireRefusalCode
 } from '../../../src/shared/agent-session-wire'
 import type { AgentSessionRefusalReference } from '../../../src/shared/agent-session-wire-refusals'
+import type { AgentJournalCursor } from '../../../src/shared/agent-session-journal-types'
 import { structuredAgentSessionPayloadFingerprint } from '../../../src/shared/structured-agent-session-mutation'
 import {
   agentSessionRefusalNotice,
@@ -26,7 +27,7 @@ import { MOBILE_NATIVE_CHAT_MIN_WRITE_TIMEOUT_MS } from './mobile-native-chat-se
 export const STRUCTURED_SEND_TIMEOUT_MS = 15_000
 
 export type StructuredAgentSessionMutationCallResult<TValue> =
-  | { status: 'accepted'; value: TValue }
+  | { status: 'accepted'; value: TValue; cursor?: AgentJournalCursor }
   | { status: 'refused'; code: AgentSessionWireRefusalCode; message: string }
   | { status: 'failed'; message: string }
   | { status: 'unknown' }
@@ -133,6 +134,8 @@ export async function requestStructuredAgentSessionMutation<TValue>(args: {
   fields: Record<string, unknown>
   clientOperationId?: string
   timeoutMs?: number
+  /** The chat's agent, which a refusal about it names. */
+  agentName?: string
 }): Promise<StructuredAgentSessionMutationCallResult<TValue>> {
   const {
     client,
@@ -142,8 +145,10 @@ export async function requestStructuredAgentSessionMutation<TValue>(args: {
     expectedRuntimeFence,
     fields,
     clientOperationId,
-    timeoutMs
+    timeoutMs,
+    agentName
   } = args
+  const context = agentName ? { agentName } : {}
   try {
     const result = await callAgentSession<AgentSessionMutationResult<TValue>>(
       client,
@@ -171,13 +176,14 @@ export async function requestStructuredAgentSessionMutation<TValue>(args: {
       return { status: 'unknown' }
     }
     return result.ok
-      ? { status: 'accepted', value: result.value }
+      ? { status: 'accepted', value: result.value, cursor: result.cursor }
       : {
           status: 'refused',
           code: result.refusal.code,
           message: agentSessionRefusalNotice(
             result.refusal,
-            phoneWriteKind(fingerprintMethod, fields)
+            phoneWriteKind(fingerprintMethod, fields),
+            context
           )
         }
   } catch (error) {
@@ -190,7 +196,7 @@ export async function requestStructuredAgentSessionMutation<TValue>(args: {
       return {
         status: 'failed',
         message: agentSessionWriteNoticeEnglish(
-          agentSessionWriteNoticeParts(answered, phoneWriteKind(fingerprintMethod, fields))
+          agentSessionWriteNoticeParts(answered, phoneWriteKind(fingerprintMethod, fields), context)
         )
       }
     }
