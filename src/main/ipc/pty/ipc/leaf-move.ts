@@ -20,7 +20,7 @@ export async function commitLeafMoveAndRekey(
   if (result.status !== 'moved') {
     return result
   }
-  rekeyMovedPaneOwners(deps.runtime, request, result.ptyId)
+  rekeyMovedPaneOwners(deps.runtime, { ...request, ptyId: result.ptyId })
   return result
 }
 

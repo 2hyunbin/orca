@@ -182,7 +182,7 @@ class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
         return routed ? [routed] : []
       },
       command,
-      (move) => rekeyMovedPaneOwners(this, move, move.ptyId)
+      (move) => rekeyMovedPaneOwners(this, move)
     )
   }
 
