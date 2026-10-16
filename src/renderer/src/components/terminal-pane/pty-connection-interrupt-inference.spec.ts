@@ -549,7 +549,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
         prompt: 'ssh style write',
         updatedAt: 1_000,
         stateStartedAt: 900,
-        agentType: 'codex',
+        agentType: 'custom-agent',
         paneKey,
         terminalTitle: 'Codex working',
         stateHistory: []
@@ -566,7 +566,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
         throw new Error('expected onData handler to be registered')
       }
       ;(onDataHandler as unknown as (data: string) => void)('\x03')
-      vi.advanceTimersByTime(500)
+      await vi.advanceTimersByTimeAsync(500)
       await flushAsyncTicks()
 
       expect(transport.sendInput).toHaveBeenCalledWith('\x03', 'query-reply')
@@ -591,7 +591,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
         prompt: 'stop then exit',
         updatedAt: 1_000,
         stateStartedAt: 900,
-        agentType: 'codex',
+        agentType: 'custom-agent',
         paneKey,
         terminalTitle: 'Codex working',
         stateHistory: []
@@ -613,8 +613,16 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
       terminalTarget.dispatch(keyEvent({ key: 'c', ctrlKey: true }))
       ;(onDataHandler as unknown as (data: string) => void)('\x03')
       await flushAsyncTicks()
-      vi.advanceTimersByTime(500)
+      await vi.advanceTimersByTimeAsync(500)
       await flushAsyncTicks()
+      expect(window.api.agentStatus.inferInterrupt).toHaveBeenCalledWith({
+        paneKey,
+        baselineUpdatedAt: 1_000,
+        baselineStateStartedAt: 900,
+        baselinePrompt: 'stop then exit',
+        baselineAgentType: 'custom-agent',
+        intent: 'ctrl-c'
+      })
       const onPtyExit = createdTransportOptions[0]?.onPtyExit as
         | ((ptyId: string) => void)
         | undefined
