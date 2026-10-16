@@ -231,7 +231,8 @@ export class ServeBrowserTabs {
     if (!session || !saved) {
       return false
     }
-    // Pages first: a tab with no saved page is listed nowhere, so the close shows at once.
+    // Pages first: a tab with no saved page is listed nowhere, so the close shows at once (and a
+    // refused close leaves only an unlisted tab record).
     this.write(worktreeId, (_hostId, next) => withoutServeBrowserPages(next, saved.tabId))
     void this.applyLogged(applyLayout, worktreeId, {
       type: 'closeTabs',
