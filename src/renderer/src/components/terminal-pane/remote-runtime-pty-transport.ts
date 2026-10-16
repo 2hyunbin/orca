@@ -56,6 +56,7 @@ import {
 } from '../../runtime/runtime-terminal-stream'
 import { getRemoteRuntimeTerminalMultiplexer } from '../../runtime/remote-runtime-terminal-multiplexer'
 import { REMOTE_TERMINAL_SNAPSHOT_TOO_LARGE } from '../../runtime/remote-runtime-terminal-snapshot-state'
+import { restoredSnapshotPaintsPrintableContent } from './restored-snapshot-coverage'
 import type {
   RemoteRuntimeMultiplexedTerminal,
   RemoteRuntimeSnapshotOutcome
@@ -271,6 +272,9 @@ export function createRemoteRuntimePtyTransport(
   let sameHandleEndReuseAttachedAt: number | null = null
   let attachGeneration = 0
   let subscriptionGeneration = 0
+  // A terminal this pane just created has no history, so an empty first image there is not a gap.
+  let spawnedHandle: string | null = null
+  let inputReadySubscription: number | null = null
 
   function setAttachmentReady(ready: boolean): void {
     attachmentReady = ready
@@ -320,6 +324,8 @@ export function createRemoteRuntimePtyTransport(
   const disconnectedInputGrace = createRemoteRuntimeDisconnectedInputGrace()
   let previousRecoveryPhase: RemoteRuntimePtyRecoveryPhase = 'idle'
   const recovery = new RemoteRuntimePtyRecoveryState(() => {
+    // Why: any recovery transition after the ack (a stale send, a close, the deadline) re-holds typing.
+    inputReadySubscription = null
     const leftLatchForRetry = previousRecoveryPhase === 'disconnected' && recovery.isActive
     previousRecoveryPhase = recovery.currentPhase
     if (recovery.currentPhase === 'disposed') {
@@ -1520,6 +1526,20 @@ export function createRemoteRuntimePtyTransport(
     return recovery.isActive || recovery.currentPhase === 'disconnected'
   }
 
+  // Why: the host's subscribed ack proves this stream is installed on the host and names its input-ack
+  // capability; the snapshot behind it only repaints, so typing need not wait for it.
+  function subscriptionAcceptsInput(): boolean {
+    return (
+      inputReadySubscription === subscriptionGeneration &&
+      handle !== null &&
+      getCurrentMultiplexedStream(handle) !== null
+    )
+  }
+
+  function inputBlocked(): boolean {
+    return recoveryBlocksIo() && !subscriptionAcceptsInput()
+  }
+
   // Why: a pane binding or auto-recovering a known handle holds typing for it instead of dropping it (#25784).
   // Why 'disconnected' too: the same handle still reattaches on its own after the window, within the grace.
   function shouldHoldInput(): boolean {
@@ -1532,7 +1552,11 @@ export function createRemoteRuntimePtyTransport(
     if (recovery.currentPhase === 'disconnected') {
       return !discardExpiredDisconnectedInput()
     }
-    return recovery.isActive || (connecting && !connected) || recoveryInputHold.isHolding()
+    return (
+      (recovery.isActive && !subscriptionAcceptsInput()) ||
+      (connecting && !connected) ||
+      recoveryInputHold.isHolding()
+    )
   }
 
   function discardExpiredDisconnectedInput(): boolean {
@@ -1607,7 +1631,7 @@ export function createRemoteRuntimePtyTransport(
 
   function sequencedInputTarget() {
     const boundHandle = handle
-    if (destroyed || terminalEnded || !connected || !boundHandle || recoveryBlocksIo()) {
+    if (destroyed || terminalEnded || !connected || !boundHandle || inputBlocked()) {
       return null
     }
     const stream = getCurrentMultiplexedStream(boundHandle)
@@ -1651,13 +1675,18 @@ export function createRemoteRuntimePtyTransport(
       return
     }
     const stream = getCurrentMultiplexedStream(boundHandle)
-    if (!connected || recoveryBlocksIo() || !attachmentReady || !stream) {
+    if (
+      !connected ||
+      inputBlocked() ||
+      !(attachmentReady || subscriptionAcceptsInput()) ||
+      !stream
+    ) {
       return
     }
     // Why first: journaled bytes were typed before anything in the hold.
     resumeSequencedInput(stream, boundHandle)
     recoveryInputHold.release(heldInputEndpoint(boundHandle), {
-      isCurrent: () => connected && handle === boundHandle && !recoveryBlocksIo(),
+      isCurrent: () => connected && handle === boundHandle && !inputBlocked(),
       sendInput: (data) => sendInputNow(data),
       sendInputImmediate: (data) => sendInputImmediateNow(data),
       sendInputAccepted: sendInputAcceptedToRuntime,
@@ -1673,14 +1702,14 @@ export function createRemoteRuntimePtyTransport(
   ): Promise<boolean> {
     const signal = options?.signal
     const targetHandle = handle
-    if (!connected || !targetHandle || recoveryBlocksIo() || signal?.aborted) {
+    if (!connected || !targetHandle || inputBlocked() || signal?.aborted) {
       return false
     }
     if (!data) {
       return true
     }
     await inputBatcher.drain()
-    if (!connected || handle !== targetHandle || recoveryBlocksIo()) {
+    if (!connected || handle !== targetHandle || inputBlocked()) {
       return false
     }
     if (pendingViewportClaim && !getCurrentMultiplexedStream(targetHandle)) {
@@ -1711,7 +1740,7 @@ export function createRemoteRuntimePtyTransport(
     }
     try {
       for (const chunk of iterateTerminalInputChunks(text)) {
-        if (!connected || handle !== targetHandle || recoveryBlocksIo() || signal?.aborted) {
+        if (!connected || handle !== targetHandle || inputBlocked() || signal?.aborted) {
           return false
         }
         // Why: acknowledged sends order behind pending debounce text but must not collapse large paste back into one remote RPC.
@@ -1766,7 +1795,7 @@ export function createRemoteRuntimePtyTransport(
   const sendUnacknowledgedInput = (text: string, queryReply = false): boolean => {
     const targetHandle = handle
     const targetLifecycleEpoch = lifecycleEpoch
-    if (!connected || !targetHandle || recoveryBlocksIo()) {
+    if (!connected || !targetHandle || inputBlocked()) {
       return false
     }
     const stream = getCurrentMultiplexedStream(targetHandle)
@@ -2345,7 +2374,8 @@ export function createRemoteRuntimePtyTransport(
         onSnapshot: (data, meta) => {
           // Why: an empty snapshot can still carry a pending mid-escape tail that must replay so the next live chunk completes it.
           if ((data || meta?.pendingEscapeTailAnsi) && isCurrentSubscription()) {
-            subscriptionSnapshotHadContent = true
+            // Why printable: a host model holding only mode/cursor bytes paints a cursor-only pane.
+            subscriptionSnapshotHadContent ||= restoredSnapshotPaintsPrintableContent({ data })
             if (subscribedPtyId && bufferPtyShutdownReplayData(subscribedPtyId, data)) {
               return
             }
@@ -2384,8 +2414,20 @@ export function createRemoteRuntimePtyTransport(
           if (isCurrentSubscription()) {
             storedCallbacks.onOutputPauseChanged?.(
               desiredOutputPaused,
-              nextStream.setOutputPaused(desiredOutputPaused)
+              nextStream.setOutputPaused(desiredOutputPaused),
+              nextStream.reportsPausedOutputDrops?.() === true
             )
+          }
+        },
+        onPausedOutputDropped: () => {
+          if (isCurrentSubscription()) {
+            storedCallbacks.onPausedOutputDropped?.()
+          }
+        },
+        onSubscribeAcknowledged: () => {
+          if (isCurrentSubscription()) {
+            inputReadySubscription = generation
+            releaseHeldInput()
           }
         },
         onSubscribed: () => {
@@ -2394,7 +2436,8 @@ export function createRemoteRuntimePtyTransport(
           }
           storedCallbacks.onOutputPauseChanged?.(
             desiredOutputPaused,
-            nextStream.setOutputPaused(desiredOutputPaused)
+            nextStream.setOutputPaused(desiredOutputPaused),
+            nextStream.reportsPausedOutputDrops?.() === true
           )
           if (!subscriptionAttached && sameHandleEndRecovery) {
             recordSameHandleEndReuse(subscribedHandle)
@@ -2406,10 +2449,13 @@ export function createRemoteRuntimePtyTransport(
           markRecoveryHealthy()
           emitRecoveryState()
           storedCallbacks.onConnect?.()
-          // Why: a recovery subscribe replays nothing when the host's push snapshot is
-          // empty (idle or exited pane), so ask for the retained buffer instead of
-          // waiting for bytes that an exited process will never send.
-          if (expectedRecoveryEpoch !== undefined && !subscriptionSnapshotHadContent) {
+          // Why: a subscribe that replayed no visible image (empty, escape-only, or over the client's
+          // replay limit) leaves an idle or exited pane blank, so pull the retained buffer instead
+          // of waiting for bytes it may never send (#18464, #21208).
+          if (
+            !subscriptionSnapshotHadContent &&
+            (expectedRecoveryEpoch !== undefined || subscribedHandle !== spawnedHandle)
+          ) {
             storedCallbacks.onStreamRecovered?.()
           }
           storedCallbacks.onStatus?.('shell')
@@ -2649,7 +2695,7 @@ export function createRemoteRuntimePtyTransport(
   }
 
   function sendInputNow(data: string): boolean {
-    if (!connected || !handle || recoveryBlocksIo()) {
+    if (!connected || !handle || inputBlocked()) {
       return false
     }
     if (!data) {
@@ -2662,7 +2708,7 @@ export function createRemoteRuntimePtyTransport(
   function sendInputImmediateNow(data: string): boolean {
     const targetHandle = handle
     const targetLifecycleEpoch = lifecycleEpoch
-    if (!connected || !targetHandle || recoveryBlocksIo()) {
+    if (!connected || !targetHandle || inputBlocked()) {
       return false
     }
     if (!data) {
@@ -2675,7 +2721,7 @@ export function createRemoteRuntimePtyTransport(
           !connected ||
           lifecycleEpoch !== targetLifecycleEpoch ||
           handle !== targetHandle ||
-          recoveryBlocksIo()
+          inputBlocked()
         ) {
           return
         }
@@ -2922,6 +2968,7 @@ export function createRemoteRuntimePtyTransport(
         rows: options.rows ?? 24
       }
       if (createdTerminal.isReattach !== true) {
+        spawnedHandle = handle
         onPtySpawn?.(remotePtyId)
       }
       emitRecoveryState()
@@ -3089,8 +3136,13 @@ export function createRemoteRuntimePtyTransport(
       if (!connected || !handle) {
         return false
       }
-      const supported = getCurrentMultiplexedStream(handle)?.setOutputPaused(paused) === true
-      storedCallbacks.onOutputPauseChanged?.(paused, supported)
+      const stream = getCurrentMultiplexedStream(handle)
+      const supported = stream?.setOutputPaused(paused) === true
+      storedCallbacks.onOutputPauseChanged?.(
+        paused,
+        supported,
+        stream?.reportsPausedOutputDrops?.() === true
+      )
       return supported
     },
 
