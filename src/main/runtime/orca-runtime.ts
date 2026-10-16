@@ -28,6 +28,7 @@ import { createReferenceAgentIndex, referenceConnectionHosts } from './runtime-r
 import type { RuntimeReferenceFindParams } from '../../shared/runtime-reference-contracts'
 import { getRepoExecutionHostId } from '../../shared/execution-host'
 import type { LayoutApplyReply } from '../../shared/workspace-layout/workspace-layout-command-types'
+import { rekeyMovedPaneOwners } from './moved-pane-owner-rekey'
 import { applyWindowLayoutCommand, type WindowLayoutCommand } from './runtime-layout-apply'
 import type { TerminalCreateOptions } from './runtime-terminal-contracts'
 
@@ -180,7 +181,8 @@ class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
         const routed = this.tryGetWorkspaceSessionHostIdForWorktree(worktreeId)
         return routed ? [routed] : []
       },
-      command
+      command,
+      (move) => rekeyMovedPaneOwners(this, move)
     )
   }
 
