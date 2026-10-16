@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { applyWebSessionTabsSnapshot } from '@/runtime/web-session-tabs-sync'
+import { applyWebSessionTabsSnapshot } from '@/runtime/web-session-tabs-sync/snapshot-api'
 import {
   makeSnapshot,
   resetWebSessionTabsSyncTestState
