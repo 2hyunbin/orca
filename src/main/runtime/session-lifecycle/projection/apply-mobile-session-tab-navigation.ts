@@ -14,7 +14,10 @@ import {
   projectClientSessionTabSelection
 } from '../../client-session-tab-selection'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
-import type { SleepingAgentSessionRecord } from '../../../../shared/agent-session-resume'
+import {
+  agentProviderSessionsEqual,
+  type SleepingAgentSessionRecord
+} from '../../../../shared/agent-session-resume'
 import type {
   MobileTerminalResumeCommand,
   OrcaRuntimeWithResolveMobileSessionTerminalCommand as MobileTerminalStartup
@@ -166,7 +169,7 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
       (other) =>
         other !== record &&
         other.agent === record.agent &&
-        other.providerSession?.id === record.providerSession.id
+        agentProviderSessionsEqual(record.agent, other.providerSession, record.providerSession)
     )
     if (
       sharedWithAnotherPane ||
@@ -189,7 +192,8 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
       (this.getAgentProviderSessionSnapshotFn?.() ?? [])
         .filter(
           (row) =>
-            row.paneKey !== record.paneKey && row.providerSession?.id === record.providerSession.id
+            row.paneKey !== record.paneKey &&
+            agentProviderSessionsEqual(record.agent, row.providerSession, record.providerSession)
         )
         .map((row) => row.paneKey)
     )
@@ -214,8 +218,8 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
   private hookStoreNamesAnotherSessionForPane(record: SleepingAgentSessionRecord): boolean {
     return (this.getAgentProviderSessionRowsForPaneFn?.(record.paneKey) ?? []).some(
       (row) =>
-        row.providerSession?.id !== undefined &&
-        row.providerSession.id !== record.providerSession.id
+        row.providerSession !== undefined &&
+        !agentProviderSessionsEqual(record.agent, row.providerSession, record.providerSession)
     )
   }
 

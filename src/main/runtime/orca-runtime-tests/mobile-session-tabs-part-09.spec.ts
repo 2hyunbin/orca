@@ -387,6 +387,27 @@ describe('OrcaRuntimeService', () => {
       expect(firstSpawnArgs(spawn).command ?? '').not.toContain('provider-session-1')
     })
 
+    // Why: Pi identities are id plus transcript; a shared id alone does not name one conversation.
+    it('does not treat another Pi transcript with the same id as this pane session', async () => {
+      const piSession = { key: 'session_id', id: 'pi-1', transcriptPath: '/t/a.jsonl' } as const
+      const { runtimeStore } = makeParkedSessionStore('worktree-sleep', {
+        agent: 'pi',
+        providerSession: piSession
+      })
+      const { runtime, spawn } = makeParkedRuntime(runtimeStore, {
+        deps: {
+          getAgentProviderSessionRowsForPane: (paneKey) => [
+            // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the resume guard reads only providerSession.
+            { paneKey, providerSession: { ...piSession, transcriptPath: '/t/b.jsonl' } } as never
+          ]
+        }
+      })
+
+      await userActivate(runtime)
+
+      expect(firstSpawnArgs(spawn).command ?? '').not.toContain('/t/a.jsonl')
+    })
+
     // Why: a session id names a transcript on the machine that captured it.
     it('does not resume a record captured on another execution host', async () => {
       const { runtimeStore } = makeParkedSessionStore('worktree-sleep', {
