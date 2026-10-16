@@ -100,6 +100,31 @@ describe('runClaudeLoginSession', () => {
     warn.mockRestore()
   })
 
+  it('never opens a link for a WSL login the user already cancelled', async () => {
+    const config = folder('wsl')
+    const openWslSignInLink = vi.fn()
+    let cancel: (() => boolean) | null = null
+    const runCommand = vi.fn<RunCommand>(async (_args, _config, _ms, options) => {
+      // Claude writes its link as the cancel lands.
+      writeFileSync(join(config.windowsPath, '.orca-sign-in-browser.link'), LINK)
+      expect(cancel?.()).toBe(true)
+      expect(options?.signal?.aborted).toBe(true)
+      // Give the link watcher its chance to read the file.
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      throw new Error('Claude sign-in was cancelled.')
+    })
+    await expect(
+      runClaudeLoginSession(config, {
+        runCommand,
+        setCancel: (next) => {
+          cancel ??= next
+        },
+        openWslSignInLink
+      })
+    ).rejects.toThrow('cancelled')
+    expect(openWslSignInLink).not.toHaveBeenCalled()
+  })
+
   it('runs a WSL login unchanged when the stand-in cannot be written', async () => {
     const config = { ...folder('wsl'), windowsPath: join(tmpdir(), 'missing-claude-folder', 'x') }
     const openWslSignInLink = vi.fn()

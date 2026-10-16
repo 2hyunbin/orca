@@ -47,12 +47,16 @@ export async function runClaudeLoginSession(
         ? await prepareOpenerBrowser(folder)
         : null
     const deliverLink = onLink ?? openLink
-    void browser?.nextLink(watch.signal).then((signInLink) => {
-      if (signInLink) {
-        deliverLink?.(signInLink)
+    // Why both signals: a cancelled login must not open a tab for a link Claude wrote as it died.
+    const stopped = AbortSignal.any([watch.signal, controller.signal])
+    // Why the full login window: auto-open never ends the login, and a cold distro can be slow.
+    const waitMs = onLink ? undefined : LOGIN_TIMEOUT_MS
+    void browser?.nextLink(stopped, waitMs).then((signInLink) => {
+      if (stopped.aborted) {
         return
       }
-      if (watch.signal.aborted) {
+      if (signInLink) {
+        deliverLink?.(signInLink)
         return
       }
       if (onLink) {
