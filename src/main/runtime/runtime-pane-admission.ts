@@ -76,21 +76,9 @@ export async function startInAdmittedPane<T>(
   admission: TerminalPaneAdmission,
   hostId: string | undefined,
   start: (outcome: TerminalPaneAdmissionOutcome | undefined) => Promise<T>,
-  options: {
-    shown?: () => boolean
-    /** A thrown write is rolled back, so the start may go ahead without the pane. */
-    startIfWriteFails?: true
-  } = {}
+  options: { shown?: () => boolean } = {}
 ): Promise<{ outcome: TerminalPaneAdmissionOutcome | undefined; result: T }> {
-  let outcome: TerminalPaneAdmissionOutcome | undefined
-  try {
-    outcome = await store?.admitTerminalPane?.(admission, hostId)
-  } catch (error) {
-    if (!options.startIfWriteFails) {
-      throw error
-    }
-    console.warn('[layout-owner] pane not written before its start:', error)
-  }
+  const outcome = await store?.admitTerminalPane?.(admission, hostId)
   try {
     return { outcome, result: await start(outcome) }
   } catch (error) {
