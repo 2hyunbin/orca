@@ -33,6 +33,7 @@ async function subscribeAndCollectSnapshot(options: SubscribeOptions): Promise<{
   authoritativeRows: (number | undefined)[]
   serializedBeforeViewportApplied: boolean
   textReads: number
+  snapshotSentBeforeViewportApplied: boolean
 }> {
   const handlers = new Map<
     number,
@@ -45,6 +46,7 @@ async function subscribeAndCollectSnapshot(options: SubscribeOptions): Promise<{
   const readTerminal = vi.fn().mockResolvedValue({ tail: ['TAIL'], truncated: false })
   let viewportApplied = false
   let serializedBeforeViewportApplied = false
+  let snapshotSentBeforeViewportApplied = false
   const serializeAuthoritativeTerminalBuffer = vi.fn(
     async (_ptyId: string, opts?: { scrollbackRows?: number }) => {
       authoritativeRows.push(opts?.scrollbackRows)
@@ -101,6 +103,9 @@ async function subscribeAndCollectSnapshot(options: SubscribeOptions): Promise<{
     connectionId: 'conn-1',
     sendBinary: (bytes) => {
       binaryFrames.push(bytes)
+      if (decodeTerminalStreamFrame(bytes)?.opcode === TerminalStreamOpcode.SnapshotEnd) {
+        snapshotSentBeforeViewportApplied = !viewportApplied
+      }
     },
     registerBinaryStreamHandler: (streamId, handler) => {
       handlers.set(streamId, handler)
@@ -144,7 +149,8 @@ async function subscribeAndCollectSnapshot(options: SubscribeOptions): Promise<{
     defaultSerializes: serializeTerminalBuffer.mock.calls.length,
     authoritativeRows,
     serializedBeforeViewportApplied,
-    textReads: readTerminal.mock.calls.length
+    textReads: readTerminal.mock.calls.length,
+    snapshotSentBeforeViewportApplied
   }
 }
 
@@ -211,7 +217,7 @@ describe('terminal.multiplex subscribe-time scrollback request', () => {
     }
   })
 
-  it('builds the requested image while the viewport registration is still in flight', async () => {
+  it('builds and sends the requested image while the viewport registration is still in flight', async () => {
     vi.useFakeTimers()
     try {
       const result = await subscribeAndCollectSnapshot({
@@ -221,6 +227,8 @@ describe('terminal.multiplex subscribe-time scrollback request', () => {
       expect(result.snapshotStarts).toBe(1)
       expect(result.authoritativeRows).toEqual([5000])
       expect(result.serializedBeforeViewportApplied).toBe(true)
+      // A SnapshotRequest was answered without waiting on registration; the served image matches it.
+      expect(result.snapshotSentBeforeViewportApplied).toBe(true)
       expect(result.meta).toMatchObject({ requestedScrollbackRows: 5000 })
     } finally {
       vi.useRealTimers()
