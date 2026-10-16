@@ -237,7 +237,8 @@ export function promotePreviewTab(
 
 /**
  * A new tab replaces the group's preview tab of a compatible kind, as a single click does today,
- * unless closing it is refused like any close (an unsaved draft): then both stay.
+ * unless closing it is refused like any close (an unsaved draft): then both stay. The new tab is
+ * placed first, so closing a group's only tab, its preview, never closes the group.
  */
 export function placeContentTab(
   model: WorkspaceLayoutModel,
@@ -246,7 +247,7 @@ export function placeContentTab(
   placement: { groupId?: string; dirtyTabIds?: string[] },
   context: LayoutContext
 ): { model: WorkspaceLayoutModel; refused: RefusedClose[] } {
-  let workspace = workspaceOrEmpty(model, key)
+  const workspace = workspaceOrEmpty(model, key)
   const group =
     workspace.groups.find((entry) => entry.id === placement.groupId) ?? workspace.groups[0]
   const preview = tab.isPreview
@@ -257,21 +258,21 @@ export function placeContentTab(
           canReplacePreviewContentType(tab.kind, entry.kind)
       )
     : undefined
-  let refused: RefusedClose[] = []
-  if (preview) {
-    const closing = closeTabs(withWorkspace(model, key, workspace), {
-      type: 'closeTabs',
-      workspace: key,
-      tabIds: [preview.id],
-      dirtyTabIds: placement.dirtyTabIds
-    })
-    if (closing.ok) {
-      workspace = closing.model.workspaces[key]!
-      refused = closing.result.refused ?? []
-    }
+  const placed = withWorkspace(
+    model,
+    key,
+    placeNewTab(workspace, tab, { groupId: group?.id }, context)
+  )
+  if (!preview) {
+    return { model: placed, refused: [] }
   }
-  return {
-    model: withWorkspace(model, key, placeNewTab(workspace, tab, { groupId: group?.id }, context)),
-    refused
-  }
+  const closing = closeTabs(placed, {
+    type: 'closeTabs',
+    workspace: key,
+    tabIds: [preview.id],
+    dirtyTabIds: placement.dirtyTabIds
+  })
+  return closing.ok
+    ? { model: closing.model, refused: closing.result.refused ?? [] }
+    : { model: placed, refused: [] }
 }

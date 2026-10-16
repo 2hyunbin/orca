@@ -89,6 +89,8 @@ export type LayoutCommand =
   | (On & { type: 'setChatPane'; tabId: string; leafId: string | null })
   | (On & {
       type: 'openEditorTab'
+      /** The window's id for a tab it drew first; minted when absent. */
+      tabId?: string
       /** The editor's file id: the tab's entity. */
       fileId: string
       contentType: Exclude<TabContentType, 'terminal' | 'browser' | 'agent-session' | 'simulator'>
@@ -150,6 +152,7 @@ export type LayoutRefusalCode =
   | 'pane_sleeping'
   | 'pane_already_bound'
   | 'workspace_exists'
+  | 'tab_exists'
 
 /** What the runtime does after applying: stop or start terminals. The reply never waits on them. */
 export type LayoutEffects = { stopPtyIds: string[]; startPaneKeys: string[] }
