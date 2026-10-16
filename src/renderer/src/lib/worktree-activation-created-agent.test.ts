@@ -11,7 +11,7 @@ import {
   makeCreatedAgentWorktree as makeWorktree,
   seedAlreadyActiveWorktree,
   seedEmptyActivatableWorktree
-} from '@/lib/worktree-activation-created-agent-test-state'
+} from '@/lib/worktree-activation-created-agent.test-fixture'
 import { stubRuntimeEnvironmentBridge } from '../runtime/runtime-environment-bridge-fixture'
 
 const initialAppStoreState = useAppStore.getState()
@@ -284,9 +284,9 @@ describe('activateAndRevealWorktree', () => {
         }
       },
       settings: {
-        agentCmdOverrides: {},
-        setupScriptLaunchMode: 'new-tab'
-      } as unknown as ReturnType<typeof useAppStore.getState>['settings'],
+        ...getDefaultSettings(''),
+        agentCmdOverrides: {}
+      },
       markWorktreeVisited: vi.fn(),
       recordWorktreeVisit: vi.fn(),
       refreshGitHubForWorktreeIfStale: vi.fn(),
@@ -338,9 +338,9 @@ describe('activateAndRevealWorktree', () => {
       tabBarOrderByWorktree: {},
       pendingStartupByTabId: {},
       settings: {
-        agentCmdOverrides: {},
-        setupScriptLaunchMode: 'new-tab'
-      } as unknown as ReturnType<typeof useAppStore.getState>['settings'],
+        ...getDefaultSettings(''),
+        agentCmdOverrides: {}
+      },
       markWorktreeVisited: vi.fn(),
       recordWorktreeVisit: vi.fn(),
       refreshGitHubForWorktreeIfStale: vi.fn(),
@@ -388,10 +388,10 @@ describe('activateAndRevealWorktree', () => {
       activeTabIdByWorktree: {},
       tabBarOrderByWorktree: {},
       settings: {
+        ...getDefaultSettings(''),
         agentCmdOverrides: {},
-        activeRuntimeEnvironmentId: 'web-runtime-1',
-        setupScriptLaunchMode: 'new-tab'
-      } as unknown as ReturnType<typeof useAppStore.getState>['settings'],
+        activeRuntimeEnvironmentId: 'web-runtime-1'
+      },
       markWorktreeVisited: vi.fn(),
       recordWorktreeVisit: vi.fn(),
       refreshGitHubForWorktreeIfStale: vi.fn(),
@@ -451,10 +451,10 @@ describe('activateAndRevealWorktree', () => {
       activeTabIdByWorktree: {},
       tabBarOrderByWorktree: {},
       settings: {
+        ...getDefaultSettings(''),
         agentCmdOverrides: {},
-        activeRuntimeEnvironmentId: 'focused-runtime',
-        setupScriptLaunchMode: 'new-tab'
-      } as unknown as ReturnType<typeof useAppStore.getState>['settings'],
+        activeRuntimeEnvironmentId: 'focused-runtime'
+      },
       markWorktreeVisited: vi.fn(),
       recordWorktreeVisit: vi.fn(),
       refreshGitHubForWorktreeIfStale: vi.fn(),
@@ -516,8 +516,7 @@ describe('activateAndRevealWorktree', () => {
       settings: {
         ...getDefaultSettings('/workspace/.orca-workspaces'),
         agentCmdOverrides: {},
-        activeRuntimeEnvironmentId: 'web-runtime-1',
-        setupScriptLaunchMode: 'new-tab'
+        activeRuntimeEnvironmentId: 'web-runtime-1'
       },
       markWorktreeVisited: vi.fn(),
       recordWorktreeVisit: vi.fn(),
@@ -666,8 +665,7 @@ describe('activateAndRevealWorktree', () => {
       settings: {
         ...getDefaultSettings('/workspace/.orca-workspaces'),
         agentCmdOverrides: {},
-        activeRuntimeEnvironmentId: 'web-runtime-1',
-        setupScriptLaunchMode: 'new-tab'
+        activeRuntimeEnvironmentId: 'web-runtime-1'
       },
       markWorktreeVisited: vi.fn(),
       recordWorktreeVisit: vi.fn(),

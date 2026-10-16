@@ -1,19 +1,26 @@
-import type { GlobalSettings } from './global-settings-types'
-
 /** Creation intent belongs to this call, never to persisted agent provenance. */
 export function shouldSeedWorktreePrimaryTerminal(args: {
   hasPrimarySurface: boolean
   callerProvidesSurface: boolean
   startupNeedsTerminal?: boolean
   issueCommandNeedsTerminal?: boolean
-  setupLaunchMode?: GlobalSettings['setupScriptLaunchMode']
 }): boolean {
   return (
     !args.hasPrimarySurface &&
     (!args.callerProvidesSurface ||
       args.startupNeedsTerminal === true ||
-      args.issueCommandNeedsTerminal === true ||
-      args.setupLaunchMode === 'split-horizontal' ||
-      args.setupLaunchMode === 'split-vertical')
+      args.issueCommandNeedsTerminal === true)
+  )
+}
+
+/** Background agent creates leave their first surface to the caller; activated ones still get a shell. */
+export function backgroundAgentCreateLeavesSurface(args: {
+  createdWithAgent?: unknown
+  request: { activate?: boolean; runHooks?: boolean }
+}): boolean {
+  return (
+    args.createdWithAgent !== undefined &&
+    args.request.activate !== true &&
+    args.request.runHooks !== true
   )
 }

@@ -1,3 +1,4 @@
+import { applyClaudeTerminalImageViewerEnv } from '../terminal-image-viewer-env'
 import type { Repo } from '../../../shared/repo-types'
 import type {
   WorktreeLineageInput,
@@ -8,6 +9,7 @@ import type { RuntimeManagedWorktreeCreateArgs } from '../runtime-managed-worktr
 import type { CreateWorktreeResult } from '../../../shared/worktree/create-types'
 import { isTuiAgentEnabled } from '../../../shared/tui-agent-selection'
 import { isFolderRepo } from '../../../shared/repo-kind'
+import { notifyLineageRepos } from '../../worktree-lineage-change-notification'
 import { resolveWorktreeCreateRoute } from '../../worktree-create-execution-host-route'
 import { ExecutionHostNotDispatchableError } from '../../providers/execution-host-provider-dispatch'
 import { SshHostNotServedError } from '../../providers/ssh-host-not-served-error'
@@ -22,6 +24,7 @@ import { assertOpenCodeModelLaunchPreferencesAbsent } from '../../opencode/openc
 import { resolveWorktreeCreateAgentStartup } from '../runtime-worktree-agent-startup'
 import type { RuntimeWorkspaceCreateEvents } from '../../workspace-create-telemetry'
 import { readCreatedWorkspaceLaunch } from '../../agent-launch/agent-launch-created-workspace'
+import { createdWorkspaceActivationCallbacks } from './workspace-create-activation'
 import { assertWslMoveRepoWritable } from '../../persistence/moving-wsl-projects/wsl-move-scope-guard'
 
 export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWithGetWorktreeTerminalProvisioningHost {
@@ -88,7 +91,18 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
             args.startupLaunchSource
           )
         : null
-    const effectiveStartup = args.startup ?? agentStartup?.startup ?? draftStartup?.startup
+    const resolvedStartup = args.startup ?? agentStartup?.startup ?? draftStartup?.startup
+    const effectiveStartup = resolvedStartup
+      ? applyClaudeTerminalImageViewerEnv(
+          resolvedStartup,
+          args.terminalImageViewerSupported,
+          resolvedStartup.launchAgent ??
+            args.startupAgent ??
+            args.createdWithAgent ??
+            agentStartup?.agent ??
+            draftStartup?.agent
+        )
+      : undefined
     const effectiveStartupFollowup = agentStartup?.followup
     const startupLaunchRuntime = args.startup
       ? undefined
@@ -101,6 +115,10 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
     const effectiveDraftPaste = args.startupDraftPaste ?? draftStartup?.draftPaste
     const launchOwnsFirstSurface = (worktreeId: string): boolean =>
       readCreatedWorkspaceLaunch(this, worktreeId) !== undefined
+    const activationCallbacks = createdWorkspaceActivationCallbacks(
+      this.notifyActivateWorktree.bind(this),
+      args.navigation
+    )
     // Match IPC routing: executionHostId-only SSH repos must not create locally.
     const createRoute = resolveWorktreeCreateRoute(repo)
     if (isFolderRepo(repo)) {
@@ -125,16 +143,7 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
           notifyWorktreesChanged: (repoId) => this.notifyWorktreesChanged(repoId),
           emitCreated: (event) => this.emitWorktreeLifecycle(event),
           launchOwnsFirstSurface,
-          activate: (repoId, worktreeId, setup, startup, providesInitialSurface) =>
-            this.notifyActivateWorktree(
-              repoId,
-              worktreeId,
-              setup,
-              startup,
-              undefined,
-              args.navigation,
-              providesInitialSurface
-            )
+          activate: activationCallbacks.folder
         }
       })
     }
@@ -210,7 +219,7 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
     // rediscover roots only this repo changed.
     invalidateAuthorizedRootsCacheForRepo(this.store, repo)
 
-    this.notifyWorktreesChanged(repo.id)
+    notifyLineageRepos(this.notifyWorktreesChanged.bind(this), repo.id, lineage?.parentWorktreeId)
     const {
       warning: terminalWarning,
       returnedSetup,
@@ -241,23 +250,7 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
         sendFollowup: (handle, followup) => this.sendStartupFollowupWhenReady(handle, followup),
         provision: (options) => this.provisionManagedWorktreeTerminals(options, worktree),
         launchOwnsFirstSurface,
-        activate: (
-          repoId,
-          worktreeId,
-          startup,
-          failedSetup,
-          failedDefaultTabs,
-          providesInitialSurface
-        ) =>
-          this.notifyActivateWorktree(
-            repoId,
-            worktreeId,
-            failedSetup,
-            startup,
-            failedDefaultTabs,
-            args.navigation,
-            providesInitialSurface
-          )
+        activate: activationCallbacks.local
       }
     }).finally(() => this.notifyCreatedWorktreeLifecycle(worktree))
     warning = terminalWarning

@@ -91,7 +91,7 @@ export function agentLaunchWorkspaceFactory(
               }),
               creatorProvenance: resolveRpcWorkspaceCreatorProvenance(context)
             },
-            context.clientKind ? { clientKind: context.clientKind } : {}
+            context
           ),
           ...(agentArgs !== undefined ? { startupAgentArgs: agentArgs } : {}),
           ...(startupPrompt

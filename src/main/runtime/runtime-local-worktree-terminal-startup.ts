@@ -7,7 +7,10 @@ import {
 } from './runtime-worktree-terminal-startup-attempt'
 import { paneIdentity } from './runtime-terminal-pane-identity'
 import { navigationTargetsHost } from '../../shared/runtime-navigation'
-import { shouldSeedWorktreePrimaryTerminal } from '../../shared/worktree-first-surface'
+import {
+  backgroundAgentCreateLeavesSurface,
+  shouldSeedWorktreePrimaryTerminal
+} from '../../shared/worktree-first-surface'
 import type { CreateWorktreeResult } from '../../shared/worktree/create-types'
 import type { Repo } from '../../shared/repo-types'
 import type { TuiAgent } from '../../shared/tui-agent'
@@ -237,8 +240,7 @@ export async function startRuntimeLocalWorktreeTerminals(args: {
     ports.canSpawn &&
     shouldSeedWorktreePrimaryTerminal({
       hasPrimarySurface: didSpawnStartup,
-      // Preserve background create behavior for attribution-only callers.
-      callerProvidesSurface: launchOwnsSurface || args.createdWithAgent !== undefined
+      callerProvidesSurface: launchOwnsSurface || backgroundAgentCreateLeavesSurface(args)
     })
   ) {
     try {
@@ -287,7 +289,7 @@ function provisionArgs(
     primaryTerminalHandle,
     hasStartupTerminal,
     ...(args.request.setupOnly !== undefined ? { setupOnly: args.request.setupOnly } : {}),
-    callerProvidesSurface: launchOwnsSurface,
+    callerProvidesSurface: launchOwnsSurface || backgroundAgentCreateLeavesSurface(args),
     startupNeedsTerminal: args.startup !== undefined && !launchOwnsSurface,
     setupCommandPlatform: setupPlatform(args.setup, 'posix'),
     observeSetupCompletion: args.request.observeSetupCompletion,
