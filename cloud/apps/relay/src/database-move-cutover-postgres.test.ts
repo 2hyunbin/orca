@@ -8,7 +8,10 @@ import {
   syncCommand,
   verifyCommand
 } from './database-move-commands.js'
-import type { MoveCutoverContext } from './database-move-cutover-commands.js'
+import {
+  restorePasswordCommand,
+  type MoveCutoverContext
+} from './database-move-cutover-commands.js'
 import {
   readUnmarkedRelaySessions,
   runCutover,
@@ -35,9 +38,11 @@ const describePostgres = adminUrl ? describe : describe.skip
 // The contract's shape, scaled down: the lead still spans two pointer polls (100 ms here).
 const TIMINGS: CutoverTimings = {
   leadMs: 800,
-  fenceAfterStartMs: 400,
-  abortAfterStartMs: 4_000,
-  holdMs: 8_000
+  reachableByMs: 2_000,
+  quietCapMs: 3_000,
+  quietScanSpacingMs: 100,
+  abortAfterStartMs: 6_000,
+  holdMs: 9_000
 }
 const POLL_MS = 100
 const CELLS = ['c0', 'c1', 'c2', 'c3']
@@ -67,14 +72,26 @@ type Fleet = {
   stop: () => Promise<void>
 }
 
-// Two relay processes following the pointer, each with three writers doing relay-shaped work.
-async function startFleet(sides: MoveTestSides, store: MemoryPointerStore): Promise<Fleet> {
-  const processes = [0, 1].map((index) => {
+// Relay processes following the pointer, three writers each doing relay-shaped work. An
+// unreachable process has the wrong password for the dedicated side, as one would that cannot
+// reach the new instance.
+async function startFleet(
+  sides: MoveTestSides,
+  store: MemoryPointerStore,
+  options: { unreachable?: boolean } = {}
+): Promise<Fleet> {
+  const count = options.unreachable ? 3 : 2
+  const processes = Array.from({ length: count }, (_, index) => {
     const settings = {
       poolMax: 4,
-      applicationName: markRelayDatabaseMoveCapability(`orca-relay/cell/p${index}`)
+      applicationName: markRelayDatabaseMoveCapability(
+        `orca-relay/cell/p${index}`,
+        `0000000${index}`
+      )
     }
-    const dedicated = openPrimaryRelayDatabaseTarget(sides.dedicated.app.url, settings)
+    const dedicatedUrl = new URL(sides.dedicated.app.url)
+    if (index === 2) dedicatedUrl.password = 'not-the-password'
+    const dedicated = openPrimaryRelayDatabaseTarget(dedicatedUrl.toString(), settings)
     return new SwitchingRelayDatabase({
       primary: openPrimaryRelayDatabaseTarget(sides.primary.app.url, settings),
       openDedicated: () => dedicated,
@@ -94,6 +111,8 @@ async function startFleet(sides: MoveTestSides, store: MemoryPointerStore): Prom
     stop: async () => undefined
   }
   let stopped = false
+  // Fleets in one test write distinct event ids.
+  const fleetTag = Math.random().toString(36).slice(2, 8)
   const writer = async (id: number): Promise<void> => {
     const database = processes[id % processes.length]
     if (!database) return
@@ -101,7 +120,7 @@ async function startFleet(sides: MoveTestSides, store: MemoryPointerStore): Prom
       const cell = CELLS[(id + n) % CELLS.length] ?? 'c0'
       try {
         if (n % 3 === 0) {
-          const eventId = `w${id}-${n}`
+          const eventId = `${fleetTag}-w${id}-${n}`
           await database.query(
             `INSERT INTO relay_audit_events (id, at, type, detail_json) VALUES (?, ?, ?, ?)`,
             [eventId, Date.now(), 'move-test', '{}']
@@ -128,7 +147,7 @@ async function startFleet(sides: MoveTestSides, store: MemoryPointerStore): Prom
       await new Promise((resolve) => setTimeout(resolve, 3))
     }
   }
-  const writers = Array.from({ length: 6 }, (_, id) => writer(id))
+  const writers = Array.from({ length: count * 3 }, (_, id) => writer(id))
   fleet.stop = async () => {
     stopped = true
     await Promise.all(writers)
@@ -136,6 +155,30 @@ async function startFleet(sides: MoveTestSides, store: MemoryPointerStore): Prom
     await Promise.all(processes.map((database) => database.close()))
   }
   return fleet
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)))
+}
+
+// The tool's JSON log lines with this event, from the mocked console.
+function moveEvents(event: string): Array<Record<string, unknown>> {
+  return vi
+    .mocked(console.log)
+    .mock.calls.map((call) => {
+      try {
+        const parsed: unknown = JSON.parse(String(call[0]))
+        return parsed
+      } catch {
+        return null
+      }
+    })
+    .filter(
+      (line): line is Record<string, unknown> =>
+        typeof line === 'object' &&
+        line !== null &&
+        Reflect.get(line, 'event') === `orca_relay_move_${event}`
+    )
 }
 
 async function loginCode(url: string): Promise<string | null> {
@@ -256,14 +299,36 @@ describePostgres('database move cutover against two PostgreSQL targets', () => {
     expect(dry.hotTables).toContain('relay_cells')
     expect(await store.read()).toEqual(before)
 
-    const result = await runCutover({
+    const cutover = runCutover({
       databases: ctx.databases,
       to: 'dedicated',
       pointerStore: store,
       timings: TIMINGS
     })
-    await new Promise((resolve) => setTimeout(resolve, 300))
+    // Still running when the window opens: the fence must wait for it rather than end it.
+    const longTransaction = (async (): Promise<number> => {
+      let startsAt: number | undefined
+      while (startsAt === undefined) {
+        startsAt = store.current()?.quiesce?.startsAt
+        await sleep(10)
+      }
+      await sleep(startsAt - 300 - Date.now())
+      await fleet.processes[0]?.transaction(async (transaction) => {
+        await transaction.query(`SELECT pg_sleep(1.2)`)
+        await transaction.query(
+          `INSERT INTO relay_audit_events (id, at, type, detail_json) VALUES ('long-1', 1, 'move-test', '{}')`
+        )
+      })
+      fleet.ackedEvents.add('long-1')
+      return Date.now() - startsAt
+    })()
+    const result = await cutover
+    const longEndedAfterStartMs = await longTransaction
+    await sleep(300)
     await fleet.stop()
+    const gate = moveEvents('gate_open')[0]
+    expect(Number(gate?.sinceStartMs)).toBeGreaterThanOrEqual(longEndedAfterStartMs - 50)
+    expect(longEndedAfterStartMs).toBeGreaterThan(800)
 
     expect(fleet.failures).toEqual([])
     expect(result.generation).toBe(1)
@@ -272,7 +337,12 @@ describePostgres('database move cutover against two PostgreSQL targets', () => {
       'dedicated'
     ])
     expect(store.current()?.quiesce).toBeUndefined()
+    expect(store.current()?.generation).toBe(1)
     expect(await loginCode(sides.primary.app.url)).toBe('28P01')
+    // The old side is behind the pointer now; only a cutover back to it may reopen it.
+    await expect(restorePasswordCommand(ctx, 'primary')).rejects.toThrow(
+      'side_is_behind_the_pointer'
+    )
 
     const dedicated = await withPgClient(sides.dedicated.move.url, async (client) => ({
       generation: await readAuthorityGeneration(client),
@@ -306,6 +376,59 @@ describePostgres('database move cutover against two PostgreSQL targets', () => {
     // The reverse sync brings the old copy level with the new one: the rollback path.
     await syncCommand(ctx, 'dedicated', { stopAtBacklog: 0, idleMs: 5 })
     expect(await verifyCommand(ctx, {})).toBe(true)
+
+    // And back: the rollback cutover reopens the fenced primary itself, then moves the fleet.
+    const returning = await startFleet(sides, store)
+    await sleep(300)
+    const back = await runCutover({
+      databases: ctx.databases,
+      to: 'primary',
+      pointerStore: store,
+      timings: TIMINGS,
+      restoreTargetPassword: async () => {
+        await withPgClient(adminUrl ?? '', (admin) =>
+          admin.query(
+            `ALTER ROLE ${sides.primary.app.user} PASSWORD '${sides.primary.app.password}'`
+          )
+        )
+      }
+    })
+    await sleep(300)
+    await returning.stop()
+    expect(returning.failures).toEqual([])
+    expect(back.generation).toBe(2)
+    expect(returning.processes.map((database) => database.activeTargetName())).toEqual([
+      'primary',
+      'primary'
+    ])
+    expect(store.current()?.generation).toBe(2)
+    expect(await loginCode(sides.dedicated.app.url)).toBe('28P01')
+  }, 90_000)
+
+  it('aborts when a process cannot reach the target, naming it, with no failed operation', async () => {
+    const fleet = await startFleet(sides, store, { unreachable: true })
+    await sleep(300)
+    const refusal = await runCutover({
+      databases: ctx.databases,
+      to: 'dedicated',
+      pointerStore: store,
+      timings: TIMINGS
+    }).catch((error: unknown) => error)
+    expect(refusal).toMatchObject({
+      reason: 'processes_without_a_target_session',
+      details: { ids: ['00000002'] }
+    })
+    await sleep(500)
+    await fleet.stop()
+    expect(fleet.failures).toEqual([])
+    expect(fleet.processes.map((database) => database.activeTargetName())).toEqual([
+      'primary',
+      'primary',
+      'primary'
+    ])
+    expect(store.current()?.quiesce).toBeUndefined()
+    expect(store.current()?.generation).toBeUndefined()
+    expect(await loginCode(sides.primary.app.url)).toBeNull()
   }, 60_000)
 
   it('aborts on a hot-table difference and leaves the processes on the restored source', async () => {

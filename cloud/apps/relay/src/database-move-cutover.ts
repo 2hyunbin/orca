@@ -1,4 +1,4 @@
-import type pg from 'pg'
+import pg from 'pg'
 import {
   compareMoveSchemas,
   RELAY_DATABASE_AUTHORITY_TABLE,
@@ -23,6 +23,7 @@ import {
 import {
   replayClaims,
   runSyncLoop,
+  syncBatch,
   takeSyncLock,
   type MoveSyncSessions
 } from './database-move-sync.js'
@@ -43,16 +44,26 @@ import {
 // Contract timings. Processes poll the pointer every 5 s, so 12 s of lead gives each two reads.
 export type CutoverTimings = {
   leadMs: number
-  fenceAfterStartMs: number
+  // Every marked process must have a session on the target by then, or the cutover aborts.
+  reachableByMs: number
+  // The fence waits for the source's relay sessions to go quiet, but no longer than this.
+  quietCapMs: number
+  quietScanSpacingMs: number
   abortAfterStartMs: number
   holdMs: number
 }
 export const CUTOVER_TIMINGS: CutoverTimings = {
   leadMs: 12_000,
-  fenceAfterStartMs: 2_000,
+  reachableByMs: 5_000,
+  quietCapMs: 6_000,
+  quietScanSpacingMs: 100,
   abortAfterStartMs: 15_000,
   holdMs: DATABASE_QUIESCE_MAX_MS
 }
+
+const MARKED_PROCESS = new RegExp(`${RELAY_DATABASE_MOVE_CAPABILITY_SUFFIX}([0-9a-f]{8})$`)
+const BUSY_STATES = new Set(['active', 'idle in transaction', 'idle in transaction (aborted)'])
+const TOOL_APPLICATION_PREFIX = 'orca-relay-move/'
 
 export type CutoverInput = {
   databases: MoveDatabases
@@ -66,6 +77,8 @@ export type CutoverInput = {
   timings?: Partial<CutoverTimings>
   // When the held session is gone: the Cloud SQL Admin API restore for the source.
   restoreSourcePassword?: () => Promise<void>
+  // A rollback's target was fenced by the cutover that left it; reopened just before the window.
+  restoreTargetPassword?: () => Promise<void>
   // SIGTERM: stop at the next step and undo, unless authority already moved.
   interrupted?: () => boolean
 }
@@ -89,15 +102,37 @@ export async function readUnmarkedRelaySessions(
   const result = await client.query(
     `SELECT application_name, count(*)::int AS sessions FROM pg_stat_activity
      WHERE usename = $1 AND coalesce(backend_type, 'client backend') = 'client backend'
-       AND pid <> pg_backend_pid()
-       AND right(application_name, $2) <> $3
+       AND pid <> pg_backend_pid() AND application_name !~ $2
      GROUP BY application_name ORDER BY application_name`,
-    [appUser, RELAY_DATABASE_MOVE_CAPABILITY_SUFFIX.length, RELAY_DATABASE_MOVE_CAPABILITY_SUFFIX]
+    [appUser, MARKED_PROCESS.source]
   )
   return result.rows.map((row) => ({
     applicationName: String(row.application_name),
     sessions: Number(row.sessions)
   }))
+}
+
+// Run as the relay role on that side, so other relay sessions' names and states are visible.
+// The tool's own sessions are left out.
+async function readRelayProcesses(
+  client: pg.Client,
+  appUser: string
+): Promise<{ ids: Set<string>; busy: Array<{ applicationName: string; state: string }> }> {
+  const result = await client.query(
+    `SELECT application_name, coalesce(state, '') AS state FROM pg_stat_activity
+     WHERE usename = $1 AND backend_type = 'client backend' AND pid <> pg_backend_pid()
+       AND left(application_name, $3) <> $2`,
+    [appUser, TOOL_APPLICATION_PREFIX, TOOL_APPLICATION_PREFIX.length]
+  )
+  const ids = new Set<string>()
+  const busy: Array<{ applicationName: string; state: string }> = []
+  for (const row of result.rows) {
+    const applicationName = String(row.application_name)
+    const id = MARKED_PROCESS.exec(applicationName)?.[1]
+    if (id) ids.add(id)
+    if (BUSY_STATES.has(String(row.state))) busy.push({ applicationName, state: String(row.state) })
+  }
+  return { ids, busy }
 }
 
 async function countClaimed(client: pg.Client): Promise<number> {
@@ -121,30 +156,49 @@ async function hotTables(
   return hot
 }
 
-// Clears our window, re-reading once if the generation moved (or was never confirmed); a window
-// someone else replaced is left alone. Processes release at `until` on their own if this never lands.
-async function clearQuiesce(
+function withoutQuiesce(pointer: DatabaseTargetPointer): DatabaseTargetPointer {
+  const { quiesce: _cleared, ...rest } = pointer
+  return rest
+}
+
+// Rewrites the pointer while it still carries our window, re-reading once if its generation
+// moved (or a write was never confirmed). A window someone else replaced is left alone, and
+// processes release at `until` on their own if this never lands.
+async function updateOurPointer(
   store: DatabaseTargetPointerStore,
   quiesceId: string,
-  known: StoredDatabaseTargetPointer | null
-): Promise<void> {
-  const without = (pointer: DatabaseTargetPointer): DatabaseTargetPointer => {
-    const { quiesce: _cleared, ...rest } = pointer
-    return rest
-  }
+  known: StoredDatabaseTargetPointer | null,
+  change: (pointer: DatabaseTargetPointer) => DatabaseTargetPointer
+): Promise<StoredDatabaseTargetPointer | null> {
   try {
     if (!known) throw new PointerGenerationConflict()
-    await store.write(without(known.pointer), known.generation)
+    const pointer = change(known.pointer)
+    return { pointer, generation: await store.write(pointer, known.generation) }
   } catch (error) {
     if (!(error instanceof PointerGenerationConflict)) throw error
     const current = await store.read()
     if (current?.pointer.quiesce?.id !== quiesceId) {
-      logMoveEvent('quiesce_not_ours_to_clear', { id: quiesceId })
-      return
+      logMoveEvent('pointer_window_not_ours', { id: quiesceId })
+      return null
     }
-    await store.write(without(current.pointer), current.generation)
+    const pointer = change(current.pointer)
+    return { pointer, generation: await store.write(pointer, current.generation) }
   }
-  logMoveEvent('quiesce_cleared', { id: quiesceId })
+}
+
+async function clearQuiesce(
+  store: DatabaseTargetPointerStore,
+  quiesceId: string,
+  known: StoredDatabaseTargetPointer | null,
+  generation?: number
+): Promise<void> {
+  const cleared = await updateOurPointer(store, quiesceId, known, (pointer) => ({
+    ...withoutQuiesce(pointer),
+    ...(generation === undefined
+      ? {}
+      : { generation: Math.max(pointer.generation ?? 0, generation) })
+  }))
+  if (cleared) logMoveEvent('quiesce_cleared', { id: quiesceId })
 }
 
 // Login roles other than the relay's and the tool's that can write relay rows, or become the relay
@@ -215,6 +269,8 @@ export async function runCutover(input: CutoverInput): Promise<CutoverResult> {
   let quiesceId: string | null = null
   let written: StoredDatabaseTargetPointer | null = null
   let committed = false
+  // Unknown after a lost reply: the pointer's generation is then left for the operator.
+  let authorityConfirmed = false
   let heldSession: pg.Client | null = null
   let newGeneration = 0
   try {
@@ -229,12 +285,21 @@ export async function runCutover(input: CutoverInput): Promise<CutoverResult> {
       source: await open(from, 'move', 'cutover-sync'),
       target: await open(to, 'move', 'cutover-sync')
     }
-    // The processes will log in there next; prove the relay's password works first.
-    await endQuietly(
-      await databases.connect(to, 'app', 'cutover-login-check').catch((error: unknown) => {
-        throw new MoveRefusal('target_refuses_relay_login', describeMoveError(error))
-      })
-    )
+    // The processes will log in there next; prove the relay's password works first. The session
+    // stays open to see which processes reach the target during the window.
+    let targetApp = await open(to, 'app', 'cutover-gate').catch((error: unknown) => error)
+    const refusedPassword =
+      typeof targetApp === 'object' &&
+      targetApp !== null &&
+      'code' in targetApp &&
+      targetApp.code === '28P01'
+    let targetPasswordRestore: 'not-needed' | 'needed' = 'not-needed'
+    if (!(targetApp instanceof pg.Client)) {
+      if (!refusedPassword || !input.restoreTargetPassword) {
+        throw new MoveRefusal('target_refuses_relay_login', describeMoveError(targetApp))
+      }
+      targetPasswordRestore = 'needed'
+    }
 
     const tables = await readMoveTables(sessions.source)
     const targetTables = await readMoveTables(sessions.target)
@@ -304,12 +369,24 @@ export async function runCutover(input: CutoverInput): Promise<CutoverResult> {
     // Checked last, just before the window, so a client that connected during the catch-up counts.
     const writers = await readOtherRelayWriters(held, tables, sourceLogin.user, toolUsers)
     if (writers.length > 0) throw new MoveRefusal('other_roles_can_write_relay_rows', { writers })
+    if (targetPasswordRestore === 'needed' && !dryRun && input.restoreTargetPassword) {
+      phase = 'reopen-target'
+      await input.restoreTargetPassword()
+      logMoveEvent('target_password_restored', { side: to })
+      targetApp = await open(to, 'app', 'cutover-gate')
+    }
     const unmarked = await readUnmarkedRelaySessions(held, sourceLogin.user)
     if (unmarked.length > 0) {
       throw new MoveRefusal('relay_sessions_without_move_capability', { sessions: unmarked })
     }
     const backlog = await readDirtyBacklog(sessions.source)
-    const facts = { generation, backlog, claimed, hotTables: hot.map((table) => table.name) }
+    const facts = {
+      generation,
+      backlog,
+      claimed,
+      targetPasswordRestore,
+      hotTables: hot.map((table) => table.name)
+    }
     if (backlog > maxBacklog) throw new MoveRefusal('backlog_too_large', { backlog, maxBacklog })
     logMoveEvent('cutover_preconditions_met', { ...facts, sourceGeneration, targetGeneration })
     if (dryRun) return { from, to, dryRun, generation, hotTables: facts.hotTables }
@@ -324,16 +401,47 @@ export async function runCutover(input: CutoverInput): Promise<CutoverResult> {
     if (startsAt - Date.now() < timings.leadMs) {
       throw new MoveRefusal('pointer_write_too_slow_for_the_lead')
     }
-    const fenceAt = startsAt + timings.fenceAfterStartMs
     const abortAt = startsAt + timings.abortAfterStartMs
     // Keep the backlog small through the lead; the drain after the fence is then short.
     await runSyncLoop(sessions, tables, {
-      shouldStop: () => Date.now() >= fenceAt || interrupted(),
+      shouldStop: () => Date.now() >= startsAt || interrupted(),
       idleMs: 50,
       label: { phase }
     })
-    await sleepUnless(fenceAt, interrupted)
+    await sleepUnless(startsAt, interrupted)
     checkpoint()
+
+    phase = 'gate'
+    if (!(targetApp instanceof pg.Client)) throw new MoveRefusal('target_session_missing')
+    const gateApp = targetApp
+    const targetUser = (await databases.login(to, 'app')).user
+    // Fence only once every process seen on the source also holds a session on the target (it can
+    // log in there), and the source's relay sessions have finished their work: no statement
+    // running and no transaction open, on two scans in a row.
+    let quietScans = 0
+    for (;;) {
+      checkpoint()
+      const [onSource, onTarget] = await Promise.all([
+        readRelayProcesses(held, sourceLogin.user),
+        readRelayProcesses(gateApp, targetUser)
+      ])
+      const missing = [...onSource.ids].filter((id) => !onTarget.ids.has(id)).sort()
+      quietScans = onSource.busy.length === 0 ? quietScans + 1 : 0
+      const sinceStart = Date.now() - startsAt
+      if (missing.length > 0 && sinceStart >= timings.reachableByMs) {
+        throw new MoveRefusal('processes_without_a_target_session', { ids: missing })
+      }
+      if (missing.length === 0 && quietScans >= 2) {
+        logMoveEvent('gate_open', { processes: onSource.ids.size, sinceStartMs: sinceStart })
+        break
+      }
+      if (missing.length === 0 && sinceStart >= timings.quietCapMs) {
+        logMoveEvent('gate_cap_reached', { busy: onSource.busy, sinceStartMs: sinceStart })
+        break
+      }
+      await syncBatch(sessions, tables, 500)
+      await sleep(timings.quietScanSpacingMs)
+    }
 
     phase = 'fence'
     fenced = true
@@ -381,14 +489,27 @@ export async function runCutover(input: CutoverInput): Promise<CutoverResult> {
       )
     } catch (error) {
       // A lost reply may hide a commit. Undo only on proof that it did not land.
-      committed = !(await authorityProvenUnwritten(databases, to, generation, quiesce.until))
+      const verdict = await checkAuthorityWrite(databases, to, generation, quiesce.until)
+      committed = verdict !== 'unwritten'
+      authorityConfirmed = verdict === 'written'
       throw error
     }
     committed = true
+    authorityConfirmed = true
     logMoveEvent('authority_written', { side: to, generation })
 
+    // Recorded before the window clears: from here no side below this generation may serve or be
+    // reopened (restore-password refuses it).
+    phase = 'pointer-generation'
+    written =
+      (await updateOurPointer(input.pointerStore, quiesce.id, written, (current) => ({
+        ...current,
+        generation: Math.max(current.generation ?? 0, generation)
+      }))) ?? written
+    logMoveEvent('pointer_generation_written', { generation })
+
     phase = 'clear'
-    await clearQuiesce(input.pointerStore, quiesce.id, written)
+    await clearQuiesce(input.pointerStore, quiesce.id, written, generation)
     const heldMs = Date.now() - startsAt
     logMoveEvent('cutover_complete', { from, to, generation, heldMs, terminated })
     return { from, to, dryRun, generation, hotTables: facts.hotTables, heldMs, terminated }
@@ -406,8 +527,9 @@ export async function runCutover(input: CutoverInput): Promise<CutoverResult> {
     })
     if (!committed) await undoCutover(input, heldSession, fenced, quiesceId, written)
     else if (quiesceId) {
-      await clearQuiesce(input.pointerStore, quiesceId, written).catch((clearError: unknown) =>
-        logMoveEvent('quiesce_clear_failed', describeMoveError(clearError))
+      const recorded = authorityConfirmed ? newGeneration : undefined
+      await clearQuiesce(input.pointerStore, quiesceId, written, recorded).catch(
+        (clearError: unknown) => logMoveEvent('quiesce_clear_failed', describeMoveError(clearError))
       )
     }
     throw error
@@ -418,12 +540,12 @@ export async function runCutover(input: CutoverInput): Promise<CutoverResult> {
 
 // The lock waits out an INSERT still committing (a synchronous standby, a lost reply), so the read
 // after it is final. Retried until the window would end; an answer never reached is "maybe".
-async function authorityProvenUnwritten(
+async function checkAuthorityWrite(
   databases: MoveDatabases,
   side: MoveSide,
   generation: number,
   until: number
-): Promise<boolean> {
+): Promise<'written' | 'unwritten' | 'unknown'> {
   for (let attempt = 1; ; attempt++) {
     try {
       const client = await databases.connect(side, 'move', 'cutover-authority-check')
@@ -436,13 +558,13 @@ async function authorityProvenUnwritten(
         const unwritten = (await readAuthorityGeneration(client)) < generation
         await client.query('ROLLBACK')
         logMoveEvent('authority_checked', { side, written: !unwritten, attempt })
-        return unwritten
+        return unwritten ? 'unwritten' : 'written'
       } finally {
         await endQuietly(client)
       }
     } catch (error) {
       logMoveEvent('authority_check_failed', { side, attempt, ...describeMoveError(error) })
-      if (Date.now() + 1_000 >= until) return false
+      if (Date.now() + 1_000 >= until) return 'unknown'
       await sleep(Math.min(1_000 * attempt, until - Date.now() - 1_000))
     }
   }

@@ -31,10 +31,35 @@ export async function fenceCommand(ctx: MoveCutoverContext, side: MoveSide): Pro
   })
 }
 
+// Reopening a side the pointer says is behind would let a stale writer onto old rows. The
+// cutover's own abort and rollback restores go through restoreSidePassword directly.
 export async function restorePasswordCommand(
   ctx: MoveCutoverContext,
   side: MoveSide
 ): Promise<void> {
+  const stored = await (await ctx.pointerStore()).read()
+  const pointerGeneration = stored?.pointer.generation
+  if (pointerGeneration !== undefined) {
+    const sideGeneration = await withClients(
+      [ctx.databases.connect(side, 'move', 'restore-check')],
+      async ([client]) => {
+        if (!client) throw new MoveRefusal('session_missing')
+        return await readAuthorityGeneration(client)
+      }
+    )
+    if (sideGeneration < pointerGeneration) {
+      throw new MoveRefusal('side_is_behind_the_pointer', {
+        side,
+        sideGeneration,
+        pointerGeneration,
+        run: `cutover --to ${side}`
+      })
+    }
+  }
+  await restoreSidePassword(ctx, side)
+}
+
+async function restoreSidePassword(ctx: MoveCutoverContext, side: MoveSide): Promise<void> {
   const login = await ctx.databases.login(side, 'app')
   if (!login.instanceConnectionName) throw new MoveRefusal('not_a_cloud_sql_url', { side })
   if (!ctx.google) throw new MoveRefusal('google_access_unavailable')
@@ -49,16 +74,21 @@ export async function restorePasswordCommand(
 
 export async function cutoverCommand(
   ctx: MoveCutoverContext,
-  input: Omit<CutoverInput, 'databases' | 'pointerStore' | 'restoreSourcePassword'>
+  input: Omit<
+    CutoverInput,
+    'databases' | 'pointerStore' | 'restoreSourcePassword' | 'restoreTargetPassword'
+  >
 ): Promise<void> {
   const from = otherMoveSide(input.to)
-  const google = ctx.google
   await runCutover({
     ...input,
     databases: ctx.databases,
     pointerStore: await ctx.pointerStore(),
-    ...(google
-      ? { restoreSourcePassword: async () => await restorePasswordCommand(ctx, from) }
+    ...(ctx.google
+      ? {
+          restoreSourcePassword: async () => await restoreSidePassword(ctx, from),
+          restoreTargetPassword: async () => await restoreSidePassword(ctx, input.to)
+        }
       : {})
   })
 }
