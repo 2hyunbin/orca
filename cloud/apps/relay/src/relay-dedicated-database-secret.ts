@@ -21,6 +21,14 @@ export async function readDedicatedDatabaseCredentials(
   google: GoogleMetadataAccess,
   fetchImpl: typeof fetch = fetch
 ): Promise<DedicatedDatabaseCredentials> {
+  return parseDedicatedDatabaseUrl(await readSecretManagerText(secretVersion, google, fetchImpl))
+}
+
+export async function readSecretManagerText(
+  secretVersion: string,
+  google: GoogleMetadataAccess,
+  fetchImpl: typeof fetch = fetch
+): Promise<string> {
   const response = await fetchImpl(`${SECRET_MANAGER_ROOT}/${secretVersion}:access`, {
     headers: { authorization: `Bearer ${await google.accessToken()}` },
     signal: AbortSignal.timeout(SECRET_READ_TIMEOUT_MS)
@@ -46,7 +54,7 @@ export async function readDedicatedDatabaseCredentials(
   if (encoded === null || encoded.length > MAX_SECRET_BYTES * 2) {
     throw new DedicatedDatabaseSecretError('payload')
   }
-  return parseDedicatedDatabaseUrl(Buffer.from(encoded, 'base64').toString('utf8').trim())
+  return Buffer.from(encoded, 'base64').toString('utf8').trim()
 }
 
 export function parseDedicatedDatabaseUrl(databaseUrl: string): DedicatedDatabaseCredentials {
