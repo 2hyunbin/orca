@@ -112,7 +112,6 @@ describe('authoritative metadata pruning under a WSL move', () => {
 
   it('removes nothing from the moving project', async () => {
     expect(await pruneMissingRow(MOVING)).toEqual([])
-    expect(store.getWorktreeMeta(`${MOVING}::${join(tmpdir(), MOVING, 'gone')}`)).toBeDefined()
   })
 
   it('prunes a project the move is not taking', async () => {

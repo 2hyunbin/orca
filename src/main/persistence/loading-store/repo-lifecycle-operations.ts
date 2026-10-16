@@ -81,15 +81,15 @@ export class RepoLifecycleOperations {
     const repoRemoved = this[repoLifecycleOperationsContext].runtime.state.repos.some(
       (repo) => repo.id === id && getRepoExecutionHostId(repo) === hostId
     )
-    this[repoLifecycleOperationsContext].runtime.state.repos = this[
-      repoLifecycleOperationsContext
-    ].runtime.state.repos.filter((r) => !(r.id === id && getRepoExecutionHostId(r) === hostId))
+    const remainingRepos = this[repoLifecycleOperationsContext].runtime.state.repos.filter(
+      (r) => !(r.id === id && getRepoExecutionHostId(r) === hostId)
+    )
+    const idStillPresent = remainingRepos.some((r) => r.id === id)
+    pruneWorktreeStateForRepo(this, id, idStillPresent ? hostId : null)
+    this[repoLifecycleOperationsContext].runtime.state.repos = remainingRepos
     if (repoRemoved) {
       bumpLocalWorktreeScanGeneration(id)
     }
-    const idStillPresent = this[repoLifecycleOperationsContext].runtime.state.repos.some(
-      (r) => r.id === id
-    )
     if (!idStillPresent) {
       retireLocalWorktreeScanGeneration(id)
       dropRepoRestoreHints(this, id)
@@ -97,7 +97,6 @@ export class RepoLifecycleOperations {
       delete this[repoLifecycleOperationsContext].runtime.state.retiredWorktreeNamesByRepo?.[id]
     }
     syncProjectHostSetupCompatibilityState(this)
-    pruneWorktreeStateForRepo(this, id, idStillPresent ? hostId : null)
     if (!idStillPresent) {
       this[repoLifecycleOperationsContext].runtime.state.workspaceSession = removeLocalRepoSession(
         this[repoLifecycleOperationsContext].runtime.state.workspaceSession,

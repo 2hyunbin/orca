@@ -416,7 +416,8 @@ describe('Store', () => {
 
     store.removeProjectForHost('r1', 'local')
 
-    expect(store.getWorktreeLineage('r1::/path/child')).toBeUndefined()
+    store.flushOrThrow()
+    expect(readDataFile()).not.toHaveProperty('lineageByChildInstance.child-instance')
     expect(store.getWorktreeLineage('r2::/other-child', 'other-child-instance')).toBeDefined()
     expect(store.getWorktreeLineage('r2::/other', 'other-instance')).toBeDefined()
   })
