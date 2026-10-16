@@ -31,18 +31,28 @@ function hasValidLineageParent(worktree: Worktree, parent: Worktree): boolean {
 export function getMobileWorkspaceLineageChildren(
   worktrees: readonly Worktree[]
 ): Map<string, Worktree[]> {
-  const worktreeById = new Map(
-    worktrees.map((worktree) => [getWorktreeRowIdentity(worktree), worktree])
-  )
+  const byInstance = new Map<string, Worktree | null>()
+  for (const row of worktrees) {
+    if (row.worktreeInstanceId) {
+      byInstance.set(row.worktreeInstanceId, byInstance.has(row.worktreeInstanceId) ? null : row)
+    }
+  }
+  const byIdentity = new Map(worktrees.map((row) => [getWorktreeRowIdentity(row), row]))
   const childrenByParentId = new Map<string, Worktree[]>()
 
   for (const worktree of worktrees) {
     const worktreeId = getWorktreeRowIdentity(worktree)
-    const parentId = worktree.parentWorktreeId
-    const parentIdentity = parentId
-      ? getWorktreeRowIdentity({ worktreeId: parentId, hostId: worktree.hostId })
-      : null
-    const parent = parentIdentity ? worktreeById.get(parentIdentity) : undefined
+    const parent = worktree.parentWorktreeInstanceId
+      ? byInstance.get(worktree.parentWorktreeInstanceId)
+      : worktree.lineageWorktreeInstanceId === undefined && worktree.parentWorktreeId
+        ? byIdentity.get(
+            getWorktreeRowIdentity({
+              worktreeId: worktree.parentWorktreeId,
+              hostId: worktree.hostId
+            })
+          )
+        : undefined
+    const parentIdentity = parent ? getWorktreeRowIdentity(parent) : null
     if (
       !parentIdentity ||
       parentIdentity === worktreeId ||

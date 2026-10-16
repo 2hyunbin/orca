@@ -221,7 +221,7 @@ describe('OrcaRuntimeService', () => {
     })
   })
 
-  it('emits only instance- and boundary-validated lineage parents in mobile summaries', async () => {
+  it('emits instance-validated lineage parents across hosts in mobile summaries', async () => {
     // Regression: shipped mobile clients trust parentWorktreeId blindly, so worktree.ps must not emit stale same-path lineage.
     const parentPath = join(tmpdir(), 'worktree-parent')
     const validChildPath = join(tmpdir(), 'worktree-child-valid')
@@ -303,13 +303,13 @@ describe('OrcaRuntimeService', () => {
     expect(staleSummary?.parentWorktreeInstanceId).toBeUndefined()
     const crossHostSummary = worktrees.find((worktree) => worktree.worktreeId === crossHostChildId)
     expect(crossHostSummary).toMatchObject({
-      parentWorktreeId: null,
+      parentWorktreeId: parentId,
       worktreeInstanceId: 'cross-host-child-instance'
     })
-    expect(crossHostSummary?.lineageWorktreeInstanceId).toBeUndefined()
-    expect(crossHostSummary?.parentWorktreeInstanceId).toBeUndefined()
+    expect(crossHostSummary?.lineageWorktreeInstanceId).toBe('cross-host-child-instance')
+    expect(crossHostSummary?.parentWorktreeInstanceId).toBe('parent-instance')
     expect(worktrees.find((worktree) => worktree.worktreeId === parentId)).toMatchObject({
-      childWorktreeIds: [validChildId]
+      childWorktreeIds: [validChildId, crossHostChildId]
     })
   })
 

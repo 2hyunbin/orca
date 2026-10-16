@@ -297,7 +297,7 @@ describe('OrcaRuntimeService', () => {
       parentRepoId: TEST_REPO_ID,
       childMeta: { hostId: 'runtime:child-host' as const },
       parentMeta: { hostId: 'runtime:parent-host' as const },
-      accepted: false
+      accepted: true
     },
     {
       boundary: 'known project',
@@ -350,18 +350,12 @@ describe('OrcaRuntimeService', () => {
     const update = runtime.updateManagedWorktreeMeta(`id:${childId}`, {
       lineage: { parentWorktree: `id:${parentId}` }
     })
-    if (scenario.accepted) {
-      await update
-      expect(setWorktreeLineage).toHaveBeenCalledWith(
-        childId,
-        expect.objectContaining({ parentWorktreeId: parentId })
-      )
-      expect(setWorkspaceLineage).toHaveBeenCalled()
-    } else {
-      await expect(update).rejects.toThrow('Parent worktree must be on the same execution host.')
-      expect(setWorktreeLineage).not.toHaveBeenCalled()
-      expect(setWorkspaceLineage).not.toHaveBeenCalled()
-    }
+    await update
+    expect(setWorktreeLineage).toHaveBeenCalledWith(
+      childId,
+      expect.objectContaining({ parentWorktreeId: parentId })
+    )
+    expect(setWorkspaceLineage).toHaveBeenCalled()
   })
 
   it('clears workspace lineage when manually removing a parent', async () => {

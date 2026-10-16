@@ -73,6 +73,38 @@ describe('deregistered repo residue', () => {
     rmSync(testState.dir, { recursive: true, force: true })
   })
 
+  it('retains child-owned external lineage across reload and parent-repo removal', async () => {
+    const store = await createStore()
+    store.addRepo(makeRepo({ id: LIVE_REPO, path: '/workspace/live' }))
+    store.setWorktreeMetaForHost(LIVE_WORKTREE, 'local', { instanceId: 'child-instance' })
+    const edge = store.setWorktreeLineage(LIVE_WORKTREE, {
+      worktreeId: LIVE_WORKTREE,
+      worktreeInstanceId: 'child-instance',
+      parentWorktreeId: GONE_WORKTREE,
+      parentWorktreeInstanceId: 'parent-instance',
+      origin: 'manual',
+      capture: { source: 'manual-action', confidence: 'explicit' },
+      createdAt: 1
+    })
+    const workspaceEdge = store.setWorkspaceLineage({
+      childWorkspaceKey: worktreeWorkspaceKey(LIVE_WORKTREE),
+      childInstanceId: 'child-instance',
+      parentWorkspaceKey: worktreeWorkspaceKey(GONE_WORKTREE),
+      parentInstanceId: 'parent-instance',
+      origin: edge.origin,
+      capture: edge.capture,
+      createdAt: 1
+    })
+    store.flush()
+    const reloaded = await createStore()
+    expect(reloaded.getWorktreeLineage(LIVE_WORKTREE)).toEqual(edge)
+    expect(reloaded.getWorkspaceLineage(workspaceEdge.childWorkspaceKey)).toEqual(workspaceEdge)
+    reloaded.addRepo(makeRepo({ id: GONE_REPO, path: '/workspace/orphan' }))
+    reloaded.removeProjectForHost(GONE_REPO, 'local')
+    expect(reloaded.getWorktreeLineage(LIVE_WORKTREE)).toEqual(edge)
+    expect(reloaded.getWorkspaceLineage(workspaceEdge.childWorkspaceKey)).toEqual(workspaceEdge)
+  })
+
   it('drops metadata, identity rows and sessions owned by an unregistered repo id', async () => {
     const seed = await createStore()
     seed.addRepo(makeRepo({ id: LIVE_REPO, path: '/workspace/live' }))

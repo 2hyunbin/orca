@@ -1,3 +1,4 @@
+import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import React, { useCallback, useMemo } from 'react'
 import { useAppStore } from '@/store'
 import { useShallow } from 'zustand/react/shallow'
@@ -60,6 +61,10 @@ const WorktreeList = React.memo(function WorktreeList({
   const allWorktrees = useAllWorktrees()
   const repoMap = useRepoMap()
   const worktreeMap = useWorktreeMap()
+  const lineageWorktreeMap = useMemo(
+    () => new Map(allWorktrees.map((row) => [getWorktreeHostIdentity(row), row])),
+    [allWorktrees]
+  )
   const repos = useAppStore((s) => s.repos)
   const worktreeLineageById = useAppStore((s) => s.worktreeLineageById)
   const workspaceLineageByChildKey = useAppStore((s) => s.workspaceLineageByChildKey)
@@ -143,7 +148,7 @@ const WorktreeList = React.memo(function WorktreeList({
     worktrees: visibleWorktrees,
     repos,
     repoMap,
-    worktreeMap,
+    worktreeMap: lineageWorktreeMap,
     worktreeLineageById,
     prCache,
     settings,

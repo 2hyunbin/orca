@@ -51,10 +51,7 @@ function getParentWorktree(
   state: ChildWorkspacesToggleState,
   target: Worktree
 ): Worktree | undefined {
-  // Why: the sidebar nests a child only under a parent on the same host, and archived rows never render.
-  const worktrees = getAllWorktreesFromState(state).filter(
-    (worktree) => worktree.hostId === target.hostId && !worktree.isArchived
-  )
+  const worktrees = getAllWorktreesFromState(state).filter((worktree) => !worktree.isArchived)
   const { worktreeMap, lineageById } = getHostScopedWorktreeLineageInputs(
     worktrees,
     state.worktreeLineageById,
@@ -63,7 +60,7 @@ function getParentWorktree(
   return getWorktreeLineageAncestors(target, lineageById, worktreeMap)[0]
 }
 
-/** Resolves the target's rendered chip, falling back to its same-host parent's chip. */
+/** Resolves the target's rendered chip, falling back to its parent's chip. */
 export function resolveChildWorkspacesToggleGroupKey(
   state: ChildWorkspacesToggleState,
   renderedChipKeys: ReadonlySet<string>,

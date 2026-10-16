@@ -1,6 +1,7 @@
+import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '@/store'
-import { useAllWorktrees, useRepoById, useRepoMap, useWorktreeMap } from '@/store/selectors'
+import { useAllWorktrees, useRepoById, useRepoMap } from '@/store/selectors'
 import type { Worktree } from '../../../../shared/worktree/types'
 import {
   getCyclicProjectedWorktreeLineageIds,
@@ -93,8 +94,11 @@ export function useWorktreeContextMenuModel({
   const lifecycleStartedRef = useRef(false)
   const isDeleting = deleteState?.isDeleting ?? false
   const repoMap = useRepoMap()
-  const worktreeMap = useWorktreeMap()
   const allWorktrees = useAllWorktrees()
+  const worktreeMap = useMemo(
+    () => new Map(allWorktrees.map((row) => [getWorktreeHostIdentity(row), row])),
+    [allWorktrees]
+  )
   // Why: these maps feed only items rendered inside the OPEN dropdown, yet delete
   // teardown replaces them on every set(). Gate them behind menuOpen via stable
   // empty sentinels so the (common) closed wrapper stays inert to that churn. The

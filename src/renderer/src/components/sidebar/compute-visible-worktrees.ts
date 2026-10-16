@@ -4,7 +4,7 @@ import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import type { ExecutionHostId, ExecutionHostScope } from '../../../../shared/execution-host'
 import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
-import { getIndexedAllWorktrees } from '@/store/worktree-repo-index'
+import { getIndexedAllWorktrees, getIndexedWorktreeById } from '@/store/worktree-repo-index'
 import { filterWorkspaceRows } from '../../../../shared/workspace-view/workspace-row-filters'
 import { buildDesktopWorkspaceRowFactReader } from './desktop-workspace-row-facts'
 import { sidebarWorkspaceRowFilters } from './sidebar-filter-actions'
@@ -63,7 +63,7 @@ export function computeVisibleWorktrees(
   if (opts.forcedVisibleWorktreeIds && opts.forcedVisibleWorktreeIds.length > 0) {
     const includedIds = new Set(all.map((worktree) => worktree.id))
     for (const worktreeId of opts.forcedVisibleWorktreeIds) {
-      const worktree = lineageAncestorById.get(worktreeId)
+      const worktree = getIndexedWorktreeById(worktreesByRepo, worktreeId)
       if (worktree && !includedIds.has(worktreeId)) {
         includedIds.add(worktreeId)
         all.push(worktree)

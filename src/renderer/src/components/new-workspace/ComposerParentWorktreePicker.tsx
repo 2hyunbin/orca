@@ -1,3 +1,4 @@
+import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Check, ChevronsUpDown, GitBranch } from 'lucide-react'
@@ -8,11 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
-import {
-  getIndexedAllWorktrees,
-  getIndexedWorktreeById,
-  getIndexedWorktreeMap
-} from '@/store/worktree-repo-index'
+import { getIndexedAllWorktrees } from '@/store/worktree-repo-index'
 import { compareWorktreeDisplayName } from '@/lib/worktree-display-name-order'
 import { branchDisplayName } from '@/components/sidebar/WorktreeCardHelpers'
 import { getCyclicProjectedWorktreeLineageIds } from '@/components/sidebar/worktree-lineage-projection'
@@ -30,10 +27,6 @@ import {
   getLineageChildWorktree
 } from '@/components/right-sidebar/folder-workspace-attached-worktrees'
 import { COMBOBOX_POPOVER_SURFACE } from './type-ahead-combobox-styles'
-import {
-  sharesWorktreeLineageBoundary,
-  type WorktreeLineageBoundary
-} from '../../../../shared/resolved-worktree-lineage'
 import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
 import type { WorkspaceLineage, WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
@@ -96,7 +89,9 @@ function ComposerParentWorktreePickerImpl({
     if (!value) {
       return null
     }
-    const parent = getIndexedWorktreeById(s.worktreesByRepo, value)
+    const parent = getIndexedAllWorktrees(s.worktreesByRepo).find((row) =>
+      row.identity ? `identity:${row.identity.key}` === value : row.id === value
+    )
     return parent && !parent.isArchived ? parent.displayName : null
   })
 
@@ -227,10 +222,10 @@ function ParentWorktreeCandidateList({
   const candidates = useMemo(() => {
     // Legacy rows inherit their real repo host, including candidates from another project.
     const childRepo = repoMap.get(repoId)
-    const childBoundary: WorktreeLineageBoundary = {
-      hostId: executionHostId ?? (childRepo ? getRepoExecutionHostId(childRepo) : undefined)
-    }
-    const worktreeMap = getIndexedWorktreeMap(worktreesByRepo)
+    const childHostId = executionHostId ?? (childRepo ? getRepoExecutionHostId(childRepo) : 'local')
+    const worktreeMap = new Map(
+      getIndexedAllWorktrees(worktreesByRepo).map((row) => [getWorktreeHostIdentity(row), row])
+    )
     const cyclicLineageIds = getCyclicProjectedWorktreeLineageIds(worktreeLineageById, worktreeMap)
     const folderSubtreeIds = activeFolderWorkspaceId
       ? getFolderWorkspaceSubtreeIds(
@@ -244,11 +239,9 @@ function ParentWorktreeCandidateList({
       .filter(
         (candidate) =>
           !candidate.isArchived &&
-          sharesWorktreeLineageBoundary(childBoundary, {
-            ...candidate,
-            hostId: getWorktreeExecutionHostId(candidate, repoMap.get(candidate.repoId))
-          }) &&
-          !cyclicLineageIds.has(candidate.id) &&
+          (getWorktreeExecutionHostId(candidate, repoMap.get(candidate.repoId)) === childHostId ||
+            (!childHostId.startsWith('runtime:') && !candidate.hostId?.startsWith('runtime:'))) &&
+          !cyclicLineageIds.has(getWorktreeHostIdentity(candidate)) &&
           (folderSubtreeIds === null || folderSubtreeIds.has(candidate.id))
       )
       .sort(compareWorktreeDisplayName)
@@ -324,7 +317,9 @@ function ParentWorktreeCandidateList({
         if (activeIndex === 0 || candidate) {
           event.preventDefault()
           event.stopPropagation()
-          onSelect(candidate?.id ?? null)
+          onSelect(
+            candidate?.identity ? `identity:${candidate.identity.key}` : (candidate?.id ?? null)
+          )
         }
       }
     },
@@ -375,7 +370,13 @@ function ParentWorktreeCandidateList({
                   transform: `translateY(${virtualRow.start}px)`
                 }}
                 onPointerMove={() => setHighlightedIndex(rowIndex)}
-                onClick={() => onSelect(candidate?.id ?? null)}
+                onClick={() =>
+                  onSelect(
+                    candidate?.identity
+                      ? `identity:${candidate.identity.key}`
+                      : (candidate?.id ?? null)
+                  )
+                }
               >
                 <Check
                   className={cn(
@@ -392,7 +393,9 @@ function ParentWorktreeCandidateList({
                         {[
                           repoMap.get(candidate.repoId)?.displayName,
                           branchDisplayName(candidate.branch)
-                        ].filter(Boolean).join(' · ')}
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
                       </span>
                     </div>
                   </div>

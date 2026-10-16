@@ -12,11 +12,9 @@ vi.mock('../../../../shared/resolved-worktree-lineage', async (importOriginal) =
   const actual = await importOriginal<typeof ResolvedWorktreeLineage>()
   return {
     ...actual,
-    getCyclicWorktreeLineageChildIds: (
-      ...args: Parameters<typeof actual.getCyclicWorktreeLineageChildIds>
-    ) => {
+    getCyclicChildKeys: (...args: Parameters<typeof actual.getCyclicChildKeys>) => {
       counters.cycleDetections += 1
-      return actual.getCyclicWorktreeLineageChildIds(...args)
+      return actual.getCyclicChildKeys(...args)
     }
   }
 })
@@ -166,7 +164,7 @@ describe('visible worktree indexes', () => {
     expect(getLineageAncestorIndex(worktreesByRepo).has(parent.id)).toBe(false)
   })
 
-  it('keeps the last row for a two-host id collision, as the per-call map did', () => {
+  it('keeps both rows for a two-host id collision', () => {
     const local: Worktree = {
       ...makeWorktree('shared'),
       hostId: LOCAL_EXECUTION_HOST_ID,
@@ -175,6 +173,7 @@ describe('visible worktree indexes', () => {
     const remote: Worktree = { ...makeWorktree('shared'), hostId: 'ssh:box', path: '/tmp/remote' }
     const worktreesByRepo = { repo1: [local, remote] }
 
-    expect(getLineageAncestorIndex(worktreesByRepo).get('shared')?.path).toBe('/tmp/remote')
+    expect(getLineageAncestorIndex(worktreesByRepo).get('ssh:box|shared')?.path).toBe('/tmp/remote')
+    expect(getLineageAncestorIndex(worktreesByRepo).get('local|shared')?.path).toBe('/tmp/local')
   })
 })

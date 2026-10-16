@@ -1,3 +1,4 @@
+import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import type { AppState } from '@/store/types'
 import type { Repo } from '../../../../shared/repo-types'
 import type { WorkspaceLineage, WorktreeLineage } from '../../../../shared/worktree/lineage-types'
@@ -77,18 +78,20 @@ function getAttachedWorktreesForFolderWorkspaceCard({
     .map((lineage) => getWorkspaceLineageChild(lineage, worktreeMap))
     .filter((worktree): worktree is Worktree => worktree !== null)
 
-  const included = new Map(directChildren.map((worktree) => [worktree.id, worktree]))
+  const included = new Map(
+    directChildren.map((worktree) => [getWorktreeHostIdentity(worktree), worktree])
+  )
   const childrenByParentId = getProjectedWorktreeLineageChildrenByParentId(
     worktreeLineageById ?? {},
     worktreeMap
   )
   const queue = [...directChildren]
   for (let index = 0; index < queue.length; index += 1) {
-    for (const child of childrenByParentId.get(queue[index].id) ?? []) {
-      if (child.isArchived || included.has(child.id)) {
+    for (const child of childrenByParentId.get(getWorktreeHostIdentity(queue[index])) ?? []) {
+      if (child.isArchived || included.has(getWorktreeHostIdentity(child))) {
         continue
       }
-      included.set(child.id, child)
+      included.set(getWorktreeHostIdentity(child), child)
       queue.push(child)
     }
   }
@@ -118,7 +121,12 @@ function getWorkspaceLineageChild(
   if (childScope?.type !== 'worktree') {
     return null
   }
-  const worktree = worktreeMap.get(childScope.worktreeId)
+  const matches = [...worktreeMap.values()].filter(
+    (row) =>
+      row.id === childScope.worktreeId &&
+      (!lineage.childInstanceId || row.instanceId === lineage.childInstanceId)
+  )
+  const worktree = matches.length === 1 ? matches[0] : undefined
   if (!worktree || worktree.isArchived) {
     return null
   }

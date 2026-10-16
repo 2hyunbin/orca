@@ -1,3 +1,4 @@
+import { composeWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
 import { worktreeWorkspaceKey } from '../../../../../../shared/workspace-scope'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type { WorktreeSliceSet } from '../listing/worktree-slice-types'
@@ -23,7 +24,10 @@ export function applyRemoveWorktreeSuccessState(
     const omitByTabId = <T>(m: Record<string, T> | undefined) => omitRecordKeys(m, tabIds)
     const nextWorktreesByRepo = { ...s.worktreesByRepo }
     for (const repoId of Object.keys(nextWorktreesByRepo)) {
-      nextWorktreesByRepo[repoId] = nextWorktreesByRepo[repoId].filter((w) => w.id !== worktreeId)
+      nextWorktreesByRepo[repoId] = nextWorktreesByRepo[repoId].filter(
+        (w) =>
+          w.id !== worktreeId || (executionHostId !== undefined && w.hostId !== executionHostId)
+      )
     }
     // Why: clean up per-file editor state for the removed worktree so stale drafts/view modes don't accumulate.
     const removedFileIds = new Set<string>()
@@ -49,9 +53,11 @@ export function applyRemoveWorktreeSuccessState(
         activeFileCleared
       }),
       worktreesByRepo: nextWorktreesByRepo,
-      worktreeLineageById: omitByWorktree(s.worktreeLineageById),
+      worktreeLineageById: omitRecordKeys(s.worktreeLineageById, [
+        composeWorktreeHostIdentity(executionHostId, worktreeId)
+      ]),
       workspaceLineageByChildKey: omitRecordKeys(s.workspaceLineageByChildKey, [
-        worktreeWorkspaceKey(worktreeId)
+        composeWorktreeHostIdentity(executionHostId, worktreeWorkspaceKey(worktreeId))
       ]),
       runtimePaneTitlesByTabId: omitByTabId(s.runtimePaneTitlesByTabId),
       automaticAgentResumeClaimsByTabId: omitByTabId(s.automaticAgentResumeClaimsByTabId),

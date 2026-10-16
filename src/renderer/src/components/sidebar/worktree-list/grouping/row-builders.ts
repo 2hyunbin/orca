@@ -1,3 +1,4 @@
+import { getHostContextLabel } from '../../../../../../shared/worktree/host-context-labels'
 import type { Repo } from '../../../../../../shared/repo-types'
 import type { Worktree } from '../../../../../../shared/worktree/types'
 import { getWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
@@ -81,6 +82,9 @@ export function appendWorktreeRows(
   )
   for (const occurrence of occurrences) {
     const worktree = occurrence.row
+    const hostLabel =
+      options.hostContextLabelByWorktreeIdentity?.get(getWorktreeHostIdentity(worktree)) ??
+      options.hostContextLabelByRepoId?.get(worktree.repoId)
     result.push({
       type: 'item',
       occurrence,
@@ -93,9 +97,11 @@ export function appendWorktreeRows(
       isLastLineageChild: occurrence.isLastChild,
       lineageChildCount: occurrence.childCount,
       showProjectName: occurrence.showProjectName,
-      hostContextLabel:
-        options.hostContextLabelByWorktreeIdentity?.get(getWorktreeHostIdentity(worktree)) ??
-        options.hostContextLabelByRepoId?.get(worktree.repoId),
+      hostContextLabel: occurrence.parent
+        ? occurrence.parent.row.hostId === worktree.hostId
+          ? undefined
+          : (hostLabel ?? (worktree.hostId ? getHostContextLabel(worktree.hostId) : undefined))
+        : hostLabel,
       ...(occurrence.childCount > 0
         ? {
             lineageGroupKey: getWorktreeLineageGroupKey(worktree),

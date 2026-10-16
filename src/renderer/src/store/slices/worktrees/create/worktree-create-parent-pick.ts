@@ -8,16 +8,12 @@ import {
   parseWorkspaceKey,
   worktreeWorkspaceKey
 } from '../../../../../../shared/workspace-scope'
-import { getIndexedWorktreesById } from '@/store/worktree-repo-index'
-import { repoMatchesHostIdentity } from '../../repo-host-identity'
-import {
-  getWorktreeExecutionHostId,
-  type ExecutionHostId
-} from '../../../../../../shared/execution-host'
+import { getIndexedAllWorktrees } from '@/store/worktree-repo-index'
+import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 
 export type WorktreeCreateParentPick = {
   /** Workspace the create attaches to. Undefined once a stale pick is dropped. */
-  parentWorkspace?: WorkspaceKey
+  parentWorkspace?: WorkspaceKey | `identity:${string}`
   /** Set only for an accepted user pick, whose lineage row must come back from the host. */
   pickedParentWorktreeId?: string
   /** Label for the drop warning; null when the parent record is already gone, '' when it has no name. */
@@ -30,23 +26,21 @@ export type WorktreeCreateParentPick = {
 export function resolveWorktreeCreateParent(
   state: AppState,
   requestedParentWorktreeId: string | undefined,
-  executionHostId: ExecutionHostId
+  _executionHostId: ExecutionHostId
 ): WorktreeCreateParentPick {
-  const picked = requestedParentWorktreeId
-    ? getIndexedWorktreesById(state.worktreesByRepo, requestedParentWorktreeId).find(
-        (candidate) => {
-          const repo = state.repos.find((owner) =>
-            repoMatchesHostIdentity(owner, candidate.repoId, candidate.hostId ?? executionHostId)
-          )
-          return Boolean(repo && getWorktreeExecutionHostId(candidate, repo) === executionHostId)
-        }
-      )
-    : undefined
+  const matches = getIndexedAllWorktrees(state.worktreesByRepo).filter((candidate) =>
+    candidate.identity && requestedParentWorktreeId?.startsWith('identity:')
+      ? `identity:${candidate.identity.key}` === requestedParentWorktreeId
+      : candidate.id === requestedParentWorktreeId
+  )
+  const picked = matches.length === 1 ? matches[0] : undefined
   const usable = picked && !picked.isArchived ? picked.id : undefined
   const pickedDisplayName = picked ? resolveWorktreeDisplayName(picked).trim() : null
   if (usable) {
     return {
-      parentWorkspace: worktreeWorkspaceKey(usable),
+      parentWorkspace: picked?.identity
+        ? `identity:${picked.identity.key}`
+        : worktreeWorkspaceKey(usable),
       pickedParentWorktreeId: usable,
       pickedDisplayName,
       staleBeforeCreate: false

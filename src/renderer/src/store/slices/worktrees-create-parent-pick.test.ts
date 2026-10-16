@@ -168,7 +168,7 @@ describe('createWorktree composer parent pick', () => {
     await createWithParentPick(store, parent.id)
 
     expect(toast.warning).not.toHaveBeenCalled()
-    expect(store.getState().worktreeLineageById[created.id]).toEqual(lineage)
+    expect(store.getState().worktreeLineageById[`local|${created.id}`]).toEqual(lineage)
   })
 
   // Why: paired web clients route window.api.worktrees.create to their host, which still rejects.

@@ -1,3 +1,4 @@
+import { composeWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import type { AppState } from '@/store/types'
 import type { Repo } from '../../../../shared/repo-types'
 import type {
@@ -58,7 +59,9 @@ export function hasWorktreeParentLink(
 ): boolean {
   return Boolean(
     getProjectedWorktreeLineage(worktree, lineageById) ||
-    workspaceLineageByChildKey[worktreeWorkspaceKey(worktree.id)]
+    workspaceLineageByChildKey[
+      composeWorktreeHostIdentity(worktree.hostId, worktreeWorkspaceKey(worktree.id))
+    ]
   )
 }
 

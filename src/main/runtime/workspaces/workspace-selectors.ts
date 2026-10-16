@@ -117,15 +117,11 @@ export abstract class RuntimeWorkspaceSelectors extends OrcaRuntimeWithResolveBr
     throw new Error('selector_not_found')
   }
 
-  /** `childRepo` scopes the parent to the new worktree's execution host (#12757). */
   protected resolveLineageForWorktreeCreate(
     input?: WorktreeLineageInput,
-    childRepo?: Repo
+    _childRepo?: Repo
   ): Promise<WorktreeLineageResolution> {
-    return this.worktreeLineage.resolveCreate(
-      input,
-      childRepo ? getRepoExecutionHostId(childRepo) : undefined
-    )
+    return this.worktreeLineage.resolveCreate(input)
   }
 
   protected getOrchestrationDbIfAvailable(): OrchestrationDb | null {

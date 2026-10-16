@@ -37,7 +37,7 @@ export type WorktreeCreateRequest = Omit<CreateWorktreeArgs, 'parentWorkspace' |
 export type WorktreeCreateAttempt = {
   name: string
   branchNameOverride?: string
-  parentWorkspace?: WorkspaceKey
+  parentWorkspace?: WorkspaceKey | `identity:${string}`
   manualOrder?: number
 }
 

@@ -1,3 +1,4 @@
+import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import React, {
   useCallback,
   useEffect,
@@ -125,7 +126,7 @@ export function handleWorktreeParentPickerKeyDown({
     if (candidate) {
       event.preventDefault()
       event.stopPropagation()
-      selectParent(candidate.id)
+      selectParent(candidate.identity ? `identity:${candidate.identity.key}` : candidate.id)
     }
   }
 }
@@ -137,7 +138,11 @@ export function WorktreeParentPickerPopover({
   onOpenChange
 }: WorktreeParentPickerPopoverProps): React.JSX.Element | null {
   const worktrees = useAllWorktrees()
-  const worktreeMap = useWorktreeMap()
+  const byId = useWorktreeMap()
+  const worktreeMap = useMemo(
+    () => new Map(worktrees.map((row) => [getWorktreeHostIdentity(row), row])),
+    [worktrees]
+  )
   const repoMap = useRepoMap()
   const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
   const lineageById = useAppStore((s) => s.worktreeLineageById)
@@ -152,7 +157,7 @@ export function WorktreeParentPickerPopover({
     getAnchorRect(anchorElement)
   )
   const [viewportHeight, setViewportHeight] = useState(() => window.innerHeight)
-  const child = childWorktreeId ? worktreeMap.get(childWorktreeId) : undefined
+  const child = childWorktreeId ? byId.get(childWorktreeId) : undefined
   const candidates = useMemo(
     () =>
       child
@@ -392,7 +397,11 @@ export function WorktreeParentPickerPopover({
                         transform: `translateY(${virtualRow.start}px)`
                       }}
                       onPointerMove={() => setHighlightedIndex(virtualRow.index)}
-                      onClick={() => handleSelect(candidate.id)}
+                      onClick={() =>
+                        handleSelect(
+                          candidate.identity ? `identity:${candidate.identity.key}` : candidate.id
+                        )
+                      }
                     >
                       <WorktreeParentPickerRow
                         candidate={candidate}

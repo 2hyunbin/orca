@@ -1,3 +1,4 @@
+import { composeWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type { WorktreeSliceSet } from '../listing/worktree-slice-types'
 import { appliedWorktreeCatalogVersionPatch } from '../listing/worktree-catalog-version-state'
@@ -41,7 +42,8 @@ export function applyCreatedWorktree(
         ? {
             workspaceLineageByChildKey: {
               ...s.workspaceLineageByChildKey,
-              [result.workspaceLineage.childWorkspaceKey]: result.workspaceLineage
+              [composeWorktreeHostIdentity(hostId, result.workspaceLineage.childWorkspaceKey)]:
+                result.workspaceLineage
             }
           }
         : {}),
@@ -49,7 +51,7 @@ export function applyCreatedWorktree(
         ? {
             worktreeLineageById: {
               ...s.worktreeLineageById,
-              [result.lineage.worktreeId]: result.lineage
+              [composeWorktreeHostIdentity(hostId, result.lineage.worktreeId)]: result.lineage
             }
           }
         : {}),

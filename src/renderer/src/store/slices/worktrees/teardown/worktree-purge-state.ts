@@ -1,3 +1,8 @@
+import {
+  composeWorktreeHostIdentity,
+  getWorktreeIdFromHostIdentity
+} from '../../../../../../shared/worktree/host-qualified-identity'
+import { omitRecordKeys } from './record-key-omission'
 import type { AppState } from '../../../types'
 import type { WorktreePurgeTarget, WorktreePurgeTargets } from '../../worktree-helpers'
 import { forgetHugeRepoWarningDismissalsForWorktrees } from '@/lib/source-control-huge-repo-warning-dismissals'
@@ -36,6 +41,20 @@ export function buildWorktreePurgeState(
     typeof target === 'string' ? { id: target } : target
   )
   const worktreeIdSet = new Set(normalizedTargets.map((target) => target.id))
+  const lineageKeys = Object.keys(s.worktreeLineageById).filter((key) =>
+    normalizedTargets.some((target) =>
+      target.hostId
+        ? key === composeWorktreeHostIdentity(target.hostId, target.id)
+        : getWorktreeIdFromHostIdentity(key) === target.id
+    )
+  )
+  const workspaceLineageKeys = Object.keys(s.workspaceLineageByChildKey).filter((key) =>
+    normalizedTargets.some((target) =>
+      target.hostId
+        ? key === composeWorktreeHostIdentity(target.hostId, `worktree:${target.id}`)
+        : getWorktreeIdFromHostIdentity(key) === `worktree:${target.id}`
+    )
+  )
   // Why: bulk purges bypass close actions, so provisional ownership must die before tab state does.
   const cancelledSessionIds = new Set<string>()
   for (const launch of structuredLaunchStates()) {
@@ -106,7 +125,6 @@ export function buildWorktreePurgeState(
   const doomed = collectWorktreePurgeDoomedIds(s, worktreeIdSet)
   const {
     omitByWorktree,
-    omitWorkspaceLineageByWorktree,
     pruneRightSidebarTabByWorktree,
     omitByTabId,
     omitByPtyId,
@@ -145,8 +163,8 @@ export function buildWorktreePurgeState(
       activeFileCleared
     }),
     // Worktree-scoped terminal/tab state
-    worktreeLineageById: omitByWorktree(s.worktreeLineageById),
-    workspaceLineageByChildKey: omitWorkspaceLineageByWorktree(s.workspaceLineageByChildKey),
+    worktreeLineageById: omitRecordKeys(s.worktreeLineageById, lineageKeys),
+    workspaceLineageByChildKey: omitRecordKeys(s.workspaceLineageByChildKey, workspaceLineageKeys),
     localOnlyScrollbackByTabId: omitByTabId(s.localOnlyScrollbackByTabId),
     runtimePaneTitlesByTabId: omitByTabId(s.runtimePaneTitlesByTabId),
     automaticAgentResumeClaimsByTabId: omitByTabId(s.automaticAgentResumeClaimsByTabId),

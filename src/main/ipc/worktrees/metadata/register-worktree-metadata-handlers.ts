@@ -91,7 +91,11 @@ export function registerWorktreeMetadataHandlers(context: WorktreeIpcContext): v
           args.noParent === true
             ? { noParent: true }
             : args.parentWorktreeId
-              ? { parentWorktree: `id:${args.parentWorktreeId}` }
+              ? {
+                  parentWorktree: args.parentWorktreeId.startsWith('identity:')
+                    ? args.parentWorktreeId
+                    : `id:${args.parentWorktreeId}`
+                }
               : undefined
       })
       notifyWorktreesChanged(mainWindow, parseWorktreeId(args.worktreeId).repoId)

@@ -27,10 +27,13 @@ export function getSidebarLineageChildren(
 ): Map<string, Worktree[]> {
   const rowsByIdentity = getSidebarLineageRowsByIdentity(worktrees, worktreeMap)
   const allowedRepoIds = filterRepoIds.length > 0 ? new Set(filterRepoIds) : null
-  const cyclicIds = getCyclicProjectedWorktreeLineageIds(lineageById, worktreeMap)
+  const cyclicIds = getCyclicProjectedWorktreeLineageIds(lineageById, rowsByIdentity)
   const childrenByParentIdentity = new Map<string, Worktree[]>()
   for (const child of rowsByIdentity.values()) {
-    if (cyclicIds.has(child.id) || (allowedRepoIds && !allowedRepoIds.has(child.repoId))) {
+    if (
+      cyclicIds.has(getWorktreeHostIdentity(child)) ||
+      (allowedRepoIds && !allowedRepoIds.has(child.repoId))
+    ) {
       continue
     }
     const parent = getSidebarLineageParent(child, lineageById, rowsByIdentity)
@@ -57,7 +60,10 @@ export function getPinnedSectionWorktrees(
     rows: worktrees,
     isPinned: (worktree) => worktree.isPinned === true,
     childrenByParentIdentity: getSidebarLineageChildren(
-      worktrees, lineageById, worktreeMap, filterRepoIds
+      worktrees,
+      lineageById,
+      worktreeMap,
+      filterRepoIds
     ),
     identityOf: getWorktreeHostIdentity,
     duplicatePinned: false

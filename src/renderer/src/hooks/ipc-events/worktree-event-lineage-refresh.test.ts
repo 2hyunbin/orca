@@ -243,7 +243,9 @@ describe('order-only refresh with actual store actions', () => {
     h.queue.enqueue({ repoId: 'repo', executionHostId: 'runtime:env-1', sortOrderOnly: true })
     await vi.waitFor(() => expect(isRemoteWorktreeLineageFresh(store.getState, 'env-1')).toBe(true))
     expect(h.lineageReadCount()).toBe(1)
-    expect(store.getState().worktreeLineageById[h.worktree.id]).toEqual(h.lineage)
+    expect(store.getState().worktreeLineageById[`runtime:env-1|${h.worktree.id}`]).toEqual(
+      h.lineage
+    )
     const beforeEpoch = store.getState().sortEpoch
     h.setOrder(20)
     h.queue.enqueue({ repoId: 'repo', executionHostId: 'runtime:env-1', sortOrderOnly: true })
@@ -268,7 +270,9 @@ describe('order-only refresh with actual store actions', () => {
     h.setLineageReply(async () => ({ lineage: { [h.worktree.id]: updated } }))
     h.queue.enqueue({ repoId: 'repo', executionHostId: 'runtime:env-1', sortOrderOnly: true })
     await vi.waitFor(() =>
-      expect(store.getState().worktreeLineageById[h.worktree.id]).toEqual(updated)
+      expect(store.getState().worktreeLineageById[`runtime:env-1|${h.worktree.id}`]).toEqual(
+        updated
+      )
     )
     expect(h.lineageReadCount()).toBe(3)
 

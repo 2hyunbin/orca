@@ -60,7 +60,9 @@ export function isEligibleWorktreeParent({
 }): boolean {
   return (
     childHostId !== null &&
-    getWorktreeOwnerHostId(candidateParent, repoMap) === childHostId &&
+    (getWorktreeOwnerHostId(candidateParent, repoMap) === childHostId ||
+      (!childHostId.startsWith('runtime:') &&
+        !getWorktreeOwnerHostId(candidateParent, repoMap)?.startsWith('runtime:'))) &&
     !candidateParent.isArchived &&
     canAssignWorktreeParent({
       child,

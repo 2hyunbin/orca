@@ -247,17 +247,14 @@ export async function resolveScopedWorktreeIdRow(
       .map((id) => splitWorktreeIdForFilesystem(id)?.repoId)
       .filter((id) => id !== undefined)
   )
-  relatedRepoIds.delete(repo.id)
-  const hostId = getRepoExecutionHostId(repo)
   const relatedRepos = store
     .getRepos()
     .filter(
       (candidate) =>
-        relatedRepoIds.has(candidate.id) && getRepoExecutionHostId(candidate) === hostId
+        relatedRepoIds.has(candidate.id) &&
+        (candidate.id !== repo.id ||
+          getRepoExecutionHostId(candidate) !== getRepoExecutionHostId(repo))
     )
-  if (new Set(relatedRepos.map((candidate) => candidate.id)).size !== relatedRepos.length) {
-    return null
-  }
   const metaById = store.getAllWorktreeMeta() ?? {}
   const projectRuntimeByRepoId = resolveLocalProjectRuntimesForRepos(store, relatedRepos)
   const otherRows = await Promise.all(

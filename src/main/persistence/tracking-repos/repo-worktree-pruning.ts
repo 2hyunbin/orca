@@ -124,20 +124,16 @@ export function pruneWorktreeStateForRepo(
       }
     }
   }
-  for (const [childId, lineage] of Object.entries(state.worktreeLineageById)) {
-    if (belongsToHost(childId) || belongsToHost(lineage.parentWorktreeId)) {
+  for (const childId of Object.keys(state.worktreeLineageById)) {
+    if (belongsToHost(childId)) {
       delete state.worktreeLineageById[childId]
     }
   }
-  for (const [childKey, lineage] of Object.entries(state.workspaceLineageByChildKey)) {
+  for (const childKey of Object.keys(state.workspaceLineageByChildKey)) {
     const childScope = parseWorkspaceKey(childKey)
-    const parentScope = parseWorkspaceKey(lineage.parentWorkspaceKey)
     if (childScope?.type === 'worktree' && belongsToHost(childScope.worktreeId)) {
       delete state.workspaceLineageByChildKey[childKey as WorkspaceKey]
       continue
-    }
-    if (parentScope?.type === 'worktree' && belongsToHost(parentScope.worktreeId)) {
-      delete state.workspaceLineageByChildKey[childKey as WorkspaceKey]
     }
   }
   pruneMobileClientTabSelections(belongsToHost)

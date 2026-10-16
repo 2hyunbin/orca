@@ -4,53 +4,26 @@ import {
   getActiveSidebarWorkspaceId,
   parseWorkspaceKey
 } from '../../../../../../shared/workspace-scope'
-import {
-  getCyclicWorktreeLineageChildIds,
-  isValidResolvedWorktreeLineageEdge
-} from '../../../../../../shared/resolved-worktree-lineage'
-import type { WorktreeLineage } from '../../../../../../shared/worktree/lineage-types'
-import type { Worktree } from '../../../../../../shared/worktree/types'
-
-type WorktreeWithEmbeddedLineage = Worktree & { lineage?: WorktreeLineage | null }
-function getProjectedLineage(get: WorktreeSliceGet, worktree: Worktree): WorktreeLineage | null {
-  if (Object.hasOwn(get().worktreeLineageById, worktree.id)) {
-    return get().worktreeLineageById[worktree.id] ?? null
-  }
-  return (worktree as WorktreeWithEmbeddedLineage).lineage ?? null
-}
+import { getWorktreeLineageAncestors } from '../../../../components/sidebar/worktree-lineage-projection'
+import { getWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
+import { getIndexedAllWorktrees } from '../../../worktree-repo-index'
 
 function hasChangedLineageAncestor(
   get: WorktreeSliceGet,
   worktreeId: string,
   changedWorktreeIds: ReadonlySet<string>
 ): boolean {
-  const seen = new Set<string>()
-  const validLineageByChildId = new Map<string, WorktreeLineage>()
-  let child = get().getKnownWorktreeById(worktreeId)
-  while (child && !seen.has(child.id)) {
-    seen.add(child.id)
-    const lineage = getProjectedLineage(get, child)
-    const parent = lineage ? get().getKnownWorktreeById(lineage.parentWorktreeId) : null
-    if (!lineage || !parent || !isValidResolvedWorktreeLineageEdge(child, parent, lineage)) {
-      break
-    }
-    validLineageByChildId.set(child.id, lineage)
-    child = parent
+  const state = get()
+  const child = state.getKnownWorktreeById(worktreeId)
+  if (!child) {
+    return false
   }
-  const cyclicIds = getCyclicWorktreeLineageChildIds(validLineageByChildId)
-  child = get().getKnownWorktreeById(worktreeId)
-  while (child && !cyclicIds.has(child.id)) {
-    const lineage = getProjectedLineage(get, child)
-    const parent = lineage ? get().getKnownWorktreeById(lineage.parentWorktreeId) : null
-    if (!lineage || !parent || !isValidResolvedWorktreeLineageEdge(child, parent, lineage)) {
-      return false
-    }
-    if (changedWorktreeIds.has(parent.id)) {
-      return true
-    }
-    child = parent
-  }
-  return false
+  const rows = new Map(
+    getIndexedAllWorktrees(state.worktreesByRepo).map((row) => [getWorktreeHostIdentity(row), row])
+  )
+  return getWorktreeLineageAncestors(child, state.worktreeLineageById, rows).some((parent) =>
+    changedWorktreeIds.has(parent.id)
+  )
 }
 
 export function createSetWorktreesPinnedAndReveal(

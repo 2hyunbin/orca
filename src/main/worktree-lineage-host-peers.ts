@@ -1,5 +1,6 @@
 import type { Worktree } from '../shared/worktree/types'
 import type { Repo } from '../shared/repo-types'
+import { getWorktreeHostIdentity } from '../shared/worktree/host-qualified-identity'
 import { getRepoExecutionHostId } from '../shared/execution-host'
 import { getRepoIdFromWorktreeId, splitWorktreeId } from '../shared/worktree/id'
 import { isFolderRepo } from '../shared/repo-kind'
@@ -24,7 +25,7 @@ type HostPeerStore = Pick<
   'getRepos' | 'getAllWorktreeMeta' | 'getAllWorktreeMetaForHost' | 'getAllWorktreeLineage'
 >
 
-/** Project a per-repo publication against persisted peers on its execution host. */
+/** Resolve connected lineage against persisted peers across execution hosts. */
 export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
   store: HostPeerStore,
   repo: Repo,
@@ -38,11 +39,7 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
     rows.map((row) => row.id),
     lineageById
   )
-  const ownIds = new Set(rows.map((row) => row.id))
-  if ([...relatedIds].every((id) => ownIds.has(id) || getRepoIdFromWorktreeId(id) === repo.id)) {
-    return projectResolvedWorktreeLineage(rows, lineageById)
-  }
-  const hostId = getRepoExecutionHostId(repo)
+  const ownKeys = new Set(rows.map(getWorktreeHostIdentity))
   const repos = store.getRepos()
   const reposById = new Map<string, Repo[]>()
   for (const candidate of repos) {
@@ -50,56 +47,50 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
     owners.push(candidate)
     reposById.set(candidate.id, owners)
   }
-  const metaById = readAllWorktreeMetaForHost(store, hostId)
   const peers: Worktree[] = []
   for (const id of relatedIds) {
-    if (ownIds.has(id) || getRepoIdFromWorktreeId(id) === repo.id) {
-      continue
-    }
     const owners = reposById.get(getRepoIdFromWorktreeId(id)) ?? []
     const evidence = owners.map(resolveRepoOwnershipEvidence)
-    const hostOwners = owners.filter((_, index) => {
-      const owner = evidence[index]
-      return owner?.status === 'owned' && owner.hostId === hostId
-    })
-    const meta = metaById[id]
-    if (
-      evidence.some((owner) => owner.status !== 'owned') ||
-      hostOwners.length !== 1 ||
-      !meta || (!meta.instanceId && !isFolderRepo(hostOwners[0])) ||
-      (!meta.hostId && owners.length > 1)
-    ) {
+    if (evidence.some((owner) => owner.status !== 'owned')) {
       continue
     }
-    const owner = hostOwners[0]
-    if (isFolderRepo(owner)) {
-      if (isFolderWorkspaceIdForRepo(owner, id)) {
-        const peerMeta =
-          meta.instanceId || id === getFolderWorkspaceRootId(owner)
-            ? meta
-            : { ...meta, instanceId: getFolderWorkspaceInstanceIdentity(owner, id) }
-        peers.push(mergeFolderWorkspace(owner, id, peerMeta))
+    for (const owner of owners) {
+      if (ownKeys.has(getWorktreeHostIdentity({ id, hostId: getRepoExecutionHostId(owner) }))) {
+        continue
       }
-      continue
-    }
-    const parsed = splitWorktreeId(id)
-    if (!parsed?.worktreePath) {
-      continue
-    }
-    peers.push(
-      mergeWorktree(
-        owner.id,
-        {
-          path: parsed.worktreePath,
-          head: '',
-          branch: '',
-          isBare: false,
-          isMainWorktree: areWorktreePathsEqual(parsed.worktreePath, owner.path)
-        },
-        meta,
-        owner.displayName
+      const meta = readAllWorktreeMetaForHost(store, getRepoExecutionHostId(owner))[id]
+      if (!meta || (!meta.instanceId && !isFolderRepo(owner))) {
+        continue
+      }
+      if (isFolderRepo(owner)) {
+        if (isFolderWorkspaceIdForRepo(owner, id)) {
+          const peerMeta =
+            meta.instanceId || id === getFolderWorkspaceRootId(owner)
+              ? meta
+              : { ...meta, instanceId: getFolderWorkspaceInstanceIdentity(owner, id) }
+          peers.push(mergeFolderWorkspace(owner, id, peerMeta))
+        }
+        continue
+      }
+      const parsed = splitWorktreeId(id)
+      if (!parsed?.worktreePath) {
+        continue
+      }
+      peers.push(
+        mergeWorktree(
+          owner.id,
+          {
+            path: parsed.worktreePath,
+            head: '',
+            branch: '',
+            isBare: false,
+            isMainWorktree: areWorktreePathsEqual(parsed.worktreePath, owner.path)
+          },
+          meta,
+          owner.displayName
+        )
       )
-    )
+    }
   }
   return projectResolvedWorktreeLineage(rows, lineageById, peers)
 }
