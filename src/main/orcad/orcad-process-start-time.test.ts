@@ -97,6 +97,32 @@ describe('orcad process identity', () => {
       )
     ).toBe('unproven')
   })
+
+  it.each([
+    ['another non-root uid', 1001, 'differs'],
+    ['root', 0, 'unproven'],
+    ['the same uid', 1000, 'unproven'],
+    ['an unreadable owner', null, 'unproven']
+  ] as const)('reads that mismatch with the PID owned by %s as %s', (_owner, ownerUid, verdict) => {
+    const readers = {
+      startedAtMs: () => 158_000,
+      ownerUid: () => ownerUid,
+      platform: 'linux' as const
+    }
+    expect(compareOrcadProcessIdentity(42, { startedAtMs: 1_000, identity: '1000' }, readers)).toBe(
+      verdict
+    )
+  })
+
+  it('never proves reuse by owner when the recorded identity is not a uid', () => {
+    expect(
+      compareOrcadProcessIdentity(
+        42,
+        { startedAtMs: 1_000, identity: 'alice' },
+        { startedAtMs: () => 158_000, ownerUid: () => 1001, platform: 'linux' }
+      )
+    ).toBe('unproven')
+  })
 })
 
 describe.runIf(platform === 'linux')('orcad process incarnation on a real /proc', () => {

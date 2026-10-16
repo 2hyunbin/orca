@@ -32,12 +32,12 @@ const DRIFTED_STARTED_AT_MS = 5_000 + 157_000
 
 function running(
   recorded: OrcadProcessIncarnation | null,
-  { requestCarriesIncarnation = false } = {}
+  { requestCarriesIncarnation = false, identity = 'uid-1000' } = {}
 ): OrcadManagedStopRequest {
   const root = mkdtempSync(join(tmpdir(), 'orcad-stop-identity-'))
   roots.push(root)
   const lock = acquireOrcadInstanceLock(root, {
-    identity: () => 'uid-1000',
+    identity: () => identity,
     startedAtMs: () => 5_000,
     incarnation: () => recorded
   })
@@ -111,6 +111,21 @@ describe('managed stop instance identity', () => {
     expect(await completeOrcadManagedStop(request, linuxHost(RECORDED))).toBe('unverifiable')
     expect(existsSync(orcadStopReceiptPath(request, 'completed'))).toBe(false)
   })
+
+  it.each([
+    ['another non-root uid', 1001, 'exited'],
+    ['root', 0, 'unverifiable'],
+    ['the same uid', 1000, 'unverifiable']
+  ] as const)(
+    'for an older lock whose wall-clock time disagrees, a PID owned by %s is %s',
+    async (_owner, ownerUid, verdict) => {
+      const request = running(null, { identity: '1000' })
+      const host = { ...linuxHost(RECORDED), ownerUid: () => ownerUid }
+      expect(await completeOrcadManagedStop(request, host)).toBe(verdict)
+      expect(existsSync(orcadStopReceiptPath(request, 'completed'))).toBe(verdict === 'exited')
+      expect(requestWritten(request)).toBe(false)
+    }
+  )
 
   it('stays readable by peers on either side of the change', async () => {
     const request = running(RECORDED, { requestCarriesIncarnation: true })
