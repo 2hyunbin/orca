@@ -49,6 +49,26 @@ describe('applyWindowLayoutCommand', () => {
     expect(mocks.markAgentLaunchesClosedByUser).not.toHaveBeenCalled()
   })
 
+  it('records a sleep and a wake in every partition holding the tab, and in no paired server’s', async () => {
+    const { store, applyLayoutCommand } = storeWith()
+    const paneKey = 'tab-1:11111111-1111-4111-8111-111111111111'
+    const wake: WindowLayoutCommand = {
+      type: 'wake',
+      workspace: 'wt-1',
+      tabId: 'tab-1',
+      paneKeys: [paneKey]
+    }
+    const sleep: WindowLayoutCommand = { ...wake, type: 'sleep', records: [] }
+
+    await applyWindowLayoutCommand(store, () => ['local', 'ssh:target-1', 'runtime:env-1'], sleep)
+    await applyWindowLayoutCommand(store, () => ['local', 'ssh:target-1'], wake)
+
+    expect(applyLayoutCommand.mock.calls).toEqual([
+      [sleep, ['local', 'ssh:target-1']],
+      [wake, ['local', 'ssh:target-1']]
+    ])
+  })
+
   it('routes a group tree command by its workspace, with no tab to look up', async () => {
     const { store, applyLayoutCommand } = storeWith()
     const hostIdsFor = vi.fn(() => ['ssh:target-1' as const])

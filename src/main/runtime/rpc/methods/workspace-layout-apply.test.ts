@@ -285,6 +285,42 @@ describe('layout.apply', () => {
     expect(applyLayoutCommand).toHaveBeenCalledWith(open, ['local'])
   })
 
+  it('accepts a sleep of one tab’s panes and a wake of exactly one pane', async () => {
+    const apply = (await registeredMethods(true)).find((method) => method.name === 'layout.apply')
+    const parse = (command: Record<string, unknown>) => apply?.params?.safeParse({ command })
+    const paneKey = 'tab-1:11111111-1111-4111-8111-111111111111'
+    const otherTabPane = 'tab-2:22222222-2222-4222-8222-222222222222'
+    const record = {
+      paneKey,
+      worktreeId: WORKTREE,
+      agent: 'codex',
+      providerSession: { key: 'session_id', id: 'session-1' },
+      prompt: '',
+      state: 'done',
+      capturedAt: 1,
+      updatedAt: 1
+    }
+    const sleep = { type: 'sleep', workspace: WORKTREE, tabId: 'tab-1' }
+    const wake = { type: 'wake', workspace: WORKTREE, tabId: 'tab-1' }
+
+    expect(parse({ ...sleep, paneKeys: [paneKey], records: [record] })?.success).toBe(true)
+    // Never the whole workspace, never past the tab, never a record for another pane or workspace.
+    expect(parse({ ...sleep, records: [record] })?.success).toBe(false)
+    expect(parse({ ...sleep, paneKeys: [otherTabPane], records: [] })?.success).toBe(false)
+    expect(
+      parse({ ...sleep, paneKeys: [paneKey], records: [{ ...record, paneKey: otherTabPane }] })
+        ?.success
+    ).toBe(false)
+    expect(
+      parse({ ...sleep, paneKeys: [paneKey], records: [{ ...record, worktreeId: 'repo-2::/x' }] })
+        ?.success
+    ).toBe(false)
+    expect(parse({ ...wake, paneKeys: [paneKey] })?.success).toBe(true)
+    expect(parse({ ...wake })?.success).toBe(false)
+    expect(parse({ ...wake, paneKeys: [paneKey, paneKey] })?.success).toBe(false)
+    expect(parse({ ...wake, paneKeys: [otherTabPane] })?.success).toBe(false)
+  })
+
   it('applies group sizes to the workspace’s routed partition', async () => {
     const { runtime, applyLayoutCommand } = runtimeHolding('ssh:target-1')
     const ratios = {
