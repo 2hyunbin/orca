@@ -74,8 +74,7 @@ function withLoadedRow(
   const next: WorkspaceSessionState = {
     ...session,
     tabsByWorktree: { ...session.tabsByWorktree, [key]: rows },
-    ...withLoadedEntry(session, loaded, 'terminalLayoutsByTabId', tabId),
-    ...withLoadedEntry(session, loaded, 'remoteSessionIdsByTabId', tabId)
+    ...withLoadedLayout(session, loaded, tabId)
   }
   if (!loadedRow && next.activeTabId === tabId) {
     next.activeTabId = loaded.activeTabId
@@ -89,21 +88,16 @@ function withLoadedRow(
   return next
 }
 
-/** The session map `field` with the tab's entry as loaded; nothing when neither side has one. */
-function withLoadedEntry<F extends 'terminalLayoutsByTabId' | 'remoteSessionIdsByTabId'>(
+/** The pane layouts with the tab's as loaded; nothing when neither side has one. */
+function withLoadedLayout(
   session: WorkspaceSessionState,
   loaded: WorkspaceSessionState,
-  field: F,
   tabId: string
-): Pick<WorkspaceSessionState, F> | Record<string, never> {
-  const { [tabId]: stored, ...rest } = session[field] ?? {}
-  const value = loaded[field]?.[tabId]
-  if (stored === undefined && value === undefined) {
+): Pick<WorkspaceSessionState, 'terminalLayoutsByTabId'> | Record<string, never> {
+  const { [tabId]: stored, ...rest } = session.terminalLayoutsByTabId ?? {}
+  const layout = loaded.terminalLayoutsByTabId?.[tabId]
+  if (!stored && !layout) {
     return {}
   }
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: `rest` and `value` come from this same field's map.
-  return { [field]: value === undefined ? rest : { ...rest, [tabId]: value } } as Pick<
-    WorkspaceSessionState,
-    F
-  >
+  return { terminalLayoutsByTabId: layout ? { ...rest, [tabId]: layout } : rest }
 }
