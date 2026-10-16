@@ -47,7 +47,7 @@ function createDeps(repos: Repo[]): RepoWorktreeRowDeps & {
 } {
   const metaById: Record<string, WorktreeMeta> = {}
   const store = {
-    getRepos: () => repos,
+    getRepos: () => repos.map((owner) => ({ ...owner })),
     getAllWorktreeMeta: () => metaById,
     getAllWorktreeLineage: () => ({}),
     getProjects: () => [],
@@ -269,7 +269,7 @@ describe('host-qualified scoped worktree resolution', () => {
     const deps = createDeps([local, remote, repo('unrelated', '/unrelated/repo')])
     const worktreeId = 'folders::/shared/folder'
     deps.listFolderWorkspaces.mockImplementation((owner) =>
-      owner === remote
+      owner.executionHostId === remote.executionHostId
         ? ([
             {
               id: worktreeId,

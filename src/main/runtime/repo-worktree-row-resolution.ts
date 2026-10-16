@@ -254,9 +254,10 @@ export async function resolveScopedWorktreeIdRow(
   const relatedOwners = new Set(
     savedOwners.filter((owner) => relatedInstances.has(owner.instanceId)).map((owner) => owner.repo)
   )
-  const relatedRepos = store
-    .getRepos()
-    .filter((candidate) => candidate !== repo && relatedOwners.has(candidate))
+  const relatedRepos = [...relatedOwners].filter(
+    (candidate) =>
+      candidate.id !== repo.id || getRepoExecutionHostId(candidate) !== getRepoExecutionHostId(repo)
+  )
   const metaById = store.getAllWorktreeMeta() ?? {}
   const projectRuntimeByRepoId = resolveLocalProjectRuntimesForRepos(store, relatedRepos)
   const otherRows = await Promise.all(
