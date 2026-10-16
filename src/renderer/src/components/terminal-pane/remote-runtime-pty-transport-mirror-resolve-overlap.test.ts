@@ -3,6 +3,7 @@ import {
   createRemoteRuntimeTransportMocks,
   type MultiplexSubscriptionCallbacks
 } from './remote-runtime-pty-transport-test-harness'
+import type { RuntimeMobileSessionClientTab } from '../../../../shared/runtime-types'
 
 // A parked web-mirror reveal used to wait for session.tabs.activate before sending
 // terminal.resolvePane, a whole extra round trip before Subscribe. The pane read has no
@@ -146,7 +147,7 @@ describe('web mirror reveal: resolvePane overlaps the activation', () => {
           ...response,
           result: {
             ...response.result,
-            tabs: response.result.tabs.map((tab: object) => ({
+            tabs: response.result.tabs.map((tab: RuntimeMobileSessionClientTab) => ({
               ...tab,
               incarnationId: 'incarnation-learned'
             }))
