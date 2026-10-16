@@ -67,11 +67,22 @@ describe('web session close replay', () => {
     expect(takeDueWebSessionCloseReplays(OWNER, WT, new Set(['host-tab-1']))).toEqual([])
   })
 
-  it('is done without a send when the host no longer lists the tab', () => {
+  it('keeps a held close through a snapshot that omits the tab', () => {
     queueWebSessionCloseReplay(OWNER, WT, ['host-tab-1'])
 
+    // An incomplete inventory omits tabs too, so absence is not proof the host removed it.
     expect(takeDueWebSessionCloseReplays(OWNER, WT, new Set())).toEqual([])
-    expect(takeDueWebSessionCloseReplays(OWNER, WT, new Set(['host-tab-1']))).toEqual([])
+    expect(takeDueWebSessionCloseReplays(OWNER, WT, new Set(['host-tab-1']))).toHaveLength(1)
+  })
+
+  it('re-hides a tab whose close is in flight when a snapshot lists it again', () => {
+    queueWebSessionCloseReplay(OWNER, WT, ['host-tab-1'])
+    takeDueWebSessionCloseReplays(OWNER, WT, new Set(['host-tab-1']))
+
+    recordReceivedWebSessionTabsSnapshot(ENV, makeSnapshot([SURFACE]))
+
+    expect(isWebSessionCloseIntentPending(OWNER, WT, 'host-tab-1', NOW)).toBe(true)
+    expect(replayWebSessionTabCloses).not.toHaveBeenCalled()
   })
 
   it('gives up after a bounded number of undelivered sends', () => {

@@ -62,25 +62,33 @@ export function queueWebSessionCloseReplay(
   pendingReplays.set(key, { owner, worktreeId, hostTabIds, attempts: 0, inFlight: false })
 }
 
+/** Held closes whose tab this snapshot lists, in flight or not. */
+function listHeldWebSessionCloseReplays(
+  owner: WebSessionIntentOwner,
+  worktreeId: string,
+  presentHostTabIds: ReadonlySet<string>
+): WebSessionCloseReplay[] {
+  const prefix = replayPartitionPrefix(owner, worktreeId)
+  return [...pendingReplays].flatMap(([key, replay]) =>
+    key.startsWith(prefix) &&
+    replay.hostTabIds.some((hostTabId) => presentHostTabIds.has(hostTabId))
+      ? [replay]
+      : []
+  )
+}
+
 /**
  * The replays a host snapshot makes due: one that still lists the tab proves the host is reachable
- * and still holds it. A replay whose tab the snapshot no longer lists is done -- the host removed it.
+ * and still holds it. Absence is not treated as removal, because an incomplete inventory omits
+ * tabs too; a close whose tab never returns ends at delivery, give-up, or eviction.
  */
 export function takeDueWebSessionCloseReplays(
   owner: WebSessionIntentOwner,
   worktreeId: string,
   presentHostTabIds: ReadonlySet<string>
 ): WebSessionCloseReplay[] {
-  const prefix = replayPartitionPrefix(owner, worktreeId)
   const due: WebSessionCloseReplay[] = []
-  for (const [key, replay] of pendingReplays) {
-    if (!key.startsWith(prefix)) {
-      continue
-    }
-    if (!replay.hostTabIds.some((hostTabId) => presentHostTabIds.has(hostTabId))) {
-      pendingReplays.delete(key)
-      continue
-    }
+  for (const replay of listHeldWebSessionCloseReplays(owner, worktreeId, presentHostTabIds)) {
     if (!replay.inFlight) {
       replay.inFlight = true
       replay.attempts += 1
@@ -122,16 +130,22 @@ export function replayWebSessionClosesDueForSnapshot(
   const presentHostTabIds = new Set(
     snapshot.tabs.map((tab) => (tab.type === 'terminal' ? tab.parentTabId : tab.id))
   )
-  const due = takeDueWebSessionCloseReplays({ environmentId }, snapshot.worktree, presentHostTabIds)
-  if (due.length === 0) {
-    return
-  }
-  // Why re-assert: a subscription reinstall clears close intents, and this snapshot lists the tab.
-  for (const replay of due) {
+  const owner = { environmentId }
+  // Why every held close, in flight too: a subscription reinstall clears close intents, and this
+  // snapshot lists the tab.
+  for (const replay of listHeldWebSessionCloseReplays(
+    owner,
+    snapshot.worktree,
+    presentHostTabIds
+  )) {
     for (const hostTabId of replay.hostTabIds) {
       recordWebSessionCloseIntent(replay.owner, replay.worktreeId, hostTabId, Date.now())
       makeWebSessionCloseIntentDurable(replay.owner, replay.worktreeId, hostTabId)
     }
+  }
+  const due = takeDueWebSessionCloseReplays(owner, snapshot.worktree, presentHostTabIds)
+  if (due.length === 0) {
+    return
   }
   // Lazy: the lifecycle module reaches the store, which loads this module.
   void import('./web-runtime-session-tab-lifecycle').then(({ replayWebSessionTabCloses }) =>
