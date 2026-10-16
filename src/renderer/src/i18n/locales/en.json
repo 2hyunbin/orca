@@ -4268,6 +4268,8 @@
             "f8f0f9d8cc": "Network issue",
             "bf2e739f18": "Sign-in unavailable",
             "f8b8dbed85": "Usage unavailable",
+            "remoteOwnerUnreachable": "Usage unavailable — cannot reach {{server}}",
+            "remoteOwnerNoUsage": "Usage unavailable — {{server}} does not report usage. Update Orca on that host.",
             "3d3c9c0c1f": "Claude usage will refresh after the live Claude terminal rotates its credentials.",
             "42fdd4da1d": "Claude sign-in is being refreshed. Agent sessions may still be signed in.",
             "c06c1d215d": "Claude usage could not be refreshed because the network request failed.",
