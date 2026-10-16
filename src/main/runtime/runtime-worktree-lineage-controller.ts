@@ -1,5 +1,6 @@
 import type { WorktreeLineage, WorkspaceLineage } from '../../shared/worktree/lineage-types'
-import type { ExecutionHostId } from '../../shared/execution-host'
+import { getRepoExecutionHostId, type ExecutionHostId } from '../../shared/execution-host'
+import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
 import type { WorkspaceKey } from '../../shared/folder-workspace-types'
 import {
   folderWorkspaceKey,
@@ -107,8 +108,16 @@ export class RuntimeWorktreeLineageController {
       if (id === child.id || id === parent.id) {
         return id === child.id ? child.instanceId : parent.instanceId
       }
-      const meta = hostId ? store?.getWorktreeMetaForHost?.(id, hostId) : undefined
-      return (meta ?? store?.getWorktreeMeta(id))?.instanceId
+      const exact = hostId ? store?.getWorktreeMetaForHost?.(id, hostId) : undefined
+      if (exact) {
+        return exact.instanceId
+      }
+      const legacy = store?.getWorktreeMeta(id)
+      const repo =
+        legacy && !legacy.hostId ? store?.getRepo(getRepoIdFromWorktreeId(id)) : undefined
+      const legacyHostId = legacy?.hostId ?? (repo ? getRepoExecutionHostId(repo) : undefined)
+      // Why: a locator-keyed row may be another host's; readers never follow a cross-host link.
+      return !hostId || !legacyHostId || legacyHostId === hostId ? legacy?.instanceId : undefined
     }
     let cursor: string | undefined = parent.id
     const visited = new Set<string>()
