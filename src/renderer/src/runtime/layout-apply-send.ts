@@ -15,7 +15,7 @@ import type {
   NewGroupSplit
 } from '../../../shared/workspace-layout/workspace-layout-command-types'
 
-/** What a window sends `layout.apply`; main mints any new id but a browser or editor tab's. */
+/** What a window sends `layout.apply`; main mints any new id but one the window already drew. */
 export type WindowLayoutCommand =
   | {
       type: 'splitPane'
@@ -25,7 +25,7 @@ export type WindowLayoutCommand =
       /** A pane the window already split under its own id. */
       newLeafId?: string
     }
-  | { type: 'closePane'; tabId: string; leafId: string; exited?: true }
+  | { type: 'closePane'; tabId: string; leafId: string; automatic?: true }
   | { type: 'renamePane'; tabId: string; leafId: string; title: string | null }
   | { type: 'equalizePanes'; tabId: string }
   | { type: 'movePane'; tabId: string; leafId: string; targetLeafId: string; side: PaneSide }

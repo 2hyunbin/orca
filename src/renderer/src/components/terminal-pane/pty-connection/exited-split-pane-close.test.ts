@@ -62,7 +62,7 @@ describe('closeExitedSplitPaneThroughLayoutOwner', () => {
     expect(c.sent).toBe(true)
     expect(mocks.sendLayoutCommandToOwner).toHaveBeenCalledWith(
       'wt-1',
-      { type: 'closePane', tabId: 'tab-1', leafId: LEAF, exited: true },
+      { type: 'closePane', tabId: 'tab-1', leafId: LEAF, automatic: true },
       expect.any(Object)
     )
     expect(c.closePane).not.toHaveBeenCalled()

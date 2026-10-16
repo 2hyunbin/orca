@@ -74,7 +74,10 @@ export const WORKSPACE_LAYOUT_METHODS = [
   })
 ]
 
-/** The window's layout commands (C1). Registered only in a layout-owner build; see methods/index.ts. */
+/**
+ * The window's layout commands (C1). Registered only in a layout-owner build; see methods/index.ts.
+ * Main mints new ids except those the window already drew under (its tabs, startup-split panes).
+ */
 export const LAYOUT_APPLY_METHODS = [
   defineMethod({
     name: 'layout.apply',

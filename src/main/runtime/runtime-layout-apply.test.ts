@@ -39,10 +39,10 @@ describe('applyWindowLayoutCommand', () => {
     })
   })
 
-  it('closes an exited pane with the user-close rules but stops no launch as the user’s', async () => {
+  it('closes a pane automatically with the user-close rules but stops no launch as the user’s', async () => {
     const { store, applyLayoutCommand } = storeWith()
 
-    await applyWindowLayoutCommand(store, () => ['local'], { ...CLOSE, exited: true })
+    await applyWindowLayoutCommand(store, () => ['local'], { ...CLOSE, automatic: true })
 
     expect(applyLayoutCommand).toHaveBeenCalledWith({ ...CLOSE, userPaneClose: true }, ['local'])
     expect(mocks.markAgentLaunchesClosedByUser).not.toHaveBeenCalled()

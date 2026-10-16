@@ -74,7 +74,7 @@ describe('layout.apply', () => {
     expect(MOBILE_RPC_METHOD_ALLOWLIST.has('layout.apply')).toBe(false)
   })
 
-  it('is registered in a layout-owner build and accepts no id main should mint', async () => {
+  it('is registered in a layout-owner build; a split keeps only a valid window pane id', async () => {
     const apply = (await registeredMethods(true)).find((method) => method.name === 'layout.apply')
     if (!apply || isStreamingMethod(apply)) {
       throw new Error('layout.apply is not a request method')
@@ -82,12 +82,19 @@ describe('layout.apply', () => {
     const applyLayoutCommand = vi.fn(async () => ({ ok: true, result: {} }))
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the handler calls only applyLayoutCommand.
     const runtime = { applyLayoutCommand } as unknown as OrcaRuntimeService
+    const newLeafId = '33333333-3333-4333-8333-333333333333'
 
-    const params = apply.params?.parse({ command: { ...SPLIT, newLeafId: 'window-minted' } })
+    const params = apply.params?.parse({ command: { ...SPLIT, newLeafId, groupId: 'window-g' } })
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the handler reads only runtime from its context.
     await apply.handler(params, { runtime } as RpcContext)
 
-    expect(applyLayoutCommand).toHaveBeenCalledWith(SPLIT)
+    expect(applyLayoutCommand).toHaveBeenCalledWith({ ...SPLIT, newLeafId })
+    expect(apply.params?.parse({ command: { ...SPLIT, id: 'window-id' } })).toEqual({
+      command: SPLIT
+    })
+    expect(
+      apply.params?.safeParse({ command: { ...SPLIT, newLeafId: 'window-minted' } }).success
+    ).toBe(false)
   })
 
   it('takes no close semantics or blank title from the window', async () => {

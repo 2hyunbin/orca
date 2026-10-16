@@ -353,7 +353,16 @@ export function installPtyExitHibernate(session: ConnectPanePtySession): void {
         tabId: session.deps.tabId,
         manager: session.manager,
         paneId: session.pane.id,
-        closeTab: () => session.deps.onPtyExitRef.current(ptyId, exitCode)
+        closeTab: () => {
+          // The sole-pane rule above: a fresh terminal the user never typed into keeps its pane.
+          if (
+            session.spawnedFreshPtyId === ptyId &&
+            !Number.isFinite(session.lastTerminalInputAt)
+          ) {
+            return
+          }
+          session.deps.onPtyExitRef.current(ptyId, exitCode)
+        }
       })
     ) {
       return

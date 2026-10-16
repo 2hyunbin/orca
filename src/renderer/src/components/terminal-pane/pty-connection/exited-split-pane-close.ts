@@ -32,7 +32,7 @@ export function closeExitedSplitPaneThroughLayoutOwner(args: {
   }
   return sendLayoutCommandToOwner(
     args.worktreeId,
-    { type: 'closePane', tabId: args.tabId, leafId, exited: true },
+    { type: 'closePane', tabId: args.tabId, leafId, automatic: true },
     {
       apply: close,
       asToday: close,

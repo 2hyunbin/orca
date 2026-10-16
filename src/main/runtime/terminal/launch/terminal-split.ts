@@ -63,7 +63,8 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
             newLeafId
           })
           return this.waitForLeafInTab(leaf.tabId, newLeafId)
-        }
+        },
+        isMounted: (newLeafId) => this.leaves.has(this.getLeafKey(leaf.tabId, newLeafId))
       })
       return {
         handle: split.handle,

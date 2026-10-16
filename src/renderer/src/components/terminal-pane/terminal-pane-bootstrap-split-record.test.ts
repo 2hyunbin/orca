@@ -1,14 +1,22 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import type { ManagedPane, PaneManager } from '@/lib/pane-manager/pane-manager'
 import type { recordLayoutApply } from '@/runtime/layout-apply-send'
+import { isTerminalLeafId, type TerminalLeafId } from '../../../../shared/stable-pane-id'
 import { recordingBootstrapSplits } from './terminal-pane-bootstrap-split-record'
 
 const mocks = vi.hoisted(() => ({ recordLayoutApply: vi.fn<typeof recordLayoutApply>() }))
 vi.mock('@/runtime/layout-apply-send', () => ({ recordLayoutApply: mocks.recordLayoutApply }))
 vi.mock('@/store', () => ({ useAppStore: { getState: () => ({}) } }))
 
-const SOURCE = '11111111-1111-4111-8111-111111111111'
-const CREATED = '22222222-2222-4222-8222-222222222222'
+function leafId(value: string): TerminalLeafId {
+  if (!isTerminalLeafId(value)) {
+    throw new Error(`not a pane id: ${value}`)
+  }
+  return value
+}
+
+const SOURCE = leafId('11111111-1111-4111-8111-111111111111')
+const CREATED = leafId('22222222-2222-4222-8222-222222222222')
 
 function fakeManager(created: Pick<ManagedPane, 'id' | 'leafId'> | null) {
   const splitPane = vi.fn(() => created)

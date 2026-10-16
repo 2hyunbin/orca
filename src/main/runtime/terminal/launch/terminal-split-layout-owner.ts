@@ -6,7 +6,8 @@ type SplitLeaf = { worktreeId: string; tabId: string; leafId: string }
 /**
  * A split of a pane the window draws, in a layout-owner build: main writes the new pane first
  * and the window mounts that pane. Main's copy lacking the tab, or refusing, splits as today
- * under a fresh id. A window that never mounts the pane leaves no pane in main.
+ * under a fresh id. A pane the window never mounted is taken back; one still binding its
+ * terminal (a slow SSH start) stays.
  */
 export async function splitWindowLeafThroughLayoutOwner(
   leaf: SplitLeaf,
@@ -14,8 +15,10 @@ export async function splitWindowLeafThroughLayoutOwner(
   deps: {
     apply: (command: WindowLayoutCommand) => Promise<LayoutApplyReply>
     mintLeafId: () => string
-    /** Asks the window to mount the pane and waits for it; the new pane's handle. */
+    /** Asks the window to mount the pane and waits for its terminal; the new pane's handle. */
     mount: (newLeafId: string) => Promise<string>
+    /** Whether the window's graph holds the pane, bound or not. */
+    isMounted: (newLeafId: string) => boolean
   }
 ): Promise<{ handle: string; leafId: string }> {
   const { worktreeId: workspace, tabId, leafId } = leaf
@@ -37,9 +40,9 @@ export async function splitWindowLeafThroughLayoutOwner(
   try {
     return { handle: await deps.mount(newLeafId), leafId: newLeafId }
   } catch (error) {
-    if (mainLeafId) {
+    if (mainLeafId && !deps.isMounted(mainLeafId)) {
       await deps
-        .apply({ type: 'closePane', workspace, tabId, leafId: mainLeafId })
+        .apply({ type: 'closePane', workspace, tabId, leafId: mainLeafId, automatic: true })
         .catch((withdrawError: unknown) =>
           console.warn('[layout-owner] unmounted split not withdrawn:', withdrawError)
         )

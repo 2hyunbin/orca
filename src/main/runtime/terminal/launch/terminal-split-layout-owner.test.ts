@@ -5,7 +5,11 @@ import { splitWindowLeafThroughLayoutOwner } from './terminal-split-layout-owner
 
 const LEAF = { worktreeId: 'wt-1', tabId: 'tab-1', leafId: 'leaf-1' }
 
-function deps(reply: LayoutApplyReply | Error, mount: (leafId: string) => Promise<string>) {
+function deps(
+  reply: LayoutApplyReply | Error,
+  mount: (leafId: string) => Promise<string>,
+  mounted = false
+) {
   return {
     apply: vi.fn(async (_command: WindowLayoutCommand): Promise<LayoutApplyReply> => {
       if (reply instanceof Error) {
@@ -14,7 +18,8 @@ function deps(reply: LayoutApplyReply | Error, mount: (leafId: string) => Promis
       return reply
     }),
     mintLeafId: () => 'minted-leaf',
-    mount: vi.fn(mount)
+    mount: vi.fn(mount),
+    isMounted: () => mounted
   }
 }
 
@@ -59,7 +64,22 @@ describe('splitWindowLeafThroughLayoutOwner', () => {
       type: 'closePane',
       workspace: 'wt-1',
       tabId: 'tab-1',
-      leafId: 'main-leaf'
+      leafId: 'main-leaf',
+      automatic: true
     })
+  })
+
+  it('keeps main’s pane when the window mounted it but its terminal is still starting', async () => {
+    const d = deps(
+      { ok: true, result: { leafId: 'main-leaf' } },
+      async () => {
+        throw new Error('timeout')
+      },
+      true
+    )
+
+    await expect(splitWindowLeafThroughLayoutOwner(LEAF, 'vertical', d)).rejects.toThrow('timeout')
+
+    expect(d.apply).toHaveBeenCalledOnce()
   })
 })
