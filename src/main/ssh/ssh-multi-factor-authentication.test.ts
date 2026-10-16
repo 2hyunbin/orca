@@ -417,5 +417,29 @@ describe('multi-stage SSH authentication', () => {
         await server.close()
       }
     })
+
+    it('answers the second factor when the host first offered both a key and the challenge', async () => {
+      // ssh2 keeps the pre-agent list (publickey and keyboard-interactive) after the agent key
+      // partially succeeds, so only the agent's signature shows this challenge is a second factor.
+      const server = await startMultiFactorServer([
+        ['publickey', 'keyboard-interactive'],
+        'keyboard-interactive'
+      ])
+      try {
+        const { ready, prompts } = connectWithOrcaConfig(
+          makeTarget(server.port, { identityAgent: join(tempDir, 'agent.sock') }),
+          null,
+          undefined,
+          [PASSCODE],
+          { includeAgent: true },
+          new SingleKeyAgent()
+        )
+
+        await expect(ready).resolves.toBeUndefined()
+        expect(prompts).toEqual(['Duo passcode:'])
+      } finally {
+        await server.close()
+      }
+    })
   })
 })

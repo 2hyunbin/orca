@@ -111,7 +111,7 @@ describe('SshConnection', () => {
     mkdirSync(join(tempDir, '.ssh'))
     // Real key bytes and parser: deferral requires the waiting key to parse as unencrypted.
     const realSsh2 = await vi.importActual<{ utils: typeof utils }>('ssh2')
-    const keyBytes = Buffer.from(realSsh2.utils.generateKeyPairSync('ed25519').private)
+    const keyBytes = Buffer.from(realSsh2.utils.generateKeyPairSync('ecdsa', { bits: 256 }).private)
     writeFileSync(join(tempDir, '.ssh', 'id_ed25519'), keyBytes)
     vi.mocked(utils.parseKey).mockImplementation(realSsh2.utils.parseKey)
     vi.stubEnv('HOME', tempDir)
