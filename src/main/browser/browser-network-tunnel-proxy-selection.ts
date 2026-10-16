@@ -1,4 +1,4 @@
-import { isIP } from 'node:net'
+import { BlockList, isIP } from 'node:net'
 import {
   getProxyBypassRulesFromEnvironment,
   getProxyUrlFromEnvironment,
@@ -73,6 +73,8 @@ export function matchesProxyBypassRules(
     .some((rule) => matchesBypassRule(host, target.port, rule, style))
 }
 
+const SCHEME_PORTS: Record<string, string> = { http: '80', ws: '80', https: '443', wss: '443' }
+
 function matchesBypassRule(
   host: string,
   port: number,
@@ -85,15 +87,20 @@ function matchesBypassRule(
   if (rule === '<local>') {
     return !host.includes('.') && !host.includes(':')
   }
-  const withoutScheme = rule.replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
-  const cidr = /^(\d{1,3}(?:\.\d{1,3}){3})\/(\d{1,2})$/.exec(withoutScheme)
+  const scheme = /^([a-z][a-z0-9+.-]*):\/\//.exec(rule)?.[1]
+  const withoutScheme = scheme ? rule.slice(scheme.length + 3) : rule
+  const cidr = /^\[?([0-9a-f:.]+)\]?\/(\d{1,3})$/.exec(withoutScheme)
   if (cidr) {
-    return matchesIpv4Cidr(host, cidr[1]!, Number(cidr[2]))
+    return matchesCidr(host, cidr[1]!, Number(cidr[2]))
   }
   const bracketed = /^\[([^\]]+)\](?::(\d+))?$/.exec(withoutScheme)
   const hostPort = bracketed ? null : /^([^:]+):(\d+)$/.exec(withoutScheme)
   const ruleHost = bracketed?.[1] ?? hostPort?.[1] ?? withoutScheme
-  const rulePort = bracketed?.[2] ?? hostPort?.[2]
+  // Why the scheme's port: a tunnel carries host:port only, so `https://x` can match only :443.
+  const rulePort = bracketed?.[2] ?? hostPort?.[2] ?? (scheme ? SCHEME_PORTS[scheme] : undefined)
+  if (scheme && rulePort === undefined) {
+    return false
+  }
   if (rulePort !== undefined && Number(rulePort) !== port) {
     return false
   }
@@ -120,12 +127,13 @@ function stripTrailingDot(host: string): string {
   return host.endsWith('.') ? host.slice(0, -1) : host
 }
 
-function matchesIpv4Cidr(host: string, network: string, prefix: number): boolean {
-  if (isIP(host) !== 4 || prefix > 32) {
+function matchesCidr(host: string, network: string, prefix: number): boolean {
+  const family = isIP(network)
+  if (family === 0 || isIP(host) !== family || prefix > (family === 4 ? 32 : 128)) {
     return false
   }
-  const toInt = (address: string): number =>
-    address.split('.').reduce((value, octet) => (value << 8) + Number(octet), 0) >>> 0
-  const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0
-  return (toInt(host) & mask) === (toInt(network) & mask)
+  const type = family === 4 ? 'ipv4' : 'ipv6'
+  const range = new BlockList()
+  range.addSubnet(network, prefix, type)
+  return range.check(host, type)
 }
