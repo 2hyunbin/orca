@@ -75,6 +75,20 @@ export function sleepingRecordNamesAnotherExecutionHost(
   )
 }
 
+// Why each side alone: either the catalog or the capture stamp can be the only evidence for a record.
+function resolveSleepingRecordMachine(
+  record: SleepingAgentSessionRecord,
+  state: WorktreeRuntimeOwnerState
+): ExecutionHostId | null {
+  const host = getKnownExecutionHostIdForWorktree(state, record.worktreeId)
+  if (host && parseExecutionHostId(host)?.kind !== 'runtime') {
+    return host
+  }
+  // A null stamp is "local or paired runtime", so only an SSH stamp names a machine.
+  const stamp = record.connectionId?.trim()
+  return stamp ? toSshExecutionHostId(stamp) : null
+}
+
 /**
  * Do two records positively name different machines? Locators are machine-scoped, so a pane on one
  * machine never owns a session recorded on another, even when the ids match (a copied state dir).
@@ -85,15 +99,7 @@ export function sleepingRecordsNameDifferentExecutionHosts(
   b: SleepingAgentSessionRecord,
   state: WorktreeRuntimeOwnerState
 ): boolean {
-  if (a.connectionId !== undefined && b.connectionId !== undefined) {
-    if ((a.connectionId?.trim() || null) !== (b.connectionId?.trim() || null)) {
-      return true
-    }
-  }
-  const aHost = getKnownExecutionHostIdForWorktree(state, a.worktreeId)
-  const bHost = getKnownExecutionHostIdForWorktree(state, b.worktreeId)
-  if (!aHost || !bHost || parseExecutionHostId(aHost)?.kind === 'runtime') {
-    return false
-  }
-  return parseExecutionHostId(bHost)?.kind !== 'runtime' && aHost !== bHost
+  const aMachine = resolveSleepingRecordMachine(a, state)
+  const bMachine = resolveSleepingRecordMachine(b, state)
+  return aMachine !== null && bMachine !== null && aMachine !== bMachine
 }

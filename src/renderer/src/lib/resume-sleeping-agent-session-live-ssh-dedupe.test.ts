@@ -217,10 +217,14 @@ describe('resumeSleepingAgentSessionsForWorktree — SSH panes and stale worktre
     expect(resumeSleepingAgentSessionsForWorktree('wt-1')).toBe(1)
   })
 
-  // Matching ids on two machines (a copied state dir) are two sessions, not one.
+  // Matching ids on two machines (a copied state dir) are two sessions, not one. Here only the
+  // catalog names this record's machine and only the capture stamp names the other's.
   it('ignores a claim from a pane on a different machine than this record', () => {
+    const localPath = '/Users/neil/projects/wt-1'
+    const localWorktreeId = `repo-1::${localPath}`
     const local = makeRecord({
-      connectionId: null,
+      paneKey: makePaneKey('tab-1', LEAF_ID),
+      worktreeId: localWorktreeId,
       providerSession: { key: 'session_id', id: 'sess-9' }
     })
     const remote = makeRecord({
@@ -232,13 +236,19 @@ describe('resumeSleepingAgentSessionsForWorktree — SSH panes and stale worktre
     })
     setStoreState({
       activeWorktreeId: 'wt-other',
-      tabsByWorktree: { 'wt-1': [], 'wt-2': [makeTerminalTab('tab-2', 'wt-2')] },
+      tabsByWorktree: { [localWorktreeId]: [], 'wt-2': [makeTerminalTab('tab-2', 'wt-2')] },
       terminalLayoutsByTabId: { 'tab-2': makeLayout(OTHER_LEAF_ID, SSH_PTY_ID) },
       ptyIdsByTabId: {},
+      repos: [{ ...TEST_REPO, id: 'repo-1', path: '/Users/neil/projects' }],
+      worktreesByRepo: {
+        'repo-1': [
+          makeWorktree({ id: localWorktreeId, repoId: 'repo-1', path: localPath, hostId: 'local' })
+        ]
+      },
       sleepingAgentSessionsByPaneKey: { [local.paneKey]: local, [remote.paneKey]: remote }
     })
 
-    expect(resumeSleepingAgentSessionsForWorktree('wt-1')).toBe(1)
+    expect(resumeSleepingAgentSessionsForWorktree(localWorktreeId)).toBe(1)
   })
 
   it('does not let a finished note in another worktree clear an active record', () => {
