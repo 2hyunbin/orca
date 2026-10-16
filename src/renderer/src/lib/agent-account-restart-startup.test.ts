@@ -4,7 +4,11 @@ import { useAppStore } from '@/store'
 import { makePaneKey } from '../../../shared/stable-pane-id'
 import type { ProjectExecutionRuntimeResolution } from '../../../shared/project-execution-runtime'
 import type * as localPreflightContext from '@/lib/local-preflight-context'
-import { buildCodexAccountRestartStartup } from './codex-account-restart-startup'
+import {
+  buildAgentAccountRestartStartup,
+  buildCodexAccountRestartStartup,
+  resolveAgentAccountRestartResumeStartup
+} from './agent-account-restart-startup'
 
 let projectRuntimeContext: ProjectExecutionRuntimeResolution | undefined
 
@@ -156,5 +160,48 @@ describe('buildCodexAccountRestartStartup', () => {
       }
     })
     expect(build().resumeProviderSession).toBeUndefined()
+  })
+})
+
+describe('buildAgentAccountRestartStartup for Claude', () => {
+  const pane = { tabId: TAB_ID, leafId: LEAF_ID, worktreeId: WORKTREE_ID }
+
+  beforeEach(() => {
+    seedAgentStatus(null)
+    projectRuntimeContext = undefined
+  })
+
+  it('resumes the pane’s Claude session with the launch marks the spawn needs', () => {
+    seedAgentStatus({
+      agentType: 'claude',
+      state: 'waiting',
+      providerSession: { key: 'session_id', id: SESSION_ID }
+    })
+
+    const startup = buildAgentAccountRestartStartup('claude', pane)
+
+    expect(startup.command).toMatch(/^claude\b/)
+    expect(startup.command).toContain('--resume')
+    expect(startup.command).toContain(SESSION_ID)
+    expect(startup.launchAgent).toBe('claude')
+    expect(startup.startupCommandDelivery).toBe('shell-ready')
+    expect(startup.resumeProviderSession?.id).toBe(SESSION_ID)
+  })
+
+  it('reports no resume when the Claude pane has no session id', () => {
+    seedAgentStatus({ agentType: 'claude', state: 'done' })
+
+    expect(resolveAgentAccountRestartResumeStartup('claude', pane)).toBeNull()
+    expect(buildAgentAccountRestartStartup('claude', pane).command).toBe('claude')
+  })
+
+  it('never resumes a Codex session as Claude', () => {
+    seedAgentStatus({
+      agentType: 'codex',
+      state: 'done',
+      providerSession: { key: 'session_id', id: SESSION_ID }
+    })
+
+    expect(resolveAgentAccountRestartResumeStartup('claude', pane)).toBeNull()
   })
 })

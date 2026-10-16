@@ -84,7 +84,7 @@ describe('codex restart notice lifecycle', () => {
       nextAccountLabel: B,
       dismissed: true
     })
-    expect(useAppStore.getState().pendingCodexPaneRestartIds).toEqual({})
+    expect(useAppStore.getState().pendingPaneAccountRestarts).toEqual({})
   })
 
   it('re-blocks a dismissed pane once a restart is queued for it', () => {
@@ -214,7 +214,7 @@ describe('codex restart notices with colliding account labels', () => {
       previousAccountLabel: A,
       nextAccountLabel: B
     })
-    expect(useAppStore.getState().pendingCodexPaneRestartIds).toEqual({})
+    expect(useAppStore.getState().pendingPaneAccountRestarts).toEqual({})
   })
 
   it('leaves unanswered and dismissed notices alone on a reopen request', () => {

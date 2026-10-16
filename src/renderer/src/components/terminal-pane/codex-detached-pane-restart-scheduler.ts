@@ -1,4 +1,5 @@
 import { useAppStore } from '@/store'
+import type { AccountRestartAgent } from '@/store/terminals/terminal-contracts'
 import {
   resetDetachedCodexPaneRestartClaimsForTests,
   sweepUnclaimedCodexPaneRestarts
@@ -11,8 +12,8 @@ let sweepRunning = false
 let sweepRequestedAfterRun = false
 
 export function hasAddedPendingCodexPaneRestart(
-  current: Record<string, true>,
-  previous: Record<string, true>
+  current: Record<string, AccountRestartAgent>,
+  previous: Record<string, AccountRestartAgent>
 ): boolean {
   if (current === previous) {
     return false
@@ -27,8 +28,8 @@ export function installCodexDetachedPaneRestartExecutor(): () => void {
   const unsubscribe = useAppStore.subscribe((state, previousState) => {
     if (
       hasAddedPendingCodexPaneRestart(
-        state.pendingCodexPaneRestartIds,
-        previousState.pendingCodexPaneRestartIds
+        state.pendingPaneAccountRestarts,
+        previousState.pendingPaneAccountRestarts
       )
     ) {
       scheduleClaimSweep()
