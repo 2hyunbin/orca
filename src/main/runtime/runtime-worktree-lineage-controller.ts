@@ -23,7 +23,6 @@ import {
 
 type RuntimeWorktreeLineageDependencies = {
   getStore(): RuntimeStore | null
-  getCachedWorktrees(): readonly ResolvedWorktree[] | null
   getDb(): OrchestrationDb | null
   resolveWorktree(selector: string): Promise<ResolvedWorktree>
   listResolvedWorktrees(): Promise<ResolvedWorktree[]>
@@ -100,15 +99,20 @@ export class RuntimeWorktreeLineageController {
         'Parent worktree must be on the same execution host.'
       )
     }
+    const store = this.deps.getStore()
     const hostId = child.hostId ?? parent.hostId
-    const instanceById = new Map(
-      this.deps
-        .getCachedWorktrees()
-        ?.filter((worktree) => !hostId || !worktree.hostId || worktree.hostId === hostId)
-        .map((worktree) => [worktree.id, worktree.instanceId]) ?? []
-    )
-    instanceById.set(child.id, child.instanceId)
-    instanceById.set(parent.id, parent.instanceId)
+    // Why: saved metadata, not the resolved-worktree cache, which the reparent itself invalidates;
+    // an unknown node would end the walk and let a longer loop through.
+    const instanceIdOf = (id: string): string | undefined => {
+      if (id === child.id || id === parent.id) {
+        return id === child.id ? child.instanceId : parent.instanceId
+      }
+      const meta =
+        hostId && store?.getWorktreeMetaForHost
+          ? store.getWorktreeMetaForHost(id, hostId)
+          : store?.getWorktreeMeta(id)
+      return meta?.instanceId
+    }
     let cursor: string | undefined = parent.id
     const visited = new Set<string>([child.id])
     while (cursor) {
@@ -119,13 +123,13 @@ export class RuntimeWorktreeLineageController {
         )
       }
       visited.add(cursor)
-      const lineage = this.deps.getStore()?.getWorktreeLineage?.(cursor)
+      const lineage = store?.getWorktreeLineage?.(cursor)
       if (!lineage) {
         break
       }
       if (
-        instanceById.get(cursor) !== lineage.worktreeInstanceId ||
-        instanceById.get(lineage.parentWorktreeId) !== lineage.parentWorktreeInstanceId
+        instanceIdOf(cursor) !== lineage.worktreeInstanceId ||
+        instanceIdOf(lineage.parentWorktreeId) !== lineage.parentWorktreeInstanceId
       ) {
         break
       }

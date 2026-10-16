@@ -103,6 +103,44 @@ describe('OrcaRuntimeService', () => {
     )
   })
 
+  it('refuses a reparent that closes a three-workspace loop through saved lineage', async () => {
+    const [aId, bId, cId] = ['a', 'b', 'c'].map((name) => `${TEST_REPO_ID}::/tmp/worktree-${name}`)
+    const metaById: Record<string, WorktreeMeta> = Object.fromEntries(
+      [aId, bId, cId].map((id) => [id, makeWorktreeMeta({ instanceId: `${id}-instance` })])
+    )
+    const edge = (child: string, parent: string): WorktreeLineage => ({
+      worktreeId: child,
+      worktreeInstanceId: `${child}-instance`,
+      parentWorktreeId: parent,
+      parentWorktreeInstanceId: `${parent}-instance`,
+      origin: 'manual',
+      capture: { source: 'manual-action', confidence: 'explicit' },
+      createdAt: 1
+    })
+    const lineageById: Record<string, WorktreeLineage> = {
+      [aId]: edge(aId, bId),
+      [bId]: edge(bId, cId)
+    }
+    const setWorktreeLineage = vi.fn()
+    const runtimeStore = {
+      ...store,
+      getAllWorktreeMeta: () => metaById,
+      getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
+      getWorktreeLineage: (worktreeId: string) => lineageById[worktreeId],
+      setWorktreeLineage
+    }
+    vi.mocked(listWorktrees).mockResolvedValue(
+      ['a', 'b', 'c'].map((name) => makeWorktreeInfo(`/tmp/worktree-${name}`))
+    )
+    const runtime = new OrcaRuntimeService(runtimeStore as never)
+
+    // Why: the reparent itself invalidates the resolved-worktree cache, so the walk must not need it.
+    await expect(
+      runtime.updateManagedWorktreeMeta(`id:${cId}`, { lineage: { parentWorktree: `id:${aId}` } })
+    ).rejects.toThrow('lineage cycle')
+    expect(setWorktreeLineage).not.toHaveBeenCalled()
+  })
+
   it('rejects lineage updates when upgraded metadata is missing a parent instance id', async () => {
     const parentPath = '/tmp/worktree-parent'
     const childPath = '/tmp/worktree-child'
