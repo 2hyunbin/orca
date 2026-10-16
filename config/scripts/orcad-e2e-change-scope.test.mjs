@@ -100,13 +100,18 @@ for (const [lane, { excluded, retained, product }] of Object.entries(cases)) {
   })
 }
 
-describe.each(['windows', 'computer'])('%s serializer oracle routing', (lane) => {
+describe.each(['windows', 'computer'])('%s unit-support routing', (lane) => {
   const paths = workflows[lane].on.pull_request.paths
-  const helper = 'src/main/daemon/serialize-grid-roundtrip.ts'
+  const helpers = [
+    'src/main/daemon/serialize-grid-roundtrip.ts',
+    'src/main/daemon/mock-descendant-sweep.ts',
+    'src/main/daemon/daemon-host-relocation.test-fixture.ts',
+    'src/main/daemon/daemon-endpoint-reachability-test-harness.ts'
+  ]
   const product = 'src/main/daemon/daemon-entry.ts'
   const renamed = 'src/main/daemon/serialize-grid-runtime.ts'
 
-  it('leaves the unit-only oracle to the unit suites', () => {
+  it.each(helpers)('leaves known unit support to its suites: %s', (helper) => {
     expect(workflowIncludes(paths, [helper])).toBe(false)
     expect(workflowIncludes(paths, [helper, 'docs/ci.md'])).toBe(false)
     expect(workflowIncludes(paths, [helper, product])).toBe(true)
@@ -115,11 +120,17 @@ describe.each(['windows', 'computer'])('%s serializer oracle routing', (lane) =>
     expect(workflowIncludes(paths, [renamed, helper])).toBe(true)
     expect(workflowIncludes(paths, ['src/main/daemon/unknown-test-harness.ts'])).toBe(true)
   })
+
+  it('keeps production selected when multiple unit fixtures change', () => {
+    expect(workflowIncludes(paths, helpers)).toBe(false)
+    expect(workflowIncludes(paths, [...helpers, product])).toBe(true)
+  })
 })
 
 it.each([
   'config/scripts/daemon-boot-smoke.mjs',
   'config/scripts/daemon-endpoint-handover-smoke.mjs',
+  'config/scripts/windows-daemon-workspace-close-repro.mjs',
   'config/scripts/computer-use-smoke.test.mjs',
   'src/main/providers/windows-shell-preflight-runtime.windows.test.ts',
   'native/computer-use-macos/Sources/OrcaComputerUseMacOS/main.swift',
