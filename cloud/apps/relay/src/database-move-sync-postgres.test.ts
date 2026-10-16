@@ -189,7 +189,14 @@ describePostgres('database move: tracking, copy, sync and verify', () => {
     }
   })
 
-  it('paces the copy on what the source reads from disk, dead pages included', async () => {
+  it('paces the copy on what the source reads from disk, dead pages included', async (context) => {
+    // Evicting the table from shared buffers needs pg_buffercache_evict (Postgres 17+).
+    const evictable = await withPgClient(sides.primary.adminUrl, async (admin) => {
+      await admin.query('CREATE EXTENSION IF NOT EXISTS pg_buffercache')
+      const found = await admin.query(`SELECT to_regproc('pg_buffercache_evict') IS NOT NULL AS ok`)
+      return Boolean(found.rows[0]?.ok)
+    })
+    if (!evictable) context.skip()
     await track()
     // 20,000 rows written and 19,900 deleted: the live JSON is tiny, the pages are not.
     await app.query(
@@ -198,7 +205,6 @@ describePostgres('database move: tracking, copy, sync and verify', () => {
     )
     await app.query(`DELETE FROM relay_audit_events WHERE at > 100`)
     const evicted = await withPgClient(sides.primary.adminUrl, async (admin) => {
-      await admin.query('CREATE EXTENSION IF NOT EXISTS pg_buffercache')
       const result = await admin.query(
         `SELECT count(*) FILTER (WHERE pg_buffercache_evict(bufferid))::int AS n FROM pg_buffercache
          WHERE relfilenode IN (SELECT pg_relation_filenode(oid) FROM pg_class
