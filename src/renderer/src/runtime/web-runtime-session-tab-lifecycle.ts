@@ -116,6 +116,8 @@ function holdUndeliveredUserClose(
   queueWebSessionCloseReplay(intentOwner, worktreeId, hostTabIds)
 }
 
+const WEB_SESSION_CLOSE_REPLAY_RETRY_DELAY_MS = 5_000
+
 /** Sends again the user closes a host snapshot proved reachable; see `takeDueWebSessionCloseReplays`. */
 export async function replayWebSessionTabCloses(
   environmentId: string,
@@ -136,7 +138,16 @@ export async function replayWebSessionTabCloses(
         ? { expectedPairingRevision: replay.owner.pairingRevision }
         : {})
     })
-    if (settleWebSessionCloseReplay(replay, outcome !== 'failed') !== 'gave-up') {
+    const settled = settleWebSessionCloseReplay(replay, outcome !== 'failed')
+    if (settled === 'retry') {
+      // Why a re-list: subscriptions are change-driven, so an idle worktree may never publish the
+      // snapshot that makes the next attempt due. The re-list's receipt does.
+      setTimeout(() => {
+        void refreshWebRuntimeSessionTabsSnapshot(environmentId, replay.worktreeId)
+      }, WEB_SESSION_CLOSE_REPLAY_RETRY_DELAY_MS)
+      continue
+    }
+    if (settled === 'done') {
       continue
     }
     // The host kept failing the close; show the tab again rather than hide a live one forever.

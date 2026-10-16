@@ -652,6 +652,36 @@ describe('web runtime session tab actions', () => {
     ).toEqual([])
   })
 
+  it('re-lists the worktree after a failed replay so an idle host still gets the next attempt', async () => {
+    vi.useFakeTimers()
+    try {
+      const runtimeCall = vi.fn().mockRejectedValue(new Error('socket hang up'))
+      stubRuntimeEnvironmentBridge({ call: runtimeCall })
+      const owner = { environmentId: ENVIRONMENT_ID }
+      queueWebSessionCloseReplay(owner, WORKTREE_ID, ['host-browser-unified'])
+
+      await replayWebSessionTabCloses(
+        ENVIRONMENT_ID,
+        takeDueWebSessionCloseReplays(owner, WORKTREE_ID, new Set(['host-browser-unified']))
+      )
+      const callsAfterReplay = runtimeCall.mock.calls.length
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      const relisted = runtimeCall.mock.calls
+        .slice(callsAfterReplay)
+        .some(
+          ([request]: unknown[]) =>
+            typeof request === 'object' &&
+            request !== null &&
+            'method' in request &&
+            request.method === 'session.tabs.list'
+        )
+      expect(relisted).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('never replays a held close to an environment re-paired since', async () => {
     const runtimeCall = vi.fn()
     stubRuntimeEnvironmentBridge({ call: runtimeCall })
