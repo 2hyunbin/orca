@@ -45,6 +45,15 @@ export const AUTHORITY_TABLE_SQL = `CREATE TABLE IF NOT EXISTS ${RELAY_DATABASE_
   written_at BIGINT NOT NULL
 )`
 
+// The move tool's own columns; the relay reads `superseded` but never writes either.
+// superseded: a cutover moved authority away from this side, so no process may serve it again
+// until a cutover back. tracking_arm: this side's tracking arming when it became the target, so
+// a move back can tell whether the copy kept in step since.
+const AUTHORITY_MOVE_COLUMNS_SQL = [
+  `ALTER TABLE ${RELAY_DATABASE_AUTHORITY_TABLE} ADD COLUMN IF NOT EXISTS superseded BOOLEAN NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE ${RELAY_DATABASE_AUTHORITY_TABLE} ADD COLUMN IF NOT EXISTS tracking_arm TEXT`
+]
+
 const MOVE_TABLES_SQL = [
   `CREATE UNLOGGED TABLE IF NOT EXISTS ${MOVE_CLAIMED_TABLE} (
      claim_id TEXT NOT NULL, table_name TEXT NOT NULL, pk JSONB NOT NULL,
@@ -175,7 +184,11 @@ export async function grantMoveRole(
 
 // The move's own tables that exist on both sides whether or not tracking is on.
 export async function createMoveBookkeeping(client: pg.Client, attempts = 25): Promise<void> {
-  for (const statement of [AUTHORITY_TABLE_SQL, ...MOVE_TABLES_SQL]) {
+  for (const statement of [
+    AUTHORITY_TABLE_SQL,
+    ...AUTHORITY_MOVE_COLUMNS_SQL,
+    ...MOVE_TABLES_SQL
+  ]) {
     await withShortLocks(client, 'bookkeeping', [statement], attempts)
   }
 }
@@ -192,6 +205,16 @@ export async function installTracking(
   const attempts = input.attempts ?? 25
   await createMoveBookkeeping(client, attempts)
   const existed = await dirtyTableExists(client)
+  // A table left without triggers (an interrupted untrack) missed changes: start a new arming,
+  // which voids every copy made under the old one.
+  const partial = existed && (await readTrackingState(client, input.tables)).untracked.length > 0
+  if (partial && (await sentinelPresent(client))) {
+    await client.query(`DELETE FROM ${MOVE_DIRTY_TABLE} WHERE table_name = $1`, [
+      MOVE_SENTINEL_TABLE_NAME
+    ])
+    await client.query(sentinelInsertSql())
+    logMoveEvent('tracking_rearmed', { reason: 'tables_without_triggers' })
+  }
   // The sentinel is armed only with a new table: re-arming an emptied one would hide lost keys.
   await withShortLocks(
     client,
@@ -231,6 +254,13 @@ export async function uninstallTracking(
   tables: MoveTable[],
   attempts = 25
 ): Promise<void> {
+  // First and committed on its own: an untrack that stops partway leaves no arming behind for a
+  // later install to keep.
+  if (await dirtyTableExists(client)) {
+    await client.query(`DELETE FROM ${MOVE_DIRTY_TABLE} WHERE table_name = $1`, [
+      MOVE_SENTINEL_TABLE_NAME
+    ])
+  }
   for (const table of tables) {
     await withShortLocks(
       client,
@@ -274,6 +304,33 @@ export async function readTrackingArm(client: pg.Client): Promise<string | null>
   )
   const arm = result.rows[0]?.arm
   return arm === undefined ? null : String(arm)
+}
+
+// The arming recorded when this side last became the target; null if it never was.
+export async function readAuthorityTrackingArm(client: pg.Client): Promise<string | null> {
+  const result = await client
+    .query(`SELECT tracking_arm FROM ${RELAY_DATABASE_AUTHORITY_TABLE}`)
+    .catch((error: unknown) => {
+      // 42P01/42703: never prepared, or prepared before the column existed.
+      const code =
+        typeof error === 'object' && error !== null && 'code' in error ? error.code : null
+      if (code === '42P01' || code === '42703') return null
+      throw error
+    })
+  const arm = result?.rows[0]?.tracking_arm
+  return typeof arm === 'string' ? arm : null
+}
+
+// Tables with a finished copy position under this arming.
+export async function readCurrentCopiedTables(
+  target: pg.Client,
+  sourceArm: string | null
+): Promise<Set<string>> {
+  const result = await target.query(
+    `SELECT table_name FROM ${MOVE_COPY_PROGRESS_TABLE} WHERE done AND tracking_arm = $1`,
+    [sourceArm]
+  )
+  return new Set(result.rows.map((row) => String(row.table_name)))
 }
 
 // Copy positions on the target written under another arming of the source's tracking.

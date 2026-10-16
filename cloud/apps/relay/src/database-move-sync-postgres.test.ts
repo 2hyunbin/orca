@@ -259,6 +259,31 @@ describePostgres('database move: tracking, copy, sync and verify', () => {
     expect(await equal()).toBe(true)
   })
 
+  it('starts a new arming when a table was left without triggers, voiding the copy', async () => {
+    await track()
+    await runCopy(sessions, tables, { maxBytesPerSecond: 1e9 })
+    // An untrack that stopped after one table: that table's writes go unrecorded.
+    for (const suffix of ['ins', 'upd', 'del', 'trunc']) {
+      await app.query(`DROP TRIGGER relay_move_track_${suffix} ON relay_audit_events`)
+    }
+    await app.query(
+      `INSERT INTO relay_audit_events (id, at, type, detail_json) VALUES ('gap', 1, 't', '{}')`
+    )
+    await track()
+    await expect(runCopy(sessions, tables, { maxBytesPerSecond: 1e9 })).rejects.toThrow(
+      'copy_predates_tracking'
+    )
+    await runCopy(sessions, tables, { restart: true, maxBytesPerSecond: 1e9 })
+    expect(await equal(['relay_audit_events'])).toBe(true)
+  })
+
+  it('refuses to sync into a target with no finished copy under the current arming', async () => {
+    await track()
+    await expect(
+      syncCommand({ databases, google: null }, 'primary', { stopAtBacklog: 0 })
+    ).rejects.toThrow('target_not_current')
+  })
+
   it('keeps BIGINTs past 2^53 exact through copy and sync', async () => {
     await track()
     const big = '9223372036854775807'

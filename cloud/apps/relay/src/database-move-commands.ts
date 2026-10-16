@@ -197,7 +197,7 @@ export async function syncCommand(
     await takeSyncLock(sessions.source)
     await refuseWritingTheActiveSide(sessions, from)
     await requireTracking(sessions.source, tables)
-    await requireCurrentCopy(sessions)
+    await requireCurrentCopy(sessions, tables, 'apply')
     const replayed = await replayClaims(sessions, tables)
     logMoveEvent('sync_started', { from, replayed })
     const result = await runSyncLoop(sessions, tables, { ...options, label: { from } })

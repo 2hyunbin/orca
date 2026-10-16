@@ -77,7 +77,7 @@ export async function runCopy(
     logMoveEvent('copy_restarted')
   }
   await requireTracking(sessions.source, tables)
-  await requireCurrentCopy(sessions)
+  await requireCurrentCopy(sessions, tables, 'copy')
   const arm = await readTrackingArm(sessions.source)
   const settings = await sessions.source.query(
     `SELECT current_setting('block_size')::int AS block_size,
