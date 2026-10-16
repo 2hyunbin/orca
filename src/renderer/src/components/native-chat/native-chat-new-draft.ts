@@ -6,13 +6,19 @@ import {
   type NativeChatNewDraft
 } from './native-chat-composer-draft-storage'
 import { notifyScope, refusedScopes, scopeListeners } from './native-chat-composer-draft-memory'
-import { broadcastNativeChatComposerDraftChange } from './native-chat-composer-draft-persistence'
 
 const PREFIX = 'agent-session-new:'
 const drafts = new Map<string, NativeChatNewDraft>()
 const changed = new Set<string>()
 const pending = new Map<string, Set<Promise<unknown>>>()
 const removedOwners: NativeChatComposerDraftOwner[] = []
+
+function broadcastNativeChatComposerDraftChange(key: string): void {
+  // Persistence reads draft metadata; only a committed write needs its broadcast channel.
+  void import('./native-chat-composer-draft-persistence').then((persistence) => {
+    persistence.broadcastNativeChatComposerDraftChange(key)
+  }).catch((error: unknown) => console.warn('[native-chat-drafts] the saved draft could not be announced', error))
+}
 
 export function nativeChatNewDraftKey(sessionId: string): string {
   return `${PREFIX}${sessionId}`
