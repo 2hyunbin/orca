@@ -56,6 +56,7 @@ import {
 } from '../../runtime/runtime-terminal-stream'
 import { getRemoteRuntimeTerminalMultiplexer } from '../../runtime/remote-runtime-terminal-multiplexer'
 import { REMOTE_TERMINAL_SNAPSHOT_TOO_LARGE } from '../../runtime/remote-runtime-terminal-snapshot-state'
+import { restoredSnapshotPaintsPrintableContent } from './restored-snapshot-coverage'
 import type {
   RemoteRuntimeMultiplexedTerminal,
   RemoteRuntimeSnapshotOutcome
@@ -112,6 +113,7 @@ import {
 
 const REMOTE_TERMINAL_INPUT_FLUSH_MS = 8
 const REMOTE_TERMINAL_VIEWPORT_FLUSH_MS = 33
+const REMOTE_VIEWPORT_CLAIM_CONFIRM_WINDOW_MS = 1_000
 const REMOTE_RUNTIME_MAX_PENDING_QUERY_REPLIES = 64
 const HOST_SESSION_ATTACH_POLL_MS = 150
 const HOST_SESSION_POLL_MAX_MS = 1_000
@@ -271,6 +273,8 @@ export function createRemoteRuntimePtyTransport(
   let sameHandleEndReuseAttachedAt: number | null = null
   let attachGeneration = 0
   let subscriptionGeneration = 0
+  // A terminal this pane just created has no history, so an empty first image there is not a gap.
+  let spawnedHandle: string | null = null
   let inputReadySubscription: number | null = null
 
   function setAttachmentReady(ready: boolean): void {
@@ -1853,9 +1857,18 @@ export function createRemoteRuntimePtyTransport(
       return
     }
     const stream = getCurrentMultiplexedStream(targetHandle)
+    if (claim && stream && isUnconfirmedClaim(stream, cols, rows)) {
+      // Why: a reveal's resume and its layout observer each claim the same grid one frame apart.
+      flushPendingClaimInput(stream)
+      return
+    }
     if (claim ? stream?.claimViewport(cols, rows) : stream?.resize(cols, rows)) {
       if (claim && stream) {
+        unconfirmedClaim = { stream, cols, rows, sentAt: Date.now() }
         flushPendingClaimInput(stream)
+      } else if (unconfirmedClaim && !isUnconfirmedClaim(unconfirmedClaim.stream, cols, rows)) {
+        // Why: the host now holds a different grid, so a later claim of the old one is new again.
+        unconfirmedClaim = null
       }
       return
     }
@@ -1868,6 +1881,28 @@ export function createRemoteRuntimePtyTransport(
       viewport: { cols, rows },
       ...(claim ? { claim: true } : {})
     }).catch(() => {})
+  }
+
+  // The host answers a claim with a fit-override event; until then a repeat of the same grid is a no-op.
+  let unconfirmedClaim: {
+    stream: RemoteRuntimeMultiplexedTerminal
+    cols: number
+    rows: number
+    sentAt: number
+  } | null = null
+  function isUnconfirmedClaim(
+    stream: RemoteRuntimeMultiplexedTerminal,
+    cols: number,
+    rows: number
+  ): boolean {
+    return (
+      unconfirmedClaim !== null &&
+      unconfirmedClaim.stream === stream &&
+      unconfirmedClaim.cols === cols &&
+      unconfirmedClaim.rows === rows &&
+      // Why bounded: a claim the host dropped must stay retryable by the next activity.
+      Date.now() - unconfirmedClaim.sentAt < REMOTE_VIEWPORT_CLAIM_CONFIRM_WINDOW_MS
+    )
   }
 
   const viewportBatcher = createRemoteRuntimeViewportBatcher(
@@ -2371,7 +2406,8 @@ export function createRemoteRuntimePtyTransport(
         onSnapshot: (data, meta) => {
           // Why: an empty snapshot can still carry a pending mid-escape tail that must replay so the next live chunk completes it.
           if ((data || meta?.pendingEscapeTailAnsi) && isCurrentSubscription()) {
-            subscriptionSnapshotHadContent = true
+            // Why printable: a host model holding only mode/cursor bytes paints a cursor-only pane.
+            subscriptionSnapshotHadContent ||= restoredSnapshotPaintsPrintableContent({ data })
             if (subscribedPtyId && bufferPtyShutdownReplayData(subscribedPtyId, data)) {
               return
             }
@@ -2410,8 +2446,14 @@ export function createRemoteRuntimePtyTransport(
           if (isCurrentSubscription()) {
             storedCallbacks.onOutputPauseChanged?.(
               desiredOutputPaused,
-              nextStream.setOutputPaused(desiredOutputPaused)
+              nextStream.setOutputPaused(desiredOutputPaused),
+              nextStream.reportsPausedOutputDrops?.() === true
             )
+          }
+        },
+        onPausedOutputDropped: () => {
+          if (isCurrentSubscription()) {
+            storedCallbacks.onPausedOutputDropped?.()
           }
         },
         onSubscribeAcknowledged: () => {
@@ -2426,7 +2468,8 @@ export function createRemoteRuntimePtyTransport(
           }
           storedCallbacks.onOutputPauseChanged?.(
             desiredOutputPaused,
-            nextStream.setOutputPaused(desiredOutputPaused)
+            nextStream.setOutputPaused(desiredOutputPaused),
+            nextStream.reportsPausedOutputDrops?.() === true
           )
           if (!subscriptionAttached && sameHandleEndRecovery) {
             recordSameHandleEndReuse(subscribedHandle)
@@ -2438,10 +2481,13 @@ export function createRemoteRuntimePtyTransport(
           markRecoveryHealthy()
           emitRecoveryState()
           storedCallbacks.onConnect?.()
-          // Why: a recovery subscribe replays nothing when the host's push snapshot is
-          // empty (idle or exited pane), so ask for the retained buffer instead of
-          // waiting for bytes that an exited process will never send.
-          if (expectedRecoveryEpoch !== undefined && !subscriptionSnapshotHadContent) {
+          // Why: a subscribe that replayed no visible image (empty, escape-only, or over the client's
+          // replay limit) leaves an idle or exited pane blank, so pull the retained buffer instead
+          // of waiting for bytes it may never send (#18464, #21208).
+          if (
+            !subscriptionSnapshotHadContent &&
+            (expectedRecoveryEpoch !== undefined || subscribedHandle !== spawnedHandle)
+          ) {
             storedCallbacks.onStreamRecovered?.()
           }
           storedCallbacks.onStatus?.('shell')
@@ -2492,11 +2538,18 @@ export function createRemoteRuntimePtyTransport(
           }
         },
         onFitOverrideChanged: (event) => {
+          // Why: desktop-fit answers our claim (its grid is the host's target, not ours); a hold means a peer owns it.
+          if (event.mode !== 'desktop-fit') {
+            unconfirmedClaim = null
+          }
           if (isCurrentSubscription() && subscribedPtyId) {
             setFitOverride(subscribedPtyId, event.mode, event.cols, event.rows)
           }
         },
         onDriverChanged: (driver) => {
+          if (driver.kind === 'mobile') {
+            unconfirmedClaim = null
+          }
           if (isCurrentSubscription() && subscribedPtyId) {
             setDriverForPty(subscribedPtyId, driver)
           }
@@ -2564,7 +2617,10 @@ export function createRemoteRuntimePtyTransport(
     }
     // Why: a viewport change during the subscribe round-trip hit the no-op one-shot fallback; replay the latest viewport so the PTY isn't stuck at subscribe-time size.
     if (pendingViewportClaim && desiredViewport) {
-      nextStream.claimViewport(desiredViewport.cols, desiredViewport.rows)
+      if (!isUnconfirmedClaim(nextStream, desiredViewport.cols, desiredViewport.rows)) {
+        nextStream.claimViewport(desiredViewport.cols, desiredViewport.rows)
+        unconfirmedClaim = { stream: nextStream, ...desiredViewport, sentAt: Date.now() }
+      }
     } else if (
       desiredViewport &&
       (desiredViewport.cols !== subscribedViewport?.cols ||
@@ -2759,6 +2815,7 @@ export function createRemoteRuntimePtyTransport(
       return
     }
 
+    let releasePrewarmedStream: (() => void) | null = null
     try {
       if (isWebTerminalSurfaceTabId(tabId ?? '')) {
         // Reattach callbacks must not publish the replacement as a fresh
@@ -2770,6 +2827,12 @@ export function createRemoteRuntimePtyTransport(
           connectLifecycleEpoch
         )
       }
+
+      // Why: every path below subscribes after its host RPCs; opening the stream alongside saves a round trip.
+      releasePrewarmedStream =
+        currentPaneRevision() === getRuntimeEnvironmentRevision(createEnvironmentId)
+          ? getRemoteRuntimeTerminalMultiplexer(createEnvironmentId).prewarm()
+          : null
 
       if (options.sessionId && !getRemoteRuntimeTerminalHandle(options.sessionId)) {
         // Why: a HUB session persists host-native PTY ids; resolve its pane handle without exposing that SSH identity as a client transport id.
@@ -2954,6 +3017,7 @@ export function createRemoteRuntimePtyTransport(
         rows: options.rows ?? 24
       }
       if (createdTerminal.isReattach !== true) {
+        spawnedHandle = handle
         onPtySpawn?.(remotePtyId)
       }
       emitRecoveryState()
@@ -2996,6 +3060,9 @@ export function createRemoteRuntimePtyTransport(
         }
       }
       return undefined
+    } finally {
+      // A subscribed stream keeps the connection; only an abandoned warm-up closes it.
+      releasePrewarmedStream?.()
     }
   }
 
@@ -3121,8 +3188,13 @@ export function createRemoteRuntimePtyTransport(
       if (!connected || !handle) {
         return false
       }
-      const supported = getCurrentMultiplexedStream(handle)?.setOutputPaused(paused) === true
-      storedCallbacks.onOutputPauseChanged?.(paused, supported)
+      const stream = getCurrentMultiplexedStream(handle)
+      const supported = stream?.setOutputPaused(paused) === true
+      storedCallbacks.onOutputPauseChanged?.(
+        paused,
+        supported,
+        stream?.reportsPausedOutputDrops?.() === true
+      )
       return supported
     },
 
