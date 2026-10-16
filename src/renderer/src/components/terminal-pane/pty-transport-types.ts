@@ -22,6 +22,7 @@ import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { PtyDataMeta } from './pty-dispatcher'
 import type { RemoteRuntimeSnapshotOutcome } from '../../runtime/remote-runtime-terminal-multiplexer-types'
 import type { AcceptedInputOptions, PtyPreconnectInputEntry } from './pty-preconnect-input-buffer'
+import type { AgentPaneLaunchRequest } from '../../../../shared/agent-pane-launch-request'
 
 export type PtyBufferSnapshot = {
   data: string
@@ -141,7 +142,9 @@ type PtyCallbacks = {
   onExit?: (code: number) => void
   onWriteUnavailable?: () => void
   onRecoveryStateChange?: (state: PtyTransportRecoveryState) => void
-  onOutputPauseChanged?: (paused: boolean, supported: boolean) => void
+  /** `dropsReported`: the host sends onPausedOutputDropped, so a pause without one lost nothing. */
+  onOutputPauseChanged?: (paused: boolean, supported: boolean, dropsReported?: boolean) => void
+  onPausedOutputDropped?: () => void
   /** The host kept this restore asleep; no process started and the resume handle is intact. */
   onSpawnDeferred?: (reason: SpawnDeferralReason) => void
 }
@@ -287,6 +290,7 @@ export type IpcPtyTransportOptions = {
   agentLaunchPreferences?: AgentLaunchPreferences
   launchToken?: string
   launchAgent?: TuiAgent
+  agentLaunch?: AgentPaneLaunchRequest
   startupCommandDelivery?: StartupCommandDelivery
   connectionId?: string | null
   executionHostId?: ExecutionHostId | null

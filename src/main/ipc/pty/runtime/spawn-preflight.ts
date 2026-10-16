@@ -9,7 +9,6 @@ import { getProvider } from '../provider/registry'
 import { buildPtyHostEnv } from '../host-env/assembly'
 import {
   getCompatibleSelectedCodexHomePath,
-  getCodexSelectionTargetForPty,
   resolveCodexHomeAfterManagedAuthReadiness,
   shouldSkipCodexHomeEnvForWindowsShell,
   shouldStripInheritedOrcaCodexHome,
@@ -27,11 +26,7 @@ import {
   mintPtySessionId,
   ptySessionIdForAgentCreateOperation
 } from '../../../daemon/pty-session-id'
-import { resolveWslSessionContext } from '../../../daemon/wsl-session-context'
 import { isAgentStatusHooksEnabled } from '../../../agent-hooks/managed-agent-hook-controls'
-import { resolveLocalWindowsTerminalRuntimeOptions } from '../../../../shared/local-windows-terminal-runtime'
-import { resolveLocalProjectRuntimeForWorktreeId } from '../../../local-project-runtime-resolution'
-import { resolveManagedSshHostLoginShell } from '../../../pty/managed-ssh-host-login-shell'
 import { resolvePathEnvKey } from '../../../pty/windows-environment-path'
 import { stampWslOrchestrationCompatibilityHost } from '../../../pty/wsl-orca-env'
 import { stampRuntimeSourceEnv } from '../../../../shared/runtime-source-env'
@@ -40,6 +35,7 @@ import { ensureCodexStateDbBackfillRecoveryStarted } from '../../../codex/codex-
 import { clearProviderPtyState } from '../provider/state-cleanup'
 import { awaitExplicitPiOmpGuestReadiness } from '../../../agent-hooks/wsl-pi-omp-guest-readiness'
 import type { RuntimePtySpawnState } from './spawn-state'
+import { resolvePtySpawnStartupTarget } from '../spawn-startup-target'
 import { getConnectionExecutionHostId } from '../../../../shared/execution-host'
 
 export async function prepareRuntimePtySpawn(
@@ -47,12 +43,11 @@ export async function prepareRuntimePtySpawn(
 ): Promise<PtySpawnResult | null> {
   const args = ctx.args
   if (!ctx.preAdoptedStablePane) {
-    const pathUsable = ctx.deps.assertFolderWorkspacePtyPathUsable(args.worktreeId)
-    if (pathUsable) {
-      await pathUsable
+    const admission = ctx.deps.assertWorkspaceAcceptsNewPty(args.worktreeId, args.sessionId)
+    if (admission) {
+      await admission
     }
   }
-  ctx.cwd = ctx.deps.resolvePtySpawnStartupCwd(args.worktreeId, args.cwd)
   // Only this machine spawns here: an `ssh:` connection throws, so every line below is local.
   ctx.provider = getProvider(getConnectionExecutionHostId(args.connectionId))
   const freshSpawnRecovery = ctx.preAdoptedStablePane
@@ -62,27 +57,6 @@ export async function prepareRuntimePtySpawn(
     await freshSpawnRecovery
   }
   ctx.isClaudeLaunch = !ctx.preAdoptedStablePane && isClaudeLaunchCommand(args.command)
-  // Why: runtime-created terminals carry no renderer-computed projectRuntime; resolve from worktreeId to honor the project's Windows runtime.
-  // `args.shellOverride` is the per-request pick (`terminal create --shell`), read here the way
-  // the renderer twin (ipc/spawn-preflight.ts) reads a tab's override. Without it a runtime create
-  // could only ever get the host default shell, so a caller asking for cmd/PowerShell got the
-  // default shell with the request typed into it. Still Windows-only: the override names a
-  // Windows shell, and spawn-options applies it under the same platform gate.
-  ctx.terminalRuntimeOptions =
-    process.platform === 'win32'
-      ? resolveLocalWindowsTerminalRuntimeOptions({
-          requestedShellOverride: args.shellOverride,
-          settings: ctx.deps.getSettings?.(),
-          projectRuntime: resolveLocalProjectRuntimeForWorktreeId(ctx.deps.store, args.worktreeId),
-          fallbackHostShell: process.env.COMSPEC || 'powershell.exe',
-          sshLoginShell: resolveManagedSshHostLoginShell()
-        })
-      : {
-          shellOverride:
-            args.shellOverride ?? (ctx.deps.getSettings?.()?.terminalDefaultShell || undefined),
-          terminalWindowsWslDistro: null
-        }
-  ctx.daemonShellOverride = ctx.terminalRuntimeOptions.shellOverride
   ctx.isDaemonHostSpawn =
     !(ctx.provider instanceof LocalPtyProvider) && !routesFreshSpawnsToLocalProvider(ctx.provider)
   ctx.callerRequestedSessionId = args.sessionId?.trim()
@@ -99,18 +73,23 @@ export async function prepareRuntimePtySpawn(
     !ctx.preAdoptedStablePane &&
     ctx.isDaemonHostSpawn &&
     (ctx.callerRequestedSessionId === undefined || args.isNewSession === true)
-  ctx.expectedWslDistro =
-    resolveWslSessionContext({
-      cwd: ctx.cwd,
-      sessionId: ctx.sessionId,
-      shellOverride: ctx.terminalRuntimeOptions.shellOverride,
-      terminalWindowsWslDistro: ctx.terminalRuntimeOptions.terminalWindowsWslDistro
-    })?.distro ?? null
-  ctx.codexSelectionTarget = getCodexSelectionTargetForPty(
-    ctx.daemonShellOverride,
-    ctx.cwd,
-    ctx.expectedWslDistro
-  )
+  // Why: runtime-created terminals carry no renderer projectRuntime. An agent launch brings the PTY
+  // its command was quoted for; anything else takes the project's runtime and `--shell` pick.
+  const target = await resolvePtySpawnStartupTarget({
+    worktreeId: args.worktreeId,
+    cwd: args.cwd,
+    sessionId: ctx.sessionId,
+    shellOverride: args.shellOverride,
+    plannedPty: args.launchRuntime?.pty,
+    projectRuntimeSource: { kind: 'store', store: ctx.deps.store },
+    getSettings: ctx.deps.getSettings,
+    resolveStartupCwd: ctx.deps.resolvePtySpawnStartupCwd
+  })
+  ctx.cwd = target.cwd
+  ctx.terminalRuntimeOptions = target.terminalRuntimeOptions
+  ctx.daemonShellOverride = ctx.terminalRuntimeOptions.shellOverride
+  ctx.expectedWslDistro = target.expectedWslDistro
+  ctx.codexSelectionTarget = target.codexSelectionTarget
   const codexResumePreparation = ctx.preAdoptedStablePane
     ? null
     : ctx.deps.prepareCodexResumeHome({
