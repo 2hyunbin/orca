@@ -62,12 +62,13 @@ export function listDesktopBrowserBridgeCandidates(
     if (connections?.getState(target.id)?.status !== 'connected') {
       continue
     }
-    // Why: an unrouted host's pages egress from this desktop, so it must not stay attached at all.
-    if (!isSshTargetBrowsingRouted(target.id)) {
-      continue
-    }
+    // Why first: with the switch on by default, every plain host reaches here; only managed ones qualify.
     const environmentId = getManagedOrcadFenceEnvironmentId(target)
     if (!environmentId || isRuntimeEnvironmentManuallyDisconnected(environmentId)) {
+      continue
+    }
+    // Why: an unrouted host's pages egress from this desktop, so it must not stay attached at all.
+    if (!isSshTargetBrowsingRouted(target.id)) {
       continue
     }
     try {
