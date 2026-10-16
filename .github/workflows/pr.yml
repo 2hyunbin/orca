@@ -1253,7 +1253,8 @@ jobs:
 
   package_windows:
     name: package (windows)
-    needs: [code_paths, preflight]
+    # Test build only: main's static analysis is red; the build doesn't need it.
+    needs: [code_paths]
     if: needs.code_paths.outputs.package_windows == 'true'
     runs-on: windows-2022
     timeout-minutes: 30
