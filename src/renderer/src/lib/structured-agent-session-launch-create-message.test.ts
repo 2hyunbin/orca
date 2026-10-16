@@ -300,6 +300,7 @@ describe('the first message owned by create', () => {
   it('re-derives metadata retirement after repeated refusal without launch evidence', async () => {
     const storage = createMemoryNativeChatComposerDraftStorage()
     setNativeChatComposerDraftStorageForTests(storage)
+    const remove = vi.spyOn(storage, 'remove')
     const sessionId = 'codex_published_metadata'
     const source = { text: 'newer typing', images: [] }
     const metadata = { owner: { workspaceId: 'workspace-1', executionHostId: 'local' as const }, agent: 'codex' as const, groupId: 'group-1', options: {} }
@@ -309,6 +310,8 @@ describe('the first message owned by create', () => {
     storage.refuseWrites = true
     for (let attempt = 0; attempt < 2; attempt += 1) {
       markStructuredAgentSessionLaunchPublished('workspace-1', sessionId, 'local')
+      await vi.waitFor(() => expect(remove).toHaveBeenCalledTimes(attempt + 1))
+      await expect(remove.mock.results[attempt]?.value).rejects.toThrow('refused')
       await vi.waitFor(() => expect(isNativeChatComposerDraftUnsaved(structuredAgentSessionDraftScopeKey(sessionId))).toBe(true))
       expect(nativeChatNewDraftIsHosted(sessionId, metadata)).toBe(true)
       expect(readNativeChatNewDraft(sessionId)).toEqual(metadata)

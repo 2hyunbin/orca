@@ -55,6 +55,7 @@ import { resetStructuredAgentLaunchRegistryForTests } from '@/lib/structured-age
 import { useNativeChatProvisionalLaunch } from './use-native-chat-provisional-launch'
 import { useStructuredAgentSession } from './use-structured-agent-session'
 import { allocateNativeChatNewDraft, readNativeChatNewDraft } from './native-chat-new-draft'
+import { isNativeChatComposerDraftUnsaved } from './native-chat-composer-draft-store'
 import { createMemoryNativeChatComposerDraftStorage, setNativeChatComposerDraftStorageForTests } from './native-chat-composer-draft-storage'
 import { markStructuredAgentSessionLaunchPublished } from '@/lib/structured-agent-session-launch-publication'
 import { resetHostModelCatalogSnapshotsForTests } from '@/runtime/host-model-catalog-snapshots'
@@ -154,6 +155,7 @@ describe('a chat pane over its own launch', () => {
     await waitFor(async () => expect(await storage.read(`agent-session-new:${sessionId}`)).toEqual(metadata))
     storage.refuseWrites = true
     markStructuredAgentSessionLaunchPublished('wt-hosted', sessionId, 'local')
+    await waitFor(() => expect(isNativeChatComposerDraftUnsaved(`agent-session:${sessionId}`)).toBe(true))
     const { result, unmount } = renderHook(() => useNativeChatProvisionalLaunch('wt-hosted', sessionId))
     const send = vi.fn(() => 'queued' as const)
     expect(result.current.sendThroughLaunch('follow-up', false, send)).toBe('queued')

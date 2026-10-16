@@ -22,11 +22,12 @@ import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import type { RuntimeStatus } from '../../../../shared/runtime-types'
 import { AGENT_SESSION_ATTACHMENTS_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
 import { AGENT_SESSION_WRITE_NOTICE_COPY } from '../../../../shared/agent-session-write-notice-copy'
-import type {
-  AgentSessionAttachmentPathUploadResult,
-  AgentSessionAttachmentUploadTarget
+import {
+  AGENT_SESSION_DRAFT_ATTACHMENTS_RUNTIME_CAPABILITY,
+  type AgentSessionReservedAttachmentSession,
+  type AgentSessionAttachmentPathUploadResult,
+  type AgentSessionAttachmentUploadTarget
 } from '../../../../shared/agent-session-attachments'
-import { AGENT_SESSION_DRAFT_ATTACHMENTS_RUNTIME_CAPABILITY, type AgentSessionReservedAttachmentSession } from '../../../../shared/agent-session-attachments'
 import { readNativeChatNewDraft } from './native-chat-new-draft'
 import type { AppState } from '@/store/types'
 import { NATIVE_FILE_DROP_MAX_PATHS } from '../../../../shared/native-file-drop'

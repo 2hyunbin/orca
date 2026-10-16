@@ -1,4 +1,3 @@
-import { handBackStagedPrompt, releaseStagedStructuredLaunchPrompt } from './structured-agent-session-launch-prompt'
 import { StructuredAgentSessionSubmissionEndedError } from './structured-agent-session-launch-errors'
 import type { StagedStructuredLaunchPrompt } from './structured-agent-session-launch-prompt'
 import type { StructuredLaunchCaller } from './structured-agent-session-launch-callers'
@@ -72,17 +71,4 @@ export function trackStructuredLaunchConfirmationDeadline(
   }, STRUCTURED_AGENT_SESSION_SEND_BUDGET_MS)
   const clear = (): void => clearTimeout(deadline)
   void promise.then(clear, clear)
-}
-
-export function failStagedStructuredLaunchPrompt(prompt: StagedStructuredLaunchPrompt): void {
-  if (prompt.discarded) {
-    return
-  }
-  if (prompt.slot) {
-    prompt.slot.release(['notDoneSend'])
-  } else {
-    handBackStagedPrompt(prompt)
-  }
-  releaseStagedStructuredLaunchPrompt(prompt)
-  prompt.settleCreate({ delivered: false, inComposer: true })
 }

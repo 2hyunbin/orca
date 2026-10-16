@@ -1,5 +1,4 @@
 import { readNativeChatNewDraft, retireNativeChatNewDraft } from '@/components/native-chat/native-chat-new-draft'
-import { getPersistedStructuredAgentLaunchRecord, getStructuredLaunchStateBySessionId } from '@/lib/structured-agent-session-launch-registry'
 import { deleteNativeChatComposerDraft } from '@/components/native-chat/native-chat-composer-draft-store'
 import type { TabsSlice, TabsSliceGet, TabsSliceSet } from './tabs-slice-contract'
 import { collapseGroupLayout } from '../../../../../shared/workspace-layout/tab-group-layout-tree'
@@ -13,6 +12,8 @@ import { dedupeTabOrder } from '../../../../../shared/workspace-layout/tab-order
 import { buildActiveSurfacePatch } from './tabs-surface'
 import { beginStructuredAgentSessionTabClose } from '@/runtime/structured-agent-session-tab-retirement'
 import {
+  getPersistedStructuredAgentLaunchRecord,
+  getStructuredLaunchStateBySessionId,
   hasStructuredAgentSessionLaunchCancellationTombstone,
   shouldRetainStructuredAgentSessionLaunchTab
 } from '@/lib/structured-agent-session-launch-registry'
