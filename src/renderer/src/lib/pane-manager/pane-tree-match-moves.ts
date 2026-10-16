@@ -24,7 +24,10 @@ function leafIdsOf(node: TerminalPaneLayoutNode, into: string[] = []): string[] 
  * mounted panes are not exactly the layout's leaves. Never reports a layout change: the shape is
  * the host's, not an edit to push back.
  */
-export function reshapePaneTree(host: PaneManagerHost, layout: TerminalPaneLayoutNode): boolean {
+export function movePanesToMatchTree(
+  host: PaneManagerHost,
+  layout: TerminalPaneLayoutNode
+): boolean {
   const callbacks = host.getDragCallbacks()
   const paneByLeafId = new Map<string, ManagedPaneInternal>()
   for (const pane of host.panes.values()) {

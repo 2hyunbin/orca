@@ -1,6 +1,6 @@
 import type { TerminalPaneLayoutNode } from '../../../../shared/terminal-tab-types'
 import type { PaneManagerHost } from './pane-manager-host'
-import { reshapePaneTree } from './pane-tree-reshape'
+import { movePanesToMatchTree } from './pane-tree-match-moves'
 import { applyDividerStyles, disposeDivider } from './pane-divider'
 import { findPaneChildren } from './pane-tree-equalization'
 import { refitPanesUnder } from './pane-tree-ops'
@@ -90,12 +90,12 @@ function flipSplitOrientation(
  * Applies split orientation and ratios from `layout` to the mounted pane tree
  * in place. Only applies when the DOM already holds exactly the layout's
  * leaves in the same tree shape, unzoomed; returns whether anything changed.
- * With `reshape`, the same leaves in another shape are moved into it first.
+ * With `followFrameTree`, the same leaves in another shape are moved into it first.
  */
 export function applyPaneLayoutGeometry(
   host: PaneManagerHost,
   layout: TerminalPaneLayoutNode,
-  reshape = false
+  followFrameTree = false
 ): boolean {
   const top = host.root.firstElementChild
   if (!(top instanceof HTMLElement)) {
@@ -103,7 +103,7 @@ export function applyPaneLayoutGeometry(
   }
   const writes: GeometryWrite[] = []
   if (!planGeometryWrites(layout, top, writes)) {
-    if (reshape && reshapePaneTree(host, layout)) {
+    if (followFrameTree && movePanesToMatchTree(host, layout)) {
       applyPaneLayoutGeometry(host, layout)
       return true
     }

@@ -43,7 +43,7 @@ function withoutRatios(node: TerminalPaneLayoutNode | null): unknown {
   }
 }
 
-describe('PaneManager.applyLayoutGeometry with reshape', () => {
+describe('PaneManager.applyLayoutGeometry following the frame tree', () => {
   let root: HTMLDivElement
   let onLayoutChanged: Mock<NonNullable<PaneManagerOptions['onLayoutChanged']>>
   let onPaneCreated: Mock<NonNullable<PaneManagerOptions['onPaneCreated']>>

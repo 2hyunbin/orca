@@ -85,7 +85,7 @@ describe('laying frame slices over the store', () => {
 
   it('keeps the pane layout of a tab the window’s own pane command holds, until main drops the tab', async () => {
     const { state, session, frame } = await restored()
-    const reshaped: PublishedWorkspaceLayout = {
+    const newRatios: PublishedWorkspaceLayout = {
       ...frame,
       tabs: frame.tabs.map((tab) =>
         tab.id === 'tab-shell' && tab.terminal?.root?.type === 'split'
@@ -95,8 +95,8 @@ describe('laying frame slices over the store', () => {
     }
     const held = (id: string): boolean => id === 'tab-shell'
 
-    expect(patchFor(state, session, reshaped).terminalLayoutsByTabId?.['tab-shell']).toBeDefined()
-    expect(patchFor(state, session, reshaped, held).terminalLayoutsByTabId).toBeUndefined()
+    expect(patchFor(state, session, newRatios).terminalLayoutsByTabId?.['tab-shell']).toBeDefined()
+    expect(patchFor(state, session, newRatios, held).terminalLayoutsByTabId).toBeUndefined()
     expect(
       patchFor(state, session, withoutTab(frame, 'tab-shell'), held).terminalLayoutsByTabId
     ).not.toHaveProperty('tab-shell')
