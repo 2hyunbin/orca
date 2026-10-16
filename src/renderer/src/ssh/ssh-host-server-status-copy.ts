@@ -53,7 +53,10 @@ export function sshHostServerStatusLine(
     return { tone: 'muted', text: settingUpLabel(status.phase) }
   }
   if (status?.kind === 'relay') {
-    return status.bridged ? bridgedTerminalsLine(status.detail) : unservedLine(status)
+    // An unverifiable bridged terminal keeps the unverifiable line: nothing proves it still answers.
+    return status.bridged && status.reason === 'relay_terminals_live'
+      ? bridgedTerminalsLine(status.detail)
+      : unservedLine(status)
   }
   if (target.managedServerUnavailable) {
     return unavailableLine(target.managedServerUnavailable.reason)

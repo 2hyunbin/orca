@@ -167,6 +167,11 @@ describe('SSH host server status line', () => {
     expect(line?.text).toContain('They keep working here')
     expect(line?.text).toContain('Close them or end them on the host, then reconnect')
     expect(line?.detail).toContain('/root/repo')
+    const unverifiable = sshHostServerStatusLine(plain, {
+      managedServer: { kind: 'relay', reason: 'relay_terminals_unverifiable', bridged: true }
+    })
+    expect(unverifiable?.text).toContain('couldn’t confirm')
+    expect(unverifiable?.text).not.toContain('They keep working here')
   })
 
   it('asks for a reconnect while an older Orca’s terminals still run, counting them', () => {
