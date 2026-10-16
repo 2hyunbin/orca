@@ -178,6 +178,113 @@ describe('layout.apply', () => {
     ).toBe(false)
   })
 
+  it('accepts a drag-out with the window’s terminal, but no tab id from the window', async () => {
+    const apply = (await registeredMethods(true)).find((method) => method.name === 'layout.apply')
+    const move = {
+      type: 'movePaneToNewTab',
+      workspace: WORKTREE,
+      tabId: 'tab-1',
+      leafId: 'leaf-1',
+      groupId: 'g1',
+      index: 2
+    }
+
+    expect(
+      apply?.params?.parse({ command: { ...move, windowDetach: { ptyId: 'pty-1', tabId: 'x' } } })
+    ).toEqual({ command: { ...move, windowDetach: { ptyId: 'pty-1' } } })
+    expect(apply?.params?.safeParse({ command: { ...move, windowDetach: {} } }).success).toBe(false)
+    expect(
+      apply?.params?.safeParse({ command: { ...move, windowDetach: { ptyId: null }, index: -1 } })
+        .success
+    ).toBe(false)
+  })
+
+  it('takes a browser tab under the window’s ids, and its page and profile changes', async () => {
+    const apply = (await registeredMethods(true)).find((method) => method.name === 'layout.apply')
+    const parse = (command: Record<string, unknown>) => apply?.params?.safeParse({ command })
+    const open = {
+      type: 'openBrowserTab',
+      workspace: WORKTREE,
+      tabId: 'entry-1',
+      browserTabId: 'browser-1',
+      pageId: 'page-1',
+      profileId: null,
+      sessionPartition: null,
+      groupId: 'g1',
+      afterTabId: 'tab-1'
+    }
+    const page = { workspace: WORKTREE, browserTabId: 'browser-1', pageId: 'page-1' }
+
+    expect(parse(open)?.success).toBe(true)
+    expect(parse({ ...open, pageId: undefined })?.success).toBe(false)
+    expect(parse({ ...open, browserTabId: '' })?.success).toBe(false)
+    expect(parse({ ...open, index: -1 })?.success).toBe(false)
+    expect(parse({ type: 'openBrowserPage', ...page })?.success).toBe(true)
+    expect(parse({ type: 'closeBrowserPage', ...page })?.success).toBe(true)
+    expect(parse({ type: 'replaceBrowserPage', ...page, newPageId: 'page-2' })?.success).toBe(true)
+    expect(parse({ type: 'replaceBrowserPage', ...page })?.success).toBe(false)
+    expect(
+      parse({
+        type: 'setBrowserTabProfile',
+        workspace: WORKTREE,
+        browserTabId: 'browser-1',
+        profileId: 'p1',
+        sessionPartition: null
+      })?.success
+    ).toBe(true)
+  })
+
+  it('applies a browser tab’s record change to the workspace’s routed partition', async () => {
+    const { runtime, applyLayoutCommand } = runtimeHolding('ssh:target-1')
+    const page = {
+      type: 'openBrowserPage',
+      workspace: WORKTREE,
+      browserTabId: 'browser-1',
+      pageId: 'page-2'
+    } as const
+
+    await runtime.applyLayoutCommand(page)
+
+    expect(applyLayoutCommand).toHaveBeenCalledWith(page, ['local'])
+  })
+
+  it('accepts an editor open under the window’s tab id, its promote, and an unrecorded close', async () => {
+    const apply = (await registeredMethods(true)).find((method) => method.name === 'layout.apply')
+    const tab = { workspace: WORKTREE, tabId: 'tab-1' }
+    const open = { type: 'openEditorTab', ...tab, fileId: '/work/one/a.ts', contentType: 'editor' }
+    const file = { filePath: '/work/one/a.ts', relativePath: 'a.ts', language: 'typescript' }
+    const parse = (command: Record<string, unknown>) => apply?.params?.safeParse({ command })
+
+    expect(
+      apply?.params?.parse({
+        command: { ...open, file: { ...file, dirtyDraftContent: 'x' }, view: { mode: 'edit' } }
+      })
+    ).toEqual({ command: { ...open, file } })
+    expect(parse({ ...open, preview: true, groupId: 'g1' })?.success).toBe(true)
+    expect(parse({ ...open, tabId: undefined })?.success).toBe(false)
+    expect(parse({ ...open, contentType: 'terminal' })?.success).toBe(false)
+    expect(parse({ ...open, preview: false })?.success).toBe(false)
+    expect(parse({ type: 'promotePreviewTab', ...tab })?.success).toBe(true)
+    expect(
+      apply?.params?.parse({ command: { type: 'closeTabs', workspace: WORKTREE, tabIds: ['e1'] } })
+    ).toEqual({ command: { type: 'closeTabs', workspace: WORKTREE, tabIds: ['e1'] } })
+  })
+
+  it('opens an editor tab in the workspace’s routed partition', async () => {
+    const { runtime, applyLayoutCommand } = runtimeHolding('ssh:target-1')
+    const open = {
+      type: 'openEditorTab',
+      workspace: WORKTREE,
+      tabId: 'editor-tab',
+      fileId: '/work/one/a.ts',
+      contentType: 'editor'
+    } as const
+
+    await runtime.applyLayoutCommand(open)
+
+    expect(applyLayoutCommand).toHaveBeenCalledWith(open, ['local'])
+  })
+
   it('applies group sizes to the workspace’s routed partition', async () => {
     const { runtime, applyLayoutCommand } = runtimeHolding('ssh:target-1')
     const ratios = {

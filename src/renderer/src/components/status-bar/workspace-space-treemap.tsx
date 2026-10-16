@@ -45,6 +45,10 @@ export function WorkspaceSpaceTreemap({
     selectedWorktree.status === 'ok' &&
     selectedWorktree.topLevelItems.length > 0
   const isZoomed = !!zoomedWorktree
+  const inspectWorkspace = (worktreeId: string): void => {
+    onSelect(worktreeId)
+    onZoomChange(worktreeId)
+  }
   const rects = useMemo(
     () =>
       buildTreemapLayout(
@@ -103,92 +107,96 @@ export function WorkspaceSpaceTreemap({
   }
 
   return (
-    <div className="relative h-72 overflow-hidden rounded-lg border border-border bg-card">
-      <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-md border border-border bg-background/90 px-2.5 py-1 text-xs font-medium text-foreground shadow-xs backdrop-blur">
-        {zoomedWorktree
-          ? translate('workspaceSpace.chart.folderSizes', 'Folder sizes')
-          : translate('workspaceSpace.chart.workspaceSizes', 'Workspace sizes')}
-      </div>
-      <div className="absolute right-2 top-2 z-10 flex max-w-[calc(100%-1rem)] items-center gap-2">
-        {zoomedWorktree ? (
-          <>
-            <div className="max-w-56 truncate rounded-md border border-border/70 bg-background/90 px-2 py-1 text-[11px] font-medium shadow-xs backdrop-blur">
-              {zoomedWorktree.displayName}
-            </div>
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="flex min-h-10 items-center justify-between gap-3 border-b border-border/70 bg-background/80 px-3 py-2">
+        <div className="min-w-0 truncate text-xs font-medium text-foreground">
+          {zoomedWorktree
+            ? translate('workspaceSpace.chart.folderSizes', 'Folder sizes')
+            : translate('workspaceSpace.chart.clickToZoom', 'Click a workspace to zoom')}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {zoomedWorktree ? (
+            <>
+              <span className="max-w-40 truncate text-xs text-muted-foreground">
+                {zoomedWorktree.displayName}
+              </span>
+              <Button variant="outline" size="xs" onClick={() => onZoomChange(null)}>
+                <ZoomOut className="size-3" />
+                {translate(
+                  'auto.components.status.bar.WorkspaceSpaceManagerPanel.ef890d31b9',
+                  'All'
+                )}
+              </Button>
+            </>
+          ) : canZoomSelected ? (
             <Button
               variant="outline"
               size="xs"
-              onClick={() => onZoomChange(null)}
-              className="gap-1.5 bg-background/90 px-2.5 backdrop-blur"
+              onClick={() => onZoomChange(getWorkspaceSpaceWorktreeIdentity(selectedWorktree))}
             >
-              <ZoomOut className="size-3" />
-              {translate('auto.components.status.bar.WorkspaceSpaceManagerPanel.ef890d31b9', 'All')}
+              <ZoomIn className="size-3" />
+              {translate(
+                'auto.components.status.bar.WorkspaceSpaceManagerPanel.d3f9c69ddc',
+                'Zoom'
+              )}
             </Button>
-          </>
-        ) : canZoomSelected ? (
-          <Button
-            variant="outline"
-            size="xs"
-            onClick={() => onZoomChange(getWorkspaceSpaceWorktreeIdentity(selectedWorktree))}
-            className="gap-1.5 bg-background/90 px-2.5 backdrop-blur"
-          >
-            <ZoomIn className="size-3" />
-            {translate('auto.components.status.bar.WorkspaceSpaceManagerPanel.d3f9c69ddc', 'Zoom')}
-          </Button>
-        ) : null}
+          ) : null}
+        </div>
       </div>
-      {rects.map((rect) => {
-        const area = rect.width * rect.height
-        const selected = !isZoomed && rect.id === selectedWorktreeId
-        const rectStyle = {
-          left: `${rect.x}%`,
-          top: `${rect.y}%`,
-          width: `${rect.width}%`,
-          height: `${rect.height}%`,
-          background: getTreemapFill(rect, selected)
-        }
-        const rectContent =
-          area >= 80 ? (
-            <span className="block min-w-0 text-[11px] font-medium leading-tight text-foreground">
-              <span className="block truncate">{rect.label}</span>
-              {area >= 180 ? (
-                <span className="mt-0.5 block truncate text-muted-foreground">
-                  {formatBytes(rect.sizeBytes)}
-                </span>
-              ) : null}
-            </span>
-          ) : null
+      <div className="relative h-72 overflow-hidden">
+        {rects.map((rect) => {
+          const area = rect.width * rect.height
+          const selected = !isZoomed && rect.id === selectedWorktreeId
+          const rectStyle = {
+            left: `${rect.x}%`,
+            top: `${rect.y}%`,
+            width: `${rect.width}%`,
+            height: `${rect.height}%`,
+            background: getTreemapFill(rect, selected)
+          }
+          const rectContent =
+            area >= 80 ? (
+              <span className="block min-w-0 text-[11px] font-medium leading-tight text-foreground">
+                <span className="block truncate">{rect.label}</span>
+                {area >= 180 ? (
+                  <span className="mt-0.5 block truncate text-muted-foreground">
+                    {formatBytes(rect.sizeBytes)}
+                  </span>
+                ) : null}
+              </span>
+            ) : null
 
-        if (isZoomed) {
+          if (isZoomed) {
+            return (
+              <div
+                key={rect.id}
+                title={`${rect.label} • ${formatBytes(rect.sizeBytes)}`}
+                className="absolute overflow-hidden border border-background/90 p-2 text-left"
+                style={rectStyle}
+              >
+                {rectContent}
+              </div>
+            )
+          }
+
           return (
-            <div
+            <button
               key={rect.id}
+              type="button"
+              aria-label={`${rect.label}, ${formatBytes(rect.sizeBytes)}`}
               title={`${rect.label} • ${formatBytes(rect.sizeBytes)}`}
-              className="absolute overflow-hidden border border-background/90 p-2 text-left"
+              onClick={() => inspectWorkspace(rect.id)}
+              className={cn(
+                'absolute overflow-hidden border border-background/90 p-2 text-left transition-[filter,outline] hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                selected && 'ring-2 ring-ring ring-offset-1 ring-offset-background'
+              )}
               style={rectStyle}
             >
               {rectContent}
-            </div>
+            </button>
           )
-        }
-
-        return (
-          <button
-            key={rect.id}
-            type="button"
-            aria-label={`${rect.label}, ${formatBytes(rect.sizeBytes)}`}
-            title={`${rect.label} • ${formatBytes(rect.sizeBytes)}`}
-            onClick={() => onSelect(rect.id)}
-            className={cn(
-              'absolute overflow-hidden border border-background/90 p-2 text-left transition-[filter,outline] hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              selected && 'ring-2 ring-ring ring-offset-1 ring-offset-background'
-            )}
-            style={rectStyle}
-          >
-            {rectContent}
-          </button>
-        )
-      })}
+        })}
+      </div>
     </div>
   )
 }

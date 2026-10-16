@@ -193,11 +193,16 @@ export const SESSION_TAB_METHODS = [
             }
           }
           if (snapshot.worktree === subscribedWorktree) {
+            // Why: clients file frames by `worktree`; a spelling switch mid-stream splits the tabs.
+            const streamSnapshot =
+              snapshot.worktree === initial.worktree
+                ? snapshot
+                : { ...snapshot, worktree: initial.worktree }
             emit({
               type: 'updated',
               ...tabDelta.update(
                 withProofDelta(
-                  projectSessionTabsForClient(snapshot, clientKind, clientCapabilities)
+                  projectSessionTabsForClient(streamSnapshot, clientKind, clientCapabilities)
                 )
               )
             })
