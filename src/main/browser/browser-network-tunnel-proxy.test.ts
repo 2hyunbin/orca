@@ -139,6 +139,12 @@ describe('native browser tunnel upstream proxy (#29154)', () => {
     expect(
       selectBrowserNetworkTunnelProxy({ host: 'a.example.test', port: 443 }, null, env)
     ).toEqual({ kind: 'direct' })
+    // `0:0:0:0:0:0:0:1` is how the client's SOCKS front end hands over `[::1]`.
+    for (const host of ['localhost.', 'app.localhost.', '::1', '0:0:0:0:0:0:0:1', '127.1.2.3']) {
+      expect(selectBrowserNetworkTunnelProxy({ host, port: 3000 }, null, env)).toEqual({
+        kind: 'direct'
+      })
+    }
   })
 
   it('reports a proxy refusal as a connect failure instead of falling back to direct', async () => {
