@@ -83,11 +83,12 @@ describe('last-status persistence stays off the main thread', () => {
     expect(writeSync).not.toHaveBeenCalled()
     expect(statusRenameSyncCalls()).toBe(0)
 
-    releaseRename()
-    await write.mock.results[0]?.value
-    // Quit still captures the newest status synchronously, and the late async rename cannot undo it.
+    // Quit flushes while the older rename is still held; releasing it afterwards must not undo that.
     server.flushStatusPersistSync()
     expect(writeSync).toHaveBeenCalledTimes(1)
+    expect(readPrompt()).toBe('while renaming')
+    releaseRename()
+    await write.mock.results[0]?.value
     expect(readPrompt()).toBe('while renaming')
   })
 
