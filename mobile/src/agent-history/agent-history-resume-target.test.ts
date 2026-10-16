@@ -121,6 +121,21 @@ describe('mobile AI Vault resume target guards', () => {
     expect(target.status).toBe('blocked')
   })
 
+  it('blocks a WSL Antigravity IDE transcript in an SSH workspace', () => {
+    const target = resolveMobileAiVaultSessionResumeTarget({
+      session: session({
+        agent: 'antigravity',
+        cwd: '/home/ada/ssh-repo/feature/src',
+        filePath:
+          '//wsl.localhost/Ubuntu/home/ada/.gemini/antigravity-ide/brain/id/transcript_full.jsonl'
+      }),
+      activeWorktreeId: 'ssh-session-wt',
+      worktrees: [sshSessionWorktree],
+      repos
+    })
+    expect(target.status).toBe('blocked')
+  })
+
   it('resumes a WSL-stored session in an SSH folder workspace', () => {
     const target = resolveMobileAiVaultSessionResumeTarget({
       session: session({ cwd: '/home/ada/folder/src', filePath: WSL_TRANSCRIPT }),

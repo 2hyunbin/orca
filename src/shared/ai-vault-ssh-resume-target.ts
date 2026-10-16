@@ -4,6 +4,7 @@ import {
   type ExecutionHostId
 } from './execution-host'
 import { isWslUncPath } from './wsl-paths'
+import { antigravitySessionOrigin } from './antigravity-session-origin'
 
 /**
  * Whether a history session can resume in an SSH workspace on `targetExecutionHostId`.
@@ -16,6 +17,15 @@ export function canResumeAiVaultSessionOnSshHost(args: {
 }): boolean {
   const sessionHost = normalizeExecutionHostId(args.sessionExecutionHostId)
   const targetHost = normalizeExecutionHostId(args.targetExecutionHostId)
+  const origin = args.sessionFilePath ? antigravitySessionOrigin(args.sessionFilePath) : null
+  if (origin && origin !== 'antigravity-cli') {
+    // Why: these resumes reference the transcript file itself, so only its own host can open it;
+    // the WSL exception below holds only for ID-based resumes.
+    return (
+      (sessionHost ?? LOCAL_EXECUTION_HOST_ID) === targetHost &&
+      !isWslUncPath(args.sessionFilePath ?? '')
+    )
+  }
   if (sessionHost && targetHost && sessionHost === targetHost) {
     return true
   }
