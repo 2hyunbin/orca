@@ -4,24 +4,36 @@ function isPlaywrightObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
-/** A dead Electron can leave its CDP socket inherited by a surviving Linux child. */
-export function releaseExitedElectronBrowserTransport(
+/** Capture before Playwright removes the application dispatcher on process close. */
+export function captureElectronBrowserTransportShutdown(
   app: unknown,
   proc: ChildProcess,
   platform: NodeJS.Platform = process.platform
+): () => boolean {
+  try {
+    if (
+      platform !== 'linux' ||
+      !isPlaywrightObject(app) ||
+      !isPlaywrightObject(app._connection) ||
+      typeof app._connection.toImpl !== 'function'
+    ) {
+      return () => false
+    }
+    const implementation: unknown = app._connection.toImpl(app)
+    return () => releaseExitedElectronBrowserTransport(implementation, proc)
+  } catch {
+    return () => false
+  }
+}
+
+function releaseExitedElectronBrowserTransport(
+  implementation: unknown,
+  proc: ChildProcess
 ): boolean {
-  if (platform !== 'linux' || (proc.exitCode === null && proc.signalCode === null)) {
+  if (proc.exitCode === null && proc.signalCode === null) {
     return false
   }
   try {
-    if (!isPlaywrightObject(app) || !isPlaywrightObject(app._connection)) {
-      return false
-    }
-    const bridge = app._connection
-    if (typeof bridge.toImpl !== 'function') {
-      return false
-    }
-    const implementation: unknown = bridge.toImpl(app)
     if (
       !isPlaywrightObject(implementation) ||
       implementation._process !== proc ||

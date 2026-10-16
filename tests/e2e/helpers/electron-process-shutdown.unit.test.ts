@@ -128,7 +128,7 @@ afterEach(async () => {
 
 describe('Electron shutdown with inherited pipes', () => {
   it.skipIf(process.platform !== 'linux')(
-    'releases the exited browser transport and still awaits public cleanup',
+    'releases after dispatcher disposal and still awaits public cleanup',
     async () => {
       const { proc, app, close } = exitedAppFixture()
       let finishPublicCleanup: () => void = () => {}
@@ -158,7 +158,15 @@ describe('Electron shutdown with inherited pipes', () => {
           }
         }
       }
-      Object.assign(app, { _connection: { toImpl: () => implementation } })
+      const dispatchers = new Map([['owned-app', implementation]])
+      const toImpl = (): unknown => {
+        const value = dispatchers.get('owned-app')
+        if (!value) {
+          throw new Error('Application dispatcher disposed')
+        }
+        return value
+      }
+      Object.assign(app, { _connection: { toImpl } })
       close.mockImplementation(async () => {
         await publicCleanup
         return []
@@ -170,6 +178,8 @@ describe('Electron shutdown with inherited pipes', () => {
       proc.exitCode = 0
       proc.emit('exit', 0, null)
       expect(transportReleased).toBe(false)
+      dispatchers.clear()
+      expect(toImpl).toThrow('Application dispatcher disposed')
       proc.emit('close', 0, null)
       expect(transportReleased).toBe(true)
       await new Promise<void>((resolve) => setImmediate(resolve))

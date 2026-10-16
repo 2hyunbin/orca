@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { cleanupE2ECrashpad } from './electron-crashpad-cleanup'
 import { recordElectronShutdownTiming } from './electron-shutdown-timing'
-import { releaseExitedElectronBrowserTransport } from './electron-browser-transport-shutdown'
+import { captureElectronBrowserTransportShutdown } from './electron-browser-transport-shutdown'
 import { observeElectronCloseStages } from './electron-close-stage-observation.mjs'
 import type { ElectronApplication } from '@stablyai/playwright-test'
 
@@ -243,9 +243,10 @@ export async function closeElectronAppForE2E(
       }
       releaseExitedProcessPipes(proc)
     }
+    const releaseBrowserTransport = captureElectronBrowserTransportShutdown(app, proc)
     const pipesClosed = (): void => {
       pipesClosedMs = performance.now() - started
-      releaseExitedElectronBrowserTransport(app, proc)
+      releaseBrowserTransport()
     }
     proc.once('exit', releasePipes)
     proc.once('close', pipesClosed)

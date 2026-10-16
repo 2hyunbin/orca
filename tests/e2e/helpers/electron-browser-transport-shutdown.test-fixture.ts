@@ -3,7 +3,7 @@ import { once } from 'node:events'
 import { spawnProcess } from '@orca/process-host'
 import { WebSocket, WebSocketServer } from 'ws'
 import { describe, expect, it } from 'vitest'
-import { releaseExitedElectronBrowserTransport } from './electron-browser-transport-shutdown'
+import { captureElectronBrowserTransportShutdown } from './electron-browser-transport-shutdown'
 
 function browserFixture(proc = new ChildProcess()) {
   if (proc.pid === undefined) {
@@ -71,19 +71,20 @@ export function registerElectronBrowserTransportShutdownTests(): void {
     ] as const
     it.each(blocked)('preserves the transport for %s', (_name, mutate) => {
       const fixture = browserFixture()
+      const release = captureElectronBrowserTransportShutdown(fixture.app, fixture.proc, 'linux')
       mutate(fixture)
-      expect(releaseExitedElectronBrowserTransport(fixture.app, fixture.proc, 'linux')).toBe(false)
+      expect(release()).toBe(false)
       expect(fixture.socket.calls).toBe(0)
     })
 
     it('keeps other platforms and unavailable SDK shapes on the original fallback', () => {
       const fixture = browserFixture()
       for (const platform of ['darwin', 'win32'] as const) {
-        expect(releaseExitedElectronBrowserTransport(fixture.app, fixture.proc, platform)).toBe(
+        expect(captureElectronBrowserTransportShutdown(fixture.app, fixture.proc, platform)()).toBe(
           false
         )
       }
-      expect(releaseExitedElectronBrowserTransport({}, fixture.proc, 'linux')).toBe(false)
+      expect(captureElectronBrowserTransportShutdown({}, fixture.proc, 'linux')()).toBe(false)
       expect(fixture.socket.calls).toBe(0)
     })
 
@@ -110,13 +111,14 @@ export function registerElectronBrowserTransportShutdownTests(): void {
         const fixture = browserFixture(child)
         const transport = fixture.browser._connection._transport
         Object.defineProperty(transport, '_ws', { value: socket })
-        expect(releaseExitedElectronBrowserTransport(fixture.app, child, 'linux')).toBe(false)
+        const release = captureElectronBrowserTransportShutdown(fixture.app, child, 'linux')
+        expect(release()).toBe(false)
         expect(socket.readyState).toBe(WebSocket.OPEN)
         const exited = once(child, 'close')
         child.kill('SIGTERM')
         await exited
         const closed = once(socket, 'close')
-        expect(releaseExitedElectronBrowserTransport(fixture.app, child, 'linux')).toBe(true)
+        expect(release()).toBe(true)
         await closed
         expect(socket.readyState).toBe(WebSocket.CLOSED)
       } finally {
