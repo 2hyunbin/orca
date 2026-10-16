@@ -153,6 +153,22 @@ describe('the relay-era orca CLI on migrated legacy orchestration records', () =
     expect(database.getLegacyCoordinatorPrincipal(adoptedRunId)).toBeUndefined()
   })
 
+  it('refuses a legacy coordinator whose principal was attested from another host', async () => {
+    const { runtime, database } = legacyRuntime()
+    database.commitLegacyCompatibilityPrincipal({
+      runId: database.getLegacyAdoption()?.adopted_run_id ?? '',
+      role: 'coordinator',
+      hostScope: JSON.stringify({ kind: 'ssh', targetId: 'another-host' }),
+      terminalHandle: COORDINATOR,
+      paneKey: COORDINATOR_PANE,
+      launchTokenHash: createHash('sha256').update('coordinator-token').digest('hex'),
+      processIncarnation: `${COORDINATOR_PTY}:inc-2`
+    })
+    await expect(
+      run(runtime, ['orchestration', 'check', '--json'], coordinatorEnv())
+    ).rejects.toThrow(LEGACY_RELAY_CLI_UNVERIFIED)
+  })
+
   it('admits a legacy coordinator bound to this pane, and the worker reports to it', async () => {
     const { runtime, database, taskId, dispatchId } = legacyRuntime()
     database.commitLegacyCompatibilityPrincipal({

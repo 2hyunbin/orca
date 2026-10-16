@@ -28,6 +28,7 @@ import {
 } from './legacy-relay-cli-args'
 import type { LegacyRelayCliServer } from './legacy-relay-client'
 import {
+  cappedInboxLimit,
   cappedWait,
   isExactLegacyRelayCliReplay,
   optionalAskTimeout,
@@ -126,7 +127,7 @@ function buildCall(
     case 'orchestration inbox':
       return {
         method: 'orchestration.inbox',
-        params: { ...self, limit: numberFlag(flags, 'limit') }
+        params: { ...self, limit: cappedInboxLimit(numberFlag(flags, 'limit')) }
       }
     case 'orchestration send':
       return {
@@ -246,7 +247,7 @@ function admit(
   }
   const fingerprint = callerFingerprint(deps.targetId, env)
   const replay = replayRequestId ? { fingerprint, requestId: replayRequestId } : undefined
-  const caller = resolveLegacyRelayCliCaller(runtime, env, deps.livePane, replay)
+  const caller = resolveLegacyRelayCliCaller(runtime, env, deps.livePane, deps.targetId, replay)
   return { runtime, caller, env, fingerprint, signal }
 }
 

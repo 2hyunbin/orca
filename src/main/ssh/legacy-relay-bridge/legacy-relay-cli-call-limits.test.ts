@@ -188,6 +188,17 @@ describe('limits on relay-era CLI calls', () => {
     expect(body(replay).result.message).toEqual(body(first).result.message)
   })
 
+  it('bounds the rows an inbox read may return', async () => {
+    const read = vi.spyOn(db, 'getAllMessagesForHandle')
+    for (const limit of ['-1', '1000000000', '0']) {
+      await server().cli(
+        { argv: ['orchestration', 'inbox', '--limit', limit, '--json'], env: ENV },
+        new AbortController().signal
+      )
+    }
+    expect(read.mock.calls.map((call) => call[1])).toEqual([1, 100, 1])
+  })
+
   it('names nobody when two hosts claim one handle', () => {
     const terminal = { handle: WORKER, paneKey: WORKER_PANE, processIncarnation: 'p-1' }
     const fresh = new OrcaRuntimeService()
