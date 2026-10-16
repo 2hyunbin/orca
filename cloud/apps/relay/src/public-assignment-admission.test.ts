@@ -382,6 +382,39 @@ describe('public assignment admission', () => {
     drain?.release()
   })
 
+  it('hands a released loan to a drain return queued before it, not to the borrower queue', async () => {
+    let borrower: RelayPublicAssignmentAdmission | undefined
+    const placement = new RelayPublicAssignmentAdmission({
+      maxConcurrent: 2,
+      maxDrainReturnConcurrent: 1,
+      maxDrainReturnQueued: 4,
+      minIntervalMs: 0,
+      onPermitFreed: () => borrower?.grantWaiting()
+    })
+    borrower = new RelayPublicAssignmentAdmission({
+      maxConcurrent: 1,
+      maxQueued: 4,
+      waitMs: 60_000,
+      minIntervalMs: 0,
+      borrow: () => placement.lend()
+    })
+    const own = await borrower.acquire('host-a')
+    const borrowed = await borrower.acquire('host-b')
+    expect(borrowed?.borrowed).toBe(true)
+    const queuedSticky = borrower.acquire('host-c')
+    // host-b's verify found its home isolated: it queues its drain return, then lets go.
+    const drain = placement.acquireDrainReturn('host-b', () => undefined)
+    borrowed?.release()
+    expect(await drain).not.toBeNull()
+    let settled = false
+    void queuedSticky.then(() => (settled = true))
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    own?.release()
+    expect((await queuedSticky)?.borrowed).toBe(false)
+  })
+
   it('runs a borrower past its own slot and wakes its queue when a lent permit frees', async () => {
     let borrower: RelayPublicAssignmentAdmission | undefined
     const placement = new RelayPublicAssignmentAdmission({
@@ -404,6 +437,11 @@ describe('public assignment admission', () => {
     const queued = borrower.acquire('host-c')
     placed?.release()
     // Placement freed a permit, but the borrower's own lent one still counts: no second loan.
+    let settled = false
+    void queued.then(() => (settled = true))
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(settled).toBe(false)
     borrowed?.release()
     const woken = await queued
     expect(woken?.borrowed).toBe(true)

@@ -67,6 +67,49 @@ describe('drain-return lane', () => {
     expect(servedLanes).toEqual(['sticky', 'sticky', 'drain-return'])
   })
 
+  it('hands a borrowed slot straight to its own drain return, not to the next reconnect', async () => {
+    const holder = 'hhhhhhhhhhhhhhhh'
+    const drained = 'dddddddddddddddd'
+    const queued = 'qqqqqqqqqqqqqqqq'
+    const held = deferred<RelayAssignment>()
+    const queuedHeld = deferred<RelayAssignment>()
+    const verifying = deferred<ResolvedRelayAssignment>()
+    const assign = vi.fn(async ({ relayHostId }: { relayHostId: string }) =>
+      relayHostId === holder
+        ? await held.promise
+        : relayHostId === queued
+          ? await queuedHeld.promise
+          : assignment('cell-new', relayHostId)
+    )
+    const resolve = vi.fn(async ({ relayHostId }: { relayHostId: string }) =>
+      relayHostId === drained ? await verifying.promise : assignment('cell-o', relayHostId)
+    )
+    const app = createRelayApp(config(), {
+      store: {} as never,
+      assignments: { assign, resolve } as never,
+      drain: vi.fn(),
+      ready: vi.fn(async () => true)
+    })
+
+    // holder keeps the sticky lane's own slot; drained verifies on the lent placement permit.
+    const holding = app.request('/v1/assign', assignmentRequest(holder, { reconnect: true }))
+    await vi.waitFor(() => expect(assign).toHaveBeenCalledTimes(1))
+    const moving = app.request('/v1/assign', assignmentRequest(drained, { reconnect: true }))
+    await vi.waitFor(() => expect(resolve).toHaveBeenCalledTimes(2))
+    const waiting = app.request('/v1/assign', assignmentRequest(queued, { reconnect: true }))
+    await sleep(10)
+
+    verifying.resolve(isolatedHome(drained))
+    // Re-lending the slot to the queued reconnect would park this behind its whole hold.
+    const moved = await moving
+    expect(moved.status).toBe(200)
+    expect(await moved.json()).toMatchObject({ cellUrl: expect.stringContaining('cell-new') })
+    queuedHeld.resolve(assignment('cell-o', queued))
+    held.resolve(assignment('cell-o', holder))
+    expect((await holding).status).toBe(200)
+    expect((await waiting).status).toBe(200)
+  })
+
   it('defers an overflowing drain return with a paced Retry-After and says why', async () => {
     const holder = 'hhhhhhhhhhhhhhhh'
     const replacement = deferred<RelayAssignment>()

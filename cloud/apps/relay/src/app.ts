@@ -548,9 +548,12 @@ export function createRelayApp(
       if (verified?.homeCellRollIsolated && drainReturnConcurrency > 0) {
         // The sticky slot covered only the verification read; the re-placement
         // that follows is the drain lane's work, not the sticky lane's.
+        // Queued before the release: a lent slot frees to waiting drain returns
+        // ahead of the sticky queue, so handing it off never re-lends it first.
+        const drainReturnAcquired = drainReturnAdmission.acquire(claims.relayHostId)
         fastLane.release()
         lane = 'drain-return'
-        const drainReturn = await drainReturnAdmission.acquire(claims.relayHostId)
+        const drainReturn = await drainReturnAcquired
         if (drainReturn.kind === 'deferred') {
           operations.recordAssignmentAdmission?.('drain-return-deferred')
           operations.recordAssignmentRejectionReason?.('drain-return', drainReturn.reason)
