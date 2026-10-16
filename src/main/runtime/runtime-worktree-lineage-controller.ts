@@ -5,9 +5,9 @@ import {
   parseWorkspaceKey,
   worktreeWorkspaceKey
 } from '../../shared/workspace-scope'
-import { indexWorktreesByInstance } from '../../shared/resolved-worktree-lineage'
 import { getWorktreeHostIdentity } from '../../shared/worktree/host-qualified-identity'
-import { readSavedLineageEdges, readSavedWorktreeOwners } from '../saved-worktree-lineage-catalog'
+import { indexWorktreesByInstance } from '../../shared/resolved-worktree-lineage'
+import { readSavedLineageCatalog, readSavedWorktreeOwners } from '../saved-worktree-lineage-catalog'
 import type { OrchestrationDb } from './orchestration/db'
 import type { RuntimeStore } from './runtime-store-contract'
 import type { ResolvedWorktree } from './runtime-worktree-path-identity'
@@ -92,9 +92,11 @@ export class RuntimeWorktreeLineageController {
     if (!store || !child.instanceId || !parent.instanceId) {
       return
     }
-    const owners = readSavedWorktreeOwners(store)
-    const byInstance = indexWorktreesByInstance(owners)
-    const edges = new Map(readSavedLineageEdges(store).map((edge) => [edge.child.instanceId, edge]))
+    const catalog = readSavedLineageCatalog(store)
+    const byInstance = catalog.edges.length
+      ? catalog.byInstance
+      : indexWorktreesByInstance(readSavedWorktreeOwners(store))
+    const edges = catalog.edgesByChild
     if (byInstance.get(parent.instanceId) === null) {
       throw new RuntimeLineageError(
         'LINEAGE_PARENT_CONTEXT_CONFLICT',

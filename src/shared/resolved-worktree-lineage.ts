@@ -143,7 +143,7 @@ export function selectResolvedWorktreeLineage<
 export function projectResolvedWorktreeLineage<T extends Worktree>(
   worktrees: readonly T[],
   lineageById: Readonly<Record<string, WorktreeLineage>>,
-  knownPeers: readonly Worktree[] = []
+  knownPeers: readonly Pick<Worktree, 'id' | 'hostId' | 'instanceId'>[] = []
 ): WorktreeWithResolvedLineage<T>[] {
   const all = [...worktrees, ...knownPeers]
   const { selected } = selectResolvedWorktreeLineage(
@@ -157,7 +157,9 @@ export function projectResolvedWorktreeLineage<T extends Worktree>(
       continue
     }
     const key = getWorktreeHostIdentity(edge.parent)
-    children.set(key, [...(children.get(key) ?? []), child.id])
+    const siblings = children.get(key) ?? []
+    siblings.push(child.id)
+    children.set(key, siblings)
   }
   return worktrees.map((worktree) => {
     const key = getWorktreeHostIdentity(worktree)

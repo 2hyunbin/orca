@@ -1,8 +1,4 @@
-import {
-  readSavedLineageEdges,
-  readSavedWorktreeLineage,
-  readSavedWorktreeOwners
-} from './saved-worktree-lineage-catalog'
+import { readSavedLineageCatalog } from './saved-worktree-lineage-catalog'
 import type { Worktree } from '../shared/worktree/types'
 import type { Repo } from '../shared/repo-types'
 import { getWorktreeHostIdentity } from '../shared/worktree/host-qualified-identity'
@@ -30,6 +26,7 @@ type HostPeerStore = Pick<
   | 'getAllWorktreeMetaForHost'
   | 'getAllWorktreeLineage'
   | 'getLineageEdges'
+  | 'getLineageSnapshot'
 >
 
 /** Resolve connected lineage against persisted peers across execution hosts. */
@@ -41,15 +38,61 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
   if (rows.length === 0) {
     return projectResolvedWorktreeLineage(rows, {})
   }
-  const edges = readSavedLineageEdges(store, 'stored')
-  const endpoints = new Set(
-    edges.flatMap((edge) => [edge.child.instanceId, edge.parent.instanceId])
-  )
-  if (!rows.some((row) => row.instanceId && endpoints.has(row.instanceId))) {
+  const catalog = readSavedLineageCatalog(store)
+  const { endpoints, owners: savedOwners, lineage: lineageById } = catalog
+  const relevant = (row: Pick<Worktree, 'id' | 'hostId' | 'instanceId'>) =>
+    endpoints.has(row.instanceId) ||
+    endpoints.has(catalog.byLocator.get(getWorktreeHostIdentity(row))?.instanceId)
+  if (!rows.some(relevant)) {
     return projectResolvedWorktreeLineage(rows, {})
   }
-  const savedOwners = readSavedWorktreeOwners(store)
-  const lineageById = readSavedWorktreeLineage(store, savedOwners, edges)
+  const instances = new Set<string>()
+  const locators = new Set<string>()
+  const disagreement = rows.some((row) => {
+    const key = getWorktreeHostIdentity(row)
+    const duplicate = instances.has(row.instanceId ?? '') || locators.has(key)
+    if (row.instanceId) {
+      instances.add(row.instanceId)
+    }
+    locators.add(key)
+    return (
+      relevant(row) &&
+      (duplicate ||
+        catalog.byInstance.get(row.instanceId ?? '')?.id !== row.id ||
+        getWorktreeHostIdentity(
+          catalog.byInstance.get(row.instanceId ?? '') ?? { id: '', hostId: undefined }
+        ) !== key ||
+        catalog.byLocator.get(key)?.instanceId !== row.instanceId)
+    )
+  })
+  if (!disagreement) {
+    const ownKeys = new Set(rows.map(getWorktreeHostIdentity))
+    const peers = new Map<string, Pick<Worktree, 'id' | 'hostId' | 'instanceId'>>()
+    const incident: typeof lineageById = {}
+    const add = (row: Pick<Worktree, 'id' | 'hostId' | 'instanceId'>) => {
+      const key = getWorktreeHostIdentity(row)
+      if (!ownKeys.has(key)) {
+        peers.set(key, row)
+      }
+      const edge = catalog.selected.get(key)
+      if (edge) {
+        incident[key] = edge.lineage
+      }
+    }
+    for (const row of rows) {
+      for (const child of catalog.children.get(getWorktreeHostIdentity(row)) ?? []) {
+        add(child)
+      }
+    }
+    for (const row of rows) {
+      add(row)
+      const edge = catalog.selected.get(getWorktreeHostIdentity(row))
+      if (edge) {
+        add(edge.parent)
+      }
+    }
+    return projectResolvedWorktreeLineage(rows, incident, [...peers.values()])
+  }
   const relatedInstances = getConnectedWorktreeLineageInstances(
     rows.flatMap((row) => (row.instanceId ? [row.instanceId] : [])),
     lineageById
