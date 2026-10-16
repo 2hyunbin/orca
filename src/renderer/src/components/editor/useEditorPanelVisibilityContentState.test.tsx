@@ -41,6 +41,7 @@ vi.mock('@/lib/runtime-workspace-file-route', () => ({
 vi.mock('@/store', () => ({ useAppStore: { getState: mocks.getState, subscribe: vi.fn() } }))
 
 import { ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT } from './editor-autosave'
+import { beginNotebookReload, openNotebookDocument } from './ipynb-document-store'
 import { useEditorPanelContentState } from './useEditorPanelContentState'
 
 type Deferred<T> = {
@@ -51,6 +52,7 @@ type Deferred<T> = {
 type ProbeSnapshot = {
   diffContents: Record<string, DiffContent>
   fileContents: Record<string, FileContent>
+  reloadContent: ReturnType<typeof useEditorPanelContentState>['reloadContent']
 }
 
 type ProbeProps = {
@@ -107,7 +109,8 @@ function Probe({
   })
   snapshots.set(name, {
     diffContents: state.diffContents,
-    fileContents: state.fileContents
+    fileContents: state.fileContents,
+    reloadContent: state.reloadContent
   })
   return null
 }
@@ -163,6 +166,10 @@ describe('useEditorPanelContentState visibility', () => {
     mocks.getState.mockReturnValue({
       settings: null,
       openFiles: [],
+      editorDrafts: {},
+      clearEditorDraft: vi.fn(),
+      setExternalMutation: vi.fn(),
+      markFileDirty: vi.fn(),
       setLastKnownDiskSignature: vi.fn()
     })
     container = document.body.appendChild(document.createElement('div'))
@@ -217,6 +224,52 @@ describe('useEditorPanelContentState visibility', () => {
     await vi.waitFor(() =>
       expect(snapshots.get('main')?.fileContents[file.id]?.content).toBe('fresh')
     )
+  })
+
+  it('rejects an older sibling-pane read after another pane accepts a notebook reload', async () => {
+    const file = makeFile('epoch', {
+      filePath: '/repo/epoch.ipynb',
+      relativePath: 'epoch.ipynb',
+      language: 'json'
+    })
+    const stale = createDeferred<FileContent>()
+    const fresh = createDeferred<FileContent>()
+    const staleText = '{"cells":[],"metadata":{"read":"stale"}}'
+    const freshText = '{"cells":[],"metadata":{"read":"fresh"}}'
+    openNotebookDocument(file.id, staleText)
+    mocks.readRuntimeFileContent
+      .mockReturnValueOnce(stale.promise)
+      .mockReturnValueOnce(fresh.promise)
+
+    await act(async () =>
+      root.render(
+        <>
+          <Probe activeFile={file} name="older" />
+          <Probe activeFile={file} name="newer" isVisible={false} />
+        </>
+      )
+    )
+    await vi.waitFor(() => expect(mocks.readRuntimeFileContent).toHaveBeenCalledOnce())
+    const reload = beginNotebookReload(file.id)!
+    act(() => snapshots.get('newer')!.reloadContent(file, reload))
+    await vi.waitFor(() => expect(mocks.readRuntimeFileContent).toHaveBeenCalledTimes(2))
+
+    await act(async () => {
+      fresh.resolve({ content: freshText, isBinary: false })
+      await fresh.promise
+    })
+    await vi.waitFor(() =>
+      expect(snapshots.get('newer')?.fileContents[file.id]?.content).toBe(freshText)
+    )
+    expect(openNotebookDocument(file.id, staleText).document?.root.metadata).toEqual({
+      read: 'fresh'
+    })
+    await act(async () => {
+      stale.resolve({ content: staleText, isBinary: false })
+      await stale.promise
+    })
+    expect(snapshots.get('older')?.fileContents[file.id]).toBeUndefined()
+    expect(snapshots.get('newer')?.fileContents[file.id]?.content).toBe(freshText)
   })
 
   it('keeps invalidated bytes on screen until the reveal read lands', async () => {

@@ -17,8 +17,7 @@ import {
   registerNotebookOwner,
   runningNotebookKeys,
   scheduleNotebookCompletion,
-  scheduleNotebookSourceWrite,
-  supersedeReloadForForeignDrafts
+  scheduleNotebookSourceWrite
 } from './ipynb-document-owner-lifecycle'
 
 /** What the viewer draws: the document, or why the newest text can't be shown. */
@@ -337,5 +336,4 @@ useAppStore.subscribe((state, previous) => {
       }
     }
   }
-  supersedeReloadForForeignDrafts(entries, state, previous, cancelReload)
 })

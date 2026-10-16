@@ -1,5 +1,6 @@
 import { useCallback, useLayoutEffect, useRef, type MutableRefObject } from 'react'
 import type { editor } from 'monaco-editor'
+import { cancelEditorBufferDiscard } from './editor-buffer-owners'
 import { syncContentUpdate, type MonacoContentSyncMode } from './monaco-content-sync'
 import {
   beginProgrammaticContentSync,
@@ -21,13 +22,15 @@ export type MonacoContentSyncBridge = {
  *  handler and any handler firing before commit already read the current props. */
 export function useMonacoContentSyncBridge(params: {
   editorRef: MutableRefObject<editor.IStandaloneCodeEditor | null>
+  fileId: string
   content: string
   contentRef: MutableRefObject<string>
   contentSyncModeRef: MutableRefObject<MonacoContentSyncMode>
   modelKey: string
   onContentChange: (content: string) => void
 }): MonacoContentSyncBridge {
-  const { editorRef, content, contentRef, contentSyncModeRef, modelKey, onContentChange } = params
+  const { editorRef, fileId, content, contentRef, contentSyncModeRef, modelKey, onContentChange } =
+    params
 
   const lastSyncedContentRef = useRef<string>(content)
 
@@ -42,10 +45,6 @@ export function useMonacoContentSyncBridge(params: {
           return
         }
         // Why: split panes share one retained model, so a sibling must ignore the echoed programmatic-sync onChange or it marks the file dirty.
-        if (isApplyingLargePasteRef.current) {
-          lastSyncedContentRef.current = value
-          return
-        }
         if (
           shouldIgnoreMonacoContentChange({
             modelKey,
@@ -54,11 +53,17 @@ export function useMonacoContentSyncBridge(params: {
         ) {
           return
         }
+        // A paste edits the model before its deferred draft callback can supersede Reload.
+        cancelEditorBufferDiscard(fileId)
+        if (isApplyingLargePasteRef.current) {
+          lastSyncedContentRef.current = value
+          return
+        }
         lastSyncedContentRef.current = value
         onContentChange(value)
       }
     },
-    [editorRef, modelKey, onContentChange]
+    [editorRef, fileId, modelKey, onContentChange]
   )
 
   // Why: sync the model on external `content` drift; useLayoutEffect lands the overwrite before paint so no stale text flashes. On-mount handled in handleMount.

@@ -134,6 +134,7 @@ export default function MonacoEditor({
     useMonacoRevealScheduler()
   const contentSync = useMonacoContentSyncBridge({
     editorRef,
+    fileId,
     content,
     contentRef,
     contentSyncModeRef,

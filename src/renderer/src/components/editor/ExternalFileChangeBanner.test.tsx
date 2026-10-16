@@ -32,6 +32,7 @@ import {
   reloadTabContentFromDisk
 } from './ExternalFileChangeBanner'
 import { getDiskBaselineSignature } from './diff-content-signature'
+import * as bufferOwners from './editor-buffer-owners'
 import { useAppStore } from '@/store'
 
 const file = {
@@ -95,7 +96,7 @@ describe('ExternalFileChangeBanner', () => {
     expect(clearEditorDraft).toHaveBeenCalledWith('file-1')
     expect(markFileDirty).toHaveBeenCalledWith('file-1', false)
     expect(setExternalMutation).toHaveBeenCalledWith('file-1', null)
-    expect(reloadContent).toHaveBeenCalledWith(file)
+    expect(reloadContent).toHaveBeenCalledWith(file, undefined)
     // Why: the draft shadows loaded content (editBuffers ?? fileContents), so
     // the refetch must come last or the stale unsaved text stays visible.
     expect(calls).toEqual([
@@ -107,6 +108,7 @@ describe('ExternalFileChangeBanner', () => {
   })
 
   it('reload offers an undo toast that restores the discarded draft and the conflict', () => {
+    const cancel = vi.spyOn(bufferOwners, 'cancelEditorBufferDiscard')
     mockStoreState({ 'file-1': 'discarded draft' })
 
     reloadTabContentFromDisk(file, vi.fn())
@@ -119,6 +121,7 @@ describe('ExternalFileChangeBanner', () => {
     // Why: after a real reload the tab is clean with no draft — the undo
     // guard only restores over that untouched state.
     mockStoreState({}, [{ ...file, isDirty: false, externalMutation: undefined } as OpenFile])
+    setEditorDraft.mockImplementation(() => expect(cancel).toHaveBeenCalledWith('file-1'))
 
     options.action.onClick()
 
@@ -127,6 +130,7 @@ describe('ExternalFileChangeBanner', () => {
     // Why: disk still differs from the restored draft — the conflict (and its
     // autosave suspension) must return with the edits.
     expect(setExternalMutation).toHaveBeenCalledWith('file-1', 'changed')
+    cancel.mockRestore()
   })
 
   it('undo is a no-op when the tab closed while the toast was up', () => {

@@ -3,6 +3,7 @@ import { useAppStore } from '@/store'
 import type { OpenFile } from '@/store/slices/editor'
 import type { DiffContent, FileContent } from './editor-panel-content-types'
 import { isEditorContentUnchanged } from './editor-content-dirty-state'
+import { cancelEditorBufferDiscard } from './editor-buffer-owners'
 
 /**
  * Builds the editor's content-change handler: record the draft, then reconcile
@@ -38,6 +39,10 @@ export function useEditorContentChangeHandler({
         !useAppStore.getState().openFiles.some((candidate) => candidate.id === file.id)
       ) {
         return
+      }
+      // Changes view echoes owner-published drafts; only a new user draft supersedes Reload.
+      if (useAppStore.getState().editorDrafts[file.id] !== content) {
+        cancelEditorBufferDiscard(file.id)
       }
       setEditorDraft(file.id, content)
       const ignoreTrailingWhitespace = file.language === 'markdown'

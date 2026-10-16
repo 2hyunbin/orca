@@ -1,5 +1,9 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, renderHook } from '@testing-library/react'
+import { useRef } from 'react'
+import type { editor } from 'monaco-editor'
+import type { OpenFile } from '@/store/slices/editor'
 import type { KernelFrame, KernelFrameEvent } from '../../../../shared/notebook-kernel-types'
 
 const { notebookApi, frameListener, disk } = vi.hoisted(() => {
@@ -44,10 +48,17 @@ import {
   beginNotebookReload,
   editNotebookDocument,
   getNotebookDocumentView,
+  notebookReloadPending,
   openNotebookDocument,
   settleNotebookReload
 } from './ipynb-document-store'
 import { runCells, trustNotebook } from './ipynb-kernel-session'
+import { useEditorContentChangeHandler } from './use-editor-content-change-handler'
+import { useMonacoContentSyncBridge } from './use-monaco-content-sync-bridge'
+import {
+  beginProgrammaticContentSync,
+  endProgrammaticContentSync
+} from './monaco-programmatic-sync'
 import {
   isNotebookTestFileDirty,
   notebookTestAppStore,
@@ -181,19 +192,11 @@ describe('notebook document store', () => {
     stdout('1\n')
     setMarkdownViewMode(FILE_ID, 'source')
     expect(savedCell(draft()).outputs).toMatchObject([{ text: ['1\n'] }])
-    const original = draft()!
 
     setEditorDraft(FILE_ID, '{"cells": [')
     stdout('2\n')
     frame({ type: 'done', status: 'ok', execution_count: 1 })
     expect(draft()).toBe('{"cells": [')
-    setMarkdownViewMode(FILE_ID, 'rich')
-    expect(getNotebookDocumentView(FILE_ID)?.error).not.toBeNull()
-    setMarkdownViewMode(FILE_ID, 'source')
-    setEditorDraft(FILE_ID, original)
-    setMarkdownViewMode(FILE_ID, 'rich')
-    expect(getNotebookDocumentView(FILE_ID)?.error).toBeNull()
-    setMarkdownViewMode(FILE_ID, 'source')
 
     const typed = notebookText('print("edited")')
     setEditorDraft(FILE_ID, typed)
@@ -208,6 +211,81 @@ describe('notebook document store', () => {
     })
   })
 
+  it('clears a stale render error after restoring the exact prior Source text', () => {
+    const { setEditorDraft, setMarkdownViewMode } = notebookTestAppStore.getState()
+    const original = notebookText('print(1)')
+    setMarkdownViewMode(FILE_ID, 'source')
+    setEditorDraft(FILE_ID, '{"cells": [')
+    setMarkdownViewMode(FILE_ID, 'rich')
+    expect(getNotebookDocumentView(FILE_ID)?.error).not.toBeNull()
+
+    setMarkdownViewMode(FILE_ID, 'source')
+    setEditorDraft(FILE_ID, original)
+    setMarkdownViewMode(FILE_ID, 'rich')
+    expect(getNotebookDocumentView(FILE_ID)?.error).toBeNull()
+    expect(getNotebookDocumentView(FILE_ID)?.document?.cells[0]).toMatchObject({
+      source: ['print(1)']
+    })
+  })
+
+  it('supersedes Reload on real Source edits and early paste chunks, not echoed drafts', () => {
+    const original = notebookText('print(1)')
+    const diskText = notebookText('disk')
+    const file = {
+      ...notebookTestAppStore.getState().openFiles[0]!,
+      relativePath: 'nb.ipynb',
+      mode: 'edit' as const,
+      language: 'json'
+    } satisfies OpenFile
+    notebookTestAppStore.setState({ openFiles: [file] })
+    notebookTestAppStore.getState().setMarkdownViewMode(FILE_ID, 'source')
+    const modelKey = 'notebook-source-model'
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the bridge reads only getModel().uri.toString() from this stand-in editor.
+    const editorRef = {
+      current: { getModel: () => ({ uri: { toString: () => modelKey } }) }
+    } as unknown as { current: editor.IStandaloneCodeEditor | null }
+    const { result } = renderHook(() => {
+      const contentRef = useRef(original)
+      const contentSyncModeRef = useRef<'undoable'>('undoable')
+      const onChange = useEditorContentChangeHandler({ fileContents: {}, diffContents: {} })
+      return {
+        bridge: useMonacoContentSyncBridge({
+          editorRef,
+          fileId: FILE_ID,
+          content: original,
+          contentRef,
+          contentSyncModeRef,
+          modelKey,
+          onContentChange: (value) => onChange(file, value)
+        }),
+        onChange
+      }
+    })
+
+    act(() => result.current.onChange(file, '{"cells": ['))
+    const ordinary = beginNotebookReload(FILE_ID)!
+    act(() => result.current.onChange(file, '{"cells": ['))
+    expect(notebookReloadPending(FILE_ID)).toBe(true)
+    act(() => result.current.onChange(file, original))
+    expect(settleNotebookReload(ordinary, diskText)).toBe(false)
+    expect(draft()).toBe(original)
+
+    act(() => result.current.onChange(file, '{"cells": ['))
+    const pasted = beginNotebookReload(FILE_ID)!
+    result.current.bridge.isApplyingLargePasteRef.current = true
+    beginProgrammaticContentSync(modelKey)
+    act(() => result.current.bridge.handleChange('machine echo'))
+    endProgrammaticContentSync(modelKey)
+    expect(notebookReloadPending(FILE_ID)).toBe(true)
+    act(() => result.current.bridge.handleChange('first paste chunk'))
+    expect(settleNotebookReload(pasted, diskText)).toBe(false)
+    expect(draft()).toBe('{"cells": [')
+    result.current.bridge.isApplyingLargePasteRef.current = false
+    act(() => result.current.onChange(file, original))
+    expect(draft()).toBe(original)
+    expect(getNotebookDocumentView(FILE_ID)?.document?.cells[0]?.source).toEqual(['print(1)'])
+  })
+
   it('keeps a no-output completion count through an unrelated Source edit', async () => {
     const { setEditorDraft, setMarkdownViewMode } = notebookTestAppStore.getState()
     await startRun()
@@ -219,6 +297,9 @@ describe('notebook document store', () => {
   })
 
   it('keeps the prior model until accepted read, then carries completed and queued results', async () => {
+    notebookTestAppStore.setState({ openFiles: [] })
+    openNotebookTestFile(FILE_ID, FILE_PATH)
+    openNotebookDocument(FILE_ID, notebookText('print(1)', ['b']))
     await startRun()
     await runCells(FILE_PATH, [{ key: 'b', code: 'print(2)', fileId: FILE_ID }], '/repo')
     const reload = beginNotebookReload(FILE_ID)!

@@ -90,6 +90,7 @@ function showReloadUndoToast(
           if (!liveFile || liveFile.isDirty) {
             return
           }
+          cancelEditorBufferDiscard(file.id)
           current.setEditorDraft(file.id, discardedDraft)
           current.markFileDirty(file.id, true)
           // Why: the disk still differs from the restored draft, so the

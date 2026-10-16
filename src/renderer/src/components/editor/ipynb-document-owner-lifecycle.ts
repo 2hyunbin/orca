@@ -106,23 +106,3 @@ export function migrateNotebookOwner(
   }
   return true
 }
-
-export function supersedeReloadForForeignDrafts(
-  entries: Map<string, Entry>,
-  state: AppState,
-  previous: AppState,
-  cancelReload: (entry: Entry) => void
-): void {
-  if (state.editorDrafts === previous.editorDrafts) {
-    return
-  }
-  for (const [fileId, entry] of entries) {
-    if (
-      entry.reload &&
-      state.editorDrafts[fileId] !== previous.editorDrafts[fileId] &&
-      state.editorDrafts[fileId] !== entry.baseText
-    ) {
-      cancelReload(entry)
-    }
-  }
-}
