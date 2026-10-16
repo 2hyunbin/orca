@@ -1,46 +1,14 @@
 name: Headless Node server
 
+# Diagnostic branch only: one unchanged ARM persistence lane; never merge this workflow.
+
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
-    paths:
-      - 'src/**'
-      - 'config/**'
-      - 'native/**'
-      - 'tests/**'
-      - 'resources/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - 'tsconfig.json'
-      - '.npmrc'
-      - '.pnpmfile.cjs'
-      - '.github/actions/install-node-dependencies/**'
-      - '.github/actions/restore-pnpm-verification/**'
-      - '.github/actions/prepare-headless-compiler/**'
-      - '.github/actions/prepare-native-runtime/**'
-      - '.github/actions/prepare-orcad-prebuilds/**'
-      - '.github/workflows/node-server-tests.yml'
   workflow_dispatch:
     inputs:
       build_template:
-        description: Also merge every lane's slot into the desktop orcad template artifact
+        description: Unused on this diagnostic branch; no template is admitted
         type: boolean
         default: false
-  # Release and dev builds qualify every platform for the template they ship.
-  workflow_call:
-    inputs:
-      ref:
-        description: Git ref every lane checks out, e.g. the release tag
-        type: string
-        default: ''
-      build_template:
-        description: Upload each lane's release slot and merge them into the orcad-template artifact
-        type: boolean
-        default: false
-  # Requalify fresh builds daily; publish missing immutable Windows cache keys.
-  schedule:
-    - cron: '30 11 * * *'
 
 permissions:
   contents: read
@@ -140,7 +108,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(needs.changes.outputs.runners || '["ubuntu-22.04","ubuntu-24.04-arm","macos-15","macos-15-intel","windows-2022","windows-11-arm"]') }}
+        os: [windows-11-arm]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     env:
@@ -194,6 +162,29 @@ jobs:
       - run: pnpm build:orcad
         env:
           ORCA_REUSE_PREPARED_WINDOWS_SECURITY: ${{ github.event_name == 'pull_request' && runner.os == 'Windows' && steps.dependencies.outcome == 'success' }}
+      - name: Prepare a bounded Windows directory-handle diagnostic
+        if: runner.os == 'Windows' && runner.arch == 'ARM64'
+        continue-on-error: true
+        timeout-minutes: 2
+        shell: pwsh
+        run: |
+          $diagnosticDir = Join-Path $env:RUNNER_TEMP ('orca-directory-handles-' + [guid]::NewGuid())
+          New-Item -ItemType Directory -Path $diagnosticDir | Out-Null
+          $archive = Join-Path $diagnosticDir 'Handle.zip'
+          Invoke-WebRequest 'https://download.sysinternals.com/files/Handle.zip' -OutFile $archive -TimeoutSec 30
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne '279AAF8ECCB6F79147F4DCC6BA091FB895C4CB8B199A0DD186A4C76BC519D2CD') {
+            throw 'The Handle archive did not match its pinned hash.'
+          }
+          Expand-Archive -LiteralPath $archive -DestinationPath $diagnosticDir
+          $probe = Join-Path $diagnosticDir 'handle64a.exe'
+          if ((Get-FileHash $probe -Algorithm SHA256).Hash -ne '21BD4ED38F08015F39F1653A1A4DCCF19CE06CD44EE32720488A9096A306080D') {
+            throw 'The ARM64 Handle executable did not match its pinned hash.'
+          }
+          $signature = Get-AuthenticodeSignature -FilePath $probe
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
+            throw 'Handle must have a valid Microsoft signature.'
+          }
+          "ORCA_SERVE_CLEANUP_HANDLE_EXE=$probe" >> $env:GITHUB_ENV
       - wait: bun-orcad
       - run: pnpm test:node-server --artifact ${{ runner.os == 'Linux' && '--cross-runtime' || '' }}
         env:
@@ -303,10 +294,7 @@ jobs:
       group: node-server-linux_glibc_floor-${{ matrix.os }}-${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' && github.ref || github.run_id }}
       cancel-in-progress: ${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' }}
     # A failed smoke already blocks qualification; missing scope still selects every platform.
-    if: >-
-      ${{ !cancelled() && needs.persistence.result == 'success' &&
-      needs.changes.outputs.should_run != 'false' &&
-      needs.changes.outputs.qualification != 'false' }}
+    if: ${{ false }}
     strategy:
       fail-fast: false
       matrix:
@@ -371,12 +359,7 @@ jobs:
       group: node-server-linux_glibc217_compat-${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' && github.ref || github.run_id }}
       cancel-in-progress: ${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' }}
     # A failed smoke already blocks qualification; missing scope still selects every platform.
-    if: >-
-      ${{ !cancelled() && needs.persistence.result == 'success' &&
-      needs.changes.outputs.should_run != 'false' &&
-      needs.changes.outputs.qualification != 'false' &&
-      (github.event_name != 'pull_request' || inputs.build_template || inputs.ref != '' ||
-      needs.changes.outputs.native_compatibility != 'false') }}
+    if: ${{ false }}
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     env:
@@ -428,10 +411,7 @@ jobs:
       group: node-server-linux_musl-${{ matrix.os }}-${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' && github.ref || github.run_id }}
       cancel-in-progress: ${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' }}
     # A failed smoke already blocks qualification; missing scope still selects every platform.
-    if: >-
-      ${{ !cancelled() && needs.persistence.result == 'success' &&
-      needs.changes.outputs.should_run != 'false' &&
-      needs.changes.outputs.qualification != 'false' }}
+    if: ${{ false }}
     strategy:
       fail-fast: false
       matrix:
@@ -484,10 +464,7 @@ jobs:
   # Design D2: the desktop ships every target's addons, merged from the lanes that qualified them.
   desktop_template:
     needs: [persistence, linux_glibc_floor, linux_glibc217_compat, linux_musl]
-    if: >-
-      ${{ !cancelled() && inputs.build_template &&
-      needs.persistence.result == 'success' && needs.linux_glibc_floor.result == 'success' &&
-      needs.linux_glibc217_compat.result == 'success' && needs.linux_musl.result == 'success' }}
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

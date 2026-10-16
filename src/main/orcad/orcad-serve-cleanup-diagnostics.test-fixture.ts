@@ -9,6 +9,7 @@ import {
 import { parseDaemonPidFile } from '../daemon/daemon-pid-file-parse'
 import type { WindowsProcessRow } from '../windows/windows-process-table'
 import { ORCAD_LOCK_FILE_NAME, readOrcadInstanceLockRecord } from './orcad-instance-lock'
+import { captureDirectoryHandles } from './orcad-windows-directory-handle-diagnostics.test-fixture'
 
 const ROW_LIMIT = 128
 const SNAPSHOT_LIMIT = 12
@@ -47,7 +48,6 @@ function errorDetails(error: unknown): Record<string, unknown> {
   return details
 }
 
-/** Observes this recipe's processes; never changes shutdown or removal decisions. */
 export class ServeCleanupDiagnostics {
   private readonly events: Record<string, unknown>[] = []
   private readonly snapshots: Record<string, unknown>[] = []
@@ -134,6 +134,7 @@ export class ServeCleanupDiagnostics {
         snapshot.processEvidence = 'unverifiable: Windows native capture only'
         return
       }
+      snapshot.directoryHandles = await captureDirectoryHandles(root ?? this.userData, phase)
       const table = await import('../windows/windows-process-table')
       // The public reader falls back to CIM when the native binding is absent.
       if (!table.isWindowsProcessTableAvailable()) {
@@ -301,9 +302,7 @@ export class ServeCleanupDiagnostics {
   }
 
   dispose(): void {
-    for (const remove of this.listeners.splice(0)) {
-      remove()
-    }
+    this.listeners.splice(0).forEach((remove) => remove())
   }
 
   private rootRole(root: string | undefined): string | undefined {
