@@ -1,3 +1,5 @@
+import { AgentHookStartup, listenForAgentHooks } from '../../../shared/agent-hook-startup'
+import { checkHookOwnerPresence } from '../../../shared/agent-hook-owner-presence'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { randomUUID } from 'node:crypto'
@@ -16,14 +18,25 @@ import { trackEmptyPaneKeyHook } from './server-transport-rules'
 import { AgentHookServerStatusHookLifecycle } from './server-status-hook-lifecycle'
 import { OPENCODE_STARTUP_PROMPT_CLAIM_PATH } from '../../../shared/opencode-startup-prompt'
 
+type HookServerStartOptions = {
+  env?: string
+  userDataPath?: string
+  endpointNamespace?: string
+  statusHooksEnabled?: boolean
+}
+
 export abstract class AgentHookServerLifecycle extends AgentHookServerStatusHookLifecycle {
+  private readonly startup = new AgentHookStartup()
+
   /** Start the loopback listener after hydration and spool replay have settled. */
-  async start(options?: {
-    env?: string
-    userDataPath?: string
-    endpointNamespace?: string
-    statusHooksEnabled?: boolean
-  }): Promise<void> {
+  start(options?: HookServerStartOptions): Promise<void> {
+    return this.startup.start((isCurrent) => this.startListener(options, isCurrent))
+  }
+
+  private async startListener(
+    options: HookServerStartOptions | undefined,
+    isCurrent: () => boolean
+  ): Promise<void> {
     if (this.server) {
       if (options?.statusHooksEnabled !== undefined) {
         this.setStatusHooksEnabled(options.statusHooksEnabled)
@@ -43,7 +56,10 @@ export abstract class AgentHookServerLifecycle extends AgentHookServerStatusHook
     this.endpointFileWritten = false
     this.closeStatusSnapshotWriter()
     if (this.statusHooksEnabled) {
-      this.initializeStatusHookOwner()
+      await this.initializeStatusHookOwner()
+    }
+    if (!isCurrent()) {
+      return
     }
     const handleRequest = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
       if (req.method !== 'POST') {
@@ -83,6 +99,12 @@ export abstract class AgentHookServerLifecycle extends AgentHookServerStatusHook
           res.end()
           return
         }
+        await this.initializeStatusHookOwner()
+        if (!this.statusHooksEnabled) {
+          res.writeHead(404)
+          res.end()
+          return
+        }
         if (pathname === CLAUDE_STATUSLINE_PATHNAME) {
           const statusLineEvent = parseClaudeStatusLineBody(body)
           if (statusLineEvent) {
@@ -107,6 +129,9 @@ export abstract class AgentHookServerLifecycle extends AgentHookServerStatusHook
           res.end()
           return
         }
+        await checkHookOwnerPresence(this.state, source, aliasedBody, this.env, (paneKey) =>
+          this.checkAgentPresence(paneKey)
+        )
         const normalized = this.normalizeLocalHookPayload(source, aliasedBody)
         const statusDisposition = normalized.event
           ? this.getAgentStatusDisposition(normalized.event.paneKey, {
@@ -176,32 +201,26 @@ export abstract class AgentHookServerLifecycle extends AgentHookServerStatusHook
     this.server = createServer((req, res) => {
       void handleRequest(req, res)
     })
+    const server = this.server
     try {
-      await new Promise<void>((resolve, reject) => {
-        const onStartupError = (err: Error): void => {
-          this.server?.off('listening', onListening)
-          reject(err)
-        }
-        const onListening = (): void => {
-          this.server?.off('error', onStartupError)
-          this.server?.on('error', (err) => {
-            console.error('[agent-hooks] server error', err)
-          })
-          const address = this.server!.address()
+      await listenForAgentHooks(
+        server,
+        0,
+        isCurrent,
+        () => {
+          const address = server.address()
           if (address && typeof address === 'object') {
             this.port = address.port
           }
           this.maybeWriteEndpointFile()
-          resolve()
-        }
-        this.server!.once('error', onStartupError)
-        this.server!.listen(0, '127.0.0.1', onListening)
-      })
+        },
+        (error) => console.error('[agent-hooks] server error', error)
+      )
     } catch (error) {
       this.rollbackTransportStart()
       throw error
     }
-    if (this.statusHooksEnabled) {
+    if (isCurrent() && this.statusHooksEnabled) {
       this.startOpenCodeBinderLoop()
     }
   }
@@ -217,6 +236,7 @@ export abstract class AgentHookServerLifecycle extends AgentHookServerStatusHook
   /** `keepStatus`: quit only. The chat teardown after it still reads each chat's subagents and
    *  background tasks from the status store to decide what to offer to resume; exit frees it. */
   stop(options?: { keepStatus?: boolean }): void {
+    this.startup.stop()
     // Terminal status may still have a pending write while hook ingress is disabled.
     if (this.statusHooksEnabled || this.statusPersistTimer) {
       this.flushStatusPersistSync()

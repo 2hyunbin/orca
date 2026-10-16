@@ -20968,39 +20968,40 @@
       "surfaces": [
         "agent hook normalization",
         "sidebar child rows",
-        "mobile status snapshots"
+        "mobile status snapshots",
+        "saved agent resume sessions",
+        "native chat transcript selection"
       ],
-      "platforms": [
-        "macos",
-        "linux",
-        "windows"
-      ],
-      "providers": [
-        "local",
-        "daemon",
-        "ssh",
-        "wsl",
-        "remote-runtime"
-      ],
-      "coveredPlatforms": [
-        "macos"
-      ],
+      "platforms": ["macos", "linux", "windows"],
+      "providers": ["local", "daemon", "ssh", "wsl", "remote-runtime"],
+      "coveredPlatforms": ["macos"],
       "coveredProviders": [],
-      "coverageNotes": "Contract tests exercise local HTTP hooks, loopback SSH/WSL relay forwarding and legacy relay snapshots. No live SSH, WSL, Linux or Windows execution is claimed. Daemon PTYs use the same hook ingress; folder workspace routing is covered. Hidden macOS Electron validation used the real WorktreeCardAgents component and store in a temporary harness, receiving real hook IPC: 60 nested Codex updates produced zero row mutations, retained 32 children and kept height at 1170px. Screenshots inspected; synthetic hooks, no new model-backed turn.",
+      "coverageNotes": "Contract tests exercise local HTTP hooks, loopback SSH/WSL relay forwarding and legacy relay snapshots. No live SSH, WSL, Linux or Windows execution is claimed. Daemon PTYs use the same hook ingress; folder workspace routing is covered. Hidden macOS Electron validation used the real WorktreeCardAgents component and store in a temporary harness, receiving real hook IPC: 60 nested Codex updates produced zero row mutations, retained 32 children and kept height at 1170px. Screenshots inspected; synthetic hooks, no new model-backed turn. Follow-up hidden Electron verification retains idle Claude native chat through six nested Codex hooks, reads its transcript through a mobile-scoped paired client, and returns to the terminal without a Codex error (three passing recorded runs).",
       "motivatingLinks": [
         "User report (2026-10-15): Claude status in nwparker/SSH alternates between a 32-child roster and an empty roster when nested Codex reviews report on the inherited terminal pane.",
         "https://github.com/stablyai/orca/pull/8211",
         "https://github.com/stablyai/orca/pull/3990"
       ],
-      "invariant": "A different provider inheriting an active pane key cannot replace its child roster, main turn, prompt, resume identity, model or freshness, nor mutate the owning provider caches. Same-provider children still update; finished or stale owners and distinct execution hosts/workspaces permit provider replacement. WSL local and relay transports retain the same owner.",
-      "oracle": "Send a full Claude child roster, interleave Codex review lifecycle/tool/approval/completion hooks, and require identical snapshots plus zero publications. A later Claude child event must retain the original prompt and roster, and a real child completion must shrink it.",
+      "invariant": "A different provider inheriting an active pane key cannot replace its child roster, main turn, prompt, resume identity, model or freshness, nor mutate the owning provider caches. Same-provider children still update. Hosts advertising process ownership retain an identified idle parent until positive exit or suspension, and unavailable reads preserve ownership. Older hosts retain the previous finished/stale replacement policy; distinct execution hosts/workspaces permit replacement. WSL local and relay transports retain the same owner.",
+      "oracle": "Send a full Claude child roster, interleave Codex review lifecycle/tool/approval/completion hooks, and require identical snapshots plus zero publications. A later Claude child event must retain the original prompt and roster, and a real child completion must shrink it. After Claude Stop, keep its mobile transcript and saved resume identity while its identified process remains live or unverifiable; accept the first provider replacement after confirmed exit or suspension. Replay must admit records in order, retain the file on failed admission, and concurrent starts or stop during replay must not leave a listener.",
       "commands": [
+        "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-idle-process-owner.test.ts src/wsl-guest/relay-idle-process-owner.test.ts tests/e2e/nested-agent-idle-owner.unit.test.ts src/shared/agent-process-presence-probe.test.ts src/shared/agent-hook-spool-drain.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/wsl-guest/relay-agent-presence.test.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-nested-resume.test.ts src/wsl-guest/agent-hook-provider-normalization.test.ts src/main/agent-hooks/server-start-failure-lifecycle.test.ts src/main/agent-hooks/server-startup-lifecycle.test.ts src/main/agent-hooks/spool.test.ts src/shared/agent-hook-spool-read.test.ts src/wsl-guest/agent-hook-server.test.ts --maxWorkers=2",
+        "ORCA_BACKGROUND_LAUNCH=1 ORCA_E2E_RECORD_VIDEO=1 pnpm exec playwright test --config tests/playwright.config.ts tests/e2e/nested-agent-idle-session-owner.spec.ts --project=electron-headless --workers=1 --repeat-each=3",
+        "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-idle-process-owner.test.ts src/wsl-guest/relay-idle-process-owner.test.ts tests/e2e/nested-agent-idle-owner.unit.test.ts src/shared/agent-process-presence-probe.test.ts src/shared/agent-hook-spool-drain.test.ts src/main/agent-hooks/server-startup-lifecycle.test.ts src/main/agent-hooks/server-start-failure-lifecycle.test.ts --maxWorkers=2",
+        "ORCA_BACKGROUND_LAUNCH=1 pnpm exec playwright test --config tests/playwright.config.ts tests/e2e/nested-agent-idle-session-owner.spec.ts --project=electron-headless --workers=1",
         "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-turn-started-at.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-tool-assistant-fields.test.ts src/renderer/src/store/slices/agent-status-provider-session.test.ts src/renderer/src/store/slices/agent-status-nested-resume.test.ts src/wsl-guest/agent-hook-provider-normalization.test.ts --maxWorkers=2",
         "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/renderer/src/store/slices/agent-status-tool-assistant-fields.test.ts --maxWorkers=2",
         "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/renderer/src/store/slices/agent-status-tool-assistant-fields.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/wsl-guest/agent-hook-server.test.ts --maxWorkers=2",
         "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-turn-started-at.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-tool-assistant-fields.test.ts --maxWorkers=2"
       ],
       "testFiles": [
+        "src/shared/agent-hook-spool-drain.test.ts",
+        "src/main/agent-hooks/server-startup-lifecycle.test.ts",
+        "src/main/agent-hooks/server-start-failure-lifecycle.test.ts",
+        "src/main/agent-hooks/server-idle-process-owner.test.ts",
+        "src/wsl-guest/relay-idle-process-owner.test.ts",
+        "tests/e2e/nested-agent-idle-owner.unit.test.ts",
+        "tests/e2e/nested-agent-idle-session-owner.spec.ts",
         "src/main/agent-hooks/server-status-listener-fanout.test.ts",
         "src/main/agent-hooks/terminal-handle-row-identity.test.ts",
         "src/wsl-guest/agent-hook-provider-normalization.test.ts",
@@ -21022,6 +21023,24 @@
         }
       ],
       "evidenceRuns": [
+        {
+          "date": "2026-10-15",
+          "runner": "local",
+          "platform": "macos",
+          "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-idle-process-owner.test.ts src/wsl-guest/relay-idle-process-owner.test.ts tests/e2e/nested-agent-idle-owner.unit.test.ts src/shared/agent-process-presence-probe.test.ts src/shared/agent-hook-spool-drain.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/wsl-guest/relay-agent-presence.test.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-nested-resume.test.ts src/wsl-guest/agent-hook-provider-normalization.test.ts src/main/agent-hooks/server-start-failure-lifecycle.test.ts src/main/agent-hooks/server-startup-lifecycle.test.ts src/main/agent-hooks/spool.test.ts src/shared/agent-hook-spool-read.test.ts src/wsl-guest/agent-hook-server.test.ts --maxWorkers=2",
+          "result": "passed",
+          "durationSeconds": 8.34,
+          "summary": "187 tests across 22 files pass on the final follow-up, covering idle process ownership, stale suspension/resume/unavailable/exit, legacy hosts, relay cache isolation, saved resume records, concurrent startup and durable ordered spool replay."
+        },
+        {
+          "date": "2026-10-15",
+          "runner": "local",
+          "platform": "macos",
+          "command": "ORCA_BACKGROUND_LAUNCH=1 ORCA_E2E_RECORD_VIDEO=1 pnpm exec playwright test --config tests/playwright.config.ts tests/e2e/nested-agent-idle-session-owner.spec.ts --project=electron-headless --workers=1 --repeat-each=3",
+          "result": "passed",
+          "durationSeconds": 32.1,
+          "summary": "Three hidden Electron runs pass. Actual native chat retains the foreground Claude reply after six nested Codex hooks; a mobile-scoped paired client reads that Claude transcript; Show terminal returns without the Codex verification error. Screenshots visually inspected and video attached to PR. Controlled hooks/transcripts with a real OS process identity; no model-backed turn or physical phone."
+        },
         {
           "date": "2026-10-15",
           "runner": "local",
@@ -21060,19 +21079,19 @@
       },
       "redGreenEvidence": {
         "status": "partial",
-        "evidence": "Live incident records alternate between a Claude 32-child roster and a Codex empty roster. Executing the original HEAD identity function accepts a nested working status; the patched function rejects it. Local and relay HTTP roster tests pass and hidden Electron real-component proof preserves all 32 rendered children through 60 nested hooks. No archived CI red/green run yet."
+        "evidence": "Live incident records alternate between a Claude 32-child roster and a Codex empty roster. Executing the original HEAD identity function accepts a nested working status; the patched function rejects it. Local and relay HTTP roster tests pass and hidden Electron real-component proof preserves all 32 rendered children through 60 nested hooks. The idle-owner follow-up reproduced eight failing assertions across three files on the prior production paths and passes with the process-owner policy. Review also reproduced stale-suspension and duplicate-listener failures before their fixes. No archived CI red/green run yet."
       },
       "performanceBudget": {
         "required": true,
-        "evidence": "Main reuses the constant-time provider identity decision and publishes no rejected updates. Legacy relays retain provider-specific prompt/tool/previous-status caches, bounded by MAX_CACHED_PANES for each finite provider and cleared on pane teardown or stop; no polling, timers or subprocesses added."
+        "evidence": "Main reuses the constant-time provider identity decision and publishes no rejected updates. Legacy relays retain provider-specific prompt/tool/previous-status caches, bounded by MAX_CACHED_PANES for each finite provider and cleared on pane teardown or stop; no polling or timers added. Cross-provider hooks on updated hosts reuse the bounded process probe before normalization; macOS performs one ps call per non-overlapping conflicting hook (one-second timeout), and concurrent checks share the existing pending promise."
       },
-      "promotionCriteria": [
-        "Save red/green evidence and CI soak before promotion."
-      ],
+      "promotionCriteria": ["Save red/green evidence and CI soak before promotion."],
       "knownGaps": [
         "A nested CLI started before any owner is observed may still establish the initial pane identity.",
         "Same-provider nested sessions remain governed by the existing process/session ownership rules.",
-        "Live SSH/WSL, Linux, Windows and physical mobile validation are not included."
+        "Live SSH/WSL, Linux, Windows and physical mobile validation are not included.",
+        "Idle-process protection needs a captured process identity and an updated execution host. Windows and older hosts retain the prior finished/stale fallback.",
+        "No new model-backed Claude/Codex turn was run; hooks and transcript fixtures drive the verification."
       ],
       "demotionRule": "Keep experimental until CI soak; investigate any roster loss or blocked genuine provider replacement without weakening the snapshot and publication assertions."
     }

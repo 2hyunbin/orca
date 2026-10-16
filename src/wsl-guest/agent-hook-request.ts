@@ -1,3 +1,4 @@
+import { checkHookOwnerPresence } from '../shared/agent-hook-owner-presence'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { HOOK_REQUEST_SLOWLORIS_MS } from '../shared/agent-hook-listener/listener-limits'
 import { mergeAgentHookRequestHeaders } from '../shared/agent-hook-listener/hook-envelope'
@@ -20,6 +21,7 @@ export async function handleRelayHookRequest(
     token: string
     env: string
     state: HookListenerState
+    checkAgentPresence: (paneKey: string) => Promise<void>
     providerNormalization: RelayProviderHookNormalization
     isPaneSurfaceRetired: (paneKey: string) => boolean
     getAgentLaunchToken: (paneKey: string) => string | undefined
@@ -65,6 +67,13 @@ export async function handleRelayHookRequest(
       res.end()
       return
     }
+    await checkHookOwnerPresence(
+      options.state,
+      source,
+      hookBody,
+      options.env,
+      options.checkAgentPresence
+    )
     let admittedOpenCodeTuiOwner = false
     const event = options.providerNormalization.normalize(
       options.state,

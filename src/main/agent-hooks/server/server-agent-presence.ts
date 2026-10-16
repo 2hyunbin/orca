@@ -44,7 +44,10 @@ export abstract class AgentHookServerAgentPresence extends AgentHookServerLifecy
       return pending
     }
     const presence = row.agentPresence
-    const check = probeAgentProcessPresence(presence.process)
+    let suspended: boolean | undefined
+    const check = probeAgentProcessPresence(presence.process, undefined, undefined, (observed) => {
+      suspended = observed
+    })
       .then((verdict) => {
         if (
           this.state.lastStatusByPaneKey.get(resolved) !== row ||
@@ -56,6 +59,14 @@ export abstract class AgentHookServerAgentPresence extends AgentHookServerLifecy
           this.reconcileEndedProcessForPaneKeys([resolved], {
             preserveResumeIdentity: true,
             endedPresence: { ...presence, ended: true }
+          })
+        } else if ((suspended === true) !== (presence.suspended === true)) {
+          const { suspended: _suspended, ...unsuspended } = presence
+          this.applyNormalizedStatus({
+            ...row,
+            hookEventName: undefined,
+            hasExplicitPrompt: undefined,
+            agentPresence: suspended ? { ...unsuspended, suspended: true } : unsuspended
           })
         }
         return verdict
