@@ -4688,7 +4688,6 @@
         "SkillFreshnessRow": {
           "statusUpdateAvailable": "Actualización disponible",
           "statusCantUpdate": "No se puede actualizar",
-          "chipCurrent": "Actual",
           "chipInaccessible": "Inaccesible",
           "chipReadOnly": "Solo lectura"
         },
@@ -5133,7 +5132,8 @@
                 "linkNotManaged": "Este enlace no lo creó Orca, así que la actualización lo deja como está.",
                 "nameInUse": "Otro archivo o carpeta ya usa el nombre de esta skill, así que la actualización lo deja como está.",
                 "readOnly": "Esta ubicación es de solo lectura, así que la actualización no puede cambiarla. Cambia sus permisos para que Orca pueda actualizarla.",
-                "unreadable": "Orca no pudo leer esta copia, así que la actualización la deja como está."
+                "unreadable": "Orca no pudo leer esta copia, así que la actualización la deja como está.",
+                "keep": "Sin cambios"
               }
             }
           }

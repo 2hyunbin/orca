@@ -4688,7 +4688,6 @@
         "SkillFreshnessRow": {
           "statusUpdateAvailable": "업데이트 있음",
           "statusCantUpdate": "업데이트할 수 없음",
-          "chipCurrent": "최신",
           "chipInaccessible": "액세스 불가",
           "chipReadOnly": "읽기 전용"
         },
@@ -5133,7 +5132,8 @@
                 "linkNotManaged": "Orca가 만든 링크가 아니어서 업데이트에서 그대로 둡니다.",
                 "nameInUse": "다른 파일이나 폴더가 이미 이 스킬 이름을 사용하고 있어 업데이트에서 그대로 둡니다.",
                 "readOnly": "이 위치는 읽기 전용이라 업데이트로 변경할 수 없습니다. Orca가 업데이트할 수 있도록 권한을 변경하세요.",
-                "unreadable": "Orca가 이 사본을 읽지 못해 업데이트에서 그대로 둡니다."
+                "unreadable": "Orca가 이 사본을 읽지 못해 업데이트에서 그대로 둡니다.",
+                "keep": "변경 없음"
               }
             }
           }

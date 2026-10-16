@@ -8,7 +8,7 @@ import { translate } from '@/i18n/i18n'
 export function planLocationLabel(location: BundledSkillLocationPlan): string {
   switch (location.action) {
     case 'keep':
-      return translate('auto.components.skills.SkillFreshnessRow.chipCurrent', 'Current')
+      return translate('auto.components.skills.skill.plan.location.copy.keep', 'No change')
     case 'install':
       return translate('auto.components.skills.skill.plan.location.copy.install', 'Will install')
     case 'update':
