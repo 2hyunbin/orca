@@ -1,6 +1,6 @@
 import { STRUCTURED_AGENT_SESSION_SEND_BUDGET_MS } from '@/components/native-chat/structured-agent-session-message-sender'
 import { recoverPublishedSessionReceipt } from './structured-agent-session-launch-recovery'
-import { finalizeStructuredLaunchFirstSubmission } from './structured-agent-session-launch-outcome-tracking'
+import { publishStructuredLaunchCreateOptions } from './structured-agent-session-launch-create-message'
 import { settleStructuredLaunchCallers } from './structured-agent-session-launch-callers'
 import { restorePersistedStructuredLaunchState } from './structured-agent-session-launch-reload'
 import {
@@ -23,16 +23,20 @@ export function confirmStructuredLaunchFirstMessagePublication(worktreeId: strin
   const expired = new Promise<never>((_resolve, reject) => {
     deadline = setTimeout(() => reject(new Error('Confirmation timed out.')), STRUCTURED_AGENT_SESSION_SEND_BUDGET_MS)
   })
-  void Promise.race([recoverPublishedSessionReceipt(state), expired]).then(async () => {
+  void Promise.race([recoverPublishedSessionReceipt(state, false), expired]).then(async (receipt) => {
     if (state.cancelled || getStructuredLaunchStateBySessionId(sessionId) !== state) {
       return
     }
-    if (state.intent.firstSubmission) {
-      await finalizeStructuredLaunchFirstSubmission(state)
-    } else {
-      settleStructuredLaunchCallers(state.callers, 'published')
-      notifyStructuredLaunchListeners()
-    }
+    await publishStructuredLaunchCreateOptions(state, receipt)
+    state.hostPublished = true
+    notifyStructuredLaunchListeners()
+    // The original command still owns refusal; a restored observation has an already settled promise.
+    void state.promise.then(() => {
+      if (!state.cancelled && getStructuredLaunchStateBySessionId(sessionId) === state) {
+        settleStructuredLaunchCallers(state.callers, 'published')
+        notifyStructuredLaunchListeners()
+      }
+    }, () => {})
   }).catch(() => {
     // An absent or unreadable journal says nothing new about the command's outcome.
   }).finally(() => {

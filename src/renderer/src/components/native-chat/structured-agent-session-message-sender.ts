@@ -184,13 +184,13 @@ export function reserveStructuredAgentSessionSend(
       const current = held()
       if (current) {
         updateStructuredAgentSessionPendingSend(entry.sessionId, entry.clientMessageId, {
-      }
         body: { ...current.body, blocks: [
           ...current.body.blocks.filter((block) => block.type !== 'image-ref'),
           ...attachments.map((image) => ({ type: 'image-ref' as const, path: image.path }))
         ] },
         previewUris: attachments.map((image) => image.previewUri)
-      })
+        })
+      }
     },
     outcome,
     legacy: () => clearTimeout(deadline),

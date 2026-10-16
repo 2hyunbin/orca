@@ -4,8 +4,7 @@ import {
 import { readNativeChatComposerDraft } from '@/components/native-chat/native-chat-composer-draft-store'
 import {
   stageStructuredLaunchPrompt,
-  releaseStagedStructuredLaunchPrompt,
-  deliverStructuredLaunchPromptToExistingSession
+  releaseStagedStructuredLaunchPrompt
 } from './structured-agent-session-launch-prompt'
 import { startStructuredAgentLaunch } from './structured-agent-session-launch'
 import { newAgentLaunchRequestId } from './agent-launch-request-id'
@@ -17,26 +16,16 @@ import {
 } from '@/components/native-chat/native-chat-attachment-upload'
 import { structuredAgentSessionTargetForHost } from '@/runtime/structured-agent-session-owner'
 import type { StructuredAgentSessionAttachment } from '../../../shared/structured-agent-session-send-mutation'
-import { getStructuredLaunchStateBySessionId, getPersistedStructuredAgentLaunchRecord } from './structured-agent-session-launch-registry'
-import { confirmStructuredLaunchFirstMessagePublication } from './structured-agent-session-launch-publication-confirmation'
 
 /** Uses the existing launch reservation for the complete immutable opening submission. */
 export function submitNativeChatLocalDraft(
   sessionId: string,
   text: string,
   attachments: readonly StructuredAgentSessionAttachment[],
-  options: Readonly<Record<string, string>>,
-  hosted = false
+  options: Readonly<Record<string, string>>
 ): boolean {
   const draft = readNativeChatNewDraft(sessionId)
   if (!draft) {
-    return false
-  }
-  const prior = getStructuredLaunchStateBySessionId(sessionId)
-  const saved = getPersistedStructuredAgentLaunchRecord(sessionId)
-  const issued = prior?.intent.firstSubmission ?? saved?.firstSubmission
-  if (!hosted && issued && (prior?.callers.outcome ?? saved?.lifecycle) !== 'failed') {
-    confirmStructuredLaunchFirstMessagePublication(draft.owner.workspaceId, sessionId)
     return false
   }
   const sourceDraft = readNativeChatComposerDraft(`agent-session:${sessionId}`)
@@ -55,7 +44,7 @@ export function submitNativeChatLocalDraft(
       if (owner.kind !== 'runtime-session') {
         throw new Error('The chat host is unavailable.')
       }
-      const prepared = await prepareNativeChatSessionAttachmentUpload(owner, hosted ? undefined : {
+      const prepared = await prepareNativeChatSessionAttachmentUpload(owner, {
         worktree: toRuntimeWorktreeSelector(draft.owner.workspaceId), agent: draft.agent
       })
       if (!prepared.ok) {
@@ -75,28 +64,18 @@ export function submitNativeChatLocalDraft(
           return { ...image, path }
         }))
       }
-      if (hosted || prepared.target.reservedSession) {
+      if (prepared.target.reservedSession) {
         await upload()
       } else {
         stagedPrompt.beforeSend = upload
       }
     }
   }
-  if (hosted) {
-    const target = structuredAgentSessionTargetForHost(draft.owner.executionHostId)
-    if (!target) {
-      releaseStagedStructuredLaunchPrompt(stagedPrompt)
-      return false
-    }
-    stagedPrompt.beforeSend = prepare
-    void deliverStructuredLaunchPromptToExistingSession(stagedPrompt, target)
-    return true
-  }
   stagedPrompt.beforeCreate = prepare
   try {
     const launch = startStructuredAgentLaunch(draft.owner.workspaceId, draft.agent, {
       requestId: newAgentLaunchRequestId(), executionHostId: draft.owner.executionHostId,
-      reservedSessionId: sessionId, stagedPrompt, prompt: text, firstSubmissionOptions: options
+      reservedSessionId: sessionId, stagedPrompt, prompt: text, openingOptions: options
     })
     void launch.launchResult.catch(() => {})
     return true

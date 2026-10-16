@@ -47,7 +47,6 @@ import {
   trackStructuredLaunchPromptOutcome,
   trackStructuredLaunchConfirmationDeadline
 } from './structured-agent-session-launch-prompt-outcome'
-import { confirmStructuredLaunchFirstMessagePublication } from './structured-agent-session-launch-publication-confirmation'
 import { repeatedStructuredLaunchAttempt } from './structured-agent-session-launch-request'
 
 export type { StructuredAgentLaunchOptions, StructuredAgentLaunchReceipt }
@@ -132,12 +131,8 @@ function resetStructuredLaunchCallers(state: StructuredLaunchState): void {
 }
 
 function restartStructuredLaunchState(state: StructuredLaunchState): void {
-  if (state.intent.firstSubmission) {
-    confirmStructuredLaunchFirstMessagePublication(state.intent.worktreeId, state.intent.sessionId)
-    return
-  }
   const wasVisibilityUnknown = state.visibilityUnknown
-  if (!wasVisibilityUnknown && !state.intent.firstSubmission) {
+  if (!wasVisibilityUnknown) {
     state.intent = retryStructuredAgentSessionLaunchIntent(state.intent)
   }
   resetStructuredLaunchCallers(state)
@@ -218,13 +213,6 @@ function structuredAgentLaunchState(
   const stagedPrompt = options.stagedPrompt ?? (text
     ? stageStructuredLaunchPrompt(intent.sessionId, text, promptOwner(options))
     : null)
-  if (stagedPrompt?.sourceDraft && stagedPrompt.slot) {
-    intent.firstSubmission = {
-      clientMessageId: stagedPrompt.slot.clientMessageId,
-      draft: stagedPrompt.sourceDraft,
-      options: options.firstSubmissionOptions ?? {}
-    }
-  }
   launchDraft.seedStructuredAgentLaunchDraft(intent.sessionId, agent, options)
   const callers = createStructuredLaunchCallerGroup({
     kind: 'first',
@@ -240,7 +228,7 @@ function structuredAgentLaunchState(
     cancelled: false,
     onVisibilityChanged: notifyStructuredLaunchListeners,
     callers,
-    selection: { seed: intent.seedOptions, held: options.firstSubmissionOptions ?? {} }
+    selection: { seed: intent.seedOptions, held: options.openingOptions ?? {} }
   }
   state.onHostSeed = (seedOptions) => adoptPairedHostSeed(state, seedOptions)
   callers.onSettled = () => maybeCleanupLaunchState(state)

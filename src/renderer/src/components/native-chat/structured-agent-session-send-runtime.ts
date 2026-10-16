@@ -7,7 +7,6 @@ import {
   agentSessionWriteNotDoneParts
 } from '../../../../shared/agent-session-refusal-notice'
 import { readNativeChatComposerDraft, updateNativeChatComposerDraft } from './native-chat-composer-draft-store'
-import { readNativeChatNewDraft } from './native-chat-new-draft'
 import type { AgentSessionWriteNoticePart } from '../../../../shared/agent-session-write-notice-copy'
 import type { AgentSessionWriteFailure } from '../../../../shared/agent-session-write-failure'
 import { dispatchWasWithdrawn } from '../../../../shared/structured-agent-session-dispatch-rejection'
@@ -49,11 +48,6 @@ export function finish(
     runtime.resolve(outcome)
   }
   updateStructuredAgentSessionPendingSend(entry.sessionId, entry.clientMessageId, keep ?? null)
-  if (outcome === 'recorded' && readNativeChatNewDraft(entry.sessionId)) {
-    void import('@/lib/structured-agent-session-launch-outcome-tracking').then(
-      ({ finalizeStructuredLaunchConfirmedSubmission }) => finalizeStructuredLaunchConfirmedSubmission(entry.sessionId)
-    )
-  }
 }
 
 /** Puts the text back in the chat's composer; false, reported, when the draft write threw. */

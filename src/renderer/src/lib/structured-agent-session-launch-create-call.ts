@@ -81,13 +81,14 @@ export type StructuredLaunchHostSeedListener = (seedOptions: LaunchSeed) => void
 export async function launchStructuredAgentSession(
   intent: StructuredAgentSessionLaunchIntent,
   onHostSeed?: StructuredLaunchHostSeedListener,
-  priorCreateOutcomeUnknown = false
+  priorCreateOutcomeUnknown = false,
+  reservedSubmission = false
 ): Promise<StructuredAgentLaunchReceipt> {
   let hostSeed: LaunchSeed
   try {
     hostSeed = await requireHostCreateSupport(intent)
   } catch (error) {
-    if (!intent.firstSubmission || error instanceof StructuredAgentSessionCreateRefusalError) {
+    if (!reservedSubmission || error instanceof StructuredAgentSessionCreateRefusalError) {
       throw error
     }
     throw new StructuredAgentSessionCreateRefusalError(
@@ -115,17 +116,14 @@ export async function launchStructuredAgentSession(
         if (error instanceof StructuredAgentSessionSubmissionEndedError) {
           throw error
         }
-        if (intent.firstSubmission) {
-          throw new StructuredAgentSessionCreateRefusalError(
-        }
+        throw new StructuredAgentSessionCreateRefusalError(
           error instanceof Error ? error.message : 'The message could not be prepared.',
           'agent_session_attachment_unavailable'
         )
-        throw error
       }
     }
   }
-  if (intent.firstSubmission && intent.target.kind === 'environment') {
+  if (reservedSubmission && intent.target.kind === 'environment') {
     try {
       await ensureRuntimeEnvironmentCompatible(intent.target.environmentId)
     } catch (error) {
@@ -139,7 +137,7 @@ export async function launchStructuredAgentSession(
   try {
     issue?.()
     intent.createPrepared = true
-    result = intent.firstSubmission && intent.target.kind === 'environment'
+    result = reservedSubmission && intent.target.kind === 'environment'
       ? await callStructuredAgentSession<AgentSessionMutationResult<AgentSessionAttachResult>>(
           intent.target, 'agentSession.create', intent.params, { skipCompatibilityCheck: true }
         )

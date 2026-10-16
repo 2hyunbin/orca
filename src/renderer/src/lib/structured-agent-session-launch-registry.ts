@@ -95,9 +95,6 @@ export function deleteStructuredLaunchStateIfCurrent(state: StructuredLaunchStat
   if (structuredLaunchesBySessionId.get(state.intent.sessionId) !== state) {
     return false
   }
-  if (state.intent.firstSubmission && !state.cancelled) {
-    return false
-  }
   structuredLaunchesBySessionId.delete(state.intent.sessionId)
   deleteStructuredAgentLaunchRecord(state.intent.sessionId)
   return true
@@ -105,7 +102,11 @@ export function deleteStructuredLaunchStateIfCurrent(state: StructuredLaunchStat
 
 function persistStructuredLaunchState(state: StructuredLaunchState): void {
   const lifecycle = launchStateLifecycle(state)
-  if ((lifecycle === 'published' && !state.intent.firstSubmission) || lifecycle === 'cancelled') {
+  if (state.callers.outcome === 'published' || lifecycle === 'cancelled') {
+    deleteStructuredAgentLaunchRecord(state.intent.sessionId)
+    return
+  }
+  if (!state.intent.createPrepared) {
     deleteStructuredAgentLaunchRecord(state.intent.sessionId)
     return
   }

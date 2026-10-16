@@ -1,7 +1,5 @@
-import { reportNativeChatNewDraftSaveFailure } from '@/components/native-chat/native-chat-new-draft'
 import {
   validRecord,
-  projectStructuredAgentFirstSubmission,
   type StructuredAgentLaunchPersistedRecord
 } from './structured-agent-session-launch-record'
 export {
@@ -42,10 +40,9 @@ function load(): void {
           const seedOptions = parseStructuredLaunchSeedOptions(
             'seedOptions' in value ? value.seedOptions : undefined
           )
-          const { seedOptions: _stored, firstSubmission, ...rest } = value
+          const { seedOptions: _stored, ...rest } = value
           records.set(value.sessionId, {
             ...rest,
-            ...(firstSubmission ? { firstSubmission: projectStructuredAgentFirstSubmission(firstSubmission) } : {}),
             ...(seedOptions ? { seedOptions } : {}),
             executionHostId:
               parseExecutionHostId(value.executionHostId)?.id ?? LOCAL_EXECUTION_HOST_ID,
@@ -118,12 +115,7 @@ function writeRecords(): void {
     } else {
       localStorage.setItem(LAUNCH_STORAGE_KEY, JSON.stringify([...records.values()]))
     }
-  } catch (error) {
-    for (const record of records.values()) {
-      if (record.firstSubmission) {
-        reportNativeChatNewDraftSaveFailure(record.sessionId, error)
-      }
-    }
+  } catch {
     // Why: persistence is recovery bookkeeping and must never block a launch.
     console.warn('[structured-agent-launch] could not persist launch state')
   }
@@ -163,7 +155,7 @@ export function writeStructuredAgentLaunchRecord(
   record: StructuredAgentLaunchPersistedRecord
 ): void {
   load()
-  records.set(record.sessionId, { ...record, ...(record.firstSubmission ? { firstSubmission: projectStructuredAgentFirstSubmission(record.firstSubmission) } : {}) })
+  records.set(record.sessionId, record)
   writeRecords()
 }
 

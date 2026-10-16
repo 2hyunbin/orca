@@ -9,7 +9,7 @@ import {
 } from '@/lib/structured-agent-session-launch'
 import { relaunchFailedStructuredAgentSessionWithMessage } from '@/lib/structured-agent-session-launch-message'
 import { toRuntimeWorktreeSelector } from '@/runtime/runtime-worktree-selector'
-import { useNativeChatNewDraft } from './native-chat-new-draft'
+import { nativeChatNewDraftIsHosted, useNativeChatNewDraft } from './native-chat-new-draft'
 import { submitNativeChatLocalDraft } from '@/lib/native-chat-first-submission'
 import type { StructuredAgentSessionAttachment } from '../../../../shared/structured-agent-session-send-mutation'
 import { structuredLaunchSeedOptions } from '../../../../shared/native-chat-session-option-defaults'
@@ -73,7 +73,8 @@ export function useNativeChatProvisionalLaunch(
 ) {
   const lifecycle = useStructuredAgentSessionLaunchLifecycle(worktreeId ?? '', sessionId)
   const draft = useNativeChatNewDraft(sessionId)
-  const localDraft = draft !== undefined && lifecycle !== 'published'
+  const hosted = useAppStore(() => draft !== undefined && nativeChatNewDraftIsHosted(sessionId, draft))
+  const localDraft = draft !== undefined && lifecycle !== 'published' && !hosted
   const failure = useStructuredAgentSessionLaunchFailure(worktreeId ?? '', sessionId)
   const latched = useLatchedLaunchView(sessionId, worktreeId, lifecycle !== null || Boolean(draft))
   const launch: StructuredAgentSessionLaunchView | undefined = localDraft && draft ? {
@@ -87,16 +88,19 @@ export function useNativeChatProvisionalLaunch(
     }
   }, [sessionId, worktreeId])
   // While the chat starts it takes no send, so Send stays off and the text stays in the box.
-  const starting = lifecycle === 'pending' || lifecycle === 'visibility-unknown'
+  const starting = !hosted && lifecycle !== 'published' && (lifecycle === 'pending' || lifecycle === 'visibility-unknown')
   const sendThroughLaunch = useCallback(
     (text: string, withImages: boolean, send: () => boolean | 'queued', submission?: {
       attachments: readonly StructuredAgentSessionAttachment[]; options: Readonly<Record<string, string>>
     }): boolean | 'queued' => {
+      if (hosted || lifecycle === 'published') {
+        return send()
+      }
       if (starting) {
         return false
       }
-      if (draft) {
-        return submitNativeChatLocalDraft(sessionId, text, submission?.attachments ?? [], submission?.options ?? {}, lifecycle === 'published')
+      if (draft && localDraft) {
+        return submitNativeChatLocalDraft(sessionId, text, submission?.attachments ?? [], submission?.options ?? {})
       }
       if (lifecycle !== 'failed' || !worktreeId) {
         return send()
@@ -108,7 +112,7 @@ export function useNativeChatProvisionalLaunch(
       relaunchFailedStructuredAgentSessionForMessage(worktreeId, sessionId)
       return false
     },
-    [draft, lifecycle, sessionId, starting, worktreeId]
+    [draft, hosted, lifecycle, localDraft, sessionId, starting, worktreeId]
   )
   return {
     lifecycle,
@@ -117,6 +121,6 @@ export function useNativeChatProvisionalLaunch(
     retry,
     starting,
     sendThroughLaunch,
-    transportEnabled: !localDraft && (lifecycle === null || lifecycle === 'published')
+    transportEnabled: !localDraft && (hosted || lifecycle === null || lifecycle === 'published')
   }
 }

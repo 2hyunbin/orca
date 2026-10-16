@@ -1,5 +1,4 @@
 import type { TuiAgent } from '../../../shared/tui-agent'
-import type { StructuredAgentFirstSubmission } from './structured-agent-session-launch-record'
 import {
   createStructuredAgentSessionId,
   structuredAgentSessionCreateParams,
@@ -45,7 +44,6 @@ export type StructuredAgentSessionLaunchIntent = {
   target: RuntimeClientTarget
   agent: TuiAgent
   params: StructuredAgentSessionCreateParams
-  firstSubmission?: StructuredAgentFirstSubmission
   createMessageSupport?: boolean
   createPrepared?: true
   prepareCreate?: () => void | (() => void) | Promise<void | (() => void)>
@@ -119,13 +117,13 @@ function buildStructuredAgentSessionLaunchIntent(
   const state = useAppStore.getState()
   if (requestFocus) {
     recordWebSessionFocusIntent(
+      structuredAgentSessionFocusOwner(owner.target),
+      worktreeId,
+      `agent-session:${sessionId}`,
+      undefined,
+      resolveWebSessionVisibleTabId(state, worktreeId)
+    )
   }
-    structuredAgentSessionFocusOwner(owner.target),
-    worktreeId,
-    `agent-session:${sessionId}`,
-    undefined,
-    resolveWebSessionVisibleTabId(state, worktreeId)
-  )
   return {
     sessionId,
     worktreeId,
@@ -172,26 +170,14 @@ export function restoreStructuredAgentSessionLaunchIntent(args: {
   firstMessage?: StructuredAgentSessionFirstMessage
   options?: Readonly<Record<string, string>>
   createMessageSupport?: boolean
-  firstSubmission?: StructuredAgentFirstSubmission
 }): StructuredAgentSessionLaunchIntent {
-  const state = useAppStore.getState()
   const { target } = structuredAgentSessionOwnerTarget(args.worktreeId, args.executionHostId)
-  if (!args.firstSubmission) {
-    recordWebSessionFocusIntent(
-  }
-    structuredAgentSessionFocusOwner(target),
-    args.worktreeId,
-    `agent-session:${args.sessionId}`,
-    undefined,
-    resolveWebSessionVisibleTabId(state, args.worktreeId)
-  )
   return {
     sessionId: args.sessionId,
     worktreeId: args.worktreeId,
     executionHostId: args.executionHostId,
     target,
     agent: args.agent,
-    ...(args.firstSubmission ? { firstSubmission: args.firstSubmission } : {}),
     params: {
       envelope: {
         sessionId: args.sessionId,

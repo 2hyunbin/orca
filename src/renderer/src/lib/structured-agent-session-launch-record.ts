@@ -8,17 +8,6 @@ import { isAgentSessionOptions } from '../../../shared/agent-session-record'
 import { SendBodyStructure } from '../../../shared/rpc-contract/structured-agent-session-message-params'
 import { parseExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
 import type { StructuredAgentSessionLaunchIntent } from './launch-structured-agent-session'
-import { parseStoredNativeChatComposerDraft, projectNativeChatComposerDraft, type NativeChatComposerDraft } from '@/components/native-chat/native-chat-composer-draft-storage'
-
-export type StructuredAgentFirstSubmission = {
-  clientMessageId: string
-  draft: NativeChatComposerDraft
-  options: Readonly<Record<string, string>>
-}
-
-export function projectStructuredAgentFirstSubmission(submission: StructuredAgentFirstSubmission): StructuredAgentFirstSubmission {
-  return { clientMessageId: submission.clientMessageId, draft: projectNativeChatComposerDraft(submission.draft), options: { ...submission.options } }
-}
 
 export type StructuredAgentLaunchPersistedLifecycle = 'pending' | 'visibility-unknown' | 'failed'
 
@@ -34,7 +23,6 @@ export type StructuredAgentLaunchPersistedRecord = {
   expectedRuntimeFence: number | null
   resumeFrom?: StructuredAgentSessionResumeSource
   firstMessage?: StructuredAgentSessionFirstMessage
-  firstSubmission?: StructuredAgentFirstSubmission
   options?: Readonly<Record<string, string>>
   createMessageSupport?: boolean
   /** A paired server's reported seed, which this machine cannot re-derive after a reload. */
@@ -61,7 +49,6 @@ export function structuredAgentLaunchRecordFor(
     expectedRuntimeFence: envelope.expectedRuntimeFence,
     ...(resumeFrom ? { resumeFrom } : {}),
     ...(firstMessage ? { firstMessage } : {}),
-    ...(intent.firstSubmission ? { firstSubmission: projectStructuredAgentFirstSubmission(intent.firstSubmission) } : {}),
     ...(options ? { options } : {}),
     ...(intent.createMessageSupport === undefined
       ? {}
@@ -101,7 +88,6 @@ export function validRecord(value: unknown): value is Omit<
   const executionHostId = 'executionHostId' in value ? value.executionHostId : undefined
   const failedAt = 'failedAt' in value ? value.failedAt : undefined
   const firstMessage = 'firstMessage' in value ? value.firstMessage : undefined
-  const firstSubmission = 'firstSubmission' in value ? value.firstSubmission : undefined
   const options = 'options' in value ? value.options : undefined
   const createMessageSupport =
     'createMessageSupport' in value ? value.createMessageSupport : undefined
@@ -117,7 +103,6 @@ export function validRecord(value: unknown): value is Omit<
     (expectedRuntimeFence === null || typeof expectedRuntimeFence === 'number') &&
     (failedAt === undefined || Number.isFinite(failedAt)) &&
     (firstMessage === undefined || validFirstMessage(firstMessage)) &&
-    (firstSubmission === undefined || validFirstSubmission(firstSubmission)) &&
     (options === undefined || isAgentSessionOptions(options)) &&
     (createMessageSupport === undefined || typeof createMessageSupport === 'boolean') &&
     (resumeFrom === undefined ||
@@ -126,14 +111,6 @@ export function validRecord(value: unknown): value is Omit<
         'providerSessionId' in resumeFrom &&
         typeof resumeFrom.providerSessionId === 'string'))
   )
-}
-
-function validFirstSubmission(value: unknown): value is StructuredAgentFirstSubmission {
-  return typeof value === 'object' && value !== null &&
-    'clientMessageId' in value && typeof value.clientMessageId === 'string' &&
-    'options' in value && isAgentSessionOptions(value.options) &&
-    'draft' in value && typeof value.draft === 'object' && value.draft !== null &&
-    parseStoredNativeChatComposerDraft({ ...value.draft, savedAt: 0 }) !== null
 }
 
 function validFirstMessage(value: unknown): value is StructuredAgentSessionFirstMessage {

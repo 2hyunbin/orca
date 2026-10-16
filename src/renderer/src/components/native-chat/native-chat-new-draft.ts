@@ -7,6 +7,9 @@ import {
   type NativeChatNewDraft
 } from './native-chat-composer-draft-storage'
 import { notifyScope, refusedScopes, scopeListeners } from './native-chat-composer-draft-memory'
+import { hostSessionTabIdsByLocalTabForWorktree } from '@/runtime/web-session-tabs-sync/tracking-mappings'
+import { structuredAgentSessionFocusOwner, structuredAgentSessionTargetForHost } from '@/runtime/structured-agent-session-owner'
+import { structuredAgentSessionTabId } from '../../../../shared/structured-agent-session-projection'
 
 const PREFIX = 'agent-session-new:'
 const drafts = new Map<string, NativeChatNewDraft>()
@@ -41,8 +44,12 @@ function notify(key: string): void {
   notifyScope(`agent-session:${key.slice(PREFIX.length)}`)
 }
 
-export function reportNativeChatNewDraftSaveFailure(sessionId: string, error: unknown): false {
-  return failed(nativeChatNewDraftKey(sessionId), error)
+/** Publication ownership is already recorded by the host mirror, independently of draft storage. */
+export function nativeChatNewDraftIsHosted(sessionId: string, draft: NativeChatNewDraft): boolean {
+  const target = structuredAgentSessionTargetForHost(draft.owner.executionHostId)
+  return target !== null && hostSessionTabIdsByLocalTabForWorktree(
+    structuredAgentSessionFocusOwner(target).environmentId, draft.owner.workspaceId
+  ).has(structuredAgentSessionTabId(sessionId))
 }
 
 function adopt(key: string, draft: NativeChatNewDraft | null): void {
@@ -52,8 +59,10 @@ function adopt(key: string, draft: NativeChatNewDraft | null): void {
   }
   if (draft) {
     unsavedAllocations.delete(key)
+    refusedScopes.delete(key)
     drafts.set(key, draft)
   } else if (!unsavedAllocations.has(key)) {
+    refusedScopes.delete(key)
     drafts.delete(key)
   }
   notify(key)
