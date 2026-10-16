@@ -109,6 +109,13 @@ export function WorkspaceSpaceBreakdownList({
             'No files found.'
           )}
         </div>
+      ) : worktree.topLevelItems.length === 0 ? (
+        <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+          {translate(
+            'workspaceSpace.savedScan.folderDetailsUnavailable',
+            'Folder details are not saved with past scans. Refresh to inspect this workspace.'
+          )}
+        </div>
       ) : (
         <div className="max-h-72 overflow-y-auto scrollbar-sleek px-3 py-3">
           <div className="space-y-2">
