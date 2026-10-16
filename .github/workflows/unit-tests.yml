@@ -93,7 +93,7 @@ jobs:
 
       # The image resets HOME during login; shell fixtures intentionally use temporary homes.
       - name: Preserve explicit login-shell homes on Blacksmith
-        if: startsWith(inputs.runner, 'blacksmith-')
+        if: runner.os == 'Linux' && startsWith(inputs.runner, 'blacksmith-')
         run: |
           sudo python3 - <<'PYTHON'
           from pathlib import Path
@@ -106,7 +106,7 @@ jobs:
           PYTHON
 
       - name: Verify Blacksmith unit runner environment
-        if: startsWith(inputs.runner, 'blacksmith-')
+        if: runner.os == 'Linux' && startsWith(inputs.runner, 'blacksmith-')
         run: |
           ELECTRON_RUN_AS_NODE=1 "$(node -p "require('electron')")" --version
           fixture_home="$(mktemp -d)"
