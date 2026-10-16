@@ -2,6 +2,7 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
+import { runInNewContext } from 'node:vm'
 import { afterEach, describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 
@@ -230,6 +231,27 @@ describe('root directory guard', () => {
     expect(result.stdout).not.toContain('guard passed')
   })
 
+  it('keeps the root and README guards on docs-only PRs without another runner', () => {
+    const prWorkflow = parse(readFileSync(join(projectDir, '.github/workflows/pr.yml'), 'utf8'))
+    const detector = prWorkflow.jobs.code_paths
+    // Only draft PRs skip the detector; verify skips with it, so no draft reports a result.
+    const runsFor = (expression, draft) =>
+      runInNewContext(expression.replace(/^\$\{\{(.*)\}\}$/s, '$1'), {
+        github: { event_name: 'pull_request', event: { pull_request: { draft } } },
+        cancelled: () => false
+      })
+    expect(runsFor(detector.if, false)).toBe(true)
+    expect(runsFor(detector.if, true)).toBe(false)
+    expect(runsFor(prWorkflow.jobs.verify.if, true)).toBe(false)
+    expect(detector.needs).toBeUndefined()
+    for (const name of ['Reject new root-level files and folders', 'Check README local links']) {
+      const step = detector.steps.find((candidate) => candidate.name === name)
+      expect(step).toBeDefined()
+      expect(step.if).toBeUndefined()
+    }
+    expect(prWorkflow.jobs.root_directory_guard).toBeUndefined()
+  })
+
   it('is wired into the PR verify gate', () => {
     const workflow = parse(readFileSync(join(projectDir, '.github/workflows/pr.yml'), 'utf8'))
     const guardJob = workflow.jobs.code_paths
@@ -237,7 +259,15 @@ describe('root directory guard', () => {
       (step) => step.name === 'Reject new root-level files and folders'
     )
 
-    expect(guardJob.if).toBeUndefined()
+    // Only draft PRs skip the guard; verify skips with it, so no draft reports a result.
+    const runsFor = (expression, draft) =>
+      runInNewContext(expression.replace(/^\$\{\{(.*)\}\}$/s, '$1'), {
+        github: { event_name: 'pull_request', event: { pull_request: { draft } } },
+        cancelled: () => false
+      })
+    expect(runsFor(guardJob.if, false)).toBe(true)
+    expect(runsFor(guardJob.if, true)).toBe(false)
+    expect(runsFor(workflow.jobs.verify.if, true)).toBe(false)
     expect(guardStep.if).toBeUndefined()
     // Why >= 2 rather than 0: the guard compares the merge commit's first parent against the
     // merged tree, so it needs both parents present but no history beyond them. Depth 1 would

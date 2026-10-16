@@ -23,6 +23,8 @@ export const HOST_OPERATION_OWNERSHIP = {
   browser: 'host',
   clipboard: 'host',
   computer: 'host',
+  // The paired desktop attaches to the named managed host, whose agents own the requests.
+  desktopBrowserBridge: 'host',
   diagnostics: 'host',
   emulator: 'host',
   files: 'host',

@@ -344,11 +344,22 @@ describe('CI dependency download caches', () => {
     ['workflow_dispatch', true, true]
   ])('retains cache producers and Windows validation on %s', (event, armRuns, sharedPlatforms) => {
     const shared = workflow('ci-cache-warmup')
-    const platforms = read(workflow('ci-cache-warmup-platforms').jobs['warm-platforms'].uses)
-    const context = { github: { event_name: event } }
+    const caller = workflow('ci-cache-warmup-platforms')
+    const platforms = read(caller.jobs['warm-platforms'].uses)
+    const contextFor = (draft) => ({
+      github: {
+        event_name: event,
+        event: event === 'pull_request' ? { pull_request: { draft } } : {}
+      }
+    })
+    const context = contextFor(false)
     expect(runInNewContext(platforms.jobs['warm-linux-runtime'].if, context)).toBe(armRuns)
     expect(runInNewContext(shared.jobs['warm-platforms'].if, context)).toBe(sharedPlatforms)
-    expect(shared.jobs.warm.if).toBeUndefined()
+    // Draft PRs skip the producers; every other event still runs them.
+    for (const guard of [shared.jobs.warm.if, caller.jobs['warm-platforms'].if]) {
+      expect(runInNewContext(guard, context)).toBe(true)
+      expect(runInNewContext(guard, contextFor(true))).toBe(event !== 'pull_request')
+    }
     expect(platforms.jobs['warm-windows'].if).toBeUndefined()
     expect(platforms.jobs['warm-windows'].strategy.matrix.os).toEqual([
       'windows-2022',

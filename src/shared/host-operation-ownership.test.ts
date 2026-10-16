@@ -29,6 +29,12 @@ describe('getHostOperationOwnership', () => {
     expect(getHostOperationOwnership('github.project.updateItemField')).toBe('credential')
   })
 
+  it('keeps the desktop browser bridge on the managed host it attaches to', () => {
+    // Like browser.clientHost.attach, a long-lived attach stays host-owned rather than a stream.
+    expect(getHostOperationOwnership('desktopBrowserBridge.attach')).toBe('host')
+    expect(getHostOperationOwnership('desktopBrowserBridge.result')).toBe('host')
+  })
+
   it('keeps client effects client and returns null for unknown names', () => {
     expect(getHostOperationOwnership('shell.openPath')).toBe('client')
     expect(getHostOperationOwnership('nope.call')).toBeNull()
