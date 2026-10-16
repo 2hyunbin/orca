@@ -8,13 +8,14 @@ import {
 import { scriptedPostgresDatabase, ScriptedPoolClient } from './test-fixtures/scripted-postgres-pool.js'
 
 describe('relay database move capability', () => {
-  it('keeps the mark inside the 63 bytes PostgreSQL stores', () => {
-    expect(markRelayDatabaseMoveCapability('orca-relay/cell/production-gce-c17')).toBe(
-      'orca-relay/cell/production-gce-c17 mv1'
+  it('marks each process with its own id, inside the 63 bytes PostgreSQL stores', () => {
+    expect(markRelayDatabaseMoveCapability('orca-relay/cell/production-gce-c17', '0a1b2c3d')).toBe(
+      'orca-relay/cell/production-gce-c17 mv1:0a1b2c3d'
     )
-    const long = markRelayDatabaseMoveCapability(`orca-relay/director/${'x'.repeat(80)}`)
+    const long = markRelayDatabaseMoveCapability(`orca-relay/director/${'x'.repeat(80)}`, 'deadbeef')
     expect(Buffer.byteLength(long)).toBe(63)
-    expect(long.endsWith(' mv1')).toBe(true)
+    expect(long.endsWith(' mv1:deadbeef')).toBe(true)
+    expect(() => markRelayDatabaseMoveCapability('orca-relay', 'not-hex!')).toThrow()
   })
 
   it('reads pool pressure from the pool a routing database serves from', () => {

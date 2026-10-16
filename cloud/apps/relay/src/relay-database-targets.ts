@@ -21,9 +21,19 @@ export type OpenedRelayDatabaseTarget = {
   applySchema(): Promise<void>
 }
 
-export type RelayDatabaseTarget = {
+export type RelayDatabaseProbeResult = { generation: number; opened: OpenedRelayDatabaseTarget }
+
+// Probes on one held session: while it is open, the target sees this process's marked
+// application_name, which is how the move tool knows the process can reach it.
+export type RelayDatabaseProbeSession = {
   // The authority generation, or null for any failure: refused, unreachable, or too slow.
-  probe(timeoutMs: number): Promise<{ generation: number; opened: OpenedRelayDatabaseTarget } | null>
+  probe(timeoutMs: number): Promise<RelayDatabaseProbeResult | null>
+  close(): void
+}
+
+export type RelayDatabaseTarget = {
+  probe(timeoutMs: number): Promise<RelayDatabaseProbeResult | null>
+  probeSession(): RelayDatabaseProbeSession
   close(): Promise<void>
 }
 
@@ -31,36 +41,74 @@ export type RelayDatabaseTarget = {
 const AUTHORITY_SQL = 'SELECT generation FROM relay_database_authority'
 const UNDEFINED_TABLE = '42P01'
 
+type ReadyTarget = { pool: pg.Pool; opened: OpenedRelayDatabaseTarget }
+
 // A failed or slow probe destroys its client, so a refused or stuck session never returns to
-// the pool.
-export async function readRelayDatabaseAuthorityGeneration(
-  pool: pg.Pool,
-  timeoutMs: number
-): Promise<number | null> {
-  let client: pg.PoolClient | undefined
-  let timer: ReturnType<typeof setTimeout> | undefined
-  let released = false
-  const release = (destroy: boolean): void => {
-    if (released || !client) return
-    released = true
-    client.release(destroy)
+// the pool; a good one keeps it for the next probe until close().
+function postgresProbeSession(ready: () => Promise<ReadyTarget | null>): RelayDatabaseProbeSession {
+  let client: pg.PoolClient | null = null
+  let closed = false
+  const drop = (held: pg.PoolClient, destroy: boolean): void => {
+    if (client === held) client = null
+    held.release(destroy)
   }
-  try {
-    client = await pool.connect()
-    const connected = client
-    timer = setTimeout(() => release(true), timeoutMs)
-    timer.unref?.()
-    const result = await connected.query(AUTHORITY_SQL)
-    release(false)
-    const generation = Number(result.rows[0]?.generation ?? 0)
-    return Number.isSafeInteger(generation) && generation >= 0 ? generation : null
-  } catch (error) {
-    const undefinedTable =
-      typeof error === 'object' && error !== null && 'code' in error && error.code === UNDEFINED_TABLE
-    release(!undefinedTable)
-    return undefinedTable ? 0 : null
-  } finally {
-    clearTimeout(timer)
+  return {
+    probe: async (timeoutMs) => {
+      const target = await ready()
+      if (!target || closed) return null
+      let held: pg.PoolClient | null = client
+      let timer: ReturnType<typeof setTimeout> | undefined
+      try {
+        if (!held) {
+          held = await target.pool.connect()
+          if (closed) {
+            held.release()
+            return null
+          }
+          client = held
+        }
+        const querying = held
+        timer = setTimeout(() => drop(querying, true), timeoutMs)
+        timer.unref?.()
+        const result = await querying.query(AUTHORITY_SQL)
+        const generation = Number(result.rows[0]?.generation ?? 0)
+        return Number.isSafeInteger(generation) && generation >= 0
+          ? { generation, opened: target.opened }
+          : null
+      } catch (error) {
+        const undefinedTable =
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          error.code === UNDEFINED_TABLE
+        if (held && client === held && !undefinedTable) drop(held, true)
+        return undefinedTable && held ? { generation: 0, opened: target.opened } : null
+      } finally {
+        clearTimeout(timer)
+      }
+    },
+    close: () => {
+      closed = true
+      if (client) drop(client, false)
+    }
+  }
+}
+
+function postgresTarget(
+  ready: () => Promise<ReadyTarget | null>,
+  close: () => Promise<void>
+): RelayDatabaseTarget {
+  return {
+    probe: async (timeoutMs) => {
+      const session = postgresProbeSession(ready)
+      try {
+        return await session.probe(timeoutMs)
+      } finally {
+        session.close()
+      }
+    },
+    probeSession: () => postgresProbeSession(ready),
+    close
   }
 }
 
@@ -83,14 +131,13 @@ export function openPrimaryRelayDatabaseTarget(
   databaseUrl: string,
   settings: RelayPostgresPoolSettings
 ): RelayDatabaseTarget & { opened: OpenedRelayDatabaseTarget } {
-  const { opened, pool } = openedPostgresTarget({ connectionString: databaseUrl }, settings)
+  const ready = openedPostgresTarget({ connectionString: databaseUrl }, settings)
   return {
-    opened,
-    probe: async (timeoutMs) => {
-      const generation = await readRelayDatabaseAuthorityGeneration(pool, timeoutMs)
-      return generation === null ? null : { generation, opened }
-    },
-    close: async () => await opened.database.close()
+    opened: ready.opened,
+    ...postgresTarget(
+      async () => ready,
+      async () => await ready.opened.database.close()
+    )
   }
 }
 
@@ -101,7 +148,7 @@ export function openDedicatedRelayDatabaseTarget(
   settings: RelayPostgresPoolSettings,
   google: GoogleMetadataAccess
 ): RelayDatabaseTarget {
-  let opening: Promise<{ opened: OpenedRelayDatabaseTarget; pool: pg.Pool }> | null = null
+  let opening: Promise<ReadyTarget> | null = null
   let connector: Connector | null = null
   let closed = false
   let lastFailure: string | null = null
@@ -113,7 +160,7 @@ export function openDedicatedRelayDatabaseTarget(
     console.warn(JSON.stringify({ event: 'orca_relay_database_dedicated_unavailable', failure }))
   }
 
-  const open = async (): Promise<{ opened: OpenedRelayDatabaseTarget; pool: pg.Pool }> => {
+  const open = async (): Promise<ReadyTarget> => {
     const credentials = await readDedicatedDatabaseCredentials(target.databaseUrlSecret, google)
     connector ??= new Connector()
     const { stream } = await connector.getOptions({
@@ -126,26 +173,21 @@ export function openDedicatedRelayDatabaseTarget(
     return openedPostgresTarget({ ...credentials, stream }, settings)
   }
 
-  return {
-    probe: async (timeoutMs) => {
-      opening ??= open()
-      const current = opening
-      const ready = await current.catch((error: unknown) => {
-        if (opening === current) opening = null
-        reportOpenFailure(error)
-        return null
-      })
-      if (!ready) return null
-      const generation = await readRelayDatabaseAuthorityGeneration(ready.pool, timeoutMs)
-      return generation === null ? null : { generation, opened: ready.opened }
-    },
-    close: async () => {
-      closed = true
-      const current = opening
-      opening = null
-      const ready = await current?.catch(() => null)
-      await ready?.opened.database.close().catch(() => undefined)
-      connector?.close()
-    }
+  const ready = async (): Promise<ReadyTarget | null> => {
+    opening ??= open()
+    const current = opening
+    return await current.catch((error: unknown) => {
+      if (opening === current) opening = null
+      reportOpenFailure(error)
+      return null
+    })
   }
+  return postgresTarget(ready, async () => {
+    closed = true
+    const current = opening
+    opening = null
+    const opened = await current?.catch(() => null)
+    await opened?.opened.database.close().catch(() => undefined)
+    connector?.close()
+  })
 }
