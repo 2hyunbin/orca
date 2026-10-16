@@ -115,6 +115,17 @@ describe('createInitialTerminalThroughLayoutOwner', () => {
     expect(create).not.toHaveBeenCalled()
   })
 
+  it('opens nothing as today once the workspace got a tab meanwhile', async () => {
+    let state = stateWith()
+    const { create } = start(() => state)
+
+    state = stateWith(['tab-opened-meanwhile'])
+    mocks.fail?.(new Error('layout_store_unavailable'))
+    await settle()
+
+    expect(create).not.toHaveBeenCalled()
+  })
+
   it('leaves a paired server’s workspace to the caller', () => {
     mocks.pairedServer = 'env-1'
 

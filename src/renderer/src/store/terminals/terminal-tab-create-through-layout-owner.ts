@@ -90,9 +90,10 @@ export function createInitialTerminalThroughLayoutOwner(
   }
   const tabId = createBrowserUuid()
   const leafId = createBrowserUuid()
-  // Today's create runs only while the workspace is still the one shown, as it did before the await.
+  // Today's create, only while the workspace is still shown and still empty, as before the await.
   const createAsToday = (): void => {
-    if (getState().activeWorktreeId === worktreeId) {
+    const state = getState()
+    if (state.activeWorktreeId === worktreeId && !state.tabsByWorktree[worktreeId]?.length) {
       create()
     }
   }
