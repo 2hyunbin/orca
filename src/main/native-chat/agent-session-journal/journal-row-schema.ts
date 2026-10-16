@@ -138,7 +138,13 @@ export type JournalStopOrResumeRow = JournalTombstoneRow &
 
 /** A Stop's event, a Resume or a reopen mark. Any value counts, so a newer build's mark never
  *  removes an item. */
-export function isJournalStopOrResumeRow(row: JournalRow): row is JournalStopOrResumeRow {
+export function isJournalStopOrResumeRow<T extends {
+  kind: JournalRow['kind']
+  stopEvent?: unknown
+  queueResume?: unknown
+  queueReopen?: unknown
+  queueClear?: unknown
+}>(row: T): row is T & { kind: 'tombstone' } {
   return (
     row.kind === 'tombstone' &&
     (row.stopEvent !== undefined ||

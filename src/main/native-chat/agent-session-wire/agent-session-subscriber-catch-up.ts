@@ -13,6 +13,7 @@ import { sameJournalCursor } from '../agent-session-journal/journal-cursor'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import { emptyAgentSessionBatch } from './agent-session-empty-batch'
 import {
+  capturePublishedWork,
   agentSessionPublishedWorkFields,
   withPublishedWork,
   withPublishedWorkResult
@@ -29,6 +30,7 @@ import {
   type SubscriberFieldHooks
 } from './agent-session-subscriber-frame-fields'
 import type { Subscriber } from './structured-agent-session-subscribers'
+import type { AgentSessionLivePublication } from './agent-session-live-publication'
 
 export type SubscriberDeliveryPort = {
   hooks: SubscriberFieldHooks & {
@@ -56,23 +58,27 @@ export function deliverToSubscriber(
     hostNow: number
     emitCheckpoint: boolean
     activity?: AgentSessionTurnActivity | null | undefined
+    publication?: AgentSessionLivePublication
   }
 ): void {
-  const { subscriber, journal, hostNow, emitCheckpoint, activity } = input
+  const { subscriber, journal, hostNow, emitCheckpoint, activity, publication } = input
+  if (!port.isActive(subscriber)) return
   const checkpointActivity = emitCheckpoint ? port.activity(subscriber.sessionId) : undefined
   const publishedActivity = activity !== undefined ? activity : checkpointActivity
   const shared = {
     hostNow,
     ...(publishedActivity !== undefined ? { activity: publishedActivity } : {})
   }
-  const work = port.hooks.readCurrentWork?.(subscriber.sessionId, journal)
+  const work = publication ? publication.work : capturePublishedWork(
+    journal.snapshot(), port.hooks.readCurrentWork?.(subscriber.sessionId, journal)
+  )
   // Caught up, so there are no rows to read: every publish behind a commit's own delivery.
-  if (sameJournalCursor(subscriber.cursor, journal.cursor())) {
+  if (sameJournalCursor(subscriber.cursor, publication?.history.snapshot.cursor ?? journal.cursor())) {
     emitCaughtUp(port, subscriber, emitCheckpoint, shared, { journal, work })
     return
   }
   const reader = subscriberHistoryReader(subscriber)
-  const readPage = createAgentSessionCatchUpReader(journal, reader)
+  const readPage = createAgentSessionCatchUpReader(journal, reader, publication?.history)
   while (true) {
     const result = withPublishedWorkResult(
       readPage({
@@ -107,7 +113,7 @@ export function deliverToSubscriber(
     // arrives as the newest page instead; older rows load on scroll.
     if (page.hasNewer && subscriber.boundedFrames) {
       const tail = withPublishedWork(
-        readAgentSessionHydrationPage(journal, subscriber.fence, reader),
+        readAgentSessionHydrationPage(journal, subscriber.fence, reader, publication?.history.snapshot),
         work
       )
       port.emit(subscriber, {
@@ -161,7 +167,7 @@ function emitCaughtUp(
     hostNow: number
     activity?: AgentSessionTurnActivity | null
   },
-  current: { journal: AgentSessionJournal; work: StructuredAgentSessionCurrentWork | undefined }
+  current: { journal: AgentSessionJournal; work: ReturnType<typeof capturePublishedWork> }
 ): void {
   const commandsChanged = subscriberCommandsChanged(port.hooks, subscriber)
   const queuedChanged = subscriberQueuedMessagesChanged(port.hooks, subscriber)
