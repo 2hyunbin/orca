@@ -12479,7 +12479,11 @@
             "target": "通过 SSH 主机访问",
             "port": "服务器端口",
             "link": "使用 SSH",
-            "linking": "正在连接…"
+            "linking": "正在连接…",
+            "pendingLink": "通过 SSH 连接未完成。",
+            "pendingUnlink": "停止 SSH 访问未完成。",
+            "retry": "重试",
+            "cancelLink": "取消"
           },
           "search": {
             "title": "受管服务器",

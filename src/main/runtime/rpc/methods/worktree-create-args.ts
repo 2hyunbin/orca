@@ -47,6 +47,7 @@ export function buildManagedWorktreeCreateArgs(
     telemetrySource: params.telemetrySource,
     workspaceStatus: params.workspaceStatus,
     manualOrder: params.manualOrder,
+    ...(params.nestWorkspaces !== undefined ? { nestWorkspaces: params.nestWorkspaces } : {}),
     sparseCheckout: params.sparseCheckout,
     pushTarget: params.pushTarget,
     runHooks: params.runHooks === true,

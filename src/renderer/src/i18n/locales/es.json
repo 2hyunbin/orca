@@ -12461,7 +12461,11 @@
             "target": "Conectar a través del host SSH",
             "port": "Puerto del servidor",
             "link": "Usar SSH",
-            "linking": "Conectando…"
+            "linking": "Conectando…",
+            "pendingLink": "La conexión por SSH no terminó.",
+            "pendingUnlink": "La desactivación del acceso SSH no terminó.",
+            "retry": "Reintentar",
+            "cancelLink": "Cancelar"
           },
           "search": {
             "title": "Servidores gestionados",

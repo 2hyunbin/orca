@@ -12465,7 +12465,11 @@
             "target": "SSH 호스트를 통해 연결",
             "port": "서버 포트",
             "link": "SSH 사용",
-            "linking": "연결 중…"
+            "linking": "연결 중…",
+            "pendingLink": "SSH를 통한 연결이 완료되지 않았습니다.",
+            "pendingUnlink": "SSH 액세스 중지가 완료되지 않았습니다.",
+            "retry": "다시 시도",
+            "cancelLink": "취소"
           },
           "search": {
             "title": "관리형 서버",
