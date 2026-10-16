@@ -50,15 +50,14 @@ function errorCode(error: unknown): string | null {
 
 /**
  * Asks the paired runtime that owns the PTY to close it. This machine cannot stop that process,
- * so the owner's receipt is the only evidence of the stop. Resolves 'absent' when the owner
- * answers it has no such terminal; any other failure rejects, so the caller keeps its local
- * mirror rather than hiding a terminal that may still run.
+ * so the owner's receipt is the only evidence of the stop. A failure to reach the owner rejects,
+ * so the caller keeps its local mirror rather than hiding a terminal that may still run.
  */
 export async function closeTerminalOnPairedHost(
   call: PairedHostTerminalCall,
   terminal: PairedHostTerminal,
   method: 'terminal.close' | 'terminal.closeTab'
-): Promise<Omit<RuntimeTerminalClose, 'handle' | 'tabId'> | 'absent'> {
+): Promise<Omit<RuntimeTerminalClose, 'handle' | 'tabId'>> {
   let result: unknown
   try {
     result = await call(
@@ -68,8 +67,18 @@ export async function closeTerminalOnPairedHost(
       PAIRED_HOST_TERMINAL_CLOSE_TIMEOUT_MS
     )
   } catch (error) {
-    if (errorCode(error) === 'terminal_not_found') {
-      return 'absent'
+    const code = errorCode(error)
+    if (code === 'terminal_not_found') {
+      // The owner has no such terminal, so nothing runs there to stop.
+      return { ptyKilled: false }
+    }
+    if (code === 'terminal_handle_stale') {
+      // Why not absence: a host whose renderer reloaded answers this for a PTY that still runs.
+      return {
+        ptyKilled: false,
+        ptyStopVerdict: 'unverifiable',
+        ptyStopReason: 'its owning host no longer recognizes this terminal handle'
+      }
     }
     throw error
   }

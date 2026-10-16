@@ -10,7 +10,9 @@ const { store } = await import('./orca-runtime-test-fixtures.spec')
 
 const WORKTREE_ID = 'repo-1::/tmp/worktree-a'
 
-function pairedHostLeafRuntime(hostCall: (...args: unknown[]) => Promise<unknown>) {
+type HostCall = (environmentId: string, method: string, params: unknown) => Promise<unknown>
+
+function pairedHostLeafRuntime(hostCall: HostCall) {
   const runtime = new OrcaRuntimeService(store)
   const localStops: string[] = []
   runtime.setPtyController({
@@ -136,18 +138,71 @@ describe('closing a terminal that a paired runtime runs', () => {
     ])
   })
 
-  it('retires the local mirror when the owning host has no such terminal', async () => {
-    const { runtime, closeTerminalTab } = pairedHostLeafRuntime(async () => {
-      throw new OrchestrationError('terminal_not_found', 'terminal_not_found')
+  it('retires the mirror of a terminal the owning host no longer knows, without claiming a stop', async () => {
+    // The owner is a real runtime that never issued this handle; the RPC layer passes its
+    // refusal code through, as `mapRuntimeError` does for `terminal_handle_stale`.
+    const owner = new OrcaRuntimeService(store)
+    owner.syncWindowGraph(1, { tabs: [], leaves: [] })
+    const { runtime, closeTerminalTab } = pairedHostLeafRuntime(async (_env, _method, params) => {
+      const terminal =
+        typeof params === 'object' && params !== null && 'terminal' in params
+          ? String(params.terminal)
+          : ''
+      try {
+        return { close: await owner.closeTerminal(terminal) }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        throw new OrchestrationError(message, message)
+      }
     })
     const handle = await listedHandle(runtime)
 
     await expect(runtime.closeTerminal(handle)).resolves.toEqual({
       handle,
       tabId: 'tab-1',
-      ptyKilled: false
+      ptyKilled: false,
+      ptyStopVerdict: 'unverifiable',
+      ptyStopReason: 'its owning host no longer recognizes this terminal handle'
     })
     expect(closeTerminalTab).toHaveBeenCalledOnce()
+  })
+
+  it('leaves a pane rebound during the host call to its new occupant', async () => {
+    let answerHost: ((value: unknown) => void) | null = null
+    const { runtime, closeTerminalTab } = pairedHostLeafRuntime(
+      () =>
+        new Promise((resolve) => {
+          answerHost = resolve
+        })
+    )
+    const handle = await listedHandle(runtime)
+
+    const closing = runtime.closeTerminal(handle)
+    await vi.waitFor(() => expect(answerHost).not.toBeNull())
+    runtime.syncWindowGraph(1, {
+      tabs: [
+        {
+          tabId: 'tab-1',
+          worktreeId: WORKTREE_ID,
+          title: 'Shell',
+          activeLeafId: 'pane:1',
+          layout: null
+        }
+      ],
+      leaves: [
+        {
+          tabId: 'tab-1',
+          worktreeId: WORKTREE_ID,
+          leafId: 'pane:1',
+          paneRuntimeId: 1,
+          ptyId: toRemoteRuntimePtyId('term_replacement', 'env-1')
+        }
+      ]
+    })
+    answerHost!({ close: { handle: 'term_on_host', tabId: 'host-tab', ptyKilled: true } })
+
+    await expect(closing).resolves.toEqual({ handle, tabId: 'tab-1', ptyKilled: true })
+    expect(closeTerminalTab).not.toHaveBeenCalled()
   })
 
   it('routes a whole-tab close to the owning host too', async () => {
