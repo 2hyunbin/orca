@@ -3,11 +3,63 @@ import { MAX_PANE_KEY_LEN } from '../../../shared/agent-hook-listener/listener-l
 import { parseLegacyNumericPaneKey, parsePaneKey } from '../../../shared/stable-pane-id'
 import { terminalStatusPayloadMatchesHook } from '../../../shared/agent-terminal-status-equivalence'
 import type { ParsedAgentStatusPayload } from '../../../shared/agent-status-types'
+import {
+  agentProviderSessionsEqual,
+  type AgentProviderSessionMetadata
+} from '../../../shared/agent-session-resume'
 import type { EnrichedAgentHookEventPayload } from './server-types'
 import { isAgentStatusHeldOpenByChildWork } from '../../../shared/agent-lead-status-fold'
 import { AgentHookServerIngestNormalization } from './server-ingest-normalization'
 
 export abstract class AgentHookServerIngestTerminal extends AgentHookServerIngestNormalization {
+  /**
+   * A resume launch names its provider session before the agent reports one. Codex runs
+   * SessionStart only at its first turn, so until the user typed, readers had no transcript
+   * to address and native chat stayed empty (#10923). Seeds an identity-only row.
+   */
+  recordLaunchResumeIdentity(event: {
+    paneKey: string
+    worktreeId?: string
+    agentType: string
+    providerSession: AgentProviderSessionMetadata
+    /** When the pane's process launched; a row reported since then is the agent's own. */
+    launchedAt: number
+  }): void {
+    const paneKey = this.resolvePaneKeyAlias(event.paneKey.trim())
+    const parsedPaneKey = parsePaneKey(paneKey)
+    if (!parsedPaneKey || paneKey.length > MAX_PANE_KEY_LEN) {
+      return
+    }
+    const previous = this.state.lastStatusByPaneKey.get(paneKey)
+    if (
+      previous &&
+      (previous.providerSessionOnly === true
+        ? agentProviderSessionsEqual(
+            event.agentType,
+            previous.providerSession,
+            event.providerSession
+          )
+        : 'receivedAt' in previous &&
+          typeof previous.receivedAt === 'number' &&
+          previous.receivedAt >= event.launchedAt)
+    ) {
+      return
+    }
+    this.applyNormalizedStatus(
+      {
+        paneKey,
+        tabId: parsedPaneKey.tabId,
+        ...(event.worktreeId?.trim() ? { worktreeId: event.worktreeId.trim() } : {}),
+        connectionId: null,
+        providerSession: event.providerSession,
+        providerSessionOnly: true,
+        payload: { state: 'done', prompt: '', agentType: event.agentType }
+      },
+      undefined,
+      'launch'
+    )
+  }
+
   ingestTerminalStatus(event: {
     ptyId?: string
     paneKey: string
