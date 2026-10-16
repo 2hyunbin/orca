@@ -662,10 +662,11 @@ describe('retained agent exit lifetime', () => {
     expect(await server.checkAgentPresenceSince(moved, 0)).toBeNull()
   })
 
-  it('drops the exit when the pane retires', async () => {
+  // Why: a finished shell command retires launch authority while the PTY, and the exit's meaning, survive.
+  it('keeps the exit when only the pane launch authority retires', async () => {
     const server = await serverWithExit()
     server.retirePaneAuthority(PANE)
-    expect(await server.checkAgentPresenceSince(PANE, 0)).toBeNull()
+    expect(await server.checkAgentPresenceSince(PANE, 0)).toBe('exited')
   })
 
   it('prunes an exit older than the hydrate window when saving', async () => {
