@@ -58,11 +58,13 @@ export async function resolveManagedRuntimeEnvironment(
     }
   } else {
     // Why here: an auto-restored host may never see an SSH connect, so it would never update.
-    void updateManagedOrcadOnRestore(environment.id, createDeps)
+    const update = updateManagedOrcadOnRestore(environment.id, createDeps)
     const targetId = getOrcadSshDeployment(environment)?.sshTargetId
     if (targetId) {
+      // Why after the update: its settled status would otherwise replace the warning.
       // Why lazy: the note publishes through this module.
-      void import('./ssh-host-launch-session-note')
+      void Promise.resolve(update)
+        .then(() => import('./ssh-host-launch-session-note'))
         .then(({ noteEndedLaunchSshSession }) =>
           noteEndedLaunchSshSession(targetId, environment.id)
         )

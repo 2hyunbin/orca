@@ -4,7 +4,9 @@ import type { SshManagedServerStatus } from '../../shared/ssh-types'
 const mocks = vi.hoisted(() => {
   const status: { current: SshManagedServerStatus | undefined } = { current: undefined }
   const os: { current: string } = { current: 'darwin' }
-  const connection: { current: object } = { current: {} }
+  const connection: { current: { getConnectGeneration: () => number } } = {
+    current: { getConnectGeneration: () => 1 }
+  }
   return { read: vi.fn(), publish: vi.fn(), os, connection, status }
 })
 
@@ -30,7 +32,7 @@ const { noteEndedLaunchSshSession } = await import('./ssh-host-launch-session-no
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.os.current = 'darwin'
-  mocks.connection.current = {}
+  mocks.connection.current = { getConnectGeneration: () => 1 }
   mocks.status.current = undefined
   mocks.read.mockResolvedValue('exited')
 })
@@ -49,9 +51,29 @@ describe('noteEndedLaunchSshSession', () => {
     await noteEndedLaunchSshSession('ssh-1', 'env-1')
     await noteEndedLaunchSshSession('ssh-1', 'env-1')
     expect(mocks.read).toHaveBeenCalledOnce()
-    mocks.connection.current = {}
+    mocks.connection.current = { getConnectGeneration: () => 1 }
     await noteEndedLaunchSshSession('ssh-1', 'env-1')
     expect(mocks.read).toHaveBeenCalledTimes(2)
+  })
+
+  it('checks again after the same connection reconnects', async () => {
+    let generation = 1
+    mocks.connection.current = { getConnectGeneration: () => generation }
+    mocks.read.mockResolvedValue('live')
+    await noteEndedLaunchSshSession('ssh-1', 'env-1')
+    generation = 2
+    mocks.read.mockResolvedValue('exited')
+    await noteEndedLaunchSshSession('ssh-1', 'env-1')
+    expect(mocks.publish).toHaveBeenCalledOnce()
+  })
+
+  it('retries when a start or update was still deciding', async () => {
+    mocks.status.current = { kind: 'setting-up', phase: 'updating' }
+    await noteEndedLaunchSshSession('ssh-1', 'env-1')
+    expect(mocks.publish).not.toHaveBeenCalled()
+    mocks.status.current = { kind: 'managed', environmentId: 'env-1' }
+    await noteEndedLaunchSshSession('ssh-1', 'env-1')
+    expect(mocks.publish).toHaveBeenCalledOnce()
   })
 
   it('never probes a Linux or Windows host', async () => {
@@ -69,7 +91,7 @@ describe('noteEndedLaunchSshSession', () => {
   })
 
   it('leaves another server decision alone', async () => {
-    mocks.status.current = { kind: 'setting-up', phase: 'starting' }
+    mocks.status.current = { kind: 'relay', reason: 'source_changed' }
     await noteEndedLaunchSshSession('ssh-1', 'env-1')
     expect(mocks.publish).not.toHaveBeenCalled()
   })

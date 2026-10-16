@@ -6,9 +6,9 @@ import { getSshHostServerStatus } from '../ssh/ssh-host-server-status'
 import { connectionManager } from './ssh-ipc-context'
 import { publishHostServerStatus } from './runtime-environment-managed-tunnel'
 
-// Once per SSH connection: a restore runs on every runtime call, and the answer only changes
-// when a session ends, which a reconnect (a new connection) then checks.
-const checkedConnections = new WeakSet<object>()
+// Once per SSH session: a restore runs on every runtime call, and the answer only changes when
+// a session ends, which the next session (a new connection or reconnect generation) checks.
+const checkedGenerations = new WeakMap<object, number>()
 
 /** Never blocks or fails the caller; anything but a proven exit shows nothing. */
 export async function noteEndedLaunchSshSession(
@@ -20,16 +20,22 @@ export async function noteEndedLaunchSshSession(
     return
   }
   const connection = connectionManager?.getConnection(targetId)
-  if (!connection || checkedConnections.has(connection)) {
+  const generation = connection?.getConnectGeneration()
+  if (!connection || checkedGenerations.get(connection) === generation) {
     return
   }
-  checkedConnections.add(connection)
+  checkedGenerations.set(connection, generation ?? 0)
   try {
     const session = await readManagedOrcadLaunchSshSession(
       getAppEnvironment().getPath('userData'),
       environmentId
     )
     const status = getSshHostServerStatus(targetId)
+    if (status?.kind === 'setting-up') {
+      // A start or update is still deciding; a later call checks again.
+      checkedGenerations.delete(connection)
+      return
+    }
     // A restored host may have no status yet; any other server decision is left alone.
     if (
       session === 'exited' &&
