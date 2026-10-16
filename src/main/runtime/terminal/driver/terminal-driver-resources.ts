@@ -1,4 +1,5 @@
 import type { RuntimeServiceCommandSurface } from '../../runtime-service-command-surface'
+import { resolveRemoteCliBrowserScopeSelector } from '../../desktop-browser-bridge/remote-cli-browser-scope'
 import type { ResolvedWorktree } from '../../runtime-worktree-path-identity'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
@@ -30,6 +31,7 @@ import { getRuntimeBrowserPageRegistry } from '../../runtime-browser-page-regist
 
 import { RuntimeBrowserDriverController } from '../../runtime-browser-driver-controller'
 import { RemoteDesktopTerminalFloor } from '../../remote-desktop-terminal-floor'
+import { HEADLESS_RUNTIME_WINDOW_ID } from '../../../../shared/runtime-types'
 import type { StatsCollector } from '../../../stats/collector'
 import { RuntimeRemoteFetchController } from '../../runtime-remote-fetch-controller'
 import { RuntimeWorktreeBaseReconciliation } from '../../runtime-worktree-base-reconciliation'
@@ -79,6 +81,10 @@ export abstract class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitO
     serializedHostScope: string | null
   ): string | null
   abstract getTerminalLivenessVerdict(handle: string): PtyLivenessVerdict | null
+  abstract checkTerminalAgentPresence(
+    handle: string,
+    exitedSince: number
+  ): Promise<'live' | 'unverifiable' | 'exited' | null>
   abstract ensureStructuredAgentSessionHost(): Promise<void>
   abstract inspectTerminalProcessIncarnationLiveness(
     processIncarnation: string,
@@ -157,8 +163,10 @@ export abstract class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitO
     },
     browserHost: {
       getAgentBrowserBridge: () => this.agentBrowserBridge,
-      resolveWorktreeSelector: (selector) => this.resolveWorktreeSelector(selector),
-      resolveBrowserWorkspace: (selector) => this.resolveBrowserWorkspace(selector),
+      resolveWorktreeSelector: (selector) =>
+        resolveRemoteCliBrowserScopeSelector(selector) ?? this.resolveWorktreeSelector(selector),
+      resolveBrowserWorkspace: (selector) =>
+        resolveRemoteCliBrowserScopeSelector(selector) ?? this.resolveBrowserWorkspace(selector),
       getBrowserHostLeaseRegistry: () => getBrowserHostLeaseRegistry(this),
       getRuntimeBrowserPageRegistry: () => getRuntimeBrowserPageRegistry(this),
       resolveBrowserNetworkExecutionHost: (worktree) =>
@@ -206,6 +214,7 @@ export abstract class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitO
     isMobileDriven: (ptyId) => this.getDriver(ptyId).kind === 'mobile',
     getTerminalSize: (ptyId) => this.getTerminalSize(ptyId) ?? null,
     resolveHostTarget: (ptyId) => this.resolveDesktopRestoreTarget(ptyId),
+    hostShowsTerminals: () => this.authoritativeWindowId !== HEADLESS_RUNTIME_WINDOW_ID,
     applyLayout: async (ptyId, target) => {
       this.freshSubscribeGuard.add(ptyId)
       try {
