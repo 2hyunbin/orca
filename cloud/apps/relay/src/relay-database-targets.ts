@@ -21,10 +21,10 @@ export type OpenedRelayDatabaseTarget = {
   applySchema(): Promise<void>
 }
 
-// `superseded`: the move tool marked this copy as left behind; it is never eligible.
+// `moveBegun`: the authority table exists, so a database move has started on this target.
 export type RelayDatabaseProbeResult = {
   generation: number
-  superseded: boolean
+  moveBegun: boolean
   opened: OpenedRelayDatabaseTarget
 }
 
@@ -42,24 +42,25 @@ export type RelayDatabaseTarget = {
   close(): Promise<void>
 }
 
-// The move tool owns this table on both targets; the relay only reads it. The whole row as JSON,
-// so a table from before the `superseded` column reads as not superseded in the same one query.
-const AUTHORITY_SQL = 'SELECT to_jsonb(authority) AS row FROM relay_database_authority authority'
+// The move tool owns this table on both targets; the relay only reads it. Presence first, so a
+// database with no move (every one today) answers one query and logs no error.
+const AUTHORITY_PRESENT_SQL =
+  "SELECT to_regclass('relay_database_authority') IS NOT NULL AS present"
+const AUTHORITY_SQL = 'SELECT generation FROM relay_database_authority'
 const UNDEFINED_TABLE = '42P01'
 
 type ReadyTarget = { pool: pg.Pool; opened: OpenedRelayDatabaseTarget }
 
-// No row is generation 0, not superseded; a malformed row is no answer.
+// No row is generation 0; a malformed one is no answer.
 function authorityRow(
   row: unknown,
   opened: OpenedRelayDatabaseTarget
 ): RelayDatabaseProbeResult | null {
-  if (row === undefined) return { generation: 0, superseded: false, opened }
+  if (row === undefined) return { generation: 0, moveBegun: true, opened }
   if (typeof row !== 'object' || row === null || !('generation' in row)) return null
   const generation = Number(row.generation)
   if (!Number.isSafeInteger(generation) || generation < 0) return null
-  const superseded = 'superseded' in row && row.superseded === true
-  return { generation, superseded, opened }
+  return { generation, moveBegun: true, opened }
 }
 
 // A failed or slow probe destroys its client, so a refused or stuck session never returns to
@@ -89,8 +90,12 @@ function postgresProbeSession(ready: () => Promise<ReadyTarget | null>): RelayDa
         const querying = held
         timer = setTimeout(() => drop(querying, true), timeoutMs)
         timer.unref?.()
+        const presence = await querying.query(AUTHORITY_PRESENT_SQL)
+        if (presence.rows[0]?.present !== true) {
+          return { generation: 0, moveBegun: false, opened: target.opened }
+        }
         const result = await querying.query(AUTHORITY_SQL)
-        return authorityRow(result.rows[0]?.row, target.opened)
+        return authorityRow(result.rows[0], target.opened)
       } catch (error) {
         const undefinedTable =
           typeof error === 'object' &&
@@ -99,7 +104,7 @@ function postgresProbeSession(ready: () => Promise<ReadyTarget | null>): RelayDa
           error.code === UNDEFINED_TABLE
         if (held && client === held && !undefinedTable) drop(held, true)
         return undefinedTable && held
-          ? { generation: 0, superseded: false, opened: target.opened }
+          ? { generation: 0, moveBegun: false, opened: target.opened }
           : null
       } finally {
         clearTimeout(timer)
