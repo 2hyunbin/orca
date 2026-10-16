@@ -155,11 +155,11 @@ export async function installBundledOrcaSkillsOnRuntimeTarget(
   ) {
     return { kind: 'unsupported' }
   }
-  // Why forward wsl: as from the web client, the agent runtime resolves from the server's project.
+  // Why no wsl: on desktop it names a local Windows project's distro; the server installs on its own host.
   const results = await callRuntimeRpc<SkillInstallResult[]>(
     runtimeTarget,
     'skills.installBundledOrca',
-    request,
+    { names: request.names },
     { timeoutMs: BUNDLED_ORCA_SKILL_INSTALL_TIMEOUT_MS }
   )
   return { kind: 'installed', results }
