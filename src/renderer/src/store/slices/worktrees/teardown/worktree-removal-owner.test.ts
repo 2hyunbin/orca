@@ -43,6 +43,7 @@ it('removes one owner while retaining the same-id survivor resources and selecti
       filePath: `/${owner}`,
       relativePath: owner,
       language: 'plaintext',
+      mode: 'edit' as const,
       isDirty: true,
       ...(owner === 'remote' ? { externalSshTargetId: 'remote' } : {})
     })),

@@ -19,7 +19,6 @@
 9 src/main/orca-profiles/profile-session-owner-transfer.ts
 3 src/main/persistence/leasing-ssh-ptys/ssh-pty-binding-cleanup.ts
 1 src/main/persistence/loading-store/loaded-state-parsing.ts
-1 src/main/persistence/loading-store/metadata-lineage-operations.ts
 1 src/main/persistence/loading-store/mobile-tab-selection-persistence.ts
 1 src/main/persistence/loading-store/normalize-loaded-profile-state.ts
 10 src/main/persistence/loading-store/pty-binding-persistence.ts
@@ -31,6 +30,7 @@
 4 src/main/persistence/loading-store/workspace-session-snapshot-publication.ts
 4 src/main/persistence/loading-store/workspace-session-terminal-binding-replay.ts
 2 src/main/persistence/loading-store/workspace-session-write-listeners.ts
+1 src/main/persistence/loading-store/worktree-metadata-removal.ts
 2 src/main/persistence/migrating-orcad-catalog/orcad-destination-client-state.ts
 1 src/main/persistence/migrating-orcad-catalog/orcad-destination-workspace-session.ts
 3 src/main/persistence/migrating-orcad-catalog/orcad-dormant-state-records.ts
