@@ -4,6 +4,7 @@
 
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
 import {
+  clearWebSessionCloseIntent,
   makeWebSessionCloseIntentDurable,
   recordWebSessionCloseIntent
 } from './web-session-close-intent'
@@ -11,7 +12,7 @@ import { webSessionIntentOwnerKey, type WebSessionIntentOwner } from './web-sess
 
 /** Bounded so a host that keeps failing the close hands the tab back instead of hiding it forever. */
 export const MAX_WEB_SESSION_CLOSE_REPLAY_ATTEMPTS = 3
-const MAX_PENDING_WEB_SESSION_CLOSE_REPLAYS = 256
+export const MAX_PENDING_WEB_SESSION_CLOSE_REPLAYS = 256
 
 export type WebSessionCloseReplay = {
   owner: WebSessionIntentOwner
@@ -47,11 +48,16 @@ export function queueWebSessionCloseReplay(
     return
   }
   while (pendingReplays.size >= MAX_PENDING_WEB_SESSION_CLOSE_REPLAYS) {
-    const oldest = pendingReplays.keys().next()
+    const oldest = pendingReplays.entries().next()
     if (oldest.done) {
       break
     }
-    pendingReplays.delete(oldest.value)
+    const [oldestKey, evicted] = oldest.value
+    pendingReplays.delete(oldestKey)
+    // An evicted close is never sent again, so it must stop hiding its tab.
+    for (const hostTabId of evicted.hostTabIds) {
+      clearWebSessionCloseIntent(evicted.owner, evicted.worktreeId, hostTabId)
+    }
   }
   pendingReplays.set(key, { owner, worktreeId, hostTabIds, attempts: 0, inFlight: false })
 }

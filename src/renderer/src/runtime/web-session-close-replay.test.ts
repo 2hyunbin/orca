@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
 import {
+  MAX_PENDING_WEB_SESSION_CLOSE_REPLAYS,
   MAX_WEB_SESSION_CLOSE_REPLAY_ATTEMPTS,
   queueWebSessionCloseReplay,
   resetWebSessionCloseReplaysForTests,
@@ -9,6 +10,11 @@ import {
   takeDueWebSessionCloseReplays
 } from './web-session-close-replay'
 import { recordReceivedWebSessionTabsSnapshot } from './web-session-tabs-sync/tracking'
+import {
+  isWebSessionCloseIntentPending,
+  makeWebSessionCloseIntentDurable,
+  recordWebSessionCloseIntent
+} from './web-session-close-intent'
 import { applyWebSessionTabsSnapshot } from './web-session-tabs-sync/snapshot-api'
 import {
   ENV,
@@ -91,6 +97,25 @@ describe('web session close replay', () => {
         new Set(['host-tab-1'])
       )
     ).toEqual([])
+  })
+
+  it('keeps a held close through a snapshot that cannot state the worktree contents', () => {
+    queueWebSessionCloseReplay(OWNER, WT, ['host-tab-1'])
+
+    recordReceivedWebSessionTabsSnapshot(ENV, makeSnapshot([], { publicationEpoch: 'none' }))
+
+    expect(takeDueWebSessionCloseReplays(OWNER, WT, new Set(['host-tab-1']))).toHaveLength(1)
+  })
+
+  it('stops hiding a tab whose held close is evicted', () => {
+    queueWebSessionCloseReplay(OWNER, WT, ['host-tab-0'])
+    recordWebSessionCloseIntent(OWNER, WT, 'host-tab-0', NOW)
+    makeWebSessionCloseIntentDurable(OWNER, WT, 'host-tab-0')
+    for (let index = 1; index <= MAX_PENDING_WEB_SESSION_CLOSE_REPLAYS; index += 1) {
+      queueWebSessionCloseReplay(OWNER, WT, [`host-tab-${index}`])
+    }
+
+    expect(isWebSessionCloseIntentPending(OWNER, WT, 'host-tab-0', NOW)).toBe(false)
   })
 
   it('sends the held close when a host snapshot arrives, while keeping the tab hidden', async () => {
