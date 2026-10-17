@@ -201,7 +201,7 @@ export function useNativeChatComposerAttachments({
                 attachResolvedPaths(
                   paths,
                   null,
-                  serverOwned ? { targetOwnerIsCurrent: () => true } : undefined
+                  serverOwned ? { ...options, targetOwnerIsCurrent: () => true } : options
                 )
             : undefined
       )
