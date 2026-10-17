@@ -66,12 +66,12 @@ function ClaudeAccountSwitchDialogContent({
           {count === 1
             ? translate(
                 'accounts.claude.switchSessions.bodyOne',
-                "1 Claude session is still running on {{previous}}. Restarting continues the conversation on {{next}}. If it's busy, it restarts when it's done.",
+                '1 Claude session is still running on {{previous}}. Restarting continues the conversation on {{next}}. Busy sessions wait for idle before restarting.',
                 accounts
               )
             : translate(
                 'accounts.claude.switchSessions.bodyOther',
-                "{{count}} Claude sessions are still running on {{previous}}. Restarting continues each conversation on {{next}}. A busy session restarts when it's done.",
+                '{{count}} Claude sessions are still running on {{previous}}. Restarting continues each conversation on {{next}}. Busy sessions wait for idle before restarting.',
                 accounts
               )}
         </DialogDescription>
