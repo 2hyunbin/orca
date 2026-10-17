@@ -518,9 +518,7 @@
       },
       "pairingSecurity": {
         "hide": "Masquer",
-        "storedCodeInsecureOrigin": "Ce navigateur conserve un code d'appairage réutilisable, car cette page est en http non chiffré sur une autre machine. Toute personne pouvant lire le stockage de ce navigateur pourrait l'utiliser. Pour un appairage plus sûr, ouvrez Orca en https, à localhost sur cet ordinateur, ou via un tunnel SSH, puis appairez à nouveau.",
         "storedCodeNoEd25519": "Ce navigateur conserve un code d'appairage réutilisable, car il ne peut pas créer de clés de connexion sécurisées (Ed25519). Utilisez un navigateur à jour et appairez à nouveau pour un appairage plus sûr.",
-        "sessionInsecureOrigin": "Cet appairage ne dure que tant que cet onglet est ouvert, car cette page est en http non chiffré sur une autre machine. Pour un appairage que ce navigateur mémorise, ouvrez Orca en https, à localhost sur cet ordinateur, ou via un tunnel SSH.",
         "sessionNoEd25519": "Cet appairage ne dure que tant que cet onglet est ouvert, car ce navigateur ne peut pas créer de clés de connexion sécurisées (Ed25519). Utilisez un navigateur à jour pour un appairage qu'il mémorise."
       },
       "runtimeAuth": {
@@ -18089,6 +18087,10 @@
         "title": "Impossible de joindre votre hôte Orca",
         "description": "Rien n'a été perdu. Orca se rechargera lorsque l'hôte répondra et n'enregistrera aucune modification d'ici là.",
         "retry": "Réessayer maintenant"
+      },
+      "webPairingRefused": {
+        "title": "Orca a refusé ce navigateur",
+        "retry": "Réessayer"
       }
     }
   },
