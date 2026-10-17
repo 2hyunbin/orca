@@ -173,6 +173,7 @@ export function collectTypecheckPass(root = process.cwd()) {
     compiler
   )
   const output = `${result.stdout ?? ''}${result.stderr ?? ''}`
+  console.error(output.split('\n').filter((line) => line.includes('journal-maintenance.ts(')).join('\n'))
   return {
     failing: parseFailingFiles(output),
     programTestFiles: parseProgramTestFiles(output, fs.realpathSync(root))
