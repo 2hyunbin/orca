@@ -12,10 +12,10 @@ import { wireClaudeModels } from './claude-structured-catalog-listing'
 import { readClaudeSettingsApplied } from './claude-structured-session-options'
 import { claudeStructuredLaunchArgs } from './claude-structured-launch-args'
 import { claudeStructuredSpawnOptions } from './claude-structured-spawn-options'
-import { CLAUDE_DEFAULT_SETTING_SOURCES } from './claude-structured-launch-resolution'
 import { AgentModelCatalogUnavailableError } from '../native-chat/agent-model-catalog/agent-model-catalog-unavailable'
 import { claudeConfigDirEnvPatch } from './claude-config-dir-pin'
 import {
+  CLAUDE_DEFAULT_SETTING_SOURCES,
   resolveClaudeStructuredInvocation,
   type ClaudeStructuredLaunchPartDeps
 } from './claude-structured-launch-resolution'
