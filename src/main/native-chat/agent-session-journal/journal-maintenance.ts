@@ -1,4 +1,3 @@
-import timers from 'node:timers'
 import type Database from '../../sqlite/sync-database'
 import { journalPragmaNumber, type JournalTransaction } from './journal-database'
 import { JournalPrunePass } from './journal-prune-pass'
@@ -59,7 +58,7 @@ export class JournalMaintenance {
   close(): void {
     this.closed = true
     if (this.timer) {
-      timers.clearTimeout(this.timer)
+      clearTimeout(this.timer)
     }
     this.timer = null
     this.current = null
@@ -77,7 +76,7 @@ export class JournalMaintenance {
     if (this.timer || this.closed) {
       return
     }
-    const setNodeTimeout: (run: () => void, ms: number) => NodeJS.Timeout = timers.setTimeout
+    const setNodeTimeout: (run: () => void, ms: number) => NodeJS.Timeout = setTimeout
     this.timer = setNodeTimeout(() => this.advance(), delay)
     this.timer.unref()
   }
