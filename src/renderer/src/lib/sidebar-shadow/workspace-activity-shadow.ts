@@ -63,7 +63,7 @@ export function readWindowWorkspaceActivityFacts(
 
 // The local runtime answers for the rows it owns. A paired server owns and publishes its own rows'
 // facts, which the server-row producer compares; an id with no owner in the catalog is no row.
-function withoutPairedServerRows<Value>(
+function toLocallyOwnedRows<Value>(
   state: AppState,
   values: ReadonlyMap<string, Value>
 ): Map<string, Value> {
@@ -94,7 +94,7 @@ export const workspaceActivityShadow = defineSidebarShadowDomain<WorkspaceActivi
   name: 'workspace-activity',
   readWindow: () => {
     const state = useAppStore.getState()
-    return withoutPairedServerRows(state, readWindowWorkspaceActivityFacts(state, Date.now()))
+    return toLocallyOwnedRows(state, readWindowWorkspaceActivityFacts(state, Date.now()))
   },
   readMain: async () => {
     const response = await window.api.runtime.call({ method: 'sidebarInputs.activityFacts' })
@@ -106,10 +106,7 @@ export const workspaceActivityShadow = defineSidebarShadowDomain<WorkspaceActivi
     }
     return {
       revision: parsed.data.revision,
-      values: withoutPairedServerRows(
-        useAppStore.getState(),
-        new Map(Object.entries(parsed.data.facts))
-      )
+      values: toLocallyOwnedRows(useAppStore.getState(), new Map(Object.entries(parsed.data.facts)))
     }
   },
   // The window has no unverifiable state: a terminal whose host lost contact still reads live there.
