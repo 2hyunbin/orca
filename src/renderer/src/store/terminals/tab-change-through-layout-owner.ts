@@ -35,16 +35,19 @@ export function sendTabChangeToLayoutOwner(
 
 /**
  * As `sendTabChangeToLayoutOwner`, for a tab addressed as its rename and color are (a terminal by
- * its terminal's id); `local` runs at once when main is not asked.
+ * its terminal's id); `local` runs at once when main is not asked. True when main was asked.
  */
 export function sendRenamableTabChangeToLayoutOwner(
   state: TabOwnerState,
   tabId: string,
   change: TabChange,
-  local: () => void
-): void {
+  local: () => void,
+  refused?: () => void
+): boolean {
   const tab = findRenamableUnifiedTab(state.unifiedTabsByWorktree, tabId)
-  if (!sendTabChangeToLayoutOwner(state, tab, change, local)) {
-    local()
+  if (sendTabChangeToLayoutOwner(state, tab, change, local, refused)) {
+    return true
   }
+  local()
+  return false
 }

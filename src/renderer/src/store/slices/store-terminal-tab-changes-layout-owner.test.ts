@@ -20,7 +20,7 @@ const mocks = vi.hoisted(() => ({
     async (
       _target: unknown,
       _method: string,
-      _params: { command: { viewMode?: string } }
+      _params: { command: { viewMode?: string; title?: unknown } }
     ): Promise<Reply> => ({ ok: true, result: {} })
   )
 }))
@@ -132,6 +132,26 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
       }
     ])
     await vi.waitFor(() => expect(row(store).generatedTitle).toBeTruthy())
+  })
+
+  it('sends one agent title while main has not answered the first, as the window keeps it', async () => {
+    const { store, tabId } = storeWithTab()
+    const second = makePaneKey(tabId, '22222222-2222-4222-8222-222222222222')
+    const titles = () => sent().map((params) => params.command.title)
+
+    store.getState().setGeneratedTabTitleFromAgentPrompt(makePaneKey(tabId, LEAF), 'fix lint')
+    store.getState().setGeneratedTabTitleFromAgentPrompt(second, 'write tests')
+
+    expect(titles()).toHaveLength(1)
+    const [first] = titles()
+    await vi.waitFor(() => expect(row(store).generatedTitle).toBe(first))
+
+    store.getState().setGeneratedTabTitleFromAgentPrompt(second, 'write tests', {
+      replaceExistingGeneratedTitle: true
+    })
+    const replaced = titles()[1]
+    expect(replaced).not.toEqual(first)
+    await vi.waitFor(() => expect(row(store).generatedTitle).toBe(replaced))
   })
 
   it('forgets an ended launch agent in main, and sends nothing for a tab without one', async () => {

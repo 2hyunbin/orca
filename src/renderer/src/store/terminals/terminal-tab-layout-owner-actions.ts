@@ -55,15 +55,37 @@ export function routeTerminalTabChangesThroughLayoutOwner(
   actions: RoutedActions,
   get: TerminalStoreGet
 ): RoutedActions {
-  const route = (tabId: string, change: TabChange, local: () => void): void =>
+  const route = (tabId: string, change: TabChange, local: () => void): void => {
     sendRenamableTabChangeToLayoutOwner(get(), tabId, change, local)
+  }
+  /** Tabs whose generated title main has and the window does not yet: the window keeps a first title. */
+  const generatedTitleSent = new Map<string, object>()
   const routeGeneratedTitles = (updates: readonly GeneratedTabTitleUpdate[]): void => {
-    for (const { tabId, title, updates: ofTab } of generatedTitleChanges(get(), updates)) {
-      route(
+    const unsent = updates.filter(
+      (update) =>
+        update.options?.replaceExistingGeneratedTitle === true ||
+        !generatedTitleSent.has(getTabIdFromPaneKey(update.paneKey) ?? '')
+    )
+    for (const { tabId, title, updates: ofTab } of generatedTitleChanges(get(), unsent)) {
+      const entry = {}
+      const settle = (): void => {
+        if (generatedTitleSent.get(tabId) === entry) {
+          generatedTitleSent.delete(tabId)
+        }
+      }
+      const sent = sendRenamableTabChangeToLayoutOwner(
+        get(),
         tabId,
         (id) => ({ type: 'renameTab', tabId: id, kind: 'generated', title }),
-        () => actions.setGeneratedTabTitlesFromAgentPrompts(ofTab)
+        () => {
+          settle()
+          actions.setGeneratedTabTitlesFromAgentPrompts(ofTab)
+        },
+        settle
       )
+      if (sent) {
+        generatedTitleSent.set(tabId, entry)
+      }
     }
   }
   return {
