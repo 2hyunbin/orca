@@ -81,7 +81,13 @@ function buildCmdJProjectSearchCandidates({
   const repoMap = new Map(repos.map((repo) => [repo.id, repo]))
   const candidates: CmdJProjectSearchResult[] = []
 
+  const seenGroupIds = new Set<string>()
   projectGroups.forEach((group, order) => {
+    // Why: hosts can publish one group under the same id; the sidebar draws it once (#30045).
+    if (seenGroupIds.has(group.id)) {
+      return
+    }
+    seenGroupIds.add(group.id)
     candidates.push({
       id: `project-group:${group.id}`,
       kind: 'project-group',

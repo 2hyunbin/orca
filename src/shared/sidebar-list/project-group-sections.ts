@@ -76,7 +76,9 @@ export function appendProjectGroupSections(
     )
   }
   const childGroupsByParentId = new Map<string | null, ProjectGroup[]>()
-  for (const group of projectGroups) {
+  // Why by id: hosts can publish one group under the same id (a project moved to a managed server
+  // keeps the desktop's copy, #30045); membership is id-keyed, so a second header would sit empty.
+  for (const group of projectGroupsById.values()) {
     const parentId =
       group.parentGroupId && projectGroupsById.has(group.parentGroupId) ? group.parentGroupId : null
     const children = childGroupsByParentId.get(parentId) ?? []

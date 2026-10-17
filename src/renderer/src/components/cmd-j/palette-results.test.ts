@@ -483,6 +483,22 @@ describe('Cmd+J project and repo-group search', () => {
     })
   })
 
+  it('lists a Project Group two hosts publish under one id once', () => {
+    const group = projectGroup('group-1', 'Infrastructure')
+    const results = searchCmdJProjectResults({
+      query: 'infra',
+      projectGroups: [
+        { ...group, executionHostId: 'local' },
+        { ...group, executionHostId: 'runtime:env-b' }
+      ],
+      repos: [],
+      projects: [],
+      projectHostSetups: []
+    })
+
+    expect(results.map((result) => result.id)).toEqual(['project-group:group-1'])
+  })
+
   it('finds a Project by project name and a repo-backed fallback by repo name', () => {
     const projectResults = searchCmdJProjectResults({
       query: 'api',
