@@ -6,11 +6,10 @@ export const MAX_REPO_ICON_DATA_URL_BYTES = 16 * 1024
 export const MAX_REPO_ICON_IDS_PER_READ = 16
 
 // Why pure: only the switched-on method reads it, so a switch-off build must drop it.
-export const RepoIconDataUrlsParams = /* @__PURE__ */ z.object({
-  ids: /* @__PURE__ */ z
-    .array(/* @__PURE__ */ z.string().min(1).max(64))
-    .max(MAX_REPO_ICON_IDS_PER_READ)
-})
+export const RepoIconDataUrlsParams = /* @__PURE__ */ (() =>
+  z.object({
+    ids: z.array(z.string().min(1).max(64)).max(MAX_REPO_ICON_IDS_PER_READ)
+  }))()
 
 /**
  * One entry per requested id, in request order. `dataUrl` is null when the host has no image for
