@@ -3,6 +3,8 @@ import { getRepoExecutionHostId, parseExecutionHostId } from '../../../../shared
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
 import type { Repo } from '../../../../shared/repo-types'
 
+const PROJECT_INVENTORY_REFRESH_BUDGET_MS = 3_000
+
 /** Distinct worktree ids of a project that still hold a pane or PTY on this host. */
 export function listProjectTerminalWorktreeIds(
   repoId: string,
@@ -33,12 +35,25 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
     options: { deadline?: number } = {}
   ): Promise<{ stopped: number }> {
     // Why: after a restart, surviving daemon sessions are in the provider inventory before ptysById.
-    try {
+    // Bounded so a slow worktree scan cannot spend the budget the known PTYs' stops need.
+    const refreshDeadline = Math.min(
+      options.deadline ?? Infinity,
+      Date.now() + PROJECT_INVENTORY_REFRESH_BUDGET_MS
+    )
+    const refresh = (async () => {
       const resolvedWorktrees = [...(await this.getResolvedWorktreeMap()).values()]
-      await this.refreshPtyWorktreeRecordsFromController(resolvedWorktrees, null, options.deadline)
-    } catch (error) {
+      await this.refreshPtyWorktreeRecordsFromController(resolvedWorktrees, null, refreshDeadline)
+    })().catch((error: unknown) => {
       console.warn('[runtime] project terminal inventory refresh failed', error)
-    }
+    })
+    let timer: ReturnType<typeof setTimeout> | undefined
+    await Promise.race([
+      refresh,
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, Math.max(0, refreshDeadline - Date.now()))
+      })
+    ])
+    clearTimeout(timer)
     // Why not the row's stamp: a `runtime:` stamp is how paired clients address a project that runs here.
     const host = parseExecutionHostId(getRepoExecutionHostId(repo))
     const fence = { resolvedConnectionId: host?.kind === 'ssh' ? host.targetId : null }

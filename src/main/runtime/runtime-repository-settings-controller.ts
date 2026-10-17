@@ -136,6 +136,8 @@ export class RuntimeRepositorySettingsController {
       })
     }
     await stopProjectTerminals()
+    // Why again: a WSL move may have fenced the project while the stop was awaited.
+    assertWslMoveRepoWritable(store, repo)
     store.removeProjectForHost(repo.id, hostId)
     // Why again: a terminal spawned while the first stop ran is past that sweep's snapshot, and
     // nothing can spawn into the project once it is gone.
