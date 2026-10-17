@@ -8,11 +8,13 @@
  * the settled value stays correct without any component mounted.
  */
 import type { StoreApi } from 'zustand'
+import {
+  INITIAL_SORT_SETTLE_STATE,
+  reduceSortSettle,
+  type SortSettleEvent
+} from '../../../shared/sidebar-list/sort-settle'
 import type { AppState } from './types'
 import { getIndexedAllWorktrees } from './worktree-repo-index'
-
-// Why: time-decaying scores would make rows jump on every bump; coalesce a burst into one re-sort.
-export const SORT_SETTLE_MS = 3_000
 
 function countLiveWorktrees(worktreesByRepo: AppState['worktreesByRepo']): number {
   let count = 0
@@ -28,37 +30,34 @@ function countLiveWorktrees(worktreesByRepo: AppState['worktreesByRepo']): numbe
 export function installSettledSortEpoch(
   api: Pick<StoreApi<AppState>, 'setState' | 'subscribe'>
 ): void {
+  let settleState = INITIAL_SORT_SETTLE_STATE
   let timer: ReturnType<typeof setTimeout> | undefined
-  // Why a baseline from the last bump (not the previous write): a row change that skipped
-  // its bump (stale-host purge) must not re-sort on its own.
-  let liveWorktreeCountAtLastBump = 0
 
-  const settle = (): void => api.setState((s) => ({ settledSortEpoch: s.sortEpoch }))
+  const apply = (event: SortSettleEvent): void => {
+    const now = Date.now()
+    const step = reduceSortSettle(settleState, event, now)
+    if (step.state.deadline !== settleState.deadline) {
+      clearTimeout(timer)
+      if (step.state.deadline !== null) {
+        timer = setTimeout(() => apply({ kind: 'deadline' }), step.state.deadline - now)
+      }
+    }
+    settleState = step.state
+    if (step.settle) {
+      api.setState((s) => ({ settledSortEpoch: s.sortEpoch }))
+    }
+  }
 
   api.subscribe((state, previous) => {
     const epochChanged = state.sortEpoch !== previous.sortEpoch
-    let structuralChange = false
     // Why also on row writes: a bump-less add during a pending window must still settle now.
-    if (epochChanged || state.worktreesByRepo !== previous.worktreesByRepo) {
-      const count = countLiveWorktrees(state.worktreesByRepo)
-      structuralChange = count !== liveWorktreeCountAtLastBump
-      if (epochChanged) {
-        liveWorktreeCountAtLastBump = count
-      }
-    }
-    if (state.settledSortEpoch === state.sortEpoch) {
-      // Why: any write that lands settled — settle() itself or a store reset — retires the pending timer.
-      clearTimeout(timer)
-      return
-    }
-    // Why: adds/removes, Manual (direct manipulation), and a mode switch never wait out the window.
-    if (structuralChange || state.sortBy === 'manual' || state.sortBy !== previous.sortBy) {
-      settle()
-      return
-    }
-    if (epochChanged) {
-      clearTimeout(timer)
-      timer = setTimeout(settle, SORT_SETTLE_MS)
-    }
+    const rowsChanged = state.worktreesByRepo !== previous.worktreesByRepo
+    apply({
+      kind: 'write',
+      epochChanged,
+      liveCount: epochChanged || rowsChanged ? countLiveWorktrees(state.worktreesByRepo) : null,
+      settled: state.settledSortEpoch === state.sortEpoch,
+      immediate: state.sortBy === 'manual' || state.sortBy !== previous.sortBy
+    })
   })
 }

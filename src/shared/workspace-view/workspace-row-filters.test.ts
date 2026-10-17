@@ -7,7 +7,11 @@ import {
   type WorkspaceRowFactReader,
   type WorkspaceRowFilters
 } from './workspace-row-filters'
-import { buildWorkspaceRowComparator, recentActivityWithCreateGrace } from './workspace-row-sort'
+import {
+  buildWorkspaceRowComparator,
+  CREATE_GRACE_MS,
+  recentActivityWithCreateGrace
+} from './workspace-row-sort'
 
 type Row = { id: string; folder?: boolean; facts?: Partial<Record<string, boolean>> }
 
@@ -68,6 +72,11 @@ describe('buildWorkspaceRowComparator', () => {
   it('does not apply create grace to non-finite createdAt values', () => {
     expect(recentActivityWithCreateGrace(10, Number.NaN, 0)).toBe(10)
     expect(recentActivityWithCreateGrace(10, Number.POSITIVE_INFINITY, 0)).toBe(10)
+  })
+
+  it('holds the create-grace floor until exactly createdAt + CREATE_GRACE_MS', () => {
+    expect(recentActivityWithCreateGrace(10, 0, CREATE_GRACE_MS - 1)).toBe(CREATE_GRACE_MS)
+    expect(recentActivityWithCreateGrace(10, 0, CREATE_GRACE_MS)).toBe(10)
   })
 
   it('puts unranked rows after ranked ones under manual order, then by name', () => {
