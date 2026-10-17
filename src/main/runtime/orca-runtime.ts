@@ -1,7 +1,7 @@
 import type { RuntimeLinearCommandSurface } from './runtime-linear-command-surface'
 import { installRuntimeLinearCommandSurface } from './runtime-linear-command-surface'
 import { publishWorkspaceViewChanges } from './runtime-workspace-view-change-events'
-import { OrcaRuntimeWithWorkspaceActivityFacts } from './sidebar-inputs/orca-runtime-workspace-activity-facts'
+import { OrcaRuntimeWithWorkspaceReviewFacts } from './sidebar-inputs/orca-runtime-workspace-review-facts'
 import type { RuntimeCommandSurfaceHost } from './orca-runtime-core'
 import type {
   AgentLaunchTabPublished,
@@ -31,9 +31,21 @@ import type { LayoutApplyReply } from '../../shared/workspace-layout/workspace-l
 import { rekeyMovedPaneOwners } from './moved-pane-owner-rekey'
 import { applyWindowLayoutCommand, type WindowLayoutCommand } from './runtime-layout-apply'
 import type { TerminalCreateOptions } from './runtime-terminal-contracts'
+import { PairedServerRowsProducer } from './sidebar-inputs/paired-server-rows-producer'
+import { HEADLESS_RUNTIME_WINDOW_ID } from '../../shared/runtime-session-contracts'
+import { getHostDisplayLabelOverrides } from '../../shared/host-setting-overrides'
 
 // oxlint-disable-next-line typescript/no-unsafe-declaration-merging -- SAFETY: The existing Linear installer supplies the canonical prototype surface.
-class OrcaRuntimeService extends OrcaRuntimeWithWorkspaceActivityFacts {
+class OrcaRuntimeService extends OrcaRuntimeWithWorkspaceReviewFacts {
+  // Idle until relay hosts attach. The fallback refresh runs while a window shows the sidebar.
+  readonly pairedServerRows = new PairedServerRowsProducer({
+    hasDemand: () =>
+      this.authoritativeWindowId !== null &&
+      this.authoritativeWindowId !== HEADLESS_RUNTIME_WINDOW_ID &&
+      this.store?.getUI?.().sidebarOpen !== false,
+    hostLabelOverrides: () => getHostDisplayLabelOverrides(this.getClientSettings())
+  })
+
   private async selectReferenceCatalogWorkspace(selector: string, cwd?: string) {
     const catalog = listReferenceWorkspaces(
       this.requireStore(),
@@ -87,7 +99,7 @@ class OrcaRuntimeService extends OrcaRuntimeWithWorkspaceActivityFacts {
     })
   }
 
-  constructor(...args: ConstructorParameters<typeof OrcaRuntimeWithWorkspaceActivityFacts>) {
+  constructor(...args: ConstructorParameters<typeof OrcaRuntimeWithWorkspaceReviewFacts>) {
     super(...args)
     // Why: the runtime listing re-runs a scan the worktree-change generation overtook and re-lists
     // through this runtime's scan cache, so a worktree change must reach both. The desktop IPC

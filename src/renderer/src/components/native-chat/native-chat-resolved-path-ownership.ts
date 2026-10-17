@@ -1,12 +1,14 @@
 import { translate } from '@/i18n/i18n'
 import type { NativeChatAttachmentOwner } from './native-chat-attachment-upload'
 
+export type NativeChatAttachmentFocusOptions = { focus?: boolean }
+
 export type NativeChatResolvedPathOperation = {
   apply: (insertReferences: ((paths: string[]) => void) | null) => boolean
   cancel: () => void
 }
 
-export type NativeChatResolvedPathOptions = {
+export type NativeChatResolvedPathOptions = NativeChatAttachmentFocusOptions & {
   operation?: NativeChatResolvedPathOperation
   /** Revalidates the destination without granting workspace-file provenance. */
   destinationIsCurrent?: () => boolean

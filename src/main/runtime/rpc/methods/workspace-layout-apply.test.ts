@@ -254,6 +254,33 @@ describe('layout.apply', () => {
     ).toBe(true)
   })
 
+  it('takes a chat tab under the window’s id, with its place and creation time', async () => {
+    const apply = eraseRpcMethods(LAYOUT_APPLY_METHODS).find(
+      (method) => method.name === 'layout.apply'
+    )
+    const parse = (command: Record<string, unknown>) => apply?.params?.safeParse({ command })
+    const open = {
+      type: 'openAgentSessionTab',
+      workspace: WORKTREE,
+      tabId: 'structured-agent-session-chat-1',
+      sessionId: 'chat-1',
+      agent: 'codex',
+      groupId: 'g1',
+      afterTabId: 'tab-1',
+      createdAt: 5,
+      split: { besideGroupId: 'g0', direction: 'right' }
+    }
+
+    expect(parse(open)?.success).toBe(true)
+    expect(parse({ ...open, tabId: undefined })?.success).toBe(false)
+    expect(parse({ ...open, sessionId: '' })?.success).toBe(false)
+    expect(parse({ ...open, index: -1 })?.success).toBe(false)
+    // Only main's own restore and activation ask for a first surface.
+    expect(apply?.params?.parse({ command: { ...open, initial: 'restore' } })).toEqual({
+      command: open
+    })
+  })
+
   it('applies a browser tab’s record change to the workspace’s routed partition', async () => {
     const { runtime, applyLayoutCommand } = runtimeHolding('ssh:target-1')
     const page = {

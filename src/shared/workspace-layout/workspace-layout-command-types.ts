@@ -174,7 +174,13 @@ export type LayoutCommand =
       sessionId: string
       agent: AgentType
       groupId?: string
+      /** Placement in the group: after this tab, else at this index, else at its end. */
+      afterTabId?: string
+      index?: number
+      /** When the window drew the tab, so a later save of it matches main's copy. */
+      createdAt?: number
       initial?: InitialSurfaceReason
+      split?: NewGroupSplit
     })
   | (On & { type: 'startPane'; paneKey: string })
   | (On & { type: 'restartPane'; paneKey: string })

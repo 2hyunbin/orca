@@ -1,9 +1,9 @@
-import type { GlobalSettings } from '../../../../shared/global-settings-types'
+import type { GlobalSettings } from '../global-settings-types'
 import {
   LOCAL_EXECUTION_HOST_ID,
   normalizeExecutionHostId,
   toSshExecutionHostId
-} from '../../../../shared/execution-host'
+} from '../execution-host'
 
 type RuntimeFocusSettings = Pick<GlobalSettings, 'activeRuntimeEnvironmentId'> | null | undefined
 
@@ -86,4 +86,24 @@ export function getLegacyGitHubPRCacheKey(
   branch: string
 ): string {
   return getLegacyGitHubRepoCacheKey(repoPath, repoId, branch)
+}
+
+/** Every key a repo's branch PR may sit under in the cache, the repo-scoped one first. */
+export function getGitHubPRCacheKeyCandidates(
+  repo: { path: string; id: string; connectionId?: string | null; executionHostId?: string | null },
+  branch: string
+): string[] {
+  return [
+    getGitHubPRCacheKey(
+      repo.path,
+      repo.id,
+      branch,
+      null,
+      repo.connectionId,
+      repo.executionHostId,
+      true
+    ),
+    getLegacyGitHubPRCacheKey(repo.path, repo.id, branch),
+    getLegacyGitHubPRCacheKey(repo.path, undefined, branch)
+  ]
 }
