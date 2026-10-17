@@ -294,7 +294,7 @@ async function startOrcadRuntime(
     agentHookServer,
     () => runtime
   )
-  registerCleanup(runtime.workspaceActivityFacts.attachAgentStatusStore(agentHookServer))
+  registerCleanup(runtime.attachSidebarAgentStatusStore(agentHookServer))
 
   // Why the headless entry point rather than registerPtyHandlers directly: this is the
   // same call `--serve` makes, and it threads the store through. Without the store the

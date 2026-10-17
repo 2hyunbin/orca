@@ -9,6 +9,7 @@ import {
   createSleepingSweepRetentionState,
   updateSleepingSweepRetention
 } from '../../../../../../shared/sidebar-list/sleeping-sweep-retention'
+import { recordWindowSleepingRetention } from '@/lib/sidebar-shadow/window-sidebar-temporal-readout'
 
 type SweepActivityInputs = Pick<
   VisibleWorktreeOptions,
@@ -77,7 +78,8 @@ export function useSleepingSweepRetention(
 
   useEffect(() => {
     committedStateRef.current = pass.state ?? createSleepingSweepRetentionState()
-  }, [pass.state])
+    recordWindowSleepingRetention(pass.retainedIds)
+  }, [pass.state, pass.retainedIds])
 
   // Why: without a wake the last grace window holds its row until an unrelated store change.
   const { nextExpiryInMs } = pass

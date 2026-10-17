@@ -620,6 +620,7 @@ import {
   WorktreeTeardownMissingTerminalsParams
 } from './worktree-params'
 import { WorktreeAdoptProvisionedRoot } from './worktree-provisioned-root-params'
+import { SidebarSessionBeginParams } from '../sidebar-list/sidebar-temporal-snapshot'
 import { SkillBundleInstallRequestSchema } from '../skill-bundle-install-contract'
 import { SkillDeleteRequestSchema } from '../skill-delete-contract'
 import {
@@ -1248,6 +1249,8 @@ export const RPC_PARAMS_BY_METHOD = {
   'sidebarInputs.desktopFacts': null,
   'sidebarInputs.pairedServerRows': null,
   'sidebarInputs.reviewFacts': null,
+  'sidebarInputs.temporal': null,
+  'sidebarSession.begin': SidebarSessionBeginParams,
   'skills.beginUpload': SkillUploadBeginRequestSchema,
   'skills.cancelInstall': SkillsCancelInstallParams,
   'skills.cancelUpload': SkillUploadCommitRequestSchema,

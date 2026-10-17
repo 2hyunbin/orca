@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '@/store'
 import { getAllWorktreesFromState } from '@/store/selectors'
 import { track } from '@/lib/telemetry'
@@ -14,6 +14,12 @@ import {
   smartSortPhase
 } from '../../../../../../shared/sidebar-list/smart-sort-phase'
 import { useReusedArrayIdentity } from './use-reused-array-identity'
+import { beginSidebarListSession } from '@/lib/sidebar-list-session'
+import { createBrowserUuid } from '@/lib/browser-uuid'
+import {
+  clearWindowSidebarTemporalReadout,
+  recordWindowSortOrder
+} from '@/lib/sidebar-shadow/window-sidebar-temporal-readout'
 
 function trackSmartClassDistribution(attention: ReadonlyMap<string, WorktreeAttention>): void {
   let class1 = 0
@@ -85,6 +91,16 @@ export function useSidebarWorktreeSortOrder(args: {
   }, [settledSortEpoch, persistedRankTrigger, repoMap, sortBy])
   // Why: stable ID order prevents rank-only refreshes from echoing an unchanged snapshot.
   const sortedIds = useReusedArrayIdentity(recomputedSort.sortedIds)
+
+  // Why: main's copy of the latch and retention lives as long as this list, as the ref above does.
+  const [listSessionId] = useState(createBrowserUuid)
+  useEffect(() => {
+    beginSidebarListSession(listSessionId)
+    return () => clearWindowSidebarTemporalReadout(listSessionId)
+  }, [listSessionId])
+  useEffect(() => {
+    recordWindowSortOrder(listSessionId, sortBy, sortedIds)
+  }, [listSessionId, sortBy, sortedIds])
 
   // Why after commit: a discarded render must not latch Smart onto a live signal that never committed.
   useEffect(() => {
