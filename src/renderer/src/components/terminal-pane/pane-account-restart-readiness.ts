@@ -1,7 +1,16 @@
 import type { AppState } from '@/store'
 import type { AccountRestartAgent } from '@/store/terminals/terminal-contracts'
-import { isAgentPaneMidTurn } from '@/lib/agent-account-switch-sessions'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
+
+/** Whether the pane's agent is mid-turn: a restart during a reply, permission prompt or question drops it. */
+export function isAgentPaneMidTurn(
+  state: Pick<AppState, 'agentStatusByPaneKey'>,
+  paneKey: string,
+  agent: AccountRestartAgent
+): boolean {
+  const entry = state.agentStatusByPaneKey[paneKey]
+  return entry?.agentType === agent && entry.state !== 'done'
+}
 
 /** Whether a queued restart for `agent` may run in `paneKey` now: never mid-turn. */
 export function isQueuedAccountRestartReady(

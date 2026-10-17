@@ -2,7 +2,8 @@ import { formatAgentTypeLabel } from '@/lib/agent-status'
 import { Folder, GitBranch } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
 import { AgentIcon } from '@/lib/agent-catalog'
-import { isAgentPaneMidTurn, type AccountSwitchSession } from '@/lib/agent-account-switch-sessions'
+import type { AccountSwitchSession } from '@/lib/agent-account-switch-sessions'
+import { isAgentPaneMidTurn } from './terminal-pane/pane-account-restart-readiness'
 import type { AccountRestartAgent } from '@/store/terminals/terminal-contracts'
 import {
   resolveWorktreeBranchLabel,

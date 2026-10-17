@@ -16,7 +16,7 @@ import {
   findMovableAgentSessions,
   findQueuedAccountRestartsOnAccount
 } from './agent-account-switch-discovery'
-import { isAgentPaneMidTurn } from './agent-account-switch-sessions'
+import { isAgentPaneMidTurn } from '@/components/terminal-pane/pane-account-restart-readiness'
 import {
   SEEDED_SESSION_ID,
   paneKeyOf,

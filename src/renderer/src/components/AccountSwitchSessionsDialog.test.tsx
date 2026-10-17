@@ -14,15 +14,15 @@ import {
 } from '@/lib/agent-account-switch-sessions'
 import AccountSwitchSessionsDialog from './AccountSwitchSessionsDialog'
 import type * as Discovery from '@/lib/agent-account-switch-discovery'
-import type * as SwitchSessions from '@/lib/agent-account-switch-sessions'
+import type * as RestartReadiness from './terminal-pane/pane-account-restart-readiness'
 
 vi.mock('@/lib/agent-account-switch-discovery', async (importOriginal) => ({
   ...(await importOriginal<typeof Discovery>()),
   findMovableAgentSessions: vi.fn(),
   findQueuedAccountRestartsOnAccount: () => []
 }))
-vi.mock('@/lib/agent-account-switch-sessions', async (importOriginal) => ({
-  ...(await importOriginal<typeof SwitchSessions>()),
+vi.mock('./terminal-pane/pane-account-restart-readiness', async (importOriginal) => ({
+  ...(await importOriginal<typeof RestartReadiness>()),
   isAgentPaneMidTurn: () => false
 }))
 

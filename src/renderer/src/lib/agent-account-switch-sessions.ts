@@ -5,7 +5,6 @@
 import { toast } from 'sonner'
 import { formatAgentTypeLabel } from '../../../shared/agent-type-label'
 import { translate } from '@/i18n/i18n'
-import type { AppState } from '@/store'
 import { useAppStore } from '@/store'
 import type { AccountRestartAgent } from '@/store/terminals/terminal-contracts'
 import type { AccountSwitchRunningSessions } from '../../../shared/agent-account-switch-settings'
@@ -39,16 +38,6 @@ export type AgentAccountSwitchPrompt = {
 
 /** 'show-confirmation' leaves the caller's own switch confirmation to show. */
 export type AgentAccountSwitchOutcome = 'show-confirmation' | 'handled'
-
-/** Whether the pane's agent is mid-turn: a restart during a reply, permission prompt or question drops it. */
-export function isAgentPaneMidTurn(
-  state: AppState,
-  paneKey: string,
-  agent: AccountRestartAgent
-): boolean {
-  const entry = state.agentStatusByPaneKey[paneKey]
-  return entry?.agentType === agent && entry.state !== 'done'
-}
 
 /** One question per agent, host and lane: a switch moves only that lane's sessions. */
 type SlotKey = { agent: AccountRestartAgent; owner: string | null; lane: string }
