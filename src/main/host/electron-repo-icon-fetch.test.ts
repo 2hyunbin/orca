@@ -57,7 +57,42 @@ describe('fetchRepoIconWithManualRedirects', () => {
     expect(await response.text()).toBe('png')
   })
 
-  it('rejects and aborts at the caller deadline, and ends a stalled body', async () => {
+  it('keeps a raw relative Location for the caller to resolve', async () => {
+    const pending = fetchRepoIconWithManualRedirects('https://github.com/o.png', {})
+    native.emit('redirect', 302, 'GET', 'https://github.com/u/3', { location: ['/u/3'] })
+
+    expect((await pending).headers.get('location')).toBe('/u/3')
+  })
+
+  it('answers a bodyless status without throwing', async () => {
+    const pending = fetchRepoIconWithManualRedirects('https://github.com/o.png', {})
+    native.emit('response', Object.assign(Readable.from([]), { statusCode: 204, headers: {} }))
+
+    expect((await pending).status).toBe(204)
+  })
+
+  it('rejects at once for a deadline that already passed', async () => {
+    const reason = new Error('deadline')
+    await expect(
+      fetchRepoIconWithManualRedirects('https://github.com/o.png', {
+        signal: AbortSignal.abort(reason)
+      })
+    ).rejects.toBe(reason)
+    expect(request).not.toHaveBeenCalled()
+  })
+
+  it('rejects and aborts a request still waiting at the deadline', async () => {
+    const controller = new AbortController()
+    const pending = fetchRepoIconWithManualRedirects('https://github.com/o.png', {
+      signal: controller.signal
+    })
+    controller.abort(new Error('deadline'))
+
+    await expect(pending).rejects.toThrow('deadline')
+    expect(native.abort).toHaveBeenCalled()
+  })
+
+  it('ends a stalled body at the deadline', async () => {
     const controller = new AbortController()
     const pending = fetchRepoIconWithManualRedirects('https://github.com/o.png', {
       signal: controller.signal
@@ -68,15 +103,15 @@ describe('fetchRepoIconWithManualRedirects', () => {
     controller.abort(new Error('deadline'))
 
     expect(stalled.destroyed).toBe(true)
+  })
 
-    native = new FakeRequest()
-    request.mockReturnValue(native)
-    const second = new AbortController()
-    const hung = fetchRepoIconWithManualRedirects('https://github.com/o.png', {
-      signal: second.signal
-    })
-    second.abort(new Error('deadline'))
-    await expect(hung).rejects.toThrow('deadline')
+  it('stops the request when the caller cancels an oversized body', async () => {
+    const pending = fetchRepoIconWithManualRedirects('https://github.com/o.png', {})
+    const body = Object.assign(new Readable({ read() {} }), { statusCode: 200, headers: {} })
+    native.emit('response', body)
+    await (await pending).body?.cancel()
+
+    expect(body.destroyed).toBe(true)
     expect(native.abort).toHaveBeenCalled()
   })
 })

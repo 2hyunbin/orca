@@ -1,7 +1,9 @@
 import { Readable } from 'node:stream'
-import { net } from 'electron'
+import { net, type ClientRequest } from 'electron'
 
-function webBody(response: Readable): ReadableStream<Uint8Array> {
+const NULL_BODY_STATUSES = new Set([101, 204, 205, 304])
+
+function webBody(response: Readable, request: ClientRequest): ReadableStream<Uint8Array> {
   const chunks: AsyncIterator<Uint8Array> = response[Symbol.asyncIterator]()
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
@@ -15,6 +17,7 @@ function webBody(response: Readable): ReadableStream<Uint8Array> {
     // Why destroy, not return(): return() would queue behind a pending read on a stalled body.
     cancel: () => {
       response.destroy()
+      request.abort()
     }
   })
 }
@@ -22,41 +25,54 @@ function webBody(response: Readable): ReadableStream<Uint8Array> {
 /**
  * A GET that answers a redirect with the 3xx itself, as undici does with `redirect: 'manual'`.
  * Why its own request: Electron's net.fetch rejects every manual redirect, and the icon fetcher
- * must count and vet each hop.
+ * must count and vet each hop. Proxy login challenges are cancelled, so icons fall back there.
  */
 export function fetchRepoIconWithManualRedirects(
   url: string,
   init: RequestInit
 ): Promise<Response> {
   const { signal } = init
+  if (signal?.aborted) {
+    return Promise.reject(signal.reason)
+  }
   return new Promise((resolve, reject) => {
     const request = net.request({ url, method: 'GET', redirect: 'manual', credentials: 'omit' })
-    const onAbort = (): void => {
+    const fail = (error: unknown): void => {
       request.abort()
-      reject(signal?.reason)
+      reject(error)
     }
-    signal?.addEventListener('abort', onAbort, { once: true })
+    signal?.addEventListener('abort', () => fail(signal.reason), { once: true })
     request.on('redirect', (statusCode, _method, redirectUrl, responseHeaders) => {
-      const headers = new Headers({ location: redirectUrl })
-      for (const [key, values] of Object.entries(responseHeaders)) {
-        headers.set(key, values.join(', '))
+      try {
+        const headers = new Headers({ location: redirectUrl })
+        for (const [key, values] of Object.entries(responseHeaders)) {
+          headers.set(key, values.join(', '))
+        }
+        resolve(new Response(null, { headers, status: statusCode }))
+        request.abort()
+      } catch (error) {
+        fail(error)
       }
-      resolve(new Response(null, { headers, status: statusCode }))
-      request.abort()
     })
     request.on('response', (response) => {
       if (!(response instanceof Readable)) {
-        request.abort()
-        reject(new TypeError('Electron response is not a readable stream'))
+        fail(new TypeError('Electron response is not a readable stream'))
         return
       }
-      const headers = new Headers()
-      for (const [key, value] of Object.entries(response.headers)) {
-        headers.set(key, Array.isArray(value) ? value.join(', ') : value)
+      try {
+        const headers = new Headers()
+        for (const [key, value] of Object.entries(response.headers)) {
+          headers.set(key, Array.isArray(value) ? value.join(', ') : value)
+        }
+        const body = NULL_BODY_STATUSES.has(response.statusCode) ? null : webBody(response, request)
+        // Why: a stalled body must end at the caller's deadline or on a late network error.
+        signal?.addEventListener('abort', () => response.destroy(signal.reason), { once: true })
+        request.on('error', (error) => response.destroy(error))
+        resolve(new Response(body, { headers, status: response.statusCode }))
+      } catch (error) {
+        response.destroy()
+        fail(error)
       }
-      // Why destroy on abort: a stalled body must end at the caller's deadline.
-      signal?.addEventListener('abort', () => response.destroy(signal.reason), { once: true })
-      resolve(new Response(webBody(response), { headers, status: response.statusCode }))
     })
     request.on('error', reject)
     request.end()
