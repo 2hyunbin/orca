@@ -71,7 +71,9 @@ function harness(initial: { sortBy: WorkspaceSortBy; worktrees: Worktree[] }) {
   return { world, owner, ranked }
 }
 
-const flush = (): Promise<void> => vi.advanceTimersByTimeAsync(0)
+const flush = async (): Promise<void> => {
+  await vi.advanceTimersByTimeAsync(0)
+}
 
 describe('SidebarTemporalOwner', () => {
   beforeEach(() => {
