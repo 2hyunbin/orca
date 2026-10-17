@@ -54,7 +54,7 @@ export function getFolderWorkspaceLaneKey(
       return getWorkspaceStatusGroupKey(getWorkspaceStatus(pair.folderWorkspace, workspaceStatuses))
     case 'pr-status':
       // Why in-progress: a folder workspace has no branch or repo, so it can
-      // never resolve a PR. getPRGroupKey returns this same lane for any
+      // never resolve a PR. The window's PR reader returns this same lane for any
       // worktree without one, so the two stay consistent.
       return getPRLaneKey('in-progress')
     case 'none':

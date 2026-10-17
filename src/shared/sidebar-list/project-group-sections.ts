@@ -60,7 +60,7 @@ export function appendProjectGroupSections(
   }
 
   const projectGroupsById = new Map(projectGroups.map((group) => [group.id, group]))
-  // Membership already decided by getRenderableFolderWorkspaces in buildRows, so
+  // Membership already decided by getRenderableFolderWorkspaces in planSidebarRows, so
   // repo grouping no longer owns the filter — it only groups and orders (#15362).
   const folderWorkspacesByProjectGroupId = new Map<string, RenderableFolderWorkspace[]>()
   for (const pair of folderWorkspaces) {

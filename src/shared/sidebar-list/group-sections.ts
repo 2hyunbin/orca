@@ -27,7 +27,7 @@ import type {
   WorktreeGroupBy
 } from './row-types'
 
-/** Everything section emission reads that stays fixed for one buildRows call. */
+/** Everything section emission reads that stays fixed for one planSidebarRows call. */
 export type SectionAppendContext = {
   result: Row[]
   groupBy: WorktreeGroupBy

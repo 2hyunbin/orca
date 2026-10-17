@@ -68,7 +68,7 @@ export function getGroupKeysForWorktree(
     const group = groupsById.get(currentGroupId)
     if (!group) {
       // Why: repos can arrive before their remote Project Group metadata; reveal
-      // keys must match the top-level fallback rows buildRows actually renders.
+      // keys must match the top-level fallback rows planSidebarRows actually renders.
       break
     }
     visited.add(currentGroupId)

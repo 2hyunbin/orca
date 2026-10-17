@@ -1,4 +1,5 @@
 import type { AppState } from '@/store/types'
+import { branchName } from '@/lib/git-utils'
 import { getGitHubPRCacheKey, getLegacyGitHubPRCacheKey } from '@/store/slices/github-cache-key'
 import type { Repo } from '../../../../../../shared/repo-types'
 import type { Worktree } from '../../../../../../shared/worktree/types'
@@ -16,7 +17,7 @@ export function getPRGroupKey(
   settings?: AppState['settings']
 ): PRGroupKey {
   const repo = repoMap.get(worktree.repoId)
-  const branch = worktree.branch.replace(/^refs\/heads\//, '')
+  const branch = branchName(worktree.branch)
   const repoScopedCacheKey =
     repo && branch
       ? getGitHubPRCacheKey(
