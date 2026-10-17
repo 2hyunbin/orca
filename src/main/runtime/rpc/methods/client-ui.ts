@@ -18,6 +18,8 @@ import {
   SettingsUpdate
 } from '../../../../shared/rpc-contract/client-settings-params'
 import { FeatureInteractionIdParam, UiUpdate } from './client-ui-schemas'
+import { SetCollapsedParams } from '../../../../shared/rpc-contract/workspace-view-collapse-params'
+import { setCollapsedSection } from '../../workspace-view-collapse-writes'
 // Type-only side effect: keeps the schema/PersistedUIState parity assertions in
 // the typecheck graph so drift fails the build instead of a paired client.
 
@@ -164,6 +166,20 @@ export const CLIENT_UI_METHODS = [
         ...ownPhoneFilter
       } as Partial<PersistedUIState>
       return { ui: uiForCaller(context.runtime.updateUIState(updates), context) }
+    }
+  }),
+  defineMethod({
+    name: 'ui.setCollapsed',
+    permission: 'workspace',
+    params: SetCollapsedParams,
+    handler: (params, context) => {
+      // Collapse is this host's view: only its own phone and local callers may change it.
+      if (context.clientKind !== undefined && !isHostOwnPhone(context)) {
+        throw Object.assign(new Error('Only this host and its own phone change its collapse.'), {
+          code: 'forbidden'
+        })
+      }
+      return setCollapsedSection(context.runtime, context.runtime.collapseWriteOrder, params)
     }
   }),
   defineMethod({
