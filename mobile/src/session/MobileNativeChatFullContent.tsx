@@ -129,6 +129,7 @@ export function MobileNativeChatToolOutput({
 export function useMobileNativeChatFullMessage(message: NativeChatMessage): {
   shown: NativeChatMessage
   showFull: React.JSX.Element | null
+  recovery: { load: Load; onPress: () => void } | null
 } {
   const source = useContext(MobileNativeChatItemSourceContext)
   const detail = source?.messageDetail
@@ -161,6 +162,7 @@ export function useMobileNativeChatFullMessage(message: NativeChatMessage): {
   }
   return {
     shown: message,
+    recovery: state === 'available' ? { load, onPress: showFull } : null,
     showFull:
       state === 'partial' ? (
         <Text style={styles.showFullText}>Showing part of this message.</Text>

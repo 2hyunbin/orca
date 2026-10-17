@@ -101,7 +101,7 @@ function MobileNativeChatMessageImpl({
   userMessageOpen?: boolean
   onToggleUserMessage?: (messageId: string) => void
 }): React.JSX.Element {
-  const { shown: message, showFull } = useMobileNativeChatFullMessage(rowMessage)
+  const { shown: message, showFull, recovery } = useMobileNativeChatFullMessage(rowMessage)
   // Another agent's message is set apart from the person's bubble, left-aligned and named.
   const attribution = agentMessageAttribution('Message from', message.from)
   const isUser = message.role === 'user' && attribution === null
@@ -269,6 +269,8 @@ function MobileNativeChatMessageImpl({
                 fontScale={fontScale}
                 open={userMessageOpen === true}
                 onToggle={() => onToggleUserMessage?.(message.id)}
+                recovery={recovery}
+                status={showFull}
               >
                 {proseRows(drawnProse.filter((block) => !isImageRefBlock(block)))}
               </MobileNativeChatUserMessageFold>
@@ -283,7 +285,7 @@ function MobileNativeChatMessageImpl({
               {(block, index, shown) => proseRow(block, index, shown.text, shown.revealing)}
             </MobileNativeChatPacedProse>
           )}
-          {showFull}
+          {isUser ? null : showFull}
           {askRow}
           {showToolRun ? (
             <ToolRun

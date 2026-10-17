@@ -1,10 +1,11 @@
-import { createElement } from 'react'
+import { createElement, useState } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
 import type { RpcClient } from '../transport/rpc-client'
 import { MobileNativeChatItemSourceContext } from './mobile-native-chat-item-read'
 import { useMobileNativeChatFullMessage } from './MobileNativeChatFullContent'
+import { MobileNativeChatUserMessageFold } from './MobileNativeChatUserMessageFold'
 
 vi.mock('react-native', () => ({
   Pressable: 'Pressable',
@@ -76,3 +77,82 @@ it.each(['client', 'session'] as const)(
     expect(newLoad).toHaveBeenCalledOnce()
   }
 )
+
+it('opens and retries missing user text without losing local disclosure', async () => {
+  let text = 'head\n'.repeat(200)
+  const raw: NativeChatMessage = { ...message, role: 'user', blocks: [{ type: 'text', text }] }
+  let pending = Promise.withResolvers<void>()
+  const load = vi.fn(() =>
+    pending.promise.then(() => {
+      text += 'FULL TAIL'
+    })
+  )
+  const value = {
+    client: first,
+    sessionId: 'session',
+    messageDetail: {
+      raw: () => raw,
+      state: () =>
+        text.endsWith('FULL TAIL') ? ('complete' as const) : ('available' as const),
+      load
+    }
+  }
+  function UserProbe() {
+    const [open, setOpen] = useState(false)
+    const full = useMobileNativeChatFullMessage({ ...raw, blocks: [{ type: 'text', text }] })
+    return (
+      <MobileNativeChatUserMessageFold
+        text={text}
+        fontScale={1}
+        open={open}
+        onToggle={() => setOpen((held) => !held)}
+        recovery={full.recovery}
+        status={full.showFull}
+      >
+        {createElement('Text', null, text)}
+      </MobileNativeChatUserMessageFold>
+    )
+  }
+  await act(async () => {
+    renderer = create(
+      <MobileNativeChatItemSourceContext.Provider value={value}>
+        <UserProbe />
+      </MobileNativeChatItemSourceContext.Provider>
+    )
+  })
+  await act(async () => {
+    renderer?.root
+      .find((node) => typeof node.props.onLayout === 'function')
+      .props.onLayout({ nativeEvent: { layout: { height: 400 } } })
+  })
+  const buttons = () => renderer?.root.findAllByProps({ accessibilityRole: 'button' }) ?? []
+  const press = async (index = 0) => {
+    await act(async () => {
+      buttons()[index].props.onPress()
+    })
+  }
+  expect(buttons()).toHaveLength(1)
+  await press()
+  expect(buttons()[0].props.accessibilityState.expanded).toBe(true)
+  expect(load).toHaveBeenCalledOnce()
+  await act(async () => {
+    pending.reject(new Error('host unavailable'))
+    await pending.promise.catch(() => {})
+  })
+  expect(JSON.stringify(renderer?.toJSON())).toContain('head')
+  expect(JSON.stringify(renderer?.toJSON())).toContain("couldn't load")
+  pending = Promise.withResolvers<void>()
+  await press(1)
+  expect(buttons()[0].props.accessibilityState.expanded).toBe(true)
+  await act(async () => {
+    pending.resolve()
+    await pending.promise
+  })
+  expect(JSON.stringify(renderer?.toJSON())).toContain('FULL TAIL')
+  expect(buttons()).toHaveLength(1)
+  await press()
+  expect(buttons()[0].props.accessibilityState.expanded).toBe(false)
+  await press()
+  expect(buttons()[0].props.accessibilityState.expanded).toBe(true)
+  expect(load).toHaveBeenCalledTimes(2)
+})
