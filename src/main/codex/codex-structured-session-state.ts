@@ -124,6 +124,7 @@ export type CodexStructuredSessionAdapterDeps = {
   requestTimeoutMs?: number
   /** Host model catalog; sessions write their listings through and read back. */
   modelCatalog?: AgentModelCatalogStore
+  readModelCatalog?: (sessionId: string) => ReturnType<AgentModelCatalogStore['get']>
 }
 
 export type CodexSession = {

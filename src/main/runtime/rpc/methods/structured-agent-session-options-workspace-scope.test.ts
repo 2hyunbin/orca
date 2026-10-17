@@ -8,7 +8,10 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AGENT_SESSION_OPTIONAL_MODEL_CLIENT_CAPABILITY } from '../../../../shared/agent-session-optional-model-capability'
 import { STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
-import { agentModelCatalogFingerprintForRecord } from '../../../native-chat/agent-model-catalog/agent-model-catalog-fingerprint'
+import {
+  agentModelCatalogFingerprintForRecord,
+  agentModelCatalogScopeFingerprint
+} from '../../../native-chat/agent-model-catalog/agent-model-catalog-fingerprint'
 import { createAgentModelCatalogService } from '../../../native-chat/agent-model-catalog/agent-model-catalog-service'
 import { AgentModelCatalogStore } from '../../../native-chat/agent-model-catalog/agent-model-catalog-store'
 import {
@@ -78,7 +81,6 @@ async function chatAtRest(repoConfig: { configured: boolean }): Promise<void> {
     await writeFile(join(repo, '.codex', 'config.toml'), 'model_reasoning_effort = "high"\n')
   }
   const store = new AgentModelCatalogStore()
-  // Not inline: this base's listing still requires the tier map that main has since dropped.
   const listing = {
     models: [
       {
@@ -92,11 +94,14 @@ async function chatAtRest(repoConfig: { configured: boolean }): Promise<void> {
         ]
       }
     ],
-    fastModeTierByModel: new Map(),
+    complete: true,
     origin: 'probe' as const
   }
   store.recordSuccess(
-    agentModelCatalogFingerprintForRecord(rig.store.getRecord(SESSION)!),
+    agentModelCatalogScopeFingerprint(
+      agentModelCatalogFingerprintForRecord(rig.store.getRecord(SESSION)!),
+      repo
+    ),
     'codex',
     listing,
     'discovery'

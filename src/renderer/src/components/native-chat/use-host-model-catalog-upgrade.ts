@@ -79,7 +79,7 @@ export function useHostModelCatalogUpgrade(args: {
     updateOptionState,
     worktree
   } = args
-  const waitKey = `${structuredAgentSessionHostKey(target)}\u0000${agent}\u0000${sessionId}`
+  const waitKey = `${structuredAgentSessionHostKey(target)}\u0000${agent}\u0000${sessionId}\u0000${fence}\u0000${args.providerRunning === true}`
   const [verdict, setVerdict] = useState<{
     key: string
     unavailable: AgentSessionUnavailable | null
@@ -114,6 +114,9 @@ export function useHostModelCatalogUpgrade(args: {
         waitForListing ? { ...params, waitForListing } : params
       )
     const apply = (catalog: AgentSessionModelCatalogResult | null): void => {
+      if (stale) {
+        return
+      }
       const next = readAgentSessionUnavailable(catalog?.unavailable)
       setVerdict((current) => {
         const shown = current?.key === waitKey ? current.unavailable : null

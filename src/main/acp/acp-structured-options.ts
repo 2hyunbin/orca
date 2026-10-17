@@ -4,7 +4,6 @@
 
 import type {
   AgentSessionModelOption,
-  AgentSessionOptionChoice,
   AgentSessionOptionsResult,
   AgentSessionSlashCommand
 } from '../../shared/agent-session-wire'
@@ -58,6 +57,10 @@ function isSelect(option: SessionConfigOption): option is SelectOption {
 export class AcpStructuredOptions {
   constructor(private readonly dialect: Pick<AcpDialect, 'modelEfforts'> = {}) {}
 
+  private readonly observedMenus = new Map<
+    string,
+    Pick<AgentSessionModelOption, 'efforts' | 'defaultEffort'>
+  >()
   private configOptions: SessionConfigOption[] = []
   private models: SessionModelState | null = null
   private commands: AgentSessionSlashCommand[] | undefined
@@ -73,9 +76,12 @@ export class AcpStructuredOptions {
     },
     origin: 'new' | 'loaded' = 'loaded'
   ): void {
+    this.observedMenus.clear()
+    this.picked.clear()
     this.configOptions = response.configOptions ?? []
     this.models = response.models ?? null
     this.resolvesConfig = origin === 'new'
+    this.observeMenu()
   }
 
   /** Orca sent `key` to the session, or the chat's saved options hold a value for it. */
@@ -86,6 +92,7 @@ export class AcpStructuredOptions {
   adoptConfigOptions(configOptions: SessionConfigOption[] | null | undefined): void {
     if (configOptions) {
       this.configOptions = configOptions
+      this.observeMenu()
     }
   }
 
@@ -132,13 +139,6 @@ export class AcpStructuredOptions {
   read(): Pick<AgentSessionOptionsResult, 'models' | 'current'> {
     const modelOption = this.select('model')
     const effortOption = this.select('thought_level')
-    const sessionEfforts: AgentSessionOptionChoice[] = effortOption
-      ? selectChoices(effortOption).map((choice) => ({
-          value: choice.value,
-          label: choice.name,
-          ...(choice.description ? { description: choice.description } : {})
-        }))
-      : []
     const currentModel = (modelOption?.currentValue ?? this.models?.currentModelId) || undefined
     const listed: { id: string; label: string; description?: string }[] = modelOption
       ? selectChoices(modelOption).map((choice) => ({
@@ -154,12 +154,11 @@ export class AcpStructuredOptions {
     const models: AgentSessionModelOption[] = listed.map((model) => {
       const info = this.models?.availableModels.find((entry) => entry.modelId === model.id)
       const advertised = info ? this.dialect.modelEfforts?.(info) : undefined
-      const sessionMenu = { efforts: model.id === currentModel ? sessionEfforts : [] }
+      const menu = advertised ?? this.observedMenus.get(model.id)
       return {
         ...model,
         isDefault: false,
-        // An empty advertised menu is no menu: the running model keeps the one its session offers.
-        ...(advertised && advertised.efforts.length > 0 ? advertised : sessionMenu)
+        ...(menu ?? { efforts: [], effortsKnown: false as const })
       }
     })
     const confirmed = [...(currentModel ? ['model'] : []), ...(effortOption ? ['effort'] : [])]
@@ -203,6 +202,20 @@ export class AcpStructuredOptions {
   /** The session's mode is its `mode`-category select, whatever the agent names it. */
   modeConfigId(): string {
     return this.select('mode')?.id ?? 'mode'
+  }
+
+  private observeMenu(): void {
+    const model = this.select('model')?.currentValue ?? this.models?.currentModelId
+    const effort = this.select('thought_level')
+    if (model && effort) {
+      this.observedMenus.set(model, {
+        efforts: selectChoices(effort).map((choice) => ({
+          value: choice.value,
+          label: choice.name,
+          ...(choice.description ? { description: choice.description } : {})
+        }))
+      })
+    }
   }
 
   private select(category: string): SelectOption | null {
