@@ -108,7 +108,7 @@ export function NativeChatQueuedMessageList({
               count={cards.length}
               attentionCaption={attentionCaption}
               pause={pause}
-              resuming={controller.resuming}
+              queueBusy={controller.queueBusy}
               clearCapable={controller.clearCapable}
               expanded={expanded}
               listId={listId}
@@ -137,6 +137,7 @@ export function NativeChatQueuedMessageList({
                   statedFailures={statedFailures}
                   showsSteerShortcut={controller.queueCapable && card === newest}
                   steerHeld={steerHeld}
+                  busy={controller.busy(card.messageId)}
                   onSteer={() => refocusAfter(controller.steer(card.messageId))}
                   onDelete={() => refocusAfter(controller.remove(card.messageId))}
                   onEdit={
@@ -163,7 +164,7 @@ function NativeChatQueueHeader({
   count,
   attentionCaption,
   pause,
-  resuming,
+  queueBusy,
   clearCapable,
   expanded,
   listId,
@@ -174,7 +175,7 @@ function NativeChatQueueHeader({
   count: number
   attentionCaption: string | null
   pause: { reason: string } | null
-  resuming: boolean
+  queueBusy: boolean
   clearCapable: boolean
   expanded: boolean
   listId: string
@@ -210,17 +211,18 @@ function NativeChatQueueHeader({
       ) : null}
       {pause ? (
         <>
+          {/* Each greys during the other: a Resume would send the cards a Clear is deleting. */}
           <Button
             type="button"
             variant="ghost"
             size="xs"
-            disabled={!clearCapable}
+            disabled={!clearCapable || queueBusy}
             onClick={onClearAll}
           >
             <Trash2 />
             {translate('components.native-chat.queuedMessages.clearAll', 'Clear all')}
           </Button>
-          <Button type="button" variant="ghost" size="xs" disabled={resuming} onClick={onResume}>
+          <Button type="button" variant="ghost" size="xs" disabled={queueBusy} onClick={onResume}>
             <Play />
             {translate('components.native-chat.queuedMessages.resume', 'Resume')}
           </Button>

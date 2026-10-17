@@ -81,8 +81,8 @@ function useScopedOpenKeys(scopeKey: string): [ReadonlySet<string>, (key: string
 }
 
 /** Owns the transcript's per-turn status rows and their disclosure state, and
- *  resolves what one list row needs. Bridge-lane chats pass `enabled: false` and
- *  keep their single three-dot working indicator instead. */
+ *  resolves what one list row needs. Bridge-lane chats pass `enabled: false`: no turn
+ *  rows, but the same live "Working…" line while the agent works. */
 export function useMobileNativeChatTurnDisclosure({
   messages,
   enabled,
@@ -188,7 +188,7 @@ export function useMobileNativeChatTurnDisclosure({
   const line = useMemo(
     () =>
       nativeChatLiveLine({
-        draws: enabled && isWorking && !lineYields && active !== null,
+        draws: isWorking && !lineYields && (!enabled || active !== null),
         thinking: active?.thinking === true,
         stopping,
         activityText: activeActivityText,

@@ -12441,9 +12441,6 @@
           "notEnforced": "Enregistré, mais non appliqué par ce runtime (hôte à version mixte).",
           "refreshAccounts": "Actualiser les comptes GitHub"
         },
-        "NativeChatSupportedAgents": {
-          "label": "Agents pris en charge :"
-        },
         "contrast": {
           "title": "Contraste des couleurs",
           "description": "Améliorez la lisibilité du texte ou préservez les couleurs choisies par les programmes du terminal.",
@@ -18768,6 +18765,9 @@
         "editFailed": "Ce message ne peut pas être modifié.",
         "editGone": "Ce message a déjà été envoyé ou supprimé. Votre modification se trouve dans le champ de discussion.",
         "editGonePrompt": "Ce message a déjà été envoyé ou supprimé. Votre modification sera dans le champ de discussion une fois que vous aurez répondu à l'agent.",
+        "imageCount": "{{count}} images",
+        "imageCount_one": "{{count}} image",
+        "imageCount_other": "{{count}} images",
         "collapse": "Réduire",
         "expand": "Développer",
         "queued": "En file d'attente",

@@ -1,12 +1,13 @@
 import { e2eConfig } from '@/lib/e2e-config'
 
+/** Facts read on demand carry no revision. */
+export type SidebarShadowMainRead<Value> = { revision?: number; values: ReadonlyMap<string, Value> }
+
 /**
  * One sidebar input main is taking over: what the window derives itself next to what main
  * publishes, keyed by workspace. Both reads cover the same scope; another producer's rows are
  * left out of both.
  */
-export type SidebarShadowMainRead<Value> = { revision: number; values: ReadonlyMap<string, Value> }
-
 export type SidebarShadowDomain<Value, Main extends SidebarShadowMainRead<Value>> = {
   name: string
   /** Given main's read, so a domain can scope the window's side to what main covers. */
@@ -21,7 +22,7 @@ export type SidebarShadowMismatch = {
   key: string
   window: unknown
   main: unknown
-  mainRevision: number
+  mainRevision?: number
 }
 
 /** One domain's comparison, with its value type closed over; false when main published nothing. */
@@ -95,13 +96,16 @@ export function installSidebarShadowComparison(checks: readonly SidebarShadowChe
     }
     inFlight = true
     void (async () => {
+      let everyCompared = true
       for (const check of checks) {
         const compared = await check(record).catch((error: unknown) => {
           console.warn('[sidebar-shadow] check failed', error)
           return false
         })
-        comparisons += compared ? 1 : 0
+        everyCompared &&= compared
       }
+      // A round counts once every domain compared, so two rounds re-check each domain twice.
+      comparisons += everyCompared ? 1 : 0
     })().finally(() => {
       inFlight = false
     })

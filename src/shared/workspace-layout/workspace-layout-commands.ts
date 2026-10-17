@@ -123,7 +123,7 @@ function applyCommand(
     case 'setBrowserTabProfile':
       return setBrowserTabProfile(model, command)
     case 'openAgentSessionTab':
-      return openAgentSessionTab(model, command, context)
+      return openInNewGroup(model, command, (next) => openAgentSessionTab(next, command, context))
     case 'startPane':
       return startPane(model, command, context)
     case 'restartPane':

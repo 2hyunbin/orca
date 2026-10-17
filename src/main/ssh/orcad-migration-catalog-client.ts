@@ -47,7 +47,7 @@ export const ORCAD_MIGRATION_DESTINATION_EXTRA_AGENT_ARGS_UNSUPPORTED =
 export const ORCAD_MIGRATION_DESTINATION_SOURCE_KIND_UNSUPPORTED =
   'orcad_migration_destination_source_kind_unsupported:Update Orca on this host to move this project to it.'
 
-type CatalogRequestOptions = {
+export type CatalogRequestOptions = {
   signal?: AbortSignal
   timeoutMs?: number
   expectedRuntimeId?: string
@@ -153,6 +153,24 @@ export async function stageRemoteOrcadMigrationBlobChunk(
   return parseOrcadMigrationBlobChunkResult(response.result, request)
 }
 
+/** One `*.list` read of the server's own rows, through the same migration preflight. */
+export async function listServerRows(
+  pairingCode: string,
+  method: string,
+  rows: string,
+  options: CatalogRequestOptions
+): Promise<unknown> {
+  const pairing = parsePairingCode(pairingCode)
+  if (!pairing) {
+    throw new Error('orcad_migration_pairing_code_invalid')
+  }
+  const response = await sendSupportedMigrationRequest(pairing, method, undefined, options)
+  if (!response.ok) {
+    throw new Error(`orcad_migration_${rows}_failed:${response.error.message}`)
+  }
+  return response.result
+}
+
 // Every orcad's repo.list returns stored rows whole, so a row without host fields is its own.
 const ServerRepositoriesSchema = z.object({
   repos: z.array(
@@ -171,15 +189,8 @@ export async function listRemoteOrcadRepositories(
   pairingCode: string,
   options: CatalogRequestOptions = {}
 ): Promise<OrcadServerRepository[]> {
-  const pairing = parsePairingCode(pairingCode)
-  if (!pairing) {
-    throw new Error('orcad_migration_pairing_code_invalid')
-  }
-  const response = await sendSupportedMigrationRequest(pairing, 'repo.list', undefined, options)
-  if (!response.ok) {
-    throw new Error(`orcad_migration_repositories_failed:${response.error.message}`)
-  }
-  return ServerRepositoriesSchema.parse(response.result).repos.map(
+  const result = await listServerRows(pairingCode, 'repo.list', 'repositories', options)
+  return ServerRepositoriesSchema.parse(result).repos.map(
     ({ id, path, connectionId, executionHostId, projectGroupId }) => ({
       id,
       path,

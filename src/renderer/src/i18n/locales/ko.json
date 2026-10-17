@@ -12333,9 +12333,6 @@
           "stopping": "중지 중…",
           "confirm": "정리 중지"
         },
-        "NativeChatSupportedAgents": {
-          "label": "지원되는 에이전트:"
-        },
         "contrast": {
           "title": "색상 대비",
           "description": "텍스트 가독성을 높이거나 터미널 프로그램에서 선택한 색상을 유지합니다.",
@@ -18699,6 +18696,9 @@
         "editFailed": "이 메시지는 편집할 수 없습니다.",
         "editGone": "이 메시지는 이미 전송되었거나 삭제되었습니다. 편집한 내용은 채팅 입력란에 있습니다.",
         "editGonePrompt": "이 메시지는 이미 전송되었거나 삭제되었습니다. 에이전트에 답하면 편집한 내용이 채팅 입력란에 표시됩니다.",
+        "imageCount": "이미지 {{count}}개",
+        "imageCount_one": "이미지 {{count}}개",
+        "imageCount_other": "이미지 {{count}}개",
         "collapse": "접기",
         "expand": "펼치기",
         "queued": "대기 중",
