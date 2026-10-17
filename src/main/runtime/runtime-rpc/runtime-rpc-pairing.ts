@@ -102,9 +102,12 @@ export class RuntimeRpcPairing extends RuntimeRpcNetworkExposure {
           nativeChatDefault: () => isStructuredNativeChatEnabled(this.runtime)
         })
       : null
+    this.detachPairedServerRows?.()
+    this.detachPairedServerRows = hosts ? this.runtime.pairedServerRows.attach(hosts) : null
     this.mobileRelayHostCatalog = hosts
       ? new MobileRelayHostCatalog({
           hosts,
+          serverRows: this.runtime.pairedServerRows,
           hostLabelOverrides: () => getHostDisplayLabelOverrides(this.runtime.getClientSettings()),
           getWorkspaceSession: (hostId) => this.runtime.getWorkspaceSessionForHost(hostId)
         })

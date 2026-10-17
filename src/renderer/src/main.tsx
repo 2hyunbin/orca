@@ -27,6 +27,7 @@ import { installBrowserClientPageRenderer } from './components/browser-pane/brow
 import { installOsFileDropCancellationGuard } from './lib/os-file-drop-cancellation-guard'
 import { installSidebarShadowComparison } from './lib/sidebar-shadow/sidebar-shadow-comparison'
 import { workspaceActivityShadow } from './lib/sidebar-shadow/workspace-activity-shadow'
+import { pairedServerRowsShadow } from './lib/sidebar-shadow/paired-server-rows-shadow'
 
 const disposeOsFileDropGuard = installOsFileDropCancellationGuard()
 import.meta.hot?.dispose(disposeOsFileDropGuard)
@@ -34,7 +35,10 @@ recordRendererCrashBreadcrumb('renderer_bootstrap_started', { dev: import.meta.e
 installRendererCrashDiagnostics()
 installTypingLatencyDiagnostic()
 installAutomationHostDiagnostic()
-const disposeSidebarShadow = installSidebarShadowComparison([workspaceActivityShadow])
+const disposeSidebarShadow = installSidebarShadowComparison([
+  workspaceActivityShadow,
+  pairedServerRowsShadow
+])
 import.meta.hot?.dispose(disposeSidebarShadow)
 
 if (

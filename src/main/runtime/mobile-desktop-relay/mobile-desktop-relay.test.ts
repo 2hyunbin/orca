@@ -79,7 +79,9 @@ function relayWithPhone(
       return syncResponse()
     },
     hostsBrowserPage: () => false,
-    onEnvironmentRetired: () => () => {}
+    onEnvironmentRetired: () => () => {},
+    onStatusChanged: () => () => {},
+    watchChanges: () => () => {}
   }
   const relay = new MobileDesktopRelay({
     hosts,
