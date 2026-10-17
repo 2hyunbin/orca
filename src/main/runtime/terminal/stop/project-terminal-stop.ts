@@ -110,11 +110,12 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
       const opts = { resolvedWorktreeId: id, ...fence, ...options }
       // Why exclusive: it waits out a spawn that holds the shared lease, so its PTY is registered
       // and stopped. Bounded by the deadline so repo.rm still answers; past it the stop is skipped.
-      const lease = this.acquireWorktreeTerminalMutation(id, 'exclusive')
-      const release = await raceDeadline(lease, options.deadline)
-      if (!release) {
-        void lease.then((late) => late())
-      }
+      // A timed-out waiter is dequeued by the lock, so it cannot hold later spawns back.
+      const release = await this.acquireWorktreeTerminalMutation(
+        id,
+        'exclusive',
+        options.deadline
+      ).catch(() => null)
       try {
         // Why raced: a provider's own exit wait can outlast the budget that keeps repo.rm answering.
         const result = await raceDeadline(
