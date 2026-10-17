@@ -1,11 +1,6 @@
 /**
- * Moves running Claude terminal sessions onto a newly selected Claude account.
- *
- * Why restart + resume is enough: every Orca terminal's `claude` shell function
- * reads the selected account's config folder at launch, so relaunching
- * `claude --resume <id>` in the same pane lands on the new account with the
- * conversation intact. Native chat sessions are not terminal panes and are
- * never touched here.
+ * Finds Claude terminal sessions to move onto a newly selected account. Why resume suffices: each
+ * launch reads the selected account's folder, so `claude --resume <id>` lands there intact.
  */
 import type { AppState } from '@/store'
 import { useAppStore } from '@/store'
@@ -52,10 +47,8 @@ function isClaudeProcess(processName: string | null): boolean {
 }
 
 /**
- * Whether Claude, not the shell or another program, holds the pane's foreground.
- *
- * Why the confirm fallback: cached foreground names flap to the shell, and the
- * native macOS install reads as its version folder (`2.1.x`), not `claude`.
+ * Whether Claude holds the pane's foreground. Why confirm: cached names flap to the shell, and
+ * the native macOS install reads as its version folder (`2.1.x`).
  */
 async function isClaudeInForeground(
   ptyId: string,
@@ -182,11 +175,8 @@ export function findQueuedClaudeRestartsOnAccount(args: {
 }
 
 /**
- * Finds local terminal panes running a resumable Claude session in the lane the
- * account switch wrote.
- *
- * Why remote owners return nothing: a relay or SSH machine keeps its own Claude
- * login, so a local switch cannot strand those sessions.
+ * Local panes running a resumable Claude session in the switched lane. Why none for remote
+ * owners: a relay or SSH machine keeps its own Claude login.
  */
 export async function findMovableClaudeSessions(args: {
   owner: RuntimeClientTarget

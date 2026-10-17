@@ -1,7 +1,4 @@
-/**
- * What happens to running Claude terminal sessions after the user switches
- * Claude accounts: ask in a dialog, or apply the saved setting.
- */
+/** What a Claude account switch does to running Claude terminal sessions: ask, or apply the setting. */
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
@@ -58,10 +55,7 @@ function currentPtyIds(sessions: readonly ClaudeSessionMoveCandidate[]): string[
   })
 }
 
-/**
- * Answers the open dialog. Like native chat's resume prompt, "don't ask again" is one-way:
- * it turns on automatic restarts however the dialog is left. Settings is where it turns off.
- */
+/** Answers the open dialog. "Don't ask again" only turns restarts on, as native chat's resume prompt does. */
 export function answerClaudeAccountSwitchPrompt(
   answer: 'restart' | 'keep',
   options: {
@@ -106,13 +100,13 @@ export async function handleRunningClaudeSessionsAfterSwitch(args: {
 }): Promise<'show-confirmation' | 'handled'> {
   const fromAccountId = claudeLaunchAccountId(args.before.state, args.before.accountId)
   const toAccountId = claudeLaunchAccountId(args.after.state, args.after.accountId)
-  // Why: a server's switch moves nothing here, and one between launch folders that coincide moves nothing.
+  // Why: a server's switch, or one between coinciding launch folders, moves nothing here.
   if (args.owner.kind !== 'local' || fromAccountId === toAccountId) {
     return 'show-confirmation'
   }
   const generation = ++switchGeneration
   setPrompt(null)
-  // Why: an accepted restart relaunches on whatever is selected when it runs, so it outlives later switches.
+  // Why: an accepted restart relaunches on whatever is selected when it runs, so it outlives switches.
   const store = useAppStore.getState()
   for (const ptyId of findQueuedClaudeRestartsOnAccount({
     owner: args.owner,

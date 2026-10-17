@@ -234,7 +234,7 @@ export function useTerminalPaneProcessExitActions(controller: TerminalPaneCloseC
     }
   }, [managerRef, panePtyLayoutBindings, paneTransportsRef, tabId])
 
-  // Why primitive ids: unrelated status publications leave the list shallow-equal, so they skip this pane.
+  // Why primitive ids: unrelated status updates stay shallow-equal and skip this pane.
   const readyRestartPtyIds = useAppStore(
     useShallow((state) => selectReadyAccountRestartPtyIds(state, tabId))
   )
