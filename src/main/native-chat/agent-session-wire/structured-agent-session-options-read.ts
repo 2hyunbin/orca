@@ -267,13 +267,7 @@ export async function readStructuredAgentSessionOptions(
     ...selected.current,
     ...options.current,
     ...(model !== undefined ? { model } : {}),
-    effort:
-      saved.effort ??
-      (model === options.current.model
-        ? options.current.effort
-        : model === selected.current.model
-          ? selected.current.effort
-          : undefined),
+    effort: saved.effort ?? options.current.effort,
     fastMode:
       saved.fastMode !== undefined
         ? selected.current.fastMode

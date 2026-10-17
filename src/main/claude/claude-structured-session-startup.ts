@@ -21,6 +21,7 @@ import {
   claudeResolvedCatalogListing,
   claudeStructuredSessionOptionsFrom,
   observeClaudeSettingsApplied,
+  observeClaudeSettingsExecutionEffort,
   readClaudeSettingsApplied,
   readClaudeFastModeFacts,
   readClaudeSettingsEffort
@@ -164,11 +165,11 @@ function applyClaudeSettingsFacts(
     session.events?.publish()
     return
   }
+  observeClaudeSettingsExecutionEffort(session, settings)
   // The readback vouches for a value the child was launched with only when it reports that value.
   const agrees = (key: string, reported: string): boolean =>
     !session.options.has(key) || session.options.get(key) === reported
   if (effort) {
-    session.reusableOptions.set('effort', effort)
     session.reportedOptions.effort = effort
     if (agrees('effort', effort)) {
       session.confirmedOptions.add('effort')
@@ -177,7 +178,6 @@ function applyClaudeSettingsFacts(
   // A launch `--effort` shows only in `applied`, never in `effective` (measured on 2.1.280).
   const launchedEffort = session.options.get('effort')
   if (launchedEffort !== undefined && session.appliedOptions?.effort === launchedEffort) {
-    session.reusableOptions.set('effort', launchedEffort)
     session.confirmedOptions.add('effort')
   }
   if (published.fastMode !== null) {

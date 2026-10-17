@@ -85,7 +85,7 @@ describe('Claude host-awaited open', () => {
     )
     const connection = claude.connections[0]!
     expect(connection.calls.filter((call) => call.subtype === 'apply_flag_settings')).toEqual([])
-    connection.getSettings = async () => ({ effective: { fastMode } })
+    connection.getSettings = async () => ({ effective: { effortLevel: 'high', fastMode } })
     await expect(
       adapter.dispatch({
         sessionId: 'session-1',

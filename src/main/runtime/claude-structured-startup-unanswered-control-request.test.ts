@@ -128,6 +128,7 @@ describe('a Claude start whose CLI answers initialize but not a control request'
     })
     expect(claude.child(SESSION).launch.options).toMatchObject({
       model: 'sonnet',
+      effort: 'high',
       permissionMode: 'acceptEdits'
     })
     // The record keeps the saved choices through the start.
@@ -139,8 +140,15 @@ describe('a Claude start whose CLI answers initialize but not a control request'
     expect(claude.child(SESSION).calls).not.toContain('set_model')
     expect(claude.child(SESSION).calls).not.toContain('set_permission_mode')
 
+    claude.child(SESSION).connection.getSettings = async () => ({
+      applied: { effort: 'high' },
+      effective: { effortLevel: 'low' }
+    })
+    await host.readOptions(SESSION)
     await send(host, 'hello')
     await vi.waitFor(() => expect(claude.child(SESSION).calls).toContain('send'))
+    expect(claude.child(SESSION).calls).not.toContain('set_model')
+    expect(claude.child(SESSION).calls).not.toContain('apply_flag_settings')
   })
 
   it('keeps the launched saved choice when the user later changes a different option', async () => {
@@ -175,14 +183,14 @@ describe('a Claude start whose CLI answers initialize but not a control request'
     await ready(host)
     expect(record(host)?.options).toEqual({ model: 'sonnet' })
     // The picker offers the saved model, which nothing has vouched for yet.
-    expect(await picker(host)).toEqual({ model: 'sonnet', effort: undefined, confirmed: undefined })
+    expect(await picker(host)).toEqual({ model: 'sonnet', effort: 'high', confirmed: ['effort'] })
 
     // A turn reports its own model; the picker and record keep the next message's saved choice.
     turnReportsModel('claude-sonnet-5')
     expect(await picker(host)).toEqual({
       model: 'sonnet',
-      effort: undefined,
-      confirmed: undefined
+      effort: 'high',
+      confirmed: ['effort']
     })
     expect(record(host)?.options).toEqual({ model: 'sonnet' })
 
@@ -224,6 +232,7 @@ describe('a Claude start whose CLI answers initialize but not a control request'
     expect(claude.child(SESSION).launch.options).toMatchObject({
       sessionId: freshProviderSessionId,
       model: 'sonnet',
+      effort: 'high',
       permissionMode: 'acceptEdits'
     })
     expect(claude.child(SESSION).launch.options.resume).toBeUndefined()
