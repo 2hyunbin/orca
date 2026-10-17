@@ -312,6 +312,65 @@ describe('questions across agents and lanes', () => {
     answerAgentAccountSwitchPrompt('keep')
     expect(getAgentAccountSwitchPrompt()).toBeNull()
   })
+
+  describe('a distro scan still running when every WSL distro is cleared', () => {
+    const clearEveryWsl = () =>
+      handleRunningAgentSessionsAfterSwitch(CODEX, {
+        ...wslSwitch(null),
+        clearsEveryWslDistro: true
+      })
+    const startOverlappingScans = () => {
+      const distro = Promise.withResolvers<ReturnType<typeof candidate>[]>()
+      const everyWsl = Promise.withResolvers<ReturnType<typeof candidate>[]>()
+      vi.mocked(findMovableAgentSessions)
+        .mockReturnValueOnce(distro.promise)
+        .mockReturnValueOnce(everyWsl.promise)
+      return {
+        distro,
+        everyWsl,
+        distroDone: switchAgent(CODEX, wslSwitch('Ubuntu')),
+        everyWslDone: clearEveryWsl()
+      }
+    }
+
+    it('drops the distro question when its scan finishes last', async () => {
+      const scans = startOverlappingScans()
+      scans.everyWsl.resolve([candidate(2)])
+      expect(await scans.everyWslDone).toBe('handled')
+      scans.distro.resolve([candidate(1)])
+      expect(await scans.distroDone).toBe('handled')
+
+      expect(listed()).toEqual(['pty-2'])
+      answerAgentAccountSwitchPrompt('keep')
+      expect(getAgentAccountSwitchPrompt()).toBeNull()
+    })
+
+    it('drops the distro question when its scan finishes first', async () => {
+      const scans = startOverlappingScans()
+      scans.distro.resolve([candidate(1)])
+      expect(await scans.distroDone).toBe('handled')
+      expect(getAgentAccountSwitchPrompt()).toBeNull()
+      scans.everyWsl.resolve([candidate(2)])
+      expect(await scans.everyWslDone).toBe('handled')
+
+      expect(listed()).toEqual(['pty-2'])
+      answerAgentAccountSwitchPrompt('keep')
+      expect(getAgentAccountSwitchPrompt()).toBeNull()
+    })
+
+    it('restarts only the newer switch sessions under Always restart', async () => {
+      store.settings = { codexAccountSwitchRunningSessions: 'restart' }
+      const scans = startOverlappingScans()
+      scans.everyWsl.resolve([candidate(2)])
+      await scans.everyWslDone
+      scans.distro.resolve([candidate(1)])
+      await scans.distroDone
+
+      expect(store.queuePaneAccountRestarts).toHaveBeenCalledTimes(1)
+      expect(store.queuePaneAccountRestarts).toHaveBeenCalledWith(['pty-2'], 'codex')
+      expect(toastSuccess).toHaveBeenCalledTimes(1)
+    })
+  })
 })
 
 describe('switching from a saved Claude account that runs on System default, as the status bar shows it', () => {

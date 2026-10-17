@@ -52,25 +52,27 @@ export function isAgentPaneMidTurn(
 
 /** One question per agent, host and lane: a switch moves only that lane's sessions. */
 type SlotKey = { agent: AccountRestartAgent; owner: string | null; lane: string }
-type PromptSlot = { key: SlotKey; prompt: AgentAccountSwitchPrompt }
+/** A switch from scan start to answer; `prompt` is set once its scan finds sessions. */
+type SwitchSlot = { id: number; key: SlotKey; prompt?: AgentAccountSwitchPrompt }
 
-const slotId = (key: SlotKey): string => JSON.stringify([key.agent, key.owner, key.lane])
-
-let nextPromptId = 0
-const generationBySlot = new Map<string, number>()
-// Why a queue: a Claude and a Codex switch can both be waiting; the dialog shows the oldest.
-let slots: PromptSlot[] = []
+let nextSlotId = 0
+// Why a queue: a Claude and a Codex switch can both be waiting; the dialog shows the first scan to finish.
+let slots: SwitchSlot[] = []
 const promptListeners = new Set<() => void>()
 
-function setSlots(next: PromptSlot[]): void {
+function setSlots(next: SwitchSlot[]): void {
+  const shown = getAgentAccountSwitchPrompt()
   slots = next
+  if (getAgentAccountSwitchPrompt() === shown) {
+    return
+  }
   for (const listener of promptListeners) {
     listener()
   }
 }
 
 export function getAgentAccountSwitchPrompt(): AgentAccountSwitchPrompt | null {
-  return slots[0]?.prompt ?? null
+  return slots.find((slot) => slot.prompt)?.prompt ?? null
 }
 
 export function subscribeAgentAccountSwitchPrompt(listener: () => void): () => void {
@@ -78,18 +80,21 @@ export function subscribeAgentAccountSwitchPrompt(listener: () => void): () => v
   return () => promptListeners.delete(listener)
 }
 
-/**
- * Starts a switch's question in `slotKey`, dropping the open ones it `covers`. The returned
- * check is false once a newer switch in the same slot has started.
- */
-function beginSlot(slotKey: SlotKey, covers: (open: SlotKey) => boolean): () => boolean {
-  const id = slotId(slotKey)
-  const generation = (generationBySlot.get(id) ?? 0) + 1
-  generationBySlot.set(id, generation)
-  if (slots.some((slot) => covers(slot.key))) {
-    setSlots(slots.filter((slot) => !covers(slot.key)))
+/** Starts a switch in `key`, dropping every pending or open switch it `covers`. */
+function beginSlot(key: SlotKey, covers: (open: SlotKey) => boolean): number {
+  const id = ++nextSlotId
+  setSlots([...slots.filter((slot) => !covers(slot.key)), { id, key }])
+  return id
+}
+
+/** Ends a switch's scan; false when a newer switch already superseded it. */
+function endScan(id: number): boolean {
+  const remaining = slots.filter((slot) => slot.id !== id)
+  if (remaining.length === slots.length) {
+    return false
   }
-  return () => generationBySlot.get(id) === generation
+  setSlots(remaining)
+  return true
 }
 
 /**
@@ -119,11 +124,11 @@ export function answerAgentAccountSwitchPrompt(
     dontAskAgain?: boolean
   } = {}
 ): void {
-  const [current, ...rest] = slots
-  if (!current) {
+  const current = slots.find((slot) => slot.prompt)
+  if (!current?.prompt) {
     return
   }
-  setSlots(rest)
+  setSlots(slots.filter((slot) => slot !== current))
   const { agent, sessions } = current.prompt
   if (answer === 'restart') {
     const chosen = options.ptyIds ? new Set(options.ptyIds) : null
@@ -199,7 +204,7 @@ export async function handleRunningAgentSessionsAfterSwitch(
     owner: args.owner.kind === 'environment' ? args.owner.environmentId : null,
     lane: clearsEveryWsl ? SLOT_EVERY_WSL : getCodexSelectionLaneKey(target)
   }
-  const isCurrent = beginSlot(switchSlot, (open) => {
+  const slotId = beginSlot(switchSlot, (open) => {
     if (open.agent !== switchSlot.agent || open.owner !== switchSlot.owner) {
       return false
     }
@@ -219,6 +224,7 @@ export async function handleRunningAgentSessionsAfterSwitch(
     store.consumePendingPaneAccountRestart(ptyId)
   }
   if (readPolicy(agent) === 'keep') {
+    endScan(slotId)
     return 'show-confirmation'
   }
   const sessions = await findMovableAgentSessions(agent, { ...scope, fromAccountId }).catch(
@@ -227,7 +233,7 @@ export async function handleRunningAgentSessionsAfterSwitch(
       return []
     }
   )
-  if (!isCurrent()) {
+  if (!endScan(slotId)) {
     return 'handled'
   }
   // Why re-read: the setting may change while the scan runs.
@@ -245,21 +251,18 @@ export async function handleRunningAgentSessionsAfterSwitch(
     return 'handled'
   }
   const prompt: AgentAccountSwitchPrompt = {
-    id: ++nextPromptId,
+    id: slotId,
     agent,
     sessions,
     previousAccountLabel: agent.accountLabel(args.before),
     nextAccountLabel
   }
-  setSlots([
-    ...slots.filter((slot) => slotId(slot.key) !== slotId(switchSlot)),
-    { key: switchSlot, prompt }
-  ])
+  // Why appended: completed questions keep completion order, so the open dialog never changes.
+  setSlots([...slots, { id: slotId, key: switchSlot, prompt }])
   return 'handled'
 }
 
 export function resetAgentAccountSwitchSessionsForTests(): void {
-  generationBySlot.clear()
-  nextPromptId = 0
+  nextSlotId = 0
   setSlots([])
 }
