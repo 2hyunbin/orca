@@ -38,6 +38,8 @@ export type LayoutCommand =
       title?: string
       color?: string
       viewMode?: 'terminal' | 'chat'
+      /** When the window drew the tab, so a later save of it matches main's copy. */
+      createdAt?: number
       creation?: Partial<LayoutTerminalCreation>
       initial?: InitialSurfaceReason
       split?: NewGroupSplit
@@ -98,6 +100,8 @@ export type LayoutCommand =
       color?: string | null
       isPinned?: boolean
       viewMode?: 'terminal' | 'chat'
+      /** The tab's agent launched and ended: a restore must not launch it again. */
+      clearLaunchAgent?: true
     })
   | (On & { type: 'setChatPane'; tabId: string; leafId: string | null })
   | (On & {
@@ -127,6 +131,11 @@ export type LayoutCommand =
       groupId: string
       /** The moved edit-mode file's record in its new workspace. */
       file?: LayoutEditorFile
+    })
+  | (On & {
+      type: 'renameEditorFiles'
+      /** Under the window's ids; one workspace's files only. */
+      renames: EditorFileRename[]
     })
   | (On & {
       type: 'openBrowserTab'
@@ -174,6 +183,13 @@ export type LayoutCommand =
 export type InitialSurfaceReason = 'restore' | 'activation'
 
 export type CommandOf<T extends LayoutCommand['type']> = Extract<LayoutCommand, { type: T }>
+
+/** One open file the window renamed or moved; `record` when it is an edit-mode file. */
+export type EditorFileRename = {
+  fileId: string
+  newFileId: string
+  record?: { fromFilePath: string; file: LayoutEditorFile }
+}
 
 export type GroupSide = 'left' | 'right' | 'up' | 'down'
 

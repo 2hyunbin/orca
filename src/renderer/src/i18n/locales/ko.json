@@ -5975,8 +5975,7 @@
                   "7edb8ebe24": "URL에서 복제",
                   "a6c20dca96": "SSH 대상에서 프로젝트 열기",
                   "serverSshTitle": "이 서버의 SSH 호스트에 있는 프로젝트",
-                  "serverSshDescription": "이 서버가 연결하는 SSH 호스트의 프로젝트 폴더를 엽니다",
-                  "serverSshUpdate": "SSH 호스트에 프로젝트를 추가하려면 이 서버를 업데이트하세요",
+                  "serverSshAddOnThisComputer": "서버에서는 사용할 수 없습니다. 프로젝트를 열려면 이 컴퓨터에 SSH 호스트를 추가하세요.",
                   "fb4fc5380e": "로컬 프로젝트, Git repo 또는 repos가 많은 폴더",
                   "2281fdc8c7": "폴더 찾아보기",
                   "runtimeBrowseDescription": "이 호스트의 기존 Git 리포지토리 또는 폴더"
@@ -8708,7 +8707,7 @@
           "addDescription": "SSH로 로그인할 수 있는 영구 머신을 추가합니다.",
           "editingPrefix": "편집 중",
           "allowRemoteCliControl": "이 호스트의 orca CLI가 Orca를 제어하도록 허용",
-          "allowRemoteCliControlHelp": "기본적으로 켜져 있습니다. 이 호스트에서 실행한 orca 명령이 이 호스트의 작업 공간에서만, 연결되어 있는 동안에만 이 데스크톱의 Orca 브라우저 탭을 열고 조작할 수 있게 하고, 이 호스트에서 이전 버전의 Orca가 시작한 터미널이 자신이 감독받는 작업에 대해 오케스트레이션 명령(check, inbox, send, ask, reply)을 실행할 수 있게 합니다. 파일, 클립보드, 쿠키는 읽을 수 없습니다. 끄면 이 호스트 자체의 Orca 서버에만 접근합니다."
+          "allowRemoteCliControlHelp": "새 호스트에서는 기본적으로 켜져 있습니다. 이 호스트에서 실행한 orca 명령이 이 호스트의 작업 공간에서만, 연결되어 있는 동안에만 이 데스크톱의 Orca 브라우저 탭을 열고 조작할 수 있게 하고, 이 호스트에서 이전 버전의 Orca가 시작한 터미널이 자신이 감독받는 작업에 대해 오케스트레이션 명령(check, inbox, send, ask, reply)을 실행할 수 있게 합니다. 파일, 클립보드, 쿠키는 읽을 수 없습니다. 끄면 이 호스트 자체의 Orca 서버에만 접근합니다."
         },
         "TasksPane": {
           "f71d8a9dd3": "작업 제공자",

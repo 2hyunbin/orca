@@ -10,12 +10,12 @@ import {
 } from '../../worktree-list-groups-test-fixtures'
 import { makeProjectGroup } from '../../folder-workspace-composer-submit-fixtures'
 import { getWorktreeRevealCollapsedGroupKeys } from '../navigation/worktree-reveal-group-keys'
-import { buildRows, buildSidebarRowPlan } from './build-rows'
+import { buildRows, buildSidebarRowPlan } from './build-rows.test-fixture'
 import {
   getWorktreeLineageGroupKey,
   getProjectGroupHeaderKey,
   PINNED_GROUP_KEY
-} from './group-keys'
+} from '../../../../../../shared/sidebar-list/group-keys'
 
 const childRepo = { ...repo, id: 'child-repo', displayName: 'Child project', path: '/tmp/child' }
 const repos = new Map([

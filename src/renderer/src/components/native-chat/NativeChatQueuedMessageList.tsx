@@ -198,6 +198,7 @@ function NativeChatQueueHeader({
           ? translate('components.native-chat.queuedMessages.paused', 'Paused')
           : translate('components.native-chat.queuedMessages.queued', 'Queued')}
       </p>
+      <span aria-hidden>·</span>
       <span className={cn('tabular-nums', attentionCaption ? 'shrink-0' : 'min-w-0 flex-1')}>
         {count}
       </span>

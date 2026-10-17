@@ -77,6 +77,7 @@ describe('createTab in a layout-owner build', () => {
         leafId: LEAF,
         groupId: 'group-1',
         viewMode: 'chat',
+        createdAt: store.getState().unifiedTabsByWorktree[WORKTREE]![0]!.createdAt,
         creation: {
           defaultTitle: 'Terminal 1',
           shellOverride: 'zsh',

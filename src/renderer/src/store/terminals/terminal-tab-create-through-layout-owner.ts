@@ -47,6 +47,7 @@ export function terminalTabCreateCommand(
         }
       : {}),
     ...(entry?.viewMode ? { viewMode: entry.viewMode } : {}),
+    createdAt: entry?.createdAt ?? tab.createdAt,
     creation
   }
 }

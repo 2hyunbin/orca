@@ -145,10 +145,12 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
       own,
       nameBasedLoadContext()
     )
+    const heldFiles = new Set(state.openFiles.map((file) => `${file.worktreeId}\0${file.id}`))
     const built = buildLayoutFrameSlices({
       layouts: Object.fromEntries(keys.map((key) => [key, cache[key]!])),
       facts,
-      view: desktopView
+      view: desktopView,
+      holdsEditorFile: (worktreeId, fileId) => heldFiles.has(`${worktreeId}\0${fileId}`)
     })
     const patch = buildLayoutFrameStorePatch(
       state,
