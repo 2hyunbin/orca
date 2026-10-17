@@ -4,6 +4,7 @@
  */
 import { z } from 'zod'
 import {
+  MAX_ORCAD_MIGRATION_FOLDER_WORKSPACES,
   MAX_ORCAD_MIGRATION_PROJECT_GROUPS,
   MAX_ORCAD_MIGRATION_REPOSITORIES,
   parseOrcadMigrationManifest,
@@ -58,6 +59,11 @@ const CutoverRecordSchema = z.object({
   linkedProjectGroupIds: z
     .array(z.string().min(1).max(1_024))
     .max(MAX_ORCAD_MIGRATION_PROJECT_GROUPS)
+    .optional(),
+  // Source folder workspaces the server already holds under the same id and folder (#27285).
+  linkedFolderWorkspaceIds: z
+    .array(z.string().min(1).max(1_024))
+    .max(MAX_ORCAD_MIGRATION_FOLDER_WORKSPACES)
     .optional(),
   manifest: z.unknown()
 })

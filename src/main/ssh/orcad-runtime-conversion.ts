@@ -45,6 +45,7 @@ import {
   linkServerHeldRepositories,
   type OrcadServerRepository
 } from './orcad-migration-repository-link'
+import type { OrcadServerFolderWorkspace } from './orcad-server-folder-workspaces'
 
 export type OrcadManagedConversionArgs = {
   sshTargetId: string
@@ -55,6 +56,10 @@ export type OrcadManagedConversionArgs = {
   destinationFor: (environment: KnownRuntimeEnvironment) => OrcadMigrationDestinationCatalog
   /** The server's own projects, so ones this host already holds at the same path link to them. */
   serverRepositoriesFor?: (environment: KnownRuntimeEnvironment) => Promise<OrcadServerRepository[]>
+  /** The server's folder workspaces, so ones an earlier move left there link to them. */
+  serverFolderWorkspacesFor?: (
+    environment: KnownRuntimeEnvironment
+  ) => Promise<OrcadServerFolderWorkspace[]>
   /** Releases the direct SSH session after the terminal check, before the fence. */
   releaseDirectSession?: (sshTargetId: string) => Promise<void>
   now?: () => Date
@@ -95,6 +100,7 @@ export async function convertSshTargetToManagedOrcad(
   const store = targetStore.getOrcadMigrationSource()
   const destination = args.destinationFor(marked)
   const serverRepositoriesFor = args.serverRepositoriesFor
+  const serverFolderWorkspacesFor = args.serverFolderWorkspacesFor
   let linkedRepositoryIds: string[] | undefined
   const committed = await runTargetLifecycle(fenced.sshTargetId, async () => {
     const journaled = requireJournaledCutover(userDataPath, fenced)
@@ -106,6 +112,9 @@ export async function convertSshTargetToManagedOrcad(
           cutover: journaled,
           destination,
           serverRepositories: () => serverRepositoriesFor(marked),
+          ...(serverFolderWorkspacesFor
+            ? { serverFolderWorkspaces: () => serverFolderWorkspacesFor(marked) }
+            : {}),
           now: args.now
         })
       : journaled

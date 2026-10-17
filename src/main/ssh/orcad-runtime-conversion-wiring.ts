@@ -17,6 +17,10 @@ import {
 import { censusHostRelayTerminalsFor } from './ssh-host-relay-census-for-target'
 import type { OrcadManagedConversionArgs } from './orcad-runtime-conversion'
 import type { OrcadServerRepository } from './orcad-migration-repository-link'
+import {
+  listRemoteOrcadFolderWorkspaces,
+  type OrcadServerFolderWorkspace
+} from './orcad-server-folder-workspaces'
 
 /** The T6-9 client against this server, pinned to the runtime it paired with. */
 export function orcadMigrationDestinationFor(
@@ -44,13 +48,29 @@ export function orcadServerRepositoriesFor(
   )
 }
 
+/** The folder workspaces this server already holds, read through the same pinned pairing. */
+export function orcadServerFolderWorkspacesFor(
+  environment: KnownRuntimeEnvironment
+): Promise<OrcadServerFolderWorkspace[]> {
+  const pairingCode = encodePairingOffer(getPreferredPairingOffer(environment))
+  return listRemoteOrcadFolderWorkspaces(
+    pairingCode,
+    environment.runtimeId ? { expectedRuntimeId: environment.runtimeId } : {}
+  )
+}
+
 export function conversionCollaborators(): Pick<
   OrcadManagedConversionArgs,
-  'destinationFor' | 'serverRepositoriesFor' | 'censusHost' | 'releaseDirectSession'
+  | 'destinationFor'
+  | 'serverRepositoriesFor'
+  | 'serverFolderWorkspacesFor'
+  | 'censusHost'
+  | 'releaseDirectSession'
 > {
   return {
     destinationFor: orcadMigrationDestinationFor,
     serverRepositoriesFor: orcadServerRepositoriesFor,
+    serverFolderWorkspacesFor: orcadServerFolderWorkspacesFor,
     censusHost: (target) => censusHostRelayTerminalsFor(target)(),
     releaseDirectSession: disconnectRegisteredSshTarget
   }

@@ -37,6 +37,7 @@ const {
   stageRemoteOrcadMigrationCatalog,
   stageRemoteOrcadMigrationSnapshotChunk
 } = await import('./orcad-migration-catalog-client')
+const { listRemoteOrcadFolderWorkspaces } = await import('./orcad-server-folder-workspaces')
 
 function manifest(): OrcadMigrationManifest {
   const unsigned = {
@@ -103,6 +104,23 @@ describe('remote orcad migration catalog client', () => {
       { id: 'runtime', path: '/root/c', executionHostId: 'runtime:env' },
       { id: 'legacy', path: '/root/d' }
     ])
+  })
+
+  it('reads the server’s folder workspaces with the host each one’s folder is on', async () => {
+    sendRequest.mockResolvedValue({
+      ok: true,
+      result: {
+        folderWorkspaces: [
+          { id: 'own', folderPath: '/root/a', projectGroupId: 'g', connectionId: null, name: 'a' },
+          { id: 'nested', folderPath: '/root/b', projectGroupId: 'g', connectionId: 'ssh-nested' }
+        ]
+      }
+    })
+    await expect(listRemoteOrcadFolderWorkspaces(pairingCode)).resolves.toEqual([
+      { id: 'own', folderPath: '/root/a', projectGroupId: 'g' },
+      { id: 'nested', folderPath: '/root/b', projectGroupId: 'g', connectionId: 'ssh-nested' }
+    ])
+    expect(sendRequest.mock.calls.at(-1)?.[1]).toBe('folderWorkspace.list')
   })
 
   it('pins snapshot acknowledgments to the admitted destination runtime', async () => {
