@@ -52,13 +52,6 @@ describe('a paired client tab move in a layout-owner build', () => {
   it('goes to main first, as a tab-bar drop does', () => {
     mocks.drop.mockReturnValue(true)
 
-    onMove({
-      worktreeId: WT,
-      kind: 'reorder',
-      tabId: 't2',
-      targetGroupId: 'g1',
-      tabOrder: ['t2', 't1']
-    })
     onMove({ worktreeId: WT, kind: 'move-to-group', tabId: 't2', targetGroupId: 'g2', index: 0 })
     onMove({
       worktreeId: WT,
@@ -69,12 +62,27 @@ describe('a paired client tab move in a layout-owner build', () => {
     })
 
     expect(mocks.drop.mock.calls).toEqual([
-      [WT, { kind: 'reorder', tabId: 't2', groupId: 'g1', tabOrder: ['t2', 't1'] }],
       [WT, { kind: 'move', tabId: 't2', groupId: 'g2', index: 0 }],
       [WT, { kind: 'split', tabId: 't2', groupId: 'g1', direction: 'right' }]
     ])
     expect(mocks.store.reorderUnifiedTabs).not.toHaveBeenCalled()
     expect(mocks.store.dropUnifiedTab).not.toHaveBeenCalled()
+  })
+
+  it('takes a reorder’s whole order, even one that moves tabs other than the named one', () => {
+    mocks.drop.mockReturnValue(true)
+
+    onMove({
+      worktreeId: WT,
+      kind: 'reorder',
+      tabId: 'c',
+      targetGroupId: 'g1',
+      tabOrder: ['b', 'a', 'c']
+    })
+
+    // The store's reorder records the order in main as moves (tabs-layout-owner-groups-order).
+    expect(mocks.drop).not.toHaveBeenCalled()
+    expect(mocks.store.reorderUnifiedTabs).toHaveBeenCalledWith('g1', ['b', 'a', 'c'])
   })
 
   it('moves the tab here as today when main does not own the workspace', () => {
