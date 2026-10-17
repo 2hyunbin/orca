@@ -84,7 +84,7 @@ async function startOrcadManagedIdleExit(
       activationFenceExists
     },
     stop: async (evidence) => {
-      await stopForIdle(input, evidence, retireOrcadDaemonIfIdle)
+      const outcome = await stopForIdle(input, evidence, retireOrcadDaemonIfIdle)
       // Clients or providers may return while daemon retirement awaits its reply.
       const activity = input.rpc.readClientActivity()
       if (
@@ -94,7 +94,17 @@ async function startOrcadManagedIdleExit(
         activity.lastRequestAt > evidence.quietSince
       ) {
         discardOrcadIdleStopRecord(input.userDataPath)
-        return false
+        // A retired daemon never admits terminals again; stay up only with a fresh one.
+        if (
+          outcome.retirement !== 'retired' ||
+          (await replaceRetiredDaemon()) ||
+          hasChatProviders()
+        ) {
+          return false
+        }
+        // No terminal daemon here; the returning client's reconnect relaunches a server with one.
+        idleRecord.requestShutdown(requestIdleShutdown)
+        return true
       }
       idleRecord.requestShutdown(requestIdleShutdown)
       return true
@@ -138,7 +148,7 @@ async function stopForIdle(
   input: { userDataPath: string; version: string },
   evidence: OrcadIdleExitEvidence,
   retireDaemon: () => Promise<{ retirement: string; reason: string | null }>
-): Promise<void> {
+): Promise<{ retirement: string }> {
   console.error(`[orcad] stopping: no client, terminal or job for ${evidence.timeoutMs}ms`)
   try {
     writeOrcadIdleStopRecord(input.userDataPath, evidence, input.version)
@@ -153,4 +163,18 @@ async function stopForIdle(
   console.error(
     `[orcad] terminal daemon on idle stop: ${outcome.retirement}${outcome.reason ? ` (${outcome.reason})` : ''}`
   )
+  return outcome
+}
+
+/** Safe only after retirement: the daemon proved itself empty and admission has stayed fenced since. */
+async function replaceRetiredDaemon(): Promise<boolean> {
+  try {
+    const { restartDaemon } = await import('../daemon/daemon-provider-restart')
+    await restartDaemon()
+    console.error('[orcad] a client returned during idle stop; started a fresh terminal daemon')
+    return true
+  } catch (error) {
+    console.error('[orcad] could not replace the retired terminal daemon:', error)
+    return false
+  }
 }
