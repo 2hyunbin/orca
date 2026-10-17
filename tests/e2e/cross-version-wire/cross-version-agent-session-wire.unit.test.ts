@@ -29,6 +29,7 @@ import {
   AGENT_SESSION_QUESTION_ANSWERS_RUNTIME_CAPABILITY,
   AGENT_SESSION_REWIND_RUNTIME_CAPABILITY,
   AGENT_SESSION_CONVERSATION_OUTLINE_RUNTIME_CAPABILITY,
+  AGENT_SESSION_ITEM_DETAIL_RUNTIME_CAPABILITY,
   AGENT_SESSION_STATUS_FEED_RUNTIME_CAPABILITY,
   STRUCTURED_AGENT_SESSION_CLIENT_LAUNCH_MODE_CAPABILITY,
   STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY
@@ -54,6 +55,7 @@ import {
   resetOperationIds,
   REWIND_METHOD,
   CONVERSATION_OUTLINE_METHOD,
+  ITEM_DETAIL_METHOD,
   envelope,
   STATUS_FEED_METHOD,
   sendParams,
@@ -268,6 +270,7 @@ describe('cross-version structured agent sessions', () => {
     it('registers the whole surface on the new build', () => {
       expect(current.capabilities).toContain(STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY)
       expect(current.capabilities).toContain(AGENT_SESSION_PENDING_SEND_RESULT_RUNTIME_CAPABILITY)
+      expect(current.capabilities).toContain(AGENT_SESSION_ITEM_DETAIL_RUNTIME_CAPABILITY)
       // The host admits by client capability, so a client may pick each launch mode itself.
       expect(current.capabilities).toContain(STRUCTURED_AGENT_SESSION_CLIENT_LAUNCH_MODE_CAPABILITY)
       expect(current.methodNames.filter((name) => name.startsWith('agentSession.'))).toHaveLength(
@@ -298,6 +301,9 @@ describe('cross-version structured agent sessions', () => {
         expect(
           build.capabilities.includes(AGENT_SESSION_CONVERSATION_OUTLINE_RUNTIME_CAPABILITY)
         ).toBe(build.methodNames.includes(CONVERSATION_OUTLINE_METHOD))
+        expect(build.capabilities.includes(AGENT_SESSION_ITEM_DETAIL_RUNTIME_CAPABILITY)).toBe(
+          build.methodNames.includes(ITEM_DETAIL_METHOD)
+        )
       }
       // Additive surface: bumping the protocol number would strand every paired
       // device on this release rather than degrade one feature.
