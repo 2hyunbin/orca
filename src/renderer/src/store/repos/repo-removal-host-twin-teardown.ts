@@ -166,8 +166,24 @@ export function closeRemovedHostTwinState(
   }))
   // Why: a pending chat's tab can already be gone, so its launch is cancelled through the registry.
   cancelStructuredLaunchesForWorktrees(new Set(twinHostIds.keys()), removedHostId)
+  // Why restored: closeFile recomputes the active surface against the focused worktree even
+  // when the file is a background twin's, which would flip an unrelated chat to 'terminal'.
+  const { activeWorktreeId, activeTabType, activeTabTypeByWorktree } = get()
   for (const fileId of removed.fileIds) {
     get().closeFile(fileId, { captureRecentlyClosed: false })
+  }
+  if (removed.fileIds.size > 0 && (!activeWorktreeId || !twinHostIds.has(activeWorktreeId))) {
+    set((state) => ({
+      activeTabType,
+      activeTabTypeByWorktree: {
+        ...activeTabTypeByWorktree,
+        ...Object.fromEntries(
+          [...twinHostIds.keys()].flatMap((id) =>
+            id in state.activeTabTypeByWorktree ? [[id, state.activeTabTypeByWorktree[id]]] : []
+          )
+        )
+      }
+    }))
   }
   for (const browserTabId of removed.browserTabIds) {
     get().closeBrowserTab(browserTabId, { reason: 'cleanup' })

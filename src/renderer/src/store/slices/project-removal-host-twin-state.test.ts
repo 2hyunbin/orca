@@ -397,10 +397,16 @@ describe('removing a remote project keeps its local twin', () => {
       tabsByWorktree: {
         [WORKTREE_ID]: [
           ...(s.tabsByWorktree[WORKTREE_ID] ?? []),
-          makeTab({ id: 'tab-mixed', worktreeId: WORKTREE_ID, ptyId: 'pty-mixed-local' })
+          makeTab({ id: 'tab-mixed', worktreeId: WORKTREE_ID, ptyId: 'pty-mixed-local' }),
+          // A legacy remote pane names no owner, so the local stamp cannot claim it.
+          makeTab({ id: 'tab-foreign', worktreeId: WORKTREE_ID, ptyId: 'remote:legacy-handle' })
         ]
       },
-      ptyIdsByTabId: { ...s.ptyIdsByTabId, 'tab-mixed': ['pty-mixed-local', remotePtyId] },
+      ptyIdsByTabId: {
+        ...s.ptyIdsByTabId,
+        'tab-mixed': ['pty-mixed-local', remotePtyId],
+        'tab-foreign': ['remote:legacy-handle']
+      },
       recentlyClosedBrowserTabsByWorktree: {
         [WORKTREE_ID]: [
           closedBrowser('closed-local', null),
@@ -412,6 +418,12 @@ describe('removing a remote project keeps its local twin', () => {
           ...(s.unifiedTabsByWorktree[WORKTREE_ID] ?? []),
           makeUnifiedTab({
             id: 'tab-mixed',
+            worktreeId: WORKTREE_ID,
+            groupId: 'group-1',
+            executionHostId: 'local'
+          }),
+          makeUnifiedTab({
+            id: 'tab-foreign',
             worktreeId: WORKTREE_ID,
             groupId: 'group-1',
             executionHostId: 'local'
@@ -436,11 +448,28 @@ describe('removing a remote project keeps its local twin', () => {
     expect(state.unifiedTabsByWorktree[WORKTREE_ID]?.map((tab) => tab.id)).toEqual([
       'tab-remote',
       'editor:remote-file',
-      'tab-mixed'
+      'tab-mixed',
+      'tab-foreign'
     ])
     expect(ptyKill).not.toHaveBeenCalledWith(remotePtyId)
     expect(
       state.recentlyClosedEditorTabsByWorktree[WORKTREE_ID]?.map((snapshot) => snapshot.filePath)
     ).toEqual(['/work/same/old-remote.ts'])
+  })
+
+  it('leaves the focused workspace’s active surface alone when a background twin is removed', async () => {
+    const store = seedTwins()
+    store.setState({
+      activeWorktreeId: 'other-repo::/work/other',
+      activeTabType: 'agent-session',
+      activeTabTypeByWorktree: { 'other-repo::/work/other': 'agent-session' }
+    })
+
+    await store.getState().removeProject(PROJECT_ID, { hostId: REMOTE_HOST })
+
+    expect(store.getState().activeTabType).toBe('agent-session')
+    expect(store.getState().activeTabTypeByWorktree['other-repo::/work/other']).toBe(
+      'agent-session'
+    )
   })
 })

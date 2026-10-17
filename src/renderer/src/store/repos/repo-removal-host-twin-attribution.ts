@@ -93,7 +93,8 @@ export type RemovedHostTwinState = {
   conversationIds: Set<string>
 }
 
-export type HostEvidence = ExecutionHostId | 'non-runtime' | null
+/** `foreign`: off this host, owner unresolved. `null`: no evidence either way. */
+export type HostEvidence = ExecutionHostId | 'non-runtime' | 'foreign' | null
 
 export function isRuntimeHost(hostId: ExecutionHostId): boolean {
   return parseExecutionHostId(hostId)?.kind === 'runtime'
@@ -101,9 +102,6 @@ export function isRuntimeHost(hostId: ExecutionHostId): boolean {
 
 function ptyHostEvidence(ptyId: string): HostEvidence {
   const host = getPtyExecutionHost(ptyId)
-  if (host === 'foreign') {
-    return null
-  }
   // Why: SSH and runtime PTY ids name their host, so an unprefixed one runs on a local/SSH host.
   return host ?? 'non-runtime'
 }
@@ -132,6 +130,7 @@ function contradictsRemovedHost(evidence: HostEvidence, removedHostId: Execution
   if (evidence === null) {
     return false
   }
+  // Why foreign contradicts: an off-host PTY with no named owner cannot be proven the removed host's.
   return evidence === 'non-runtime' ? isRuntimeHost(removedHostId) : evidence !== removedHostId
 }
 
@@ -140,7 +139,7 @@ export function belongsToRemovedHost(
   removedHostId: ExecutionHostId,
   survivingHostIds: readonly ExecutionHostId[]
 ): boolean {
-  if (evidence === null) {
+  if (evidence === null || evidence === 'foreign') {
     return false
   }
   if (evidence !== 'non-runtime') {
