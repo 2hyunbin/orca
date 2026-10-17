@@ -61,7 +61,10 @@ export function NativeChatToolOutput({
           ? {
               text: payload.head,
               partial: payload.truncated
-                ? { shown: new TextEncoder().encode(payload.head).length, total: payload.byteLength }
+                ? {
+                    shown: new TextEncoder().encode(payload.head).length,
+                    total: payload.byteLength
+                  }
                 : null
             }
           : { text: body.output, partial: null }

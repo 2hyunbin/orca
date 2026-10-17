@@ -5,7 +5,10 @@ import { diffFromText, diffFromToolCall } from '../../../src/shared/native-chat-
 import type { NativeChatDiffLine as DiffLine } from '../../../src/shared/native-chat-diff'
 import { pairToolBlocks } from '../../../src/shared/native-chat-tool-fold'
 import type { NativeChatToolPair as ToolPair } from '../../../src/shared/native-chat-tool-fold'
-import { createToolInputDisplay, summarizeToolRun } from '../../../src/shared/native-chat-tool-summary'
+import {
+  createToolInputDisplay,
+  summarizeToolRun
+} from '../../../src/shared/native-chat-tool-summary'
 import {
   describeActiveToolCall,
   formatActiveToolLabel,
@@ -128,9 +131,7 @@ function ToolLine({
         <View style={styles.toolDetail}>
           {callDiff ? <DiffView lines={callDiff} /> : null}
           {callDetail ? <Text style={styles.mono}>{callDetail}</Text> : null}
-          {result ? (
-            <ResultBody result={result} diff={resultDiff} />
-          ) : null}
+          {result ? <ResultBody result={result} diff={resultDiff} /> : null}
         </View>
       ) : null}
     </View>

@@ -50,8 +50,19 @@ export {
 } from './structured-agent-session-live-turn'
 export { hasUnansweredStructuredAgentSessionDispatch } from './structured-agent-session-unanswered-dispatch'
 
-function boundedText(payload: { head: string; truncated: boolean; byteLength: number }): string {
-  return payload.truncated ? `${payload.head}\n… (${payload.byteLength} bytes)` : payload.head
+/** A tool's output as its result block. Only a cut the sent copy made has more behind it; a head an
+ *  older build saved has none, so only that cut names the item to fetch. */
+function toolResult(
+  item: AgentJournalRenderItem,
+  payload: { head: string; truncated: boolean; byteLength: number },
+  callId: string | undefined
+) {
+  return {
+    type: 'tool-result' as const,
+    output: payload.truncated ? `${payload.head}\n… (${payload.byteLength} bytes)` : payload.head,
+    callId,
+    ...(item.shortened && payload.truncated ? { fullOutputItemId: item.itemId } : {})
+  }
 }
 
 /** The markers a clipped payload carries in its own text, anchored to the end
@@ -83,18 +94,7 @@ function itemBlocks(item: AgentJournalRenderItem): {
     // The call and its output are one journal row, so the result names its call.
     const { callId } = call
     if (body.kind === 'diff') {
-      return {
-        role: 'assistant',
-        blocks: [
-          call,
-          {
-            type: 'tool-result',
-            output: boundedText(body.patch),
-            callId,
-            ...(item.shortened && body.patch.truncated ? { fullOutputItemId: item.itemId } : {})
-          }
-        ]
-      }
+      return { role: 'assistant', blocks: [call, toolResult(item, body.patch, callId)] }
     }
     return {
       role: 'assistant',
@@ -103,13 +103,9 @@ function itemBlocks(item: AgentJournalRenderItem): {
         ...(body.output
           ? [
               {
-                type: 'tool-result' as const,
-                output: boundedText(body.output),
+                ...toolResult(item, body.output, callId),
                 // Output a call left when it was cut short is not an error it reported.
-                isError: agentJournalToolCallLifecycle(body) === 'failed',
-                callId,
-                // Only the sent copy's cut has more behind it; a head an older build saved has none.
-                ...(item.shortened && body.output.truncated ? { fullOutputItemId: item.itemId } : {})
+                isError: agentJournalToolCallLifecycle(body) === 'failed'
               }
             ]
           : [])

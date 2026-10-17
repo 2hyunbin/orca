@@ -183,9 +183,7 @@ export function claudeToolBody(input: {
     input: input.tool.input,
     callId: input.tool.id,
     state: input.result ? (input.result.failed ? 'failed' : 'completed') : 'running',
-    ...(input.result
-      ? { output: journalPayload(input.result.output) }
-      : {})
+    ...(input.result ? { output: journalPayload(input.result.output) } : {})
   }
 }
 

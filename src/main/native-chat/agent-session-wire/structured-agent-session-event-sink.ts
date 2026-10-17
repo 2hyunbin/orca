@@ -8,10 +8,8 @@ import type {
 import type { AgentSessionTurnActivity } from '../../../shared/agent-session-wire'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import type { JournalLifecycleIdentityMutationInput } from '../agent-session-journal/journal-row-builders'
-import { estimateStructuredAgentSessionItemBytes } from './structured-agent-session-event-sink-estimate'
-import { journalBodyWithinCeiling } from '../agent-session-journal/journal-body-ceiling'
 import { StructuredAgentSessionSinkQueue } from './structured-agent-session-event-sink-queue'
-import { structuredAgentSessionJournalAppendOptions } from './structured-agent-session-journal-append-options'
+import { createStructuredAgentSessionItemAppend } from './structured-agent-session-item-append'
 import { createStructuredAgentSessionResolvedAppend } from './structured-agent-session-resolved-append'
 import {
   createStructuredAgentSessionTransitionMembers,
@@ -233,35 +231,7 @@ export function createDeferredStructuredAgentSessionEventSink(deps: {
     ...(deps.onBackpressureChange ? { onBackpressureChange: deps.onBackpressureChange } : {})
   })
   const resolvedAppend = createStructuredAgentSessionResolvedAppend(queue)
-
-  const appendLifecycleBatch = (
-    settlementId: string,
-    written: readonly JournalLifecycleIdentityMutationInput[],
-    options: StructuredAgentSessionAppendOptions = {}
-  ): StructuredAgentSessionSinkAdmission => {
-    const mutations = written.map((mutation) => {
-      if (mutation.kind !== 'item') {
-        return mutation
-      }
-      const body = journalBodyWithinCeiling(mutation.body)
-      return body === mutation.body ? mutation : { ...mutation, body }
-    })
-    return queue.submit(
-      {
-        bytes: Buffer.byteLength(JSON.stringify({ settlementId, mutations }), 'utf8') + 512,
-        run: (bound) =>
-          bound.journal.appendLifecycleBatch({
-            settlementId,
-            mutations,
-            // No row-level linkage: each mutation names its own (see the batch row builder).
-            fence: bound.fence,
-            // The provider's own observation: its child's generation produced every item it creates.
-            ownerFence: bound.fence
-          })
-      },
-      { ...options, lifecycle: true }
-    )
-  }
+  const { appendItem, appendLifecycleBatch } = createStructuredAgentSessionItemAppend(queue)
 
   const publish = (
     options: StructuredAgentSessionPublishOptions = {}
@@ -274,26 +244,6 @@ export function createDeferredStructuredAgentSessionEventSink(deps: {
       },
       options
     )
-
-  const appendItem: NonNullable<StructuredAgentSessionEventSink['tryAppendItem']> = (
-    identity,
-    written,
-    options
-  ) => {
-    const body = journalBodyWithinCeiling(written)
-    return queue.submit(
-      {
-        bytes: estimateStructuredAgentSessionItemBytes(identity, body),
-        run: (bound) =>
-          bound.journal.appendItem(
-            identity,
-            body,
-            structuredAgentSessionJournalAppendOptions(bound.fence, options)
-          )
-      },
-      options
-    )
-  }
 
   return {
     sink: {

@@ -1,9 +1,11 @@
 import { useContext, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { truncateToolDetail, MAX_TOOL_DETAIL_LENGTH } from '../../../src/shared/native-chat-tool-summary'
+import { Pressable, Text, View } from 'react-native'
+import {
+  truncateToolDetail,
+  MAX_TOOL_DETAIL_LENGTH
+} from '../../../src/shared/native-chat-tool-summary'
 import { isTextBlock, type NativeChatMessage } from '../../../src/shared/native-chat-types'
-import { colors, spacing, typography } from '../theme/mobile-theme'
-import { styles as messageStyles } from './mobile-native-chat-message-styles'
+import { styles } from './mobile-native-chat-message-styles'
 import {
   MobileNativeChatItemSourceContext,
   readMobileNativeChatItem,
@@ -26,13 +28,13 @@ function ShowFull({
 }): React.JSX.Element {
   return (
     <Pressable
-      style={styles.toggle}
+      style={styles.showFull}
       onPress={onPress}
       disabled={load === 'loading'}
       hitSlop={8}
       accessibilityRole="button"
     >
-      <Text style={styles.toggleText}>
+      <Text style={styles.showFullText}>
         {load === 'failed' ? `${label} — couldn't load, tap to retry` : label}
       </Text>
     </Pressable>
@@ -76,8 +78,8 @@ export function MobileNativeChatToolOutput({
   }
   return (
     <View>
-      <View style={[messageStyles.toolResult, isError && messageStyles.toolResultError]}>
-        <Text style={messageStyles.mono}>{full ?? truncateToolDetail(output)}</Text>
+      <View style={[styles.toolResult, isError && styles.toolResultError]}>
+        <Text style={styles.mono}>{full ?? truncateToolDetail(output)}</Text>
       </View>
       {clipped ? <ShowFull label="Show full output" load={load} onPress={showFull} /> : null}
     </View>
@@ -121,15 +123,3 @@ export function useMobileNativeChatFullMessage(message: NativeChatMessage): {
     showFull: <ShowFull label="Show full message" load={load} onPress={showFull} />
   }
 }
-
-const styles = StyleSheet.create({
-  toggle: {
-    alignSelf: 'flex-start',
-    paddingTop: spacing.xs
-  },
-  toggleText: {
-    color: colors.textMuted,
-    fontSize: typography.metaSize,
-    fontWeight: '600'
-  }
-})

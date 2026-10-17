@@ -541,17 +541,18 @@ describe('codex item bodies', () => {
   })
 
   it('saves a long assistant reply whole, its content parts joined', () => {
+    const parts = Array.from({ length: 200 }, () => 'a'.repeat(10_000))
     const body = codexItemBody({
       type: 'agentMessage',
       id: 'assistant-parts',
-      content: Array.from({ length: 200 }, () => ({ type: 'text', text: 'a'.repeat(10_000) }))
+      content: parts.map((text) => ({ type: 'text', text }))
     })
     const text =
       body?.kind === 'message' && body.blocks[0]?.type === 'text' ? body.blocks[0].text : ''
 
     expect(body).toMatchObject({ kind: 'message', role: 'assistant' })
     expect(body?.kind === 'message' ? body.blocks : []).toHaveLength(1)
-    expect(text).toBe('a'.repeat(2_000_000))
+    expect(text).toBe(parts.join('\n'))
   })
 
   it('calls a nonzero exit a failure even though codex calls the status completed', () => {
