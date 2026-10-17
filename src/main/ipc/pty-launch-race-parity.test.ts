@@ -1,4 +1,5 @@
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
+import type * as JcodeRuntimeDir from '../../shared/jcode-runtime-dir'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 import { getHiddenRendererPtyIds, isHiddenRendererPty } from './pty-hidden-delivery-gate'
 import { ptySizes } from './pty/delivery/visibility-state'
@@ -58,6 +59,14 @@ vi.mock('../codex/codex-pane-account-registry', () =>
 vi.mock('../codex/codex-state-db-backfill-recovery', () =>
   import('./pty-ipc-mock-registry').then((m) => m.codexBackfillRecoveryModuleMock())
 )
+// Why: the host lane's real mkdir is thread-pool I/O, so a joiner could miss flushMacrotasks' turns under load.
+vi.mock('../../shared/jcode-runtime-dir', async (importOriginal) => {
+  const actual = await importOriginal<typeof JcodeRuntimeDir>()
+  return {
+    ...actual,
+    ensureJcodeRuntimeDir: async (paneKey: string) => actual.buildJcodeRuntimeDirEnv(paneKey)
+  }
+})
 
 const mintedFor = (worktreeId: string): string[] =>
   getHiddenRendererPtyIds().filter((id) => id.startsWith(`${worktreeId}@@`))
@@ -78,12 +87,16 @@ describe('launch race parity, both spawn lanes', () => {
       async (lane) => {
         const pane = launchRacePane(`race-join-${lane}`, '72727272-7272-4272-8272-727272727272')
         let finishSpawn!: () => void
-        const spawn = vi.fn(
-          () =>
-            new Promise((resolve) => {
-              finishSpawn = () => resolve({ id: 'pty-join-winner' })
-            })
-        )
+        const spawn = vi
+          .fn()
+          .mockImplementationOnce(
+            () =>
+              new Promise((resolve) => {
+                finishSpawn = () => resolve({ id: 'pty-join-winner' })
+              })
+          )
+          // A joiner that missed the join fails here instead of hanging on a spawn nobody finishes.
+          .mockRejectedValue(new Error('joiner_spawned_its_own_pty'))
         installDaemonTestProvider({ spawn })
         const auth = gatedClaudeAuth()
         auth.release()
