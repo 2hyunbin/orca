@@ -67,6 +67,7 @@ vi.mock('./PageRouteUnavailableScreen', async () => ({
 
 import HostListRoute from '../../app/h/[hostId]/index'
 import TasksRoute from '../../app/h/[hostId]/tasks'
+import AccountsRoute from '../../app/h/[hostId]/accounts'
 import AgentHistoryRoute from '../../app/h/[hostId]/agent-history/[worktreeId]'
 import FilesRoute from '../../app/h/[hostId]/files/[worktreeId]'
 import FilesPreviewRoute from '../../app/h/[hostId]/files/preview/[worktreeId]'
@@ -101,6 +102,13 @@ const SWITCHES: readonly SwitchCase[] = [
     params: { hostId: 'host-1' },
     unroutableParams: { hostId: '' },
     pathname: '/h/host-1/tasks'
+  },
+  {
+    name: 'accounts',
+    Route: AccountsRoute,
+    params: { hostId: 'host-1' },
+    unroutableParams: { hostId: '' },
+    pathname: '/h/host-1/accounts'
   },
   {
     name: 'agent history',

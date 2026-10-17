@@ -15,12 +15,19 @@ import {
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { getWorkspaceSessionTabActivityIds } from '../../../shared/workspace-session-tab-activity'
 import { runtimeWorktreeIdentityKey } from '../runtime-worktree-path-identity'
-import {
-  SERVER_FETCH_TIMEOUT_MS,
-  type PairedServerRowsProducer
-} from '../sidebar-inputs/paired-server-rows-producer'
+import { SERVER_FETCH_TIMEOUT_MS } from './server-worktree-fetch'
 import type { MobileDesktopRelayHosts } from './mobile-desktop-relay-hosts'
 import { describeRelayHosts, relayHostFence } from './mobile-relay-host-descriptions'
+
+/** Where the catalog reads each server's rows: main's live set, or a fetch per phone request. */
+export type ServerWorktreeRows = {
+  /** Catches up with the configured servers before a read. */
+  sync: () => void
+  /** Fetches now, or joins the fetch in flight. */
+  refresh: (environmentId: string) => Promise<void>
+  /** The server's rows as last fetched under this pairing; null when none were. */
+  rows: (environmentId: string, fence: string) => readonly MobileRelayServerWorktreeRow[] | null
+}
 
 /**
  * The configured servers the desktop shows, for the phone: health from the desktop's own status
@@ -32,8 +39,8 @@ export class MobileRelayHostCatalog {
   constructor(
     private readonly options: {
       hosts: MobileDesktopRelayHosts
-      /** The desktop's one live set of server rows; this catalog keeps no copy. */
-      serverRows: PairedServerRowsProducer
+      /** This catalog keeps no copy of the rows. */
+      serverRows: ServerWorktreeRows
       hostLabelOverrides: () => ReadonlyMap<ExecutionHostId, string>
       /** The desktop's saved session for a host, as its sidebar last wrote it. */
       getWorkspaceSession: (hostId: ExecutionHostId) => WorkspaceSessionState | null

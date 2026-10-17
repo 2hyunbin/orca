@@ -102,6 +102,15 @@ export type WindowLayoutCommand =
     }
   | { type: 'promotePreviewTab'; tabId: string }
   | {
+      type: 'openSimulatorTab'
+      tabId: string
+      groupId: string
+      afterTabId?: string
+      index?: number
+      createdAt: number
+      split?: NewGroupSplit
+    }
+  | {
       type: 'moveTabToWorkspace'
       toWorkspace: string
       tabs: { tabId: string; newTabId: string; newEntityId: string }[]

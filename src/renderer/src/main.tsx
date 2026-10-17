@@ -26,6 +26,7 @@ import { SkillWarningPreviewLauncher } from './components/skills/SkillWarningPre
 import { installBrowserClientPageRenderer } from './components/browser-pane/browser-client-page-renderer-installation'
 import { installOsFileDropCancellationGuard } from './lib/os-file-drop-cancellation-guard'
 import { installSidebarShadowComparison } from './lib/sidebar-shadow/sidebar-shadow-comparison'
+import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../shared/sidebar-inputs-switch'
 import { workspaceActivityShadow } from './lib/sidebar-shadow/workspace-activity-shadow'
 import {
   pairedServerHostsShadow,
@@ -40,14 +41,17 @@ recordRendererCrashBreadcrumb('renderer_bootstrap_started', { dev: import.meta.e
 installRendererCrashDiagnostics()
 installTypingLatencyDiagnostic()
 installAutomationHostDiagnostic()
-const disposeSidebarShadow = installSidebarShadowComparison([
-  workspaceActivityShadow,
-  pairedServerRowsShadow,
-  pairedServerHostsShadow,
-  desktopFactsShadow,
-  workspaceReviewShadow
-])
-import.meta.hot?.dispose(disposeSidebarShadow)
+// Switch point: only a build where main produces the sidebar's inputs compares them.
+if (ORCA_SIDEBAR_INPUTS_IS_MAIN) {
+  const disposeSidebarShadow = installSidebarShadowComparison([
+    workspaceActivityShadow,
+    pairedServerRowsShadow,
+    pairedServerHostsShadow,
+    desktopFactsShadow,
+    workspaceReviewShadow
+  ])
+  import.meta.hot?.dispose(disposeSidebarShadow)
+}
 
 if (
   import.meta.env.DEV &&
