@@ -28,14 +28,6 @@ vi.mock('lucide-react-native', () => ({
   Trash2: 'Trash2'
 }))
 
-vi.mock('react-native-svg', () => ({
-  default: 'Svg',
-  Defs: 'Defs',
-  LinearGradient: 'LinearGradient',
-  Rect: 'Rect',
-  Stop: 'Stop'
-}))
-
 vi.mock('../components/ActionSheetModal', () => ({ ActionSheetModal: 'ActionSheetModal' }))
 
 function card(
@@ -197,8 +189,13 @@ describe('MobileNativeChatQueuedMessages', () => {
   }
 
   it('a clipped card opens to the whole message on tap, line breaks kept, and a second tap folds it', async () => {
-    const text = 'You have 1 orchestration message.\nRun `orca orchestration check --run run_e99`'
-    const mounted = await mount({ cards: [card({ messageId: 'mail', text })] })
+    const text = Array.from({ length: 100 }, (_, index) => `Line ${index + 1}`).join('\n')
+    const mounted = await mount({
+      cards: [card({ messageId: 'mail', text })],
+      onSend: vi.fn(async () => true),
+      onDelete: vi.fn(async () => true),
+      onEdit: vi.fn(async () => true)
+    })
     await layOut(mounted, text, 5)
     const body = () =>
       mounted.root.find(
@@ -215,10 +212,21 @@ describe('MobileNativeChatQueuedMessages', () => {
     expect(body().props.numberOfLines).toBeUndefined()
     expect(toggle().props.accessibilityState).toEqual({ expanded: true })
     expect(texts(mounted)).toContain('Show less')
+    const row = mounted.root.findByProps({ testID: 'queued-card-row' })
+    // The document follows the compact controls, so its height cannot center actions offscreen.
+    const controlLine = row.findByProps({ accessibilityLabel: 'More actions' }).parent?.parent
+    expect(controlLine?.findAll((node) => node === body())).toHaveLength(0)
+    expect(body().parent?.parent?.parent).toBe(row)
+    expect(row.children.indexOf(controlLine!)).toBeLessThan(
+      row.children.indexOf(body().parent!.parent!)
+    )
     // The queue's capped list scrolls a long message: the card opens no scroll box of its own.
     const scrolls = mounted.root.findAll((node) => String(node.type) === 'ScrollView')
     expect(scrolls).toHaveLength(1)
     expect(flatStyle(scrolls[0]!.props.style).maxHeight).toBe(160)
+    await act(async () => body().parent?.props.onPress())
+    expect(body().props.numberOfLines).toBe(2)
+    await act(async () => toggle().props.onPress())
     await act(async () => toggle().props.onPress())
     expect(body().props.numberOfLines).toBe(2)
   })
@@ -257,8 +265,9 @@ describe('MobileNativeChatQueuedMessages', () => {
   })
 
   it("lets a returned card's reason wrap whole, in the destructive color, beside an alert", async () => {
-    const reason =
-      "Claude didn't accept this message: Claude does not support the image type .bmp in a steering message."
+    const reason = Array.from({ length: 100 }, (_, index) => `Rejection line ${index + 1}`).join(
+      '\n'
+    )
     const mounted = await mount({
       cards: [
         card({ messageId: 'r', state: 'returned', needsAttention: true, caption: reason }),
@@ -272,6 +281,8 @@ describe('MobileNativeChatQueuedMessages', () => {
     expect(flatStyle(caption.props.style).color).toBe('#ef4444')
     const [returnedRow, waitingRow] = mounted.root.findAllByProps({ testID: 'queued-card-row' })
     expect(nodeTypes(returnedRow!)).toContain('AlertCircle')
+    expect(caption.parent?.parent).toBe(returnedRow)
+    expect(returnedRow!.children.indexOf(caption.parent!)).toBe(1)
     expect(nodeTypes(waitingRow!)).not.toContain('AlertCircle')
     const toggle = () => mounted.root.findByProps({ accessibilityLabel: 'Queued messages' })
     await act(async () => toggle().props.onPress())
@@ -680,20 +691,33 @@ describe('MobileNativeChatQueuedMessages', () => {
       await act(async () => {
         mounted.update(createElement(MobileNativeChatQueuedMessages, { cards }))
       })
-      const scroll = mounted.root.find((node) => String(node.type) === 'ScrollView')
-      await act(async () => scroll.props.onContentSizeChange(0, cards.length * 44))
-      return scroll
+      return mounted.root.find((node) => String(node.type) === 'ScrollView')
     }
     const scroll = await show(ids.map((messageId) => card({ messageId })))
     // The header stays outside the list, which never grows past desktop's cap.
     expect(flatStyle(scroll.props.style).maxHeight).toBe(160)
     expect(scroll.findAllByProps({ testID: 'queued-header' })).toHaveLength(0)
     expect(scroll.findAllByProps({ testID: 'queued-card-row' })).toHaveLength(5)
+    await act(async () => scroll.props.onContentSizeChange(0, ids.length * 44))
     expect(scrollToEnd).not.toHaveBeenCalled()
     // Another agent's card waits in line unseen; the person's own new card is scrolled to.
     await show([...ids, 'f'].map((messageId) => card({ messageId, attribution: 'From Alex' })))
     expect(scrollToEnd).not.toHaveBeenCalled()
     await show([...ids, 'f', 'g'].map((messageId) => card({ messageId })))
     expect(scrollToEnd).toHaveBeenCalledExactlyOnceWith({ animated: false })
+    scrollToEnd.mockClear()
+    // Draining the head and appending our card in one update keeps the same total height.
+    await show(['b', 'c', 'd', 'e', 'f', 'g', 'h'].map((messageId) => card({ messageId })))
+    expect(scrollToEnd).toHaveBeenCalledExactlyOnceWith({ animated: false })
+    scrollToEnd.mockClear()
+    // A later expansion or agent append cannot consume a stranded own-append request.
+    await act(async () => scroll.props.onContentSizeChange(0, 2400))
+    await show(
+      ['b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'].map((messageId) =>
+        card({ messageId, attribution: 'From Alex' })
+      )
+    )
+    await act(async () => scroll.props.onContentSizeChange(0, 2444))
+    expect(scrollToEnd).not.toHaveBeenCalled()
   })
 })

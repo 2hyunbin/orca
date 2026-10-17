@@ -77,6 +77,9 @@ export const queuedMessageStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center'
   },
+  card: {
+    minHeight: MIN_TOUCH_TARGET
+  },
   row: {
     minHeight: MIN_TOUCH_TARGET,
     flexDirection: 'row',
@@ -93,6 +96,16 @@ export const queuedMessageStyles = StyleSheet.create({
     minWidth: 0,
     paddingVertical: spacing.sm,
     gap: 2
+  },
+  bodyText: {
+    color: colors.textPrimary,
+    fontSize: typography.bodySize,
+    lineHeight: typography.bodySize + 6
+  },
+  expandedBody: {
+    paddingLeft: spacing.md + 14 + spacing.sm,
+    paddingRight: spacing.md,
+    paddingBottom: spacing.sm
   },
   caption: {
     color: colors.textMuted,

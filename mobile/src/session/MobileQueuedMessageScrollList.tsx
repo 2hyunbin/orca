@@ -24,7 +24,6 @@ export function MobileQueuedMessageScrollList({
   const scrollRef = useRef<ScrollView>(null)
   const metrics = useRef<Metrics>({ offset: 0, viewport: 0, content: 0 })
   const shownIds = useRef<ReadonlySet<string>>(new Set(messageIds))
-  const revealNewest = useRef(false)
   const flashed = useRef(false)
   const [cues, setCues] = useState({ above: false, below: false })
   useLayoutEffect(() => {
@@ -32,10 +31,9 @@ export function MobileQueuedMessageScrollList({
     const appended =
       shownIds.current.size > 0 && newest !== undefined && !shownIds.current.has(newest)
     shownIds.current = new Set(messageIds)
-    // Like desktop, the list opens on the next card to send; a card the person just queued is
-    // shown instead, once the content has grown to hold it.
+    // Reveal the committed own append even when a simultaneous removal keeps content size equal.
     if (appended && newestIsPersons) {
-      revealNewest.current = true
+      scrollRef.current?.scrollToEnd({ animated: false })
     }
   }, [messageIds, newestIsPersons])
   const measure = (next: Partial<Metrics>) => {
@@ -74,13 +72,7 @@ export function MobileQueuedMessageScrollList({
         scrollEventThrottle={32}
         onScroll={(event) => measure({ offset: event.nativeEvent.contentOffset.y })}
         onLayout={(event) => measure({ viewport: event.nativeEvent.layout.height })}
-        onContentSizeChange={(_width, height) => {
-          if (revealNewest.current) {
-            revealNewest.current = false
-            scrollRef.current?.scrollToEnd({ animated: false })
-          }
-          measure({ content: height })
-        }}
+        onContentSizeChange={(_width, height) => measure({ content: height })}
       >
         {children(reveal)}
       </ScrollView>
