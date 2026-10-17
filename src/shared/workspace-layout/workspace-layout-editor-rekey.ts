@@ -56,7 +56,11 @@ export function renameEditorFiles(
   const editorViews =
     workspace.editorViews &&
     Object.fromEntries(Object.entries(workspace.editorViews).map(([id, view]) => [tabId(id), view]))
-  const editorFiles = renamedEditorFiles(workspace.editorFiles, command.renames)
+  const editorFiles = renamedEditorFiles(
+    workspace.editorFiles,
+    command.renames,
+    new Set(tabs.map((tab) => tab.entityId))
+  )
   return applied(
     withWorkspace(model, command.workspace, {
       ...workspace,
@@ -69,20 +73,25 @@ export function renameEditorFiles(
   )
 }
 
-/** Each renamed edit-mode file's record, in its old record's place. */
+/** Each renamed edit-mode file's record, in its old record's place; a new one only for a tab main holds. */
 function renamedEditorFiles(
   files: LayoutEditorFile[] | undefined,
-  renames: CommandOf<'renameEditorFiles'>['renames']
+  renames: CommandOf<'renameEditorFiles'>['renames'],
+  heldEntityIds: ReadonlySet<string>
 ): LayoutEditorFile[] | undefined {
-  const moves = renames.flatMap((rename) => (rename.record ? [rename.record] : []))
+  const moves = renames.flatMap((rename) =>
+    rename.record ? [{ ...rename.record, newFileId: rename.newFileId }] : []
+  )
   if (moves.length === 0) {
     return files
   }
   const byOldPath = new Map(moves.map((move) => [move.fromFilePath, move.file]))
   const kept = (files ?? []).map((file) => byOldPath.get(file.filePath) ?? file)
-  // A record main never got is the window's now too.
+  // A record main never got is the window's now too, when main shows the file.
   const missing = moves.filter(
-    (move) => !files?.some((file) => file.filePath === move.fromFilePath)
+    (move) =>
+      heldEntityIds.has(move.newFileId) &&
+      !files?.some((file) => file.filePath === move.fromFilePath)
   )
   return [...kept, ...missing.map((move) => move.file)]
 }

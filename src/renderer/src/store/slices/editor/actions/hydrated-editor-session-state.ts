@@ -26,11 +26,14 @@ export type HydratedEditorSessionState = Pick<
 /**
  * The editor state a stored session restores, and the file id each workspace's tabs must be
  * rekeyed to. `activeWorktreeId` is the store's, which workspace hydration may have nulled.
+ * `restart`: a whole saved session; a frame's few workspaces would resolve ids against a partial
+ * set of files, so they never map a moved tab's owned id.
  */
 export function buildHydratedEditorSessionState(
   session: WorkspaceSessionState,
   validWorktreeIds: ReadonlySet<string>,
-  activeWorktreeId: string | null
+  activeWorktreeId: string | null,
+  restart: boolean
 ): {
   state: HydratedEditorSessionState
   editorFileIdMigrationsByWorktree: Record<string, Map<string, string>>
@@ -79,7 +82,7 @@ export function buildHydratedEditorSessionState(
       // Why: map from the collision-derived legacy id; keying by filePath would collapse same-path local/runtime tabs onto the last owner to hydrate.
       addEditorFileIdMigration(editorFileIdMigrationsByWorktree, worktreeId, legacyId, id)
       // Why: a tab Orca moved to the workspace owning its file was saved under the owned id (F42).
-      if (ownedId !== id && savedTabEntityIds(worktreeId).has(ownedId)) {
+      if (restart && ownedId !== id && savedTabEntityIds(worktreeId).has(ownedId)) {
         addEditorFileIdMigration(editorFileIdMigrationsByWorktree, worktreeId, ownedId, id)
       }
       legacyFileIndex.add({

@@ -83,7 +83,7 @@ describe('editor tabs follow a file renamed on disk', () => {
     expect(back && back.ok && editors(back.model)).toEqual(editors(model))
   })
 
-  it('never merges two open files, and changes no tab for a file none shows', () => {
+  it('never merges two open files, and changes nothing for a file none shows', () => {
     const model = setup()
     expect(rename(model, [edit('/repo/a.ts', '/repo/b.ts')])).toEqual({
       ok: false,
@@ -94,9 +94,21 @@ describe('editor tabs follow a file renamed on disk', () => {
     ).toEqual({ ok: false, code: 'invalid_params' })
     const closed = rename(model, [{ fileId: '/repo/x.ts', newFileId: '/repo/y.ts' }])
     expect(closed.ok && closed.model).toEqual(model)
-    // A record main lacks is the window's now.
-    const unrecorded = rename(model, [edit('/repo/x.ts', '/repo/y.ts')])
-    expect(unrecorded.ok && editors(unrecorded.model).files).toContainEqual(['/repo/y.ts', 'y.ts'])
+    const unshown = rename(model, [edit('/repo/x.ts', '/repo/y.ts')])
+    expect(unshown.ok && unshown.model).toEqual(model)
+    // A record main lacks for a tab it shows is the window's now.
+    const workspace = model.workspaces[WS]!
+    const unrecorded = {
+      ...model,
+      workspaces: {
+        [WS]: {
+          ...workspace,
+          editorFiles: workspace.editorFiles!.filter((entry) => entry.filePath !== '/repo/a.ts')
+        }
+      }
+    }
+    const recorded = rename(unrecorded, [edit('/repo/a.ts', '/repo/c.ts')])
+    expect(recorded.ok && editors(recorded.model).files).toContainEqual(['/repo/c.ts', 'c.ts'])
   })
 
   it('moves a tab-bar id that is the file id with it, in the tab order too', () => {

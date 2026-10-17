@@ -167,7 +167,7 @@ export function buildLayoutFrameSlices({
   })
 
   const tabs = buildHydratedTabState(session, workspaceKeys, holdsEditorFile)
-  const editor = buildHydratedEditorSessionState(session, workspaceKeys, null)
+  const editor = buildHydratedEditorSessionState(session, workspaceKeys, null, false)
   const browser = projectHydratedBrowserSession(
     {
       activeWorktreeId: null,
