@@ -631,7 +631,7 @@ describe('MobileNativeChatQueuedMessages', () => {
           saving: false,
           canSave: true,
           change: vi.fn(),
-          save: vi.fn(async () => undefined),
+          save: vi.fn(async () => true),
           cancel: vi.fn()
         }
         const mounted = await mountPaused({ pause: { reason: 'stopped' }, editor })

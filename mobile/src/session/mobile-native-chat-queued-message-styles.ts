@@ -26,9 +26,11 @@ export const queuedMessageStyles = StyleSheet.create({
     gap: spacing.xs,
     paddingLeft: spacing.md
   },
-  // Large text: Clear all and Resume on a line of their own, under the label.
+  // Large text: Clear all and Resume on a line of their own, under the label; at the largest sizes
+  // one button is all a small phone's line holds, so they wrap.
   headerActionsLine: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'flex-end',
     gap: spacing.xs,
     paddingHorizontal: spacing.xs

@@ -105,6 +105,7 @@ const styles = StyleSheet.create({
   // Large text: Cancel and Save on a line of their own, under the heading.
   actionsLine: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'flex-end',
     gap: spacing.sm
   },
