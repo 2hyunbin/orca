@@ -242,6 +242,7 @@ it('pins every foreground and background step to its selected phase', () => {
     ['Enforce runtime Electron-import ratchet', staticPhase],
     ['Enforce focus-read ratchet', staticPhase],
     ['Enforce layout-writer ratchets', staticPhase],
+    ['Enforce deprecated runtime-owner importer ratchet', staticPhase],
     ['Check Node runtime pin', staticPhase],
     ['Decide whether the orcad terminal smoke runs', staticPhase],
     ['Verify the generated RPC params catalog', staticPhase],
