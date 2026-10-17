@@ -14,7 +14,7 @@ import { MobileRelayHostCatalog } from '../mobile-desktop-relay/mobile-relay-hos
 import { getHostDisplayLabelOverrides } from '../../../shared/host-setting-overrides'
 import { DELEGATED_PHONE_NAME_MAX_CHARS } from '../../../shared/delegated-mobile-device-contract'
 import { allocateTerminalSubscriptionStreamId } from '../rpc/methods/terminal/terminal-subscription-stream-id'
-import { isStructuredNativeChatEnabled } from '../rpc/methods/structured-agent-session-policy'
+import { isStructuredNativeChatDefaultFor } from '../rpc/methods/structured-agent-session-policy'
 import {
   createWebClientUrl,
   DEVICE_REGISTRY_UNAVAILABLE_GUIDANCE,
@@ -99,12 +99,15 @@ export class RuntimeRpcPairing extends RuntimeRpcNetworkExposure {
           listPhones: () => this.listRelayedPhones(),
           // Why: one allocator with local streams, so relayed ids never collide on the phone's socket.
           allocateStreamId: allocateTerminalSubscriptionStreamId,
-          nativeChatDefault: () => isStructuredNativeChatEnabled(this.runtime)
+          nativeChatDefault: (agent) => isStructuredNativeChatDefaultFor(this.runtime, agent)
         })
       : null
+    this.detachPairedServerRows?.()
+    this.detachPairedServerRows = hosts ? this.runtime.pairedServerRows.attach(hosts) : null
     this.mobileRelayHostCatalog = hosts
       ? new MobileRelayHostCatalog({
           hosts,
+          serverRows: this.runtime.pairedServerRows,
           hostLabelOverrides: () => getHostDisplayLabelOverrides(this.runtime.getClientSettings()),
           getWorkspaceSession: (hostId) => this.runtime.getWorkspaceSessionForHost(hostId)
         })

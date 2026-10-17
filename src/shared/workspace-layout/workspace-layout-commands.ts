@@ -20,6 +20,7 @@ import {
   setGroupRatios,
   splitGroup
 } from './workspace-layout-group-commands'
+import { renameEditorFiles } from './workspace-layout-editor-rekey'
 import { updateLegacyPersistence } from './workspace-layout-legacy-persistence'
 import type { WorkspaceLayoutModel } from './workspace-layout-model'
 import {
@@ -109,6 +110,8 @@ function applyCommand(
       return promotePreviewTab(model, command)
     case 'moveTabToWorkspace':
       return moveTabToWorkspace(model, command, context)
+    case 'renameEditorFiles':
+      return renameEditorFiles(model, command)
     case 'openBrowserTab':
       return openInNewGroup(model, command, (next) => openBrowserTab(next, command, context))
     case 'openBrowserPage':
@@ -120,7 +123,7 @@ function applyCommand(
     case 'setBrowserTabProfile':
       return setBrowserTabProfile(model, command)
     case 'openAgentSessionTab':
-      return openAgentSessionTab(model, command, context)
+      return openInNewGroup(model, command, (next) => openAgentSessionTab(next, command, context))
     case 'startPane':
       return startPane(model, command, context)
     case 'restartPane':

@@ -97,7 +97,12 @@ function windowView() {
     group: group.id,
     tabs: group.tabOrder.map((tabId) => {
       const tab = tabs.find((entry) => entry.id === tabId)!
-      return { id: tab.id, entity: tab.entityId, preview: tab.isPreview === true }
+      return {
+        id: tab.id,
+        entity: tab.entityId,
+        preview: tab.isPreview === true,
+        createdAt: tab.createdAt
+      }
     })
   }))
 }
@@ -108,7 +113,12 @@ function mainView() {
     group: group.id,
     tabs: group.tabOrder.map((tabId) => {
       const tab = workspace.tabs.find((entry) => entry.id === tabId)!
-      return { id: tab.id, entity: tab.entityId, preview: tab.isPreview === true }
+      return {
+        id: tab.id,
+        entity: tab.entityId,
+        preview: tab.isPreview === true,
+        createdAt: tab.createdAt
+      }
     })
   }))
 }
@@ -147,6 +157,7 @@ describe('editor tabs in a layout-owner build', () => {
       contentType: 'editor',
       groupId: 'g1',
       preview: true,
+      createdAt: windowView()[0]!.tabs[0]!.createdAt,
       file: { filePath: '/a.ts', relativePath: 'a.ts', language: 'ts', runtimeEnvironmentId: null }
     })
     expect(mainView()).toEqual(windowView())

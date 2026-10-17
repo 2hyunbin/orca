@@ -25,6 +25,14 @@ import { primeTerminalWebglAddon } from './lib/pane-manager/pane-webgl-renderer'
 import { SkillWarningPreviewLauncher } from './components/skills/SkillWarningPreviewLauncher'
 import { installBrowserClientPageRenderer } from './components/browser-pane/browser-client-page-renderer-installation'
 import { installOsFileDropCancellationGuard } from './lib/os-file-drop-cancellation-guard'
+import { installSidebarShadowComparison } from './lib/sidebar-shadow/sidebar-shadow-comparison'
+import { workspaceActivityShadow } from './lib/sidebar-shadow/workspace-activity-shadow'
+import {
+  pairedServerHostsShadow,
+  pairedServerRowsShadow
+} from './lib/sidebar-shadow/paired-server-rows-shadow'
+import { desktopFactsShadow } from './lib/sidebar-shadow/desktop-facts-shadow'
+import { workspaceReviewShadow } from './lib/sidebar-shadow/workspace-review-shadow'
 
 const disposeOsFileDropGuard = installOsFileDropCancellationGuard()
 import.meta.hot?.dispose(disposeOsFileDropGuard)
@@ -32,6 +40,14 @@ recordRendererCrashBreadcrumb('renderer_bootstrap_started', { dev: import.meta.e
 installRendererCrashDiagnostics()
 installTypingLatencyDiagnostic()
 installAutomationHostDiagnostic()
+const disposeSidebarShadow = installSidebarShadowComparison([
+  workspaceActivityShadow,
+  pairedServerRowsShadow,
+  pairedServerHostsShadow,
+  desktopFactsShadow,
+  workspaceReviewShadow
+])
+import.meta.hot?.dispose(disposeSidebarShadow)
 
 if (
   import.meta.env.DEV &&

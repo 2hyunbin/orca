@@ -1,8 +1,7 @@
 import { MobileSelectableText as Text } from '../components/MobileSelectableText'
-import { memo, useCallback, useContext, useState } from 'react'
+import { memo, useCallback, useContext, useLayoutEffect, useRef } from 'react'
 import { Text as NativeText, View } from 'react-native'
 import { INLINE_TEXT_SELECTION } from '../components/inline-text-selection'
-import { MobileNativeChatMessageActionsSheet } from './MobileNativeChatMessageActionsSheet'
 import { MobileNativeChatLongPressContent as Content } from './MobileNativeChatLongPressContent'
 import { splitNativeChatBlocks } from '../../../src/shared/native-chat-tool-fold'
 import { selectActiveToolCall } from '../../../src/shared/native-chat-tool-activity'
@@ -22,7 +21,9 @@ import { deriveNativeChatRowContent } from '../../../src/shared/native-chat-row-
 import { MobileNativeChatReasoningRow } from './MobileNativeChatReasoningRow'
 import { MobileNativeChatTurnStatus } from './MobileNativeChatTurnStatus'
 import { MobileNativeChatNoticeRow } from './MobileNativeChatNoticeRow'
+import { MobileNativeChatRowOverlaysContext } from './mobile-native-chat-row-overlays'
 import { MobileNativeChatUserMessageFold } from './MobileNativeChatUserMessageFold'
+import { MobileNativeChatMessageTime } from './MobileNativeChatMessageTime'
 import { MobileNativeChatAwaitingInputRow } from './MobileNativeChatAwaitingInputRow'
 import { MobileNativeChatResolutionReceipt } from './MobileNativeChatResolutionReceipt'
 import {
@@ -138,10 +139,13 @@ function MobileNativeChatMessageImpl({
         listsQuestions={false}
       />
     ) : null
-  // Mount selection UI only for the message being copied.
-  const [actionsOpen, setActionsOpen] = useState(false)
-  // Keep the memoized Markdown context stable as the message streams.
-  const openActions = useCallback(() => setActionsOpen(true), [])
+  // A ref keeps the memoized Markdown context stable as the message streams.
+  const { openActions: openSheet } = useContext(MobileNativeChatRowOverlaysContext)
+  const pressedMessage = useRef(message)
+  useLayoutEffect(() => {
+    pressedMessage.current = message
+  }, [message])
+  const openActions = useCallback(() => openSheet(pressedMessage.current), [openSheet])
   const onLongPress = INLINE_TEXT_SELECTION ? undefined : openActions
   const renderVisual = useContext(MobileNativeChatVisualContext) ?? undefined
   // Structured replies grow in place: only the last block of the newest row may still be typing.
@@ -196,21 +200,12 @@ function MobileNativeChatMessageImpl({
             />
           </View>
         ) : null}
-        {actionsOpen ? (
-          <MobileNativeChatMessageActionsSheet
-            message={message}
-            onClose={() => setActionsOpen(false)}
-          />
-        ) : null}
         {turnStatusAbove ? null : statusRow}
       </>
     )
   }
-  // Always shown, so the row never shifts when copy appears.
-  const copyText =
-    message.role === 'user' || message.role === 'assistant'
-      ? nativeChatMessagePlainText(message)
-      : ''
+  const isChatTurn = message.role === 'user' || message.role === 'assistant'
+  const copyText = isChatTurn ? nativeChatMessagePlainText(message) : ''
   const proseRow = (block: NativeChatBlock, index: number, text: string, revealing = false) =>
     isSubagentGroupBlock(block) && isRenderableSubagentGroup(block) ? (
       <MobileNativeChatSubagentGroup
@@ -300,20 +295,20 @@ function MobileNativeChatMessageImpl({
           ) : null}
         </Content>
         {unsentNotice ? <NativeText style={styles.unsentNotice}>{unsentNotice}</NativeText> : null}
-        {copyText.length > 0 ? (
-          <MobileSourceCopyButton
-            key={message.id}
-            text={copyText}
-            accessibilityLabel="Copy message"
-          />
+        {/* Always shown, so the row never shifts when copy appears. */}
+        {isChatTurn ? (
+          <View style={styles.meta}>
+            {copyText.length > 0 ? (
+              <MobileSourceCopyButton
+                key={message.id}
+                text={copyText}
+                accessibilityLabel="Copy message"
+              />
+            ) : null}
+            <MobileNativeChatMessageTime timestamp={message.timestamp} fontScale={fontScale} />
+          </View>
         ) : null}
       </View>
-      {actionsOpen ? (
-        <MobileNativeChatMessageActionsSheet
-          message={message}
-          onClose={() => setActionsOpen(false)}
-        />
-      ) : null}
       {turnStatusAbove ? null : statusRow}
     </>
   )

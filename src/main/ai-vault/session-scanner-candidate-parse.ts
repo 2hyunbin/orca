@@ -1,4 +1,5 @@
 import { yieldToEventLoop } from '../../shared/event-loop-yield'
+import { isConversationNameRequestSession } from './conversation-name-request-sessions'
 import { candidateFileTime } from './antigravity-transcript-candidates'
 import type { AiVaultScanIssue, AiVaultSession } from '../../shared/ai-vault-types'
 import type { ExecutionHostId } from '../../shared/execution-host'
@@ -98,7 +99,11 @@ export async function parseSessionCandidates(args: {
       if (result.issue) {
         recordSessionScanIssue(args.issues, result.issue)
       }
-      if (result.session && (!args.admitSession || args.admitSession(result.session))) {
+      if (
+        result.session &&
+        !isConversationNameRequestSession(result.session) &&
+        (!args.admitSession || args.admitSession(result.session))
+      ) {
         if (args.listed === false) {
           noteSessionParseCacheListed(selected[resultIndex].file.path)
         }

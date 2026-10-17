@@ -13,7 +13,7 @@ import {
   isAgentSessionHostStatusPresentation
 } from '../../../src/shared/agent-session-host-status-rows'
 import { withoutPendingNativeChatVisualDirectiveTail } from '../../../src/shared/native-chat-visual-directive'
-import { MobileNativeChatImageViewerContext } from './mobile-native-chat-image-viewer-context'
+import { MobileNativeChatRowOverlaysContext } from './mobile-native-chat-row-overlays'
 import { isRenderableImageUri } from './mobile-native-chat-image-preview'
 import {
   CHAT_PROSE_SCALE,
@@ -104,7 +104,7 @@ function ImageAttachment({
   fontScale: number
   onLongPress?: () => void
 }): React.JSX.Element {
-  const openImage = useContext(MobileNativeChatImageViewerContext)
+  const { openImage } = useContext(MobileNativeChatRowOverlaysContext)
   const uri = block.url ?? block.path
   const label = block.alt ?? 'Attached image'
   if (!isRenderableImageUri(uri)) {

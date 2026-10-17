@@ -17,8 +17,8 @@ vi.mock('./MobileNativeChatBackgroundTasks', () => ({
   MobileNativeChatBackgroundTasks: 'BackgroundTasks'
 }))
 vi.mock('./MobileNativeChatVisual', () => ({ useMobileNativeChatVisualRenderer: () => null }))
-vi.mock('./MobileNativeChatImageViewer', () => ({
-  MobileNativeChatImageViewerHost: 'View'
+vi.mock('./MobileNativeChatRowOverlaysHost', () => ({
+  MobileNativeChatRowOverlaysHost: 'View'
 }))
 
 function assistantTurn(id: string, text: string): NativeChatMessage {
