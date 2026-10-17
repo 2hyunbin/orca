@@ -10,7 +10,7 @@ import {
 import type { TerminalSlice, TerminalStoreGet, TerminalStoreSet } from './terminal-state'
 import { equalStringSets, sortedUniquePtyIds } from './terminal-pty-identities'
 import { resolveRuntimeOwnerForWorktree } from '@/lib/worktree-runtime-owner'
-import { resolveTerminalTeardownOwners } from './terminal-teardown-owner'
+import { resolveTerminalTeardownOwner } from './terminal-teardown-owner'
 import { createTerminalShutdownGuardController } from './terminal-shutdown-guards'
 import { commitTerminalShutdownState } from './terminal-shutdown-state'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
@@ -38,22 +38,22 @@ export function createTerminalShutdownActions(
       )
       const expectedRuntimePtyIds = sortedUniquePtyIds(opts?.expectedRuntimePtyIds)
       const backendOwnsPtyTeardown = opts?.backendOwnsPtyTeardown === true
-      const teardownOwners = resolveTerminalTeardownOwners(
+      const teardownOwner = resolveTerminalTeardownOwner(
         resolveRuntimeOwnerForWorktree(get(), worktreeId),
         rendererShutdownPtyIds
       )
       // Why: treating an unattributable owner as local skips the host stop yet still clears
       // bindings and writes resume records, so the agent runs on unseen and wake starts a twin.
       // A backend-owned teardown already stopped its PTYs, so it has nothing to misroute.
-      if (teardownOwners.kind === 'refused' && !backendOwnsPtyTeardown) {
+      if (teardownOwner.kind === 'refused' && !backendOwnsPtyTeardown) {
         console.warn('[terminal-shutdown] refusing teardown: terminal owner is ambiguous', {
           worktreeId,
           shutdownReason
         })
-        throw new Error(teardownOwners.reason)
+        throw new Error(teardownOwner.reason)
       }
-      const runtimeEnvironmentIds =
-        teardownOwners.kind === 'resolved' ? teardownOwners.runtimeEnvironmentIds : []
+      const runtimeEnvironmentId =
+        teardownOwner.kind === 'resolved' ? teardownOwner.runtimeEnvironmentId : null
       // Only renderer-bound ids emit pane exit callbacks; raw RPC handles never enter this guard.
       const exitGuardPtyIds = rendererShutdownPtyIds
       const sleepingAgentSessionRecords = keepIdentifiers
@@ -78,7 +78,7 @@ export function createTerminalShutdownActions(
         get,
         keepIdentifiers,
         rendererShutdownPtyIds,
-        runtimeOwnsRemotePtys: runtimeEnvironmentIds.length > 0,
+        runtimeOwnsRemotePtys: runtimeEnvironmentId !== null,
         set,
         tabs
       })
@@ -102,27 +102,15 @@ export function createTerminalShutdownActions(
         guards.unregisterHandlers()
         try {
           // Backend ownership is opt-in; the default owner RPC prevents remote PTY leaks.
-          if (!backendOwnsPtyTeardown) {
-            // Why allSettled: rolling back guards while another host is still stopping would let
-            // its late exits clear bindings without the captured resume records.
-            const ownerStops = await Promise.allSettled(
-              runtimeEnvironmentIds.map((environmentId) =>
-                shutdownReason === 'manual-sleep'
-                  ? requestRemoteWorktreeSleep({ environmentId, worktreeId })
-                  : callRuntimeRpc(
-                      { kind: 'environment', environmentId },
-                      'terminal.stop',
-                      { worktree: toRuntimeWorktreeSelector(worktreeId) },
-                      { timeoutMs: 15_000 }
-                    )
-              )
-            )
-            const failedStop = ownerStops.find(
-              (result): result is PromiseRejectedResult => result.status === 'rejected'
-            )
-            if (failedStop) {
-              throw failedStop.reason
-            }
+          if (runtimeEnvironmentId && !backendOwnsPtyTeardown) {
+            await (shutdownReason === 'manual-sleep'
+              ? requestRemoteWorktreeSleep({ environmentId: runtimeEnvironmentId, worktreeId })
+              : callRuntimeRpc(
+                  { kind: 'environment', environmentId: runtimeEnvironmentId },
+                  'terminal.stop',
+                  { worktree: toRuntimeWorktreeSelector(worktreeId) },
+                  { timeoutMs: 15_000 }
+                ))
           }
           // Renderer teardown waits for the owner RPC so failures leave bindings retryable.
           const rendererStop = await guards.stopRendererPtys()
@@ -137,13 +125,8 @@ export function createTerminalShutdownActions(
           throw error
         }
       } else {
-        const runtimeEnvironmentId = runtimeEnvironmentIds[0]
-        if (!runtimeEnvironmentId || runtimeEnvironmentIds.length > 1) {
-          throw new Error(
-            runtimeEnvironmentId
-              ? 'ambiguous_terminal_owner'
-              : 'missing_runtime_for_exact_terminal_stop'
-          )
+        if (!runtimeEnvironmentId) {
+          throw new Error('missing_runtime_for_exact_terminal_stop')
         }
         guards.markShutdownPending()
         guards.unregisterHandlers()

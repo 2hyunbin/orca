@@ -147,55 +147,6 @@ describe('sleeping a worktree published by an SSH host and a runtime twin', () =
     expect(store.getState().sleepingAgentSessionsByPaneKey[PANE_KEY]?.origin).toBe('live')
   })
 
-  it('holds shutdown guards until every runtime stop settles when one host fails', async () => {
-    const store = createTestStore()
-    const ptyIds = ['remote:runtime-1@@pty-1', 'remote:runtime-2@@pty-2']
-    seedTwin(store, ptyIds)
-    let releaseSecond: () => void = () => {}
-    const secondGate = new Promise<void>((resolve) => {
-      releaseSecond = resolve
-    })
-    let secondStarted = false
-    mockApi.runtimeEnvironments.call.mockImplementation(
-      async (args: { method: string; selector: string }) => {
-        const compatible = createCompatibleRuntimeStatusResponseIfNeeded(args)
-        if (compatible) {
-          return compatible
-        }
-        if (args.method === 'terminal.sleep' && args.selector === 'runtime-1') {
-          throw new Error('runtime-1 unreachable')
-        }
-        if (args.method === 'terminal.sleep') {
-          secondStarted = true
-          await secondGate
-          return {
-            id: 'rpc',
-            ok: true,
-            result: {
-              stopped: 1,
-              stoppedPtyIds: ['pty-2'],
-              livePtyIds: [],
-              postStopVerified: true
-            },
-            _meta: { runtimeId: 'r' }
-          }
-        }
-        return { id: 'rpc', ok: true, result: {}, _meta: { runtimeId: 'r' } }
-      }
-    )
-
-    const sleeping = store.getState().shutdownWorktreeTerminals(WT, { keepIdentifiers: true })
-    const outcome = sleeping.catch((error: unknown) => error)
-    await vi.waitFor(() => expect(secondStarted).toBe(true))
-    await Promise.resolve()
-    expect(store.getState().pendingPtyShutdownIds['remote:runtime-2@@pty-2']).toBe(1)
-    releaseSecond()
-
-    expect(await outcome).toEqual(new Error('runtime-1 unreachable'))
-    expect(store.getState().pendingPtyShutdownIds['remote:runtime-2@@pty-2']).toBeUndefined()
-    expect(store.getState().ptyIdsByTabId['tab-1']).toEqual(ptyIds)
-  })
-
   it('kills an SSH PTY through its own host and asks no runtime', async () => {
     const store = createTestStore()
     seedTwin(store, ['ssh:ssh-1@@pty-1'])
@@ -209,7 +160,8 @@ describe('sleeping a worktree published by an SSH host and a runtime twin', () =
 
   it.each([
     ['a remote PTY that names no runtime', ['remote:pty-1']],
-    ['no bound PTY at all', []]
+    ['no bound PTY at all', []],
+    ['PTYs split across two runtimes', ['remote:runtime-1@@pty-1', 'remote:runtime-2@@pty-2']]
   ])('refuses, leaving bindings and resume records untouched, for %s', async (_label, ptyIds) => {
     const store = createTestStore()
     seedTwin(store, ptyIds)

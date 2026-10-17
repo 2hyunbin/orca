@@ -1,5 +1,5 @@
 import type { AppState } from '@/store/types'
-import { resolveTerminalTeardownOwners } from '@/store/terminals/terminal-teardown-owner'
+import { resolveTerminalTeardownOwner } from '@/store/terminals/terminal-teardown-owner'
 import { resolveRuntimeOwnerForWorktree } from './worktree-runtime-owner'
 
 export type AgentHibernationRuntimeOwner =
@@ -20,10 +20,10 @@ export function resolveAgentHibernationRuntimeOwner(
   const ptyIds = (state.tabsByWorktree[worktreeId] ?? []).flatMap(
     (tab) => state.ptyIdsByTabId[tab.id] ?? []
   )
-  const teardownOwners = resolveTerminalTeardownOwners(worktreeOwner, ptyIds)
-  if (teardownOwners.kind === 'refused' || teardownOwners.runtimeEnvironmentIds.length > 1) {
+  const teardownOwner = resolveTerminalTeardownOwner(worktreeOwner, ptyIds)
+  if (teardownOwner.kind === 'refused') {
     return { kind: 'unresolved' }
   }
-  const environmentId = teardownOwners.runtimeEnvironmentIds[0]
+  const environmentId = teardownOwner.runtimeEnvironmentId
   return environmentId ? { kind: 'runtime', environmentId } : { kind: 'non-runtime' }
 }

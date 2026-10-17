@@ -4,24 +4,24 @@ import {
 } from '../../../../shared/remote-runtime-pty-id'
 import type { WorktreeRuntimeOwner } from '@/lib/worktree-runtime-owner'
 
-export type TerminalTeardownOwners =
-  | { kind: 'resolved'; runtimeEnvironmentIds: string[] }
+export type TerminalTeardownOwner =
+  | { kind: 'resolved'; runtimeEnvironmentId: string | null }
   | { kind: 'refused'; reason: 'ambiguous_terminal_owner' }
 
 /**
- * Which runtime hosts must stop these PTYs. When two hosts publish the worktree, each
+ * Which runtime host must stop these PTYs (`null`: none). When two hosts publish the worktree, each
  * `remote:<env>@@…` id names its own owner; a PTY that names none (or no PTY at all) can't be
  * attributed, so teardown is refused rather than treated as local.
  */
-export function resolveTerminalTeardownOwners(
+export function resolveTerminalTeardownOwner(
   worktreeOwner: WorktreeRuntimeOwner,
   ptyIds: readonly string[]
-): TerminalTeardownOwners {
+): TerminalTeardownOwner {
   if (worktreeOwner.kind === 'runtime') {
-    return { kind: 'resolved', runtimeEnvironmentIds: [worktreeOwner.environmentId] }
+    return { kind: 'resolved', runtimeEnvironmentId: worktreeOwner.environmentId }
   }
   if (worktreeOwner.kind === 'non-runtime') {
-    return { kind: 'resolved', runtimeEnvironmentIds: [] }
+    return { kind: 'resolved', runtimeEnvironmentId: null }
   }
   // Why: with no bound PTY there is nothing to attribute, and the server may still run the agent.
   if (ptyIds.length === 0) {
@@ -38,5 +38,9 @@ export function resolveTerminalTeardownOwners(
     }
     environmentIds.add(environmentId)
   }
-  return { kind: 'resolved', runtimeEnvironmentIds: [...environmentIds].sort() }
+  // Why: a stop split across runtimes can half-succeed, and no rollback is right for both halves.
+  if (environmentIds.size > 1) {
+    return { kind: 'refused', reason: 'ambiguous_terminal_owner' }
+  }
+  return { kind: 'resolved', runtimeEnvironmentId: [...environmentIds][0] ?? null }
 }

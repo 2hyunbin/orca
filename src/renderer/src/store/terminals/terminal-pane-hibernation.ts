@@ -14,7 +14,7 @@ import {
 import type { TerminalSlice, TerminalStoreGet, TerminalStoreSet } from './terminal-state'
 import { equalStringSets, sortedUniquePtyIds } from './terminal-pty-identities'
 import { resolveRuntimeOwnerForWorktree } from '@/lib/worktree-runtime-owner'
-import { resolveTerminalTeardownOwners } from './terminal-teardown-owner'
+import { resolveTerminalTeardownOwner } from './terminal-teardown-owner'
 import { removePanesAttention } from '../slices/workspace-attention/subject-attention-transitions'
 import { settleAttentionRemovedBy } from '../slices/workspace-attention/attention-removal-follow-up'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
@@ -33,11 +33,11 @@ export function createTerminalPaneHibernationActions(
       const rendererShutdownPtyIds = [opts.ptyId]
       const state = get()
       const worktreeOwner = resolveRuntimeOwnerForWorktree(state, worktreeId)
-      const teardownOwners = resolveTerminalTeardownOwners(worktreeOwner, [opts.ptyId])
+      const teardownOwner = resolveTerminalTeardownOwner(worktreeOwner, [opts.ptyId])
       // Why: a twin-published worktree must route by the PTY's own owner; a remote PTY with no
       // host stop to run would otherwise lose its binding while the agent keeps running.
       if (
-        teardownOwners.kind === 'refused' ||
+        teardownOwner.kind === 'refused' ||
         (worktreeOwner.kind === 'ambiguous' &&
           isRemoteRuntimePtyId(opts.ptyId) &&
           expectedRuntimePtyIds.length === 0)
@@ -48,7 +48,7 @@ export function createTerminalPaneHibernationActions(
         })
         throw new Error('ambiguous_terminal_owner')
       }
-      const runtimeEnvironmentId = teardownOwners.runtimeEnvironmentIds[0] ?? null
+      const runtimeEnvironmentId = teardownOwner.runtimeEnvironmentId
       // Why: pane transports emit renderer PTY ids, not raw exact-stop handles; guard only the identity that can deliver an exit callback.
       const exitGuardPtyIds = [opts.ptyId]
       const tab = (state.tabsByWorktree[worktreeId] ?? []).find(
