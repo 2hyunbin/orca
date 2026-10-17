@@ -1,11 +1,4 @@
-// Journal payloads: what a row keeps of a tool output or diff.
-//
-// A row keeps the whole value; only what is sent to a client is bounded (the item wire form in
-// agent-session-wire), so no writer can turn a transport limit into lost content. Two bounds stay:
-// any text past `JOURNAL_PAYLOAD_MAX_BYTES` keeps its head and tail (journal-body-ceiling.ts), and
-// a Grok, OpenCode, OMP or Pi call still running keeps a preview that its closing revision
-// replaces. The byte clip below also serves keys and the few fields with their own named limit.
-
+// Completed content is canonical; running revisions keep previews until the full close.
 import { createHash } from 'node:crypto'
 import type { AgentJournalBoundedPayload } from '../../../shared/agent-session-journal-types'
 
@@ -13,10 +6,6 @@ export type JournalPayloadLimits = {
   /** Bytes of the payload kept in `head`. */
   inlineHeadBytes: number
 }
-
-/** Past this one write outgrows the journal write queue (16 MiB per lifecycle write), which stalls
- *  the chat, so a larger text keeps its head and tail, where a log's command and errors are. */
-export const JOURNAL_PAYLOAD_MAX_BYTES = 4 * 1024 * 1024
 
 /** What a revision of a call still running keeps where every update is a row and the open budget
  *  holds it (provider-timeline-budget.ts); its closing revision keeps the whole value. */
@@ -51,23 +40,6 @@ export function journalPayload(payload: string): AgentJournalBoundedPayload {
     digest: digestPayload(payload),
     truncated: false
   }
-}
-
-/** `text` itself within `JOURNAL_PAYLOAD_MAX_BYTES`; past it, its head and tail. */
-export function journalTextWithinCeiling(text: string): string {
-  // UTF-8 spends at most three bytes per UTF-16 unit, so most text needs no encoding.
-  if (text.length * 3 <= JOURNAL_PAYLOAD_MAX_BYTES) {
-    return text
-  }
-  const byteLength = Buffer.byteLength(text, 'utf8')
-  if (byteLength <= JOURNAL_PAYLOAD_MAX_BYTES) {
-    return text
-  }
-  const keep = JOURNAL_PAYLOAD_MAX_BYTES / 2
-  const head = utf8Head(text, keep)
-  const tail = utf8Tail(text, keep)
-  const omitted = byteLength - Buffer.byteLength(head, 'utf8') - Buffer.byteLength(tail, 'utf8')
-  return `${head}\n… [Orca kept the start and end; ${omitted} bytes in between were not saved] …\n${tail}`
 }
 
 /** Whole once `running` is false; a preview while the call still runs. */
@@ -135,16 +107,6 @@ export function boundToolInput(input: unknown, limits: JournalPayloadLimits): un
         head: bounded.head
       }
     : input
-}
-
-/** The last `maxBytes` of `text` as UTF-8, never splitting a character. */
-function utf8Tail(text: string, maxBytes: number): string {
-  const buffer = Buffer.from(text, 'utf8')
-  let start = Math.max(0, buffer.length - maxBytes)
-  while (start < buffer.length && (buffer[start] & 0b1100_0000) === 0b1000_0000) {
-    start += 1
-  }
-  return buffer.subarray(start).toString('utf8')
 }
 
 /** Slice at a byte budget without splitting a multi-byte character. */

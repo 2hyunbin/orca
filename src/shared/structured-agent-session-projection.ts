@@ -209,7 +209,7 @@ export function projectStructuredItemToNativeChat(
         ...lifecycle,
         ...(command ? { command } : {}),
         ...(from && projected.role === 'user' ? { from } : {}),
-        ...(item.shortened ? { shortened: true } : {})
+        ...(item.shortened && item.body.kind === 'message' ? { shortened: true } : {})
       }
     : null
   projectedItems.set(item, message)

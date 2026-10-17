@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
@@ -16,8 +16,7 @@ import { MAX_TOOL_DETAIL_LENGTH } from '../../../../shared/native-chat-tool-summ
 import { useNativeChatVisualOwner } from './native-chat-visual-owner'
 import { truncateToolDetail } from './native-chat-tool-summary'
 
-/** `partial`: Orca kept only part of this output (past its storage ceiling) or the item was more
- *  than one reply carries. */
+/** A partial detail response retains its original byte count. */
 type FullOutput = { text: string; partial: { shown: number; total: number } | null }
 
 function fullPayload(body: AgentJournalItemBody): AgentJournalBoundedPayload | null {
@@ -35,44 +34,49 @@ export function NativeChatToolOutput({
   body: NativeChatToolResultBlock
 }): React.JSX.Element {
   const owner = useNativeChatVisualOwner()
-  const [full, setFull] = useState<FullOutput | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [failed, setFailed] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  const [detail, setDetail] = useState<{
+    body: NativeChatToolResultBlock; owner: typeof owner; full?: FullOutput;
+    loading?: boolean; failed?: boolean
+  } | null>(null)
+  useEffect(() => () => setDetail((held) => held?.body === body && held.owner === owner ? null : held), [body, owner])
+  const current = detail?.body === body && detail.owner === owner ? detail : null
+  const full = current?.full
+  const loading = current?.loading === true
+  const failed = current?.failed === true
   const clipped =
-    full === null &&
-    (body.fullOutputItemId !== undefined || body.output.length > MAX_TOOL_DETAIL_LENGTH)
+    !full &&
+    (body.fullOutputItemId !== undefined || (!expanded && body.output.length > MAX_TOOL_DETAIL_LENGTH))
 
   const showFull = async (): Promise<void> => {
     const itemId = body.fullOutputItemId
     if (itemId === undefined || owner === null) {
-      setFull({ text: body.output, partial: null })
+      setExpanded(true)
       return
     }
-    setLoading(true)
-    setFailed(false)
+    setDetail({ body, owner, loading: true })
+    const finish = (result: { full?: FullOutput; failed?: boolean }): void => {
+      setDetail((held) => held?.body === body && held.owner === owner ? { body, owner, ...result } : held)
+    }
     try {
-      // An older host keeps only the head it already sent.
-      const item = (await supportsStructuredAgentSessionItemDetail(owner.target))
-        ? await readStructuredAgentSessionItem(owner.target, owner.sessionId, itemId)
-        : null
-      const payload = item ? fullPayload(item.body) : null
-      setFull(
-        payload
-          ? {
-              text: payload.head,
-              partial: payload.truncated
-                ? {
-                    shown: new TextEncoder().encode(payload.head).length,
-                    total: payload.byteLength
-                  }
-                : null
-            }
-          : { text: body.output, partial: null }
-      )
+      if (!(await supportsStructuredAgentSessionItemDetail(owner.target))) {
+        setExpanded(true)
+        finish({})
+        return
+      }
+      const item = await readStructuredAgentSessionItem(owner.target, owner.sessionId, itemId)
+      const payload = item?.itemId === itemId ? fullPayload(item.body) : null
+      if (!payload) {
+        throw new Error('Output is unavailable')
+      }
+      finish({ full: {
+        text: payload.head,
+        partial: payload.truncated ? {
+          shown: new TextEncoder().encode(payload.head).length, total: payload.byteLength
+        } : null
+      } })
     } catch {
-      setFailed(true)
-    } finally {
-      setLoading(false)
+      finish({ failed: true })
     }
   }
 
@@ -85,7 +89,7 @@ export function NativeChatToolOutput({
           body.isError ? 'text-destructive' : 'text-chat-foreground'
         )}
       >
-        {full ? full.text : truncateToolDetail(body.output)}
+        {full ? full.text : expanded ? body.output : truncateToolDetail(body.output)}
       </pre>
       {full?.partial ? (
         <p className="text-xs text-chat-foreground-faint">

@@ -89,11 +89,18 @@ export class AcpToolTimeline {
   private readonly turns = new BoundedMap<string, string>({
     maxEntries: MAX_PROVIDER_TIMELINE_OPEN_ENTRIES
   })
-  /** A running call's whole input and output, outside the budgeted snapshot that holds only their
-   *  preview, so its closing revision keeps them even when the closing update repeats neither. */
-  private readonly whole = new BoundedMap<string, { input?: unknown; output?: string }>({
-    maxEntries: MAX_PROVIDER_TIMELINE_OPEN_ENTRIES
+  // One latest snapshot per live call; the closing event takes ownership. Bytes are a ledger,
+  // not an RSS ceiling: provider frame limits and the live-entry count bound this finite carry.
+  private readonly whole = new BoundedMap<string, {
+    input?: unknown; output?: string; inputBytes: number; outputBytes: number
+  }>({
+    maxEntries: MAX_PROVIDER_TIMELINE_OPEN_ENTRIES,
+    sizeOf: (value, key) => value.inputBytes + value.outputBytes + Buffer.byteLength(key) + 64
   })
+
+  get retainedToolBytes(): number {
+    return this.whole.retainedBytes
+  }
 
   translate(
     raw: ToolCallUpdate,
@@ -104,7 +111,8 @@ export class AcpToolTimeline {
     const previous = this.tools.get(update.toolCallId)
     const held = this.whole.get(update.toolCallId)
     const input = update.rawInput === undefined ? held?.input : update.rawInput
-    const output = outputText(update) ?? held?.output
+    const suppliedOutput = outputText(update)
+    const output = suppliedOutput ?? held?.output
     const exitCode = rawExitCodeSchema.safeParse(update.rawOutput).data?.exitCode
     const state =
       update.status === 'completed'
@@ -115,7 +123,18 @@ export class AcpToolTimeline {
             ? 'running'
             : (previous?.body.state ?? 'running')
     if (state === 'running') {
-      this.whole.set(update.toolCallId, { input, output })
+      if (!held && this.whole.size >= MAX_PROVIDER_TIMELINE_OPEN_ENTRIES) {
+        throw new Error('ACP tool stream capacity exceeded')
+      }
+      if (!this.whole.set(update.toolCallId, {
+        input, output,
+        inputBytes: update.rawInput === undefined ? (held?.inputBytes ?? 0)
+          : Buffer.byteLength(JSON.stringify(input) ?? ''),
+        outputBytes: suppliedOutput === undefined ? (held?.outputBytes ?? 0)
+          : Buffer.byteLength(JSON.stringify(output) ?? '')
+      })) {
+        throw new Error('ACP tool snapshot could not be retained')
+      }
     } else {
       this.whole.delete(update.toolCallId)
     }

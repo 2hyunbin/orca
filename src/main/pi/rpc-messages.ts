@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { BoundedMap } from '../../shared/bounded-map'
+import { MAX_PROVIDER_TIMELINE_OPEN_ENTRIES } from '../native-chat/agent-session-timeline/provider-timeline-budget'
 import type { AgentJournalToolCallItem } from '../../shared/agent-session-journal-types'
 import {
   boundToolInput,
@@ -19,9 +21,17 @@ export class PiRpcMessages {
   private active?: number
   private readonly text = new Map<string, { index: number; channel: 'assistant' | 'reasoning' }>()
   private readonly tools = new Map<string, AgentJournalToolCallItem>()
-  /** A running call's whole input and output, apart from `tools`, which holds the previews the open
-   *  budget counts, so its closing revision keeps them though Pi's end event repeats no args. */
-  private readonly whole = new Map<string, { input?: unknown; output?: string }>()
+  // Closing events take these latest full fields; running journal rows retain only previews.
+  private readonly whole = new BoundedMap<string, {
+    input?: unknown; output?: string; inputBytes: number; outputBytes: number
+  }>({
+    maxEntries: MAX_PROVIDER_TIMELINE_OPEN_ENTRIES,
+    sizeOf: (value, key) => value.inputBytes + value.outputBytes + Buffer.byteLength(key) + 64
+  })
+
+  get retainedToolBytes(): number {
+    return this.whole.retainedBytes
+  }
 
   constructor(
     private readonly generation: string,
@@ -141,7 +151,18 @@ export class PiRpcMessages {
         throw new Error('Pi tool stream capacity exceeded')
       }
       this.tools.set(event.toolCallId, body)
-      this.whole.set(event.toolCallId, { input, output })
+      if (!held && this.whole.size >= MAX_PROVIDER_TIMELINE_OPEN_ENTRIES) {
+        throw new Error('Pi tool stream capacity exceeded')
+      }
+      if (!this.whole.set(event.toolCallId, {
+        input, output,
+        inputBytes: event.args === undefined ? (held?.inputBytes ?? 0)
+          : Buffer.byteLength(JSON.stringify(input) ?? ''),
+        outputBytes: result === undefined ? (held?.outputBytes ?? 0)
+          : Buffer.byteLength(JSON.stringify(output) ?? '')
+      })) {
+        throw new Error('Pi tool snapshot could not be retained')
+      }
       if (
         [...this.tools.values()].reduce(
           (bytes, tool) => bytes + Buffer.byteLength(JSON.stringify(tool)),

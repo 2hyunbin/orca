@@ -176,14 +176,16 @@ export class StructuredAgentSessionSinkQueue {
       this.lifecycleQueuedBytes - (replaced ? lifecycleCost(replaced) : 0) + lifecycleBytes
     const nextLifecycleOperations =
       this.lifecycleQueuedOperations - (replaced?.lifecycle ? 1 : 0) + (lifecycle ? 1 : 0)
+    // A byte watermark paces waiting work; an empty budget can own one complete operation.
     const exceedsOrdinary =
       !finalTail &&
       !lifecycle &&
-      (nextBytes > this.deps.watermarks.maxQueuedBytes ||
+      ((this.queuedOperations > 0 && nextBytes > this.deps.watermarks.maxQueuedBytes) ||
         nextOperations > this.deps.watermarks.maxQueuedOperations)
     const exceedsLifecycle =
       lifecycle &&
-      (nextLifecycleBytes > this.deps.watermarks.maxLifecycleQueuedBytes ||
+      ((this.lifecycleQueuedOperations > 0 &&
+        nextLifecycleBytes > this.deps.watermarks.maxLifecycleQueuedBytes) ||
         nextLifecycleOperations > this.deps.watermarks.maxLifecycleQueuedOperations)
     if (exceedsOrdinary || exceedsLifecycle) {
       this.setBackpressure(true)

@@ -64,9 +64,7 @@ function ResultBody({
   }
   return (
     <MobileNativeChatToolOutput
-      output={result.output}
-      isError={result.isError}
-      fullOutputItemId={result.fullOutputItemId}
+      body={result}
     />
   )
 }

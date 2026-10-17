@@ -9,6 +9,7 @@ import { useMobileNativeChatComposerTray } from './use-mobile-native-chat-compos
 import { useMobileNativeChatVisualRenderer } from './MobileNativeChatVisual'
 import { MobileNativeChatVisualContext } from './mobile-native-chat-visual-context'
 import { MobileNativeChatItemSourceContext } from './mobile-native-chat-item-read'
+import { useMobileNativeChatMessageDetail } from './use-mobile-native-chat-message-detail'
 import {
   MobileNativeChatReplyRevealsContext,
   useMobileNativeChatReplyReveals
@@ -66,9 +67,10 @@ export function MobileNativeChatOverlay({
   const session = controller.nativeChatSession
   // The chat is drawn only with a resolved agent; the fallback never reaches the screen.
   const agent = controller.nativeChatAgent ?? ''
+  const fullContent = useMobileNativeChatMessageDetail(session.messages, controller.nativeChatItemSource)
   const folded = useMemo(
-    () => foldMobileNativeChatMessages(session.messages, agent),
-    [session.messages, agent]
+    () => foldMobileNativeChatMessages(fullContent.messages, agent),
+    [fullContent.messages, agent]
   )
   const streaming = useMobileNativeChatStreamingBubble(
     folded,
@@ -102,7 +104,7 @@ export function MobileNativeChatOverlay({
     <MobileNativeChatRowOverlaysHost conversation={{ surfaceId: sendSurfaceId, sessionId }}>
       <View style={styles.overlay}>
         <MobileNativeChatVisualContext.Provider value={visuals}>
-          <MobileNativeChatItemSourceContext.Provider value={controller.nativeChatItemSource}>
+          <MobileNativeChatItemSourceContext.Provider value={controller.nativeChatItemSource ? { ...controller.nativeChatItemSource, messageDetail: fullContent.detail } : null}>
             <MobileNativeChatReplyRevealsContext.Provider value={replyReveals}>
               <MobileNativeChatView
                 messages={session.messages}

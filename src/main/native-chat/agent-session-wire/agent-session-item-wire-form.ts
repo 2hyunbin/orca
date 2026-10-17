@@ -2,7 +2,7 @@
 //
 // The journal keeps tool output and diffs whole. A client is sent a head of each and the item is
 // marked `shortened`; it fetches the whole item with `agentSession.item` when the user asks. Every
-// other field is sent as kept. An item still past half a page is shortened to fit and marked
+// other field is sent as kept. An item still past a page is shortened to fit and marked
 // rather than replaced, so its row and its "show full" stay readable.
 
 import type {
@@ -10,7 +10,7 @@ import type {
   AgentJournalItemBody,
   AgentJournalRenderItem
 } from '../../../shared/agent-session-journal-types'
-import { utf8Head } from '../agent-session-journal/journal-payload-bounds'
+import { boundToolInput, JOURNAL_RUNNING_PREVIEW_LIMITS, utf8Head } from '../agent-session-journal/journal-payload-bounds'
 import {
   HISTORY_PAGE_CONTENT_BUDGET_BYTES,
   type HistoryReader
@@ -20,8 +20,8 @@ import { jsonBytes, shortenJsonStringsToFit } from './json-string-shortening'
 /** Each tool output or diff as sent: the head older clients have always been sent. */
 export const AGENT_SESSION_WIRE_PAYLOAD_HEAD_BYTES = 16 * 1024
 
-/** Half a page, so an item and the submission it carries always fit one. */
-const CLIENT_ITEM_MAX_BYTES = HISTORY_PAGE_CONTENT_BUDGET_BYTES / 2
+/** Preserve every ordinary message that already fits a desktop page. */
+const CLIENT_ITEM_MAX_BYTES = HISTORY_PAGE_CONTENT_BUDGET_BYTES
 
 /** The payload as sent; itself when its head already fits. */
 function wirePayload(payload: AgentJournalBoundedPayload): AgentJournalBoundedPayload {
@@ -60,10 +60,14 @@ export function shortenedAgentJournalItem(
   if (jsonBytes(item) <= maxBytes) {
     return item
   }
-  const body = shortenJsonStringsToFit(
-    item.body,
-    maxBytes - (jsonBytes({ ...item, body: null, shortened: true }) - jsonBytes(null))
-  )
+  const budget = maxBytes - (jsonBytes({ ...item, body: null, shortened: true }) - jsonBytes(null))
+  let body = shortenJsonStringsToFit(item.body, budget)
+  if (body === null && item.body.kind === 'tool-call') {
+    body = shortenJsonStringsToFit(
+      { ...item.body, input: boundToolInput(item.body.input, JOURNAL_RUNNING_PREVIEW_LIMITS) },
+      budget
+    )
+  }
   return body === null ? null : { ...item, body, shortened: true }
 }
 

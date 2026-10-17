@@ -1,31 +1,16 @@
 import { createContext } from 'react'
 import { z } from 'zod'
+import { isAdmissibleAgentJournalRenderItem } from '../../../src/shared/agent-session-journal-schemas'
+import type { AgentJournalRenderItem } from '../../../src/shared/agent-session-journal-types'
 import { bindDeferredRpcOperation, defineRpcOperation } from '../transport/rpc-operation'
 import { rpcResultVariant } from '../transport/rpc-operation-result-reader'
 import type { MobileNativeChatVisualSource } from './mobile-native-chat-visual-read'
+import type { MobileNativeChatMessageDetail } from './use-mobile-native-chat-message-detail'
 
 // One chat item whole, for "Show full output" and "Show full message": every other read sends the
 // phone a head of long text, and the host keeps the rest.
 
-const Payload = z.object({ head: z.string(), byteLength: z.number(), truncated: z.boolean() })
-
-const itemReplySchema = z.object({
-  item: z
-    .object({
-      body: z.union([
-        z.object({ kind: z.literal('tool-call'), output: Payload.optional() }),
-        z.object({ kind: z.literal('diff'), patch: Payload }),
-        z.object({
-          kind: z.literal('message'),
-          blocks: z.array(z.object({ type: z.string(), text: z.string().optional() }))
-        }),
-        z.object({ kind: z.string() })
-      ])
-    })
-    .nullable()
-})
-
-export type MobileNativeChatItemBody = NonNullable<z.output<typeof itemReplySchema>['item']>['body']
+const itemReplySchema = z.object({ item: z.custom<AgentJournalRenderItem>(isAdmissibleAgentJournalRenderItem).nullable() })
 
 const nativeChatItemRead = bindDeferredRpcOperation(
   defineRpcOperation({
@@ -40,7 +25,7 @@ const nativeChatItemRead = bindDeferredRpcOperation(
 const READ_TIMEOUT_MS = 30_000
 
 /** Where whole items are read from; null where the host predates `agentSession.item`. */
-export const MobileNativeChatItemSourceContext = createContext<MobileNativeChatVisualSource | null>(
+export const MobileNativeChatItemSourceContext = createContext<(MobileNativeChatVisualSource & { messageDetail?: MobileNativeChatMessageDetail | null }) | null>(
   null
 )
 
@@ -49,7 +34,7 @@ export const MobileNativeChatItemSourceContext = createContext<MobileNativeChatV
 export async function readMobileNativeChatItem(
   source: MobileNativeChatVisualSource,
   itemId: string
-): Promise<MobileNativeChatItemBody | null> {
+): Promise<AgentJournalRenderItem | null> {
   const response = await nativeChatItemRead.request(
     source.client,
     { sessionId: source.sessionId, itemId },
@@ -59,5 +44,5 @@ export async function readMobileNativeChatItem(
   if (reply === null) {
     throw new Error('The host could not read this item.')
   }
-  return reply.item?.body ?? null
+  return reply.item
 }
