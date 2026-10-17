@@ -28,7 +28,12 @@ import {
   type HugeRepoWarningProbe
 } from '@/lib/source-control-huge-repo-warning-dismissals'
 
-export type HostTwinKind = 'local+ssh' | 'local+runtime' | 'folder local+ssh'
+export type HostTwinKind =
+  | 'local+ssh'
+  | 'local+runtime'
+  | 'folder local+ssh'
+  // One unstamped folder row whose project group both hosts publish.
+  | 'folder group local+ssh'
 
 export const TWIN_SSH_TARGET = 'conn-b'
 export const TWIN_RUNTIME_ENV = 'env-b'
@@ -132,7 +137,7 @@ function sleepingRecord(
 export function createHostTwinFixture(kind: HostTwinKind): HostTwinFixture {
   const store = createTestStore()
   const root = '/work/twin'
-  const isFolder = kind === 'folder local+ssh'
+  const isFolder = kind === 'folder local+ssh' || kind === 'folder group local+ssh'
   const projectId = isFolder ? FOLDER_ID : PROJECT_ID
   const workspaceKey = isFolder ? folderWorkspaceKey(FOLDER_ID) : `${PROJECT_ID}::${root}`
   const remoteHostId = remoteHostFor(kind)
@@ -158,21 +163,24 @@ export function createHostTwinFixture(kind: HostTwinKind): HostTwinFixture {
     ...(isFolder
       ? {
           projectGroups: [projectGroupRow('local'), projectGroupRow(remoteHostId)],
-          folderWorkspaces: [
-            makeFolderWorkspace({
-              id: FOLDER_ID,
-              projectGroupId: GROUP_ID,
-              folderPath: root,
-              executionHostId: 'local'
-            }),
-            makeFolderWorkspace({
-              id: FOLDER_ID,
-              projectGroupId: GROUP_ID,
-              folderPath: root,
-              executionHostId: remoteHostId,
-              connectionId: TWIN_SSH_TARGET
-            })
-          ]
+          folderWorkspaces:
+            kind === 'folder group local+ssh'
+              ? [makeFolderWorkspace({ id: FOLDER_ID, projectGroupId: GROUP_ID, folderPath: root })]
+              : [
+                  makeFolderWorkspace({
+                    id: FOLDER_ID,
+                    projectGroupId: GROUP_ID,
+                    folderPath: root,
+                    executionHostId: 'local'
+                  }),
+                  makeFolderWorkspace({
+                    id: FOLDER_ID,
+                    projectGroupId: GROUP_ID,
+                    folderPath: root,
+                    executionHostId: remoteHostId,
+                    connectionId: TWIN_SSH_TARGET
+                  })
+                ]
         }
       : {
           repos: [repoRow('local', root), repoRow(remoteHostId, root)],
