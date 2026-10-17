@@ -2,6 +2,13 @@ import { isSameCodexRestartNoticeAccount } from '../slices/codex-restart-notice-
 import type { AccountRestartAgent } from './terminal-contracts'
 import type { TerminalSlice, TerminalStoreGet, TerminalStoreSet } from './terminal-state'
 
+// Why: Codex notice cleanup shares this map with Claude switch restarts and must not drop them.
+function dropQueuedCodexRestart(pending: Record<string, AccountRestartAgent>, ptyId: string): void {
+  if (pending[ptyId] === 'codex') {
+    delete pending[ptyId]
+  }
+}
+
 export function createTerminalRestartActions(
   set: TerminalStoreSet,
   get: TerminalStoreGet
@@ -121,7 +128,7 @@ export function createTerminalRestartActions(
             )
           ) {
             delete next[notice.ptyId]
-            delete nextPendingPaneAccountRestarts[notice.ptyId]
+            dropQueuedCodexRestart(nextPendingPaneAccountRestarts, notice.ptyId)
             continue
           }
           next[notice.ptyId] = {
@@ -164,7 +171,7 @@ export function createTerminalRestartActions(
         const next = { ...s.codexRestartNoticeByPtyId }
         const nextPendingPaneAccountRestarts = { ...s.pendingPaneAccountRestarts }
         delete next[ptyId]
-        delete nextPendingPaneAccountRestarts[ptyId]
+        dropQueuedCodexRestart(nextPendingPaneAccountRestarts, ptyId)
         return {
           codexRestartNoticeByPtyId: next,
           pendingPaneAccountRestarts: nextPendingPaneAccountRestarts
@@ -186,7 +193,7 @@ export function createTerminalRestartActions(
           }
           const { restartRequested: _restartRequested, ...kept } = notice
           next[ptyId] = { ...kept, dismissed: true }
-          delete nextPendingPaneAccountRestarts[ptyId]
+          dropQueuedCodexRestart(nextPendingPaneAccountRestarts, ptyId)
           changed = true
         }
         if (!changed) {
@@ -206,7 +213,7 @@ export function createTerminalRestartActions(
         }
         const { restartRequested: _restartRequested, ...kept } = notice
         const nextPendingPaneAccountRestarts = { ...s.pendingPaneAccountRestarts }
-        delete nextPendingPaneAccountRestarts[ptyId]
+        dropQueuedCodexRestart(nextPendingPaneAccountRestarts, ptyId)
         return {
           codexRestartNoticeByPtyId: { ...s.codexRestartNoticeByPtyId, [ptyId]: kept },
           pendingPaneAccountRestarts: nextPendingPaneAccountRestarts

@@ -16,6 +16,23 @@ beforeEach(() => {
 })
 
 describe('codex restart notice lifecycle', () => {
+  it('keeps a queued Claude restart through Codex notice clear, dismiss and settle', () => {
+    const pending = (): string | undefined =>
+      useAppStore.getState().pendingPaneAccountRestarts['pty-1']
+    useAppStore.getState().queuePaneAccountRestarts(['pty-1'], 'claude')
+
+    switchAccount('pty-1', A, B)
+    useAppStore.getState().clearCodexRestartNotice('pty-1')
+    expect(pending()).toBe('claude')
+
+    switchAccount('pty-1', A, B)
+    useAppStore.getState().dismissCodexRestartNotices(['pty-1'])
+    expect(pending()).toBe('claude')
+
+    switchAccount('pty-1', B, A)
+    expect(pending()).toBe('claude')
+  })
+
   it('raises no notice when the pane returns to the account it launched under', () => {
     switchAccount('pty-1', A, B)
     switchAccount('pty-1', B, A)
