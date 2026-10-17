@@ -95,6 +95,10 @@ export async function readTranscriptHeadCwd(
   source: { cwdOf: (record: HeadRecord) => unknown; firstReadBytes?: number },
   signal?: AbortSignal
 ): Promise<string | null> {
+  const cached = headCwdCache.get(file.path)
+  if (cached && cached.mtimeMs === file.mtimeMs && cached.sizeBytes === file.sizeBytes) {
+    return cached.cwd
+  }
   const { cwdOf } = source
   let cwd: string | null = null
   const first = source.firstReadBytes ?? HEAD_READ_BYTES
@@ -117,29 +121,13 @@ export async function readTranscriptHeadCwd(
     }
   }
   if (cwd !== null) {
-    rememberTranscriptScopeCwd(file, cwd)
+    headCwdCache.set(file.path, {
+      mtimeMs: file.mtimeMs,
+      sizeBytes: file.sizeBytes,
+      cwd: internCwd(cwd)
+    })
   }
   return cwd
-}
-
-/**
- * A file version's settled cwd: from its opening records, or from its parse (null
- * = the parse produced no session or no cwd, so it can never be in scope).
- * Undefined when this version has not been settled yet.
- */
-export function cachedTranscriptScopeCwd(file: FileWithMtime): string | null | undefined {
-  const cached = headCwdCache.get(file.path)
-  return cached && cached.mtimeMs === file.mtimeMs && cached.sizeBytes === file.sizeBytes
-    ? cached.cwd
-    : undefined
-}
-
-export function rememberTranscriptScopeCwd(file: FileWithMtime, cwd: string | null): void {
-  headCwdCache.set(file.path, {
-    mtimeMs: file.mtimeMs,
-    sizeBytes: file.sizeBytes,
-    cwd: cwd === null ? null : internCwd(cwd)
-  })
 }
 
 function firstHeadCwd(
@@ -159,7 +147,7 @@ function firstHeadCwd(
 // In memory only: a restart re-reads heads, and parsed files answer from the parse cache.
 const headCwdCache = new Map<
   string,
-  { mtimeMs: number; sizeBytes: number | undefined; cwd: string | null }
+  { mtimeMs: number; sizeBytes: number | undefined; cwd: string }
 >()
 // Thousands of transcripts share a handful of cwds.
 const cwdStrings = new Map<string, string>()
@@ -180,7 +168,7 @@ export function pruneTranscriptHeadCwdCache(discoveredPaths: ReadonlySet<string>
       headCwdCache.delete(path)
     }
   }
-  const liveCwds = new Set<string | null>([...headCwdCache.values()].map((entry) => entry.cwd))
+  const liveCwds = new Set([...headCwdCache.values()].map((entry) => entry.cwd))
   for (const cwd of cwdStrings.keys()) {
     if (!liveCwds.has(cwd)) {
       cwdStrings.delete(cwd)

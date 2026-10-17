@@ -120,11 +120,6 @@ export function peekSessionParseCacheEntry(
   return cache.get(path) ?? coldTier?.read(path)
 }
 
-/** The in-memory row only: a per-file check that must never fall through to the database. */
-export function peekLoadedSessionParseCacheEntry(path: string): SessionParseCacheEntry | undefined {
-  return cache.get(path)
-}
-
 export function storeSessionParseCacheEntry(path: string, entry: SessionParseCacheEntry): void {
   const previous = cache.get(path)
   const changed =
