@@ -570,8 +570,8 @@ describe('a /clear keeps the chat its orchestration address', () => {
     })
   })
 
-  observationClock.start()
   it('sends mail the earlier context never took to the fresh context, without a user message', async () => {
+    observationClock.start()
     const chat = await openChat(COORDINATOR)
     const { runId, taskId } = await coordinatorRunAndTask()
     await finishWorker(taskId)
