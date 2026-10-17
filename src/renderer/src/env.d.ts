@@ -140,7 +140,7 @@ declare global {
     __terminalPtyPreSpawnE2EBarrier?: TerminalPtyPreSpawnE2EBarrier
     /** Dev/test only: settled disagreements between the window's sidebar inputs and main's. */
     __sidebarShadow?: {
-      /** Fewest main-reading checks of any domain; a check of a silent host does not count. */
+      /** Rounds in which every domain read main's published values; a round with a silent host does not count. */
       comparisons: () => number
       mismatches: () => SidebarShadowMismatch[]
     }

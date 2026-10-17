@@ -204,6 +204,18 @@
         "saveFailed": "Could not save chat name settings.",
         "searchAgent": "agent",
         "searchTemplate": "command template"
+      },
+      "providers": {
+        "title": "Providers",
+        "description": "Choose which agents open as a chat. Turned off, an installed agent opens in a terminal.",
+        "searchAgents": "agents",
+        "searchCli": "CLI",
+        "searchTerminal": "terminal",
+        "agentDisabled": "Turned off in Agent settings",
+        "installed": "Installed",
+        "notInstalled": "Not installed",
+        "install": "Install",
+        "toggleLabel": "Open {{value0}} as a chat"
       }
     },
     "terminal": {
@@ -12569,9 +12581,6 @@
         "shortcutDefinitionCatalog": {
           "missionControlConflict": "Blocked by Mission Control. Remap here or change it in System Settings."
         },
-        "NativeChatSupportedAgents": {
-          "label": "Supported agents:"
-        },
         "contrast": {
           "title": "Color Contrast",
           "description": "Improve text readability or preserve the colors chosen by terminal programs.",
@@ -18931,6 +18940,9 @@
         "editFailed": "This message can't be edited.",
         "editGone": "This message was already sent or removed. Your edit is in the chat box.",
         "editGonePrompt": "This message was already sent or removed. Your edit will be in the chat box after you answer the agent.",
+        "imageCount": "{{count}} images",
+        "imageCount_one": "{{count}} image",
+        "imageCount_other": "{{count}} images",
         "collapse": "Collapse",
         "expand": "Expand",
         "queued": "Queued",

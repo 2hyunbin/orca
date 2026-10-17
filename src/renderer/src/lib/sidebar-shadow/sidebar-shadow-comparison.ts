@@ -8,7 +8,7 @@ import { e2eConfig } from '@/lib/e2e-config'
 export type SidebarShadowDomain<Value> = {
   name: string
   readWindow: () => ReadonlyMap<string, Value>
-  /** Null when this host does not publish the domain (an older host). Revision absent for reads on demand. */
+  /** Null when this host does not publish the domain (an older host); facts read on demand carry no revision. */
   readMain: () => Promise<{ revision?: number; values: ReadonlyMap<string, Value> } | null>
   equals: (window: Value | undefined, main: Value | undefined) => boolean
 }
@@ -79,10 +79,9 @@ export function installSidebarShadowComparison(checks: readonly SidebarShadowChe
     mismatches.push(mismatch)
     console.warn('[sidebar-shadow] window and main disagree', mismatch)
   }
-  // Per domain, so a caller waiting for fresh checks waits for every domain, not one tick.
-  const comparisons = checks.map(() => 0)
+  let comparisons = 0
   window.__sidebarShadow = {
-    comparisons: () => Math.min(...comparisons),
+    comparisons: () => comparisons,
     mismatches: () => [...mismatches]
   }
   let inFlight = false
@@ -92,13 +91,16 @@ export function installSidebarShadowComparison(checks: readonly SidebarShadowChe
     }
     inFlight = true
     void (async () => {
-      for (const [index, check] of checks.entries()) {
+      let everyCompared = true
+      for (const check of checks) {
         const compared = await check(record).catch((error: unknown) => {
           console.warn('[sidebar-shadow] check failed', error)
           return false
         })
-        comparisons[index] += compared ? 1 : 0
+        everyCompared &&= compared
       }
+      // A round counts once every domain compared, so two rounds re-check each domain twice.
+      comparisons += everyCompared ? 1 : 0
     })().finally(() => {
       inFlight = false
     })
