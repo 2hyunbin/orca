@@ -50,6 +50,18 @@ function queueClaudeRestarts(ptyIds: string[]): void {
 }
 
 /**
+ * The panes' PTYs as they are now. Why: a reattach can rebind a pane while the dialog is open,
+ * and a closed pane has none, so the ids it listed may name nothing.
+ */
+function currentPtyIds(sessions: readonly ClaudeSessionMoveCandidate[]): string[] {
+  const layouts = useAppStore.getState().terminalLayoutsByTabId
+  return sessions.flatMap((session) => {
+    const ptyId = layouts[session.tabId]?.ptyIdsByLeafId[session.leafId]
+    return ptyId ? [ptyId] : []
+  })
+}
+
+/**
  * Answers the open dialog. Like native chat's resume prompt, "don't ask again" is one-way:
  * it turns on automatic restarts however the dialog is left. Settings is where it turns off.
  */
@@ -67,10 +79,12 @@ export function answerClaudeAccountSwitchPrompt(
   }
   setPrompt(null)
   if (answer === 'restart') {
-    const listed = request.sessions.map((session) => session.ptyId)
     const chosen = options.ptyIds
     // Why filtered: only sessions this question listed may restart.
-    queueClaudeRestarts(chosen ? listed.filter((ptyId) => chosen.includes(ptyId)) : listed)
+    const picked = chosen
+      ? request.sessions.filter((session) => chosen.includes(session.ptyId))
+      : request.sessions
+    queueClaudeRestarts(currentPtyIds(picked))
   }
   if (options.dontAskAgain) {
     void useAppStore.getState().updateSettings({ claudeAccountSwitchRunningSessions: 'restart' })

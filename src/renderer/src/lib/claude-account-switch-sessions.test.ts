@@ -16,12 +16,14 @@ type SwitchSettings = { claudeAccountSwitchRunningSessions?: ClaudeAccountSwitch
 type StoreStub = {
   settings: SwitchSettings
   updateSettings: (updates: SwitchSettings) => Promise<void>
+  terminalLayoutsByTabId: Record<string, { ptyIdsByLeafId: Record<string, string> }>
   queuePaneAccountRestarts: (ptyIds: string[], agent: string) => void
   consumePendingPaneAccountRestart: (ptyId: string) => void
 }
 
 const store = vi.hoisted((): StoreStub => ({
   settings: {},
+  terminalLayoutsByTabId: {},
   updateSettings: vi.fn(async () => {}),
   queuePaneAccountRestarts: vi.fn(),
   consumePendingPaneAccountRestart: vi.fn()
@@ -55,6 +57,9 @@ describe('handleRunningClaudeSessionsAfterSwitch', () => {
     vi.clearAllMocks()
     resetClaudeAccountSwitchSessionsForTests()
     store.settings = {}
+    store.terminalLayoutsByTabId = Object.fromEntries(
+      [1, 2, 3].map((n) => [`tab-${n}`, { ptyIdsByLeafId: { [`leaf-${n}`]: `pty-${n}` } }])
+    )
   })
 
   it('asks nothing when no Claude session runs on the outgoing account', async () => {
@@ -120,6 +125,16 @@ describe('handleRunningClaudeSessionsAfterSwitch', () => {
     answerClaudeAccountSwitchPrompt('restart', { ptyIds: ['pty-2', 'pty-unlisted'] })
 
     expect(store.queuePaneAccountRestarts).toHaveBeenLastCalledWith(['pty-2'], 'claude')
+  })
+
+  it('restarts a pane on the PTY it has now, and skips a pane that closed', async () => {
+    vi.mocked(findMovableClaudeSessions).mockResolvedValue([candidate(1), candidate(2)])
+    await handleRunningClaudeSessionsAfterSwitch(SWITCH)
+    store.terminalLayoutsByTabId = { 'tab-1': { ptyIdsByLeafId: { 'leaf-1': 'pty-1-reattached' } } }
+
+    answerClaudeAccountSwitchPrompt('restart')
+
+    expect(store.queuePaneAccountRestarts).toHaveBeenLastCalledWith(['pty-1-reattached'], 'claude')
   })
 
   it('leaves sessions alone when the user keeps them', async () => {
