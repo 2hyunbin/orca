@@ -91,10 +91,8 @@ beforeAll(async () => {
       'src/main/runtime/rpc/methods/session-tab-agent-status-projection.ts'
     ),
     importReleaseCheckoutModule(checkout, 'src/shared/workspace-session-schema.ts'),
-    importReleaseCheckoutModule(
-      checkout,
-      'src/renderer/src/components/native-chat/structured-agent-session-tabs.ts'
-    ),
+    // Why shared: #28819 moved isStructuredTab there, and every baseline release since has it there.
+    importReleaseCheckoutModule(checkout, 'src/shared/structured-agent-session-tab.ts'),
     importReleaseCheckoutModule(checkout, 'src/shared/agent-session-record.ts')
   ])
   current = await loadAgentSessionWireBuild(WORKING_TREE)
