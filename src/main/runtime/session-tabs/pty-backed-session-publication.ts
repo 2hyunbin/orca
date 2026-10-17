@@ -12,6 +12,7 @@ import {
   getHeadlessMobileSessionGroupId
 } from '../mobile-session-layout-projection'
 import {
+  appendChatTabOrder,
   mergeMobileSessionSnapshotTabs,
   mergeMobileSessionTabGroups
 } from '../mobile-session-tab-merge'
@@ -147,11 +148,16 @@ export abstract class OrcaRuntimeWithPublishPtyBackedMobileSessionTerminal exten
       activeGroupId: existing?.activeGroupId ?? getHeadlessMobileSessionGroupId(worktreeId),
       activeTabId: activeTab?.id ?? null,
       activeTabType: activeTab?.type ?? null,
-      tabGroups: mergeMobileSessionTabGroups(
-        worktreeId,
+      tabGroups: appendChatTabOrder(
+        mergeMobileSessionTabGroups(
+          worktreeId,
+          existing?.tabGroups ?? [],
+          terminalTabs,
+          activeTab?.type === 'terminal' ? activeTab : null
+        ),
         existing?.tabGroups ?? [],
-        terminalTabs,
-        activeTab?.type === 'terminal' ? activeTab : null
+        tabs,
+        activeTab?.id ?? null
       ),
       ...(existing?.tabGroupLayout ? { tabGroupLayout: existing.tabGroupLayout } : {}),
       tabs

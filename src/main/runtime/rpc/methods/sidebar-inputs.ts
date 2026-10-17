@@ -29,6 +29,12 @@ export const SIDEBAR_INPUT_METHODS = [
     handler: async (_params, { runtime }) => runtime.pairedServerRows.snapshot()
   }),
   defineMethod({
+    name: 'sidebarInputs.reviewFacts',
+    permission: 'workspace',
+    params: null,
+    handler: async (_params, { runtime }) => runtime.getWorkspaceReviewFacts()
+  }),
+  defineMethod({
     name: 'sidebarInputs.workspaceCreations',
     permission: 'workspace',
     params: null,

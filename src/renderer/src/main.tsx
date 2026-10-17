@@ -32,6 +32,7 @@ import {
   pairedServerRowsShadow
 } from './lib/sidebar-shadow/paired-server-rows-shadow'
 import { desktopFactsShadow } from './lib/sidebar-shadow/desktop-facts-shadow'
+import { workspaceReviewShadow } from './lib/sidebar-shadow/workspace-review-shadow'
 import { workspaceCreationsShadow } from './lib/sidebar-shadow/workspace-creations-shadow'
 
 const disposeOsFileDropGuard = installOsFileDropCancellationGuard()
@@ -45,6 +46,7 @@ const disposeSidebarShadow = installSidebarShadowComparison([
   pairedServerRowsShadow,
   pairedServerHostsShadow,
   desktopFactsShadow,
+  workspaceReviewShadow,
   workspaceCreationsShadow
 ])
 import.meta.hot?.dispose(disposeSidebarShadow)
