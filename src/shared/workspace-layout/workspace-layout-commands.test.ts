@@ -582,4 +582,43 @@ describe('layout command effects', () => {
       opened.model.workspaces[WS]!.tabs.find((tab) => tab.id === session!.tabId)
     ).toMatchObject({ kind: 'agent-session', entityId: 'sess-1', agentSessionAgent: 'codex' })
   })
+
+  it('creates a terminal tab at the time the window drew it, else now', () => {
+    const ctx = testContext()
+    const { model, results } = build(ctx, [
+      { type: 'createTerminalTab', workspace: WS, createdAt: 42 },
+      { type: 'createTerminalTab', workspace: WS }
+    ])
+    expect(terminalTab(model, results[0]!.tabId!).createdAt).toBe(42)
+    expect(terminalTab(model, results[1]!.tabId!).createdAt).toBeGreaterThan(42)
+  })
+
+  it('forgets an ended launch agent on a terminal tab only', () => {
+    const ctx = testContext()
+    const { model, results } = build(ctx, [
+      { type: 'createTerminalTab', workspace: WS, creation: { launchAgent: 'claude' } },
+      {
+        type: 'openEditorTab',
+        workspace: WS,
+        fileId: '/w/a.ts',
+        contentType: 'editor',
+        file: { filePath: '/w/a.ts', relativePath: 'a.ts', language: 'typescript' }
+      }
+    ])
+    const [terminal, editor] = results
+    const cleared = build(
+      ctx,
+      [{ type: 'setTabProps', workspace: WS, tabId: terminal!.tabId!, clearLaunchAgent: true }],
+      model
+    ).model
+    expect(terminalTab(cleared, terminal!.tabId!).terminal).toEqual({ defaultTitle: 'Terminal 1' })
+    expect(
+      refusal(model, {
+        type: 'setTabProps',
+        workspace: WS,
+        tabId: editor!.tabId!,
+        clearLaunchAgent: true
+      })
+    ).toBe('invalid_params')
+  })
 })

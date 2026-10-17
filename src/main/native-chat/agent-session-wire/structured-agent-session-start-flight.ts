@@ -29,6 +29,10 @@ export class StructuredAgentSessionStartFlights {
     return this.flying.get(sessionId)
   }
 
+  has(sessionId: string): boolean {
+    return this.flying.has(sessionId)
+  }
+
   isCurrent(sessionId: string, attemptId: string): boolean {
     return this.flying.get(sessionId)?.attemptId === attemptId
   }

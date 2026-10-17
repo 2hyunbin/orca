@@ -188,6 +188,8 @@ export function structuredAgentSessionWorkingAtStop(input: {
   getRecord: (sessionId: string) => AgentSessionRecord | null
   /** The session's child records, the same read the status feed publishes. */
   childWork: (sessionId: string) => readonly AgentChildWorkView[] | undefined
+  /** Child work the provider reported running and not over, recorded or not. */
+  childWorkOpen: (sessionId: string) => boolean
   trigger: AgentSessionResumeTrigger
   /** Stable teardown identity for continuation deduplication, not launch ancestry. */
   teardownId: string
@@ -217,7 +219,8 @@ export function structuredAgentSessionWorkingAtStop(input: {
     session.child.fence,
     scope
   )
-  if (status.state === 'done') {
+  // A helper the bounded store refused is still work to resume; `tasks` names only recorded ones.
+  if (status.state === 'done' && !input.childWorkOpen(sessionId)) {
     return null
   }
   const work = structuredAgentSessionResumeWork(current.items, handedOver, scope)

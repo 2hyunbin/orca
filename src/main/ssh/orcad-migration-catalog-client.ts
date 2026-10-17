@@ -160,7 +160,8 @@ const ServerRepositoriesSchema = z.object({
       id: z.string().min(1),
       path: z.string().min(1),
       connectionId: z.string().nullish(),
-      executionHostId: z.string().nullish()
+      executionHostId: z.string().nullish(),
+      projectGroupId: z.string().nullish()
     })
   )
 })
@@ -179,11 +180,12 @@ export async function listRemoteOrcadRepositories(
     throw new Error(`orcad_migration_repositories_failed:${response.error.message}`)
   }
   return ServerRepositoriesSchema.parse(response.result).repos.map(
-    ({ id, path, connectionId, executionHostId }) => ({
+    ({ id, path, connectionId, executionHostId, projectGroupId }) => ({
       id,
       path,
       ...(connectionId != null ? { connectionId } : {}),
-      ...(executionHostId != null ? { executionHostId } : {})
+      ...(executionHostId != null ? { executionHostId } : {}),
+      ...(projectGroupId != null ? { projectGroupId } : {})
     })
   )
 }

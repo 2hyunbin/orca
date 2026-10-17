@@ -10,11 +10,13 @@ import type { PaneSide } from '../../../shared/workspace-layout/terminal-pane-tr
 import type { LayoutEditorFile } from '../../../shared/workspace-layout/workspace-layout-model'
 import type { EditorTabContentType } from '@/store/slices/editor/tabs/editor-tab-content-type'
 import type {
+  EditorFileRename,
   GroupSide,
   LayoutApplyReply,
   LayoutCommandResult,
   LayoutRefusalCode,
-  NewGroupSplit
+  NewGroupSplit,
+  TabTitle
 } from '../../../shared/workspace-layout/workspace-layout-command-types'
 
 /** What a window sends `layout.apply`; main mints any new id but one the window already drew. */
@@ -36,8 +38,15 @@ export type WindowLayoutCommand =
   | { type: 'splitGroup'; tabId: string; besideGroupId: string; direction: GroupSide }
   | { type: 'setGroupRatios'; groupLayout: TabGroupLayoutNode }
   | { type: 'closeTabs'; tabIds: [string]; recordClose?: 'user' | 'cleanup' }
-  | { type: 'renameTab'; tabId: string; kind: 'custom'; title: string | null }
-  | { type: 'setTabProps'; tabId: string; color?: string | null; isPinned?: boolean }
+  | ({ type: 'renameTab'; tabId: string } & TabTitle)
+  | {
+      type: 'setTabProps'
+      tabId: string
+      color?: string | null
+      isPinned?: boolean
+      viewMode?: 'terminal' | 'chat'
+      clearLaunchAgent?: true
+    }
   | {
       type: 'movePaneToNewTab'
       tabId: string
@@ -84,6 +93,7 @@ export type WindowLayoutCommand =
       groupId: string
       file?: LayoutEditorFile
     }
+  | { type: 'renameEditorFiles'; renames: EditorFileRename[] }
   | { type: 'sleep'; tabId: string; paneKeys: string[]; records: SleepingAgentSessionRecord[] }
   | { type: 'wake'; tabId: string; paneKeys: [string] }
 

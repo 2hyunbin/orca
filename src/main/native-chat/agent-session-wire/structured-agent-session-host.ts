@@ -133,8 +133,7 @@ export class StructuredAgentSessionHost {
       resolveRecovery: (sessionId) => this.runtimeState.resolveRecovery(sessionId),
       serialize: (sessionId, task) => this.serialize(sessionId, task),
       hasSession: this.hasSession,
-      // Site 10: cannot overwrite a live entry — the restorer returns early on
-      // `hasSession` inside the same serialized step as this `set`.
+      // The restorer returns on `hasSession` in this same step, so this never overwrites a live entry.
       onReadable: this.conversationDelivery.adoptOpened,
       onUnopened: (sessionId) => this.tabs.markUnopened(sessionId)
     })
@@ -156,6 +155,7 @@ export class StructuredAgentSessionHost {
     this.restartResume = createStructuredAgentSessionRestartResume(deps, this.sessions, {
       ...structuredAgentSessionRestartResumeSurfaces(this, this.now),
       readChildWork: this.clientDelivery.readChildWork,
+      childWorkOpen: this.clientDelivery.childWorkOpen,
       publishStatus: this.clientDelivery.publishStatusAndSettlement
     })
     this.lifetime = createStructuredAgentSessionConversationLifetime({
@@ -164,11 +164,10 @@ export class StructuredAgentSessionHost {
       serialize: (sessionId, task) => this.serialize(sessionId, task),
       open: (sessionId) => this.conversationDelivery.open(sessionId),
       // A start in flight is execution under way, even before the loop or an operation sees a child.
-      deliveryActive: (sessionId) =>
-        this.conversationDelivery.loop.isRunning(sessionId) ||
-        this.runtimeState.startFlights.get(sessionId) !== undefined,
+      deliveryActive: (id) =>
+        this.conversationDelivery.loop.isRunning(id) || this.runtimeState.startFlights.has(id),
       closeStatus: (sessionId, options) => this.clientDelivery.closeSession(sessionId, options),
-      readChildWork: this.clientDelivery.readChildWork
+      childWorkOpen: this.clientDelivery.childWorkOpen
     })
     this.runtimeState.startLeaseRenewal()
     this.lifetime.idleSweep.start()
@@ -279,6 +278,8 @@ export class StructuredAgentSessionHost {
       conversation: this.lifetime.conversation,
       readChildWork: this.clientDelivery.readChildWork,
       publishChildWork: this.clientDelivery.publishChildWork,
+      captureChildWorkStops: this.clientDelivery.captureChildWorkStops,
+      childWorkOpen: this.clientDelivery.childWorkOpen,
       childWorkIncomplete: this.clientDelivery.childWorkIncomplete,
       serialize: (sessionId, task) => this.serialize(sessionId, task),
       openConversation: this.conversationDelivery.open,

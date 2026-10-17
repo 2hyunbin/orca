@@ -31,6 +31,8 @@ import type { SshTargetOrcadClaims } from './ssh-target-orcad-claims'
 export type OrcadServerRepository = Pick<Repo, 'id' | 'path'> & {
   connectionId?: string | null
   executionHostId?: string | null
+  /** Proves the server holds this group: its record, not this desktop's copy, wins on relink. */
+  projectGroupId?: string | null
 }
 
 /**
@@ -78,16 +80,56 @@ async function serverHeldRepositoriesToLink(
   return state.state === 'committed' ? held.otherId : [...held.otherId, ...held.sameId]
 }
 
-/** The source the cutover was cut from: the real store less any project it linked. */
+/**
+ * Source groups the server's projects sit in, and their ancestors, renamed there perhaps since:
+ * re-importing this desktop's retained copy would conflict with the server's. An ancestor the
+ * server may lack still moves while a moving row needs it.
+ */
+function serverHeldProjectGroups(
+  payload: OrcadMigrationSourceCutover['manifest']['payload'],
+  linkedRepositoryIds: ReadonlySet<string>,
+  server: readonly OrcadServerRepository[]
+): string[] {
+  const parentById = new Map(payload.projectGroups.map((group) => [group.id, group.parentGroupId]))
+  const held = new Set(server.flatMap((repo) => (repo.projectGroupId ? [repo.projectGroupId] : [])))
+  const withAncestors = (ids: (string | null | undefined)[], stopAt: ReadonlySet<string>) => {
+    const out = new Set<string>()
+    while (ids.length > 0) {
+      const id = ids.pop()
+      if (id && !out.has(id) && !stopAt.has(id) && parentById.has(id)) {
+        out.add(id)
+        ids.push(parentById.get(id))
+      }
+    }
+    return out
+  }
+  const candidates = withAncestors([...held], new Set())
+  const needed = withAncestors(
+    [
+      ...payload.repositories
+        .filter((repo) => !linkedRepositoryIds.has(repo.id))
+        .map((repo) => repo.projectGroupId),
+      ...payload.folderWorkspaces.map((workspace) => workspace.projectGroupId),
+      ...payload.projectGroups
+        .filter((group) => !candidates.has(group.id))
+        .map((group) => group.parentGroupId)
+    ],
+    held
+  )
+  return [...candidates].filter((id) => !needed.has(id))
+}
+
+/** The source the cutover was cut from: the real store less any project or group it linked. */
 export function linkedOrcadMigrationSource(
   store: Store,
   cutover: Pick<
     OrcadMigrationSourceCutover,
-    'sshTargetId' | 'destinationEnvironmentId' | 'linkedRepositoryIds'
+    'sshTargetId' | 'destinationEnvironmentId' | 'linkedRepositoryIds' | 'linkedProjectGroupIds'
   >
 ): (() => OrcadDeltaSourceStore) | undefined {
   const linked = cutover.linkedRepositoryIds ?? []
-  if (linked.length === 0) {
+  const linkedGroups = cutover.linkedProjectGroupIds ?? []
+  if (linked.length === 0 && linkedGroups.length === 0) {
     return undefined
   }
   return () => {
@@ -103,7 +145,8 @@ export function linkedOrcadMigrationSource(
         folderWorkspaceIds: new Set(),
         projectGroupIds: new Set()
       },
-      cutover.destinationEnvironmentId
+      cutover.destinationEnvironmentId,
+      new Set(linkedGroups)
     )
   }
 }
@@ -190,11 +233,8 @@ export async function linkServerHeldRepositories(args: {
   if (cutover.phase !== 'source-fenced' && cutover.phase !== 'destination-staged') {
     return cutover
   }
-  const linked = await serverHeldRepositoriesToLink(
-    cutover,
-    args.destination,
-    await args.serverRepositories()
-  )
+  const serverRepositories = await args.serverRepositories()
+  const linked = await serverHeldRepositoriesToLink(cutover, args.destination, serverRepositories)
   if (linked.length === 0) {
     return cutover
   }
@@ -203,7 +243,21 @@ export async function linkServerHeldRepositories(args: {
   // The relinked manifest is cut from the source as fenced, so it must still be that source.
   source.verifyFence(cutover)
   const linkedRepositoryIds = [...new Set([...(cutover.linkedRepositoryIds ?? []), ...linked])]
-  const view = linkedOrcadMigrationSource(args.store, { ...cutover, linkedRepositoryIds })?.()
+  const linkedProjectGroupIds = [
+    ...new Set([
+      ...(cutover.linkedProjectGroupIds ?? []),
+      ...serverHeldProjectGroups(
+        cutover.manifest.payload,
+        new Set(linkedRepositoryIds),
+        serverRepositories
+      )
+    ])
+  ]
+  const linkedIds = {
+    linkedRepositoryIds,
+    ...(linkedProjectGroupIds.length > 0 ? { linkedProjectGroupIds } : {})
+  }
+  const view = linkedOrcadMigrationSource(args.store, { ...cutover, ...linkedIds })?.()
   const target = args.store.getSshTarget(cutover.sshTargetId)
   if (!view || !target) {
     throw new Error('orcad_migration_source_fence_lost')
@@ -219,7 +273,7 @@ export async function linkServerHeldRepositories(args: {
     updatedAt: (args.now ?? (() => new Date()))().toISOString(),
     manifestSha256: manifest.manifestSha256,
     manifest,
-    linkedRepositoryIds,
+    ...linkedIds,
     // The retained rows still hold the linked projects, so the baseline is the whole fenced source.
     sourceBaselineFingerprint:
       cutover.sourceBaselineFingerprint ?? orcadCatalogFingerprint(cutover.manifest.payload)

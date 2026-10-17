@@ -126,6 +126,11 @@ export function cancelStructuredAgentSessionTurn(
         ...params,
         childWork: () => context.readChildWork(sessionId),
         acknowledgeStops: (evidence) => context.publishChildWork(sessionId, evidence),
+        captureStops: (targets) =>
+          context.captureChildWorkStops(
+            sessionId,
+            targets.map((target) => target.providerId)
+          ),
         // Untargeted, with work no record lists: the idle sweep's stop ends it with the agent.
         ...(params.taskId === undefined
           ? {

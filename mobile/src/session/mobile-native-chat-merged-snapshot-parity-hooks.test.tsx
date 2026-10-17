@@ -44,6 +44,7 @@ vi.mock('react-native', async () => {
     View: 'View'
   }
 })
+vi.mock('../platform/use-reduced-motion', () => ({ useReducedMotionEnabled: () => null }))
 vi.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 })
 }))
@@ -62,6 +63,9 @@ vi.mock('lucide-react-native', () => ({
   Square: 'Square'
 }))
 vi.mock('./MobileNativeChatMessage', () => ({ MobileNativeChatMessage: 'ChatMessage' }))
+vi.mock('./MobileNativeChatMessageActionsSheet', () => ({
+  MobileNativeChatMessageActionsSheet: 'MessageActionsSheet'
+}))
 vi.mock('./MobileNativeChatLiveLine', () => ({ MobileNativeChatLiveLine: 'LiveStatus' }))
 vi.mock('./MobileNativeChatComposer', () => ({ MobileNativeChatComposer: 'Composer' }))
 vi.mock('./MobileNativeChatQueuedMessages', () => ({ MobileNativeChatQueuedMessages: 'Queued' }))
