@@ -5,6 +5,7 @@ import type { SplitTerminalPaneDetail } from '@/constants/terminal'
 import { BACKGROUND_WORKTREE_MEASURE_WINDOW_MS } from '../terminal/background-terminal-worktree-visibility'
 import {
   _resetTerminalPaneSplitRequestRoutingForTests,
+  cancelQueuedTerminalPaneSplitForLeaf,
   cancelQueuedTerminalPaneSplitRequests,
   dispatchTerminalPaneSplitRequest,
   hasTerminalPaneSplitMountLease,
@@ -175,5 +176,39 @@ describe('withoutQueuedMainSplits', () => {
     })
     expect(withoutQueuedMainSplits(layout, 'tab-1', 'wt-1')).toBe(layout)
     _resetTerminalPaneSplitRequestRoutingForTests()
+  })
+})
+
+describe('cancelQueuedTerminalPaneSplitForLeaf', () => {
+  const split = (newLeafId: string): SplitTerminalPaneDetail => ({
+    ...splitRequest('tab-parked'),
+    worktreeId: 'wt-1',
+    newLeafId
+  })
+
+  it('drops only the closed pane’s split, and the lease with the tab’s last one', () => {
+    queueTerminalPaneSplitRequest(split('leaf-a'))
+    queueTerminalPaneSplitRequest(split('leaf-b'))
+
+    cancelQueuedTerminalPaneSplitForLeaf('tab-parked', 'leaf-a')
+    expect(hasTerminalPaneSplitMountLease('tab-parked')).toBe(true)
+    cancelQueuedTerminalPaneSplitForLeaf('tab-other', 'leaf-b')
+    expect(hasTerminalPaneSplitMountLease('tab-parked')).toBe(true)
+
+    cancelQueuedTerminalPaneSplitForLeaf('tab-parked', 'leaf-b')
+    expect(hasTerminalPaneSplitMountLease('tab-parked')).toBe(false)
+    expect(takeQueuedTerminalPaneSplitRequests('tab-parked', 'wt-1')).toEqual([])
+  })
+
+  it('keeps the lease of another split still waiting there', () => {
+    queueTerminalPaneSplitRequest(split('leaf-a'))
+    queueTerminalPaneSplitRequest(split('leaf-b'))
+
+    cancelQueuedTerminalPaneSplitForLeaf('tab-parked', 'leaf-b')
+
+    expect(hasTerminalPaneSplitMountLease('tab-parked')).toBe(true)
+    expect(
+      takeQueuedTerminalPaneSplitRequests('tab-parked', 'wt-1').map((r) => r.newLeafId)
+    ).toEqual(['leaf-a'])
   })
 })

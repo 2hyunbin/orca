@@ -18,20 +18,13 @@ import {
   terminalLayoutsPatch
 } from '@/store/workspace-layout-frame-store-patch'
 import { buildWorkspaceSessionPayload } from '@/lib/workspace-session'
-import { buildHostIdByWorktreeId } from '@/lib/workspace-session-host-persistence'
-import {
-  splitWorkspaceSessionByHost,
-  type HostIdByWorktreeId
-} from '@/lib/workspace-session-host-split'
+import { pairedServerMirrors } from './paired-server-workspace'
+import { splitWorkspaceSessionByHost } from '@/lib/workspace-session-host-split'
 import {
   isWindowSessionWriteBusy,
   onWindowSessionWriteIdle
 } from '@/lib/window-session-write-activity'
-import {
-  LOCAL_EXECUTION_HOST_ID,
-  parseExecutionHostId,
-  type ExecutionHostId
-} from '../../../shared/execution-host'
+import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../shared/execution-host'
 import type { TerminalTabTitleUpdate } from '@/store/slices/terminal-tab-title-batch'
 import { loadWorkspaceLayoutWithoutReport } from '../../../shared/workspace-layout/workspace-layout-load'
 import { stableJson } from '../../../shared/workspace-layout/workspace-layout-load-report'
@@ -123,14 +116,9 @@ function liveTitleUpdates(
 
 /** Which workspaces frames draw: ones the window holds that no paired server mirrors. */
 function framesDrawWorkspace(state: AppState): (key: string) => boolean {
-  let hostIdOf: HostIdByWorktreeId | null = null
-  return (key) => {
-    if (!(key in state.groupsByWorktree || key in state.unifiedTabsByWorktree)) {
-      return false
-    }
-    hostIdOf ??= buildHostIdByWorktreeId(state)
-    return parseExecutionHostId(hostIdOf(key))?.kind !== 'runtime'
-  }
+  const mirrored = pairedServerMirrors(state)
+  return (key) =>
+    (key in state.groupsByWorktree || key in state.unifiedTabsByWorktree) && !mirrored(key)
 }
 
 export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLayoutFrameSync {

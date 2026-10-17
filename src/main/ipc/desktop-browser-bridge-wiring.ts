@@ -16,6 +16,7 @@ import {
   getPreferredPairedRuntimeConnection
 } from '../../shared/runtime-environments'
 import { getManagedOrcadFenceEnvironmentId } from '../../shared/managed-orcad-ssh-owner'
+import { isRemoteCliControlAllowed } from '../../shared/ssh-remote-cli-control'
 import { browserManager } from '../browser/browser-manager'
 import {
   DesktopBrowserBridgeManager,
@@ -49,25 +50,25 @@ function log(message: string): void {
   console.info(`[desktop-browser-bridge] ${message}`)
 }
 
-function listDesktopBrowserBridgeCandidates(
+export function listDesktopBrowserBridgeCandidates(
   userDataPath: string,
   connections: Pick<SshConnectionManager, 'getState'> | null
 ): DesktopBrowserBridgeCandidate[] {
   const candidates: DesktopBrowserBridgeCandidate[] = []
   for (const target of getSshTargetRegistryStore()?.listTargets() ?? []) {
-    // Why strict true: the setting is opt-in, and an absent value is off.
-    if (target.allowRemoteCliControl !== true) {
+    if (!isRemoteCliControlAllowed(target)) {
       continue
     }
     if (connections?.getState(target.id)?.status !== 'connected') {
       continue
     }
-    // Why: an unrouted host's pages egress from this desktop, so it must not stay attached at all.
-    if (!isSshTargetBrowsingRouted(target.id)) {
-      continue
-    }
+    // Why first: with the switch on by default, every plain host reaches here; only managed ones qualify.
     const environmentId = getManagedOrcadFenceEnvironmentId(target)
     if (!environmentId || isRuntimeEnvironmentManuallyDisconnected(environmentId)) {
+      continue
+    }
+    // Why: an unrouted host's pages egress from this desktop, so it must not stay attached at all.
+    if (!isSshTargetBrowsingRouted(target.id)) {
       continue
     }
     try {

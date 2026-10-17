@@ -10,6 +10,7 @@
 import { getAutomationRunRepoId } from '../../shared/automation-run-identity'
 import type { Automation } from '../../shared/automations-types'
 import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-path'
+import { isRepoOnCatalogHost } from '../../shared/execution-host'
 import type { OrcadMigrationSourceCutover } from '../../shared/orcad-migration-source-cutover'
 import type { Repo } from '../../shared/repo-types'
 import type { SshManagedServerLinkedProject } from '../../shared/ssh-types'
@@ -27,18 +28,22 @@ import { sshRelayMigrationCutoverPort } from './orcad-migration-ssh-relay-source
 import { orcadCatalogFingerprint } from './orcad-retained-source'
 import type { SshTargetOrcadClaims } from './ssh-target-orcad-claims'
 
-export type OrcadServerRepository = Pick<Repo, 'id' | 'path'>
+export type OrcadServerRepository = Pick<Repo, 'id' | 'path'> & {
+  connectionId?: string | null
+  executionHostId?: string | null
+}
 
 /**
  * Incoming projects the server holds at the same host path. `sameId` is the server's copy of this
- * desktop's own row, from an earlier move into the profile a stopped server left (#29560).
+ * desktop's own row, from an earlier move into the profile a stopped server left (#29560). Only the
+ * server machine's own rows count: one it reaches on another host is a different checkout.
  */
 export function repositoriesHeldByServer(
   incoming: readonly OrcadServerRepository[],
   server: readonly OrcadServerRepository[]
 ): { otherId: string[]; sameId: string[] } {
   const serverIdsByPath = new Map<string, Set<string>>()
-  for (const repo of server) {
+  for (const repo of server.filter(isRepoOnCatalogHost)) {
     const key = normalizeRuntimePathForComparison(repo.path)
     serverIdsByPath.set(key, (serverIdsByPath.get(key) ?? new Set()).add(repo.id))
   }

@@ -8708,8 +8708,7 @@
           "addDescription": "SSH로 로그인할 수 있는 영구 머신을 추가합니다.",
           "editingPrefix": "편집 중",
           "allowRemoteCliControl": "이 호스트의 orca CLI가 Orca를 제어하도록 허용",
-          "allowRemoteCliControlHelp": "켜면 이 호스트에서 실행한 orca 명령이 이 호스트의 작업 공간에서만, 연결되어 있는 동안에만 이 데스크톱의 Orca 브라우저 탭을 열고 조작할 수 있습니다. 이 호스트에서 이전 버전의 Orca가 시작한 터미널도 자신이 감독받는 작업에 대해 오케스트레이션 명령(check, inbox, send, ask, reply)을 실행할 수 있습니다. 파일, 클립보드, 쿠키는 읽을 수 없습니다. 끄면 이 호스트 자체의 Orca 서버에만 접근합니다.",
-          "allowRemoteCliControlReset": "업데이트 후 Orca가 이 설정을 껐습니다. 이제 이 호스트가 데스크톱 브라우저를 조작할 수 있고, 이 호스트에서 이전 버전의 Orca가 시작한 터미널이 오케스트레이션 명령을 실행할 수 있게 되었기 때문입니다. 원하는 경우에만 다시 켜세요."
+          "allowRemoteCliControlHelp": "기본적으로 켜져 있습니다. 이 호스트에서 실행한 orca 명령이 이 호스트의 작업 공간에서만, 연결되어 있는 동안에만 이 데스크톱의 Orca 브라우저 탭을 열고 조작할 수 있게 하고, 이 호스트에서 이전 버전의 Orca가 시작한 터미널이 자신이 감독받는 작업에 대해 오케스트레이션 명령(check, inbox, send, ask, reply)을 실행할 수 있게 합니다. 파일, 클립보드, 쿠키는 읽을 수 없습니다. 끄면 이 호스트 자체의 Orca 서버에만 접근합니다."
         },
         "TasksPane": {
           "f71d8a9dd3": "작업 제공자",
