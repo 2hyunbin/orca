@@ -74,6 +74,7 @@ describe('buildWorkspaceRowComparator', () => {
     const ranks: Record<string, number | null> = { a: null, b: 1, c: 5, d: null }
     const compare = buildWorkspaceRowComparator<string>('manual', {
       label: (id) => id,
+      identity: (id) => id,
       repoLabel: () => '',
       recentActivity: () => 0,
       manualRank: (id) => ranks[id] ?? null,

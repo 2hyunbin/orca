@@ -8,6 +8,7 @@ import type { ProjectOrderBy } from '../ui-chrome-types'
 import { getEffectiveProjectGroupManualRank } from '../project-groups'
 import { getProjectGroupHeaderKey } from './group-keys'
 import { appendOrderedGroups } from './group-sections'
+import { compareCodePoints, compareSidebarText } from './text-order'
 import type { SectionAppendContext } from './group-sections'
 import type { OrderedGroupEntry } from './worktree-group-entry'
 import {
@@ -84,7 +85,11 @@ export function appendProjectGroupSections(
   }
   for (const groups of childGroupsByParentId.values()) {
     groups.sort(
-      (left, right) => left.tabOrder - right.tabOrder || left.name.localeCompare(right.name)
+      (left, right) =>
+        left.tabOrder - right.tabOrder ||
+        compareSidebarText(left.name, right.name) ||
+        compareCodePoints(left.executionHostId ?? '', right.executionHostId ?? '') ||
+        compareCodePoints(left.id, right.id)
     )
   }
 

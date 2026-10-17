@@ -3,6 +3,7 @@ import type { ProjectGroup } from '../project-group-types'
 import type { WorkspaceStatusDefinition } from '../worktree/types'
 import { getWorkspaceStatus, getWorkspaceStatusGroupKey } from '../workspace-statuses'
 import { ALL_GROUP_KEY, getPRLaneKey } from './group-keys'
+import { compareCodePoints, compareSidebarText } from './text-order'
 import type { WorktreeGroupBy } from './row-types'
 
 /** A folder workspace paired with the project group that owns it. The pair is
@@ -70,5 +71,10 @@ export function compareFolderWorkspacesForDisplay(
 ): number {
   const leftOrder = left.manualOrder ?? left.sortOrder
   const rightOrder = right.manualOrder ?? right.sortOrder
-  return rightOrder - leftOrder || left.name.localeCompare(right.name)
+  return (
+    rightOrder - leftOrder ||
+    compareSidebarText(left.name, right.name) ||
+    compareCodePoints(left.executionHostId ?? '', right.executionHostId ?? '') ||
+    compareCodePoints(left.id, right.id)
+  )
 }

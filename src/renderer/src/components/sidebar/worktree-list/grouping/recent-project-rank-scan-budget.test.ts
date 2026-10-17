@@ -120,7 +120,7 @@ describe('recent project rank scan budget', () => {
     expect(readCount()).toBe(128 * 33)
   })
 
-  it('preserves identity collisions, manual ties, stable ties and missing activity fallbacks', () => {
+  it('preserves identity collisions, manual ties, key-ordered label ties and missing activity fallbacks', () => {
     const hottest = entry('collision', 'hottest', [10, 300, 20])
     const hot = entry('collision', 'hot', [200])
     const tieA = entry('a', 'same', [100], 0, ['tie'])
@@ -159,9 +159,10 @@ describe('recent project rank scan budget', () => {
       hottest,
       hot,
       tieRank,
+      // Equal labels fall to the section key, so input order cannot decide them.
+      tieA,
       tieA,
       tieB,
-      tieA,
       emptyNew,
       invalid,
       missing,
