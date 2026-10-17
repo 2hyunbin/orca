@@ -51,7 +51,8 @@ function buildSessionListQuery(db: SyncDatabase, limited: boolean, scoped: boole
 function readSessionRows(
   db: SyncDatabase,
   limit: number,
-  scopePaths: readonly string[] | undefined
+  scopePaths: readonly string[] | undefined,
+  dbPath: string
 ): SessionRow[] {
   if (!canReadOpenCodeSessions(db)) {
     return []
@@ -60,8 +61,12 @@ function readSessionRows(
   const limited = Number.isFinite(limit) && !scoped
   const statement = db.prepare(buildSessionListQuery(db, limited, scoped))
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the query above selects exactly these columns.
-  const rows = (limited ? statement.all(limit) : statement.all()) as SessionRow[]
-  return scoped && scopePaths ? scopedSessionRows(rows, scopePaths, limit) : rows
+  const rows = (
+    limited ? statement.all(limit) : scoped ? statement.iterate() : statement.all()
+  ) as Iterable<SessionRow>
+  return scoped && scopePaths
+    ? scopedSessionRows(rows, scopePaths, limit, dbPath)
+    : Array.from(rows)
 }
 
 function rowToCandidate(
@@ -129,7 +134,7 @@ export async function listOpenCodeSqliteSessions(args: {
     try {
       const rows = readOpenCodeDatabase({
         dbPath,
-        read: (db) => readSessionRows(db, args.limit, args.scopePaths)
+        read: (db) => readSessionRows(db, args.limit, args.scopePaths, dbPath)
       })
       for (const row of rows) {
         candidates.push(rowToCandidate(row, dbPath, agent))

@@ -43,7 +43,7 @@ export function truncateAiVaultListResult(
     const inScope = createAiVaultScopeCwdMatcher(scopePaths)
     let scopedCount = 0
     for (const session of result.sessions) {
-      if (inScope(session.cwd)) {
+      if (inScope(session.cwd, session.filePath)) {
         selectedIds.add(session.id)
         if (++scopedCount >= depth) {
           break

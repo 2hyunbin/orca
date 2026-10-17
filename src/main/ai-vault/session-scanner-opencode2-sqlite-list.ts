@@ -115,10 +115,14 @@ export async function listOpenCode2SqliteSessions(args: {
       }
       const limited = Number.isFinite(args.limit) && !scoped
       const statement = db.prepare(buildSessionListQuery(db, limited, scoped))
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Runtime validation or the local test fixture establishes the asserted shape.
-      const listed = (limited ? statement.all(args.limit) : statement.all()) as SessionRow[]
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the query above selects exactly these metadata columns.
+      const listed = (
+        limited ? statement.all(args.limit) : scoped ? statement.iterate() : statement.all()
+      ) as Iterable<SessionRow>
       const rows =
-        scoped && args.scopePaths ? scopedSessionRows(listed, args.scopePaths, args.limit) : listed
+        scoped && args.scopePaths
+          ? scopedSessionRows(listed, args.scopePaths, args.limit, dbPath)
+          : listed
       for (const row of rows) {
         candidates.push(rowToCandidate(row, dbPath))
       }

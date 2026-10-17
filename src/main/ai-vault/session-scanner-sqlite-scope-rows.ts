@@ -1,19 +1,24 @@
 import { createAiVaultScopeCwdMatcher } from '../../shared/ai-vault-scope-cwd-match'
 
-/**
- * A scoped list reads every row's `directory` and keeps the newest `limit` in
- * scope, so the scope applies before the cap. A schema without the column cannot
- * say, so its rows stay candidates and the parsed cwd decides.
- */
+/** Foreign databases need canonical descendant matching before output admission. */
 export function scopedSessionRows<Row extends { directory?: unknown }>(
-  rows: readonly Row[],
+  rows: Iterable<Row>,
   scopePaths: readonly string[],
-  limit: number
+  limit: number,
+  dbPath: string
 ): Row[] {
   const inScope = createAiVaultScopeCwdMatcher(scopePaths)
-  const matching = rows.filter(
-    (row) =>
-      !('directory' in row) || inScope(typeof row.directory === 'string' ? row.directory : null)
-  )
-  return Number.isFinite(limit) ? matching.slice(0, limit) : matching
+  const matching: Row[] = []
+  for (const row of rows) {
+    if (
+      !('directory' in row) ||
+      inScope(typeof row.directory === 'string' ? row.directory : null, dbPath)
+    ) {
+      matching.push(row)
+      if (matching.length >= limit) {
+        break
+      }
+    }
+  }
+  return matching
 }

@@ -3,9 +3,20 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { truncateAiVaultListResult } from '../../shared/ai-vault-session-depth'
+import { parseSessionCandidates } from './session-scanner-candidate-parse'
+import {
+  storeSessionParseCacheEntry,
+  resetSessionParseCacheForTests
+} from './session-parse-cache-store'
+import { createSessionParseStats } from './session-scanner-parse-cache'
 import { scanAiVaultSessions } from './session-scanner'
 import { resetTranscriptHeadCwdCacheForTests } from './session-scope-cwd'
-import { isolatedScanRoots, jsonLines } from './session-scanner-test-fixtures'
+import {
+  isolatedScanRoots,
+  jsonLines,
+  writeAntigravityTranscript,
+  writeAntigravityHistory
+} from './session-scanner-test-fixtures'
 
 let tempRoots: string[] = []
 
@@ -13,6 +24,7 @@ afterEach(async () => {
   await Promise.all(tempRoots.map((root) => rm(root, { recursive: true, force: true })))
   tempRoots = []
   resetTranscriptHeadCwdCacheForTests()
+  resetSessionParseCacheForTests()
 })
 
 async function writeRollout(sessionsDir: string, id: string, cwd: string, day: string) {
@@ -73,4 +85,105 @@ describe('scanAiVaultSessions — scope before the recency cap', () => {
       truncateAiVaultListResult(scoped, 2, [workspace]).sessions.map((s) => s.sessionId)
     ).toContain('01a14083-old')
   })
+})
+
+it('keeps an older Antigravity session in scope across warm scans and changed history', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'orca-scope-history-'))
+  tempRoots.push(root)
+  const roots = isolatedScanRoots(root)
+  await writeRollout(roots.codexSessionsDir, 'newer', '/other', '15')
+  const timestamp = '2026-10-11T10:00:00.000Z'
+  const path = await writeAntigravityTranscript(roots.antigravityBrainDir, 'older', [
+    { source: 'USER_EXPLICIT', type: 'USER_INPUT', created_at: timestamp, content: 'Find me' }
+  ])
+  await utimes(path, new Date(timestamp), new Date(timestamp))
+  const history = (workspace: string) =>
+    writeAntigravityHistory(roots.antigravityBrainDir, [
+      { conversationId: 'older', display: 'Find me', timestamp, workspace }
+    ])
+  const scan = () =>
+    scanAiVaultSessions({ ...roots, platform: 'linux', limit: 1, scopePaths: ['/repo'] })
+  await history('/repo')
+  expect((await scan()).sessions.map((row) => row.sessionId)).toContain('older')
+  expect((await scan()).sessions.map((row) => row.sessionId)).toContain('older')
+  await history('/elsewhere')
+  expect((await scan()).sessions.map((row) => row.sessionId)).not.toContain('older')
+  await history('/repo')
+  expect((await scan()).sessions.map((row) => row.sessionId)).toContain('older')
+})
+
+it('admits the newest scoped activity when copied Hermes files have newer mtimes', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'orca-scope-activity-'))
+  tempRoots.push(root)
+  const roots = isolatedScanRoots(root)
+  await writeRollout(roots.codexSessionsDir, 'newer', '/other', '15')
+  await mkdir(roots.hermesSessionsDir, { recursive: true })
+  const base = Date.parse('2026-10-10T00:00:00.000Z')
+  for (let index = 0; index < 17; index++) {
+    const path = join(roots.hermesSessionsDir, `session_${index}.json`)
+    await writeFile(
+      path,
+      JSON.stringify({
+        session_id: `hermes-${index}`,
+        cwd: '/repo',
+        message_count: 1,
+        last_updated: new Date(base + (index === 16 ? 980 : 100)).toISOString()
+      })
+    )
+    await utimes(path, new Date(base + 1000 - index), new Date(base + 1000 - index))
+  }
+  const scan = (limit: number) =>
+    scanAiVaultSessions({ ...roots, platform: 'linux', limit, scopePaths: ['/repo'] })
+  const result = await scan(1)
+  expect(result.sessions.filter((row) => row.cwd === '/repo').map((row) => row.sessionId)).toEqual([
+    'hermes-16'
+  ])
+  expect(result.sessions.some((row) => row.sessionId === 'newer')).toBe(true)
+  expect(
+    truncateAiVaultListResult(result, 1, ['/repo'])
+      .sessions.filter((row) => row.cwd === '/repo')
+      .map((row) => row.sessionId)
+  ).toEqual(['hermes-16'])
+  expect(
+    truncateAiVaultListResult(await scan(2), 1, ['/repo'])
+      .sessions.filter((row) => row.cwd === '/repo')
+      .map((row) => row.sessionId)
+  ).toEqual(['hermes-16'])
+})
+
+it('delivers cancellation while traversing unchanged cached candidates', async () => {
+  const candidates = Array.from({ length: 512 }, (_, index) => {
+    const file = {
+      path: `/cached/${index}.json`,
+      mtimeMs: 1,
+      modifiedAt: new Date(1).toISOString()
+    }
+    storeSessionParseCacheEntry(file.path, {
+      mtimeMs: 1,
+      sizeBytes: null,
+      platform: 'linux',
+      session: null,
+      resume: null
+    })
+    return { agent: 'hermes' as const, file, codexHome: null }
+  })
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 0)
+  try {
+    await expect(
+      parseSessionCandidates({
+        candidates,
+        limit: 1,
+        platform: 'linux',
+        executionHostId: 'local',
+        issues: [],
+        parseStats: createSessionParseStats(),
+        signal: controller.signal,
+        listed: false,
+        selectCandidate: async () => true
+      })
+    ).rejects.toMatchObject({ name: 'AbortError' })
+  } finally {
+    clearTimeout(timer)
+  }
 })

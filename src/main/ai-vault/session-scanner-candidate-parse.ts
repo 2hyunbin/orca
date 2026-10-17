@@ -1,3 +1,4 @@
+import { yieldToEventLoop } from '../../shared/event-loop-yield'
 import { candidateFileTime } from './antigravity-transcript-candidates'
 import type { AiVaultScanIssue, AiVaultSession } from '../../shared/ai-vault-types'
 import type { ExecutionHostId } from '../../shared/execution-host'
@@ -9,13 +10,13 @@ import {
   type SessionParseStats
 } from './session-scanner-parse-cache'
 import { recordSessionScanIssue } from './session-scan-issues'
-import { getSessionParseCacheEntry } from './session-parse-cache-store'
+import { noteSessionParseCacheListed, getSessionParseCacheEntry } from './session-parse-cache-store'
 import { describeSkippedTranscriptRecords } from './session-transcript-record-budget'
 import { canStopParsingSessions } from './session-scan-cutoff'
 import type { SessionFileCandidate, SessionParseResult } from './session-scanner-types'
 import { errorMessage } from './session-scanner-values'
 import { throwIfAiVaultScanCancelled } from './ai-vault-scan-cancellation'
-import { noteAiVaultScanFilesRead } from './ai-vault-scan-progress'
+import { noteAiVaultScanFilesRead, noteAiVaultScanReading } from './ai-vault-scan-progress'
 
 const SESSION_PARSE_CONCURRENCY = 8
 
@@ -29,29 +30,61 @@ export async function parseSessionCandidates(args: {
   parseStats: SessionParseStats
   signal?: AbortSignal
   antigravityWorkspaceResolver?: AntigravityWorkspaceResolver
+  selectCandidate?: (candidate: SessionFileCandidate) => Promise<boolean>
+  admitSession?: (session: AiVaultSession) => boolean
+  listed?: boolean
 }): Promise<AiVaultSession[]> {
   const sessions = new ScannedSessionCollection()
+  let nextYieldIndex = 256
+  let nextCutoffIndex = 0
 
   for (let index = 0; index < args.candidates.length;) {
+    if (index >= nextYieldIndex) {
+      await yieldToEventLoop()
+      nextYieldIndex = index + 256
+    }
     throwIfAiVaultScanCancelled(args.signal)
-    if (
-      canStopParsingSessions(sessions, args.limit, candidateFileTime(args.candidates[index]?.file))
-    ) {
-      break
+    if (!args.selectCandidate || (Number.isFinite(args.limit) && index >= nextCutoffIndex)) {
+      if (
+        canStopParsingSessions(
+          sessions,
+          args.limit,
+          candidateFileTime(args.candidates[index]?.file)
+        )
+      ) {
+        break
+      }
+      // Exhaustive walks retain every canonical row: amortize repeated ranking over the cursor.
+      if (args.selectCandidate && sessions.size >= args.limit) {
+        nextCutoffIndex = Math.max(index * 2, index + SESSION_PARSE_CONCURRENCY)
+      }
     }
 
     const remaining = args.candidates.length - index
     const needed = Math.max(args.limit - sessions.size, 1)
-    const batchSize = Math.min(SESSION_PARSE_CONCURRENCY, needed, remaining)
+    const batchSize = Math.min(
+      SESSION_PARSE_CONCURRENCY,
+      args.selectCandidate ? remaining : needed,
+      remaining
+    )
     const batch = args.candidates.slice(index, index + batchSize)
+    index += batchSize
+    const verdicts = args.selectCandidate
+      ? await Promise.all(batch.map(args.selectCandidate))
+      : batch.map(() => true)
+    throwIfAiVaultScanCancelled(args.signal)
+    const selected = batch.filter((_, batchIndex) => verdicts[batchIndex])
+    if (args.selectCandidate) {
+      noteAiVaultScanReading(args.signal, selected.length)
+    }
     const results = await Promise.all(
-      batch.map((candidate) =>
+      selected.map((candidate) =>
         parseSessionCandidate(candidate, {
           platform: args.platform,
           executionHostId: args.executionHostId,
           parseStats: args.parseStats,
           antigravityWorkspaceResolver: args.antigravityWorkspaceResolver,
-          listed: true,
+          listed: args.listed ?? true,
           signal: args.signal
         })
       )
@@ -59,18 +92,19 @@ export async function parseSessionCandidates(args: {
     // An abort can land while a batch settles: a read it cut short is not that
     // file's issue, and a partial parse must never be cached or returned.
     throwIfAiVaultScanCancelled(args.signal)
-    noteAiVaultScanFilesRead(args.signal, batch.length)
+    noteAiVaultScanFilesRead(args.signal, selected.length)
 
-    for (const result of results) {
+    results.forEach((result, resultIndex) => {
       if (result.issue) {
         recordSessionScanIssue(args.issues, result.issue)
       }
-      if (result.session) {
+      if (result.session && (!args.admitSession || args.admitSession(result.session))) {
+        if (args.listed === false) {
+          noteSessionParseCacheListed(selected[resultIndex].file.path)
+        }
         sessions.add(result.session)
       }
-    }
-
-    index += batchSize
+    })
   }
 
   return [...sessions.values()]

@@ -103,7 +103,7 @@ export async function discoverInScopeCwdBucketFiles(
     )) {
       if (layout.agent === 'claude') {
         const cwd = await cachedProjectDirCwd(projectDir, args.issues, layout.agent)
-        if (!inScope(cwd)) {
+        if (!inScope(cwd, projectDir)) {
           continue
         }
       }
@@ -238,7 +238,7 @@ async function readFirstCwd(
 
 async function collectBucketFiles(args: {
   agent: AiVaultAgent
-  inScope?: (cwd: string | null) => boolean
+  inScope?: ReturnType<typeof createAiVaultScopeCwdMatcher>
   projectDir: string
   issues: AiVaultScanIssue[]
   collected: Map<string, FileWithMtime>
@@ -263,7 +263,7 @@ async function collectBucketFiles(args: {
     try {
       if (args.inScope) {
         const cwd = await readFirstCwd(path, args.issues, args.agent)
-        if (!args.inScope(cwd)) {
+        if (!args.inScope(cwd, path)) {
           continue
         }
       }
