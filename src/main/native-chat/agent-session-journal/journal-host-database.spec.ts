@@ -231,7 +231,7 @@ setTimeout(() => { db.exec('COMMIT'); db.close() }, 200)`,
 
     const appendOptions = { fence: 1, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
 
-    it('uses NORMAL only for maintenance and restores FULL after success or error', async () => {
+    it('shares NORMAL for streamed revisions and maintenance, restoring FULL after success or error', async () => {
       vi.useFakeTimers()
       const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
       const database = openTestJournalHostDatabase(root)
@@ -253,7 +253,7 @@ setTimeout(() => { db.exec('COMMIT'); db.close() }, 200)`,
       for (let revision = 1; revision <= 3; revision++) {
         await journal.appendItem(item(1), text(`revision ${revision}`), appendOptions)
       }
-      expect(commits.every((mode) => mode === 2)).toBe(true)
+      expect(commits).toEqual([2, 1, 1])
       commits.length = 0
       await vi.advanceTimersByTimeAsync(30_020)
       expect(commits.every((mode) => mode === 1)).toBe(true)
@@ -269,8 +269,8 @@ setTimeout(() => { db.exec('COMMIT'); db.close() }, 200)`,
       )
       expect(vi.getTimerCount()).toBe(0)
       expect(connection.pragma('synchronous', { simple: true })).toBe(2)
-      failMaintenance = true
       await journal.appendItem(item(1), text('next'), appendOptions)
+      failMaintenance = true
       await vi.runAllTimersAsync()
       expect(warned).toHaveBeenCalledWith('[journal-maintenance] stopped:', expect.any(Error))
       expect(connection.isTransaction).toBe(false)
