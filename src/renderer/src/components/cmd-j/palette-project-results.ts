@@ -12,6 +12,7 @@ import type { Project, ProjectHostSetup } from '../../../../shared/project-types
 import type { Repo } from '../../../../shared/repo-types'
 import { translate } from '@/i18n/i18n'
 import { getProjectGroupHeaderKey } from '../../../../shared/sidebar-list/group-keys'
+import { getDistinctProjectGroups } from '../../../../shared/project-groups'
 import { getProjectHeaderRevealTarget } from '../../../../shared/project-section-grouping'
 import type { ProjectGroupingModel } from '../../../../shared/project-section-grouping'
 
@@ -81,13 +82,7 @@ function buildCmdJProjectSearchCandidates({
   const repoMap = new Map(repos.map((repo) => [repo.id, repo]))
   const candidates: CmdJProjectSearchResult[] = []
 
-  const seenGroupIds = new Set<string>()
-  projectGroups.forEach((group, order) => {
-    // Why: hosts can publish one group under the same id; the sidebar draws it once (#30045).
-    if (seenGroupIds.has(group.id)) {
-      return
-    }
-    seenGroupIds.add(group.id)
+  getDistinctProjectGroups(projectGroups).forEach((group, order) => {
     candidates.push({
       id: `project-group:${group.id}`,
       kind: 'project-group',

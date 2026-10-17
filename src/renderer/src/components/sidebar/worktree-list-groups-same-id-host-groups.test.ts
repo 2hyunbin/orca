@@ -63,12 +63,14 @@ function rowsFor(projectGroups: readonly ProjectGroup[], collapsed = new Set<str
 
 describe('a project group both hosts publish under one id', () => {
   it('draws one header holding the project, not a second empty one', () => {
-    const rows = rowsFor([group('local'), group(REMOTE_HOST)])
+    const rows = rowsFor([group('local'), group(REMOTE_HOST, { name: 'Renamed on server' })])
 
     const groupHeaders = rows.filter((row) => row.type === 'header' && row.projectGroup)
     expect(groupHeaders).toHaveLength(1)
+    // The same copy every id-keyed lookup (and Cmd+J) resolves to.
     expect(groupHeaders[0]).toMatchObject({
       key: 'project-group:group-shared',
+      label: 'Renamed on server',
       count: 1
     })
     expect(rows.filter((row) => row.type === 'item')).toHaveLength(2)

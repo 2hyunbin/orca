@@ -5,7 +5,7 @@ import {
 } from './folder-workspace-lanes'
 import type { ProjectGroup } from '../project-group-types'
 import type { ProjectOrderBy } from '../ui-chrome-types'
-import { getEffectiveProjectGroupManualRank } from '../project-groups'
+import { getDistinctProjectGroups, getEffectiveProjectGroupManualRank } from '../project-groups'
 import { getProjectGroupHeaderKey } from './group-keys'
 import { appendOrderedGroups } from './group-sections'
 import { compareCodePoints, compareSidebarText } from './text-order'
@@ -76,9 +76,8 @@ export function appendProjectGroupSections(
     )
   }
   const childGroupsByParentId = new Map<string | null, ProjectGroup[]>()
-  // Why by id: hosts can publish one group under the same id (a project moved to a managed server
-  // keeps the desktop's copy, #30045); membership is id-keyed, so a second header would sit empty.
-  for (const group of projectGroupsById.values()) {
+  // Why distinct: membership is id-keyed, so a same-id copy's header would sit empty (#30045).
+  for (const group of getDistinctProjectGroups(projectGroups)) {
     const parentId =
       group.parentGroupId && projectGroupsById.has(group.parentGroupId) ? group.parentGroupId : null
     const children = childGroupsByParentId.get(parentId) ?? []
