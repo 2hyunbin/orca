@@ -38,7 +38,7 @@ function useLaunchView(
       if (current) {
         snapshot = current
       } else if (snapshot && snapshot.held !== NO_HELD_OPTIONS) {
-        snapshot = { seed: snapshot.seed, held: NO_HELD_OPTIONS }
+        snapshot = { seed: snapshot.seed, held: NO_HELD_OPTIONS, seedPending: true }
       }
       return snapshot
     }
@@ -71,18 +71,19 @@ function useLaunchView(
     })
   }
   const held = selection?.held ?? NO_HELD_OPTIONS
+  const seedPending = launching && (!selection || selection.seedPending === true)
   return useMemo(
     () =>
       intent.kind
         ? {
             kind: intent.kind,
             ...(selection?.seed ? { seedOptions: selection.seed } : {}),
-            ...(selection?.seedPending ? { seedPending: true as const } : {}),
+            ...(seedPending ? { seedPending: true as const } : {}),
             heldOptions: held,
             ...(worktreeId ? { worktree: toRuntimeWorktreeSelector(worktreeId) } : {})
           }
         : undefined,
-    [held, intent.kind, selection?.seed, selection?.seedPending, worktreeId]
+    [held, intent.kind, selection?.seed, seedPending, worktreeId]
   )
 }
 

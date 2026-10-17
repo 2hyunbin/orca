@@ -28,10 +28,8 @@ import {
 import { clearWebSessionFocusIntentIfMatches } from '@/runtime/web-session-focus-intent'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import type { NativeChatComposerFocusIntent } from '@/components/native-chat/use-native-chat-composer-reveal-focus'
-import {
-  readNativeChatComposerDraft,
-  structuredAgentSessionDraftScopeKey
-} from '@/components/native-chat/native-chat-composer-draft-store'
+import { structuredAgentSessionDraftScopeKey } from '@/components/native-chat/native-chat-composer-draft-store'
+import { nativeChatComposerHasUserContent } from '@/components/native-chat/native-chat-pending-attachment-cache'
 import { StructuredAgentSessionCreateRefusalError } from '@/lib/structured-agent-session-launch-errors'
 
 type LocalProvisionalLaunch = StructuredAgentLaunchHandle & { tab: Tab }
@@ -155,18 +153,17 @@ async function openTerminalForDeclinedChat(
   tab: Tab,
   settlement: StructuredAgentLaunchSettlement
 ): Promise<StructuredAgentLaunchSettlement> {
-  const draft = readNativeChatComposerDraft(structuredAgentSessionDraftScopeKey(tab.entityId))
+  const scopeKey = structuredAgentSessionDraftScopeKey(tab.entityId)
   if (
     settlement.kind !== 'failed' ||
     !(settlement.error instanceof StructuredAgentSessionCreateRefusalError) ||
     settlement.error.code !== 'structured_agent_session_unsupported' ||
-    draft.text.trim() !== '' ||
-    draft.images.length > 0
+    nativeChatComposerHasUserContent(scopeKey)
   ) {
     return settlement
   }
   const terminal = await openDeclinedTerminal(args, worktreeId, owner.target)
-  if (!terminal.opened) {
+  if (!terminal.opened || nativeChatComposerHasUserContent(scopeKey)) {
     return settlement
   }
   useAppStore.getState().closeUnifiedTab(tab.id)
@@ -273,7 +270,7 @@ export function beginStructuredAgentSessionProvisionalLaunch(
 }
 
 function beginLocalProvisionalLaunch(args: ProvisionalLaunchArgs): LocalProvisionalLaunch | null {
-  const handle = args.plan.begin(args.hooks, args.target)
+  const handle = args.plan.begin({ ...args.hooks, activate: args.activate !== false }, args.target)
   if (!handle) {
     return null
   }

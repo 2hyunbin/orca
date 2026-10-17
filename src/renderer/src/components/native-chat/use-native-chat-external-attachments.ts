@@ -89,6 +89,7 @@ export function useNativeChatExternalAttachments({
   const sessionId = structuredSession?.sessionId
   const runtimeEnvironmentId = structuredSession?.runtimeEnvironmentId ?? null
   const sessionPending = structuredSession?.sessionPending === true
+  const sessionPendingNotice = structuredSession?.sessionPendingNotice
   const workspaceRef = useRef<ComposerWorkspace>({
     structuredWorktreeId,
     terminalTabId,
@@ -98,9 +99,18 @@ export function useNativeChatExternalAttachments({
     workspaceRef.current = {
       structuredWorktreeId,
       terminalTabId,
-      structuredSession: sessionId ? { sessionId, runtimeEnvironmentId, sessionPending } : undefined
+      structuredSession: sessionId
+        ? { sessionId, runtimeEnvironmentId, sessionPending, sessionPendingNotice }
+        : undefined
     }
-  }, [runtimeEnvironmentId, sessionId, sessionPending, structuredWorktreeId, terminalTabId])
+  }, [
+    runtimeEnvironmentId,
+    sessionId,
+    sessionPending,
+    sessionPendingNotice,
+    structuredWorktreeId,
+    terminalTabId
+  ])
   const pendingChipsRef = useRef(pendingChips)
   useLayoutEffect(() => {
     pendingChipsRef.current = pendingChips
@@ -110,7 +120,7 @@ export function useNativeChatExternalAttachments({
     const { structuredWorktreeId, structuredSession, terminalTabId } = workspaceRef.current
     if (structuredWorktreeId && structuredSession?.runtimeEnvironmentId) {
       if (structuredSession.sessionPending) {
-        return { kind: 'not-ready' }
+        return { kind: 'not-ready', notice: structuredSession.sessionPendingNotice }
       }
       return resolveNativeChatRuntimeSessionAttachmentOwner({
         sessionId: structuredSession.sessionId,
@@ -149,7 +159,7 @@ export function useNativeChatExternalAttachments({
           return
         }
         if (owner.kind === 'not-ready') {
-          setNotice(nativeChatWorktreeNotReadyNotice())
+          setNotice(owner.notice ?? nativeChatWorktreeNotReadyNotice())
           return
         }
         if (owner.kind === 'remote') {

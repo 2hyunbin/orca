@@ -105,7 +105,7 @@ export function useNativeChatComposerPaste({
     (pendingId: string | null, path: string, originalOwner: NativeChatAttachmentOwner) => {
       if (!nativeChatAttachmentOwnerUnchanged(originalOwner, resolveAttachmentOwner())) {
         dropImagePaste(pendingId)
-        setNotice(nativeChatWorktreeNotReadyNotice())
+        setNotice(owner.notice ?? nativeChatWorktreeNotReadyNotice())
         return
       }
       if (pendingId) {

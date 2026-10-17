@@ -30,11 +30,13 @@ vi.mock('@/runtime/structured-agent-session-client', () => ({
 
 vi.mock('@/components/native-chat/native-chat-composer-draft-store', () => ({
   readNativeChatComposerDraft: () => ({ text: mocks.draftText.value, images: [] }),
+  resolveNativeChatComposerDraftOwner: () => undefined,
   structuredAgentSessionDraftScopeKey: (sessionId: string) => `agent-session:${sessionId}`
 }))
 
 import { beginStructuredAgentSessionProvisionalLaunch } from './structured-agent-session-provisional-tab'
 import { StructuredAgentSessionCreateRefusalError } from './structured-agent-session-launch-errors'
+import { addNativeChatPendingAttachment, clearNativeChatPendingAttachmentsForTests } from '@/components/native-chat/native-chat-pending-attachment-cache'
 
 function planSettlingAs(
   settlement: StructuredAgentLaunchSettlement,
@@ -59,6 +61,7 @@ function planSettlingAs(
 
 beforeEach(() => {
   vi.clearAllMocks()
+  clearNativeChatPendingAttachmentsForTests()
   mocks.createUnifiedTab.mockImplementation(
     (worktreeId: string, _type: string, tab: Partial<Tab>) => ({ ...tab, worktreeId })
   )
@@ -91,9 +94,10 @@ describe('a provisional structured chat tab', () => {
   })
 
   it.each([
-    ['nobody typed: its terminal opens in its place', '', { kind: 'terminal' }],
-    ['typed in: the chat keeps it', 'half a thought', { kind: 'failed' }]
-  ])('a New Chat its host refuses, %s', async (_name, typed, settled) => {
+    ['nobody typed: its terminal opens in its place', '', false, { kind: 'terminal' }],
+    ['typed in: the chat keeps it', 'half a thought', false, { kind: 'failed' }],
+    ['pasting an image: the chat keeps it', '', true, { kind: 'failed' }]
+  ])('a New Chat its host refuses, %s', async (_name, typed, pasting, settled) => {
     const onHostDeclined = vi.fn(() => ({ opened: true }))
     const launch = beginStructuredAgentSessionProvisionalLaunch({
       plan: planSettlingAs(declined()),
@@ -102,10 +106,28 @@ describe('a provisional structured chat tab', () => {
       onHostDeclined
     })
     mocks.draftText.value = typed
+    if (pasting) {
+      addNativeChatPendingAttachment('agent-session:claude_1', { id: 'paste-1', path: '', pending: true })
+    }
 
     await expect(launch?.settlement).resolves.toMatchObject(settled)
-    expect(onHostDeclined).toHaveBeenCalledTimes(typed ? 0 : 1)
-    expect(mocks.closeUnifiedTab).toHaveBeenCalledTimes(typed ? 0 : 1)
+    expect(onHostDeclined).toHaveBeenCalledTimes(typed || pasting ? 0 : 1)
+    expect(mocks.closeUnifiedTab).toHaveBeenCalledTimes(typed || pasting ? 0 : 1)
+  })
+
+  it('keeps text entered while its fallback terminal is opening', async () => {
+    let open!: (terminal: { opened: boolean }) => void
+    const onHostDeclined = vi.fn(() => new Promise<{ opened: boolean }>((resolve) => { open = resolve }))
+    const launch = beginStructuredAgentSessionProvisionalLaunch({
+      plan: planSettlingAs(declined()), hooks: {},
+      focusIntent: { request: mocks.requestFocus, cancel: mocks.cancelFocus }, onHostDeclined
+    })
+    await Promise.resolve()
+    expect(onHostDeclined).toHaveBeenCalledOnce()
+    mocks.draftText.value = 'keep this thought'
+    open({ opened: true })
+    await expect(launch?.settlement).resolves.toMatchObject({ kind: 'failed' })
+    expect(mocks.closeUnifiedTab).not.toHaveBeenCalled()
   })
 
   it('asks first for a launch that carries a prompt, so a "no" can hand it on', async () => {
