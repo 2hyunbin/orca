@@ -192,7 +192,10 @@ export function collectRemovedHostTwinState(
       if (file.worktreeId !== worktreeId) {
         continue
       }
-      const evidence = stampedHostByEntityId.get(file.id) ?? openFileHostEvidence(file)
+      // Why file first: its own route names the host; a tab stamp can come from the focused twin.
+      const evidence = hasOpenFileExecutionHostEvidence(file)
+        ? openFileHostEvidence(file)
+        : (stampedHostByEntityId.get(file.id) ?? 'non-runtime')
       if (owns(evidence)) {
         removed.fileIds.add(file.id)
       }

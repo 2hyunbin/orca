@@ -156,12 +156,13 @@ function seedTwins(): ReturnType<typeof createTestStore> {
           contentType: 'editor',
           executionHostId: 'local'
         }),
+        // Stamped with the focused twin, but the file itself names the remote host.
         makeUnifiedTab({
           id: remoteFileId,
           worktreeId: WORKTREE_ID,
           groupId: 'group-1',
           contentType: 'editor',
-          executionHostId: REMOTE_HOST
+          executionHostId: 'local'
         })
       ]
     },
