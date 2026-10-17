@@ -46,6 +46,31 @@ describe('project removal on the execution host', () => {
     expect(removeProjectForHost).toHaveBeenCalledWith(TEST_REPO_ID, 'local')
   })
 
+  it('stops native shells of a project a paired client registered under a runtime stamp', async () => {
+    const removeProjectForHost = vi.fn()
+    const stopAndWait = vi.fn(async () => true)
+    const stampedRepo = { ...store.getRepo(TEST_REPO_ID)!, executionHostId: 'runtime:env-self' }
+    const runtime = new OrcaRuntimeService({
+      ...store,
+      getRepo: (id: string) => (id === TEST_REPO_ID ? stampedRepo : undefined),
+      getRepos: () => [stampedRepo],
+      removeProjectForHost
+    } as never)
+    runtime.setPtyController({
+      write: () => true,
+      kill: vi.fn(() => false),
+      stopAndWait,
+      getForegroundProcess: async () => null
+    })
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
+    runtime.registerPty('pty-native', TEST_WORKTREE_ID, null)
+
+    await expect(runtime.removeProject(TEST_REPO_ID)).resolves.toEqual({ removed: true })
+
+    expect(stopAndWait).toHaveBeenCalledWith('pty-native', expect.anything())
+  })
+
   it('still removes the project when a stop cannot be verified', async () => {
     const { runtime, stopAndWait, removeProjectForHost } = createRemovableRuntime()
     runtime.registerPty('pty-unverifiable', TEST_WORKTREE_ID, null)

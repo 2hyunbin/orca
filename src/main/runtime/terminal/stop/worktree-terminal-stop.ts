@@ -18,6 +18,7 @@ import { rollbackWorkspaceSessionAfterFailedAsyncWrite } from '../../../persiste
 import {
   getRepoExecutionHostId,
   getWorktreeExecutionHostId,
+  parseExecutionHostId,
   type ExecutionHostId
 } from '../../../../shared/execution-host'
 import type { Repo } from '../../../../shared/repo-types'
@@ -78,7 +79,9 @@ export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntim
     repo: Pick<Repo, 'id' | 'connectionId' | 'executionHostId'>,
     options: Pick<WorktreeTerminalStopOptions, 'deadline'> = {}
   ): Promise<{ stopped: number }> {
-    const fence = hostFenceForExecutionHost(getRepoExecutionHostId(repo))
+    // Why not the row's stamp: a `runtime:` stamp is how paired clients address a project that runs here.
+    const host = parseExecutionHostId(getRepoExecutionHostId(repo))
+    const fence = { resolvedConnectionId: host?.kind === 'ssh' ? host.targetId : null }
     let stopped = 0
     for (const id of listProjectTerminalWorktreeIds(repo.id, this.leaves, this.ptysById)) {
       const opts = { resolvedWorktreeId: id, ...fence, ...options }
