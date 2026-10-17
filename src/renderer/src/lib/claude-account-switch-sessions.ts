@@ -1,6 +1,6 @@
 /**
  * What happens to running Claude terminal sessions after the user switches
- * Claude accounts: ask in a dialog, or apply the remembered choice.
+ * Claude accounts: ask in a dialog, or apply the saved setting.
  */
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
@@ -48,10 +48,13 @@ function queueClaudeRestarts(ptyIds: string[]): void {
   useAppStore.getState().queuePaneAccountRestarts(ptyIds, 'claude')
 }
 
-/** Answers the open dialog; `remember` stores the answer as the default for later switches. */
+/**
+ * Answers the open dialog. Like native chat's resume prompt, "don't ask again" is one-way:
+ * it turns on automatic restarts however the dialog is left. Settings is where it turns off.
+ */
 export function answerClaudeAccountSwitchPrompt(
   answer: 'restart' | 'keep',
-  options: { remember?: boolean } = {}
+  options: { dontAskAgain?: boolean } = {}
 ): void {
   const request = prompt
   if (!request) {
@@ -61,15 +64,15 @@ export function answerClaudeAccountSwitchPrompt(
   if (answer === 'restart') {
     queueClaudeRestarts(request.ptyIds)
   }
-  if (options.remember) {
-    void useAppStore.getState().updateSettings({ claudeAccountSwitchRunningSessions: answer })
+  if (options.dontAskAgain) {
+    void useAppStore.getState().updateSettings({ claudeAccountSwitchRunningSessions: 'restart' })
   }
 }
 
 /**
  * Runs after a Claude account switch has already applied. Finds Claude sessions
  * still on the outgoing account and asks, restarts, or keeps them per the
- * remembered choice.
+ * saved setting.
  */
 export async function handleRunningClaudeSessionsAfterSwitch(args: {
   owner: RuntimeClientTarget

@@ -113,16 +113,19 @@ describe('handleRunningClaudeSessionsAfterSwitch', () => {
     expect(getClaudeAccountSwitchPrompt()).toBeNull()
   })
 
-  it.each(['restart', 'keep'] as const)('remembers %s when asked to', async (answer) => {
-    vi.mocked(findMovableClaudeSessions).mockResolvedValue([candidate(1)])
-    await handleRunningClaudeSessionsAfterSwitch(SWITCH)
+  it.each(['restart', 'keep'] as const)(
+    'turns on automatic restarts on %s when told not to ask again',
+    async (answer) => {
+      vi.mocked(findMovableClaudeSessions).mockResolvedValue([candidate(1)])
+      await handleRunningClaudeSessionsAfterSwitch(SWITCH)
 
-    answerClaudeAccountSwitchPrompt(answer, { remember: true })
+      answerClaudeAccountSwitchPrompt(answer, { dontAskAgain: true })
 
-    expect(store.updateSettings).toHaveBeenCalledWith({
-      claudeAccountSwitchRunningSessions: answer
-    })
-  })
+      expect(store.updateSettings).toHaveBeenCalledWith({
+        claudeAccountSwitchRunningSessions: 'restart'
+      })
+    }
+  )
 
   it('restarts without asking when the setting is Always restart', async () => {
     store.settings = { claudeAccountSwitchRunningSessions: 'restart' }

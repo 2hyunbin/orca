@@ -89,18 +89,29 @@ describe('ClaudeAccountSwitchDialog', () => {
 
     await user.keyboard('{Escape}')
 
-    expect(answerClaudeAccountSwitchPrompt).toHaveBeenCalledWith('keep')
+    expect(answerClaudeAccountSwitchPrompt).toHaveBeenCalledWith('keep', { dontAskAgain: false })
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('passes Remember my choice with the restart answer', async () => {
+  it("carries Don't ask again into an Escape", async () => {
+    const user = userEvent.setup()
+    render(<ClaudeAccountSwitchDialog />)
+    await switchWith(1)
+
+    await user.click(screen.getByRole('checkbox', { name: /Don't ask again/ }))
+    await user.keyboard('{Escape}')
+
+    expect(answerClaudeAccountSwitchPrompt).toHaveBeenCalledWith('keep', { dontAskAgain: true })
+  })
+
+  it("passes Don't ask again with the restart answer", async () => {
     const user = userEvent.setup()
     render(<ClaudeAccountSwitchDialog />)
     await switchWith(2)
 
-    await user.click(screen.getByRole('checkbox', { name: 'Remember my choice' }))
+    await user.click(screen.getByRole('checkbox', { name: /Don't ask again/ }))
     await user.click(screen.getByRole('button', { name: 'Restart 2 sessions' }))
 
-    expect(answerClaudeAccountSwitchPrompt).toHaveBeenCalledWith('restart', { remember: true })
+    expect(answerClaudeAccountSwitchPrompt).toHaveBeenCalledWith('restart', { dontAskAgain: true })
   })
 })

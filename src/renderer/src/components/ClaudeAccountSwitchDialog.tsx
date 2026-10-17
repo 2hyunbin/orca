@@ -1,4 +1,4 @@
-import { useId, useState, useSyncExternalStore } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -10,7 +10,6 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
 import { translate } from '@/i18n/i18n'
 import {
   answerClaudeAccountSwitchPrompt,
@@ -25,29 +24,39 @@ export default function ClaudeAccountSwitchDialog(): React.JSX.Element | null {
     getClaudeAccountSwitchPrompt,
     getClaudeAccountSwitchPrompt
   )
+  // Why keyed by prompt id: each switch asks afresh, and closing must read the box too.
+  const [dontAskAgainFor, setDontAskAgainFor] = useState<number | null>(null)
+  const dontAskAgain = prompt !== null && dontAskAgainFor === prompt.id
   return (
     <Dialog
       open={prompt !== null}
       onOpenChange={(open) => {
         // Why: closing never undoes the switch; it answers "Keep as is".
         if (!open) {
-          answerClaudeAccountSwitchPrompt('keep')
+          answerClaudeAccountSwitchPrompt('keep', { dontAskAgain })
         }
       }}
     >
-      {/* Why the key: each switch asks afresh, so the checkbox must not carry over. */}
-      {prompt ? <ClaudeAccountSwitchDialogContent key={prompt.id} prompt={prompt} /> : null}
+      {prompt ? (
+        <ClaudeAccountSwitchDialogContent
+          prompt={prompt}
+          dontAskAgain={dontAskAgain}
+          onDontAskAgainChange={(checked) => setDontAskAgainFor(checked ? prompt.id : null)}
+        />
+      ) : null}
     </Dialog>
   )
 }
 
 function ClaudeAccountSwitchDialogContent({
-  prompt
+  prompt,
+  dontAskAgain,
+  onDontAskAgainChange
 }: {
   prompt: ClaudeAccountSwitchPrompt
+  dontAskAgain: boolean
+  onDontAskAgainChange: (checked: boolean) => void
 }): React.JSX.Element {
-  const [remember, setRemember] = useState(false)
-  const checkboxId = useId()
   const count = prompt.ptyIds.length
   const accounts = {
     count,
@@ -76,22 +85,33 @@ function ClaudeAccountSwitchDialogContent({
               )}
         </DialogDescription>
       </DialogHeader>
-      <div className="flex items-center gap-2">
+      <label className="flex min-w-0 items-start gap-2.5">
         <Checkbox
-          id={checkboxId}
-          checked={remember}
-          onCheckedChange={(checked) => setRemember(checked === true)}
+          checked={dontAskAgain}
+          onCheckedChange={(checked) => onDontAskAgainChange(checked === true)}
+          className="mt-0.5"
         />
-        <Label htmlFor={checkboxId}>
-          {translate('accounts.claude.switchSessions.remember', 'Remember my choice')}
-        </Label>
-      </div>
+        <span className="min-w-0 space-y-0.5">
+          <span className="block text-sm">
+            {translate(
+              'accounts.claude.switchSessions.dontAskAgain',
+              "Don't ask again (restart automatically)"
+            )}
+          </span>
+          <span className="block text-xs text-muted-foreground">
+            {translate(
+              'accounts.claude.switchSessions.dontAskAgainHint',
+              'You can turn this off in Settings → AI Provider Accounts.'
+            )}
+          </span>
+        </span>
+      </label>
       <DialogFooter className="sm:justify-between">
         <Button
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => answerClaudeAccountSwitchPrompt('keep', { remember })}
+          onClick={() => answerClaudeAccountSwitchPrompt('keep', { dontAskAgain })}
         >
           {translate('accounts.claude.switchSessions.keep', 'Keep as is')}
         </Button>
@@ -99,7 +119,7 @@ function ClaudeAccountSwitchDialogContent({
           type="button"
           size="sm"
           autoFocus
-          onClick={() => answerClaudeAccountSwitchPrompt('restart', { remember })}
+          onClick={() => answerClaudeAccountSwitchPrompt('restart', { dontAskAgain })}
         >
           <RefreshCw className="size-3.5" aria-hidden="true" />
           {count === 1
