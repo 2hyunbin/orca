@@ -12,7 +12,14 @@
     }
   },
   "githubChecks": {
-    "retrying": "再試行中…"
+    "retrying": "再試行中…",
+    "logsNotYetAvailable": "ログ出力はまだ利用できません。",
+    "logsLoadErrorDetails": "ログを読み込めませんでした。更新して再試行してください。",
+    "logsLoadErrorSidebar": "ログを読み込めませんでした。「詳細を表示」を開き、更新して再試行してください。",
+    "logsEmpty": "ログ出力は返されませんでした。",
+    "logsNotRequested": "ログ抜粋はリクエストされていません。チェックごとに失敗したジョブの抜粋を最大5件読み込みます。",
+    "noLogExcerpt": "利用できるログの抜粋はありません。",
+    "refreshingDetails": "チェックの詳細を更新中…"
   },
   "settings": {
     "chat": {
@@ -1062,6 +1069,14 @@
       "aiVaultResumeRefusal": {
         "openInChat": "この {{value0}} の会話はチャットで開かれています。開くにはセッション履歴を更新してください。",
         "ownershipUnknown": "Orca はこの {{value0}} の会話の所有者を確認できませんでした。セッション履歴を更新して、再試行してください。"
+      },
+      "pendingWorktreeCreation": {
+        "checkingOutFiles": "ファイルをチェックアウト中… {{percent}}%",
+        "provisioningVm": "VMをプロビジョニング中…",
+        "settingUpWorkspace": "ワークスペースをセットアップ中…",
+        "preparingWorkspace": "ワークスペースを準備中…",
+        "creatingWorktree": "ワークツリーを作成中…",
+        "fetchingBaseBranch": "ベースブランチを取得中…"
       }
     },
     "hooks": {
@@ -3134,7 +3149,11 @@
               "command_label": "コマンド",
               "agent_toolbar_hint": "/目標、スキル、パスをサポートします",
               "agent_footer_hint": "複数行のプロンプトは問題ありません。焦点を合わせてください。",
-              "resize_hint": "角をドラッグしてサイズを変更します"
+              "resize_hint": "角をドラッグしてサイズを変更します",
+              "length_over_limit": "長すぎるため保存できません。",
+              "length_count": "{{value0}} / {{value1}} 文字",
+              "size_count": "{{value0}} / {{value1}}",
+              "prompt_over_host_limit": "このホストには長すぎます。より長いプロンプトを保存するには、ホストの Orca を更新してください。"
             },
             "TerminalQuickCommandDialogFooter": {
               "2e2b958dfc": "保存",
@@ -8726,7 +8745,7 @@
           "addDescription": "SSH でログインできる永続的なマシンを追加します。",
           "editingPrefix": "編集中",
           "allowRemoteCliControl": "このホストの orca CLI による Orca の操作を許可する",
-          "allowRemoteCliControlHelp": "オフの場合、このホストで実行される orca コマンドは、このホスト自身のターミナルにのみアクセスできます。オンにすると、このコンピュータ上の他のホスト、オーケストレーション、ファイル、連携にもアクセスできるようになります。"
+          "allowRemoteCliControlHelp": "デフォルトでオンです。このホストで実行される orca コマンドが、このホストのワークスペース内に限り、接続中のみ、このデスクトップの Orca ブラウザのタブを開いて操作できるようにし、このホストで古い Orca が起動したターミナルが自身の監督下の作業についてオーケストレーションコマンド（check、inbox、send、ask、reply）を実行できるようにします。ファイル、クリップボード、Cookie は読み取れません。オフの場合、このホスト自身の Orca サーバーにのみアクセスします。"
         },
         "TasksPane": {
           "f71d8a9dd3": "タスクプロバイダー",
@@ -12412,6 +12431,10 @@
           "detailsUnavailable": "プランの認証情報の詳細は、Orca を実行しているコンピュータでのみ読み取ることができます。",
           "siteUnavailable": "ホストプランサイトが利用できない"
         },
+        "sshManagedHostRemove": {
+          "description": "{{label}} では管理対象の Orca サーバーが実行されています。管理対象サーバーで「停止…」を使ってホストからサーバーを削除するか、ホストがもう存在しない場合は「登録を解除…」を使ってください。その後、この SSH ホストを削除できます。",
+          "open": "管理対象サーバーを開く"
+        },
         "managedServers": {
           "row": {
             "notRunning": "実行していません",
@@ -12453,7 +12476,11 @@
             "target": "SSH ホスト経由で接続",
             "port": "サーバーポート",
             "link": "SSH を使用",
-            "linking": "接続中…"
+            "linking": "接続中…",
+            "pendingLink": "SSH 経由の接続が完了しませんでした。",
+            "pendingUnlink": "SSH アクセスの停止が完了しませんでした。",
+            "retry": "再試行",
+            "cancelLink": "キャンセル"
           },
           "search": {
             "title": "管理対象サーバー",
@@ -12533,6 +12560,8 @@
           "unsupportedUnknown": "このバージョンの Orca はこのホストをサポートしていません。引き続き使用するには、以前のバージョンの Orca をインストールしてください。",
           "tunnelUnsupported": "このバージョンの Orca はこのホストをサポートしていません。ホストの SSH サーバーがポート転送を許可しておらず、SSH セッション経由でも Orca のサーバーに接続できませんでした。引き続き使用するには、以前のバージョンの Orca をインストールしてください。",
           "setupRetry": "Orca はこのホストでサーバーを起動できませんでした。もう一度接続してください。",
+          "moveHeld": "サーバー側のコピーを確認できなかったため、Orca はこのホストのプロジェクトを管理対象サーバーへ移動する処理を一時停止しました。データは失われていません。移動が完了するまで、ホストはプロジェクトを保持したままロックされます。再接続すると再開します。サーバーが復帰できない場合は、設定 > 管理対象サーバーで停止するか登録を解除してください。",
+          "olderTerminalsBridged": "まだ管理サーバーに移行していません。以前のバージョンの Orca で開始されたターミナルがこのホストのプロジェクトでまだ実行中です。ターミナルはここで引き続き使えます。閉じるかホスト上で終了してから再接続してください。",
           "olderTerminalsUncounted": "以前のバージョンの Orca で開始されたターミナルがこのホストでまだ実行中で、自動では終了しません。そのバージョンの Orca で閉じるか、ホスト上で終了してから再接続してください。",
           "olderTerminalsUnverifiable": "以前のバージョンの Orca で開始されたターミナルが終了したことを確認できませんでした。再接続してもう一度お試しください。",
           "olderTerminals_one": "以前のバージョンの Orca で開始された {{count}} 個のターミナルがこのホストでまだ実行中で、自動では終了しません。そのバージョンの Orca で閉じるか、ホスト上で終了してから再接続してください。",
@@ -12564,6 +12593,13 @@
           "description": "このホストはそのまま管理対象サーバーに戻ります。古いバージョンの Orca がここに追加または変更したものは移動されず、クリーンアップされるまでこのコンピュータの保存済み設定にのみ残ります。",
           "cancel": "キャンセル",
           "confirm": "サーバーのバージョンを保持"
+        },
+        "moveAnyway": {
+          "action": "それでも移行…",
+          "title": "このホストをそれでも移行",
+          "description": "Orca はこのホストを管理サーバーへ移行しますが、以下の保存済み項目は含めません。これらはこのコンピューターに残り、管理サーバーには表示されません。未保存の編集は保持され、削除されることはありません。",
+          "cancel": "キャンセル",
+          "confirm": "それでも移行"
         },
         "ZcodeCliSetupSection": {
           "title": "ZCode で GLM を使用する",
@@ -13273,7 +13309,6 @@
                 "a6de3e5a20": "キュー内のコメントをクリア",
                 "49ea0937e4": "コメントを解決リストに追加",
                 "9fecebb29d": "追加",
-                "b8c4e2a1f7": "完全なログを表示",
                 "f8a2c91d04": "Agent のキューに追加",
                 "b4e8a1c902": "キュー待ち",
                 "7c1f0a2b11": "開く",
@@ -14129,6 +14164,15 @@
             "sourceMissing": "トランスクリプトは利用できなくなりました",
             "metadataMatch": "セッションメタデータ内の一致",
             "sourceActionsUnavailable": "トランスクリプトのソースが利用できません。"
+          },
+          "AiVaultScanProgressStrip": {
+            "fileCount_one": "{{value0}} 個のファイル",
+            "fileCount_other": "{{value0}} 個のファイル",
+            "databaseCount_one": "{{value0}} 個のデータベース",
+            "databaseCount_other": "{{value0}} 個のデータベース",
+            "scanning": "{{value0}}をスキャン中",
+            "reading": "{{value0}} ファイルを読み込み中",
+            "scanned": "{{value0}}をスキャン済み"
           }
         }
       },
@@ -17935,6 +17979,13 @@
           "deleteTable": "テーブルを削除"
         }
       }
+    },
+    "startup": {
+      "webHostUnreachable": {
+        "title": "Orca ホストに接続できませんでした",
+        "description": "失われたものはありません。ホストが応答すると Orca は再読み込みされます。それまで変更は保存されません。",
+        "retry": "今すぐ再試行"
+      }
     }
   },
   "components": {
@@ -18009,6 +18060,7 @@
         "claudeAccountFolderMissing": "選択した Claude アカウントのフォルダーが見つかりません。もう一度サインインするか、別のアカウントを選択してください。",
         "claudeAccountSetupFailed": "選択した Claude アカウントを設定できませんでした。もう一度試すか、別のアカウントを選択してください。",
         "agentCommandNotRunnable": "[設定] → [Agent] にある {{agent}} の [コマンド] には、Orca が見つけられるプログラムのパスまたは名前を、引数や変数なしで指定する必要があります。変更するか、[リセット] してください。",
+        "runtimeNotInstalled": "{{agent}} はこのチャットを実行しているコンピューターにインストールされていません。最新バージョンの Orca でチャットからインストールしてください。",
         "chooseClaudeAccount": "Claude アカウントの設定で選択または追加してください。",
         "chooseClaudeAccountThenRunCommand": "Claude アカウントの設定で選択または追加してから、/{{command}} をもう一度実行してください。",
         "chooseClaudeAccountThenSend": "Claude アカウントの設定で選択または追加してから、メッセージをもう一度送信してください。",
@@ -18580,7 +18632,7 @@
       },
       "goal": {
         "placeholder": "目標を説明し、最良の結果を得るために測定可能な結果を​​定義する",
-        "clear": "明確な目標",
+        "clear": "目標を削除",
         "chip": "ゴール",
         "exitMode": "ゴールモードを終了する",
         "sentAsGoal": "ゴールとして送信されました",
@@ -18588,11 +18640,12 @@
         "expand": "完全な目標を表示",
         "pause": "ゴールを一時停止する",
         "resume": "再開目標",
-        "pursuing": "目標を追求する",
+        "pursuing": "目標を追求中",
         "paused": "一時停止されたゴール",
         "blocked": "ゴール阻止",
         "limited": "目標が限定されている",
-        "attachmentsUnsupported": "目標を設定する前に添付ファイルを削除してください。"
+        "attachmentsUnsupported": "目標を設定する前に添付ファイルを削除してください。",
+        "set": "目標を設定済み"
       },
       "fileLinks": {
         "notFound": "ファイルが見つかりません: {{value0}}",
@@ -18630,15 +18683,7 @@
         "withdrawnHold": "送信前に停止されました",
         "pausedSendFailed": "送信できませんでした。「送信」を押して再試行してください。",
         "paused": "一時停止中",
-        "queuePausedStopped": "中断したため、キューを一時停止しました",
-        "queuePaused": "キューは一時停止中です",
         "resume": "再開",
-        "sendConfirmTitle": "メッセージを送信しますか？",
-        "sendConfirmBody": "メッセージを送信しようとしています。キューに入っている {{count}} 件のメッセージを消去しますか？",
-        "sendConfirmBody_one": "メッセージを送信しようとしています。キューに入っている {{count}} 件のメッセージを消去しますか？",
-        "sendConfirmBody_other": "メッセージを送信しようとしています。キューに入っている {{count}} 件のメッセージを消去しますか？",
-        "sendConfirmClear": "キューを消去",
-        "sendConfirmSend": "メッセージを送信",
         "fromSender": "送信元:",
         "pausedSendFailedWaiting": "送信できませんでした。Agent の処理が終わったら「送信」を押して再試行してください。",
         "save": "保存",
@@ -18648,7 +18693,11 @@
         "editChangedPrompt": "編集中にこのメッセージが変更されました。Agent に回答すると、編集したテキストがチャット入力欄に表示されます。",
         "editFailed": "このメッセージは編集できません。",
         "editGone": "このメッセージはすでに送信または削除されています。編集したテキストはチャット入力欄にあります。",
-        "editGonePrompt": "このメッセージはすでに送信または削除されています。Agent に回答すると、編集したテキストがチャット入力欄に表示されます。"
+        "editGonePrompt": "このメッセージはすでに送信または削除されています。Agent に回答すると、編集したテキストがチャット入力欄に表示されます。",
+        "collapse": "折りたたむ",
+        "expand": "展開",
+        "queued": "キュー待ち",
+        "clearAll": "すべてクリア"
       },
       "thought": "考えました",
       "thoughtForDuration": "{{duration}} 考えました",
@@ -19803,6 +19852,12 @@
       "confirmBody": "再起動すると、{{sessions}} で実行中のすべてのプロセスが終了します。再開に対応している Agent は後で再開できますが、シェルなどのジョブは再開できず、再度開始する必要があります。Agent がアイドル状態のときに行ってください。",
       "cancel": "キャンセル",
       "confirm": "再起動してプロセスを終了"
+    },
+    "restartedInputNotSent": "入力中にターミナルが再起動したため、一部の入力が届いていない可能性があります。もう一度入力する前に新しいシェルを確認してください。",
+    "stalledDaemonBanner": {
+      "body": "このコンピュータのバックグラウンド処理が停滞しています。入力と新規ターミナルが機能しない可能性があります。ターミナルサービスを再起動すると、実行中のターミナルとコマンドが終了します。",
+      "review": "再起動オプションを確認",
+      "title": "ターミナルサービスの再起動が必要になる可能性があります"
     }
   },
   "fileSearch": {
@@ -20044,6 +20099,22 @@
       "cancel": "キャンセル",
       "noTransition": "{{key}} では {{column}} へのステータス変更を利用できません。",
       "queryTooLong": "Jira クエリが長すぎます。クエリを短くするか、フィルターをクリアしてください。"
+    },
+    "favourites": {
+      "activeLabel": "Jira のお気に入り: {{name}}",
+      "applyFailed": "Jira のお気に入りを適用できませんでした。",
+      "chooseSite": "お気に入りを使用するには、接続済みの Jira サイトを 1 つ選択してください。",
+      "clear": "Jira のお気に入りをクリア",
+      "clearFailed": "保存済みフィルターをクリアできませんでした。読み込みまたは保存が完了してから再試行してください。",
+      "empty": "Jira のお気に入りが見つかりません。",
+      "find": "Jira のお気に入りを検索",
+      "label": "Jira のお気に入り",
+      "loadFailed": "Jira のお気に入りを読み込めませんでした。",
+      "loading": "お気に入りを読み込んでいます…",
+      "refresh": "更新",
+      "siteMismatch": "お気に入りの Jira サイトのプロジェクトを選択するか、プロジェクトフィルターをクリアしてください。",
+      "truncated": "一部のお気に入りを表示できませんでした。リストを絞り込むには、Jira でお気に入りを管理してください。",
+      "unsupported": "お気に入りを使用するには Jira ホストを更新してください。"
     }
   },
   "updates": {

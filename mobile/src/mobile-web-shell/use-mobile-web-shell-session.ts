@@ -7,6 +7,7 @@ import { deriveHostCacheKey } from './host-cache-key'
 import { download, openCache, readManifest } from './mobile-web-shell-session-effects'
 import {
   createMobileWebShellRuntime,
+  DOCUMENT_LOAD_DEADLINE_MS,
   PAGE_READY_DEADLINE_MS,
   type MobileWebShellRuntime
 } from './mobile-web-shell-runtime'
@@ -164,12 +165,6 @@ export function useMobileWebShellSession(args: {
           // queued behind this one already run after it.
           await store.deleteHostCache(hostKey).catch(() => undefined)
           return
-        case 'persist-manifest':
-          // Nothing is reported back and a failure is swallowed: the routes the page is mounted
-          // under are already on the session, so all a refused or failed write costs is the
-          // freshness of the next offline verdict, never the generation being opened here.
-          await store.persistActiveManifest(hostKey, effect.manifest).catch(() => undefined)
-          return
         case 'record-update-failure':
           // Stamped here because the reducer holds neither: the host is the mount's, the time the
           // runtime's. Reports nothing, and the store swallows its own failure.
@@ -210,13 +205,17 @@ export function useMobileWebShellSession(args: {
         case 'remount':
           send({ type: 'remounted', flow, sessionId: runtime.mintSessionId() })
           return
-        case 'await-page-ready': {
-          const cancel = runtime.setTimer(() => {
-            timersRef.current.delete(cancel)
-            send({ type: 'page-ready-deadline', flow })
-          }, PAGE_READY_DEADLINE_MS)
+        case 'await-page-ready':
+        case 'await-document-load': {
+          const pageReady = effect.kind === 'await-page-ready'
+          const cancel = runtime.setTimer(
+            () => {
+              timersRef.current.delete(cancel)
+              send({ type: pageReady ? 'page-ready-deadline' : 'document-load-deadline', flow })
+            },
+            pageReady ? PAGE_READY_DEADLINE_MS : DOCUMENT_LOAD_DEADLINE_MS
+          )
           timersRef.current.add(cancel)
-          return
         }
       }
     },
