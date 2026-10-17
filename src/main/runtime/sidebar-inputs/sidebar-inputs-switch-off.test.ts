@@ -10,7 +10,7 @@ describe('sidebar inputs with the switch off', () => {
     expect(runtime.sidebarFacts).toBeNull()
     expect(runtime.pairedServerRows).toBeNull()
     expect(runtime.collapseWriteOrder).toBeNull()
-    const gated = new Set(SIDEBAR_INPUT_METHODS.map((method) => method.name))
+    const gated = new Set<string>(SIDEBAR_INPUT_METHODS.map((method) => method.name))
     expect(ALL_RPC_METHODS.filter((method) => gated.has(method.name))).toEqual([])
   })
 })
