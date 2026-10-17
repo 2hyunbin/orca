@@ -191,6 +191,7 @@ export function openInNewGroup(
         split.direction
       )
     : undefined
+  // Both groups held, but no branch of main's tree holds them both.
   if (besideHeld && !groupLayout) {
     return refuse('invalid_params')
   }
