@@ -27,7 +27,8 @@ import { ptyDataHandlers, unregisterPtyDataHandlers } from './pty-dispatcher'
 import { collectLeafIds } from './terminal-pane-layout-tree'
 import { discardPreHandlerPtyState } from './pty-pre-handler-buffer'
 import { disposeParkedTerminalWatchersForPtyIds } from './terminal-parked-watcher-registry'
-import { buildPaneIdentityEnv, getWorkspacePath } from './detached-pane-restart-spawn-context'
+import { getWorkspacePath } from '@/lib/workspace-directory'
+import { buildPaneIdentityEnv } from './detached-pane-restart-spawn-context'
 
 // Why no in-flight registry: the scheduler never overlaps sweeps, and consuming the queued entry is the claim.
 export async function sweepUnclaimedPaneAccountRestarts(): Promise<void> {

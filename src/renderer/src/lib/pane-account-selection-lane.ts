@@ -15,8 +15,8 @@ import {
 import { parseAppSshPtyId } from '../../../shared/ssh-pty-id'
 import { resolveTerminalStartupCwd } from '../../../shared/terminal-startup-cwd'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
-import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { parseWslUncPath } from '../../../shared/wsl-paths'
+import { getWorkspacePath } from './workspace-directory'
 import { getLocalProjectExecutionRuntimeContext } from './local-preflight-context'
 import { getRendererAppPlatform } from './renderer-app-platform'
 import { wslHostDistroForTarget } from './wsl-host-account-owner'
@@ -214,22 +214,4 @@ function resolveLocalPaneTerminalRuntime(args: {
     settings: args.state.settings ?? undefined,
     projectRuntime
   })
-}
-
-function getWorkspacePath(
-  state: Pick<AppState, 'folderWorkspaces' | 'worktreesByRepo'>,
-  worktreeId: string
-): string | null {
-  const parsed = parseWorkspaceKey(worktreeId)
-  if (parsed?.type === 'folder') {
-    return (
-      (state.folderWorkspaces ?? []).find((workspace) => workspace.id === parsed.folderWorkspaceId)
-        ?.folderPath ?? null
-    )
-  }
-  return (
-    Object.values(state.worktreesByRepo ?? {})
-      .flat()
-      .find((entry) => entry.id === worktreeId)?.path ?? null
-  )
 }
