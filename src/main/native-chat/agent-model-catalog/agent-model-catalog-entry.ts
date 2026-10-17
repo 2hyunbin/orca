@@ -6,7 +6,7 @@ import type {
 } from '../../../shared/agent-session-wire'
 
 /** `discovery`: an account-level listing that names the configured default and owns freshness.
- *  `live`: what a running session listed — which models exist and their efforts, nothing more. */
+ *  `live`: what a running session listed, including any default it names. */
 export type AgentModelCatalogSource = 'discovery' | 'live'
 
 /** One successful listing, as any lister hands it to the store. */
@@ -26,10 +26,10 @@ export type AgentModelCatalogListing = {
   models: AgentSessionModelOption[]
   fastModeSupport?: AgentSessionFastModeSupport
   origin: 'live-session' | 'probe'
-  /** When Orca received it: its age, and the wire's `fetchedAt`. */
+  /** Receipt time and wire `fetchedAt`; restored live values encode relative authority. */
   at: number
-  /** When the process that listed it started (0 when unknown); in memory only. It, not `at`,
-   *  decides whose listing wins: an older child can answer after a newer one. */
+  /** Producer rank: process start, probe request, or 0 when unknown; in memory only.
+   *  It precedes receipt order because an older child can answer after a newer one. */
   startedAt: number
 }
 
@@ -150,7 +150,7 @@ export function agentModelCatalogResultFromEntry(
 }
 
 /** The later-started producer's listing leads; a tie goes to the later arrival, live first. */
-function liveLeads(
+export function liveLeads(
   discovered: AgentModelCatalogListing | null,
   live: AgentModelCatalogListing | null
 ): live is AgentModelCatalogListing {
@@ -175,6 +175,9 @@ function mergedModels(
   const older = liveIsNewer ? discovered : live
   const joined =
     configured && newer?.models.some((model) => model.id === configured.modelId) ? configured : null
+  // A positive live default is authoritative; listings that name none keep discovery's flags.
+  const defaults =
+    liveIsNewer && newer?.models.some((model) => model.isDefault) ? live : (discovered ?? live)
   return (newer?.models ?? []).map((model) => {
     const listed = discovered?.models.find((entry) => entry.id === model.id)
     const reported = live?.models.find((entry) => entry.id === model.id)
@@ -195,12 +198,9 @@ function mergedModels(
     const { defaultEffort: _own, ...rest } = model
     return {
       ...rest,
-      // A session names no default; discovery's flag, on rows both list, outlives a newer session.
       isDefault: joined
         ? model.id === joined.modelId
-        : discovered
-          ? listed?.isDefault === true
-          : model.isDefault,
+        : defaults?.models.find((entry) => entry.id === model.id)?.isDefault === true,
       efforts,
       ...(defaultEffort ? { defaultEffort } : {})
     }
@@ -343,13 +343,14 @@ export function entryWithConfiguredDefault(
   )
 }
 
-/** What a saved entry says, without its clocks: an unchanged key needs no write to disk. */
+/** Saved facts and relative authority: an unchanged key needs no write to disk. */
 export function agentModelCatalogListingKey(entry: AgentModelCatalogEntry): string {
   const facts = (listing: AgentModelCatalogListing | null): unknown =>
     listing && [listing.origin, listing.models, listing.fastModeSupport ?? null]
   return JSON.stringify([
     facts(entry.discovered),
     facts(entry.live),
+    liveLeads(entry.discovered, entry.live),
     configuredDefaultFacts(entry.configured)
   ])
 }

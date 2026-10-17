@@ -6,6 +6,7 @@ import type {
 } from '../../../shared/agent-session-wire'
 import {
   agentModelCatalogEntry,
+  liveLeads,
   type AgentModelCatalogEntry,
   type AgentModelCatalogListing
 } from './agent-model-catalog-entry'
@@ -154,11 +155,22 @@ function persistedListing(listing: AgentModelCatalogListing | null): unknown {
 
 /** Only the two listings and the configured default are written; the merged view is derived again on load. */
 function persistedEntry(entry: AgentModelCatalogEntry): unknown {
+  const { discovered, live } = entry
+  // Starts die with this run; encode their winner without changing discovery's freshness.
+  const savedLive =
+    live && discovered
+      ? {
+          ...live,
+          at: liveLeads(discovered, live)
+            ? Math.max(live.at, discovered.at)
+            : Math.min(live.at, discovered.at - 1)
+        }
+      : live
   return {
     agent: entry.agent,
     fingerprint: entry.fingerprint,
     discovered: persistedListing(entry.discovered),
-    live: persistedListing(entry.live),
+    live: persistedListing(savedLive),
     ...(entry.configured ? { configured: entry.configured } : {})
   }
 }

@@ -244,7 +244,19 @@ describe('agent model catalog store', () => {
     ): AgentSessionModelOption => ({ id, label: id, isDefault, efforts })
     const listed = (startedAt: number, ...models: AgentSessionModelOption[]) =>
       store.recordSuccess('fp', 'claude', { models, origin: 'live-session' }, 'live', startedAt)
+    store.recordSuccess(
+      'fp',
+      'claude',
+      { models: [row('opus'), row('haiku', [], true)], origin: 'probe' },
+      'discovery',
+      1
+    )
     // Chats report only their current model's menu.
+    listed(2, row('opus', menu('high'), true), row('haiku'))
+    expect(store.get('fp')!.models.map((model) => model.isDefault)).toEqual([true, false])
+    // A listing that names no default still uses discovery's flags on shared rows.
+    listed(2, row('opus', menu('high')), row('haiku'))
+    expect(store.get('fp')!.models.map((model) => model.isDefault)).toEqual([false, true])
     listed(2, row('opus', menu('high'), true), row('haiku'))
     // An older CLI's chat reads later: its rows and default lose, its known menu fills a gap.
     listed(1, row('opus[1m]', [], true), row('haiku', menu('low')))
@@ -278,22 +290,51 @@ describe('agent model catalog store', () => {
   })
 
   it('still writes a pending probe that resolves after a live save, keeping both', async () => {
-    const store = new AgentModelCatalogStore()
+    const directory = mkdtempSync(join(tmpdir(), 'pr-30042-catalog-'))
+    const persistence = createAgentModelCatalogFilePersistence(directory)
+    let at = 100
+    const store = new AgentModelCatalogStore({ now: () => at })
+    await store.attachPersistence(persistence)
     let settleProbe!: (success: AgentModelCatalogSuccess) => void
     const probe: AgentModelCatalogProbe = () =>
       new Promise<AgentModelCatalogSuccess>((resolve) => (settleProbe = resolve))
     const pending = store.refresh('fp-1', 'codex', probe, () =>
       probe({ variable: 'CODEX_HOME', path: '/homes/a' })
     )
-    store.recordSuccess('fp-1', 'codex', success('gpt-live'), 'live')
+    at = 300
+    store.recordSuccess('fp-1', 'codex', success('gpt-live'), 'live', 200)
+    at = 400
     settleProbe({ ...success('gpt-probe'), origin: 'probe' })
     await pending
     const entry = store.get('fp-1')!
     expect(entry.discovered!.models[0]!.id).toBe('gpt-probe')
     expect(entry.live!.models[0]!.id).toBe('gpt-live')
+    await store.flushPersistence()
+    const [saved] = await persistence.load()
+    expect(saved?.models).toEqual(entry.models)
+    expect(entry.live!.at).toBe(300)
+    expect(saved?.discovered?.at).toBe(400)
+    const restarted = new AgentModelCatalogStore({ now: () => at })
+    await restarted.attachPersistence(createAgentModelCatalogFilePersistence(directory))
+    at = 400 + AGENT_MODEL_CATALOG_FRESH_MS - 1
+    expect(restarted.shouldRefresh('fp-1')).toBe(false)
+    at++
+    expect(restarted.shouldRefresh('fp-1')).toBe(true)
+
+    // Identical slot facts can change authority and must schedule another save.
+    store.recordSuccess(
+      'fp-1',
+      'codex',
+      { ...success('gpt-probe'), origin: 'probe' },
+      'discovery',
+      500
+    )
+    await store.flushPersistence()
+    const [flipped] = await persistence.load()
+    expect(flipped?.models[0]?.id).toBe('gpt-probe')
     // A live save neither postpones the next discovery nor clears its failure back-off.
     store.recordFailure('fp-1', 'timed out')
-    store.recordSuccess('fp-1', 'codex', success('gpt-live'), 'live')
+    store.recordSuccess('fp-1', 'codex', success('gpt-live'), 'live', 200)
     expect(store.hasActiveFailure('fp-1')).toBe(true)
   })
 
