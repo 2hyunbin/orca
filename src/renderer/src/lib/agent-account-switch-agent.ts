@@ -1,7 +1,6 @@
 /**
- * What one agent supplies to the shared account-switch flow. Adding an agent means writing one
- * of these and listing it in agent-account-switch-agents.ts; discovery, the question queue, the
- * dialog and the restart executor read nothing else agent-specific.
+ * What one agent supplies to the shared account-switch flow. Adding an agent also needs its
+ * AccountRestartAgent id, a listing in agent-account-switch-agents.ts, and its setting key and copy.
  */
 import type { AppState } from '@/store'
 import type { AgentAccountSwitchSettings } from '../../../shared/agent-account-switch-settings'

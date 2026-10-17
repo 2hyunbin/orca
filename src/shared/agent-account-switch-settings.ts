@@ -4,6 +4,6 @@ export type AccountSwitchRunningSessions = 'ask' | 'restart' | 'keep'
 export type AgentAccountSwitchSettings = {
   /** Absent means 'ask'. */
   claudeAccountSwitchRunningSessions?: AccountSwitchRunningSessions
-  /** Absent means 'ask'. Separate from Claude's: a Codex restart does not wait for idle. */
+  /** Absent means 'ask'. */
   codexAccountSwitchRunningSessions?: AccountSwitchRunningSessions
 }
