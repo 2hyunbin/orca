@@ -13,6 +13,7 @@ import type {
 import { boundToolInput, JOURNAL_RUNNING_PREVIEW_LIMITS, utf8Head } from '../agent-session-journal/journal-payload-bounds'
 import {
   HISTORY_PAGE_CONTENT_BUDGET_BYTES,
+  type HistoryItemForm,
   type HistoryReader
 } from './agent-session-history-page-bounds'
 import { jsonBytes, shortenJsonStringsToFit } from './json-string-shortening'
@@ -55,9 +56,10 @@ function wireBody(body: AgentJournalItemBody): AgentJournalItemBody {
  *  that cannot fit, which the page answers with its too-large marker. */
 export function shortenedAgentJournalItem(
   item: AgentJournalRenderItem,
-  maxBytes: number
+  maxBytes: number,
+  bytes = jsonBytes(item)
 ): AgentJournalRenderItem | null {
-  if (jsonBytes(item) <= maxBytes) {
+  if (bytes <= maxBytes) {
     return item
   }
   const budget = maxBytes - (jsonBytes({ ...item, body: null, shortened: true }) - jsonBytes(null))
@@ -71,17 +73,19 @@ export function shortenedAgentJournalItem(
   return body === null ? null : { ...item, body, shortened: true }
 }
 
-function wireItem(item: AgentJournalRenderItem): AgentJournalRenderItem {
+function wireItem(item: AgentJournalRenderItem): HistoryItemForm {
   const body = wireBody(item.body)
   const sent = body === item.body ? item : { ...item, body, shortened: true as const }
-  return shortenedAgentJournalItem(sent, CLIENT_ITEM_MAX_BYTES) ?? sent
+  const bytes = jsonBytes(sent)
+  const fitted = shortenedAgentJournalItem(sent, CLIENT_ITEM_MAX_BYTES, bytes) ?? sent
+  return { item: fitted, bytes: fitted === sent ? bytes : jsonBytes(fitted) }
 }
 
 // Items are immutable per revision, so a catch-up or a second subscriber reuses the sent form.
-const sentForms = new WeakMap<AgentJournalRenderItem, AgentJournalRenderItem>()
+const sentForms = new WeakMap<AgentJournalRenderItem, HistoryItemForm>()
 
 /** What a client is sent of `item`. */
-export function agentJournalItemForWire(item: AgentJournalRenderItem): AgentJournalRenderItem {
+export function agentJournalItemForWire(item: AgentJournalRenderItem): HistoryItemForm {
   let sent = sentForms.get(item)
   if (sent === undefined) {
     sent = wireItem(item)

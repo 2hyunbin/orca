@@ -32,7 +32,8 @@ import { CLIENT_HISTORY_READER } from './agent-session-item-wire-form'
 import {
   boundHistoryItemsByBytes,
   type HistoryReader,
-  historyEntryBytes,
+  type HistoryItemForm,
+  measureHistoryItem,
   newestWholeSequenceGroups,
   wholeSubagentGroupsStart,
   oversizedHistoryItem,
@@ -235,10 +236,13 @@ function readForward(
   // submissions AND removal ids — a legal pre-bounding tombstone id can dwarf
   // every item on the page.
   const pageContentBytes = (
-    items: readonly AgentJournalRenderItem[],
+    items: readonly HistoryItemForm[],
     removedItemIds: readonly string[]
   ): number =>
-    items.reduce((total, item) => total + historyEntryBytes(item, submissionBytes), 0) +
+    items.reduce(
+      (total, { item, bytes }) => total + bytes + (submissionBytes.get(item.itemId) ?? 0),
+      0
+    ) +
     removedItemIds.reduce(
       (total, itemId) => total + Buffer.byteLength(JSON.stringify(itemId), 'utf8') + 1,
       0
@@ -247,7 +251,7 @@ function readForward(
   // clipping projected items: dropping an item while advancing the cursor past
   // the rows that touched it would lose that revision for good.
   let rows = since.rows.slice(0, limit)
-  const project = (window: typeof rows): ReturnType<typeof projectJournalBatch> => {
+  const project = (window: typeof rows) => {
     const result = projectJournalBatch({
       rows: window,
       snapshot,
@@ -275,9 +279,11 @@ function readForward(
   // One row can still touch an over-budget item; degrade it visibly.
   let items = projected.batch.items
   if (contentBytes > reader.budgetBytes) {
-    items = items.map((item) => {
-      const bytes = historyEntryBytes(item, submissionBytes)
-      return bytes > reader.budgetBytes ? oversizedHistoryItem(item) : item
+    items = items.map((formed) => {
+      const bytes = formed.bytes + (submissionBytes.get(formed.item.itemId) ?? 0)
+      return bytes > reader.budgetBytes
+        ? measureHistoryItem(oversizedHistoryItem(formed.item))
+        : formed
     })
     contentBytes = pageContentBytes(items, projected.batch.removedItemIds)
   }
@@ -295,7 +301,7 @@ function readForward(
     page: buildPage({
       snapshot,
       direction: 'after',
-      items,
+      items: items.map(({ item }) => item),
       removedItemIds: projected.batch.removedItemIds,
       // Reading after a position means there is something before it.
       hasOlder: cursor.sequence > 0,

@@ -72,7 +72,7 @@ describe('journal payload allocation bounds', () => {
       body,
       sequence: 1,
       observedAt: 1
-    })
+    }).item
     const encodedStringBytes = from.mock.calls.reduce(
       (largest, [value]) =>
         typeof value === 'string' ? Math.max(largest, Buffer.byteLength(value, 'utf8')) : largest,

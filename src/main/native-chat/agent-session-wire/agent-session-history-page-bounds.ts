@@ -65,10 +65,19 @@ export function oversizedHistoryItem(item: AgentJournalRenderItem): AgentJournal
   }
 }
 
+export type HistoryItemForm = {
+  item: AgentJournalRenderItem
+  bytes: number
+}
+
+export function measureHistoryItem(item: AgentJournalRenderItem): HistoryItemForm {
+  return { item, bytes: Buffer.byteLength(JSON.stringify(item), 'utf8') }
+}
+
 /** How a reader receives each item, and the bytes its page may hold of them. A page is measured
  *  in that form, so it carries what it will actually send. */
 export type HistoryReader = {
-  form: (item: AgentJournalRenderItem) => AgentJournalRenderItem
+  form: (item: AgentJournalRenderItem) => HistoryItemForm
   budgetBytes: number
 }
 
@@ -78,14 +87,18 @@ export function boundHistoryItemsByBytes(
   keep: 'newest' | 'oldest',
   submissionBytes: ReadonlyMap<string, number>,
   maxBytes: number,
-  form: HistoryReader['form'] = (item) => item
+  form: HistoryReader['form'] = measureHistoryItem
 ): { items: AgentJournalRenderItem[]; dropped: number } {
   const ordered = groupItemsBySequence(items, keep)
   const kept: AgentJournalRenderItem[][] = []
   let total = 0
   for (const stored of ordered) {
-    const group = stored.map(form)
-    const bytes = group.reduce((sum, item) => sum + historyEntryBytes(item, submissionBytes), 0)
+    const formed = stored.map(form)
+    const group = formed.map(({ item }) => item)
+    const bytes = formed.reduce(
+      (sum, { item, bytes }) => sum + bytes + (submissionBytes.get(item.itemId) ?? 0),
+      0
+    )
     if (kept.length === 0 && bytes > maxBytes) {
       kept.push(group.map((item) => oversizedHistoryItem(item)))
       break
