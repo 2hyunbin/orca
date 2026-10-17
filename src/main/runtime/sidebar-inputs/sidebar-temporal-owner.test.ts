@@ -182,6 +182,30 @@ describe('SidebarTemporalOwner', () => {
     expect(ranked()).toEqual(['new', 'old'])
     await vi.advanceTimersByTimeAsync(CREATE_GRACE_MS - 1_000)
     expect(ranked()).toEqual(['old', 'new'])
+    expect(owner.snapshot().sortSnapshot?.cause).toBe('create-grace')
+  })
+
+  it('stays idle until a window begins a session, and after dispose', async () => {
+    const { world, owner } = harness({ sortBy: 'name', worktrees: [worktree('a')] })
+    owner.noteRowsChange(1)
+    owner.noteSortInputChange()
+    world.active = new Set(['a'])
+    owner.noteActivityChange()
+    await vi.advanceTimersByTimeAsync(SORT_SETTLE_MS)
+    expect(owner.snapshot()).toEqual({
+      revision: 0,
+      sessionId: null,
+      sortSnapshot: null,
+      retention: null
+    })
+    expect(vi.getTimerCount()).toBe(0)
+
+    owner.beginSession('s1')
+    owner.dispose()
+    owner.noteSortInputChange()
+    await vi.advanceTimersByTimeAsync(SORT_SETTLE_MS)
+    expect(owner.snapshot().sortSnapshot).toBeNull()
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('drops a sample a newer settle overtook', async () => {

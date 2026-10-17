@@ -89,6 +89,7 @@ export class SmartSortAgentEntries {
       ...(latest.mainAgent ? { mainAgent: latest.mainAgent } : {})
     }
     this.entries.set(paneKey, entry)
+    // The window also re-sorts on a Command Code prompt; that turn moves stateStartedAt here.
     return isSmartSortRelevantAgentChange(existing, entry, latest.receivedAt)
   }
 }

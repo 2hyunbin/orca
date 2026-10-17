@@ -31,16 +31,19 @@ function readComparableIdentities(): Map<string, string> {
  */
 export const sidebarTemporalShadow = defineSidebarShadowDomain<TemporalValue>({
   name: 'sidebar-temporal',
-  readWindow: () => {
+  readWindow: (main) => {
     const window = readWindowSidebarTemporal()
     const values = new Map<string, TemporalValue>()
-    if (!window) {
+    // Main published nothing for this session, so there is nothing to agree with.
+    if (!window || main.values.size === 0) {
       return values
     }
     const identities = readComparableIdentities()
     const toIdentities = (ids: Iterable<string>): string[] =>
       [...ids].flatMap((id) => identities.get(id) ?? [])
-    values.set('sort', { mode: window.sortBy, ids: toIdentities(window.sortedIds) })
+    if (main.values.has('sort')) {
+      values.set('sort', { mode: window.sortBy, ids: toIdentities(window.sortedIds) })
+    }
     if (window.retainedIds) {
       values.set('retention', { ids: toIdentities(window.retainedIds).sort() })
     }
@@ -60,7 +63,10 @@ export const sidebarTemporalShadow = defineSidebarShadowDomain<TemporalValue>({
     }
     const comparable = new Set(readComparableIdentities().values())
     const scoped = (ids: readonly string[]): string[] => ids.filter((id) => comparable.has(id))
-    values.set('sort', { mode: main.sortSnapshot.mode, ids: scoped(main.sortSnapshot.rankedIds) })
+    // The window keeps its order past a create grace until its next settle, by design for now.
+    if (main.sortSnapshot.cause === 'settle') {
+      values.set('sort', { mode: main.sortSnapshot.mode, ids: scoped(main.sortSnapshot.rankedIds) })
+    }
     if (main.retention) {
       values.set('retention', { ids: scoped(main.retention.retainedIds) })
     }

@@ -5,12 +5,14 @@ const SortModeSchema = z.enum(['name', 'smart', 'recent', 'repo', 'manual'])
 /** The frozen order main sampled at its last settle, as host-qualified ids. */
 const SortSnapshotSchema = z.object({
   mode: SortModeSchema,
-  /** Counts settles since the list session began. */
+  /** Counts samples since the list session began. */
   epoch: z.number(),
   sampledAt: z.number(),
   rankedIds: z.array(z.string()),
   /** Smart has seen a live signal this session, so it ranks by attention, not saved order. */
-  smartLatched: z.boolean()
+  smartLatched: z.boolean(),
+  /** A create-grace re-sort is the one deadline the window does not act on yet. */
+  cause: z.enum(['settle', 'create-grace'])
 })
 
 /** Workspaces "Hide sleeping" keeps through a rebind gap; null while sleeping ones are shown. */

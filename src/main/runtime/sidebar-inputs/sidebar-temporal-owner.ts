@@ -57,11 +57,12 @@ const RETENTION_DEADLINE = 'sleeping-retention'
 /**
  * Main's copy of the list's time rules: when the frozen order settles, whether Smart has latched,
  * and which sleeping rows the sweep still keeps. The window still runs its own; this one is
- * compared against it and never persists ranks.
+ * compared against it and never persists ranks. It stays idle until a window begins a session.
  */
 export class SidebarTemporalOwner {
   private revision = 0
   private sessionId: string | null = null
+  private disposed = false
   private settleState = INITIAL_SORT_SETTLE_STATE
   private sortBy: WorkspaceSortBy
   private smartLatched = false
@@ -95,6 +96,7 @@ export class SidebarTemporalOwner {
       return
     }
     this.sessionId = sessionId
+    this.sortBy = this.inputs.sortBy()
     this.smartLatched = false
     this.epoch = 0
     // Until the new session's first sample lands, a reader must not take the old warm ranks.
@@ -106,8 +108,8 @@ export class SidebarTemporalOwner {
   }
 
   /** A change the sort reads; it settles after the burst, or at once when the row count moved. */
-  noteSortInputChange(liveWorktreeCount?: number): void {
-    this.dispatchSettle({
+  noteSortInputChange(liveWorktreeCount?: number): boolean {
+    return this.dispatchSettle({
       kind: 'write',
       change: {
         epochBumped: true,
@@ -121,10 +123,17 @@ export class SidebarTemporalOwner {
 
   /** Rows changed: Manual and cold Smart follow saved ranks at once, as the window does. */
   noteRowsChange(liveWorktreeCount: number): void {
-    this.noteSortInputChange(liveWorktreeCount)
-    if (ranksFollowPersistedOrder(this.sortBy, this.smartLatched)) {
+    if (
+      !this.noteSortInputChange(liveWorktreeCount) &&
+      ranksFollowPersistedOrder(this.sortBy, this.smartLatched)
+    ) {
       this.settleNow()
     }
+  }
+
+  /** The window re-sorts at once when a repo changes, since repo labels are a sort key. */
+  noteRepoChange(): void {
+    this.settleNow()
   }
 
   /** Activity alone never re-sorts; its sort-relevant causes arrive as their own changes. */
@@ -149,13 +158,23 @@ export class SidebarTemporalOwner {
   }
 
   dispose(): void {
+    this.disposed = true
     this.sampleSeq += 1
     for (const key of [SETTLE_DEADLINE, CREATE_GRACE_DEADLINE, RETENTION_DEADLINE]) {
       this.clock.cancel(key)
     }
   }
 
-  private dispatchSettle(event: SortSettleEvent): void {
+  /** False until a window begins a session, and after dispose. */
+  get running(): boolean {
+    return this.sessionId !== null && !this.disposed
+  }
+
+  /** True when this event settled at once. */
+  private dispatchSettle(event: SortSettleEvent): boolean {
+    if (!this.running) {
+      return false
+    }
     const step = reduceSortSettle(this.settleState, event, Date.now())
     const deadline = step.state.deadline
     if (deadline !== this.settleState.deadline) {
@@ -171,21 +190,25 @@ export class SidebarTemporalOwner {
     if (step.settle) {
       this.settleNow()
     }
+    return step.settle
   }
 
-  private settleNow(): void {
+  private settleNow(cause: SidebarSortSnapshot['cause'] = 'settle'): void {
+    if (!this.running) {
+      return
+    }
     const seq = ++this.sampleSeq
     void this.inputs.readSortSample().then(
       (sample) => {
         if (seq === this.sampleSeq) {
-          this.applySample(sample)
+          this.applySample(sample, cause)
         }
       },
       (error: unknown) => console.warn('[sidebar-temporal] could not read the rows to sort', error)
     )
   }
 
-  private applySample(sample: SidebarSortSample): void {
+  private applySample(sample: SidebarSortSample, cause: SidebarSortSnapshot['cause']): void {
     const now = Date.now()
     const ranking = rankWorktreesForSort({
       worktrees: sample.worktrees.filter((worktree) => !worktree.isArchived),
@@ -202,7 +225,8 @@ export class SidebarTemporalOwner {
       epoch: this.epoch,
       sampledAt: now,
       rankedIds: ranking.sorted.map(getWorktreeHostIdentity),
-      smartLatched: this.smartLatched
+      smartLatched: this.smartLatched,
+      cause
     }
     this.identityById = new Map(
       sample.worktrees.map((worktree) => [worktree.id, getWorktreeHostIdentity(worktree)])
@@ -214,7 +238,10 @@ export class SidebarTemporalOwner {
   // Recent ranks a new row at its grace floor until the window closes; re-sort when it does.
   private scheduleCreateGraceBoundary(worktrees: readonly Worktree[], now: number): void {
     let next = Infinity
-    if (this.sortBy === 'recent' || this.sortBy === 'smart') {
+    const readsRecency =
+      this.sortBy === 'recent' ||
+      (this.sortBy === 'smart' && !ranksFollowPersistedOrder(this.sortBy, this.smartLatched))
+    if (readsRecency) {
       for (const { createdAt } of worktrees) {
         const closesAt = (createdAt ?? -Infinity) + CREATE_GRACE_MS
         if (closesAt > now && closesAt < next) {
@@ -225,11 +252,14 @@ export class SidebarTemporalOwner {
     if (next === Infinity) {
       this.clock.cancel(CREATE_GRACE_DEADLINE)
     } else {
-      this.clock.schedule(CREATE_GRACE_DEADLINE, next, () => this.settleNow())
+      this.clock.schedule(CREATE_GRACE_DEADLINE, next, () => this.settleNow('create-grace'))
     }
   }
 
   private retentionPass(): void {
+    if (!this.running) {
+      return
+    }
     if (this.inputs.showSleepingWorkspaces()) {
       this.retentionState = createSleepingSweepRetentionState()
       this.clock.cancel(RETENTION_DEADLINE)
@@ -254,7 +284,8 @@ export class SidebarTemporalOwner {
     } else {
       this.clock.schedule(RETENTION_DEADLINE, now + nextExpiryInMs, () => this.retentionPass())
     }
-    const ids = [...retainedIds].map((id) => this.identityById.get(id) ?? id).sort()
+    // An id no sample has listed yet has no host to qualify it with, so it waits for one.
+    const ids = [...retainedIds].flatMap((id) => this.identityById.get(id) ?? []).sort()
     const previous = this.retention?.retainedIds
     if (!previous || previous.length !== ids.length || previous.some((id, i) => id !== ids[i])) {
       this.retention = { retainedIds: ids, retentionDecidedAt: now }

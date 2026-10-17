@@ -46,7 +46,7 @@ export const SIDEBAR_INPUT_METHODS = [
     permission: 'workspace',
     params: SidebarSessionBeginParams,
     handler: async ({ sessionId }, { runtime }) => {
-      runtime.sidebarTemporal.beginSession(sessionId)
+      runtime.beginSidebarListSession(sessionId)
       return { ok: true }
     }
   })

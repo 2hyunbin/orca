@@ -21,7 +21,7 @@ type Runtime = OrcaRuntimeWithWorkspaceReviewFacts
  */
 export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWorkspaceReviewFacts {
   private readonly smartSortAgentEntries = new SmartSortAgentEntries()
-  readonly sidebarTemporal = new SidebarTemporalOwner(this.sidebarClock, {
+  private readonly sidebarTemporal = new SidebarTemporalOwner(this.sidebarClock, {
     sortBy: () => this.store?.getUI?.().sortBy ?? 'smart',
     showSleepingWorkspaces: () =>
       this.store?.getUI?.().showSleepingWorkspaces ?? DEFAULT_SHOW_SLEEPING_WORKSPACES,
@@ -36,8 +36,10 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     // Every catalog change, from IPC or the runtime, reaches clients through this one bus.
     this.clientEvents.on(
       (event) => {
-        if (event.type === 'worktreesChanged' || event.type === 'reposChanged') {
+        if (event.type === 'worktreesChanged') {
           this.noteSidebarRowsChange()
+        } else if (event.type === 'reposChanged') {
+          this.sidebarTemporal.noteRepoChange()
         }
       },
       { consumesTerminalSideEffects: false }
@@ -45,7 +47,11 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
   }
 
   // Whether rows came or went decides if the change settles at once, so count after it lands.
+  // The count can come from a listing cached just before the change; the change then settles late.
   private noteSidebarRowsChange(): void {
+    if (!this.sidebarTemporal.running) {
+      return
+    }
     void this.listResolvedWorktreeSnapshot().then(
       ({ worktrees }) =>
         this.sidebarTemporal.noteRowsChange(
@@ -57,6 +63,10 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
 
   getSidebarTemporalSnapshot(): SidebarTemporalSnapshot {
     return this.sidebarTemporal.snapshot()
+  }
+
+  beginSidebarListSession(sessionId: string): void {
+    this.sidebarTemporal.beginSession(sessionId)
   }
 
   /** Attaches every sidebar producer that reads the hook server's store. */
@@ -73,6 +83,9 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
   }
 
   override syncWindowGraph(...args: Parameters<Runtime['syncWindowGraph']>) {
+    if (!this.sidebarTemporal.running) {
+      return super.syncWindowGraph(...args)
+    }
     const before = this.readSidebarGraphSortCauses()
     const result = super.syncWindowGraph(...args)
     const after = this.readSidebarGraphSortCauses()
