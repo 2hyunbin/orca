@@ -4,10 +4,11 @@ import { getLiveAgentStatusByWorktreeId } from '@/lib/worktree-activity-state'
 import { tabHasLivePty } from '@/lib/tab-has-live-pty'
 import { getWorktreeIdsWithStructuredChat } from '@/components/sidebar/visible-worktree-activity-inputs'
 import {
-  getSettingsFocusedExecutionHostId,
-  getWorktreeExecutionHostId,
-  parseExecutionHostId
+  getRepoExecutionHostId,
+  parseExecutionHostId,
+  type ExecutionHostId
 } from '../../../../shared/execution-host'
+import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import {
   IDLE_WORKSPACE_ACTIVITY,
   isIdleWorkspaceActivity,
@@ -60,21 +61,29 @@ export function readWindowWorkspaceActivityFacts(
   return facts
 }
 
-// A paired server publishes its own rows' facts; that comparison belongs to the server-row producer.
+// The local runtime answers for the rows it owns. A paired server owns and publishes its own rows'
+// facts, which the server-row producer compares; an id with no owner in the catalog is no row.
 function withoutPairedServerRows<Value>(
   state: AppState,
   values: ReadonlyMap<string, Value>
 ): Map<string, Value> {
   const worktreeById = new Map(getAllWorktreesFromState(state).map((row) => [row.id, row]))
+  const folderById = new Map((state.folderWorkspaces ?? []).map((folder) => [folder.id, folder]))
   const repoById = getRepoMapFromState(state)
-  const defaultHostId = getSettingsFocusedExecutionHostId(state.settings)
+  const ownerOf = (id: string): ExecutionHostId | null => {
+    const worktree = worktreeById.get(id)
+    const scope = parseWorkspaceKey(id)
+    const hostFields = worktree
+      ? repoById.get(worktree.repoId)
+      : scope?.type === 'folder'
+        ? folderById.get(scope.folderWorkspaceId)
+        : undefined
+    return worktree?.hostId ?? (hostFields ? getRepoExecutionHostId(hostFields) : null)
+  }
   const scoped = new Map<string, Value>()
   for (const [id, value] of values) {
-    const worktree = worktreeById.get(id)
-    const hostId = worktree
-      ? getWorktreeExecutionHostId(worktree, repoById.get(worktree.repoId), defaultHostId)
-      : defaultHostId
-    if (parseExecutionHostId(hostId)?.kind !== 'runtime') {
+    const owner = ownerOf(id)
+    if (owner !== null && parseExecutionHostId(owner)?.kind !== 'runtime') {
       scoped.set(id, value)
     }
   }
