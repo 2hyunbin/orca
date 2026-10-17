@@ -5975,8 +5975,7 @@
                   "7edb8ebe24": "从 URL 克隆",
                   "a6c20dca96": "从 SSH 目标打开项目",
                   "serverSshTitle": "此服务器 SSH 主机上的项目",
-                  "serverSshDescription": "从此服务器连接的 SSH 主机打开项目文件夹",
-                  "serverSshUpdate": "更新此服务器后才能在其 SSH 主机上添加项目",
+                  "serverSshAddOnThisComputer": "无法从服务器使用。请在此电脑上添加该 SSH 主机以打开其项目。",
                   "fb4fc5380e": "本地项目、Git 仓库或包含多个仓库的文件夹",
                   "2281fdc8c7": "浏览文件夹",
                   "runtimeBrowseDescription": "此主机上的现有 Git 仓库或文件夹"

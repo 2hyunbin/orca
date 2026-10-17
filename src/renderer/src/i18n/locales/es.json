@@ -5990,8 +5990,7 @@
                   "7edb8ebe24": "Clonar desde URL",
                   "a6c20dca96": "Abrir un proyecto desde un destino SSH",
                   "serverSshTitle": "Proyecto en un host SSH de este servidor",
-                  "serverSshDescription": "Abre una carpeta de proyecto de un host SSH al que se conecta este servidor",
-                  "serverSshUpdate": "Actualiza este servidor para añadir proyectos en sus hosts SSH",
+                  "serverSshAddOnThisComputer": "No disponible desde un servidor. Añade el host SSH en este ordenador para abrir sus proyectos.",
                   "fb4fc5380e": "Proyecto local, repositorio de Git o carpeta con muchos repositorios",
                   "2281fdc8c7": "Explorar carpeta",
                   "runtimeBrowseDescription": "Repositorio Git o carpeta existente en este host"

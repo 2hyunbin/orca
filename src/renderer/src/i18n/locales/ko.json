@@ -5975,8 +5975,7 @@
                   "7edb8ebe24": "URL에서 복제",
                   "a6c20dca96": "SSH 대상에서 프로젝트 열기",
                   "serverSshTitle": "이 서버의 SSH 호스트에 있는 프로젝트",
-                  "serverSshDescription": "이 서버가 연결하는 SSH 호스트의 프로젝트 폴더를 엽니다",
-                  "serverSshUpdate": "SSH 호스트에 프로젝트를 추가하려면 이 서버를 업데이트하세요",
+                  "serverSshAddOnThisComputer": "서버에서는 사용할 수 없습니다. 프로젝트를 열려면 이 컴퓨터에 SSH 호스트를 추가하세요.",
                   "fb4fc5380e": "로컬 프로젝트, Git repo 또는 repos가 많은 폴더",
                   "2281fdc8c7": "폴더 찾아보기",
                   "runtimeBrowseDescription": "이 호스트의 기존 Git 리포지토리 또는 폴더"
