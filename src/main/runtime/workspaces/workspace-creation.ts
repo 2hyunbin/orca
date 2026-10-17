@@ -1,4 +1,3 @@
-import { applyClaudeTerminalImageViewerEnv } from '../terminal-image-viewer-env'
 import type { Repo } from '../../../shared/repo-types'
 import type {
   WorktreeLineageInput,
@@ -7,7 +6,6 @@ import type {
 import { OrcaRuntimeWithGetWorktreeTerminalProvisioningHost } from './startup/workspace-terminal-provisioning'
 import type { RuntimeManagedWorktreeCreateArgs } from '../runtime-managed-worktree-create-types'
 import type { CreateWorktreeResult } from '../../../shared/worktree/create-types'
-import { isTuiAgentEnabled } from '../../../shared/tui-agent-selection'
 import { isFolderRepo } from '../../../shared/repo-kind'
 import { notifyLineageRepos } from '../../worktree-lineage-change-notification'
 import { resolveWorktreeCreateRoute } from '../../worktree-create-execution-host-route'
@@ -21,11 +19,14 @@ import { invalidateAuthorizedRootsCacheForRepo } from '../../ipc/filesystem-auth
 import { startRuntimeLocalWorktreeTerminals } from '../runtime-local-worktree-terminal-startup'
 import { trackRuntimeWorkspaceCreate } from '../../workspace-create-telemetry'
 import { assertOpenCodeModelLaunchPreferencesAbsent } from '../../opencode/opencode-model-startup-plan'
-import { resolveWorktreeCreateAgentStartup } from '../runtime-worktree-agent-startup'
 import type { RuntimeWorkspaceCreateEvents } from '../../workspace-create-telemetry'
 import { createdWorkspaceActivationCallbacks } from './workspace-create-activation'
 import { assertWslMoveRepoWritable } from '../../persistence/moving-wsl-projects/wsl-move-scope-guard'
-import { WorkspaceCreationRegistry } from '../sidebar-inputs/workspace-creation-registry'
+import { resolveManagedWorktreeCreateStartup } from './managed-worktree-create-startup'
+import {
+  WorkspaceCreationRegistry,
+  type WorkspaceCreationHandle
+} from '../sidebar-inputs/workspace-creation-registry'
 
 export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWithGetWorktreeTerminalProvisioningHost {
   protected abstract resolveLineageForWorktreeCreate(
@@ -45,7 +46,6 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
         this.performManagedWorktreeCreate(args, rearm, events)
       )
     } finally {
-      this.workspaceCreations.close(args)
       rearm.fire()
     }
   }
@@ -65,60 +65,39 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
     )
 
     const repo = await this.resolveRepoSelector(args.repoSelector)
-    // Opened once the project is known; a create refused before this is never listed.
-    this.workspaceCreations.open(args, { creationId: args.creationId, repoId: repo.id })
-    const onWorkspaceCreated = this.workspaceCreations.naming(args, args.onWorkspaceCreated)
-    assertWslMoveRepoWritable(this.store, repo)
-    const createSettings = this.store.getSettings()
-    const requestedAgent = args.startupAgent ?? args.createdWithAgent
-    const requestedAgentEnabled =
-      requestedAgent !== undefined
-        ? isTuiAgentEnabled(requestedAgent, createSettings.disabledTuiAgents)
-        : false
-    if ((args.startup || args.startupAgent) && requestedAgent && !requestedAgentEnabled) {
-      throw new Error('Selected agent is disabled. Choose an enabled agent before creating.')
+    // Listed from here: a create refused before its project resolved has nothing to show.
+    const creation = this.workspaceCreations.open({ creationId: args.creationId, repoId: repo.id })
+    try {
+      return await this.createInResolvedProject(args, repo, creation, rearm, events)
+    } finally {
+      creation.close()
     }
-    if (
-      args.startup &&
-      args.startupDraftPaste &&
-      !isTuiAgentEnabled(args.startupDraftPaste.agent, createSettings.disabledTuiAgents)
-    ) {
-      throw new Error('Selected agent is disabled. Choose an enabled agent before creating.')
+  }
+
+  private async createInResolvedProject(
+    args: RuntimeManagedWorktreeCreateArgs,
+    repo: Repo,
+    creation: WorkspaceCreationHandle,
+    rearm: PreparationRearmHolder,
+    events: RuntimeWorkspaceCreateEvents
+  ): Promise<CreateWorktreeResult> {
+    const store = this.requireStore()
+    const onWorkspaceCreated = (worktreeId: string): void => {
+      creation.named(worktreeId)
+      args.onWorkspaceCreated?.(worktreeId)
     }
-    const agentStartup = resolveWorktreeCreateAgentStartup(args, (...inputs) =>
-      this.buildStartupForAgent(repo, ...inputs)
-    )
-    const draftStartup =
-      !args.startup && !agentStartup && args.startupDraft
-        ? await this.buildStartupForDraft(
-            repo,
-            args.startupDraft,
-            args.startupDraftAgent ?? requestedAgent,
-            args.startupLaunchSource
-          )
-        : null
-    const resolvedStartup = args.startup ?? agentStartup?.startup ?? draftStartup?.startup
-    const effectiveStartup = resolvedStartup
-      ? applyClaudeTerminalImageViewerEnv(
-          resolvedStartup,
-          args.terminalImageViewerSupported,
-          resolvedStartup.launchAgent ??
-            args.startupAgent ??
-            args.createdWithAgent ??
-            agentStartup?.agent ??
-            draftStartup?.agent
-        )
-      : undefined
-    const effectiveStartupFollowup = agentStartup?.followup
-    const startupLaunchRuntime = args.startup
-      ? undefined
-      : (agentStartup ?? draftStartup)?.launchRuntime
-    const effectiveCreatedWithAgent = args.startup
-      ? args.createdWithAgent
-      : (agentStartup?.agent ??
-        draftStartup?.agent ??
-        (requestedAgentEnabled ? requestedAgent : undefined))
-    const effectiveDraftPaste = args.startupDraftPaste ?? draftStartup?.draftPaste
+    assertWslMoveRepoWritable(store, repo)
+    const createSettings = store.getSettings()
+    const {
+      effectiveStartup,
+      effectiveStartupFollowup,
+      startupLaunchRuntime,
+      effectiveCreatedWithAgent,
+      effectiveDraftPaste
+    } = await resolveManagedWorktreeCreateStartup(args, createSettings.disabledTuiAgents, {
+      agent: (...inputs) => this.buildStartupForAgent(repo, ...inputs),
+      draft: (...inputs) => this.buildStartupForDraft(repo, ...inputs)
+    })
     const activationCallbacks = createdWorkspaceActivationCallbacks(
       this.notifyActivateWorktree.bind(this),
       args.navigation
@@ -138,7 +117,7 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
         onWorkspaceCreated,
         draftPaste: effectiveDraftPaste,
         deps: {
-          store: this.store,
+          store,
           ptySpawnAvailable: Boolean(this.ptyController?.spawn),
           provisionInBackground: () => this.shouldProvisionWorktreeInBackground(args.navigation),
           createTerminal: (selector, options) => this.createTerminal(selector, options),
@@ -221,7 +200,7 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
     // authorization-requiring IPC relists EVERY registered repo — ~58 `git worktree
     // list` spawns, ~10s of git wall-clock through an admission budget of 4, to
     // rediscover roots only this repo changed.
-    invalidateAuthorizedRootsCacheForRepo(this.store, repo)
+    invalidateAuthorizedRootsCacheForRepo(store, repo)
 
     notifyLineageRepos(this.notifyWorktreesChanged.bind(this), repo.id, lineage?.parentWorktreeId)
     const {

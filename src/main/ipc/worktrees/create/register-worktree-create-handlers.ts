@@ -67,39 +67,41 @@ export function registerWorktreeCreateHandlers(context: WorktreeIpcContext): voi
           fromExistingBranch: typeof args.baseBranch === 'string' && args.baseBranch.length > 0,
           isFolder: isFolderRepo(repo)
         })
+        const creation = runtime.workspaceCreations.open({
+          creationId: args.creationId,
+          repoId: repo.id
+        })
         try {
           // Why: wrap only the helpers; the pre-validation throws above are IPC-shape bugs, not the git/filesystem failures the funnel tracks.
-          result = await runtime.workspaceCreations.track(
-            { creationId: args.creationId, repoId: repo.id },
-            async (named) => {
-              if (isFolderRepo(repo)) {
-                // A folder workspace is a registration, not a filesystem create, so it is host-agnostic.
-                return createFolderWorkspace(createArgs, repo, store)
-              }
-              // Resolve the host rather than reading the raw field: an `executionHostId: 'ssh:*'`-only
-              // row read as local here and ran `git worktree add` on the client against a remote path,
-              // while the runtime sibling on the same repo already resolved.
-              const createRoute = requireWorktreeCreateRoute(repo)
-              if (createRoute.kind === 'ssh') {
-                // Tagged before the refusal so the failed-create event keeps naming its host.
-                telemetry.timing.recordExecutionHost('ssh')
-                throw new SshHostNotServedError(createRoute.connectionId)
-              }
-              return createLocalWorktree(
-                createArgs,
-                repo,
-                store,
-                mainWindow,
-                runtime,
-                telemetry.timing,
-                named
-              )
+          if (isFolderRepo(repo)) {
+            // A folder workspace is a registration, not a filesystem create, so it is host-agnostic.
+            result = createFolderWorkspace(createArgs, repo, store)
+          } else {
+            // Resolve the host rather than reading the raw field: an `executionHostId: 'ssh:*'`-only
+            // row read as local here and ran `git worktree add` on the client against a remote path,
+            // while the runtime sibling on the same repo already resolved.
+            const createRoute = requireWorktreeCreateRoute(repo)
+            if (createRoute.kind === 'ssh') {
+              // Tagged before the refusal so the failed-create event keeps naming its host.
+              telemetry.timing.recordExecutionHost('ssh')
+              throw new SshHostNotServedError(createRoute.connectionId)
             }
-          )
+            result = await createLocalWorktree(
+              createArgs,
+              repo,
+              store,
+              mainWindow,
+              runtime,
+              telemetry.timing,
+              creation.named
+            )
+          }
         } catch (error) {
           releaseAutomationWorkspaceProvenanceRequest(args.automationProvenanceRequest)
           telemetry.failed(error)
           throw error
+        } finally {
+          creation.close()
         }
         finishAutomationWorkspaceProvenanceRequest(args.automationProvenanceRequest)
         if (result.timing) {
