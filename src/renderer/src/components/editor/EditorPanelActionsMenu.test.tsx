@@ -1,7 +1,7 @@
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { EditorPanelMarkdownActionsMenu } from './EditorPanelMarkdownActionsMenu'
+import { EditorPanelActionsMenu } from './EditorPanelActionsMenu'
 
 const checkboxItems = vi.hoisted(() => ({
   list: [] as {
@@ -41,17 +41,47 @@ vi.mock('@/components/ui/dropdown-menu', async () => {
 
 vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => fallback }))
 
-describe('EditorPanelMarkdownActionsMenu', () => {
+vi.mock('@/components/ui/tooltip', () => ({
+  Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipContent: () => null
+}))
+
+describe('EditorPanelActionsMenu', () => {
   beforeEach(() => {
     checkboxItems.list = []
+  })
+
+  it('shows front matter as a view preference beside word wrap', () => {
+    const onToggleMarkdownFrontmatter = vi.fn()
+    renderToStaticMarkup(
+      <EditorPanelActionsMenu
+        isDiffSurface={false}
+        diffWordWrap={false}
+        diffShowWhitespace={false}
+        editorWordWrap
+        shouldShowMarkdownExportAction
+        canExportMarkdownToPdf
+        canShowMarkdownFrontmatterToggle
+        markdownFrontmatterVisible
+        onToggleDiffWordWrap={vi.fn()}
+        onToggleDiffWhitespace={vi.fn()}
+        onToggleEditorWordWrap={vi.fn()}
+        onToggleMarkdownFrontmatter={onToggleMarkdownFrontmatter}
+        onExportMarkdownToPdf={vi.fn()}
+      />
+    )
+    expect(checkboxItems.list.map(({ label }) => label)).toEqual(['Word Wrap', 'Front Matter'])
+    expect(checkboxItems.list[1]?.checked).toBe(true)
+    checkboxItems.list[1]?.onCheckedChange?.(false)
+    expect(onToggleMarkdownFrontmatter).toHaveBeenCalledOnce()
   })
 
   it('shows Word Wrap for normal file tabs using editorWordWrap (#9974)', () => {
     const onToggleDiffWordWrap = vi.fn()
     const onToggleEditorWordWrap = vi.fn()
     renderToStaticMarkup(
-      React.createElement(EditorPanelMarkdownActionsMenu, {
-        isMarkdown: false,
+      React.createElement(EditorPanelActionsMenu, {
         isDiffSurface: false,
         diffWordWrap: false,
         diffShowWhitespace: false,
@@ -79,8 +109,7 @@ describe('EditorPanelMarkdownActionsMenu', () => {
     const onToggleDiffWordWrap = vi.fn()
     const onToggleEditorWordWrap = vi.fn()
     renderToStaticMarkup(
-      React.createElement(EditorPanelMarkdownActionsMenu, {
-        isMarkdown: false,
+      React.createElement(EditorPanelActionsMenu, {
         isDiffSurface: true,
         diffWordWrap: true,
         diffShowWhitespace: false,
@@ -107,8 +136,7 @@ describe('EditorPanelMarkdownActionsMenu', () => {
   it('shows and binds Show Whitespace on diff surfaces', () => {
     const onToggleDiffWhitespace = vi.fn()
     renderToStaticMarkup(
-      React.createElement(EditorPanelMarkdownActionsMenu, {
-        isMarkdown: false,
+      React.createElement(EditorPanelActionsMenu, {
         isDiffSurface: true,
         diffWordWrap: false,
         diffShowWhitespace: true,

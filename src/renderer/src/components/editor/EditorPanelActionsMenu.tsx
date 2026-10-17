@@ -1,5 +1,5 @@
 import type React from 'react'
-import { MoreHorizontal } from 'lucide-react'
+import { FileDown, MoreHorizontal } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -9,9 +9,11 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { translate } from '@/i18n/i18n'
+import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
-type EditorPanelMarkdownActionsMenuProps = {
-  isMarkdown: boolean
+type EditorPanelActionsMenuProps = {
+  fileLocationActions?: React.ReactNode
   isDiffSurface: boolean
   /** Diff-only wrap preference; ignored for normal file tabs. */
   diffWordWrap: boolean
@@ -30,8 +32,8 @@ type EditorPanelMarkdownActionsMenuProps = {
   onExportMarkdownToPdf: () => void
 }
 
-export function EditorPanelMarkdownActionsMenu({
-  isMarkdown,
+export function EditorPanelActionsMenu({
+  fileLocationActions,
   isDiffSurface,
   diffWordWrap,
   diffShowWhitespace,
@@ -45,32 +47,35 @@ export function EditorPanelMarkdownActionsMenu({
   onToggleEditorWordWrap,
   onToggleMarkdownFrontmatter,
   onExportMarkdownToPdf
-}: EditorPanelMarkdownActionsMenuProps): React.JSX.Element | null {
-  const hasMarkdownActions =
-    isMarkdown && (shouldShowMarkdownExportAction || canShowMarkdownFrontmatterToggle)
+}: EditorPanelActionsMenuProps): React.JSX.Element {
   // Why: normal files always get Word Wrap so long/structured lines can unwrap without Settings (#9974).
   const wordWrapChecked = isDiffSurface ? diffWordWrap : editorWordWrap
   const onToggleWordWrap = isDiffSurface ? onToggleDiffWordWrap : onToggleEditorWordWrap
+  const menuLabel = fileLocationActions
+    ? translate('auto.components.editor.EditorPanelActionsMenu.fileActions', 'File actions')
+    : translate('auto.components.editor.EditorPanelMarkdownActionsMenu.561251019a', 'More actions')
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-          aria-label={translate(
-            'auto.components.editor.EditorPanelMarkdownActionsMenu.561251019a',
-            'More actions'
-          )}
-          title={translate(
-            'auto.components.editor.EditorPanelMarkdownActionsMenu.561251019a',
-            'More actions'
-          )}
-        >
-          <MoreHorizontal size={14} />
-        </button>
-      </DropdownMenuTrigger>
+    <DropdownMenu modal={false}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon-xs" aria-label={menuLabel}>
+              <MoreHorizontal />
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" sideOffset={4}>
+          {menuLabel}
+        </TooltipContent>
+      </Tooltip>
       <DropdownMenuContent align="end" sideOffset={4}>
+        {fileLocationActions ? (
+          <>
+            {fileLocationActions}
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
         <DropdownMenuCheckboxItem checked={wordWrapChecked} onCheckedChange={onToggleWordWrap}>
           {translate(
             'auto.components.editor.EditorPanelMarkdownActionsMenu.1eef809708',
@@ -88,34 +93,22 @@ export function EditorPanelMarkdownActionsMenu({
             )}
           </DropdownMenuCheckboxItem>
         ) : null}
-        {hasMarkdownActions ? <DropdownMenuSeparator /> : null}
         {canShowMarkdownFrontmatterToggle ? (
-          <>
-            <DropdownMenuItem
-              onSelect={(event) => {
-                event.preventDefault()
-                onToggleMarkdownFrontmatter()
-              }}
-            >
-              {markdownFrontmatterVisible
-                ? translate(
-                    'auto.components.editor.EditorPanelMarkdownActionsMenu.10c39d58c1',
-                    'Hide front matter'
-                  )
-                : translate(
-                    'auto.components.editor.EditorPanelMarkdownActionsMenu.8c8b7f5ff5',
-                    'Show front matter'
-                  )}
-            </DropdownMenuItem>
-            {shouldShowMarkdownExportAction ? <DropdownMenuSeparator /> : null}
-          </>
+          <DropdownMenuCheckboxItem
+            checked={markdownFrontmatterVisible}
+            onCheckedChange={onToggleMarkdownFrontmatter}
+          >
+            {translate('auto.components.editor.EditorContent.e4b074749d', 'Front Matter')}
+          </DropdownMenuCheckboxItem>
         ) : null}
+        {shouldShowMarkdownExportAction ? <DropdownMenuSeparator /> : null}
         {shouldShowMarkdownExportAction ? (
           <DropdownMenuItem
             // Why: source/Monaco fallbacks have no rendered document DOM to export.
             disabled={!canExportMarkdownToPdf}
             onSelect={onExportMarkdownToPdf}
           >
+            <FileDown />
             {translate(
               'auto.components.editor.EditorPanelMarkdownActionsMenu.3e0ce48c24',
               'Export as PDF'
