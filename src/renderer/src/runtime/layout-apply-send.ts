@@ -10,6 +10,7 @@ import type { PaneSide } from '../../../shared/workspace-layout/terminal-pane-tr
 import type { LayoutEditorFile } from '../../../shared/workspace-layout/workspace-layout-model'
 import type { EditorTabContentType } from '@/store/slices/editor/tabs/editor-tab-content-type'
 import type {
+  EditorFileRename,
   GroupSide,
   LayoutApplyReply,
   LayoutCommandResult,
@@ -84,6 +85,7 @@ export type WindowLayoutCommand =
       groupId: string
       file?: LayoutEditorFile
     }
+  | { type: 'renameEditorFiles'; renames: EditorFileRename[] }
   | { type: 'sleep'; tabId: string; paneKeys: string[]; records: SleepingAgentSessionRecord[] }
   | { type: 'wake'; tabId: string; paneKeys: [string] }
 

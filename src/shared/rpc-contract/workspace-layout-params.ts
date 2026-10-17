@@ -257,6 +257,24 @@ const MoveTabToWorkspaceCommand = z.object({
   file: EditorFileRecord.optional()
 })
 
+/**
+ * Open files the window renamed or moved on disk, under the ids the window gave them; an edit-mode
+ * file's record moves from its old path.
+ */
+const RenameEditorFilesCommand = z.object({
+  type: z.literal('renameEditorFiles'),
+  workspace: OnPane.workspace,
+  renames: z
+    .array(
+      z.object({
+        fileId: z.string().min(1),
+        newFileId: z.string().min(1),
+        record: z.object({ fromFilePath: z.string().min(1), file: EditorFileRecord }).optional()
+      })
+    )
+    .min(1)
+})
+
 /** Pane keys of the command's own tab only, so a sleep or wake never reaches past it. */
 function paneKeysNameTab(command: { tabId: string; paneKeys: string[] }): boolean {
   return command.paneKeys.every((paneKey) => parsePaneKey(paneKey)?.tabId === command.tabId)
@@ -314,6 +332,7 @@ export const LayoutApplyParams = z.object({
     OpenEditorTabCommand,
     PromotePreviewTabCommand,
     MoveTabToWorkspaceCommand,
+    RenameEditorFilesCommand,
     SleepCommand,
     WakeCommand
   ])

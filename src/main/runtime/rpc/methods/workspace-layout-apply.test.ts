@@ -313,6 +313,30 @@ describe('layout.apply', () => {
     expect(parse({ ...move, toWorkspace: '' })?.success).toBe(false)
   })
 
+  it('accepts open files renamed on disk under the window’s ids, with an edit file’s record', async () => {
+    const apply = eraseRpcMethods(LAYOUT_APPLY_METHODS).find(
+      (method) => method.name === 'layout.apply'
+    )
+    const parse = (command: Record<string, unknown>) => apply?.params?.safeParse({ command })
+    const edit = {
+      fileId: '/work/one/a.ts',
+      newFileId: '/work/one/b.ts',
+      record: {
+        fromFilePath: '/work/one/a.ts',
+        file: { filePath: '/work/one/b.ts', relativePath: 'b.ts', language: 'typescript' }
+      }
+    }
+    const rename = { type: 'renameEditorFiles', workspace: WORKTREE, renames: [edit] }
+
+    expect(parse(rename)?.success).toBe(true)
+    expect(parse({ ...rename, renames: [{ fileId: 'd1', newFileId: 'd2' }] })?.success).toBe(true)
+    expect(parse({ ...rename, renames: [] })?.success).toBe(false)
+    expect(parse({ ...rename, renames: [{ ...edit, newFileId: '' }] })?.success).toBe(false)
+    expect(
+      parse({ ...rename, renames: [{ ...edit, record: { fromFilePath: 'x' } }] })?.success
+    ).toBe(false)
+  })
+
   it('takes an open into a new split under the window’s group id, on every open kind', async () => {
     const apply = (await registeredMethods(true)).find((method) => method.name === 'layout.apply')
     const parse = (command: Record<string, unknown>) => apply?.params?.safeParse({ command })

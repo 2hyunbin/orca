@@ -129,6 +129,11 @@ export type LayoutCommand =
       file?: LayoutEditorFile
     })
   | (On & {
+      type: 'renameEditorFiles'
+      /** Under the window's ids; one workspace's files only. */
+      renames: EditorFileRename[]
+    })
+  | (On & {
       type: 'openBrowserTab'
       profileId?: string | null
       sessionPartition?: string | null
@@ -174,6 +179,13 @@ export type LayoutCommand =
 export type InitialSurfaceReason = 'restore' | 'activation'
 
 export type CommandOf<T extends LayoutCommand['type']> = Extract<LayoutCommand, { type: T }>
+
+/** One open file the window renamed or moved; `record` when it is an edit-mode file. */
+export type EditorFileRename = {
+  fileId: string
+  newFileId: string
+  record?: { fromFilePath: string; file: LayoutEditorFile }
+}
 
 export type GroupSide = 'left' | 'right' | 'up' | 'down'
 

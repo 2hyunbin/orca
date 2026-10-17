@@ -2,6 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
+import { remapOpenEditorTabsForPathChange } from '@/lib/remap-open-editor-tabs-for-path-change'
 import type { AppState } from '@/store/types'
 import { endLayoutFramePositions } from '@/runtime/layout-frame-position'
 import { openWorkspaceLayoutFrameSync } from '@/runtime/workspace-layout-frame-sync'
@@ -44,6 +45,7 @@ vi.mock('@/runtime/runtime-layout-client', () => ({
 }))
 
 const WT = 'repo-a::/repo-a'
+const SIBLING = 'repo-a::/repo-a-2'
 
 let main: WorkspaceLayoutModel
 
@@ -58,7 +60,10 @@ beforeEach(() => {
       settings: { editorAutoSave: false },
       repos: [{ id: 'repo-a', path: '/repo-a', kind: 'git', executionHostId: 'local' }],
       worktreesByRepo: {
-        'repo-a': [{ id: WT, repoId: 'repo-a', path: '/repo-a', hostId: 'local', branch: '' }]
+        'repo-a': [
+          { id: WT, repoId: 'repo-a', path: '/repo-a', hostId: 'local', branch: '' },
+          { id: SIBLING, repoId: 'repo-a', path: '/repo-a-2', hostId: 'local', branch: '' }
+        ]
       },
       detectedWorktreesByRepo: {},
       runtimeEnvironments: [],
@@ -81,7 +86,7 @@ beforeEach(() => {
 
 afterEach(() => endLayoutFramePositions())
 
-function applySent(): void {
+function applySent(): LayoutCommand[] {
   const commands = mocks.callRuntimeRpc.mock.calls.map((call) => call[2].command)
   mocks.layoutOwnerIsMain = true
   mocks.callRuntimeRpc.mockClear()
@@ -97,6 +102,7 @@ function applySent(): void {
     }
     main = applied.model
   }
+  return commands
 }
 
 async function showMainFrame(): Promise<void> {
@@ -113,14 +119,54 @@ async function showMainFrame(): Promise<void> {
   sync.close()
 }
 
-function editorTabsAndFiles() {
+function editorTabsAndFiles(worktreeId = WT) {
   const state = useAppStore.getState()
   const fileIds = new Set(state.openFiles.map((file) => file.id))
-  return (state.unifiedTabsByWorktree[WT] ?? []).map((tab) => ({
+  return (state.unifiedTabsByWorktree[worktreeId] ?? []).map((tab) => ({
     kind: tab.contentType,
     entity: tab.entityId,
     hasFile: fileIds.has(tab.entityId)
   }))
+}
+
+/** Non-empty groups only: an emptied group is never saved. */
+function windowView(worktreeId: string) {
+  const state = useAppStore.getState()
+  const tabs = state.unifiedTabsByWorktree[worktreeId] ?? []
+  return (state.groupsByWorktree[worktreeId] ?? [])
+    .filter((group) => group.tabOrder.length > 0)
+    .map((group) => ({
+      group: group.id,
+      tabs: group.tabOrder.map((tabId) => {
+        const tab = tabs.find((entry) => entry.id === tabId)!
+        return { id: tab.id, entity: tab.entityId }
+      })
+    }))
+}
+
+function mainView(worktreeId: string) {
+  const workspace = main.workspaces[worktreeId]
+  return (workspace?.groups ?? []).map((group) => ({
+    group: group.id,
+    tabs: group.tabOrder.map((tabId) => {
+      const tab = workspace!.tabs.find((entry) => entry.id === tabId)!
+      return { id: tab.id, entity: tab.entityId }
+    })
+  }))
+}
+
+function openEdit(worktreeId: string, filePath: string, relativePath: string): string {
+  return useAppStore.getState().openFile(
+    {
+      filePath,
+      relativePath,
+      worktreeId,
+      runtimeEnvironmentId: null,
+      language: 'typescript',
+      mode: 'edit'
+    },
+    { suppressActiveRuntimeFallback: true }
+  )
 }
 
 describe('editor records under frames, layout-owner build', () => {
@@ -189,5 +235,95 @@ describe('editor records under frames, layout-owner build', () => {
 
     expect(editorTabsAndFiles()).toEqual([])
     expect(useAppStore.getState().openFiles.map((file) => file.id)).toEqual(['/repo-a/c.ts'])
+  })
+})
+
+describe('open files renamed on disk, layout-owner build', () => {
+  it("rekeys main's tabs and file records under the window's ids", async () => {
+    const plain = openEdit(WT, '/repo-a/src/a.ts', 'src/a.ts')
+    // The same path in a sibling workspace gets an owner-qualified id.
+    const owned = openEdit(SIBLING, '/repo-a/src/a.ts', 'src/a.ts')
+    useAppStore.getState().openDiff(WT, '/repo-a/src/a.ts', 'src/a.ts', 'typescript', false)
+    applySent()
+    expect(owned).toMatch(/^editor:/)
+
+    const result = remapOpenEditorTabsForPathChange({
+      fromPath: '/repo-a/src',
+      toPath: '/repo-a/lib',
+      worktreePath: '/repo-a',
+      worktreeId: WT
+    })
+
+    expect(result).toEqual({ ok: true })
+    const commands = applySent()
+    expect(commands.map((command) => [command.type, command.workspace])).toEqual([
+      ['renameEditorFiles', WT],
+      ['renameEditorFiles', SIBLING]
+    ])
+    expect(editorTabsAndFiles().map((tab) => tab.entity)).not.toContain(plain)
+    for (const worktreeId of [WT, SIBLING]) {
+      expect(mainView(worktreeId)).toEqual(windowView(worktreeId))
+      expect(main.workspaces[worktreeId]!.editorFiles).toEqual([
+        expect.objectContaining({ filePath: '/repo-a/lib/a.ts', relativePath: 'lib/a.ts' })
+      ])
+    }
+
+    const before = [editorTabsAndFiles(WT), editorTabsAndFiles(SIBLING)]
+    await showMainFrame()
+    expect([editorTabsAndFiles(WT), editorTabsAndFiles(SIBLING)]).toEqual(before)
+  })
+
+  it('sends nothing for a refused rekey or with the switch off', () => {
+    openEdit(WT, '/repo-a/a.ts', 'a.ts')
+    openEdit(WT, '/repo-a/b.ts', 'b.ts')
+    applySent()
+    expect(
+      remapOpenEditorTabsForPathChange({
+        fromPath: '/repo-a/a.ts',
+        toPath: '/repo-a/b.ts',
+        worktreePath: '/repo-a',
+        worktreeId: WT
+      })
+    ).toEqual({ ok: false, reason: 'collision' })
+    expect(applySent()).toEqual([])
+
+    mocks.layoutOwnerIsMain = false
+    expect(
+      remapOpenEditorTabsForPathChange({
+        fromPath: '/repo-a/a.ts',
+        toPath: '/repo-a/c.ts',
+        worktreePath: '/repo-a',
+        worktreeId: WT
+      })
+    ).toEqual({ ok: true })
+    expect(applySent()).toEqual([])
+  })
+})
+
+describe('a resolved deleted-side conflict, layout-owner build', () => {
+  it("closes the placeholder's tab in main, so no frame brings its record back", async () => {
+    const entry = {
+      path: 'gone.ts',
+      status: 'deleted' as const,
+      area: 'unstaged' as const,
+      conflictKind: 'deleted_by_us' as const,
+      conflictStatus: 'unresolved' as const,
+      conflictStatusSource: 'git' as const
+    }
+    useAppStore.getState().setGitStatus(WT, { entries: [entry], conflictOperation: 'merge' })
+    useAppStore.getState().openConflictFile(WT, '/repo-a', entry, 'typescript')
+    applySent()
+    expect(editorTabsAndFiles()).toEqual([
+      { kind: 'editor', entity: '/repo-a/gone.ts', hasFile: true }
+    ])
+    expect(main.workspaces[WT]!.tabs).toHaveLength(1)
+
+    useAppStore.getState().setGitStatus(WT, { entries: [], conflictOperation: 'merge' })
+
+    expect(applySent().map((command) => command.type)).toEqual(['closeTabs'])
+    expect(main.workspaces[WT]!.tabs).toEqual([])
+    await showMainFrame()
+    expect(editorTabsAndFiles()).toEqual([])
+    expect(useAppStore.getState().openFiles).toEqual([])
   })
 })
