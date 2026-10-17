@@ -86,7 +86,7 @@ function ClaudeAccountSwitchDialogContent({
           {translate('accounts.claude.switchSessions.remember', 'Remember my choice')}
         </Label>
       </div>
-      <DialogFooter>
+      <DialogFooter className="sm:justify-between">
         <Button
           type="button"
           variant="outline"
