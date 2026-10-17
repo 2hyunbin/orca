@@ -161,7 +161,7 @@ describe('OrcaRuntimeService', () => {
     const localRepo = store.getRepos()[0]
     const repos = [remoteRepo, localRepo]
     runtimeStore.getRepos = () => repos
-    runtimeStore.getRepo = (id: string) => repos.find((repo) => repo.id === id)
+    runtimeStore.getRepoAnyHost = (id: string) => repos.find((repo) => repo.id === id)
     const runtime = new OrcaRuntimeService(runtimeStore as never)
     const listProcesses = vi.fn(async () => [
       {

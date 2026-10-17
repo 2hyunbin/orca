@@ -184,7 +184,7 @@ describe('OrcaRuntimeService', () => {
     const runtimeStore = {
       ...store,
       getRepos: () => [remoteRepo],
-      getRepo: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined),
+      getRepoAnyHost: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined),
       getAllWorktreeMeta: () => metaById,
       getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
       getWorkspaceSession: () => getDefaultWorkspaceSession()
@@ -247,11 +247,11 @@ describe('OrcaRuntimeService', () => {
         displayName: 'Remote mobile'
       })
     }
-    const getRepo = vi.fn((id: string) => (id === remoteRepo.id ? remoteRepo : undefined))
+    const getRepoAnyHost = vi.fn((id: string) => (id === remoteRepo.id ? remoteRepo : undefined))
     const runtimeStore = {
       ...store,
       getRepos: () => [remoteRepo],
-      getRepo,
+      getRepoAnyHost,
       getAllWorktreeMeta: () => metaById,
       getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
       setWorktreeMeta: (worktreeId: string, meta: Partial<WorktreeMeta>) => {
@@ -300,7 +300,7 @@ describe('OrcaRuntimeService', () => {
       })
     ])
     expect(summaries.worktrees[0]?.agents).toHaveLength(100)
-    expect(getRepo).toHaveBeenCalledTimes(1)
+    expect(getRepoAnyHost).toHaveBeenCalledTimes(1)
   })
 
   it.each([
@@ -345,7 +345,7 @@ describe('OrcaRuntimeService', () => {
       const runtimeStore = {
         ...store,
         getRepos: () => [remoteRepo],
-        getRepo: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined),
+        getRepoAnyHost: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined),
         getAllWorktreeMeta: () => storedMeta,
         getWorktreeMeta: () => undefined
       }
@@ -417,7 +417,7 @@ describe('OrcaRuntimeService', () => {
     const runtimeStore = {
       ...store,
       getRepos: () => [remoteRepo],
-      getRepo: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined),
+      getRepoAnyHost: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined),
       getAllWorktreeMeta: () => storedMeta,
       getWorktreeMeta: () => undefined
     }
@@ -468,12 +468,12 @@ describe('OrcaRuntimeService', () => {
         isMainWorktree: false
       }
     })
-    const getRepo = vi.fn((id: string) => (id === remoteRepo.id ? remoteRepo : undefined))
+    const getRepoAnyHost = vi.fn((id: string) => (id === remoteRepo.id ? remoteRepo : undefined))
     const storedMeta = storedWorktreeMeta(remoteRepo.id, remoteWorktrees)
     const runtimeStore = {
       ...store,
       getRepos: () => [remoteRepo],
-      getRepo,
+      getRepoAnyHost,
       getAllWorktreeMeta: () => storedMeta,
       getWorktreeMeta: () => undefined
     }
@@ -497,7 +497,7 @@ describe('OrcaRuntimeService', () => {
 
     expect(summaries).toMatchObject({ totalCount: 2_000, truncated: true })
     expect(summaries.worktrees.every((worktree) => worktree.agents?.length === 0)).toBe(true)
-    expect(getRepo).toHaveBeenCalledTimes(remoteWorktrees.length)
+    expect(getRepoAnyHost).toHaveBeenCalledTimes(remoteWorktrees.length)
     // Why: the prior fallback read every worktree path per distinct miss, exceeding the 3s worktree.ps poll interval at this scale.
     expect(pathReadCount).toBeLessThan(40_000)
   })
@@ -522,7 +522,7 @@ describe('OrcaRuntimeService', () => {
     const runtimeStore = {
       ...store,
       getRepos: () => [remoteRepo],
-      getRepo: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined),
+      getRepoAnyHost: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined),
       getAllWorktreeMeta: () => storedMeta,
       getWorktreeMeta: () => undefined
     }
@@ -584,7 +584,7 @@ describe('OrcaRuntimeService', () => {
     const runtimeStore = {
       ...store,
       getRepos: () => [remoteRepo],
-      getRepo: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined),
+      getRepoAnyHost: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined),
       getAllWorktreeMeta: () => storedMeta,
       getWorktreeMeta: () => undefined
     }

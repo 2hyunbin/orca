@@ -84,7 +84,7 @@ function makeStore(options: StoreOptions = {}) {
   }
   const lineageById = makeLineage()
   const store = {
-    getRepo: (id: string) => store.getRepos().find((repo) => repo.id === id),
+    getRepoAnyHost: (id: string) => store.getRepos().find((repo) => repo.id === id),
     getRepos: () => [
       {
         id: REPO_ID,

@@ -39,7 +39,7 @@ const localRepo = { id: 'repo-local', path: '/repos/local', displayName: 'local'
 function createStore(repo: Repo) {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the listing reads only these store methods; the pruning that would need more is mocked above.
   return {
-    getRepo: () => repo,
+    getRepoAnyHost: () => repo,
     getRepos: () => [repo],
     getProjects: () => [],
     getSettings: () => ({}),

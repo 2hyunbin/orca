@@ -12,14 +12,14 @@ const settingsState = {
 }
 
 const store = {
-  getRepo: () => ({
+  getRepoAnyHost: () => ({
     id: 'repo-1',
     path: '/tmp/repo',
     displayName: 'repo',
     badgeColor: 'blue',
     addedAt: 1
   }),
-  getRepos: () => [store.getRepo()],
+  getRepos: () => [store.getRepoAnyHost()],
   addRepo: () => {},
   updateRepo: () => undefined as never,
   getAllWorktreeMeta: () => ({}),

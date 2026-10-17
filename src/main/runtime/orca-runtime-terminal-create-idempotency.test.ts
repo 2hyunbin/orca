@@ -590,7 +590,7 @@ describe('launch runtime dispatch and allocation phases', () => {
       title: null
     }
     Object.defineProperty(runtime, 'store', {
-      value: { getRepos: () => [repo], getRepo: () => repo }
+      value: { getRepos: () => [repo], getRepoAnyHost: () => repo }
     })
     Object.defineProperty(runtime, 'resolveWorktreeSelector', {
       value: async () => ({ id: 'repo::workspace', repoId: 'repo', path: '/workspace' })

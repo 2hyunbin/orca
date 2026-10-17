@@ -1,5 +1,5 @@
 export const makeStore = (overrides?: { isUnread?: boolean }) => ({
-  getRepo: (id: string) =>
+  getRepoAnyHost: (id: string) =>
     makeStore(overrides)
       .getRepos()
       .find((repo) => repo.id === id),
@@ -14,8 +14,9 @@ export const makeStore = (overrides?: { isUnread?: boolean }) => ({
   ],
   addRepo: () => {},
   updateRepo: (id: string, updates: Record<string, unknown>) =>
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
     ({
-      ...makeStore(overrides).getRepo(id),
+      ...makeStore(overrides).getRepoAnyHost(id),
       ...updates
     }) as never,
   getAllWorktreeMeta: () => ({

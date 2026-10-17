@@ -86,13 +86,13 @@ describe('Store', () => {
     expect(makeTerminalTab).toBe(makeSessionTerminalTab)
   })
 
-  // ── 5. addRepo and getRepo ──────────────────────────────────────────
+  // ── 5. addRepo and getRepoAnyHost ──────────────────────────────────────────
 
-  it('addRepo stores a repo retrievable by getRepo', async () => {
+  it('addRepo stores a repo retrievable by getRepoAnyHost', async () => {
     const store = await createStore()
     store.addRepo(makeRepo())
 
-    const fetched = store.getRepo('r1')
+    const fetched = store.getRepoAnyHost('r1')
     expect(fetched).toBeDefined()
     expect(fetched!.displayName).toBe('test')
     // No username has been resolved yet — hydration must not probe git/gh.
@@ -131,10 +131,10 @@ describe('Store', () => {
   it('setResolvedRepoGitUsername persists the enriched username for hydration', async () => {
     const store = await createStore()
     store.addRepo(makeRepo())
-    expect(store.getRepo('r1')!.gitUsername).toBe('')
+    expect(store.getRepoAnyHost('r1')!.gitUsername).toBe('')
 
     expect(store.setResolvedRepoGitUsername(makeRepo(), 'testuser')).toBe(true)
-    expect(store.getRepo('r1')!.gitUsername).toBe('testuser')
+    expect(store.getRepoAnyHost('r1')!.gitUsername).toBe('testuser')
     // Unchanged value reports no change so callers can skip renderer notify.
     expect(store.setResolvedRepoGitUsername(makeRepo(), 'testuser')).toBe(false)
     expect(store.setResolvedRepoGitUsername(makeRepo({ id: 'missing' }), 'x')).toBe(false)
@@ -142,7 +142,7 @@ describe('Store', () => {
     expect(store.setResolvedRepoGitUsername(makeRepo({ connectionId: 'ssh-1' }), 'ssh-user')).toBe(
       false
     )
-    expect(store.getRepo('r1')!.gitUsername).toBe('testuser')
+    expect(store.getRepoAnyHost('r1')!.gitUsername).toBe('testuser')
 
     store.flush()
     const persisted = readDataFile() as PersistedState
@@ -165,9 +165,9 @@ describe('Store', () => {
     expect(store.deleteProjectGroup(root.id)).toBe(true)
 
     expect(store.getProjectGroups().map((group) => group.id)).toEqual([sibling.id])
-    expect(store.getRepo('direct')?.projectGroupId).toBeNull()
-    expect(store.getRepo('nested')?.projectGroupId).toBeNull()
-    expect(store.getRepo('sibling')?.projectGroupId).toBe(sibling.id)
+    expect(store.getRepoAnyHost('direct')?.projectGroupId).toBeNull()
+    expect(store.getRepoAnyHost('nested')?.projectGroupId).toBeNull()
+    expect(store.getRepoAnyHost('sibling')?.projectGroupId).toBe(sibling.id)
   })
 
   it('adapts flat folder-scan groups into sparse nested folder scopes on load', async () => {
@@ -215,10 +215,10 @@ describe('Store', () => {
       ['Platform', null, '/workspace/platform'],
       ['packages/shared', 'root', '/workspace/platform/packages/shared']
     ])
-    expect(store.getRepo('api')?.projectGroupId).toBe('root')
-    expect(store.getRepo('web')?.projectGroupId).toBe('root')
-    expect(store.getRepo('repo1')?.projectGroupId).toBe(shared?.id)
-    expect(store.getRepo('repo2')?.projectGroupId).toBe(shared?.id)
+    expect(store.getRepoAnyHost('api')?.projectGroupId).toBe('root')
+    expect(store.getRepoAnyHost('web')?.projectGroupId).toBe('root')
+    expect(store.getRepoAnyHost('repo1')?.projectGroupId).toBe(shared?.id)
+    expect(store.getRepoAnyHost('repo2')?.projectGroupId).toBe(shared?.id)
   })
 
   it('creates a project group when persisted group history is very large', async () => {
@@ -271,12 +271,12 @@ describe('Store', () => {
     const updated = store.updateRepo('r1', { executionHostId: 'runtime:env-1' })
 
     expect(updated?.executionHostId).toBe('runtime:env-1')
-    expect(store.getRepo('r1')?.executionHostId).toBe('runtime:env-1')
+    expect(store.getRepoAnyHost('r1')?.executionHostId).toBe('runtime:env-1')
   })
 
-  it('getRepo returns undefined for nonexistent id', async () => {
+  it('getRepoAnyHost returns undefined for nonexistent id', async () => {
     const store = await createStore()
-    expect(store.getRepo('nonexistent')).toBeUndefined()
+    expect(store.getRepoAnyHost('nonexistent')).toBeUndefined()
   })
 
   // ── 6. removeProjectForHost cleans up worktree meta ──────────────────────────
@@ -292,7 +292,7 @@ describe('Store', () => {
 
     store.removeProjectForHost('r1', 'local')
 
-    expect(store.getRepo('r1')).toBeUndefined()
+    expect(store.getRepoAnyHost('r1')).toBeUndefined()
     expect(store.getWorktreeMeta('r1::/path/wt1')).toBeUndefined()
     expect(store.getWorktreeMeta('r1::/path/wt2')).toBeUndefined()
     expect(store.getWorktreeMeta('r2::/other')).toBeDefined()
@@ -710,7 +710,7 @@ describe('Store', () => {
 
     store.removeProjectForHost('only', 'ssh:ssh-x')
 
-    expect(store.getRepo('only')).toBeUndefined()
+    expect(store.getRepoAnyHost('only')).toBeUndefined()
     expect(store.getWorktreeMeta('only::/repo/wt')).toBeUndefined()
   })
 
@@ -757,7 +757,7 @@ describe('Store', () => {
     const repoIds = store.reassignSshTargetId('ssh-old', 'ssh-new')
 
     expect(repoIds).toEqual(['r1'])
-    const repo = store.getRepo('r1')!
+    const repo = store.getRepoAnyHost('r1')!
     expect(repo.connectionId).toBe('ssh-new')
     expect(repo.executionHostId).toBe('ssh:ssh-new')
     expect(store.getWorktreeMeta('r1::/repo/wt')!.hostId).toBe('ssh:ssh-new')
@@ -778,8 +778,8 @@ describe('Store', () => {
     const repoIds = store.reassignSshTargetId('ssh-old', 'ssh-new')
 
     expect(repoIds).toEqual(['ssh-repo'])
-    expect(store.getRepo('local-repo')!.connectionId).toBeUndefined()
-    expect(store.getRepo('ssh-repo')!.connectionId).toBe('ssh-new')
+    expect(store.getRepoAnyHost('local-repo')!.connectionId).toBeUndefined()
+    expect(store.getRepoAnyHost('ssh-repo')!.connectionId).toBe('ssh-new')
   })
 
   it('reassignSshTargetId re-points a repo that only carries connectionId (no executionHostId)', async () => {
@@ -790,7 +790,7 @@ describe('Store', () => {
     const repoIds = store.reassignSshTargetId('ssh-old', 'ssh-new')
 
     expect(repoIds).toEqual(['r1'])
-    const repo = store.getRepo('r1')!
+    const repo = store.getRepoAnyHost('r1')!
     expect(repo.connectionId).toBe('ssh-new')
     // Must not stamp an executionHostId where there wasn't one.
     expect(repo.executionHostId).toBeUndefined()

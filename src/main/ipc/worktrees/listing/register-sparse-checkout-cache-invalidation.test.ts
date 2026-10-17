@@ -27,8 +27,9 @@ vi.mock('../../worktree-remote', () => ({
 }))
 
 function makeStore(repos: Repo[]): Store {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
   return {
-    getRepo: (id: string) => repos.find((repo) => repo.id === id),
+    getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id),
     getRepos: () => repos
   } as unknown as Store
 }

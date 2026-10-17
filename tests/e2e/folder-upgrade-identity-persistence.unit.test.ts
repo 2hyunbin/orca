@@ -40,7 +40,7 @@ it('retains the folder instance and metadata through upgrade, listing, and Store
   store.updateRepo(owner.id, { kind: 'git', folderUpgradeGitRootPath: 'C:/projects/draft' })
   store.flush()
   const reloaded = createStore()
-  const repo = reloaded.getRepo(owner.id)
+  const repo = reloaded.getRepoAnyHost(owner.id)
   expect(repo?.folderUpgradeGitRootPath).toBe('C:/projects/draft')
   if (!repo) {
     throw new Error('registered repo missing')
@@ -97,5 +97,5 @@ it('drops upgrade path evidence when execution ownership changes', () => {
   store.addRepo(makeRepo({ id: 'folder', path: 'C:\\projects\\draft', kind: 'git' }))
   store.updateRepo('folder', { folderUpgradeGitRootPath: 'C:/projects/draft' })
   store.updateRepo('folder', { executionHostId: 'ssh:builder' })
-  expect(store.getRepo('folder')?.folderUpgradeGitRootPath).toBeUndefined()
+  expect(store.getRepoAnyHost('folder')?.folderUpgradeGitRootPath).toBeUndefined()
 })

@@ -15,7 +15,7 @@ import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../shared/ex
 import { planWorktreeFolderRename } from '../ipc/worktree-folder-rename-target'
 
 export type FirstWorkFolderRenameDeps = {
-  getRepo: (repoId: string) => Repo | undefined
+  getRepoAnyHost: (repoId: string) => Repo | undefined
   getSettings: () => Parameters<typeof planWorktreeFolderRename>[0]['settings']
   /** Re-key all worktreeId-keyed state from the old (path-derived) id to the new. */
   migrateWorktreeIdentity: (oldWorktreeId: string, newWorktreeId: string) => void
@@ -38,7 +38,7 @@ export async function renameWorktreeFolderOnFirstWork(
   newLeaf: string,
   deps: FirstWorkFolderRenameDeps
 ): Promise<boolean> {
-  const repo = deps.getRepo(getRepoIdFromWorktreeId(worktreeId))
+  const repo = deps.getRepoAnyHost(getRepoIdFromWorktreeId(worktreeId))
   // Why: oldWorktreePath feeds an on-disk folder move. Resolve the synthetic
   // `::workspace:<uuid>` suffix to the backing folder; identity is migrated
   // separately via the untouched worktreeId.

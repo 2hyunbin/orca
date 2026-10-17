@@ -40,7 +40,7 @@ describe('repos:getGitUsername', () => {
 
   beforeEach(() => {
     captureHandlers(handleMock)
-    mockStore.getRepo.mockReset()
+    mockStore.getRepoAnyHost.mockReset()
     gitExecFileAsyncMock.mockReset()
     mockWindow.webContents.send.mockReset()
     prepareLocalWorktreeRootForRepoMock.mockReset().mockResolvedValue(undefined)
@@ -49,7 +49,7 @@ describe('repos:getGitUsername', () => {
   })
 
   it('returns no username for an SSH repo and never reads git config for it', async () => {
-    mockStore.getRepo.mockReturnValue({
+    mockStore.getRepoAnyHost.mockReturnValue({
       id: 'repo-ssh',
       path: '/remote/repo',
       displayName: 'ssh',

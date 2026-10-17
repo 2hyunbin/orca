@@ -285,7 +285,7 @@ describe('OrcaRuntimeService', () => {
           addedAt: 1
         }
       ],
-      getRepo: (id: string) =>
+      getRepoAnyHost: (id: string) =>
         id === TEST_REPO_ID
           ? {
               id: TEST_REPO_ID,
@@ -345,7 +345,7 @@ describe('OrcaRuntimeService', () => {
           addedAt: 1
         }
       ],
-      getRepo: (id: string) =>
+      getRepoAnyHost: (id: string) =>
         id === TEST_REPO_ID
           ? {
               id: TEST_REPO_ID,
@@ -417,7 +417,7 @@ describe('OrcaRuntimeService', () => {
           addedAt: 1
         }
       ],
-      getRepo: (id: string) =>
+      getRepoAnyHost: (id: string) =>
         id === TEST_REPO_ID
           ? {
               id: TEST_REPO_ID,

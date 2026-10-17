@@ -103,20 +103,20 @@ describe('Store', () => {
     const store = await createStore()
 
     expect(store.getSettings().worktreeVisibilityDefaults).toEqual({ external: 'hide' })
-    expect(store.getRepo('legacy')).toMatchObject({
+    expect(store.getRepoAnyHost('legacy')).toMatchObject({
       externalWorktreeVisibility: 'show',
       externalWorktreeVisibilityLegacy: true
     })
-    expect(store.getRepo('explicit')?.externalWorktreeVisibility).toBe('hide')
-    expect(store.getRepo('inherited')?.externalWorktreeVisibility).toBeUndefined()
+    expect(store.getRepoAnyHost('explicit')?.externalWorktreeVisibility).toBe('hide')
+    expect(store.getRepoAnyHost('inherited')?.externalWorktreeVisibility).toBeUndefined()
 
     store.flush()
     const reloaded = await createStore()
-    expect(reloaded.getRepo('legacy')).toMatchObject({
+    expect(reloaded.getRepoAnyHost('legacy')).toMatchObject({
       externalWorktreeVisibility: 'show',
       externalWorktreeVisibilityLegacy: true
     })
-    expect(reloaded.getRepo('inherited')?.externalWorktreeVisibility).toBeUndefined()
+    expect(reloaded.getRepoAnyHost('inherited')?.externalWorktreeVisibility).toBeUndefined()
   })
 
   it('merges visibility-default patches so future source defaults survive older controls', async () => {
@@ -184,7 +184,7 @@ describe('Store', () => {
 
     store.flush()
     const reloaded = await createStore()
-    expect(reloaded.getRepo('r1')).toMatchObject({
+    expect(reloaded.getRepoAnyHost('r1')).toMatchObject({
       externalWorktreeVisibility: 'hide',
       agentWorktreeVisibility: 'show',
       worktreeVisibilitySourcePreferences: {
@@ -218,7 +218,7 @@ describe('Store', () => {
 
     store.flush()
     const reloaded = await createStore()
-    expect(reloaded.getRepo('r1')?.customWorktreeVisibilitySources).toEqual([
+    expect(reloaded.getRepoAnyHost('r1')?.customWorktreeVisibilitySources).toEqual([
       { id: 'team', rootPath: '/srv/team-worktrees' }
     ])
   })
@@ -238,8 +238,8 @@ describe('Store', () => {
     expect(updated?.externalWorktreeVisibilityLegacy).toBe(false)
     store.flush()
     const reloaded = await createStore()
-    expect(reloaded.getRepo('r1')?.externalWorktreeVisibility).toBeUndefined()
-    expect(reloaded.getRepo('r1')?.externalWorktreeVisibilityLegacy).toBe(false)
+    expect(reloaded.getRepoAnyHost('r1')?.externalWorktreeVisibility).toBeUndefined()
+    expect(reloaded.getRepoAnyHost('r1')?.externalWorktreeVisibilityLegacy).toBe(false)
   })
 
   it('sanitizes raw custom worktree visibility sources on the read path', async () => {
@@ -260,7 +260,7 @@ describe('Store', () => {
     writeDataFile(persisted)
 
     const store = await createStore()
-    expect(store.getRepo('r1')).toMatchObject({
+    expect(store.getRepoAnyHost('r1')).toMatchObject({
       customWorktreeVisibilitySources: [{ id: 'team', rootPath: '/srv/team-worktrees' }],
       worktreeVisibilitySourcePreferences: {
         builtIn: { claude: 'show', gsd: 'show' },
@@ -286,13 +286,13 @@ describe('Store', () => {
       sourceControlAi: undefined
     })
 
-    expect(store.getRepo('r1')!.issueSourcePreference).toBeUndefined()
-    expect(store.getRepo('r1')!.sourceControlAi).toBeUndefined()
+    expect(store.getRepoAnyHost('r1')!.issueSourcePreference).toBeUndefined()
+    expect(store.getRepoAnyHost('r1')!.sourceControlAi).toBeUndefined()
 
     store.flush()
     const reloaded = await createStore()
-    expect(reloaded.getRepo('r1')!.issueSourcePreference).toBeUndefined()
-    expect(reloaded.getRepo('r1')!.sourceControlAi).toBeUndefined()
+    expect(reloaded.getRepoAnyHost('r1')!.issueSourcePreference).toBeUndefined()
+    expect(reloaded.getRepoAnyHost('r1')!.sourceControlAi).toBeUndefined()
   })
 
   it('updateRepo treats source-control AI null as a transport clear sentinel', async () => {
@@ -310,11 +310,11 @@ describe('Store', () => {
       sourceControlAi: null
     })
 
-    expect(store.getRepo('r1')!.sourceControlAi).toBeUndefined()
+    expect(store.getRepoAnyHost('r1')!.sourceControlAi).toBeUndefined()
 
     store.flush()
     const reloaded = await createStore()
-    expect(reloaded.getRepo('r1')!.sourceControlAi).toBeUndefined()
+    expect(reloaded.getRepoAnyHost('r1')!.sourceControlAi).toBeUndefined()
   })
 
   it('updateRepo normalizes source-control AI overrides before storing', async () => {

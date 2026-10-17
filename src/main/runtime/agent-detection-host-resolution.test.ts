@@ -24,7 +24,7 @@ const originalPlatform = process.platform
 
 function makeRuntime(repos: Repo[]) {
   const store = {
-    getRepo: (id: string) => repos.find((repo) => repo.id === id),
+    getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id),
     getRepos: () => repos,
     getProjects: () => [],
     getSettings: () => ({ localWindowsRuntimeDefault: { kind: 'wsl', distro: 'Ubuntu' } })

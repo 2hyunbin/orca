@@ -11,7 +11,11 @@ import type {
 } from '../../../shared/project-types'
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import type { Repo } from '../../../shared/repo-types'
-import { getRepoExecutionHostId, normalizeExecutionHostId } from '../../../shared/execution-host'
+import {
+  getRepoExecutionHostId,
+  normalizeExecutionHostId,
+  type ExecutionHostId
+} from '../../../shared/execution-host'
 import { normalizeProjectRuntimePreference } from '../../../shared/project-execution-runtime'
 import { makeProjectHostSetupId } from './project-host-compatibility'
 import { repoGitUsernameCacheKey } from './repo-hydration'
@@ -204,9 +208,19 @@ export class ProjectHostPersistenceOperations {
     return this.state.repos.length
   }
 
-  getRepo(id: string): Repo | undefined {
+  // Why the name: a repo id is not host-unique, so this returns whichever twin comes first.
+  getRepoAnyHost(id: string): Repo | undefined {
     const repo = this.state.repos.find((r) => r.id === id)
     return repo ? this.hydrateRepo(repo) : undefined
+  }
+
+  getRepo(repoId: string, hostId: ExecutionHostId): Repo | undefined {
+    const repo = this.findRepoRowOnHost(repoId, hostId)
+    return repo ? this.hydrateRepo(repo) : undefined
+  }
+
+  private findRepoRowOnHost(repoId: string, hostId: ExecutionHostId): Repo | undefined {
+    return this.state.repos.find((r) => r.id === repoId && getRepoExecutionHostId(r) === hostId)
   }
 
   /**
@@ -219,10 +233,7 @@ export class ProjectHostPersistenceOperations {
     target: Pick<Repo, 'id' | 'connectionId' | 'executionHostId'>,
     username: string
   ): boolean {
-    const targetHostId = getRepoExecutionHostId(target)
-    const repo = this.state.repos.find(
-      (r) => r.id === target.id && getRepoExecutionHostId(r) === targetHostId
-    )
+    const repo = this.findRepoRowOnHost(target.id, getRepoExecutionHostId(target))
     if (!repo) {
       return false
     }

@@ -119,7 +119,7 @@ function makeStore(
   worktreeMeta: Record<string, unknown> = {}
 ): {
   getRepos: () => Repo[]
-  getRepo: ReturnType<typeof vi.fn>
+  getRepoAnyHost: ReturnType<typeof vi.fn>
   updateRepo: ReturnType<typeof vi.fn>
   getAllWorktreeMeta: () => Record<string, unknown>
   getSettings: () => Record<string, never>
@@ -127,7 +127,7 @@ function makeStore(
   return {
     getAllWorktreeMeta: () => worktreeMeta,
     getRepos: () => repos,
-    getRepo: vi.fn((id: string) => repos.find((repo) => repo.id === id)),
+    getRepoAnyHost: vi.fn((id: string) => repos.find((repo) => repo.id === id)),
     updateRepo: vi.fn((id: string, updates: Partial<Repo>) => {
       const repo = repos.find((candidate) => candidate.id === id)
       if (!repo) {
@@ -413,7 +413,7 @@ describe('folder repo git upgrade watch', () => {
     // ticks once. Anything above 2 means the backoff was skipped.
     expect(listCalls).toBeGreaterThanOrEqual(1)
     expect(listCalls).toBeLessThanOrEqual(2)
-    expect(store.getRepo).not.toHaveBeenCalled()
+    expect(store.getRepoAnyHost).not.toHaveBeenCalled()
     expect(statCalls).toHaveLength(0)
   })
 

@@ -85,7 +85,7 @@ describe('OrcaRuntimeService', () => {
       withDurableRuntimeStore({
         ...runtimeStore,
         getRepos: () => [remoteRepo],
-        getRepo: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined),
+        getRepoAnyHost: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined),
         getWorkspaceSession,
         setWorkspaceSession,
         flushOrThrow: vi.fn()

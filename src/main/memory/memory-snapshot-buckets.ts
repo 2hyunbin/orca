@@ -5,7 +5,7 @@ import type { Store } from '../persistence'
 import { parseWorkspaceKey } from '../../shared/workspace-scope'
 import { folderWorkspaceToWorktree } from '../../shared/folder-workspace-worktree'
 
-export type MemorySnapshotStore = Pick<Store, 'getRepo' | 'getWorktreeMeta'> &
+export type MemorySnapshotStore = Pick<Store, 'getRepoAnyHost' | 'getWorktreeMeta'> &
   Partial<Pick<Store, 'getFolderWorkspace'>> & {
     getProjectGroups?: () => Pick<ReturnType<Store['getProjectGroups']>[number], 'id' | 'name'>[]
   }
@@ -94,7 +94,7 @@ export function resolveWorktreeMemoryNames(
   const worktreePath = parsed?.worktreePath ?? ''
   const fallbackName = worktreePath ? basename(worktreePath) : worktreeId
   const meta = store.getWorktreeMeta(worktreeId)
-  const repo = store.getRepo(repoId)
+  const repo = store.getRepoAnyHost(repoId)
 
   return {
     worktreeName: meta?.displayName?.trim() || fallbackName,

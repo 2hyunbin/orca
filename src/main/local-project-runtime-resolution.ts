@@ -40,7 +40,7 @@ import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../shared/execu
  */
 export type ProjectRuntimeResolutionStore = {
   getProjects?: Store['getProjects']
-  getRepo?: Store['getRepo']
+  getRepoAnyHost?: Store['getRepoAnyHost']
   getSettings?: () => Partial<Pick<GlobalSettings, 'localWindowsRuntimeDefault'>>
 }
 
@@ -57,8 +57,10 @@ function canResolveProjectRuntimeForRepo(
 
 function canResolveProjectRuntimeForWorktreeId(
   store: ProjectRuntimeResolutionStore
-): store is ResolvableStore & { getRepo: NonNullable<ProjectRuntimeResolutionStore['getRepo']> } {
-  return canResolveProjectRuntimeForRepo(store) && typeof store.getRepo === 'function'
+): store is ResolvableStore & {
+  getRepoAnyHost: NonNullable<ProjectRuntimeResolutionStore['getRepoAnyHost']>
+} {
+  return canResolveProjectRuntimeForRepo(store) && typeof store.getRepoAnyHost === 'function'
 }
 
 function resolveLocalProjectRuntime(
@@ -230,7 +232,7 @@ export function resolveLocalProjectRuntimeForWorktreeId(
   if (!canResolveProjectRuntimeForWorktreeId(store)) {
     return undefined
   }
-  const repo = store.getRepo(getRepoIdFromWorktreeId(worktreeId))
+  const repo = store.getRepoAnyHost(getRepoIdFromWorktreeId(worktreeId))
   return repo ? resolveLocalProjectRuntimeForRepo(store, repo) : undefined
 }
 

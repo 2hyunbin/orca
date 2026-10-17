@@ -110,7 +110,7 @@ describe('registerWorktreeHandlers', () => {
         kind: 'folder'
       }
     ])
-    store.getRepo.mockReturnValue({
+    store.getRepoAnyHost.mockReturnValue({
       id: 'repo-1',
       path: '/workspace/folder',
       displayName: 'folder',
@@ -146,7 +146,7 @@ describe('registerWorktreeHandlers', () => {
     const listed = await handlers['worktrees:list'](null, undefined)
 
     expect(listed).toEqual([])
-    expect(store.getRepo).not.toHaveBeenCalled()
+    expect(store.getRepoAnyHost).not.toHaveBeenCalled()
   })
 
   it('returns reconstructed rows when an SSH provider is unavailable', async () => {
@@ -158,7 +158,7 @@ describe('registerWorktreeHandlers', () => {
       addedAt: 0,
       connectionId: 'conn-1'
     }
-    store.getRepo.mockReturnValue(repo)
+    store.getRepoAnyHost.mockReturnValue(repo)
     store.getAllWorktreeMeta.mockReturnValue({
       'repo-ssh::/remote/feature-wt': makeWorktreeMeta({
         displayName: 'Feature workspace',
@@ -245,7 +245,7 @@ describe('registerWorktreeHandlers', () => {
       displayName: 'Canonical remote',
       hostId: 'ssh:conn-1'
     })
-    store.getRepo.mockReturnValue(repo)
+    store.getRepoAnyHost.mockReturnValue(repo)
     store.getAllWorktreeMeta.mockReturnValue({
       [worktreeId]: makeWorktreeMeta({ displayName: 'Legacy local', hostId: 'local' })
     })
@@ -275,7 +275,7 @@ describe('registerWorktreeHandlers', () => {
       addedAt: 0,
       connectionId: 'conn-1'
     }
-    store.getRepo.mockReturnValue(repo)
+    store.getRepoAnyHost.mockReturnValue(repo)
     store.getAllWorktreeMeta.mockReturnValue({
       'repo-ssh::/remote/feature-wt': makeWorktreeMeta({
         displayName: 'Feature workspace',
@@ -318,7 +318,7 @@ describe('registerWorktreeHandlers', () => {
       addedAt: 0,
       connectionId: 'conn-1'
     }
-    store.getRepo.mockReturnValue(repo)
+    store.getRepoAnyHost.mockReturnValue(repo)
     store.getAllWorktreeMeta.mockReturnValue({
       'not-a-worktree-id': makeWorktreeMeta({ displayName: 'Bad row' }),
       'repo-ssh::/remote/feature-wt': makeWorktreeMeta({ displayName: 'Good row' })
@@ -343,7 +343,7 @@ describe('registerWorktreeHandlers', () => {
       addedAt: 0,
       connectionId: 'conn-1'
     }
-    store.getRepo.mockReturnValue(repo)
+    store.getRepoAnyHost.mockReturnValue(repo)
     store.getAllWorktreeMeta.mockReturnValue({
       'repo-ssh::/remote/custom-name': makeWorktreeMeta({
         sparseDirectories: ['packages/web']
@@ -372,7 +372,7 @@ describe('registerWorktreeHandlers', () => {
       addedAt: 0,
       connectionId: 'conn-1'
     }
-    store.getRepo.mockReturnValue(repo)
+    store.getRepoAnyHost.mockReturnValue(repo)
     store.getAllWorktreeMeta.mockReturnValue({
       'repo-ssh::c:/remote/repo': makeWorktreeMeta()
     })

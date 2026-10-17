@@ -382,6 +382,10 @@ jobs:
         if: needs.code_paths.outputs.static_analysis == 'true'
         run: node config/scripts/check-focus-read-ratchet.mjs
 
+      - name: Enforce getRepoAnyHost ratchet
+        if: needs.code_paths.outputs.static_analysis == 'true'
+        run: node config/scripts/check-get-repo-any-host-ratchet.mjs
+
       - name: Enforce layout-writer ratchets
         if: needs.code_paths.outputs.static_analysis == 'true'
         run: bun config/scripts/check-layout-writer-ratchets.mjs

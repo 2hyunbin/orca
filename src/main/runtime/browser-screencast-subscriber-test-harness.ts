@@ -6,14 +6,14 @@ export const HARNESS_WORKTREE_ID = 'repo-1::/tmp/worktree-a'
 export const HARNESS_PAGE_ID = 'page-1'
 
 const store = {
-  getRepo: () => ({
+  getRepoAnyHost: () => ({
     id: 'repo-1',
     path: '/tmp/repo',
     displayName: 'repo',
     badgeColor: 'blue',
     addedAt: 1
   }),
-  getRepos: () => [store.getRepo()],
+  getRepos: () => [store.getRepoAnyHost()],
   addRepo: () => {},
   updateRepo: () => undefined as never,
   getAllWorktreeMeta: () => ({}),

@@ -25,7 +25,7 @@ const worktree = resolve('/wsl-drive/workspaces/feature-extra')
 
 function fixture(): Store {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the ownership check reads only these store methods.
-  return { getRepo: () => repo, getAllWorktreeMeta: () => ({}) } as unknown as Store
+  return { getRepoAnyHost: () => repo, getAllWorktreeMeta: () => ({}) } as unknown as Store
 }
 
 beforeEach(() => {

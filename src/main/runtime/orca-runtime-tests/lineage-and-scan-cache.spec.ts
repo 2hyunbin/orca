@@ -46,7 +46,7 @@ describe('OrcaRuntimeService', () => {
     const runtimeStore = {
       ...store,
       getRepos: () => [remoteRepo],
-      getRepo: () => remoteRepo
+      getRepoAnyHost: () => remoteRepo
     }
     const runtime = new OrcaRuntimeService(runtimeStore as never)
 
@@ -78,7 +78,7 @@ describe('OrcaRuntimeService', () => {
     const setWorktreeLineage = vi.fn((_worktreeId: string, lineage: WorktreeLineage) => lineage)
     const runtimeStore = {
       ...store,
-      getRepo: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined),
+      getRepoAnyHost: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined),
       getRepos: () => [remoteRepo],
       getAllWorktreeMeta: () => metaById,
       getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
@@ -123,7 +123,7 @@ describe('OrcaRuntimeService', () => {
     }
     const runtimeStore = {
       ...store,
-      getRepo: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined),
+      getRepoAnyHost: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined),
       getRepos: () => [remoteRepo],
       getAllWorktreeMeta: () => metaById,
       getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
@@ -155,7 +155,7 @@ describe('OrcaRuntimeService', () => {
     const setWorktreeLineage = vi.fn((_worktreeId: string, lineage: WorktreeLineage) => lineage)
     const runtimeStore = {
       ...store,
-      getRepo: (id: string) =>
+      getRepoAnyHost: (id: string) =>
         id === repoId
           ? {
               id: repoId,
@@ -330,7 +330,7 @@ describe('OrcaRuntimeService', () => {
     const runtimeStore = {
       ...store,
       getRepos: () => repos,
-      getRepo: (id: string) => repos.find((repo) => repo.id === id),
+      getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id),
       getAllWorktreeMeta: () => metaById,
       getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
       setWorktreeMeta: (worktreeId: string, meta: Partial<WorktreeMeta>) => {

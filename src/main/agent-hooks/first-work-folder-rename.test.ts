@@ -13,7 +13,7 @@ const FOLDER_WORKSPACE_ID = 'repo1::/ws/cunner::workspace:12345678-1234-1234-123
 
 function makeDeps(overrides: Partial<FirstWorkFolderRenameDeps> = {}): FirstWorkFolderRenameDeps {
   return {
-    getRepo: vi.fn(() => REPO),
+    getRepoAnyHost: vi.fn(() => REPO),
     getSettings: vi.fn(() => SETTINGS),
     migrateWorktreeIdentity: vi.fn(),
     notifyWorktreeRenamed: vi.fn(),
@@ -79,21 +79,21 @@ describe('renameWorktreeFolderOnFirstWork', () => {
   })
 
   it('skips remote worktrees without moving', async () => {
-    const deps = makeDeps({ getRepo: vi.fn(() => ({ ...REPO, connectionId: 'ssh1' })) })
+    const deps = makeDeps({ getRepoAnyHost: vi.fn(() => ({ ...REPO, connectionId: 'ssh1' })) })
     expect(await renameWorktreeFolderOnFirstWork(OLD_ID, 'fix-auth', deps)).toBe(false)
     expect(deps.moveWorktree).not.toHaveBeenCalled()
   })
 
   it('skips runtime-owned worktrees without moving', async () => {
     const deps = makeDeps({
-      getRepo: vi.fn(() => ({ ...REPO, executionHostId: 'runtime:gpu-vm' as const }))
+      getRepoAnyHost: vi.fn(() => ({ ...REPO, executionHostId: 'runtime:gpu-vm' as const }))
     })
     expect(await renameWorktreeFolderOnFirstWork(OLD_ID, 'fix-auth', deps)).toBe(false)
     expect(deps.moveWorktree).not.toHaveBeenCalled()
   })
 
   it('returns false when the repo is unknown', async () => {
-    const deps = makeDeps({ getRepo: vi.fn(() => undefined) })
+    const deps = makeDeps({ getRepoAnyHost: vi.fn(() => undefined) })
     expect(await renameWorktreeFolderOnFirstWork(OLD_ID, 'fix-auth', deps)).toBe(false)
     expect(deps.moveWorktree).not.toHaveBeenCalled()
   })

@@ -23,11 +23,11 @@ function makeRepo(overrides: Partial<Repo> & Pick<Repo, 'id'>): Repo {
 
 function makeStore(repos: readonly Repo[]): {
   getRepos: () => readonly Repo[]
-  getRepo: (repoId: string) => Repo | undefined
+  getRepoAnyHost: (repoId: string) => Repo | undefined
 } {
   return {
     getRepos: () => repos,
-    getRepo: (repoId) => repos.find((repo) => repo.id === repoId)
+    getRepoAnyHost: (repoId) => repos.find((repo) => repo.id === repoId)
   }
 }
 

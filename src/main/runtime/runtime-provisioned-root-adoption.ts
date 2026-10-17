@@ -21,7 +21,7 @@ import { assertWslMoveRepoWritable } from '../persistence/moving-wsl-projects/ws
 export type RuntimeProvisionedRootRequest = ProvisionedRootRequest & { expectedPath: string }
 
 export type RuntimeProvisionedRootPorts = {
-  store: ProvisionedRootMetaStore & Pick<RuntimeStore, 'getRepo' | 'setWorktreeMeta'>
+  store: ProvisionedRootMetaStore & Pick<RuntimeStore, 'getRepoAnyHost' | 'setWorktreeMeta'>
   resolveRepo: (selector: string) => Promise<Repo>
   listWorktrees: (repoPath: string) => Promise<GitWorktreeInfo[]>
   isSparseCheckoutEnabled: (checkoutPath: string) => Promise<boolean>

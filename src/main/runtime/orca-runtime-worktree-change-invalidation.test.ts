@@ -52,7 +52,7 @@ function row(path: string) {
 
 function makeStore() {
   return {
-    getRepo: (id: string) => (id === REPO_ID ? repo : undefined),
+    getRepoAnyHost: (id: string) => (id === REPO_ID ? repo : undefined),
     getRepos: () => [repo],
     getAllWorktreeMeta: () => ({}),
     getWorktreeMeta: () => undefined,

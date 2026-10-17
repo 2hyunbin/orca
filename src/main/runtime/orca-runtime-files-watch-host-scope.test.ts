@@ -30,7 +30,7 @@ describe('RuntimeFileCommands', () => {
 
   it('refuses an SSH runtime watch without watching this machine', async () => {
     const { commands, store } = createRuntimeFileCommands({ path: '/remote/repo' })
-    store.getRepo.mockReturnValue({ connectionId: 'ssh-1' })
+    store.getRepoAnyHost.mockReturnValue({ connectionId: 'ssh-1' })
 
     await expect(commands.watchFileExplorer('id:wt-1', vi.fn())).rejects.toThrow(
       SshHostNotServedError

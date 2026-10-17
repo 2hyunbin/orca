@@ -1,4 +1,4 @@
-// launchAgentTerminal once read the host-blind `store.getRepo(worktree.repoId)`, so the same repo
+// launchAgentTerminal once read the host-blind `store.getRepoAnyHost(worktree.repoId)`, so the same repo
 // id on two hosts built the launch for the wrong one (#11163).
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -24,7 +24,7 @@ function makeRuntime(repos: readonly Record<string, unknown>[], hostId?: string)
     getSettings: () => ({ disabledTuiAgents: [], workspaceDir: '/tmp/workspaces' }),
     getProjectHostSetups: () => [],
     getRepos: () => repos,
-    getRepo: (id: string) => repos.find((repo) => repo.id === id)
+    getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id)
   }
   const runtime = new OrcaRuntimeService(store as never)
   const internals = runtime as unknown as RuntimeInternals

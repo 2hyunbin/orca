@@ -121,11 +121,11 @@ describe('OrcaRuntimeService session-tab shell selection', () => {
 
   it('refuses a shell pick for a workspace that runs over SSH', async () => {
     await onWindowsHost(async () => {
-      const remoteRepo = { ...store.getRepo(TEST_REPO_ID)!, connectionId: 'ssh-1' }
+      const remoteRepo = { ...store.getRepoAnyHost(TEST_REPO_ID)!, connectionId: 'ssh-1' }
       const { runtime, spawn } = makeHeadlessRuntime({
         ...store,
         getRepos: () => [remoteRepo],
-        getRepo: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined)
+        getRepoAnyHost: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined)
       })
 
       await expect(

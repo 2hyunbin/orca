@@ -80,7 +80,7 @@ describe('registerHostedReviewHandlers', () => {
     connectionId: 'ssh-1'
   }
   const store = {
-    getRepo: vi.fn((repoId: string) => (repoId === repo.id ? repo : null)),
+    getRepoAnyHost: vi.fn((repoId: string) => (repoId === repo.id ? repo : null)),
     getRepos: vi.fn(() => [repo]),
     getProjects: vi.fn((): Record<string, unknown>[] => []),
     getSettings: vi.fn(() => ({ localWindowsRuntimeDefault: { kind: 'windows-host' } }))
@@ -99,7 +99,7 @@ describe('registerHostedReviewHandlers', () => {
     getHostedReviewForBranchMock.mockReset()
     resolveRegisteredWorktreePathMock.mockReset()
     listRepoWorktreeGraphMock.mockReset()
-    store.getRepo.mockReset()
+    store.getRepoAnyHost.mockReset()
     store.getRepos.mockReset()
     store.getProjects.mockReset()
     store.getSettings.mockReset()
@@ -111,7 +111,7 @@ describe('registerHostedReviewHandlers', () => {
     handleMock.mockImplementation((channel, handler) => {
       handlers[channel] = handler
     })
-    store.getRepo.mockImplementation((repoId: string) => (repoId === repo.id ? repo : null))
+    store.getRepoAnyHost.mockImplementation((repoId: string) => (repoId === repo.id ? repo : null))
     store.getRepos.mockReturnValue([repo])
     store.getProjects.mockReturnValue([])
     store.getSettings.mockReturnValue({ localWindowsRuntimeDefault: { kind: 'windows-host' } })
@@ -127,7 +127,7 @@ describe('registerHostedReviewHandlers', () => {
       badgeColor: '#000',
       addedAt: 0
     }
-    store.getRepo.mockImplementation((repoId: string) =>
+    store.getRepoAnyHost.mockImplementation((repoId: string) =>
       repoId === localRepo.id ? localRepo : null
     )
     store.getRepos.mockReturnValue([localRepo])
@@ -188,7 +188,7 @@ describe('registerHostedReviewHandlers', () => {
       addedAt: 0,
       symlinkPaths: ['node_modules']
     }
-    store.getRepo.mockImplementation((repoId: string) =>
+    store.getRepoAnyHost.mockImplementation((repoId: string) =>
       repoId === localRepo.id ? localRepo : null
     )
     store.getRepos.mockReturnValue([localRepo])
@@ -223,7 +223,7 @@ describe('registerHostedReviewHandlers', () => {
   // Why: remote creation never materializes these links, and `repo.path` names a
   // path on the remote host — resolving it locally would read a stranger's file.
   it('does not resolve shared link paths for an SSH repo', async () => {
-    store.getRepo.mockImplementation((repoId: string) =>
+    store.getRepoAnyHost.mockImplementation((repoId: string) =>
       repoId === repo.id ? { ...repo, symlinkPaths: ['node_modules'] } : null
     )
     createHostedReviewMock.mockResolvedValueOnce({ ok: true, number: 42, url: 'https://x/1' })
@@ -259,7 +259,7 @@ describe('registerHostedReviewHandlers', () => {
       badgeColor: '#000',
       addedAt: 0
     }
-    store.getRepo.mockImplementation((repoId: string) =>
+    store.getRepoAnyHost.mockImplementation((repoId: string) =>
       repoId === localRepo.id ? localRepo : null
     )
     store.getRepos.mockReturnValue([localRepo])
@@ -511,7 +511,9 @@ describe('registerHostedReviewHandlers', () => {
     const boundRepo = { ...repo, ghAccount: { host: 'github.com', user: 'octocat' } }
 
     beforeEach(() => {
-      store.getRepo.mockImplementation((repoId: string) => (repoId === repo.id ? boundRepo : null))
+      store.getRepoAnyHost.mockImplementation((repoId: string) =>
+        repoId === repo.id ? boundRepo : null
+      )
       store.getRepos.mockReturnValue([boundRepo])
     })
 
@@ -560,7 +562,9 @@ describe('registerHostedReviewHandlers', () => {
     })
 
     it('leaves an unbound repo on the ambient account', async () => {
-      store.getRepo.mockImplementation((repoId: string) => (repoId === repo.id ? repo : null))
+      store.getRepoAnyHost.mockImplementation((repoId: string) =>
+        repoId === repo.id ? repo : null
+      )
       store.getRepos.mockReturnValue([repo])
       getHostedReviewForBranchMock.mockResolvedValueOnce(null)
       registerHostedReviewHandlers(store as never, stats as never)
@@ -578,7 +582,7 @@ describe('registerHostedReviewHandlers', () => {
   })
 
   it('rejects creation when repoId and repoPath point at different registered repos', async () => {
-    store.getRepo.mockImplementation((repoId: string) =>
+    store.getRepoAnyHost.mockImplementation((repoId: string) =>
       repoId === repo.id ? { ...repo, path: '/other/repo' } : null
     )
 

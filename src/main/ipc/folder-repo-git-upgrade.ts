@@ -95,7 +95,7 @@ type UpgradeResult = 'upgraded' | 'blocked' | 'rejected'
 
 async function upgradeFolderRepo(watch: UpgradeWatch, repoId: string): Promise<UpgradeResult> {
   // Re-read after the marker stat: the repo can be removed or already upgraded mid-tick.
-  const current = watch.store.getRepo(repoId)
+  const current = watch.store.getRepoAnyHost(repoId)
   if (!current || !isUpgradeCandidate(current)) {
     return 'blocked'
   }
@@ -104,7 +104,7 @@ async function upgradeFolderRepo(watch: UpgradeWatch, repoId: string): Promise<U
   }
   const inspectedPath = current.path
   const updates = await resolveUpgrade(inspectedPath)
-  const latest = watch.store.getRepo(repoId)
+  const latest = watch.store.getRepoAnyHost(repoId)
   if (
     watch.disposed ||
     !latest ||

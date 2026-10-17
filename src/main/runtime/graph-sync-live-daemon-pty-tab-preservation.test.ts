@@ -54,7 +54,7 @@ function createHarness() {
   const repo = makeRepo()
   const store = withDurableRuntimeStore({
     getRepos: () => [repo],
-    getRepo: (id: string) => (id === REPO_ID ? repo : undefined),
+    getRepoAnyHost: (id: string) => (id === REPO_ID ? repo : undefined),
     getAllWorktreeMeta: () => ({}),
     getWorktreeMeta: () => undefined,
     getSettings: () => ({ workspaceDir: '/tmp/workspaces' }),

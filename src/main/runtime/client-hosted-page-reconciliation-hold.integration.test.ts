@@ -12,14 +12,14 @@ const DEVICE_A = 'device-a'
 const DEVICE_B = 'device-b'
 
 const storeBase = {
-  getRepo: () => ({
+  getRepoAnyHost: () => ({
     id: 'repo-1',
     path: '/tmp/repo',
     displayName: 'repo',
     badgeColor: 'blue',
     addedAt: 1
   }),
-  getRepos: () => [storeBase.getRepo()],
+  getRepos: () => [storeBase.getRepoAnyHost()],
   addRepo: () => {},
   updateRepo: () => undefined as never,
   getAllWorktreeMeta: () => ({}),

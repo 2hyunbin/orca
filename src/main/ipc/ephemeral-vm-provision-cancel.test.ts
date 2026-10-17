@@ -70,7 +70,7 @@ function makeTempDir(prefix: string): string {
 function makeStore(repoPath: string) {
   const repo = { id: 'repo-1', path: repoPath, displayName: 'Repo', addedAt: 0 }
   return {
-    getRepo: vi.fn((id: string) => (id === repo.id ? repo : null)),
+    getRepoAnyHost: vi.fn((id: string) => (id === repo.id ? repo : null)),
     getRepos: vi.fn(() => [repo]),
     getSettings: vi.fn(() => ({ activeRuntimeEnvironmentId: null }))
   }

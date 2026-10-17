@@ -61,7 +61,7 @@ export abstract class RuntimeWorkspaceSelectors extends OrcaRuntimeWithResolveBr
       }
       if (candidates.length === 0) {
         const parsed = splitWorktreeIdForFilesystem(worktreeId)
-        const repo = parsed ? this.store?.getRepo(parsed.repoId) : null
+        const repo = parsed ? this.store?.getRepoAnyHost(parsed.repoId) : null
         const fallback =
           repo?.connectionId && this.store?.getWorktreeMeta(worktreeId)
             ? this.buildResolvedWorktreeFromId(worktreeId)
@@ -77,7 +77,7 @@ export abstract class RuntimeWorkspaceSelectors extends OrcaRuntimeWithResolveBr
       if (candidates.length > 1) {
         const hostIds = new Set(
           candidates.map((worktree) => {
-            const repo = this.store?.getRepo(worktree.repoId)
+            const repo = this.store?.getRepoAnyHost(worktree.repoId)
             return getWorktreeExecutionHostId(worktree, repo)
           })
         )

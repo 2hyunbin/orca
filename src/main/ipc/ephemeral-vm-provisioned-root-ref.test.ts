@@ -134,7 +134,7 @@ function provision(args: { ref?: string }): Promise<unknown> {
 function makeStore(path: string) {
   const repo = { id: 'repo-1', path, displayName: 'Repo', badgeColor: '#000', addedAt: 0 }
   return {
-    getRepo: vi.fn((id: string) => (id === repo.id ? repo : null)),
+    getRepoAnyHost: vi.fn((id: string) => (id === repo.id ? repo : null)),
     getRepos: vi.fn(() => [repo]),
     getSettings: vi.fn(() => ({ activeRuntimeEnvironmentId: null }))
   }

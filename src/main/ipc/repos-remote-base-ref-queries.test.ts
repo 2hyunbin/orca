@@ -42,7 +42,7 @@ describe('repos:getBaseRefDefault envelope', () => {
   beforeEach(() => {
     captureHandlers(handleMock)
     mockStore.getRepos.mockReset().mockReturnValue([])
-    mockStore.getRepo.mockReset()
+    mockStore.getRepoAnyHost.mockReset()
     prepareLocalWorktreeRootForRepoMock.mockReset().mockResolvedValue(undefined)
     // Reset exec so a newly added test doesn't inherit the previous test's exec mock.
     gitExecFileAsyncMock.mockReset()
@@ -51,7 +51,7 @@ describe('repos:getBaseRefDefault envelope', () => {
   })
 
   it('returns { defaultBaseRef, remoteCount: 0 } for folder-mode repos', async () => {
-    mockStore.getRepo.mockReturnValue({
+    mockStore.getRepoAnyHost.mockReturnValue({
       id: 'r1',
       path: '/some/folder',
       kind: 'folder'
@@ -63,7 +63,7 @@ describe('repos:getBaseRefDefault envelope', () => {
   })
 
   it('returns { defaultBaseRef: null, remoteCount: 0 } for an unknown repoId', async () => {
-    mockStore.getRepo.mockReturnValue(undefined)
+    mockStore.getRepoAnyHost.mockReturnValue(undefined)
 
     const result = await handlers.get('repos:getBaseRefDefault')!(null, { repoId: 'missing' })
 
@@ -71,7 +71,7 @@ describe('repos:getBaseRefDefault envelope', () => {
   })
 
   it('wraps the local getBaseRefDefault result in the envelope', async () => {
-    mockStore.getRepo.mockReturnValue({
+    mockStore.getRepoAnyHost.mockReturnValue({
       id: 'r1',
       path: '/repo',
       kind: 'git'
@@ -88,7 +88,7 @@ describe('repos:getBaseRefDefault envelope', () => {
   })
 
   it('returns { defaultBaseRef: null, remoteCount: 0 } for an SSH repo without running git', async () => {
-    mockStore.getRepo.mockReturnValue({
+    mockStore.getRepoAnyHost.mockReturnValue({
       id: 'r1',
       path: '/remote/repo',
       connectionId: 'conn-1',
@@ -108,7 +108,7 @@ describe('repos:searchBaseRefs on SSH repos', () => {
   beforeEach(() => {
     captureHandlers(handleMock)
     mockStore.getRepos.mockReset().mockReturnValue([])
-    mockStore.getRepo.mockReset()
+    mockStore.getRepoAnyHost.mockReset()
     prepareLocalWorktreeRootForRepoMock.mockReset().mockResolvedValue(undefined)
     gitExecFileAsyncMock.mockReset()
     vi.mocked(getBaseRefDefault).mockClear()
@@ -116,7 +116,7 @@ describe('repos:searchBaseRefs on SSH repos', () => {
   })
 
   it('returns [] for a folder-mode repo without invoking the relay', async () => {
-    mockStore.getRepo.mockReturnValue({
+    mockStore.getRepoAnyHost.mockReturnValue({
       id: 'r1',
       path: '/some/folder',
       kind: 'folder',
@@ -132,7 +132,7 @@ describe('repos:searchBaseRefs on SSH repos', () => {
   })
 
   it('returns [] for an SSH repo without running git', async () => {
-    mockStore.getRepo.mockReturnValue({
+    mockStore.getRepoAnyHost.mockReturnValue({
       id: 'r1',
       path: '/remote/repo',
       connectionId: 'conn-1',
@@ -149,7 +149,7 @@ describe('repos:searchBaseRefs on SSH repos', () => {
   })
 
   it('returns [] when the SSH provider is not connected', async () => {
-    mockStore.getRepo.mockReturnValue({
+    mockStore.getRepoAnyHost.mockReturnValue({
       id: 'r1',
       path: '/remote/repo',
       connectionId: 'unknown-conn',

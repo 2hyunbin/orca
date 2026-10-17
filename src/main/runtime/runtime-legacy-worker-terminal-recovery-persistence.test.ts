@@ -78,7 +78,7 @@ function makeFixture(hosts: readonly ExecutionHostId[], count: number) {
   }
   const store: RuntimeStore = withDurableRuntimeStore({
     getRepos: unused,
-    getRepo: unused,
+    getRepoAnyHost: unused,
     addRepo: unused,
     updateRepo: unused,
     getAllWorktreeMeta: unused,

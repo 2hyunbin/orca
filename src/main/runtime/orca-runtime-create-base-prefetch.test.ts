@@ -40,7 +40,7 @@ const project: Project = {
 function makeStore(overrides: Partial<Project> = {}): unknown {
   return {
     getRepos: () => [repo],
-    getRepo: (id: string) => (id === repo.id ? repo : undefined),
+    getRepoAnyHost: (id: string) => (id === repo.id ? repo : undefined),
     getProjects: () => [{ ...project, ...overrides }],
     getSettings: () => ({ localWindowsRuntimeDefault: { kind: 'windows-host' } })
   }

@@ -71,7 +71,7 @@ export function makeStore() {
     }
   ]
   return {
-    getRepo: (id: string) => repos.find((repo) => repo.id === id),
+    getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id),
     getRepos: () => repos,
     addRepo: () => {},
     updateRepo: () => undefined as never,

@@ -205,7 +205,7 @@ export class RuntimeRepositoryCloneController {
     await prepareLocalWorktreeRootForRepo(store, repo)
     invalidateAuthorizedRootsCache()
     this.invalidate(repo.id)
-    return store.getRepo(repo.id) ?? repo
+    return store.getRepoAnyHost(repo.id) ?? repo
   }
 
   private invalidate(repoId: string): void {

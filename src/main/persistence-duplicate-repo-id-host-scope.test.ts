@@ -123,6 +123,16 @@ describe('deleting one host copy of a repo id shared by two hosts', () => {
     expect(store.getRepos().map((repo) => repo.path)).toEqual(['/laptop/dup', '/remote/dup'])
   })
 
+  it('getRepo returns only the twin on the asked host; getRepoAnyHost keeps the first match', async () => {
+    const store = await createStoreWithDuplicateRepoId()
+
+    expect(store.getRepo('dup', 'local')?.path).toBe('/laptop/dup')
+    expect(store.getRepo('dup', 'ssh:ssh-1')?.path).toBe('/remote/dup')
+    expect(store.getRepo('dup', 'ssh:other')).toBeUndefined()
+    expect(store.getRepo('missing', 'local')).toBeUndefined()
+    expect(store.getRepoAnyHost('dup')?.path).toBe('/laptop/dup')
+  })
+
   it.each(['git', 'folder'] as const)(
     'removing the local %s row keeps the other host row and its metadata',
     async (kind) => {

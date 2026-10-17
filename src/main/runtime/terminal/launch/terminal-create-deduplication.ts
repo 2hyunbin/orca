@@ -155,13 +155,13 @@ export abstract class OrcaRuntimeWithTerminalCreateDeduplication extends OrcaRun
     opts: { agent: TuiAgent; prompt: string; title?: string; extraAgentArgs?: string }
   ): Promise<RuntimeTerminalCreate> {
     const worktree = await this.resolveWorktreeSelector(worktreeSelector)
-    // Why: `getRepo(id)` is host-blind; the same repo id on two hosts must build the launch for the
+    // Why: `getRepoAnyHost(id)` is host-blind; the same repo id on two hosts must build the launch for the
     // host that owns this worktree (#11163).
     const resolution = resolveWorktreeLaunchHost(this.store?.getRepos() ?? [], worktree)
     if (resolution.kind === 'ambiguous') {
       throw new Error('worktree_execution_host_unresolved')
     }
-    const repo = resolution.repo ?? this.store?.getRepo(worktree.repoId)
+    const repo = resolution.repo ?? this.store?.getRepoAnyHost(worktree.repoId)
     if (!repo) {
       throw new Error('Repository for the selected workspace is no longer available.')
     }

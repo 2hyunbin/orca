@@ -47,7 +47,7 @@ export class RuntimeWorkspaceSessionController {
       return getConnectionExecutionHostId(this.deps.resolveFolderConnectionId(workspace))
     }
     const resolvedWorktreeId = scope?.type === 'worktree' ? scope.worktreeId : worktreeId
-    const repo = store?.getRepo?.(getRepoIdFromWorktreeId(resolvedWorktreeId))
+    const repo = store?.getRepoAnyHost?.(getRepoIdFromWorktreeId(resolvedWorktreeId))
     return repo
       ? workspaceSessionPartitionHostId(getRepoExecutionHostId(repo))
       : LOCAL_EXECUTION_HOST_ID

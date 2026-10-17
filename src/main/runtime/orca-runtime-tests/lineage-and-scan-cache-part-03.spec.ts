@@ -49,10 +49,11 @@ describe('OrcaRuntimeService', () => {
       badgeColor: 'blue' as const,
       addedAt: 1
     }))
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
     const runtime = new OrcaRuntimeService({
       ...store,
       getRepos: () => repos,
-      getRepo: (id: string) => repos.find((repo) => repo.id === id),
+      getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id),
       getAllWorktreeMeta: () => ({}),
       getWorktreeMeta: () => undefined
     } as never)
@@ -97,7 +98,7 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('keeps detected metadata scoped to the selected colliding host', async () => {
-    const localRepo = store.getRepo(TEST_REPO_ID)!
+    const localRepo = store.getRepoAnyHost(TEST_REPO_ID)!
     const remoteRepo = { ...localRepo, path: '/remote/repo', connectionId: 'ssh-1' }
     const worktreePath = '/same/worktree'
     const worktreeId = `${TEST_REPO_ID}::${worktreePath}`
@@ -110,7 +111,7 @@ describe('OrcaRuntimeService', () => {
     const runtimeStore = {
       ...store,
       getRepos: () => [localRepo, remoteRepo],
-      getRepo: (id: string) => (id === localRepo.id ? localRepo : undefined),
+      getRepoAnyHost: (id: string) => (id === localRepo.id ? localRepo : undefined),
       getAllWorktreeMeta: () => ({ [worktreeId]: localMeta }),
       getWorktreeMeta: (id: string) => (id === worktreeId ? localMeta : undefined)
     }
@@ -123,7 +124,7 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('does not project one colliding host lineage onto another host rows', async () => {
-    const localRepo = store.getRepo(TEST_REPO_ID)!
+    const localRepo = store.getRepoAnyHost(TEST_REPO_ID)!
     const remoteRepo = { ...localRepo, connectionId: 'ssh-1' }
     const parentPath = '/same/parent'
     const childPath = '/same/child'
@@ -185,10 +186,11 @@ describe('OrcaRuntimeService', () => {
       { ...store.getRepos()[0], id: 'repo-a', path: '/tmp/repo-a' },
       { ...store.getRepos()[0], id: 'repo-b', path: '/tmp/repo-b' }
     ]
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
     const runtime = new OrcaRuntimeService({
       ...store,
       getRepos: () => repos,
-      getRepo: (id: string) => repos.find((repo) => repo.id === id)
+      getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id)
     } as never)
     vi.mocked(listWorktrees).mockImplementation(async (repoPath) => [makeWorktreeInfo(repoPath)])
 
@@ -290,10 +292,11 @@ describe('OrcaRuntimeService', () => {
         { ...store.getRepos()[0], id: 'repo-a', path: '/tmp/repo-a' },
         { ...store.getRepos()[0], id: 'repo-b', path: '/tmp/repo-b' }
       ]
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
       const runtime = new OrcaRuntimeService({
         ...store,
         getRepos: () => repos,
-        getRepo: (id: string) => repos.find((repo) => repo.id === id)
+        getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id)
       } as never)
       vi.mocked(listWorktrees).mockImplementation(async (repoPath) => [makeWorktreeInfo(repoPath)])
 
@@ -318,12 +321,16 @@ describe('OrcaRuntimeService', () => {
 
   it('worktree scan cache: SSH state changes do not evict local repo scans', async () => {
     vi.mocked(listWorktrees).mockClear()
-    const localRepo = { ...store.getRepo(TEST_REPO_ID)!, id: 'local-repo' }
-    const remoteRepo = { ...store.getRepo(TEST_REPO_ID)!, id: 'remote-repo', connectionId: 'ssh-1' }
+    const localRepo = { ...store.getRepoAnyHost(TEST_REPO_ID)!, id: 'local-repo' }
+    const remoteRepo = {
+      ...store.getRepoAnyHost(TEST_REPO_ID)!,
+      id: 'remote-repo',
+      connectionId: 'ssh-1'
+    }
     const repos = [localRepo, remoteRepo]
     const remoteStore = {
       ...store,
-      getRepo: (id: string) => repos.find((repo) => repo.id === id),
+      getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id),
       getRepos: () => repos
     }
     const runtime = new OrcaRuntimeService(remoteStore as never)
@@ -504,7 +511,7 @@ describe('OrcaRuntimeService', () => {
     })
     const runtimeStore = {
       ...store,
-      getRepo: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined),
+      getRepoAnyHost: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined),
       getRepos: () => [remoteRepo],
       getAllWorktreeMeta: () => metaById,
       getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],

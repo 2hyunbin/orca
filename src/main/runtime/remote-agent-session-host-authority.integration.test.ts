@@ -100,7 +100,7 @@ describe('remote agent-session host authority integration', () => {
           agentDefaultEnv: {}
         }),
         getRepos: () => [],
-        getRepo: () => undefined,
+        getRepoAnyHost: () => undefined,
         getAllWorktreeMeta: () => ({}),
         getWorktreeMeta: () => undefined,
         getProjects: () => []

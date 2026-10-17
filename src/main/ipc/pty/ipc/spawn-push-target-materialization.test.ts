@@ -23,10 +23,12 @@ const FORK_TARGET: GitPushTarget = {
 const REPO = { id: REPO_ID, path: '/repo', connectionId: null } as unknown as Repo
 
 function depsWithStore(overrides: Partial<Store> = {}): PtySpawnIpcDeps {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
   return {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
     store: {
       getWorktreeMeta: vi.fn().mockReturnValue({ pushTarget: FORK_TARGET } as WorktreeMeta),
-      getRepo: vi.fn().mockReturnValue(REPO),
+      getRepoAnyHost: vi.fn().mockReturnValue(REPO),
       ...overrides
     } as unknown as Store
   } as unknown as PtySpawnIpcDeps
@@ -67,7 +69,7 @@ describe('triggerPtySpawnPushTargetMaterialization', () => {
     triggerPtySpawnPushTargetMaterialization(deps, baseArgs())
 
     expect(deps.store!.getWorktreeMeta).toHaveBeenCalledWith(WORKTREE_ID)
-    expect(deps.store!.getRepo).toHaveBeenCalledWith(REPO_ID)
+    expect(deps.store!.getRepoAnyHost).toHaveBeenCalledWith(REPO_ID)
     expect(triggerMock).toHaveBeenCalledWith(
       WORKTREE_PATH,
       FORK_TARGET,
@@ -79,7 +81,7 @@ describe('triggerPtySpawnPushTargetMaterialization', () => {
   })
 
   it('passes null when the repo lookup misses', () => {
-    const deps = depsWithStore({ getRepo: vi.fn().mockReturnValue(undefined) })
+    const deps = depsWithStore({ getRepoAnyHost: vi.fn().mockReturnValue(undefined) })
     triggerPtySpawnPushTargetMaterialization(deps, baseArgs())
 
     expect(triggerMock).toHaveBeenCalledWith(
@@ -96,7 +98,7 @@ describe('triggerPtySpawnPushTargetMaterialization', () => {
   // this is the actual bug the hook must guard against (#17828), not a hypothetical.
   // Optional chaining degrades the lookups to undefined/null; the underlying trigger
   // itself no-ops on an undefined push target, so this never blocks or throws on spawn.
-  it('does not throw when the store lacks getWorktreeMeta/getRepo, delegating with undefined/null', () => {
+  it('does not throw when the store lacks getWorktreeMeta/getRepoAnyHost, delegating with undefined/null', () => {
     const partialStore = {} as Store
     expect(() =>
       triggerPtySpawnPushTargetMaterialization(

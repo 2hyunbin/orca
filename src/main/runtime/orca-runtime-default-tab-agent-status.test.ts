@@ -58,7 +58,7 @@ function sessionStore(initial: WorkspaceSessionState): {
   let session = initial
   const store: RuntimeStore = {
     getRepos: () => [],
-    getRepo: () => undefined,
+    getRepoAnyHost: () => undefined,
     addRepo: vi.fn<RuntimeStore['addRepo']>(),
     updateRepo: vi.fn<RuntimeStore['updateRepo']>(),
     getAllWorktreeMeta: () => ({}),

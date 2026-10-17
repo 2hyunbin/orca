@@ -74,7 +74,7 @@ export abstract class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntime
   }> {
     this.assertGraphReady()
     const worktree = await this.resolveWorktreeSelector(worktreeSelector)
-    const repo = this.store?.getRepo(worktree.repoId)
+    const repo = this.store?.getRepoAnyHost(worktree.repoId)
     if (!repo) {
       throw new Error('repo_not_found')
     }

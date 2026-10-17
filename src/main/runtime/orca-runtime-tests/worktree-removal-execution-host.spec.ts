@@ -54,7 +54,7 @@ function makeRemoteRepoStore(
     runtimeStore: {
       ...store,
       getRepos: () => [repo],
-      getRepo: (id: string) => (id === repo.id ? repo : undefined),
+      getRepoAnyHost: (id: string) => (id === repo.id ? repo : undefined),
       getAllWorktreeMeta: () => metaById,
       getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
       setWorktreeMeta: (worktreeId: string, meta: Partial<WorktreeMeta>) => {

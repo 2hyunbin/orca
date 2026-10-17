@@ -43,7 +43,7 @@ export function registerTerminalListExecutionHostScopeTests(): void {
       getProjectGroups: vi.fn(() => []),
       setWorkspaceSession: vi.fn(),
       getRepos: vi.fn(() => REPOS),
-      getRepo: vi.fn((id: string) => REPOS.find((repo) => repo.id === id)),
+      getRepoAnyHost: vi.fn((id: string) => REPOS.find((repo) => repo.id === id)),
       getAllWorktreeMeta: vi.fn(() => ({})),
       getWorktreeMeta: vi.fn(() => undefined),
       setWorktreeMeta: vi.fn(),
@@ -215,7 +215,7 @@ export function registerTerminalListExecutionHostScopeTests(): void {
       const runtime = makeRuntime([], {
         ...baseStore,
         getRepos: vi.fn(() => repos),
-        getRepo: vi.fn((id: string) => repos.find((repo) => repo.id === id)),
+        getRepoAnyHost: vi.fn((id: string) => repos.find((repo) => repo.id === id)),
         getWorkspaceSessionHostIds: vi.fn(() => ['local'])
       })
 
@@ -241,7 +241,7 @@ export function registerTerminalListExecutionHostScopeTests(): void {
       const runtime = makeRuntime([], {
         ...baseStore,
         getRepos: vi.fn(() => repos),
-        getRepo: vi.fn((id: string) => repos.find((repo) => repo.id === id)),
+        getRepoAnyHost: vi.fn((id: string) => repos.find((repo) => repo.id === id)),
         getWorkspaceSessionHostIds: vi.fn(() => ['local'])
       })
 
@@ -257,7 +257,7 @@ export function registerTerminalListExecutionHostScopeTests(): void {
       const runtime = makeRuntime([], {
         ...baseStore,
         getRepos: vi.fn(() => [REPOS[0]!]),
-        getRepo: vi.fn((id: string) => (id === REPOS[0]!.id ? REPOS[0] : undefined)),
+        getRepoAnyHost: vi.fn((id: string) => (id === REPOS[0]!.id ? REPOS[0] : undefined)),
         getWorkspaceSessionHostIds: vi.fn(() => ['local']),
         getFolderWorkspaces: vi.fn(() => [folderWorkspace])
       })
@@ -284,7 +284,7 @@ export function registerTerminalListExecutionHostScopeTests(): void {
       const runtime = makeRuntime([], {
         ...baseStore,
         getRepos: vi.fn(() => [REPOS[0]!]),
-        getRepo: vi.fn((id: string) => (id === REPOS[0]!.id ? REPOS[0] : undefined)),
+        getRepoAnyHost: vi.fn((id: string) => (id === REPOS[0]!.id ? REPOS[0] : undefined)),
         getWorkspaceSessionHostIds: vi.fn(() => ['local']),
         getFolderWorkspaces: vi.fn(() => [folderWorkspace])
       })
@@ -309,7 +309,7 @@ export function registerTerminalListExecutionHostScopeTests(): void {
       const runtime = makeRuntime([], {
         ...baseStore,
         getRepos: vi.fn(() => [REPOS[0]!]),
-        getRepo: vi.fn((id: string) => (id === REPOS[0]!.id ? REPOS[0] : undefined)),
+        getRepoAnyHost: vi.fn((id: string) => (id === REPOS[0]!.id ? REPOS[0] : undefined)),
         getWorkspaceSessionHostIds: vi.fn(() => ['local']),
         getFolderWorkspaces: vi.fn(() => [folderWorkspace])
       })
@@ -326,7 +326,7 @@ export function registerTerminalListExecutionHostScopeTests(): void {
       const runtime = makeRuntime([], {
         ...baseStore,
         getRepos: vi.fn(() => [REPOS[0]!]),
-        getRepo: vi.fn((id: string) => (id === REPOS[0]!.id ? REPOS[0] : undefined)),
+        getRepoAnyHost: vi.fn((id: string) => (id === REPOS[0]!.id ? REPOS[0] : undefined)),
         getWorkspaceSessionHostIds: vi.fn(() => ['local']),
         getFolderWorkspaces: vi.fn(() => [folderWorkspace])
       })

@@ -41,7 +41,8 @@ describe('OrcaRuntimeService', () => {
       addRepo: (repo: Record<string, unknown>) => {
         repos.push(repo)
       },
-      getRepo: (id: string) => repos.find((repo) => repo.id === id) as never,
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+      getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id) as never,
       updateRepo: (id: string, updates: Record<string, unknown>) => {
         const index = repos.findIndex((repo) => repo.id === id)
         if (index === -1) {
@@ -121,7 +122,8 @@ describe('OrcaRuntimeService', () => {
       addRepo: (repo: Record<string, unknown>) => {
         repos.push(repo)
       },
-      getRepo: (id: string) => repos.find((repo) => repo.id === id) as never,
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+      getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id) as never,
       updateRepo: (id: string, updates: Record<string, unknown>) => {
         const index = repos.findIndex((repo) => repo.id === id)
         if (index === -1) {
@@ -183,7 +185,8 @@ describe('OrcaRuntimeService', () => {
       addRepo: (repo: Record<string, unknown>) => {
         added.push(repo)
       },
-      getRepo: (id: string) => added.find((repo) => repo.id === id) as never
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+      getRepoAnyHost: (id: string) => added.find((repo) => repo.id === id) as never
     }
     const runtime = new OrcaRuntimeService(colorStore as never)
     const parentDir = await mkdtemp('/tmp/orca-runtime-create-')
@@ -208,7 +211,8 @@ describe('OrcaRuntimeService', () => {
       addRepo: (repo: Record<string, unknown>) => {
         added.push(repo)
       },
-      getRepo: (id: string) => added.find((repo) => repo.id === id) as never
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+      getRepoAnyHost: (id: string) => added.find((repo) => repo.id === id) as never
     }
     const runtime = new OrcaRuntimeService(createStore as never)
     const tempRoot = await mkdtemp(join(tmpdir(), 'orca-runtime-create-parent-'))
@@ -235,7 +239,8 @@ describe('OrcaRuntimeService', () => {
       addRepo: (repo: Record<string, unknown>) => {
         added.push(repo)
       },
-      getRepo: (id: string) => added.find((repo) => repo.id === id) as never
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+      getRepoAnyHost: (id: string) => added.find((repo) => repo.id === id) as never
     }
     const runtime = new OrcaRuntimeService(runtimeStore as never)
     const parentDir = await mkdtemp(join(tmpdir(), 'orca-runtime-create-root-prep-'))
@@ -282,7 +287,8 @@ describe('OrcaRuntimeService', () => {
       addRepo: (repo: Record<string, unknown>) => {
         added.push(repo)
       },
-      getRepo: (id: string) => added.find((repo) => repo.id === id) as never
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+      getRepoAnyHost: (id: string) => added.find((repo) => repo.id === id) as never
     }
     spawnSpy.mockImplementation(() => {
       const proc = new EventEmitter() as EventEmitter & { stderr: EventEmitter }
@@ -321,7 +327,8 @@ describe('OrcaRuntimeService', () => {
       ...store,
       getRepos: () => [...added] as never,
       addRepo: (repo: Record<string, unknown>) => added.push(repo),
-      getRepo: (id: string) => added.find((repo) => repo.id === id) as never
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+      getRepoAnyHost: (id: string) => added.find((repo) => repo.id === id) as never
     }
     spawnSpy.mockImplementation(() => {
       const proc = new EventEmitter() as EventEmitter & { stderr: EventEmitter }
@@ -414,7 +421,8 @@ describe('OrcaRuntimeService', () => {
     const runtimeStore = {
       ...store,
       getRepos: () => [repo],
-      getRepo: (id: string) => (id === repo.id ? repo : undefined) as never,
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+      getRepoAnyHost: (id: string) => (id === repo.id ? repo : undefined) as never,
       updateRepo: vi.fn(() => updated as never)
     }
     const runtime = new OrcaRuntimeService(runtimeStore as never)
@@ -588,7 +596,8 @@ describe('OrcaRuntimeService', () => {
       addRepo: (repo: Record<string, unknown>) => {
         added.push(repo)
       },
-      getRepo: (id: string) => added.find((repo) => repo.id === id) as never
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+      getRepoAnyHost: (id: string) => added.find((repo) => repo.id === id) as never
     }
     const runtime = new OrcaRuntimeService(colorStore as never)
     const destination = await mkdtemp(join(tmpdir(), 'orca-runtime-clone-'))

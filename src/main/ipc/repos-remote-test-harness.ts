@@ -17,7 +17,7 @@ export type ReposIpcMocks = {
     | 'getAllWorktreeMeta'
     | 'addRepo'
     | 'removeProjectForHost'
-    | 'getRepo'
+    | 'getRepoAnyHost'
     | 'getProjects'
     | 'getProjectHostSetups'
     | 'updateProjectHostSetup'
@@ -48,7 +48,7 @@ export function createReposIpcMocks(): ReposIpcMocks {
       getAllWorktreeMeta: vi.fn().mockReturnValue({}),
       addRepo: vi.fn(),
       removeProjectForHost: vi.fn(),
-      getRepo: vi.fn(),
+      getRepoAnyHost: vi.fn(),
       updateRepo: vi.fn(),
       getProjects: vi.fn().mockReturnValue([]),
       getProjectHostSetups: vi.fn().mockReturnValue([]),

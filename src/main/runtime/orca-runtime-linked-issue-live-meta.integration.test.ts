@@ -73,7 +73,7 @@ function makeStore(worktreePath: string) {
       getRepos: () => [
         { id: REPO_ID, path: worktreePath, displayName: 'repo', badgeColor: 'blue', addedAt: 1 }
       ],
-      getRepo: (id: string) =>
+      getRepoAnyHost: (id: string) =>
         id === REPO_ID
           ? { id: REPO_ID, path: worktreePath, displayName: 'repo', badgeColor: 'blue', addedAt: 1 }
           : undefined,

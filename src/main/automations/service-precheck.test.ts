@@ -246,7 +246,7 @@ describe('AutomationService prechecks', () => {
     await runHeadlessAutomationDispatch({
       automation,
       run,
-      target: { ok: true, cwd: '/repo', repo: store.getRepo('r1')! },
+      target: { ok: true, cwd: '/repo', repo: store.getRepoAnyHost('r1')! },
       dispatcher: headlessDispatcher,
       runs: createAutomationRunWriter(store, null),
       runPrecheck: () => service.runPrecheck(automation.id, run.id),

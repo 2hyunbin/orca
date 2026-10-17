@@ -16,7 +16,7 @@ export function firstWorkRenameDeps(
   store: Pick<
     RuntimeStore,
     | 'getSettings'
-    | 'getRepo'
+    | 'getRepoAnyHost'
     | 'getWorktreeMeta'
     | 'setWorktreeMeta'
     | 'getFolderWorkspace'
@@ -33,7 +33,7 @@ export function firstWorkRenameDeps(
 ): FirstWorkBranchRenameDeps {
   return {
     getSettings: () => store.getSettings(),
-    getRepo: (repoId) => store.getRepo(repoId),
+    getRepoAnyHost: (repoId) => store.getRepoAnyHost(repoId),
     getAgentEnvResolvers: () => runtime.getCommitMessageAgentEnvironmentResolvers(),
     getCurrentDisplayName: (worktreeId) => {
       const scope = parseWorkspaceKey(worktreeId)
@@ -90,7 +90,7 @@ export function firstWorkRenameDeps(
     renameWorktreeFolder: ENABLE_FIRST_WORK_FOLDER_RENAME
       ? (worktreeId, newLeaf) =>
           renameWorktreeFolderOnFirstWork(worktreeId, newLeaf, {
-            getRepo: (repoId) => store.getRepo(repoId),
+            getRepoAnyHost: (repoId) => store.getRepoAnyHost(repoId),
             getSettings: () => store.getSettings(),
             migrateWorktreeIdentity: (oldId, newId) => store.migrateWorktreeIdentity!(oldId, newId),
             notifyWorktreeRenamed: (repoId, oldId, newId) =>

@@ -20,7 +20,7 @@ import {
 describe('OrcaRuntimeService', () => {
   it('sequences setup before startup for opted-in local headless worktree creates', async () => {
     const waitRepo = {
-      ...store.getRepo('repo-1')!,
+      ...store.getRepoAnyHost('repo-1')!,
       hookSettings: {
         mode: 'auto' as const,
         setupRunPolicy: 'run-by-default' as const,
@@ -31,7 +31,7 @@ describe('OrcaRuntimeService', () => {
     const runtimeStore = {
       ...store,
       getRepos: () => [waitRepo],
-      getRepo: (id: string) => (id === 'repo-1' ? waitRepo : undefined)
+      getRepoAnyHost: (id: string) => (id === 'repo-1' ? waitRepo : undefined)
     }
     const runtime = new OrcaRuntimeService(runtimeStore as never)
     const createTerminal = vi.spyOn(runtime, 'createTerminal')

@@ -13,7 +13,7 @@ const sshRepo = { ...localRepo, displayName: 'ssh', connectionId: 'ssh-1' }
 
 function makeStore() {
   return {
-    getRepo: vi.fn(() => localRepo),
+    getRepoAnyHost: vi.fn(() => localRepo),
     getRepos: vi.fn(() => [localRepo, sshRepo])
   }
 }

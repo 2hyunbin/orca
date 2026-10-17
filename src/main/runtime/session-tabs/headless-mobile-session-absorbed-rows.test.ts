@@ -19,7 +19,7 @@ const repos = [
 
 function hydratedRuntime(session: WorkspaceSessionState) {
   const runtime = new OrcaRuntimeService({
-    getRepo: (id: string) => repos.find((repo) => repo.id === id),
+    getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id),
     getRepos: () => repos,
     getAllWorktreeMeta: () => ({}),
     getWorktreeMeta: () => undefined,

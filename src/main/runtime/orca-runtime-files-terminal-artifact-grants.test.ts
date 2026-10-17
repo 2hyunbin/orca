@@ -373,7 +373,7 @@ describe('RuntimeFileCommands', () => {
 
     it('does not grant remote temp artifacts that resolve outside allowed temp roots', async () => {
       const { commands, store } = createRuntimeFileCommands({ path: '/repo' })
-      store.getRepo.mockReturnValue({ connectionId: 'ssh-1' })
+      store.getRepoAnyHost.mockReturnValue({ connectionId: 'ssh-1' })
 
       const result = await commands.resolveTerminalPath(
         'id:wt-1',

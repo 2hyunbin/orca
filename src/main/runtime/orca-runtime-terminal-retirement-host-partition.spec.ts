@@ -128,7 +128,7 @@ export function registerOrcaRuntimeTerminalRetirementHostPartitionTests(): void 
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This runtime fixture supplies the persistence and graph methods exercised by the test.
     const store = withDurableRuntimeStore({
       getRepos: () => [SSH_REPO],
-      getRepo: (id: string) => (id === SSH_REPO_ID ? SSH_REPO : undefined),
+      getRepoAnyHost: (id: string) => (id === SSH_REPO_ID ? SSH_REPO : undefined),
       getWorkspaceSessionHostIds: () => [...sessions.keys()],
       getWorkspaceSession: (hostId?: ExecutionHostId) => {
         reads.push(hostId)
@@ -216,7 +216,7 @@ export function registerOrcaRuntimeTerminalRetirementHostPartitionTests(): void 
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This runtime fixture supplies the persistence and graph methods exercised by the test.
       const store = withDurableRuntimeStore({
         getRepos: () => [{ ...SSH_REPO, executionHostId: staleHostId }],
-        getRepo: () => ({ ...SSH_REPO, executionHostId: staleHostId }),
+        getRepoAnyHost: () => ({ ...SSH_REPO, executionHostId: staleHostId }),
         getWorktreeMeta: () => undefined,
         getAllWorktreeMeta: () => ({}),
         getWorkspaceSessionHostIds: () => [...sessions.keys()],
@@ -295,7 +295,7 @@ export function registerOrcaRuntimeTerminalRetirementHostPartitionTests(): void 
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This runtime fixture supplies the persistence and graph methods exercised by the test.
       const store = withDurableRuntimeStore({
         getRepos: () => [SSH_REPO],
-        getRepo: (id: string) => (id === SSH_REPO_ID ? SSH_REPO : undefined),
+        getRepoAnyHost: (id: string) => (id === SSH_REPO_ID ? SSH_REPO : undefined),
         getWorktreeMeta: () => ({ hostId: SSH_HOST_ID }),
         getAllWorktreeMeta: () => ({ [SSH_WORKTREE_ID]: { hostId: SSH_HOST_ID } }),
         setWorktreeMeta: vi.fn(),
@@ -351,7 +351,7 @@ export function registerOrcaRuntimeTerminalRetirementHostPartitionTests(): void 
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This runtime fixture supplies the persistence and graph methods exercised by the test.
       const store = withDurableRuntimeStore({
         getRepos: () => [{ ...SSH_REPO, executionHostId: staleHostId }],
-        getRepo: () => ({ ...SSH_REPO, executionHostId: staleHostId }),
+        getRepoAnyHost: () => ({ ...SSH_REPO, executionHostId: staleHostId }),
         getWorktreeMeta: () => ({}),
         getAllWorktreeMeta: () => ({ [SSH_WORKTREE_ID]: {} }),
         setWorktreeMeta: vi.fn(),
@@ -462,7 +462,7 @@ export function registerOrcaRuntimeTerminalRetirementHostPartitionTests(): void 
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the controller reads only repos, folder workspaces and workspace sessions.
       const store = {
         getRepos: () => (folderId ? [] : [repoOrFolder]),
-        getRepo: () => (folderId ? undefined : repoOrFolder),
+        getRepoAnyHost: () => (folderId ? undefined : repoOrFolder),
         getFolderWorkspaces: () => (folderId ? [{ ...repoOrFolder, id: folderId }] : []),
         getWorkspaceSessionHostIds: () => [...sessions.keys()],
         getWorkspaceSession: (hostId: ExecutionHostId) =>
@@ -635,10 +635,11 @@ export function registerOrcaRuntimeTerminalRetirementHostPartitionTests(): void 
         }
       }
       harness.sessions.set(LOCAL_EXECUTION_HOST_ID, localSession)
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
       const store = {
         ...(harness.store as object),
         getRepos: () => [SSH_REPO, localRepo],
-        getRepo: (id: string) =>
+        getRepoAnyHost: (id: string) =>
           id === SSH_REPO_ID ? SSH_REPO : id === 'local-repo' ? localRepo : undefined
       } as never
       const runtime = new OrcaRuntimeService(store)

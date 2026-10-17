@@ -78,7 +78,7 @@ export function createDaemonActiveProviderFixtures(ctx: {
       ...args.settings
     }
     return {
-      getRepo: vi.fn((repoId: string) =>
+      getRepoAnyHost: vi.fn((repoId: string) =>
         repoId === 'repo-1' ? { id: 'repo-1', path: 'C:\\repo' } : undefined
       ),
       getProjects: vi.fn(() => [

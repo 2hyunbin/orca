@@ -13,14 +13,14 @@ import { OrcaRuntimeService } from './orca-runtime'
 const WT = 'repo-1::/tmp/worktree-a'
 
 const storeBase = {
-  getRepo: () => ({
+  getRepoAnyHost: () => ({
     id: 'repo-1',
     path: '/tmp/repo',
     displayName: 'repo',
     badgeColor: 'blue',
     addedAt: 1
   }),
-  getRepos: () => [storeBase.getRepo()],
+  getRepos: () => [storeBase.getRepoAnyHost()],
   addRepo: () => {},
   updateRepo: () => undefined as never,
   getAllWorktreeMeta: () => ({}),

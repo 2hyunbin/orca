@@ -250,8 +250,9 @@ describe('registerPtyHandlers', () => {
   it('reports lower-owner commit before rejecting an early-exited runtime incarnation', async () => {
     const persistPtyBinding = vi.fn()
     const onPtySpawnCommitted = vi.fn()
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
     const runtime = new OrcaRuntimeService({
-      getRepo: () => undefined,
+      getRepoAnyHost: () => undefined,
       getRepos: () => [],
       addRepo: () => {},
       updateRepo: () => undefined as never,
@@ -329,8 +330,9 @@ describe('registerPtyHandlers', () => {
     clearProviderPtyState('pty-early-exit')
   })
   it('does not retain a claimed owner when its PTY exits before controller admission', async () => {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
     const runtime = new OrcaRuntimeService({
-      getRepo: () => undefined,
+      getRepoAnyHost: () => undefined,
       getRepos: () => [],
       addRepo: () => {},
       updateRepo: () => undefined as never,

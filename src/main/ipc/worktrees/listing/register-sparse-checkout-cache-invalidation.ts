@@ -19,7 +19,7 @@ export function registerSparseCheckoutCacheInvalidation(
   store: Store
 ): () => void {
   const unregisterInvalidator = registerWorktreeChangeInvalidator((repoId) => {
-    const repoPath = store.getRepo(repoId)?.path
+    const repoPath = store.getRepoAnyHost(repoId)?.path
     if (repoPath) {
       clearSparseCheckoutStateCacheForRepo(repoPath)
     } else {

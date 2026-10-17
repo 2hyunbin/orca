@@ -81,7 +81,7 @@ async function listedRows(): Promise<{ path: string; removalError?: string }[]> 
 function storeStub(pushTarget?: GitPushTarget) {
   const meta = pushTarget ? { pushTarget } : undefined
   return {
-    getRepo: (id: string) => (id === repo.id ? repo : undefined),
+    getRepoAnyHost: (id: string) => (id === repo.id ? repo : undefined),
     getRepos: () => [repo],
     getWorktreeMeta: (id: string) => (id === worktreeId ? meta : undefined),
     getAllWorktreeMeta: () => (meta ? { [worktreeId]: meta } : {})

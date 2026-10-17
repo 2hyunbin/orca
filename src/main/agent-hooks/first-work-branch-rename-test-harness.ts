@@ -71,7 +71,7 @@ export function makeBranchRenameDeps(
     setRenameError,
     deps: {
       getSettings: () => settings,
-      getRepo: () => repo,
+      getRepoAnyHost: () => repo,
       getAgentEnvResolvers: () => undefined,
       getCurrentDisplayName: () => 'Nautilus-8',
       canRenameOrcaCreatedBranch: () => true,

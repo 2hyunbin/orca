@@ -8,7 +8,7 @@ const { handleMock, randomUUIDMock, mockStore } = vi.hoisted(() => ({
   mockStore: {
     getRepos: vi.fn().mockReturnValue([]),
     addRepo: vi.fn(),
-    getRepo: vi.fn(),
+    getRepoAnyHost: vi.fn(),
     updateRepo: vi.fn(),
     getSparsePresets: vi.fn(),
     saveSparsePreset: vi.fn(),
@@ -77,7 +77,7 @@ describe('sparse preset repo IPC handlers', () => {
     })
     randomUUIDMock.mockReturnValue('preset-new')
     mainWindow.webContents.send.mockReset()
-    mockStore.getRepo.mockReset().mockReturnValue({
+    mockStore.getRepoAnyHost.mockReset().mockReturnValue({
       id: 'repo-1',
       path: '/repo',
       displayName: 'repo',
@@ -185,7 +185,7 @@ describe('sparse preset repo IPC handlers', () => {
   })
 
   it('rejects sparse preset saves for unknown repos', () => {
-    mockStore.getRepo.mockReturnValue(null)
+    mockStore.getRepoAnyHost.mockReturnValue(null)
 
     expect(() =>
       handlers.get('sparsePresets:save')!(null, {
@@ -197,7 +197,7 @@ describe('sparse preset repo IPC handlers', () => {
   })
 
   it('rejects sparse preset removals for unknown repos before persistence', () => {
-    mockStore.getRepo.mockReturnValue(null)
+    mockStore.getRepoAnyHost.mockReturnValue(null)
 
     expect(() =>
       handlers.get('sparsePresets:remove')!(null, {

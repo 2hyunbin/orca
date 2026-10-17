@@ -564,7 +564,7 @@ describe('OrcaRuntimeService', () => {
     const orphanStore = {
       ...runtimeStore,
       getRepos: () => [],
-      getRepo: () => undefined
+      getRepoAnyHost: () => undefined
     }
     const runtime = createWorktreeRemovalRuntime(orphanStore)
 
@@ -594,7 +594,7 @@ describe('OrcaRuntimeService', () => {
     const orphanStore = {
       ...runtimeStore,
       getRepos: () => [],
-      getRepo: () => undefined
+      getRepoAnyHost: () => undefined
     }
     const localProvider = {
       listProcesses: vi.fn(async () => [{ id: `${TEST_WORKTREE_ID}@@1` }]),
@@ -640,7 +640,7 @@ describe('OrcaRuntimeService', () => {
     const orphanStore = {
       ...runtimeStore,
       getRepos: () => [],
-      getRepo: () => undefined
+      getRepoAnyHost: () => undefined
     }
     const localProvider = {
       listProcesses: vi.fn(async () => [{ id: `${TEST_WORKTREE_ID}@@1` }]),
@@ -692,7 +692,7 @@ describe('OrcaRuntimeService', () => {
     const orphanStore = {
       ...runtimeStore,
       getRepos: () => [],
-      getRepo: () => undefined
+      getRepoAnyHost: () => undefined
     }
     const localProvider = {
       listProcesses: vi.fn(async () => []),
@@ -724,7 +724,7 @@ describe('OrcaRuntimeService', () => {
     const orphanStore = {
       ...runtimeStore,
       getRepos: () => [],
-      getRepo: () => undefined
+      getRepoAnyHost: () => undefined
     }
     const runtime = createWorktreeRemovalRuntime(orphanStore)
 

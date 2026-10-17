@@ -66,7 +66,7 @@ function createWindowsWatcher(close: () => void) {
 }
 
 function createRuntimeFileCommands(rootPath: string) {
-  const store = { getRepo: vi.fn(() => undefined) }
+  const store = { getRepoAnyHost: vi.fn(() => undefined) }
   const commands = new RuntimeFileCommands({
     getRuntimeId: () => 'runtime-1',
     requireStore: () => store,

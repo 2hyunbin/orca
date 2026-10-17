@@ -23,7 +23,7 @@ const group = { id: 'documentation', name: 'Documentation' }
 function makeStore(): MemorySnapshotStore &
   Required<Pick<MemorySnapshotStore, 'getFolderWorkspace' | 'getProjectGroups'>> {
   return {
-    getRepo: vi.fn(),
+    getRepoAnyHost: vi.fn(),
     getWorktreeMeta: vi.fn(),
     getFolderWorkspace: vi.fn((id) => (id === folder.id ? folder : undefined)),
     getProjectGroups: vi.fn(() => [group])
@@ -38,7 +38,7 @@ describe('memory snapshot workspace names', () => {
       repoId: 'folder-workspace:documentation',
       repoName: 'Documentation'
     })
-    expect(store.getRepo).not.toHaveBeenCalled()
+    expect(store.getRepoAnyHost).not.toHaveBeenCalled()
   })
 
   it('reads updated folder and project-group names on the next snapshot', () => {
@@ -80,28 +80,28 @@ describe('memory snapshot workspace names', () => {
 
 describe('memory snapshot optional capability failures', () => {
   it('keeps the direct folder call failure when that capability is absent', () => {
-    const store: MemorySnapshotStore = { getRepo: vi.fn(), getWorktreeMeta: vi.fn() }
+    const store: MemorySnapshotStore = { getRepoAnyHost: vi.fn(), getWorktreeMeta: vi.fn() }
     expect(() => resolveWorktreeMemoryNames('folder:notes-folder', store)).toThrow(TypeError)
-    expect(store.getRepo).not.toHaveBeenCalled()
+    expect(store.getRepoAnyHost).not.toHaveBeenCalled()
     expect(store.getWorktreeMeta).not.toHaveBeenCalled()
   })
 
   it('keeps the direct group call failure after the folder lookup', () => {
     const getFolderWorkspace = vi.fn(() => folder)
     const store: MemorySnapshotStore = {
-      getRepo: vi.fn(),
+      getRepoAnyHost: vi.fn(),
       getWorktreeMeta: vi.fn(),
       getFolderWorkspace
     }
     expect(() => resolveWorktreeMemoryNames('folder:notes-folder', store)).toThrow(TypeError)
     expect(getFolderWorkspace).toHaveBeenCalledExactlyOnceWith(folder.id)
-    expect(store.getRepo).not.toHaveBeenCalled()
+    expect(store.getRepoAnyHost).not.toHaveBeenCalled()
   })
 
   it('looks up and invokes folder before groups with the original receiver and arguments', () => {
     const calls: string[] = []
     const store: MemorySnapshotStore = {
-      getRepo: vi.fn(),
+      getRepoAnyHost: vi.fn(),
       getWorktreeMeta: vi.fn(),
       get getFolderWorkspace() {
         calls.push('folder:get')

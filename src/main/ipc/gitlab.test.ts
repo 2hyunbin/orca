@@ -130,10 +130,10 @@ function repo(overrides: Partial<Repo> = {}): Repo {
 function storeWithRepos(
   repos: Repo[],
   projects: ReturnType<Store['getProjects']> = []
-): Pick<Store, 'getRepos' | 'getRepo' | 'getProjects' | 'getSettings'> {
+): Pick<Store, 'getRepos' | 'getRepoAnyHost' | 'getProjects' | 'getSettings'> {
   return {
     getRepos: () => repos,
-    getRepo: (id: string) => repos.find((candidate) => candidate.id === id),
+    getRepoAnyHost: (id: string) => repos.find((candidate) => candidate.id === id),
     getProjects: () => projects,
     getSettings: () =>
       ({

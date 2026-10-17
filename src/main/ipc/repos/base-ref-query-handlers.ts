@@ -83,7 +83,7 @@ function getRepoForExecutionHost(
   hostId?: ExecutionHostId
 ): Repo | null {
   if (!hostId) {
-    return store.getRepo(repoId) ?? null
+    return store.getRepoAnyHost(repoId) ?? null
   }
   // Why: repo ids can collide across local and SSH hosts; read must use the same host the Settings pane selected for the write.
   return (

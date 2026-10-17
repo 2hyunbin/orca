@@ -68,7 +68,7 @@ describe('OrcaRuntimeService', () => {
     const runtimeStore = {
       ...store,
       getRepos: () => [repo],
-      getRepo: (id: string) => (id === repo.id ? repo : undefined),
+      getRepoAnyHost: (id: string) => (id === repo.id ? repo : undefined),
       getAllWorktreeMeta: () => metaById,
       getWorktreeMeta: (id: string) => metaById[id],
       setWorktreeMeta: (id: string, meta: Partial<WorktreeMeta>) => {
@@ -208,7 +208,7 @@ describe('OrcaRuntimeService', () => {
     const runtimeStore = {
       ...store,
       getRepos: () => [repo],
-      getRepo: () => repo
+      getRepoAnyHost: () => repo
     }
     const runtime = createWorktreeRemovalRuntime(runtimeStore)
     const killSpy = vi.fn().mockReturnValue(true)
@@ -247,7 +247,7 @@ describe('OrcaRuntimeService', () => {
     const runtimeStore = {
       ...store,
       getRepos: () => [repo],
-      getRepo: () => repo
+      getRepoAnyHost: () => repo
     }
     const runtime = createWorktreeRemovalRuntime(runtimeStore)
     const killSpy = vi.fn().mockReturnValue(true)
@@ -354,7 +354,7 @@ describe('OrcaRuntimeService', () => {
           addedAt: 1
         }
       ],
-      getRepo: (id: string) =>
+      getRepoAnyHost: (id: string) =>
         id === TEST_REPO_ID
           ? {
               id: TEST_REPO_ID,
@@ -434,7 +434,7 @@ describe('OrcaRuntimeService', () => {
           addedAt: 1
         }
       ],
-      getRepo: (id: string) =>
+      getRepoAnyHost: (id: string) =>
         id === TEST_REPO_ID
           ? {
               id: TEST_REPO_ID,
@@ -733,7 +733,7 @@ describe('OrcaRuntimeService', () => {
   it('preserves create-time metadata on later runtime listings when Windows path formatting differs', async () => {
     const metaById: Record<string, WorktreeMeta> = {}
     const runtimeStore = {
-      getRepo: (id: string) => runtimeStore.getRepos().find((repo) => repo.id === id),
+      getRepoAnyHost: (id: string) => runtimeStore.getRepos().find((repo) => repo.id === id),
       getRepos: () => [
         {
           id: 'repo-1',

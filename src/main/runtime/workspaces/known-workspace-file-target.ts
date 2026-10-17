@@ -79,7 +79,7 @@ export abstract class OrcaRuntimeWithResolveKnownWorkspaceFileTarget extends Orc
       ) {
         continue
       }
-      // Why: `getRepo(id)` is host-blind, so a candidate on one SSH host could be filed under
+      // Why: `getRepoAnyHost(id)` is host-blind, so a candidate on one SSH host could be filed under
       // another's key and then answer for a path it does not hold. Rival rows that disagree with
       // no worktree host name no single filesystem authority, so that candidate is dropped.
       const routing = resolveWorktreeHostRouting(repos, worktree)

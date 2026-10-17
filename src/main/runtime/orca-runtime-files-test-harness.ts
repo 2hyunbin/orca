@@ -49,7 +49,8 @@ export function createRuntimeFileCommands(options?: {
 }) {
   const store = {
     getSettings: vi.fn(() => ({ followSymlinkedDirectories: false })),
-    getRepo: vi.fn((_repoId?: string) => undefined as { connectionId?: string } | undefined)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+    getRepoAnyHost: vi.fn((_repoId?: string) => undefined as { connectionId?: string } | undefined)
   }
   const path = options?.path ?? '/repo'
   const worktree = {
@@ -60,9 +61,10 @@ export function createRuntimeFileCommands(options?: {
   }
   // Mirrors the real resolver: the worktree's own host outranks the repo row.
   const runtimeFileTargetExecutionHostId = (): ExecutionHostId => {
-    const connectionId = store.getRepo(worktree.repoId)?.connectionId
+    const connectionId = store.getRepoAnyHost(worktree.repoId)?.connectionId
     return normalizeExecutionHostId(options?.hostId) ?? getConnectionExecutionHostId(connectionId)
   }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
   const commands = new RuntimeFileCommands({
     getRuntimeId: () => 'runtime-1',
     requireStore: () => store,
@@ -81,7 +83,7 @@ export function createRuntimeFileCommands(options?: {
       options?.resolveTerminalContext ??
       vi.fn(() => ({
         worktreeId: worktree.id,
-        connectionId: store.getRepo(worktree.repoId)?.connectionId ?? null
+        connectionId: store.getRepoAnyHost(worktree.repoId)?.connectionId ?? null
       })),
     ...(options?.resolveTerminalFileUriHostname
       ? { resolveTerminalFileUriHostname: options.resolveTerminalFileUriHostname }

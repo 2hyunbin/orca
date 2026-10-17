@@ -31,7 +31,7 @@ function findRegisteredGitLabRepo(args: GitLabRepoSelectorArgs, store: Store): R
     return matches.length === 1 ? matches[0] : undefined
   }
   if (repoId) {
-    const repo = store.getRepo(repoId)
+    const repo = store.getRepoAnyHost(repoId)
     if (repo) {
       return repo
     }

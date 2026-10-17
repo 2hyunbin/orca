@@ -369,7 +369,7 @@ describe('RuntimeFileCommands', () => {
         path: '/repo',
         hasRecentNativeChatOutputPath: vi.fn(() => true)
       })
-      store.getRepo.mockReturnValue({ connectionId: 'ssh-1' })
+      store.getRepoAnyHost.mockReturnValue({ connectionId: 'ssh-1' })
 
       await expect(
         resolveRemoteNativeChatArtifact(commands, '/home/me/report.json')

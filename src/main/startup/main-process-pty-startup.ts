@@ -99,7 +99,7 @@ async function sweepRestoredStatusesAgainstLocalPtys(): Promise<void> {
     isLocalExecutionHost: (worktreeId) =>
       isLocalExecutionHost(
         resolveAgentWorkspaceExecutionHostId(worktreeId, {
-          getRepo: (repoId) => store.getRepo(repoId),
+          getRepoAnyHost: (repoId) => store.getRepoAnyHost(repoId),
           getWorktreeMeta: (resolvedWorktreeId) => store.getWorktreeMeta(resolvedWorktreeId),
           getFolderWorkspace: (folderWorkspaceId) => store.getFolderWorkspace(folderWorkspaceId),
           getProjectGroups: () => store.getProjectGroups()

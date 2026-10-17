@@ -23,7 +23,7 @@ export type WslMoveRepoRow = HostedRow & { id: string; path: string }
 export type WslMoveFolderWorkspaceRow = HostedRow & { id: string; folderPath: string }
 
 function repoStore(repo: WslMoveRepoRow) {
-  return { getRepo: (id: string) => (id === repo.id ? repo : undefined) }
+  return { getRepoAnyHost: (id: string) => (id === repo.id ? repo : undefined) }
 }
 
 export function isWslMoveRepoBlocked(repo: WslMoveRepoRow): boolean {
@@ -46,7 +46,7 @@ export function isWslMoveFolderWorkspaceBlocked(folder: WslMoveFolderWorkspaceRo
     return false
   }
   const store = {
-    getRepo: () => undefined,
+    getRepoAnyHost: () => undefined,
     getFolderWorkspace: (id: string) => (id === folder.id ? folder : undefined)
   }
   return isWslMoveProjectBlocked(store, { folderWorkspaceId: folder.id })
@@ -66,6 +66,6 @@ export function isWslMoveWorktreeBlocked(
   }
   const path = worktreePath ?? splitWorktreeIdForFilesystem(worktreeId)?.worktreePath
   const row = path === undefined ? undefined : { path, folderPath: path }
-  const store = { getRepo: () => row, getFolderWorkspace: () => row }
+  const store = { getRepoAnyHost: () => row, getFolderWorkspace: () => row }
   return isWslMoveProjectBlocked(store, wslMoveProjectRefForWorkspace(worktreeId))
 }

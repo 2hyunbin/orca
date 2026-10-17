@@ -22,7 +22,7 @@ describe('OrcaRuntimeService', () => {
     const runtimeStore = {
       ...store,
       getRepos: () => [remoteRepo],
-      getRepo: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined)
+      getRepoAnyHost: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined)
     }
     const gitSpy = vi.spyOn(gitRunner, 'gitExecFileAsync')
     const runtime = new OrcaRuntimeService(runtimeStore as never)
@@ -54,7 +54,7 @@ describe('OrcaRuntimeService', () => {
     const runtimeStore = {
       ...store,
       getRepos: () => [localRepo],
-      getRepo: (id: string) => (id === localRepo.id ? localRepo : undefined)
+      getRepoAnyHost: (id: string) => (id === localRepo.id ? localRepo : undefined)
     }
     getGitLabProjectRefForRemoteMock.mockResolvedValue({
       host: 'gitlab.example',
@@ -112,7 +112,7 @@ describe('OrcaRuntimeService', () => {
     const runtimeStore = {
       ...store,
       getRepos: () => [localRepo],
-      getRepo: (id: string) => (id === localRepo.id ? localRepo : undefined)
+      getRepoAnyHost: (id: string) => (id === localRepo.id ? localRepo : undefined)
     }
     getGitLabProjectRefForRemoteMock.mockResolvedValue({
       host: 'gitlab.example',

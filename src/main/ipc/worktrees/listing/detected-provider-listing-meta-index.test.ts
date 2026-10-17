@@ -41,9 +41,10 @@ function createStore(): Store {
     // Other repos' rows share the host snapshot; only this repo's bucket is ever read back.
     'repo-2::/home/user/other': { instanceId: 'instance-2' }
   }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
   return {
     getRepos: () => [repo],
-    getRepo: () => repo,
+    getRepoAnyHost: () => repo,
     getSettings: () => ({}),
     getProjectHostSetups: () => [],
     getAllWorktreeLineage: () => ({}),

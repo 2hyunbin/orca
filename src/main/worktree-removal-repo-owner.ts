@@ -4,7 +4,7 @@ import type { WorktreeMeta } from '../shared/worktree/meta-types'
 
 export type WorktreeRemovalRepoSource = {
   getRepos: () => readonly Repo[]
-  getRepo: (repoId: string) => Repo | undefined
+  getRepoAnyHost: (repoId: string) => Repo | undefined
 }
 
 export type WorktreeRemovalRepoOwner =
@@ -33,7 +33,7 @@ export function resolveWorktreeRemovalRepoOwner(
   if (matches.length > 1) {
     return { kind: 'ambiguous' }
   }
-  const legacyMatch = store.getRepo(repoId)
+  const legacyMatch = store.getRepoAnyHost(repoId)
   return legacyMatch && (!hostId || getRepoExecutionHostId(legacyMatch) === hostId)
     ? { kind: 'resolved', repo: legacyMatch }
     : { kind: 'missing' }

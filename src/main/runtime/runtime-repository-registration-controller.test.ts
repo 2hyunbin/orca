@@ -23,7 +23,7 @@ function createController(): {
   const repos: Repo[] = []
   const store = {
     getRepos: () => repos,
-    getRepo: (id: string) => repos.find((repo) => repo.id === id),
+    getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id),
     addRepo: (repo: Repo) => {
       repos.push(repo)
       return repo
@@ -31,7 +31,7 @@ function createController(): {
     updateRepo: () => null
   }
   const controller = new RuntimeRepositoryRegistrationController({
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: add() only uses getRepos/getRepo/addRepo/updateRepo.
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: add() only uses getRepos/getRepoAnyHost/addRepo/updateRepo.
     getStore: () => store as unknown as RuntimeStore,
     invalidateResolvedWorktrees: () => {},
     invalidateWorktreeScan: () => {},

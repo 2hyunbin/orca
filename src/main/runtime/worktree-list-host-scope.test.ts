@@ -62,9 +62,10 @@ function queries(
   resolved: ResolvedWorktree[],
   knownHostIds: ExecutionHostId[] = ['local', 'ssh:box-1']
 ): RuntimeManagedWorktreeQueries {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
   const store = {
     getRepos: () => [LOCAL_REPO, SSH_REPO],
-    getRepo: () => LOCAL_REPO,
+    getRepoAnyHost: () => LOCAL_REPO,
     getAllWorktreeMeta: () => ({}),
     getWorktreeMeta: () => undefined,
     setWorktreeMeta: vi.fn(),

@@ -42,7 +42,7 @@ function getLegacyPrecheckCwd(store: Store, automation: Automation): string | nu
       : null
     return parsed?.worktreePath ?? null
   }
-  return store.getRepo(getAutomationLegacyRepoId(automation))?.path ?? null
+  return store.getRepoAnyHost(getAutomationLegacyRepoId(automation))?.path ?? null
 }
 
 function resolveAutomationOwnerRefusal(store: Store, automation: Automation): string | null {
@@ -64,7 +64,7 @@ export function resolveAutomationRunTarget(
     if (ownerRefusal) {
       return { ok: false, error: ownerRefusal }
     }
-    const repo = store.getRepo(getAutomationLegacyRepoId(automation))
+    const repo = store.getRepoAnyHost(getAutomationLegacyRepoId(automation))
     const cwd = getLegacyPrecheckCwd(store, automation)
     if (!repo || !cwd) {
       return { ok: false, error: 'Automation run target is no longer available.' }
@@ -118,7 +118,7 @@ export function resolveAutomationRunTarget(
     }
   }
 
-  const repo = store.getRepo(context.repoId)
+  const repo = store.getRepoAnyHost(context.repoId)
   if (!repo) {
     return {
       ok: false,

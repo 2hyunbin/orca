@@ -177,7 +177,7 @@ describe('registerWorktreeHandlers', () => {
       })
     }
     store.getRepos.mockReturnValue([folderRepo])
-    store.getRepo.mockReturnValue(folderRepo)
+    store.getRepoAnyHost.mockReturnValue(folderRepo)
     store.getAllWorktreeMeta.mockReturnValue(metaById)
     store.getWorktreeMeta.mockImplementation((worktreeId: string) => metaById[worktreeId])
     store.getAllWorktreeLineage.mockReturnValue({
@@ -267,7 +267,7 @@ describe('registerWorktreeHandlers', () => {
     store.getAllWorktreeMeta.mockReturnValue({
       'repo-ssh::/remote/live-child': {}
     })
-    store.getRepo.mockReturnValue(repo)
+    store.getRepoAnyHost.mockReturnValue(repo)
     store.getAllWorktreeLineage.mockReturnValue({
       'repo-ssh::/remote/live-child': {
         parentWorktreeId: 'repo-ssh::/remote/missing-parent',

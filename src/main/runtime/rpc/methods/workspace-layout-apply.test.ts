@@ -51,7 +51,7 @@ function runtimeHolding(hostId: string) {
   const applyLayoutCommand = vi.fn(async () => ({ ok: true, result: { leafId: 'minted' } }))
   const empty: WorkspaceSessionState = { ...sessionListing('other'), tabsByWorktree: {} }
   const store = {
-    getRepo: () => undefined,
+    getRepoAnyHost: () => undefined,
     getWorkspaceSessionHostIds: () => ['local', hostId],
     getWorkspaceSession: (host: string) => (host === hostId ? sessionListing('tab-1') : empty),
     applyLayoutCommand
@@ -523,7 +523,7 @@ describe('layout.apply', () => {
     const written = new Set<(hostId: string | null) => void>()
     const order: string[] = []
     const store = {
-      getRepo: () => undefined,
+      getRepoAnyHost: () => undefined,
       getWorkspaceSessionHostIds: () => ['local'],
       getWorkspaceSession: () => session,
       onWorkspaceSessionWritten: (listener: (hostId: string | null) => void) => {

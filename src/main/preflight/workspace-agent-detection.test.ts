@@ -95,7 +95,7 @@ function store(args: {
 }): WorkspaceAgentDetectionStore {
   return {
     getRepos: () => args.repos,
-    getRepo: (id: string) => args.repos.find((entry) => entry.id === id),
+    getRepoAnyHost: (id: string) => args.repos.find((entry) => entry.id === id),
     getProjects: () => args.projects ?? [],
     getSettings: () => ({ localWindowsRuntimeDefault: args.globalDefault }),
     getFolderWorkspaces: () => args.folderWorkspaces ?? [],

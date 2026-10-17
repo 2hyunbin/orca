@@ -201,15 +201,15 @@ describe('Flat folder-scan project groups adaptation', () => {
         normalizeRuntimePathSeparators(join(parentPath, 'packages', 'shared'))
       ]
     ])
-    expect(store.getRepo('api')?.projectGroupId).toBe('root')
-    expect(store.getRepo('api')?.projectGroupOrder).toBe(10)
-    expect(store.getRepo('web')?.projectGroupId).toBe('root')
-    expect(store.getRepo('web')?.projectGroupOrder).toBe(20)
-    expect(store.getRepo('repo1')?.projectGroupId).toBe(shared?.id)
-    expect(store.getRepo('repo1')?.projectGroupOrder).toBe(0)
-    expect(store.getRepo('repo2')?.projectGroupId).toBe(shared?.id)
-    expect(store.getRepo('repo2')?.projectGroupOrder).toBe(1)
-    expect(store.getRepo('folder')).toEqual(
+    expect(store.getRepoAnyHost('api')?.projectGroupId).toBe('root')
+    expect(store.getRepoAnyHost('api')?.projectGroupOrder).toBe(10)
+    expect(store.getRepoAnyHost('web')?.projectGroupId).toBe('root')
+    expect(store.getRepoAnyHost('web')?.projectGroupOrder).toBe(20)
+    expect(store.getRepoAnyHost('repo1')?.projectGroupId).toBe(shared?.id)
+    expect(store.getRepoAnyHost('repo1')?.projectGroupOrder).toBe(0)
+    expect(store.getRepoAnyHost('repo2')?.projectGroupId).toBe(shared?.id)
+    expect(store.getRepoAnyHost('repo2')?.projectGroupOrder).toBe(1)
+    expect(store.getRepoAnyHost('folder')).toEqual(
       expect.objectContaining({
         kind: 'folder',
         projectGroupId: 'root',

@@ -83,7 +83,7 @@ function makeFixture(repos: Repo[] = [owner()], hostId: ExecutionHostId = 'local
   const lineageById: Record<string, WorktreeLineage> = {}
   const store: RuntimeStore = {
     getRepos: () => repos,
-    getRepo: (id) => repos.find((repo) => repo.id === id),
+    getRepoAnyHost: (id) => repos.find((repo) => repo.id === id),
     addRepo: vi.fn<RuntimeStore['addRepo']>(),
     updateRepo: vi.fn<RuntimeStore['updateRepo']>(),
     getAllWorktreeMeta: () => metadata,

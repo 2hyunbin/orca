@@ -82,7 +82,7 @@ describe('OrcaRuntimeService', () => {
     const runtimeStore = {
       ...store,
       getRepos: () => [remoteRepo],
-      getRepo: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined)
+      getRepoAnyHost: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined)
     }
     const runtime = new OrcaRuntimeService(runtimeStore as never)
 

@@ -1,0 +1,44 @@
+# Production uses of the host-blind repo lookup `getRepoAnyHost`, per file.
+# This is a RATCHET: counts may only go DOWN. Use the host-scoped getRepo(repoId, hostId).
+# Prune after removing uses: pnpm check:get-repo-any-host-ratchet --prune
+1 src/main/agent-hooks/first-work-branch-rename.ts
+1 src/main/agent-hooks/first-work-folder-rename.ts
+2 src/main/agent-hooks/first-work-rename-runtime.ts
+1 src/main/agent-hooks/restored-status-dead-terminal-sweep.ts
+3 src/main/automations/run-target-resolution.ts
+2 src/main/ipc/ephemeral-vm-recipe-context.ts
+1 src/main/ipc/filesystem/filesystem-source-control-ai-targets.ts
+2 src/main/ipc/folder-repo-git-upgrade.ts
+1 src/main/ipc/gitlab-repo-access.ts
+1 src/main/ipc/hooks/register-worktree-hook-runner-handler.ts
+1 src/main/ipc/hosted-review.ts
+1 src/main/ipc/pty/ipc/spawn-push-target-materialization.ts
+1 src/main/ipc/repos/base-ref-query-handlers.ts
+1 src/main/ipc/repos/repo-git-username-handler.ts
+2 src/main/ipc/repos/sparse-preset-handlers.ts
+1 src/main/ipc/worktrees/create/register-review-base-handlers.ts
+1 src/main/ipc/worktrees/create/register-worktree-create-handlers.ts
+1 src/main/ipc/worktrees/create/register-worktree-prefetch-handler.ts
+1 src/main/ipc/worktrees/listing/register-sparse-checkout-cache-invalidation.ts
+2 src/main/ipc/worktrees/listing/register-worktree-catalog-handlers.ts
+2 src/main/local-project-runtime-resolution.ts
+1 src/main/memory/memory-snapshot-buckets.ts
+1 src/main/persistence/loading-store/project-collection-operations.ts
+1 src/main/persistence/moving-wsl-projects/wsl-move-scope-guard.ts
+2 src/main/runtime/runtime-interrupted-local-worktree-removal.ts
+1 src/main/runtime/runtime-managed-worktree-queries.ts
+1 src/main/runtime/runtime-repository-clone-controller.ts
+2 src/main/runtime/runtime-repository-registration-controller.ts
+1 src/main/runtime/runtime-workspace-session-controller.ts
+1 src/main/runtime/session-tabs/structured-session-create-support.ts
+1 src/main/runtime/structured-agent-session-mobile-attention.ts
+1 src/main/runtime/structured-attention-hidden-workspace.ts
+1 src/main/runtime/terminal/launch/terminal-create-deduplication.ts
+3 src/main/runtime/terminal/launch/terminal-workspace-scope.ts
+1 src/main/runtime/terminal/stop/project-terminal-stop.ts
+1 src/main/runtime/terminal/stop/worktree-terminal-stop.ts
+1 src/main/runtime/workspaces/workspace-activation.ts
+1 src/main/runtime/workspaces/workspace-file-session-targets.ts
+2 src/main/runtime/workspaces/workspace-selectors.ts
+1 src/main/startup/main-process-pty-startup.ts
+1 src/main/worktree-removal-repo-owner.ts

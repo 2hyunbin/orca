@@ -419,7 +419,8 @@ describe('authoritative local worktree metadata pruning integration', () => {
 
       const pending = listDetectedWorktreesForCapturedRepo(
         store as never,
-        store.getRepo(REPO_ID) as never,
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+        store.getRepoAnyHost(REPO_ID) as never,
         () => callerCurrent
       )
       await vi.waitFor(() => expect(localWorktreePathPresenceMock).toHaveBeenCalledTimes(1))

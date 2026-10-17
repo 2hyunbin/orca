@@ -55,7 +55,7 @@ function deferred<T>() {
 function begin(repos = [folder()], meta: ReturnType<Store['getAllWorktreeMeta']> = {}) {
   const store = {
     getRepos: () => repos,
-    getRepo: (id: string) => repos.find((repo) => repo.id === id),
+    getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id),
     getAllWorktreeMeta: () => meta,
     updateRepo: vi.fn((id: string, patch: Partial<Repo>) => {
       const repo = repos.find((row) => row.id === id)

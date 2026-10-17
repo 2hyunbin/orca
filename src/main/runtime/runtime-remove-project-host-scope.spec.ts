@@ -43,9 +43,10 @@ export function registerRuntimeRemoveProjectHostScopeTests(): void {
         }
       }
     })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
     const runtime = new OrcaRuntimeService({
       getRepos: () => [...repos],
-      getRepo: (id: string) => repos.find((repo) => repo.id === id) ?? null,
+      getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id) ?? null,
       getAllWorktreeMeta: () => ({}),
       getWorktreeMeta: () => null,
       setWorktreeMeta: vi.fn(),

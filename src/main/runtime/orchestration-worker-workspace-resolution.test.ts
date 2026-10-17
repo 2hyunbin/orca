@@ -70,7 +70,7 @@ function makeStore(
   ]
   const meta = options.meta ?? { [WORKTREE_ID]: makeMeta('Feature') }
   const store = {
-    getRepo: (id: string) => repos.find((repo) => repo.id === id),
+    getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id),
     getRepos: () => repos,
     getAllWorktreeMeta: () => meta,
     getWorktreeMeta: (id: string) => meta[id],

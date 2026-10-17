@@ -378,7 +378,7 @@ describe('registerWorktreeHandlers', () => {
       }
       const repo = { id: 'repo-1', path: repoPath, displayName: 'repo', badgeColor: '', addedAt: 0 }
       store.getRepos.mockReturnValue([repo])
-      store.getRepo.mockReturnValue(repo)
+      store.getRepoAnyHost.mockReturnValue(repo)
       mockKnownFeatureWorktree(orphanPath, repoPath)
       getEffectiveHooksMock.mockReturnValue(null)
       removeWorktreeMock.mockRejectedValue(
@@ -638,7 +638,7 @@ describe('registerWorktreeHandlers', () => {
   })
 
   it('refuses to delete the root workspace for folder-mode repos', async () => {
-    store.getRepo.mockReturnValue({
+    store.getRepoAnyHost.mockReturnValue({
       id: 'repo-folder',
       path: '/workspace/folder',
       displayName: 'folder',
@@ -660,7 +660,7 @@ describe('registerWorktreeHandlers', () => {
   it('kills PTYs before removing additional folder workspace metadata', async () => {
     const ptyProvider = {} as never
     const worktreeId = 'repo-folder::/workspace/folder::workspace:child-1'
-    store.getRepo.mockReturnValue({
+    store.getRepoAnyHost.mockReturnValue({
       id: 'repo-folder',
       path: '/workspace/folder',
       displayName: 'folder',
@@ -693,7 +693,7 @@ describe('registerWorktreeHandlers', () => {
 
   it('purges a folder workspace after a rejected best-effort PTY sweep', async () => {
     const worktreeId = 'repo-folder::/workspace/folder::workspace:child-1'
-    store.getRepo.mockReturnValue({
+    store.getRepoAnyHost.mockReturnValue({
       id: 'repo-folder',
       path: '/workspace/folder',
       displayName: 'folder',
@@ -720,7 +720,7 @@ describe('registerWorktreeHandlers', () => {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: an identity marker; the mocked sweep never calls into it.
     const localPtyProvider = { id: 'local-pty-provider' } as never
     const worktreeId = 'repo-folder::/remote/folder::workspace:child-1'
-    store.getRepo.mockReturnValue({
+    store.getRepoAnyHost.mockReturnValue({
       id: 'repo-folder',
       path: '/remote/folder',
       displayName: 'folder',
@@ -753,7 +753,7 @@ describe('registerWorktreeHandlers', () => {
   it('fences a mirrored runtime folder workspace sweep to its environment', async () => {
     const runtimePtyProvider = {} as never
     const worktreeId = 'repo-folder::/runtime/folder::workspace:child-1'
-    store.getRepo.mockReturnValue({
+    store.getRepoAnyHost.mockReturnValue({
       id: 'repo-folder',
       path: '/runtime/folder',
       displayName: 'folder',

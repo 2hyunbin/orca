@@ -48,7 +48,7 @@ describe('host agent planner', () => {
       getProjects: () => [
         { id: 'p', sourceRepoIds: ['r'], localWindowsRuntimePreference: preference }
       ],
-      getRepo: () => repo
+      getRepoAnyHost: () => repo
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the planner reads only these members and fields.
     const scope = { ...workspace, id: 'r', path: repo.path, repo } as never
@@ -88,7 +88,7 @@ describe('host agent planner', () => {
       getProjects: () => [
         { id: 'p', sourceRepoIds: ['r'], localWindowsRuntimePreference: preference }
       ],
-      getRepo: () => repo
+      getRepoAnyHost: () => repo
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the planner reads only these members and fields.
     const share = { ...workspace, id: 'r', path: repo.path, repo } as never

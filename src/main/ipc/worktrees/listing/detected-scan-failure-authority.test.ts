@@ -31,8 +31,9 @@ const repo = {
 const removeWorktreeLineage = vi.fn()
 
 function createStore() {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
   return {
-    getRepo: () => repo,
+    getRepoAnyHost: () => repo,
     getRepos: () => [repo],
     getProjects: () => [],
     getSettings: () => ({}),

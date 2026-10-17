@@ -79,9 +79,11 @@ function depsFor(
   meta: Record<string, WorktreeMeta>
 } {
   const meta: Record<string, WorktreeMeta> = { [worktreeId]: { pushTarget } as WorktreeMeta }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
   const store = {
     getWorktreeMeta: (id: string) => meta[id],
-    getRepo: (id: string) => ({ id, path: repoPath, connectionId: null }) as unknown as Repo,
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+    getRepoAnyHost: (id: string) => ({ id, path: repoPath, connectionId: null }) as unknown as Repo,
     getAllWorktreeMeta: () => meta,
     ...(setWorktreeMeta ? { setWorktreeMeta } : {})
   } as unknown as Store

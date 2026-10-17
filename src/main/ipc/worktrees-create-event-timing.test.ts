@@ -117,7 +117,7 @@ function makeRepo(fields: Record<string, unknown>) {
 
 function useRepo(repo: ReturnType<typeof makeRepo>): void {
   store.getRepos.mockReturnValue([repo])
-  store.getRepo.mockReturnValue(repo)
+  store.getRepoAnyHost.mockReturnValue(repo)
   store.setWorktreeMeta.mockImplementation((_worktreeId: string, meta: unknown) => meta)
 }
 

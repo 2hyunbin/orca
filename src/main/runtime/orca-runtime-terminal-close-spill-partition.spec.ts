@@ -56,7 +56,7 @@ export function registerOrcaRuntimeTerminalCloseSpillPartitionTests(): void {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This runtime fixture supplies the persistence methods exercised by the test.
     const store = withDurableRuntimeStore({
       getRepos: () => [REPO],
-      getRepo: (id: string) => (id === REPO.id ? REPO : undefined),
+      getRepoAnyHost: (id: string) => (id === REPO.id ? REPO : undefined),
       getWorktreeMeta: () => undefined,
       getAllWorktreeMeta: () => ({}),
       getWorkspaceSessionHostIds: () => [...sessions.keys()],

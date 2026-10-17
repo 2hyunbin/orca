@@ -302,7 +302,7 @@ describe('registerWorktreeHandlers', () => {
       addedAt: 0,
       connectionId: 'ssh-target-1'
     }
-    store.getRepo.mockReturnValue(repo)
+    store.getRepoAnyHost.mockReturnValue(repo)
     store.getAllWorktreeMeta.mockReturnValue({
       'repo-ssh::/remote/orca': makeWorktreeMeta({
         instanceId: 'existing-instance',
@@ -453,7 +453,7 @@ describe('registerWorktreeHandlers', () => {
         kind: 'folder'
       }
     ])
-    store.getRepo.mockReturnValue({
+    store.getRepoAnyHost.mockReturnValue({
       id: 'repo-1',
       path: '/workspace/folder',
       displayName: 'folder',

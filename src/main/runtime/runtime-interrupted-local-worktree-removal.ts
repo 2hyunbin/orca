@@ -92,7 +92,7 @@ export function interruptedLocalWorktreeRemovalJob(
     },
     publish: () => host.publish(record.repoId),
     cleanupPushTargetRemote: async () => {
-      const repo = host.store.getRepo(record.repoId)
+      const repo = host.store.getRepoAnyHost(record.repoId)
       if (repo) {
         await cleanupUnusedWorktreePushTargetRemote(
           repo.path,
@@ -127,7 +127,7 @@ async function finishInterruptedLocalWorktreeRemoval(
   args: InterruptedLocalWorktreeRemovalArgs
 ): Promise<RemoveWorktreeResult> {
   const { record, store } = args
-  const repo = store.getRepo(record.repoId)
+  const repo = store.getRepoAnyHost(record.repoId)
   if (!repo) {
     console.warn(`[worktrees] dropping removal of ${record.worktreePath}: its repo is gone`)
     return {}

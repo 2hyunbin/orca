@@ -53,7 +53,7 @@ function fixture(fields: Pick<Repo, 'connectionId' | 'executionHostId'>) {
     new Map()
   )
   const store = {
-    getRepo: () => repo,
+    getRepoAnyHost: () => repo,
     getRepos: () => [repo],
     getProjects: () => [],
     getSettings: () => ({}),

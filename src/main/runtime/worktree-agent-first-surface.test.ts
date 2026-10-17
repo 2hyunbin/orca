@@ -42,7 +42,7 @@ function chatCreateRuntime(args: {
   nativeChat?: true
 }) {
   const path = '/tmp/workspaces/chat-create'
-  const baseRepo = store.getRepo('repo-1')
+  const baseRepo = store.getRepoAnyHost('repo-1')
   if (!baseRepo) {
     throw new Error('missing test repo')
   }
@@ -60,7 +60,7 @@ function chatCreateRuntime(args: {
   const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(getDefaultWorkspaceSession())
   const runtime = new OrcaRuntimeService({
     ...runtimeStore,
-    getRepo: (id) => (id === repo.id ? repo : undefined),
+    getRepoAnyHost: (id) => (id === repo.id ? repo : undefined),
     getRepos: () => [repo],
     getSettings: () => ({
       ...runtimeStore.getSettings(),

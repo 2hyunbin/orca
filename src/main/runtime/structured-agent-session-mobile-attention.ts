@@ -48,14 +48,14 @@ export type StructuredAttentionMobileDelivery = {
 
 /** The labels the desktop shows for a workspace, from the host's persisted metadata alone. */
 export function readStructuredAttentionWorkspaceLabels(
-  store: Pick<RuntimeStore, 'getRepo' | 'getWorktreeMeta' | 'getFolderWorkspaces'>,
+  store: Pick<RuntimeStore, 'getRepoAnyHost' | 'getWorktreeMeta' | 'getFolderWorkspaces'>,
   scope: AgentSessionExecutionLocation
 ): StructuredAttentionWorkspaceLabels {
   if (scope.workspaceKind === 'folder') {
     const folder = store.getFolderWorkspaces?.().find((item) => item.id === scope.workspaceId)
     return folder ? { worktreeLabel: folder.name } : {}
   }
-  const repo = store.getRepo(getRepoIdFromWorktreeId(scope.workspaceId))
+  const repo = store.getRepoAnyHost(getRepoIdFromWorktreeId(scope.workspaceId))
   const worktreeLabel = store.getWorktreeMeta(scope.workspaceId)?.displayName
   return {
     ...(repo?.displayName ? { repoLabel: repo.displayName } : {}),

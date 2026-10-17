@@ -24,7 +24,7 @@ import type { RuntimeStore } from './runtime-store-contract'
 export type HiddenWorkspaceAttentionDeps = {
   store: Pick<
     RuntimeStore,
-    'getUI' | 'getRepo' | 'getWorktreeMeta' | 'getAllWorktreeLineage' | 'getFolderWorkspaces'
+    'getUI' | 'getRepoAnyHost' | 'getWorktreeMeta' | 'getAllWorktreeLineage' | 'getFolderWorkspaces'
   >
   /** Last resolved Git listing, possibly stale; branch and HEAD come only from here. */
   resolvedWorktrees: readonly Worktree[] | null
@@ -65,7 +65,9 @@ export function isStructuredAttentionWorkspaceHidden(
     if (
       hideOtherClients &&
       isWorkspaceOwnedBySomeoneElse(
-        { creatorProvenance: listed?.creatorProvenance ?? meta?.creatorProvenance },
+        {
+          creatorProvenance: listed?.creatorProvenance ?? meta?.creatorProvenance
+        },
         EMPTY_PAIRED_DEVICE_IDS_BY_ENVIRONMENT
       )
     ) {
@@ -81,7 +83,7 @@ export function isStructuredAttentionWorkspaceHidden(
     }
     return isHiddenByWorkspaceKindSwitch(
       kind,
-      deps.store.getRepo(getRepoIdFromWorktreeId(id)),
+      deps.store.getRepoAnyHost(getRepoIdFromWorktreeId(id)),
       switches
     )
   }

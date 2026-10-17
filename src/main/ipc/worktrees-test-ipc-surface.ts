@@ -19,7 +19,7 @@ export type TestMainWindow = {
 export type TestStore = {
   getProfileStorageDirectory: Mock<() => string>
   getRepos: StoreMock
-  getRepo: KeyedStoreMock
+  getRepoAnyHost: KeyedStoreMock
   getProjects: StoreMock
   getSparsePresets: StoreMock
   getSettings: StoreMock
@@ -55,7 +55,7 @@ export const ipcEvent = { sender: Object.assign(new EventEmitter(), { id: 1 }) }
 export const store: TestStore = {
   getProfileStorageDirectory: vi.fn(() => '/profile-a'),
   getRepos: vi.fn(),
-  getRepo: vi.fn(),
+  getRepoAnyHost: vi.fn(),
   getProjects: vi.fn(),
   getSparsePresets: vi.fn(),
   getSettings: vi.fn(),

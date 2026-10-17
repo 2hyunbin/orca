@@ -118,7 +118,7 @@ describe('session tab workspace path aliases', () => {
       const repo = { id: 'repo', path: 'G:\\git\\example', connectionId }
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this fixture only needs the registered repository's execution host.
       const runtime = new OrcaRuntimeService({
-        getRepo: () => repo,
+        getRepoAnyHost: () => repo,
         getRepos: () => [repo]
       } as never)
       runtime.attachWindow(1)
@@ -177,7 +177,7 @@ describe('session tab workspace path aliases', () => {
       }
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture supplies the runtime-owned repo row; no remote services are called.
       const runtime = new OrcaRuntimeService({
-        getRepo: () => repo,
+        getRepoAnyHost: () => repo,
         getRepos: () => [repo]
       } as never)
       runtime.attachWindow(1)
@@ -208,7 +208,7 @@ describe('session tab workspace path aliases', () => {
     const local = { id: 'repo', path: 'G:\\git\\example' }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: duplicate repo rows model an ambiguous host without any external services.
     const runtime = new OrcaRuntimeService({
-      getRepo: () => local,
+      getRepoAnyHost: () => local,
       getRepos: () => [local, { ...local, connectionId: 'ssh-host' }]
     } as never)
     runtime.attachWindow(1)
@@ -416,7 +416,7 @@ describe('session tab workspace path aliases', () => {
       }
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: only repository and saved-session reads are reached; no process controller or filesystem scan is installed.
       const runtime = new OrcaRuntimeService({
-        getRepo: (id: string) => (id === repo.id ? repo : undefined),
+        getRepoAnyHost: (id: string) => (id === repo.id ? repo : undefined),
         getRepos: () => [repo],
         getWorkspaceSessionHostIds: () => ['local', 'ssh:ssh-host'],
         getWorkspaceSession: (hostId = 'local') =>
@@ -445,7 +445,10 @@ describe('session tab workspace path aliases', () => {
   it('refuses alias adoption of an unattributed remote PTY for a local repository', async () => {
     const repo = { id: 'repo', path: 'G:\\git\\example' }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture only needs the local repository row.
-    const runtime = new OrcaRuntimeService({ getRepo: () => repo, getRepos: () => [repo] } as never)
+    const runtime = new OrcaRuntimeService({
+      getRepoAnyHost: () => repo,
+      getRepos: () => [repo]
+    } as never)
     runtime.attachWindow(1)
     publishGraph(runtime, WORKTREE, [], toRemoteRuntimePtyId('term_1'))
     await expect(runtime.listMobileSessionTabs(`id:${ALIAS}`)).rejects.toThrow(

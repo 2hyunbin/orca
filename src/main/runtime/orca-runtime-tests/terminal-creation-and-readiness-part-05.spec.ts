@@ -471,7 +471,7 @@ describe('OrcaRuntimeService', () => {
     const tabId = 'ssh-split-tab'
     const sourcePtyId = 'ssh:ssh-1@@source-pty'
     const splitPtyId = 'ssh:ssh-1@@split-pty'
-    const remoteRepo = { ...store.getRepo(TEST_REPO_ID)!, connectionId: 'ssh-1' }
+    const remoteRepo = { ...store.getRepoAnyHost(TEST_REPO_ID)!, connectionId: 'ssh-1' }
     const { runtimeStore, getSession } = makeRuntimeStoreWithWorkspaceSession(
       makeWorkspaceSessionWithHeadlessTerminal({
         tabsByWorktree: {
@@ -495,10 +495,11 @@ describe('OrcaRuntimeService', () => {
       'ssh:ssh-1'
     )
     const spawn = vi.fn().mockResolvedValue({ id: splitPtyId })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
     const runtime = new OrcaRuntimeService({
       ...runtimeStore,
       getRepos: () => [remoteRepo],
-      getRepo: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined)
+      getRepoAnyHost: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined)
     } as never)
     runtime.setPtyController({
       spawn,

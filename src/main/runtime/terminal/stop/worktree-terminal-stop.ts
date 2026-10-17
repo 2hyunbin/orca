@@ -60,7 +60,7 @@ export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntim
   private getWorktreeHostFence(
     worktree: { id: string; repoId?: string } & Parameters<typeof getWorktreeExecutionHostId>[0]
   ): WorktreePtyHostFence {
-    const repo = worktree.repoId ? this.store?.getRepo?.(worktree.repoId) : undefined
+    const repo = worktree.repoId ? this.store?.getRepoAnyHost?.(worktree.repoId) : undefined
     const parsedHost = parseExecutionHostId(getWorktreeExecutionHostId(worktree, repo))
     return parsedHost?.kind === 'runtime'
       ? { resolvedRuntimeEnvironmentId: parsedHost.environmentId }

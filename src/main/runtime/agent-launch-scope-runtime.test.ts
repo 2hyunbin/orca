@@ -44,7 +44,7 @@ function store(args: {
       terminalWindowsShell: args.shell ?? 'cmd.exe',
       localWindowsRuntimeDefault: args.global
     }),
-    getRepo: (id: string) => (id === 'r' ? repo(WIN) : undefined),
+    getRepoAnyHost: (id: string) => (id === 'r' ? repo(WIN) : undefined),
     getRepos: () => args.repos ?? [],
     getFolderWorkspaces: () => (args.folder ? [args.folder] : []),
     getProjectGroups: () => [{ id: 'g', name: 'g', parentPath: null, connectionId: null }]
@@ -104,7 +104,7 @@ it("finds a repo's project the way the window does, by its id too", () => {
     { id: 'r', sourceRepoIds: [], localWindowsRuntimePreference: UBUNTU },
     { id: 'p', sourceRepoIds: ['r'], localWindowsRuntimePreference: { kind: 'windows-host' } }
   ]
-  const fake = { getProjects: () => projects, getSettings: () => ({}), getRepo: () => repo(WIN) }
+  const fake = { getProjects: () => projects, getSettings: () => ({}), getRepoAnyHost: () => repo(WIN) }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the resolver reads only these members.
   expect(agentLaunchPlatformForScope(fake as never, scope(WIN, { repo: repo(WIN) }))).toBe('linux')
 })

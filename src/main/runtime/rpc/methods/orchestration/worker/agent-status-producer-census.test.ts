@@ -113,7 +113,8 @@ const REPO_PATH = '/census/repo'
 function censusStore() {
   const metaById: Record<string, unknown> = {}
   return {
-    getRepo: (id: string) => (id === 'repo-census' ? censusStore().getRepos()[0] : undefined),
+    getRepoAnyHost: (id: string) =>
+      id === 'repo-census' ? censusStore().getRepos()[0] : undefined,
     getRepos: () => [
       { id: 'repo-census', path: REPO_PATH, displayName: 'census', badgeColor: 'blue', addedAt: 1 }
     ],

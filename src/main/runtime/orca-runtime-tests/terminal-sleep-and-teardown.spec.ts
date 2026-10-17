@@ -192,9 +192,9 @@ describe('OrcaRuntimeService', () => {
       }
     })
     const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(session)
-    const repo = { ...store.getRepo(TEST_REPO_ID)!, connectionId: 'conn-stale' }
+    const repo = { ...store.getRepoAnyHost(TEST_REPO_ID)!, connectionId: 'conn-stale' }
     runtimeStore.getRepos = () => [repo]
-    runtimeStore.getRepo = (id: string) => (id === TEST_REPO_ID ? repo : undefined)
+    runtimeStore.getRepoAnyHost = (id: string) => (id === TEST_REPO_ID ? repo : undefined)
     runtimeStore.getWorktreeMeta = () => ({ hostId: targetHostId }) as never
     runtimeStore.getAllWorktreeMeta = () =>
       ({ [TEST_WORKTREE_ID]: { hostId: targetHostId } }) as never
@@ -226,9 +226,9 @@ describe('OrcaRuntimeService', () => {
       terminalLayoutsByTabId: {}
     })
     const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(session)
-    const repo = { ...store.getRepo(TEST_REPO_ID)!, connectionId: 'conn-1' }
+    const repo = { ...store.getRepoAnyHost(TEST_REPO_ID)!, connectionId: 'conn-1' }
     runtimeStore.getRepos = () => [repo]
-    runtimeStore.getRepo = (id: string) => (id === TEST_REPO_ID ? repo : undefined)
+    runtimeStore.getRepoAnyHost = (id: string) => (id === TEST_REPO_ID ? repo : undefined)
     const runtime = new OrcaRuntimeService(runtimeStore as never)
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, { tabs: [], leaves: [] })

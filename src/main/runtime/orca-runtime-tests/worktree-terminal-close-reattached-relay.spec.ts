@@ -36,9 +36,9 @@ function makeReattachedRelayRuntime(): OrcaRuntimeService {
     }
   })
   const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(session)
-  const repo = { ...store.getRepo(TEST_REPO_ID)!, connectionId: CONNECTION_ID }
+  const repo = { ...store.getRepoAnyHost(TEST_REPO_ID)!, connectionId: CONNECTION_ID }
   runtimeStore.getRepos = () => [repo]
-  runtimeStore.getRepo = (id: string) => (id === TEST_REPO_ID ? repo : undefined)
+  runtimeStore.getRepoAnyHost = (id: string) => (id === TEST_REPO_ID ? repo : undefined)
   const runtime = new OrcaRuntimeService(runtimeStore)
   runtime.attachWindow(1)
   runtime.syncWindowGraph(1, { tabs: [], leaves: [] })

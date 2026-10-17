@@ -74,7 +74,8 @@ it('removes the hidden SSH target when provider cleanup cannot start', async () 
       }
     }
   })
-  registerEphemeralVmRuntimeHandlers({ getRepo: vi.fn() } as never)
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+  registerEphemeralVmRuntimeHandlers({ getRepoAnyHost: vi.fn() } as never)
 
   const cleaned = await handlers.get('ephemeralVm:cleanup')?.(null, {
     runtimeId: 'runtime-missing-context'
@@ -123,8 +124,9 @@ it('stops in-flight cleanup and retains the runtime for retry', async () => {
       }
     }
   })
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
   registerEphemeralVmRuntimeHandlers({
-    getRepo: vi.fn(() => ({
+    getRepoAnyHost: vi.fn(() => ({
       id: 'repo-1',
       path: repoPath,
       displayName: 'Repo',

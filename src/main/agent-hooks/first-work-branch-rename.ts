@@ -47,7 +47,7 @@ export type FirstWorkBranchRenameDeps = {
   getSettings: () => Parameters<typeof resolveTextGenerationParams>[0] &
     Parameters<typeof getConfiguredBranchPrefix>[0] &
     Partial<Pick<GlobalSettings, 'autoRenameBranchFromWork'>>
-  getRepo: (repoId: string) => Repo | undefined
+  getRepoAnyHost: (repoId: string) => Repo | undefined
   getAgentEnvResolvers: () => CommitMessageAgentEnvironmentResolvers | undefined
   /** Current sidebar display name for the worktree, if one is stored. */
   getCurrentDisplayName: (worktreeId: string) => string | undefined
@@ -171,7 +171,7 @@ async function runAutoRename(
     )
   }
 
-  const repo = deps.getRepo(getRepoIdFromWorktreeId(worktreeId))
+  const repo = deps.getRepoAnyHost(getRepoIdFromWorktreeId(worktreeId))
   // Why: folder-workspace ids carry a synthetic `::workspace:<uuid>` suffix that's not a real dir; resolve to the backing folder for Git's cwd.
   const parsed = splitWorktreeIdForFilesystem(worktreeId)
   if (!repo || !parsed) {

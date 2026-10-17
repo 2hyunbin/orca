@@ -54,7 +54,7 @@ function scannedSpellingOf(storedPath: string): string {
 function makeStore(repoPath: string = REPO_PATH) {
   const metaById: Record<string, Record<string, unknown>> = {}
   const store = {
-    getRepo: (id: string) => store.getRepos().find((repo) => repo.id === id),
+    getRepoAnyHost: (id: string) => store.getRepos().find((repo) => repo.id === id),
     getRepos: () => [
       { id: REPO_ID, path: repoPath, displayName: 'app', badgeColor: 'blue', addedAt: 1 }
     ],

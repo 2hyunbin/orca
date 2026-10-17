@@ -23,7 +23,7 @@ export type EphemeralVmRecipeCatalogEntry = {
 }
 
 export type RecipeRepoResult =
-  | { ok: true; repo: Exclude<ReturnType<Store['getRepo']>, null | undefined> }
+  | { ok: true; repo: Exclude<ReturnType<Store['getRepoAnyHost']>, null | undefined> }
   | { ok: false; message: string; doctor: (recipeId: string) => EphemeralVmRecipeDoctorResult }
 
 export function listRecipes(
@@ -31,7 +31,7 @@ export function listRecipes(
   repoId: string,
   pluginRecipes: readonly OrcaVmRecipe[] = []
 ): EphemeralVmRecipeListResult {
-  const repo = store.getRepo(repoId)
+  const repo = store.getRepoAnyHost(repoId)
   if (!repo || isFolderRepo(repo)) {
     return {
       status: 'error',
@@ -80,7 +80,7 @@ export function listRecipeCatalog(
 }
 
 export function getRecipeRepo(store: Store, repoId: string): RecipeRepoResult {
-  const repo = store.getRepo(repoId)
+  const repo = store.getRepoAnyHost(repoId)
   if (!repo || isFolderRepo(repo)) {
     return failedRecipeRepo(null, `Repo not found: ${repoId}`)
   }

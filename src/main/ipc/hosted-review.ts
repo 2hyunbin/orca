@@ -27,7 +27,7 @@ import { getRepoHostedReviewExecutionHostId } from '../source-control/hosted-rev
 
 function assertRegisteredRepo(repoPath: string, store: Store, repoId?: string): Repo {
   if (repoId) {
-    const repo = store.getRepo(repoId)
+    const repo = store.getRepoAnyHost(repoId)
     if (!repo || repo.path !== repoPath) {
       throw new Error('Access denied: unknown repository')
     }

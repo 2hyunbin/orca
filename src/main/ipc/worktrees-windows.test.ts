@@ -163,7 +163,7 @@ describe('registerWorktreeHandlers – Windows path handling', () => {
   const store = {
     getProfileStorageDirectory: vi.fn(() => '/profile-a'),
     getRepos: vi.fn(),
-    getRepo: vi.fn(),
+    getRepoAnyHost: vi.fn(),
     getProjects: vi.fn(),
     getProjectHostSetups: vi.fn(),
     getSettings: vi.fn(),
@@ -209,7 +209,7 @@ describe('registerWorktreeHandlers – Windows path handling', () => {
     deleteWorktreeHistoryDirMock.mockReset()
     mainWindow.webContents.send.mockReset()
     store.getRepos.mockReset()
-    store.getRepo.mockReset()
+    store.getRepoAnyHost.mockReset()
     store.getProjects.mockReset()
     store.getProjectHostSetups.mockReset()
     store.getSettings.mockReset()
@@ -240,7 +240,7 @@ describe('registerWorktreeHandlers – Windows path handling', () => {
         addedAt: 0
       }
     ])
-    store.getRepo.mockReturnValue({
+    store.getRepoAnyHost.mockReturnValue({
       id: 'repo-1',
       path: 'C:\\repo',
       displayName: 'repo',

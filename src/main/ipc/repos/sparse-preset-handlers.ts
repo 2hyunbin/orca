@@ -20,7 +20,7 @@ export function registerSparsePresetHandlers(mainWindow: BrowserWindow, store: S
       _event,
       args: { repoId: string; id?: string; name: string; directories: string[] }
     ): SparsePreset => {
-      const repo = store.getRepo(args.repoId)
+      const repo = store.getRepoAnyHost(args.repoId)
       if (!repo) {
         throw new Error(`Repo "${args.repoId}" not found`)
       }
@@ -46,7 +46,7 @@ export function registerSparsePresetHandlers(mainWindow: BrowserWindow, store: S
   )
 
   ipcMain.handle('sparsePresets:remove', (_event, args: { repoId: string; presetId: string }) => {
-    const repo = store.getRepo(args.repoId)
+    const repo = store.getRepoAnyHost(args.repoId)
     if (!repo) {
       throw new Error(`Repo "${args.repoId}" not found`)
     }

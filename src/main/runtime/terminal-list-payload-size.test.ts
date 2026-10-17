@@ -25,12 +25,14 @@ const groupIdFor = (tab: number): string => `group-${uuid(3_000 + (tab % 2))}`
 const titleFor = (index: number): string => `claude — orca/perf-terminal-list-diet #${index}`
 
 const makeStore = () => ({
-  getRepo: (id: string) => makeStore().getRepos()[0] ?? (id as never),
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+  getRepoAnyHost: (id: string) => makeStore().getRepos()[0] ?? (id as never),
   getRepos: () => [
     { id: REPO_ID, path: '/tmp/repo', displayName: 'repo', badgeColor: 'blue', addedAt: 1 }
   ],
   addRepo: () => {},
-  updateRepo: (id: string) => makeStore().getRepo(id) as never,
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+  updateRepo: (id: string) => makeStore().getRepoAnyHost(id) as never,
   getAllWorktreeMeta: () => ({
     [WORKTREE_ID]: {
       displayName: 'foo',

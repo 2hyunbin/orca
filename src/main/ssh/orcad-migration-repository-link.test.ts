@@ -402,7 +402,7 @@ describe('moving the host again after its server was stopped', () => {
 
     await expect(convert()).resolves.toMatchObject({ outcome: 'converted' })
     expect(groupName(server, groupId)).toBe('Renamed on the server')
-    expect(server.getRepo('desktop-repo')?.projectGroupId).toBe(groupId)
+    expect(server.getRepoAnyHost('desktop-repo')?.projectGroupId).toBe(groupId)
     // This desktop's retained copy stays as it was, for a downgraded build.
     expect(groupName(store, groupId)).toBe('Before')
   })
@@ -416,7 +416,7 @@ describe('moving the host again after its server was stopped', () => {
     store.moveProjectToGroup('added-after-stop', groupId)
 
     await expect(convert()).resolves.toMatchObject({ outcome: 'converted' })
-    expect(server.getRepo('added-after-stop')?.projectGroupId).toBe(groupId)
+    expect(server.getRepoAnyHost('added-after-stop')?.projectGroupId).toBe(groupId)
     expect(groupName(server, groupId)).toBe('Renamed on the server')
   })
 
@@ -457,7 +457,7 @@ describe('moving the host again after its server was stopped', () => {
 
     store.addRepo(repo('added-later', '/root/later'))
     await expect(runDelta()).resolves.toMatchObject({ outcome: 'moved' })
-    expect(server.getRepo('added-later')).toBeDefined()
+    expect(server.getRepoAnyHost('added-later')).toBeDefined()
     expect(groupName(server, parent.id)).toBe('Parent renamed on the server')
   })
 
@@ -484,7 +484,7 @@ describe('moving the host again after its server was stopped', () => {
     store.addRepo(repo('added-later', '/root/later'))
     store.moveProjectToGroup('added-later', groupId)
     await expect(runDelta()).resolves.toMatchObject({ outcome: 'moved' })
-    expect(server.getRepo('added-later')?.projectGroupId).toBe(groupId)
+    expect(server.getRepoAnyHost('added-later')?.projectGroupId).toBe(groupId)
   })
 
   it('resumes, not relinks, a move the server committed before the reply was lost', async () => {

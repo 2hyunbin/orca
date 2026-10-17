@@ -41,9 +41,10 @@ function summary(overrides: Partial<AgentSessionStatusSummary> = {}): AgentSessi
 
 beforeEach(() => {
   renameCalls.length = 0
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
   mainProcessState.store = {
     getSettings: () => ({}),
-    getRepo: () => undefined,
+    getRepoAnyHost: () => undefined,
     getWorktreeMeta: () => undefined,
     getWorktreeIdForTab: () => undefined
   } as unknown as typeof mainProcessState.store

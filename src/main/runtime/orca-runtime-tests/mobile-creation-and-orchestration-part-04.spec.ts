@@ -430,7 +430,7 @@ describe('OrcaRuntimeService', () => {
     const runtimeStore = {
       ...store,
       getRepos: () => [hiddenExternalRepo],
-      getRepo: () => hiddenExternalRepo
+      getRepoAnyHost: () => hiddenExternalRepo
     }
     const runtime = new OrcaRuntimeService(runtimeStore as never)
 
@@ -474,10 +474,11 @@ describe('OrcaRuntimeService', () => {
         externalWorktreeVisibilityLegacy: false,
         worktreeVisibilitySourcePreferences: { builtIn: { claude, gsd: 'hide' as const } }
       }
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
       return new OrcaRuntimeService({
         ...store,
         getRepos: () => [repo],
-        getRepo: () => repo
+        getRepoAnyHost: () => repo
       } as never)
     }
 

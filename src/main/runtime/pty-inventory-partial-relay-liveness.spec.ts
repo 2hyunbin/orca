@@ -55,7 +55,7 @@ export function registerPtyInventoryPartialRelayLivenessTests(): void {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This runtime fixture supplies the persistence and graph methods exercised by the test.
     const store = withDurableRuntimeStore({
       getRepos: () => [REPO],
-      getRepo: (id: string) => (id === REPO_ID ? REPO : undefined),
+      getRepoAnyHost: (id: string) => (id === REPO_ID ? REPO : undefined),
       getAllWorktreeMeta: () => meta,
       getWorktreeMeta: (worktreeId: string) => meta[worktreeId],
       setWorktreeMeta: (worktreeId: string, patch: Record<string, unknown>) => {

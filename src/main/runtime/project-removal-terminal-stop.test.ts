@@ -64,12 +64,12 @@ describe('project removal on the execution host', () => {
     const removeProjectForHost = vi.fn()
     const stopAndWait = vi.fn(async () => true)
     const stampedRepo: Repo = {
-      ...store.getRepo(TEST_REPO_ID)!,
+      ...store.getRepoAnyHost(TEST_REPO_ID)!,
       executionHostId: 'runtime:env-self'
     }
     const runtime = new OrcaRuntimeService({
       ...store,
-      getRepo: (id: string) => (id === TEST_REPO_ID ? stampedRepo : undefined),
+      getRepoAnyHost: (id: string) => (id === TEST_REPO_ID ? stampedRepo : undefined),
       getRepos: () => [stampedRepo],
       removeProjectForHost
     })
@@ -92,13 +92,13 @@ describe('project removal on the execution host', () => {
     const removeProjectForHost = vi.fn()
     const stopAndWait = vi.fn(async (_ptyId: string) => true)
     const sshRepo: Repo = {
-      ...store.getRepo(TEST_REPO_ID)!,
+      ...store.getRepoAnyHost(TEST_REPO_ID)!,
       executionHostId: 'runtime:env-self',
       connectionId: 'ssh-target'
     }
     const runtime = new OrcaRuntimeService({
       ...store,
-      getRepo: (id: string) => (id === TEST_REPO_ID ? sshRepo : undefined),
+      getRepoAnyHost: (id: string) => (id === TEST_REPO_ID ? sshRepo : undefined),
       getRepos: () => [sshRepo],
       removeProjectForHost
     })
@@ -134,10 +134,10 @@ describe('project removal on the execution host', () => {
 
   it('refuses a spawn that reaches its lease after the project is gone', async () => {
     let removed = false
-    const repo = store.getRepo(TEST_REPO_ID)!
+    const repo = store.getRepoAnyHost(TEST_REPO_ID)!
     const runtime = new OrcaRuntimeService({
       ...store,
-      getRepo: (id: string) => (id === TEST_REPO_ID && !removed ? repo : undefined),
+      getRepoAnyHost: (id: string) => (id === TEST_REPO_ID && !removed ? repo : undefined),
       getRepos: () => (removed ? [] : [repo]),
       removeProjectForHost: () => {
         removed = true
@@ -162,7 +162,7 @@ describe('project removal on the execution host', () => {
   it('stops nothing when a same-id sibling row would claim the same PTYs', async () => {
     const removeProjectForHost = vi.fn()
     const stopAndWait = vi.fn(async (_ptyId: string) => true)
-    const localRow = store.getRepo(TEST_REPO_ID)!
+    const localRow = store.getRepoAnyHost(TEST_REPO_ID)!
     const foreignRow: Repo = {
       ...localRow,
       path: '/srv/foreign-copy',

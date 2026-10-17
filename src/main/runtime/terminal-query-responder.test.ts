@@ -32,7 +32,7 @@ const settingsState = {
 }
 
 const store = {
-  getRepo: () => undefined,
+  getRepoAnyHost: () => undefined,
   getRepos: () => [],
   addRepo: () => {},
   updateRepo: () => undefined as never,

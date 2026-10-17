@@ -44,7 +44,7 @@ describe('OrcaRuntimeService', () => {
     const runtimeStore = {
       ...store,
       getRepos: () => [folderRepo],
-      getRepo: (id: string) => (id === folderRepo.id ? folderRepo : undefined),
+      getRepoAnyHost: (id: string) => (id === folderRepo.id ? folderRepo : undefined),
       getAllWorktreeMeta: () => metaById,
       getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
       setWorktreeMeta: (worktreeId: string, meta: Partial<WorktreeMeta>) => {

@@ -12,7 +12,7 @@ const { handleMock, mockStore } = vi.hoisted(() => ({
   handleMock: vi.fn(),
   mockStore: {
     getRepos: vi.fn().mockReturnValue([]),
-    getRepo: vi.fn(),
+    getRepoAnyHost: vi.fn(),
     addRepo: vi.fn(),
     updateRepo: vi.fn(),
     removeProjectForHost: vi.fn(),

@@ -71,11 +71,11 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('spawns fresh headless SSH mobile session terminals instead of reattaching synthetic local ids', async () => {
-    const remoteRepo = { ...store.getRepo(TEST_REPO_ID)!, connectionId: 'ssh-1' }
+    const remoteRepo = { ...store.getRepoAnyHost(TEST_REPO_ID)!, connectionId: 'ssh-1' }
     const remoteStore = {
       ...store,
       getRepos: () => [remoteRepo],
-      getRepo: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined)
+      getRepoAnyHost: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined)
     }
     const spawn = vi.fn().mockResolvedValue({ id: 'ssh:ssh-1@@remote-pty' })
     const runtime = new OrcaRuntimeService(remoteStore as never)
@@ -174,7 +174,7 @@ describe('OrcaRuntimeService', () => {
         'ssh-host-tab': makeHeadlessTerminalLayout({ [HEADLESS_LEAF_ID]: sshPtyId })
       }
     })
-    const remoteRepo = { ...store.getRepo(TEST_REPO_ID)!, connectionId: 'ssh-1' }
+    const remoteRepo = { ...store.getRepoAnyHost(TEST_REPO_ID)!, connectionId: 'ssh-1' }
     const getWorkspaceSession = vi.fn((hostId?: string | null) =>
       hostId === 'ssh:ssh-1' ? sshSession : localSession
     )
@@ -183,7 +183,7 @@ describe('OrcaRuntimeService', () => {
         ...store,
         flushOrThrow: vi.fn(),
         getRepos: () => [remoteRepo],
-        getRepo: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined),
+        getRepoAnyHost: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined),
         getWorkspaceSession
       })
     )
@@ -226,7 +226,7 @@ describe('OrcaRuntimeService', () => {
         'ssh-host-tab': makeHeadlessTerminalLayout({ [HEADLESS_LEAF_ID]: sshPtyId })
       }
     })
-    const remoteRepo = { ...store.getRepo(TEST_REPO_ID)!, connectionId: 'ssh-1' }
+    const remoteRepo = { ...store.getRepoAnyHost(TEST_REPO_ID)!, connectionId: 'ssh-1' }
     const setWorkspaceSession = vi.fn((session: WorkspaceSessionState, hostId?: string | null) => {
       expect(hostId).toBe('ssh:ssh-1')
       sshSession = session
@@ -236,7 +236,7 @@ describe('OrcaRuntimeService', () => {
       withDurableRuntimeStore({
         ...store,
         getRepos: () => [remoteRepo],
-        getRepo: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined),
+        getRepoAnyHost: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined),
         getWorkspaceSession: (hostId?: string | null) =>
           hostId === 'ssh:ssh-1' ? sshSession : localSession,
         setWorkspaceSession,

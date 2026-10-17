@@ -108,7 +108,7 @@ function makeRepo(fields: Record<string, unknown>) {
 
 function useRepo(repo: ReturnType<typeof makeRepo>): void {
   store.getRepos.mockReturnValue([repo])
-  store.getRepo.mockReturnValue(repo)
+  store.getRepoAnyHost.mockReturnValue(repo)
   store.setWorktreeMeta.mockImplementation((_worktreeId: string, meta: unknown) => meta)
 }
 
@@ -130,7 +130,7 @@ describe('registerWorktreeHandlers', () => {
       }
       mkdirSync(join(root, '.orca'))
       writeFileSync(join(root, '.orca', 'issue-command'), 'old command\n')
-      store.getRepo.mockReturnValue(repo)
+      store.getRepoAnyHost.mockReturnValue(repo)
       store.getRepos.mockReturnValue([repo])
       const resolver = vi
         .spyOn(projectGitOptions, 'getLocalProjectWorktreeGitOptions')
@@ -210,7 +210,7 @@ describe('registerWorktreeHandlers', () => {
       connectionId: 'conn-1',
       worktreeBaseRef: null
     }
-    store.getRepo.mockReturnValue(repo)
+    store.getRepoAnyHost.mockReturnValue(repo)
 
     await expect(
       handlers['hooks:writeIssueCommand'](null, {

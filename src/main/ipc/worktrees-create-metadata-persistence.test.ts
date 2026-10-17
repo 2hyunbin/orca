@@ -260,7 +260,7 @@ describe('registerWorktreeHandlers', () => {
     // Backs the store mocks with one meta table so writes, removal and listing see the same rows.
     function useFolderMetaTable(): Record<string, WorktreeMeta> {
       const table: Record<string, WorktreeMeta> = {}
-      store.getRepo.mockReturnValue(folderRepo)
+      store.getRepoAnyHost.mockReturnValue(folderRepo)
       store.getRepos.mockReturnValue([folderRepo])
       store.getWorktreeMeta.mockImplementation((id: string) => table[id])
       store.getAllWorktreeMeta.mockImplementation(() => table)
@@ -304,7 +304,7 @@ describe('registerWorktreeHandlers', () => {
       const table = useFolderMetaTable()
       delete table[workspaceId]
       const otherOwner = { ...folderRepo, path: '/elsewhere/repo' }
-      store.getRepo.mockReturnValue(otherOwner)
+      store.getRepoAnyHost.mockReturnValue(otherOwner)
       store.getRepos.mockReturnValue([otherOwner, folderRepo])
 
       handlers['worktrees:updateMeta'](null, {
@@ -632,7 +632,7 @@ describe('registerWorktreeHandlers', () => {
   })
 
   it('threads explicit origin preference into dual-remote PR head resolution', async () => {
-    store.getRepo.mockReturnValue({
+    store.getRepoAnyHost.mockReturnValue({
       id: 'repo-1',
       path: '/workspace/repo',
       displayName: 'repo',

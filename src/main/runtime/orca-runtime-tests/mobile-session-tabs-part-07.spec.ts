@@ -245,14 +245,15 @@ describe('OrcaRuntimeService', () => {
       }
     })
     const localSession = getDefaultWorkspaceSession()
-    const remoteRepo = { ...store.getRepo(TEST_REPO_ID)!, connectionId: 'ssh-1' }
+    const remoteRepo = { ...store.getRepoAnyHost(TEST_REPO_ID)!, connectionId: 'ssh-1' }
     const getWorkspaceSession = vi.fn((hostId?: string | null) =>
       hostId === 'ssh:ssh-1' ? sshSession : localSession
     )
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
     const runtime = new OrcaRuntimeService({
       ...store,
       getRepos: () => [remoteRepo],
-      getRepo: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined),
+      getRepoAnyHost: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined),
       getWorkspaceSession
     } as never)
 
@@ -292,11 +293,12 @@ describe('OrcaRuntimeService', () => {
       }
     })
     const localSession = getDefaultWorkspaceSession()
-    const remoteRepo = { ...store.getRepo(TEST_REPO_ID)!, connectionId: 'ssh-1' }
+    const remoteRepo = { ...store.getRepoAnyHost(TEST_REPO_ID)!, connectionId: 'ssh-1' }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
     const runtime = new OrcaRuntimeService({
       ...store,
       getRepos: () => [remoteRepo],
-      getRepo: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined),
+      getRepoAnyHost: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined),
       getWorkspaceSession: (hostId?: string | null) =>
         hostId === 'ssh:ssh-1' ? sshSession : localSession
     } as never)

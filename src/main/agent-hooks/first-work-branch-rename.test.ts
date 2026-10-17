@@ -192,7 +192,8 @@ describe('maybeAutoRenameBranchOnFirstWork', () => {
   it('does not probe git for a folder-project structured session with a synthetic worktree id', async () => {
     const workspaceId = `${REPO_ID}::/workspace/platform::workspace:123e4567-e89b-12d3-a456-426614174000`
     const { deps, setDisplayName, setRenameError } = makeDeps({
-      getRepo: () => ({ id: REPO_ID, kind: 'folder', path: '/workspace/platform' }) as Repo
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+      getRepoAnyHost: () => ({ id: REPO_ID, kind: 'folder', path: '/workspace/platform' }) as Repo
     })
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the status feed reads only cursor(), lastActivityAt(), stopMarks, snapshot(), the provenance reads and runningTurn() of a journal.
     const journal = {
@@ -694,7 +695,7 @@ describe('maybeAutoRenameBranchOnFirstWork', () => {
     ['connectionId', { ...REMOTE_REPO_BASE, connectionId: 'ssh-1' }],
     ['executionHostId', { ...REMOTE_REPO_BASE, executionHostId: 'ssh:ssh-1' }]
   ])('retries without local git for a row naming its SSH owner by %s', async (_spelling, repo) => {
-    const { deps, onRenamed } = makeDeps({ getRepo: () => repo })
+    const { deps, onRenamed } = makeDeps({ getRepoAnyHost: () => repo })
 
     await maybeAutoRenameBranchOnFirstWork(workingEvent(), deps)
 
@@ -709,7 +710,7 @@ describe('maybeAutoRenameBranchOnFirstWork', () => {
       connectionId: 'ssh-1',
       executionHostId: 'runtime:env-1'
     }
-    const { deps, onRenamed } = makeDeps({ getRepo: () => repo })
+    const { deps, onRenamed } = makeDeps({ getRepoAnyHost: () => repo })
 
     await maybeAutoRenameBranchOnFirstWork(workingEvent(), deps)
 

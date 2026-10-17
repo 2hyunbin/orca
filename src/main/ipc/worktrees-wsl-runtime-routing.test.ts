@@ -226,7 +226,7 @@ describe('registerWorktreeHandlers', () => {
     })
     gitExecFileAsyncMock.mockResolvedValue({ stdout: 'abc123\n', stderr: '' })
     // A persisted base that differs from the detected default also drives the usability probe.
-    store.getRepo.mockReturnValue({ ...harnessRepo, worktreeBaseRef: 'custom-base' })
+    store.getRepoAnyHost.mockReturnValue({ ...harnessRepo, worktreeBaseRef: 'custom-base' })
     listWorktreesMock.mockResolvedValue([
       {
         path: '/workspace/improve-dashboard',

@@ -171,7 +171,7 @@ describe('RuntimeFileCommands', () => {
 
     it('refuses an SSH workspace path instead of stating this machine', async () => {
       const { commands, store } = createRuntimeFileCommands({ path: '/repo' })
-      store.getRepo.mockReturnValue({ connectionId: 'ssh-1' })
+      store.getRepoAnyHost.mockReturnValue({ connectionId: 'ssh-1' })
 
       await expect(commands.resolveTerminalPath('id:wt-1', 'src/app.ts')).rejects.toThrow(
         SshHostNotServedError
@@ -355,7 +355,7 @@ describe('RuntimeFileCommands', () => {
 
     it('does not expand ~/ on a remote worktree (home is unknown)', async () => {
       const { commands, store } = createRuntimeFileCommands({ path: '/repo' })
-      store.getRepo.mockReturnValue({ connectionId: 'ssh-1' })
+      store.getRepoAnyHost.mockReturnValue({ connectionId: 'ssh-1' })
 
       const result = await commands.resolveTerminalPath('id:wt-1', '~/notes.md')
 
@@ -369,7 +369,7 @@ describe('RuntimeFileCommands', () => {
         path: '/repo',
         hasRecentNativeChatOutputPath
       })
-      store.getRepo.mockReturnValue({ connectionId: 'ssh-1' })
+      store.getRepoAnyHost.mockReturnValue({ connectionId: 'ssh-1' })
 
       const result = await commands.resolveTerminalPath(
         'id:wt-1',

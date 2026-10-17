@@ -146,7 +146,7 @@ describe('RuntimeRepositorySettingsController under a WSL move', () => {
     await expect(controller.setBaseRef('repo-1', 'origin/dev')).rejects.toBeInstanceOf(
       WslMoveProjectFencedError
     )
-    expect(store.getRepo('repo-1')?.displayName).toBe('repo-1')
+    expect(store.getRepoAnyHost('repo-1')?.displayName).toBe('repo-1')
     expect(notifyReposChanged).not.toHaveBeenCalled()
   })
 })

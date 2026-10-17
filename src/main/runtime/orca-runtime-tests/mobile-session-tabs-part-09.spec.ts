@@ -554,7 +554,7 @@ describe('OrcaRuntimeService', () => {
       const { runtime, spawn } = makeParkedRuntime({
         ...runtimeStore,
         getRepos: () => [sshRepo],
-        getRepo: (id: string) => (id === TEST_REPO_ID ? sshRepo : undefined)
+        getRepoAnyHost: (id: string) => (id === TEST_REPO_ID ? sshRepo : undefined)
       })
 
       const activated = await automaticActivate(runtime)
@@ -589,11 +589,11 @@ describe('OrcaRuntimeService', () => {
       }),
       'ssh:ssh-1'
     )
-    const remoteRepo = { ...store.getRepo(TEST_REPO_ID)!, connectionId: 'ssh-1' }
+    const remoteRepo = { ...store.getRepoAnyHost(TEST_REPO_ID)!, connectionId: 'ssh-1' }
     const remoteStore = {
       ...runtimeStore,
       getRepos: () => [remoteRepo],
-      getRepo: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined)
+      getRepoAnyHost: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined)
     }
     const spawn = vi.fn().mockResolvedValue({ id: 'ssh:ssh-1@@relay-pty', isReattach: true })
     const runtime = new OrcaRuntimeService(remoteStore as never)
@@ -643,11 +643,11 @@ describe('OrcaRuntimeService', () => {
       }),
       'ssh:ssh-1'
     )
-    const remoteRepo = { ...store.getRepo(TEST_REPO_ID)!, connectionId: 'ssh-1' }
+    const remoteRepo = { ...store.getRepoAnyHost(TEST_REPO_ID)!, connectionId: 'ssh-1' }
     const remoteStore = {
       ...runtimeStore,
       getRepos: () => [remoteRepo],
-      getRepo: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined)
+      getRepoAnyHost: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined)
     }
     const spawn = vi
       .fn()
@@ -870,11 +870,11 @@ describe('OrcaRuntimeService', () => {
       }),
       'ssh:ssh-1'
     )
-    const remoteRepo = { ...store.getRepo(TEST_REPO_ID)!, connectionId: 'ssh-1' }
+    const remoteRepo = { ...store.getRepoAnyHost(TEST_REPO_ID)!, connectionId: 'ssh-1' }
     const remoteStore = {
       ...runtimeStore,
       getRepos: () => [remoteRepo],
-      getRepo: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined)
+      getRepoAnyHost: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined)
     }
     const spawn = vi.fn().mockResolvedValue({ id: 'ssh:ssh-1@@fresh-pty' })
     const runtime = new OrcaRuntimeService(remoteStore as never)

@@ -200,8 +200,9 @@ describe('registerPtyHandlers', () => {
     it('answers DA1 from the model on the first chunk of a hidden-at-spawn PTY', async () => {
       // End-to-end through a REAL runtime: spawn-marked → first chunk dropped → emulator parses query → replies; main answers, the renderer never saw the bytes.
       const daemon = installObservableDaemonTestProvider()
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
       const runtime = new OrcaRuntimeService({
-        getRepo: () => undefined,
+        getRepoAnyHost: () => undefined,
         getRepos: () => [],
         addRepo: () => {},
         updateRepo: () => undefined as never,

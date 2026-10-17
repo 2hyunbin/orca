@@ -217,7 +217,7 @@ describe('registerWorktreeHandlers', () => {
       addedAt: 0,
       worktreeBaseRef: null
     }
-    store.getRepo.mockReturnValue(repo)
+    store.getRepoAnyHost.mockReturnValue(repo)
     store.getRepos.mockReturnValue([repo])
     mockKnownFeatureWorktree(join(parentDir, 'real-feature'), repoPath)
     store.getWorktreeMeta.mockReturnValue(makeWorktreeMeta({ createdAt: Date.now() }))
@@ -263,7 +263,7 @@ describe('registerWorktreeHandlers', () => {
       addedAt: 0,
       worktreeBaseRef: null
     }
-    store.getRepo.mockReturnValue(repo)
+    store.getRepoAnyHost.mockReturnValue(repo)
     store.getRepos.mockReturnValue([repo])
     mockKnownFeatureWorktree(join(parentDir, 'real-feature'), repoPath)
     store.getWorktreeMeta.mockReturnValue(
@@ -292,7 +292,7 @@ describe('registerWorktreeHandlers', () => {
     const worktreeId = `repo-1::${leftoverPath}`
     await mkdir(leftoverPath, { recursive: true })
     await writeFile(join(leftoverPath, 'notes.txt'), 'mine\n')
-    store.getRepo.mockReturnValue({
+    store.getRepoAnyHost.mockReturnValue({
       id: 'repo-1',
       path: repoPath,
       displayName: 'repo',
@@ -338,7 +338,7 @@ describe('registerWorktreeHandlers', () => {
     const repoPath = join(parentDir, 'repo')
     const standalonePath = join(parentDir, 'standalone')
     await mkdir(join(standalonePath, '.git'), { recursive: true })
-    store.getRepo.mockReturnValue({
+    store.getRepoAnyHost.mockReturnValue({
       id: 'repo-1',
       path: repoPath,
       displayName: 'repo',
@@ -377,7 +377,7 @@ describe('registerWorktreeHandlers', () => {
       addedAt: 0,
       connectionId: 'conn-missing-fs'
     }
-    store.getRepo.mockReturnValue(repo)
+    store.getRepoAnyHost.mockReturnValue(repo)
     store.getWorktreeMeta.mockReturnValue(
       makeWorktreeMeta({ orcaCreatedAt: Date.now(), orcaCreationSource: 'ssh' })
     )

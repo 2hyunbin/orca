@@ -33,7 +33,7 @@ const store = {
     { id: 'p', sourceRepoIds: ['r'], localWindowsRuntimePreference: wsl },
     { id: 'q', sourceRepoIds: ['s'], localWindowsRuntimePreference: { kind: 'windows-host' } }
   ],
-  getRepo: (id: string) => [repo, share].find((entry) => entry.id === id),
+  getRepoAnyHost: (id: string) => [repo, share].find((entry) => entry.id === id),
   getRepos: () => [repo],
   getFolderWorkspaces: () => [folder],
   getProjectGroups: () => [{ id: 'g' }]

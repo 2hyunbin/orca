@@ -88,9 +88,10 @@ describe('RuntimeManagedWorktreeQueries.listDetected', () => {
   it('stamps a scanned listing with the generation its scan began at', async () => {
     resetLocalWorktreeScanGenerationsForTests()
     const repo = folderRepo({ kind: 'git', path: '/source/git-app' })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
     const store = {
       getRepos: () => [repo],
-      getRepo: () => repo,
+      getRepoAnyHost: () => repo,
       getAllWorktreeMeta: () => ({}),
       getWorktreeMeta: () => undefined,
       setWorktreeMeta: vi.fn(),
@@ -117,9 +118,10 @@ describe('RuntimeManagedWorktreeQueries.listDetected', () => {
     const remote = folderRepo({ connectionId: 'build-box', displayName: 'Remote app' })
     const rootId = `${local.id}::${local.path}`
     const foreignMeta = metadata({ displayName: 'Wrong host', hostId: 'ssh:build-box' })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
     const store = {
       getRepos: () => [local, remote],
-      getRepo: () => local,
+      getRepoAnyHost: () => local,
       getAllWorktreeMeta: () => ({ [rootId]: foreignMeta }),
       getWorktreeMeta: () => foreignMeta,
       setWorktreeMeta: vi.fn(),
@@ -139,9 +141,10 @@ describe('RuntimeManagedWorktreeQueries.listDetected', () => {
 
   it('omits host-owned source defaults for clients that do not support them', async () => {
     const repo = folderRepo({ path: '/source/app' })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
     const store = {
       getRepos: () => [repo],
-      getRepo: () => repo,
+      getRepoAnyHost: () => repo,
       getAllWorktreeMeta: () => ({}),
       getWorktreeMeta: () => undefined,
       setWorktreeMeta: vi.fn((_id, updates) => metadata(updates)),
@@ -179,9 +182,10 @@ describe('RuntimeManagedWorktreeQueries.list host scope', () => {
       connectionId: 'conn-1',
       path: '/home/dev/app'
     })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
     return {
       getRepos: () => [repo],
-      getRepo: () => repo,
+      getRepoAnyHost: () => repo,
       getAllWorktreeMeta: () => ({}),
       getWorktreeMeta: () => undefined,
       setWorktreeMeta: vi.fn(),
@@ -242,9 +246,10 @@ describe('RuntimeManagedWorktreeQueries.list host scope', () => {
   // the wrong one would be worse than naming none. These pin both.
   it('names the local host for a scoped local repo', async () => {
     const repo = folderRepo({ id: 'repo-local', kind: 'git', path: '/workspace/local' })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
     const store = {
       getRepos: () => [repo],
-      getRepo: () => repo,
+      getRepoAnyHost: () => repo,
       getAllWorktreeMeta: () => ({}),
       getWorktreeMeta: () => undefined,
       setWorktreeMeta: vi.fn(),
@@ -265,9 +270,10 @@ describe('RuntimeManagedWorktreeQueries.list host scope', () => {
       executionHostId: 'runtime:env-1',
       path: '/workspace/runtime'
     })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
     const store = {
       getRepos: () => [repo],
-      getRepo: () => repo,
+      getRepoAnyHost: () => repo,
       getAllWorktreeMeta: () => ({}),
       getWorktreeMeta: () => undefined,
       setWorktreeMeta: vi.fn(),
@@ -307,7 +313,7 @@ describe('RuntimeManagedWorktreeQueries.listDetected overtaken scan', () => {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the git listing reads only these store members; the prunes that would need more are mocked above.
     return {
       getRepos: () => [repo],
-      getRepo: () => repo,
+      getRepoAnyHost: () => repo,
       getAllWorktreeMeta: () => ({}),
       getWorktreeMeta: () => undefined,
       setWorktreeMeta: vi.fn(),

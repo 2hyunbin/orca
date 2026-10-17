@@ -195,7 +195,7 @@ export abstract class OrcaRuntimeWithPersistHeadlessTerminalTitle extends Runtim
     return await this.notifier.saveMobileMarkdownTab(worktreeId, tabId, baseVersion, content)
   }
 
-  // Why: `getRepo(id)` is host-blind and never read `worktree.hostId`, which outranks every repo
+  // Why: `getRepoAnyHost(id)` is host-blind and never read `worktree.hostId`, which outranks every repo
   // row. One id can name rows on local, SSH and runtime hosts at once, so an arbitrary row decided
   // the execution host for ~36 downstream Git dispatches: a worktree on one SSH host routed to
   // another, and a runtime host's *nested* target got dialled in this client's namespace (#11163).
@@ -214,7 +214,7 @@ export abstract class OrcaRuntimeWithPersistHeadlessTerminalTitle extends Runtim
     const executionHostId = routing.kind === 'resolved' ? routing.hostId : LOCAL_EXECUTION_HOST_ID
     // Metadata only (shared-link paths, source-control AI defaults); routing is `executionHostId`.
     const repo =
-      (routing.kind === 'resolved' ? routing.repo : null) ?? store.getRepo(worktree.repoId)
+      (routing.kind === 'resolved' ? routing.repo : null) ?? store.getRepoAnyHost(worktree.repoId)
     const localGitOptions =
       repo && executionHostId === LOCAL_EXECUTION_HOST_ID
         ? getLocalProjectWorktreeGitOptions(store, repo)
@@ -222,7 +222,7 @@ export abstract class OrcaRuntimeWithPersistHeadlessTerminalTitle extends Runtim
     return { worktree, repo, executionHostId, localGitOptions }
   }
 
-  // Why: same defect as `resolveRuntimeGitTarget` above, in ~30 filesystem dispatches. `getRepo(id)`
+  // Why: same defect as `resolveRuntimeGitTarget` above, in ~30 filesystem dispatches. `getRepoAnyHost(id)`
   // is host-blind and never read `worktree.hostId`, and the `connectionId` it returned spelled
   // "runtime host", "unresolved" and "genuinely local" all as `undefined` (#11163).
   async resolveRuntimeFileTarget(worktreeSelector: string): Promise<{

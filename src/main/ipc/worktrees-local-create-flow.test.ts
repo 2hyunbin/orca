@@ -175,7 +175,7 @@ describe('registerWorktreeHandlers', () => {
       ref: 'refs/remotes/origin/main',
       base: 'origin/main'
     }
-    store.getRepo.mockReturnValue(repo)
+    store.getRepoAnyHost.mockReturnValue(repo)
     runtimeStub.resolveRemoteTrackingBase.mockImplementation(async (_repoPath, baseBranch) =>
       baseBranch === 'origin/main' ? remoteBase : null
     )
@@ -400,7 +400,7 @@ describe('registerWorktreeHandlers', () => {
   })
 
   it('uses a repo-specific worktree base path when creating local worktrees', async () => {
-    store.getRepo.mockReturnValue({
+    store.getRepoAnyHost.mockReturnValue({
       id: 'repo-1',
       path: '/workspace/repo',
       displayName: 'repo',
@@ -583,7 +583,7 @@ describe('registerWorktreeHandlers', () => {
       addedAt: 0,
       kind: 'folder' as const
     }
-    store.getRepo.mockReturnValue(repo)
+    store.getRepoAnyHost.mockReturnValue(repo)
     store.setWorktreeMeta.mockImplementation((_worktreeId, meta) => ({
       displayName: '',
       comment: '',

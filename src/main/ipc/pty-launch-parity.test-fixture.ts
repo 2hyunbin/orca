@@ -164,7 +164,7 @@ export function startParityLanes(
           : {})
       }
     ],
-    getRepo: (id: string) => (repo && id === repo.id ? repo : undefined),
+    getRepoAnyHost: (id: string) => (repo && id === repo.id ? repo : undefined),
     getRepos: () => (repo ? [repo] : []),
     getAllWorktreeMeta: () => ({}),
     getWorktreeMeta: () => undefined,

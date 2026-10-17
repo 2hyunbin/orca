@@ -54,7 +54,7 @@ describe('OrcaRuntimeService', () => {
     const orphanStore = {
       ...runtimeStore,
       getRepos: () => [],
-      getRepo: () => undefined
+      getRepoAnyHost: () => undefined
     }
     const runtime = createWorktreeRemovalRuntime(orphanStore)
 
@@ -73,7 +73,7 @@ describe('OrcaRuntimeService', () => {
     const orphanStore = {
       ...runtimeStore,
       getRepos: () => [],
-      getRepo: () => undefined
+      getRepoAnyHost: () => undefined
     }
     const localProvider = {
       listProcesses: vi.fn(async () => []),
@@ -99,7 +99,7 @@ describe('OrcaRuntimeService', () => {
 
   it('does not remove a runtime worktree when watcher teardown cannot release it', async () => {
     const repo = { ...store.getRepos()[0], symlinkPaths: ['node_modules'] }
-    const runtimeStore = { ...store, getRepos: () => [repo], getRepo: () => repo }
+    const runtimeStore = { ...store, getRepos: () => [repo], getRepoAnyHost: () => repo }
     const runtime = createWorktreeRemovalRuntime(runtimeStore)
     vi.mocked(getEffectiveHooks).mockReturnValue(null)
     deleteWorktreeHistoryDirMock.mockClear()
@@ -118,7 +118,7 @@ describe('OrcaRuntimeService', () => {
 
   it('stops worktree PTYs before removing linked paths', async () => {
     const repo = { ...store.getRepos()[0], symlinkPaths: ['node_modules'] }
-    const runtimeStore = { ...store, getRepos: () => [repo], getRepo: () => repo }
+    const runtimeStore = { ...store, getRepos: () => [repo], getRepoAnyHost: () => repo }
     const runtime = createWorktreeRemovalRuntime(runtimeStore)
     const stopAndWait = vi.fn().mockResolvedValue(true)
     runtime.setPtyController({
@@ -483,7 +483,7 @@ describe('OrcaRuntimeService', () => {
     const runtimeStore = {
       ...store,
       getRepos: () => [repo],
-      getRepo: (id: string) => (id === TEST_REPO_ID ? repo : undefined),
+      getRepoAnyHost: (id: string) => (id === TEST_REPO_ID ? repo : undefined),
       getAllWorktreeMeta: () => ({
         [requestedWorktreeId]: makeWorktreeMeta()
       }),

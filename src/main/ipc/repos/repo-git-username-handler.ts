@@ -5,7 +5,7 @@ import { resolveLocalGitUsername } from '../../git/git-username'
 
 export function registerRepoGitUsernameHandler(store: Store): void {
   ipcMain.handle('repos:getGitUsername', async (_event, args: { repoId: string }) => {
-    const repo = store.getRepo(args.repoId)
+    const repo = store.getRepoAnyHost(args.repoId)
     if (!repo || isFolderRepo(repo)) {
       return ''
     }

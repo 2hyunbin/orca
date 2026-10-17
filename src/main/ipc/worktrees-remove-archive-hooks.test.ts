@@ -196,7 +196,7 @@ describe('registerWorktreeHandlers', () => {
 
   it('does not remove a worktree when watcher teardown cannot release it', async () => {
     mockKnownFeatureWorktree()
-    store.getRepo.mockReturnValue({
+    store.getRepoAnyHost.mockReturnValue({
       id: 'repo-1',
       path: '/workspace/repo',
       displayName: 'repo',
@@ -361,7 +361,7 @@ describe('registerWorktreeHandlers', () => {
       worktreeBaseRef: null
     }
     store.getRepos.mockReturnValue([repo])
-    store.getRepo.mockReturnValue(repo)
+    store.getRepoAnyHost.mockReturnValue(repo)
     getEffectiveHooksMock.mockReturnValue({ scripts: { archive: 'exit 23' } })
     runHookMock.mockResolvedValue({
       success: false,

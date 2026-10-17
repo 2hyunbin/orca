@@ -104,7 +104,7 @@ export async function getRepoForSourceControlAi(
   if (!args.repoId) {
     return null
   }
-  const repo = store.getRepo(args.repoId)
+  const repo = store.getRepoAnyHost(args.repoId)
   if (!repo) {
     return null
   }

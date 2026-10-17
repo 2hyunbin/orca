@@ -53,7 +53,7 @@ function deps(options: {
     store: {
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the check reads only the hide* switches of this partial UI.
       getUI: () => (options.ui === null ? undefined : options.ui) as PersistedState['ui'],
-      getRepo: () => undefined,
+      getRepoAnyHost: () => undefined,
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the check reads only provenance fields of this partial meta.
       getWorktreeMeta: (id) => (options.metaById?.[id] ?? options.meta) as WorktreeMeta | undefined,
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the check reads only worktreeId and parentWorktreeId.

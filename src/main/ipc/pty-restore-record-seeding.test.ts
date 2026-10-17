@@ -345,10 +345,11 @@ describe('registerPtyHandlers', () => {
       badgeColor: '#000000',
       addedAt: 0
     }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
     const runtime = new OrcaRuntimeService({
       getWorkspaceSession: () => session,
       setWorkspaceSession: () => {},
-      getRepo: (repoId: string) => (repoId === repo.id ? repo : undefined),
+      getRepoAnyHost: (repoId: string) => (repoId === repo.id ? repo : undefined),
       getRepos: () => [repo],
       getAllWorktreeMeta: () => ({}),
       getWorktreeMeta: () => undefined,

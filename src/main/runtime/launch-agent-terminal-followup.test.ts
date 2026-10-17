@@ -25,7 +25,7 @@ function makeRuntime() {
     getSettings: () => ({ disabledTuiAgents: [], workspaceDir: '/tmp/workspaces' }),
     getProjectHostSetups: () => [],
     getRepos: () => [repo],
-    getRepo: (id: string) => (id === repo.id ? repo : undefined)
+    getRepoAnyHost: (id: string) => (id === repo.id ? repo : undefined)
   }
   vi.spyOn(internals, 'resolveWorktreeSelector').mockResolvedValue({
     id: 'repo-1::/home/me/app-feature',

@@ -42,7 +42,7 @@ function ports(worktrees: GitWorktreeInfo[], sparse = false) {
   const value: RuntimeProvisionedRootPorts = {
     store: {
       getSettings: () => ({ workspaceDir: '/workspaces', nestWorkspaces: false }),
-      getRepo: () => repo,
+      getRepoAnyHost: () => repo,
       setWorktreeMeta
     },
     resolveRepo: async () => repo,

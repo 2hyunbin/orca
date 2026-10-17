@@ -170,7 +170,7 @@ describe('structured attention mobile delivery', () => {
 
 describe('readStructuredAttentionWorkspaceLabels', () => {
   const store = {
-    getRepo: vi.fn((id: string) => (id === 'repo-1' ? { displayName: 'orca' } : undefined)),
+    getRepoAnyHost: vi.fn((id: string) => (id === 'repo-1' ? { displayName: 'orca' } : undefined)),
     getWorktreeMeta: vi.fn((id: string) =>
       id === SCOPE.workspaceId ? { displayName: 'feature' } : undefined
     ),

@@ -46,10 +46,11 @@ export function registerOrcaRuntimeEmulatorFolderWorkspaceTests(): void {
           stopActiveForSwitch: vi.fn(async () => null)
         }
         const send = vi.fn()
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
         const runtime = new OrcaRuntimeService({
           getFolderWorkspaces: () => [makeFolderWorkspace()],
           getAllWorktreeMeta: () => new Map(),
-          getRepo: () => null,
+          getRepoAnyHost: () => null,
           getRepos: () => [],
           getSettings: () => ({
             mobileEmulatorEnabled: true,
@@ -88,10 +89,11 @@ export function registerOrcaRuntimeEmulatorFolderWorkspaceTests(): void {
       async (selector) => {
         let folderWorkspaces = [makeFolderWorkspace()]
         const shutdownActiveManagedForWorktree = vi.fn(async () => EMULATOR_INFO.deviceUdid)
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
         const runtime = new OrcaRuntimeService({
           getFolderWorkspaces: () => folderWorkspaces,
           getAllWorktreeMeta: () => new Map(),
-          getRepo: () => null,
+          getRepoAnyHost: () => null,
           getRepos: () => [],
           getSettings: () => ({ androidSdkPath: null })
         } as never)
@@ -124,10 +126,11 @@ export function registerOrcaRuntimeEmulatorFolderWorkspaceTests(): void {
         shutdownActiveManagedForWorktree: vi.fn(async () => null),
         stopActiveForSwitch: vi.fn(async () => null)
       }
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
       const runtime = new OrcaRuntimeService({
         getFolderWorkspaces: () => folderWorkspaces,
         getAllWorktreeMeta: () => new Map(),
-        getRepo: () => null,
+        getRepoAnyHost: () => null,
         getRepos: () => [],
         getSettings: () => ({
           mobileEmulatorEnabled: true,

@@ -33,7 +33,7 @@ function makeStore() {
     getWorkspaceSession: vi.fn(() => session),
     setWorkspaceSession: vi.fn(),
     getRepos: vi.fn(() => [REPO]),
-    getRepo: vi.fn((id: string) => (id === REPO.id ? REPO : undefined)),
+    getRepoAnyHost: vi.fn((id: string) => (id === REPO.id ? REPO : undefined)),
     // Why: this process serves no SSH git, so the SSH repo lists its stored rows.
     getAllWorktreeMeta: vi.fn(() => ({ [WORKTREE_ID]: {} })),
     getWorktreeMeta: vi.fn(() => undefined),

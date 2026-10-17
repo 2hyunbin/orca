@@ -138,7 +138,7 @@ describe('project host setups under a WSL move', () => {
     expect(() => controller.updateSetup({ setupId, updates: { displayName: 'x' } })).toThrow(
       WslMoveProjectFencedError
     )
-    expect(store.getRepo('repo-1')).toBeDefined()
+    expect(store.getRepoAnyHost('repo-1')).toBeDefined()
   })
 })
 

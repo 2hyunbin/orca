@@ -40,7 +40,7 @@ const repoPaths = new Map([
   ['repo-win', 'C:\\src\\app']
 ])
 const store = {
-  getRepo: (id: string) => {
+  getRepoAnyHost: (id: string) => {
     const path = repoPaths.get(id)
     return path === undefined ? undefined : { path }
   },
@@ -226,7 +226,7 @@ describe('WSL move edit guard', () => {
     writeFileSync(join(directory, 'move-1.json'), '{not json')
     loadWslMoveFence(userDataPath)
     const listOnly = {
-      getRepo: () => undefined,
+      getRepoAnyHost: () => undefined,
       getFolderWorkspaces: () => [
         { id: 'wsl-notes', folderPath: '\\\\wsl.localhost\\Ubuntu\\home\\dev\\notes' },
         { id: 'win-notes', folderPath: 'C:\\notes' }
@@ -234,8 +234,8 @@ describe('WSL move edit guard', () => {
     }
     expect(isWslMoveProjectBlocked(listOnly, { folderWorkspaceId: 'wsl-notes' })).toBe(true)
     expect(isWslMoveProjectBlocked(listOnly, { folderWorkspaceId: 'win-notes' })).toBe(false)
-    expect(isWslMoveProjectBlocked({ getRepo: () => undefined }, { folderWorkspaceId: 'x' })).toBe(
-      false
-    )
+    expect(
+      isWslMoveProjectBlocked({ getRepoAnyHost: () => undefined }, { folderWorkspaceId: 'x' })
+    ).toBe(false)
   })
 })

@@ -14,7 +14,7 @@ function makeRuntimeHostedStore(extraRepoFields: Record<string, unknown> = {}) {
   return {
     ...store,
     getRepos: () => [repo],
-    getRepo: (id: string) => (id === repo.id ? repo : undefined)
+    getRepoAnyHost: (id: string) => (id === repo.id ? repo : undefined)
   }
 }
 

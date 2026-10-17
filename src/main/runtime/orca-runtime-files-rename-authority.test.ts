@@ -77,7 +77,7 @@ describe('RuntimeFileCommands', () => {
 
   it('rejects legacy paired SSH mutations before selecting a filesystem provider', async () => {
     const { commands, store } = createRuntimeFileCommands()
-    store.getRepo.mockReturnValue({ connectionId: 'ssh-1' })
+    store.getRepoAnyHost.mockReturnValue({ connectionId: 'ssh-1' })
 
     await expect(
       commands.renameFileExplorerPath('id:wt-1', 'old.ts', 'new.ts', 0, 'ssh-1')
@@ -88,7 +88,7 @@ describe('RuntimeFileCommands', () => {
 
   it('rejects a local expectation when the worktree moved to SSH', async () => {
     const { commands, store } = createRuntimeFileCommands()
-    store.getRepo.mockReturnValue({ connectionId: 'ssh-1' })
+    store.getRepoAnyHost.mockReturnValue({ connectionId: 'ssh-1' })
 
     await expect(
       commands.renameFileExplorerPath('id:wt-1', 'old.ts', 'new.ts', undefined, undefined, 'local')
@@ -184,7 +184,7 @@ describe('RuntimeFileCommands', () => {
 
   it('refuses a matching SSH rename without renaming on this machine', async () => {
     const { commands, store } = createRuntimeFileCommands()
-    store.getRepo.mockReturnValue({ connectionId: 'ssh-1' })
+    store.getRepoAnyHost.mockReturnValue({ connectionId: 'ssh-1' })
 
     await expect(
       commands.renameFileExplorerPath('id:wt-1', 'old.ts', 'new.ts', 0, 'ssh-1', 'ssh:ssh-1')
@@ -194,7 +194,7 @@ describe('RuntimeFileCommands', () => {
 
   it('rejects a mutation captured for an obsolete SSH connection generation', async () => {
     const { commands, store } = createRuntimeFileCommands()
-    store.getRepo.mockReturnValue({ connectionId: 'ssh-1' })
+    store.getRepoAnyHost.mockReturnValue({ connectionId: 'ssh-1' })
     setSshConnectionGeneration('ssh-1', 8)
 
     await expect(
@@ -205,7 +205,7 @@ describe('RuntimeFileCommands', () => {
 
   it('rejects nested SSH mutations from clients without generation support', async () => {
     const { commands, store } = createRuntimeFileCommands()
-    store.getRepo.mockReturnValue({ connectionId: 'ssh-1' })
+    store.getRepoAnyHost.mockReturnValue({ connectionId: 'ssh-1' })
 
     await expect(
       commands.renameFileExplorerPath(
@@ -222,7 +222,7 @@ describe('RuntimeFileCommands', () => {
 
   it('rejects an equal-generation mutation captured for another SSH target', async () => {
     const { commands, store } = createRuntimeFileCommands()
-    store.getRepo.mockReturnValue({ connectionId: 'ssh-b' })
+    store.getRepoAnyHost.mockReturnValue({ connectionId: 'ssh-b' })
 
     await expect(
       commands.renameFileExplorerPath('id:wt-1', 'old.ts', 'new.ts', 0, 'ssh-a', 'ssh:ssh-a')

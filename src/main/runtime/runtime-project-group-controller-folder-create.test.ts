@@ -33,7 +33,7 @@ function createController() {
     ],
     getRepos: () => [],
     createFolderWorkspace,
-    getRepo: unused,
+    getRepoAnyHost: unused,
     addRepo: unused,
     updateRepo: unused,
     getAllWorktreeMeta: unused,

@@ -55,10 +55,11 @@ describe('OrcaRuntimeService', () => {
         builtIn: { claude: 'show' as const, gsd: 'hide' as const }
       }
     }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
     const runtime = new OrcaRuntimeService({
       ...store,
       getRepos: () => [repo],
-      getRepo: () => repo
+      getRepoAnyHost: () => repo
     } as never)
 
     const target = await (
@@ -100,10 +101,11 @@ describe('OrcaRuntimeService', () => {
       externalWorktreeVisibility: 'hide' as const,
       externalWorktreeVisibilityLegacy: false
     }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
     const runtime = new OrcaRuntimeService({
       ...store,
       getRepos: () => [repo],
-      getRepo: () => repo,
+      getRepoAnyHost: () => repo,
       getSettings: () => ({
         ...store.getSettings(),
         worktreeVisibilityDefaults: {

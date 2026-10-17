@@ -243,7 +243,7 @@ describe('runtime-controller spawn: hidden until a renderer view mounts', () => 
     const daemon = installObservableDaemonTestProvider()
     const runtime = new OrcaRuntimeService(
       testDouble({
-        getRepo: () => undefined,
+        getRepoAnyHost: () => undefined,
         getRepos: () => [],
         addRepo: () => {},
         updateRepo: () => undefined,

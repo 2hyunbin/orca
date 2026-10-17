@@ -12,6 +12,7 @@ import type {
   ProjectUpdateArgs
 } from '../../../shared/project-types'
 import type { Repo } from '../../../shared/repo-types'
+import type { ExecutionHostId } from '../../../shared/execution-host'
 import { ProjectGroupPersistenceOperations } from '../tracking-repos/project-group-operations'
 import { FolderWorkspacePersistenceOperations } from '../restoring-sessions/folder-workspace-operations'
 import { ProjectHostPersistenceOperations } from '../tracking-repos/project-host-operations'
@@ -99,8 +100,12 @@ export class ProjectCollectionOperations {
     return getProjectHostOperations(this).getRepoCount()
   }
 
-  getRepo(id: string): Repo | undefined {
-    return getProjectHostOperations(this).getRepo(id)
+  getRepoAnyHost(id: string): Repo | undefined {
+    return getProjectHostOperations(this).getRepoAnyHost(id)
+  }
+
+  getRepo(repoId: string, hostId: ExecutionHostId): Repo | undefined {
+    return getProjectHostOperations(this).getRepo(repoId, hostId)
   }
 
   setResolvedRepoGitUsername(

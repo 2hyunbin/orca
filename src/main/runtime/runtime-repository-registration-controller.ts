@@ -94,7 +94,7 @@ export class RuntimeRepositoryRegistrationController {
     store.addRepo(repo)
     await prepareLocalWorktreeRootForRepo(store, repo)
     this.invalidate(repo.id)
-    return store.getRepo(repo.id) ?? repo
+    return store.getRepoAnyHost(repo.id) ?? repo
   }
 
   async create(
@@ -178,7 +178,7 @@ export class RuntimeRepositoryRegistrationController {
     await prepareLocalWorktreeRootForRepo(store, repo)
     invalidateAuthorizedRootsCache()
     this.invalidate(repo.id)
-    return { repo: store.getRepo(repo.id) ?? repo }
+    return { repo: store.getRepoAnyHost(repo.id) ?? repo }
   }
 
   private async initializeGitRepo(targetPath: string, createdDir: boolean): Promise<string | null> {

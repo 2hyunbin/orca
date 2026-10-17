@@ -22,7 +22,7 @@ export function triggerPtySpawnPushTargetMaterialization(
   // unexpected lookup failure turn this best-effort hook into a spawn-blocking exception.
   try {
     const pushTarget = deps.store.getWorktreeMeta?.(args.worktreeId)?.pushTarget
-    const repo = deps.store.getRepo?.(parsed.repoId) ?? null
+    const repo = deps.store.getRepoAnyHost?.(parsed.repoId) ?? null
     triggerTerminalSpawnPushTargetMaterialization(
       parsed.worktreePath,
       pushTarget,

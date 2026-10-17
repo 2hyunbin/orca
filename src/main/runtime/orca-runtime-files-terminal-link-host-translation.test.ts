@@ -186,7 +186,7 @@ describe('RuntimeFileCommands', () => {
         resolveTerminalFileUriHostname,
         hasRecentTerminalOutputPath
       })
-      store.getRepo.mockReturnValue({ connectionId: 'ssh-1' })
+      store.getRepoAnyHost.mockReturnValue({ connectionId: 'ssh-1' })
 
       await expect(
         resolveTerminalArtifactPath(commands, '//remote-host/tmp/result.json')
@@ -205,7 +205,7 @@ describe('RuntimeFileCommands', () => {
 
     it('rejects host-qualified remote POSIX terminal links without a verified host match', async () => {
       const { commands, store } = createRuntimeFileCommands({ path: '/home/me/repo' })
-      store.getRepo.mockReturnValue({ connectionId: 'ssh-1' })
+      store.getRepoAnyHost.mockReturnValue({ connectionId: 'ssh-1' })
 
       const result = await commands.resolveTerminalPath(
         'id:wt-1',

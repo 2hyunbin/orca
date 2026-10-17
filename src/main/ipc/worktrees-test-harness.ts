@@ -130,7 +130,7 @@ export function setupWorktreeHandlers(): WorktreeRuntimeStub {
     getSshFilesystemProviderMock,
     mainWindow.webContents.send,
     store.getRepos,
-    store.getRepo,
+    store.getRepoAnyHost,
     store.getProjects,
     store.getSparsePresets,
     store.getSettings,
@@ -186,7 +186,7 @@ export function setupWorktreeHandlers(): WorktreeRuntimeStub {
   })
 
   store.getRepos.mockReturnValue([harnessRepo])
-  store.getRepo.mockReturnValue({ ...harnessRepo, worktreeBaseRef: null })
+  store.getRepoAnyHost.mockReturnValue({ ...harnessRepo, worktreeBaseRef: null })
   store.getProjects.mockReturnValue([])
   store.getSparsePresets.mockReturnValue([])
   const settings = {

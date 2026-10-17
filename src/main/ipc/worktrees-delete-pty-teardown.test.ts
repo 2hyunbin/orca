@@ -301,7 +301,7 @@ describe('registerWorktreeHandlers', () => {
       worktreeBaseRef: null
     }
     store.getRepos.mockReturnValue([repo])
-    store.getRepo.mockReturnValue(repo)
+    store.getRepoAnyHost.mockReturnValue(repo)
 
     await expect(
       handlers['worktrees:remove'](null, { worktreeId: 'repo-ssh::/remote/feature-wt' })

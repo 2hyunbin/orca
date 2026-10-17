@@ -85,7 +85,7 @@ describe('Store', () => {
     const updated = store.updateRepo('r1', { displayName: 'renamed' })
     expect(updated).not.toBeNull()
     expect(updated!.displayName).toBe('renamed')
-    expect(store.getRepo('r1')!.displayName).toBe('renamed')
+    expect(store.getRepoAnyHost('r1')!.displayName).toBe('renamed')
   })
 
   it('invalidates local worktree scans across a git-folder-git update round trip', async () => {
@@ -355,7 +355,7 @@ describe('Store', () => {
         updates: { kind: 'git', displayName: 'Renamed' }
       })
     ).toThrow("This folder project has 1 other workspace that a Git project can't show")
-    expect(store.getRepo('r1')).toMatchObject({ kind: 'folder', displayName: 'Repo' })
+    expect(store.getRepoAnyHost('r1')).toMatchObject({ kind: 'folder', displayName: 'Repo' })
 
     store.removeWorktreeMeta(workspaceId)
     expect(
@@ -378,7 +378,7 @@ describe('Store', () => {
       })
 
     await expect(changeToGit('inner')).rejects.toThrow("isn't the top folder of a Git repository")
-    expect(store.getRepo('inner')?.kind).toBe('folder')
+    expect(store.getRepoAnyHost('inner')?.kind).toBe('folder')
     const converted = await changeToGit('outer')
     expect(converted?.repo).toMatchObject({
       kind: 'git',
@@ -449,7 +449,7 @@ describe('Store', () => {
     expect(result?.project).toMatchObject({ id: 'repo:r1' })
     expect(result?.setup).toMatchObject({ id: 'r1', repoId: 'r1' })
     expect(result?.repo).toMatchObject({ id: 'r1' })
-    expect(store.getRepo('r1')).toBeUndefined()
+    expect(store.getRepoAnyHost('r1')).toBeUndefined()
     expect(store.getProjects()).toEqual([])
     expect(store.getProjectHostSetups()).toEqual([])
     expect(store.getWorktreeMeta('r1::/path/wt1')).toBeUndefined()
@@ -461,7 +461,7 @@ describe('Store', () => {
 
     store.updateRepo('r1', { projectHostSetupMethod: 'cloned' })
 
-    expect(store.getRepo('r1')?.projectHostSetupMethod).toBe('cloned')
+    expect(store.getRepoAnyHost('r1')?.projectHostSetupMethod).toBe('cloned')
     expect(store.getProjectHostSetups()).toEqual([
       expect.objectContaining({
         id: 'r1',
@@ -484,7 +484,7 @@ describe('Store', () => {
 
     expect(updated).not.toBeNull()
     expect(updated!.repoIcon).toBeUndefined()
-    expect(store.getRepo('r1')!.repoIcon).toBeUndefined()
+    expect(store.getRepoAnyHost('r1')!.repoIcon).toBeUndefined()
   })
 
   it('updateRepo normalizes custom repo badge colors before storing', async () => {
@@ -494,7 +494,7 @@ describe('Store', () => {
     const updated = store.updateRepo('r1', { badgeColor: ' ABCDEF ' })
 
     expect(updated!.badgeColor).toBe('#abcdef')
-    expect(store.getRepo('r1')!.badgeColor).toBe('#abcdef')
+    expect(store.getRepoAnyHost('r1')!.badgeColor).toBe('#abcdef')
   })
 
   it('updateRepo ignores invalid repo badge colors without clearing the existing color', async () => {
@@ -504,10 +504,10 @@ describe('Store', () => {
     const updated = store.updateRepo('r1', { badgeColor: 'blue' })
 
     expect(updated!.badgeColor).toBe('#123456')
-    expect(store.getRepo('r1')!.badgeColor).toBe('#123456')
+    expect(store.getRepoAnyHost('r1')!.badgeColor).toBe('#123456')
   })
 
-  it('getRepo does not expose invalid persisted repo icons', async () => {
+  it('getRepoAnyHost does not expose invalid persisted repo icons', async () => {
     const store = await createStore()
     store.addRepo(
       makeRepo({
@@ -519,7 +519,7 @@ describe('Store', () => {
       })
     )
 
-    expect(store.getRepo('r1')!.repoIcon).toBeUndefined()
+    expect(store.getRepoAnyHost('r1')!.repoIcon).toBeUndefined()
     expect(store.getRepos()[0]!.repoIcon).toBeUndefined()
   })
 
@@ -535,7 +535,7 @@ describe('Store', () => {
     store.updateRepo('r1', { upstream: null })
     store.flush()
     const reloaded = await createStore()
-    expect(reloaded.getRepo('r1')!.upstream).toBeNull()
+    expect(reloaded.getRepoAnyHost('r1')!.upstream).toBeNull()
   })
 
   it('updateRepo persists the resolved no-usable-remote identity marker', async () => {
@@ -558,14 +558,14 @@ describe('Store', () => {
     store.updateRepo('r1', { gitRemoteIdentity: null })
     store.flush()
     const reloaded = await createStore()
-    expect(reloaded.getRepo('r1')!.gitRemoteIdentity).toBeNull()
+    expect(reloaded.getRepoAnyHost('r1')!.gitRemoteIdentity).toBeNull()
   })
 
-  it('getRepo does not expose invalid persisted repo upstream metadata', async () => {
+  it('getRepoAnyHost does not expose invalid persisted repo upstream metadata', async () => {
     const store = await createStore()
     store.addRepo(makeRepo({ upstream: { owner: '', repo: 42 } as never }))
 
-    expect(store.getRepo('r1')!.upstream).toBeUndefined()
+    expect(store.getRepoAnyHost('r1')!.upstream).toBeUndefined()
     expect(store.getRepos()[0]!.upstream).toBeUndefined()
   })
 
@@ -584,7 +584,7 @@ describe('Store', () => {
 
     store.flush()
     const reloaded = await createStore()
-    expect(reloaded.getRepo('r1')!.upstream).toEqual({
+    expect(reloaded.getRepoAnyHost('r1')!.upstream).toEqual({
       owner: 'acme',
       repo: 'widgets',
       host: 'GHE.example:8443'
@@ -595,15 +595,15 @@ describe('Store', () => {
     const store = await createStore()
     store.addRepo(makeRepo({ upstream: { owner: 'stablyai', repo: 'orca' } }))
 
-    expect(store.getRepo('r1')!.upstream).toEqual({ owner: 'stablyai', repo: 'orca' })
-    expect(store.getRepo('r1')!.upstream).not.toHaveProperty('host')
+    expect(store.getRepoAnyHost('r1')!.upstream).toEqual({ owner: 'stablyai', repo: 'orca' })
+    expect(store.getRepoAnyHost('r1')!.upstream).not.toHaveProperty('host')
   })
 
   it('drops a blank upstream host instead of persisting an empty string', async () => {
     const store = await createStore()
     store.addRepo(makeRepo({ upstream: { owner: 'acme', repo: 'widgets', host: '   ' } }))
 
-    expect(store.getRepo('r1')!.upstream).toEqual({ owner: 'acme', repo: 'widgets' })
+    expect(store.getRepoAnyHost('r1')!.upstream).toEqual({ owner: 'acme', repo: 'widgets' })
   })
 
   it('updateRepo returns null for nonexistent id', async () => {
@@ -620,7 +620,7 @@ describe('Store', () => {
 
     store.flush()
     const reloaded = await createStore()
-    expect(reloaded.getRepo('r1')!.issueSourcePreference).toBe('upstream')
+    expect(reloaded.getRepoAnyHost('r1')!.issueSourcePreference).toBe('upstream')
   })
 
   it('updateRepo persists and clears ghAccount bindings', async () => {
@@ -634,7 +634,7 @@ describe('Store', () => {
 
     store.flush()
     const reloaded = await createStore()
-    expect(reloaded.getRepo('r1')!.ghAccount).toEqual({ host: 'github.com', user: 'Alice' })
+    expect(reloaded.getRepoAnyHost('r1')!.ghAccount).toEqual({ host: 'github.com', user: 'Alice' })
 
     const cleared = reloaded.updateRepo('r1', { ghAccount: null })
     expect(cleared!.ghAccount).toBeUndefined()
@@ -649,7 +649,7 @@ describe('Store', () => {
 
     store.flush()
     const reloaded = await createStore()
-    expect(reloaded.getRepo('r1')!.forkSyncMode).toBe('safe-auto')
+    expect(reloaded.getRepoAnyHost('r1')!.forkSyncMode).toBe('safe-auto')
   })
 
   it('updateRepo ignores invalid fork sync mode updates', async () => {
@@ -662,10 +662,10 @@ describe('Store', () => {
 
     store.flush()
     const reloaded = await createStore()
-    expect(reloaded.getRepo('r1')!.forkSyncMode).toBe('ask')
+    expect(reloaded.getRepoAnyHost('r1')!.forkSyncMode).toBe('ask')
   })
 
-  it('getRepo does not expose invalid persisted fork sync mode values', async () => {
+  it('getRepoAnyHost does not expose invalid persisted fork sync mode values', async () => {
     writeDataFile({
       ...getDefaultPersistedState(testState.dir),
       repos: [makeRepo({ forkSyncMode: 'always' as never })]
@@ -673,21 +673,21 @@ describe('Store', () => {
 
     const store = await createStore()
 
-    expect(store.getRepo('r1')!.forkSyncMode).toBeUndefined()
+    expect(store.getRepoAnyHost('r1')!.forkSyncMode).toBeUndefined()
     expect(store.getRepos()[0]!.forkSyncMode).toBeUndefined()
   })
 
   it('updateRepo with issueSourcePreference=undefined clears the preference', async () => {
     const store = await createStore()
     store.addRepo(makeRepo({ issueSourcePreference: 'origin' }))
-    expect(store.getRepo('r1')!.issueSourcePreference).toBe('origin')
+    expect(store.getRepoAnyHost('r1')!.issueSourcePreference).toBe('origin')
 
     // Why: `Object.assign` skips undefined, so updateRepo needs an explicit delete branch or the key with value undefined wouldn't clear.
     store.updateRepo('r1', { issueSourcePreference: undefined })
-    expect(store.getRepo('r1')!.issueSourcePreference).toBeUndefined()
+    expect(store.getRepoAnyHost('r1')!.issueSourcePreference).toBeUndefined()
 
     store.flush()
     const reloaded = await createStore()
-    expect(reloaded.getRepo('r1')!.issueSourcePreference).toBeUndefined()
+    expect(reloaded.getRepoAnyHost('r1')!.issueSourcePreference).toBeUndefined()
   })
 })

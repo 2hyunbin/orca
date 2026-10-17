@@ -79,9 +79,9 @@ function setupManagedSshRecipe(): { userDataPath: string } {
     environmentId: 'env-managed-vm'
   }))
   const repo = { id: 'repo-1', path: repoPath, displayName: 'Repo', badgeColor: '#000', addedAt: 0 }
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these handlers read only getRepo, getRepos and getSettings.
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these handlers read only getRepoAnyHost, getRepos and getSettings.
   const store = {
-    getRepo: (id: string) => (id === repo.id ? repo : null),
+    getRepoAnyHost: (id: string) => (id === repo.id ? repo : null),
     getRepos: () => [repo],
     getSettings: () => ({})
   } as unknown as Store

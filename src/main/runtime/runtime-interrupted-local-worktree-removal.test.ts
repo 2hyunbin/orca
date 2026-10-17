@@ -120,7 +120,7 @@ async function finishAfterRestart(
   expect(() => beginWatcherInstall(worktreePath)).toThrow(/being removed/)
 
   const storeStub = {
-    getRepo: (id: string) => (id === repo.id && !options.repoGone ? repo : undefined),
+    getRepoAnyHost: (id: string) => (id === repo.id && !options.repoGone ? repo : undefined),
     getRepos: () => (options.repoGone ? [] : [repo]),
     getWorktreeMeta: () => undefined
   }

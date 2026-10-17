@@ -643,7 +643,7 @@ describe('Store', () => {
     const session = store.getWorkspaceSession()
     expect(store.getFolderWorkspaces()).toEqual([])
     expect(store.getProjectGroups()).toHaveLength(1)
-    expect(store.getRepo('api')?.projectGroupId).toBe(group.id)
+    expect(store.getRepoAnyHost('api')?.projectGroupId).toBe(group.id)
     expect(session.activeWorkspaceKey).toBeNull()
     expect(session.activeWorktreeId).toBeNull()
     expect(session.activeTabId).toBeNull()

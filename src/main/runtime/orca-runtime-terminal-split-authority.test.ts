@@ -99,7 +99,7 @@ function createHarness(
   }
   const store = withRuntimePaneAdmission({
     getRepos: () => [repo],
-    getRepo: (id: string) => (id === REPO_ID ? repo : undefined),
+    getRepoAnyHost: (id: string) => (id === REPO_ID ? repo : undefined),
     getWorkspaceSession: (hostId?: string) => {
       requestedSessionHostIds.push(hostId)
       return hostId === undefined || hostId === ownerHostId ? session : getDefaultWorkspaceSession()

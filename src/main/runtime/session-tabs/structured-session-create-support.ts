@@ -111,7 +111,7 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
 
   protected async resolveStructuredAgentSessionLocation(worktreeSelector: string) {
     const target = await this.resolveRuntimeFileTarget(worktreeSelector)
-    const repo = this.store?.getRepo(target.worktree.repoId)
+    const repo = this.store?.getRepoAnyHost(target.worktree.repoId)
     const folderScope = parseWorkspaceKey(target.worktree.id)
     // The floating workspace is a plain directory with no repo git options, which is exactly what
     // `folder` denotes here — it describes how Orca manages the place, not whether git is in it.

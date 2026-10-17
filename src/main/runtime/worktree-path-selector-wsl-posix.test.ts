@@ -60,7 +60,7 @@ function makeStore(registrations: readonly Registration[]) {
     addedAt: 1
   }))
   const store = {
-    getRepo: (id: string) => repos.find((repo) => repo.id === id),
+    getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id),
     getRepos: () => repos,
     getAllWorktreeMeta: vi.fn(() => ({})),
     getWorktreeMeta: () => undefined,

@@ -32,7 +32,7 @@ describe('OrcaRuntimeService', () => {
     const remoteStore = {
       ...store,
       getRepos: () => [remoteRepo],
-      getRepo: () => remoteRepo
+      getRepoAnyHost: () => remoteRepo
     }
     const runtime = new OrcaRuntimeService(remoteStore as never)
     const stopAndWait = vi.fn(async () => true)

@@ -693,7 +693,7 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('preserves bare-id runtime state when removed-host metadata masks another owner', () => {
-    const localRepo = store.getRepo(TEST_REPO_ID)!
+    const localRepo = store.getRepoAnyHost(TEST_REPO_ID)!
     const remoteRepo = { ...localRepo, connectionId: 'ssh-1' }
     const removeWorktreeMeta = vi.fn()
     const runtimeStore = {

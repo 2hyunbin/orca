@@ -86,7 +86,7 @@ export function indexPersistedPaneKeyPtyIds(
 }
 
 type AgentWorkspaceExecutionHostDeps = {
-  getRepo: (repoId: string) => ExecutionHostOwner | null | undefined
+  getRepoAnyHost: (repoId: string) => ExecutionHostOwner | null | undefined
   getWorktreeMeta: (worktreeId: string) => { hostId?: string | null } | null | undefined
   getFolderWorkspace: (
     folderWorkspaceId: string
@@ -133,7 +133,7 @@ export function resolveAgentWorkspaceExecutionHostId(
   if (declaredWorktreeHost) {
     return parseExecutionHostId(declaredWorktreeHost)?.id ?? null
   }
-  const repo = deps.getRepo(getRepoIdFromWorktreeId(worktreeId))
+  const repo = deps.getRepoAnyHost(getRepoIdFromWorktreeId(worktreeId))
   return repo ? resolveDeclaredExecutionHost(repo) : null
 }
 

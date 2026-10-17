@@ -221,7 +221,7 @@ export class RuntimeManagedWorktreeQueries {
     sourceDefaultsSupported = true,
     providedSettings?: ReturnType<RuntimeStore['getSettings']>
   ): boolean {
-    const repo = this.deps.getStore()?.getRepo(worktree.repoId)
+    const repo = this.deps.getStore()?.getRepoAnyHost(worktree.repoId)
     return repo
       ? this.toDetected(repo, worktree, matcher, sourceDefaultsSupported, providedSettings).visible
       : true

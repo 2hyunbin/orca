@@ -1,4 +1,4 @@
-// `resolveRuntimeFileTarget` read `store.getRepo(worktree.repoId)?.connectionId` and never looked
+// `resolveRuntimeFileTarget` read `store.getRepoAnyHost(worktree.repoId)?.connectionId` and never looked
 // at `worktree.hostId`, so one arbitrarily chosen row decided the execution host for ~30 downstream
 // filesystem dispatches. `undefined` there meant "runtime host", "unresolved" and "genuinely local"
 // at once (#11163). These cases pin all four answers end to end; an `ssh:` host is refused by
@@ -42,7 +42,7 @@ function makeRuntime(repos: readonly Record<string, unknown>[], hostId?: string)
     getProjects: () => [],
     getFolderWorkspaces: () => [],
     getRepos: () => repos,
-    getRepo: (id: string) => repos.find((repo) => repo.id === id)
+    getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id)
   }
   const runtime = new OrcaRuntimeService(store as never)
   vi.spyOn(runtime as unknown as RuntimeInternals, 'resolveWorktreeSelector').mockResolvedValue({
@@ -77,7 +77,7 @@ describe('runtime file target execution host', () => {
   })
 
   // The case whose absence let the original cross-host leak through review: two SSH hosts,
-  // and the rival row is the one `getRepo` returns first.
+  // and the rival row is the one `getRepoAnyHost` returns first.
   it('routes an ssh workspace to the host it names, not to a rival row on another ssh host', async () => {
     const runtime = makeRuntime(
       [

@@ -62,12 +62,13 @@ function createRuntime(overrides: Partial<FolderWorkspace> = {}): OrcaRuntimeSer
     updatedAt: 1,
     ...overrides
   }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
   return new OrcaRuntimeService({
     getFolderWorkspaces: () => [folderWorkspace],
     getProjectGroups: () => [],
     getAllWorktreeMeta: () => ({}),
     getWorktreeMeta: () => undefined,
-    getRepo: () => null,
+    getRepoAnyHost: () => null,
     getRepos: () => [],
     getSettings: () => ({})
   } as never)

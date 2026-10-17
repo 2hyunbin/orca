@@ -178,7 +178,7 @@ function coldRestoredRuntime(host: RestoreHost = LOCAL_HOST): {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the list, fence, exit and close paths read only repos and the workspace session; the rest of Store is unreached.
     withDurableRuntimeStore({
       getRepos: () => [host.repo],
-      getRepo: (id: string) => (id === REPO_ID ? host.repo : undefined),
+      getRepoAnyHost: (id: string) => (id === REPO_ID ? host.repo : undefined),
       getAllWorktreeMeta: () => ({}),
       getWorktreeMeta: () => undefined,
       getSettings: () => ({ workspaceDir: '/tmp/workspaces' }),

@@ -45,7 +45,7 @@ function makeStore() {
     }
   }
   return {
-    getRepo: (id: string) =>
+    getRepoAnyHost: (id: string) =>
       makeStore()
         .getRepos()
         .find((repo) => repo.id === id),

@@ -549,10 +549,11 @@ describe('OrcaRuntimeService', () => {
         createdAt: 1
       }
     }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
     const runtime = new OrcaRuntimeService({
       ...store,
       getRepos: () => [folderRepo],
-      getRepo: (id: string) => (id === folderRepo.id ? folderRepo : undefined),
+      getRepoAnyHost: (id: string) => (id === folderRepo.id ? folderRepo : undefined),
       getAllWorktreeMeta: () => metaById,
       getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
       setWorktreeMeta: (worktreeId: string, meta: Partial<WorktreeMeta>) => {

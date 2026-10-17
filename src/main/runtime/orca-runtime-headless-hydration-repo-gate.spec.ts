@@ -53,10 +53,11 @@ export function registerOrcaRuntimeHeadlessHydrationRepoGateTests(): void {
 
     it('does not read the repo inventory for an unparseable worktree id', async () => {
       const getRepos = vi.fn(() => [{ id: REPO_ID, path: '/repo', name: 'repo' }])
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
       const runtime = new OrcaRuntimeService({
         getWorkspaceSession: () => makeSession(FLOATING_TERMINAL_WORKTREE_ID),
-        // A separator-less id is validated against getRepo (singular) first.
-        getRepo: () => null,
+        // A separator-less id is validated against getRepoAnyHost (singular) first.
+        getRepoAnyHost: () => null,
         getRepos
       } as never)
 

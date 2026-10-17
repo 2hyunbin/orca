@@ -32,7 +32,7 @@ import type { RuntimeWorktreeScanResult } from './repo-worktree-resolution-scan'
 type RepoWorktreeRowStore = Pick<
   RuntimeStore,
   | 'getRepos'
-  | 'getRepo'
+  | 'getRepoAnyHost'
   | 'getProjects'
   | 'getSettings'
   | 'getAllWorktreeMeta'

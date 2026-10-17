@@ -56,7 +56,7 @@ const emptyStore = {
   getFolderWorkspace: () => undefined,
   getProjectGroups: () => [],
   getWorktreeMeta: () => undefined,
-  getRepo: () => undefined
+  getRepoAnyHost: () => undefined
 } satisfies MemorySnapshotStore
 
 describe('parsePsOutput', () => {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { resolveWorktreeHostRouting, resolveWorktreeLaunchHost } from './worktree-launch-host-repo'
 
 // Why (#11163): the terminal launch scope read
-// `store.getRepo(worktree.repoId)?.connectionId ?? null` — one spelling of one arbitrarily chosen
+// `store.getRepoAnyHost(worktree.repoId)?.connectionId ?? null` — one spelling of one arbitrarily chosen
 // row instead of the worktree's execution host. A remote worktree then spawns its PTY on the
 // client with the remote cwd (`DaemonProtocolError: Working directory "…" does not exist`).
 describe('resolveWorktreeLaunchHost', () => {

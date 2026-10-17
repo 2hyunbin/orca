@@ -308,10 +308,11 @@ describe('OrcaRuntimeService', () => {
       addedAt: 1,
       issueSourcePreference: 'origin' as const
     }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
     const runtime = new OrcaRuntimeService({
       ...store,
       getRepos: () => [originRepo],
-      getRepo: (id: string) => (id === originRepo.id ? originRepo : undefined)
+      getRepoAnyHost: (id: string) => (id === originRepo.id ? originRepo : undefined)
     } as never)
     const prRepo = { owner: 'acme', repo: 'orca' }
 

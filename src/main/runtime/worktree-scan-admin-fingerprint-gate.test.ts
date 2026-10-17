@@ -88,7 +88,7 @@ function makeStore(options: { connectionId?: string; repoCount?: number; repoPat
     ...(options.connectionId === undefined ? {} : { connectionId: options.connectionId })
   }))
   const store = {
-    getRepo: (id: string) => store.getRepos().find((repo) => repo.id === id),
+    getRepoAnyHost: (id: string) => store.getRepos().find((repo) => repo.id === id),
     getRepos: () => repos,
     getAllWorktreeMeta: () => metaById,
     getWorktreeMeta: (id: string) => metaById[id],

@@ -101,7 +101,7 @@ const channels = [
 ] as const
 
 function register(repo: Repo): void {
-  const context = { store: { getRepos: () => [repo], getRepo: () => repo } }
+  const context = { store: { getRepos: () => [repo], getRepoAnyHost: () => repo } }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: These adapters only read the provided store accessors.
   registerWorktreeHookCheckHandler(context as never)
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: These adapters only read the provided store accessors.

@@ -80,7 +80,7 @@ function makeStore(repoPath: string) {
   }
   let activeRuntimeEnvironmentId: string | null = null
   return {
-    getRepo: vi.fn((repoId: string) => (repoId === 'repo-1' ? repo : null)),
+    getRepoAnyHost: vi.fn((repoId: string) => (repoId === 'repo-1' ? repo : null)),
     getRepos: vi.fn(() => [repo]),
     getSettings: vi.fn(() => ({ activeRuntimeEnvironmentId })),
     updateSettings: vi.fn((updates: { activeRuntimeEnvironmentId: string | null }) => {

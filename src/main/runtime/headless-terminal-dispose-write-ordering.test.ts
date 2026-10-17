@@ -14,7 +14,7 @@ import { OrcaRuntimeService } from './orca-runtime'
 import { HeadlessEmulator } from '../daemon/headless-emulator'
 
 const store = {
-  getRepo: () => undefined,
+  getRepoAnyHost: () => undefined,
   getRepos: () => [],
   addRepo: () => {},
   updateRepo: () => undefined as never,

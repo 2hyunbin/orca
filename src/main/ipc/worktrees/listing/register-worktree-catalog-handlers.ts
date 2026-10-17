@@ -149,7 +149,7 @@ export function registerWorktreeCatalogHandlers(context: WorktreeIpcContext): vo
   })
 
   ipcMain.handle('worktrees:listRetiredNames', async (_event, args: { repoId: string }) => {
-    const repo = store.getRepo(args.repoId)
+    const repo = store.getRepoAnyHost(args.repoId)
     if (!repo) {
       return EMPTY_RETIRED_NAME_REGISTRY
     }
@@ -162,7 +162,7 @@ export function registerWorktreeCatalogHandlers(context: WorktreeIpcContext): vo
     if (!repoId) {
       return []
     }
-    const repo = store.getRepo(repoId)
+    const repo = store.getRepoAnyHost(repoId)
     if (!repo) {
       return []
     }

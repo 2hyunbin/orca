@@ -120,7 +120,7 @@ describe('registerWorktreeHandlers', () => {
       const ptyProvider = {} as never
       const worktreeId = 'repo-1::/workspace/feature-wt'
       store.getRepos.mockReturnValue([repo])
-      store.getRepo.mockReturnValue(repo)
+      store.getRepoAnyHost.mockReturnValue(repo)
       getLocalPtyProviderMock.mockReturnValue(ptyProvider)
 
       const result = await handlers['worktrees:forgetLocal'](null, { worktreeId })
@@ -185,7 +185,7 @@ describe('registerWorktreeHandlers', () => {
         resolve(worktreePath)
       )
       store.getRepos.mockReturnValue([])
-      store.getRepo.mockReturnValue(undefined)
+      store.getRepoAnyHost.mockReturnValue(undefined)
 
       await expect(
         handlers['worktrees:forgetLocal'](null, {
@@ -219,7 +219,7 @@ describe('registerWorktreeHandlers', () => {
       }
       const worktreeId = 'repo-ssh::/workspace/feature-wt'
       store.getRepos.mockReturnValue([repo])
-      store.getRepo.mockReturnValue(repo)
+      store.getRepoAnyHost.mockReturnValue(repo)
       // The orphan case forget-local exists for: the meta row is lost, so only the repo still records ownership.
       store.getWorktreeMeta.mockReturnValue(undefined)
       getLocalPtyProviderMock.mockReturnValue({} as never)
@@ -245,7 +245,7 @@ describe('registerWorktreeHandlers', () => {
       }
       const worktreeId = 'repo-shared::/workspace/feature-wt'
       store.getRepos.mockReturnValue([localRepo, sshRepo])
-      store.getRepo.mockReturnValue(localRepo)
+      store.getRepoAnyHost.mockReturnValue(localRepo)
       store.getWorktreeMeta.mockReturnValue({ hostId: 'local' })
 
       await expect(handlers['worktrees:forgetLocal'](null, { worktreeId })).rejects.toThrow(
@@ -267,7 +267,7 @@ describe('registerWorktreeHandlers', () => {
       }
       const worktreeId = 'repo-folder-child::/workspace/folder/child'
       store.getRepos.mockReturnValue([repo])
-      store.getRepo.mockReturnValue(repo)
+      store.getRepoAnyHost.mockReturnValue(repo)
       store.getWorktreeMeta.mockReturnValue(undefined)
       getLocalPtyProviderMock.mockReturnValue({} as never)
 
@@ -285,7 +285,7 @@ describe('registerWorktreeHandlers', () => {
         addedAt: 0,
         kind: 'folder' as const
       }
-      store.getRepo.mockReturnValue(repo)
+      store.getRepoAnyHost.mockReturnValue(repo)
 
       await expect(
         handlers['worktrees:forgetLocal'](null, {
@@ -308,7 +308,7 @@ describe('registerWorktreeHandlers', () => {
       }
       const worktreeId = `${localRepo.id}::${localRepo.path}`
       store.getRepos.mockReturnValue([localRepo])
-      store.getRepo.mockReturnValue(undefined)
+      store.getRepoAnyHost.mockReturnValue(undefined)
       store.getWorktreeMeta.mockReturnValue({ hostId: 'ssh:removed' })
       getLocalPtyProviderMock.mockReturnValue({} as never)
 
@@ -342,7 +342,7 @@ describe('worktree execution-host disambiguation', () => {
       displayName: 'ssh',
       connectionId: 'conn-1'
     }
-    store.getRepo.mockReturnValue(localRepo)
+    store.getRepoAnyHost.mockReturnValue(localRepo)
     store.getRepos.mockReturnValue([localRepo, sshRepo])
 
     // The SSH owner is selected, so the delete refuses as not served rather than running here.
@@ -370,7 +370,7 @@ describe('worktree execution-host disambiguation', () => {
       connectionId: null,
       executionHostId: 'ssh:conn-1' as const
     }
-    store.getRepo.mockReturnValue(brokenRepo)
+    store.getRepoAnyHost.mockReturnValue(brokenRepo)
     store.getRepos.mockReturnValue([brokenRepo])
 
     await expect(
@@ -396,7 +396,7 @@ describe('worktree execution-host disambiguation', () => {
       connectionId: 'conn-1',
       executionHostId: 'local' as const
     }
-    store.getRepo.mockReturnValue(brokenRepo)
+    store.getRepoAnyHost.mockReturnValue(brokenRepo)
     store.getRepos.mockReturnValue([brokenRepo])
 
     await expect(
@@ -423,7 +423,7 @@ describe('worktree execution-host disambiguation', () => {
       connectionId: null,
       executionHostId: 'runtime:env-1' as const
     }
-    store.getRepo.mockReturnValue(runtimeRepo)
+    store.getRepoAnyHost.mockReturnValue(runtimeRepo)
     store.getRepos.mockReturnValue([runtimeRepo])
 
     await expect(
@@ -449,7 +449,7 @@ describe('worktree execution-host disambiguation', () => {
       connectionId: 'conn one',
       executionHostId: 'ssh:conn one' as const
     }
-    store.getRepo.mockReturnValue(repo)
+    store.getRepoAnyHost.mockReturnValue(repo)
     store.getRepos.mockReturnValue([repo])
 
     // Past the spelling check, the host is refused only because it is not served here.
@@ -545,7 +545,7 @@ describe('worktree execution-host disambiguation', () => {
       connectionId: 'conn-1'
     }
     store.getRepos.mockReturnValue([localRepo, sshRepo])
-    store.getRepo.mockReturnValue(localRepo)
+    store.getRepoAnyHost.mockReturnValue(localRepo)
 
     // Why: this process serves no SSH filesystem, so the SSH host offers no imports.
     await expect(
@@ -600,7 +600,7 @@ describe('worktree execution-host disambiguation', () => {
   it('does not let stale metadata coalesce an explicit host forget onto another host', async () => {
     const worktreeId = 'repo-gone::/same/path'
     store.getRepos.mockReturnValue([])
-    store.getRepo.mockReturnValue(undefined)
+    store.getRepoAnyHost.mockReturnValue(undefined)
     store.getWorktreeMeta.mockReturnValue({ hostId: 'local' })
     let finishFirst!: () => void
     killAllProcessesForWorktreeMock

@@ -79,7 +79,7 @@ function makeStore(repoOverrides: Record<string, unknown>) {
     }
   ]
   const store = {
-    getRepo: (id: string) => repos.find((repo) => repo.id === id),
+    getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id),
     getRepos: () => repos,
     getAllWorktreeMeta: () => metaById,
     getWorktreeMeta: (id: string) => metaById[id],

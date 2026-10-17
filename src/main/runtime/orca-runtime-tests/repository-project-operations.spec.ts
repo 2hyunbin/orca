@@ -38,7 +38,9 @@ describe('OrcaRuntimeService', () => {
       addRepo: (repo: Record<string, unknown>) => {
         added.push(repo)
       },
-      getRepo: (id: string) => [...uncStore.getRepos()].find((repo) => repo.id === id) as never
+      getRepoAnyHost: (id: string) =>
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+        [...uncStore.getRepos()].find((repo) => repo.id === id) as never
     }
     const runtime = new OrcaRuntimeService(uncStore as never)
 
@@ -92,7 +94,8 @@ describe('OrcaRuntimeService', () => {
       addRepo: (repo: Record<string, unknown>) => {
         added.push(repo)
       },
-      getRepo: (id: string) => added.find((repo) => repo.id === id) as never
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+      getRepoAnyHost: (id: string) => added.find((repo) => repo.id === id) as never
     }
     const runtime = new OrcaRuntimeService(colorStore as never)
 
@@ -110,7 +113,8 @@ describe('OrcaRuntimeService', () => {
       addRepo: (repo: Record<string, unknown>) => {
         added.push(repo)
       },
-      getRepo: (id: string) => added.find((repo) => repo.id === id) as never
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+      getRepoAnyHost: (id: string) => added.find((repo) => repo.id === id) as never
     }
     const runtime = new OrcaRuntimeService(runtimeStore as never)
 
@@ -129,7 +133,8 @@ describe('OrcaRuntimeService', () => {
       addRepo: (repo: Record<string, unknown>) => {
         repos.push(repo)
       },
-      getRepo: (id: string) => repos.find((repo) => repo.id === id) as never,
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+      getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id) as never,
       updateRepo: (id: string, updates: Record<string, unknown>) => {
         const index = repos.findIndex((repo) => repo.id === id)
         if (index === -1) {
@@ -206,7 +211,8 @@ describe('OrcaRuntimeService', () => {
       ...store,
       getRepos: () => [...repos] as never,
       addRepo: (repo: Record<string, unknown>) => repos.push(repo),
-      getRepo: (id: string) => repos.find((repo) => repo.id === id) as never,
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+      getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id) as never,
       updateRepo: (id: string, updates: Record<string, unknown>) => {
         const repo = repos.find((entry) => entry.id === id)
         if (!repo) {
@@ -258,7 +264,8 @@ describe('OrcaRuntimeService', () => {
       ...store,
       getRepos: () => [...repos] as never,
       addRepo: (repo: Record<string, unknown>) => repos.push(repo),
-      getRepo: (id: string) => repos.find((repo) => repo.id === id) as never,
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+      getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id) as never,
       updateRepo: (id: string, updates: Record<string, unknown>) => {
         const repo = repos.find((entry) => entry.id === id)
         if (!repo) {
@@ -347,7 +354,8 @@ describe('OrcaRuntimeService', () => {
       addRepo: (repo: Record<string, unknown>) => {
         repos.push(repo)
       },
-      getRepo: (id: string) => repos.find((repo) => repo.id === id) as never,
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+      getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id) as never,
       updateRepo: (id: string, updates: Record<string, unknown>) => {
         const index = repos.findIndex((repo) => repo.id === id)
         if (index === -1) {
@@ -431,7 +439,8 @@ describe('OrcaRuntimeService', () => {
       addRepo: (repo: Record<string, unknown>) => {
         repos.push(repo)
       },
-      getRepo: (id: string) => repos.find((repo) => repo.id === id) as never
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+      getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id) as never
     }
     const runtime = new OrcaRuntimeService(runtimeStore as never)
 
@@ -464,7 +473,8 @@ describe('OrcaRuntimeService', () => {
       addRepo: (repo: Record<string, unknown>) => {
         repos.push(repo)
       },
-      getRepo: (id: string) => repos.find((repo) => repo.id === id) as never,
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+      getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id) as never,
       updateRepo: (id: string, updates: Record<string, unknown>) => {
         const index = repos.findIndex((repo) => repo.id === id)
         if (index === -1) {
@@ -505,7 +515,8 @@ describe('OrcaRuntimeService', () => {
         addRepo: (repo: Record<string, unknown>) => {
           repos.push(repo)
         },
-        getRepo: (id: string) => repos.find((repo) => repo.id === id) as never,
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+        getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id) as never,
         updateRepo: (id: string, updates: Record<string, unknown>) => {
           const index = repos.findIndex((repo) => repo.id === id)
           if (index === -1) {
@@ -538,7 +549,8 @@ describe('OrcaRuntimeService', () => {
       addRepo: (repo: Record<string, unknown>) => {
         repos.push(repo)
       },
-      getRepo: (id: string) => repos.find((repo) => repo.id === id) as never,
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
+      getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id) as never,
       updateRepo: (id: string, updates: Record<string, unknown>) => {
         const index = repos.findIndex((repo) => repo.id === id)
         if (index === -1) {

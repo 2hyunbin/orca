@@ -28,7 +28,7 @@ export class WslMoveProjectFencedError extends Error {
 
 /** Only the project paths, read when the journal is unreadable. */
 type ProjectStore = {
-  getRepo: (repoId: string) => { path: string } | undefined
+  getRepoAnyHost: (repoId: string) => { path: string } | undefined
   // RuntimeStore has only the list.
   getFolderWorkspace?: (folderWorkspaceId: string) => { folderPath: string } | undefined
   getFolderWorkspaces?: () => readonly { id: string; folderPath: string }[]
@@ -97,7 +97,7 @@ function inScope(scope: WslMoveFenceState['fenced'], ref: WslMoveProjectRef): bo
 
 function projectPath(store: ProjectStore, ref: WslMoveProjectRef): string | undefined {
   if ('repoId' in ref) {
-    return store.getRepo(ref.repoId)?.path
+    return store.getRepoAnyHost(ref.repoId)?.path
   }
   const id = ref.folderWorkspaceId
   if (store.getFolderWorkspace) {

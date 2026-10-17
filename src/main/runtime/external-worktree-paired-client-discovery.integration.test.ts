@@ -397,9 +397,10 @@ describe('external worktree discovery for paired clients', () => {
       ...store.getRepos(),
       { ...localRepo, path: '/remote/repo', connectionId: 'ssh-target-1' }
     ]
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
     const runtime = new OrcaRuntimeService({
       ...store,
-      getRepo: (id: string) => collidingRepos.find((repo) => repo.id === id),
+      getRepoAnyHost: (id: string) => collidingRepos.find((repo) => repo.id === id),
       getRepos: () => collidingRepos
     } as never)
     setWorktreeCatalogRemoteClientNotifier(runtime)

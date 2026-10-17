@@ -106,8 +106,8 @@ describe('fork upstream backfill under a WSL move', () => {
 
     await new RuntimeRepositoryForkBackfill(() => store, vi.fn()).run()
 
-    expect(store.getRepo(MOVING)?.upstream).toBeUndefined()
-    expect(store.getRepo(STAYING)?.upstream).toEqual({ owner: 'acme', repo: 'app' })
+    expect(store.getRepoAnyHost(MOVING)?.upstream).toBeUndefined()
+    expect(store.getRepoAnyHost(STAYING)?.upstream).toEqual({ owner: 'acme', repo: 'app' })
   })
 
   it('fills the host row, not the hidden local row with the same id', async () => {

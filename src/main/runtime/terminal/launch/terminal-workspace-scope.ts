@@ -65,7 +65,7 @@ export abstract class OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktr
     repoId?: string
     hostId?: ExecutionHostId
   }): BrowserNetworkExecutionHost | Promise<BrowserNetworkExecutionHost> {
-    const repo = worktree?.repoId ? this.requireStore().getRepo(worktree.repoId) : undefined
+    const repo = worktree?.repoId ? this.requireStore().getRepoAnyHost(worktree.repoId) : undefined
     const executionHostId = worktree
       ? getWorktreeExecutionHostId(worktree, repo)
       : LOCAL_EXECUTION_HOST_ID
@@ -159,7 +159,7 @@ export abstract class OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktr
     const worktree =
       resolveCreatedWorktreeTerminalTarget(this.store, selector, createdWorktree) ??
       (await this.resolveWorktreeSelector(worktreeSelector))
-    // Why: `getRepo(id)` is host-blind and the same repo id can exist on local, SSH and runtime
+    // Why: `getRepoAnyHost(id)` is host-blind and the same repo id can exist on local, SSH and runtime
     // hosts. Reading `connectionId` off an arbitrary row reports "local" for a remote worktree and
     // spawns its PTY on the client with the remote cwd (#11163). Loss of a usable answer is
     // `unresolved`, never `local`.
@@ -168,7 +168,7 @@ export abstract class OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktr
       throw new Error('worktree_execution_host_unresolved')
     }
     // Metadata only (display name, hook settings); the routing decision is `resolution.connectionId`.
-    const repo = resolution.repo ?? this.store?.getRepo(worktree.repoId) ?? null
+    const repo = resolution.repo ?? this.store?.getRepoAnyHost(worktree.repoId) ?? null
     triggerTerminalSpawnPushTargetMaterialization(
       worktree.path,
       worktree.pushTarget,
@@ -229,7 +229,7 @@ export abstract class OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktr
     if (
       worktreeId &&
       !worktreeId.includes(WORKTREE_ID_SEPARATOR) &&
-      this.store?.getRepo(worktreeId)
+      this.store?.getRepoAnyHost(worktreeId)
     ) {
       // Why: a registered repo id is a known-invalid worktree id; reject early before fast paths or Git/SSH scans hide the mistake.
       throw new WorktreeIdRequiresFullPathError()

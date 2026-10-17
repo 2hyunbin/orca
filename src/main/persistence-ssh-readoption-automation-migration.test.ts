@@ -212,7 +212,7 @@ describe('SSH re-adoption migrates automations', () => {
       targetId: added.id,
       targetGeneration: added.generation
     })
-    expect(store.getRepo('repo-1')?.connectionId).toBe(added.id)
+    expect(store.getRepoAnyHost('repo-1')?.connectionId).toBe(added.id)
     // Enablement is the user's intent and is never rewritten by migration or re-adoption.
     expect(store.listAutomations()[0].enabled).toBe(true)
   })
@@ -240,7 +240,7 @@ describe('SSH re-adoption migrates automations', () => {
       hostKey: desktopSshKey(added.id)
     })
     expect(reloaded.listAutomationRuns('auto-1')[0].runContext?.hostId).toBe(`ssh:${added.id}`)
-    expect(reloaded.getRepo('repo-1')?.connectionId).toBe(added.id)
+    expect(reloaded.getRepoAnyHost('repo-1')?.connectionId).toBe(added.id)
   })
 
   it('repairs a folder workspace pinned to the removed host', async () => {

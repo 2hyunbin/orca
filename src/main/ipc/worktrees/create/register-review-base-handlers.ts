@@ -33,7 +33,7 @@ export function registerReviewBaseHandlers(context: WorktreeIpcContext): void {
         isCrossRepository?: boolean
       }
     ): Promise<GitHubPrStartPoint | { error: string }> => {
-      const repo = store.getRepo(args.repoId)
+      const repo = store.getRepoAnyHost(args.repoId)
       if (!repo) {
         return { error: 'Repo not found' }
       }

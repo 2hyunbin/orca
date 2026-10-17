@@ -45,7 +45,7 @@ function runtimeWithPane() {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the layout stream and PTY title paths read only repos and the workspace session.
     {
       getRepos: () => [REPO],
-      getRepo: (id: string) => (id === REPO.id ? REPO : undefined),
+      getRepoAnyHost: (id: string) => (id === REPO.id ? REPO : undefined),
       getAllWorktreeMeta: () => ({}),
       getWorktreeMeta: () => undefined,
       getSettings: () => ({ workspaceDir: '/tmp/workspaces' }),

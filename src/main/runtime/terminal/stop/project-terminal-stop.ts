@@ -54,7 +54,7 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
     const release = await super.acquireWorktreeTerminalSpawn(worktreeId, opts)
     const repoId = worktreeId ? getRepoIdFromWorktreeId(worktreeId) : null
     // Why under the lease: a spawn that resolved its workspace before removal queues behind the sweep.
-    if (repoId && this.removedProjectIds.has(repoId) && !this.store?.getRepo?.(repoId)) {
+    if (repoId && this.removedProjectIds.has(repoId) && !this.store?.getRepoAnyHost?.(repoId)) {
       release()
       throw new Error('repo_not_found')
     }

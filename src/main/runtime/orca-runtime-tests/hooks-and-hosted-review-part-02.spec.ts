@@ -356,7 +356,7 @@ describe('OrcaRuntimeService', () => {
     const multiRepoStore = {
       ...store,
       getRepos: () => repos,
-      getRepo: (id: string) => repos.find((repo) => repo.id === id)
+      getRepoAnyHost: (id: string) => repos.find((repo) => repo.id === id)
     }
     const runtime = new OrcaRuntimeService(multiRepoStore as never)
 
@@ -401,7 +401,7 @@ describe('OrcaRuntimeService', () => {
     const remoteStore = {
       ...store,
       getRepos: () => [remoteRepo],
-      getRepo: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined)
+      getRepoAnyHost: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined)
     }
     const runtime = new OrcaRuntimeService(remoteStore as never)
 

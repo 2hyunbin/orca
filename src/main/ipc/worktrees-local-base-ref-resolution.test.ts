@@ -170,7 +170,7 @@ describe('registerWorktreeHandlers', () => {
       ref: 'refs/remotes/origin/main',
       base: 'origin/main'
     }
-    store.getRepo.mockReturnValue({
+    store.getRepoAnyHost.mockReturnValue({
       id: 'repo-1',
       path: '/workspace/repo',
       displayName: 'repo',
@@ -228,7 +228,7 @@ describe('registerWorktreeHandlers', () => {
   })
 
   it('keeps a usable persisted local branch base when a detected default exists', async () => {
-    store.getRepo.mockReturnValue({
+    store.getRepoAnyHost.mockReturnValue({
       id: 'repo-1',
       path: '/workspace/repo',
       displayName: 'repo',
@@ -285,7 +285,7 @@ describe('registerWorktreeHandlers', () => {
       ref: 'refs/remotes/team/feature',
       base: 'team/feature'
     }
-    store.getRepo.mockReturnValue({
+    store.getRepoAnyHost.mockReturnValue({
       id: 'repo-1',
       path: '/workspace/repo',
       displayName: 'repo',
@@ -408,7 +408,7 @@ describe('registerWorktreeHandlers', () => {
       ok: false,
       errorKind: 'git_error'
     })
-    store.getRepo.mockReturnValue({
+    store.getRepoAnyHost.mockReturnValue({
       id: 'repo-1',
       path: '/workspace/repo',
       displayName: 'repo',
@@ -530,7 +530,7 @@ describe('registerWorktreeHandlers', () => {
   it('throws a clear error when no default base ref can be resolved', async () => {
     // Why: guard against regressing to a silent 'origin/main' fallback; an unresolved default base must fail loudly, not hand a non-existent ref to `git worktree add`.
     resolveDefaultBaseRefWithLocalGitMock.mockResolvedValue(null)
-    store.getRepo.mockReturnValue({
+    store.getRepoAnyHost.mockReturnValue({
       id: 'repo-1',
       path: '/workspace/repo',
       displayName: 'repo',

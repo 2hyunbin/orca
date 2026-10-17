@@ -391,7 +391,7 @@ function createStaleRuntimeWorktreeStore(
 }
 
 const store = {
-  getRepo: (id: string) => store.getRepos().find((repo) => repo.id === id),
+  getRepoAnyHost: (id: string) => store.getRepos().find((repo) => repo.id === id),
   getRepos: () => [
     {
       id: TEST_REPO_ID,
@@ -406,8 +406,9 @@ const store = {
   mergeRetiredWorktreeNames: () => false,
   addRepo: () => {},
   updateRepo: (id: string, updates: Record<string, unknown>) =>
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the code under test reads only the fields this fixture sets.
     ({
-      ...store.getRepo(id),
+      ...store.getRepoAnyHost(id),
       ...updates
     }) as never,
   getAllWorktreeMeta: () => ({

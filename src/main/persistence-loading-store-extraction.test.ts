@@ -305,7 +305,7 @@ describe('loading Store extraction seams', () => {
     expect(detached.call(store)).toBe(0)
     expect(new Proxy(store, {}).getRepoCount()).toBe(0)
     expect([
-      Store.prototype.getRepo.length,
+      Store.prototype.getRepoAnyHost.length,
       Store.prototype.updateProject.length,
       Store.prototype.createAutomationRun.length
     ]).toEqual([1, 2, 2])

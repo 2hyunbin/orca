@@ -115,7 +115,7 @@ describe('registerWorktreeHandlers', () => {
       addedAt: 0,
       symlinkPaths: ['scratch.txt']
     }
-    store.getRepo.mockReturnValue(repoWithConfiguredRegularFile)
+    store.getRepoAnyHost.mockReturnValue(repoWithConfiguredRegularFile)
     store.getRepos.mockReturnValue([repoWithConfiguredRegularFile])
     getEffectiveHooksMock.mockReturnValue(null)
     assertWorktreeCleanForRemovalMock.mockRejectedValue(
@@ -177,7 +177,7 @@ describe('registerWorktreeHandlers', () => {
         lockReason: 'active agent session'
       }
     ])
-    store.getRepo.mockReturnValue({
+    store.getRepoAnyHost.mockReturnValue({
       id: 'repo-1',
       path: '/workspace/repo',
       displayName: 'repo',
@@ -215,7 +215,7 @@ describe('registerWorktreeHandlers', () => {
     listWorktreesMock
       .mockResolvedValueOnce(unlockedWorktrees)
       .mockResolvedValueOnce(lockedWorktrees)
-    store.getRepo.mockReturnValue({
+    store.getRepoAnyHost.mockReturnValue({
       id: 'repo-1',
       path: '/workspace/repo',
       displayName: 'repo',

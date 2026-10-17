@@ -29,11 +29,11 @@ describe('host worktree creation while its renderer is unavailable', () => {
   ] as const)(
     'provisions %s work after a renderer %s for %s navigation with its notifier retained',
     async (kind, loss, navigation) => {
-      const repo = { ...store.getRepo('repo-1')!, kind }
+      const repo = { ...store.getRepoAnyHost('repo-1')!, kind }
       const runtime = new OrcaRuntimeService({
         ...store,
         getRepos: () => [repo],
-        getRepo: (id) => (id === repo.id ? repo : undefined)
+        getRepoAnyHost: (id) => (id === repo.id ? repo : undefined)
       })
       onTestFinished(() => runtime.markGraphUnavailable(1))
       const notifier = createMobileCreateTestNotifier(vi.fn())

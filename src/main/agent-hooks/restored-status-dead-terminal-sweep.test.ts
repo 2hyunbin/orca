@@ -434,7 +434,7 @@ describe('resolveAgentWorkspaceExecutionHostId', () => {
     executionHostId: 'container:future-host'
   }
   const deps = {
-    getRepo: (repoId: string) =>
+    getRepoAnyHost: (repoId: string) =>
       [localRepo, runtimeRepo, futureHostRepo].find((candidate) => candidate.id === repoId),
     getWorktreeMeta: (worktreeId: string) => {
       if (worktreeId === 'local-repo::/runtime-worktree') {

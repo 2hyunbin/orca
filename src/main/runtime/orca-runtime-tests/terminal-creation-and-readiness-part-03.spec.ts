@@ -61,7 +61,7 @@ describe('OrcaRuntimeService', () => {
     const remoteStore = {
       ...store,
       getRepos: () => [remoteRepo],
-      getRepo: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined),
+      getRepoAnyHost: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined),
       // Why: this process serves no SSH git, so the SSH repo resolves from its stored rows.
       getAllWorktreeMeta: () => ({
         [`${TEST_REPO_ID}::C:/remote/repo`]: makeWorktreeMeta()

@@ -96,7 +96,7 @@ describe('OrcaRuntimeService', () => {
           connectionId: 'ssh-1'
         }
       ],
-      getRepo: () => ({
+      getRepoAnyHost: () => ({
         id: TEST_REPO_ID,
         path: '//Server/Share/Repo',
         displayName: 'repo',
@@ -188,7 +188,7 @@ describe('OrcaRuntimeService', () => {
     const runtimeStore = {
       ...store,
       getRepos: () => [remoteRepo],
-      getRepo: () => remoteRepo,
+      getRepoAnyHost: () => remoteRepo,
       getAllWorktreeMeta: () => metaById,
       getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
       setWorktreeMeta: (worktreeId: string, meta: Partial<WorktreeMeta>) => {
@@ -259,7 +259,7 @@ describe('OrcaRuntimeService', () => {
     const remoteStore = {
       ...store,
       getRepos: () => [remoteRepo],
-      getRepo: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined)
+      getRepoAnyHost: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined)
     }
     vi.mocked(listWorktrees).mockClear()
     const runtime = new OrcaRuntimeService(remoteStore)
