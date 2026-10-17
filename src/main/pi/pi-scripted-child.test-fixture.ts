@@ -29,7 +29,7 @@ class ScriptedPiConnection implements PiRpcConnection {
     private readonly wire: string[],
     private readonly onClosed: () => void,
     number: number,
-    /** A Pi with no login lists no model. */
+    /** A Pi with no login runs the unknown provider and lists no model. */
     private readonly signedOut = false
   ) {
     this.pid = 42_000 + number
@@ -183,7 +183,8 @@ class ScriptedPiConnection implements PiRpcConnection {
   private state() {
     return {
       sessionFile: this.file,
-      model: this.signedOut ? null : this.model,
+      // As a signed-out Pi reports it (capture `signed-out.jsonl`).
+      model: this.signedOut ? { provider: 'unknown', id: 'unknown', reasoning: false } : this.model,
       thinkingLevel: this.effort,
       isStreaming: this.streaming,
       isCompacting: false,

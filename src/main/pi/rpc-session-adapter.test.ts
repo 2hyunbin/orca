@@ -126,7 +126,7 @@ describe('Pi RPC session ownership and delivery', () => {
       mintedAtFence: 7
     })
     expect(h.connection.requests).not.toContain('set_thinking_level')
-    expect(h.connection.requests).toContain('get_commands')
+    await vi.waitFor(() => expect(h.connection.requests).toContain('get_commands'))
   })
 
   it('admits a send before Pi confirms it and settles only after journal acceptance', async () => {
