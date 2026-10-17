@@ -18,6 +18,11 @@ import type { RepoSlice } from './repo-state'
 import { ERROR_TOAST_DURATION } from './repo-state'
 import { mergeProjectCompatibilityForHostRepoChange } from './repo-catalog-identity'
 import {
+  closeRemovedHostTwinState,
+  collectRemovedHostTwinState,
+  getSurvivingTwinHostIds
+} from './repo-removal-host-twin-teardown'
+import {
   captureWorkspaceChatDraftKeys,
   deleteWorkspaceChatDrafts
 } from '../slices/worktrees/teardown/removed-worktree-chat-drafts'
@@ -113,11 +118,25 @@ export function createRepoRemovalActions(
           throw new Error('The project host is unresolved. Refresh and retry.')
         }
         // Why before the host call: its announcement can start a listing refresh that drops these tabs.
+        const survivingTwinHostIds = getSurvivingTwinHostIds(get(), projectId, ownerHostId)
+        const removedTwinState = collectRemovedHostTwinState(
+          get(),
+          new Set(survivingTwinHostIds.keys()),
+          ownerHostId,
+          survivingTwinHostIds
+        )
+        const removedTwinEntityIds = new Set([
+          ...removedTwinState.terminalTabIds,
+          ...removedTwinState.conversationTabIds
+        ])
         const chatDraftKeys = captureWorkspaceChatDraftKeys(
           get(),
           getKnownRepoWorktreeIds(get(), projectId, ownerHostId).map((workspaceId) => ({
             workspaceId,
-            executionHostId: ownerHostId
+            executionHostId: ownerHostId,
+            ...(survivingTwinHostIds.has(workspaceId)
+              ? { onlyEntityIds: removedTwinEntityIds }
+              : {})
           }))
         )
         // Why: a stopped or forgotten server leaves rows nothing can reach; only this desktop's copy goes.
@@ -165,22 +184,10 @@ export function createRepoRemovalActions(
         const { clearRepoSlugCacheEntry } = await import('../../lib/repo-slug-index')
         clearRepoSlugCacheEntry(projectId)
 
-        // Kill PTYs for all worktrees belonging to this repo
         const worktreeIds = getKnownRepoWorktreeIds(get(), projectId, ownerHostId)
-        // A raw id can be published by two hosts. Keep the purge host-scoped for
-        // those twins so the sibling's qualified visit recency survives.
-        const knownRepoWorktrees = [
-          ...(get().worktreesByRepo[projectId] ?? []),
-          ...(get().detectedWorktreesByRepo[projectId]?.worktrees ?? [])
-        ]
-        const exactSiblingIds = new Set(
-          knownRepoWorktrees
-            .filter((worktree) => !worktreeBelongsToHost(worktree, ownerHostId))
-            .map((worktree) => worktree.id)
-        )
-        const purgeTargets = worktreeIds.map((id) =>
-          exactSiblingIds.has(id) ? { id, hostId: ownerHostId } : id
-        )
+        // Why: state under an id another host also publishes is shared, so only the removed
+        // host's attributed tabs and files go; the raw-id purge would take the survivor's too.
+        const exclusiveWorktreeIds = worktreeIds.filter((id) => !survivingTwinHostIds.has(id))
         const localAgentContextProjectIds =
           ownerHostId === LOCAL_EXECUTION_HOST_ID
             ? [
@@ -190,7 +197,7 @@ export function createRepoRemovalActions(
                   .flatMap((worktree) => (worktree.projectId ? [worktree.projectId] : []))
               ]
             : []
-        for (const wId of worktreeIds) {
+        for (const wId of exclusiveWorktreeIds) {
           const tabs = get().tabsByWorktree[wId] ?? []
           for (const tab of tabs) {
             for (const ptyId of get().ptyIdsByTabId[tab.id] ?? []) {
@@ -202,7 +209,8 @@ export function createRepoRemovalActions(
         }
 
         // Why: use the canonical per-worktree purge to evict all worktree-scoped maps (hand-deletion leaked most); runs before the set() below so it still sees tabsByWorktree.
-        get().purgeWorktreeTerminalState(purgeTargets)
+        closeRemovedHostTwinState(get, removedTwinState, ownerHostId)
+        get().purgeWorktreeTerminalState(exclusiveWorktreeIds)
         deleteWorkspaceChatDrafts(chatDraftKeys)
         get().clearLocalDetectedAgentContextsForProjects(localAgentContextProjectIds)
 
@@ -264,6 +272,14 @@ export function createRepoRemovalActions(
               hostId: ownerHostId
             }),
             activeRepoId: s.activeRepoId === projectId ? null : s.activeRepoId,
+            ...(s.activeWorktreeId &&
+            s.activeWorkspaceExecutionHostId === ownerHostId &&
+            survivingTwinHostIds.has(s.activeWorktreeId)
+              ? {
+                  activeWorkspaceExecutionHostId:
+                    survivingTwinHostIds.get(s.activeWorktreeId)?.[0] ?? null
+                }
+              : {}),
             filterRepoIds: s.filterRepoIds.filter((id) => id !== projectId),
             worktreesByRepo: nextWorktrees,
             detectedWorktreesByRepo: nextDetectedWorktrees,
