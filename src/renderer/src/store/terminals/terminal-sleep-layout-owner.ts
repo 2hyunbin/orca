@@ -50,9 +50,15 @@ export function recordSleepingRecordChangesThroughLayoutOwner(
   previous: SleepingRecords,
   next: SleepingRecords
 ): void {
+  // Only panes of tabs the window holds: a closed tab's or removed workspace's records went with it
+  // in main, and a capture from a stale agent status names a tab main no longer has.
+  const held = ([paneKey, record]: [string, SleepingAgentSessionRecord]): boolean =>
+    state.tabsByWorktree[record.worktreeId]?.some(
+      (tab) => tab.id === parsePaneKey(paneKey)?.tabId
+    ) ?? false
   const changedByWorktree = new Map<string, Record<string, SleepingAgentSessionRecord>>()
   for (const [paneKey, record] of Object.entries(next)) {
-    if (previous[paneKey] !== record) {
+    if (previous[paneKey] !== record && held([paneKey, record])) {
       changedByWorktree.set(record.worktreeId, {
         ...changedByWorktree.get(record.worktreeId),
         [paneKey]: record
@@ -62,15 +68,7 @@ export function recordSleepingRecordChangesThroughLayoutOwner(
   for (const [worktreeId, records] of changedByWorktree) {
     recordPaneSleepThroughLayoutOwner(state, worktreeId, records, true)
   }
-  // A closed tab's or removed workspace's records went with it in main too.
-  const dropped = Object.entries(previous).filter(
-    ([paneKey, record]) =>
-      !(paneKey in next) &&
-      (state.tabsByWorktree[record.worktreeId]?.some(
-        (tab) => tab.id === parsePaneKey(paneKey)?.tabId
-      ) ??
-        false)
-  )
+  const dropped = Object.entries(previous).filter((entry) => !(entry[0] in next) && held(entry))
   for (const [tabId, entries] of byTab(dropped, ([paneKey]) => paneKey)) {
     recordLayoutApply(state, entries[0]![1].worktreeId, {
       type: 'wake',

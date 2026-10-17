@@ -103,8 +103,10 @@ describe('sleep and wake through the layout owner', () => {
     ])
   })
 
-  it('sends no drop for a tab the window closed: main dropped its records with the tab', () => {
+  it('sends nothing for a tab the window closed: main dropped its records with the tab', () => {
     recordSleepingRecordChangesThroughLayoutOwner(holding(['tab-b']), { [A2]: record(A2) }, {})
+    // A periodic capture from a stale agent status can name the closed tab again.
+    recordSleepingRecordChangesThroughLayoutOwner(holding(['tab-b']), {}, { [A1]: record(A1) })
 
     expect(mocks.send).not.toHaveBeenCalled()
   })

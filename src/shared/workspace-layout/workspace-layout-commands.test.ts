@@ -299,6 +299,37 @@ describe('layout command refusals', () => {
     expect(refusal(woken.model, { type: 'startPane', workspace: WS, paneKey })).toBe('applied')
   })
 
+  it('startPane leaves a bound pane with a live resume record alone, and refuses an unbound one', () => {
+    const { model, tabB, leafB } = setup()
+    const paneKey = `${tabB}:${leafB}`
+    const sleeping = {
+      agent: 'codex' as const,
+      providerSession: { key: 'session_id' as const, id: 's' },
+      prompt: 'p',
+      state: 'working' as const,
+      capturedAt: 1,
+      updatedAt: 1,
+      origin: 'live' as const
+    }
+    const withLeaf = (leaf: { ptyId?: string }): WorkspaceLayoutModel => {
+      const workspace = model.workspaces[WS]!
+      return {
+        ...model,
+        workspaces: {
+          ...model.workspaces,
+          [WS]: { ...workspace, leaves: { ...workspace.leaves, [leafB]: { ...leaf, sleeping } } }
+        }
+      }
+    }
+    const start = { type: 'startPane', workspace: WS, paneKey } as const
+    expect(applyLayoutCommand(withLeaf({ ptyId: 'pty-b' }), start, context)).toMatchObject({
+      ok: true,
+      effects: { startPaneKeys: [] }
+    })
+    // Its terminal is gone: a plain start would lose how the agent resumes.
+    expect(refusal(withLeaf({}), start)).toBe('pane_sleeping')
+  })
+
   it('a record-only sleep and wake change the resume record and stop or start nothing', () => {
     const { model, tabB, leafB } = setup()
     const paneKey = `${tabB}:${leafB}`
