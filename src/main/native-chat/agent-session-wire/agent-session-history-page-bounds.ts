@@ -72,18 +72,13 @@ export type HistoryReader = {
   budgetBytes: number
 }
 
-export const STORED_HISTORY_READER: HistoryReader = {
-  form: (item) => item,
-  budgetBytes: HISTORY_PAGE_CONTENT_BUDGET_BYTES
-}
-
 /** Rows are put in `form` only as the page takes them. */
 export function boundHistoryItemsByBytes(
   items: AgentJournalRenderItem[],
   keep: 'newest' | 'oldest',
   submissionBytes: ReadonlyMap<string, number>,
   maxBytes: number,
-  form: HistoryReader['form'] = STORED_HISTORY_READER.form
+  form: HistoryReader['form'] = (item) => item
 ): { items: AgentJournalRenderItem[]; dropped: number } {
   const ordered = groupItemsBySequence(items, keep)
   const kept: AgentJournalRenderItem[][] = []

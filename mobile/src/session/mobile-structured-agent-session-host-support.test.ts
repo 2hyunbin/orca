@@ -23,7 +23,8 @@ describe('structuredAgentSessionHostSupport', () => {
       statusFeed: false,
       sendOptions: false,
       conversationStop: false,
-      permissionModes: false
+      permissionModes: false,
+      itemDetail: false
     }
     expect(structuredAgentSessionHostSupport([])).toEqual(none)
     expect(

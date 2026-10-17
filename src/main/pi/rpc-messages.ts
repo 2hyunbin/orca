@@ -1,9 +1,9 @@
 import { z } from 'zod'
 import type { AgentJournalToolCallItem } from '../../shared/agent-session-journal-types'
 import {
-  boundPayload,
   boundToolInput,
-  DEFAULT_JOURNAL_PAYLOAD_LIMITS
+  JOURNAL_RUNNING_PREVIEW_LIMITS,
+  journalToolPayload
 } from '../native-chat/agent-session-journal/journal-payload-bounds'
 import type { ProviderTimelineEvent } from '../native-chat/agent-session-timeline/provider-timeline-event'
 import { piRpcMessageEventSchema, piRpcToolEventSchema } from './rpc-protocol'
@@ -19,6 +19,9 @@ export class PiRpcMessages {
   private active?: number
   private readonly text = new Map<string, { index: number; channel: 'assistant' | 'reasoning' }>()
   private readonly tools = new Map<string, AgentJournalToolCallItem>()
+  /** A running call's whole input and output, apart from `tools`, which holds the previews the open
+   *  budget counts, so its closing revision keeps them though Pi's end event repeats no args. */
+  private readonly whole = new Map<string, { input?: unknown; output?: string }>()
 
   constructor(
     private readonly generation: string,
@@ -29,6 +32,7 @@ export class PiRpcMessages {
     this.active = undefined
     this.text.clear()
     this.tools.clear()
+    this.whole.clear()
   }
 
   message(value: unknown, at: number): ProviderTimelineEvent[] {
@@ -101,11 +105,12 @@ export class PiRpcMessages {
     }
     const event = parsed.data
     const previous = this.tools.get(event.toolCallId)
+    const held = this.whole.get(event.toolCallId)
     const result = event.result ?? event.partialResult
     const content = resultSchema.safeParse(result)
     const output =
       result === undefined
-        ? undefined
+        ? held?.output
         : content.success
           ? content.data.content
               .flatMap((block) => (block.text === undefined ? [] : [block.text]))
@@ -113,28 +118,30 @@ export class PiRpcMessages {
           : JSON.stringify(result)
     const state =
       event.type === 'tool_execution_end' ? (event.isError ? 'failed' : 'completed') : 'running'
+    const input = event.args === undefined ? held?.input : event.args
     const body: AgentJournalToolCallItem = {
       kind: 'tool-call',
       name: event.toolName,
       callId: event.toolCallId,
       input:
-        event.args === undefined
+        input === undefined
           ? (previous?.input ?? null)
-          : boundToolInput(event.args, DEFAULT_JOURNAL_PAYLOAD_LIMITS),
+          : state === 'running'
+            ? boundToolInput(input, JOURNAL_RUNNING_PREVIEW_LIMITS)
+            : input,
       state,
       ...(output === undefined
         ? previous?.output
           ? { output: previous.output }
           : {}
-        : {
-            output: boundPayload(output, DEFAULT_JOURNAL_PAYLOAD_LIMITS)
-          })
+        : { output: journalToolPayload(output, state === 'running') })
     }
     if (state === 'running') {
       if (this.tools.size >= 128 && !previous) {
         throw new Error('Pi tool stream capacity exceeded')
       }
       this.tools.set(event.toolCallId, body)
+      this.whole.set(event.toolCallId, { input, output })
       if (
         [...this.tools.values()].reduce(
           (bytes, tool) => bytes + Buffer.byteLength(JSON.stringify(tool)),
@@ -146,6 +153,7 @@ export class PiRpcMessages {
       }
     } else {
       this.tools.delete(event.toolCallId)
+      this.whole.delete(event.toolCallId)
     }
     return [
       {

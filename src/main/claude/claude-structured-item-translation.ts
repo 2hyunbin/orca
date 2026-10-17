@@ -4,10 +4,7 @@ import type {
   AgentJournalMessageItem
 } from '../../shared/agent-session-journal-types'
 import type { NativeChatBlock } from '../../shared/native-chat-types'
-import {
-  boundInlineText,
-  DEFAULT_JOURNAL_PAYLOAD_LIMITS
-} from '../native-chat/agent-session-journal/journal-payload-bounds'
+import { journalPayload } from '../native-chat/agent-session-journal/journal-payload-bounds'
 
 export type ClaudeMessageEnvelope = {
   sessionId: string
@@ -187,7 +184,7 @@ export function claudeToolBody(input: {
     callId: input.tool.id,
     state: input.result ? (input.result.failed ? 'failed' : 'completed') : 'running',
     ...(input.result
-      ? { output: boundInlineText(input.result.output, DEFAULT_JOURNAL_PAYLOAD_LIMITS).bounded }
+      ? { output: journalPayload(input.result.output) }
       : {})
   }
 }

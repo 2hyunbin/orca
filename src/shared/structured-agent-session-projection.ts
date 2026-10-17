@@ -85,7 +85,15 @@ function itemBlocks(item: AgentJournalRenderItem): {
     if (body.kind === 'diff') {
       return {
         role: 'assistant',
-        blocks: [call, { type: 'tool-result', output: boundedText(body.patch), callId }]
+        blocks: [
+          call,
+          {
+            type: 'tool-result',
+            output: boundedText(body.patch),
+            callId,
+            ...(item.shortened && body.patch.truncated ? { fullOutputItemId: item.itemId } : {})
+          }
+        ]
       }
     }
     return {
@@ -99,7 +107,9 @@ function itemBlocks(item: AgentJournalRenderItem): {
                 output: boundedText(body.output),
                 // Output a call left when it was cut short is not an error it reported.
                 isError: agentJournalToolCallLifecycle(body) === 'failed',
-                callId
+                callId,
+                // Only the sent copy's cut has more behind it; a head an older build saved has none.
+                ...(item.shortened && body.output.truncated ? { fullOutputItemId: item.itemId } : {})
               }
             ]
           : [])
@@ -202,7 +212,8 @@ export function projectStructuredItemToNativeChat(
         ...(sentAs !== undefined && isAgentJournalMessageSendMode(sentAs) ? { sentAs } : {}),
         ...lifecycle,
         ...(command ? { command } : {}),
-        ...(from && projected.role === 'user' ? { from } : {})
+        ...(from && projected.role === 'user' ? { from } : {}),
+        ...(item.shortened ? { shortened: true } : {})
       }
     : null
   projectedItems.set(item, message)

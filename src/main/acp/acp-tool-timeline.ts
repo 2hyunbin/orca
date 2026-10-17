@@ -7,9 +7,10 @@ import {
   MAX_PROVIDER_TIMELINE_OPEN_ENTRIES
 } from '../native-chat/agent-session-timeline/provider-timeline-budget'
 import {
-  boundPayload,
   boundToolInput,
-  DEFAULT_JOURNAL_PAYLOAD_LIMITS
+  JOURNAL_RUNNING_PREVIEW_LIMITS,
+  journalPayload,
+  journalToolPayload
 } from '../native-chat/agent-session-journal/journal-payload-bounds'
 import type {
   ProviderTimelineEvent,
@@ -88,6 +89,11 @@ export class AcpToolTimeline {
   private readonly turns = new BoundedMap<string, string>({
     maxEntries: MAX_PROVIDER_TIMELINE_OPEN_ENTRIES
   })
+  /** A running call's whole input and output, outside the budgeted snapshot that holds only their
+   *  preview, so its closing revision keeps them even when the closing update repeats neither. */
+  private readonly whole = new BoundedMap<string, { input?: unknown; output?: string }>({
+    maxEntries: MAX_PROVIDER_TIMELINE_OPEN_ENTRIES
+  })
 
   translate(
     raw: ToolCallUpdate,
@@ -96,7 +102,9 @@ export class AcpToolTimeline {
   ): ProviderTimelineEvent[] {
     const update = dialect.normalizeToolUpdate?.(raw) ?? raw
     const previous = this.tools.get(update.toolCallId)
-    const output = outputText(update)
+    const held = this.whole.get(update.toolCallId)
+    const input = update.rawInput === undefined ? held?.input : update.rawInput
+    const output = outputText(update) ?? held?.output
     const exitCode = rawExitCodeSchema.safeParse(update.rawOutput).data?.exitCode
     const state =
       update.status === 'completed'
@@ -106,6 +114,11 @@ export class AcpToolTimeline {
           : update.status === 'pending' || update.status === 'in_progress'
             ? 'running'
             : (previous?.body.state ?? 'running')
+    if (state === 'running') {
+      this.whole.set(update.toolCallId, { input, output })
+    } else {
+      this.whole.delete(update.toolCallId)
+    }
     const body: AgentJournalToolCallItem = {
       kind: 'tool-call',
       callId: update.toolCallId,
@@ -117,16 +130,18 @@ export class AcpToolTimeline {
         update.kind ??
         'tool',
       input:
-        update.rawInput === undefined
+        input === undefined
           ? (previous?.body.input ?? null)
-          : boundToolInput(update.rawInput, DEFAULT_JOURNAL_PAYLOAD_LIMITS),
+          : state === 'running'
+            ? boundToolInput(input, JOURNAL_RUNNING_PREVIEW_LIMITS)
+            : input,
       state,
       ...(exitCode === undefined ? {} : { exitCode }),
       ...(output === undefined
         ? previous?.body.output
           ? { output: previous.body.output }
           : {}
-        : { output: boundPayload(output, DEFAULT_JOURNAL_PAYLOAD_LIMITS) })
+        : { output: journalToolPayload(output, state === 'running') })
     }
     const turn = join.turn ?? this.turn(update.toolCallId)
     this.turns.delete(update.toolCallId)
@@ -147,9 +162,8 @@ export class AcpToolTimeline {
           body: {
             kind: 'diff',
             path: content.path,
-            patch: boundPayload(
-              boundedDiffPatch(content.path, content.oldText ?? '', content.newText),
-              DEFAULT_JOURNAL_PAYLOAD_LIMITS
+            patch: journalPayload(
+              boundedDiffPatch(content.path, content.oldText ?? '', content.newText)
             )
           },
           join
@@ -175,6 +189,7 @@ export class AcpToolTimeline {
       if (snapshot.turn === turn) {
         this.bytes -= this.size(key, snapshot)
         this.retire(key, snapshot)
+        this.whole.delete(key)
       }
     }
   }

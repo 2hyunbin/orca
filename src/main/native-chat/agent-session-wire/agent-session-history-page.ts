@@ -28,9 +28,9 @@ import {
 } from '../../../shared/agent-session-wire'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import { projectJournalBatch } from './agent-session-journal-batch'
+import { CLIENT_HISTORY_READER } from './agent-session-item-wire-form'
 import {
   boundHistoryItemsByBytes,
-  STORED_HISTORY_READER,
   type HistoryReader,
   historyEntryBytes,
   newestWholeSequenceGroups,
@@ -95,7 +95,7 @@ export function readAgentSessionHistory(
   {
     snapshot = journal.snapshot(),
     scope = 'every-agent',
-    reader = STORED_HISTORY_READER
+    reader = CLIENT_HISTORY_READER
   }: {
     /** Reduced state to read against. A synchronous multi-page catch-up passes one
      *  snapshot for the whole run so each page costs its own rows, not the timeline. */
@@ -152,7 +152,7 @@ export function readAgentSessionHistory(
  */
 export function createAgentSessionCatchUpReader(
   journal: AgentSessionJournal,
-  reader: HistoryReader = STORED_HISTORY_READER
+  reader: HistoryReader = CLIENT_HISTORY_READER
 ): (request: AgentSessionHistoryRequest) => AgentSessionHistoryResult {
   let snapshot = journal.snapshot()
   return (request) => {
@@ -167,7 +167,7 @@ export function createAgentSessionCatchUpReader(
 export function readAgentSessionHydrationPage(
   journal: AgentSessionJournal,
   fence?: number,
-  reader: HistoryReader = STORED_HISTORY_READER
+  reader: HistoryReader = CLIENT_HISTORY_READER
 ): AgentSessionHistoryPage {
   return buildHydrationPage(journal.snapshot(), fence, reader)
 }

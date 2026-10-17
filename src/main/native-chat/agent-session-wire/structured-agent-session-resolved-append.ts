@@ -3,6 +3,7 @@ import type {
   AgentJournalItemIdentity
 } from '../../../shared/agent-session-journal-types'
 import { estimateStructuredAgentSessionItemBytes } from './structured-agent-session-event-sink-estimate'
+import { journalBodyWithinCeiling } from '../agent-session-journal/journal-body-ceiling'
 import type {
   StructuredAgentSessionItemAppendOptions,
   StructuredAgentSessionEventSink,
@@ -62,8 +63,9 @@ export function createStructuredAgentSessionResolvedAppend(
     )
   const ITEM_OVERFLOW = 'structured agent-session resolved item exceeded its reserved size'
   const identityOnly = (publish: boolean) =>
-    ((identitySizeBound, body, resolveIdentity, options) =>
-      submit(
+    ((identitySizeBound, written, resolveIdentity, options) => {
+      const body = journalBodyWithinCeiling(written)
+      return submit(
         estimateStructuredAgentSessionItemBytes(identitySizeBound, body) + (publish ? 1 : 0),
         (journal) => {
           const identity = resolveIdentity(journal)
@@ -71,7 +73,8 @@ export function createStructuredAgentSessionResolvedAppend(
         },
         options,
         { publish, overflow: ITEM_OVERFLOW }
-      )) satisfies NonNullable<StructuredAgentSessionEventSink['tryAppendResolvedItem']>
+      )
+    }) satisfies NonNullable<StructuredAgentSessionEventSink['tryAppendResolvedItem']>
   return {
     tryAppendResolvedItem: identityOnly(false),
     tryAppendResolvedItemAndPublish: identityOnly(true),

@@ -9,6 +9,7 @@ import type { AgentSessionTurnActivity } from '../../../shared/agent-session-wir
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import type { JournalLifecycleIdentityMutationInput } from '../agent-session-journal/journal-row-builders'
 import { estimateStructuredAgentSessionItemBytes } from './structured-agent-session-event-sink-estimate'
+import { journalBodyWithinCeiling } from '../agent-session-journal/journal-body-ceiling'
 import { StructuredAgentSessionSinkQueue } from './structured-agent-session-event-sink-queue'
 import { structuredAgentSessionJournalAppendOptions } from './structured-agent-session-journal-append-options'
 import { createStructuredAgentSessionResolvedAppend } from './structured-agent-session-resolved-append'
@@ -235,10 +236,17 @@ export function createDeferredStructuredAgentSessionEventSink(deps: {
 
   const appendLifecycleBatch = (
     settlementId: string,
-    mutations: readonly JournalLifecycleIdentityMutationInput[],
+    written: readonly JournalLifecycleIdentityMutationInput[],
     options: StructuredAgentSessionAppendOptions = {}
-  ): StructuredAgentSessionSinkAdmission =>
-    queue.submit(
+  ): StructuredAgentSessionSinkAdmission => {
+    const mutations = written.map((mutation) => {
+      if (mutation.kind !== 'item') {
+        return mutation
+      }
+      const body = journalBodyWithinCeiling(mutation.body)
+      return body === mutation.body ? mutation : { ...mutation, body }
+    })
+    return queue.submit(
       {
         bytes: Buffer.byteLength(JSON.stringify({ settlementId, mutations }), 'utf8') + 512,
         run: (bound) =>
@@ -253,6 +261,7 @@ export function createDeferredStructuredAgentSessionEventSink(deps: {
       },
       { ...options, lifecycle: true }
     )
+  }
 
   const publish = (
     options: StructuredAgentSessionPublishOptions = {}
@@ -268,10 +277,11 @@ export function createDeferredStructuredAgentSessionEventSink(deps: {
 
   const appendItem: NonNullable<StructuredAgentSessionEventSink['tryAppendItem']> = (
     identity,
-    body,
+    written,
     options
-  ) =>
-    queue.submit(
+  ) => {
+    const body = journalBodyWithinCeiling(written)
+    return queue.submit(
       {
         bytes: estimateStructuredAgentSessionItemBytes(identity, body),
         run: (bound) =>
@@ -283,6 +293,7 @@ export function createDeferredStructuredAgentSessionEventSink(deps: {
       },
       options
     )
+  }
 
   return {
     sink: {

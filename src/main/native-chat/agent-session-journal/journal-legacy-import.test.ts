@@ -17,7 +17,6 @@ import {
   importLegacyTranscriptIntoJournal,
   prepareLegacyTranscriptImport
 } from './journal-legacy-import'
-import { DEFAULT_JOURNAL_PAYLOAD_LIMITS } from './journal-payload-bounds'
 import { openAgentSessionJournal } from './journal-store-factory'
 import type { AgentSessionJournal } from './journal-store'
 import { openTestJournalHostDatabase } from './journal-host-database-test-support'
@@ -407,8 +406,8 @@ async function importDecodedRoster(agents: RosterAgents): Promise<AgentSessionJo
   return journal
 }
 
-describe('payload bounds on import', () => {
-  it('marks a clipped tool result and discards the remainder', async () => {
+describe('payloads on import', () => {
+  it('keeps an imported tool result whole', async () => {
     const output = 'y'.repeat(64 * 1024)
     const filePath = await writeFixture('claude-big.jsonl', [
       {
@@ -430,7 +429,7 @@ describe('payload bounds on import', () => {
       agent: 'claude',
       sessionId: CLAUDE_SESSION,
       fence: 1,
-      options: { filePath, limits: { ...DEFAULT_JOURNAL_PAYLOAD_LIMITS, inlineHeadBytes: 1_024 } }
+      options: { filePath }
     })
 
     const item = journal.snapshot().items[0]
@@ -438,16 +437,13 @@ describe('payload bounds on import', () => {
     const body = item?.body
     const result = body?.kind === 'message' ? body.blocks[0] : undefined
     if (result?.type !== 'tool-result') {
-      throw new Error('expected a bounded tool result')
+      throw new Error('expected a tool result')
     }
     expect(result.callId).toBe('toolu_9')
-    expect(result.output.startsWith('y'.repeat(1_024))).toBe(true)
-    expect(result.output).toContain('65536 bytes')
-    expect(result.output).toContain('output truncated')
-    expect(result.output.length).toBeLessThan(1_200)
+    expect(result.output).toBe(output)
   })
 
-  it('bounds an imported subagent roster by entry count, label and id', async () => {
+  it('bounds an imported subagent roster by entry count and id', async () => {
     // The import reads an untrusted file: nothing upstream bounded either string.
     const oversized = 'z'.repeat(20 * 1024)
     const journal = await importDecodedRoster(
@@ -464,7 +460,6 @@ describe('payload bounds on import', () => {
       throw new Error('expected a subagent-group block')
     }
     expect(block.agents).toHaveLength(64)
-    expect(block.agents[0]?.label.length).toBeLessThan(oversized.length)
     expect(block.agents[0]?.id.length).toBeLessThan(oversized.length)
     expect(block.agents[0]?.id.startsWith('z')).toBe(true)
   })
@@ -557,55 +552,6 @@ describe('import failures', () => {
     expect(texts.length).toBeLessThan(lines.length)
   })
 
-  it('bounds oversized legacy tool-call input before journal publication', async () => {
-    const journalDir = join(root, 'bounded-tool-input-journal')
-    const limits = { ...DEFAULT_JOURNAL_PAYLOAD_LIMITS, inlineHeadBytes: 64 }
-    const journal = await open('claude', CLAUDE_SESSION, {
-      database: openTestJournalHostDatabase(journalDir)
-    })
-    const filePath = await writeFixture('oversized-tool-input.jsonl', [
-      {
-        parentUuid: null,
-        isSidechain: false,
-        type: 'assistant',
-        message: {
-          role: 'assistant',
-          content: [
-            {
-              type: 'tool_use',
-              id: 'toolu_large_input',
-              name: 'Edit',
-              input: { file_path: 'a.ts', patch: 'x'.repeat(10_000) }
-            }
-          ]
-        },
-        uuid: 'cc11ad00-1111-4222-8333-444455556666',
-        timestamp: '2026-08-05T10:00:09.000Z',
-        sessionId: CLAUDE_SESSION
-      }
-    ])
-
-    const result = await importLegacyTranscriptIntoJournal({
-      journal,
-      agent: 'claude',
-      sessionId: CLAUDE_SESSION,
-      fence: 1,
-      options: { filePath, limits }
-    })
-    expect(result.ok).toBe(true)
-    const imported = journal.snapshot().items[0]
-    expect(imported?.body).toMatchObject({
-      kind: 'tool-call',
-      input: {
-        truncated: true,
-        byteLength: expect.any(Number),
-        digest: expect.stringMatching(/^[0-9a-f]{64}$/),
-        head: expect.any(String)
-      }
-    })
-    expect(JSON.stringify(imported?.body)).not.toContain('x'.repeat(1_000))
-  })
-
   it('reports a missing transcript without touching the journal', async () => {
     const journal = await open('claude', CLAUDE_SESSION)
     const before = journal.epoch
@@ -662,134 +608,5 @@ describe('import failures', () => {
       options: { filePath: join(root, 'claude.jsonl') }
     })
     expect(result).toMatchObject({ ok: false })
-  })
-})
-
-// A tool call is only the SOLE block of its message when the provider wrote it
-// that way. Claude interleaves it with narration, Grok hangs `tool_calls` off a
-// row that also has text, and omp's execution cells always pair the invocation
-// with its output — so the multi-block path carries untrusted tool input too.
-describe('multi-block legacy messages', () => {
-  const limits = { ...DEFAULT_JOURNAL_PAYLOAD_LIMITS, inlineHeadBytes: 64 }
-  const oversized = 'x'.repeat(10_000)
-
-  /** The tool-call block of the first imported multi-block message. */
-  function importedToolCallBlock(journal: AgentSessionJournal): unknown {
-    for (const entry of journal.snapshot().items) {
-      if (entry.body.kind !== 'message') {
-        continue
-      }
-      const block = entry.body.blocks.find((candidate) => candidate.type === 'tool-call')
-      if (block) {
-        return block.input
-      }
-    }
-    return null
-  }
-
-  it('bounds a Claude tool call that shares its message with narration', async () => {
-    const journal = await open('claude', CLAUDE_SESSION, {
-      database: openTestJournalHostDatabase(join(root, 'claude-mixed-journal'))
-    })
-    const filePath = await writeFixture('claude-mixed.jsonl', [
-      {
-        parentUuid: null,
-        isSidechain: false,
-        type: 'assistant',
-        message: {
-          role: 'assistant',
-          content: [
-            { type: 'text', text: 'Editing the file.' },
-            {
-              type: 'tool_use',
-              id: 'toolu_mixed',
-              name: 'Edit',
-              input: { file_path: 'a.ts', patch: oversized }
-            }
-          ]
-        },
-        uuid: 'dd22be00-1111-4222-8333-444455556666',
-        timestamp: '2026-08-05T10:00:09.000Z',
-        sessionId: CLAUDE_SESSION
-      }
-    ])
-
-    const result = await importLegacyTranscriptIntoJournal({
-      journal,
-      agent: 'claude',
-      sessionId: CLAUDE_SESSION,
-      fence: 1,
-      options: { filePath, limits }
-    })
-
-    expect(result.ok).toBe(true)
-    expect(importedToolCallBlock(journal)).toMatchObject({
-      truncated: true,
-      byteLength: expect.any(Number),
-      digest: expect.stringMatching(/^[0-9a-f]{64}$/),
-      head: expect.any(String)
-    })
-    expect(JSON.stringify(journal.snapshot().items)).not.toContain('x'.repeat(1_000))
-    await journal.close()
-  })
-
-  it('bounds a Grok tool call that shares its row with assistant text', async () => {
-    const journal = await open('grok', CODEX_SESSION, {
-      database: openTestJournalHostDatabase(join(root, 'grok-mixed-journal'))
-    })
-    const filePath = await writeFixture('grok-mixed.jsonl', [
-      {
-        type: 'assistant',
-        id: 'asst-mixed',
-        timestamp: '2026-08-05T10:00:09.000Z',
-        content: [{ type: 'text', text: 'Searching.' }],
-        tool_calls: [{ id: 'c1', name: 'grep', arguments: JSON.stringify({ pattern: oversized }) }]
-      }
-    ])
-
-    const result = await importLegacyTranscriptIntoJournal({
-      journal,
-      agent: 'grok',
-      sessionId: CODEX_SESSION,
-      fence: 1,
-      options: { filePath, limits }
-    })
-
-    expect(result.ok).toBe(true)
-    expect(importedToolCallBlock(journal)).toMatchObject({ truncated: true })
-    expect(JSON.stringify(journal.snapshot().items)).not.toContain('x'.repeat(1_000))
-    await journal.close()
-  })
-
-  it('bounds an omp execution cell, whose invocation always ships with its output', async () => {
-    const journal = await open('omp', CODEX_SESSION, {
-      database: openTestJournalHostDatabase(join(root, 'omp-mixed-journal'))
-    })
-    const filePath = await writeFixture('omp-mixed.jsonl', [
-      {
-        type: 'message',
-        id: 'omp-mixed-1',
-        timestamp: '2026-08-05T10:00:09.000Z',
-        message: {
-          role: 'bashExecution',
-          command: `echo ${oversized}`,
-          output: 'done',
-          exitCode: 0
-        }
-      }
-    ])
-
-    const result = await importLegacyTranscriptIntoJournal({
-      journal,
-      agent: 'omp',
-      sessionId: CODEX_SESSION,
-      fence: 1,
-      options: { filePath, limits }
-    })
-
-    expect(result.ok).toBe(true)
-    expect(importedToolCallBlock(journal)).toMatchObject({ truncated: true })
-    expect(JSON.stringify(journal.snapshot().items)).not.toContain('x'.repeat(1_000))
-    await journal.close()
   })
 })

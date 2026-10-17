@@ -7,15 +7,10 @@ import {
   BOUNDED_FRAME_CONTENT_BUDGET_BYTES,
   oversizedHistoryItem
 } from './agent-session-history-page-bounds'
-import { jsonBytes, shortenJsonStringsToFit } from './json-string-shortening'
+import { shortenedAgentJournalItem } from './agent-session-item-wire-form'
 
 /** One row's share of a page, so a page always carries several rows. */
 export const BOUNDED_FRAME_ROW_BYTES = BOUNDED_FRAME_CONTENT_BUDGET_BYTES / 8
-
-/** What the body may weigh once the rest of the row is paid for. */
-function bodyBudget(item: AgentJournalRenderItem): number {
-  return BOUNDED_FRAME_ROW_BYTES - (jsonBytes({ ...item, body: null }) - jsonBytes(null))
-}
 
 /** The too-large marker with every identifier it carries held to a key's bound, so the marker
  *  itself always fits a row. Provenance a reader never joins on is dropped. */
@@ -42,11 +37,7 @@ function oversizedFrameItem(item: AgentJournalRenderItem): AgentJournalRenderIte
 }
 
 function boundFrameItem(item: AgentJournalRenderItem): AgentJournalRenderItem {
-  const body = shortenJsonStringsToFit(item.body, bodyBudget(item))
-  if (body === null) {
-    return oversizedFrameItem(item)
-  }
-  return body === item.body ? item : { ...item, body }
+  return shortenedAgentJournalItem(item, BOUNDED_FRAME_ROW_BYTES) ?? oversizedFrameItem(item)
 }
 
 // Items are immutable per revision, so a catch-up or a second subscriber reuses the bound form.
