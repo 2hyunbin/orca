@@ -14,6 +14,7 @@ import { isRepoOnCatalogHost } from '../../shared/execution-host'
 import type { OrcadMigrationSourceCutover } from '../../shared/orcad-migration-source-cutover'
 import type { Repo } from '../../shared/repo-types'
 import type { SshManagedServerLinkedProject } from '../../shared/ssh-types'
+import { parseWorkspaceKey } from '../../shared/workspace-scope'
 import { splitWorktreeId } from '../../shared/worktree/id'
 import type { Store } from '../persistence'
 import {
@@ -28,7 +29,7 @@ import { sshRelayMigrationCutoverPort } from './orcad-migration-ssh-relay-source
 import { orcadCatalogFingerprint } from './orcad-retained-source'
 import {
   folderWorkspacesHeldByServer,
-  type OrcadServerFolderWorkspace
+  type OrcadServerFolderCatalog
 } from './orcad-server-folder-workspaces'
 import type { SshTargetOrcadClaims } from './ssh-target-orcad-claims'
 
@@ -75,11 +76,11 @@ async function serverHeldRowsToLink(
   cutover: OrcadMigrationSourceCutover,
   destination: OrcadMigrationDestinationCatalog,
   server: readonly OrcadServerRepository[],
-  serverFolders: readonly OrcadServerFolderWorkspace[]
+  serverFolders: OrcadServerFolderCatalog
 ): Promise<{ repositoryIds: string[]; folderWorkspaceIds: string[] }> {
   const { payload } = cutover.manifest
   const held = repositoriesHeldByServer(payload.repositories, server)
-  const heldFolders = folderWorkspacesHeldByServer(payload.folderWorkspaces, serverFolders)
+  const heldFolders = folderWorkspacesHeldByServer(payload.folderWorkspaces, serverFolders, server)
   if (held.sameId.length === 0 && heldFolders.length === 0) {
     return { repositoryIds: held.otherId, folderWorkspaceIds: [] }
   }
@@ -97,7 +98,7 @@ async function serverHeldRowsToLink(
 function serverHeldProjectGroups(
   payload: OrcadMigrationSourceCutover['manifest']['payload'],
   linked: { repositoryIds: ReadonlySet<string>; folderWorkspaceIds: ReadonlySet<string> },
-  server: readonly (OrcadServerRepository | OrcadServerFolderWorkspace)[]
+  server: readonly { projectGroupId?: string | null }[]
 ): string[] {
   const parentById = new Map(payload.projectGroups.map((group) => [group.id, group.parentGroupId]))
   const held = new Set(server.flatMap((row) => (row.projectGroupId ? [row.projectGroupId] : [])))
@@ -181,6 +182,14 @@ export function linkedOrcadMigrationCutoverPort(args: {
   })
 }
 
+const NO_SERVER_FOLDERS: OrcadServerFolderCatalog = { folderWorkspaces: [], projectGroups: [] }
+
+/** The repo or folder workspace a lease's tab belongs to. */
+function leaseWorkspaceOwner(worktreeId: string): string | undefined {
+  const scope = parseWorkspaceKey(worktreeId)
+  return scope?.type === 'folder' ? scope.folderWorkspaceId : splitWorktreeId(worktreeId)?.repoId
+}
+
 /**
  * A relay terminal the bridge still serves reattaches only into its own tab, which a linked
  * project never sends to the server: linking now would strand it out of sight, still running.
@@ -195,7 +204,7 @@ function assertNoRelayTerminalsIn(
   const owners = store
     .getSshRemotePtyLeases(cutover.sshTargetId)
     .filter((lease) => bridged.has(lease.ptyId) && lease.state !== 'terminated')
-    .map((lease) => (lease.worktreeId ? splitWorktreeId(lease.worktreeId)?.repoId : undefined))
+    .map((lease) => (lease.worktreeId ? leaseWorkspaceOwner(lease.worktreeId) : undefined))
   if (owners.length === 0) {
     return
   }
@@ -250,7 +259,7 @@ export async function linkServerHeldRepositories(args: {
   destination: OrcadMigrationDestinationCatalog
   serverRepositories: () => Promise<OrcadServerRepository[]>
   /** Absent: the server's folder workspaces aren't read, so none of them link. */
-  serverFolderWorkspaces?: () => Promise<OrcadServerFolderWorkspace[]>
+  serverFolderCatalog?: () => Promise<OrcadServerFolderCatalog>
   now?: () => Date
 }): Promise<OrcadMigrationSourceCutover> {
   const { cutover, userDataPath } = args
@@ -260,8 +269,8 @@ export async function linkServerHeldRepositories(args: {
   const serverRepositories = await args.serverRepositories()
   const serverFolders =
     cutover.manifest.payload.folderWorkspaces.length > 0
-      ? ((await args.serverFolderWorkspaces?.()) ?? [])
-      : []
+      ? ((await args.serverFolderCatalog?.()) ?? NO_SERVER_FOLDERS)
+      : NO_SERVER_FOLDERS
   const toLink = await serverHeldRowsToLink(
     cutover,
     args.destination,
@@ -289,7 +298,7 @@ export async function linkServerHeldRepositories(args: {
           repositoryIds: new Set(linkedRepositoryIds),
           folderWorkspaceIds: new Set(linkedFolderWorkspaceIds)
         },
-        [...serverRepositories, ...serverFolders]
+        [...serverRepositories, ...serverFolders.folderWorkspaces]
       )
     ])
   ]

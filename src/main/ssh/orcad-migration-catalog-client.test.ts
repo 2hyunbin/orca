@@ -37,7 +37,7 @@ const {
   stageRemoteOrcadMigrationCatalog,
   stageRemoteOrcadMigrationSnapshotChunk
 } = await import('./orcad-migration-catalog-client')
-const { listRemoteOrcadFolderWorkspaces } = await import('./orcad-server-folder-workspaces')
+const { listRemoteOrcadFolderCatalog } = await import('./orcad-server-folder-workspaces')
 
 function manifest(): OrcadMigrationManifest {
   const unsigned = {
@@ -106,21 +106,33 @@ describe('remote orcad migration catalog client', () => {
     ])
   })
 
-  it('reads the server’s folder workspaces with the host each one’s folder is on', async () => {
-    sendRequest.mockResolvedValue({
+  it('reads the server’s folder workspaces and the groups that place them on a host', async () => {
+    sendRequest.mockImplementation(async (_pairing, method: string) => ({
       ok: true,
-      result: {
-        folderWorkspaces: [
-          { id: 'own', folderPath: '/root/a', projectGroupId: 'g', connectionId: null, name: 'a' },
-          { id: 'nested', folderPath: '/root/b', projectGroupId: 'g', connectionId: 'ssh-nested' }
-        ]
-      }
+      result:
+        method === 'folderWorkspace.list'
+          ? {
+              folderWorkspaces: [
+                { id: 'own', folderPath: '/root/a', projectGroupId: 'g', connectionId: null },
+                { id: 'nested', folderPath: '/root/b', projectGroupId: 'g', connectionId: 'ssh-x' }
+              ]
+            }
+          : { groups: [{ id: 'g', name: 'G', parentGroupId: null }, { id: 'h' }] }
+    }))
+    await expect(listRemoteOrcadFolderCatalog(pairingCode)).resolves.toEqual({
+      folderWorkspaces: [
+        { id: 'own', folderPath: '/root/a', projectGroupId: 'g', connectionId: null },
+        { id: 'nested', folderPath: '/root/b', projectGroupId: 'g', connectionId: 'ssh-x' }
+      ],
+      projectGroups: [
+        { id: 'g', parentGroupId: null },
+        { id: 'h', parentGroupId: null }
+      ]
     })
-    await expect(listRemoteOrcadFolderWorkspaces(pairingCode)).resolves.toEqual([
-      { id: 'own', folderPath: '/root/a', projectGroupId: 'g' },
-      { id: 'nested', folderPath: '/root/b', projectGroupId: 'g', connectionId: 'ssh-nested' }
+    expect(sendRequest.mock.calls.map((call) => call[1]).sort()).toEqual([
+      'folderWorkspace.list',
+      'projectGroup.list'
     ])
-    expect(sendRequest.mock.calls.at(-1)?.[1]).toBe('folderWorkspace.list')
   })
 
   it('pins snapshot acknowledgments to the admitted destination runtime', async () => {

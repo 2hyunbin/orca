@@ -22,11 +22,12 @@ import {
 import { planOrcadDeltaMove } from './orcad-migration-delta-plan'
 import {
   linkedOrcadMigrationProjects,
-  repositoriesHeldByServer
+  repositoriesHeldByServer,
+  type OrcadServerRepository
 } from './orcad-migration-repository-link'
 import {
   folderWorkspacesHeldByServer,
-  type OrcadServerFolderWorkspace
+  type OrcadServerFolderCatalog
 } from './orcad-server-folder-workspaces'
 import { reconcileManagedOrcadSshTargets, visibleRepos } from './orcad-retained-source'
 import { SshConnectionStore } from './ssh-connection-store'
@@ -160,7 +161,10 @@ const convert = (
     ...(link
       ? {
           serverRepositoriesFor: async () => server.getRepos(),
-          serverFolderWorkspacesFor: async () => server.getFolderWorkspaces()
+          serverFolderCatalogFor: async () => ({
+            folderWorkspaces: server.getFolderWorkspaces(),
+            projectGroups: server.getProjectGroups()
+          })
         }
       : {}),
     now: () => new Date('2026-10-14T00:00:00.000Z')
@@ -579,6 +583,48 @@ describe('moving the host again after its SSH target was deleted and re-created'
     expect(store.getFolderWorkspace(folderId)?.comment).toBe('edited after re-creating')
   })
 
+  // Codex repro: a folder lease key is `folder:<id>`, not a worktree id.
+  describe('with relay terminals the bridge still serves', () => {
+    const lease = (targetId: string, folderId: string) => ({
+      targetId,
+      ptyId: 'relay-pty',
+      state: 'detached' as const,
+      tabId: 'tab-1',
+      worktreeId: `folder:${folderId}`,
+      createdAt: 1,
+      updatedAt: 1
+    })
+
+    it('still links when the terminal runs in a folder workspace that moves', async () => {
+      const { groupId, folderId } = folderInGroup()
+      await convert()
+      const recreated = recreateTarget()
+      const later = store.createFolderWorkspace({
+        projectGroupId: groupId,
+        folderPath: '/root/later'
+      })
+      vi.spyOn(store, 'getSshRemotePtyLeases').mockReturnValue([lease(recreated, later.id)])
+      await expect(convert(true, 'unverifiable', recreated)).resolves.toMatchObject({
+        outcome: 'converted'
+      })
+      expect(server.getFolderWorkspace(later.id)).toBeDefined()
+      const journal = listOrcadMigrationSourceCutovers(userDataPath).find(
+        (entry) => entry.sshTargetId === recreated
+      )
+      expect(journal?.linkedFolderWorkspaceIds).toEqual([folderId])
+    })
+
+    it('refuses to link the folder workspace the terminal runs in, naming it', async () => {
+      const { folderId } = folderInGroup()
+      await convert()
+      const recreated = recreateTarget()
+      vi.spyOn(store, 'getSshRemotePtyLeases').mockReturnValue([lease(recreated, folderId)])
+      await expect(convert(true, 'unverifiable', recreated)).rejects.toThrow(
+        'orcad_migration_linked_project_terminals:/root/notes'
+      )
+    })
+  })
+
   it('never offers the linked folder workspace again in a later delta move', async () => {
     const { folderId } = folderInGroup()
     await convert()
@@ -658,10 +704,21 @@ describe('which projects are the same checkout', () => {
 
 describe('which folder workspaces the server already holds', () => {
   const incoming = [{ id: 'notes', folderPath: '/root/notes' }]
-  const held = (row: Partial<OrcadServerFolderWorkspace>) =>
-    folderWorkspacesHeldByServer(incoming, [
-      { id: 'notes', folderPath: '/root/notes/', projectGroupId: 'group', ...row }
-    ])
+  const held = (
+    row: Partial<OrcadServerFolderCatalog['folderWorkspaces'][number]>,
+    serverRepos: OrcadServerRepository[] = [],
+    group: Partial<OrcadServerFolderCatalog['projectGroups'][number]> = {}
+  ) =>
+    folderWorkspacesHeldByServer(
+      incoming,
+      {
+        folderWorkspaces: [
+          { id: 'notes', folderPath: '/root/notes/', projectGroupId: 'group', ...row }
+        ],
+        projectGroups: [{ id: 'group', parentGroupId: null, ...group }]
+      },
+      serverRepos
+    )
 
   it('links the same id at the same folder', () => {
     expect(held({})).toEqual(['notes'])
@@ -678,5 +735,13 @@ describe('which folder workspaces the server already holds', () => {
   it('keeps a row whose files are on another host apart', () => {
     expect(held({ connectionId: 'nested-target' })).toEqual([])
     expect(held({ executionHostId: 'ssh:nested-target' })).toEqual([])
+    expect(held({}, [], { connectionId: 'nested-target' })).toEqual([])
+  })
+
+  // Codex repro: a bare row its group's nested SSH project places on another host.
+  it('keeps a bare row apart when its group puts it on another host', () => {
+    const nested = { id: 'r', path: '/srv/app', projectGroupId: 'group', connectionId: 'nested' }
+    expect(held({}, [nested])).toEqual([])
+    expect(held({}, [{ ...nested, connectionId: null }])).toEqual(['notes'])
   })
 })
