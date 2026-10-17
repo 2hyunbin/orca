@@ -29,10 +29,7 @@ function installationFor(agent: string, runtime: OrcaRuntimeService): ManagedRun
   // What a start would run, outside Orca's releases: the launch's own lookup decides.
   const findExternal = async (): Promise<boolean> => {
     const settings = runtime.requireStore().getSettings()
-    const env = {
-      ...(await resolveHostStructuredAgentLaunchEnvironment(agent, settings)),
-      ...spec.env
-    }
+    const env = { ...(await resolveHostStructuredAgentLaunchEnvironment(agent, settings)), ...spec.env }
     try {
       const command = resolveAcpLaunchCommand(spec, env, {
         commandSettings: settings,

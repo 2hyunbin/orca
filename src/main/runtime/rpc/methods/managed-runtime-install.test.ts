@@ -70,7 +70,9 @@ it('pushes a snapshot, then the install another client starts, until the transpo
   // Cancel answers with the outcome once the run has unwound.
   const outcome = await cancelMethod.handler({ agent: 'grok', operationId: id }, ctx)
   expect(outcome).toMatchObject({ id, phase: 'cancelled' })
-  await vi.waitFor(() => expect(frames.at(-1)).toMatchObject({ operation: { phase: 'cancelled' } }))
+  await vi.waitFor(() =>
+    expect(frames.at(-1)).toMatchObject({ operation: { phase: 'cancelled' } })
+  )
 
   transport.abort()
   const seen = frames.length

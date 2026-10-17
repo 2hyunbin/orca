@@ -43,6 +43,7 @@ export type MobileTerminalCreateOptions = {
 }
 
 export abstract class OrcaRuntimeWithRunCreateMobileSessionTerminal extends OrcaRuntimeWithMobileChatForkCreate {
+
   protected abstract resolveMobileSessionTerminalCommand(
     workspace: TerminalWorkspaceLaunchScope,
     opts: MobileTerminalCommandOptions
@@ -101,11 +102,7 @@ export abstract class OrcaRuntimeWithRunCreateMobileSessionTerminal extends Orca
         : requestedAfterTabId
     if (opts.sourceChatFork) {
       return this.createMobileChatForkTerminal({
-        workspace,
-        worktreeId,
-        opts,
-        afterTabId,
-        graphEpoch
+        workspace, worktreeId, opts, afterTabId, graphEpoch
       })
     }
     let afterDesktopTabId: string | undefined

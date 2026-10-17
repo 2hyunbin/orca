@@ -21,16 +21,13 @@ export async function prepareCodexAdoption(
     return source
   }
   const nativeSystemHomePath = getSystemCodexHomePath()
-  const result = await prepare(
-    {
-      agent: 'codex',
-      sessionId: providerSessionId,
-      filePath: source.transcriptPath,
-      codexHome: source.accountHome.path,
-      executionHostId: 'local'
-    },
-    nativeSystemHomePath
-  )
+  const result = await prepare({
+    agent: 'codex',
+    sessionId: providerSessionId,
+    filePath: source.transcriptPath,
+    codexHome: source.accountHome.path,
+    executionHostId: 'local'
+  }, nativeSystemHomePath)
   const home = result.useRealCodexHome ? nativeSystemHomePath : result.substituteCodexHome
   if (
     !home ||
@@ -44,8 +41,7 @@ export async function prepareCodexAdoption(
     !recognizedHomes.some(
       (candidate) =>
         isLegacyAgentSessionAccountHome(candidate) &&
-        normalizeRuntimePathForComparison(candidate.path) ===
-          normalizeRuntimePathForComparison(home)
+        normalizeRuntimePathForComparison(candidate.path) === normalizeRuntimePathForComparison(home)
     )
   ) {
     throw new Error('The prepared conversation account is not recognized on this host.')

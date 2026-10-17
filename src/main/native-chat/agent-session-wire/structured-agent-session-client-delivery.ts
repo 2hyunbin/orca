@@ -125,7 +125,8 @@ export class StructuredAgentSessionClientDelivery {
   captureChildWorkStops = (
     sessionId: string,
     handleIds: readonly string[]
-  ): CapturedChildWorkStops => this.statusFeed.captureChildWorkStops(sessionId, handleIds)
+  ): CapturedChildWorkStops =>
+    this.statusFeed.captureChildWorkStops(sessionId, handleIds)
 
   childWorkIncomplete = (sessionId: string): boolean =>
     this.statusFeed.childWorkIncomplete(sessionId)

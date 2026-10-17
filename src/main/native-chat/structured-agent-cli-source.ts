@@ -20,14 +20,12 @@ export function captureStructuredAgentCliSource(
   try {
     return Object.freeze({
       rows: Object.freeze(
-        readRows().map((row) =>
-          Object.freeze({
-            ...row,
-            ...(row.providerSession
-              ? { providerSession: Object.freeze({ ...row.providerSession }) }
-              : {})
-          })
-        )
+        readRows().map((row) => Object.freeze({
+          ...row,
+          ...(row.providerSession
+            ? { providerSession: Object.freeze({ ...row.providerSession }) }
+            : {})
+        }))
       )
     })
   } catch (error) {

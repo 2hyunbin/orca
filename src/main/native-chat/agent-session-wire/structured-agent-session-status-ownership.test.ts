@@ -309,4 +309,5 @@ describe('child work the provider reported, recorded or not', () => {
     expect(owner.childWorkIncomplete(summary.sessionId)).toBe(true)
     expect(captured.current('helper')).toBe(false)
   })
+
 })

@@ -116,8 +116,7 @@ export function registerTerminalPresentationIpcBridge(unsubs: (() => void)[]): v
                     agentLaunchViewer === 'focus-window' ||
                     agentLaunchViewer === 'focus-in-workspace',
                   ...(surfaceOwner === false && terminalPresentation === 'background'
-                    ? { recordInteraction: false }
-                    : {}),
+                    ? { recordInteraction: false } : {}),
                   ...(launchAgent
                     ? {
                         launchAgent,
@@ -148,9 +147,7 @@ export function registerTerminalPresentationIpcBridge(unsubs: (() => void)[]): v
           if (afterTabId) {
             const unifiedTabs = useAppStore.getState().unifiedTabsByWorktree[worktreeId] ?? []
             const createdUnified = unifiedTabs.find((item) => item.entityId === tab.id)?.id
-            const anchorUnified = unifiedTabs.find(
-              (item) => item.id === afterTabId || item.entityId === afterTabId
-            )?.id
+            const anchorUnified = unifiedTabs.find((item) => item.id === afterTabId || item.entityId === afterTabId)?.id
             if (createdUnified && anchorUnified) {
               insertUnifiedTabAfterAnchor(worktreeId, createdUnified, anchorUnified)
             }
