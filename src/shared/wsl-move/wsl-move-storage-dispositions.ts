@@ -159,7 +159,7 @@ export const SQLITE_TABLE_DISPOSITIONS: Record<string, WslMoveFieldDisposition> 
     ),
     ...tables(
       'agent-session-journal',
-      ['${PROGRESS}', '${ITEMS}', '${WORK}'],
+      ['${PROGRESS}', '${WORK}'],
       notApplicableDisposition(52, 'Journal cleanup progress; a moved journal is rescanned once.')
     ),
     ...tables(

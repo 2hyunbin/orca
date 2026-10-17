@@ -103,7 +103,7 @@ function bodyAt(seq: number, sessionId = 'chat'): unknown {
   return typeof row === 'object' && row !== null && 'body' in row ? row.body : undefined
 }
 
-it('continues only the appended suffix across lifecycle and tombstone boundaries', async () => {
+it('continues only the appended suffix across lifecycle and tombstone boundaries', () => {
   transaction(() => {
     start()
     for (let ordinal = 1; ordinal <= 300; ordinal++) {
@@ -163,39 +163,6 @@ it('continues only the appended suffix across lifecycle and tombstone boundaries
     expect(bodyAt(seq)).toMatchObject({ blocks: [] })
   }
   expect(drain()).toEqual({ scanned: 0, compacted: 0 })
-  db.exec(`INSERT INTO journal_prune_items_v1
-SELECT * FROM temp.journal_prune_items WHERE item_id LIKE 'earlier-%'`)
-  for (let batch = 0; batch < 2; batch++) {
-    insertJournalRow(db, 'chat', {
-      v: 1,
-      epoch: 'epoch',
-      seq: 317 + batch,
-      fence: 1,
-      ts: 317 + batch,
-      kind: 'lifecycle-batch',
-      settlementId: `retire-candidates-${batch}`,
-      mutations: Array.from({ length: 150 }, (_, ordinal) => ({
-        kind: 'tombstone' as const,
-        itemId: `earlier-${batch * 150 + ordinal + 1}`,
-        revision: 2
-      }))
-    })
-  }
-  db.pragma('incremental_vacuum')
-  expect(db.pragma('freelist_count', { simple: true })).toBe(0)
-  const retained = db.prepare('SELECT row_json FROM journal_rows ORDER BY seq').all()
-  const pagesBefore = Number(db.pragma('page_count', { simple: true }))
-  vi.useFakeTimers()
-  const maintenance = new JournalMaintenance(() => db, transaction, 0)
-  try {
-    await vi.runAllTimersAsync()
-    expect(db.prepare('SELECT row_json FROM journal_rows ORDER BY seq').all()).toEqual(retained)
-    expect(Number(db.pragma('page_count', { simple: true }))).toBeLessThan(pagesBefore)
-    expect(db.pragma('freelist_count', { simple: true })).toBe(0)
-    expect(vi.getTimerCount()).toBe(0)
-  } finally {
-    maintenance.close()
-  }
 })
 
 it('runs finite first and later passes during streaming, then sleeps without changing replay', async () => {
@@ -448,7 +415,6 @@ it('pages healthy keys, resumes ordered garbage and discovers changes beyond fin
     }
     healthy.advance(4)
     healthy.enqueue(3)
-    db.exec('INSERT INTO journal_prune_items_v1 SELECT * FROM temp.journal_prune_items')
   })
   const legacy = {
     after: { sessionId: 'z-owec', epoch: '' },
@@ -487,7 +453,6 @@ it('pages healthy keys, resumes ordered garbage and discovers changes beyond fin
   let maintenance = new JournalMaintenance(() => db, transaction, 0)
   try {
     await vi.advanceTimersByTimeAsync(60)
-    expect(count('journal_prune_items_v1')).toBe(33)
     expect(count('temp.journal_prune_items')).toBe(65)
     expect(count('journal_prune_work_v1')).toBe(65)
     expect(count('journal_prune_progress_v1')).toBe(1)
@@ -508,7 +473,6 @@ it('pages healthy keys, resumes ordered garbage and discovers changes beyond fin
     await vi.runAllTimersAsync()
     expect(bodyAt(3, 'a000')).toMatchObject({ blocks: [] })
     expect(bodyAt(3, 'zz-new')).toMatchObject({ blocks: [] })
-    expect(count('journal_prune_items_v1')).toBe(0)
     expect(count('temp.journal_prune_items')).toBe(0)
     expect(count('journal_prune_work_v1')).toBe(0)
     expect(count('journal_prune_progress_v1')).toBe(1)

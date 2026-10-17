@@ -6,7 +6,6 @@ import type { JournalPruneCandidate, JournalPruneCandidates } from './journal-pr
  *  refusal after a policy or parser change: `CREATE TABLE IF NOT EXISTS` never reshapes a table. */
 const JOURNAL_PRUNE_TABLES_VERSION = 1
 const PROGRESS = `journal_prune_progress_v${JOURNAL_PRUNE_TABLES_VERSION}`
-const ITEMS = `journal_prune_items_v${JOURNAL_PRUNE_TABLES_VERSION}`
 const WORK = `journal_prune_work_v${JOURNAL_PRUNE_TABLES_VERSION}`
 
 /** Every writable open, no `user_version` bump (see `ensureQueuedMessagesTable`): progress survives
@@ -30,12 +29,6 @@ export function ensureJournalPruneTables(db: Database.Database): boolean {
   session_id TEXT NOT NULL, epoch TEXT NOT NULL,
   scanned INTEGER NOT NULL DEFAULT 0, refused INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (session_id, epoch)
-) WITHOUT ROWID;
-CREATE TABLE IF NOT EXISTS ${ITEMS} (
-  session_id TEXT NOT NULL, epoch TEXT NOT NULL, item_id TEXT NOT NULL,
-  seq INTEGER NOT NULL, revision INTEGER NOT NULL, signature TEXT NOT NULL,
-  removable INTEGER NOT NULL, saved_at REAL NOT NULL, observed_at REAL NOT NULL,
-  PRIMARY KEY (session_id, epoch, item_id)
 ) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS ${WORK} (
   session_id TEXT NOT NULL, epoch TEXT NOT NULL, seq INTEGER NOT NULL,
@@ -220,7 +213,7 @@ WHERE session_id = ? AND epoch = ? AND seq = ?`)
   }
 }
 
-/** Retire legacy candidates even for live epochs; only retired/refused keys lose current work. */
+/** Only retired or refused keys lose their work. */
 export function collectJournalPruneGarbage(
   db: Database.Database,
   transaction: JournalTransaction,
@@ -240,8 +233,7 @@ ORDER BY session_id, epoch LIMIT 32`)
     const eligible = db.prepare(`SELECT s.epoch AS live, p.refused FROM ${PROGRESS} p
 LEFT JOIN journal_sessions s ON s.session_id = p.session_id
 WHERE p.session_id = ? AND p.epoch = ? AND (
-  EXISTS (SELECT 1 FROM ${ITEMS} i WHERE i.session_id = p.session_id AND i.epoch = p.epoch)
-  OR s.epoch IS NULL OR s.epoch != p.epoch OR (p.refused = 1 AND (
+  s.epoch IS NULL OR s.epoch != p.epoch OR (p.refused = 1 AND (
   EXISTS (SELECT 1 FROM temp.journal_prune_items i WHERE i.session_id = p.session_id AND i.epoch = p.epoch)
   OR EXISTS (SELECT 1 FROM ${WORK} w WHERE w.session_id = p.session_id AND w.epoch = p.epoch))))`)
     for (const row of rows) {
@@ -252,17 +244,6 @@ WHERE p.session_id = ? AND p.epoch = ? AND (
       const epoch = row.epoch
       const garbage = eligible.get(sessionId, epoch)
       if (!garbage) {
-        cursor.after = { sessionId, epoch }
-        continue
-      }
-      const items = db
-        .prepare(`DELETE FROM ${ITEMS} WHERE session_id = ? AND epoch = ? AND item_id IN (
-SELECT item_id FROM ${ITEMS} WHERE session_id = ? AND epoch = ? LIMIT 32)`)
-        .run(sessionId, epoch, sessionId, epoch)
-      if (items.changes > 0) {
-        return { collected: true, more: true }
-      }
-      if (garbage.live === epoch && garbage.refused !== 1) {
         cursor.after = { sessionId, epoch }
         continue
       }
