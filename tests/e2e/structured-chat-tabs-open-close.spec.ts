@@ -152,7 +152,13 @@ function readStubLaunches(launchLog: string): string[][] {
   return readFileSync(launchLog, 'utf8')
     .split('\n')
     .filter(Boolean)
-    .map((line) => (JSON.parse(line) as { args: string[] }).args)
+    .map((line) => {
+      const entry: unknown = JSON.parse(line)
+      if (typeof entry !== 'object' || entry === null || !('args' in entry)) {
+        throw new Error(`unreadable stub launch: ${line}`)
+      }
+      return Array.isArray(entry.args) ? entry.args.map(String) : []
+    })
 }
 
 test.describe('structured chat tabs', () => {

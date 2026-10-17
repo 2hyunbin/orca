@@ -14,7 +14,7 @@ if (args.includes('--version') || args.includes('-v')) {
 
 function argValue(name) {
   const index = args.indexOf(name)
-  return index >= 0 ? args[index + 1] : undefined
+  return index !== -1 ? args[index + 1] : undefined
 }
 
 const sessionId = argValue('--session-id') ?? argValue('--resume') ?? randomUUID()
@@ -31,9 +31,9 @@ let buffer = ''
 let initSent = false
 process.stdin.setEncoding('utf8')
 process.stdin.on('data', (chunk) => {
-  buffer += chunk
+  buffer += String(chunk)
   let index
-  while ((index = buffer.indexOf('\n')) >= 0) {
+  while ((index = buffer.indexOf('\n')) !== -1) {
     const line = buffer.slice(0, index).trim()
     buffer = buffer.slice(index + 1)
     let frame
