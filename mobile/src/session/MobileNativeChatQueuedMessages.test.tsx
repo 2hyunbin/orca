@@ -287,10 +287,10 @@ describe('MobileNativeChatQueuedMessages', () => {
     const toggle = () => mounted.root.findByProps({ accessibilityLabel: 'Queued messages' })
     await act(async () => toggle().props.onPress())
     expect(mounted.root.findAllByProps({ testID: 'queued-card-row' })).toHaveLength(0)
-    expect(texts(mounted)).toContain(`2 · ${reason}`)
+    expect(texts(mounted)).toContain(`· ${reason}`)
     const headerCaption = mounted.root
       .findByProps({ testID: 'queued-header' })
-      .find((node) => String(node.type) === 'Text' && node.props.children === `2 · ${reason}`)
+      .find((node) => String(node.type) === 'Text' && node.props.children === `· ${reason}`)
     expect(flatStyle(headerCaption.props.style).color).toBe('#ef4444')
     await act(async () => toggle().props.onPress())
     expect(texts(mounted).filter((text) => text === reason)).toHaveLength(1)
@@ -325,7 +325,7 @@ describe('MobileNativeChatQueuedMessages', () => {
     expect(nodeTypes(rows[1]!)).toContain('CornerDownRight')
     const toggle = () => mounted.root.findByProps({ accessibilityLabel: 'Queued messages' })
     await act(async () => toggle().props.onPress())
-    expect(texts(mounted)).toContain("3 · Couldn't send — tap Send to retry")
+    expect(texts(mounted)).toContain("· Couldn't send — tap Send to retry")
     await act(async () => toggle().props.onPress())
     expect(
       texts(mounted).filter((text) => text === "Couldn't send — tap Send to retry")
@@ -604,6 +604,8 @@ describe('MobileNativeChatQueuedMessages', () => {
       const mounted = await mountPaused({ pause: { reason: 'stopped' } })
       const row = mounted.root.findByProps({ testID: 'queued-header' })
       expect(row.props.accessibilityLiveRegion).toBe('polite')
+      // Large text: the buttons wrap below the label rather than squeezing it out.
+      expect(flatStyle(row.props.style).flexWrap).toBe('wrap')
       // Android drops touches outside the parent: nothing may pull a row or a button past its edge.
       const styled = mounted.root.findAll(
         (node) => typeof node.type === 'string' && node.props.style !== undefined

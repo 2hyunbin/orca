@@ -111,9 +111,12 @@ export function MobileNativeChatQueuedMessages({
             >
               ·
             </Text>
-            <Text style={headerCountStyle} numberOfLines={1}>
-              {attentionCaption ? `${cards.length} · ${attentionCaption}` : cards.length}
-            </Text>
+            <Text style={headerCountStyle}>{cards.length}</Text>
+            {attentionCaption ? (
+              <Text style={styles.headerCaption} numberOfLines={1}>
+                {`· ${attentionCaption}`}
+              </Text>
+            ) : null}
           </View>
           {pause ? (
             <>

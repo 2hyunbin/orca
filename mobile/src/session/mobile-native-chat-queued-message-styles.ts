@@ -19,9 +19,11 @@ export const queuedMessageStyles = StyleSheet.create({
     borderColor: colors.borderSubtle,
     overflow: 'hidden'
   },
+  // Wraps so at large text sizes the buttons drop to a second line instead of squeezing the label.
   header: {
     minHeight: HEADER_HEIGHT,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacing.xs,
     paddingLeft: spacing.md
@@ -33,9 +35,10 @@ export const queuedMessageStyles = StyleSheet.create({
     bottom: 0,
     left: 0
   },
+  // Grows from its natural width, so a line break comes before the label is squeezed.
   headerLabels: {
-    flex: 1,
-    minWidth: 0,
+    flexGrow: 1,
+    flexShrink: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs
@@ -54,12 +57,20 @@ export const queuedMessageStyles = StyleSheet.create({
     fontWeight: '500'
   },
   headerCount: {
-    flex: 1,
     color: colors.textMuted,
     fontSize: typography.metaSize,
     lineHeight: META_LINE_HEIGHT,
     paddingVertical: spacing.sm,
     fontVariant: ['tabular-nums']
+  },
+  // Zero basis: a long reason truncates in the space left rather than forcing the line break.
+  headerCaption: {
+    flex: 1,
+    minWidth: 0,
+    color: colors.statusRed,
+    fontSize: typography.metaSize,
+    lineHeight: META_LINE_HEIGHT,
+    paddingVertical: spacing.sm
   },
   // minHeight, not height: rows grow with the system text size instead of clipping.
   headerAction: {
