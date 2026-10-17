@@ -78,7 +78,10 @@ async function runRestartDaemon(expectedDaemonPid?: number): Promise<RestartDaem
   // containment; without this a wedged host could never be recovered from the UI.
   currentSpawner.resetRespawnWindow()
   const currentOnly = getCurrentDaemonAdapter(currentAdapter)
-  const legacyAdapters = getLegacyDaemonAdapters(currentAdapter)
+  // A generation that accepted idle retirement is leaving; keeping its route would fail every inventory.
+  const legacyAdapters = getLegacyDaemonAdapters(currentAdapter).filter(
+    (legacy) => !legacy.hasRetiredForIdle()
+  )
 
   // Step 1: synthesize pty:exit for every active session BEFORE teardown — the daemon's shutdown path never fans onExit to clients (session.ts:246-252), so the renderer would otherwise never see exits.
   const fallbackKilledCount =

@@ -353,6 +353,34 @@ describe('daemon-init: runRestartDaemon (7-step sequence)', () => {
     expect(legacyAdapter.listProcesses).toHaveBeenCalled()
   })
 
+  it('drops a legacy generation that retired for idle instead of routing to its dead endpoint', async () => {
+    const mod = await importFresh()
+    await mod.initDaemonPtyProvider()
+
+    const { DaemonPtyRouter } = await import('./daemon-pty-router')
+    const { DaemonPtyAdapter } = await import('./daemon-pty-adapter')
+    const legacyAdapter = new DaemonPtyAdapter({
+      socketPath: '/fake/legacy.sock',
+      tokenPath: '/fake/legacy.token',
+      protocolVersion: 3
+    })
+    vi.mocked(legacyAdapter.hasRetiredForIdle).mockReturnValue(true)
+    const current = adapterInstances[0]
+    mod.replaceDaemonProvider(
+      new DaemonPtyRouter({
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mocked module's adapter class built this instance.
+        current: current as unknown as InstanceType<typeof DaemonPtyAdapter>,
+        legacy: [legacyAdapter]
+      })
+    )
+
+    await mod.restartDaemon()
+
+    expect(mod.getDaemonProvider()).toBeInstanceOf(DaemonPtyAdapter)
+    expect(mod.getDaemonProvider()).not.toBeInstanceOf(DaemonPtyRouter)
+    expect(legacyAdapter.listProcesses).not.toHaveBeenCalled()
+  })
+
   it('routes affected v9 daemon sessions through a legacy adapter on launch', async () => {
     const mod = await importFresh()
     probeSocketExistsMock.mockImplementation((p?: string) => p?.endsWith('daemon-v9.sock') ?? false)
