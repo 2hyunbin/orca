@@ -103,7 +103,9 @@ export function createTerminalShutdownActions(
         try {
           // Backend ownership is opt-in; the default owner RPC prevents remote PTY leaks.
           if (!backendOwnsPtyTeardown) {
-            await Promise.all(
+            // Why allSettled: rolling back guards while another host is still stopping would let
+            // its late exits clear bindings without the captured resume records.
+            const ownerStops = await Promise.allSettled(
               runtimeEnvironmentIds.map((environmentId) =>
                 shutdownReason === 'manual-sleep'
                   ? requestRemoteWorktreeSleep({ environmentId, worktreeId })
@@ -115,6 +117,12 @@ export function createTerminalShutdownActions(
                     )
               )
             )
+            const failedStop = ownerStops.find(
+              (result): result is PromiseRejectedResult => result.status === 'rejected'
+            )
+            if (failedStop) {
+              throw failedStop.reason
+            }
           }
           // Renderer teardown waits for the owner RPC so failures leave bindings retryable.
           const rendererStop = await guards.stopRendererPtys()
