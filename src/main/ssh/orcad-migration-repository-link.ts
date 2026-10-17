@@ -9,6 +9,7 @@
  */
 import { getAutomationRunRepoId } from '../../shared/automation-run-identity'
 import type { Automation } from '../../shared/automations-types'
+import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-path'
 import { isRepoOnCatalogHost } from '../../shared/execution-host'
 import type { OrcadMigrationSourceCutover } from '../../shared/orcad-migration-source-cutover'
@@ -232,22 +233,30 @@ function assertNoRelayTerminalsIn(
 export function linkedOrcadMigrationProjects(
   store: {
     getRepos(): OrcadServerRepository[]
+    getFolderWorkspaces(): Pick<FolderWorkspace, 'id' | 'folderPath'>[]
     listAutomations(): Pick<Automation, 'projectId' | 'runContext'>[]
   },
-  cutover: Pick<OrcadMigrationSourceCutover, 'linkedRepositoryIds'>
+  cutover: Pick<OrcadMigrationSourceCutover, 'linkedRepositoryIds' | 'linkedFolderWorkspaceIds'>
 ): SshManagedServerLinkedProject[] {
   const linked = new Set(cutover.linkedRepositoryIds ?? [])
-  if (linked.size === 0) {
+  const linkedFolders = new Set(cutover.linkedFolderWorkspaceIds ?? [])
+  if (linked.size === 0 && linkedFolders.size === 0) {
     return []
   }
   const automations = store.listAutomations()
-  return store
-    .getRepos()
-    .filter((repo) => linked.has(repo.id))
-    .map((repo) => ({
-      path: repo.path,
-      automations: automations.filter((entry) => getAutomationRunRepoId(entry) === repo.id).length
-    }))
+  return [
+    ...store
+      .getRepos()
+      .filter((repo) => linked.has(repo.id))
+      .map((repo) => ({
+        path: repo.path,
+        automations: automations.filter((entry) => getAutomationRunRepoId(entry) === repo.id).length
+      })),
+    ...store
+      .getFolderWorkspaces()
+      .filter((workspace) => linkedFolders.has(workspace.id))
+      .map((workspace) => ({ path: workspace.folderPath, automations: 0 }))
+  ]
 }
 
 /** Returns the cutover to commit: the same one, or one re-journaled without the linked projects. */
@@ -271,23 +280,22 @@ export async function linkServerHeldRepositories(args: {
     cutover.manifest.payload.folderWorkspaces.length > 0
       ? ((await args.serverFolderCatalog?.()) ?? NO_SERVER_FOLDERS)
       : NO_SERVER_FOLDERS
-  const toLink = await serverHeldRowsToLink(
+  const { repositoryIds: linked, folderWorkspaceIds: folders } = await serverHeldRowsToLink(
     cutover,
     args.destination,
     serverRepositories,
     serverFolders
   )
-  const linked = toLink.repositoryIds
-  if (linked.length === 0 && toLink.folderWorkspaceIds.length === 0) {
+  if (linked.length === 0 && folders.length === 0) {
     return cutover
   }
-  assertNoRelayTerminalsIn(args.store, cutover, linked, toLink.folderWorkspaceIds)
+  assertNoRelayTerminalsIn(args.store, cutover, linked, folders)
   const source = linkedOrcadMigrationCutoverPort(args)
   // The relinked manifest is cut from the source as fenced, so it must still be that source.
   source.verifyFence(cutover)
   const linkedRepositoryIds = [...new Set([...(cutover.linkedRepositoryIds ?? []), ...linked])]
   const linkedFolderWorkspaceIds = [
-    ...new Set([...(cutover.linkedFolderWorkspaceIds ?? []), ...toLink.folderWorkspaceIds])
+    ...new Set([...(cutover.linkedFolderWorkspaceIds ?? []), ...folders])
   ]
   const linkedProjectGroupIds = [
     ...new Set([

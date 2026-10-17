@@ -101,7 +101,10 @@ export async function convertSshTargetToManagedOrcad(
   const destination = args.destinationFor(marked)
   const serverRepositoriesFor = args.serverRepositoriesFor
   const serverFolderCatalogFor = args.serverFolderCatalogFor
-  let linkedRepositoryIds: string[] | undefined
+  let linked: Pick<
+    OrcadMigrationSourceCutover,
+    'linkedRepositoryIds' | 'linkedFolderWorkspaceIds'
+  > = {}
   const committed = await runTargetLifecycle(fenced.sshTargetId, async () => {
     const journaled = requireJournaledCutover(userDataPath, fenced)
     const cutover = serverRepositoriesFor
@@ -118,7 +121,7 @@ export async function convertSshTargetToManagedOrcad(
           now: args.now
         })
       : journaled
-    linkedRepositoryIds = cutover.linkedRepositoryIds
+    linked = cutover
     return commitOrcadMigrationDestination(
       {
         userDataPath,
@@ -137,7 +140,7 @@ export async function convertSshTargetToManagedOrcad(
   if (committed.phase === 'destination-committed') {
     retainOrcadMigrationSource(userDataPath, committed.migrationId, args.now)
   }
-  const linkedProjects = linkedOrcadMigrationProjects(store, { linkedRepositoryIds })
+  const linkedProjects = linkedOrcadMigrationProjects(store, linked)
   return {
     outcome: 'converted',
     environment: redactRuntimeEnvironment(marked),

@@ -571,7 +571,12 @@ describe('moving the host again after its SSH target was deleted and re-created'
     store.updateFolderWorkspace(folderId, { comment: 'edited after re-creating' })
 
     await expect(convert(true, 'exited', recreated)).resolves.toMatchObject({
-      outcome: 'converted'
+      outcome: 'converted',
+      // The connect names it, since this desktop's tabs in it stay behind.
+      linkedProjects: ['/root/migrepo', '/root/tool', '/root/notes'].map((path) => ({
+        path,
+        automations: 0
+      }))
     })
     expect(server.getFolderWorkspace(folderId)?.comment).toBe('edited on the server')
     const journal = listOrcadMigrationSourceCutovers(userDataPath).find(
@@ -652,6 +657,10 @@ describe('what a linked project leaves behind', () => {
     })
     const fake = {
       getRepos: () => [repo('linked', '/root/app'), repo('moved', '/root/tool')],
+      getFolderWorkspaces: () => [
+        { id: 'notes', folderPath: '/root/notes' },
+        { id: 'other-notes', folderPath: '/root/other' }
+      ],
       listAutomations: () => [
         { projectId: 'linked' },
         { projectId: 'linked', runContext: runIn('moved') },
@@ -661,6 +670,9 @@ describe('what a linked project leaves behind', () => {
     }
     expect(linkedOrcadMigrationProjects(fake, { linkedRepositoryIds: ['linked'] })).toEqual([
       { path: '/root/app', automations: 2 }
+    ])
+    expect(linkedOrcadMigrationProjects(fake, { linkedFolderWorkspaceIds: ['notes'] })).toEqual([
+      { path: '/root/notes', automations: 0 }
     ])
     expect(linkedOrcadMigrationProjects(fake, {})).toEqual([])
   })
