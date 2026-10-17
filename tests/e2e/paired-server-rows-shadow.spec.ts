@@ -17,6 +17,7 @@ const SnapshotSchema = z.object({
     z.object({
       hostId: z.string(),
       freshness: z.string(),
+      host: z.looseObject({ health: z.string() }).nullable(),
       rows: z.array(
         z.looseObject({
           key: z.string(),
@@ -41,6 +42,7 @@ async function mainServerRows(page: Page) {
   const server = SnapshotSchema.parse(response.ok ? response.result : null).servers[0]
   return {
     freshness: server?.freshness ?? null,
+    health: server?.host?.health ?? null,
     names: (server?.rows ?? []).map((row) => path.basename(row.path)).sort(),
     pinned: (server?.rows ?? [])
       .filter((row) => row.isPinned)
@@ -84,6 +86,7 @@ test("main keeps a paired server's rows live, deletions included, and unverifiab
       expect(
         (await mainServerRows(desktop.page)).keys.every((key) => key.startsWith('runtime:'))
       ).toBe(true)
+      expect((await mainServerRows(desktop.page)).health).toBe('available')
       await expectNoSidebarShadowMismatches(desktop.page)
 
       await host.client.call('worktree.set', { worktree: `id:${removed}`, isPinned: true })

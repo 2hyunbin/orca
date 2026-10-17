@@ -50,7 +50,10 @@ function fakeHosts(servers: { id: string; live: boolean }[]) {
   const state = { servers, pairingRevision: 1 }
   const statusListeners = new Set<() => void>()
   const retiredListeners = new Set<(environmentId: string) => void>()
-  const watches = new Map<string, { onChange: () => void; onClose: () => void; closed: boolean }>()
+  const watches = new Map<
+    string,
+    { onChange: () => void; onClose: () => void; closed: boolean; ended: boolean }
+  >()
   const call = vi.fn<MobileDesktopRelayHosts['call']>()
   const hosts: MobileDesktopRelayHosts = {
     list: () => ({
@@ -81,10 +84,13 @@ function fakeHosts(servers: { id: string; live: boolean }[]) {
       return () => statusListeners.delete(listener)
     },
     watchChanges: (host, _expected, callbacks) => {
-      const watch = { ...callbacks, closed: false }
+      const watch = { ...callbacks, closed: false, ended: false }
       watches.set(host.environmentId, watch)
-      return () => {
-        watch.closed = true
+      return {
+        close: () => {
+          watch.closed = true
+        },
+        current: () => !watch.closed && !watch.ended
       }
     }
   }
@@ -111,14 +117,18 @@ describe('PairedServerRowsProducer', () => {
     vi.useRealTimers()
   })
 
-  it('populates from a server in contact once its change stream is ready, with no window', async () => {
+  it('populates from a server in contact once its change stream is ready', async () => {
     const { hosts, call, watches } = fakeHosts([{ id: 'box', live: true }])
     call.mockResolvedValue(psReply([row('repo::/a', { workspaceKind: 'git' })]))
-    const producer = new PairedServerRowsProducer({ hasDemand: () => false })
+    const producer = new PairedServerRowsProducer({
+      hasDemand: () => true,
+      hostLabelOverrides: () => new Map()
+    })
     producer.attach(hosts)
     expect(rowsOf(producer, 'runtime:box')).toEqual({
       hostId: 'runtime:box',
       freshness: 'unverifiable',
+      host: { label: 'box', health: 'available', compatibility: 'ok', pairedDeviceId: null },
       rows: []
     })
 
@@ -134,6 +144,7 @@ describe('PairedServerRowsProducer', () => {
     expect(rowsOf(producer, 'runtime:box')).toEqual({
       hostId: 'runtime:box',
       freshness: 'live',
+      host: { label: 'box', health: 'available', compatibility: 'ok', pairedDeviceId: null },
       rows: [
         {
           key: 'runtime:box|repo::/a',
@@ -153,7 +164,10 @@ describe('PairedServerRowsProducer', () => {
   it('refetches on a change event and drops workspaces the server deleted', async () => {
     const { hosts, call, watches } = fakeHosts([{ id: 'box', live: true }])
     call.mockResolvedValueOnce(psReply([row('a'), row('b')]))
-    const producer = new PairedServerRowsProducer({ hasDemand: () => false })
+    const producer = new PairedServerRowsProducer({
+      hasDemand: () => true,
+      hostLabelOverrides: () => new Map()
+    })
     producer.attach(hosts)
     watches.get('box')?.onChange()
     await vi.advanceTimersByTimeAsync(0)
@@ -172,7 +186,10 @@ describe('PairedServerRowsProducer', () => {
     let answer: (response: RuntimeRpcResponse<unknown>) => void = () => {}
     call.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
     call.mockResolvedValueOnce(psReply([row('new')]))
-    const producer = new PairedServerRowsProducer({ hasDemand: () => false })
+    const producer = new PairedServerRowsProducer({
+      hasDemand: () => true,
+      hostLabelOverrides: () => new Map()
+    })
     producer.attach(hosts)
     watches.get('box')?.onChange()
     watches.get('box')?.onChange()
@@ -187,7 +204,10 @@ describe('PairedServerRowsProducer', () => {
   it('keeps the last rows as unverifiable when the server loses contact or stops answering', async () => {
     const { hosts, call, watches, state, publishStatus } = fakeHosts([{ id: 'box', live: true }])
     call.mockResolvedValueOnce(psReply([row('a')]))
-    const producer = new PairedServerRowsProducer({ hasDemand: () => false })
+    const producer = new PairedServerRowsProducer({
+      hasDemand: () => true,
+      hostLabelOverrides: () => new Map()
+    })
     producer.attach(hosts)
     watches.get('box')?.onChange()
     await vi.advanceTimersByTimeAsync(0)
@@ -215,7 +235,10 @@ describe('PairedServerRowsProducer', () => {
   it('watches again and refetches when the server comes back into contact', async () => {
     const { hosts, call, watches, state, publishStatus } = fakeHosts([{ id: 'box', live: false }])
     call.mockResolvedValue(psReply([row('a')]))
-    const producer = new PairedServerRowsProducer({ hasDemand: () => false })
+    const producer = new PairedServerRowsProducer({
+      hasDemand: () => true,
+      hostLabelOverrides: () => new Map()
+    })
     producer.attach(hosts)
     expect(watches.has('box')).toBe(false)
 
@@ -231,7 +254,10 @@ describe('PairedServerRowsProducer', () => {
     const { hosts, call, watches, state, retire } = fakeHosts([{ id: 'box', live: true }])
     let answer: (response: RuntimeRpcResponse<unknown>) => void = () => {}
     call.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
-    const producer = new PairedServerRowsProducer({ hasDemand: () => false })
+    const producer = new PairedServerRowsProducer({
+      hasDemand: () => true,
+      hostLabelOverrides: () => new Map()
+    })
     producer.attach(hosts)
     watches.get('box')?.onChange()
 
@@ -242,6 +268,7 @@ describe('PairedServerRowsProducer', () => {
     expect(rowsOf(producer, 'runtime:box')).toEqual({
       hostId: 'runtime:box',
       freshness: 'unverifiable',
+      host: { label: 'box', health: 'available', compatibility: 'ok', pairedDeviceId: null },
       rows: []
     })
 
@@ -257,7 +284,10 @@ describe('PairedServerRowsProducer', () => {
     ])
     call.mockResolvedValue(psReply([]))
     let showing = false
-    const producer = new PairedServerRowsProducer({ hasDemand: () => showing })
+    const producer = new PairedServerRowsProducer({
+      hasDemand: () => showing,
+      hostLabelOverrides: () => new Map()
+    })
     const detach = producer.attach(hosts)
 
     await vi.advanceTimersByTimeAsync(FALLBACK_REFRESH_MS)
@@ -285,7 +315,10 @@ describe('PairedServerRowsProducer', () => {
     call.mockResolvedValueOnce(
       psReply([row('same', { workspaceKind: 'future-kind' }), { path: '/no-id' }])
     )
-    const producer = new PairedServerRowsProducer({ hasDemand: () => false })
+    const producer = new PairedServerRowsProducer({
+      hasDemand: () => true,
+      hostLabelOverrides: () => new Map()
+    })
     producer.attach(hosts)
     watches.get('one')?.onChange()
     await vi.advanceTimersByTimeAsync(0)
@@ -313,7 +346,10 @@ describe('PairedServerRowsProducer', () => {
   it('serves raw rows only under the pairing they were fetched for', async () => {
     const { hosts, call, watches } = fakeHosts([{ id: 'box', live: true }])
     call.mockResolvedValueOnce(psReply([row('a', { preview: 'kept as sent' })]))
-    const producer = new PairedServerRowsProducer({ hasDemand: () => false })
+    const producer = new PairedServerRowsProducer({
+      hasDemand: () => true,
+      hostLabelOverrides: () => new Map()
+    })
     producer.attach(hosts)
     watches.get('box')?.onChange()
     await vi.advanceTimersByTimeAsync(0)
@@ -322,5 +358,47 @@ describe('PairedServerRowsProducer', () => {
       { ...row('a', { preview: 'kept as sent' }), hostId: 'runtime:box' }
     ])
     expect(producer.rows('box', '2\0runtime-a')).toBeNull()
+  })
+  it('reads unverifiable after contact returns until a fetch answers again', async () => {
+    const { hosts, call, watches, state, publishStatus } = fakeHosts([{ id: 'box', live: true }])
+    let answer: (response: RuntimeRpcResponse<unknown>) => void = () => {}
+    call.mockResolvedValueOnce(psReply([row('a')]))
+    call.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
+    const producer = new PairedServerRowsProducer({
+      hasDemand: () => true,
+      hostLabelOverrides: () => new Map()
+    })
+    producer.attach(hosts)
+    watches.get('box')?.onChange()
+    await vi.advanceTimersByTimeAsync(0)
+
+    state.servers = [{ id: 'box', live: false }]
+    publishStatus()
+    state.servers = [{ id: 'box', live: true }]
+    publishStatus()
+    watches.get('box')?.onChange()
+    expect(rowsOf(producer, 'runtime:box')?.freshness).toBe('unverifiable')
+    answer(psReply([row('a')]))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(rowsOf(producer, 'runtime:box')?.freshness).toBe('live')
+  })
+
+  it('opens a new watch once the old one ends with its transport, even without a close notice', () => {
+    const { hosts, watches, publishStatus } = fakeHosts([{ id: 'box', live: true }])
+    const producer = new PairedServerRowsProducer({
+      hasDemand: () => true,
+      hostLabelOverrides: () => new Map()
+    })
+    producer.attach(hosts)
+    const first = watches.get('box')
+    publishStatus()
+    expect(watches.get('box')).toBe(first)
+
+    if (first) {
+      first.ended = true
+    }
+    publishStatus()
+    expect(watches.get('box')).not.toBe(first)
+    expect(first?.closed).toBe(true)
   })
 })

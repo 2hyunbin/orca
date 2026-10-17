@@ -81,7 +81,7 @@ function relayWithPhone(
     hostsBrowserPage: () => false,
     onEnvironmentRetired: () => () => {},
     onStatusChanged: () => () => {},
-    watchChanges: () => () => {}
+    watchChanges: () => ({ close: () => {}, current: () => true })
   }
   const relay = new MobileDesktopRelay({
     hosts,

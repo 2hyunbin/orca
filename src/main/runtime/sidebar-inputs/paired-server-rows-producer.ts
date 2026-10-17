@@ -1,15 +1,19 @@
 import { z } from 'zod'
-import { toRuntimeExecutionHostId } from '../../../shared/execution-host'
+import { toRuntimeExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
+import { describePairedServerHosts } from '../../../shared/paired-server-hosts'
 import type { MobileRelayServerWorktreeRow } from '../../../shared/mobile-relay-hosts-contract'
 import {
   normalizePairedServerRow,
   type PairedServerRowsSnapshot
 } from '../../../shared/sidebar-list/paired-server-rows'
-import type { MobileDesktopRelayHosts } from '../mobile-desktop-relay/mobile-desktop-relay-hosts'
+import type {
+  MobileDesktopRelayHostListing,
+  MobileDesktopRelayHosts,
+  MobileDesktopRelayHostWatch
+} from '../mobile-desktop-relay/mobile-desktop-relay-hosts'
 import {
   describeRelayHosts,
-  relayHostFence,
-  type DescribedRelayHost
+  relayHostFence
 } from '../mobile-desktop-relay/mobile-relay-host-descriptions'
 
 // Why the phone's own full-catalog limit: the server's default page is 200 and nothing pages on.
@@ -24,28 +28,35 @@ const WorktreePsReplySchema = z.object({ worktrees: z.array(z.looseObject({})) }
 type ServerEntry = {
   environmentId: string
   fence: string
-  identity: DescribedRelayHost['identity']
+  identity: Pick<MobileDesktopRelayHostListing, 'pairingRevision' | 'runtimeId'>
   inContact: boolean
   /** Null until a fetch under this pairing answered. */
   rows: MobileRelayServerWorktreeRow[] | null
-  lastFetchAnswered: boolean
-  closeWatch: (() => void) | null
+  /** The rows are the server's answer since it last came into contact; else unverifiable. */
+  confirmed: boolean
+  watch: MobileDesktopRelayHostWatch | null
   refreshing: Promise<void> | null
   refreshAgain: boolean
 }
 
 /**
- * The desktop's one live set of paired-server workspace rows. Fetched when a server comes into
- * contact, on each of its change events, when a reader asks, and every 30 s while the list is
- * showing. A server that loses contact keeps its last rows as unverifiable; only removing or
- * re-pairing it drops them, and a fetch that answers replaces them, deletions included.
+ * The desktop's one live set of paired-server workspace rows, needing no window. A server is
+ * refetched when it comes into contact, on each of its change events, when a reader asks, and
+ * every 30 s while the list is showing. A server's last rows read unverifiable once it loses
+ * contact, until a fetch answers again. Only removing or re-pairing a server drops them; a fetch
+ * that answers replaces them, deletions included.
  */
 export class PairedServerRowsProducer {
   private readonly servers = new Map<string, ServerEntry>()
   private hosts: MobileDesktopRelayHosts | null = null
   private revision = 0
 
-  constructor(private readonly options: { hasDemand: () => boolean }) {}
+  constructor(
+    private readonly options: {
+      hasDemand: () => boolean
+      hostLabelOverrides: () => ReadonlyMap<ExecutionHostId, string>
+    }
+  ) {}
 
   attach(hosts: MobileDesktopRelayHosts): () => void {
     this.hosts = hosts
@@ -67,7 +78,7 @@ export class PairedServerRowsProducer {
       stopStatus()
       stopRetired()
       for (const entry of this.servers.values()) {
-        entry.closeWatch?.()
+        entry.watch?.close()
       }
       this.servers.clear()
       this.hosts = null
@@ -75,55 +86,56 @@ export class PairedServerRowsProducer {
     }
   }
 
-  /**
-   * Re-reads the configured servers: drops removed or re-paired ones, watches those in contact
-   * and fetches one that just came into contact. Returns the servers as described.
-   */
-  sync(): DescribedRelayHost[] {
+  /** Re-reads the configured servers: drops removed or re-paired ones, watches those in contact. */
+  sync(): void {
     const hosts = this.hosts
     if (!hosts) {
-      return []
+      return
     }
-    const described = describeRelayHosts(hosts)
-    const listed = new Map(described.map((host) => [host.environmentId, host]))
+    const fences = new Map(
+      hosts.list().environments.map((environment) => [environment.id, relayHostFence(environment)])
+    )
     for (const [environmentId, entry] of this.servers) {
-      const host = listed.get(environmentId)
-      if (!host || relayHostFence(host.identity) !== entry.fence) {
-        entry.closeWatch?.()
+      if (fences.get(environmentId) !== entry.fence) {
+        entry.watch?.close()
         this.servers.delete(environmentId)
         this.revision += 1
       }
     }
-    for (const host of described) {
-      let entry = this.servers.get(host.environmentId)
-      if (!entry) {
-        entry = {
+    // Why the shown hosts: a managed server reached over its SSH host's relay is not in contact here.
+    const shown = new Map(describeRelayHosts(hosts).map((host) => [host.environmentId, host]))
+    for (const host of shown.values()) {
+      if (!this.servers.has(host.environmentId)) {
+        this.servers.set(host.environmentId, {
           environmentId: host.environmentId,
           fence: relayHostFence(host.identity),
           identity: host.identity,
           inContact: false,
           rows: null,
-          lastFetchAnswered: false,
-          closeWatch: null,
+          confirmed: false,
+          watch: null,
           refreshing: null,
           refreshAgain: false
-        }
-        this.servers.set(host.environmentId, entry)
+        })
         this.revision += 1
-      }
-      const inContact = host.health === 'available'
-      if (inContact !== entry.inContact) {
-        entry.inContact = inContact
-        this.revision += 1
-      }
-      if (inContact && !entry.closeWatch) {
-        this.watch(hosts, entry)
-      } else if (!inContact && entry.closeWatch) {
-        entry.closeWatch()
-        entry.closeWatch = null
       }
     }
-    return described
+    for (const entry of this.servers.values()) {
+      const inContact = shown.get(entry.environmentId)?.health === 'available'
+      if (inContact !== entry.inContact) {
+        entry.inContact = inContact
+        entry.confirmed = false
+        this.revision += 1
+      }
+      // Why current(): a replaced transport can end the stream without telling it.
+      if (inContact && !entry.watch?.current()) {
+        entry.watch?.close()
+        this.watch(hosts, entry)
+      } else if (!inContact && entry.watch) {
+        entry.watch.close()
+        entry.watch = null
+      }
+    }
   }
 
   /** Fetches now, or joins the fetch in flight. */
@@ -148,13 +160,26 @@ export class PairedServerRowsProducer {
   }
 
   snapshot(): PairedServerRowsSnapshot {
+    const shown = new Map(
+      (this.hosts
+        ? describePairedServerHosts({
+            ...this.hosts.list(),
+            hostLabelOverrides: this.options.hostLabelOverrides()
+          })
+        : []
+      ).map(({ environmentId, label, health, compatibility, pairedDeviceId }) => [
+        environmentId,
+        { label, health, compatibility, pairedDeviceId }
+      ])
+    )
     return {
       revision: this.revision,
       servers: [...this.servers.values()].map((entry) => {
         const hostId = toRuntimeExecutionHostId(entry.environmentId)
         return {
           hostId,
-          freshness: entry.inContact && entry.lastFetchAnswered ? 'live' : 'unverifiable',
+          freshness: entry.inContact && entry.confirmed ? 'live' : 'unverifiable',
+          host: shown.get(entry.environmentId) ?? null,
           rows: (entry.rows ?? []).flatMap((row) => normalizePairedServerRow(hostId, row) ?? [])
         }
       })
@@ -163,8 +188,8 @@ export class PairedServerRowsProducer {
 
   private watch(hosts: MobileDesktopRelayHosts, entry: ServerEntry): void {
     const current = (): boolean => this.servers.get(entry.environmentId) === entry
-    // Ready fires on every (re)connect, so contact and a missed-event replay both refetch.
-    entry.closeWatch = hosts.watchChanges({ environmentId: entry.environmentId }, entry.identity, {
+    // Ready fires on every (re)connect, so contact and a missed-event replay both count as changes.
+    const watch = hosts.watchChanges({ environmentId: entry.environmentId }, entry.identity, {
       onChange: () => {
         if (current()) {
           // A fetch already in flight may predate this change, so one more runs after it.
@@ -173,11 +198,19 @@ export class PairedServerRowsProducer {
         }
       },
       onClose: () => {
-        if (current()) {
-          entry.closeWatch = null
+        if (current() && entry.watch === watch) {
+          entry.watch = null
         }
       }
     })
+    entry.watch = watch
+  }
+
+  private unconfirm(entry: ServerEntry): void {
+    if (entry.confirmed) {
+      entry.confirmed = false
+      this.revision += 1
+    }
   }
 
   private async fetchUntilCurrent(hosts: MobileDesktopRelayHosts, entry: ServerEntry) {
@@ -205,15 +238,14 @@ export class PairedServerRowsProducer {
       return
     }
     const reply = response?.ok ? WorktreePsReplySchema.safeParse(response.result) : null
-    const answered = reply?.success === true
-    if (reply?.success) {
-      entry.rows = stampServerWorktreeRows(entry.environmentId, reply.data.worktrees)
+    if (!reply?.success) {
+      this.unconfirm(entry)
+      return
     }
+    entry.rows = stampServerWorktreeRows(entry.environmentId, reply.data.worktrees)
+    entry.confirmed = entry.inContact
     // Every answer moves the revision: rows carry activity that changes without a catalog event.
-    if (answered || entry.lastFetchAnswered) {
-      entry.lastFetchAnswered = answered
-      this.revision += 1
-    }
+    this.revision += 1
   }
 }
 

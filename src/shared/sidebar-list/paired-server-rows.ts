@@ -16,6 +16,14 @@ const PairedServerWorkspaceRowSchema = z.object({
   isPinned: z.boolean()
 })
 
+/** See PairedServerHost; health and compatibility stay open strings, as a reader only compares them. */
+const PairedServerHostFactsSchema = z.object({
+  label: z.string(),
+  health: z.string(),
+  compatibility: z.string().nullable(),
+  pairedDeviceId: z.string().nullable()
+})
+
 /** Every configured server main lists rows for. Unverifiable: its last rows, not confirmed current. */
 export const PairedServerRowsSnapshotSchema = z.object({
   revision: z.number(),
@@ -23,10 +31,14 @@ export const PairedServerRowsSnapshotSchema = z.object({
     z.object({
       hostId: z.string(),
       freshness: z.enum(['live', 'unverifiable']),
+      /** Null while the desktop does not show the server (a managed one folded into its SSH host). */
+      host: PairedServerHostFactsSchema.nullable(),
       rows: z.array(PairedServerWorkspaceRowSchema)
     })
   )
 })
+
+export type PairedServerHostFacts = z.infer<typeof PairedServerHostFactsSchema>
 
 export type PairedServerWorkspaceRow = z.infer<typeof PairedServerWorkspaceRowSchema>
 export type PairedServerRowsSnapshot = z.infer<typeof PairedServerRowsSnapshotSchema>

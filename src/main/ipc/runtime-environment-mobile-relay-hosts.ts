@@ -10,7 +10,10 @@ import {
   runtimeEnvironmentStatusFromSnapshot,
   type RuntimeEnvironmentStatus
 } from '../../shared/runtime-host-status'
-import type { MobileDesktopRelayHosts } from '../runtime/mobile-desktop-relay/mobile-desktop-relay-hosts'
+import type {
+  MobileDesktopRelayHosts,
+  MobileDesktopRelayHostWatch
+} from '../runtime/mobile-desktop-relay/mobile-desktop-relay-hosts'
 import { resolveManagedRuntimeEnvironment } from './runtime-environment-managed-tunnel'
 import type { SshConnectionState } from '../../shared/ssh-types'
 import { getRegisteredSshState, listRegisteredSshTargets } from '../ssh/ssh-target-registry'
@@ -131,13 +134,20 @@ function watchRuntimeEnvironmentChanges(
   environmentId: string,
   expected: { pairingRevision: number; runtimeId: string | null },
   callbacks: { onChange: () => void; onClose: () => void }
-): () => void {
+): MobileDesktopRelayHostWatch {
   const controller = new AbortController()
   let subscription: RemoteRuntimeSubscription | null = null
+  const generation = getRuntimeEnvironmentTransportGeneration(environmentId)
+  const current = (): boolean =>
+    !controller.signal.aborted &&
+    getRuntimeEnvironmentTransportGeneration(environmentId) === generation
+  const close = (): void => {
+    controller.abort()
+    subscription?.close()
+  }
   const end = (): void => {
     if (!controller.signal.aborted) {
-      controller.abort()
-      subscription?.close()
+      close()
       callbacks.onClose()
     }
   }
@@ -151,12 +161,8 @@ function watchRuntimeEnvironmentChanges(
     environment.runtimeId !== expected.runtimeId
   ) {
     queueMicrotask(end)
-    return () => controller.abort()
+    return { close, current }
   }
-  const generation = getRuntimeEnvironmentTransportGeneration(environmentId)
-  const isCurrent = (): boolean =>
-    !controller.signal.aborted &&
-    getRuntimeEnvironmentTransportGeneration(environmentId) === generation
   subscribeRuntimeEnvironment(
     userDataPath,
     environmentId,
@@ -165,7 +171,7 @@ function watchRuntimeEnvironmentChanges(
     15_000,
     {
       onEvent: (payload) => {
-        if (payload.type === 'response' && payload.response.ok && isCurrent()) {
+        if (payload.type === 'response' && payload.response.ok && current()) {
           const { response } = payload
           if (isRuntimeSubscriptionReplayResponse(response) || isWorkspaceChange(response.result)) {
             callbacks.onChange()
@@ -174,7 +180,7 @@ function watchRuntimeEnvironmentChanges(
       },
       onClose: end
     },
-    isCurrent,
+    current,
     controller.signal
   ).then((opened) => {
     subscription = opened
@@ -182,10 +188,7 @@ function watchRuntimeEnvironmentChanges(
       opened.close()
     }
   }, end)
-  return () => {
-    controller.abort()
-    subscription?.close()
-  }
+  return { close, current }
 }
 
 function isWorkspaceChange(message: unknown): boolean {

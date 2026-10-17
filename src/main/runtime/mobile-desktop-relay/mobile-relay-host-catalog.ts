@@ -50,11 +50,13 @@ export class MobileRelayHostCatalog {
 
   async worktrees(hostId: string): Promise<MobileRelayHostWorktreesResult> {
     const parsed = parseExecutionHostId(hostId)
+    // Why sync first: a re-pair since the last status publication must fetch under the new pairing.
+    this.options.serverRows.sync()
     const host =
       parsed?.kind === 'runtime'
-        ? this.options.serverRows
-            .sync()
-            .find((entry) => entry.environmentId === parsed.environmentId)
+        ? describeRelayHosts(this.options.hosts).find(
+            (entry) => entry.environmentId === parsed.environmentId
+          )
         : undefined
     if (!host) {
       return { worktrees: null }

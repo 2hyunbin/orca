@@ -105,7 +105,7 @@ function fakeHosts(
       return () => {}
     },
     onStatusChanged: () => () => {},
-    watchChanges: () => () => {}
+    watchChanges: () => ({ close: () => {}, current: () => true })
   }
   return { hosts, call, state }
 }
@@ -117,7 +117,10 @@ function catalog(
     sessions?: Record<string, Partial<WorkspaceSessionState>>
   } = {}
 ) {
-  const serverRows = new PairedServerRowsProducer({ hasDemand: () => false })
+  const serverRows = new PairedServerRowsProducer({
+    hasDemand: () => false,
+    hostLabelOverrides: () => new Map()
+  })
   serverRows.attach(hosts)
   return {
     catalog: new MobileRelayHostCatalog({

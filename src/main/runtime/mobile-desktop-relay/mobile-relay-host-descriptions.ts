@@ -1,7 +1,6 @@
 import { DELEGATED_MOBILE_DEVICES_RUNTIME_CAPABILITY } from '../../../shared/delegated-mobile-device-contract'
-import { parseExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
-import { buildExecutionHostRegistry } from '../../../shared/execution-host-registry'
-import { pickerExecutionHosts } from '../../../shared/managed-orcad-execution-host'
+import type { ExecutionHostId } from '../../../shared/execution-host'
+import { describePairedServerHosts } from '../../../shared/paired-server-hosts'
 import type {
   MobileRelayHost,
   MobileRelayHostRelay
@@ -23,35 +22,24 @@ export function describeRelayHosts(
   hosts: Pick<MobileDesktopRelayHosts, 'list'>,
   hostLabelOverrides: ReadonlyMap<ExecutionHostId, string> = new Map()
 ): DescribedRelayHost[] {
-  const { environments, statusByEnvironmentId, sshTargetLabels, sshConnectionStates } = hosts.list()
-  const identities = new Map(environments.map((environment) => [environment.id, environment]))
-  // Why the desktop's picker rows: a managed server folds into its SSH host as the sidebar shows it.
-  return pickerExecutionHosts(
-    buildExecutionHostRegistry({
-      repos: [],
-      settings: null,
-      hostSource: 'configured-only',
-      sshTargetLabels,
-      sshConnectionStates,
-      runtimeEnvironments: environments,
-      runtimeStatusByEnvironmentId: statusByEnvironmentId,
-      hostLabelOverrides
-    })
-  ).flatMap((entry) => {
-    const parsed = parseExecutionHostId(entry.id)
-    const identity = parsed?.kind === 'runtime' ? identities.get(parsed.environmentId) : undefined
-    if (parsed?.kind !== 'runtime' || !identity) {
+  const listing = hosts.list()
+  const identities = new Map(
+    listing.environments.map((environment) => [environment.id, environment])
+  )
+  return describePairedServerHosts({ ...listing, hostLabelOverrides }).flatMap((host) => {
+    const identity = identities.get(host.environmentId)
+    if (!identity) {
       return []
     }
-    const answer = lastVerifiedRuntimeStatus(statusByEnvironmentId.get(parsed.environmentId))
+    const answer = lastVerifiedRuntimeStatus(listing.statusByEnvironmentId.get(host.environmentId))
     return [
       {
-        hostId: parsed.id,
-        environmentId: parsed.environmentId,
+        hostId: host.hostId,
+        environmentId: host.environmentId,
         identity: { pairingRevision: identity.pairingRevision, runtimeId: identity.runtimeId },
-        label: entry.label,
-        health: entry.health,
-        relay: relayVerdict(entry.health, answer)
+        label: host.label,
+        health: host.health,
+        relay: relayVerdict(host.health, answer)
       }
     ]
   })
