@@ -6,7 +6,6 @@ import type { WorktreeLineage } from '../worktree/lineage-types'
 import type { WorkspaceStatusDefinition, Worktree } from '../worktree/types'
 import type { ExecutionHostId } from '../execution-host'
 import { ALL_GROUP_KEY, PINNED_GROUP_KEY } from './group-keys'
-import type { SidebarListLabels, SidebarListSettings } from './group-keys'
 import { appendOrderedGroups } from './group-sections'
 import type { SectionAppendContext } from './group-sections'
 import {
@@ -44,6 +43,8 @@ import type {
   PendingCreationRef,
   PinnedWorktreeDisplayPolicy,
   Row,
+  SidebarListLabels,
+  SidebarListSettings,
   WorktreeGroupBy
 } from './row-types'
 import { orderMainWorktreeFirst, getRenderedNaturalAnchorRepoIds } from './section-order'
@@ -182,7 +183,11 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
     .filter((section) => section.key !== PINNED_GROUP_KEY)
     .map((section) => [section.key, section.group])
   const naturalWorktrees = orderedGroups.flatMap(([, group]) => group.items)
-  const render = (collapsedGroups: Set<string>): Row[] => {
+  // Why labels again at render: header copy follows the locale on every re-emit, as it always has.
+  const render = (
+    collapsedGroups: Set<string>,
+    renderLabels: SidebarListLabels = labels
+  ): Row[] => {
     const result: Row[] = []
     if (groupBy !== 'repo') {
       for (const creation of pendingCreations) {
@@ -220,7 +225,7 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
       projectGrouping
     })
     emitPinnedGroup(
-      labels.pinned,
+      renderLabels.pinned,
       pinnedSectionWorktrees,
       repoMap,
       defaultHostId,
@@ -240,7 +245,7 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
         result.push({
           type: 'header',
           key: ALL_GROUP_KEY,
-          label: labels.all,
+          label: renderLabels.all,
           count: naturalWorktrees.length + renderableFolderWorkspaces.length,
           icon: { kind: 'all' },
           hostWorktreeCounts: getLaneHostWorktreeCounts(
@@ -289,7 +294,7 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
       mixedWorktreeHostContextLabels,
       noticeHostContextLabelByRepoId,
       occurrencePlan,
-      labels
+      labels: renderLabels
     }
 
     if (groupBy !== 'repo' || projectGroups.length === 0) {

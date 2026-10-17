@@ -3,7 +3,7 @@ import type { WorktreeOccurrencePlan } from '../worktree-occurrence-plan'
 import type { WorkspaceStatusDefinition, Worktree } from '../worktree/types'
 import type { ExecutionHostId } from '../execution-host'
 import { getWorkspaceStatusFromGroupKey } from '../workspace-statuses'
-import type { PRGroupKey, SidebarListLabels } from './group-keys'
+import type { PRGroupKey } from './group-keys'
 import type { NoticeHostContext } from './host-labels'
 import {
   getLaneHostWorktreeCounts,
@@ -24,6 +24,7 @@ import type {
   NewExternalWorktreesInboxCandidate,
   PendingCreationRef,
   Row,
+  SidebarListLabels,
   WorktreeGroupBy
 } from './row-types'
 

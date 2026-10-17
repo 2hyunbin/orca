@@ -2,7 +2,7 @@ import type { Repo } from '../repo-types'
 import type { Worktree } from '../worktree/types'
 import { getWorktreeHostIdentity } from '../worktree/host-qualified-identity'
 import { UNGROUPED_PROJECT_GROUP_KEY } from '../project-groups'
-import type { GlobalSettings } from '../global-settings-types'
+import type { SidebarListSettings } from './row-types'
 import { getGitHubPRCacheKey, getLegacyGitHubPRCacheKey } from '../github/github-cache-key'
 import { isGitHubPRSuppressed } from '../worktree/github-pr-suppression'
 import { getPRGroupKeyForState, type PRGroupKey } from '../workspace-view/workspace-pr-groups'
@@ -18,19 +18,6 @@ export function getProjectGroupHeaderKey(groupId: string | null): string {
 }
 
 export const PINNED_GROUP_KEY = 'pinned'
-
-/** Settings the list reads: PR cache scoping and the pinned display policy. */
-export type SidebarListSettings = Pick<
-  GlobalSettings,
-  'activeRuntimeEnvironmentId' | 'showPinnedWorktreesInGroups'
-> | null
-
-/** Localized header labels, supplied by each client so the builder stays free of i18n. */
-export type SidebarListLabels = {
-  pinned: string
-  all: string
-  prGroups: Readonly<Record<PRGroupKey, string>>
-}
 
 export const ALL_GROUP_KEY = 'all'
 

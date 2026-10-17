@@ -1,9 +1,8 @@
 import type { Repo } from '../repo-types'
 import type { WorkspaceStatusDefinition, Worktree } from '../worktree/types'
-import type { SidebarListSettings } from './group-keys'
 import type { ProjectGroupingModel } from '../project-section-grouping'
 import { ALL_GROUP_KEY } from './group-keys'
-import type { WorktreeGroupBy } from './row-types'
+import type { SidebarListSettings, WorktreeGroupBy } from './row-types'
 import { getGroupKeyForWorktree } from './worktree-group-keys'
 
 export function getRenderedNaturalAnchorRepoIds({

@@ -10,10 +10,10 @@ import {
   type ExecutionHostId
 } from '../../../../../../shared/execution-host'
 import type { ProjectGroupingModel } from '../../../../../../shared/project-section-grouping'
-import type { SidebarListSettings } from '../../../../../../shared/sidebar-list/group-keys'
 import { getPinnedWorktreeDisplayPolicy } from '../../../../../../shared/sidebar-list/row-types'
 import type {
   ImportedWorktreesCardCandidate,
+  SidebarListSettings,
   NewExternalWorktreesInboxCandidate,
   PendingCreationRef,
   PinnedWorktreeDisplayPolicy,

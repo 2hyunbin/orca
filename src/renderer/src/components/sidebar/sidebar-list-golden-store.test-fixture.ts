@@ -226,3 +226,18 @@ export function goldenLiveTerminalState(): Partial<AppState> {
     ptyIdsByTabId: { 'tab-live': ['pty-live'] }
   }
 }
+
+/** ext after its first import prompt: the detected worktree shows as an inbox row, not a card. */
+export function goldenInboxState(): Partial<AppState> {
+  return {
+    repos: [
+      orca,
+      orcaSsh,
+      api,
+      lab,
+      shared,
+      empty,
+      { ...ext, externalWorktreeVisibilityPromptDismissedAt: GOLDEN_NOW }
+    ]
+  }
+}

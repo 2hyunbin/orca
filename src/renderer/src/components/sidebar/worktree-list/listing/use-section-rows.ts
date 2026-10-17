@@ -11,6 +11,7 @@ import type { WorktreeLineage } from '../../../../../../shared/worktree/lineage-
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import { getHostDisplayLabelOverrides } from '../../../../../../shared/host-setting-overrides'
 import { buildSidebarRowPlan } from '../grouping/build-rows'
+import { getSidebarListLabels } from '../grouping/header-visuals'
 import { useEffectiveCollapsedGroups } from './use-collapsed-groups'
 import type { ProjectGroupingModel } from '../../../../../../shared/project-section-grouping'
 import type {
@@ -220,7 +221,7 @@ export function useSidebarSectionRows(args: SectionRowsArgs) {
     [effectiveCollapsedGroups, hostScopedGroups]
   )
   const rows: Row[] = useMemo(
-    () => rowPlan.render(rowCollapsedGroups),
+    () => rowPlan.render(rowCollapsedGroups, getSidebarListLabels()),
     [rowPlan, rowCollapsedGroups]
   )
   const orderedHostOptions = useMemo(

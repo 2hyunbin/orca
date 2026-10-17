@@ -2,8 +2,10 @@ import { CircleX, FolderTree, List, Pin } from 'lucide-react'
 import type React from 'react'
 import { translate } from '@/i18n/i18n'
 import type { PRGroupKey } from '../../../../../../shared/workspace-view/workspace-pr-groups'
-import type { SidebarListLabels } from '../../../../../../shared/sidebar-list/group-keys'
-import type { SidebarHeaderIcon } from '../../../../../../shared/sidebar-list/row-types'
+import type {
+  SidebarHeaderIcon,
+  SidebarListLabels
+} from '../../../../../../shared/sidebar-list/row-types'
 import {
   ConductorDoneIcon,
   ConductorProgressIcon,
@@ -49,12 +51,12 @@ export const PR_GROUP_META: Record<
   }
 }
 
-export const PROJECT_GROUP_META = {
+const PROJECT_GROUP_META = {
   tone: 'text-foreground',
   icon: FolderTree
 } as const
 
-export const PINNED_GROUP_META = {
+const PINNED_GROUP_META = {
   get label() {
     return translate('auto.components.sidebar.worktree.list.groups.4aeefc5996', 'Pinned')
   },
@@ -62,7 +64,7 @@ export const PINNED_GROUP_META = {
   icon: Pin
 } as const
 
-export const ALL_GROUP_META = {
+const ALL_GROUP_META = {
   get label() {
     return translate('auto.components.sidebar.worktree.list.groups.0ed04075b8', 'All')
   },
@@ -84,7 +86,7 @@ export function getSidebarListLabels(): SidebarListLabels {
   }
 }
 
-export type SidebarHeaderVisual = {
+type SidebarHeaderVisual = {
   tone: string
   icon: React.ComponentType<{ className?: string }>
 }

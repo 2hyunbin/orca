@@ -9,6 +9,7 @@ import type {
   Worktree
 } from '../worktree/types'
 import type { ExecutionHostId } from '../execution-host'
+import type { GlobalSettings } from '../global-settings-types'
 import type { PRGroupKey } from '../workspace-view/workspace-pr-groups'
 
 export type WorktreeGroupBy = 'none' | 'workspace-status' | 'repo' | 'pr-status'
@@ -20,7 +21,20 @@ export function getPinnedWorktreeDisplayPolicy(
   return settings?.showPinnedWorktreesInGroups === true ? 'duplicate-in-groups' : 'single-location'
 }
 
-/** Which glyph, and its tone, a group header draws; each client maps it to its own icon set. */
+/** Settings the list reads: PR cache scoping and the pinned display policy. */
+export type SidebarListSettings = Pick<
+  GlobalSettings,
+  'activeRuntimeEnvironmentId' | 'showPinnedWorktreesInGroups'
+> | null
+
+/** Localized header labels, supplied by each client so the builder stays free of i18n. */
+export type SidebarListLabels = {
+  pinned: string
+  all: string
+  prGroups: Readonly<Record<PRGroupKey, string>>
+}
+
+/** Which glyph a group header draws; each client maps it to its own icon and tone. */
 export type SidebarHeaderIcon =
   | { kind: 'pinned' }
   | { kind: 'all' }

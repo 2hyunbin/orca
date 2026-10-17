@@ -41,6 +41,7 @@ import { GOLDEN_NOW } from './sidebar-list-golden-factories.test-fixture'
 import {
   GOLDEN_WORKTREE_IDS,
   buildGoldenStoreState,
+  goldenInboxState,
   goldenLiveTerminalState,
   type GoldenView
 } from './sidebar-list-golden-store.test-fixture'
@@ -267,7 +268,8 @@ describe('sidebar row model goldens', () => {
     'single-host-scope': { workspaceHostScope: 'ssh:gpu-vm' },
     'repo-filter': { filterRepoIds: ['orca', 'lab'] },
     'hide-sleeping': { showSleepingWorkspaces: false, ...goldenLiveTerminalState() },
-    'hide-default-branch': { hideDefaultBranchWorkspace: true }
+    'hide-default-branch': { hideDefaultBranchWorkspace: true },
+    'new-external-inbox': goldenInboxState()
   }
 
   for (const [name, overrides] of Object.entries(SCENARIOS)) {

@@ -6,11 +6,10 @@ import {
   getWorkspaceStatus,
   getWorkspaceStatusGroupKey
 } from '../workspace-statuses'
-import type { SidebarListSettings } from './group-keys'
 import { ALL_GROUP_KEY, getPRGroupKey, getProjectGroupHeaderKey } from './group-keys'
 import { buildProjectGroupingIndex, getProjectGroupingForRepo } from '../project-section-grouping'
 import type { ProjectGroupingModel } from '../project-section-grouping'
-import type { WorktreeGroupBy } from './row-types'
+import type { SidebarListSettings, WorktreeGroupBy } from './row-types'
 
 export function getGroupKeyForWorktree(
   groupBy: WorktreeGroupBy,

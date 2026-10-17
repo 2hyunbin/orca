@@ -13,7 +13,7 @@ import {
   type RenderableFolderWorkspace
 } from './folder-workspace-lanes'
 import { PR_GROUP_ORDER, getPRGroupKey, getPRLaneKey } from './group-keys'
-import type { PRGroupKey, SidebarListLabels, SidebarListSettings } from './group-keys'
+import type { PRGroupKey } from './group-keys'
 import type { OrderedGroupEntry, WorktreeGroupEntry } from './worktree-group-entry'
 import { buildProjectSections, type ProjectGroupingIndex } from '../project-section-grouping'
 import { orderProjectSections } from '../project-section-order'
@@ -21,6 +21,8 @@ import type {
   ImportedWorktreesCardCandidate,
   NewExternalWorktreesInboxCandidate,
   PendingCreationRef,
+  SidebarListLabels,
+  SidebarListSettings,
   WorktreeGroupBy
 } from './row-types'
 
