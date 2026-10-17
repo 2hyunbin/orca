@@ -60,10 +60,13 @@ export type WorktreeAttention = {
 
 export const IDLE: WorktreeAttention = { cls: 5, attentionTimestamp: 0 }
 
+/** The tab fields attention reads, so main can score from its own tab records. */
+export type SmartAttentionTab = Pick<TerminalTab, 'id' | 'title'>
+
 export function hasFreshAttributedAgentStatus(
   agentStatusByPaneKey: Record<string, AgentStatusEntry> | undefined,
   now: number,
-  tabsByWorktree: Record<string, TerminalTab[]>
+  tabsByWorktree: Record<string, readonly SmartAttentionTab[]>
 ): boolean {
   const freshUnstampedTabIds = new Set<string>()
   for (const entry of Object.values(agentStatusByPaneKey ?? {})) {
@@ -291,7 +294,7 @@ export type TabPaneInputSources = {
  * stale working-pattern title can't leak through.
  */
 export function collectTabPaneInputs(
-  tab: Pick<TerminalTab, 'id' | 'title'>,
+  tab: SmartAttentionTab,
   worktreeLastActivityAt: number,
   sources: TabPaneInputSources,
   now: number
@@ -365,8 +368,8 @@ export function collectTabPaneInputs(
  * gated on `tabHasLivePty` so slept tabs' stale working-pattern titles don't leak through.
  */
 export function buildAttentionByWorktree(
-  worktrees: Worktree[],
-  tabsByWorktree: Record<string, TerminalTab[]> | null,
+  worktrees: readonly Pick<Worktree, 'id' | 'lastActivityAt'>[],
+  tabsByWorktree: Record<string, readonly SmartAttentionTab[]> | null,
   agentStatusByPaneKey: Record<string, AgentStatusEntry> | undefined,
   runtimePaneTitlesByTabId: Record<string, Record<number, string>>,
   ptyIdsByTabId: Record<string, string[]>,

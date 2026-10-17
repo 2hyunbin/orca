@@ -15,8 +15,10 @@ import {
   IDLE,
   buildAttentionByWorktree,
   hasFreshAttributedAgentStatus,
+  type SmartAttentionTab,
   type WorktreeAttention
 } from './smart-attention'
+import { smartSortPhase } from './smart-sort-phase'
 
 export type SortBy = WorkspaceSortBy
 
@@ -86,7 +88,7 @@ export function compareWorktreeSortLabel(
  */
 export function buildWorktreeComparator(
   sortBy: SortBy,
-  repoMap: Map<string, Repo>,
+  repoMap: Map<string, Pick<Repo, 'displayName'>>,
   now: number,
   attentionByWorktree: Map<string, WorktreeAttention>,
   labels?: WorktreeSortLabels
@@ -142,35 +144,91 @@ export function sortWorktreesSmart(
   migrationUnsupportedByPtyId?: Record<string, MigrationUnsupportedPtyEntry>,
   terminalLayoutsByTabId?: Record<string, TerminalLayoutSnapshot>
 ): Worktree[] {
-  // Why: `tabHasLivePty` (over `ptyIdsByTabId`) is the source of truth for
-  // liveness — slept terminals retain `tab.ptyId` as a wake hint, so reading
-  // it directly would falsely keep cold-start ordering off after restart.
-  const hasAnyLivePty = Object.values(tabsByWorktree).some((tabs) =>
-    tabs.some((tab) => tabHasLivePty(ptyIdsByTabId, tab.id))
-  )
+  return rankWorktreesForSort({
+    worktrees: [...worktrees],
+    sortBy: 'smart',
+    latched: false,
+    repoMap,
+    now: Date.now(),
+    sources: {
+      tabsByWorktree,
+      agentStatusByPaneKey,
+      runtimePaneTitlesByTabId,
+      ptyIdsByTabId,
+      migrationUnsupportedByPtyId,
+      terminalLayoutsByTabId
+    }
+  }).sorted
+}
 
-  const now = Date.now()
+/** What a Smart sort reads besides the rows; the window passes its store, main its own records. */
+export type SmartSortSources = {
+  tabsByWorktree: Record<string, readonly SmartAttentionTab[]>
+  agentStatusByPaneKey: Record<string, AgentStatusEntry>
+  runtimePaneTitlesByTabId: Record<string, Record<number, string>>
+  ptyIdsByTabId: Record<string, string[]>
+  migrationUnsupportedByPtyId?: Record<string, MigrationUnsupportedPtyEntry>
+  terminalLayoutsByTabId?: Record<string, TerminalLayoutSnapshot>
+}
+
+export type WorktreeSortRanking<W extends Worktree> = {
+  sorted: W[]
+  /** Smart only, and only once warm. */
+  attentionByWorktree: Map<string, WorktreeAttention> | null
+  /** True when this sort found the live signal that latches Smart for the list's lifetime. */
+  detectedLiveSmartSignal: boolean
+}
+
+/** One frozen order for the active mode; the window and main both sort through here. */
+export function rankWorktreesForSort<W extends Worktree>(args: {
+  /** Non-archived rows; sorted in place. */
+  worktrees: W[]
+  sortBy: SortBy
+  latched: boolean
+  repoMap: Map<string, Pick<Repo, 'displayName'>>
+  now: number
+  sources: SmartSortSources
+}): WorktreeSortRanking<W> {
+  const { worktrees, sortBy, now, sources } = args
+  // Why precompute: the label tiebreaker runs on every comparison in every mode.
   const labels = buildWorktreeSortLabels(worktrees)
-  if (!hasAnyLivePty && !hasFreshAttributedAgentStatus(agentStatusByPaneKey, now, tabsByWorktree)) {
-    // Cold start: use persisted sortOrder snapshot until the agent-status
-    // snapshot lands and a warm sort runs.
-    return [...worktrees].sort(
-      (a, b) => b.sortOrder - a.sortOrder || compareWorktreeSortLabel(a, b, labels)
+  let detectedLiveSmartSignal = false
+
+  // Why cold-start detection: agent-status hydrates async, so the warm comparator would collapse all to Class 4; keep the persisted order until a live signal appears.
+  if (smartSortPhase(sortBy, args.latched) === 'cold') {
+    // Why tabHasLivePty over tab.ptyId: slept terminals keep tab.ptyId as a wake hint, so it'd falsely keep cold-start ordering off.
+    const hasAnyLivePty = Object.values(sources.tabsByWorktree).some((tabs) =>
+      tabs.some((tab) => tabHasLivePty(sources.ptyIdsByTabId, tab.id))
     )
+    if (
+      hasAnyLivePty ||
+      hasFreshAttributedAgentStatus(sources.agentStatusByPaneKey, now, sources.tabsByWorktree)
+    ) {
+      detectedLiveSmartSignal = true
+    } else {
+      worktrees.sort((a, b) => b.sortOrder - a.sortOrder || compareWorktreeSortLabel(a, b, labels))
+      return { sorted: worktrees, attentionByWorktree: null, detectedLiveSmartSignal: false }
+    }
   }
 
-  const attentionByWorktree = buildAttentionByWorktree(
-    worktrees,
-    tabsByWorktree,
-    agentStatusByPaneKey,
-    runtimePaneTitlesByTabId,
-    ptyIdsByTabId,
-    now,
-    migrationUnsupportedByPtyId,
-    terminalLayoutsByTabId
-  )
-
-  return [...worktrees].sort(
-    buildWorktreeComparator('smart', repoMap, now, attentionByWorktree, labels)
-  )
+  // Why precompute: hot sort — build the attention map once so the O(N log N) comparator does O(1) lookups.
+  const attentionByWorktree =
+    sortBy === 'smart'
+      ? buildAttentionByWorktree(
+          worktrees,
+          sources.tabsByWorktree,
+          sources.agentStatusByPaneKey,
+          sources.runtimePaneTitlesByTabId,
+          sources.ptyIdsByTabId,
+          now,
+          sources.migrationUnsupportedByPtyId,
+          sources.terminalLayoutsByTabId
+        )
+      : new Map<string, WorktreeAttention>()
+  worktrees.sort(buildWorktreeComparator(sortBy, args.repoMap, now, attentionByWorktree, labels))
+  return {
+    sorted: worktrees,
+    attentionByWorktree: sortBy === 'smart' ? attentionByWorktree : null,
+    detectedLiveSmartSignal
+  }
 }

@@ -1,16 +1,16 @@
 import {
   AGENT_STATE_HISTORY_MAX,
   type AgentStateHistoryEntry,
-  type AgentStatusEntry
-} from '../../../../shared/agent-status-types'
-import { agentVerdictFields } from '../../../../shared/agent-main-agent-verdict'
-import type { AgentStatusPayload } from './agent-status-contract'
+  type AgentStatusEntry,
+  type ParsedAgentStatusPayload
+} from './agent-status-types'
+import { agentVerdictFields } from './agent-main-agent-verdict'
 
 /** The history a live entry carries after this write, and when its state was first observed. A
  *  state switch moves the previous state into history; a session boundary is never recorded. */
 export function resolveAgentStatusLiveEntryStateHistory(
   existing: AgentStatusEntry | undefined,
-  payload: Pick<AgentStatusPayload, 'state' | 'sessionBoundary'>,
+  payload: Pick<ParsedAgentStatusPayload, 'state' | 'sessionBoundary'>,
   updatedAt: number
 ): {
   history: AgentStateHistoryEntry[]
