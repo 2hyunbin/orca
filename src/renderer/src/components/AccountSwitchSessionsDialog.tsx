@@ -48,7 +48,6 @@ function SwitchPromptDialog({ prompt }: { prompt: AgentAccountSwitchPrompt }): R
       return next
     })
   }
-  const focusRestart = prompt.agent.defaultButton === 'restart'
   return (
     <Dialog
       open
@@ -112,7 +111,6 @@ function SwitchPromptDialog({ prompt }: { prompt: AgentAccountSwitchPrompt }): R
             type="button"
             variant="outline"
             size="sm"
-            autoFocus={!focusRestart}
             onClick={() => answerAgentAccountSwitchPrompt('keep', { dontAskAgain })}
           >
             {translate('accounts.switchSessions.keep', 'Keep as is')}
@@ -120,7 +118,7 @@ function SwitchPromptDialog({ prompt }: { prompt: AgentAccountSwitchPrompt }): R
           <Button
             type="button"
             size="sm"
-            autoFocus={focusRestart}
+            autoFocus
             disabled={chosen.length === 0}
             onClick={() =>
               answerAgentAccountSwitchPrompt('restart', { ptyIds: chosen, dontAskAgain })

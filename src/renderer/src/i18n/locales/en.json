@@ -19972,8 +19972,8 @@
         "settingDescription": "Restarting continues each running conversation on the new account."
       },
       "codex": {
-        "bodyOne": "1 Codex session is still running on {{previous}}. Restarting relaunches it on {{next}} and stops any work in progress.",
-        "bodyOther": "{{count}} Codex sessions are still running on {{previous}}. Restarting relaunches them on {{next}} and stops any work in progress.",
+        "bodyOne": "1 Codex session is still running on {{previous}}. Restarting relaunches it on {{next}}. A busy session waits for idle before restarting.",
+        "bodyOther": "{{count}} Codex sessions are still running on {{previous}}. Restarting relaunches them on {{next}}. Busy sessions wait for idle before restarting.",
         "settingTitle": "When you switch accounts while Codex is running",
         "settingDescription": "Restarting relaunches each running Codex session on the new account."
       },

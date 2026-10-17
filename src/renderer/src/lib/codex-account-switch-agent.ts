@@ -3,113 +3,57 @@
  * CODEX_HOME (`<home>/sessions/...`), and a launch reads the selected account's home, so the
  * transcript path names the account a session runs on.
  */
-import {
-  confirmRuntimeTerminalForegroundProcess,
-  type RuntimeTerminalProcessInspection
-} from '@/runtime/runtime-terminal-inspection'
-import type { GlobalSettings } from '../../../shared/global-settings-types'
-import type { CodexManagedAccount } from '../../../shared/managed-account-types'
-import { isShellProcess } from '../../../shared/shell-process-detection'
-import { isClientOnlyUnverifiableInspection } from '../../../shared/terminal-process-inspection'
-import type { TuiAgent } from '../../../shared/tui-agent'
 import { translate } from '@/i18n/i18n'
-import {
-  findAccountByHomeFolder,
-  normalizeAgentHomeFolder,
-  transcriptHomeFolder
-} from './agent-account-switch-discovery'
 import type { AccountSwitchAgent } from './agent-account-switch-agent'
-import { resolveCodexSwitchAccountLabel } from './codex-session-restart'
 import {
-  isCodexForegroundProcess,
-  isCodexRestartEligiblePane
-} from './codex-pane-restart-eligibility'
+  CODEX_ACCOUNT_RESTART_STARTUP,
+  resolveCodexSwitchAccountLabel
+} from './codex-session-restart'
+import { isCodexRestartEligiblePane } from './codex-pane-restart-eligibility'
 
-/** Codex's own default home, host or inside a WSL distro. */
-const DEFAULT_CODEX_HOME_SUFFIX = '/.codex'
+// Why the layout and not a roster: a server's roster carries no home paths, and Orca keeps every
+// saved account's home, host or WSL, at `.../codex-accounts/<id>/home`.
+const SAVED_ACCOUNT_SESSIONS = /\/codex-accounts\/([^/]+)\/home\/sessions\//gi
+// Why the mirror counts: a System default launch runs there when the user sets their own CODEX_HOME.
+const SYSTEM_DEFAULT_SESSIONS = /\/(\.codex|codex-runtime-home\/home)\/sessions\//i
 
 /**
  * The Codex account a session runs on, from its rollout's `<CODEX_HOME>/sessions/...` path: a
- * saved account's home, null for System default (`~/.codex` or the configured history home),
- * undefined otherwise — including Orca's retired shared home, which no account owns.
+ * saved account's id, null for System default, undefined when the home is neither.
  */
 export function resolveCodexSessionAccountId(
-  transcriptPath: string | undefined,
-  accounts: readonly CodexManagedAccount[],
-  sessionSourceHome?: GlobalSettings['codexSessionSourceHome']
+  transcriptPath: string | undefined
 ): string | null | undefined {
-  const home = transcriptHomeFolder(transcriptPath, 'sessions')
-  if (home === undefined) {
-    return undefined
+  const slashed = transcriptPath?.replace(/\\/g, '/') ?? ''
+  const saved = [...slashed.matchAll(SAVED_ACCOUNT_SESSIONS)].at(-1)
+  if (saved) {
+    return saved[1]
   }
-  const account = findAccountByHomeFolder(home, accounts, (candidate) => [
-    candidate.managedHomePath,
-    candidate.wslLinuxHomePath
-  ])
-  if (account) {
-    return account.id
-  }
-  const systemDefaultHomes = [
-    sessionSourceHome?.host,
-    ...Object.values(sessionSourceHome?.wsl ?? {})
-  ].flatMap((folder) => (folder?.trim() ? [normalizeAgentHomeFolder(folder.trim())] : []))
-  return home.endsWith(DEFAULT_CODEX_HOME_SUFFIX) || systemDefaultHomes.includes(home)
-    ? null
-    : undefined
-}
-
-/**
- * Whether Codex holds the pane's foreground. Why the fresh read: the cached foreground can flap to
- * the shell for a live Codex session (#11064).
- */
-async function isCodexInForeground(
-  ptyId: string,
-  launchAgent: TuiAgent | undefined,
-  inspection: RuntimeTerminalProcessInspection
-): Promise<boolean> {
-  if (isCodexRestartEligiblePane({ inspection, launchAgent })) {
-    return true
-  }
-  if (
-    isClientOnlyUnverifiableInspection(inspection) ||
-    inspection.foregroundProcess === null ||
-    !isShellProcess(inspection.foregroundProcess)
-  ) {
-    return false
-  }
-  return isCodexForegroundProcess(await confirmRuntimeTerminalForegroundProcess(ptyId))
+  return SYSTEM_DEFAULT_SESSIONS.test(slashed) ? null : undefined
 }
 
 export const CODEX_ACCOUNT_SWITCH_AGENT: AccountSwitchAgent = {
   agent: 'codex',
   settingKey: 'codexAccountSwitchRunningSessions',
-  // Why: a Codex restart stops work at once, so a stray Enter must not trigger it (#10863).
-  defaultButton: 'keep',
-  waitsForIdle: false,
-  // Why not: a Codex restart without a session to resume relaunches Codex bare.
-  requiresResume: false,
-  transcriptAccountId: (state, transcriptPath) =>
-    resolveCodexSessionAccountId(
-      transcriptPath,
-      state.settings?.codexManagedAccounts ?? [],
-      state.settings?.codexSessionSourceHome
-    ),
+  // Why: Codex can start a session over without its history, so one with none to resume still moves.
+  freshStartup: CODEX_ACCOUNT_RESTART_STARTUP,
+  transcriptAccountId: (transcriptPath) => resolveCodexSessionAccountId(transcriptPath),
   launchAccountId: (snapshot) => snapshot.accountId ?? null,
   accountLabel: (snapshot) =>
     resolveCodexSwitchAccountLabel(snapshot.state.accounts, snapshot.accountId),
-  isInForeground: (pane, inspection) =>
-    isCodexInForeground(pane.ptyId, pane.tab.launchAgent, inspection),
+  isAgentForeground: (reading, launchAgent) =>
+    isCodexRestartEligiblePane({ inspection: reading, launchAgent }),
   copy: {
     body: (values) =>
       values.count === 1
         ? translate(
             'accounts.switchSessions.codex.bodyOne',
-            '1 Codex session is still running on {{previous}}. Restarting relaunches it on {{next}} and stops any work in progress.',
+            '1 Codex session is still running on {{previous}}. Restarting relaunches it on {{next}}. A busy session waits for idle before restarting.',
             values
           )
         : translate(
             'accounts.switchSessions.codex.bodyOther',
-            '{{count}} Codex sessions are still running on {{previous}}. Restarting relaunches them on {{next}} and stops any work in progress.',
+            '{{count}} Codex sessions are still running on {{previous}}. Restarting relaunches them on {{next}}. Busy sessions wait for idle before restarting.',
             values
           ),
     settingTitle: () =>

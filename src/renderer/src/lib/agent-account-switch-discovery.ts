@@ -5,9 +5,13 @@
  */
 import type { AppState } from '@/store'
 import { useAppStore } from '@/store'
-import { inspectRuntimeTerminalProcess } from '@/runtime/runtime-terminal-inspection'
+import {
+  confirmRuntimeTerminalForegroundProcess,
+  inspectRuntimeTerminalProcess
+} from '@/runtime/runtime-terminal-inspection'
 import { normalizeAgentProviderSession } from '../../../shared/agent-session-resume'
 import { isTerminalLeafId, makePaneKey } from '../../../shared/stable-pane-id'
+import { isClientOnlyUnverifiableInspection } from '../../../shared/terminal-process-inspection'
 import type { CodexAccountSelectionTarget } from '../../../shared/codex-selection-lane'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
@@ -16,10 +20,9 @@ import type { AccountSwitchSession } from './agent-account-switch-sessions'
 import type { AccountSwitchAgent } from './agent-account-switch-agent'
 import { getRendererAppPlatform } from './renderer-app-platform'
 import {
-  getCodexAccountSwitchLaneMatcher,
-  isForeignMachineCodexPtyId,
-  resolveCodexPaneSelectionLane
-} from './codex-pane-selection-lane'
+  getAccountSwitchLaneMatcher,
+  resolvePaneAccountSelectionLaneKey
+} from './pane-account-selection-lane'
 
 export type AgentSwitchScope = {
   owner: RuntimeClientTarget
@@ -54,7 +57,7 @@ export function findAccountByHomeFolder<T>(
   )
 }
 
-type LocalAgentPane = {
+type AgentPane = {
   worktreeId: string
   tab: TerminalTab
   leafId: string
@@ -62,36 +65,33 @@ type LocalAgentPane = {
   accountId: string | null | undefined
 }
 
-/** This machine's terminal (not structured) sessions of `reader.agent` in the switch's lane. */
-function* localAgentPanesInLane(
+/** Terminal (not structured) sessions of `reader.agent` in the switch's lane, on any machine. */
+function* agentPanesInLane(
   state: AppState,
   reader: AccountSwitchAgent,
   scope: AgentSwitchScope
-): Generator<LocalAgentPane> {
-  const isLaneInScope = getCodexAccountSwitchLaneMatcher(scope)
+): Generator<AgentPane> {
+  const isLaneInScope = getAccountSwitchLaneMatcher(scope)
   for (const [worktreeId, tabs] of Object.entries(state.tabsByWorktree)) {
     for (const tab of tabs) {
       const boundPtyIds = state.ptyIdsByTabId[tab.id] ?? []
       const leaves = state.terminalLayoutsByTabId[tab.id]?.ptyIdsByLeafId ?? {}
       for (const [leafId, ptyId] of Object.entries(leaves)) {
-        if (
-          !ptyId ||
-          !isTerminalLeafId(leafId) ||
-          !boundPtyIds.includes(ptyId) ||
-          isForeignMachineCodexPtyId(ptyId)
-        ) {
+        if (!ptyId || !isTerminalLeafId(leafId) || !boundPtyIds.includes(ptyId)) {
           continue
         }
         const entry = state.agentStatusByPaneKey[makePaneKey(tab.id, leafId)]
         if (entry?.agentType !== reader.agent || entry.structuredHostOwned) {
           continue
         }
-        if (!isLaneInScope(resolveCodexPaneSelectionLane({ state, tab, ptyId }).laneKey)) {
+        // Why by lane: a WSL host's terminals run on this desktop's distro selection, while SSH
+        // panes keep their machine's own login and match no switch.
+        if (!isLaneInScope(resolvePaneAccountSelectionLaneKey({ state, tab, ptyId }))) {
           continue
         }
         const accountId = reader.transcriptAccountId(
-          state,
-          normalizeAgentProviderSession(entry.providerSession)?.transcriptPath
+          normalizeAgentProviderSession(entry.providerSession)?.transcriptPath,
+          { state, owner: scope.owner }
         )
         yield { worktreeId, tab, leafId, ptyId, accountId }
       }
@@ -106,7 +106,7 @@ export function findQueuedAccountRestartsOnAccount(
 ): string[] {
   const state = useAppStore.getState()
   const ptyIds: string[] = []
-  for (const pane of localAgentPanesInLane(state, reader, scope)) {
+  for (const pane of agentPanesInLane(state, reader, scope)) {
     if (
       state.pendingPaneAccountRestarts[pane.ptyId] === reader.agent &&
       pane.accountId === scope.accountId
@@ -117,28 +117,43 @@ export function findQueuedAccountRestartsOnAccount(
   return ptyIds
 }
 
+/** Whether the agent, not a shell, holds the pane, re-checked once against a fresh read. */
+async function isAgentHoldingPane(reader: AccountSwitchAgent, pane: AgentPane): Promise<boolean> {
+  const inspection = await inspectRuntimeTerminalProcess(pane.ptyId)
+  if (isClientOnlyUnverifiableInspection(inspection)) {
+    return false
+  }
+  if (reader.isAgentForeground(inspection, pane.tab.launchAgent)) {
+    return true
+  }
+  // Why: the cached name can flap to the shell for a live session (#11064), and the native macOS
+  // Claude reads as its version folder until a fresh read resolves it.
+  const confirmed = await confirmRuntimeTerminalForegroundProcess(pane.ptyId)
+  return (
+    confirmed !== null &&
+    reader.isAgentForeground(
+      { foregroundProcess: confirmed, hasChildProcesses: inspection.hasChildProcesses },
+      pane.tab.launchAgent
+    )
+  )
+}
+
 /**
- * Local panes in the switched lane whose session runs on `fromAccountId` (null is System
- * default), the account the switch left. Why
- * none for remote owners: a relay or SSH machine keeps its own login, and its transcript paths
- * name homes this machine does not know.
+ * Panes in the switched lane whose session runs on `fromAccountId` (null is System default), the
+ * account the switch left.
  */
 export async function findMovableAgentSessions(
   reader: AccountSwitchAgent,
   scope: AgentSwitchScope & { fromAccountId: string | null }
 ): Promise<AccountSwitchSession[]> {
-  if (scope.owner.kind !== 'local') {
-    return []
-  }
-  const panes: LocalAgentPane[] = []
-  for (const pane of localAgentPanesInLane(useAppStore.getState(), reader, scope)) {
+  const panes: AgentPane[] = []
+  for (const pane of agentPanesInLane(useAppStore.getState(), reader, scope)) {
     // Why undefined never matches: an unknown home cannot be shown to be on the old account.
-    const { accountId } = pane
-    if (accountId !== scope.fromAccountId) {
+    if (pane.accountId !== scope.fromAccountId) {
       continue
     }
     if (
-      reader.requiresResume &&
+      !reader.freshStartup &&
       !resolveAgentAccountRestartResumeStartup(reader.agent, {
         tabId: pane.tab.id,
         leafId: pane.leafId,
@@ -150,16 +165,11 @@ export async function findMovableAgentSessions(
     }
     panes.push(pane)
   }
-  const inForeground = await Promise.all(
-    panes.map((pane) =>
-      inspectRuntimeTerminalProcess(pane.ptyId).then(
-        (inspection) => reader.isInForeground(pane, inspection),
-        () => false
-      )
-    )
+  const holding = await Promise.all(
+    panes.map((pane) => isAgentHoldingPane(reader, pane).catch(() => false))
   )
   return panes
-    .filter((_, index) => inForeground[index])
+    .filter((_, index) => holding[index])
     .map((pane) => ({
       ptyId: pane.ptyId,
       worktreeId: pane.worktreeId,

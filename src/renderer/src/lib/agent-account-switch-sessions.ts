@@ -40,7 +40,7 @@ export type AgentAccountSwitchPrompt = {
 /** 'show-confirmation' leaves the caller's own switch confirmation to show. */
 export type AgentAccountSwitchOutcome = 'show-confirmation' | 'handled'
 
-/** Whether the pane's agent is mid-turn; a Claude restart during a permission prompt or question drops it. */
+/** Whether the pane's agent is mid-turn: a restart during a reply, permission prompt or question drops it. */
 export function isAgentPaneMidTurn(
   state: AppState,
   paneKey: string,
@@ -50,7 +50,11 @@ export function isAgentPaneMidTurn(
   return entry?.agentType === agent && entry.state !== 'done'
 }
 
-type PromptSlot = { key: string; prompt: AgentAccountSwitchPrompt }
+/** One question per agent, host and lane: a switch moves only that lane's sessions. */
+type SlotKey = { agent: AccountRestartAgent; owner: string | null; lane: string }
+type PromptSlot = { key: SlotKey; prompt: AgentAccountSwitchPrompt }
+
+const slotId = (key: SlotKey): string => JSON.stringify([key.agent, key.owner, key.lane])
 
 let nextPromptId = 0
 const generationBySlot = new Map<string, number>()
@@ -78,13 +82,14 @@ export function subscribeAgentAccountSwitchPrompt(listener: () => void): () => v
  * Starts a switch's question in `slotKey`, dropping the open ones it `covers`. The returned
  * check is false once a newer switch in the same slot has started.
  */
-function beginSlot(slotKey: string, covers: (openSlotKey: string) => boolean): () => boolean {
-  const generation = (generationBySlot.get(slotKey) ?? 0) + 1
-  generationBySlot.set(slotKey, generation)
+function beginSlot(slotKey: SlotKey, covers: (open: SlotKey) => boolean): () => boolean {
+  const id = slotId(slotKey)
+  const generation = (generationBySlot.get(id) ?? 0) + 1
+  generationBySlot.set(id, generation)
   if (slots.some((slot) => covers(slot.key))) {
     setSlots(slots.filter((slot) => !covers(slot.key)))
   }
-  return () => generationBySlot.get(slotKey) === generation
+  return () => generationBySlot.get(id) === generation
 }
 
 /**
@@ -179,8 +184,8 @@ export async function handleRunningAgentSessionsAfterSwitch(
 ): Promise<AgentAccountSwitchOutcome> {
   const fromAccountId = agent.launchAccountId(args.before)
   const toAccountId = agent.launchAccountId(args.after)
-  // Why: a server's switch keeps its own login, and one between coinciding homes moves nothing.
-  if (args.owner.kind !== 'local' || fromAccountId === toAccountId) {
+  // Why: a switch between coinciding homes moves nothing.
+  if (fromAccountId === toAccountId) {
     return 'show-confirmation'
   }
   const target = normalizeCodexAccountSelectionTarget(args.target)
@@ -189,15 +194,19 @@ export async function handleRunningAgentSessionsAfterSwitch(
   const scope = { owner: args.owner, target, clearsEveryWslDistro: clearsEveryWsl }
   // Why per lane: a switch moves only its own lane's sessions, so it must not replace another
   // lane's open question; the every-distro question overlaps each distro's.
-  const lane = clearsEveryWsl ? SLOT_EVERY_WSL : getCodexSelectionLaneKey(target)
-  const slotKey = `${agent.agent}:${lane}`
-  const isCurrent = beginSlot(slotKey, (openSlotKey) => {
-    const [openAgent, openLane = ''] = openSlotKey.split(/:(.*)/)
+  const switchSlot: SlotKey = {
+    agent: agent.agent,
+    owner: args.owner.kind === 'environment' ? args.owner.environmentId : null,
+    lane: clearsEveryWsl ? SLOT_EVERY_WSL : getCodexSelectionLaneKey(target)
+  }
+  const isCurrent = beginSlot(switchSlot, (open) => {
+    if (open.agent !== switchSlot.agent || open.owner !== switchSlot.owner) {
+      return false
+    }
     return (
-      openAgent === agent.agent &&
-      (openLane === lane ||
-        (lane.startsWith(SLOT_WSL_PREFIX) &&
-          (clearsEveryWsl ? openLane.startsWith(SLOT_WSL_PREFIX) : openLane === SLOT_EVERY_WSL)))
+      open.lane === switchSlot.lane ||
+      (switchSlot.lane.startsWith(SLOT_WSL_PREFIX) &&
+        (clearsEveryWsl ? open.lane.startsWith(SLOT_WSL_PREFIX) : open.lane === SLOT_EVERY_WSL))
     )
   })
   // Why: an accepted restart relaunches on whatever is selected when it runs, so it outlives
@@ -242,7 +251,10 @@ export async function handleRunningAgentSessionsAfterSwitch(
     previousAccountLabel: agent.accountLabel(args.before),
     nextAccountLabel
   }
-  setSlots([...slots.filter((slot) => slot.key !== slotKey), { key: slotKey, prompt }])
+  setSlots([
+    ...slots.filter((slot) => slotId(slot.key) !== slotId(switchSlot)),
+    { key: switchSlot, prompt }
+  ])
   return 'handled'
 }
 

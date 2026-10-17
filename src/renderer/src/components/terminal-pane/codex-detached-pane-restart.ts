@@ -14,11 +14,10 @@ import { useAppStore } from '@/store'
 import { singlePaneLayoutSnapshot } from '@/store/slices/terminal-helpers'
 import { hasRegisteredRuntimeTerminalTab } from '@/runtime/mounted-terminal-tab-registry'
 import { buildPaneAccountRestartStartup } from '@/lib/agent-account-restart-startup'
-import { CODEX_ACCOUNT_RESTART_STARTUP } from '@/lib/codex-session-restart'
 import { ACCOUNT_SWITCH_AGENTS } from '@/lib/agent-account-switch-agents'
 import { isQueuedAccountRestartReady } from './pane-account-restart-readiness'
 import type { AccountRestartAgent } from '@/store/terminals/terminal-contracts'
-import { isForeignMachineCodexPtyId } from '@/lib/codex-pane-selection-lane'
+import { isForeignMachinePtyId } from '@/lib/pane-account-selection-lane'
 import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
 import {
   getCachedWindowsTerminalCapabilities,
@@ -47,7 +46,7 @@ async function sweepUnclaimedCodexPaneRestart(ptyId: string): Promise<void> {
   try {
     // Why: remote-runtime spawns need that machine's transport assembly, which
     // only the mounted pane path carries today; leave those queued for mount.
-    if (isForeignMachineCodexPtyId(ptyId)) {
+    if (isForeignMachinePtyId(ptyId)) {
       return
     }
     // Why: a live primary handler means a mounted pane owns this PTY, and its
@@ -133,7 +132,8 @@ async function executeDetachedCodexPaneRestart(
   const state = useAppStore.getState()
   if (!located.leafId) {
     // Why: an agent that only resumes cannot without a leaf's session, and a fresh one would lose it.
-    if (ACCOUNT_SWITCH_AGENTS[agent].requiresResume) {
+    const { freshStartup } = ACCOUNT_SWITCH_AGENTS[agent]
+    if (!freshStartup) {
       return
     }
     // Why: without a usable layout leaf the replacement cannot be bound in
@@ -145,12 +145,12 @@ async function executeDetachedCodexPaneRestart(
     store.suppressPtyExit(ptyId)
     store.clearTabPtyId(located.tab.id, ptyId)
     store.consumeSuppressedPtyExit(ptyId)
-    store.queueTabStartupCommand(located.tab.id, { ...CODEX_ACCOUNT_RESTART_STARTUP })
+    store.queueTabStartupCommand(located.tab.id, { ...freshStartup })
     killReplacedCodexPanePty(ptyId)
     return
   }
   const { worktreeId, tab, leafId } = located
-  const startup = buildPaneAccountRestartStartup(agent, {
+  const startup = buildPaneAccountRestartStartup(ACCOUNT_SWITCH_AGENTS[agent], {
     worktreeId,
     tabId: tab.id,
     leafId,

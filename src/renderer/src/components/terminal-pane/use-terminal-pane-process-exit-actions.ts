@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useAppStore } from '../../store'
 import { buildPaneAccountRestartStartup } from '@/lib/agent-account-restart-startup'
+import { ACCOUNT_SWITCH_AGENTS } from '@/lib/agent-account-switch-agents'
 import {
   isAccountRestartReady,
   selectReadyAccountRestartPtyIds
@@ -59,7 +60,7 @@ export function useTerminalPaneProcessExitActions(controller: TerminalPaneCloseC
 
   const buildAccountRestartStartup = useCallback(
     (agent: AccountRestartAgent, leafId: string) =>
-      buildPaneAccountRestartStartup(agent, {
+      buildPaneAccountRestartStartup(ACCOUNT_SWITCH_AGENTS[agent], {
         tabId,
         worktreeId,
         leafId,

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
 import type { ClaudeManagedAccount } from '../../../shared/managed-account-types'
 import type * as localPreflightContext from '@/lib/local-preflight-context'
-import type * as paneSelectionLane from './codex-pane-selection-lane'
+import type * as paneSelectionLane from './pane-account-selection-lane'
 import {
   confirmRuntimeTerminalForegroundProcess,
   inspectRuntimeTerminalProcess
@@ -23,7 +23,7 @@ import {
   ptyId,
   seedAgentPanes,
   type SeededAgentPane
-} from './agent-account-switch-test-panes'
+} from './agent-account-switch-panes.test-fixture'
 
 const laneByPtyId: Record<string, string> = {}
 
@@ -35,13 +35,9 @@ vi.mock('@/lib/local-preflight-context', async (importOriginal) => ({
   ...(await importOriginal<typeof localPreflightContext>()),
   getLocalProjectExecutionRuntimeContext: () => undefined
 }))
-vi.mock('./codex-pane-selection-lane', async (importOriginal) => ({
+vi.mock('./pane-account-selection-lane', async (importOriginal) => ({
   ...(await importOriginal<typeof paneSelectionLane>()),
-  resolveCodexPaneSelectionLane: ({ ptyId }: { ptyId: string }) => ({
-    laneKey: laneByPtyId[ptyId] ?? 'host',
-    source: 'derived',
-    derivedLaneKey: null
-  })
+  resolvePaneAccountSelectionLaneKey: ({ ptyId }: { ptyId: string }) => laneByPtyId[ptyId] ?? 'host'
 }))
 
 const LOCAL = { kind: 'local' } as const
@@ -144,8 +140,9 @@ describe('finding Claude sessions to move', () => {
     expect(await movable('acct-a', { runtime: 'wsl', wslDistro: 'Ubuntu' })).toEqual([ptyId(2)])
   })
 
-  it('never offers a move for a remote-server switch or SSH panes', async () => {
+  it("never offers a server's sessions, whose folders its roster does not name, or SSH panes", async () => {
     seedPanes([{ n: 1, agentType: 'claude' }])
+    laneByPtyId[ptyId(1)] = 'env:env-1'
     expect(
       await findMovableAgentSessions(CLAUDE_ACCOUNT_SWITCH_AGENT, {
         owner: { kind: 'environment', environmentId: 'env-1' },

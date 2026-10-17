@@ -80,7 +80,8 @@ vi.mock('@/lib/agent-account-switch-sessions', () => ({
   handleRunningAgentSessionsAfterSwitch
 }))
 
-vi.mock('@/lib/codex-session-restart', () => ({
+vi.mock('@/lib/codex-session-restart', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   resolveCodexSwitchAccountLabel: (
     accounts: readonly { id: string; email: string }[],
     accountId: string | null | undefined

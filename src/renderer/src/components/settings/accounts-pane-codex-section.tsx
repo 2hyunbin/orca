@@ -286,7 +286,7 @@ export function renderCodexAccountsSection(model: AccountsPaneSectionModel): Rea
           )}
         </div>
       </SearchableSetting>
-      {/* Why shown for a server's accounts too: its switches still ask here, under this local setting. */}
+      {/* Why shown for a server's accounts too: a server switch asks about that server's sessions under this setting. */}
       <RunningSessionSwitchSetting
         agent="codex"
         settings={settings}

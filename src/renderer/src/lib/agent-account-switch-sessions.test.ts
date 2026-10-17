@@ -216,19 +216,25 @@ describe.each([CLAUDE, CODEX])('the $agent account switch', (agent) => {
     expect(store.consumePendingPaneAccountRestart).toHaveBeenCalledWith('pty-home')
   })
 
-  it('leaves local questions and queued restarts alone on a server account switch', async () => {
-    vi.mocked(findMovableAgentSessions).mockResolvedValue([candidate(1)])
+  it("asks about a server's sessions in their own question, leaving the local one open", async () => {
+    vi.mocked(findMovableAgentSessions)
+      .mockResolvedValueOnce([candidate(1)])
+      .mockResolvedValueOnce([candidate(2)])
     await switchAgent(agent)
+    const serverSwitch = {
+      ...SWITCH,
+      owner: { kind: 'environment', environmentId: 'env-1' } as const
+    }
 
-    expect(
-      await handleRunningAgentSessionsAfterSwitch(agent, {
-        ...SWITCH,
-        owner: { kind: 'environment', environmentId: 'env-1' }
-      })
-    ).toBe('show-confirmation')
+    expect(await handleRunningAgentSessionsAfterSwitch(agent, serverSwitch)).toBe('handled')
+    expect(findMovableAgentSessions).toHaveBeenLastCalledWith(
+      agent,
+      expect.objectContaining({ owner: serverSwitch.owner })
+    )
 
     expect(listed()).toEqual(['pty-1'])
-    expect(findQueuedAccountRestartsOnAccount).toHaveBeenCalledTimes(1)
+    answerAgentAccountSwitchPrompt('keep')
+    expect(listed()).toEqual(['pty-2'])
   })
 
   it('asks nothing when the account does not change', async () => {

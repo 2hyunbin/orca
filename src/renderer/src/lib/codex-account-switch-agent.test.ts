@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
-import type { CodexManagedAccount } from '../../../shared/managed-account-types'
 import type * as localPreflightContext from '@/lib/local-preflight-context'
-import type * as paneSelectionLane from './codex-pane-selection-lane'
-import type * as rendererAppPlatform from './renderer-app-platform'
+import type * as paneSelectionLane from './pane-account-selection-lane'
 import {
   confirmRuntimeTerminalForegroundProcess,
   inspectRuntimeTerminalProcess
@@ -16,10 +14,13 @@ import {
   findMovableAgentSessions,
   findQueuedAccountRestartsOnAccount
 } from './agent-account-switch-discovery'
-import { ptyId, seedAgentPanes, type SeededAgentPane } from './agent-account-switch-test-panes'
+import {
+  ptyId,
+  seedAgentPanes,
+  type SeededAgentPane
+} from './agent-account-switch-panes.test-fixture'
 
 const laneByPtyId = vi.hoisted((): Record<string, string> => ({}))
-const platform = vi.hoisted((): { current: NodeJS.Platform } => ({ current: 'darwin' }))
 
 vi.mock('@/runtime/runtime-terminal-inspection', () => ({
   inspectRuntimeTerminalProcess: vi.fn(),
@@ -29,18 +30,15 @@ vi.mock('@/lib/local-preflight-context', async (importOriginal) => ({
   ...(await importOriginal<typeof localPreflightContext>()),
   getLocalProjectExecutionRuntimeContext: () => undefined
 }))
-vi.mock('./renderer-app-platform', async (importOriginal) => ({
-  ...(await importOriginal<typeof rendererAppPlatform>()),
-  getRendererAppPlatform: () => platform.current
-}))
-vi.mock('./codex-pane-selection-lane', async (importOriginal) => ({
-  ...(await importOriginal<typeof paneSelectionLane>()),
-  resolveCodexPaneSelectionLane: ({ ptyId: id }: { ptyId: string }) => ({
-    laneKey: laneByPtyId[id] ?? 'host',
-    source: 'derived',
-    derivedLaneKey: null
-  })
-}))
+vi.mock('./pane-account-selection-lane', async (importOriginal) => {
+  const actual = await importOriginal<typeof paneSelectionLane>()
+  return {
+    ...actual,
+    resolvePaneAccountSelectionLaneKey: (
+      args: Parameters<typeof actual.resolvePaneAccountSelectionLaneKey>[0]
+    ) => laneByPtyId[args.ptyId] ?? actual.resolvePaneAccountSelectionLaneKey(args)
+  }
+})
 
 const LOCAL = { kind: 'local' } as const
 const HOST = { runtime: 'host' } as const
@@ -48,45 +46,23 @@ const USER_DATA = '/Users/dev/Library/Application Support/orca'
 const HOME_A = `${USER_DATA}/codex-accounts/acct-a/home`
 const HOME_B = `${USER_DATA}/codex-accounts/acct-b/home`
 const SYSTEM_HOME = '/Users/dev/.codex'
-const LEGACY_SHARED_HOME = `${USER_DATA}/codex-runtime-home/home`
+// Why it is System default: a host launch runs there when the user sets their own CODEX_HOME.
+const MIRROR_HOME = `${USER_DATA}/codex-runtime-home/home`
 const WSL_LINUX_HOME = '/home/dev/.local/share/orca/codex-accounts/acct-w/home'
-
-function account(id: string, managedHomePath: string, extra: Partial<CodexManagedAccount> = {}) {
-  return {
-    id,
-    email: `${id}@example.com`,
-    managedHomePath,
-    createdAt: 1,
-    updatedAt: 1,
-    lastAuthenticatedAt: 1,
-    ...extra
-  }
-}
-
-const ACCOUNTS: CodexManagedAccount[] = [
-  account('acct-a', HOME_A),
-  account('acct-b', HOME_B),
-  account(
-    'acct-w',
-    '\\\\wsl.localhost\\Ubuntu\\home\\dev\\.local\\share\\orca\\codex-accounts\\acct-w\\home',
-    {
-      managedHomeRuntime: 'wsl',
-      wslDistro: 'Ubuntu',
-      wslLinuxHomePath: WSL_LINUX_HOME
-    }
-  )
-]
+const SERVER_HOME = '/srv/orca-data/codex-accounts/acct-s/home'
 const rollout = (home: string): string => `${home}/sessions/2026/10/17/rollout-s.jsonl`
 
-function seedCodexPanes(panes: (Omit<SeededAgentPane, 'transcriptPath'> & { home: string })[]) {
+function seedCodexPanes(
+  panes: (Omit<SeededAgentPane, 'transcriptPath'> & { home: string | null })[]
+) {
   seedAgentPanes(
     panes.map(({ home, ...pane }) => ({
       agentType: 'codex',
       launchAgent: 'codex',
       ...pane,
-      transcriptPath: rollout(home)
+      transcriptPath: home === null ? null : rollout(home)
     })),
-    { codexManagedAccounts: ACCOUNTS }
+    {}
   )
 }
 
@@ -103,7 +79,6 @@ const movable = async (
   ).map((pane) => pane.ptyId)
 
 beforeEach(() => {
-  platform.current = 'darwin'
   for (const key of Object.keys(laneByPtyId)) {
     delete laneByPtyId[key]
   }
@@ -115,35 +90,29 @@ beforeEach(() => {
 })
 
 describe('resolveCodexSessionAccountId', () => {
-  const resolve = (transcriptPath: string | undefined, sourceHome?: { host?: string }) =>
-    resolveCodexSessionAccountId(transcriptPath, ACCOUNTS, sourceHome)
-
-  it("reads a saved account from its own home's sessions folder", () => {
-    expect(resolve(rollout(HOME_A))).toBe('acct-a')
-    expect(resolve(rollout(WSL_LINUX_HOME))).toBe('acct-w')
+  it("reads a saved account from its home's place in Orca's account storage", () => {
+    expect(resolveCodexSessionAccountId(rollout(HOME_A))).toBe('acct-a')
+    expect(resolveCodexSessionAccountId(rollout(WSL_LINUX_HOME))).toBe('acct-w')
+    expect(resolveCodexSessionAccountId(rollout(SERVER_HOME))).toBe('acct-s')
   })
 
-  it('reads ~/.codex and a configured history home as System default', () => {
-    expect(resolve(rollout(SYSTEM_HOME))).toBeNull()
-    expect(resolve(rollout('/home/dev/.codex'))).toBeNull()
-    expect(resolve(rollout('/work/codex-home'), { host: '/work/codex-home/' })).toBeNull()
+  it("reads ~/.codex and Orca's mirror for a custom CODEX_HOME as System default", () => {
+    expect(resolveCodexSessionAccountId(rollout(SYSTEM_HOME))).toBeNull()
+    expect(resolveCodexSessionAccountId(rollout('/home/dev/.codex'))).toBeNull()
+    expect(resolveCodexSessionAccountId(rollout(MIRROR_HOME))).toBeNull()
   })
 
-  it("cannot tell the account of Orca's retired shared home or a missing transcript", () => {
-    expect(resolve(rollout(LEGACY_SHARED_HOME))).toBeUndefined()
-    expect(resolve(rollout('/work/codex-home'))).toBeUndefined()
-    expect(resolve(undefined)).toBeUndefined()
+  it('cannot tell the account of any other home or of a missing transcript', () => {
+    expect(resolveCodexSessionAccountId(rollout('/work/codex-home'))).toBeUndefined()
+    expect(resolveCodexSessionAccountId(undefined)).toBeUndefined()
   })
 
-  it('matches Windows paths whatever their case and separators', () => {
-    platform.current = 'win32'
-    const windowsAccounts = [account('acct-x', 'C:\\Users\\Dev\\AppData\\orca\\acct-x\\home')]
+  it('reads Windows paths whatever their separators, keeping the id as written', () => {
     expect(
       resolveCodexSessionAccountId(
-        'c:\\users\\dev\\appdata\\ORCA\\acct-x\\home\\sessions\\2026\\rollout-s.jsonl',
-        windowsAccounts
+        'C:\\Users\\Dev\\AppData\\Roaming\\orca\\codex-accounts\\Acct-X\\home\\sessions\\2026\\rollout-s.jsonl'
       )
-    ).toBe('acct-x')
+    ).toBe('Acct-X')
   })
 })
 
@@ -153,12 +122,13 @@ describe('finding Codex sessions to move', () => {
       { n: 1, home: HOME_A },
       { n: 2, home: HOME_B },
       { n: 3, home: SYSTEM_HOME },
-      { n: 4, home: LEGACY_SHARED_HOME },
-      { n: 5, agentType: 'claude', home: HOME_A }
+      { n: 4, home: MIRROR_HOME },
+      { n: 5, home: '/work/codex-home' },
+      { n: 6, agentType: 'claude', home: HOME_A }
     ])
 
     expect(await movable('acct-a')).toEqual([ptyId(1)])
-    expect(await movable(null)).toEqual([ptyId(3)])
+    expect(await movable(null)).toEqual([ptyId(3), ptyId(4)])
   })
 
   it('offers nothing when switching back to the account the sessions still run on', async () => {
@@ -180,16 +150,48 @@ describe('finding Codex sessions to move', () => {
     expect(await movable('acct-w')).toEqual([])
   })
 
-  it('never offers a session on a remote server switch', async () => {
-    seedCodexPanes([{ n: 1, home: HOME_A }])
+  it("offers a WSL host's terminals on a switch of this desktop's selection for its distro", async () => {
+    const wslHostPty = 'remote:wsl-ubuntu@@term-1'
+    seedCodexPanes([{ n: 1, ptyId: wslHostPty, home: WSL_LINUX_HOME }])
+    laneByPtyId[wslHostPty] = 'wsl:Ubuntu'
 
-    expect(
-      await findMovableAgentSessions(CODEX_ACCOUNT_SWITCH_AGENT, {
-        owner: { kind: 'environment', environmentId: 'env-1' },
+    expect(await movable('acct-w', { runtime: 'wsl', wslDistro: 'Ubuntu' })).toEqual([wslHostPty])
+  })
+
+  it("offers a paired server's sessions only on that server's switch", async () => {
+    const serverPty = 'remote:env-1@@term-1'
+    seedCodexPanes([
+      { n: 1, ptyId: serverPty, home: SERVER_HOME },
+      { n: 2, home: SERVER_HOME.replace('acct-s', 'acct-a') }
+    ])
+    laneByPtyId[serverPty] = 'env:env-1'
+    const serverSwitch = (environmentId: string) =>
+      findMovableAgentSessions(CODEX_ACCOUNT_SWITCH_AGENT, {
+        owner: { kind: 'environment', environmentId },
         target: HOST,
-        fromAccountId: 'acct-a'
+        fromAccountId: 'acct-s'
       })
-    ).toEqual([])
+
+    expect((await serverSwitch('env-1')).map((pane) => pane.ptyId)).toEqual([serverPty])
+    expect(await serverSwitch('env-2')).toEqual([])
+    expect(await movable('acct-s')).toEqual([])
+  })
+
+  it('never offers an SSH pane, which keeps its own login', async () => {
+    const sshPty = 'ssh:box@@pty-1'
+    seedCodexPanes([{ n: 1, ptyId: sshPty, home: HOME_A }])
+
+    expect(await movable('acct-a')).toEqual([])
+  })
+
+  it('offers nothing with hooks off, since no transcript names the account', async () => {
+    seedCodexPanes([
+      { n: 1, home: null },
+      { n: 2, sessionId: null, home: null }
+    ])
+
+    expect(await movable('acct-a')).toEqual([])
+    expect(await movable(null)).toEqual([])
   })
 
   it('recognizes codex.exe and re-checks a shell reading before skipping a pane', async () => {
@@ -217,7 +219,7 @@ describe('queued Codex restarts already on the account', () => {
     seedCodexPanes([
       { n: 1, home: HOME_B },
       { n: 2, home: HOME_A },
-      { n: 3, home: LEGACY_SHARED_HOME }
+      { n: 3, home: '/work/codex-home' }
     ])
     useAppStore.setState({
       pendingPaneAccountRestarts: { [ptyId(1)]: 'codex', [ptyId(2)]: 'codex', [ptyId(3)]: 'codex' }

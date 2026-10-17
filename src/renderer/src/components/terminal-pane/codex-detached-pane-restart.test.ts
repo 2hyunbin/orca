@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
+import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { registerRuntimeTerminalTab } from '@/runtime/mounted-terminal-tab-registry'
 import { ptyDataHandlers } from './pty-dispatcher'
 import { deliverPtyExitToHandlers } from './pty-exit-delivery'
@@ -138,6 +139,36 @@ describe('codex detached pane restart executor', () => {
     expect(state.terminalLayoutsByTabId['tab-1']?.ptyIdsByLeafId).toEqual({ [LEAF_ID]: NEW_PTY })
     expect(state.pendingPaneAccountRestarts).toEqual({})
     expect(state.suppressedPtyExitIds[OLD_PTY]).toBeUndefined()
+  })
+
+  it('waits for a busy Codex turn to end, then restarts', async () => {
+    seedQueuedRestart()
+    const paneKey = makePaneKey('tab-1', LEAF_ID)
+    const codexStatus = (state: 'working' | 'done') => ({
+      agentStatusByPaneKey: {
+        [paneKey]: {
+          paneKey,
+          tabId: 'tab-1',
+          state,
+          prompt: '',
+          updatedAt: 1,
+          stateStartedAt: 1,
+          stateHistory: [],
+          agentType: 'codex' as const
+        }
+      }
+    })
+    useAppStore.setState(codexStatus('working'))
+
+    await sweepUnclaimedCodexPaneRestarts()
+    expect(window.api.pty.spawn).not.toHaveBeenCalled()
+    expect(useAppStore.getState().pendingPaneAccountRestarts).toEqual({ [OLD_PTY]: 'codex' })
+
+    useAppStore.setState(codexStatus('done'))
+    await sweepUnclaimedCodexPaneRestarts()
+    expect(window.api.pty.spawn).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ command: 'codex', replacesPtyId: OLD_PTY })
+    )
   })
 
   it('adopts the replacement when the replaced PTY exit clears the tab binding mid-spawn', async () => {

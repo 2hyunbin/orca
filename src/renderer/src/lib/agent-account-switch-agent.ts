@@ -4,10 +4,11 @@
  * dialog and the restart executor read nothing else agent-specific.
  */
 import type { AppState } from '@/store'
-import type { RuntimeTerminalProcessInspection } from '@/runtime/runtime-terminal-inspection'
 import type { AgentAccountSwitchSettings } from '../../../shared/agent-account-switch-settings'
-import type { TerminalTab } from '../../../shared/terminal-tab-types'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
+import type { TuiAgent } from '../../../shared/tui-agent'
 import type { AccountRestartAgent } from '@/store/terminals/terminal-contracts'
+import type { AgentAccountRestartStartup } from './agent-account-restart-startup'
 
 /** A selected account row and the roster it was selected from. */
 export type AgentAccountSnapshot = {
@@ -22,27 +23,30 @@ export type AgentAccountSnapshot = {
   accountId: string | null | undefined
 }
 
+/** What the pane's process inspection reports. */
+export type AgentForegroundReading = {
+  foregroundProcess: string | null
+  hasChildProcesses: boolean
+}
+
 export type AccountSwitchAgent = {
   agent: AccountRestartAgent
   settingKey: keyof AgentAccountSwitchSettings
-  /** Which answer Enter gives; 'keep' where a restart stops work at once. */
-  defaultButton: 'keep' | 'restart'
-  /** Whether a queued restart waits for the session's turn to end. */
-  waitsForIdle: boolean
-  /** Only sessions a restart can resume count; otherwise a bare relaunch is acceptable. */
-  requiresResume: boolean
-  /** Account id, null for System default, undefined when the transcript cannot tell. */
+  /** Relaunch for a session with nothing to resume; without one, only resumable sessions count. */
+  freshStartup?: AgentAccountRestartStartup
+  /**
+   * Account id, null for System default, undefined when the transcript cannot tell. `owner` is
+   * the host whose roster the switch wrote, since a server's homes are not this machine's.
+   */
   transcriptAccountId: (
-    state: AppState,
-    transcriptPath: string | undefined
+    transcriptPath: string | undefined,
+    context: { state: AppState; owner: RuntimeClientTarget }
   ) => string | null | undefined
   /** The account id a session launched under `snapshot` reports in its transcript. */
   launchAccountId: (snapshot: AgentAccountSnapshot) => string | null
   accountLabel: (snapshot: AgentAccountSnapshot) => string
-  isInForeground: (
-    pane: { ptyId: string; tab: TerminalTab },
-    inspection: RuntimeTerminalProcessInspection
-  ) => Promise<boolean>
+  /** Whether this reading shows the agent, not a shell, holding the pane. */
+  isAgentForeground: (reading: AgentForegroundReading, launchAgent: TuiAgent | undefined) => boolean
   copy: {
     /** `previous`, `next` and `count` are interpolated. */
     body: (values: { count: number; previous: string; next: string }) => string

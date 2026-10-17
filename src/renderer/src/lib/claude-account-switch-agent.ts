@@ -3,14 +3,9 @@
  * account's folder, so `claude --resume <id>` lands there intact.
  */
 import {
-  confirmRuntimeTerminalForegroundProcess,
-  type RuntimeTerminalProcessInspection
-} from '@/runtime/runtime-terminal-inspection'
-import {
   isAgentForegroundWrapperProcess,
   recognizeAgentProcess
 } from '../../../shared/agent-process-recognition'
-import { isClientOnlyUnverifiableInspection } from '../../../shared/terminal-process-inspection'
 import type { ClaudeManagedAccount } from '../../../shared/managed-account-types'
 import { translate } from '@/i18n/i18n'
 import { findAccountByHomeFolder, transcriptHomeFolder } from './agent-account-switch-discovery'
@@ -23,23 +18,6 @@ function isClaudeProcess(processName: string | null): boolean {
     (recognizeAgentProcess(processName)?.agent === 'claude' ||
       isAgentForegroundWrapperProcess(processName))
   )
-}
-
-/**
- * Whether Claude holds the pane's foreground. Why confirm: cached names flap to the shell, and
- * the native macOS install reads as its version folder (`2.1.x`).
- */
-async function isClaudeInForeground(
-  ptyId: string,
-  inspection: RuntimeTerminalProcessInspection
-): Promise<boolean> {
-  if (isClientOnlyUnverifiableInspection(inspection)) {
-    return false
-  }
-  if (isClaudeProcess(inspection.foregroundProcess)) {
-    return true
-  }
-  return isClaudeProcess(await confirmRuntimeTerminalForegroundProcess(ptyId))
 }
 
 /**
@@ -78,14 +56,16 @@ export function claudeLaunchAccountId(
 export const CLAUDE_ACCOUNT_SWITCH_AGENT: AccountSwitchAgent = {
   agent: 'claude',
   settingKey: 'claudeAccountSwitchRunningSessions',
-  defaultButton: 'restart',
-  waitsForIdle: true,
-  requiresResume: true,
-  transcriptAccountId: (state, transcriptPath) =>
-    resolveClaudeSessionAccountId(transcriptPath, state.settings?.claudeManagedAccounts ?? []),
+  // Why local only: a server's roster carries no account folders, so its transcripts cannot be read.
+  transcriptAccountId: (transcriptPath, { state, owner }) =>
+    owner.kind === 'local'
+      ? resolveClaudeSessionAccountId(transcriptPath, state.settings?.claudeManagedAccounts ?? [])
+      : undefined,
   launchAccountId: (snapshot) => claudeLaunchAccountId(snapshot.state, snapshot.accountId ?? null),
   accountLabel: (snapshot) => getClaudeAccountLabel(snapshot.state, snapshot.accountId),
-  isInForeground: (pane, inspection) => isClaudeInForeground(pane.ptyId, inspection),
+  // Why no launch fallback: the native macOS install reads as its version folder, which the
+  // fresh confirmation resolves.
+  isAgentForeground: (reading) => isClaudeProcess(reading.foregroundProcess),
   copy: {
     body: (values) =>
       values.count === 1

@@ -193,18 +193,18 @@ describe('AccountSwitchSessionsDialog', () => {
     expect(screen.queryByRole('tree')).toBeNull()
   })
 
-  it('asks the same question for Codex, with Codex copy and Keep focused', async () => {
+  it('asks the same question for Codex, with Codex copy and Restart focused', async () => {
     render(<AccountSwitchSessionsDialog />)
     await askCodex(2)
 
     expect(screen.getByText('Switched to account-b@example.com')).toBeTruthy()
     expect(
       screen.getByText(
-        '2 Codex sessions are still running on account-a@example.com. Restarting relaunches them on account-b@example.com and stops any work in progress.'
+        '2 Codex sessions are still running on account-a@example.com. Restarting relaunches them on account-b@example.com. Busy sessions wait for idle before restarting.'
       )
     ).toBeTruthy()
     expect(screen.getByRole('tree', { name: 'Codex sessions to restart' })).toBeTruthy()
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Keep as is' }))
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Restart 2 sessions' }))
   })
 
   it('restarts the ticked Codex sessions', async () => {
