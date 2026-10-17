@@ -65,7 +65,7 @@ exports[`native-chat launch parity > antigravity floating fresh 1`] = `
     },
   },
   "launchPosture": {
-    "fullAccess": true,
+    "fullAccess": false,
   },
   "pinnedLaunchDirectories": [
     "<root>/floating",
@@ -138,7 +138,7 @@ exports[`native-chat launch parity > antigravity floating resumed 1`] = `
     },
   },
   "launchPosture": {
-    "fullAccess": true,
+    "fullAccess": false,
   },
   "pinnedLaunchDirectories": [],
 }
@@ -209,7 +209,7 @@ exports[`native-chat launch parity > antigravity worktree fresh 1`] = `
     },
   },
   "launchPosture": {
-    "fullAccess": true,
+    "fullAccess": false,
   },
   "pinnedLaunchDirectories": [],
 }
@@ -279,7 +279,7 @@ exports[`native-chat launch parity > antigravity worktree fresh configured 1`] =
     },
   },
   "launchPosture": {
-    "fullAccess": false,
+    "fullAccess": true,
   },
   "pinnedLaunchDirectories": [],
 }
@@ -350,7 +350,7 @@ exports[`native-chat launch parity > antigravity worktree fresh worker 1`] = `
     },
   },
   "launchPosture": {
-    "fullAccess": true,
+    "fullAccess": false,
   },
   "pinnedLaunchDirectories": [],
 }
@@ -421,7 +421,7 @@ exports[`native-chat launch parity > antigravity worktree resumed 1`] = `
     },
   },
   "launchPosture": {
-    "fullAccess": true,
+    "fullAccess": false,
   },
   "pinnedLaunchDirectories": [],
 }
@@ -491,7 +491,7 @@ exports[`native-chat launch parity > antigravity worktree resumed configured 1`]
     },
   },
   "launchPosture": {
-    "fullAccess": false,
+    "fullAccess": true,
   },
   "pinnedLaunchDirectories": [],
 }
