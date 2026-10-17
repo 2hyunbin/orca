@@ -24,6 +24,7 @@ import type { Tab } from '../../../../shared/tab-types'
 import type { ClosedEditorTabSnapshot } from './editor/types/open-file'
 import type { SleepingAgentSessionRecord } from '../../../../shared/agent-session-resume'
 import { toAppSshPtyId } from '../../../../shared/ssh-pty-id'
+import { worktreeWorkspaceKey } from '../../../../shared/workspace-scope'
 import {
   readNativeChatComposerDraft,
   updateNativeChatComposerDraft
@@ -476,7 +477,7 @@ describe('removing a remote project keeps its local twin', () => {
       ],
       activeFileId: 'editor:remote-only',
       activeWorktreeId: WORKTREE_ID,
-      activeWorkspaceKey: WORKTREE_ID,
+      activeWorkspaceKey: worktreeWorkspaceKey(WORKTREE_ID),
       activeWorkspaceExecutionHostId: REMOTE_HOST
     })
 
@@ -487,5 +488,21 @@ describe('removing a remote project keeps its local twin', () => {
     if (state.activeWorktreeId === null) {
       expect(state.activeWorkspaceKey).toBeNull()
     }
+  })
+
+  it('leaves the focused workspace’s active surface alone when a background twin is removed', async () => {
+    const store = seedTwins()
+    store.setState({
+      activeWorktreeId: 'other-repo::/work/other',
+      activeTabType: 'agent-session',
+      activeTabTypeByWorktree: { 'other-repo::/work/other': 'agent-session' }
+    })
+
+    await store.getState().removeProject(PROJECT_ID, { hostId: REMOTE_HOST })
+
+    expect(store.getState().activeTabType).toBe('agent-session')
+    expect(store.getState().activeTabTypeByWorktree['other-repo::/work/other']).toBe(
+      'agent-session'
+    )
   })
 })
