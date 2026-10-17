@@ -58,8 +58,10 @@ function isFolderTwin(state: WorktreeOperationRouteState, folderWorkspaceId: str
   if (folder.kind !== 'resolved') {
     return folder.kind === 'ambiguous'
   }
+  // Why: the folder's own host stamp or SSH connection names its owner; only an inherited host is moot.
   return (
     !folder.owner.executionHostId?.trim() &&
+    !folder.owner.connectionId?.trim() &&
     resolveIndexedProjectGroupOwner(state.projectGroups, folder.owner.projectGroupId).kind ===
       'ambiguous'
   )

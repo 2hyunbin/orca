@@ -321,7 +321,7 @@ export function findIndexedFolderWorkspaceOwner<T extends FolderWorkspaceOwnerRe
     folderWorkspaceId,
     executionHostId
   )
-  // The cache is keyed by this exact array, so its owner retains the caller's row type.
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the index is built from and cached on this exact array, so its owner is one of the caller's T rows.
   return resolution.kind === 'resolved' ? (resolution.owner as T) : null
 }
 
@@ -331,6 +331,6 @@ export function findIndexedProjectGroupOwner<T extends ProjectGroupOwnerRecord>(
   executionHostId?: ExecutionHostId
 ): T | null {
   const resolution = resolveIndexedProjectGroupOwner(projectGroups, projectGroupId, executionHostId)
-  // The cache is keyed by this exact array, so its owner retains the caller's row type.
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the index is built from and cached on this exact array, so its owner is one of the caller's T rows.
   return resolution.kind === 'resolved' ? (resolution.owner as T) : null
 }

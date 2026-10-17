@@ -228,6 +228,18 @@ const ROWS: Row[] = [
     owner: ambiguous
   },
   {
+    name: 'legacy folder naming its own SSH connection, in a project group two hosts publish',
+    rows: {
+      folderWorkspaces: [folder(null, 't')],
+      projectGroups: [
+        { id: 'g1', connectionId: null, executionHostId: 'local' },
+        { id: 'g1', connectionId: 't', executionHostId: 'ssh:t' }
+      ]
+    },
+    ref: { workspaceId: 'folder:f1' },
+    owner: selfAt('ssh:t')
+  },
+  {
     name: 'stamped folder in a project group two hosts publish',
     rows: {
       folderWorkspaces: [folder('runtime:env-a')],
