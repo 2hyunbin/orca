@@ -137,6 +137,19 @@ describe('handleRunningClaudeSessionsAfterSwitch', () => {
     expect(store.queuePaneAccountRestarts).toHaveBeenLastCalledWith(['pty-1-reattached'], 'claude')
   })
 
+  it('asks nothing when launches run on the same folder before and after the switch', async () => {
+    vi.mocked(findMovableClaudeSessions).mockResolvedValue([candidate(1)])
+
+    expect(
+      await handleRunningClaudeSessionsAfterSwitch({
+        ...SWITCH,
+        previousAccountId: null,
+        nextAccountId: null
+      })
+    ).toBe('none')
+    expect(findMovableClaudeSessions).not.toHaveBeenCalled()
+  })
+
   it('leaves sessions alone when the user keeps them', async () => {
     vi.mocked(findMovableClaudeSessions).mockResolvedValue([candidate(1)])
     await handleRunningClaudeSessionsAfterSwitch(SWITCH)

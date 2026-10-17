@@ -31,6 +31,7 @@ import {
 } from './accounts-pane-action-errors'
 import { getClaudeAccountLabel } from './accounts-pane-runtime'
 import { handleRunningClaudeSessionsAfterSwitch } from '@/lib/claude-account-switch-sessions'
+import { claudeLaunchAccountId } from '@/lib/claude-session-account-move'
 
 type CodexActionContext = {
   settings: GlobalSettings
@@ -221,8 +222,8 @@ export function createClaudeAccountActionRunner(
         void handleRunningClaudeSessionsAfterSwitch({
           owner: accountOwner,
           target: actionRuntime,
-          previousAccountId: previousActiveAccountId,
-          nextAccountId: nextActiveAccountId,
+          previousAccountId: claudeLaunchAccountId(claudeAccounts, previousActiveAccountId),
+          nextAccountId: claudeLaunchAccountId(next, nextActiveAccountId),
           previousAccountLabel: getClaudeAccountLabel(claudeAccounts, previousActiveAccountId),
           nextAccountLabel: getClaudeAccountLabel(next, nextActiveAccountId)
         }).then((outcome) => {

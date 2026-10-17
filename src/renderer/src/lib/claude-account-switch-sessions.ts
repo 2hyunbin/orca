@@ -99,13 +99,15 @@ export function answerClaudeAccountSwitchPrompt(
 export async function handleRunningClaudeSessionsAfterSwitch(args: {
   owner: RuntimeClientTarget
   target: CodexAccountSelectionTarget
+  /** Where launches ran and now run; see claudeLaunchAccountId. */
   previousAccountId: string | null
   nextAccountId: string | null
   previousAccountLabel: string
   nextAccountLabel: string
 }): Promise<ClaudeAccountSwitchOutcome> {
-  // Why first: a server's switch moves nothing here, so local questions and queued restarts stand.
-  if (args.owner.kind !== 'local') {
+  // Why first: a server's switch moves nothing here, so local questions and queued restarts stand;
+  // nor does one whose launches run on the same folder as before (see claudeLaunchAccountId).
+  if (args.owner.kind !== 'local' || args.previousAccountId === args.nextAccountId) {
     return 'none'
   }
   const generation = ++switchGeneration

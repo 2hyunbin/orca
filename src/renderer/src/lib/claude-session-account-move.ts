@@ -23,7 +23,10 @@ import { isTerminalLeafId, makePaneKey } from '../../../shared/stable-pane-id'
 import { isClientOnlyUnverifiableInspection } from '../../../shared/terminal-process-inspection'
 import type { CodexAccountSelectionTarget } from '../../../shared/codex-selection-lane'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
-import type { ClaudeManagedAccount } from '../../../shared/managed-account-types'
+import type {
+  ClaudeManagedAccount,
+  ClaudeRateLimitAccountsState
+} from '../../../shared/managed-account-types'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
 import { resolveAgentAccountRestartResumeStartup } from './agent-account-restart-startup'
 import { getRendererAppPlatform } from './renderer-app-platform'
@@ -99,6 +102,18 @@ export function resolveClaudeSessionAccountId(
     )
   )
   return account ? account.id : null
+}
+
+/**
+ * The account a launch under `accountId` runs on, as a session's transcript reports it: System
+ * default (null) for an account with no login of its own that System default covers.
+ */
+export function claudeLaunchAccountId(
+  state: Pick<ClaudeRateLimitAccountsState, 'accounts'>,
+  accountId: string | null
+): string | null {
+  const account = state.accounts.find((candidate) => candidate.id === accountId)
+  return account?.runsOnSystemDefault ? null : accountId
 }
 
 type LocalClaudePane = {

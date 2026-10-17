@@ -12,6 +12,7 @@ import {
   inspectRuntimeTerminalProcess
 } from '@/runtime/runtime-terminal-inspection'
 import {
+  claudeLaunchAccountId,
   findMovableClaudeSessions,
   findQueuedClaudeRestartsOnAccount,
   isClaudePaneMidTurn,
@@ -281,5 +282,16 @@ describe('findQueuedClaudeRestartsOnAccount', () => {
     expect(
       findQueuedClaudeRestartsOnAccount({ owner: LOCAL, target: HOST, accountId: 'acct-b' })
     ).toEqual([ptyId(1)])
+  })
+})
+
+describe('claudeLaunchAccountId', () => {
+  it('reads an account System default covers as System default, where its sessions run', () => {
+    const covered = { ...account('acct-a', FOLDER_A), runsOnSystemDefault: true as const }
+    const own = account('acct-b', FOLDER_B)
+
+    expect(claudeLaunchAccountId({ accounts: [covered, own] }, 'acct-a')).toBeNull()
+    expect(claudeLaunchAccountId({ accounts: [covered, own] }, 'acct-b')).toBe('acct-b')
+    expect(claudeLaunchAccountId({ accounts: [covered, own] }, null)).toBeNull()
   })
 })
