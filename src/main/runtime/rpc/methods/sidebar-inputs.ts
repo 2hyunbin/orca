@@ -3,6 +3,9 @@ import { getRegisteredSshState, listRegisteredSshTargets } from '../../../ssh/ss
 import { getWslHostService } from '../../../wsl/wsl-host-service-instance'
 import { readDesktopSidebarFacts } from '../../sidebar-inputs/desktop-sidebar-facts'
 import { SidebarSessionBeginParams } from '../../../../shared/rpc-contract/sidebar-session-params'
+import { RepoIconDataUrlsParams } from '../../../../shared/sidebar-list/repo-icon-data-urls-contract'
+import { SetCollapsedParams } from '../../../../shared/rpc-contract/workspace-view-collapse-params'
+import { setCollapsedSection } from '../../workspace-view-collapse-writes'
 
 // Registered only with ORCA_SIDEBAR_INPUTS=main, so the producers below always exist.
 function requireSwitchedOn<Producer>(producer: Producer | null): Producer {
@@ -19,6 +22,12 @@ export const SIDEBAR_INPUT_METHODS = [
     params: null,
     handler: async (_params, { runtime }) =>
       requireSwitchedOn(runtime.sidebarFacts).getWorkspaceActivityFacts()
+  }),
+  defineMethod({
+    name: 'sidebarInputs.repoIcons',
+    permission: 'workspace',
+    params: RepoIconDataUrlsParams,
+    handler: async ({ ids }, { runtime }) => requireSwitchedOn(runtime.repoIconDataUrls).read(ids)
   }),
   defineMethod({
     name: 'sidebarInputs.desktopFacts',
@@ -60,5 +69,20 @@ export const SIDEBAR_INPUT_METHODS = [
       requireSwitchedOn(runtime.sidebarFacts).beginSidebarListSession(sessionId)
       return { ok: true }
     }
+  }),
+  defineMethod({
+    name: 'sidebarInputs.workspaceCreations',
+    permission: 'workspace',
+    params: null,
+    handler: async (_params, { runtime }) =>
+      requireSwitchedOn(runtime.workspaceCreations).snapshot()
+  }),
+  defineMethod({
+    name: 'ui.setCollapsed',
+    permission: 'workspace',
+    params: SetCollapsedParams,
+    // Why the same callers as ui.set: collapsedGroups is not pairing-local, so both writes share one view.
+    handler: (params, { runtime }) =>
+      setCollapsedSection(runtime, requireSwitchedOn(runtime.collapseWriteOrder), params)
   })
 ]
