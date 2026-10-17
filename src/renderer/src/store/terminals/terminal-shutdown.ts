@@ -9,7 +9,8 @@ import {
 } from '../slices/agent-status'
 import type { TerminalSlice, TerminalStoreGet, TerminalStoreSet } from './terminal-state'
 import { equalStringSets, sortedUniquePtyIds } from './terminal-pty-identities'
-import { resolveTerminalStopRuntimeEnvironmentId } from './terminal-workspace-routing'
+import { resolveRuntimeOwnerForWorktree } from '@/lib/worktree-runtime-owner'
+import { resolveTerminalTeardownOwners } from './terminal-teardown-owner'
 import { createTerminalShutdownGuardController } from './terminal-shutdown-guards'
 import { commitTerminalShutdownState } from './terminal-shutdown-state'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
@@ -36,7 +37,23 @@ export function createTerminalShutdownActions(
         tabs.flatMap((tab) => get().ptyIdsByTabId[tab.id] ?? [])
       )
       const expectedRuntimePtyIds = sortedUniquePtyIds(opts?.expectedRuntimePtyIds)
-      const runtimeEnvironmentId = resolveTerminalStopRuntimeEnvironmentId(get(), worktreeId)
+      const backendOwnsPtyTeardown = opts?.backendOwnsPtyTeardown === true
+      const teardownOwners = resolveTerminalTeardownOwners(
+        resolveRuntimeOwnerForWorktree(get(), worktreeId),
+        rendererShutdownPtyIds
+      )
+      // Why: treating an unattributable owner as local skips the host stop yet still clears
+      // bindings and writes resume records, so the agent runs on unseen and wake starts a twin.
+      // A backend-owned teardown already stopped its PTYs, so it has nothing to misroute.
+      if (teardownOwners.kind === 'refused' && !backendOwnsPtyTeardown) {
+        console.warn('[terminal-shutdown] refusing teardown: terminal owner is ambiguous', {
+          worktreeId,
+          shutdownReason
+        })
+        throw new Error(teardownOwners.reason)
+      }
+      const runtimeEnvironmentIds =
+        teardownOwners.kind === 'resolved' ? teardownOwners.runtimeEnvironmentIds : []
       // Only renderer-bound ids emit pane exit callbacks; raw RPC handles never enter this guard.
       const exitGuardPtyIds = rendererShutdownPtyIds
       const sleepingAgentSessionRecords = keepIdentifiers
@@ -61,7 +78,7 @@ export function createTerminalShutdownActions(
         get,
         keepIdentifiers,
         rendererShutdownPtyIds,
-        runtimeEnvironmentId,
+        runtimeOwnsRemotePtys: runtimeEnvironmentIds.length > 0,
         set,
         tabs
       })
@@ -85,15 +102,19 @@ export function createTerminalShutdownActions(
         guards.unregisterHandlers()
         try {
           // Backend ownership is opt-in; the default owner RPC prevents remote PTY leaks.
-          if (runtimeEnvironmentId && opts?.backendOwnsPtyTeardown !== true) {
-            await (shutdownReason === 'manual-sleep'
-              ? requestRemoteWorktreeSleep({ environmentId: runtimeEnvironmentId, worktreeId })
-              : callRuntimeRpc(
-                  { kind: 'environment', environmentId: runtimeEnvironmentId },
-                  'terminal.stop',
-                  { worktree: toRuntimeWorktreeSelector(worktreeId) },
-                  { timeoutMs: 15_000 }
-                ))
+          if (!backendOwnsPtyTeardown) {
+            await Promise.all(
+              runtimeEnvironmentIds.map((environmentId) =>
+                shutdownReason === 'manual-sleep'
+                  ? requestRemoteWorktreeSleep({ environmentId, worktreeId })
+                  : callRuntimeRpc(
+                      { kind: 'environment', environmentId },
+                      'terminal.stop',
+                      { worktree: toRuntimeWorktreeSelector(worktreeId) },
+                      { timeoutMs: 15_000 }
+                    )
+              )
+            )
           }
           // Renderer teardown waits for the owner RPC so failures leave bindings retryable.
           const rendererStop = await guards.stopRendererPtys()
@@ -108,8 +129,13 @@ export function createTerminalShutdownActions(
           throw error
         }
       } else {
-        if (!runtimeEnvironmentId) {
-          throw new Error('missing_runtime_for_exact_terminal_stop')
+        const runtimeEnvironmentId = runtimeEnvironmentIds[0]
+        if (!runtimeEnvironmentId || runtimeEnvironmentIds.length > 1) {
+          throw new Error(
+            runtimeEnvironmentId
+              ? 'ambiguous_terminal_owner'
+              : 'missing_runtime_for_exact_terminal_stop'
+          )
         }
         guards.markShutdownPending()
         guards.unregisterHandlers()
