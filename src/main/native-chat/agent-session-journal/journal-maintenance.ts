@@ -18,7 +18,7 @@ const VACUUM_PAGES = 1
 
 /** Owed work is derived from saved frontiers, so a restart resumes instead of rescanning. */
 export class JournalMaintenance {
-  private timer: ReturnType<typeof timers.setTimeout> | null = null
+  private timer: NodeJS.Timeout | null = null
   private sweepAt: number | null
   private readonly readyAt = new Map<string, number>()
   private sessions: JournalPruneCursor<string> | null = null
@@ -77,7 +77,7 @@ export class JournalMaintenance {
     if (this.timer || this.closed) {
       return
     }
-    this.timer = timers.setTimeout(() => this.advance(), delay)
+    this.timer = timers.setTimeout<[]>(() => this.advance(), delay)
     this.timer.unref()
   }
 
