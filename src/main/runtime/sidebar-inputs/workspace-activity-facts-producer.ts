@@ -204,13 +204,17 @@ export class WorkspaceActivityFactsProducer {
     this.expiryTimer = null
     this.expiryAt = Infinity
     const now = Date.now()
+    const stale: string[] = []
     for (const [paneKey, pane] of this.agentPanes) {
-      // Re-derived, not dropped: another of the pane's rows may still be fresh.
       if (pane.staleAt <= now) {
-        this.refreshAgentPane(paneKey)
+        stale.push(paneKey)
       } else {
         this.armExpiry(pane.staleAt)
       }
+    }
+    // Re-derived, not dropped: another of the pane's rows may still be fresh.
+    for (const paneKey of stale) {
+      this.refreshAgentPane(paneKey)
     }
   }
 

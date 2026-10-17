@@ -29,8 +29,15 @@ export abstract class OrcaRuntimeWithWorkspaceActivityFacts extends OrcaRuntimeW
   }
 
   override syncWindowGraph(...args: Parameters<Runtime['syncWindowGraph']>) {
+    const previousTabs = this.tabs
     const result = super.syncWindowGraph(...args)
-    this.workspaceActivityFacts.resyncAgentPanes()
+    // Only a tab moving workspace can change where an agent row is attributed.
+    const moved = [...this.tabs.values()].some(
+      (tab) => previousTabs.get(tab.tabId)?.worktreeId !== tab.worktreeId
+    )
+    if (moved || [...previousTabs.keys()].some((tabId) => !this.tabs.has(tabId))) {
+      this.workspaceActivityFacts.resyncAgentPanes()
+    }
     return result
   }
 
@@ -74,13 +81,17 @@ export abstract class OrcaRuntimeWithWorkspaceActivityFacts extends OrcaRuntimeW
   protected override async refreshPtyWorktreeRecordsWithControllerInventory(
     ...args: Parameters<Runtime['refreshPtyWorktreeRecordsWithControllerInventory']>
   ): ReturnType<Runtime['refreshPtyWorktreeRecordsWithControllerInventory']> {
-    const connectedBefore = new Map([...this.ptysById].map(([id, pty]) => [id, pty.connected]))
+    const livenessOf = (ptyId: string, connected: boolean): string =>
+      `${connected}:${this.getPtyLivenessVerdict(ptyId)?.status ?? ''}`
+    const before = new Map(
+      [...this.ptysById].map(([id, pty]) => [id, livenessOf(id, pty.connected)])
+    )
     try {
       return await super.refreshPtyWorktreeRecordsWithControllerInventory(...args)
     } finally {
       const changed = new Set<string>()
       for (const pty of this.ptysById.values()) {
-        if (connectedBefore.get(pty.ptyId) !== pty.connected) {
+        if (before.get(pty.ptyId) !== livenessOf(pty.ptyId, pty.connected)) {
           changed.add(pty.worktreeId)
         }
       }
