@@ -96,11 +96,11 @@ describe('applyWindowLayoutCommand', () => {
   it('renames editor files in the workspace’s routed partition, an SSH one too', async () => {
     const { store, applyLayoutCommand } = storeWith()
     const hostIdsFor = vi.fn(() => ['ssh:target-1' as const])
-    const rename = {
+    const rename: WindowLayoutCommand = {
       type: 'renameEditorFiles',
       workspace: 'wt-1',
       renames: [{ fileId: '/a.ts', newFileId: '/b.ts' }]
-    } as const
+    }
 
     await applyWindowLayoutCommand(store, hostIdsFor, rename)
 
