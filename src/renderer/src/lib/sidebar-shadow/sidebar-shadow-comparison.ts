@@ -21,10 +21,10 @@ export type SidebarShadowMismatch = {
   mainRevision: number
 }
 
-/** One domain's comparison, with its value type closed over. */
+/** One domain's comparison, with its value type closed over; false when main published nothing. */
 export type SidebarShadowCheck = (
   record: (mismatch: SidebarShadowMismatch) => void
-) => Promise<void>
+) => Promise<boolean>
 
 const CHECK_INTERVAL_MS = 1_500
 
@@ -50,7 +50,8 @@ export function defineSidebarShadowDomain<Value>(
       if (domain.equals(window.get(key), main.values.get(key))) {
         continue
       }
-      const signature = JSON.stringify([key, windowValue, mainValue, main.revision])
+      // Values only: main's revision moves with every workspace, which would keep resetting this one.
+      const signature = JSON.stringify([key, windowValue, mainValue])
       next.set(key, signature)
       if (pending.get(key) === signature && !recorded.has(signature)) {
         recorded.add(signature)

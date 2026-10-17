@@ -4,7 +4,7 @@ import {
   isFreshNonDoneAgentStatus,
   type AgentStatusEntry
 } from '../../../shared/agent-status-types'
-import { resolveAgentStatusWorktreeId } from './agent-status-worktree-attribution'
+import { resolveAgentStatusWorktreeId } from '../../../shared/agent-status-worktree-attribution'
 import {
   liveAgentStatusOf,
   strongerLiveAgentStatus,

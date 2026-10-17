@@ -140,6 +140,26 @@ describe('WorkspaceActivityFactsProducer', () => {
     }
   })
 
+  it('re-attributes a pane once its tab becomes known', () => {
+    const server = new AgentHookServer()
+    const tabs: Record<string, string> = {}
+    const { producer } = createProducer(tabs)
+    const detach = producer.attachAgentStatusStore(server)
+    try {
+      server.ingestTerminalStatus({
+        paneKey: PANE_A,
+        tabId: 'tab-a',
+        payload: { state: 'working', prompt: 'task', agentType: 'codex' }
+      })
+      expect(producer.snapshot().facts).toEqual({})
+      tabs['tab-a'] = WT_A
+      producer.resyncAgentPanes()
+      expect(producer.snapshot().facts[WT_A]?.agent).toBe('working')
+    } finally {
+      detach()
+    }
+  })
+
   it('attributes an SSH pane to the workspace its host reported', () => {
     const server = new AgentHookServer()
     const { producer } = createProducer({ 'tab-a': WT_B })

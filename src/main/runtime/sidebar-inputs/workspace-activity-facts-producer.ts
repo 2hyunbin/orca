@@ -4,9 +4,9 @@ import {
   type AgentStatusIpcPayload
 } from '../../../shared/agent-status-types'
 import { agentStatusEvidenceObservedAt } from '../../../shared/agent-status-freshness'
-import { parseLegacyNumericPaneKey, parsePaneKey } from '../../../shared/stable-pane-id'
-import { isWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
+import { resolveAgentStatusWorktreeId } from '../../../shared/agent-status-worktree-attribution'
 import {
+  IDLE_WORKSPACE_ACTIVITY,
   isIdleWorkspaceActivity,
   liveAgentStatusOf,
   strongerLiveAgentStatus,
@@ -19,7 +19,7 @@ import type { AgentHookServer } from '../../agent-hooks/server'
 
 export type WorkspaceSurfaceActivity = Omit<WorkspaceActivityFacts, 'agent'>
 
-/** The hook server's store, read one pane at a time. */
+/** The hook server's store: one snapshot to seed from, then per-row change taps. */
 export type AgentStatusStoreView = Pick<
   AgentHookServer,
   | 'getStatusSnapshot'
@@ -28,23 +28,18 @@ export type AgentStatusStoreView = Pick<
   | 'subscribeStatusFreshness'
 >
 
-const IDLE_SURFACES: WorkspaceSurfaceActivity = {
-  terminal: null,
-  browser: false,
-  structuredChat: false
-}
-
 type AgentPane = { worktreeId: string; status: LiveAgentWorktreeStatus; staleAt: number }
 
 /**
  * Per-workspace activity facts the sidebar builder reads, kept current one workspace at a time.
- * Surfaces are re-read when the runtime publishes a workspace's tabs; agent rows follow the hook
- * server's per-row mutations, so a status ping costs one pane, never a scan.
+ * Surfaces are re-read when the runtime publishes a workspace; agent rows follow the hook server's
+ * per-row mutations, so a status ping re-derives one pane and never re-reads surfaces.
  */
 export class WorkspaceActivityFactsProducer {
   private readonly facts = new Map<string, WorkspaceActivityFacts>()
   private readonly agentPanes = new Map<string, AgentPane>()
   private readonly agentPanesByWorktree = new Map<string, Map<string, AgentPane>>()
+  private agentStore: AgentStatusStoreView | null = null
   private revision = 0
   private expiryTimer: ReturnType<typeof setTimeout> | null = null
   private expiryAt = Infinity
@@ -65,71 +60,55 @@ export class WorkspaceActivityFactsProducer {
     this.publish(worktreeId, this.deps.readSurfaces(worktreeId))
   }
 
-  // An agent change keeps the surfaces last read, so a status ping never re-reads them.
-  private refreshAgent(worktreeId: string): void {
-    this.publish(worktreeId, this.facts.get(worktreeId) ?? IDLE_SURFACES)
-  }
-
-  private publish(worktreeId: string, surfaces: WorkspaceSurfaceActivity): void {
-    const next: WorkspaceActivityFacts = {
-      terminal: surfaces.terminal,
-      browser: surfaces.browser,
-      structuredChat: surfaces.structuredChat,
-      agent: this.agentStatusFor(worktreeId)
-    }
-    const previous = this.facts.get(worktreeId)
-    if (isIdleWorkspaceActivity(next)) {
-      if (!previous) {
-        return
-      }
-      this.facts.delete(worktreeId)
-    } else {
-      if (previous && workspaceActivityFactsEqual(previous, next)) {
-        return
-      }
-      this.facts.set(worktreeId, next)
-    }
-    this.revision += 1
-  }
-
   attachAgentStatusStore(store: AgentStatusStoreView): () => void {
-    const refreshPane = (paneKey: string): void =>
-      this.setAgentPane(paneKey, store.getStatusSnapshotForPane(paneKey))
-    for (const paneKey of new Set(store.getStatusSnapshot().map((row) => row.paneKey))) {
-      refreshPane(paneKey)
-    }
+    this.agentStore = store
+    this.resyncAgentPanes()
     const unsubscribeMutations = store.subscribeStatusRowMutations(({ before, after }) => {
       if (before) {
-        refreshPane(before.paneKey)
+        this.refreshAgentPane(before.paneKey)
       }
       if (after && after.paneKey !== before?.paneKey) {
-        refreshPane(after.paneKey)
+        this.refreshAgentPane(after.paneKey)
       }
     })
     // Duplicate evidence renews a row's lease without a semantic mutation.
     const unsubscribeFreshness = store.subscribeStatusFreshness(({ paneKey }) =>
-      refreshPane(paneKey)
+      this.refreshAgentPane(paneKey)
     )
     return () => {
       unsubscribeMutations()
       unsubscribeFreshness()
+      this.agentStore = null
       this.clearExpiryTimer()
     }
   }
 
-  private setAgentPane(paneKey: string, rows: readonly AgentStatusIpcPayload[]): void {
+  /** Re-derives every pane; attribution reads the runtime's tabs, which a graph sync replaces. */
+  resyncAgentPanes(): void {
+    const paneKeys = new Set(this.agentPanes.keys())
+    for (const row of this.agentStore?.getStatusSnapshot() ?? []) {
+      paneKeys.add(row.paneKey)
+    }
+    for (const paneKey of paneKeys) {
+      this.refreshAgentPane(paneKey)
+    }
+  }
+
+  private refreshAgentPane(paneKey: string): void {
     const previous = this.agentPanes.get(paneKey)
-    const next = this.toAgentPane(rows, Date.now())
+    const next = this.toAgentPane(this.agentStore?.getStatusSnapshotForPane(paneKey) ?? [])
     if (previous) {
-      this.unindexAgentPane(paneKey, previous.worktreeId)
+      this.agentPanes.delete(paneKey)
+      const panes = this.agentPanesByWorktree.get(previous.worktreeId)
+      if (panes?.delete(paneKey) && panes.size === 0) {
+        this.agentPanesByWorktree.delete(previous.worktreeId)
+      }
     }
     if (next) {
       this.agentPanes.set(paneKey, next)
       const panes = this.agentPanesByWorktree.get(next.worktreeId) ?? new Map<string, AgentPane>()
       this.agentPanesByWorktree.set(next.worktreeId, panes.set(paneKey, next))
       this.armExpiry(next.staleAt)
-    } else {
-      this.agentPanes.delete(paneKey)
     }
     if (previous) {
       this.refreshAgent(previous.worktreeId)
@@ -139,7 +118,9 @@ export class WorkspaceActivityFactsProducer {
     }
   }
 
-  private toAgentPane(rows: readonly AgentStatusIpcPayload[], now: number): AgentPane | null {
+  // A pane's rows (one per canonical subject) fold into its first row's workspace.
+  private toAgentPane(rows: readonly AgentStatusIpcPayload[]): AgentPane | null {
+    const now = Date.now()
     const live: AgentPane[] = []
     for (const row of rows) {
       const entry = {
@@ -150,7 +131,8 @@ export class WorkspaceActivityFactsProducer {
         restoredUnconfirmed: row.restoredUnconfirmed,
         ...(row.structuredHost === 'owned' ? { structuredHostOwned: true as const } : {})
       }
-      const worktreeId = this.agentRowWorktreeId(row)
+      // The window's own attribution rule, over this runtime's tabs.
+      const worktreeId = resolveAgentStatusWorktreeId(row, { get: this.deps.resolveTabWorktreeId })
       if (row.providerSessionOnly || !worktreeId || !isFreshNonDoneAgentStatus(entry, now)) {
         continue
       }
@@ -175,29 +157,35 @@ export class WorkspaceActivityFactsProducer {
     }
   }
 
-  // The window's attribution rule: host-reported ownership for remote panes, else the pane's tab.
-  private agentRowWorktreeId(row: AgentStatusIpcPayload): string | undefined {
-    const tabId =
-      row.tabId ?? parsePaneKey(row.paneKey)?.tabId ?? parseLegacyNumericPaneKey(row.paneKey)?.tabId
-    if (row.worktreeId && (row.connectionId || isWebTerminalSurfaceTabId(tabId ?? ''))) {
-      return row.worktreeId
-    }
-    return (tabId ? this.deps.resolveTabWorktreeId(tabId) : undefined) ?? row.worktreeId
+  // An agent change keeps the surfaces last read; absent facts mean idle surfaces.
+  private refreshAgent(worktreeId: string): void {
+    this.publish(worktreeId, this.facts.get(worktreeId) ?? IDLE_WORKSPACE_ACTIVITY)
   }
 
-  private unindexAgentPane(paneKey: string, worktreeId: string): void {
-    const panes = this.agentPanesByWorktree.get(worktreeId)
-    if (panes?.delete(paneKey) && panes.size === 0) {
-      this.agentPanesByWorktree.delete(worktreeId)
-    }
-  }
-
-  private agentStatusFor(worktreeId: string): LiveAgentWorktreeStatus | null {
-    let status: LiveAgentWorktreeStatus | null = null
+  private publish(worktreeId: string, surfaces: WorkspaceSurfaceActivity): void {
+    let agent: LiveAgentWorktreeStatus | null = null
     for (const pane of this.agentPanesByWorktree.get(worktreeId)?.values() ?? []) {
-      status = strongerLiveAgentStatus(status, pane.status)
+      agent = strongerLiveAgentStatus(agent, pane.status)
     }
-    return status
+    const next: WorkspaceActivityFacts = {
+      terminal: surfaces.terminal,
+      browser: surfaces.browser,
+      structuredChat: surfaces.structuredChat,
+      agent
+    }
+    const previous = this.facts.get(worktreeId)
+    if (isIdleWorkspaceActivity(next)) {
+      if (!previous) {
+        return
+      }
+      this.facts.delete(worktreeId)
+    } else {
+      if (previous && workspaceActivityFactsEqual(previous, next)) {
+        return
+      }
+      this.facts.set(worktreeId, next)
+    }
+    this.revision += 1
   }
 
   // One timer for the earliest lease; a renewed lease only moves later, so an early fire re-arms.
@@ -216,18 +204,13 @@ export class WorkspaceActivityFactsProducer {
     this.expiryTimer = null
     this.expiryAt = Infinity
     const now = Date.now()
-    let nextStaleAt = Infinity
     for (const [paneKey, pane] of this.agentPanes) {
-      if (pane.staleAt > now) {
-        nextStaleAt = Math.min(nextStaleAt, pane.staleAt)
-        continue
+      // Re-derived, not dropped: another of the pane's rows may still be fresh.
+      if (pane.staleAt <= now) {
+        this.refreshAgentPane(paneKey)
+      } else {
+        this.armExpiry(pane.staleAt)
       }
-      this.agentPanes.delete(paneKey)
-      this.unindexAgentPane(paneKey, pane.worktreeId)
-      this.refreshAgent(pane.worktreeId)
-    }
-    if (nextStaleAt !== Infinity) {
-      this.armExpiry(nextStaleAt)
     }
   }
 

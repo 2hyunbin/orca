@@ -97,6 +97,25 @@ describe('runtime workspace activity facts', () => {
     expect(Object.keys(runtime.getWorkspaceActivityFacts().facts)).toEqual([FOLDER])
   })
 
+  it('reads a terminal whose host lost contact as unverifiable, not live', () => {
+    const runtime = createRuntime()
+    runtime.syncWindowGraph(1, {
+      tabs: [
+        { tabId: 'tab-1', worktreeId: WT, title: 'Terminal', activeLeafId: LEAF, layout: null }
+      ],
+      leaves: [{ tabId: 'tab-1', worktreeId: WT, leafId: LEAF, paneRuntimeId: 1, ptyId: 'pty-1' }],
+      mobileSessionTabs: [snapshot(WT, 1, [terminalTab])]
+    })
+    vi.advanceTimersByTime(300)
+    expect(runtime.getWorkspaceActivityFacts().facts[WT]?.terminal).toBe('live')
+
+    runtime.markPtyLivenessUnverifiable('pty-1', 'relay dropped')
+    expect(runtime.getWorkspaceActivityFacts().facts[WT]?.terminal).toBe('unverifiable')
+
+    runtime.markPtyLivenessLive('pty-1')
+    expect(runtime.getWorkspaceActivityFacts().facts[WT]?.terminal).toBe('live')
+  })
+
   it('reads agent status from the hook-server store it is attached to', () => {
     const runtime = createRuntime()
     const server = new AgentHookServer()

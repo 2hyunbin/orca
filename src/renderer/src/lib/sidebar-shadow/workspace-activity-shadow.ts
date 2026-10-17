@@ -9,19 +9,13 @@ import {
   parseExecutionHostId
 } from '../../../../shared/execution-host'
 import {
+  IDLE_WORKSPACE_ACTIVITY,
   isIdleWorkspaceActivity,
   workspaceActivityFactsEqual,
   WorkspaceActivityFactsSnapshotSchema,
   type WorkspaceActivityFacts
 } from '../../../../shared/sidebar-list/workspace-activity-facts'
 import { defineSidebarShadowDomain } from './sidebar-shadow-comparison'
-
-const IDLE: WorkspaceActivityFacts = {
-  terminal: null,
-  browser: false,
-  structuredChat: false,
-  agent: null
-}
 
 /** The window's own activity facts, from the same store slices the sidebar filter reads. */
 export function readWindowWorkspaceActivityFacts(
@@ -111,8 +105,8 @@ export const workspaceActivityShadow = defineSidebarShadowDomain<WorkspaceActivi
   },
   // The window has no unverifiable state: a terminal whose host lost contact still reads live there.
   equals: (window, main) =>
-    workspaceActivityFactsEqual(window ?? IDLE, {
-      ...(main ?? IDLE),
+    workspaceActivityFactsEqual(window ?? IDLE_WORKSPACE_ACTIVITY, {
+      ...(main ?? IDLE_WORKSPACE_ACTIVITY),
       terminal: main?.terminal ? 'live' : null
     })
 })

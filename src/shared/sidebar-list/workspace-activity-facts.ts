@@ -24,6 +24,13 @@ export type WorkspaceActivityFacts = z.infer<typeof WorkspaceActivityFactsSchema
 export type WorkspaceTerminalLiveness = NonNullable<WorkspaceActivityFacts['terminal']>
 export type WorkspaceActivityFactsSnapshot = z.infer<typeof WorkspaceActivityFactsSnapshotSchema>
 
+export const IDLE_WORKSPACE_ACTIVITY: WorkspaceActivityFacts = {
+  terminal: null,
+  browser: false,
+  structuredChat: false,
+  agent: null
+}
+
 export function isIdleWorkspaceActivity(facts: WorkspaceActivityFacts): boolean {
   return facts.terminal === null && !facts.browser && !facts.structuredChat && facts.agent === null
 }

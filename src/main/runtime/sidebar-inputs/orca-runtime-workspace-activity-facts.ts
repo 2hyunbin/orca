@@ -10,10 +10,13 @@ import {
   type WorkspaceSurfaceActivity
 } from './workspace-activity-facts-producer'
 
+type Runtime = OrcaRuntimeWithMigrationCatalog
+
 /**
  * Feeds the activity producer from the runtime's own funnels: every per-workspace session.tabs
- * publication (already coalesced, and fired for status-only changes too), plus PTY liveness
- * changes that reach no publication.
+ * publication (already coalesced, and fired for status-only changes too), the graph sync that
+ * replaces the tabs agent rows are attributed through, and the PTY liveness writers no
+ * publication follows: exits, verdicts and the inventory sweep.
  */
 export abstract class OrcaRuntimeWithWorkspaceActivityFacts extends OrcaRuntimeWithMigrationCatalog {
   readonly workspaceActivityFacts = new WorkspaceActivityFactsProducer({
@@ -23,6 +26,12 @@ export abstract class OrcaRuntimeWithWorkspaceActivityFacts extends OrcaRuntimeW
 
   getWorkspaceActivityFacts(): WorkspaceActivityFactsSnapshot {
     return this.workspaceActivityFacts.snapshot()
+  }
+
+  override syncWindowGraph(...args: Parameters<Runtime['syncWindowGraph']>) {
+    const result = super.syncWindowGraph(...args)
+    this.workspaceActivityFacts.resyncAgentPanes()
+    return result
   }
 
   protected override notifyMobileSessionTabsChangedNow(
@@ -45,30 +54,48 @@ export abstract class OrcaRuntimeWithWorkspaceActivityFacts extends OrcaRuntimeW
     this.workspaceActivityFacts.refreshWorkspace(worktreeId)
   }
 
-  override onPtyExit(
-    ...args: Parameters<OrcaRuntimeWithMigrationCatalog['onPtyExit']>
-  ): ReturnType<OrcaRuntimeWithMigrationCatalog['onPtyExit']> {
-    const worktreeId = this.ptysById.get(args[0])?.worktreeId
+  override onPtyExit(...args: Parameters<Runtime['onPtyExit']>): ReturnType<Runtime['onPtyExit']> {
+    // Read first: the exit may prune the PTY's record.
+    const worktreeIds = this.ptyWorktreeIds(args[0])
     const result = super.onPtyExit(...args)
-    if (worktreeId) {
-      this.workspaceActivityFacts.refreshWorkspace(worktreeId)
-    }
+    this.refreshWorkspaces(worktreeIds)
     return result
   }
 
   protected override rememberPtyLivenessVerdict(ptyId: string, verdict: PtyLivenessVerdict): void {
+    const before = this.getPtyLivenessVerdict(ptyId)?.status
     super.rememberPtyLivenessVerdict(ptyId, verdict)
-    this.refreshPtyWorkspace(ptyId)
+    // An inventory sweep re-confirms every PTY; only a changed verdict can change a fact.
+    if (before !== verdict.status) {
+      this.refreshWorkspaces(this.ptyWorktreeIds(ptyId))
+    }
   }
 
-  protected override forgetPtyLivenessVerdict(ptyId: string, observedNoLaterThan?: number): void {
-    super.forgetPtyLivenessVerdict(ptyId, observedNoLaterThan)
-    this.refreshPtyWorkspace(ptyId)
+  protected override async refreshPtyWorktreeRecordsWithControllerInventory(
+    ...args: Parameters<Runtime['refreshPtyWorktreeRecordsWithControllerInventory']>
+  ): ReturnType<Runtime['refreshPtyWorktreeRecordsWithControllerInventory']> {
+    const connectedBefore = new Map([...this.ptysById].map(([id, pty]) => [id, pty.connected]))
+    try {
+      return await super.refreshPtyWorktreeRecordsWithControllerInventory(...args)
+    } finally {
+      const changed = new Set<string>()
+      for (const pty of this.ptysById.values()) {
+        if (connectedBefore.get(pty.ptyId) !== pty.connected) {
+          changed.add(pty.worktreeId)
+        }
+      }
+      this.refreshWorkspaces(changed)
+    }
   }
 
-  private refreshPtyWorkspace(ptyId: string): void {
-    const worktreeId = this.ptysById.get(ptyId)?.worktreeId
-    if (worktreeId) {
+  private ptyWorktreeIds(ptyId: string): Set<string> {
+    const worktreeIds = new Set(this.getLeavesForPty(ptyId).map((leaf) => leaf.worktreeId))
+    const recorded = this.ptysById.get(ptyId)?.worktreeId
+    return recorded ? worktreeIds.add(recorded) : worktreeIds
+  }
+
+  private refreshWorkspaces(worktreeIds: Iterable<string>): void {
+    for (const worktreeId of worktreeIds) {
       this.workspaceActivityFacts.refreshWorkspace(worktreeId)
     }
   }
@@ -82,8 +109,8 @@ export abstract class OrcaRuntimeWithWorkspaceActivityFacts extends OrcaRuntimeW
     }
   }
 
-  // getLivePtyIdsForWorktree's identity rule in one pass that stops at the first live PTY; a host
-  // that only lost contact keeps its terminals unverifiable, never gone.
+  // getLivePtyIdsForWorktree's identity rule in one pass. A host that only lost contact keeps its
+  // terminals unverifiable, never gone, even while the record still reads connected.
   private readWorkspaceTerminalLiveness(worktreeId: string): WorkspaceTerminalLiveness | null {
     const key = worktreeIdComparisonKey(worktreeId)
     const owns = (id: string): boolean =>
@@ -94,10 +121,11 @@ export abstract class OrcaRuntimeWithWorkspaceActivityFacts extends OrcaRuntimeW
         if (surface.ptyId === null || !owns(surface.worktreeId)) {
           continue
         }
-        if (surface.connected) {
+        if (this.getPtyLivenessVerdict(surface.ptyId)?.status === 'unverifiable') {
+          unverifiable = true
+        } else if (surface.connected) {
           return 'live'
         }
-        unverifiable ||= this.getPtyLivenessVerdict(surface.ptyId)?.status === 'unverifiable'
       }
     }
     return unverifiable ? 'unverifiable' : null

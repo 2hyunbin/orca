@@ -1,9 +1,6 @@
-import type {
-  AgentStatusEntry,
-  AgentStatusOrchestrationContext
-} from '../../../shared/agent-status-types'
-import { isWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
-import { parseLegacyNumericPaneKey, parsePaneKey } from '../../../shared/stable-pane-id'
+import type { AgentStatusEntry, AgentStatusOrchestrationContext } from './agent-status-types'
+import { isWebTerminalSurfaceTabId } from './terminal-surface-id'
+import { parseLegacyNumericPaneKey, parsePaneKey } from './stable-pane-id'
 
 export type AgentStatusPaneIdentity = { tabId: string; paneId: string }
 
@@ -23,7 +20,7 @@ export function parseAgentStatusPaneIdentity(
 
 export function resolveAgentStatusWorktreeId(
   entry: Pick<AgentStatusEntry, 'paneKey' | 'worktreeId' | 'orchestration' | 'connectionId'>,
-  worktreeIdByTabId: ReadonlyMap<string, string>,
+  worktreeIdByTabId: Pick<ReadonlyMap<string, string>, 'get'>,
   orchestration = entry.orchestration
 ): string | null {
   const paneIdentity = parseAgentStatusPaneIdentity(entry.paneKey)

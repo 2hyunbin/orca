@@ -49,15 +49,17 @@ describe('defineSidebarShadowDomain', () => {
     expect(recorded).toEqual([])
   })
 
-  it('restarts the interval when main publishes a new revision with the same disagreement', async () => {
+  it('records a held disagreement while other workspaces keep changing', async () => {
     const { sides, run, recorded } = createDomain()
     sides.window.set('a', 1)
+    sides.window.set('b', 1)
+    sides.main.set('b', 1)
     await run()
+    sides.window.set('b', 2)
+    sides.main.set('b', 2)
     sides.revision = 2
     await run()
-    expect(recorded).toEqual([])
-    await run()
-    expect(recorded).toHaveLength(1)
+    expect(recorded).toEqual([{ domain: 'test', key: 'a', window: 1, main: null, mainRevision: 2 }])
   })
 
   it('skips a host that does not publish the domain', async () => {
