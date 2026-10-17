@@ -201,6 +201,15 @@ describe('formatMessageForChat', () => {
       'orca'
     )
     expect(text.match(/[bp]/g)?.length).toBeLessThan(4_100)
-    expect(text).toContain('`orca orchestration inbox --full` shows all of message `msg_test1`')
+    expect(text).toContain('`orca orchestration inbox --id msg_test1 --full`')
+    expect(text).toContain('orca orchestration inbox --terminal term_coord --full --limit 100')
+    expect(text).toContain('increase --limit to look farther back')
+    const hugeSubject = formatMessageForChat(
+      makeMessage({ subject: 's'.repeat(10_000) }),
+      'orca-dev'
+    )
+    expect(hugeSubject).not.toContain('s'.repeat(4_001))
+    expect(hugeSubject).toContain('orca-dev orchestration inbox --id msg_test1 --full')
+    expect(hugeSubject).toContain('**Reply:**')
   })
 })

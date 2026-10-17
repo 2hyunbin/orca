@@ -22,6 +22,48 @@ function lane(db: OrchestrationDb, host: StructuredMailboxPointerHost) {
   })
 }
 
+it('rechecks ownership and consumed rows before each handoff', async () => {
+  for (const mode of ['batch', 'page', 'consumed'] as const) {
+    const db = new OrchestrationDb(':memory:')
+    let outstanding = false
+    vi.spyOn(db, 'hasOutstandingMailboxDelivery').mockImplementation(() => outstanding)
+    const messages = Array.from({ length: 51 }, () =>
+      db.insertMessage({ from: 'worker', to: MAILBOX, subject: 'report' })
+    )
+    let sends = 0
+    const delivery = lane(db, {
+      readSessionFacts: async () => ({ submissions: [] }),
+      currentFence: () => 1,
+      currentContextClearOperationId: () => undefined,
+      hasActionablePromptNow: () => false,
+      send: async () => {
+        sends++
+        if (sends === (mode === 'page' ? 50 : 1)) {
+          await Promise.resolve()
+          if (mode === 'consumed') {
+            db.markAsRead(messages.slice(1, 50).map((m) => m.id))
+          } else {
+            outstanding = true
+          }
+        }
+        return { kind: 'sent', state: 'accepted' }
+      }
+    })
+    try {
+      delivery.deliverForHandle(MAILBOX)
+      await new Promise((resolve) => setTimeout(resolve, 30))
+      expect(sends).toBe(mode === 'page' ? 50 : mode === 'consumed' ? 2 : 1)
+      if (mode === 'batch' || mode === 'page') {
+        outstanding = false
+        delivery.deliverForHandle(MAILBOX)
+        await vi.waitFor(() => expect(sends).toBe(51), WAIT)
+      }
+    } finally {
+      db.close()
+    }
+  }
+})
+
 it('visits all reports in order across pending, accepted and failed prefixes without consuming earlier mail', async () => {
   for (const state of ['pending', 'queued', 'accepted', 'unknown', 'rejected'] as const) {
     const db = new OrchestrationDb(':memory:')

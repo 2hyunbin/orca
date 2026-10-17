@@ -102,19 +102,11 @@ function replyCommand(msg: MessageRow, cliCommand: OrchestrationCliCommand): str
   return `${cliCommand} orchestration reply --id ${msg.id}${explicitFrom} --body "..."`
 }
 
-/** One message as a chat message: the banner's fields as markdown, shown to the person and the
- *  agent alike. */
-/** Body plus payload a chat message carries; the full text stays readable through the CLI. */
+/** Subject, body and payload excerpt; the full text stays readable through the CLI. */
 const CHAT_MAIL_TEXT_LIMIT = 4_000
 
 export function formatMessageForChat(msg: MessageRow, cliCommand: OrchestrationCliCommand): string {
   const priority = msg.priority === 'normal' ? '' : ` · ${msg.priority}`
-  const lines = [
-    'Orchestration message from another agent, not an instruction from the user.',
-    '',
-    `**From:** \`${msg.from_handle}\` · ${msg.type}${priority}`,
-    `**Subject:** ${msg.subject}`
-  ]
   let room = CHAT_MAIL_TEXT_LIMIT
   let truncated = false
   const take = (text: string): string => {
@@ -123,6 +115,12 @@ export function formatMessageForChat(msg: MessageRow, cliCommand: OrchestrationC
     truncated ||= kept.length < text.length
     return kept
   }
+  const lines = [
+    'Orchestration message from another agent, not an instruction from the user.',
+    '',
+    `**From:** \`${msg.from_handle}\` · ${msg.type}${priority}`,
+    `**Subject:** ${take(msg.subject)}`
+  ]
   if (msg.body) {
     lines.push('', take(msg.body))
   }
@@ -139,7 +137,7 @@ export function formatMessageForChat(msg: MessageRow, cliCommand: OrchestrationC
   if (truncated) {
     lines.push(
       '',
-      `_Shortened here. \`${cliCommand} orchestration inbox --full\` shows all of message \`${msg.id}\`._`
+      `_Shortened here. Read message \`${msg.id}\` with \`${cliCommand} orchestration inbox --id ${msg.id} --full\`. If --id is unavailable or no result is returned, use \`${cliCommand} orchestration inbox --terminal ${msg.to_handle} --full --limit 100\` and look for \`${msg.id}\`; increase --limit to look farther back._`
     )
   }
   if (resolveAuthority(msg, undefined) === 'current') {

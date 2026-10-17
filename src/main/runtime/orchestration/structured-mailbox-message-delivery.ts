@@ -33,6 +33,8 @@ export async function sendStructuredMailboxMessage(
     fence: number
     retain: (reason: StructuredPointerRetainReason) => void
     answered: (attached?: boolean) => void
+    isCurrent: () => boolean
+    isEligible: (message: MessageRow) => boolean
   },
   deps: {
     host: StructuredMailboxPointerHost
@@ -79,10 +81,16 @@ export async function sendStructuredMailboxMessage(
       })
     let outcome = await send()
     // Nothing is recorded for a held send, so the same id is safe to retry once the prompt clears.
-    while (
-      outcome.kind === 'held' &&
-      deps.host.hasActionablePromptNow(target.sessionId) === false
-    ) {
+    while (outcome.kind === 'held') {
+      if (!attempt.isCurrent()) {
+        return false
+      }
+      if (!attempt.isEligible(message)) {
+        return true
+      }
+      if (deps.host.hasActionablePromptNow(target.sessionId) !== false) {
+        break
+      }
       outcome = await send()
     }
     if (outcome.kind === 'held') {
@@ -119,6 +127,7 @@ export async function sendStructuredMailboxPage(input: {
   submissionIndex: StructuredMailSubmissionIndex
   fence: number
   isCurrent: () => boolean
+  isEligible: (message: MessageRow) => boolean
   retain: (reason: StructuredPointerRetainReason) => void
   prune: (key?: string) => void
   host: StructuredMailboxPointerHost
@@ -146,6 +155,9 @@ export async function sendStructuredMailboxPage(input: {
     if (!isCurrent()) {
       return false
     }
+    if (!input.isEligible(message)) {
+      continue
+    }
     const key = JSON.stringify([sessionId, contextClearOperationId ?? null, message.id])
     if (input.sendsInFlight.has(key)) {
       continue
@@ -171,6 +183,8 @@ export async function sendStructuredMailboxPage(input: {
         fence,
         retain,
         answered,
+        isCurrent,
+        isEligible: input.isEligible,
         contextClearOperationId,
         submissionIndex
       },

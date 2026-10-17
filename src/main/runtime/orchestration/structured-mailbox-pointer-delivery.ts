@@ -18,6 +18,8 @@ import type { OrchestrationDb } from './db'
 import type { OrchestrationCliCommand } from './cli-command'
 import {
   selectOrchestrationPointerBatch,
+  hasUnfilteredOrchestrationWaiter,
+  shouldReleaseOrchestrationPointer,
   type OrchestrationMessageWaiter
 } from './mailbox-pointer-eligibility'
 import { visitStructuredMailboxPages } from './structured-mailbox-pointer-batch'
@@ -274,6 +276,8 @@ export class OrchestrationStructuredMailboxPointerDelivery<
       }
       const submissionIndex = indexStructuredMailSubmissions(session.submissions)
       const isCurrent = () =>
+        !db.hasOutstandingMailboxDelivery?.(mailboxHandle) &&
+        !hasUnfilteredOrchestrationWaiter(this.deps.getMessageWaiters(mailboxHandle)) &&
         this.inFlight.get(mailboxHandle) === target &&
         this.deps.resolveStructuredTarget(mailboxHandle)?.sessionId === target.sessionId &&
         this.deps.host.currentContextClearOperationId(target.sessionId) === contextClearOperationId
@@ -296,6 +300,13 @@ export class OrchestrationStructuredMailboxPointerDelivery<
             submissionIndex,
             fence,
             isCurrent,
+            isEligible: (message) =>
+              !shouldReleaseOrchestrationPointer(
+                db,
+                mailboxHandle,
+                [message],
+                this.deps.getMessageWaiters(mailboxHandle)
+              ),
             retain,
             prune: (key) => this.prune(db, mailboxHandle, key),
             mintedOperations: this.mintedOperations,
