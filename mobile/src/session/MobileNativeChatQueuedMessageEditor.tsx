@@ -102,8 +102,9 @@ const styles = StyleSheet.create({
     fontSize: typography.metaSize,
     lineHeight: typography.metaSize + spacing.xs
   },
+  // minHeight, not height: the action line grows with the system text size instead of clipping.
   cancel: {
-    height: EDITOR_ACTION_HEIGHT,
+    minHeight: EDITOR_ACTION_HEIGHT,
     minWidth: 56,
     paddingHorizontal: spacing.sm,
     alignItems: 'center',
@@ -116,11 +117,11 @@ const styles = StyleSheet.create({
     fontWeight: '500'
   },
   save: {
-    height: EDITOR_ACTION_HEIGHT,
+    minHeight: EDITOR_ACTION_HEIGHT,
     justifyContent: 'center'
   },
   savePill: {
-    height: spacing.xl + spacing.xs,
+    minHeight: spacing.xl + spacing.xs,
     paddingHorizontal: spacing.md,
     borderRadius: radii.button,
     backgroundColor: colors.textPrimary,

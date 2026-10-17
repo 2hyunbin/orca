@@ -61,8 +61,9 @@ export const queuedMessageStyles = StyleSheet.create({
     paddingVertical: spacing.sm,
     fontVariant: ['tabular-nums']
   },
+  // minHeight, not height: rows grow with the system text size instead of clipping.
   headerAction: {
-    height: HEADER_HEIGHT,
+    minHeight: HEADER_HEIGHT,
     minWidth: MIN_TOUCH_TARGET,
     flexDirection: 'row',
     alignItems: 'center',
@@ -73,7 +74,7 @@ export const queuedMessageStyles = StyleSheet.create({
   },
   chevron: {
     width: 36,
-    height: HEADER_HEIGHT,
+    minHeight: HEADER_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center'
   },

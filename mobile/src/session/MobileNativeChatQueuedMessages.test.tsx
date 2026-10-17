@@ -663,8 +663,10 @@ describe('MobileNativeChatQueuedMessages', () => {
     const header = mounted.root.findByProps({ testID: 'queued-header' })
     expect(flatStyle(header.props.style).minHeight).toBe(32)
     expect(style(buttons[0]!)).toMatchObject({ position: 'absolute', top: 0, bottom: 0 })
+    // A minimum, so the header buttons grow with large system text instead of clipping.
     for (const button of buttons.slice(1, 3)) {
-      expect(style(button).height).toBe(32)
+      expect(style(button).minHeight).toBe(32)
+      expect(style(button).height).toBeUndefined()
       expect(style(button).minWidth).toBeGreaterThanOrEqual(44)
     }
     // Grouped with no gap; the last one keeps the full 44.
