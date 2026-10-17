@@ -22,7 +22,7 @@ type HeadRecord = Record<string, unknown>
  */
 export type SessionScopeCwdSource =
   | { kind: 'bucket'; layout: CwdBucketLayout }
-  | { kind: 'head'; cwdOf: (record: HeadRecord) => unknown }
+  | { kind: 'head'; cwdOf: (record: HeadRecord) => unknown; firstReadBytes?: number }
   | { kind: 'parse' }
   | { kind: 'none' }
 
@@ -41,7 +41,9 @@ export const AI_VAULT_SCOPE_CWD_SOURCES: Record<AiVaultAgent, SessionScopeCwdSou
   codex: {
     kind: 'head',
     cwdOf: (record) =>
-      record.type === 'session_meta' ? asRecord(record.payload)?.cwd : undefined
+      record.type === 'session_meta' ? asRecord(record.payload)?.cwd : undefined,
+    // Its first record carries the base instructions (about 20 KB): one read, not two.
+    firstReadBytes: 64 * 1024
   },
   qoder: { kind: 'head', cwdOf: (record) => record.cwd },
   omp: SESSION_HEADER,
@@ -81,7 +83,6 @@ export function scopeWalksAgentFiles(
 }
 
 const HEAD_READ_BYTES = 8 * 1024
-// Codex's first record carries its base instructions (about 20 KB).
 const HEAD_WIDENED_READ_BYTES = 64 * 1024
 
 /**
@@ -91,15 +92,13 @@ const HEAD_WIDENED_READ_BYTES = 64 * 1024
  */
 export async function readTranscriptHeadCwd(
   file: FileWithMtime,
-  cwdOf: (record: HeadRecord) => unknown,
+  source: { cwdOf: (record: HeadRecord) => unknown; firstReadBytes?: number },
   signal?: AbortSignal
 ): Promise<string | null> {
-  const cached = headCwdCache.get(file.path)
-  if (cached && cached.mtimeMs === file.mtimeMs && cached.sizeBytes === file.sizeBytes) {
-    return cached.cwd
-  }
+  const { cwdOf } = source
   let cwd: string | null = null
-  for (const length of [HEAD_READ_BYTES, HEAD_WIDENED_READ_BYTES]) {
+  const first = source.firstReadBytes ?? HEAD_READ_BYTES
+  for (const length of first < HEAD_WIDENED_READ_BYTES ? [first, HEAD_WIDENED_READ_BYTES] : [first]) {
     let head: Buffer
     try {
       head = await readTranscriptSlice(file.path, 0, length, 'scan', signal)
@@ -118,13 +117,29 @@ export async function readTranscriptHeadCwd(
     }
   }
   if (cwd !== null) {
-    headCwdCache.set(file.path, {
-      mtimeMs: file.mtimeMs,
-      sizeBytes: file.sizeBytes,
-      cwd: internCwd(cwd)
-    })
+    rememberTranscriptScopeCwd(file, cwd)
   }
   return cwd
+}
+
+/**
+ * A file version's settled cwd: from its opening records, or from its parse (null
+ * = the parse produced no session or no cwd, so it can never be in scope).
+ * Undefined when this version has not been settled yet.
+ */
+export function cachedTranscriptScopeCwd(file: FileWithMtime): string | null | undefined {
+  const cached = headCwdCache.get(file.path)
+  return cached && cached.mtimeMs === file.mtimeMs && cached.sizeBytes === file.sizeBytes
+    ? cached.cwd
+    : undefined
+}
+
+export function rememberTranscriptScopeCwd(file: FileWithMtime, cwd: string | null): void {
+  headCwdCache.set(file.path, {
+    mtimeMs: file.mtimeMs,
+    sizeBytes: file.sizeBytes,
+    cwd: cwd === null ? null : internCwd(cwd)
+  })
 }
 
 function firstHeadCwd(
@@ -144,7 +159,7 @@ function firstHeadCwd(
 // In memory only: a restart re-reads heads, and parsed files answer from the parse cache.
 const headCwdCache = new Map<
   string,
-  { mtimeMs: number; sizeBytes: number | undefined; cwd: string }
+  { mtimeMs: number; sizeBytes: number | undefined; cwd: string | null }
 >()
 // Thousands of transcripts share a handful of cwds.
 const cwdStrings = new Map<string, string>()
@@ -165,7 +180,7 @@ export function pruneTranscriptHeadCwdCache(discoveredPaths: ReadonlySet<string>
       headCwdCache.delete(path)
     }
   }
-  const liveCwds = new Set([...headCwdCache.values()].map((entry) => entry.cwd))
+  const liveCwds = new Set<string | null>([...headCwdCache.values()].map((entry) => entry.cwd))
   for (const cwd of cwdStrings.keys()) {
     if (!liveCwds.has(cwd)) {
       cwdStrings.delete(cwd)

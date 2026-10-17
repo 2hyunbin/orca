@@ -2,7 +2,11 @@ import { createAiVaultScopeCwdMatcher } from '../../shared/ai-vault-scope-cwd-ma
 import type { AiVaultScanIssue, AiVaultSession } from '../../shared/ai-vault-types'
 import type { ExecutionHostId } from '../../shared/execution-host'
 import { noteAiVaultScanReading } from './ai-vault-scan-progress'
-import { peekSessionParseCacheEntry } from './session-parse-cache-store'
+import {
+  peekLoadedSessionParseCacheEntry,
+  peekSessionParseCacheEntry,
+  type PersistedSessionParseCacheEntry
+} from './session-parse-cache-store'
 import type { AntigravityWorkspaceResolver } from './session-scanner-antigravity-history'
 import { parseSessionCandidates } from './session-scanner-candidate-parse'
 import { sessionSortTime } from './session-scanner-accumulator'
@@ -17,8 +21,10 @@ import type {
 } from './session-scanner-types'
 import {
   AI_VAULT_SCOPE_CWD_SOURCES,
+  cachedTranscriptScopeCwd,
   pruneTranscriptHeadCwdCache,
   readTranscriptHeadCwd,
+  rememberTranscriptScopeCwd,
   scopeWalksAgentFiles
 } from './session-scope-cwd'
 import { sidecarUnchanged } from './session-sidecar-stat'
@@ -92,7 +98,10 @@ async function walkInScopeSessions(
 ): Promise<AiVaultSession[]> {
   const signal = args.options.signal
   const inScope = createAiVaultScopeCwdMatcher(scopePaths)
-  const candidates = walkCandidates(args, scopePaths)
+  // Settled out-of-scope files drop here without a per-file await or database read.
+  const candidates = walkCandidates(args, scopePaths).filter(
+    (candidate) => settledScopeVerdict(candidate, inScope, args.platform) !== false
+  )
   const sessions = await parseSessionCandidates({
     candidates,
     limit: args.limit,
@@ -141,16 +150,15 @@ function walkCandidates(
   )
 }
 
-/** False only when a current parse or the transcript's opening records put it out of scope. */
-async function mayBeInScope(
+type ScopeCwdMatcher = ReturnType<typeof createAiVaultScopeCwdMatcher>
+
+function isCurrentParseRow(
+  entry: PersistedSessionParseCacheEntry | undefined,
   candidate: SessionFileCandidate,
-  inScope: ReturnType<typeof createAiVaultScopeCwdMatcher>,
-  platform: NodeJS.Platform,
-  signal: AbortSignal | undefined
-): Promise<boolean> {
+  platform: NodeJS.Platform
+): entry is PersistedSessionParseCacheEntry {
   const { file } = candidate
-  const entry = peekSessionParseCacheEntry(file.path)
-  if (
+  return (
     // The Antigravity fold has no cwd until the per-scan history join runs.
     !candidate.antigravityHistoryPath &&
     entry !== undefined &&
@@ -160,13 +168,47 @@ async function mayBeInScope(
       file.sizeBytes === undefined ||
       entry.sizeBytes === file.sizeBytes) &&
     sidecarUnchanged(entry.sidecar, file.sidecar)
-  ) {
+  )
+}
+
+/** The verdict already known for this file version, or undefined when it still has to be read. */
+function settledScopeVerdict(
+  candidate: SessionFileCandidate,
+  inScope: ScopeCwdMatcher,
+  platform: NodeJS.Platform
+): boolean | undefined {
+  const loaded = peekLoadedSessionParseCacheEntry(candidate.file.path)
+  if (isCurrentParseRow(loaded, candidate, platform)) {
+    return loaded.session !== null && inScope(loaded.session.cwd, candidate.file.path)
+  }
+  if (candidate.antigravityHistoryPath) {
+    return undefined
+  }
+  const cwd = cachedTranscriptScopeCwd(candidate.file)
+  return cwd === undefined ? undefined : cwd !== null && inScope(cwd, candidate.file.path)
+}
+
+/** False only when a current parse or the transcript's opening records put it out of scope. */
+async function mayBeInScope(
+  candidate: SessionFileCandidate,
+  inScope: ScopeCwdMatcher,
+  platform: NodeJS.Platform,
+  signal: AbortSignal | undefined
+): Promise<boolean> {
+  const settled = settledScopeVerdict(candidate, inScope, platform)
+  if (settled !== undefined) {
+    return settled
+  }
+  const { file } = candidate
+  const entry = peekSessionParseCacheEntry(file.path)
+  if (isCurrentParseRow(entry, candidate, platform)) {
+    rememberTranscriptScopeCwd(file, entry.session?.cwd ?? null)
     return entry.session !== null && inScope(entry.session.cwd, file.path)
   }
   const source = AI_VAULT_SCOPE_CWD_SOURCES[candidate.agent]
   if (source.kind !== 'head') {
     return true
   }
-  const cwd = await readTranscriptHeadCwd(file, source.cwdOf, signal)
+  const cwd = await readTranscriptHeadCwd(file, source, signal)
   return cwd === null || inScope(cwd, file.path)
 }
