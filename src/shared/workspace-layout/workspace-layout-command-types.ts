@@ -38,6 +38,8 @@ export type LayoutCommand =
       title?: string
       color?: string
       viewMode?: 'terminal' | 'chat'
+      /** When the window drew the tab, so a later save of it matches main's copy. */
+      createdAt?: number
       creation?: Partial<LayoutTerminalCreation>
       initial?: InitialSurfaceReason
       split?: NewGroupSplit
@@ -98,6 +100,8 @@ export type LayoutCommand =
       color?: string | null
       isPinned?: boolean
       viewMode?: 'terminal' | 'chat'
+      /** The tab's agent launched and ended: a restore must not launch it again. */
+      clearLaunchAgent?: true
     })
   | (On & { type: 'setChatPane'; tabId: string; leafId: string | null })
   | (On & {

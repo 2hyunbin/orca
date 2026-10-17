@@ -117,6 +117,21 @@ describe('laying frame slices over the store', () => {
     expect(fields).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps a row’s pane mount generation, which a recovery remount bumps in the window', async () => {
+    const { state, session, frame } = await restored()
+    const bumped = {
+      ...state,
+      tabsByWorktree: {
+        ...state.tabsByWorktree,
+        [GIT_KEY]: state.tabsByWorktree[GIT_KEY]!.map((tab) =>
+          tab.id === 'tab-shell' ? { ...tab, generation: 7 } : tab
+        )
+      }
+    }
+
+    expect(patchFor(bumped, session, frame).tabsByWorktree).toBeUndefined()
+  })
+
   it('keeps an open file’s editor state and place, and drops a file main closed', async () => {
     const { state, session, frame } = await restored()
     const file = state.openFiles.find((entry) => entry.worktreeId === GIT_KEY)!

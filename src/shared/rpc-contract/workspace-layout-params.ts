@@ -159,6 +159,7 @@ const CreateTerminalTabCommand = z.object({
   leafId: z.string().refine(isTerminalLeafId),
   groupId: z.string().min(1).optional(),
   viewMode: z.enum(['terminal', 'chat']).optional(),
+  createdAt: z.number().int().nonnegative().optional(),
   creation: z
     .object({
       defaultTitle: z.string().min(1).optional(),
@@ -175,19 +176,35 @@ const CreateTerminalTabCommand = z.object({
   split: NewGroupSplit
 })
 
-/** The tab bar's rename: a title as the window stores it today; null clears it. */
-const RenameTabCommand = z.object({
-  type: z.literal('renameTab'),
-  ...OnTab,
-  kind: z.literal('custom'),
-  title: z.union([z.string(), z.null()])
+const AiVaultTitle = z.object({
+  agent: z.enum(['claude', 'codex']),
+  sessionId: z.string(),
+  title: z.string()
 })
+
+/** A tab's rename: a title as the window stores it today; null clears it. */
+const RenameTabCommand = z.discriminatedUnion('kind', [
+  z.object({
+    type: z.literal('renameTab'),
+    ...OnTab,
+    kind: z.enum(['custom', 'generated']),
+    title: z.union([z.string(), z.null()])
+  }),
+  z.object({
+    type: z.literal('renameTab'),
+    ...OnTab,
+    kind: z.literal('aiVault'),
+    title: z.union([AiVaultTitle, z.null()])
+  })
+])
 
 const SetTabPropsCommand = z.object({
   type: z.literal('setTabProps'),
   ...OnTab,
   color: z.union([z.string(), z.null()]).optional(),
-  isPinned: z.boolean().optional()
+  isPinned: z.boolean().optional(),
+  viewMode: z.enum(['terminal', 'chat']).optional(),
+  clearLaunchAgent: z.literal(true).optional()
 })
 
 /**
