@@ -476,6 +476,8 @@ describe('removing a remote project keeps its local twin', () => {
       'tab-foreign'
     ])
     expect(ptyKill).not.toHaveBeenCalledWith(remotePtyId)
+    // The mixed tab stays for its runtime pane, but the removed local pane's shell is stopped.
+    expect(ptyKill).toHaveBeenCalledWith('pty-mixed-local')
     expect(
       state.recentlyClosedEditorTabsByWorktree[WORKTREE_ID]?.map((snapshot) => snapshot.filePath)
     ).toEqual(['/work/same/old-remote.ts'])

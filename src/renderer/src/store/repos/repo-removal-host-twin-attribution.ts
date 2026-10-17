@@ -93,6 +93,8 @@ export type RemovedHostTwinState = {
   otherTabIds: Set<string>
   /** Their conversation ids, which key the chats' drafts. */
   conversationIds: Set<string>
+  /** Live removed-host panes inside tabs that stay because another host's pane shares them. */
+  mixedTabPtyIds: Set<string>
 }
 
 /** `foreign`: off this host, owner unresolved. `null`: no evidence either way. */
@@ -162,7 +164,8 @@ export function collectRemovedHostTwinState(
     fileIds: new Set(),
     browserTabIds: new Set(),
     otherTabIds: new Set(),
-    conversationIds: new Set()
+    conversationIds: new Set(),
+    mixedTabPtyIds: new Set()
   }
   for (const worktreeId of twinWorktreeIds) {
     const survivors = survivingHostIdsByWorktreeId.get(worktreeId) ?? []
@@ -201,6 +204,12 @@ export function collectRemovedHostTwinState(
     for (const tab of state.tabsByWorktree[worktreeId] ?? []) {
       if (ownsTerminal(tab.id, tab.ptyId)) {
         removed.terminalTabIds.add(tab.id)
+        continue
+      }
+      for (const ptyId of state.ptyIdsByTabId[tab.id] ?? []) {
+        if (owns(ptyHostEvidence(ptyId))) {
+          removed.mixedTabPtyIds.add(ptyId)
+        }
       }
     }
     for (const file of state.openFiles) {
@@ -261,6 +270,7 @@ export function mergeRemovedHostTwinState(
     fileIds: new Set([...a.fileIds, ...b.fileIds]),
     browserTabIds: new Set([...a.browserTabIds, ...b.browserTabIds]),
     otherTabIds: new Set([...a.otherTabIds, ...b.otherTabIds]),
-    conversationIds: new Set([...a.conversationIds, ...b.conversationIds])
+    conversationIds: new Set([...a.conversationIds, ...b.conversationIds]),
+    mixedTabPtyIds: new Set([...a.mixedTabPtyIds, ...b.mixedTabPtyIds])
   }
 }
