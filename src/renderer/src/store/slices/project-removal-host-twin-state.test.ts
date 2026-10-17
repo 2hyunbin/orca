@@ -303,7 +303,12 @@ describe('removing a remote project keeps its local twin', () => {
       worktreesByRepo: {
         [PROJECT_ID]: [
           makeWorktree({ id: WORKTREE_ID, repoId: PROJECT_ID, hostId: 'local' }),
-          makeWorktree({ id: WORKTREE_ID, repoId: PROJECT_ID, hostId: 'ssh:target-1' })
+          makeWorktree({
+            id: WORKTREE_ID,
+            repoId: PROJECT_ID,
+            hostId: 'ssh:target-1',
+            runtimeOwnerEnvironmentId: 'env-b'
+          })
         ]
       },
       tabsByWorktree: {
@@ -311,10 +316,26 @@ describe('removing a remote project keeps its local twin', () => {
           makeTab({ id: 'tab-local', worktreeId: WORKTREE_ID, ptyId: 'pty-local' }),
           makeTab({ id: 'tab-ssh', worktreeId: WORKTREE_ID, ptyId: sshPtyId }),
           // Restored: the only record of its host is the layout's pane binding.
-          makeTab({ id: 'tab-ssh-restored', worktreeId: WORKTREE_ID })
+          makeTab({ id: 'tab-ssh-restored', worktreeId: WORKTREE_ID }),
+          // Mirrored through the paired runtime that reaches this SSH copy.
+          makeTab({ id: 'tab-ssh-mirrored', worktreeId: WORKTREE_ID, ptyId: remotePtyId })
         ]
       },
-      ptyIdsByTabId: { 'tab-local': ['pty-local'], 'tab-ssh': [sshPtyId] },
+      unifiedTabsByWorktree: {
+        [WORKTREE_ID]: [
+          makeUnifiedTab({
+            id: 'tab-ssh-mirrored',
+            worktreeId: WORKTREE_ID,
+            groupId: 'group-1',
+            executionHostId: REMOTE_HOST
+          })
+        ]
+      },
+      ptyIdsByTabId: {
+        'tab-local': ['pty-local'],
+        'tab-ssh': [sshPtyId],
+        'tab-ssh-mirrored': [remotePtyId]
+      },
       // Records whose tabs are gone: only the host they name says whose they are.
       sleepingAgentSessionsByPaneKey: {
         'gone-ssh:leaf': sleepingRecord('gone-ssh:leaf', 'target-1'),

@@ -8,6 +8,8 @@ import {
 import { getPtyExecutionHost } from '../../../../shared/terminal-execution-host'
 import { collectPtyIdsForTab } from '../slices/terminal-tab-retirement'
 import { toVisibleTabType } from '../../../../shared/tab-types'
+import { isExecutionHostAliasForWorktree } from '@/lib/worktree-execution-host-alias'
+import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
 import {
   getOpenFileExecutionHostId,
   hasOpenFileExecutionHostEvidence
@@ -164,12 +166,25 @@ export function collectRemovedHostTwinState(
   }
   for (const worktreeId of twinWorktreeIds) {
     const survivors = survivingHostIdsByWorktreeId.get(worktreeId) ?? []
+    const removedRow = [
+      ...(state.worktreesByRepo[getRepoIdFromWorktreeId(worktreeId)] ?? []),
+      ...(state.detectedWorktreesByRepo[getRepoIdFromWorktreeId(worktreeId)]?.worktrees ?? [])
+    ].find((row) => row.id === worktreeId && row.hostId === removedHostId)
+    // Why: an SSH copy reached through a paired runtime stamps its tabs with that runtime's id.
+    const canonical = (evidence: HostEvidence): HostEvidence =>
+      evidence &&
+      evidence !== 'non-runtime' &&
+      evidence !== 'foreign' &&
+      !survivors.includes(evidence) &&
+      isExecutionHostAliasForWorktree(evidence, removedRow ?? { hostId: removedHostId })
+        ? removedHostId
+        : evidence
     const owns = (evidence: HostEvidence): boolean =>
-      belongsToRemovedHost(evidence, removedHostId, survivors)
+      belongsToRemovedHost(canonical(evidence), removedHostId, survivors)
     const unifiedTabs = state.unifiedTabsByWorktree[worktreeId] ?? []
     const stampedHostByEntityId = new Map(
       unifiedTabs.flatMap((tab) =>
-        tab.executionHostId ? [[tab.entityId, tab.executionHostId] as const] : []
+        tab.executionHostId ? [[tab.entityId, canonical(tab.executionHostId)] as const] : []
       )
     )
     const ownsTerminal = (tabId: string, rowPtyId: string | null): boolean => {
@@ -180,7 +195,7 @@ export function collectRemovedHostTwinState(
       // stamp still yields to a PTY that names another host.
       return stamped
         ? stamped === removedHostId &&
-            evidence.every((entry) => !contradictsRemovedHost(entry, removedHostId))
+            evidence.every((entry) => !contradictsRemovedHost(canonical(entry), removedHostId))
         : evidence.length > 0 && evidence.every(owns)
     }
     for (const tab of state.tabsByWorktree[worktreeId] ?? []) {
@@ -211,7 +226,7 @@ export function collectRemovedHostTwinState(
       }
     }
     for (const tab of unifiedTabs) {
-      if (tab.executionHostId !== removedHostId) {
+      if (!tab.executionHostId || canonical(tab.executionHostId) !== removedHostId) {
         continue
       }
       if (tab.contentType === 'terminal') {
