@@ -11,7 +11,6 @@ import {
   readdirSync,
   renameSync,
   rmSync,
-  statSync,
   unlinkSync,
   writeFileSync
 } from 'node:fs'
@@ -95,7 +94,7 @@ function renameAndPublish(
 }
 
 /**
- * One recovery lock per stale lock (named by its contents and inode), in generations: a dead
+ * One recovery lock per stale record (named by its contents), in generations: a dead
  * owner's generation is never removed or renamed, the next one is created beside it. Taking one is
  * exclusive, and a later generation exists only once every earlier owner provably exited, so the
  * newest generation's owner is the only live reclaimer and no live owner is ever displaced.
@@ -145,14 +144,12 @@ function withRecoveryLock<T>(
   }
 }
 
+/**
+ * Keyed by contents alone: everyone who inspected the same stale record must share one recovery
+ * lock, whatever the path held when they looked again (another inode, or nothing mid-reclaim).
+ */
 export function orcadLockRecoveryPrefix(lockPath: string, inspectedContents: string): string {
-  let inode = ''
-  try {
-    inode = String(statSync(lockPath).ino)
-  } catch {
-    // Gone already; the reclaimer's own re-read will say so.
-  }
-  const key = createHash('sha256').update(`${inode}\0${inspectedContents}`).digest('hex')
+  const key = createHash('sha256').update(inspectedContents).digest('hex')
   return `${lockPath}${RECOVERY_DIR_SUFFIX}-${key.slice(0, 16)}-`
 }
 
