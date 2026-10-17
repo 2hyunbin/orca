@@ -652,7 +652,9 @@
           "presenceProfileOverflow": "{{names}} +{{count}} autres",
           "removeProjectFailed": "Échec de la suppression du projet",
           "wslFilesystemBoundaryTitle": "Ce projet est stocké sur un lecteur Windows",
-          "wslFilesystemBoundaryDescription": "Git pour ce projet s'exécute dans {{distro}}, qui atteint les lecteurs Windows via le pont du système de fichiers WSL. Attendez-vous à ce que git soit environ 20 fois plus lent que sur une copie stockée dans {{distro}}."
+          "wslFilesystemBoundaryDescription": "Git pour ce projet s'exécute dans {{distro}}, qui atteint les lecteurs Windows via le pont du système de fichiers WSL. Attendez-vous à ce que git soit environ 20 fois plus lent que sur une copie stockée dans {{distro}}.",
+          "moveToGroupOtherHost": "Impossible de déplacer le projet dans le groupe",
+          "moveToGroupOtherHostDesc": "L’ordinateur sur lequel ce projet s’exécute n’a pas ce groupe. Un projet ne peut rejoindre que les groupes enregistrés sur son propre ordinateur."
         },
         "settings": {
           "e12dab333b": "Échec du changement de serveur",

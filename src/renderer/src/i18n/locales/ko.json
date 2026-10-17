@@ -548,7 +548,9 @@
           "presenceProfileOverflow": "{{names}} 외 {{count}}개",
           "removeProjectFailed": "프로젝트를 삭제하지 못했습니다.",
           "wslFilesystemBoundaryTitle": "이 프로젝트는 Windows 드라이브에 저장되어 있습니다.",
-          "wslFilesystemBoundaryDescription": "이 프로젝트의 Git은 WSL 파일 시스템 브리지를 통해 Windows 드라이브에 연결되는 {{distro}}에서 실행됩니다. git은 {{distro}}에 저장된 복사본에 비해 약 20배 느릴 것으로 예상됩니다."
+          "wslFilesystemBoundaryDescription": "이 프로젝트의 Git은 WSL 파일 시스템 브리지를 통해 Windows 드라이브에 연결되는 {{distro}}에서 실행됩니다. git은 {{distro}}에 저장된 복사본에 비해 약 20배 느릴 것으로 예상됩니다.",
+          "moveToGroupOtherHost": "프로젝트를 그룹으로 이동할 수 없습니다",
+          "moveToGroupOtherHostDesc": "이 프로젝트가 실행되는 컴퓨터에 이 그룹이 없습니다. 프로젝트는 같은 컴퓨터에 저장된 그룹에만 참여할 수 있습니다."
         },
         "settings": {
           "e12dab333b": "서버를 전환하지 못했습니다.",
