@@ -117,7 +117,8 @@ export function closeRemovedHostTwinState(
   const twinWorktreeIds = new Set(twinHostIds.keys())
   const removed = mergeRemovedHostTwinState(
     beforeCall,
-    collectRemovedHostTwinState(get(), twinWorktreeIds, removedHostId, twinHostIds)
+    collectRemovedHostTwinState(get(), twinWorktreeIds, removedHostId, twinHostIds),
+    get()
   )
   const sleepingPatch = omitRemovedHostSleepingSessions(get(), twinHostIds, removedHostId, removed)
   if (Object.keys(sleepingPatch).length > 0) {

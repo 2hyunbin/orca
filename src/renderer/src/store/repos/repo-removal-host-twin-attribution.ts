@@ -260,17 +260,39 @@ export function collectRemovedHostTwinState(
   return removed
 }
 
-/** Union of two attributions: one taken before the host call, one after it settled. */
+/**
+ * The settled attribution, plus pre-call entries whose surface has since disappeared. A surface
+ * still present is judged on its latest evidence, which may now include a surviving host's pane.
+ */
 export function mergeRemovedHostTwinState(
-  a: RemovedHostTwinState,
-  b: RemovedHostTwinState
+  beforeCall: RemovedHostTwinState,
+  settled: RemovedHostTwinState,
+  state: Pick<
+    AppState,
+    'tabsByWorktree' | 'unifiedTabsByWorktree' | 'openFiles' | 'browserTabsByWorktree'
+  >
 ): RemovedHostTwinState {
+  const terminalIds = new Set([
+    ...Object.values(state.tabsByWorktree).flatMap((tabs) => tabs.map((tab) => tab.id)),
+    ...Object.values(state.unifiedTabsByWorktree).flatMap((tabs) =>
+      tabs.flatMap((tab) => (tab.contentType === 'terminal' ? [tab.entityId] : []))
+    )
+  ])
+  const unifiedIds = new Set(
+    Object.values(state.unifiedTabsByWorktree).flatMap((tabs) => tabs.map((tab) => tab.id))
+  )
+  const fileIds = new Set(state.openFiles.map((file) => file.id))
+  const browserIds = new Set(
+    Object.values(state.browserTabsByWorktree).flatMap((tabs) => tabs.map((tab) => tab.id))
+  )
+  const keep = (a: Set<string>, b: Set<string>, present: Set<string>): Set<string> =>
+    new Set([...b, ...[...a].filter((id) => !present.has(id))])
   return {
-    terminalTabIds: new Set([...a.terminalTabIds, ...b.terminalTabIds]),
-    fileIds: new Set([...a.fileIds, ...b.fileIds]),
-    browserTabIds: new Set([...a.browserTabIds, ...b.browserTabIds]),
-    otherTabIds: new Set([...a.otherTabIds, ...b.otherTabIds]),
-    conversationIds: new Set([...a.conversationIds, ...b.conversationIds]),
-    mixedTabPtyIds: new Set([...a.mixedTabPtyIds, ...b.mixedTabPtyIds])
+    terminalTabIds: keep(beforeCall.terminalTabIds, settled.terminalTabIds, terminalIds),
+    fileIds: keep(beforeCall.fileIds, settled.fileIds, fileIds),
+    browserTabIds: keep(beforeCall.browserTabIds, settled.browserTabIds, browserIds),
+    otherTabIds: keep(beforeCall.otherTabIds, settled.otherTabIds, unifiedIds),
+    conversationIds: new Set([...beforeCall.conversationIds, ...settled.conversationIds]),
+    mixedTabPtyIds: settled.mixedTabPtyIds
   }
 }

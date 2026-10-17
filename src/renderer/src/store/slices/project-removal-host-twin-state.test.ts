@@ -33,6 +33,7 @@ import {
 const PROJECT_ID = 'same-repo'
 const WORKTREE_ID = 'same-repo::/work/same'
 const REMOTE_HOST = 'runtime:env-b' as const
+const LOCAL_HOST = 'local'
 const localRow: Repo = {
   id: PROJECT_ID,
   path: '/work/same',
@@ -79,7 +80,14 @@ beforeEach(() => {
   onRepoRemoved = null
   vi.stubGlobal('window', {
     api: {
-      repos: { remove: vi.fn(), removeForHost: vi.fn().mockResolvedValue(undefined) },
+      repos: {
+        remove: vi.fn(),
+        removeForHost: vi.fn(async ({ hostId }: { hostId: string }) => {
+          if (hostId === LOCAL_HOST) {
+            onRepoRemoved?.()
+          }
+        })
+      },
       pty: { kill: ptyKill },
       runtimeEnvironments: {
         call: vi.fn(answerLikeRuntimeHost),
@@ -529,5 +537,33 @@ describe('removing a remote project keeps its local twin', () => {
     expect(store.getState().activeTabTypeByWorktree['other-repo::/work/other']).toBe(
       'agent-session'
     )
+  })
+
+  it('judges a tab that gained a surviving pane during removal on its latest panes', async () => {
+    const store = seedTwins()
+    store.setState((s) => ({
+      unifiedTabsByWorktree: {
+        [WORKTREE_ID]: (s.unifiedTabsByWorktree[WORKTREE_ID] ?? []).filter(
+          (tab) => tab.id !== 'tab-remote'
+        )
+      },
+      tabsByWorktree: {
+        [WORKTREE_ID]: (s.tabsByWorktree[WORKTREE_ID] ?? []).filter(
+          (tab) => tab.id !== 'tab-remote'
+        )
+      }
+    }))
+    onRepoRemoved = () =>
+      store.setState((s) => ({
+        ptyIdsByTabId: { ...s.ptyIdsByTabId, 'tab-local': ['pty-local', remotePtyId] }
+      }))
+
+    await store.getState().removeProject(PROJECT_ID, { hostId: 'local' })
+
+    expect(store.getState().tabsByWorktree[WORKTREE_ID]?.map((tab) => tab.id)).toEqual([
+      'tab-local'
+    ])
+    expect(ptyKill).toHaveBeenCalledWith('pty-local')
+    expect(ptyKill).not.toHaveBeenCalledWith(remotePtyId)
   })
 })
