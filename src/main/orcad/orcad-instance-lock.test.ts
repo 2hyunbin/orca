@@ -601,7 +601,7 @@ describe('acquireOrcadInstanceLock', () => {
     ).toThrow(refused)
     expect(readOrcadInstanceLockRecord(lockPath)?.nonce).toBe('stale')
 
-    // An owner that exited on this machine, and an owner file never written, are a crash's.
+    // An owner that exited on this machine is a crash's; an empty directory is no lock at all.
     for (const owner of [reclaimer({ pid: 6160, machineIdentity: 'machine-a' }), null]) {
       writeFileSync(lockPath, JSON.stringify(persistedRecord({ machineIdentity: 'machine-a' })))
       leaveRecovery(owner)
@@ -610,10 +610,32 @@ describe('acquireOrcadInstanceLock', () => {
       expect(readdirSync(root)).toEqual([ORCAD_LOCK_FILE_NAME])
       lock.release()
     }
-    // A fresh owner-less recovery lock is a reclaimer between mkdir and its first write.
+  })
+
+  it('publishes a recovery lock only complete, and never removes one it did not create', () => {
+    const root = makeRoot()
+    const lockPath = join(root, ORCAD_LOCK_FILE_NAME)
+    const recovery = `${lockPath}.recovery`
     writeFileSync(lockPath, JSON.stringify(persistedRecord()))
-    mkdirSync(recovery)
-    expect(() => acquireOrcadInstanceLock(root, paused)).toThrow(refused)
+    const other = JSON.stringify(persistedRecord({ pid: 5150, machineIdentity: 'machine-a' }))
+    let raced = false
+    // Another reclaimer's recovery lock lands just before this one publishes its own.
+    const racing = hooks({
+      processIsAlive: (pid) => {
+        if (!raced && pid === 424242) {
+          raced = true
+          mkdirSync(recovery)
+          writeFileSync(join(recovery, 'owner'), other)
+        }
+        return pid === 5150
+      }
+    })
+    expect(() => acquireOrcadInstanceLock(root, racing)).toThrow(
+      expect.objectContaining({ message: expect.stringContaining('is reclaiming') })
+    )
+    expect(readFileSync(join(recovery, 'owner'), 'utf8')).toBe(other)
+    expect(readdirSync(root).sort()).toEqual([ORCAD_LOCK_FILE_NAME, 'orcad.lock.recovery'])
+    expect(readOrcadInstanceLockRecord(lockPath)?.nonce).toBe('stale')
   })
 
   it.runIf(process.platform !== 'win32')(

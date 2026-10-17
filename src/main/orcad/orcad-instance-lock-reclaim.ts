@@ -7,8 +7,8 @@ import {
   linkSync,
   mkdirSync,
   renameSync,
+  rmdirSync,
   rmSync,
-  statSync,
   unlinkSync,
   writeFileSync
 } from 'node:fs'
@@ -16,14 +16,11 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { OrcadInstanceLockError } from './orcad-data-root-privacy'
 import { readNodeFileSyncWithinLimit } from '../../shared/node-bounded-file-reader'
-import { hasErrorCode } from '../daemon/daemon-process-inspection'
 
 export const MAX_ORCAD_LOCK_BYTES = 64 * 1024
 // Serializes stale-lock recovery, so no reclaimer ever renames away a lock another just published.
 const RECOVERY_DIR_SUFFIX = '.recovery'
 const RECOVERY_OWNER_FILE = 'owner'
-// Only an owner file never written (a crash right after mkdir) is judged by age instead.
-const OWNERLESS_RECOVERY_GRACE_MS = 10_000
 
 /** Who is recovering, as a lock record, and whether a recovery owner's holder provably exited. */
 export type OrcadLockRecoveryOwner = {
@@ -112,23 +109,28 @@ function withRecoveryLock<T>(lockPath: string, owner: OrcadLockRecoveryOwner, re
   }
 }
 
+/**
+ * Staged with its owner, then renamed into place: the recovery lock never exists without a complete
+ * owner, and a rename onto one that does (a non-empty directory) fails instead of replacing it.
+ */
 function takeRecoveryLock(dir: string, ownerRecord: string): boolean {
+  const staged = `${dir}.staged-${process.pid}-${randomUUID()}`
   try {
-    mkdirSync(dir, { mode: 0o700 })
+    mkdirSync(staged, { mode: 0o700 })
+    writeFileSync(join(staged, RECOVERY_OWNER_FILE), ownerRecord, { flag: 'wx', mode: 0o600 })
   } catch (error) {
-    if (hasErrorCode(error, 'EEXIST')) {
-      return false
-    }
+    rmSync(staged, { recursive: true, force: true })
     throw new OrcadInstanceLockError(
       'orcad_data_root_unusable',
-      `Cannot create ${dir}: ${error instanceof Error ? error.message : String(error)}`
+      `Cannot create ${staged}: ${error instanceof Error ? error.message : String(error)}`
     )
   }
   try {
-    writeFileSync(join(dir, RECOVERY_OWNER_FILE), ownerRecord, { flag: 'wx', mode: 0o600 })
+    renameSync(staged, dir)
     return true
   } catch {
-    rmSync(dir, { recursive: true, force: true })
+    // Whatever holds the name, it was not created by this attempt; only our staging is removed.
+    rmSync(staged, { recursive: true, force: true })
     return false
   }
 }
@@ -143,7 +145,17 @@ function breakAbandonedRecoveryLock(
   exited: (ownerRecord: string) => boolean
 ): boolean {
   const inspected = readBoundedLockFile(join(dir, RECOVERY_OWNER_FILE))
-  if (inspected === null ? !ownerlessRecoveryLockIsAbandoned(dir) : !exited(inspected)) {
+  if (inspected === null) {
+    // No lock is ever published without its owner; an empty directory is not one. rmdir refuses
+    // a non-empty one, so a lock renamed into its place survives.
+    try {
+      rmdirSync(dir)
+    } catch {
+      return false
+    }
+    return true
+  }
+  if (!exited(inspected)) {
     return false
   }
   const aside = `${dir}.abandoned-${process.pid}-${randomUUID()}`
@@ -152,7 +164,6 @@ function breakAbandonedRecoveryLock(
   } catch {
     return false
   }
-  // A taker we displaced before it wrote its owner fails its own write, so null matching is safe.
   if (readBoundedLockFile(join(aside, RECOVERY_OWNER_FILE)) === inspected) {
     rmSync(aside, { recursive: true, force: true })
     return true
@@ -164,14 +175,6 @@ function breakAbandonedRecoveryLock(
     // Left aside under a unique name; inert.
   }
   return false
-}
-
-function ownerlessRecoveryLockIsAbandoned(dir: string): boolean {
-  try {
-    return Date.now() - statSync(dir).mtimeMs > OWNERLESS_RECOVERY_GRACE_MS
-  } catch {
-    return false
-  }
 }
 
 /** No-clobber restore: a third contender's newer record at the canonical path stays authoritative. */
