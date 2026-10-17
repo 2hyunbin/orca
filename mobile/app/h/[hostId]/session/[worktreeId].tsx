@@ -20,7 +20,7 @@ import { shellSwitchDecision } from '../../../../src/mobile-web-shell/shell-swit
  * The review switch's shape, for its reasons: the native screen is `MobileSessionRouteScreen`
  * rather than the body of this file, because `useMobileSessionController` at this file's top level
  * would open the terminal, chat and tab subscriptions behind the page as well as in front of it.
- * As an element it is built and not mounted, and only `fallback` ever mounts it.
+ * As an element it is built and not mounted, and only a native-shell build mounts it.
  *
  * Four query params rather than the review's four, and one of them is not part of this screen's
  * identity: `paneKey`. A notification tap for a pane of the session already on screen is a tab
@@ -103,7 +103,6 @@ export default withWorkspaceRoute(function MobileSessionScreen() {
       key={shellScreenRouteKey({ pathname: decision.route.pathname, params: identity })}
       hostId={hostId}
       route={decision.route}
-      fallback={native}
       onRouteParamClear={erasePaneKey}
     />
   )

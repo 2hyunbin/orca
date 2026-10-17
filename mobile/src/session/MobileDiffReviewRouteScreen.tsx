@@ -14,8 +14,8 @@ import { useWorkspaceRouteHandoff } from '../navigation/workspace-route-handoff'
  *
  * A route file that both reads the flag and calls `useMobileDiffReviewController` runs the whole
  * controller — its client subscriptions included — behind the page, because hooks cannot be
- * conditional. As an element passed for `fallback` it is created and not mounted, so the
- * controller runs only when the shell answers `native-route`. Same reason the explorer switch
+ * conditional. As an element it is created and not mounted, so the controller runs only when a
+ * native-shell build renders it. Same reason the explorer switch
  * builds its panel as an element.
  *
  * The params are read here rather than handed down, so this is the route body and the two route

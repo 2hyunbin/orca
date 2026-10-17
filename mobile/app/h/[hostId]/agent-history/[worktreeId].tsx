@@ -14,8 +14,7 @@ import { firstParam } from '../../../../src/navigation/route-param-reader'
  * Agent session history, from the desktop's bundle or from this app.
  *
  * The switch is `index.tsx`'s, for its reasons: the shell renders the page only for a route the
- * bundle lists with grants this app implements, and `fallback` is what a negotiation that said no
- * falls back to.
+ * bundle lists with grants this app implements, and walls the host otherwise.
  *
  * Two dynamic segments rather than one, so both are encoded: `useLocalSearchParams` answers the
  * decoded value, and a worktree id or a deep-linked host id carrying `/`, `?`, `#` or whitespace
@@ -70,11 +69,6 @@ export default withWorkspaceRoute(function MobileAgentSessionHistoryScreen() {
   // page has left. The key is what makes the change a remount, which disposes that bridge in the
   // commit, and the new session starts with no grants until its own `init`.
   return (
-    <MobileWebShellScreen
-      key={decision.route.pathname}
-      hostId={hostId}
-      route={decision.route}
-      fallback={panel}
-    />
+    <MobileWebShellScreen key={decision.route.pathname} hostId={hostId} route={decision.route} />
   )
 })

@@ -141,12 +141,14 @@ describe('shell lifecycle log lines', () => {
     expect(JSON.stringify(lines)).not.toContain('/Users/someone')
   })
 
-  it('logs nothing for a route that stays native, the normal case for native screens', () => {
+  it('logs the wall a host with no page earns', () => {
     const { session, lines } = replay([
       { type: 'gates-changed', gates: gates({ hostCapabilities: [] }) }
     ])
-    expect(session.state.kind).toBe('native-route')
-    expect(lines).toEqual([])
+    expect(session.state.kind).toBe('wall')
+    expect(summary(lines)).toEqual([
+      'web-shell-flow Web shell: blocked by version check | reason=bundle-unavailable'
+    ])
   })
 
   it('logs a missed ready deadline, the failure it causes and the recovery flow', () => {

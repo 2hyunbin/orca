@@ -25,10 +25,6 @@ export default function MobileWebShellRoute() {
   }
   // The screen the page stands in for. The document is served at `/`, which matches no route in
   // the tree the page carries, so this is the only thing that tells it which one to open.
-  //
-  // The fallback is a redirect rather than the native screen: this route exists only to open the
-  // page deliberately, so a bundle that does not list the worktree list has nothing to show here
-  // and the host route is where the list actually lives.
   return (
     <MobileWebShellScreen
       // Same reason as the agent-history route: a host holds the grants its session opened with,
@@ -36,7 +32,6 @@ export default function MobileWebShellRoute() {
       key={hostId}
       hostId={hostId}
       route={decision.route}
-      fallback={<Redirect href={`/h/${hostId}`} />}
     />
   )
 }

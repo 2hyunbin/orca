@@ -4,7 +4,7 @@
  *
  * `catch-all-page-route.test.tsx` mocks both and reads what the switch hands over; this drives the
  * other half — the session reducer is the only thing stubbed, so the screen the user sees for
- * `native-route`, `offline`, `checking` and the wall is the one this app ships.
+ * `route-unavailable`, `offline`, `checking` and the wall is the one this app ships.
  */
 import { createElement } from 'react'
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer'
@@ -26,7 +26,7 @@ const SNAPSHOT = vi.hoisted(() => ({
 const dependencies = vi.hoisted((): Dependencies => {
   Object.assign(globalThis, { __DEV__: true })
   return {
-    state: { kind: 'native-route' },
+    state: { kind: 'route-unavailable' },
     params: {},
     replace: vi.fn(),
     push: vi.fn()
@@ -192,16 +192,22 @@ afterEach(() => {
 })
 
 describe('the screen the catch-all paints for each shell state', () => {
-  it('renders the refusal through the shell fallback, not beside it', async () => {
-    // `native-route` is the only state that reaches `fallback`, so this is what pins that binding:
-    // with `fallback={null}` the shell paints nothing and the control below is gone.
-    const tree = await renderRoute({ kind: 'native-route' })
+  it('shows the refusal when the shell finds the page does not serve the pathname', async () => {
+    const tree = await renderRoute({ kind: 'route-unavailable' })
+    expect(textOf(tree)).toContain('This workspace screen is not available on this host.')
+    expect(textOf(tree)).not.toContain('too old')
+    expect(backControl(tree)).toBeDefined()
+  })
+
+  it('shows the same refusal on a native-shell build, with no shell mounted', async () => {
+    vi.stubEnv('EXPO_PUBLIC_MOBILE_SHELL', '')
+    const tree = await renderRoute({ kind: 'checking' })
     expect(textOf(tree)).toContain('This workspace screen is not available on this host.')
     expect(backControl(tree)).toBeDefined()
   })
 
   it('leaves the dead end rather than stacking it, on the encoded host route', async () => {
-    const tree = await renderRoute({ kind: 'native-route' })
+    const tree = await renderRoute({ kind: 'route-unavailable' })
     await act(async () => {
       backControl(tree).props.onPress()
     })
@@ -219,7 +225,7 @@ describe('the screen the catch-all paints for each shell state', () => {
     for (const hostId of ['a?b', 'a#b', 'a b', 'a/b', 'a\\b']) {
       dependencies.params = { hostId, page: ['settings'] }
       dependencies.replace.mockClear()
-      const tree = await renderRoute({ kind: 'native-route' })
+      const tree = await renderRoute({ kind: 'route-unavailable' })
       await act(async () => {
         backControl(tree).props.onPress()
       })
@@ -240,7 +246,7 @@ describe('the screen the catch-all paints for each shell state', () => {
    */
   it('goes to the app root when there is no host to go back to', async () => {
     dependencies.params = { page: ['settings'] }
-    const tree = await renderRoute({ kind: 'native-route' })
+    const tree = await renderRoute({ kind: 'route-unavailable' })
     await act(async () => {
       backControl(tree, ROOT_LABEL).props.onPress()
     })

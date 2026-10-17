@@ -78,7 +78,6 @@ export default withWorkspaceRoute(function MobileFilePreviewRoute() {
       key={shellScreenRouteKey(decision.route)}
       hostId={route.params.hostId}
       route={decision.route}
-      fallback={native}
     />
   )
 })

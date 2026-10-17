@@ -19,7 +19,7 @@ import { shellSwitchDecision } from '../../../../src/mobile-web-shell/shell-swit
  * The files switch's shape. What is different here is that the native screen is a component rather
  * than the body of this file: `MobileDiffReviewRouteScreen` calls the review controller, and a
  * controller at this file's top level would subscribe behind the page as well as in front of it.
- * As an element it is built and not mounted, and only `fallback` ever mounts it.
+ * As an element it is built and not mounted, and only a native-shell build mounts it.
  *
  * `matchesRoutePattern` is segment-count exact with literal equality on the static segments, so
  * these five segments collide with nothing: the explorer's five carry `files`.
@@ -73,7 +73,6 @@ export default withWorkspaceRoute(function MobileDiffReviewScreen() {
       key={shellScreenRouteKey(decision.route)}
       hostId={hostId}
       route={decision.route}
-      fallback={native}
     />
   )
 })

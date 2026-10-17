@@ -11,9 +11,8 @@ import { shellSwitchDecision } from '../../../src/mobile-web-shell/shell-switch-
  * The worktree list, from the desktop's bundle or from this app.
  *
  * The shell decides, not this switch: it renders the page only for a route the bundle lists with
- * grants this app implements, and answers `native-route` otherwise, which is what `fallback` is.
- * So the two ways to stay native are a build without the shell and a negotiation that said no, and
- * the second one covers every host whose desktop is older than the page.
+ * grants this app implements, and walls the host otherwise. So the one way to stay native is a build
+ * without the shell.
  *
  * Encoded, not interpolated raw, for the reason `web.tsx` states: a deep-linked host id carrying
  * `?`, `#` or whitespace would build a pathname the page refuses, and a refusal here is a failure
@@ -50,7 +49,6 @@ function HostListScreen() {
       key={hostId}
       hostId={hostId}
       route={decision.route}
-      fallback={native}
     />
   )
 }

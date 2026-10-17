@@ -17,8 +17,8 @@ import { shellSwitchDecision } from '../../../../src/mobile-web-shell/shell-swit
 /**
  * The source-control hub, from the desktop's bundle or from this app.
  *
- * The files switch's shape, for its reasons: the shell answers `native-route` for a route the
- * bundle does not list or this app's grants do not cover, and `fallback` is what that renders.
+ * The files switch's shape, for its reasons: the shell walls a route the bundle does not list or
+ * this app's grants do not cover.
  *
  * `pr` and `history` are not switched and never will be. Both are `Redirect`s into this route, and
  * a redirect inside the page would leave the session bound to a pathname the page has left; left
@@ -83,7 +83,6 @@ export default withWorkspaceRoute(function MobileSourceControlScreen() {
       key={shellScreenRouteKey(decision.route)}
       hostId={hostId}
       route={decision.route}
-      fallback={native}
     />
   )
 })

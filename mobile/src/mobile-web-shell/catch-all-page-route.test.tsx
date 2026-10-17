@@ -50,9 +50,16 @@ vi.mock('./MobileWebShellScreen', () => ({
 }))
 
 import { BRIDGE_MAX_ROUTE_PARAMS, BRIDGE_ROUTE_PATHNAME_PATTERN } from './bridge/bridge-caps'
-import { grantsForRoute, pageRendersRoute, routeViewOf } from './page-route-policy'
+import { grantsForRoute, matchesRoutePattern, routeViewOf } from './page-route-policy'
 import { shellScreenRouteKey } from './shell-screen-route'
 import MobileWebPageCatchAllScreen from './catch-all-page-route'
+
+/** Whether a narrow session on `pathname` would be served the page under `routes`. */
+function servesRoute(routes: Parameters<typeof routeViewOf>[0], pathname: string): boolean {
+  return routeViewOf(routes, pathname).pageRoutes.some((pattern) =>
+    matchesRoutePattern(pathname, pattern)
+  )
+}
 
 async function render(): Promise<void> {
   await act(async () => {
@@ -209,8 +216,8 @@ const FUTURE_MANIFEST = [
 
 describe('the gate a catch-all pathname meets', () => {
   it('renders a manifest route this app has no route file for', () => {
-    expect(pageRendersRoute(FUTURE_MANIFEST, '/h/H1/insights')).toBe(true)
-    expect(pageRendersRoute(FUTURE_MANIFEST, '/h/H1/insights/W1')).toBe(true)
+    expect(servesRoute(FUTURE_MANIFEST, '/h/H1/insights')).toBe(true)
+    expect(servesRoute(FUTURE_MANIFEST, '/h/H1/insights/W1')).toBe(true)
     expect(grantsForRoute(FUTURE_MANIFEST, '/h/H1/insights/W1')).toEqual([
       'navigate',
       'storage',
@@ -220,12 +227,12 @@ describe('the gate a catch-all pathname meets', () => {
   })
 
   it('refuses a pathname the manifest does not list', () => {
-    expect(pageRendersRoute(FUTURE_MANIFEST, '/h/H1/settings')).toBe(false)
+    expect(servesRoute(FUTURE_MANIFEST, '/h/H1/settings')).toBe(false)
     expect(grantsForRoute(FUTURE_MANIFEST, '/h/H1/settings')).toEqual([])
   })
 
   it('refuses a listed route needing a grant this app does not implement', () => {
-    expect(pageRendersRoute(FUTURE_MANIFEST, '/h/H1/future')).toBe(false)
+    expect(servesRoute(FUTURE_MANIFEST, '/h/H1/future')).toBe(false)
     expect(routeViewOf(FUTURE_MANIFEST, '/h/H1/future').pageRoutes).toEqual([
       '/h/[hostId]/insights',
       '/h/[hostId]/insights/[worktreeId]'

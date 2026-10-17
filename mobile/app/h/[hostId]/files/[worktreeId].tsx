@@ -17,7 +17,7 @@ import { shellSwitchDecision } from '../../../../src/mobile-web-shell/shell-swit
  * The file explorer, from the desktop's bundle or from this app.
  *
  * The shell decides, not this switch: it renders the page only for a route the bundle lists with
- * grants this app implements, and answers `native-route` otherwise, which is what `fallback` is.
+ * grants this app implements, and walls the host otherwise.
  *
  * Encoded, not interpolated raw, for the reason `web.tsx` states: an id carrying `?`, `#` or
  * whitespace would build a pathname the page refuses and mount nothing.
@@ -67,7 +67,6 @@ export default withWorkspaceRoute(function MobileFileExplorerScreen() {
       key={shellScreenRouteKey(decision.route)}
       hostId={hostId}
       route={decision.route}
-      fallback={native}
     />
   )
 })

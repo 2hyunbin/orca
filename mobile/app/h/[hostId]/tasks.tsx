@@ -43,7 +43,6 @@ export default function MobileTasksRoute() {
       key={hostId}
       hostId={hostId}
       route={decision.route}
-      fallback={native}
     />
   )
 }
