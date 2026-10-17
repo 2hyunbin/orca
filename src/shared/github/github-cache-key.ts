@@ -87,3 +87,23 @@ export function getLegacyGitHubPRCacheKey(
 ): string {
   return getLegacyGitHubRepoCacheKey(repoPath, repoId, branch)
 }
+
+/** Every key a repo's branch PR may sit under in the cache, the repo-scoped one first. */
+export function getGitHubPRCacheKeyCandidates(
+  repo: { path: string; id: string; connectionId?: string | null; executionHostId?: string | null },
+  branch: string
+): string[] {
+  return [
+    getGitHubPRCacheKey(
+      repo.path,
+      repo.id,
+      branch,
+      null,
+      repo.connectionId,
+      repo.executionHostId,
+      true
+    ),
+    getLegacyGitHubPRCacheKey(repo.path, repo.id, branch),
+    getLegacyGitHubPRCacheKey(repo.path, undefined, branch)
+  ]
+}

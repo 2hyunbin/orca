@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { Repo } from '../repo-types'
 import type { Worktree } from '../worktree/types'
-import { getGitHubPRCacheKey, getLegacyGitHubPRCacheKey } from '../github/github-cache-key'
+import { getGitHubPRCacheKeyCandidates } from '../github/github-cache-key'
 import { isGitHubPRSuppressed } from '../worktree/github-pr-suppression'
 import { getPRGroupKeyForState, type PRGroupKey } from '../workspace-view/workspace-pr-groups'
 
@@ -34,26 +34,10 @@ export function readWorkspaceReviewFact(
   if (!repo || !branch) {
     return null
   }
-  const canUseLegacyKeys = !repo.connectionId && !repo.executionHostId
-  // Why: refreshes write repo-id scoped entries; legacy entries from an old cache must not win.
-  const keys = [
-    getGitHubPRCacheKey(
-      repo.path,
-      repo.id,
-      branch,
-      null,
-      repo.connectionId,
-      repo.executionHostId,
-      true
-    ),
-    ...(canUseLegacyKeys
-      ? [
-          getLegacyGitHubPRCacheKey(repo.path, repo.id, branch),
-          getLegacyGitHubPRCacheKey(repo.path, undefined, branch)
-        ]
-      : [])
-  ]
-  const entry = keys.map((key) => prCache[key]).find((candidate) => candidate != null)
+  const keys = getGitHubPRCacheKeyCandidates(repo, branch)
+  // Why: legacy keys carry no host, so only a local repo may read them.
+  const lookup = !repo.connectionId && !repo.executionHostId ? keys : keys.slice(0, 1)
+  const entry = lookup.map((key) => prCache[key]).find((candidate) => candidate != null)
   const pr = entry?.data
   if (!pr || (typeof pr.number === 'number' && isGitHubPRSuppressed(worktree, pr.number))) {
     return null
