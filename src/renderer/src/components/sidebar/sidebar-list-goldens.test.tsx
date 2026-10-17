@@ -45,6 +45,7 @@ import {
   goldenLiveTerminalState,
   type GoldenView
 } from './sidebar-list-golden-store.test-fixture'
+import { goldenNameOrderState } from './sidebar-list-golden-name-order.test-fixture'
 import {
   serializeOccurrencePlan,
   serializeShortcutTargets,
@@ -303,6 +304,34 @@ describe('sidebar row model goldens', () => {
       )
     })
   }
+
+  it('orders accented, mixed-case and numbered names across sorts and grouping', async () => {
+    const sections: string[] = []
+    const seen = new Map<string, string>()
+    for (const groupBy of ['none', 'repo'] as const) {
+      for (const sortBy of ['name', 'recent', 'repo'] as const) {
+        for (const projectOrderBy of PROJECT_ORDER_BYS) {
+          const view: GoldenView = {
+            groupBy,
+            sortBy,
+            projectOrderBy,
+            pinnedInGroups: false,
+            collapsedGroups: new Set()
+          }
+          appendCapture(
+            sections,
+            seen,
+            `groupBy=${groupBy} sort=${sortBy} projectOrder=${projectOrderBy}`,
+            captureGolden(buildGoldenStoreState(view, goldenNameOrderState()))
+          )
+          useAppStore.setState(initialState, true)
+        }
+      }
+    }
+    await expect(`${sections.join('\n')}\n`).toMatchFileSnapshot(
+      './__goldens__/sidebar-list/scenario-name-order.txt'
+    )
+  })
 
   it('orders rows missing from the frozen sort order last', async () => {
     const state = buildGoldenStoreState({
