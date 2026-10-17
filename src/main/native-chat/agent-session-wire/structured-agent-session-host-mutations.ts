@@ -58,6 +58,8 @@ import {
   type StructuredAgentSessionOptionsReader
 } from './structured-agent-session-options-read'
 import { writeStructuredAgentSessionOption } from './structured-agent-session-message-options'
+import { settleStructuredAgentSessionLateDispatch } from './structured-agent-session-late-dispatch'
+import { releaseStructuredAgentSessionUnansweredDispatches } from './structured-agent-session-unanswered-dispatch-release'
 
 export function sendStructuredAgentSessionTurn(
   context: StructuredAgentSessionMutationContext,
@@ -125,6 +127,11 @@ export function cancelStructuredAgentSessionTurn(
         ...params,
         childWork: () => context.readChildWork(sessionId),
         acknowledgeStops: (evidence) => context.publishChildWork(sessionId, evidence),
+        captureStops: (targets) =>
+          context.captureChildWorkStops(
+            sessionId,
+            targets.map((target) => target.providerId)
+          ),
         // Untargeted, with work no record lists: the idle sweep's stop ends it with the agent.
         ...(params.taskId === undefined
           ? {
@@ -291,6 +298,11 @@ export function structuredAgentSessionMutationDelegates(
     readOptions: (
       sessionId: string,
       reader: StructuredAgentSessionOptionsReader = IN_PROCESS_OPTIONS_READER
-    ) => readStructuredAgentSessionOptions(context(), sessionId, reader)
+    ) => readStructuredAgentSessionOptions(context(), sessionId, reader),
+    settleLateDispatch: (input: Parameters<typeof settleStructuredAgentSessionLateDispatch>[1]) =>
+      settleStructuredAgentSessionLateDispatch(context(), input),
+    releaseUnansweredDispatches: (
+      input: Parameters<typeof releaseStructuredAgentSessionUnansweredDispatches>[1]
+    ) => releaseStructuredAgentSessionUnansweredDispatches(context(), input)
   }
 }

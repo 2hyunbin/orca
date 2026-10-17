@@ -169,6 +169,30 @@ describe('SshConnectionManager', () => {
     expect(manager.getConnection(target.id)).toBe(replacement)
   })
 
+  it('keeps a Disconnect that lands while a background connect closes the old transport', async () => {
+    const manager = new SshConnectionManager({ onStateChange: vi.fn() })
+    await manager.connect(target)
+    const old = mockState.instances[0]
+    // The pooled transport dropped, so a background dial (tunnel, census) replaces it.
+    old.status = 'disconnected'
+    let finishOldClose!: () => void
+    old.disconnect.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishOldClose = resolve
+        })
+    )
+
+    const background = manager.connect(target)
+    const rejected = expect(background).rejects.toThrow('cancelled')
+    await manager.disconnect(target.id)
+    finishOldClose()
+    await rejected
+
+    expect(mockState.instances).toHaveLength(1)
+    expect(manager.getConnection(target.id)).toBeUndefined()
+  })
+
   it('leaves a connection whose own reconnect is asking the user alone', async () => {
     const manager = new SshConnectionManager({ onStateChange: vi.fn() })
     const conn = await manager.connect(target)

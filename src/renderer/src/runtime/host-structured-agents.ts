@@ -30,6 +30,8 @@ export type HostStructuredAgentsStatuses = ReadonlyMap<string, RuntimeEnvironmen
 
 const entries = new Map<string, HostAgentsEntry>()
 const inflight = new Map<string, Promise<void>>()
+/** Host runtimes whose last read failed, keyed like `inflight`: unlearned but not loading. */
+const failed = new Set<string>()
 const listeners = new Set<() => void>()
 let version = 0
 
@@ -69,6 +71,14 @@ export function readHostStructuredAgentsForRuntime(
     : undefined
 }
 
+/** Whether the given runtime's last agents read failed, as opposed to not having answered yet. */
+export function hostStructuredAgentsReadFailed(
+  executionHostId: string,
+  runtimeId: string | null
+): boolean {
+  return failed.has(hostRuntimeKey(executionHostId, runtimeId))
+}
+
 /** The agents this host listed, or undefined when none were learned from its current runtime. */
 export function readHostStructuredAgents(
   executionHostId: string,
@@ -95,11 +105,12 @@ export function loadHostStructuredAgents(
   ) {
     return Promise.resolve()
   }
-  const key = `${executionHostId}\u0000${runtimeId ?? ''}`
+  const key = hostRuntimeKey(executionHostId, runtimeId)
   const pending = inflight.get(key)
   if (pending) {
     return pending
   }
+  failed.delete(key)
   const read = callRuntimeRpc<unknown>(
     host.kind === 'local'
       ? { kind: 'local' }
@@ -117,6 +128,8 @@ export function loadHostStructuredAgents(
     })
     .catch((error: unknown) => {
       console.warn('[native-chat] could not read the host structured agents', error)
+      failed.add(key)
+      publish()
     })
     .finally(() => {
       inflight.delete(key)
@@ -165,8 +178,13 @@ export function subscribeHostStructuredAgents(listener: () => void): () => void 
   }
 }
 
+function hostRuntimeKey(executionHostId: string, runtimeId: string | null): string {
+  return `${executionHostId}\u0000${runtimeId ?? ''}`
+}
+
 export function resetHostStructuredAgentsForTests(): void {
   entries.clear()
   inflight.clear()
+  failed.clear()
   publish()
 }

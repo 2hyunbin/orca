@@ -2440,6 +2440,9 @@
             "96354ed249": "Split Up",
             "966feb9ad5": "Split Right"
           },
+          "EditorFileTabCloseButton": {
+            "a768f428f1": "Close tab"
+          },
           "EditorFileTabContextMenu": {
             "1d04b1630b": "Split Down",
             "6b3efb106e": "Split Up",
@@ -2706,7 +2709,9 @@
         },
         "space": {
           "WorkspaceSpacePage": {
-            "8d0048e1cb": "Workspace disk usage and reclaimable worktree storage."
+            "45f6302dbc": "Space",
+            "8d0048e1cb": "Workspace disk usage and reclaimable worktree storage.",
+            "e8d6ba11ab": "Beta"
           }
         }
       }

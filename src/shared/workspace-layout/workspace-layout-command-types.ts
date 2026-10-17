@@ -38,6 +38,8 @@ export type LayoutCommand =
       title?: string
       color?: string
       viewMode?: 'terminal' | 'chat'
+      /** When the window drew the tab, so a later save of it matches main's copy. */
+      createdAt?: number
       creation?: Partial<LayoutTerminalCreation>
       initial?: InitialSurfaceReason
       split?: NewGroupSplit
@@ -98,6 +100,8 @@ export type LayoutCommand =
       color?: string | null
       isPinned?: boolean
       viewMode?: 'terminal' | 'chat'
+      /** The tab's agent launched and ended: a restore must not launch it again. */
+      clearLaunchAgent?: true
     })
   | (On & { type: 'setChatPane'; tabId: string; leafId: string | null })
   | (On & {
@@ -115,6 +119,8 @@ export type LayoutCommand =
       preview?: boolean
       /** Editor tabs whose view reported an unsaved draft: a preview among them is not replaced. */
       dirtyTabIds?: string[]
+      /** When the window drew the tab, so a later save of it matches main's copy. */
+      createdAt?: number
       split?: NewGroupSplit
     })
   | (On & { type: 'promotePreviewTab'; tabId: string })
@@ -129,6 +135,11 @@ export type LayoutCommand =
       file?: LayoutEditorFile
     })
   | (On & {
+      type: 'renameEditorFiles'
+      /** Under the window's ids; one workspace's files only. */
+      renames: EditorFileRename[]
+    })
+  | (On & {
       type: 'openBrowserTab'
       profileId?: string | null
       sessionPartition?: string | null
@@ -141,6 +152,9 @@ export type LayoutCommand =
       /** The window's own ids for a tab it drew: its tab-bar entry and its browser record. */
       tabId?: string
       browserTabId?: string
+      /** When the window drew the tab-bar entry and the browser record, so its later save matches. */
+      createdAt?: number
+      browserCreatedAt?: number
       split?: NewGroupSplit
     })
   | (On & { type: 'openBrowserPage'; browserTabId: string; pageId: string })
@@ -164,8 +178,15 @@ export type LayoutCommand =
     })
   | (On & { type: 'startPane'; paneKey: string })
   | (On & { type: 'restartPane'; paneKey: string })
-  | (On & { type: 'sleep'; paneKeys?: string[]; records: SleepingAgentSessionRecord[] })
-  | (On & { type: 'wake'; paneKeys?: string[] })
+  | (On & {
+      type: 'sleep'
+      paneKeys?: string[]
+      records: SleepingAgentSessionRecord[]
+      /** Records how each agent resumes and stops nothing: the window's live and quit captures. */
+      recordOnly?: true
+    })
+  /** `recordOnly`: drops the records and starts nothing. */
+  | (On & { type: 'wake'; paneKeys?: string[]; recordOnly?: true })
 
 /**
  * Why a workspace's first surface is asked for: `restore` at relaunch, `activation` when a user
@@ -174,6 +195,13 @@ export type LayoutCommand =
 export type InitialSurfaceReason = 'restore' | 'activation'
 
 export type CommandOf<T extends LayoutCommand['type']> = Extract<LayoutCommand, { type: T }>
+
+/** One open file the window renamed or moved; `record` when it is an edit-mode file. */
+export type EditorFileRename = {
+  fileId: string
+  newFileId: string
+  record?: { fromFilePath: string; file: LayoutEditorFile }
+}
 
 export type GroupSide = 'left' | 'right' | 'up' | 'down'
 

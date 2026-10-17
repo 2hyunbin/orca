@@ -597,9 +597,7 @@
       },
       "pairingSecurity": {
         "hide": "Hide",
-        "storedCodeInsecureOrigin": "This browser keeps a reusable pairing code, because this page is plain http on another machine. Anyone who can read this browser’s storage could use it. For a safer pairing, open Orca over https, at localhost on this computer, or through an SSH tunnel, and pair again.",
         "storedCodeNoEd25519": "This browser keeps a reusable pairing code, because it cannot create secure sign-in keys (Ed25519). Use a current browser and pair again for a safer pairing.",
-        "sessionInsecureOrigin": "This pairing lasts only while this tab is open, because this page is plain http on another machine. For a pairing this browser remembers, open Orca over https, at localhost on this computer, or through an SSH tunnel.",
         "sessionNoEd25519": "This pairing lasts only while this tab is open, because this browser cannot create secure sign-in keys (Ed25519). Use a current browser for a pairing it remembers."
       },
       "runtimeAuth": {
@@ -659,7 +657,8 @@
             "hostUnresolved": "Orca cannot tell which host owns this workspace. Refresh projects and review it again.",
             "gitStatusUnavailable": "Orca couldn't check this workspace's git status. Try again, or delete it from its host-specific sidebar or project list.",
             "gitStatusUnavailableOlderPeer": "Orca couldn't match this git-status failure to a host. Update the older connected peer, or delete the workspace from its host-specific sidebar or project list.",
-            "forceNeedsApproval": "Review and confirm this workspace before force deleting it."
+            "forceNeedsApproval": "Review and confirm this workspace before force deleting it.",
+            "agentStartedSinceConfirmation": "An agent is running in this workspace. Delete it again to review stopping the agent."
           }
         },
         "worktrees": {
@@ -6239,8 +6238,7 @@
                   "7edb8ebe24": "Clone from URL",
                   "a6c20dca96": "Open a project from an SSH target",
                   "serverSshTitle": "Project on this server's SSH host",
-                  "serverSshDescription": "Open a project folder from an SSH host this server connects to",
-                  "serverSshUpdate": "Update this server to add projects on its SSH hosts",
+                  "serverSshAddOnThisComputer": "Not available from a server. Add the SSH host on this computer to open its projects.",
                   "fb4fc5380e": "Local project, Git repo, or folder with many repos",
                   "2281fdc8c7": "Browse folder",
                   "runtimeBrowseDescription": "Existing Git repository or folder on this host"
@@ -6270,7 +6268,8 @@
               "unstoppedPty": "Orca could not confirm every terminal in this workspace has exited, so it stopped before deleting any files. Use Force Delete to remove it anyway.",
               "unstoppedPtyLive": "This workspace still has running terminals, so Orca stopped before deleting any files. Force Delete will kill them and discard any uncommitted work they hold.",
               "runningAgentSession": "Orca could not confirm every agent session in this workspace has closed, so it stopped before deleting any files. Use Force Delete to remove it anyway.",
-              "runningAgentSessionLive": "This workspace still has running agent sessions that Orca could not close, so it stopped before deleting any files. Force Delete will discard any work they hold."
+              "runningAgentSessionLive": "This workspace still has running agent sessions that Orca could not close, so it stopped before deleting any files. Force Delete will discard any work they hold.",
+              "submodules": "This workspace contains submodules, so Git deletes it only with Force Delete. Force Delete also permanently removes anything in those submodules that was never pushed: commits, local branches and stashes."
             },
             "failure": {
               "archive": {
@@ -9007,8 +9006,7 @@
           "8c922dffba": "Reuse SSH connection for faster setup",
           "53e9aabfc0": "Uses OpenSSH multiplexing when available. Turn off for hosts with custom SSH restrictions.",
           "allowRemoteCliControl": "Allow this host's orca CLI to control Orca",
-          "allowRemoteCliControlHelp": "When on, orca commands run on this host can open and drive Orca browser tabs on this desktop, only in this host's workspaces and only while it is connected. Terminals started by an older Orca on this host can also run orchestration commands (check, inbox, send, ask, reply) for their own supervised work. They cannot read your files, clipboard or cookies. When off, they reach only this host's own Orca server.",
-          "allowRemoteCliControlReset": "Orca turned this off after an update, because it now lets this host drive your desktop browser and lets terminals started by an older Orca on this host run orchestration commands. Turn it on again only if you want that.",
+          "allowRemoteCliControlHelp": "On by default for new hosts. Lets orca commands run on this host open and drive Orca browser tabs on this desktop, only in this host's workspaces and only while it is connected, and lets terminals started by an older Orca on this host run orchestration commands (check, inbox, send, ask, reply) for their own supervised work. They cannot read your files, clipboard or cookies. When off, they reach only this host's own Orca server.",
           "editTitle": "Edit SSH host",
           "addTitle": "Add SSH host",
           "editDescription": "Update connection details for this machine. Changes apply on next connect.",
@@ -12893,13 +12891,6 @@
           "confirm": "Restart",
           "terminalsUnknown": "Orca couldn’t confirm whether terminals are running on this host, so it didn’t restart the managed server.",
           "terminalsRunning": "{{count}} terminals are still running on this host. Close them, then restart the managed server."
-        },
-        "keychainCredentialNotice": {
-          "locked": "{{service}} is unavailable on {{host}}: its macOS login Keychain is locked. This happens after a reboot when you only sign in over SSH. Sign in to that Mac at its screen once. Orca then offers to switch the host to file storage so this stops happening.",
-          "unnamedHost": "the remote server",
-          "moved": "Switched {{host}} to file storage",
-          "offerMove": "{{host}} keeps its credential key in its macOS login Keychain, which was locked after a reboot. Switch to file storage to keep Linear and Jira working when you only sign in over SSH. The key then sits in a file only this account can read, which protects it less than the Keychain: it is not tied to this machine, so a backup or shared copy of ~/.orca can open the credentials.",
-          "moveAction": "Switch to file storage"
         }
       },
       "right": {
@@ -18199,6 +18190,10 @@
         "title": "Couldn't reach your Orca host",
         "description": "Nothing was lost. Orca will reload when the host answers, and won't save changes until then.",
         "retry": "Retry now"
+      },
+      "webPairingRefused": {
+        "title": "Orca refused this browser",
+        "retry": "Try again"
       }
     }
   },
@@ -19229,6 +19224,13 @@
           "label": "Host: {{value0}}",
           "unknown": "Unknown host",
           "candidateName": "{{value0}} on {{value1}}"
+        },
+        "stopAgents": {
+          "titleMany": "Stop these agents?",
+          "descriptionOne": "Deleting will stop the agent's current work.",
+          "descriptionMany": "Deleting will stop these agents' current work.",
+          "confirm": "Stop agents and delete",
+          "confirmOne": "Stop agent and delete"
         }
       },
       "creation": {
@@ -19384,6 +19386,30 @@
       "keywordJira": "jira",
       "keywordDefaultProject": "default project",
       "keywordIssuePicker": "issue picker"
+    },
+    "managed-runtime": {
+      "cancel": "Cancel installation",
+      "cancelled": "Installation cancelled.",
+      "cancelling": "Cancelling…",
+      "chatTitle": "Install {{agent}} to start chatting.",
+      "damaged": "This copy of {{agent}} is damaged.",
+      "downloading": "Downloading {{done}} MB.",
+      "downloadingOf": "Downloading {{done}} MB of {{total}} MB.",
+      "external": "Uses the copy of {{agent}} found on this host.",
+      "extracting": "Extracting {{agent}}.",
+      "failed": "Installation failed. Try again.",
+      "cancelFailed": "Couldn't cancel the installation. Try again.",
+      "install": "Install {{agent}}",
+      "installManaged": "Install Orca's copy",
+      "installed": "Installed.",
+      "notInstalled": "Not installed.",
+      "progress": "{{agent}} download",
+      "readFailed": "Could not check {{agent}} on this host. Retrying.",
+      "reinstall": "Reinstall {{agent}}",
+      "retry": "Retry installation",
+      "unavailable": "{{agent}} is not available on this host.",
+      "update": "Update {{agent}}",
+      "verifying": "Checking the downloaded runtime."
     }
   },
   "dashboardPopout": {
@@ -20204,6 +20230,13 @@
     }
   },
   "workspaceSpace": {
+    "deleteOne": "Delete {{value0}}",
+    "table": {
+      "lastActive": "Last active"
+    },
+    "breakdown": {
+      "viewAll": "Show more folder details"
+    },
     "compact": {
       "linkedAndUnavailable": "{{value0}} in linked worktrees · {{value1}} unavailable",
       "linkedAndScanned": "{{value0}} in linked worktrees · {{value1}} workspaces",
@@ -20220,8 +20253,8 @@
     "metric": {
       "linkedWorktrees": "Linked worktrees"
     },
-    "summary": {
-      "linkedWorktrees": "{{value0}} is used by linked worktrees. Managed worktrees can be removed here."
+    "scan": {
+      "moreErrors": "{{value0}} more scan errors"
     },
     "status": {
       "notManaged": "Not managed"
@@ -20232,7 +20265,6 @@
       "clickToZoom": "Click a workspace to zoom"
     },
     "window": {
-      "close": "Close",
       "errorTitle": "Space hit an error.",
       "errorDescription": "Close and reopen Space to try again."
     }
