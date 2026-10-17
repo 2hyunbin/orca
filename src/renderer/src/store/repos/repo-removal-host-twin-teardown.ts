@@ -2,11 +2,14 @@ import type { AppState } from '../types'
 import {
   LOCAL_EXECUTION_HOST_ID,
   parseExecutionHostId,
+  toRuntimeExecutionHostId,
   type ExecutionHostId
 } from '../../../../shared/execution-host'
 import { getPtyExecutionHost } from '../../../../shared/terminal-execution-host'
 import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import { collectPtyIdsForTab } from '../slices/terminal-tab-retirement'
+import { toVisibleTabType } from '../../../../shared/tab-types'
+import type { RecentlyClosedTabKind } from '../slices/recently-closed-tabs'
 import {
   getOpenFileExecutionHostId,
   hasOpenFileExecutionHostEvidence
@@ -86,8 +89,8 @@ export type RemovedHostTwinState = {
   terminalTabIds: Set<string>
   fileIds: Set<string>
   browserTabIds: Set<string>
-  /** Unified tab ids of the removed host's structured chats. */
-  agentSessionTabIds: Set<string>
+  /** Unified tab ids of the removed host's chats, simulators and other non-file surfaces. */
+  otherTabIds: Set<string>
   /** Their conversation ids, which key the chats' drafts. */
   conversationIds: Set<string>
 }
@@ -132,7 +135,7 @@ export function collectRemovedHostTwinState(
     terminalTabIds: new Set(),
     fileIds: new Set(),
     browserTabIds: new Set(),
-    agentSessionTabIds: new Set(),
+    otherTabIds: new Set(),
     conversationIds: new Set()
   }
   for (const worktreeId of twinWorktreeIds) {
@@ -179,9 +182,11 @@ export function collectRemovedHostTwinState(
         removed.terminalTabIds.add(tab.entityId)
       } else if (tab.contentType === 'browser') {
         removed.browserTabIds.add(tab.entityId)
-      } else if (tab.contentType === 'agent-session') {
-        removed.agentSessionTabIds.add(tab.id)
-        removed.conversationIds.add(tab.entityId)
+      } else if (toVisibleTabType(tab.contentType) !== 'editor') {
+        removed.otherTabIds.add(tab.id)
+        if (tab.contentType === 'agent-session') {
+          removed.conversationIds.add(tab.entityId)
+        }
       }
     }
   }
@@ -197,43 +202,68 @@ function mergeRemovedHostTwinState(
     terminalTabIds: new Set([...a.terminalTabIds, ...b.terminalTabIds]),
     fileIds: new Set([...a.fileIds, ...b.fileIds]),
     browserTabIds: new Set([...a.browserTabIds, ...b.browserTabIds]),
-    agentSessionTabIds: new Set([...a.agentSessionTabIds, ...b.agentSessionTabIds]),
+    otherTabIds: new Set([...a.otherTabIds, ...b.otherTabIds]),
     conversationIds: new Set([...a.conversationIds, ...b.conversationIds])
   }
 }
 
 /** Drops the removed host's closed editors from a twin id's reopen stack; the survivor's stay. */
+/** Which entries of one reopen stack are the removed host's; unmarked ones may be the survivor's. */
+function prunedEntries<T>(stack: readonly T[] | undefined, isRemoved: (entry: T) => boolean) {
+  const pruned = (stack ?? []).map(isRemoved)
+  return pruned.includes(true) ? pruned : null
+}
+
+/** The n-th kind entry of a type is that type's n-th snapshot, so pruned ones go from both. */
+function dropPrunedKinds(
+  kinds: readonly RecentlyClosedTabKind[],
+  kind: RecentlyClosedTabKind,
+  pruned: readonly boolean[]
+): RecentlyClosedTabKind[] {
+  let index = 0
+  return kinds.filter((entry) => entry !== kind || !pruned[index++])
+}
+
 function pruneRemovedHostReopenHistory(
   state: AppState,
   twinWorktreeIds: Iterable<string>,
   removedHostId: ExecutionHostId
 ): Partial<AppState> | null {
-  let snapshots = state.recentlyClosedEditorTabsByWorktree
-  let kinds = state.recentlyClosedTabKindsByWorktree
+  const editors = { ...state.recentlyClosedEditorTabsByWorktree }
+  const browsers = { ...state.recentlyClosedBrowserTabsByWorktree }
+  const kinds = { ...state.recentlyClosedTabKindsByWorktree }
+  let changed = false
   for (const worktreeId of twinWorktreeIds) {
-    const stack = snapshots[worktreeId] ?? []
-    // Why evidence only: an unmarked snapshot may be the survivor's.
-    const pruned = stack.map(
+    const editorPruned = prunedEntries(
+      editors[worktreeId],
       (snapshot) =>
         hasOpenFileExecutionHostEvidence(snapshot) &&
         getOpenFileExecutionHostId(snapshot) === removedHostId
     )
-    if (!pruned.includes(true)) {
-      continue
-    }
-    snapshots = { ...snapshots, [worktreeId]: stack.filter((_, index) => !pruned[index]) }
-    // Why: the n-th 'editor' kind is the n-th snapshot, so drop the same ones to keep reopen order.
-    let editorIndex = 0
-    kinds = {
-      ...kinds,
-      [worktreeId]: (kinds[worktreeId] ?? []).filter(
-        (kind) => kind !== 'editor' || !pruned[editorIndex++]
+    const browserPruned = prunedEntries(browsers[worktreeId], (snapshot) =>
+      snapshot.pages.some(
+        (page) =>
+          !!page.browserRuntimeEnvironmentId &&
+          toRuntimeExecutionHostId(page.browserRuntimeEnvironmentId) === removedHostId
       )
+    )
+    if (editorPruned) {
+      editors[worktreeId] = (editors[worktreeId] ?? []).filter((_, i) => !editorPruned[i])
+      kinds[worktreeId] = dropPrunedKinds(kinds[worktreeId] ?? [], 'editor', editorPruned)
     }
+    if (browserPruned) {
+      browsers[worktreeId] = (browsers[worktreeId] ?? []).filter((_, i) => !browserPruned[i])
+      kinds[worktreeId] = dropPrunedKinds(kinds[worktreeId] ?? [], 'browser', browserPruned)
+    }
+    changed ||= Boolean(editorPruned || browserPruned)
   }
-  return snapshots === state.recentlyClosedEditorTabsByWorktree
-    ? null
-    : { recentlyClosedEditorTabsByWorktree: snapshots, recentlyClosedTabKindsByWorktree: kinds }
+  return changed
+    ? {
+        recentlyClosedEditorTabsByWorktree: editors,
+        recentlyClosedBrowserTabsByWorktree: browsers,
+        recentlyClosedTabKindsByWorktree: kinds
+      }
+    : null
 }
 
 /**
@@ -283,7 +313,7 @@ export function closeRemovedHostTwinState(
   for (const browserTabId of removed.browserTabIds) {
     get().closeBrowserTab(browserTabId, { reason: 'cleanup' })
   }
-  for (const tabId of removed.agentSessionTabIds) {
+  for (const tabId of removed.otherTabIds) {
     get().closeUnifiedTab(tabId, { preserveWorktreeSelection: true })
   }
 }

@@ -211,7 +211,18 @@ describe('removing a remote project keeps its local twin', () => {
     const store = seedTwins()
     const unified = (overrides: Partial<Tab> & { id: string }): Tab =>
       makeUnifiedTab({ worktreeId: WORKTREE_ID, groupId: 'group-1', ...overrides })
+    const closedBrowser = (id: string, browserRuntimeEnvironmentId: string | null) => ({
+      workspace: browserWorkspace(id),
+      pages: [{ ...browserWorkspace(id), workspaceId: id, browserRuntimeEnvironmentId }]
+    })
     store.setState((s) => ({
+      recentlyClosedBrowserTabsByWorktree: {
+        [WORKTREE_ID]: [
+          closedBrowser('closed-remote', 'env-b'),
+          closedBrowser('closed-local', null)
+        ]
+      },
+      recentlyClosedTabKindsByWorktree: { [WORKTREE_ID]: ['browser', 'browser'] },
       browserTabsByWorktree: {
         [WORKTREE_ID]: [browserWorkspace('browser-local'), browserWorkspace('browser-remote')]
       },
@@ -225,7 +236,8 @@ describe('removing a remote project keeps its local twin', () => {
             contentType: 'agent-session',
             executionHostId: REMOTE_HOST
           }),
-          unified({ id: 'hydrated-remote', executionHostId: REMOTE_HOST })
+          unified({ id: 'hydrated-remote', executionHostId: REMOTE_HOST }),
+          unified({ id: 'sim-remote', contentType: 'simulator', executionHostId: REMOTE_HOST })
         ]
       }
     }))
@@ -251,6 +263,10 @@ describe('removing a remote project keeps its local twin', () => {
       '/work/same/local.ts',
       'browser-local'
     ])
+    expect(
+      state.recentlyClosedBrowserTabsByWorktree[WORKTREE_ID]?.map((entry) => entry.workspace.id)
+    ).toEqual(['closed-local'])
+    expect(state.recentlyClosedTabKindsByWorktree[WORKTREE_ID]).toEqual(['browser'])
   })
 
   it('attributes unstamped terminals by the host their PTY ids name, wherever those are kept', async () => {
