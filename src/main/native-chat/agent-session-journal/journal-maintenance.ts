@@ -1,3 +1,4 @@
+import timers from 'node:timers'
 import type Database from '../../sqlite/sync-database'
 import { journalPragmaNumber, type JournalTransaction } from './journal-database'
 import { JournalPrunePass } from './journal-prune-pass'
@@ -17,7 +18,7 @@ const VACUUM_PAGES = 1
 
 /** Owed work is derived from saved frontiers, so a restart resumes instead of rescanning. */
 export class JournalMaintenance {
-  private timer: ReturnType<typeof setTimeout> | null = null
+  private timer: ReturnType<typeof timers.setTimeout> | null = null
   private sweepAt: number | null
   private readonly readyAt = new Map<string, number>()
   private sessions: JournalPruneCursor<string> | null = null
@@ -58,7 +59,7 @@ export class JournalMaintenance {
   close(): void {
     this.closed = true
     if (this.timer) {
-      clearTimeout(this.timer)
+      timers.clearTimeout(this.timer)
     }
     this.timer = null
     this.current = null
@@ -76,7 +77,7 @@ export class JournalMaintenance {
     if (this.timer || this.closed) {
       return
     }
-    this.timer = setTimeout(() => this.advance(), delay)
+    this.timer = timers.setTimeout(() => this.advance(), delay)
     this.timer.unref()
   }
 
