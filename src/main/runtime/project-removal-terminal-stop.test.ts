@@ -3,6 +3,7 @@
  * stops the workspaces it has loaded, and an unhydrated or hidden one would keep running.
  */
 import { describe, expect, it, vi } from 'vitest'
+import type { Repo } from '../../shared/repo-types'
 import { OrcaRuntimeService } from './orca-runtime-test-mocks.spec'
 import { TEST_REPO_ID, TEST_WORKTREE_ID, store } from './orca-runtime-test-fixtures.spec'
 
@@ -33,7 +34,7 @@ function createRemovableRuntime(onFirstStop?: () => void): {
     runtime.onPtyExit(ptyId, 0)
     return true
   })
-  const runtime = new OrcaRuntimeService({ ...store, removeProjectForHost } as never)
+  const runtime = new OrcaRuntimeService({ ...store, removeProjectForHost })
   runtime.setPtyController({
     write: () => true,
     kill: vi.fn(() => false),
@@ -62,13 +63,16 @@ describe('project removal on the execution host', () => {
   it('stops native shells of a project a paired client registered under a runtime stamp', async () => {
     const removeProjectForHost = vi.fn()
     const stopAndWait = vi.fn(async () => true)
-    const stampedRepo = { ...store.getRepo(TEST_REPO_ID)!, executionHostId: 'runtime:env-self' }
+    const stampedRepo: Repo = {
+      ...store.getRepo(TEST_REPO_ID)!,
+      executionHostId: 'runtime:env-self'
+    }
     const runtime = new OrcaRuntimeService({
       ...store,
       getRepo: (id: string) => (id === TEST_REPO_ID ? stampedRepo : undefined),
       getRepos: () => [stampedRepo],
       removeProjectForHost
-    } as never)
+    })
     runtime.setPtyController({
       write: () => true,
       kill: vi.fn(() => false),
@@ -87,7 +91,7 @@ describe('project removal on the execution host', () => {
   it('fences a runtime-stamped project with a nested SSH connection to that connection', async () => {
     const removeProjectForHost = vi.fn()
     const stopAndWait = vi.fn(async (_ptyId: string) => true)
-    const sshRepo = {
+    const sshRepo: Repo = {
       ...store.getRepo(TEST_REPO_ID)!,
       executionHostId: 'runtime:env-self',
       connectionId: 'ssh-target'
@@ -97,7 +101,7 @@ describe('project removal on the execution host', () => {
       getRepo: (id: string) => (id === TEST_REPO_ID ? sshRepo : undefined),
       getRepos: () => [sshRepo],
       removeProjectForHost
-    } as never)
+    })
     runtime.setPtyController({
       write: () => true,
       kill: vi.fn(() => false),
@@ -138,7 +142,7 @@ describe('project removal on the execution host', () => {
       removeProjectForHost: () => {
         removed = true
       }
-    } as never)
+    })
     runtime.setPtyController({
       write: () => true,
       kill: vi.fn(() => false),
@@ -159,7 +163,7 @@ describe('project removal on the execution host', () => {
     const removeProjectForHost = vi.fn()
     const stopAndWait = vi.fn(async (_ptyId: string) => true)
     const localRow = store.getRepo(TEST_REPO_ID)!
-    const foreignRow = {
+    const foreignRow: Repo = {
       ...localRow,
       path: '/srv/foreign-copy',
       executionHostId: 'runtime:env-other'
@@ -168,7 +172,7 @@ describe('project removal on the execution host', () => {
       ...store,
       getRepos: () => [localRow, foreignRow],
       removeProjectForHost
-    } as never)
+    })
     runtime.setPtyController({
       write: () => true,
       kill: vi.fn(() => false),
