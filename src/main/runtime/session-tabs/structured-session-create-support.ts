@@ -161,8 +161,7 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
         selfSessionId: input.envelope.sessionId
       })
     }
-    const structuredAgentCliSourceEvidence =
-      input.structuredAgentCliSourceEvidence ??
+    const structuredAgentCliSourceEvidence = input.structuredAgentCliSourceEvidence ??
       (input.resumeFrom?.cliSource
         ? captureStructuredAgentCliSource(() => this.getAgentProviderSessionRows())
         : undefined)
@@ -242,9 +241,7 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
       return committedReplay
     }
     const resumeFrom = input.resumeFrom
-    const workspaceCwd = resumeFrom
-      ? (await this.resolveRuntimeFileTarget(input.worktree)).worktree.path
-      : ''
+    const workspaceCwd = resumeFrom ? (await this.resolveRuntimeFileTarget(input.worktree)).worktree.path : ''
     const selectedAccountHome = await resolveAccountHome({ launchEnv, location })
     // Adopting pins the account home to wherever the conversation actually lives, which is not
     // necessarily the one a fresh create would pick: Codex resolves its rollout under
@@ -257,13 +254,10 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
             agent: input.agent,
             transcriptImport,
             providerSessionId: resumeFrom.providerSessionId,
-            resolveTranscriptPath: () =>
-              structuredAgentCliSourcePathFromEvidence({
-                agent: input.agent,
-                resumeFrom,
-                workspaceId: location.workspaceId,
-                evidence: input.structuredAgentCliSourceEvidence
-              }),
+            resolveTranscriptPath: () => structuredAgentCliSourcePathFromEvidence({
+              agent: input.agent, resumeFrom, workspaceId: location.workspaceId,
+              evidence: input.structuredAgentCliSourceEvidence
+            }),
             prepareCodexResume: this.prepareAiVaultSessionResumeFn ?? undefined,
             selectedAccountHome,
             launchEnv: await resolveHostStructuredAgentLaunchEnvironment(input.agent, settings),
