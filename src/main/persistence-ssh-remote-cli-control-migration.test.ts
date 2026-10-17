@@ -9,7 +9,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { rmSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import type { PersistedState } from '../shared/persisted-state-types'
 import type { SshTarget } from '../shared/ssh-types'
 import { isRemoteCliControlAllowed } from '../shared/ssh-remote-cli-control'
 import { SshConnectionStore } from './ssh/ssh-connection-store'
@@ -85,9 +84,12 @@ describe("pinning existing hosts' orca CLI control switch on upgrade", () => {
     expect(store.getSettings().sshRemoteCliControlExistingHostsMigrated).toBe(true)
 
     store.flush()
-    const saved = readDataFile() as PersistedState
-    expect(saved.sshTargets.find((t) => t.id === 'absent')?.allowRemoteCliControl).toBe(false)
-    expect(saved.settings.sshRemoteCliControlExistingHostsMigrated).toBe(true)
+    expect(readDataFile()).toMatchObject({
+      sshTargets: expect.arrayContaining([
+        expect.objectContaining({ id: 'absent', allowRemoteCliControl: false })
+      ]),
+      settings: expect.objectContaining({ sshRemoteCliControlExistingHostsMigrated: true })
+    })
   })
 
   it('runs once, so hosts added afterwards keep the on-by-default switch', async () => {
