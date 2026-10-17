@@ -69,7 +69,11 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
   readonly repoIconDataUrls = ORCA_SIDEBAR_INPUTS_IS_MAIN
     ? new RepoIconDataUrls({
         repos: () => this.store?.getRepos() ?? [],
-        fetch: (url, init) => getMainHttpClient().fetch(url, init),
+        // Why not the shared desktop client: its net.fetch rejects every manual redirect.
+        fetch: (url, init) => {
+          const desktopFetch = getRuntimeDesktopSurface().fetchRepoIcon
+          return desktopFetch ? desktopFetch(url, init) : getMainHttpClient().fetch(url, init)
+        },
         encoder: () => getRuntimeDesktopSurface().encodeRepoIconPng
       })
     : null

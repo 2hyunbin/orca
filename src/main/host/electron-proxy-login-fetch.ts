@@ -30,8 +30,7 @@ function abortReason(signal: AbortSignal): unknown {
 /**
  * Electron's net.fetch with a proxy `login` listener. Its internal request has none, so
  * Electron cancels every proxy challenge and app 'login' never sees main-process requests.
- * `redirect: 'manual'` answers with the redirect response. Everything else mirrors Electron
- * 43's net.fetch.
+ * Everything else mirrors Electron 43's net.fetch.
  */
 export function fetchWithProxyLogin(request: Request, proxySession: Session): Promise<Response> {
   const { signal } = request
@@ -76,18 +75,6 @@ export function fetchWithProxyLogin(request: Request, proxySession: Session): Pr
         callback()
       }
     })
-    // Why: net.fetch rejects every manual redirect; answer with the 3xx itself, as undici does.
-    // Only for manual: the event also fires before each redirect a follow request takes.
-    if (request.redirect === 'manual') {
-      native.on('redirect', (statusCode, _method, redirectUrl, responseHeaders) => {
-        const headers = new Headers({ location: redirectUrl })
-        for (const [key, values] of Object.entries(responseHeaders)) {
-          headers.set(key, values.join(', '))
-        }
-        resolve(new Response(null, { headers, status: statusCode }))
-        native.abort()
-      })
-    }
     native.on('response', (response) => {
       if (aborted) {
         return

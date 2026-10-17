@@ -27,12 +27,10 @@ async function hasConfiguredProxyCredentials(
 
 async function fetchFromDefaultSession(url: string, init?: RequestInit): Promise<Response> {
   const proxySession = session.defaultSession
-  // Why manual too: net.fetch rejects every manual redirect instead of returning it.
-  const needsOwnRequest =
+  if (
     isHttpUrl(url) &&
-    (init?.redirect === 'manual' ||
-      (await hasConfiguredProxyCredentials(proxySession, init?.signal ?? undefined)))
-  if (needsOwnRequest) {
+    (await hasConfiguredProxyCredentials(proxySession, init?.signal ?? undefined))
+  ) {
     return fetchWithProxyLogin(new Request(url, init), proxySession)
   }
   // Not ready falls through too: the default-session request guard cancels it.

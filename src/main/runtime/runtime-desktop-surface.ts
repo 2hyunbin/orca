@@ -27,6 +27,8 @@ export type RuntimeDesktopSurface = {
   removeIpcListener(channel: string, listener: (...args: never[]) => void): void
   /** Re-encodes as a PNG fitting `maxEdge`; null if undecodable. Absent on Node hosts. */
   encodeRepoIconPng?(bytes: Uint8Array, maxEdge: number): Uint8Array | null
+  /** A GET answering redirects with the 3xx; absent where the platform fetch already does. */
+  fetchRepoIcon?(url: string, init: RequestInit): Promise<Response>
 }
 
 const inertDesktopSurface: RuntimeDesktopSurface = {
