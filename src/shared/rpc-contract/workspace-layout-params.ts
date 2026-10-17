@@ -135,6 +135,7 @@ const OpenEditorTabCommand = z.object({
   file: EditorFileRecord.optional(),
   groupId: z.string().min(1).optional(),
   preview: z.literal(true).optional(),
+  createdAt: z.number().int().nonnegative().optional(),
   split: NewGroupSplit
 })
 
@@ -297,13 +298,17 @@ function paneKeysNameTab(command: { tabId: string; paneKeys: string[] }): boolea
   return command.paneKeys.every((paneKey) => parsePaneKey(paneKey)?.tabId === command.tabId)
 }
 
-/** The window's sleep of panes of one tab it already stopped; main records how each resumes. */
+/**
+ * The window's sleep of panes of one tab it already stopped; main records how each resumes.
+ * `recordOnly`: a resume record of a running agent (a live or quit capture); nothing stops.
+ */
 const SleepCommand = z
   .object({
     type: z.literal('sleep'),
     ...OnTab,
     paneKeys: z.array(z.string().min(1)).min(1),
-    records: z.array(sleepingAgentSessionRecordSchema)
+    records: z.array(sleepingAgentSessionRecordSchema),
+    recordOnly: z.literal(true).optional()
   })
   .refine(paneKeysNameTab)
   .refine((command) =>
@@ -313,9 +318,18 @@ const SleepCommand = z
     )
   )
 
-/** The window's wake of the one pane it shows; never more, so agents are not resumed in bulk. */
+/**
+ * The window's wake of the one pane it shows; never more, so agents are not resumed in bulk.
+ * `recordOnly`: the window dropped the panes' resume records; nothing starts, so any count.
+ */
 const WakeCommand = z
-  .object({ type: z.literal('wake'), ...OnTab, paneKeys: z.tuple([z.string().min(1)]) })
+  .object({
+    type: z.literal('wake'),
+    ...OnTab,
+    paneKeys: z.array(z.string().min(1)).min(1),
+    recordOnly: z.literal(true).optional()
+  })
+  .refine((command) => command.recordOnly === true || command.paneKeys.length === 1)
   .refine(paneKeysNameTab)
 
 /**

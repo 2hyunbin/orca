@@ -74,14 +74,16 @@ export function restartPane(
   )
 }
 
-/** Stops the terminals and records how to resume each agent; panes and bindings stay. */
+/** Stops the terminals (unless `recordOnly`) and records how to resume each agent; panes and bindings stay. */
 export function sleep(model: WorkspaceLayoutModel, command: CommandOf<'sleep'>): Applied {
   let workspace = model.workspaces[command.workspace]!
   const panes = workspacePanes(workspace)
   const targets = command.paneKeys
     ? panes.filter((pane) => command.paneKeys!.includes(pane.paneKey))
     : panes
-  const stopPtyIds = targets.flatMap((pane) => workspace.leaves?.[pane.leafId]?.ptyId ?? [])
+  const stopPtyIds = command.recordOnly
+    ? []
+    : targets.flatMap((pane) => workspace.leaves?.[pane.leafId]?.ptyId ?? [])
   for (const { paneKey, leafId } of targets) {
     const record = command.records.find((entry) => entry.paneKey === paneKey)
     if (record) {
@@ -114,6 +116,6 @@ export function wake(model: WorkspaceLayoutModel, command: CommandOf<'wake'>): A
   return applied(
     withWorkspace(model, command.workspace, workspace),
     { woken: paneKeys },
-    { startPaneKeys: paneKeys }
+    { startPaneKeys: command.recordOnly ? [] : paneKeys }
   )
 }

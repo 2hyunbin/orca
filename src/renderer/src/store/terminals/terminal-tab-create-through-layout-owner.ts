@@ -2,6 +2,8 @@
 // window drew it with, before any later command from this window names its pane, so a split of a
 // just-created pane finds it. The window still draws first: its callers act on the tab at once
 // (select, retitle, anchor, mount, launch). Main's copy reaches the window through layout frames.
+// A tab main made itself (CLI, drag-out, a host's terminal) is drawn with main's own facts, so the
+// window's save of it changes nothing in main.
 
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { afterLayoutFrame, layoutFramesFlowing } from '@/runtime/layout-frame-position'
@@ -9,12 +11,45 @@ import { expectTabRowFields } from '@/runtime/layout-owner-pane-intents'
 import { getExplicitRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { newGroupSplitOf } from '@/runtime/layout-owner-new-group-split'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
+import { layoutFrameTerminalTab } from '@/runtime/layout-frame-terminal-panes'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
+import { pickStoredFields } from '../../../../shared/workspace-layout/stored-record-fields'
 import type {
   CommandOf,
   LayoutApplyReply
 } from '../../../../shared/workspace-layout/workspace-layout-command-types'
 import type { AppState } from '../types'
+
+/** The row a tab main made itself is drawn with: main's creation facts over the window's. */
+export function withMainTerminalFacts(tab: TerminalTab): TerminalTab {
+  const main = layoutFrameTerminalTab(tab.worktreeId, tab.id)
+  if (!main) {
+    return tab
+  }
+  const {
+    shellOverride: _shellOverride,
+    startupCwd: _startupCwd,
+    forceHostRuntime: _forceHostRuntime,
+    launchAgent: _launchAgent,
+    ...windowFields
+  } = tab
+  const terminal = main.terminal
+  return {
+    ...windowFields,
+    createdAt: main.createdAt,
+    ...(terminal?.defaultTitle
+      ? { title: terminal.defaultTitle, defaultTitle: terminal.defaultTitle }
+      : {}),
+    ...(terminal
+      ? pickStoredFields(terminal, [
+          'shellOverride',
+          'startupCwd',
+          'forceHostRuntime',
+          'launchAgent'
+        ])
+      : {})
+  }
+}
 
 /** What the window's `createTab` just drew, as main's create command. */
 export function terminalTabCreateCommand(
@@ -61,8 +96,12 @@ export function recordCreatedTerminalTabInLayoutOwner(
   state: AppState,
   command: CommandOf<'createTerminalTab'> & { tabId: string; leafId: string }
 ): void {
-  // Why: a paired server mirrors this workspace's tabs; main does not own its layout.
-  if (getExplicitRuntimeEnvironmentIdForWorktree(state, command.workspace)) {
+  // Why: a paired server mirrors this workspace's tabs; main does not own its layout. A tab main
+  // already holds is its own.
+  if (
+    getExplicitRuntimeEnvironmentIdForWorktree(state, command.workspace) ||
+    layoutFrameTerminalTab(command.workspace, command.tabId)
+  ) {
     return
   }
   void callRuntimeRpc<LayoutApplyReply>({ kind: 'local' }, 'layout.apply', { command }).then(

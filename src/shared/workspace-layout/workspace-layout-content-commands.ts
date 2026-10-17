@@ -80,6 +80,7 @@ export function openEditorTab(
   }
   const tab = contentTab(context, {
     ...(command.tabId ? { id: command.tabId } : {}),
+    ...(command.createdAt !== undefined ? { createdAt: command.createdAt } : {}),
     kind: command.contentType,
     entityId: command.fileId,
     ...(command.preview ? { isPreview: true } : {})

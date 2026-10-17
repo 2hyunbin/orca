@@ -3,7 +3,8 @@ import type { SleepingAgentSessionRecord } from '../../../../shared/agent-sessio
 import type { recordLayoutApply } from '@/runtime/layout-apply-send'
 import {
   recordPaneSleepThroughLayoutOwner,
-  recordPaneWakeThroughLayoutOwner
+  recordPaneWakeThroughLayoutOwner,
+  recordSleepingRecordChangesThroughLayoutOwner
 } from './terminal-sleep-layout-owner'
 
 const mocks = vi.hoisted(() => ({ send: vi.fn<typeof recordLayoutApply>() }))
@@ -65,5 +66,21 @@ describe('sleep and wake through the layout owner', () => {
       tabId: 'tab-a',
       paneKeys: [A2]
     })
+  })
+
+  it('records a live capture and a dropped record without stopping or starting anything', () => {
+    const live = { ...record(A1), state: 'working' as const, origin: 'live' as const }
+    const kept = record(B1)
+
+    recordSleepingRecordChangesThroughLayoutOwner(
+      STATE,
+      { [A2]: record(A2), [B1]: kept },
+      { [A1]: live, [B1]: kept }
+    )
+
+    expect(mocks.send.mock.calls.map((call) => call[2])).toEqual([
+      { type: 'sleep', tabId: 'tab-a', paneKeys: [A1], records: [live], recordOnly: true },
+      { type: 'wake', tabId: 'tab-a', paneKeys: [A2], recordOnly: true }
+    ])
   })
 })

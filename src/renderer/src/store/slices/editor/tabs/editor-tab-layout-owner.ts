@@ -34,6 +34,7 @@ export function recordOpenedEditorTabInLayoutOwner(state: EditorOwnerState, tab:
     // Open to the side: main makes the window's new split with the tab.
     ...newGroupSplitOf(state, tab.worktreeId, tab.groupId, tab.id),
     ...(tab.isPreview ? { preview: true } : {}),
+    createdAt: tab.createdAt,
     // Only edit-mode files are restored after restart; the window saves no other.
     ...(file?.mode === 'edit' ? { file: restorableEditorFile(file) } : {})
   })

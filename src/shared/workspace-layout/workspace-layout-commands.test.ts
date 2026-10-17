@@ -277,6 +277,67 @@ describe('layout command refusals', () => {
     expect(woken.results[0]!.woken).toEqual([paneKey])
     expect(refusal(woken.model, { type: 'startPane', workspace: WS, paneKey })).toBe('applied')
   })
+
+  it('a record-only sleep and wake change the resume record and stop or start nothing', () => {
+    const { model, tabB, leafB } = setup()
+    const paneKey = `${tabB}:${leafB}`
+    const workspace = model.workspaces[WS]!
+    const bound: WorkspaceLayoutModel = {
+      ...model,
+      workspaces: {
+        ...model.workspaces,
+        [WS]: { ...workspace, leaves: { ...workspace.leaves, [leafB]: { ptyId: 'pty-b' } } }
+      }
+    }
+    const record = {
+      paneKey,
+      tabId: tabB,
+      worktreeId: WS,
+      agent: 'codex' as const,
+      providerSession: { key: 'session_id' as const, id: 's' },
+      prompt: 'p',
+      state: 'working' as const,
+      capturedAt: 1,
+      updatedAt: 1,
+      origin: 'live' as const
+    }
+    const sleep: CommandOf<'sleep'> = {
+      type: 'sleep',
+      workspace: WS,
+      paneKeys: [paneKey],
+      records: [record]
+    }
+    expect(applyLayoutCommand(bound, sleep, context)).toMatchObject({
+      effects: { stopPtyIds: ['pty-b'] }
+    })
+
+    const recorded = applyLayoutCommand(bound, { ...sleep, recordOnly: true }, context)
+    expect(recorded).toMatchObject({ ok: true, effects: { stopPtyIds: [] } })
+    const recordedModel = recorded.ok ? recorded.model : bound
+    expect(recordedModel.workspaces[WS]!.leaves![leafB]).toEqual({
+      ptyId: 'pty-b',
+      sleeping: {
+        agent: 'codex',
+        providerSession: { key: 'session_id', id: 's' },
+        prompt: 'p',
+        state: 'working',
+        capturedAt: 1,
+        updatedAt: 1,
+        origin: 'live'
+      }
+    })
+    const cleared = applyLayoutCommand(
+      recordedModel,
+      { type: 'wake', workspace: WS, paneKeys: [paneKey], recordOnly: true },
+      context
+    )
+    expect(cleared).toMatchObject({
+      ok: true,
+      result: { woken: [paneKey] },
+      effects: { startPaneKeys: [] }
+    })
+    expect(cleared.ok && cleared.model.workspaces[WS]!.leaves![leafB]).toEqual({ ptyId: 'pty-b' })
+  })
 })
 
 describe('closeTabs', () => {
@@ -591,6 +652,19 @@ describe('layout command effects', () => {
     ])
     expect(terminalTab(model, results[0]!.tabId!).createdAt).toBe(42)
     expect(terminalTab(model, results[1]!.tabId!).createdAt).toBeGreaterThan(42)
+  })
+
+  it('opens an editor tab at the time the window drew it, else now', () => {
+    const ctx = testContext()
+    const open = { type: 'openEditorTab', workspace: WS, contentType: 'editor' } as const
+    const { model, results } = build(ctx, [
+      { ...open, fileId: '/w/a.ts', createdAt: 42 },
+      { ...open, fileId: '/w/b.ts' }
+    ])
+    const createdAt = (tabId: string) =>
+      model.workspaces[WS]!.tabs.find((tab) => tab.id === tabId)!.createdAt
+    expect(createdAt(results[0]!.tabId!)).toBe(42)
+    expect(createdAt(results[1]!.tabId!)).toBeGreaterThan(42)
   })
 
   it('forgets an ended launch agent on a terminal tab only', () => {

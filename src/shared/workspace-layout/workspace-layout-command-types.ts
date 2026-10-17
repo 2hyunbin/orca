@@ -119,6 +119,8 @@ export type LayoutCommand =
       preview?: boolean
       /** Editor tabs whose view reported an unsaved draft: a preview among them is not replaced. */
       dirtyTabIds?: string[]
+      /** When the window drew the tab, so a later save of it matches main's copy. */
+      createdAt?: number
       split?: NewGroupSplit
     })
   | (On & { type: 'promotePreviewTab'; tabId: string })
@@ -173,8 +175,15 @@ export type LayoutCommand =
     })
   | (On & { type: 'startPane'; paneKey: string })
   | (On & { type: 'restartPane'; paneKey: string })
-  | (On & { type: 'sleep'; paneKeys?: string[]; records: SleepingAgentSessionRecord[] })
-  | (On & { type: 'wake'; paneKeys?: string[] })
+  | (On & {
+      type: 'sleep'
+      paneKeys?: string[]
+      records: SleepingAgentSessionRecord[]
+      /** Records how each agent resumes and stops nothing: the window's live and quit captures. */
+      recordOnly?: true
+    })
+  /** `recordOnly`: drops the records and starts nothing. */
+  | (On & { type: 'wake'; paneKeys?: string[]; recordOnly?: true })
 
 /**
  * Why a workspace's first surface is asked for: `restore` at relaunch, `activation` when a user
