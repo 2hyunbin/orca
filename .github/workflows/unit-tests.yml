@@ -174,23 +174,15 @@ jobs:
           ORCA_SHARD_SOURCE_SHA="$(git rev-parse HEAD)"
           export ORCA_SHARD_SOURCE_SHA
           mkdir -p ci-shards
-          printf 'unit-test runner_os=%s\n' "$RUNNER_OS"
           watchdog=()
           if [ "$RUNNER_OS" = Linux ]; then
-            command -v timeout
-            timeout --version
             watchdog=(timeout --signal=TERM --kill-after=20s 12m)
           fi
           test_status=0
-          printf 'unit-test-stage=before-watchdog\n'
           "${watchdog[@]}" node config/scripts/run-vitest.mjs run --config config/vitest.config.ts \
             --shard=${{ matrix.shard.index }}/${{ matrix.shard.count }} \
             ${{ (runner.arch == 'ARM64' || inputs.runner == 'blacksmith-4vcpu-ubuntu-2404') && '--maxWorkers=4' || '' }} > ci-shards/unit-output.log 2>&1 || test_status=$?
-          printf 'unit-test-stage=after-watchdog status=%s\n' "$test_status"
-          wc -c ci-shards/unit-output.log
-          printf 'unit-test-stage=before-log-tail\n'
-          tail -c 1048576 ci-shards/unit-output.log | head -c 1048576 || true
-          printf '\nunit-test-stage=after-log-tail\n'
+          cat ci-shards/unit-output.log
           exit "$test_status"
 
       - name: Seal unit module cache
