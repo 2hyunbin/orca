@@ -219,15 +219,19 @@ describe('host model catalog read', () => {
     unmount()
   })
 
-  it('joins the wait already in flight through attach', async () => {
+  it('discards the pre-attach wait when a new process generation starts', async () => {
     const waited = deferred()
-    answerCatalog([() => Promise.resolve(LISTING), () => waited.promise])
+    const attached = deferred()
+    answerCatalog([() => Promise.resolve(LISTING), () => waited.promise, () => attached.promise])
     const { result, rerender, unmount } = renderOptions()
     await flush()
     rerender({ attached: true })
     await flush()
-    expect(catalogReads()).toHaveLength(2)
+    expect(catalogReads()).toHaveLength(3)
     waited.resolve(HOST_CATALOG)
+    await flush()
+    expect(modelChoices(result.current.optionSnapshot)).not.toContain('gpt-hosted')
+    attached.resolve(HOST_CATALOG)
     await flush()
     expect(modelChoices(result.current.optionSnapshot)).toContain('gpt-hosted')
     unmount()

@@ -112,6 +112,7 @@ describe('the model catalog contract on every registration', () => {
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a probe reads only the command, env and auth resolvers given here.
       deps: {
         stateDirectory: '/state',
+        resolveLaunchArgs: () => [],
         resolveClaudeCommand: () => resolveStructuredAgentCommand('claude', settings),
         resolveCodexCommand: (options) => resolveStructuredAgentCommand('codex', settings, options),
         resolveClaudeAuthPolicy: () => ({ account: 'system' as const }),
@@ -158,6 +159,7 @@ describe('the model catalog contract on every registration', () => {
         // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a probe reads only the command, env and auth resolvers given here.
         deps: {
           stateDirectory: '/state',
+          resolveLaunchArgs: () => [],
           resolveClaudeCommand: (options) => resolveCliCommand(installed('claude'), options),
           resolveCodexCommand: (options) => resolveCliCommand(installed('codex'), options),
           resolveClaudeAuthPolicy: () => ({ account: 'system' as const }),
