@@ -88,6 +88,12 @@ const ENDPOINT_FILESYSTEM_PROBE_JS = [
   'process.stdout.write(process.platform+" "+a.toString(16)+" "+b.toString(16))'
 ].join('')
 
+// `/dev/disk3s5 on /System/Volumes/Data (apfs, local, journaled)` → `apfs`.
+const DARWIN_MOUNT_TYPE_AWK =
+  '{i=index($0," on "mp" (");if(i&&mp!=""){t=substr($0,i+length(mp)+6);sub(/[,)].*/,"",t);print t;exit}}'
+// Only these macOS filesystems live on a disk this machine owns.
+const DARWIN_LOCAL_FILESYSTEM_NAMES = new Set(['apfs', 'hfs'])
+
 export class RelayProbeCleanupUnconfirmedError extends Error {
   readonly name = 'RelayProbeCleanupUnconfirmedError'
   constructor() {
@@ -117,7 +123,12 @@ export function relayEndpointIncumbentProbeCommand(nodePath: string, sockPath: s
     'printf \'LISTEN=%s\\n\' "$listen"',
     'dir=$(dirname "$sock")',
     `fs_type=$("$node" -e ${shellEscape(ENDPOINT_FILESYSTEM_PROBE_JS)} "$dir" 2>/dev/null) || fs_type=`,
-    'if [ -z "$fs_type" ]; then',
+    'if [ -n "$fs_type" ]; then :',
+    // BSD stat has no filesystem type; macOS names it in `mount` against df's mount point.
+    'elif [ "$(uname -s 2>/dev/null)" = Darwin ]; then',
+    `  mp=$(df -P "$dir" 2>/dev/null | awk 'NR==2{print $NF}')`,
+    `  fs_type="darwin-mount $(mount 2>/dev/null | awk -v mp="$mp" ${shellEscape(DARWIN_MOUNT_TYPE_AWK)})"`,
+    'else',
     '  fs_type="$(uname -s 2>/dev/null) $(stat -f -c %t "$dir" 2>/dev/null) $(stat -f -c %t / 2>/dev/null)"',
     'fi',
     'printf \'FS_TYPE=%s\\n\' "$fs_type"',
@@ -212,6 +223,9 @@ export function parseRelayEndpointIncumbentProbe(
 /** Unknown or unreadable types are not local: only a local disk confines a socket to this kernel. */
 function endpointIsOnLocalDisk(fsType: string | undefined): boolean {
   const [platform, rawType, rawRootType] = (fsType ?? '').trim().split(/\s+/)
+  if (platform === 'darwin-mount') {
+    return DARWIN_LOCAL_FILESYSTEM_NAMES.has(rawType ?? '')
+  }
   const parseType = (raw: string | undefined): number | null =>
     raw && /^[0-9a-f]{1,8}$/iu.test(raw) ? Number.parseInt(raw, 16) : null
   const type = parseType(rawType)

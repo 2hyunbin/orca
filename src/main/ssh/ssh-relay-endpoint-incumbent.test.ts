@@ -73,7 +73,7 @@ describe('parseRelayEndpointIncumbentProbe', () => {
   })
 
   it('reports exited for a refused socket on a macOS boot-volume filesystem or Linux tmpfs', () => {
-    for (const fsType of ['darwin 1a 1a', 'Linux 1021994 ef53']) {
+    for (const fsType of ['darwin 1a 1a', 'Linux 1021994 ef53', 'darwin-mount apfs']) {
       const incumbent = parseRelayEndpointIncumbentProbe(
         SOCK,
         probeOutput(['PRESENT=yes', 'LISTEN=refused', `FS_TYPE=${fsType}`, 'HOLDERS_SOURCE=lsof'])
@@ -90,6 +90,9 @@ describe('parseRelayEndpointIncumbentProbe', () => {
       'linux ff534d42 ef53', // cifs
       'linux 65735546 ef53', // fuse (sshfs)
       'darwin 1c 1a', // macOS nfs/smbfs
+      'darwin-mount nfs',
+      'darwin-mount smbfs',
+      'darwin-mount ', // no mount line matched
       'linux  ', // statfs unavailable
       'freebsd 35 35'
     ]) {
