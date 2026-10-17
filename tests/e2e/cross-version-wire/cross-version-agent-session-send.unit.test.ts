@@ -21,8 +21,8 @@ import {
   type SentMessage
 } from './versioned-agent-session-wire'
 
-// The first release whose host advertises `agent-session.send-options.v1`.
-const SEND_OPTIONS_RELEASE_REF = 'v1.4.226'
+// The first published release whose host advertises `agent-session.send-options.v1` (#27826).
+const SEND_OPTIONS_RELEASE_REF = 'v1.4.228'
 
 // Why: a cold CI run extracts the baseline checkout before the first pairing.
 const SUITE_TIMEOUT_MS = 180_000

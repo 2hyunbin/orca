@@ -250,6 +250,7 @@ export const SQLITE_RUNTIME_INCLUDE = [
   'src/main/runtime/orca-runtime-terminal-surface-close.test.ts',
   'src/main/runtime/orchestration/orchestration-party-location.test.ts',
   'src/main/runtime/orchestration/structured-worker-journal-page.test.ts',
+  'src/main/runtime/rpc/methods/agent-launch-at-rest.test.ts',
   'src/main/runtime/rpc/methods/agent-launch-caller-selection.test.ts',
   'src/main/runtime/rpc/methods/orchestration/federation/federation-agent-death-liveness.test.ts',
   'tests/e2e/agent-launch-cli.unit.test.ts',
