@@ -2,17 +2,18 @@
  * Replacing a stale orcad instance lock without ever displacing a live one (see
  * `orcad-instance-lock.ts`).
  */
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import {
   linkSync,
   mkdirSync,
+  readdirSync,
   renameSync,
-  rmdirSync,
   rmSync,
+  statSync,
   unlinkSync,
   writeFileSync
 } from 'node:fs'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import process from 'node:process'
 import { OrcadInstanceLockError } from './orcad-data-root-privacy'
 import { readNodeFileSyncWithinLimit } from '../../shared/node-bounded-file-reader'
@@ -40,7 +41,7 @@ export function reclaimAndPublish(
   publish: () => boolean,
   owner: OrcadLockRecoveryOwner
 ): void {
-  return withRecoveryLock(lockPath, owner, () => {
+  return withRecoveryLock(lockPath, inspectedContents, owner, () => {
     // Another reclaimer finished first: whatever it published is authoritative, not stale.
     if (readBoundedLockFile(lockPath) !== inspectedContents) {
       throw new OrcadInstanceLockError(
@@ -89,12 +90,29 @@ function renameAndPublish(
   }
 }
 
-function withRecoveryLock<T>(lockPath: string, owner: OrcadLockRecoveryOwner, recover: () => T): T {
-  const dir = `${lockPath}${RECOVERY_DIR_SUFFIX}`
-  if (
-    !takeRecoveryLock(dir, owner.record) &&
-    !(breakAbandonedRecoveryLock(dir, owner.exited) && takeRecoveryLock(dir, owner.record))
-  ) {
+/**
+ * One recovery lock per stale lock (named by its contents and inode), in generations: a dead
+ * owner's generation is never removed or renamed, the next one is created beside it. Taking one is
+ * exclusive, and a later generation exists only once every earlier owner provably exited, so the
+ * newest generation's owner is the only live reclaimer and no live owner is ever displaced.
+ */
+function withRecoveryLock<T>(
+  lockPath: string,
+  inspectedContents: string,
+  owner: OrcadLockRecoveryOwner,
+  recover: () => T
+): T {
+  const prefix = orcadLockRecoveryPrefix(lockPath, inspectedContents)
+  const generations = recoveryGenerations(prefix)
+  const newest = generations.at(-1)
+  const ownerRecord =
+    newest === undefined
+      ? null
+      : readBoundedLockFile(join(`${prefix}${newest}`, RECOVERY_OWNER_FILE))
+  // An owner-less generation is one whose cleanup a crash cut short; none is published empty.
+  const free = newest === undefined || ownerRecord === null || owner.exited(ownerRecord)
+  const generation = newest === undefined ? 0 : newest + 1
+  if (!free || !takeRecoveryLock(`${prefix}${generation}`, owner.record)) {
     throw new OrcadInstanceLockError(
       'orcad_instance_lock_held',
       `Another process is reclaiming the stale orcad instance lock at ${lockPath}. Retry.`
@@ -103,14 +121,39 @@ function withRecoveryLock<T>(lockPath: string, owner: OrcadLockRecoveryOwner, re
   try {
     return recover()
   } finally {
-    if (readBoundedLockFile(join(dir, RECOVERY_OWNER_FILE)) === owner.record) {
-      rmSync(dir, { recursive: true, force: true })
+    // Once the stale record is gone no reclaimer can use its recovery locks again.
+    const gone = readBoundedLockFile(lockPath) !== inspectedContents
+    for (const stale of gone ? recoveryGenerations(prefix) : [generation]) {
+      rmSync(`${prefix}${stale}`, { recursive: true, force: true })
     }
   }
 }
 
+export function orcadLockRecoveryPrefix(lockPath: string, inspectedContents: string): string {
+  let inode = ''
+  try {
+    inode = String(statSync(lockPath).ino)
+  } catch {
+    // Gone already; the reclaimer's own re-read will say so.
+  }
+  const key = createHash('sha256').update(`${inode}\0${inspectedContents}`).digest('hex')
+  return `${lockPath}${RECOVERY_DIR_SUFFIX}-${key.slice(0, 16)}-`
+}
+
+function recoveryGenerations(prefix: string): number[] {
+  const name = basename(prefix)
+  try {
+    return readdirSync(dirname(prefix))
+      .filter((entry) => entry.startsWith(name) && /^\d{1,9}$/u.test(entry.slice(name.length)))
+      .map((entry) => Number(entry.slice(name.length)))
+      .sort((a, b) => a - b)
+  } catch {
+    return []
+  }
+}
+
 /**
- * Staged with its owner, then renamed into place: the recovery lock never exists without a complete
+ * Staged with its owner, then renamed into place: a recovery lock never exists without a complete
  * owner, and a rename onto one that does (a non-empty directory) fails instead of replacing it.
  */
 function takeRecoveryLock(dir: string, ownerRecord: string): boolean {
@@ -133,48 +176,6 @@ function takeRecoveryLock(dir: string, ownerRecord: string): boolean {
     rmSync(staged, { recursive: true, force: true })
     return false
   }
-}
-
-/**
- * Only a crash mid-recovery leaves this, so it is broken only once its owner provably exited: a
- * paused owner (stalled NFS, a suspended laptop) still holds it however long ago it started.
- * Renamed aside and re-inspected, like the lock itself, so one a live reclaimer just took is put back.
- */
-function breakAbandonedRecoveryLock(
-  dir: string,
-  exited: (ownerRecord: string) => boolean
-): boolean {
-  const inspected = readBoundedLockFile(join(dir, RECOVERY_OWNER_FILE))
-  if (inspected === null) {
-    // No lock is ever published without its owner; an empty directory is not one. rmdir refuses
-    // a non-empty one, so a lock renamed into its place survives.
-    try {
-      rmdirSync(dir)
-    } catch {
-      return false
-    }
-    return true
-  }
-  if (!exited(inspected)) {
-    return false
-  }
-  const aside = `${dir}.abandoned-${process.pid}-${randomUUID()}`
-  try {
-    renameSync(dir, aside)
-  } catch {
-    return false
-  }
-  if (readBoundedLockFile(join(aside, RECOVERY_OWNER_FILE)) === inspected) {
-    rmSync(aside, { recursive: true, force: true })
-    return true
-  }
-  try {
-    // Fails onto a newer, non-empty recovery lock, which then stays authoritative.
-    renameSync(aside, dir)
-  } catch {
-    // Left aside under a unique name; inert.
-  }
-  return false
 }
 
 /** No-clobber restore: a third contender's newer record at the canonical path stays authoritative. */
