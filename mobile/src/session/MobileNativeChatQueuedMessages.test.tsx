@@ -634,19 +634,32 @@ describe('MobileNativeChatQueuedMessages', () => {
           save: vi.fn(async () => true),
           cancel: vi.fn()
         }
-        const mounted = await mountPaused({ pause: { reason: 'stopped' }, editor })
+        const mounted = await mountPaused({ pause: { reason: 'stopped' } })
         const header = mounted.root.findByProps({ testID: 'queued-header' })
+        for (const label of ['Delete every queued message', 'Resume sending the queued messages']) {
+          const button = mounted.root.findByProps({ accessibilityLabel: label })
+          expect(header.findAll((node) => node === button)).toHaveLength(0)
+        }
+        // Editing, the keyboard leaves no room for that line: it gives way to the editor.
+        await act(async () => {
+          mounted.update(
+            createElement(MobileNativeChatQueuedMessages, {
+              cards: [waiting],
+              onSend: vi.fn(async () => true),
+              onClearAll: vi.fn(async () => true),
+              pause: { reason: 'stopped' },
+              editor
+            })
+          )
+        })
+        expect(
+          mounted.root.findAllByProps({ accessibilityLabel: 'Resume sending the queued messages' })
+        ).toHaveLength(0)
         const head = mounted.root.find(
           (node) => String(node.type) === 'Text' && node.props.children === 'Editing message'
         ).parent!
-        for (const label of [
-          'Delete every queued message',
-          'Resume sending the queued messages',
-          'Cancel editing queued message',
-          'Save queued message'
-        ]) {
+        for (const label of ['Cancel editing queued message', 'Save queued message']) {
           const button = mounted.root.findByProps({ accessibilityLabel: label })
-          expect(header.findAll((node) => node === button)).toHaveLength(0)
           expect(head.findAll((node) => node === button)).toHaveLength(0)
         }
       } finally {

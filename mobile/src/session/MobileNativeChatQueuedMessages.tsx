@@ -165,7 +165,9 @@ export function MobileNativeChatQueuedMessages({
             )}
           </View>
         </View>
-        {largeText && headerActions ? (
+        {/* While a card is edited at large text, the line yields its height to the editor: with
+            the keyboard up, a small phone has no room for both. */}
+        {largeText && headerActions && !editor ? (
           <View style={[styles.headerActionsLine, styles.headerPaused]}>{headerActions}</View>
         ) : null}
         {expanded ? (
