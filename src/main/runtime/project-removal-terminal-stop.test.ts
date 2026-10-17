@@ -84,6 +84,50 @@ describe('project removal on the execution host', () => {
     expect(stopAndWait).toHaveBeenCalledWith('pty-native', expect.anything())
   })
 
+  it('fences a runtime-stamped project with a nested SSH connection to that connection', async () => {
+    const removeProjectForHost = vi.fn()
+    const stopAndWait = vi.fn(async (_ptyId: string) => true)
+    const sshRepo = {
+      ...store.getRepo(TEST_REPO_ID)!,
+      executionHostId: 'runtime:env-self',
+      connectionId: 'ssh-target'
+    }
+    const runtime = new OrcaRuntimeService({
+      ...store,
+      getRepo: (id: string) => (id === TEST_REPO_ID ? sshRepo : undefined),
+      getRepos: () => [sshRepo],
+      removeProjectForHost
+    } as never)
+    runtime.setPtyController({
+      write: () => true,
+      kill: vi.fn(() => false),
+      stopAndWait,
+      getForegroundProcess: async () => null
+    })
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
+    runtime.registerPty('pty-native-sibling', TEST_WORKTREE_ID, null)
+    runtime.registerPty('pty-over-ssh', TEST_WORKTREE_ID, 'ssh-target')
+
+    await runtime.removeProject(TEST_REPO_ID)
+
+    expect([...new Set(stopAndWait.mock.calls.map(([ptyId]) => ptyId))]).toEqual(['pty-over-ssh'])
+  })
+
+  it('waits out a spawn already in flight and stops what it registers', async () => {
+    const { runtime, stopAndWait } = createRemovableRuntime()
+    runtime.registerPty('pty-early', TEST_WORKTREE_ID, null)
+    const releaseSpawn = await runtime.acquireWorktreeTerminalSpawn(TEST_WORKTREE_ID)
+
+    const removal = runtime.removeProject(TEST_REPO_ID)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    runtime.registerPty('pty-in-flight', TEST_WORKTREE_ID, null)
+    releaseSpawn()
+    await removal
+
+    expect(stopAndWait.mock.calls.map(([ptyId]) => ptyId)).toContain('pty-in-flight')
+  })
+
   it('stops a terminal spawned while the first sweep ran', async () => {
     const { runtime, stopAndWait } = createRemovableRuntime(() =>
       runtime.registerPty('pty-late', TEST_WORKTREE_ID, null)

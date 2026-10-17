@@ -1,5 +1,5 @@
 import { OrcaRuntimeWithStopExactTerminalsForWorktree } from './worktree-terminal-stop-targets'
-import { getRepoExecutionHostId, parseExecutionHostId } from '../../../../shared/execution-host'
+import { getRepoSshConnectionId } from '../../../../shared/execution-host'
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
 import type { Repo } from '../../../../shared/repo-types'
 
@@ -40,8 +40,14 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
       options.deadline ?? Infinity,
       Date.now() + PROJECT_INVENTORY_REFRESH_BUDGET_MS
     )
+    const projectWorktreeIds = new Set<string>()
     const refresh = (async () => {
       const resolvedWorktrees = [...(await this.getResolvedWorktreeMap()).values()]
+      for (const worktree of resolvedWorktrees) {
+        if (worktree.repoId === repo.id) {
+          projectWorktreeIds.add(worktree.id)
+        }
+      }
       await this.refreshPtyWorktreeRecordsFromController(resolvedWorktrees, null, refreshDeadline)
     })().catch((error: unknown) => {
       console.warn('[runtime] project terminal inventory refresh failed', error)
@@ -54,13 +60,20 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
       })
     ])
     clearTimeout(timer)
-    // Why not the row's stamp: a `runtime:` stamp is how paired clients address a project that runs here.
-    const host = parseExecutionHostId(getRepoExecutionHostId(repo))
-    const fence = { resolvedConnectionId: host?.kind === 'ssh' ? host.targetId : null }
+    // Why not the row's stamp: a `runtime:` stamp is how paired clients address a project that runs
+    // here, natively or over its nested SSH connection.
+    const fence = { resolvedConnectionId: getRepoSshConnectionId(repo) }
     let stopped = 0
     for (const id of listProjectTerminalWorktreeIds(repo.id, this.leaves, this.ptysById)) {
+      projectWorktreeIds.add(id)
+    }
+    for (const id of projectWorktreeIds) {
       const opts = { resolvedWorktreeId: id, ...fence, ...options }
-      stopped += (await this.stopTerminalsForWorktree(`id:${id}`, opts)).stopped
+      // Why exclusive: it waits out a spawn that holds the shared lease, so its PTY is registered and stopped.
+      stopped += await this.runWorktreeTerminalMutation(
+        id,
+        async () => (await this.stopTerminalsForWorktree(`id:${id}`, opts)).stopped
+      )
     }
     return { stopped }
   }
