@@ -196,12 +196,7 @@ export async function discoverFiles(args: {
   } finally {
     source.close()
   }
-  return {
-    agent: args.agent,
-    rootDir: args.rootDir,
-    files: files.newest(),
-    ...(scopeFiles ? { scopeFiles } : {})
-  }
+  return { agent: args.agent, rootDir: args.rootDir, files: files.newest(), scopeFiles }
 }
 
 async function observeSessionFile(
