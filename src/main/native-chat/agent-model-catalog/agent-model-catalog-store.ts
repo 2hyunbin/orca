@@ -35,11 +35,10 @@ export type { AgentModelCatalogFailure }
 
 // The execution host's one model catalog per (agent, launch fingerprint):
 // served immediately at any age, refreshed in the background when old, and
-// written through by what each session lists as it starts (never its later
-// reads: a long-running session may run an older CLI than the next start).
+// written through by each session's startup and later capability listings.
 // Each entry keeps two listings: the last account-level discovery (the only
 // source of the configured default and default efforts, and the only clock a
-// refresh follows) and the last started session's listing (which models exist
+// refresh follows) and the last received session listing (which models exist
 // and their efforts). Readers see the two merged; neither write erases the other.
 // Success-only: a failure, timeout or empty list is never stored as a catalog
 // and never persisted — it is held separately under a short TTL so a burst of

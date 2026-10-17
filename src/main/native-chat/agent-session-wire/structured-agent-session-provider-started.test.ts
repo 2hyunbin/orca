@@ -103,6 +103,7 @@ beforeEach(async () => {
     mintSpawnToken: () => 'spawn-a',
     modelCatalog: {
       read: async () => ({ origin: 'unknown' }),
+      retainedLiveModelIds: vi.fn(() => []),
       recordLiveListing: (sessionId, listing) => savedListings.push({ sessionId, listing }),
       prewarm: async () => {},
       stop: () => {},
@@ -239,10 +240,11 @@ describe('a publish-first Claude create whose init is slow', () => {
         configuredDefault: expect.objectContaining({ modelId: 'claude-opus-9' })
       })
     })
-    // A later options read saves nothing: only a start speaks for the account.
+    // A later read refreshes the listing without re-learning the configured default.
     const saved = savedListings.length
     await host.readOptions(SESSION)
-    expect(savedListings).toHaveLength(saved)
+    expect(savedListings).toHaveLength(saved + 1)
+    expect(savedListings.at(-1)?.listing).not.toHaveProperty('configuredDefault')
   })
 
   it('saves the configured default when the settings readback beats the attach', async () => {

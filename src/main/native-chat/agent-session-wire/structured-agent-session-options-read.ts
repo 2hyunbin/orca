@@ -27,7 +27,8 @@ import { journalOpenReadRefusal } from '../agent-session-journal/journal-open-fa
 import type { StructuredAgentDefinition } from './structured-agent-definition'
 import type { StructuredAgentRegistry } from './structured-agent-registry'
 import type { StructuredAgentSessionLiveOptions } from './structured-agent-session-adapter'
-import type { AgentModelCatalogLiveListing } from '../agent-model-catalog/agent-model-catalog-entry'
+import { retainedAgentModelCatalogModels } from '../agent-model-catalog/agent-model-catalog-entry'
+import { saveStructuredAgentSessionListing } from './structured-agent-session-start-listing'
 import type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
 import { structuredAgentSessionOptionModels } from './structured-agent-session-option-models'
 import { structuredAgentSessionLaunchPermission } from './structured-agent-session-launch-permission'
@@ -234,12 +235,16 @@ export async function readStructuredAgentSessionOptions(
         : null
   let options: Omit<AgentSessionOptionsResult, 'rewind'>
   if (live) {
-    // Only a start saves its listing for the account: a long-running child may run an older CLI
-    // than the next start will, so its later reads must not replace a newer start's list.
     const { catalogListing, ...answer } = live
-    options = catalogListing
-      ? { ...answer, listedModelIds: accountListedModelIds(catalogListing) }
-      : answer
+    options = answer
+    if (catalogListing) {
+      // Check prior membership before saving: a launch-added row cannot verify itself.
+      const listedModelIds = context.deps.modelCatalog
+        ? context.deps.modelCatalog.retainedLiveModelIds(sessionId, catalogListing)
+        : retainedAgentModelCatalogModels(undefined, catalogListing).map((model) => model.id)
+      saveStructuredAgentSessionListing(context, sessionId, catalogListing)
+      options = { ...answer, listedModelIds }
+    }
   } else {
     options = await readStructuredAgentSessionOptionsAtRest(context.deps, sessionId, reader)
   }
@@ -296,11 +301,6 @@ export async function readStructuredAgentSessionOptions(
       ? { contextUsage: { current: session.journal.contextUsage(), ...contextFloor } }
       : {})
   }
-}
-
-/** The rows a child listed for its account, never one only its own launch added. */
-function accountListedModelIds(listing: AgentModelCatalogLiveListing): string[] {
-  return listing.models.map((row) => row.id).filter((id) => id !== listing.launchOnlyModelId)
 }
 
 /** A goal the host can change, or one only the agent's own `/goal` changes, reported apart. */

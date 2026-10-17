@@ -129,8 +129,8 @@ describe('a Claude model the verified list no longer offers', () => {
   ])('keeps the model when the host answer has %s', (_name, models) => {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a malformed host answer is the case under test.
     const answer = { origin: 'probe', fetchedAt: 1, models } as AgentSessionModelCatalogResult
-    const state = withHostList(fresh(), answer)
-    expect(structuredAgentSessionListedPicks(state, remembered, {})).toBeNull()
+    const state = withHostList(stopped('claude-gone', [OPUS], []), answer)
+    expect(structuredAgentSessionListedPicks(state, undefined, {})).toBeNull()
   })
 
   it('keeps the model before any host answer, and on an answer that verifies no row', () => {
