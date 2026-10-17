@@ -17,13 +17,13 @@ import { stopRuntimeProjectTerminalsBeforeRemoval } from './runtime-project-term
 import type { RepoSlice } from './repo-state'
 import { ERROR_TOAST_DURATION } from './repo-state'
 import { mergeProjectCompatibilityForHostRepoChange } from './repo-catalog-identity'
+import { closeRemovedHostTwinState } from './repo-removal-host-twin-teardown'
 import {
-  closeRemovedHostTwinState,
   collectRemovedHostTwinState,
   getSurvivingTwinHostIds,
   retainSurvivingTwinHostIds,
   splitRemovedWorktreeIds
-} from './repo-removal-host-twin-teardown'
+} from './repo-removal-host-twin-attribution'
 import {
   captureWorkspaceChatDraftKeys,
   deleteWorkspaceChatDrafts

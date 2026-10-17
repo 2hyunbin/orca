@@ -22,6 +22,7 @@ import { toRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import type { BrowserWorkspace } from '../../../../shared/browser-workspace-types'
 import type { Tab } from '../../../../shared/tab-types'
 import type { ClosedEditorTabSnapshot } from './editor/types/open-file'
+import type { SleepingAgentSessionRecord } from '../../../../shared/agent-session-resume'
 import { toAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import {
   readNativeChatComposerDraft,
@@ -98,6 +99,20 @@ function closedSnapshot(filePath: string): ClosedEditorTabSnapshot {
     worktreeId: WORKTREE_ID
   })
   return snapshot
+}
+
+function sleepingRecord(paneKey: string, connectionId: string | null): SleepingAgentSessionRecord {
+  return {
+    paneKey,
+    worktreeId: WORKTREE_ID,
+    agent: 'claude',
+    providerSession: { key: 'session_id', id: paneKey },
+    prompt: '',
+    state: 'done',
+    capturedAt: 1,
+    updatedAt: 1,
+    connectionId
+  }
 }
 
 function seedTwins(): ReturnType<typeof createTestStore> {
@@ -298,6 +313,11 @@ describe('removing a remote project keeps its local twin', () => {
         ]
       },
       ptyIdsByTabId: { 'tab-local': ['pty-local'], 'tab-ssh': [sshPtyId] },
+      // Records whose tabs are gone: only the host they name says whose they are.
+      sleepingAgentSessionsByPaneKey: {
+        'gone-ssh:leaf': sleepingRecord('gone-ssh:leaf', 'target-1'),
+        'gone-local:leaf': sleepingRecord('gone-local:leaf', null)
+      },
       terminalLayoutsByTabId: {
         'tab-ssh-restored': {
           root: null,
@@ -313,6 +333,9 @@ describe('removing a remote project keeps its local twin', () => {
     expect(ptyKill).not.toHaveBeenCalledWith('pty-local')
     expect(ptyKill).toHaveBeenCalledWith(sshPtyId)
     expect(ptyKill).toHaveBeenCalledWith(toAppSshPtyId('target-1', 'relay-2'))
+    expect(Object.keys(store.getState().sleepingAgentSessionsByPaneKey)).toEqual([
+      'gone-local:leaf'
+    ])
     expect(store.getState().tabsByWorktree[WORKTREE_ID]?.map((tab) => tab.id)).toEqual([
       'tab-local'
     ])
@@ -370,6 +393,14 @@ describe('removing a remote project keeps its local twin', () => {
       pages: [{ ...browserWorkspace(id), workspaceId: id, browserRuntimeEnvironmentId }]
     })
     store.setState((s) => ({
+      // Stamped local, but one pane runs on the surviving runtime: it is not only local's.
+      tabsByWorktree: {
+        [WORKTREE_ID]: [
+          ...(s.tabsByWorktree[WORKTREE_ID] ?? []),
+          makeTab({ id: 'tab-mixed', worktreeId: WORKTREE_ID, ptyId: 'pty-mixed-local' })
+        ]
+      },
+      ptyIdsByTabId: { ...s.ptyIdsByTabId, 'tab-mixed': ['pty-mixed-local', remotePtyId] },
       recentlyClosedBrowserTabsByWorktree: {
         [WORKTREE_ID]: [
           closedBrowser('closed-local', null),
@@ -379,6 +410,12 @@ describe('removing a remote project keeps its local twin', () => {
       unifiedTabsByWorktree: {
         [WORKTREE_ID]: [
           ...(s.unifiedTabsByWorktree[WORKTREE_ID] ?? []),
+          makeUnifiedTab({
+            id: 'tab-mixed',
+            worktreeId: WORKTREE_ID,
+            groupId: 'group-1',
+            executionHostId: 'local'
+          }),
           makeUnifiedTab({
             id: 'stale-editor',
             worktreeId: WORKTREE_ID,
@@ -398,7 +435,9 @@ describe('removing a remote project keeps its local twin', () => {
     ).toEqual(['closed-remote'])
     expect(state.unifiedTabsByWorktree[WORKTREE_ID]?.map((tab) => tab.id)).toEqual([
       'tab-remote',
-      'editor:remote-file'
+      'editor:remote-file',
+      'tab-mixed'
     ])
+    expect(ptyKill).not.toHaveBeenCalledWith(remotePtyId)
   })
 })
