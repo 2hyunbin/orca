@@ -94,12 +94,14 @@ export function createTabsLabelActions(
   }
 
   /** Tab-bar id → the mode last sent to main and not yet answered: a toggle flips from that. */
-  const viewModeSent = new Map<string, 'terminal' | 'chat'>()
+  const viewModeSent = new Map<string, { mode: 'terminal' | 'chat' }>()
 
   function sendViewMode(tabId: string, mode: 'terminal' | 'chat', local: () => void): boolean {
     const state = get()
+    // Why an object: only this send's answer clears its entry, not an earlier send's of the same mode.
+    const entry = { mode }
     const settle = (): void => {
-      if (viewModeSent.get(tabId) === mode) {
+      if (viewModeSent.get(tabId) === entry) {
         viewModeSent.delete(tabId)
       }
     }
@@ -114,14 +116,16 @@ export function createTabsLabelActions(
       settle
     )
     if (sent) {
-      viewModeSent.set(tabId, mode)
+      viewModeSent.set(tabId, entry)
     }
     return sent
   }
 
   function sendViewModeToggle(tabId: string): boolean {
     const shown = findTabAndWorktree(get().unifiedTabsByWorktree, tabId)?.tab.viewMode
-    const to = oppositeViewMode(viewModeSent.get(tabId) ?? (shown === 'chat' ? 'chat' : 'terminal'))
+    const to = oppositeViewMode(
+      viewModeSent.get(tabId)?.mode ?? (shown === 'chat' ? 'chat' : 'terminal')
+    )
     return sendViewMode(tabId, to, () => toggleTabViewModeHere(tabId, to))
   }
 

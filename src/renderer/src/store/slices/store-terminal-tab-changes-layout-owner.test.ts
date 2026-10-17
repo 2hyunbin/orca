@@ -194,6 +194,24 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
     expect(row(store).viewMode).toBe('terminal')
   })
 
+  it('toggles from the shown mode again once main refuses the pending one', async () => {
+    const { store, tabBarId } = storeWithTab()
+    mocks.callRuntimeRpc.mockResolvedValueOnce({ ok: false, code: 'invalid_params' })
+
+    store.getState().toggleTabViewMode(tabBarId)
+    await vi.waitFor(() =>
+      expect(console.warn).toHaveBeenCalledWith(
+        '[layout-owner] setTabProps refused:',
+        'invalid_params'
+      )
+    )
+    store.getState().toggleTabViewMode(tabBarId)
+
+    expect(sentViewModes()).toEqual(['chat', 'chat'])
+    await vi.waitFor(() => expect(row(store).viewMode).toBe('chat'))
+    expect(mocks.toggled).toHaveBeenCalledTimes(1)
+  })
+
   it('gives each tab of an agent-title batch its title once main has it, and a paired server’s tab at once', async () => {
     const store = createTestStore()
     const remote = 'repo2::/path/remote'
@@ -235,6 +253,7 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
     expect(title(WORKTREE)).toBeUndefined()
     answer({ ok: true, result: {} })
     await vi.waitFor(() => expect(title(WORKTREE)).toBeTruthy())
+    expect(sent()).toHaveLength(1)
   })
 
   it('acts as today at once for a paired server’s workspace', () => {
