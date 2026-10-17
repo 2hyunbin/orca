@@ -85,6 +85,17 @@ export type WindowLayoutCommand =
       preview?: true
       split?: NewGroupSplit
     }
+  | {
+      type: 'openAgentSessionTab'
+      tabId: string
+      sessionId: string
+      agent: string
+      groupId: string
+      afterTabId?: string
+      index?: number
+      createdAt: number
+      split?: NewGroupSplit
+    }
   | { type: 'promotePreviewTab'; tabId: string }
   | {
       type: 'moveTabToWorkspace'

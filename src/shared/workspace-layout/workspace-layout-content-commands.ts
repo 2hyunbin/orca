@@ -35,31 +35,19 @@ export function openEditorTab(
   const workspace = model.workspaces[key]
   const sameFile = (tab: LayoutTab): boolean =>
     tab.entityId === command.fileId && tab.kind === command.contentType
-  if (command.tabId) {
-    // The same open again (a tab this window drew, then sent twice or saved first) changes nothing.
-    const drawn = workspace?.tabs.find((tab) => tab.id === command.tabId)
-    if (drawn && sameFile(drawn)) {
-      return applied(model, { tabId: drawn.id })
-    }
-    const holds = Object.values(model.workspaces).some((entry) =>
-      entry.tabs.some((tab) => tab.id === command.tabId)
-    )
-    if (holds) {
-      return refuse('tab_exists')
-    }
+  const drawn = drawnTabOpen(model, key, command.tabId, sameFile)
+  if (drawn) {
+    return drawn
   }
-  let target = model
-  if (command.groupId && !workspace?.groups.some((entry) => entry.id === command.groupId)) {
-    if (workspace?.groups.length) {
-      // Another group would put the tab where its sender did not.
-      return refuse('group_not_found')
-    }
-    // A workspace with no group takes the sender's, as the window keeps its emptied root group.
-    target = withWorkspace(model, key, {
-      ...workspaceOrEmpty(model, key),
-      groups: [{ id: command.groupId, tabOrder: [] }]
-    })
+  if (
+    command.groupId &&
+    workspace?.groups.length &&
+    !workspace.groups.some((entry) => entry.id === command.groupId)
+  ) {
+    // Another group would put the tab where its sender did not.
+    return refuse('group_not_found')
   }
+  const target = withSendersGroup(model, key, command.groupId)
   const group =
     target.workspaces[key]?.groups.find((entry) => entry.id === command.groupId) ??
     target.workspaces[key]?.groups[0]
@@ -198,13 +186,63 @@ export function openAgentSessionTab(
   if (command.initial && !admitsInitialSurface(model, command.workspace, command.initial)) {
     return applied(model)
   }
+  const drawn = drawnTabOpen(
+    model,
+    command.workspace,
+    command.tabId,
+    (tab) => tab.kind === 'agent-session' && tab.entityId === command.sessionId
+  )
+  if (drawn) {
+    return drawn
+  }
   const tab = contentTab(context, {
     ...(command.tabId ? { id: command.tabId } : {}),
+    ...(command.createdAt !== undefined ? { createdAt: command.createdAt } : {}),
     kind: 'agent-session',
     entityId: command.sessionId,
     agentSessionAgent: command.agent
   })
-  return applied(placeContentTab(model, command.workspace, tab, command, context).model, {
+  const target = withSendersGroup(model, command.workspace, command.groupId)
+  return applied(placeContentTab(target, command.workspace, tab, command, context).model, {
     tabId: tab.id
+  })
+}
+
+/**
+ * An open naming a tab id: the same open again (a tab a window drew, then sent twice or saved
+ * first) changes nothing; an id another tab holds refuses it. Null when the open goes ahead.
+ */
+function drawnTabOpen(
+  model: WorkspaceLayoutModel,
+  key: string,
+  tabId: string | undefined,
+  sameContent: (tab: LayoutTab) => boolean
+): Applied | null {
+  if (!tabId) {
+    return null
+  }
+  const drawn = model.workspaces[key]?.tabs.find((tab) => tab.id === tabId)
+  if (drawn && sameContent(drawn)) {
+    return applied(model, { tabId: drawn.id })
+  }
+  const holds = Object.values(model.workspaces).some((entry) =>
+    entry.tabs.some((tab) => tab.id === tabId)
+  )
+  return holds ? refuse('tab_exists') : null
+}
+
+/** A workspace with no group takes the sender's, as the window keeps its emptied root group. */
+function withSendersGroup(
+  model: WorkspaceLayoutModel,
+  key: string,
+  groupId: string | undefined
+): WorkspaceLayoutModel {
+  const workspace = model.workspaces[key]
+  if (!groupId || workspace?.groups.length) {
+    return model
+  }
+  return withWorkspace(model, key, {
+    ...workspaceOrEmpty(model, key),
+    groups: [{ id: groupId, tabOrder: [] }]
   })
 }

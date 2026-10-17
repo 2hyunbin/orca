@@ -134,7 +134,9 @@ export function setGroupRatios(
   )
 }
 
-type NewGroupOpen = CommandOf<'createTerminalTab' | 'openEditorTab' | 'openBrowserTab'>
+type NewGroupOpen = CommandOf<
+  'createTerminalTab' | 'openEditorTab' | 'openBrowserTab' | 'openAgentSessionTab'
+>
 
 /**
  * `open` into a new group `command.groupId` beside `split.besideGroupId`, as the window's split
