@@ -169,7 +169,10 @@ export function closeRemovedHostTwinState(
   // Why: a pending chat's tab can already be gone, so its launch is cancelled through the registry.
   cancelStructuredLaunchesForWorktrees(new Set(twinHostIds.keys()), removedHostId)
   for (const fileId of removed.fileIds) {
-    get().closeFile(fileId, { captureRecentlyClosed: false })
+    // Why: a file the announcement's refresh already dropped would make closeFile reset the focused surface.
+    if (get().openFiles.some((file) => file.id === fileId)) {
+      get().closeFile(fileId, { captureRecentlyClosed: false })
+    }
   }
   for (const browserTabId of removed.browserTabIds) {
     get().closeBrowserTab(browserTabId, { reason: 'cleanup' })
