@@ -8,9 +8,13 @@ function isAsciiDigit(code: number): boolean {
   return code >= DIGIT_0 && code <= DIGIT_9
 }
 
+const COMBINING_MARKS = /\p{M}/gu
+const NON_ASCII = /[\u0080-\u{10ffff}]/u
+
+/** Primary key: case and accents ignored, so "Éclair" sorts beside "eclair". */
 function foldSidebarText(text: string): string {
-  // Why lowercase before NFC: lowercasing can emit decomposed sequences ("İ" becomes "i" + U+0307).
-  return text.toLowerCase().normalize('NFC')
+  const lower = text.toLowerCase()
+  return NON_ASCII.test(lower) ? lower.normalize('NFD').replace(COMBINING_MARKS, '') : lower
 }
 
 function codePointLength(code: number): number {
@@ -96,15 +100,15 @@ function compareFoldedThenCanonical(
   }
   return (
     compareNatural(fold(left), fold(right)) ||
-    // Why: "Alpha"/"alpha" and "w02"/"w2" fold equal but must still order the same everywhere.
+    // Why: "Alpha"/"alpha", "éclair"/"eclair" and "w02"/"w2" fold equal but must still order alike.
     compareCodePoints(left.normalize('NFC'), right.normalize('NFC'))
   )
 }
 
 /**
- * Device-independent order for sidebar text: case-folded and NFC-normalized, digit runs by value,
- * the rest by code point. Returns 0 only for canonically equal text; callers break that tie by
- * host-qualified id.
+ * Device-independent order for sidebar text: case and accents ignored, digit runs by value, the
+ * rest by code point; case and accents then break exact ties. Returns 0 only for canonically equal
+ * text; callers break that tie by host-qualified id.
  */
 export function compareSidebarText(left: string, right: string): number {
   return compareFoldedThenCanonical(left, right, foldSidebarText)

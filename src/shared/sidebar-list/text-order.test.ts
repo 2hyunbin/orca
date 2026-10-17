@@ -30,9 +30,17 @@ describe('compareSidebarText', () => {
     expect(sorted(['w2', 'w02', 'w3'])).toEqual(['w02', 'w2', 'w3'])
   })
 
-  it('orders accented letters by code point, after the unaccented alphabet', () => {
-    expect(sorted(['éclair', 'zebra', 'eclair'])).toEqual(['eclair', 'zebra', 'éclair'])
+  it('ignores accents, then lets them break an exact tie', () => {
+    expect(sorted(['éclair', 'zebra', 'eclair'])).toEqual(['eclair', 'éclair', 'zebra'])
+    expect(sorted(['zebra', 'Éclair', 'ecluse', 'eclair'])).toEqual([
+      'eclair',
+      'Éclair',
+      'ecluse',
+      'zebra'
+    ])
     expect(compareSidebarText('Éclair', 'éclair')).toBeLessThan(0)
+    expect(compareSidebarText('ångström', 'angstrom')).toBeGreaterThan(0)
+    expect(compareSidebarText('ångström', 'b')).toBeLessThan(0)
   })
 
   it('treats NFC and NFD spellings as the same text', () => {
