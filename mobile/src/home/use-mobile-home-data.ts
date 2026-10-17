@@ -164,10 +164,15 @@ export function useMobileHomeData() {
     () => sortedHosts.filter((host) => connections.hostStates[host.id] === 'connected'),
     [sortedHosts, connections.hostStates]
   )
-  const primaryHost = connectedHosts[0] ?? null
-  const primaryTaskProviders = primaryHost
-    ? (taskProvidersByHost[primaryHost.id] ?? ['github'])
-    : []
+  // Why: Tasks asks which host to open, so the card lists every provider some connected host has.
+  const connectedTaskProviders = useMemo(
+    () => [
+      ...new Set(
+        connectedHosts.flatMap((host): TaskProvider[] => taskProvidersByHost[host.id] ?? ['github'])
+      )
+    ],
+    [connectedHosts, taskProvidersByHost]
+  )
   const hostConnections = useMemo(
     () => projectHomeHostConnections(connections.allClients),
     [connections.allClients]
@@ -177,10 +182,9 @@ export function useMobileHomeData() {
     ...connections,
     accountsHosts,
     connectedHosts,
+    connectedTaskProviders,
     hostCatalog,
     hostConnections,
-    primaryHost,
-    primaryTaskProviders,
     resumeCard,
     router,
     setHostCatalog,
