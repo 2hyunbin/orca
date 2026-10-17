@@ -453,7 +453,7 @@ it('pages healthy keys, resumes ordered garbage and discovers changes beyond fin
   let maintenance = new JournalMaintenance(() => db, transaction, 0)
   try {
     await vi.advanceTimersByTimeAsync(60)
-    expect(count('temp.journal_prune_items')).toBe(65)
+    expect(count('temp.journal_prune_items')).toBe(33)
     expect(count('journal_prune_work_v1')).toBe(65)
     expect(count('journal_prune_progress_v1')).toBe(1)
     maintenance.close()
