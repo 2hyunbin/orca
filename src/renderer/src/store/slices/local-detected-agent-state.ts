@@ -224,11 +224,7 @@ export const createLocalDetectedAgentState: LocalDetectedAgentStateCreator = (se
           return typed
         })
         .catch(() => {
-          const fallback = isFloating
-            ? (get().localDetectedAgentIdsByContext[contextKey] ?? [])
-            : detectedContextKey !== contextKey
-              ? []
-              : (get().detectedAgentIds ?? [])
+          const fallback = get().localDetectedAgentIdsByContext[contextKey] ?? []
           if (
             requestGeneration === localDetectionGeneration &&
             refreshPromises.get(contextKey) === pending
@@ -239,6 +235,7 @@ export const createLocalDetectedAgentState: LocalDetectedAgentStateCreator = (se
             const exposeToLegacy = legacyRefreshContextKey === contextKey
             if (exposeToLegacy) {
               legacyRefreshContextKey = null
+              detectedContextKey = contextKey
             }
             set((state) => ({
               ...(exposeToLegacy ? { detectedAgentIds: fallback, isRefreshingAgents: false } : {}),

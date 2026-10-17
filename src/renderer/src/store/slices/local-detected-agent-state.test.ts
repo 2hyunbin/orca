@@ -96,6 +96,7 @@ describe('local detected agent context lifecycle', () => {
 
   it('keeps native provider inventory across WSL selection and refresh', async () => {
     const store = createTestStore([makeRepo('repo-1')])
+    const projects = store.getState().projects
     detectAgents.mockResolvedValueOnce(['grok']).mockResolvedValueOnce([])
     await store.getState().ensureNativeDetectedAgents()
     expect(detectAgents).toHaveBeenNthCalledWith(1, undefined)
@@ -103,6 +104,29 @@ describe('local detected agent context lifecycle', () => {
     await store.getState().refreshDetectedAgents()
     expect(readNativeDetectedAgents(store.getState())).toEqual(['grok'])
     expect(store.getState().detectedAgentIds).toEqual(['codex'])
+    store.setState({ projects: [] })
+    refreshAgents.mockRejectedValueOnce(new Error('native refresh failed'))
+    await expect(store.getState().refreshDetectedAgents()).resolves.toEqual(['grok'])
+    expect(readNativeDetectedAgents(store.getState())).toEqual(['grok'])
+    expect(store.getState().detectedAgentIds).toEqual(['grok'])
+    expect(store.getState().isRefreshingAgents).toBe(false)
+    expect(store.getState().isRefreshingLocalAgentsByContext).toEqual({})
+    await expect(store.getState().ensureNativeDetectedAgents()).resolves.toEqual(['grok'])
+    expect(detectAgents).toHaveBeenCalledTimes(2)
+
+    let finish: (result: { agents: string[] }) => void = () => {}
+    refreshAgents.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve
+      })
+    )
+    store.setState({ projects })
+    const wslRefresh = store.getState().refreshDetectedAgents()
+    expect(store.getState().detectedAgentIds).toBeNull()
+    finish({ agents: ['codex'] })
+    await wslRefresh
+    expect(store.getState().detectedAgentIds).toEqual(['codex'])
+    expect(readNativeDetectedAgents(store.getState())).toEqual(['grok'])
     store.setState({ projects: [] })
     await store.getState().refreshDetectedAgents()
     expect(readNativeDetectedAgents(store.getState())).toEqual(['codex'])

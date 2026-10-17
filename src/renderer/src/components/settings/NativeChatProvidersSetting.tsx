@@ -138,23 +138,15 @@ export function NativeChatProvidersSetting({
                       'Open {{value0}} as a chat',
                       { value0: label }
                     )}
-                    onChange={() =>
-                      enqueueProviderUpdate({
+                    onChange={() => {
+                      const next = !on
+                      return enqueueProviderUpdate({
                         getSettings: () => useAppStore.getState().settings,
                         fallbackSettings: settings,
                         updateSettings,
-                        buildUpdate: (latest) =>
-                          buildNativeChatProviderUpdate(
-                            latest,
-                            agent,
-                            !isNativeChatProviderDisplayedOn(
-                              latest,
-                              agent,
-                              readNativeDetectedAgents(useAppStore.getState())
-                            )
-                          )
+                        buildUpdate: (latest) => buildNativeChatProviderUpdate(latest, agent, next)
                       })
-                    }
+                    }}
                   />
                 </div>
               )

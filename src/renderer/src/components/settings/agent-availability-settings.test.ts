@@ -1,13 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import {
-  buildNativeChatProviderUpdate,
-  isNativeChatProviderDisplayedOn
-} from '../../../../shared/native-chat-providers'
+import { isNativeChatProviderDisplayedOn } from '../../../../shared/native-chat-providers'
 import { getDefaultSettings } from '../../../../shared/constants'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import {
   buildAgentAvailabilitySettingsUpdate,
-  createAgentSettingsUpdateQueue,
   createAgentAvailabilityUpdateQueue
 } from './agent-availability-settings'
 
@@ -39,34 +35,6 @@ describe('agent availability settings', () => {
       disabledTuiAgents: ['claude', 'codex'],
       defaultTuiAgent: null
     })
-  })
-
-  it('preserves different-row and same-row toggle intent during delayed persistence', async () => {
-    let latest = getDefaultSettings('/tmp')
-    const enqueue = createAgentSettingsUpdateQueue()
-    let finish: () => void = () => {}
-    const delayed = new Promise<void>((resolve) => {
-      finish = resolve
-    })
-    const toggle = (agent: 'claude' | 'codex') =>
-      enqueue({
-        getSettings: () => latest,
-        fallbackSettings: latest,
-        updateSettings: async (update) => {
-          await delayed
-          latest = { ...latest, ...update }
-        },
-        buildUpdate: (settings) =>
-          buildNativeChatProviderUpdate(
-            settings,
-            agent,
-            !isNativeChatProviderDisplayedOn(settings, agent, [])
-          )
-      })
-    const writes = [toggle('claude'), toggle('codex'), toggle('claude')]
-    finish()
-    await Promise.all(writes)
-    expect(latest.nativeChatProviders).toEqual({ claude: true, codex: false })
   })
 
   it('continues serializing requests after a rejected write', async () => {

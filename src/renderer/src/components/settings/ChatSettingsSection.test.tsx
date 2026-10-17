@@ -3,7 +3,10 @@ import { cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testin
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDefaultSettings } from '../../../../shared/constants'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
+import type { TuiAgent } from '../../../../shared/tui-agent'
+import { decodeAgentSessionAgentsResult } from '../../../../shared/agent-session-registered-agents'
 import { ChatSettingsSection } from './ChatSettingsSection'
+import { NativeChatProvidersSetting } from './NativeChatProvidersSetting'
 import { TooltipProvider } from '../ui/tooltip'
 import { ActiveSettingsSectionProvider } from './SettingsSection'
 import { getChatAppearanceSearchEntries } from './chat-appearance-search'
@@ -13,6 +16,7 @@ import { getChatBehaviorSearchEntries } from './chat-behavior-search'
 import { AGENT_SESSION_QUEUED_MESSAGES_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
 import { setLocalRuntimeCapabilitiesForTests } from '@/runtime/local-runtime-capabilities'
 import { useStructuredAgentSessionHostQueuesMessages } from '@/runtime/structured-agent-session-host-capability'
+import type * as HostStructuredAgentsModule from '@/runtime/host-structured-agents'
 import { i18n } from '@/i18n/i18n'
 import { buildSettingsNavigationMetadata } from '@/hooks/useSettingsNavigationMetadata'
 import { buildCmdJSettingsResults } from '../cmd-j/palette-results'
@@ -20,9 +24,17 @@ import { isSettingsNavigationTarget } from '@/lib/settings-navigation-types'
 import { getSettingsSectionId, getSettingsScrollTarget } from './settings-navigation-foundations'
 import { getSettingsSectionSearchEntries, matchesSettingsSearch } from './settings-search'
 
-const state = vi.hoisted((): { settingsSearchQuery: string; settings: GlobalSettings | null } => ({
-  settingsSearchQuery: '',
-  settings: null
+const state = vi.hoisted(
+  (): {
+    settingsSearchQuery: string
+    settings: GlobalSettings | null
+    localDetectedAgentIdsByContext: Record<string, TuiAgent[] | null>
+  } => ({ settingsSearchQuery: '', settings: null, localDetectedAgentIdsByContext: {} })
+)
+vi.mock('@/runtime/host-structured-agents', async (importOriginal) => ({
+  ...(await importOriginal<typeof HostStructuredAgentsModule>()),
+  readHostStructuredAgents: () =>
+    decodeAgentSessionAgentsResult({ agents: [{ agent: 'grok', capabilities: {} }] }) ?? []
 }))
 vi.mock('../../store', () => ({
   useAppStore: Object.assign((selector: (value: typeof state) => unknown) => selector(state), {
@@ -38,6 +50,7 @@ afterEach(async () => {
 beforeEach(() => {
   state.settingsSearchQuery = ''
   state.settings = null
+  state.localDetectedAgentIdsByContext = {}
   setLocalRuntimeCapabilitiesForTests([AGENT_SESSION_QUEUED_MESSAGES_RUNTIME_CAPABILITY])
 })
 
@@ -77,6 +90,38 @@ function renderChat(
 }
 
 describe('Chat settings page', () => {
+  it('preserves clicked provider choices while queued saves and inventory changes settle', async () => {
+    let latest = getDefaultSettings('/tmp')
+    state.settings = latest
+    state.localDetectedAgentIdsByContext = { host: [] }
+    let finish: () => void = () => {}
+    const delayed = new Promise<void>((resolve) => {
+      finish = resolve
+    })
+    const updateSettings = vi.fn(async (updates: Partial<GlobalSettings>) => {
+      await delayed
+      latest = { ...latest, ...updates }
+      state.settings = latest
+    })
+    const element = () => (
+      <NativeChatProvidersSetting settings={latest} updateSettings={updateSettings} />
+    )
+    const { rerender } = render(element())
+    const claude = screen.getByRole('switch', { name: 'Open Claude as a chat' })
+    const grok = screen.getByRole('switch', { name: 'Open Grok as a chat' })
+    expect(grok.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(claude)
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1))
+    fireEvent.click(grok)
+    fireEvent.click(claude)
+    state.localDetectedAgentIdsByContext = { host: ['grok'] }
+    rerender(element())
+    expect(grok.getAttribute('aria-checked')).toBe('true')
+    finish()
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(3))
+    expect(latest.nativeChatProviders).toEqual({ claude: false, grok: true })
+  })
+
   it.each([false, true])('displays saved provider choice %s when disabled in Agents', (on) => {
     renderChat(true, true, false, {
       nativeChatProviders: { claude: on },
