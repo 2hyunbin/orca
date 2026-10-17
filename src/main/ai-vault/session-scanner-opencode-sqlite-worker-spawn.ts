@@ -50,6 +50,8 @@ function getSharedClient(): OpenCodeSqliteWorkerClient {
   return sharedClient
 }
 
+type SqliteListArgs = Omit<Parameters<OpenCodeSqliteWorkerClient['list']>[0], 'agent'>
+
 /**
  * List OpenCode SQLite session candidates through the shared worker client.
  * @param args.dbPaths - Absolute paths to opencode.db files to scan.
@@ -57,12 +59,7 @@ function getSharedClient(): OpenCodeSqliteWorkerClient {
  * @param args.issues - Collected scan issues to append errors to.
  * @returns Synthetic candidates sorted by effective recency.
  */
-export function listOpenCodeSqliteSessionsViaWorker(args: {
-  dbPaths: readonly string[]
-  limit: number
-  issues: AiVaultScanIssue[]
-  signal?: AbortSignal
-}): Promise<SessionFileCandidate[]> {
+export function listOpenCodeSqliteSessionsViaWorker(args: SqliteListArgs): Promise<SessionFileCandidate[]> {
   return listForHost(args)
 }
 
@@ -70,21 +67,11 @@ export function listOpenCodeSqliteSessionsViaWorker(args: {
  * List opencode2 session candidates (v2 channel-scoped DB schema) through the
  * shared worker client.
  */
-export function listOpenCode2SqliteSessionsViaWorker(args: {
-  dbPaths: readonly string[]
-  limit: number
-  issues: AiVaultScanIssue[]
-  signal?: AbortSignal
-}): Promise<SessionFileCandidate[]> {
+export function listOpenCode2SqliteSessionsViaWorker(args: SqliteListArgs): Promise<SessionFileCandidate[]> {
   return listForHost({ ...args, agent: 'opencode2' })
 }
 
-export function listZcodeSqliteSessionsViaWorker(args: {
-  dbPaths: readonly string[]
-  limit: number
-  issues: AiVaultScanIssue[]
-  signal?: AbortSignal
-}): Promise<SessionFileCandidate[]> {
+export function listZcodeSqliteSessionsViaWorker(args: SqliteListArgs): Promise<SessionFileCandidate[]> {
   return listForHost({ ...args, agent: 'zcode' })
 }
 
@@ -164,6 +151,10 @@ async function listForHost(
   args: Parameters<OpenCodeSqliteWorkerClient['list']>[0]
 ): Promise<SessionFileCandidate[]> {
   const agent = args.agent ?? 'opencode'
+  // A scoped list re-reads the databases the global list already counted and reported on.
+  if (args.scopePaths?.length) {
+    return listCandidatesForHost({ ...args, issues: [] })
+  }
   const closeSource = args.dbPaths.length > 0 ? openAiVaultScanSource(args.signal, agent) : null
   try {
     const candidates = await listCandidatesForHost(args)
