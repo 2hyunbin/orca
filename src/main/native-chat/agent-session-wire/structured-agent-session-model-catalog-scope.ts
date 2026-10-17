@@ -4,7 +4,7 @@ import { providerChildRootExited } from './structured-agent-session-provider-chi
 
 export function structuredAgentSessionModelCatalogScope(
   sessionId: string,
-  record: AgentSessionRecord | undefined,
+  record: AgentSessionRecord | null | undefined,
   session: Pick<StructuredAgentSessionHostSession, 'child' | 'lastEndedChild'> | undefined
 ): string | null {
   if (!record || record.provider === 'codex') {
