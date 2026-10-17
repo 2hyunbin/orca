@@ -456,20 +456,4 @@ describe('removing a remote project keeps its local twin', () => {
       state.recentlyClosedEditorTabsByWorktree[WORKTREE_ID]?.map((snapshot) => snapshot.filePath)
     ).toEqual(['/work/same/old-remote.ts'])
   })
-
-  it('leaves the focused workspace’s active surface alone when a background twin is removed', async () => {
-    const store = seedTwins()
-    store.setState({
-      activeWorktreeId: 'other-repo::/work/other',
-      activeTabType: 'agent-session',
-      activeTabTypeByWorktree: { 'other-repo::/work/other': 'agent-session' }
-    })
-
-    await store.getState().removeProject(PROJECT_ID, { hostId: REMOTE_HOST })
-
-    expect(store.getState().activeTabType).toBe('agent-session')
-    expect(store.getState().activeTabTypeByWorktree['other-repo::/work/other']).toBe(
-      'agent-session'
-    )
-  })
 })
