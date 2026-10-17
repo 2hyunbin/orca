@@ -607,6 +607,10 @@ describe('acquireOrcadInstanceLock', () => {
       expect(readOrcadInstanceLockRecord(lockPath)?.nonce).toBe('stale')
       expect(readFileSync(join(generation(0), 'owner'), 'utf8')).toBe(owner)
     }
+    // An owner that cannot be read proves nothing either.
+    reset()
+    mkdirSync(join(generation(0), 'owner'), { recursive: true })
+    expect(() => acquireOrcadInstanceLock(root, paused)).toThrow(refused)
     // Dead here, on a machine this cannot tell apart from this one.
     reset()
     leaveRecovery(0, reclaimer({ pid: 6160 }))
