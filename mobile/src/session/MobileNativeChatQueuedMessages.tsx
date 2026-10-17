@@ -1,25 +1,15 @@
 import { useRef, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
-import {
-  AlertCircle,
-  ChevronDown,
-  ChevronRight,
-  CornerDownRight,
-  ListEnd,
-  MoreHorizontal,
-  Pencil,
-  Play,
-  Send,
-  Trash2
-} from 'lucide-react-native'
+import { Pressable, Text, View } from 'react-native'
+import { ChevronDown, ChevronRight, Pencil, Play, Trash2 } from 'lucide-react-native'
 import { ActionSheetModal } from '../components/ActionSheetModal'
-import { colors, radii, spacing, typography } from '../theme/mobile-theme'
+import { colors } from '../theme/mobile-theme'
 import type { MobileQueuedMessageCard } from './mobile-structured-queued-message-cards'
 import type { MobileQueuePause } from './mobile-structured-queued-message-feed'
 import type { MobileQueuedMessageEdit } from './use-mobile-structured-queued-message-controls'
 import type { MobileQueuedMessageInlineEditor } from './use-mobile-structured-queued-edit'
-import { MobileNativeChatQueuedMessageEditor } from './MobileNativeChatQueuedMessageEditor'
-import { MobileQueuedCardText } from './MobileQueuedCardText'
+import { MobileQueuedMessageCardRow } from './MobileQueuedMessageCardRow'
+import { MobileQueuedMessageScrollList } from './MobileQueuedMessageScrollList'
+import { queuedMessageStyles as styles } from './mobile-native-chat-queued-message-styles'
 
 /** The header's in-flight keys beside the cards' message ids, which never contain NUL. */
 const RESUME_KEY = '\u0000resume'
@@ -93,27 +83,38 @@ export function MobileNativeChatQueuedMessages({
   const headerCountStyle = [styles.headerCount, attentionCaption && styles.captionReturned]
   return (
     <View style={styles.list}>
-      {/* One box: the header is its first row, and each card a row below it. */}
+      {/* One box: the header is its first row, and the capped list of cards below it. */}
       <View style={styles.box}>
         {/* A polite region, as the app's other notices: React Native has no status role. */}
         <View
           testID="queued-header"
-          style={[styles.row, pause && styles.headerPaused]}
+          style={[styles.header, pause && styles.headerPaused]}
           accessibilityLiveRegion="polite"
         >
-          <Text style={[styles.headerLabel, pause && styles.headerLabelPaused]}>
-            {pause ? 'Paused' : 'Queued'}
-          </Text>
-          <Text
-            style={styles.headerLabel}
-            importantForAccessibility="no"
-            accessibilityElementsHidden
-          >
-            ·
-          </Text>
-          <Text style={headerCountStyle} numberOfLines={1}>
-            {attentionCaption ? `${cards.length} · ${attentionCaption}` : cards.length}
-          </Text>
+          {/* The whole row folds the cards. It sits behind the labels rather than around the
+              header's buttons, which VoiceOver could not reach inside another button. */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ expanded }}
+            accessibilityLabel="Queued messages"
+            style={({ pressed }) => [styles.headerToggle, pressed && styles.pressed]}
+            onPress={() => setExpanded(!expanded)}
+          />
+          <View style={styles.headerLabels} pointerEvents="none">
+            <Text style={[styles.headerLabel, pause && styles.headerLabelPaused]}>
+              {pause ? 'Paused' : 'Queued'}
+            </Text>
+            <Text
+              style={styles.headerLabel}
+              importantForAccessibility="no"
+              accessibilityElementsHidden
+            >
+              ·
+            </Text>
+            <Text style={headerCountStyle} numberOfLines={1}>
+              {attentionCaption ? `${cards.length} · ${attentionCaption}` : cards.length}
+            </Text>
+          </View>
           {pause ? (
             <>
               {onClearAll ? (
@@ -122,7 +123,7 @@ export function MobileNativeChatQueuedMessages({
                   accessibilityState={{ disabled: clearing }}
                   accessibilityLabel="Delete every queued message"
                   style={({ pressed }) => [
-                    styles.textAction,
+                    styles.headerAction,
                     pressed && styles.pressed,
                     clearing && styles.disabled
                   ]}
@@ -140,7 +141,7 @@ export function MobileNativeChatQueuedMessages({
                 accessibilityState={{ disabled: resuming }}
                 accessibilityLabel="Resume sending the queued messages"
                 style={({ pressed }) => [
-                  styles.textAction,
+                  styles.headerAction,
                   pressed && styles.pressed,
                   resuming && styles.disabled
                 ]}
@@ -152,124 +153,40 @@ export function MobileNativeChatQueuedMessages({
               </Pressable>
             </>
           ) : null}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ expanded }}
-            accessibilityLabel="Queued messages"
-            style={({ pressed }) => [styles.iconAction, pressed && styles.pressed]}
-            onPress={() => setExpanded(!expanded)}
-          >
+          <View style={styles.chevron} pointerEvents="none">
             {expanded ? (
-              <ChevronDown size={14} color={colors.textMuted} strokeWidth={2} />
+              <ChevronDown size={12} color={colors.textMuted} strokeWidth={2} />
             ) : (
-              <ChevronRight size={14} color={colors.textMuted} strokeWidth={2} />
+              <ChevronRight size={12} color={colors.textMuted} strokeWidth={2} />
             )}
-          </Pressable>
+          </View>
         </View>
-        {(expanded ? cards : []).map((card) => {
-          const editing = editor?.messageId === card.messageId
-          const busy = busyIds.has(card.messageId)
-          const editBlocked = busy || editor !== undefined || !onEdit
-          const returned = card.state === 'returned'
-          // "Steer" submits beside the running turn, the paused queue's cards too; a card whose
-          // own send failed, or a returned one, is sent again.
-          const steers = !returned && !card.paused && !card.command
-          return (
-            <View
-              key={card.messageId}
-              testID="queued-card-row"
-              style={[styles.row, styles.divided]}
-            >
-              {card.needsAttention ? (
-                <AlertCircle size={14} color={colors.statusRed} strokeWidth={2} />
-              ) : (
-                <ListEnd size={14} color={colors.textMuted} strokeWidth={2} />
-              )}
-              <View style={styles.textColumn}>
-                {card.attribution ? (
-                  <Text style={styles.caption} numberOfLines={1}>
-                    {card.attribution}
-                  </Text>
-                ) : null}
-                {editing ? (
-                  <MobileNativeChatQueuedMessageEditor editor={editor} />
-                ) : (
-                  <MobileQueuedCardText text={card.text} />
-                )}
-                {card.caption ? (
-                  // A returned card's reason only reads whole, often at its end; a hold is one line.
-                  <Text
-                    style={[styles.caption, returned && styles.captionReturned]}
-                    numberOfLines={returned ? undefined : 1}
-                  >
-                    {card.caption}
-                  </Text>
-                ) : null}
-              </View>
-              {/* A command never steers: its Send shows only while the agent is idle. */}
-              {editing || card.waitsForAgent ? null : (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: busy || steerHeld }}
-                  accessibilityLabel={
-                    returned
-                      ? 'Send this message again'
-                      : steers
-                        ? 'Submit without interrupting the model'
-                        : 'Send this message'
-                  }
-                  style={({ pressed }) => [
-                    styles.textAction,
-                    pressed && styles.pressed,
-                    (busy || steerHeld) && styles.disabled
-                  ]}
-                  disabled={busy || steerHeld}
-                  onPress={() => void run(card.messageId, onSend)}
-                >
-                  {steers ? (
-                    <CornerDownRight size={12} color={colors.textPrimary} strokeWidth={2} />
-                  ) : (
-                    <Send size={12} color={colors.textPrimary} strokeWidth={2} />
-                  )}
-                  <Text style={styles.actionLabel}>{steers ? 'Steer' : 'Send'}</Text>
-                </Pressable>
-              )}
-              {editing ? null : (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: busy }}
-                  accessibilityLabel="Delete this queued message"
-                  style={({ pressed }) => [
-                    styles.iconAction,
-                    pressed && styles.pressed,
-                    busy && styles.disabled
-                  ]}
-                  disabled={busy}
-                  onPress={() => void run(card.messageId, onDelete)}
-                >
-                  <Trash2 size={14} color={colors.textPrimary} strokeWidth={2} />
-                </Pressable>
-              )}
-              {/* The menu holds only Edit, which a command does not take. */}
-              {editing || card.command ? null : (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: editBlocked }}
-                  accessibilityLabel="More actions"
-                  style={({ pressed }) => [
-                    styles.iconAction,
-                    pressed && styles.pressed,
-                    editBlocked && styles.disabled
-                  ]}
-                  disabled={editBlocked}
-                  onPress={() => setMenuFor(card.messageId)}
-                >
-                  <MoreHorizontal size={14} color={colors.textPrimary} strokeWidth={2} />
-                </Pressable>
-              )}
-            </View>
-          )
-        })}
+        {expanded ? (
+          <MobileQueuedMessageScrollList
+            messageIds={cards.map((card) => card.messageId)}
+            newestIsPersons={!cards.at(-1)?.attribution}
+          >
+            {(reveal) =>
+              cards.map((card) => {
+                const busy = busyIds.has(card.messageId)
+                return (
+                  <MobileQueuedMessageCardRow
+                    key={card.messageId}
+                    card={card}
+                    editor={editor?.messageId === card.messageId ? editor : undefined}
+                    busy={busy}
+                    editBlocked={busy || editor !== undefined || !onEdit}
+                    steerHeld={steerHeld}
+                    onSend={() => void run(card.messageId, onSend)}
+                    onDelete={() => void run(card.messageId, onDelete)}
+                    onMore={() => setMenuFor(card.messageId)}
+                    onEditorLayout={reveal}
+                  />
+                )
+              })
+            }
+          </MobileQueuedMessageScrollList>
+        ) : null}
       </View>
       <ActionSheetModal
         visible={menuCard !== undefined}
@@ -292,90 +209,3 @@ export function MobileNativeChatQueuedMessages({
     </View>
   )
 }
-
-// Every action touches as a 44pt target (platform floor) inside its row: Android drops touches
-// outside the parent, so the row is at least that tall and nothing overhangs it.
-const MIN_TOUCH_TARGET = 44
-
-const styles = StyleSheet.create({
-  list: {
-    marginHorizontal: spacing.lg,
-    marginVertical: spacing.xs
-  },
-  box: {
-    backgroundColor: colors.bgPanel,
-    borderRadius: radii.row,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderSubtle,
-    overflow: 'hidden'
-  },
-  row: {
-    minHeight: MIN_TOUCH_TARGET,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingLeft: spacing.md
-  },
-  divided: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.borderSubtle
-  },
-  headerPaused: {
-    backgroundColor: colors.bgRaised
-  },
-  headerLabel: {
-    color: colors.textMuted,
-    fontSize: typography.metaSize
-  },
-  headerLabelPaused: {
-    color: colors.textPrimary,
-    fontWeight: '500'
-  },
-  headerCount: {
-    flex: 1,
-    color: colors.textMuted,
-    fontSize: typography.metaSize,
-    fontVariant: ['tabular-nums']
-  },
-  textColumn: {
-    flex: 1,
-    minWidth: 0,
-    paddingVertical: spacing.sm,
-    gap: 2
-  },
-  caption: {
-    color: colors.textMuted,
-    fontSize: typography.metaSize
-  },
-  captionReturned: {
-    color: colors.statusRed
-  },
-  textAction: {
-    minHeight: MIN_TOUCH_TARGET,
-    minWidth: MIN_TOUCH_TARGET,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radii.button
-  },
-  iconAction: {
-    minHeight: MIN_TOUCH_TARGET,
-    minWidth: MIN_TOUCH_TARGET,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.button
-  },
-  actionLabel: {
-    color: colors.textPrimary,
-    fontSize: typography.metaSize,
-    fontWeight: '500'
-  },
-  pressed: {
-    backgroundColor: colors.bgRaised
-  },
-  disabled: {
-    opacity: 0.5
-  }
-})

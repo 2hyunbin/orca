@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { colors, typography } from '../theme/mobile-theme'
 
 /** Two lines, opening on tap when it clips: a card can hold another agent's message the person
- *  never read, and Steer or Delete must not be a blind choice. Opened, a long one scrolls in a
- *  capped box. */
+ *  never read, and Steer or Delete must not be a blind choice. Opened, the queue's own capped list
+ *  scrolls through a long one: a second scroll box inside it would be taller than its viewport. */
 export function MobileQueuedCardText({ text }: { text: string }): React.JSX.Element {
   const [expanded, setExpanded] = useState(false)
   const [clipped, setClipped] = useState(false)
@@ -44,14 +44,9 @@ export function MobileQueuedCardText({ text }: { text: string }): React.JSX.Elem
       <Text style={styles.caption}>{expanded ? 'Show less' : 'Show more'}</Text>
     </Pressable>
   )
-  // The press sits inside the scroll, so a drag scrolls and only a tap folds it.
-  return expanded ? (
-    <ScrollView style={styles.expandedBody} nestedScrollEnabled>
-      {toggle}
-    </ScrollView>
-  ) : (
+  return (
     <View>
-      {measure}
+      {expanded ? null : measure}
       {toggle}
     </View>
   )
@@ -60,10 +55,8 @@ export function MobileQueuedCardText({ text }: { text: string }): React.JSX.Elem
 const styles = StyleSheet.create({
   body: {
     color: colors.textPrimary,
-    fontSize: typography.bodySize
-  },
-  expandedBody: {
-    maxHeight: 240
+    fontSize: typography.bodySize,
+    lineHeight: typography.bodySize + 6
   },
   measure: {
     position: 'absolute',
