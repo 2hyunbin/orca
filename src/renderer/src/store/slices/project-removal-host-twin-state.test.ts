@@ -224,13 +224,21 @@ describe('removing a remote project keeps its local twin', () => {
       },
       recentlyClosedTabKindsByWorktree: { [WORKTREE_ID]: ['browser', 'browser'] },
       browserTabsByWorktree: {
-        [WORKTREE_ID]: [browserWorkspace('browser-local'), browserWorkspace('browser-remote')]
+        [WORKTREE_ID]: [
+          browserWorkspace('browser-local'),
+          browserWorkspace('browser-remote'),
+          browserWorkspace('browser-remote-unstamped')
+        ]
+      },
+      browserPagesByWorkspace: {
+        'browser-remote-unstamped': closedBrowser('browser-remote-unstamped', 'env-b').pages
       },
       unifiedTabsByWorktree: {
         [WORKTREE_ID]: [
           ...(s.unifiedTabsByWorktree[WORKTREE_ID] ?? []),
           unified({ id: 'browser-local', contentType: 'browser', executionHostId: 'local' }),
           unified({ id: 'browser-remote', contentType: 'browser', executionHostId: REMOTE_HOST }),
+          unified({ id: 'browser-remote-unstamped', contentType: 'browser' }),
           unified({
             id: 'chat-remote',
             contentType: 'agent-session',
