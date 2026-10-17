@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { parsePaneKey } from '../stable-pane-id'
 import { sleepingAgentSessionRecordSchema } from '../workspace-session-sleeping-agents'
 
+// copied, not imported: import cycle
 const OnTab = { workspace: z.string().min(1), tabId: z.string().min(1) }
 
 /** Pane keys of the command's own tab only, so a sleep or wake never reaches past it. */
