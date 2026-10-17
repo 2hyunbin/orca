@@ -1,4 +1,3 @@
-import { z } from 'zod'
 import { toRuntimeExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
 import { describePairedServerHosts } from '../../../shared/paired-server-hosts'
 import type { MobileRelayServerWorktreeRow } from '../../../shared/mobile-relay-hosts-contract'
@@ -15,15 +14,16 @@ import {
   describeRelayHosts,
   relayHostFence
 } from '../mobile-desktop-relay/mobile-relay-host-descriptions'
+import type { ServerWorktreeRows } from '../mobile-desktop-relay/mobile-relay-host-catalog'
+import {
+  SERVER_FETCH_TIMEOUT_MS,
+  SERVER_WORKTREE_LIMIT,
+  WorktreePsReplySchema,
+  stampServerWorktreeRows
+} from '../mobile-desktop-relay/server-worktree-fetch'
 
-// Why the phone's own full-catalog limit: the server's default page is 200 and nothing pages on.
-const SERVER_WORKTREE_LIMIT = 10_000
-// Why well under the phone's 30s request timeout: a hung server must answer with its last rows.
-export const SERVER_FETCH_TIMEOUT_MS = 5_000
 // Owner-approved fallback for changes a server announces no event for (status-only, older servers).
 export const FALLBACK_REFRESH_MS = 30_000
-
-const WorktreePsReplySchema = z.object({ worktrees: z.array(z.looseObject({})) })
 
 type ServerEntry = {
   environmentId: string
@@ -46,7 +46,7 @@ type ServerEntry = {
  * contact, until a fetch answers again. Only removing or re-pairing a server drops them; a fetch
  * that answers replaces them, deletions included.
  */
-export class PairedServerRowsProducer {
+export class PairedServerRowsProducer implements ServerWorktreeRows {
   private readonly servers = new Map<string, ServerEntry>()
   private hosts: MobileDesktopRelayHosts | null = null
   private revision = 0
@@ -247,16 +247,4 @@ export class PairedServerRowsProducer {
     // Every answer moves the revision: rows carry activity that changes without a catalog event.
     this.revision += 1
   }
-}
-
-/**
- * A server's rows name hosts relative to that server (`local`, its own `ssh:` targets). Like the
- * desktop sidebar, the phone shows every one of them under the server, so all become its host id.
- */
-function stampServerWorktreeRows<Row extends { hostId?: string }>(
-  environmentId: string,
-  rows: readonly Row[]
-): (Row & { hostId: `runtime:${string}` })[] {
-  const hostId = toRuntimeExecutionHostId(environmentId)
-  return rows.map((row) => ({ ...row, hostId }))
 }

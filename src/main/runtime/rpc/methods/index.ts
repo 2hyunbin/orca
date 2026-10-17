@@ -65,6 +65,7 @@ import { AGENT_HOOK_METHODS } from './agent-hooks'
 import { AGENT_LAUNCH_METHODS } from './agent-launch'
 import { LAYOUT_APPLY_METHODS, WORKSPACE_LAYOUT_METHODS } from './workspace-layout'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
 
 // Why: a flat manifest keeps registration order explicit and provides one
 // grep-point for "what methods does the RPC server expose?" — useful when
@@ -135,7 +136,8 @@ export const ALL_RPC_METHODS = [
   ...PAIRING_METHODS,
   ...MOBILE_RELAY_HOSTS_METHODS,
   ...MOBILE_PROJECT_SECTIONS_METHODS,
-  ...SIDEBAR_INPUT_METHODS,
+  // Switch point: a window-fed build publishes no sidebar input.
+  ...(ORCA_SIDEBAR_INPUTS_IS_MAIN ? SIDEBAR_INPUT_METHODS : []),
   ...UPDATER_METHODS,
   ...AUTOMATIC_WORK_METHODS
 ]

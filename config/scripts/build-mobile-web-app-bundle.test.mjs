@@ -505,13 +505,13 @@ describe('the Phase C budget', () => {
   it('fails the build when the derived ceiling passes what the phone will accept', async () => {
     // The shell hands back null for a manifest over its own ceiling, so a derived ceiling above
     // that ships a green build no device can open. At the 42 images the tree carries, the envelope
-    // plus 42 plus the document crosses 256 at 28 routes, which Phase C reaches. The crossing came
+    // plus 42 plus the document crosses 256 at 27 routes, which Phase C reaches. The crossing came
     // in from 50 with the envelope: it grants the worst swept route to each one past the sweep,
     // where `4r + 16` granted four, so re-measuring a tree whose routes share more moves it out.
     expect(await readMobileWebBundleMaxAssets()).toBe(MOBILE_WEB_BUNDLE_MAX_ASSETS)
-    expect(assertAssetCeilingFitsShell(27, 42, MOBILE_WEB_BUNDLE_MAX_ASSETS)).toBe(256)
-    expect(() => assertAssetCeilingFitsShell(28, 42, MOBILE_WEB_BUNDLE_MAX_ASSETS)).toThrow(
-      /267 .*256/
+    expect(assertAssetCeilingFitsShell(26, 42, MOBILE_WEB_BUNDLE_MAX_ASSETS)).toBe(247)
+    expect(() => assertAssetCeilingFitsShell(27, 42, MOBILE_WEB_BUNDLE_MAX_ASSETS)).toThrow(
+      /258 .*256/
     )
   })
 })

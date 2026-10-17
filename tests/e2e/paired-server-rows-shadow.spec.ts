@@ -9,8 +9,13 @@ import { z } from 'zod'
 import { expect, test } from './helpers/orca-app'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
 import { launchPairedElectronClient } from './helpers/paired-electron-client'
-import { expectNoSidebarShadowMismatches } from './helpers/sidebar-shadow'
+import { SIDEBAR_INPUTS_BUILD, expectNoSidebarShadowMismatches } from './helpers/sidebar-shadow'
 import type { Page } from '@stablyai/playwright-test'
+
+test.skip(
+  !SIDEBAR_INPUTS_BUILD,
+  'main publishes sidebar inputs only in an ORCA_SIDEBAR_INPUTS=main build'
+)
 
 const SnapshotSchema = z.object({
   servers: z.array(

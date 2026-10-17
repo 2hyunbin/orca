@@ -8,17 +8,14 @@ import {
 import type { Tab } from '../../../../../shared/tab-types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import { recordPromotedEditorTabsInLayoutOwner } from '../editor/tabs/editor-tab-layout-owner'
+import { withPreviewEnded } from './tab-preview-flag'
 
-/** Activation ends a preview. Switch point: main stores no `isPreview: false`, so neither does this. */
+/** Activation ends a preview unless it preserves it. */
 function withPreviewOnActivation(tab: Tab, preservePreview: boolean): Tab {
   if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
     return { ...tab, isPreview: preservePreview ? tab.isPreview : false }
   }
-  if (preservePreview) {
-    return tab
-  }
-  const { isPreview: _ended, ...rest } = tab
-  return rest
+  return preservePreview ? tab : withPreviewEnded(tab)
 }
 
 export function createTabsFocusActions(
