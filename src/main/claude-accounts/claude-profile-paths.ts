@@ -222,17 +222,8 @@ function assertOutsideDefaultClaudeHomes(
 
 /** The user's own CLAUDE_CONFIG_DIR (their System default), or undefined for `~/.claude`. */
 export function readUserClaudeConfigDir(env: NodeJS.ProcessEnv): string | undefined {
-  const configDir = env.CLAUDE_CONFIG_DIR?.trim()
-  const injected = env[CLAUDE_INJECTED_CONFIG_DIR_ENV]?.trim()
-  if (!configDir) {
-    return undefined
-  }
-  if (injected && resolve(injected) === resolve(configDir)) {
-    // Why: an outer Orca's injected value carries the user's own beside it.
-    const user = env[CLAUDE_USER_CONFIG_DIR_ENV]?.trim()
-    return user ? resolve(user) : undefined
-  }
-  return resolve(configDir)
+  const user = readUserClaudeConfigDirAsSet(env)
+  return user === undefined ? undefined : resolve(user.trim())
 }
 
 /**

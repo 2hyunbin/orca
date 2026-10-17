@@ -140,6 +140,20 @@ async function advanceRefreshDeadline(launch: Promise<unknown>, waitMs: number):
   await vi.advanceTimersByTimeAsync(1)
 }
 
+/** Runs the POSIX claude function under bash (after `rc`); prints the folder Claude would use. */
+function claudeShellProbe(root: string): (env: Record<string, string>, rc?: string) => string {
+  const bin = join(root, 'bin')
+  mkdirSync(bin)
+  writeFileSync(join(bin, 'claude'), '#!/bin/sh\nprintf "%s" "${CLAUDE_CONFIG_DIR-unset}"\n')
+  chmodSync(join(bin, 'claude'), 0o700)
+  return (env, rc = '') =>
+    spawnSync(
+      '/bin/bash',
+      ['--norc', '--noprofile', '-c', `${getPosixClaudeShellFunction()}\n${rc}claude`],
+      { env: { ...env, PATH: `${bin}:/usr/bin:/bin` }, encoding: 'utf8' }
+    ).stdout
+}
+
 describe('ClaudeProfileRouter', () => {
   it('runs an account with no login of its own on System default while that is signed in to it', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
@@ -443,16 +457,7 @@ describe('ClaudeProfileRouter', () => {
       for (const inherited of [{ CLAUDE_CONFIG_DIR: resolve('/user/own') }, {}]) {
         const f = fixture(inherited)
         mkdirSync(f.home('a'), { recursive: true })
-        const bin = join(f.root, 'bin')
-        mkdirSync(bin)
-        writeFileSync(join(bin, 'claude'), '#!/bin/sh\nprintf "%s" "${CLAUDE_CONFIG_DIR-unset}"\n')
-        chmodSync(join(bin, 'claude'), 0o700)
-        const claude = (env: Record<string, string>): string =>
-          spawnSync(
-            '/bin/bash',
-            ['--norc', '--noprofile', '-c', `${getPosixClaudeShellFunction()}\nclaude`],
-            { env: { ...env, PATH: `${bin}:/usr/bin:/bin` }, encoding: 'utf8' }
-          ).stdout
+        const claude = claudeShellProbe(f.root)
         // The pane opens while account A is selected, so Orca replaces the inherited value.
         f.router.publish()
         const pane = { ...inherited, ...f.router.terminalEnv() }
@@ -471,16 +476,7 @@ describe('ClaudeProfileRouter', () => {
       const own = resolve('/user/own')
       const f = fixture({ CLAUDE_CONFIG_DIR: own })
       mkdirSync(f.home('a'), { recursive: true })
-      const bin = join(f.root, 'bin')
-      mkdirSync(bin)
-      writeFileSync(join(bin, 'claude'), '#!/bin/sh\nprintf "%s" "${CLAUDE_CONFIG_DIR-unset}"\n')
-      chmodSync(join(bin, 'claude'), 0o700)
-      const claude = (env: Record<string, string>, rc = ''): string =>
-        spawnSync(
-          '/bin/bash',
-          ['--norc', '--noprofile', '-c', `${getPosixClaudeShellFunction()}\n${rc}claude`],
-          { env: { ...env, PATH: `${bin}:/usr/bin:/bin` }, encoding: 'utf8' }
-        ).stdout
+      const claude = claudeShellProbe(f.root)
       f.settings.activeClaudeManagedAccountId = null
       f.router.publish()
       const pane = { CLAUDE_CONFIG_DIR: own, ...f.router.terminalEnv() }
