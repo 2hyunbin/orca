@@ -13,6 +13,7 @@ import type { SessionParseStats } from './session-scanner-parse-cache'
 import { discoverInScopeCwdBucketFiles } from './session-scanner-scope-discovery'
 import type {
   AiVaultScanOptions,
+  FileWithMtime,
   SessionFileCandidate,
   SessionFileDiscovery
 } from './session-scanner-types'
@@ -144,7 +145,7 @@ function walkCandidates(args: ScopeScanArgs, scopePaths: readonly string[]): Ses
     if (!scopeWalksAgentFiles(discovery.agent, scopePaths)) {
       continue
     }
-    const files = []
+    const files: FileWithMtime[] = []
     for (const file of [...discovery.files, ...(discovery.scopeFiles ?? [])]) {
       if (!seenPaths.has(file.path)) {
         seenPaths.add(file.path)
