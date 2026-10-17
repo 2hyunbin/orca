@@ -2,11 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
-import { sweepUnclaimedCodexPaneRestarts } from './codex-detached-pane-restart'
+import { sweepUnclaimedPaneAccountRestarts } from './detached-pane-account-restart'
 import {
-  installCodexDetachedPaneRestartExecutor,
-  resetCodexDetachedPaneRestartExecutorForTests
-} from './codex-detached-pane-restart-scheduler'
+  installDetachedPaneAccountRestartExecutor,
+  resetDetachedPaneAccountRestartExecutorForTests
+} from './detached-pane-account-restart-scheduler'
 
 const LEAF_ID = '11111111-1111-4111-8111-111111111111'
 const OLD_PTY = 'wt1@@old'
@@ -75,7 +75,7 @@ describe('detached Claude account-move restart', () => {
   const originalWindow = (globalThis as { window?: typeof window }).window
 
   beforeEach(() => {
-    resetCodexDetachedPaneRestartExecutorForTests()
+    resetDetachedPaneAccountRestartExecutorForTests()
     useAppStore.setState(useAppStore.getInitialState(), true)
     ;(globalThis as { window: typeof window }).window = {
       ...originalWindow,
@@ -91,7 +91,7 @@ describe('detached Claude account-move restart', () => {
   })
 
   afterEach(() => {
-    resetCodexDetachedPaneRestartExecutorForTests()
+    resetDetachedPaneAccountRestartExecutorForTests()
     if (originalWindow) {
       ;(globalThis as { window: typeof window }).window = originalWindow
     } else {
@@ -103,7 +103,7 @@ describe('detached Claude account-move restart', () => {
     seedClaudePane()
     useAppStore.getState().queuePaneAccountRestarts([OLD_PTY], 'claude')
 
-    await sweepUnclaimedCodexPaneRestarts()
+    await sweepUnclaimedPaneAccountRestarts()
 
     const spawnArgs = vi.mocked(window.api.pty.spawn).mock.calls[0]?.[0]
     expect(spawnArgs).toEqual(
@@ -123,7 +123,7 @@ describe('detached Claude account-move restart', () => {
   it.each(['claude', 'codex'] as const)(
     'restarts a mid-turn %s session once its turn ends, via the store subscription',
     async (agent) => {
-      const uninstall = installCodexDetachedPaneRestartExecutor()
+      const uninstall = installDetachedPaneAccountRestartExecutor()
       try {
         seedClaudePane({ state: 'working', agentType: agent })
         useAppStore.getState().queuePaneAccountRestarts([OLD_PTY], agent)
@@ -150,7 +150,7 @@ describe('detached Claude account-move restart', () => {
     seedClaudePane({ providerSession: undefined })
     useAppStore.getState().queuePaneAccountRestarts([OLD_PTY], 'claude')
 
-    await sweepUnclaimedCodexPaneRestarts()
+    await sweepUnclaimedPaneAccountRestarts()
 
     expect(window.api.pty.spawn).not.toHaveBeenCalled()
     expect(useAppStore.getState().pendingPaneAccountRestarts).toEqual({})

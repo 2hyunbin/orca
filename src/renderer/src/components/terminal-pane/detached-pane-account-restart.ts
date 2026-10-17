@@ -1,5 +1,5 @@
 /**
- * Detached executor for accepted account-switch restarts (Codex and Claude).
+ * Detached executor for accepted account-switch restarts, for every account-switch agent.
  *
  * Why: queued restarts used to execute only inside mounted TerminalPane
  * instances, so accepting the prompt stranded every unmounted pane on the old
@@ -29,20 +29,14 @@ import { discardPreHandlerPtyState } from './pty-pre-handler-buffer'
 import { disposeParkedTerminalWatchersForPtyIds } from './terminal-parked-watcher-registry'
 import { buildPaneIdentityEnv, getWorkspacePath } from './detached-pane-restart-spawn-context'
 
-const inFlightPtyIds = new Set<string>()
-
-export function resetDetachedCodexPaneRestartClaimsForTests(): void {
-  inFlightPtyIds.clear()
-}
-
-export async function sweepUnclaimedCodexPaneRestarts(): Promise<void> {
+// Why no in-flight registry: the scheduler never overlaps sweeps, and consuming the queued entry is the claim.
+export async function sweepUnclaimedPaneAccountRestarts(): Promise<void> {
   for (const ptyId of Object.keys(useAppStore.getState().pendingPaneAccountRestarts)) {
-    await sweepUnclaimedCodexPaneRestart(ptyId)
+    await sweepUnclaimedPaneAccountRestart(ptyId)
   }
 }
 
-async function sweepUnclaimedCodexPaneRestart(ptyId: string): Promise<void> {
-  let claimed = false
+async function sweepUnclaimedPaneAccountRestart(ptyId: string): Promise<void> {
   try {
     // Why: remote-runtime spawns need that machine's transport assembly, which
     // only the mounted pane path carries today; leave those queued for mount.
@@ -52,11 +46,11 @@ async function sweepUnclaimedCodexPaneRestart(ptyId: string): Promise<void> {
     // Why: a live primary handler means a mounted pane owns this PTY, and its
     // restart effect re-runs on both the queue write and the transport bind —
     // it is guaranteed to claim, and only it can reconnect the xterm in place.
-    if (ptyDataHandlers.has(ptyId) || inFlightPtyIds.has(ptyId)) {
+    if (ptyDataHandlers.has(ptyId)) {
       return
     }
     const state = useAppStore.getState()
-    const located = locateCodexPane(state, ptyId)
+    const located = locatePane(state, ptyId)
     if (!located) {
       // Why not consume: a sleep-retained pending id is unbound on purpose and
       // wake migrates it onto the respawned PTY — taking it here would lose that restart.
@@ -81,27 +75,21 @@ async function sweepUnclaimedCodexPaneRestart(ptyId: string): Promise<void> {
     if (!agent) {
       return
     }
-    inFlightPtyIds.add(ptyId)
-    claimed = true
-    await executeDetachedCodexPaneRestart(located, ptyId, agent)
+    await executeDetachedPaneAccountRestart(located, ptyId, agent)
   } catch (err) {
     // Why caught: one malformed claim must not abort later panes; this one stays on its account.
-    console.warn('[codex-restart] detached pane restart failed:', err)
-  } finally {
-    if (claimed) {
-      inFlightPtyIds.delete(ptyId)
-    }
+    console.warn('[account-restart] detached pane restart failed:', err)
   }
 }
 
-type LocatedCodexPane = {
+type LocatedPane = {
   worktreeId: string
   tab: TerminalTab
   leafId: string | null
   generation: number
 }
 
-function locateCodexPane(state: AppState, ptyId: string): LocatedCodexPane | null {
+function locatePane(state: AppState, ptyId: string): LocatedPane | null {
   for (const [worktreeId, tabs] of Object.entries(state.tabsByWorktree)) {
     for (const tab of tabs) {
       if (tab.ptyId !== ptyId && !(state.ptyIdsByTabId[tab.id] ?? []).includes(ptyId)) {
@@ -124,8 +112,8 @@ function locateCodexPane(state: AppState, ptyId: string): LocatedCodexPane | nul
   return null
 }
 
-async function executeDetachedCodexPaneRestart(
-  located: LocatedCodexPane,
+async function executeDetachedPaneAccountRestart(
+  located: LocatedPane,
   ptyId: string,
   agent: AccountRestartAgent
 ): Promise<void> {
@@ -137,8 +125,8 @@ async function executeDetachedCodexPaneRestart(
       return
     }
     // Why: without a usable layout leaf the replacement cannot be bound in
-    // place, so kill now and let the tab's next mount run the Codex startup.
-    if (!isLocatedCodexPaneCurrent(state, located, ptyId)) {
+    // place, so kill now and let the tab's next mount run the agent's fresh startup.
+    if (!isLocatedPaneCurrent(state, located, ptyId)) {
       return
     }
     const store = useAppStore.getState()
@@ -146,7 +134,7 @@ async function executeDetachedCodexPaneRestart(
     store.clearTabPtyId(located.tab.id, ptyId)
     store.consumeSuppressedPtyExit(ptyId)
     store.queueTabStartupCommand(located.tab.id, { ...freshStartup })
-    killReplacedCodexPanePty(ptyId)
+    killReplacedPanePty(ptyId)
     return
   }
   const { worktreeId, tab, leafId } = located
@@ -173,7 +161,7 @@ async function executeDetachedCodexPaneRestart(
   })
 
   const currentState = useAppStore.getState()
-  if (!isLocatedCodexPaneCurrent(currentState, located, ptyId)) {
+  if (!isLocatedPaneCurrent(currentState, located, ptyId)) {
     return
   }
   if (hasRegisteredRuntimeTerminalTab(tab.id, worktreeId) || ptyDataHandlers.has(ptyId)) {
@@ -206,26 +194,22 @@ async function executeDetachedCodexPaneRestart(
   // Why adopt rather than stand down: main stopped `ptyId` before replying, so the replacement is
   // the pane's only process — even if that exit already cleared the old binding or a pane mounted.
   const store = useAppStore.getState()
-  if (!isLocatedCodexPaneLeafAdoptable(store, located, ptyId, spawned.id)) {
-    reapUnboundCodexPty(spawned.id, 'stale detached spawn')
+  if (!isLocatedPaneLeafAdoptable(store, located, ptyId, spawned.id)) {
+    reapUnboundPty(spawned.id, 'stale detached spawn')
     return
   }
   store.updateTabPtyId(tab.id, spawned.id, ptyId)
   if (!useAppStore.getState().ptyIdsByTabId[tab.id]?.includes(spawned.id)) {
     // Why: the tab was retired while the spawn was in flight; without a binding
     // the fresh PTY would idle in the daemon forever, so reap it and stand down.
-    reapUnboundCodexPty(spawned.id, 'retired-tab spawn')
+    reapUnboundPty(spawned.id, 'retired-tab spawn')
     return
   }
-  rebindCodexPaneLayoutLeaf(tab.id, leafId, spawned.id)
-  releaseReplacedCodexPanePty(ptyId)
+  rebindPaneLayoutLeaf(tab.id, leafId, spawned.id)
+  releaseReplacedPanePty(ptyId)
 }
 
-function isLocatedCodexPaneCurrent(
-  state: AppState,
-  located: LocatedCodexPane,
-  ptyId: string
-): boolean {
+function isLocatedPaneCurrent(state: AppState, located: LocatedPane, ptyId: string): boolean {
   const currentTab = state.tabsByWorktree[located.worktreeId]?.find(
     (candidate) => candidate.id === located.tab.id
   )
@@ -243,9 +227,9 @@ function isLocatedCodexPaneCurrent(
   )
 }
 
-function isLocatedCodexPaneLeafAdoptable(
+function isLocatedPaneLeafAdoptable(
   state: AppState,
-  located: LocatedCodexPane,
+  located: LocatedPane,
   replacedPtyId: string,
   replacementPtyId: string
 ): boolean {
@@ -272,7 +256,7 @@ function restartReplacesLayoutRoot(
   )
 }
 
-function rebindCodexPaneLayoutLeaf(tabId: string, leafId: string, newPtyId: string): void {
+function rebindPaneLayoutLeaf(tabId: string, leafId: string, newPtyId: string): void {
   const store = useAppStore.getState()
   const layout = store.terminalLayoutsByTabId[tabId]
   if (restartReplacesLayoutRoot(layout, leafId)) {
@@ -285,18 +269,18 @@ function rebindCodexPaneLayoutLeaf(tabId: string, leafId: string, newPtyId: stri
   store.replaceTerminalLayoutPanePtyId(tabId, leafId, newPtyId)
 }
 
-function reapUnboundCodexPty(ptyId: string, reason: string): void {
+function reapUnboundPty(ptyId: string, reason: string): void {
   try {
     void window.api.pty.kill(ptyId).catch((err) => {
-      console.warn(`[codex-restart] failed to reap ${reason}:`, err)
+      console.warn(`[account-restart] failed to reap ${reason}:`, err)
     })
   } catch (err) {
-    console.warn(`[codex-restart] failed to reap ${reason}:`, err)
+    console.warn(`[account-restart] failed to reap ${reason}:`, err)
   }
   discardPreHandlerPtyState(ptyId)
 }
 
-function releaseReplacedCodexPanePty(ptyId: string): void {
+function releaseReplacedPanePty(ptyId: string): void {
   // Why the disposal: a parked tab's exit sidecar treats an unlabeled exit as the pane
   // dying — it would collapse the just-rebound leaf or close the whole tab.
   disposeParkedTerminalWatchersForPtyIds([ptyId])
@@ -306,7 +290,7 @@ function releaseReplacedCodexPanePty(ptyId: string): void {
   discardPreHandlerPtyState(ptyId)
 }
 
-function killReplacedCodexPanePty(ptyId: string): void {
-  releaseReplacedCodexPanePty(ptyId)
-  reapUnboundCodexPty(ptyId, 'replaced Codex pane PTY')
+function killReplacedPanePty(ptyId: string): void {
+  releaseReplacedPanePty(ptyId)
+  reapUnboundPty(ptyId, 'replaced pane PTY')
 }

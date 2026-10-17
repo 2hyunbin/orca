@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { restoreLocalStructuredChatsAtStartup } from '@/runtime/local-structured-chats'
 import { syncZoomCSSVar } from '@/lib/ui-zoom'
-import { installCodexDetachedPaneRestartExecutor } from '@/components/terminal-pane/codex-detached-pane-restart-scheduler'
+import { installDetachedPaneAccountRestartExecutor } from '@/components/terminal-pane/detached-pane-account-restart-scheduler'
 import { useAppStore } from '../store'
 import { reconcileHydratedWorkspaceTabModels } from './reconcile-hydrated-workspace-tab-models'
 import { useStartupActions } from './use-app-startup-actions'
@@ -64,7 +64,7 @@ export function useAppStartupHydration(onOnboardingLoaded: (state: OnboardingSta
     onOnboardingLoadedRef.current = onOnboardingLoaded
   }, [onOnboardingLoaded])
 
-  useEffect(() => installCodexDetachedPaneRestartExecutor(), [])
+  useEffect(() => installDetachedPaneAccountRestartExecutor(), [])
 
   // Fetch initial data + hydrate GitHub cache from disk
   useEffect(() => {
