@@ -12,7 +12,6 @@ import {
 import {
   getDaemonHistoryDir as getHistoryDir,
   getDaemonRuntimeDir as getRuntimeDir,
-  probeDaemonSocket,
   resolvePackagedDarwinAppVersion
 } from './daemon-launch-paths'
 import { trackDaemonRetired } from './daemon-lifecycle-event'
@@ -41,6 +40,7 @@ import {
   type DaemonSpawner
 } from './daemon-spawner'
 import { DaemonClient } from './client'
+import { endpointIsProvenDead, probeSocketConnect } from './daemon-endpoint-probe'
 import { clearSeveredDaemon } from './daemon-host-image-state'
 import { PROTOCOL_VERSION } from './types'
 import { recoverRetiredMacDaemonJobs } from './macos-retired-daemon-recovery'
@@ -212,7 +212,8 @@ async function assertDaemonEndpointOwner(
   endpointMayBeGone: boolean
 ): Promise<void> {
   const socketPath = getDaemonSocketPath(runtimeDir, PROTOCOL_VERSION)
-  if (endpointMayBeGone && !(await probeDaemonSocket(socketPath))) {
+  // Only a proven-dead endpoint skips the check; a timeout or EPERM proves nothing.
+  if (endpointMayBeGone && endpointIsProvenDead(await probeSocketConnect(socketPath))) {
     return
   }
   const client = new DaemonClient({
