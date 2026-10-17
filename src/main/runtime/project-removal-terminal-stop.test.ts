@@ -9,15 +9,29 @@ import { TEST_REPO_ID, TEST_WORKTREE_ID, store } from './orca-runtime-test-fixtu
 const HIDDEN_WORKTREE_ID = `${TEST_REPO_ID}::/tmp/hidden-worktree`
 const OTHER_WORKTREE_ID = 'repo-2::/tmp/other'
 
-function createRemovableRuntime(): {
+function createRemovableRuntime(onFirstStop?: () => void): {
   runtime: InstanceType<typeof OrcaRuntimeService>
   stopAndWait: ReturnType<typeof vi.fn>
   removeProjectForHost: ReturnType<typeof vi.fn>
+  stoppedBeforeRemoval: string[]
 } {
   const removeProjectForHost = vi.fn()
+  const stoppedBeforeRemoval: string[] = []
+  let firstStop = true
   const stopAndWait = vi.fn(async (ptyId: string) => {
-    expect(removeProjectForHost).not.toHaveBeenCalled()
-    return ptyId !== 'pty-unverifiable'
+    if (removeProjectForHost.mock.calls.length === 0) {
+      stoppedBeforeRemoval.push(ptyId)
+    }
+    if (firstStop) {
+      firstStop = false
+      onFirstStop?.()
+    }
+    if (ptyId === 'pty-unverifiable') {
+      return false
+    }
+    // Like the provider: a stopped PTY exits and leaves the runtime's table.
+    runtime.onPtyExit(ptyId, 0)
+    return true
   })
   const runtime = new OrcaRuntimeService({ ...store, removeProjectForHost } as never)
   runtime.setPtyController({
@@ -28,12 +42,12 @@ function createRemovableRuntime(): {
   })
   runtime.attachWindow(1)
   runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
-  return { runtime, stopAndWait, removeProjectForHost }
+  return { runtime, stopAndWait, removeProjectForHost, stoppedBeforeRemoval }
 }
 
 describe('project removal on the execution host', () => {
   it('stops every terminal of the project, including workspaces no client listed', async () => {
-    const { runtime, stopAndWait, removeProjectForHost } = createRemovableRuntime()
+    const { runtime, removeProjectForHost, stoppedBeforeRemoval } = createRemovableRuntime()
     runtime.registerPty('pty-visible', TEST_WORKTREE_ID, null)
     runtime.registerPty('pty-hidden', HIDDEN_WORKTREE_ID, null)
     runtime.registerPty('pty-other-project', OTHER_WORKTREE_ID, null)
@@ -41,8 +55,7 @@ describe('project removal on the execution host', () => {
 
     await expect(runtime.removeProject(TEST_REPO_ID)).resolves.toEqual({ removed: true })
 
-    const stoppedPtyIds = stopAndWait.mock.calls.map(([ptyId]) => ptyId)
-    expect(stoppedPtyIds.sort()).toEqual(['pty-hidden', 'pty-visible'])
+    expect(stoppedBeforeRemoval.sort()).toEqual(['pty-hidden', 'pty-visible'])
     expect(removeProjectForHost).toHaveBeenCalledWith(TEST_REPO_ID, 'local')
   })
 
@@ -69,6 +82,17 @@ describe('project removal on the execution host', () => {
     await expect(runtime.removeProject(TEST_REPO_ID)).resolves.toEqual({ removed: true })
 
     expect(stopAndWait).toHaveBeenCalledWith('pty-native', expect.anything())
+  })
+
+  it('stops a terminal spawned while the first sweep ran', async () => {
+    const { runtime, stopAndWait } = createRemovableRuntime(() =>
+      runtime.registerPty('pty-late', TEST_WORKTREE_ID, null)
+    )
+    runtime.registerPty('pty-early', TEST_WORKTREE_ID, null)
+
+    await runtime.removeProject(TEST_REPO_ID)
+
+    expect(stopAndWait.mock.calls.map(([ptyId]) => ptyId)).toContain('pty-late')
   })
 
   it('still removes the project when a stop cannot be verified', async () => {

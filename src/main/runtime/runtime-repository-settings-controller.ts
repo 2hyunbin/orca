@@ -129,12 +129,17 @@ export class RuntimeRepositorySettingsController {
     assertWslMoveRepoWritable(store, repo)
     // Why here: the host owns these shells; a client only stops the workspaces it has loaded,
     // and older clients stop none. Bounded so repo.rm still answers inside the client's timeout.
-    await this.deps
-      .stopProjectTerminals?.(repo, Date.now() + PROJECT_TERMINAL_STOP_BUDGET_MS)
-      .catch((error: unknown) => {
-        console.warn('[runtime] failed to stop project terminals before removal', error)
+    const deadline = Date.now() + PROJECT_TERMINAL_STOP_BUDGET_MS
+    const stopProjectTerminals = async (): Promise<void> => {
+      await this.deps.stopProjectTerminals?.(repo, deadline).catch((error: unknown) => {
+        console.warn('[runtime] failed to stop project terminals on removal', error)
       })
+    }
+    await stopProjectTerminals()
     store.removeProjectForHost(repo.id, hostId)
+    // Why again: a terminal spawned while the first stop ran is past that sweep's snapshot, and
+    // nothing can spawn into the project once it is gone.
+    await stopProjectTerminals()
     this.deps.forgetTerminalTopology(repo.id)
     this.deps.invalidateResolvedWorktrees()
     this.deps.invalidateWorktreeScan(repo.id)
