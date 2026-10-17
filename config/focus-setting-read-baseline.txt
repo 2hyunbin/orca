@@ -421,7 +421,6 @@
 1 src/renderer/src/store/slices/editor/actions/open-file-action.ts
 1 src/renderer/src/store/slices/editor/actions/open-file-apply.ts
 1 src/renderer/src/store/slices/editor/create-editor-slice.ts
-1 src/renderer/src/store/slices/github-cache-key.ts
 1 src/renderer/src/store/slices/hosted-review-cache-identity.ts
 5 src/renderer/src/store/slices/jira-collection-read-actions.ts
 31 src/renderer/src/store/slices/jira-connection-actions.ts

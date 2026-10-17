@@ -1,6 +1,6 @@
-import type { ExecutionHostId } from '../../../../shared/execution-host'
+import type { ExecutionHostId } from '../execution-host'
 import type { HostSectionRow } from './host-section-rows'
-import { PINNED_GROUP_KEY } from './worktree-list/grouping/group-keys'
+import { PINNED_GROUP_KEY } from './group-keys'
 
 export function isHostLaneSectionKey(key: string): boolean {
   return (

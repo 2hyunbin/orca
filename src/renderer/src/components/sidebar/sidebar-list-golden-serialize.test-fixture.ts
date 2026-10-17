@@ -4,8 +4,9 @@ import type {
 } from '../../../../shared/worktree-occurrence-plan'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
-import type { HostSectionRow } from './host-section-rows'
+import type { HostSectionRow } from '../../../../shared/sidebar-list/host-section-rows'
 import type { VisibleWorktreeShortcutTarget } from './visible-worktrees'
+import { getSidebarHeaderVisual } from './worktree-list/grouping/header-visuals'
 
 function iconName(icon: { displayName?: string; name?: string } | undefined): string {
   return icon ? (icon.displayName ?? icon.name ?? 'anonymous') : '-'
@@ -57,8 +58,8 @@ export function serializeSidebarRow(row: HostSectionRow): string {
         field('collapseKey', row.collapseKey),
         field('label', JSON.stringify(row.label)),
         field('count', row.count),
-        field('tone', JSON.stringify(row.tone)),
-        field('icon', iconName(row.icon)),
+        field('tone', row.icon ? JSON.stringify(getSidebarHeaderVisual(row.icon).tone) : undefined),
+        field('icon', iconName(row.icon ? getSidebarHeaderVisual(row.icon).icon : undefined)),
         field('repo', row.repo?.id),
         field('projectGroup', row.projectGroup ? (row.projectGroup.id ?? 'ungrouped') : undefined),
         field('projectGroupDepth', row.projectGroupDepth),

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { sortProjectEntries } from '../../../../../../shared/project-section-order'
-import { appendProjectGroupSections } from './project-group-sections'
-import type { SectionAppendContext } from './group-sections'
-import { PROJECT_GROUP_META } from './group-keys'
-import type { OrderedGroupEntry } from './worktree-group-entry'
+import { appendProjectGroupSections } from '../../../../../../shared/sidebar-list/project-group-sections'
+import type { SectionAppendContext } from '../../../../../../shared/sidebar-list/group-sections'
+import { getSidebarListLabels } from './header-visuals'
+import type { OrderedGroupEntry } from '../../../../../../shared/sidebar-list/worktree-group-entry'
 import { repo, worktree } from '../../worktree-list-groups-test-fixtures'
 
 function entry(
@@ -80,7 +80,8 @@ describe('recent project rank scan budget', () => {
       pendingByRepo: new Map(),
       mixedWorktreeHostContextLabels: undefined,
       noticeHostContextLabelByRepoId: undefined,
-      occurrencePlan: { bySection: new Map(), preferredByIdentity: new Map() }
+      occurrencePlan: { bySection: new Map(), preferredByIdentity: new Map() },
+      labels: getSidebarListLabels()
     }
     appendProjectGroupSections(ctx, {
       orderedGroups: grouped,
@@ -113,8 +114,7 @@ describe('recent project rank scan budget', () => {
         key,
         label: group.label,
         count: 32,
-        tone: PROJECT_GROUP_META.tone,
-        icon: PROJECT_GROUP_META.icon,
+        icon: { kind: 'project' },
         repo: group.repo,
         projectGroupDepth: 1
       }))

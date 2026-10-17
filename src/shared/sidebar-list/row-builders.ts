@@ -1,11 +1,11 @@
-import type { Repo } from '../../../../../../shared/repo-types'
-import type { Worktree } from '../../../../../../shared/worktree/types'
-import { getWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
+import type { Repo } from '../repo-types'
+import type { Worktree } from '../worktree/types'
+import { getWorktreeHostIdentity } from '../worktree/host-qualified-identity'
 import { getWorktreeLineageGroupKey } from './group-keys'
 import {
   getExpandedWorktreeOccurrences,
   type WorktreeOccurrencePlan
-} from '../../../../../../shared/worktree-occurrence-plan'
+} from '../worktree-occurrence-plan'
 import type { NoticeHostContext } from './host-labels'
 import type { RenderableFolderWorkspace } from './folder-workspace-lanes'
 import type {

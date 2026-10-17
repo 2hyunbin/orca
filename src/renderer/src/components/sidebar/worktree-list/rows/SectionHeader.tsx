@@ -14,10 +14,14 @@ import type {
   WorkspaceStatus,
   WorkspaceStatusDefinition
 } from '../../../../../../shared/worktree/types'
-import type { GroupHeaderRow, WorktreeGroupBy } from '../grouping/row-types'
-import { PINNED_GROUP_KEY } from '../grouping/group-keys'
+import type {
+  GroupHeaderRow,
+  WorktreeGroupBy
+} from '../../../../../../shared/sidebar-list/row-types'
+import { PINNED_GROUP_KEY } from '../../../../../../shared/sidebar-list/group-keys'
 import { getWorkspaceStatusFromGroupKey } from '../../workspace-status'
 import { getVirtualRowTransform } from '../viewport/virtual-rows'
+import { getSidebarHeaderVisual } from '../grouping/header-visuals'
 import { resolveProjectGroupHeaderColor } from '../../project-header-color'
 import { getRepoHeaderCreateState } from '../../repo-header-create-state'
 import { ProjectHeaderActions } from '../../ProjectHeaderActions'
@@ -143,6 +147,7 @@ export function renderWorktreeSectionHeaderRow(args: {
       ? getWorkspaceStatusFromGroupKey(row.key, ctx.workspaceStatuses)
       : null
   const isPinnedHeader = row.key === PINNED_GROUP_KEY
+  const headerVisual = row.icon ? getSidebarHeaderVisual(row.icon) : null
   const repoHeaderColor = resolveProjectGroupHeaderColor({
     groupBy: ctx.groupBy,
     headerKey: row.key,
@@ -307,11 +312,11 @@ export function renderWorktreeSectionHeaderRow(args: {
               'cursor-grab active:cursor-grabbing'
           )}
         >
-          {row.icon ? (
+          {headerVisual ? (
             <div
               className={cn(
                 'flex size-4 shrink-0 items-center justify-center rounded-[4px]',
-                repoHeaderColor ? 'text-muted-foreground' : row.tone
+                repoHeaderColor ? 'text-muted-foreground' : headerVisual.tone
               )}
             >
               {row.repo ? (
@@ -322,7 +327,7 @@ export function renderWorktreeSectionHeaderRow(args: {
                   iconClassName="size-3.5"
                 />
               ) : (
-                <row.icon className="size-3" />
+                <headerVisual.icon className="size-3" />
               )}
             </div>
           ) : null}

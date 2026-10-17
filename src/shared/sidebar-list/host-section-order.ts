@@ -1,4 +1,4 @@
-import type { ExecutionHostId } from '../../../../shared/execution-host'
+import type { ExecutionHostId } from '../execution-host'
 import type { HostSectionOption } from './host-section-rows'
 
 export function orderHostSectionOptions(

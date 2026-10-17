@@ -1,10 +1,15 @@
-import type React from 'react'
-import type { WorktreeOccurrence } from '../../../../../../shared/worktree-occurrence-plan'
-import type { FolderWorkspace } from '../../../../../../shared/folder-workspace-types'
-import type { ProjectGroup } from '../../../../../../shared/project-group-types'
-import type { Repo } from '../../../../../../shared/repo-types'
-import type { DetectedWorktree, Worktree } from '../../../../../../shared/worktree/types'
-import type { ExecutionHostId } from '../../../../../../shared/execution-host'
+import type { WorktreeOccurrence } from '../worktree-occurrence-plan'
+import type { FolderWorkspace } from '../folder-workspace-types'
+import type { ProjectGroup } from '../project-group-types'
+import type { Repo } from '../repo-types'
+import type {
+  DetectedWorktree,
+  WorkspaceStatus,
+  WorkspaceStatusDefinition,
+  Worktree
+} from '../worktree/types'
+import type { ExecutionHostId } from '../execution-host'
+import type { PRGroupKey } from '../workspace-view/workspace-pr-groups'
 
 export type WorktreeGroupBy = 'none' | 'workspace-status' | 'repo' | 'pr-status'
 export type PinnedWorktreeDisplayPolicy = 'single-location' | 'duplicate-in-groups'
@@ -15,14 +20,21 @@ export function getPinnedWorktreeDisplayPolicy(
   return settings?.showPinnedWorktreesInGroups === true ? 'duplicate-in-groups' : 'single-location'
 }
 
+/** Which glyph, and its tone, a group header draws; each client maps it to its own icon set. */
+export type SidebarHeaderIcon =
+  | { kind: 'pinned' }
+  | { kind: 'all' }
+  | { kind: 'project' }
+  | { kind: 'pr-status'; prGroup: PRGroupKey }
+  | { kind: 'workspace-status'; status: WorkspaceStatus | WorkspaceStatusDefinition }
+
 export type GroupHeaderRow = {
   type: 'header'
   collapseKey?: string
   key: string
   label: string
   count: number
-  tone: string
-  icon?: React.ComponentType<{ className?: string }>
+  icon?: SidebarHeaderIcon
   repo?: Repo
   projectGroup?: ProjectGroup | { id: null; name: 'Ungrouped'; tabOrder: number }
   projectGroupDepth?: number

@@ -1,21 +1,15 @@
-import type { Repo } from '../../../../../../shared/repo-types'
-import type { Worktree } from '../../../../../../shared/worktree/types'
-import {
-  getRepoExecutionHostId,
-  getWorktreeExecutionHostId
-} from '../../../../../../shared/execution-host'
-import type { ExecutionHostId } from '../../../../../../shared/execution-host'
+import type { Repo } from '../repo-types'
+import type { Worktree } from '../worktree/types'
+import { getRepoExecutionHostId, getWorktreeExecutionHostId } from '../execution-host'
+import type { ExecutionHostId } from '../execution-host'
 import {
   getHostContextLabel,
   getMixedHostContextLabels as getSharedMixedHostContextLabels
-} from '../../../../../../shared/worktree/host-context-labels'
-import { getWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
-import {
-  getProjectGroupingForRepo,
-  type ProjectGroupingIndex
-} from '../../../../../../shared/project-section-grouping'
+} from '../worktree/host-context-labels'
+import { getWorktreeHostIdentity } from '../worktree/host-qualified-identity'
+import { getProjectGroupingForRepo, type ProjectGroupingIndex } from '../project-section-grouping'
 import type { WorktreeGroupEntry } from './worktree-group-entry'
-import { getFolderWorkspaceHostId } from '../../folder-workspace-host-id'
+import { getFolderWorkspaceHostId } from './folder-workspace-host-id'
 import type { RenderableFolderWorkspace } from './folder-workspace-lanes'
 
 function getRepoHostId(repoId: string, repoMap: Map<string, Repo>): ExecutionHostId | null {

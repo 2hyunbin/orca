@@ -15,7 +15,7 @@ import {
   getWorktreeLineageGroupKey,
   getProjectGroupHeaderKey,
   PINNED_GROUP_KEY
-} from './group-keys'
+} from '../../../../../../shared/sidebar-list/group-keys'
 
 const childRepo = { ...repo, id: 'child-repo', displayName: 'Child project', path: '/tmp/child' }
 const repos = new Map([

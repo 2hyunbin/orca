@@ -5,7 +5,7 @@ import { getWorktreeDragGroups, getWorktreeDragIndexes } from '../drag/groups'
 import { renderRowContainsWorktree } from '../navigation/render-row-lookup'
 import type { Repo } from '../../../../../../shared/repo-types'
 import type { Worktree } from '../../../../../../shared/worktree/types'
-import type { Row } from './row-types'
+import type { Row } from '../../../../../../shared/sidebar-list/row-types'
 
 const repo: Repo = {
   id: 'repo-1',
@@ -19,8 +19,7 @@ const makeHeaderRow = (key: string): Extract<Row, { type: 'header' }> => ({
   type: 'header',
   key,
   label: key,
-  count: 0,
-  tone: 'text-foreground'
+  count: 0
 })
 
 const makeWorktree = (id: string): Worktree => ({

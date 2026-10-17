@@ -1,10 +1,7 @@
-import type { FolderWorkspace } from '../../../../../../shared/folder-workspace-types'
-import type { ProjectGroup } from '../../../../../../shared/project-group-types'
-import type { WorkspaceStatusDefinition } from '../../../../../../shared/worktree/types'
-import {
-  getWorkspaceStatus,
-  getWorkspaceStatusGroupKey
-} from '../../../../../../shared/workspace-statuses'
+import type { FolderWorkspace } from '../folder-workspace-types'
+import type { ProjectGroup } from '../project-group-types'
+import type { WorkspaceStatusDefinition } from '../worktree/types'
+import { getWorkspaceStatus, getWorkspaceStatusGroupKey } from '../workspace-statuses'
 import { ALL_GROUP_KEY, getPRLaneKey } from './group-keys'
 import type { WorktreeGroupBy } from './row-types'
 

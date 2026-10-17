@@ -22,7 +22,7 @@ import {
   PR_GROUP_LABELS,
   PR_GROUP_ORDER
 } from '../../../../shared/workspace-view/workspace-pr-groups'
-import { PR_GROUP_META } from './worktree-list/grouping/group-keys'
+import { PR_GROUP_META } from './worktree-list/grouping/header-visuals'
 
 // The desktop's localized copy must read, in English, exactly as the shared copy the phone shows.
 const sharedCopy = (choices: readonly { id: string; label: string; description?: string }[]) =>

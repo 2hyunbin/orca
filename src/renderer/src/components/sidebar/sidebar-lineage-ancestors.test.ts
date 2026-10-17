@@ -8,7 +8,7 @@ import { worktree, repoMap } from './worktree-list-groups-test-fixtures'
 import {
   getCyclicProjectedWorktreeLineageIds,
   getSidebarLineageAncestors
-} from './worktree-lineage-projection'
+} from '../../../../shared/sidebar-list/worktree-lineage-projection'
 
 function pair(parentHost: ExecutionHostId | undefined, childHost: ExecutionHostId | undefined) {
   const parent: Worktree = { ...worktree, id: 'parent', instanceId: 'p', hostId: parentHost }

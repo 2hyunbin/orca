@@ -19,7 +19,7 @@ import {
 } from '@/store/selectors'
 import type { AppState } from '@/store/types'
 import { getSettingsFocusedExecutionHostId } from '../../../../shared/execution-host'
-import { getPinnedWorktreeDisplayPolicy } from './worktree-list/grouping/row-types'
+import { getPinnedWorktreeDisplayPolicy } from '../../../../shared/sidebar-list/row-types'
 import { selectWorktreeListReviewCacheInputs } from './worktree-list/listing/review-cache-inputs'
 import { useAgentSendTargetWorktreeId } from './worktree-list/listing/use-agent-send-target'
 import { useSidebarExternalWorktreeCards } from './worktree-list/listing/use-external-worktree-cards'
@@ -37,18 +37,18 @@ import {
 } from './visible-worktrees'
 import { computeVisibleWorktreeIds } from './compute-visible-worktrees'
 import { buildVisibleWorktreeOptionsFromState } from './visible-worktree-options-from-state'
-import { GOLDEN_NOW } from './sidebar-list-golden-factories'
+import { GOLDEN_NOW } from './sidebar-list-golden-factories.test-fixture'
 import {
   GOLDEN_WORKTREE_IDS,
   buildGoldenStoreState,
   goldenLiveTerminalState,
   type GoldenView
-} from './sidebar-list-golden-fixture'
+} from './sidebar-list-golden-store.test-fixture'
 import {
   serializeOccurrencePlan,
   serializeShortcutTargets,
   serializeSidebarRow
-} from './sidebar-list-golden-serialize'
+} from './sidebar-list-golden-serialize.test-fixture'
 
 const initialState = useAppStore.getInitialState()
 

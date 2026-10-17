@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildRows } from './build-rows'
-import { ALL_GROUP_META, getPRGroupKey, PINNED_GROUP_KEY } from './group-keys'
-import { getGroupKeyForWorktree } from './worktree-group-keys'
+import { getPRGroupKey, PINNED_GROUP_KEY } from '../../../../../../shared/sidebar-list/group-keys'
+import { getGroupKeyForWorktree } from '../../../../../../shared/sidebar-list/worktree-group-keys'
 import { repo, worktree, repoMap } from '../../worktree-list-groups-test-fixtures'
 import type { Repo } from '../../../../../../shared/repo-types'
 import type { Worktree } from '../../../../../../shared/worktree/types'
@@ -116,7 +116,7 @@ describe('buildRows with pinned worktrees', () => {
     expect(rows[0]).toMatchObject({ type: 'header', key: 'pinned', label: 'Pinned' })
     expect(rows[1]).toMatchObject({ type: 'item', worktree: { id: 'wt-pinned' } })
     expect(rows[2]).toMatchObject({ type: 'header', key: 'all', label: 'All', count: 2 })
-    expect(rows[2]).toMatchObject({ type: 'header', icon: ALL_GROUP_META.icon })
+    expect(rows[2]).toMatchObject({ type: 'header', icon: { kind: 'all' } })
   })
 
   it('uses worktree host ownership for pinned header host counts', () => {

@@ -1,12 +1,12 @@
-import type { OccurrenceSectionPath } from '../../../../../../shared/worktree-occurrence-plan'
+import type { OccurrenceSectionPath } from '../worktree-occurrence-plan'
 import {
   compareFolderWorkspacesForDisplay,
   type RenderableFolderWorkspace
 } from './folder-workspace-lanes'
-import type { ProjectGroup } from '../../../../../../shared/project-group-types'
-import type { ProjectOrderBy } from '../../../../../../shared/ui-chrome-types'
-import { getEffectiveProjectGroupManualRank } from '../../../../../../shared/project-groups'
-import { PROJECT_GROUP_META, getProjectGroupHeaderKey } from './group-keys'
+import type { ProjectGroup } from '../project-group-types'
+import type { ProjectOrderBy } from '../ui-chrome-types'
+import { getEffectiveProjectGroupManualRank } from '../project-groups'
+import { getProjectGroupHeaderKey } from './group-keys'
 import { appendOrderedGroups } from './group-sections'
 import type { SectionAppendContext } from './group-sections'
 import type { OrderedGroupEntry } from './worktree-group-entry'
@@ -14,7 +14,7 @@ import {
   compareRecentRank,
   createRecentRankLookup,
   withRepoSectionDisplayLabels
-} from '../../../../../../shared/project-section-order'
+} from '../project-section-order'
 import { buildFolderWorkspaceRow } from './row-builders'
 
 export function appendProjectGroupSections(
@@ -107,8 +107,7 @@ export function appendProjectGroupSections(
       key,
       label: projectGroup.name,
       count: getProjectGroupSubtreeCount(projectGroup.id),
-      tone: PROJECT_GROUP_META.tone,
-      icon: PROJECT_GROUP_META.icon,
+      icon: { kind: 'project' },
       projectGroup,
       projectGroupDepth: depth
     })

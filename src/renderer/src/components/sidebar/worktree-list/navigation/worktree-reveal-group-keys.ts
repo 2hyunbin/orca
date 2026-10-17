@@ -7,12 +7,15 @@ import type { ProjectGroup } from '../../../../../../shared/project-group-types'
 import type { Repo } from '../../../../../../shared/repo-types'
 import type { WorktreeLineage } from '../../../../../../shared/worktree/lineage-types'
 import type { WorkspaceStatusDefinition, Worktree } from '../../../../../../shared/worktree/types'
-import { getHostSectionCollapseKey } from '../../host-section-collapse'
+import { getHostSectionCollapseKey } from '../../../../../../shared/sidebar-list/host-section-collapse'
 import { getWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
-import { getWorktreeLineageGroupKey } from '../grouping/group-keys'
+import { getWorktreeLineageGroupKey } from '../../../../../../shared/sidebar-list/group-keys'
 import type { ProjectGroupingModel } from '../../../../../../shared/project-section-grouping'
 import type { WorktreeOccurrencePlan } from '../../../../../../shared/worktree-occurrence-plan'
-import type { PinnedWorktreeDisplayPolicy, WorktreeGroupBy } from '../grouping/row-types'
+import type {
+  PinnedWorktreeDisplayPolicy,
+  WorktreeGroupBy
+} from '../../../../../../shared/sidebar-list/row-types'
 import { buildSidebarRowPlan } from '../grouping/build-rows'
 
 export function getWorktreeRevealCollapsedGroupKeys(args: {

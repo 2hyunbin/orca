@@ -6,7 +6,7 @@ import {
   getFolderWorkspaceExecutionHostIdForRows,
   getProjectGroupExecutionHostIdForRows,
   getRuntimeEnvironmentIdForFolderPathStatusHost
-} from './host-filtering'
+} from '../../../../../../shared/sidebar-list/host-filtering'
 
 function group(overrides: Partial<ProjectGroup> = {}): ProjectGroup {
   return {

@@ -1,14 +1,14 @@
 import {
   getCyclicWorktreeLineageChildIds,
   isValidResolvedWorktreeLineageEdge
-} from '../../../../shared/resolved-worktree-lineage'
-import type { ExecutionHostId } from '../../../../shared/execution-host'
+} from '../resolved-worktree-lineage'
+import type { ExecutionHostId } from '../execution-host'
 import {
   composeWorktreeHostIdentity,
   getWorktreeHostIdentity
-} from '../../../../shared/worktree/host-qualified-identity'
-import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
-import type { Worktree } from '../../../../shared/worktree/types'
+} from '../worktree/host-qualified-identity'
+import type { WorktreeLineage } from '../worktree/lineage-types'
+import type { Worktree } from '../worktree/types'
 
 export type LineageRenderInfo =
   | { state: 'none' }

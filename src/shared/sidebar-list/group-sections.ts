@@ -1,13 +1,9 @@
-import type { Repo } from '../../../../../../shared/repo-types'
-import type { WorktreeOccurrencePlan } from '../../../../../../shared/worktree-occurrence-plan'
-import type { WorkspaceStatusDefinition, Worktree } from '../../../../../../shared/worktree/types'
-import type { ExecutionHostId } from '../../../../../../shared/execution-host'
-import {
-  getWorkspaceStatusFromGroupKey,
-  getWorkspaceStatusVisualMeta
-} from '../../workspace-status'
-import { PROJECT_GROUP_META, PR_GROUP_META } from './group-keys'
-import type { PRGroupKey } from './group-keys'
+import type { Repo } from '../repo-types'
+import type { WorktreeOccurrencePlan } from '../worktree-occurrence-plan'
+import type { WorkspaceStatusDefinition, Worktree } from '../worktree/types'
+import type { ExecutionHostId } from '../execution-host'
+import { getWorkspaceStatusFromGroupKey } from '../workspace-statuses'
+import type { PRGroupKey, SidebarListLabels } from './group-keys'
 import type { NoticeHostContext } from './host-labels'
 import {
   getLaneHostWorktreeCounts,
@@ -15,7 +11,7 @@ import {
   getMixedHostContextLabels
 } from './host-labels'
 import type { OrderedGroupEntry } from './worktree-group-entry'
-import type { ProjectGroupingIndex } from '../../../../../../shared/project-section-grouping'
+import type { ProjectGroupingIndex } from '../project-section-grouping'
 import {
   appendWorktreeRows,
   buildFolderWorkspaceRow,
@@ -47,6 +43,7 @@ export type SectionAppendContext = {
   mixedWorktreeHostContextLabels: Map<string, string> | undefined
   noticeHostContextLabelByRepoId: Map<string, NoticeHostContext> | undefined
   occurrencePlan: WorktreeOccurrencePlan<Worktree>
+  labels: SidebarListLabels
 }
 
 export function appendOrderedGroups(
@@ -67,7 +64,8 @@ export function appendOrderedGroups(
     newExternalWorktreesInboxByRepo,
     pendingByRepo,
     mixedWorktreeHostContextLabels,
-    occurrencePlan
+    occurrencePlan,
+    labels
   } = ctx
   for (const [key, group] of groupsToAppend) {
     const isCollapsed = collapsedGroups.has(key)
@@ -80,8 +78,7 @@ export function appendOrderedGroups(
             key,
             label: group.label,
             count: group.items.length,
-            tone: PROJECT_GROUP_META.tone,
-            icon: PROJECT_GROUP_META.icon,
+            icon: { kind: 'project' as const },
             repo,
             projectGroupDepth
           }
@@ -92,14 +89,12 @@ export function appendOrderedGroups(
                 workspaceStatuses[0]?.id ??
                 'in-progress'
               const definition = workspaceStatuses.find((status) => status.id === workspaceStatus)
-              const meta = getWorkspaceStatusVisualMeta(definition ?? workspaceStatus)
               return {
                 type: 'header' as const,
                 key,
                 label: definition?.label ?? workspaceStatus,
                 count: group.items.length + folderPairs.length,
-                tone: meta.tone,
-                icon: meta.icon,
+                icon: { kind: 'workspace-status' as const, status: definition ?? workspaceStatus },
                 hostWorktreeCounts: getLaneHostWorktreeCounts(
                   group.items,
                   folderPairs,
@@ -117,14 +112,12 @@ export function appendOrderedGroups(
             })()
           : (() => {
               const prGroup = key.replace(/^pr:/, '') as PRGroupKey
-              const meta = PR_GROUP_META[prGroup]
               return {
                 type: 'header' as const,
                 key,
-                label: meta.label,
+                label: labels.prGroups[prGroup],
                 count: group.items.length + folderPairs.length,
-                tone: meta.tone,
-                icon: meta.icon,
+                icon: { kind: 'pr-status' as const, prGroup },
                 hostWorktreeCounts: getLaneHostWorktreeCounts(
                   group.items,
                   folderPairs,

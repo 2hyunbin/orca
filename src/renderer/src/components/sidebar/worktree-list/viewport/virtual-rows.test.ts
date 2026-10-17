@@ -33,7 +33,6 @@ function groupRow(key: string, hostId?: ExecutionHostId): RenderRow {
     key,
     label: key,
     count: 1,
-    tone: 'text-foreground',
     ...(hostId ? { hostId } : {})
   }
 }

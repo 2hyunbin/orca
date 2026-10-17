@@ -1,9 +1,9 @@
-import type { Repo } from '../../../../../../shared/repo-types'
-import type { WorktreeOccurrencePlan } from '../../../../../../shared/worktree-occurrence-plan'
-import type { Worktree } from '../../../../../../shared/worktree/types'
-import { getWorktreeExecutionHostId } from '../../../../../../shared/execution-host'
-import type { ExecutionHostId } from '../../../../../../shared/execution-host'
-import { PINNED_GROUP_KEY, PINNED_GROUP_META } from './group-keys'
+import type { Repo } from '../repo-types'
+import type { WorktreeOccurrencePlan } from '../worktree-occurrence-plan'
+import type { Worktree } from '../worktree/types'
+import { getWorktreeExecutionHostId } from '../execution-host'
+import type { ExecutionHostId } from '../execution-host'
+import { PINNED_GROUP_KEY } from './group-keys'
 import { appendWorktreeRows, buildImportedWorktreesCardRow } from './row-builders'
 import type { NoticeHostContext } from './host-labels'
 import type { ImportedWorktreesCardCandidate, Row } from './row-types'
@@ -15,6 +15,7 @@ import type { ImportedWorktreesCardCandidate, Row } from './row-types'
  * emission has its own ordering and imported-fallback placement rules.
  */
 export function emitPinnedGroup(
+  pinnedLabel: string,
   pinnedSectionWorktrees: Worktree[],
   repoMap: Map<string, Repo>,
   defaultHostId: ExecutionHostId,
@@ -49,10 +50,9 @@ export function emitPinnedGroup(
   result.push({
     type: 'header',
     key: PINNED_GROUP_KEY,
-    label: PINNED_GROUP_META.label,
+    label: pinnedLabel,
     count: pinnedSectionWorktrees.length,
-    tone: PINNED_GROUP_META.tone,
-    icon: PINNED_GROUP_META.icon,
+    icon: { kind: 'pinned' },
     hostWorktreeCounts,
     hostWorktreeIds,
     worktreeIds: pinnedSectionWorktrees.map((worktree) => worktree.id)

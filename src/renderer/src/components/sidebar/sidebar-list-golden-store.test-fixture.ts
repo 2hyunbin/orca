@@ -14,7 +14,7 @@ import {
   prEntry,
   repo,
   wt
-} from './sidebar-list-golden-factories'
+} from './sidebar-list-golden-factories.test-fixture'
 
 // Hosts: local, an SSH box, and a paired Orca server (runtime environment).
 const orca = repo('orca', 'orca', { projectGroupId: 'pg-work' })

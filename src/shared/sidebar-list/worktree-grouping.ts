@@ -1,26 +1,22 @@
-import type { Repo } from '../../../../../../shared/repo-types'
-import type { ProjectOrderBy } from '../../../../../../shared/ui-chrome-types'
-import type { WorkspaceStatusDefinition, Worktree } from '../../../../../../shared/worktree/types'
-import type { AppState } from '../../../../store/types'
-import { getWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
+import type { Repo } from '../repo-types'
+import type { ProjectOrderBy } from '../ui-chrome-types'
+import type { WorkspaceStatusDefinition, Worktree } from '../worktree/types'
+import { getWorktreeHostIdentity } from '../worktree/host-qualified-identity'
 import {
   getWorkspaceStatus,
   getWorkspaceStatusFromGroupKey,
   getWorkspaceStatusGroupKey
-} from '../../workspace-status'
+} from '../workspace-statuses'
 import {
   compareFolderWorkspacesForDisplay,
   getFolderWorkspaceLaneKey,
   type RenderableFolderWorkspace
 } from './folder-workspace-lanes'
-import { PR_GROUP_META, PR_GROUP_ORDER, getPRGroupKey, getPRLaneKey } from './group-keys'
-import type { PRGroupKey } from './group-keys'
+import { PR_GROUP_ORDER, getPRGroupKey, getPRLaneKey } from './group-keys'
+import type { PRGroupKey, SidebarListLabels, SidebarListSettings } from './group-keys'
 import type { OrderedGroupEntry, WorktreeGroupEntry } from './worktree-group-entry'
-import {
-  buildProjectSections,
-  type ProjectGroupingIndex
-} from '../../../../../../shared/project-section-grouping'
-import { orderProjectSections } from '../../../../../../shared/project-section-order'
+import { buildProjectSections, type ProjectGroupingIndex } from '../project-section-grouping'
+import { orderProjectSections } from '../project-section-order'
 import type {
   ImportedWorktreesCardCandidate,
   NewExternalWorktreesInboxCandidate,
@@ -32,14 +28,16 @@ import type {
 function getLaneLabelForKey(
   key: string,
   groupBy: Exclude<WorktreeGroupBy, 'repo'>,
-  workspaceStatuses: readonly WorkspaceStatusDefinition[]
+  workspaceStatuses: readonly WorkspaceStatusDefinition[],
+  labels: SidebarListLabels
 ): string {
   if (groupBy === 'workspace-status') {
     const status = getWorkspaceStatusFromGroupKey(key, workspaceStatuses)
     return workspaceStatuses.find((entry) => entry.id === status)?.label ?? status ?? key
   }
   if (groupBy === 'pr-status') {
-    return PR_GROUP_META[key.replace(/^pr:/, '') as PRGroupKey].label
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: pr-status lane keys come from getPRLaneKey(PRGroupKey).
+    return labels.prGroups[key.replace(/^pr:/, '') as PRGroupKey]
   }
   return key
 }
@@ -50,7 +48,7 @@ export function buildOrderedGroups(args: {
   naturalWorktrees: readonly Worktree[]
   repoMap: Map<string, Repo>
   prCache: Record<string, unknown> | null
-  settings: AppState['settings'] | undefined
+  settings: SidebarListSettings | undefined
   workspaceStatuses: readonly WorkspaceStatusDefinition[]
   projectIndex: ProjectGroupingIndex | null
   displayRootByIdentity?: ReadonlyMap<string, Worktree>
@@ -61,6 +59,7 @@ export function buildOrderedGroups(args: {
   repoOrder: Map<string, number> | undefined
   projectOrderBy: ProjectOrderBy
   folderWorkspaces?: readonly RenderableFolderWorkspace[]
+  labels: SidebarListLabels
 }): OrderedGroupEntry[] {
   const {
     groupBy,
@@ -77,7 +76,8 @@ export function buildOrderedGroups(args: {
     pendingByRepo,
     repoOrder,
     projectOrderBy,
-    folderWorkspaces = []
+    folderWorkspaces = [],
+    labels
   } = args
 
   if (groupBy === 'repo') {
@@ -116,7 +116,7 @@ export function buildOrderedGroups(args: {
     } else {
       const prGroup = getPRGroupKey(w, repoMap, prCache, settings)
       key = getPRLaneKey(prGroup)
-      label = PR_GROUP_META[prGroup].label
+      label = labels.prGroups[prGroup]
     }
     if (!grouped.has(key)) {
       grouped.set(key, { label, items: [], repo: undefined, repoIds: new Set() })
@@ -132,7 +132,7 @@ export function buildOrderedGroups(args: {
     const key = getFolderWorkspaceLaneKey(pair, groupBy, workspaceStatuses)
     if (!grouped.has(key)) {
       grouped.set(key, {
-        label: getLaneLabelForKey(key, groupBy, workspaceStatuses),
+        label: getLaneLabelForKey(key, groupBy, workspaceStatuses, labels),
         items: [],
         repo: undefined,
         repoIds: new Set()

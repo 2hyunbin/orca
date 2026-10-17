@@ -1,15 +1,15 @@
-import type { ProjectGroup } from '../../../../../../shared/project-group-types'
-import type { Repo } from '../../../../../../shared/repo-types'
-import type { WorkspaceStatusDefinition, Worktree } from '../../../../../../shared/worktree/types'
-import { getWorkspaceStatus, getWorkspaceStatusGroupKey } from '../../workspace-status'
-import { cloneDefaultWorkspaceStatuses } from '../../../../../../shared/workspace-statuses'
-import type { AppState } from '../../../../store/types'
-import { ALL_GROUP_KEY, getPRGroupKey, getProjectGroupHeaderKey } from './group-keys'
+import type { ProjectGroup } from '../project-group-types'
+import type { Repo } from '../repo-types'
+import type { WorkspaceStatusDefinition, Worktree } from '../worktree/types'
 import {
-  buildProjectGroupingIndex,
-  getProjectGroupingForRepo
-} from '../../../../../../shared/project-section-grouping'
-import type { ProjectGroupingModel } from '../../../../../../shared/project-section-grouping'
+  cloneDefaultWorkspaceStatuses,
+  getWorkspaceStatus,
+  getWorkspaceStatusGroupKey
+} from '../workspace-statuses'
+import type { SidebarListSettings } from './group-keys'
+import { ALL_GROUP_KEY, getPRGroupKey, getProjectGroupHeaderKey } from './group-keys'
+import { buildProjectGroupingIndex, getProjectGroupingForRepo } from '../project-section-grouping'
+import type { ProjectGroupingModel } from '../project-section-grouping'
 import type { WorktreeGroupBy } from './row-types'
 
 export function getGroupKeyForWorktree(
@@ -18,7 +18,7 @@ export function getGroupKeyForWorktree(
   repoMap: Map<string, Repo>,
   prCache: Record<string, unknown> | null,
   workspaceStatuses: readonly WorkspaceStatusDefinition[] = cloneDefaultWorkspaceStatuses(),
-  settings?: AppState['settings'],
+  settings?: SidebarListSettings,
   projectGrouping?: ProjectGroupingModel
 ): string | null {
   if (groupBy === 'none') {
@@ -43,7 +43,7 @@ export function getGroupKeysForWorktree(
   repoMap: Map<string, Repo>,
   prCache: Record<string, unknown> | null,
   workspaceStatuses: readonly WorkspaceStatusDefinition[] = cloneDefaultWorkspaceStatuses(),
-  settings?: AppState['settings'],
+  settings?: SidebarListSettings,
   projectGroups: readonly ProjectGroup[] = [],
   projectGrouping?: ProjectGroupingModel
 ): string[] {

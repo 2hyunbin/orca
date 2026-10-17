@@ -7,12 +7,12 @@ import {
   type ExecutionHostId,
   type ExecutionHostKind,
   type ExecutionHostScope
-} from '../../../../shared/execution-host'
-import type { ExecutionHostHealth } from '../../../../shared/execution-host-registry'
-import type { RuntimeCompatVerdict } from '../../../../shared/protocol-compat'
-import type { SshConnectionStatus } from '../../../../shared/ssh-types'
-import type { Repo } from '../../../../shared/repo-types'
-import type { Row } from './worktree-list/grouping/row-types'
+} from '../execution-host'
+import type { ExecutionHostHealth } from '../execution-host-registry'
+import type { RuntimeCompatVerdict } from '../protocol-compat'
+import type { SshConnectionStatus } from '../ssh-types'
+import type { Repo } from '../repo-types'
+import type { Row } from './row-types'
 import { getFolderWorkspaceHostId } from './folder-workspace-host-id'
 
 export type HostHeaderRow = {

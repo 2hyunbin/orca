@@ -1,7 +1,7 @@
-import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
-import type { Worktree } from '../../../../shared/worktree/types'
-import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
-import { getLineagePlacementRows } from '../../../../shared/worktree-occurrence-plan'
+import type { WorktreeLineage } from '../worktree/lineage-types'
+import type { Worktree } from '../worktree/types'
+import { getWorktreeHostIdentity } from '../worktree/host-qualified-identity'
+import { getLineagePlacementRows } from '../worktree-occurrence-plan'
 import {
   getCyclicProjectedWorktreeLineageIds,
   getSidebarLineageParent

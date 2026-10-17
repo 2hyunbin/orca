@@ -6,7 +6,7 @@ import type { FolderWorkspace } from '../../../../../../shared/folder-workspace-
 import type { ProjectGroup } from '../../../../../../shared/project-group-types'
 import type { Repo } from '../../../../../../shared/repo-types'
 import type { AppState } from '@/store/types'
-import { getFolderPathStatusRouteOptionsForRows } from './host-filtering'
+import { getFolderPathStatusRouteOptionsForRows } from '../../../../../../shared/sidebar-list/host-filtering'
 
 type FolderPathStatusRequest = Parameters<AppState['fetchFolderWorkspacePathStatus']>[0]
 
