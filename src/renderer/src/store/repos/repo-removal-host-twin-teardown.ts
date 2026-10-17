@@ -218,11 +218,33 @@ export function closeRemovedHostTwinState(
 
 /** Keeps the three selection fields consistent once the removed host's copy is gone. */
 export function twinSelectionPatch(
-  state: Pick<AppState, 'activeWorktreeId' | 'activeWorkspaceExecutionHostId'>,
+  state: Pick<
+    AppState,
+    | 'activeWorktreeId'
+    | 'activeWorkspaceExecutionHostId'
+    | 'worktreesByRepo'
+    | 'detectedWorktreesByRepo'
+  >,
   twinHostIds: ReadonlyMap<string, readonly ExecutionHostId[]>,
   removedHostId: ExecutionHostId
 ): Partial<AppState> {
-  if (state.activeWorkspaceExecutionHostId !== removedHostId) {
+  const selected = state.activeWorkspaceExecutionHostId
+  // Why canonicalized: a copy reached through a paired runtime is selected under that runtime's id.
+  const candidates = state.activeWorktreeId ? [state.activeWorktreeId] : [...twinHostIds.keys()]
+  const selectsRemovedHost =
+    selected === removedHostId ||
+    (selected !== null &&
+      candidates.some(
+        (worktreeId) =>
+          twinHostIds.has(worktreeId) &&
+          removedHostCanonicalizer(
+            state,
+            worktreeId,
+            removedHostId,
+            twinHostIds.get(worktreeId) ?? []
+          )(selected) === removedHostId
+      ))
+  if (!selectsRemovedHost) {
     return {}
   }
   const survivor = state.activeWorktreeId ? twinHostIds.get(state.activeWorktreeId)?.[0] : null
