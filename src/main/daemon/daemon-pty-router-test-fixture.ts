@@ -64,6 +64,11 @@ export function createAdapter(
     requestIdleRetirement: vi.fn(async () => ({ state: 'retiring' as const })),
     releaseIdleRetirementFence: vi.fn(),
     isIdleRetirementAdmissionClosed: vi.fn(() => false),
+    getLastAuthenticatedDaemonIdentity: vi.fn(() => ({
+      pid: 4242,
+      startedAtMs: 0,
+      launchNonce: label
+    })),
     hasPty: vi.fn((id: string) => sessions.includes(id)),
     probePtyLiveness: vi.fn(async (id: string) => sessions.includes(id)),
     write: vi.fn((id: string, data: string) => {

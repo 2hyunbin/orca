@@ -68,7 +68,7 @@ async function startOrcadManagedIdleExit(
   }
 ): Promise<void> {
   const { getLocalPtyProvider } = await import('../ipc/pty/provider/registry')
-  const { getDaemonEndpointFacts, isDaemonTerminalAdmissionClosed } =
+  const { getCurrentDaemonPid, getDaemonEndpointFacts, isDaemonTerminalAdmissionClosed } =
     await import('../daemon/daemon-provider-state')
   const { countLiveOrcadDaemonSessions, retireOrcadDaemonIfIdle } =
     await import('./orcad-daemon-retirement')
@@ -106,6 +106,8 @@ async function startOrcadManagedIdleExit(
     config: input.config,
     ports,
     stop: async (evidence) => {
+      // Read first: a replacement may stop only the incarnation that agreed to retire.
+      const retiringPid = getCurrentDaemonPid()
       const outcome = await stopForIdle(input, evidence, retireOrcadDaemonIfIdle)
       // Clients or providers may return while daemon retirement awaits its reply.
       const activity = input.rpc.readClientActivity()
@@ -120,8 +122,11 @@ async function startOrcadManagedIdleExit(
           admissionClosed: isDaemonTerminalAdmissionClosed,
           retireAgain: () => retireOrcadDaemonIfIdle(),
           replaceDaemon: async () => {
+            if (retiringPid === null) {
+              throw new Error('the retiring daemon never identified itself')
+            }
             const { restartDaemon } = await import('../daemon/daemon-provider-restart')
-            await restartDaemon()
+            await restartDaemon({ expectedDaemonPid: retiringPid, endpointMayBeGone: true })
           }
         })
         if (daemon === 'serving' || (await hasNonTerminalWork())) {

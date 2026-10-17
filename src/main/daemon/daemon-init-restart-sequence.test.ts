@@ -123,6 +123,39 @@ describe('daemon-init: runRestartDaemon (7-step sequence)', () => {
     expect(recoverRetired).not.toHaveBeenCalled()
   })
 
+  it('replaces a retired daemon that already left its endpoint', async () => {
+    const mod = await importFresh()
+    await mod.initDaemonPtyProvider()
+    const originalAdapter = adapterInstances[0]
+
+    await mod.restartDaemon({ expectedDaemonPid: 4288, endpointMayBeGone: true })
+
+    expect(mod.getDaemonProvider()).not.toBe(originalAdapter)
+  })
+
+  it('still refuses when another daemon owns an endpoint the retired one may have left', async () => {
+    const mod = await importFresh()
+    await mod.initDaemonPtyProvider()
+    const originalAdapter = adapterInstances[0]
+    const liveSocket = `daemon-v${PROTOCOL_VERSION}.sock`
+    probeSocketExistsMock.mockImplementation((p?: string) => p?.endsWith(liveSocket) ?? false)
+    mockOnlyDaemonSocketAlive(liveSocket)
+    daemonClientMock.mockImplementation(function MockDaemonClient() {
+      return {
+        ensureConnected: vi.fn(async () => {}),
+        ensureConnectedWithin: vi.fn(async () => {}),
+        getDaemonIdentity: vi.fn(() => ({ pid: 9000, startedAtMs: 1, launchNonce: 'other' })),
+        request: vi.fn(async () => ({ sessions: [] })),
+        disconnect: vi.fn()
+      }
+    })
+
+    await expect(
+      mod.restartDaemon({ expectedDaemonPid: 4288, endpointMayBeGone: true })
+    ).rejects.toThrow('owned by a different daemon')
+    expect(originalAdapter.fanoutSyntheticExits).not.toHaveBeenCalled()
+  })
+
   it('uses daemon-owned idle retirement after a failed manual-restart adoption', async () => {
     const mod = await importFresh()
     await mod.initDaemonPtyProvider()

@@ -12,6 +12,7 @@ import {
 import {
   getDaemonHistoryDir as getHistoryDir,
   getDaemonRuntimeDir as getRuntimeDir,
+  probeDaemonSocket,
   resolvePackagedDarwinAppVersion
 } from './daemon-launch-paths'
 import { trackDaemonRetired } from './daemon-lifecycle-event'
@@ -48,12 +49,21 @@ export type { RestartDaemonResult } from './daemon-restart-state'
 
 // Why: the 7-step restart sequence from docs/daemon-staleness-ux.md §Phase 1; current-protocol only (legacy adapters preserved).
 export async function restartDaemon(
-  options: { expectedDaemonPid?: number } = {}
+  options: {
+    expectedDaemonPid?: number
+    /** A retired daemon may already have left; only a different live owner aborts. */
+    endpointMayBeGone?: boolean
+  } = {}
 ): Promise<RestartDaemonResult> {
-  return runCoalescedDaemonRestart(() => runRestartDaemon(options.expectedDaemonPid))
+  return runCoalescedDaemonRestart(() =>
+    runRestartDaemon(options.expectedDaemonPid, options.endpointMayBeGone === true)
+  )
 }
 
-async function runRestartDaemon(expectedDaemonPid?: number): Promise<RestartDaemonResult> {
+async function runRestartDaemon(
+  expectedDaemonPid?: number,
+  endpointMayBeGone = false
+): Promise<RestartDaemonResult> {
   const currentSpawner = getDaemonSpawner()
   const currentAdapter = getDaemonProvider()
   if (!currentSpawner || !currentAdapter) {
@@ -72,7 +82,7 @@ async function runRestartDaemon(expectedDaemonPid?: number): Promise<RestartDaem
   if (expectedDaemonPid !== undefined) {
     // Why before any teardown: a targeted restart must not end a single terminal when the
     // endpoint now belongs to a replacement daemon.
-    await assertDaemonEndpointOwner(runtimeDir, expectedDaemonPid)
+    await assertDaemonEndpointOwner(runtimeDir, expectedDaemonPid, endpointMayBeGone)
   }
   // An operator asking for a restart is the deliberate "try again" that clears crash-loop
   // containment; without this a wedged host could never be recovered from the UI.
@@ -196,9 +206,17 @@ async function runRestartDaemon(expectedDaemonPid?: number): Promise<RestartDaem
   return { killedCount }
 }
 
-async function assertDaemonEndpointOwner(runtimeDir: string, expectedPid: number): Promise<void> {
+async function assertDaemonEndpointOwner(
+  runtimeDir: string,
+  expectedPid: number,
+  endpointMayBeGone: boolean
+): Promise<void> {
+  const socketPath = getDaemonSocketPath(runtimeDir, PROTOCOL_VERSION)
+  if (endpointMayBeGone && !(await probeDaemonSocket(socketPath))) {
+    return
+  }
   const client = new DaemonClient({
-    socketPath: getDaemonSocketPath(runtimeDir, PROTOCOL_VERSION),
+    socketPath,
     tokenPath: getDaemonTokenPath(runtimeDir, PROTOCOL_VERSION)
   })
   try {

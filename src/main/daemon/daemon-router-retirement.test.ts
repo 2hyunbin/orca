@@ -62,3 +62,20 @@ it('releases a fence left by an incomplete retirement, but never one that retire
   retirement.releaseFence()
   expect(retirement.admissionClosed).toBe(true)
 })
+
+it('reports the router fence as closed admission while its census is still pending', async () => {
+  const { DaemonPtyRouter } = await import('./daemon-pty-router')
+  const { installDaemonProvider, isDaemonTerminalAdmissionClosed } =
+    await import('./daemon-provider-state')
+  const current = createAdapter('current', [], undefined, PROTOCOL_VERSION)
+  const census = Promise.withResolvers<{ sessionId: string; isAlive: boolean }[]>()
+  vi.mocked(current.listSessions).mockReturnValueOnce(census.promise)
+  const router = new DaemonPtyRouter({ current, legacy: [] })
+  installDaemonProvider(null, router)
+
+  const retiring = router.requestIdleRetirement()
+  expect(current.isIdleRetirementAdmissionClosed()).toBe(false)
+  expect(isDaemonTerminalAdmissionClosed()).toBe(true)
+  census.resolve([])
+  await retiring
+})

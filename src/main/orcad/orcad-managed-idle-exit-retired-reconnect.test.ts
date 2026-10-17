@@ -118,7 +118,10 @@ it('serves new terminals when a client returns after the daemon retired', async 
   })
   expect(stopped).toBe(false)
   expect(shutdown).not.toHaveBeenCalled()
-  expect(restartDaemon).toHaveBeenCalledOnce()
+  expect(restartDaemon).toHaveBeenCalledExactlyOnceWith({
+    expectedDaemonPid: 4242,
+    endpointMayBeGone: true
+  })
 })
 
 it('finishes the stop when the retired daemon cannot be replaced', async () => {
@@ -140,7 +143,10 @@ it('asks a daemon whose stop reply was lost again, and replaces it once it retir
   })
   expect(stopped).toBe(false)
   expect(shutdown).not.toHaveBeenCalled()
-  expect(restartDaemon).toHaveBeenCalledOnce()
+  expect(restartDaemon).toHaveBeenCalledExactlyOnceWith({
+    expectedDaemonPid: 4242,
+    endpointMayBeGone: true
+  })
 })
 
 it('keeps a daemon that refuses the second ask, and serves from it', async () => {
