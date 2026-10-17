@@ -47,6 +47,13 @@ export const SIDEBAR_INPUT_METHODS = [
       requireSwitchedOn(runtime.sidebarFacts).getWorkspaceReviewFacts()
   }),
   defineMethod({
+    name: 'sidebarInputs.workspaceCreations',
+    permission: 'workspace',
+    params: null,
+    handler: async (_params, { runtime }) =>
+      requireSwitchedOn(runtime.workspaceCreations).snapshot()
+  }),
+  defineMethod({
     name: 'ui.setCollapsed',
     permission: 'workspace',
     params: SetCollapsedParams,

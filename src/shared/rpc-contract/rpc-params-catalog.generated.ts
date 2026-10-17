@@ -1249,6 +1249,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'sidebarInputs.desktopFacts': null,
   'sidebarInputs.pairedServerRows': null,
   'sidebarInputs.reviewFacts': null,
+  'sidebarInputs.workspaceCreations': null,
   'skills.beginUpload': SkillUploadBeginRequestSchema,
   'skills.cancelInstall': SkillsCancelInstallParams,
   'skills.cancelUpload': SkillUploadCommitRequestSchema,
