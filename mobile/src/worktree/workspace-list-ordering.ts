@@ -5,7 +5,7 @@ import {
   recentActivityWithCreateGrace
 } from '../../../src/shared/workspace-view/workspace-row-sort'
 import { compareCodePoints, compareSidebarText } from '../../../src/shared/sidebar-list/text-order'
-import { composeWorktreeHostIdentity } from '../../../src/shared/worktree/host-qualified-identity'
+import { getWorktreeRowIdentity } from './worktree-host-row-identity'
 
 function finiteOr(value: number | undefined, fallback: number): number {
   return value !== undefined && Number.isFinite(value) ? value : fallback
@@ -14,10 +14,6 @@ function finiteOr(value: number | undefined, fallback: number): number {
 function getManualSortRank(worktree: Worktree): number | null {
   const rank = worktree.manualOrder ?? worktree.sortOrder
   return typeof rank === 'number' && Number.isFinite(rank) ? rank : null
-}
-
-function getHostIdentity(worktree: Worktree): string {
-  return composeWorktreeHostIdentity(worktree.hostId, worktree.worktreeId)
 }
 
 const AGENT_ATTENTION_STATUS_ORDER = { permission: 0, working: 1, done: 2, active: 3, inactive: 4 }
@@ -38,11 +34,11 @@ export function sortWorktrees(
   const compareRecent = (a: Worktree, b: Worktree): number =>
     recentActivity(b) - recentActivity(a) ||
     compareSidebarText(a.displayName, b.displayName) ||
-    compareCodePoints(getHostIdentity(a), getHostIdentity(b))
+    compareCodePoints(getWorktreeRowIdentity(a), getWorktreeRowIdentity(b))
   return [...worktrees].sort(
     buildWorkspaceRowComparator<Worktree>(mode, {
       label: (w) => w.displayName,
-      identity: getHostIdentity,
+      identity: getWorktreeRowIdentity,
       repoLabel: (w) => w.repo,
       recentActivity,
       manualRank: getManualSortRank,

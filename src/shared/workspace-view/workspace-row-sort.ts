@@ -1,5 +1,5 @@
 import type { PersistedUIState } from '../persisted-ui-state-types'
-import { compareCodePoints, compareSidebarText } from '../sidebar-list/text-order'
+import { compareCodePoints, createSidebarTextComparator } from '../sidebar-list/text-order'
 
 export type WorkspaceSortBy = PersistedUIState['sortBy']
 
@@ -54,8 +54,9 @@ export function buildWorkspaceRowComparator<Row>(
   sortBy: WorkspaceSortBy,
   read: WorkspaceRowSortReader<Row>
 ): (a: Row, b: Row) => number {
+  const compareText = createSidebarTextComparator()
   const byLabel = (a: Row, b: Row): number =>
-    compareSidebarText(read.label(a), read.label(b)) ||
+    compareText(read.label(a), read.label(b)) ||
     compareCodePoints(read.identity(a), read.identity(b))
   return (a, b) => {
     switch (sortBy) {
@@ -66,7 +67,7 @@ export function buildWorkspaceRowComparator<Row>(
       case 'recent':
         return read.recentActivity(b) - read.recentActivity(a) || byLabel(a, b)
       case 'repo':
-        return compareSidebarText(read.repoLabel(a), read.repoLabel(b)) || byLabel(a, b)
+        return compareText(read.repoLabel(a), read.repoLabel(b)) || byLabel(a, b)
       case 'manual':
         return compareManualRank(read.manualRank(a), read.manualRank(b)) || byLabel(a, b)
     }

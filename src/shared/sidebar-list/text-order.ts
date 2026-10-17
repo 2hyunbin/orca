@@ -86,18 +86,40 @@ function compareNatural(left: string, right: string): number {
   return i < left.length ? 1 : j < right.length ? -1 : 0
 }
 
+function compareFoldedThenCanonical(
+  left: string,
+  right: string,
+  fold: (text: string) => string
+): number {
+  if (left === right) {
+    return 0
+  }
+  return (
+    compareNatural(fold(left), fold(right)) ||
+    // Why: "Alpha"/"alpha" and "w02"/"w2" fold equal but must still order the same everywhere.
+    compareCodePoints(left.normalize('NFC'), right.normalize('NFC'))
+  )
+}
+
 /**
  * Device-independent order for sidebar text: case-folded and NFC-normalized, digit runs by value,
  * the rest by code point. Returns 0 only for canonically equal text; callers break that tie by
  * host-qualified id.
  */
 export function compareSidebarText(left: string, right: string): number {
-  if (left === right) {
-    return 0
+  return compareFoldedThenCanonical(left, right, foldSidebarText)
+}
+
+/** compareSidebarText that folds each string once; build one per sort, since the cache grows with it. */
+export function createSidebarTextComparator(): (left: string, right: string) => number {
+  const foldedByText = new Map<string, string>()
+  const fold = (text: string): string => {
+    let folded = foldedByText.get(text)
+    if (folded === undefined) {
+      folded = foldSidebarText(text)
+      foldedByText.set(text, folded)
+    }
+    return folded
   }
-  return (
-    compareNatural(foldSidebarText(left), foldSidebarText(right)) ||
-    // Why: "Alpha"/"alpha" and "w02"/"w2" fold equal but must still order the same everywhere.
-    compareCodePoints(left.normalize('NFC'), right.normalize('NFC'))
-  )
+  return (left, right) => compareFoldedThenCanonical(left, right, fold)
 }
