@@ -47,6 +47,12 @@ describe('SSH hosts that need a typed credential', () => {
     await resetSshHandlerStateForTests()
     mockSshStore.listTargets.mockReturnValue(targets)
     mockSshStore.getTarget.mockImplementation((id: string) => targets.find((t) => t.id === id))
+    registerAgain()
+  }
+
+  /** What the main process does at launch, and again when macOS recreates the window. */
+  function registerAgain(): void {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the same partial store and window the shared harness registers with.
     registerSshHandlers(mockStore as never, () => mockWindow as never)
   }
 
@@ -113,7 +119,7 @@ describe('SSH hosts that need a typed credential', () => {
     await launch([passwordHost])
     await handlers.get('ssh:connect')!(null, { targetId: passwordHost.id })
 
-    registerSshHandlers(mockStore as never, () => mockWindow as never)
+    registerAgain()
 
     expect(isSshCredentialDeclined(passwordHost.id)).toBe(false)
   })
