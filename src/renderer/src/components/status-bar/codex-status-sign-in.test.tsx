@@ -17,7 +17,7 @@ import type {
 } from '../../../../shared/managed-account-types'
 import type { ProviderRateLimits } from '../../../../shared/rate-limit-types'
 
-const markLiveCodexSessionsForRestart = vi.fn(async () => {})
+const markLiveCodexSessionsForRestart = vi.fn(async () => [])
 const toastSuccess = vi.fn()
 const toastError = vi.fn()
 const fetchInactiveCodexAccountUsage = vi.fn(async () => {})
@@ -78,7 +78,7 @@ vi.mock('sonner', () => ({
 
 vi.mock('@/lib/codex-session-restart', () => ({
   markLiveCodexSessionsForRestart,
-  resolveCodexRestartPromptAccountLabel: (
+  resolveCodexSwitchAccountLabel: (
     accounts: readonly { id: string; email: string }[],
     accountId: string | null | undefined
   ) => accounts.find((entry) => entry.id === accountId)?.email ?? 'System default'

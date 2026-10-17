@@ -189,7 +189,7 @@ export function closeRemovedHostTwinState(
   set((state) => ({
     suppressedPtyExitIds: omitRecordKeys(state.suppressedPtyExitIds, retiredPtyIds),
     pendingPaneAccountRestarts: omitRecordKeys(state.pendingPaneAccountRestarts, retiredPtyIds),
-    codexRestartNoticeByPtyId: omitRecordKeys(state.codexRestartNoticeByPtyId, retiredPtyIds)
+    codexStalePaneByPtyId: omitRecordKeys(state.codexStalePaneByPtyId, retiredPtyIds)
   }))
   // Why: a pending chat's tab can already be gone, so its launch is cancelled through the registry.
   cancelStructuredLaunchesForWorktrees(

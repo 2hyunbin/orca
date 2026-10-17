@@ -3,10 +3,7 @@ import { toast } from 'sonner'
 import type { CodexRateLimitAccountsState } from '../../../../shared/managed-account-types'
 import type { AppState } from '../../store/types'
 import { translate } from '@/i18n/i18n'
-import {
-  markLiveCodexSessionsForRestart,
-  resolveCodexRestartPromptAccountLabel
-} from '@/lib/codex-session-restart'
+import { handleRunningCodexSessionsAfterSwitch } from '@/lib/codex-account-switch-sessions'
 import { getCodexStatusActiveId } from './status-bar-codex-accounts'
 import type { CodexStatusRuntimeTarget } from './status-bar-runtime-targets'
 
@@ -63,14 +60,9 @@ export async function signInCodexAccount(
     if (previousActiveAccountId !== nextActiveAccountId) {
       // Why: sign-in that lands on a new active account changes pane credentials
       // exactly like an explicit switch, so it owes the same restart prompt.
-      await markLiveCodexSessionsForRestart({
-        previousAccountLabel: resolveCodexRestartPromptAccountLabel(
-          accountState.accounts,
-          previousActiveAccountId
-        ),
-        nextAccountLabel: resolveCodexRestartPromptAccountLabel(next.accounts, nextActiveAccountId),
-        previousAccountId: previousActiveAccountId ?? null,
-        nextAccountId: nextActiveAccountId ?? null,
+      await handleRunningCodexSessionsAfterSwitch({
+        before: { accounts: accountState.accounts, accountId: previousActiveAccountId },
+        after: { accounts: next.accounts, accountId: nextActiveAccountId },
         // Why: reauthenticate is local IPC, so only this computer's panes changed.
         owner: { kind: 'local' },
         target

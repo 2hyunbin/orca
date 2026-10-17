@@ -380,7 +380,7 @@ describe('fish never receives a color-scheme report it did not query (#9993)', (
         promptCacheTimerEnabled: true,
         terminalMainSideEffectAuthority: false
       },
-      codexRestartNoticeByPtyId: {},
+      codexStalePaneByPtyId: {},
       deferredSshReconnectTargets: [],
       deferredSshSessionIdsByTabId: {},
       removeDeferredSshReconnectTarget: vi.fn(),

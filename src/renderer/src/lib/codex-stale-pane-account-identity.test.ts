@@ -18,7 +18,7 @@ function seedRoster(
 }
 
 function noticeFor(ptyId: string): unknown {
-  return useAppStore.getState().codexRestartNoticeByPtyId[ptyId]
+  return useAppStore.getState().codexStalePaneByPtyId[ptyId]
 }
 
 describe('stale Codex panes are decided by account id, not label', () => {
@@ -44,7 +44,7 @@ describe('stale Codex panes are decided by account id, not label', () => {
       },
       ptyIdsByTabId: { 'tab-1': ['pty-1'] },
       pendingPaneAccountRestarts: {},
-      codexRestartNoticeByPtyId: {}
+      codexStalePaneByPtyId: {}
     })
     ;(globalThis as { window: typeof window }).window = {
       ...originalWindow,
@@ -133,7 +133,7 @@ describe('stale Codex panes are decided by account id, not label', () => {
   it('raises no notice and reports nothing notified for a pane on the selected account', async () => {
     const scans = await markRestoredStaleCodexSessionsForRestart()
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
     expect(scans.every((scan) => scan.notified === false)).toBe(true)
   })
 
@@ -141,7 +141,7 @@ describe('stale Codex panes are decided by account id, not label', () => {
     // The pane already carries a notice remembering account-b as its launch
     // account, so re-marking it against active account-b collapses the notice.
     useAppStore.setState({
-      codexRestartNoticeByPtyId: {
+      codexStalePaneByPtyId: {
         'pty-1': {
           previousAccountLabel: SHARED_EMAIL,
           nextAccountLabel: SHARED_EMAIL,

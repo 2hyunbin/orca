@@ -10,10 +10,7 @@ import {
   selectCodexProviderAccount
 } from '@/runtime/runtime-provider-accounts-client'
 import { translate } from '@/i18n/i18n'
-import {
-  markLiveCodexSessionsForRestart,
-  resolveCodexRestartPromptAccountLabel
-} from '@/lib/codex-session-restart'
+import { handleRunningCodexSessionsAfterSwitch } from '@/lib/codex-account-switch-sessions'
 import {
   getWindowsTerminalCapabilityOwnerKey,
   useWindowsTerminalCapabilities
@@ -148,19 +145,9 @@ export function useCodexSwitcherController(codex: ProviderRateLimits) {
       }
       const nextActiveAccountId = getCodexStatusActiveId(next, target)
       if (previousActiveAccountId !== nextActiveAccountId) {
-        await markLiveCodexSessionsForRestart({
-          previousAccountLabel: resolveCodexRestartPromptAccountLabel(
-            accountState.accounts,
-            previousActiveAccountId
-          ),
-          nextAccountLabel: resolveCodexRestartPromptAccountLabel(
-            next.accounts,
-            nextActiveAccountId
-          ),
-          // Why: two accounts can share an email, so the labels alone cannot
-          // tell the store whether this switch lands back on the launch account.
-          previousAccountId: previousActiveAccountId ?? null,
-          nextAccountId: nextActiveAccountId ?? null,
+        await handleRunningCodexSessionsAfterSwitch({
+          before: { accounts: accountState.accounts, accountId: previousActiveAccountId },
+          after: { accounts: next.accounts, accountId: nextActiveAccountId },
           // Why: the mutation wrote this row's slot only, so panes on any other
           // lane still launch under the account they already had.
           owner: runtimeTarget,
@@ -168,7 +155,7 @@ export function useCodexSwitcherController(codex: ProviderRateLimits) {
           // Why: clearing a distro-less WSL row nulls every distro slot at once.
           clearsEveryWslDistro: accountId === null
         })
-        // Why: collapse to the summary row (not close) so the follow-up "restart open tabs" prompt appears in the same flow.
+        // Why: collapse to the summary row (not close) so the menu shows the new account.
         if (mountedRef.current) {
           setAccountsExpanded(false)
         }

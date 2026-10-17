@@ -14,16 +14,15 @@ export type AutomaticAgentResumeClaim = {
 /** Agents whose panes restart in place onto a newly selected account. */
 export type AccountRestartAgent = 'codex' | 'claude'
 
-export type CodexRestartNotice = {
+/** A live Codex pane still on the account it launched under, after the selection moved on. */
+export type CodexStalePane = {
   previousAccountLabel: string
   nextAccountLabel: string
   /** Labels are display-only; account ids disambiguate equal labels and A→B→A collapse. */
   previousAccountId?: string | null
   nextAccountId?: string | null
-  /** Accepted restart remains tracked so a failed execution can reopen instead of input-blocking invisibly. */
-  restartRequested?: true
-  /** Dismissal outlives the prompt while explicitly preventing that notice from blocking pane input. */
-  dismissed?: true
+  /** The user chose to keep the launch account against `nextAccount*`. */
+  kept?: true
 }
 
 export type HydrateWorkspaceSessionOptions = {

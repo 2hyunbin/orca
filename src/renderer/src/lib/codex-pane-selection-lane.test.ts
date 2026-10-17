@@ -408,7 +408,7 @@ describe('resolveCodexPaneSelectionLane', () => {
       }
     })
     // Why: this call sits outside the scan's per-pane failure guard, so a throw
-    // would lose the notice for every pane in the batch, not just this one.
+    // would lose the question for every pane in the batch, not just this one.
     expect(
       resolveCodexPaneSelectionLane({
         state: exploding,

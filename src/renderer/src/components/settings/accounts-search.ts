@@ -72,6 +72,22 @@ export const getAccountsCodexSearchEntries = createLocalizedCatalog(() => [
       ...translateSearchKeyword('auto.components.settings.accounts.search.f2d666a886', 'optional'),
       ...translateSearchKeyword('auto.components.settings.accounts.search.35b461d817', 'sign in')
     ]
+  },
+  {
+    title: translate(
+      'accounts.switchSessions.codex.settingTitle',
+      'When you switch accounts while Codex is running'
+    ),
+    description: translate(
+      'accounts.switchSessions.codex.settingDescription',
+      'Restarting relaunches each running Codex session on the new account.'
+    ),
+    keywords: [
+      ...translateSearchKeyword('auto.components.settings.accounts.search.70d1b8def5', 'codex'),
+      ...translateSearchKeyword('auto.components.settings.accounts.search.5b3f18ef4a', 'switch'),
+      ...translateSearchKeyword('accounts.switchSessions.keyword.restart', 'restart'),
+      ...translateSearchKeyword('accounts.switchSessions.keyword.running', 'running')
+    ]
   }
 ])
 

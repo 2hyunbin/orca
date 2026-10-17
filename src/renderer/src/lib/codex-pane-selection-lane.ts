@@ -78,7 +78,7 @@ export function getCodexAccountSwitchLaneMatcher(args: {
    * True only when the mutation cleared every WSL distro slot at once, which
    * setSelectedCodexAccountIdForTarget does for a null account on a distro-less
    * WSL target. Any other write lands in a single slot, so defaulting this to
-   * false keeps the matcher from muting a sibling distro's healthy panes.
+   * false keeps the matcher off a sibling distro's healthy panes.
    */
   clearsEveryWslDistro?: boolean
 }): (laneKey: string) => boolean {
@@ -93,7 +93,7 @@ export function getCodexAccountSwitchLaneMatcher(args: {
   const normalized = normalizeCodexAccountSelectionTarget(args.target)
   // Why a family rather than the `wsl:__default__` key: clearing a distro-less
   // WSL selection nulls every distro slot, so every WSL pane really is stranded.
-  // Keying that to `__default__` alone would leave them all without a notice.
+  // Keying that to `__default__` alone would leave them all unasked.
   if (args.clearsEveryWslDistro && normalized.runtime === 'wsl' && normalized.wslDistro === null) {
     return (laneKey) => laneKey.startsWith(WSL_LANE_PREFIX)
   }
@@ -117,7 +117,7 @@ export type CodexPaneSelectionLane = {
  * the spawn actually resolved, so it cannot drift. The derivation below reads
  * CURRENT state, so flipping the global WSL distro or a project's runtime
  * preference after a pane opened makes it answer for a launch that never
- * happened — a missed notice one way, a muted working terminal the other.
+ * happened — a missed question one way, a needless restart offer the other.
  *
  * The derivation stays because it is the only answer for the panes main never
  * records: every pre-feature pane, and every LocalPtyProvider or remote spawn.
@@ -131,7 +131,7 @@ export function resolveCodexPaneSelectionLane(args: {
 }): CodexPaneSelectionLane {
   const recorded = args.recordedLaneKey?.trim()
   // Why the local-key check: the registry accepts any string it finds on disk,
-  // and a lane key that matches no switch silently drops that pane's notice.
+  // and a lane key that matches no switch silently drops that pane's question.
   // Why foreign ids still derive: their lane is settled by the id itself and no
   // record can exist for one, so a hit here would mean a recycled id.
   const trustsRecord =
@@ -203,7 +203,7 @@ export function resolveCodexPaneSelectionLaneKey(args: {
  * deliberately NOT constrained to the worktree (see resolveTerminalStartupCwd,
  * #7685), so a pane split after `cd \\wsl.localhost\...` runs on a different
  * filesystem than its workspace. Main keys the lane off that cwd, so reading the
- * root instead would call a live WSL pane `host` and mute it on a host switch.
+ * root instead would call a live WSL pane `host` and ask about it on a host switch.
  */
 function resolveLocalPaneSelectionTarget(args: {
   state: CodexPaneLaneState
@@ -231,7 +231,7 @@ function resolvePaneCwd(args: {
   // transport as a prop, so the store cannot see the path main keyed off. Such a
   // pane falls through to its shell below, which is right unless the configured
   // floating cwd is a WSL UNC path under a host shell — a known gap, not a guess
-  // worth making, since guessing wrong here mutes a working terminal.
+  // worth making, since guessing wrong here offers to restart a working terminal.
   if (args.tab.worktreeId === FLOATING_TERMINAL_WORKTREE_ID) {
     return null
   }
@@ -277,7 +277,7 @@ function resolveLocalPaneTerminalRuntime(args: {
   if (projectRuntime?.status === 'repair-required') {
     // Why not delegate: resolveLocalWindowsTerminalRuntimeOptions throws here,
     // and this call sits outside the scan's per-pane failure guard, so a throw
-    // would lose the notice for every pane in the batch, not just this one.
+    // would lose the question for every pane in the batch, not just this one.
     return {
       shellOverride: 'wsl.exe',
       terminalWindowsWslDistro: projectRuntime.repair.preferredRuntime.distro

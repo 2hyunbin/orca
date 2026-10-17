@@ -15,9 +15,9 @@ import {
   claudeLaunchAccountId,
   findMovableClaudeSessions,
   findQueuedClaudeRestartsOnAccount,
-  isClaudePaneMidTurn,
   resolveClaudeSessionAccountId
 } from './claude-session-account-move'
+import { isAgentPaneMidTurn } from './agent-account-switch-sessions'
 
 const laneByPtyId: Record<string, string> = {}
 
@@ -245,7 +245,7 @@ describe('resolveClaudeSessionAccountId', () => {
   })
 })
 
-describe('isClaudePaneMidTurn', () => {
+describe('isAgentPaneMidTurn', () => {
   it('waits on a reply, a permission prompt or a question, not on an idle session', () => {
     seedPanes([
       { n: 1, agentType: 'claude', state: 'working' },
@@ -255,7 +255,7 @@ describe('isClaudePaneMidTurn', () => {
     ])
     const state = useAppStore.getState()
     const midTurn = [1, 2, 3, 4].map((n) =>
-      isClaudePaneMidTurn(state, makePaneKey(tabId(n), leafId(n)))
+      isAgentPaneMidTurn(state, makePaneKey(tabId(n), leafId(n)), 'claude')
     )
 
     expect(midTurn).toEqual([true, true, true, false])

@@ -1,14 +1,16 @@
 import {
   markRestoredStaleCodexSessionsForRestart,
+  toAccountSwitchSession,
   type CodexPaneScanResult
 } from './codex-session-restart'
 import { isForeignMachineCodexPtyId } from './codex-pane-selection-lane'
+import { offerRestoredCodexSessions } from './codex-account-switch-sessions'
 
 // Why: the first delay coalesces the startup burst of binds and lets
 // updateTabPtyId (written just after the layout binding) land, since the scan
 // walks tabs. The rest cover a reattached daemon shell that answers
 // `inspectProcess` with terminal_gone for a beat. The tail is sized off live
-// Windows 11 runs, where the 5.8s rung is what raised the notice in all three
+// Windows 11 runs, where the 5.8s rung is what found the pane in all three
 // (macOS resolved on the first): the ladder used to end exactly where the
 // slowest measured box landed, so a colder reattach fell off it and the pane
 // stayed silently stale. Bounded on purpose — this is a hint, and a pane that
@@ -170,6 +172,13 @@ async function flush(): Promise<void> {
     return
   }
 
+  // Why one offer per flush: the startup burst lands in one sweep, so it asks once.
+  const notified = scans
+    .filter((scan) => scan.notified)
+    .map((scan) => ({ ...toAccountSwitchSession(scan), laneKey: scan.laneKey }))
+  if (notified.length > 0) {
+    offerRestoredCodexSessions(notified)
+  }
   const scanByPtyId = new Map(scans.map((scan) => [scan.ptyId, scan]))
   for (const ptyId of ptyIds) {
     const scan = scanByPtyId.get(ptyId)

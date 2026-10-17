@@ -320,7 +320,7 @@ describe('account restart through renderer connection and host spawn', () => {
       panePtyBindingsRef: { current: bindings },
       savedLayout: { ptyIdsByLeafId: { [leafId]: 'pty-old' } },
       consumePendingPaneAccountRestart: vi.fn(() => 'codex'),
-      clearCodexRestartNotice: vi.fn(),
+      clearCodexStalePane: vi.fn(),
       suppressPtyExit: vi.fn(),
       setTerminalError: vi.fn(),
       setTerminalErrorsByPaneId: vi.fn(),

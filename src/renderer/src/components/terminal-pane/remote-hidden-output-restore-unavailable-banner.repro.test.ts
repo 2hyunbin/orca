@@ -505,7 +505,7 @@ describe('remote hidden-output restore abandonment (issue2-hidden-output-skip)',
         experimentalTerminalAttention: true,
         terminalMainSideEffectAuthority: false
       },
-      codexRestartNoticeByPtyId: {},
+      codexStalePaneByPtyId: {},
       deferredSshReconnectTargets: [],
       deferredSshSessionIdsByTabId: {},
       removeDeferredSshReconnectTarget: vi.fn(),

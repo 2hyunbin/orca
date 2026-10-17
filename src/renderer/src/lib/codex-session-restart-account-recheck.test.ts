@@ -34,7 +34,7 @@ describe('Codex account switch recheck against main', () => {
       },
       ptyIdsByTabId: { 'tab-1': ['pty-1'] },
       pendingPaneAccountRestarts: {},
-      codexRestartNoticeByPtyId: {}
+      codexStalePaneByPtyId: {}
     })
     vi.stubGlobal('window', {
       api: {
@@ -57,7 +57,7 @@ describe('Codex account switch recheck against main', () => {
   })
 
   it('clears an open notice and its queued restart once main reports the pane current', async () => {
-    useAppStore.getState().markCodexRestartNotices([
+    useAppStore.getState().markCodexStalePanes([
       {
         ptyId: 'pty-1',
         previousAccountLabel: ACCOUNT_A,
@@ -77,7 +77,7 @@ describe('Codex account switch recheck against main', () => {
     })
 
     expect(listStalePanes).toHaveBeenCalledWith({ ptyIds: ['pty-1'] })
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
     expect(useAppStore.getState().pendingPaneAccountRestarts).toEqual({})
   })
 
@@ -92,7 +92,7 @@ describe('Codex account switch recheck against main', () => {
       nextAccountId: 'account-b'
     })
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']).toEqual({
       previousAccountLabel: ACCOUNT_A,
       nextAccountLabel: ACCOUNT_B,
       previousAccountId: 'account-a',

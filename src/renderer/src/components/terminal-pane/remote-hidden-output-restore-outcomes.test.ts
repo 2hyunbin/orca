@@ -476,7 +476,7 @@ describe('remote hidden-output restore outcomes', () => {
         experimentalTerminalAttention: true,
         terminalMainSideEffectAuthority: false
       },
-      codexRestartNoticeByPtyId: {},
+      codexStalePaneByPtyId: {},
       deferredSshReconnectTargets: [],
       deferredSshSessionIdsByTabId: {},
       removeDeferredSshReconnectTarget: vi.fn(),

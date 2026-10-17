@@ -25,7 +25,7 @@ import type {
 import type {
   AccountRestartAgent,
   AutomaticAgentResumeClaim,
-  CodexRestartNotice,
+  CodexStalePane,
   HydrateWorkspaceSessionOptions
 } from './terminal-contracts'
 
@@ -164,18 +164,17 @@ export type TerminalActions = {
   suppressPtyExit: (ptyId: string) => void
   consumeSuppressedPtyExit: (ptyId: string) => boolean
   isPtyShutdownPending: (ptyId: string) => boolean
-  /** Codex also marks its restart notices answered. */
   queuePaneAccountRestarts: (ptyIds: string[], agent: AccountRestartAgent) => void
   consumePendingPaneAccountRestart: (ptyId: string) => AccountRestartAgent | null
-  markCodexRestartNotices: (
-    notices: (Pick<CodexRestartNotice, 'previousAccountLabel' | 'nextAccountLabel'> &
-      Partial<Pick<CodexRestartNotice, 'previousAccountId' | 'nextAccountId'>> & {
+  /** Records stale panes and returns the ones still owed a question. */
+  markCodexStalePanes: (
+    panes: (Pick<CodexStalePane, 'previousAccountLabel' | 'nextAccountLabel'> &
+      Partial<Pick<CodexStalePane, 'previousAccountId' | 'nextAccountId'>> & {
         ptyId: string
       })[]
   ) => string[]
-  clearCodexRestartNotice: (ptyId: string) => void
-  dismissCodexRestartNotices: (ptyIds: string[]) => void
-  reopenCodexRestartPrompt: (ptyId: string) => void
+  clearCodexStalePane: (ptyId: string) => void
+  keepCodexStalePanes: (ptyIds: string[]) => void
   replaceTerminalLayoutPanePtyId: (tabId: string, leafId: string, ptyId: string) => void
   setTabPaneExpanded: (tabId: string, expanded: boolean) => void
   setTabCanExpandPane: (tabId: string, canExpand: boolean) => void

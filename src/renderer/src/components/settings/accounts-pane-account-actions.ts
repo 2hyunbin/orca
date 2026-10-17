@@ -8,10 +8,7 @@ import type {
 } from '../../../../shared/managed-account-types'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
-import {
-  markLiveCodexSessionsForRestart,
-  resolveCodexRestartPromptAccountLabel
-} from '@/lib/codex-session-restart'
+import { handleRunningCodexSessionsAfterSwitch } from '@/lib/codex-account-switch-sessions'
 import {
   getProviderAccountActiveIdForView,
   getProviderAccountRuntime
@@ -97,7 +94,7 @@ export function createCodexAccountActionRunner(
         // so the slot it wrote is the created account's — not this row's, which
         // may still say "WSL default". Found by diffing the roster rather than
         // by the row's active id, which resolves to null once two distro slots
-        // are filled and would send the notice to the wrong lane.
+        // are filled and would ask about the wrong lane.
         const newAccounts =
           action === 'adding'
             ? next.accounts.filter(
@@ -105,22 +102,12 @@ export function createCodexAccountActionRunner(
               )
             : []
         // Why exactly one: an unloaded prior roster makes every account look new,
-        // and picking one of those would aim the notice at an unrelated lane.
+        // and picking one of those would aim the question at an unrelated lane.
         // Falling back to the row is the pre-existing behaviour, not a new risk.
         const addedAccount = newAccounts.length === 1 ? newAccounts[0] : undefined
-        void markLiveCodexSessionsForRestart({
-          previousAccountLabel: resolveCodexRestartPromptAccountLabel(
-            codexAccounts.accounts,
-            previousActiveAccountId
-          ),
-          nextAccountLabel: resolveCodexRestartPromptAccountLabel(
-            next.accounts,
-            nextActiveAccountId
-          ),
-          // Why: two accounts can share an email, so the labels alone cannot
-          // tell the store whether this switch lands back on the launch account.
-          previousAccountId: previousActiveAccountId ?? null,
-          nextAccountId: nextActiveAccountId ?? null,
+        void handleRunningCodexSessionsAfterSwitch({
+          before: { accounts: codexAccounts.accounts, accountId: previousActiveAccountId },
+          after: { accounts: next.accounts, accountId: nextActiveAccountId },
           // Why: the mutation wrote this row's slot only, so panes on any other
           // lane still launch under the account they already had.
           owner: accountOwner,

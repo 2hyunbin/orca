@@ -48,7 +48,7 @@ describe('spurious shell readings on Codex-launched panes', () => {
       },
       ptyIdsByTabId: { 'tab-1': [ptyId] },
       pendingPaneAccountRestarts: {},
-      codexRestartNoticeByPtyId: {}
+      codexStalePaneByPtyId: {}
     })
   }
 
@@ -109,7 +109,7 @@ describe('spurious shell readings on Codex-launched panes', () => {
     })
 
     expect(window.api.pty.confirmForegroundProcess).toHaveBeenCalledWith('pty-1')
-    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']).toEqual({
       previousAccountLabel: ACCOUNT_A,
       nextAccountLabel: ACCOUNT_B
     })
@@ -124,7 +124,7 @@ describe('spurious shell readings on Codex-launched panes', () => {
       nextAccountLabel: ACCOUNT_B
     })
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
   })
 
   it('treats a rejected confirmation as no new evidence', async () => {
@@ -136,7 +136,7 @@ describe('spurious shell readings on Codex-launched panes', () => {
       nextAccountLabel: ACCOUNT_B
     })
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
   })
 
   it('survives a preload without confirmForegroundProcess', async () => {
@@ -150,7 +150,7 @@ describe('spurious shell readings on Codex-launched panes', () => {
       nextAccountLabel: ACCOUNT_B
     })
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
   })
 
   it('never spends the fresh scan on a pane Orca did not launch Codex in', async () => {
@@ -163,7 +163,7 @@ describe('spurious shell readings on Codex-launched panes', () => {
     })
 
     expect(window.api.pty.confirmForegroundProcess).not.toHaveBeenCalled()
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
   })
 
   it('never spends the fresh scan when the cached reading already answers', async () => {
@@ -178,7 +178,7 @@ describe('spurious shell readings on Codex-launched panes', () => {
       nextAccountLabel: ACCOUNT_B
     })
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toBeDefined()
+    expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']).toBeDefined()
     expect(window.api.pty.confirmForegroundProcess).not.toHaveBeenCalled()
   })
 
@@ -201,7 +201,7 @@ describe('spurious shell readings on Codex-launched panes', () => {
     // Why: a fresh local scan can know nothing about env-1's PTY, and a
     // cross-lane answer must never card (or spare) a remote pane.
     expect(window.api.pty.confirmForegroundProcess).not.toHaveBeenCalled()
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
   })
 
   it('heals a spurious shell reading before the restored-pane stale lookup', async () => {
@@ -212,7 +212,7 @@ describe('spurious shell readings on Codex-launched panes', () => {
 
     await markRestoredStaleCodexSessionsForRestart()
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']).toEqual({
       previousAccountLabel: ACCOUNT_A,
       nextAccountLabel: ACCOUNT_B,
       previousAccountId: 'account-a',

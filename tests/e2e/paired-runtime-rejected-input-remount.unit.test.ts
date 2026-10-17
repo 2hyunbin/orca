@@ -323,7 +323,7 @@ describe('host-rejected paired-runtime input reaches a pane remount', () => {
       transientClearedAgentStatusConnectionIds: {},
       cacheTimerByKey: {},
       settings: { terminalMainSideEffectAuthority: false },
-      codexRestartNoticeByPtyId: {},
+      codexStalePaneByPtyId: {},
       deferredSshReconnectTargets: [],
       deferredSshSessionIdsByTabId: {},
       removeDeferredSshReconnectTarget: vi.fn(),

@@ -14,7 +14,7 @@ export function useTerminalPaneStoreActions() {
   return useMemo(() => {
     const state = useAppStore.getState()
     return {
-      clearCodexRestartNotice: state.clearCodexRestartNotice,
+      clearCodexStalePane: state.clearCodexStalePane,
       clearRuntimePaneTitle: state.clearRuntimePaneTitle,
       clearTabPtyId: state.clearTabPtyId,
       consumePendingPaneAccountRestart: state.consumePendingPaneAccountRestart,
@@ -45,7 +45,7 @@ export type TerminalPaneStoreActions = ReturnType<typeof useTerminalPaneStoreAct
 
 /** The action names bound above, for the listener-budget test. */
 export const TERMINAL_PANE_STORE_ACTION_KEYS = [
-  'clearCodexRestartNotice',
+  'clearCodexStalePane',
   'clearRuntimePaneTitle',
   'clearTabPtyId',
   'consumePendingPaneAccountRestart',

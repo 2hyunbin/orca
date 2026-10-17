@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
+import { getDefaultSettings } from '../../../shared/constants'
+import {
+  getAgentAccountSwitchPrompt,
+  resetAgentAccountSwitchSessionsForTests
+} from './agent-account-switch-sessions'
 import {
   notifyCodexPaneBoundForStaleSweep,
   resetCodexStalePaneSweepForTests,
@@ -25,6 +30,7 @@ describe('notifyCodexPaneBoundForStaleSweep', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     resetCodexStalePaneSweepForTests()
+    resetAgentAccountSwitchSessionsForTests()
     useAppStore.setState({
       tabsByWorktree: {
         wt1: [
@@ -43,9 +49,11 @@ describe('notifyCodexPaneBoundForStaleSweep', () => {
       },
       ptyIdsByTabId: { 'tab-1': ['pty-1'] },
       pendingPaneAccountRestarts: {},
-      codexRestartNoticeByPtyId: {}
+      codexStalePaneByPtyId: {},
+      terminalLayoutsByTabId: {},
+      settings: getDefaultSettings('/home/dev')
     })
-    ;(globalThis as { window: typeof window }).window = {
+    vi.stubGlobal('window', {
       ...originalWindow,
       api: {
         ...originalWindow?.api,
@@ -64,10 +72,11 @@ describe('notifyCodexPaneBoundForStaleSweep', () => {
             ],
             activeAccountId: 'account-b'
           }),
-          listStalePanes: vi.fn().mockResolvedValue([])
+          listStalePanes: vi.fn().mockResolvedValue([]),
+          forgetStalePanes: vi.fn().mockResolvedValue(undefined)
         }
       }
-    } as unknown as typeof window
+    })
   })
 
   afterEach(() => {
@@ -80,8 +89,19 @@ describe('notifyCodexPaneBoundForStaleSweep', () => {
     }
   })
 
-  it('raises the prompt once the pane PTY actually binds', async () => {
+  it('asks about the pane once its PTY actually binds', async () => {
     vi.mocked(window.api.codexAccounts.listStalePanes).mockResolvedValue([STALE_PANE])
+    const leafId = '0195f2ce-1111-4000-8000-000000000001'
+    useAppStore.setState({
+      terminalLayoutsByTabId: {
+        'tab-1': {
+          root: null,
+          activeLeafId: leafId,
+          expandedLeafId: null,
+          ptyIdsByLeafId: { [leafId]: 'pty-1' }
+        }
+      }
+    })
 
     notifyCodexPaneBoundForStaleSweep('pty-1')
     // Nothing inspected yet: the bind has not settled.
@@ -90,12 +110,52 @@ describe('notifyCodexPaneBoundForStaleSweep', () => {
     await vi.advanceTimersByTimeAsync(300)
 
     expect(window.api.codexAccounts.listStalePanes).toHaveBeenCalledWith({ ptyIds: ['pty-1'] })
-    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']).toEqual({
       previousAccountLabel: ACCOUNT_A,
       nextAccountLabel: ACCOUNT_B,
       previousAccountId: 'account-a',
       nextAccountId: 'account-b'
     })
+    // Why a dialog with the pane's location: it groups and labels each session.
+    expect(getAgentAccountSwitchPrompt()).toMatchObject({
+      agent: 'codex',
+      reason: 'restored',
+      sessions: [{ ptyId: 'pty-1', worktreeId: 'wt1', tabId: 'tab-1', leafId }],
+      previousAccountLabel: ACCOUNT_A,
+      nextAccountLabel: ACCOUNT_B
+    })
+  })
+
+  it('restarts a restored pane without asking under Always restart', async () => {
+    useAppStore.setState({
+      settings: { ...getDefaultSettings('/home/dev'), codexAccountSwitchRunningSessions: 'restart' }
+    })
+    vi.mocked(window.api.codexAccounts.listStalePanes).mockResolvedValue([STALE_PANE])
+
+    notifyCodexPaneBoundForStaleSweep('pty-1')
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(getAgentAccountSwitchPrompt()).toBeNull()
+    expect(useAppStore.getState().pendingPaneAccountRestarts).toEqual({ 'pty-1': 'codex' })
+  })
+
+  it('keeps a restored pane under Never restart and does not ask again on the next sweep', async () => {
+    useAppStore.setState({
+      settings: { ...getDefaultSettings('/home/dev'), codexAccountSwitchRunningSessions: 'keep' }
+    })
+    vi.mocked(window.api.codexAccounts.listStalePanes).mockResolvedValue([STALE_PANE])
+
+    notifyCodexPaneBoundForStaleSweep('pty-1')
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']?.kept).toBe(true)
+    expect(window.api.codexAccounts.forgetStalePanes).toHaveBeenCalledWith({ ptyIds: ['pty-1'] })
+
+    useAppStore.setState({ settings: getDefaultSettings('/home/dev') })
+    notifyCodexPaneBoundForStaleSweep('pty-1')
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(getAgentAccountSwitchPrompt()).toBeNull()
   })
 
   it('coalesces a burst of startup binds into one sweep', async () => {
@@ -133,11 +193,11 @@ describe('notifyCodexPaneBoundForStaleSweep', () => {
 
     notifyCodexPaneBoundForStaleSweep('pty-1')
     await vi.advanceTimersByTimeAsync(300)
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
 
     await vi.advanceTimersByTimeAsync(1500)
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']).toEqual({
       previousAccountLabel: ACCOUNT_A,
       nextAccountLabel: ACCOUNT_B,
       previousAccountId: 'account-a',
@@ -174,12 +234,12 @@ describe('notifyCodexPaneBoundForStaleSweep', () => {
     // t = 5800: rungs 1-3 are spent and nothing has been raised.
     await vi.advanceTimersByTimeAsync(5_800)
     expect(inspectCallCountFor('pty-1')).toBe(3)
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
 
     // t = 15800: the fourth rung is the one that catches this pane.
     await vi.advanceTimersByTimeAsync(10_000)
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']).toEqual({
       previousAccountLabel: ACCOUNT_A,
       nextAccountLabel: ACCOUNT_B,
       previousAccountId: 'account-a',
@@ -231,11 +291,11 @@ describe('notifyCodexPaneBoundForStaleSweep', () => {
 
     notifyCodexPaneBoundForStaleSweep('pty-1')
     await vi.advanceTimersByTimeAsync(300)
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
 
     await vi.advanceTimersByTimeAsync(1500)
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']).toEqual({
       previousAccountLabel: ACCOUNT_A,
       nextAccountLabel: ACCOUNT_B,
       previousAccountId: 'account-a',
@@ -268,12 +328,12 @@ describe('notifyCodexPaneBoundForStaleSweep', () => {
     // later change to the flush sequence could leave this passing while the
     // stranding it exists to catch is no longer being set up at all.
     expect(window.api.codexAccounts.listStalePanes).toHaveBeenCalledWith({ ptyIds: ['pty-2'] })
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
 
     await vi.advanceTimersByTimeAsync(1200)
 
     expect(window.api.codexAccounts.listStalePanes).toHaveBeenCalledWith({ ptyIds: ['pty-1'] })
-    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']).toEqual({
       previousAccountLabel: ACCOUNT_A,
       nextAccountLabel: ACCOUNT_B,
       previousAccountId: 'account-a',
@@ -305,7 +365,7 @@ describe('notifyCodexPaneBoundForStaleSweep', () => {
     // The pane already remembers account-b as its launch account, which
     // collapses a fresh notice pointing back at account-b.
     useAppStore.setState({
-      codexRestartNoticeByPtyId: {
+      codexStalePaneByPtyId: {
         'pty-1': {
           previousAccountLabel: ACCOUNT_B,
           nextAccountLabel: ACCOUNT_A,
@@ -318,7 +378,7 @@ describe('notifyCodexPaneBoundForStaleSweep', () => {
 
     notifyCodexPaneBoundForStaleSweep('pty-1')
     await vi.advanceTimersByTimeAsync(300)
-    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toBeUndefined()
+    expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']).toBeUndefined()
     expect(inspectCallCountFor('pty-1')).toBe(1)
 
     notifyCodexPaneBoundForStaleSweep('pty-1')
@@ -354,7 +414,7 @@ describe('notifyCodexPaneBoundForStaleSweep', () => {
     await vi.advanceTimersByTimeAsync(60_000)
 
     expect(window.api.codexAccounts.listStalePanes).not.toHaveBeenCalled()
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
   })
 
   it('retries a Codex tab still showing its shell, then prompts when Codex is up', async () => {
@@ -366,11 +426,11 @@ describe('notifyCodexPaneBoundForStaleSweep', () => {
 
     notifyCodexPaneBoundForStaleSweep('pty-1')
     await vi.advanceTimersByTimeAsync(300)
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
 
     await vi.advanceTimersByTimeAsync(1500)
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']).toEqual({
       previousAccountLabel: ACCOUNT_A,
       nextAccountLabel: ACCOUNT_B,
       previousAccountId: 'account-a',
@@ -389,7 +449,7 @@ describe('notifyCodexPaneBoundForStaleSweep', () => {
     useAppStore.setState({ ptyIdsByTabId: { 'tab-1': ['pty-1'] } })
     await vi.advanceTimersByTimeAsync(1500)
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']).toEqual({
       previousAccountLabel: ACCOUNT_A,
       nextAccountLabel: ACCOUNT_B,
       previousAccountId: 'account-a',
@@ -421,7 +481,7 @@ describe('notifyCodexPaneBoundForStaleSweep', () => {
       expect(vi.getTimerCount()).toBe(0)
       expect(window.api.codexAccounts.listStalePanes).not.toHaveBeenCalled()
       expect(window.api.pty.inspectProcess).not.toHaveBeenCalled()
-      expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+      expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
     }
   )
 
@@ -437,7 +497,7 @@ describe('notifyCodexPaneBoundForStaleSweep', () => {
       ptyIds: ['pty-1']
     })
     expect(inspectCallCountFor('remote:env-1@@term-1')).toBe(0)
-    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']).toEqual({
       previousAccountLabel: ACCOUNT_A,
       nextAccountLabel: ACCOUNT_B,
       previousAccountId: 'account-a',
@@ -459,7 +519,7 @@ describe('notifyCodexPaneBoundForStaleSweep', () => {
       ptyIds: ['pty-1']
     })
     expect(inspectCallCountFor('remote:env-1@@term-1')).toBe(0)
-    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']).toEqual({
       previousAccountLabel: ACCOUNT_A,
       nextAccountLabel: ACCOUNT_B,
       previousAccountId: 'account-a',

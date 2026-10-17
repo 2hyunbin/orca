@@ -63,12 +63,6 @@ async function isClaudeInForeground(
   return isClaudeProcess(await confirmRuntimeTerminalForegroundProcess(ptyId))
 }
 
-/** Whether the pane's Claude is mid-turn; a restart during a permission prompt or question drops it. */
-export function isClaudePaneMidTurn(state: AppState, paneKey: string): boolean {
-  const entry = state.agentStatusByPaneKey[paneKey]
-  return entry?.agentType === 'claude' && entry.state !== 'done'
-}
-
 function normalizeFolder(path: string): string {
   const slashed = path.replace(/\\/g, '/').replace(/\/+$/, '')
   return getRendererAppPlatform() === 'win32' ? slashed.toLowerCase() : slashed

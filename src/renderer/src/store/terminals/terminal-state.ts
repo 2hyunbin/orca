@@ -14,7 +14,7 @@ import type { HostSessionSlices } from '@/lib/workspace-session-host-split'
 import type {
   AccountRestartAgent,
   AutomaticAgentResumeClaim,
-  CodexRestartNotice
+  CodexStalePane
 } from './terminal-contracts'
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
@@ -33,7 +33,7 @@ export type TerminalState = {
   pendingPtyShutdownIds: Record<string, number>
   /** Account-switch restarts awaiting execution, keyed by the PTY they replace. */
   pendingPaneAccountRestarts: Record<string, AccountRestartAgent>
-  codexRestartNoticeByPtyId: Record<string, CodexRestartNotice>
+  codexStalePaneByPtyId: Record<string, CodexStalePane>
   expandedPaneByTabId: Record<string, boolean>
   canExpandPaneByTabId: Record<string, boolean>
   terminalLayoutsByTabId: Record<string, TerminalLayoutSnapshot>

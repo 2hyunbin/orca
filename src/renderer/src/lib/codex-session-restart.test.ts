@@ -5,7 +5,7 @@ import { defaultScopeHost } from '@/lib/default-creation-host'
 // Why: these cases model a switch made on the focused host, as the status bar does.
 const markForFocusedHost = (
   args: Omit<Parameters<typeof markLiveCodexSessionsForRestart>[0], 'owner'>
-): Promise<void> =>
+): Promise<unknown> =>
   markLiveCodexSessionsForRestart({
     owner: defaultScopeHost(useAppStore.getState().settings),
     ...args
@@ -85,8 +85,8 @@ describe('markLiveCodexSessionsForRestart', () => {
         'tab-1': ['pty-1']
       },
       pendingPaneAccountRestarts: {},
-      codexRestartNoticeByPtyId: {},
-      markCodexRestartNotices: useAppStore.getState().markCodexRestartNotices
+      codexStalePaneByPtyId: {},
+      markCodexStalePanes: useAppStore.getState().markCodexStalePanes
     })
 
     ;(globalThis as { window: typeof window }).window = {
@@ -136,7 +136,7 @@ describe('markLiveCodexSessionsForRestart', () => {
     })
 
     expect(window.api.pty.inspectProcess).toHaveBeenCalledWith('pty-1')
-    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']).toEqual({
       previousAccountLabel: ACCOUNT_A,
       nextAccountLabel: ACCOUNT_B
     })
@@ -185,7 +185,7 @@ describe('markLiveCodexSessionsForRestart', () => {
       nextAccountLabel: ACCOUNT_B
     })
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({
       'pty-1': {
         previousAccountLabel: ACCOUNT_A,
         nextAccountLabel: ACCOUNT_B
@@ -208,7 +208,7 @@ describe('markLiveCodexSessionsForRestart', () => {
       nextAccountLabel: ACCOUNT_B
     })
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
   })
 
   it('marks a launcher-started Codex pane whose deepest process is a subagent', async () => {
@@ -224,7 +224,7 @@ describe('markLiveCodexSessionsForRestart', () => {
       nextAccountLabel: ACCOUNT_B
     })
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']).toEqual({
       previousAccountLabel: ACCOUNT_A,
       nextAccountLabel: ACCOUNT_B
     })
@@ -242,8 +242,8 @@ describe('markLiveCodexSessionsForRestart', () => {
       nextAccountLabel: ACCOUNT_B
     })
 
-    // Why: a restart notice drops every keystroke in that pane.
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+    // Why: asking would offer to restart a pane this switch never touched.
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
   })
 
   it('leaves a Codex-launched pane alone while the user is inside their own program', async () => {
@@ -260,7 +260,7 @@ describe('markLiveCodexSessionsForRestart', () => {
       nextAccountLabel: ACCOUNT_B
     })
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
   })
 
   it('still marks a confirmed Codex pane when another pane is unreachable', async () => {
@@ -277,7 +277,7 @@ describe('markLiveCodexSessionsForRestart', () => {
       nextAccountLabel: ACCOUNT_B
     })
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({
       'pty-1': {
         previousAccountLabel: ACCOUNT_A,
         nextAccountLabel: ACCOUNT_B
@@ -296,7 +296,7 @@ describe('markLiveCodexSessionsForRestart', () => {
       nextAccountLabel: ACCOUNT_B
     })
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']).toEqual({
       previousAccountLabel: ACCOUNT_A,
       nextAccountLabel: ACCOUNT_B
     })
@@ -313,13 +313,13 @@ describe('markLiveCodexSessionsForRestart', () => {
       nextAccountLabel: ACCOUNT_B
     })
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']).toEqual({
       previousAccountLabel: ACCOUNT_A,
       nextAccountLabel: ACCOUNT_B
     })
   })
 
-  it('clears stale restart notices when the selected account switches back to the live pane account', async () => {
+  it('clears stale pane records when the selected account switches back to the live pane account', async () => {
     vi.mocked(window.api.pty.inspectProcess).mockResolvedValue({
       foregroundProcess: 'codex',
       hasChildProcesses: false
@@ -336,7 +336,7 @@ describe('markLiveCodexSessionsForRestart', () => {
       nextAccountLabel: ACCOUNT_A
     })
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
     expect(useAppStore.getState().pendingPaneAccountRestarts).toEqual({})
   })
 
@@ -351,17 +351,17 @@ describe('markLiveCodexSessionsForRestart', () => {
       nextAccountLabel: ACCOUNT_B
     })
     useAppStore.getState().queuePaneAccountRestarts(['pty-1'], 'codex')
-    await markForFocusedHost({
+    const owed = await markForFocusedHost({
       previousAccountLabel: ACCOUNT_B,
       nextAccountLabel: 'account-c@example.com'
     })
 
     // Why: the queued restart relaunches under whatever account is selected when
-    // it runs, so a third switch must not reopen a prompt the user answered.
-    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toEqual({
+    // it runs, so a third switch must not ask about it again.
+    expect(owed).toEqual([])
+    expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']).toEqual({
       previousAccountLabel: ACCOUNT_A,
-      nextAccountLabel: 'account-c@example.com',
-      restartRequested: true
+      nextAccountLabel: 'account-c@example.com'
     })
     expect(useAppStore.getState().pendingPaneAccountRestarts).toEqual({ 'pty-1': 'codex' })
   })
@@ -382,7 +382,7 @@ describe('markLiveCodexSessionsForRestart', () => {
       nextAccountLabel: ACCOUNT_C
     })
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']).toEqual({
       previousAccountLabel: ACCOUNT_A,
       nextAccountLabel: ACCOUNT_C
     })
@@ -434,7 +434,7 @@ describe('markLiveCodexSessionsForRestart', () => {
       params: { terminal: 'term-1' },
       timeoutMs: 15_000
     })
-    expect(useAppStore.getState().codexRestartNoticeByPtyId['remote:env-1@@term-1']).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId['remote:env-1@@term-1']).toEqual({
       previousAccountLabel: ACCOUNT_A,
       nextAccountLabel: ACCOUNT_B
     })
@@ -442,8 +442,8 @@ describe('markLiveCodexSessionsForRestart', () => {
 })
 
 /**
- * A restart notice blocks every keystroke in the pane it names, so raising one
- * on a pane the switch could not have touched takes a working terminal deaf.
+ * Asking about a pane the switch could not have touched offers to restart a
+ * working terminal for nothing.
  * A managed Codex account is scoped to one machine AND one runtime: a remote
  * spawn carries a connectionId, so no CODEX_HOME is ever injected into it, and
  * WSL selections live in their own per-distro slot.
@@ -481,7 +481,7 @@ describe('markLiveCodexSessionsForRestart lane scoping', () => {
       },
       ptyIdsByTabId: Object.fromEntries(panes.map((pane, index) => [`tab-${index}`, [pane.ptyId]])),
       pendingPaneAccountRestarts: {},
-      codexRestartNoticeByPtyId: {}
+      codexStalePaneByPtyId: {}
     })
   }
 
@@ -548,7 +548,7 @@ describe('markLiveCodexSessionsForRestart lane scoping', () => {
       target: { runtime: 'host' }
     })
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
     expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
   })
 
@@ -561,7 +561,7 @@ describe('markLiveCodexSessionsForRestart lane scoping', () => {
       target: { runtime: 'host' }
     })
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
     expect(window.api.pty.inspectProcess).not.toHaveBeenCalled()
   })
 
@@ -574,7 +574,7 @@ describe('markLiveCodexSessionsForRestart lane scoping', () => {
       target: { runtime: 'host' }
     })
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({
       'pty-1': { previousAccountLabel: ACCOUNT_A, nextAccountLabel: ACCOUNT_B }
     })
     expect(window.api.pty.inspectProcess).toHaveBeenCalledWith('pty-1')
@@ -593,7 +593,7 @@ describe('markLiveCodexSessionsForRestart lane scoping', () => {
     })
 
     // Why: the notice follows the host that was written, never the focused one.
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({
       'pty-1': { previousAccountLabel: ACCOUNT_A, nextAccountLabel: ACCOUNT_B }
     })
   })
@@ -606,7 +606,7 @@ describe('markLiveCodexSessionsForRestart lane scoping', () => {
       nextAccountLabel: ACCOUNT_B
     })
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({
       'pty-1': { previousAccountLabel: ACCOUNT_A, nextAccountLabel: ACCOUNT_B }
     })
   })
@@ -623,7 +623,7 @@ describe('markLiveCodexSessionsForRestart lane scoping', () => {
       target: { runtime: 'host' }
     })
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
     expect(window.api.pty.inspectProcess).not.toHaveBeenCalled()
   })
 
@@ -636,7 +636,7 @@ describe('markLiveCodexSessionsForRestart lane scoping', () => {
       target: { runtime: 'wsl', wslDistro: 'Ubuntu' }
     })
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({
       'pty-wsl': { previousAccountLabel: ACCOUNT_A, nextAccountLabel: ACCOUNT_B }
     })
   })
@@ -650,7 +650,7 @@ describe('markLiveCodexSessionsForRestart lane scoping', () => {
       target: { runtime: 'wsl', wslDistro: 'Debian' }
     })
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
   })
 
   it('leaves the local host pane alone when the switch was made on a runtime environment', async () => {
@@ -665,7 +665,7 @@ describe('markLiveCodexSessionsForRestart lane scoping', () => {
 
     // Why: that mutation was RPC'd to env-1's own roster, so env-1's panes are
     // the stale ones and the local shell is untouched — the mirror of the bug.
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({
       'remote:env-1@@term-1': {
         previousAccountLabel: ACCOUNT_A,
         nextAccountLabel: ACCOUNT_B
@@ -695,7 +695,7 @@ describe('markLiveCodexSessionsForRestart lane scoping', () => {
         target: { runtime: 'host' }
       })
 
-      expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+      expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
       expect(window.api.pty.inspectProcess).not.toHaveBeenCalled()
     })
 
@@ -722,7 +722,7 @@ describe('markLiveCodexSessionsForRestart lane scoping', () => {
         target: { runtime: 'host' }
       })
 
-      expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toEqual({
+      expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']).toEqual({
         previousAccountLabel: ACCOUNT_A,
         nextAccountLabel: ACCOUNT_B,
         previousAccountId: 'account-a',
@@ -747,7 +747,7 @@ describe('markLiveCodexSessionsForRestart lane scoping', () => {
       expect(window.api.codexAccounts.listStalePanes).toHaveBeenCalledWith({
         ptyIds: ['pty-1']
       })
-      expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+      expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
     })
 
     it('classifies current, stale, and unrecorded panes independently', async () => {
@@ -775,7 +775,7 @@ describe('markLiveCodexSessionsForRestart lane scoping', () => {
       expect(window.api.codexAccounts.listStalePanes).toHaveBeenCalledWith({
         ptyIds: ['pty-current', 'pty-stale']
       })
-      expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({
+      expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({
         'pty-stale': {
           previousAccountLabel: ACCOUNT_A,
           nextAccountLabel: ACCOUNT_B,
@@ -817,7 +817,7 @@ describe('markLiveCodexSessionsForRestart lane scoping', () => {
         target: { runtime: 'host' }
       })
 
-      expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toEqual({
+      expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']).toEqual({
         previousAccountLabel: ACCOUNT_A,
         nextAccountLabel: ACCOUNT_B
       })
@@ -868,7 +868,7 @@ describe('markRestoredStaleCodexSessionsForRestart', () => {
       },
       ptyIdsByTabId: { 'tab-1': ['pty-1'] },
       pendingPaneAccountRestarts: {},
-      codexRestartNoticeByPtyId: {}
+      codexStalePaneByPtyId: {}
     })
     ;(globalThis as { window: typeof window }).window = {
       ...originalWindow,
@@ -914,7 +914,7 @@ describe('markRestoredStaleCodexSessionsForRestart', () => {
     await markRestoredStaleCodexSessionsForRestart()
 
     expect(window.api.codexAccounts.listStalePanes).toHaveBeenCalledWith({ ptyIds: ['pty-1'] })
-    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']).toEqual({
+    expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']).toEqual({
       previousAccountLabel: ACCOUNT_A,
       nextAccountLabel: ACCOUNT_B,
       previousAccountId: 'account-a',
@@ -929,7 +929,7 @@ describe('markRestoredStaleCodexSessionsForRestart', () => {
 
     await markRestoredStaleCodexSessionsForRestart()
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId['pty-1']?.previousAccountLabel).toBe(
+    expect(useAppStore.getState().codexStalePaneByPtyId['pty-1']?.previousAccountLabel).toBe(
       'System default'
     )
   })
@@ -937,7 +937,7 @@ describe('markRestoredStaleCodexSessionsForRestart', () => {
   it('prompts nothing when every restored pane is on the selected account', async () => {
     await markRestoredStaleCodexSessionsForRestart()
 
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
   })
 
   it('skips the account lookup entirely when no pane is running Codex', async () => {
@@ -949,6 +949,6 @@ describe('markRestoredStaleCodexSessionsForRestart', () => {
     await markRestoredStaleCodexSessionsForRestart()
 
     expect(window.api.codexAccounts.listStalePanes).not.toHaveBeenCalled()
-    expect(useAppStore.getState().codexRestartNoticeByPtyId).toEqual({})
+    expect(useAppStore.getState().codexStalePaneByPtyId).toEqual({})
   })
 })

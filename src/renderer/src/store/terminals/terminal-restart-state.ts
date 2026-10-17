@@ -1,8 +1,8 @@
-import { isSameCodexRestartNoticeAccount } from '../slices/codex-restart-notice-account-identity'
+import { isSameCodexStalePaneAccount } from '../slices/codex-stale-pane-account-identity'
 import type { AccountRestartAgent } from './terminal-contracts'
 import type { TerminalSlice, TerminalStoreGet, TerminalStoreSet } from './terminal-state'
 
-// Why: Codex notice cleanup shares this map with Claude switch restarts and must not drop them.
+// Why: Codex stale-pane cleanup shares this map with Claude switch restarts and must not drop them.
 function dropQueuedCodexRestart(pending: Record<string, AccountRestartAgent>, ptyId: string): void {
   if (pending[ptyId] === 'codex') {
     delete pending[ptyId]
@@ -19,10 +19,9 @@ export function createTerminalRestartActions(
   | 'suppressPtyExit'
   | 'queuePaneAccountRestarts'
   | 'consumePendingPaneAccountRestart'
-  | 'markCodexRestartNotices'
-  | 'clearCodexRestartNotice'
-  | 'dismissCodexRestartNotices'
-  | 'reopenCodexRestartPrompt'
+  | 'markCodexStalePanes'
+  | 'clearCodexStalePane'
+  | 'keepCodexStalePanes'
 > {
   return {
     consumeSuppressedPtyExit: (ptyId) => {
@@ -48,33 +47,12 @@ export function createTerminalRestartActions(
       if (ptyIds.length === 0) {
         return
       }
-      set((s) => {
-        const pendingPaneAccountRestarts = {
+      set((s) => ({
+        pendingPaneAccountRestarts: {
           ...s.pendingPaneAccountRestarts,
           ...Object.fromEntries(ptyIds.map((ptyId) => [ptyId, agent] as const))
         }
-        if (agent === 'claude') {
-          return { pendingPaneAccountRestarts }
-        }
-        // Why: the prompt is answered the moment the user asks for a restart. A
-        // pane whose tab isn't mounted can only restart when it next mounts, and
-        // leaving the prompt up re-showed a button that now does nothing.
-        const nextCodexRestartNoticeByPtyId = { ...s.codexRestartNoticeByPtyId }
-        for (const ptyId of ptyIds) {
-          const notice = nextCodexRestartNoticeByPtyId[ptyId]
-          if (notice) {
-            // Why: mirror of the strip in dismissCodexRestartNotices. A queued
-            // restart leaves the pane on the old account until it relaunches, so
-            // it must re-block input that an earlier dismissal had freed.
-            const { dismissed: _dismissed, ...kept } = notice
-            nextCodexRestartNoticeByPtyId[ptyId] = { ...kept, restartRequested: true }
-          }
-        }
-        return {
-          pendingPaneAccountRestarts,
-          codexRestartNoticeByPtyId: nextCodexRestartNoticeByPtyId
-        }
-      })
+      }))
     },
     consumePendingPaneAccountRestart: (ptyId) => {
       let queuedAgent: AccountRestartAgent | null = null
@@ -90,94 +68,89 @@ export function createTerminalRestartActions(
       })
       return queuedAgent
     },
-    markCodexRestartNotices: (notices) => {
-      if (notices.length === 0) {
+    markCodexStalePanes: (panes) => {
+      if (panes.length === 0) {
         return []
       }
-      const noticedPtyIds: string[] = []
+      const owedPtyIds: string[] = []
       set((s) => {
-        const next = { ...s.codexRestartNoticeByPtyId }
+        const next = { ...s.codexStalePaneByPtyId }
         const nextPendingPaneAccountRestarts = { ...s.pendingPaneAccountRestarts }
-        for (const notice of notices) {
-          const existing = next[notice.ptyId]
+        for (const pane of panes) {
+          const existing = next[pane.ptyId]
           // Why one record rather than two lookups: the label and the id of the
           // launch account have to come from the same source, or they can end up
           // describing two different accounts.
-          const launch = existing ?? notice
-          const target = { id: notice.nextAccountId, label: notice.nextAccountLabel }
-          // Why: a live Codex pane keeps its original launch account until it actually restarts, so A -> B -> A must not leave a stale restart notice.
+          const launch = existing ?? pane
+          const target = { id: pane.nextAccountId, label: pane.nextAccountLabel }
+          // Why: a live Codex pane keeps its original launch account until it actually restarts, so A -> B -> A must not ask.
           if (
-            isSameCodexRestartNoticeAccount(
+            isSameCodexStalePaneAccount(
               { id: launch.previousAccountId, label: launch.previousAccountLabel },
               target
             )
           ) {
-            delete next[notice.ptyId]
-            dropQueuedCodexRestart(nextPendingPaneAccountRestarts, notice.ptyId)
+            delete next[pane.ptyId]
+            dropQueuedCodexRestart(nextPendingPaneAccountRestarts, pane.ptyId)
             continue
           }
-          next[notice.ptyId] = {
-            previousAccountLabel: launch.previousAccountLabel,
-            nextAccountLabel: notice.nextAccountLabel,
-            ...(launch.previousAccountId === undefined
-              ? {}
-              : { previousAccountId: launch.previousAccountId }),
-            ...(notice.nextAccountId === undefined ? {} : { nextAccountId: notice.nextAccountId }),
-            // Why: a queued restart relaunches under whatever account is selected
-            // when it runs, so a later switch does not reopen an answered prompt.
-            ...(existing?.restartRequested ? { restartRequested: true as const } : {}),
-            // Why: a dismissal answered one question — "keep the launch account
-            // instead of this one". Only a genuinely different target re-asks it,
-            // so a later C reopens the prompt while adding an account or
-            // reauthenticating the active one (both re-mark live panes with the
-            // selection unchanged) must not resurrect it and re-mute the pane.
-            ...(existing?.dismissed &&
-            isSameCodexRestartNoticeAccount(
+          // Why: keeping answered "stay on the launch account instead of this one". Adding an
+          // account or reauthenticating the active one re-marks with the target unchanged, which
+          // must not re-ask; only a genuinely different target does.
+          const kept =
+            existing?.kept === true &&
+            isSameCodexStalePaneAccount(
               { id: existing.nextAccountId, label: existing.nextAccountLabel },
               target
             )
-              ? { dismissed: true as const }
-              : {})
+          next[pane.ptyId] = {
+            previousAccountLabel: launch.previousAccountLabel,
+            nextAccountLabel: pane.nextAccountLabel,
+            ...(launch.previousAccountId === undefined
+              ? {}
+              : { previousAccountId: launch.previousAccountId }),
+            ...(pane.nextAccountId === undefined ? {} : { nextAccountId: pane.nextAccountId }),
+            ...(kept ? { kept: true as const } : {})
           }
-          noticedPtyIds.push(notice.ptyId)
+          // Why: a queued restart relaunches under whatever is selected when it runs.
+          if (!kept && nextPendingPaneAccountRestarts[pane.ptyId] !== 'codex') {
+            owedPtyIds.push(pane.ptyId)
+          }
         }
         return {
-          codexRestartNoticeByPtyId: next,
+          codexStalePaneByPtyId: next,
           pendingPaneAccountRestarts: nextPendingPaneAccountRestarts
         }
       })
-      return noticedPtyIds
+      return owedPtyIds
     },
-    clearCodexRestartNotice: (ptyId) => {
+    clearCodexStalePane: (ptyId) => {
       set((s) => {
-        if (!s.codexRestartNoticeByPtyId[ptyId]) {
+        if (!s.codexStalePaneByPtyId[ptyId]) {
           return s
         }
-        const next = { ...s.codexRestartNoticeByPtyId }
+        const next = { ...s.codexStalePaneByPtyId }
         const nextPendingPaneAccountRestarts = { ...s.pendingPaneAccountRestarts }
         delete next[ptyId]
         dropQueuedCodexRestart(nextPendingPaneAccountRestarts, ptyId)
         return {
-          codexRestartNoticeByPtyId: next,
+          codexStalePaneByPtyId: next,
           pendingPaneAccountRestarts: nextPendingPaneAccountRestarts
         }
       })
     },
-    dismissCodexRestartNotices: (ptyIds) => {
+    keepCodexStalePanes: (ptyIds) => {
       set((s) => {
-        // Why: keeping the old account is an answer, not a restart — the record
-        // stays so `previousAccountLabel` still names the pane's launch account,
-        // but every consumer treats it as answered (prompt hidden, input freed).
-        const next = { ...s.codexRestartNoticeByPtyId }
+        // Why the record stays: `previousAccountLabel` still names the pane's launch account.
+        const next = { ...s.codexStalePaneByPtyId }
         const nextPendingPaneAccountRestarts = { ...s.pendingPaneAccountRestarts }
         let changed = false
         for (const ptyId of ptyIds) {
-          const notice = next[ptyId]
-          if (!notice || notice.dismissed) {
+          const pane = next[ptyId]
+          if (!pane || pane.kept) {
             continue
           }
-          const { restartRequested: _restartRequested, ...kept } = notice
-          next[ptyId] = { ...kept, dismissed: true }
+          next[ptyId] = { ...pane, kept: true }
           dropQueuedCodexRestart(nextPendingPaneAccountRestarts, ptyId)
           changed = true
         }
@@ -185,22 +158,7 @@ export function createTerminalRestartActions(
           return s
         }
         return {
-          codexRestartNoticeByPtyId: next,
-          pendingPaneAccountRestarts: nextPendingPaneAccountRestarts
-        }
-      })
-    },
-    reopenCodexRestartPrompt: (ptyId) => {
-      set((s) => {
-        const notice = s.codexRestartNoticeByPtyId[ptyId]
-        if (!notice?.restartRequested) {
-          return s
-        }
-        const { restartRequested: _restartRequested, ...kept } = notice
-        const nextPendingPaneAccountRestarts = { ...s.pendingPaneAccountRestarts }
-        dropQueuedCodexRestart(nextPendingPaneAccountRestarts, ptyId)
-        return {
-          codexRestartNoticeByPtyId: { ...s.codexRestartNoticeByPtyId, [ptyId]: kept },
+          codexStalePaneByPtyId: next,
           pendingPaneAccountRestarts: nextPendingPaneAccountRestarts
         }
       })

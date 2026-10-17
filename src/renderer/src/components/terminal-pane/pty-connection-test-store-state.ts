@@ -82,13 +82,12 @@ export type StoreState = {
     agentDefaultArgs?: Record<string, string>
     agentDefaultEnv?: Record<string, Record<string, string>>
   } | null
-  codexRestartNoticeByPtyId: Record<
+  codexStalePaneByPtyId: Record<
     string,
     {
       previousAccountLabel: string
       nextAccountLabel: string
-      restartRequested?: true
-      dismissed?: true
+      kept?: true
     }
   >
   deferredSshReconnectTargets: string[]
