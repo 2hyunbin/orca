@@ -17,6 +17,7 @@ import type {
   AgentJournalThreadGoal
 } from '../../../shared/agent-session-journal-types'
 import { decodeStructuredAgentSessionOptionValue } from '../../../shared/structured-agent-session-option-codec'
+import { finishedListingIds } from '../../../shared/structured-agent-session-options'
 import {
   AGENT_CHAT_PERMISSION_MODE_OPTION_ID,
   agentChatPermissionModes
@@ -26,13 +27,17 @@ import { journalOpenReadRefusal } from '../agent-session-journal/journal-open-fa
 import type { StructuredAgentDefinition } from './structured-agent-definition'
 import type { StructuredAgentRegistry } from './structured-agent-registry'
 import type { StructuredAgentSessionLiveOptions } from './structured-agent-session-adapter'
+import type { AgentModelCatalogLiveListing } from '../agent-model-catalog/agent-model-catalog-entry'
 import type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
 import { structuredAgentSessionOptionModels } from './structured-agent-session-option-models'
 import { structuredAgentSessionLaunchPermission } from './structured-agent-session-launch-permission'
 import type { AgentSessionTurnContext, TurnOutcome } from './structured-agent-session-turns'
 import type { StructuredAgentSessionMutationContext } from './structured-agent-session-host-mutations'
 
-type RestingOptions = Pick<AgentSessionOptionsResult, 'models' | 'fastModeSupport' | 'current'>
+type RestingOptions = Pick<
+  AgentSessionOptionsResult,
+  'models' | 'listedModelIds' | 'fastModeSupport' | 'current'
+>
 
 /** What the asking client takes: whether it reads an answer that names no model. */
 export type StructuredAgentSessionOptionsReader = { readsWithoutModel: boolean }
@@ -119,6 +124,7 @@ async function readStructuredAgentSessionOptionsAtRest(
   // With no catalog for the account, the list a running child of this agent falls back to.
   const listed = catalog.origin === 'unknown' ? (rules?.fallbackModels() ?? null) : catalog.models
   const models = listed ?? []
+  const listedModelIds = finishedListingIds(catalog)
   const fastMode =
     saved.fastMode === undefined
       ? null
@@ -137,6 +143,7 @@ async function readStructuredAgentSessionOptionsAtRest(
       : undefined)
   return {
     models: listed ? structuredAgentSessionOptionModels(listed, model, (row) => row) : [],
+    ...(listedModelIds ? { listedModelIds } : {}),
     ...(catalog.origin !== 'unknown' && catalog.fastModeSupport
       ? { fastModeSupport: catalog.fastModeSupport }
       : {}),
@@ -227,12 +234,12 @@ export async function readStructuredAgentSessionOptions(
         : null
   let options: Omit<AgentSessionOptionsResult, 'rewind'>
   if (live) {
+    // Only a start saves its listing for the account: a long-running child may run an older CLI
+    // than the next start will, so its later reads must not replace a newer start's list.
     const { catalogListing, ...answer } = live
-    if (catalogListing) {
-      // What a running child listed is its account's catalog too, so the next chat opens warm.
-      context.deps.modelCatalog?.recordLiveListing(sessionId, catalogListing)
-    }
-    options = answer
+    options = catalogListing
+      ? { ...answer, listedModelIds: accountListedModelIds(catalogListing) }
+      : answer
   } else {
     options = await readStructuredAgentSessionOptionsAtRest(context.deps, sessionId, reader)
   }
@@ -289,6 +296,11 @@ export async function readStructuredAgentSessionOptions(
       ? { contextUsage: { current: session.journal.contextUsage(), ...contextFloor } }
       : {})
   }
+}
+
+/** The rows a child listed for its account, never one only its own launch added. */
+function accountListedModelIds(listing: AgentModelCatalogLiveListing): string[] {
+  return listing.models.map((row) => row.id).filter((id) => id !== listing.launchOnlyModelId)
 }
 
 /** A goal the host can change, or one only the agent's own `/goal` changes, reported apart. */

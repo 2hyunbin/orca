@@ -62,7 +62,8 @@ export type AgentModelCatalogService = {
     /** Answer only from the saved entry and held reason; start, join or re-check no listing. */
     savedOnly?: boolean
   }) => Promise<AgentSessionModelCatalogResult>
-  /** Saves what a running session listed as its account's catalog, so the next chat starts warm. */
+  /** Saves what a session listed as it started as its account's catalog, so the next chat starts
+   *  warm. */
   recordLiveListing: (sessionId: string, listing: AgentModelCatalogLiveListing) => void
   /** Lists, in the background, every agent the user has used here (a saved catalog or a chat)
    *  whose catalog for the account a new chat would pin is missing or old, so a picker never meets

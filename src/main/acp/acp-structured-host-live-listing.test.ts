@@ -1,5 +1,5 @@
-// A running Grok chat's own model list, read through the real host, reaches the account's saved
-// catalog: the next chat opens warm even when a session-free listing failed.
+// A Grok chat's start saves its model list to the account's catalog, so the next chat opens warm
+// even when a session-free listing failed; its later reads save nothing.
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { closeProviderTimelineRigs } from '../native-chat/agent-session-timeline/provider-timeline-assembler-test-support'
@@ -12,7 +12,7 @@ afterEach(async () => {
 })
 
 describe('a live Grok listing', () => {
-  it('is saved through the host catalog when the chat reads its options', async () => {
+  it('is saved at the start, and a later options read saves nothing', async () => {
     const modelCatalog: AgentModelCatalogService = {
       read: vi.fn(async () => ({ origin: 'unknown' as const })),
       recordLiveListing: vi.fn(),
@@ -22,17 +22,11 @@ describe('a live Grok listing', () => {
     }
     const { host } = await openAttachedHostRig({}, undefined, modelCatalog)
 
-    // Its start was saved once as the chat attached; this read is saved too.
+    // A running child may run an older CLI than the next start, so only its start speaks.
     expect(modelCatalog.recordLiveListing).toHaveBeenCalledTimes(1)
     await host.readOptions(SESSION)
 
-    expect(modelCatalog.recordLiveListing).toHaveBeenCalledTimes(2)
-    const [sessionId, listing] = vi.mocked(modelCatalog.recordLiveListing).mock.calls[1]!
-    expect(sessionId).toBe(SESSION)
-    expect(listing.models.map((model) => model.id)).toEqual(['grok-4.7', 'grok-4.6'])
-    // The session's picks are no one's default, and only its start says what its config resolved.
-    expect(listing.models.every((model) => !model.isDefault)).toBe(true)
-    expect(listing).not.toHaveProperty('configuredDefault')
+    expect(modelCatalog.recordLiveListing).toHaveBeenCalledTimes(1)
   })
 
   it('starts the chat even when saving its start listing throws', async () => {

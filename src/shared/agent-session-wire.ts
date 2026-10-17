@@ -480,6 +480,10 @@ export type AgentSessionOptionsResult = {
   /** This session takes image attachments. Absent = unknown (an older host). */
   acceptsImages?: boolean
   models: AgentSessionModelOption[]
+  /** The `models` ids the agent's own finished listing names, never a row the host added (the
+   *  session's unlisted model, built-in rows, a launch-only row). Absent: nothing verified, as
+   *  from an older host. */
+  listedModelIds?: string[]
   /** Session/account/transport support. Absent means unknown, never unsupported. */
   fastModeSupport?: AgentSessionFastModeSupport
   current: {

@@ -239,9 +239,10 @@ describe('a publish-first Claude create whose init is slow', () => {
         configuredDefault: expect.objectContaining({ modelId: 'claude-opus-9' })
       })
     })
-    // A later options read lists the models and says nothing more about the default.
+    // A later options read saves nothing: only a start speaks for the account.
+    const saved = savedListings.length
     await host.readOptions(SESSION)
-    expect(savedListings.at(-1)?.listing).not.toHaveProperty('configuredDefault')
+    expect(savedListings).toHaveLength(saved)
   })
 
   it('saves the configured default when the settings readback beats the attach', async () => {
