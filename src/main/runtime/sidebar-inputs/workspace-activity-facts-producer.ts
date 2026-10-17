@@ -28,6 +28,12 @@ export type AgentStatusStoreView = Pick<
   | 'subscribeStatusFreshness'
 >
 
+const IDLE_SURFACES: WorkspaceSurfaceActivity = {
+  terminal: null,
+  browser: false,
+  structuredChat: false
+}
+
 type AgentPane = { worktreeId: string; status: LiveAgentWorktreeStatus; staleAt: number }
 
 /**
@@ -54,9 +60,21 @@ export class WorkspaceActivityFactsProducer {
     return { revision: this.revision, facts: Object.fromEntries(this.facts) }
   }
 
+  /** Re-reads the workspace's surfaces; the runtime calls this per publication. */
   refreshWorkspace(worktreeId: string): void {
+    this.publish(worktreeId, this.deps.readSurfaces(worktreeId))
+  }
+
+  // An agent change keeps the surfaces last read, so a status ping never re-reads them.
+  private refreshAgent(worktreeId: string): void {
+    this.publish(worktreeId, this.facts.get(worktreeId) ?? IDLE_SURFACES)
+  }
+
+  private publish(worktreeId: string, surfaces: WorkspaceSurfaceActivity): void {
     const next: WorkspaceActivityFacts = {
-      ...this.deps.readSurfaces(worktreeId),
+      terminal: surfaces.terminal,
+      browser: surfaces.browser,
+      structuredChat: surfaces.structuredChat,
       agent: this.agentStatusFor(worktreeId)
     }
     const previous = this.facts.get(worktreeId)
@@ -114,10 +132,10 @@ export class WorkspaceActivityFactsProducer {
       this.agentPanes.delete(paneKey)
     }
     if (previous) {
-      this.refreshWorkspace(previous.worktreeId)
+      this.refreshAgent(previous.worktreeId)
     }
     if (next && next.worktreeId !== previous?.worktreeId) {
-      this.refreshWorkspace(next.worktreeId)
+      this.refreshAgent(next.worktreeId)
     }
   }
 
@@ -206,7 +224,7 @@ export class WorkspaceActivityFactsProducer {
       }
       this.agentPanes.delete(paneKey)
       this.unindexAgentPane(paneKey, pane.worktreeId)
-      this.refreshWorkspace(pane.worktreeId)
+      this.refreshAgent(pane.worktreeId)
     }
     if (nextStaleAt !== Infinity) {
       this.armExpiry(nextStaleAt)

@@ -83,17 +83,15 @@ describe('WorkspaceActivityFactsProducer', () => {
     expect(producer.snapshot().facts[WT_A]?.terminal).toBe('unverifiable')
   })
 
-  it('follows agent status transitions, touching only the pinged workspace', () => {
+  it('follows agent status transitions without re-reading any surfaces', () => {
     const server = new AgentHookServer()
     const { producer, readSurfaces } = createProducer()
     const detach = producer.attachAgentStatusStore(server)
     try {
       terminalStatus(server, PANE_B, WT_B, 'working')
-      readSurfaces.mockClear()
 
       terminalStatus(server, PANE_A, WT_A, 'working')
       expect(producer.snapshot().facts[WT_A]?.agent).toBe('working')
-      expect(readSurfaces.mock.calls.map(([id]) => id)).toEqual([WT_A])
 
       terminalStatus(server, PANE_A, WT_A, 'waiting')
       expect(producer.snapshot().facts[WT_A]?.agent).toBe('permission')
@@ -104,6 +102,27 @@ describe('WorkspaceActivityFactsProducer', () => {
       terminalStatus(server, PANE_A, WT_A, 'done')
       expect(producer.snapshot().facts[WT_A]).toBeUndefined()
       expect(producer.snapshot().facts[WT_B]?.agent).toBe('working')
+      expect(readSurfaces).not.toHaveBeenCalled()
+    } finally {
+      detach()
+    }
+  })
+
+  it('keeps the surfaces it last read when only the agent changes', () => {
+    const server = new AgentHookServer()
+    const { producer, surfaces } = createProducer()
+    surfaces.set(WT_A, { ...NONE, terminal: 'live' })
+    producer.refreshWorkspace(WT_A)
+    const detach = producer.attachAgentStatusStore(server)
+    try {
+      terminalStatus(server, PANE_A, WT_A, 'working')
+      terminalStatus(server, PANE_A, WT_A, 'done')
+      expect(producer.snapshot().facts[WT_A]).toEqual({
+        terminal: 'live',
+        browser: false,
+        structuredChat: false,
+        agent: null
+      })
     } finally {
       detach()
     }

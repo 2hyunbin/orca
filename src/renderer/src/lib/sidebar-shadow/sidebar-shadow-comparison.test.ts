@@ -16,7 +16,7 @@ function createDomain() {
     equals: (a, b) => a === b
   })
   const recorded: SidebarShadowMismatch[] = []
-  const run = (): Promise<void> => check((mismatch) => recorded.push(mismatch))
+  const run = (): Promise<boolean> => check((mismatch) => recorded.push(mismatch))
   return { sides, run, recorded }
 }
 
@@ -64,8 +64,8 @@ describe('defineSidebarShadowDomain', () => {
     const { sides, run, recorded } = createDomain()
     sides.publishes = false
     sides.window.set('a', 1)
-    await run()
-    await run()
+    expect(await run()).toBe(false)
+    expect(await run()).toBe(false)
     expect(recorded).toEqual([])
   })
 })

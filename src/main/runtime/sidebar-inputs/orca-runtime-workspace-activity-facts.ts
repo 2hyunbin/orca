@@ -4,7 +4,7 @@ import type {
   WorkspaceActivityFactsSnapshot,
   WorkspaceTerminalLiveness
 } from '../../../shared/sidebar-list/workspace-activity-facts'
-import { runtimeWorktreeIdsEqual } from '../runtime-worktree-path-identity'
+import { worktreeIdComparisonKey } from '../../../shared/worktree/id'
 import {
   WorkspaceActivityFactsProducer,
   type WorkspaceSurfaceActivity
@@ -82,19 +82,24 @@ export abstract class OrcaRuntimeWithWorkspaceActivityFacts extends OrcaRuntimeW
     }
   }
 
-  // A host that only lost contact keeps its terminals unverifiable, never gone.
+  // getLivePtyIdsForWorktree's identity rule in one pass that stops at the first live PTY; a host
+  // that only lost contact keeps its terminals unverifiable, never gone.
   private readWorkspaceTerminalLiveness(worktreeId: string): WorkspaceTerminalLiveness | null {
-    if (this.getLivePtyIdsForWorktree(worktreeId).size > 0) {
-      return 'live'
+    const key = worktreeIdComparisonKey(worktreeId)
+    const owns = (id: string): boolean =>
+      id === worktreeId || (key !== null && worktreeIdComparisonKey(id) === key)
+    let unverifiable = false
+    for (const surfaces of [this.leaves.values(), this.ptysById.values()]) {
+      for (const surface of surfaces) {
+        if (surface.ptyId === null || !owns(surface.worktreeId)) {
+          continue
+        }
+        if (surface.connected) {
+          return 'live'
+        }
+        unverifiable ||= this.getPtyLivenessVerdict(surface.ptyId)?.status === 'unverifiable'
+      }
     }
-    const owned = [...this.ptysById.values(), ...this.leaves.values()]
-    return owned.some(
-      (surface) =>
-        surface.ptyId !== null &&
-        runtimeWorktreeIdsEqual(surface.worktreeId, worktreeId) &&
-        this.getPtyLivenessVerdict(surface.ptyId)?.status === 'unverifiable'
-    )
-      ? 'unverifiable'
-      : null
+    return unverifiable ? 'unverifiable' : null
   }
 }

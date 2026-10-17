@@ -40,7 +40,7 @@ export function defineSidebarShadowDomain<Value>(
   return async (record) => {
     const main = await domain.readMain()
     if (!main) {
-      return
+      return false
     }
     const window = domain.readWindow()
     const next = new Map<string, string>()
@@ -64,6 +64,7 @@ export function defineSidebarShadowDomain<Value>(
       }
     }
     pending = next
+    return true
   }
 }
 
@@ -77,8 +78,9 @@ export function installSidebarShadowComparison(checks: readonly SidebarShadowChe
     mismatches.push(mismatch)
     console.warn('[sidebar-shadow] window and main disagree', mismatch)
   }
+  let comparisons = 0
   window.__sidebarShadow = {
-    mismatchCount: () => mismatches.length,
+    comparisons: () => comparisons,
     mismatches: () => [...mismatches]
   }
   let inFlight = false
@@ -89,9 +91,11 @@ export function installSidebarShadowComparison(checks: readonly SidebarShadowChe
     inFlight = true
     void (async () => {
       for (const check of checks) {
-        await check(record).catch((error: unknown) =>
+        const compared = await check(record).catch((error: unknown) => {
           console.warn('[sidebar-shadow] check failed', error)
-        )
+          return false
+        })
+        comparisons += compared ? 1 : 0
       }
     })().finally(() => {
       inFlight = false
