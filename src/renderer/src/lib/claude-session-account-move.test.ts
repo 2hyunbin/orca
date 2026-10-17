@@ -13,6 +13,7 @@ import {
 } from '@/runtime/runtime-terminal-inspection'
 import {
   findMovableClaudeSessions,
+  findQueuedClaudeRestartsOnAccount,
   isClaudePaneMidTurn,
   resolveClaudeSessionAccountId
 } from './claude-session-account-move'
@@ -141,11 +142,14 @@ const movable = async (
     (pane) => pane.ptyId
   )
 
+beforeEach(() => {
+  for (const key of Object.keys(laneByPtyId)) {
+    delete laneByPtyId[key]
+  }
+})
+
 describe('findMovableClaudeSessions', () => {
   beforeEach(() => {
-    for (const key of Object.keys(laneByPtyId)) {
-      delete laneByPtyId[key]
-    }
     // Why the version name: the native macOS install reports its version folder, not `claude`.
     vi.mocked(inspectRuntimeTerminalProcess).mockResolvedValue({
       foregroundProcess: '2.1.258',
@@ -241,17 +245,41 @@ describe('resolveClaudeSessionAccountId', () => {
 })
 
 describe('isClaudePaneMidTurn', () => {
-  it('waits on a reply and on a permission prompt, not on an idle session', () => {
+  it('waits on a reply, a permission prompt or a question, not on an idle session', () => {
     seedPanes([
       { n: 1, agentType: 'claude', state: 'working' },
       { n: 2, agentType: 'claude', state: 'blocked' },
-      { n: 3, agentType: 'claude', state: 'done' }
+      { n: 3, agentType: 'claude', state: 'waiting' },
+      { n: 4, agentType: 'claude', state: 'done' }
     ])
     const state = useAppStore.getState()
-    const midTurn = [1, 2, 3].map((n) =>
+    const midTurn = [1, 2, 3, 4].map((n) =>
       isClaudePaneMidTurn(state, makePaneKey(tabId(n), leafId(n)))
     )
 
-    expect(midTurn).toEqual([true, true, false])
+    expect(midTurn).toEqual([true, true, true, false])
+  })
+})
+
+describe('findQueuedClaudeRestartsOnAccount', () => {
+  it('lists queued Claude restarts in the lane whose session already runs on the account', () => {
+    seedPanes([
+      { n: 1, agentType: 'claude', configDir: FOLDER_B },
+      { n: 2, agentType: 'claude', configDir: FOLDER_A },
+      { n: 3, agentType: 'claude', configDir: FOLDER_B },
+      { n: 4, agentType: 'claude', configDir: FOLDER_B }
+    ])
+    laneByPtyId[ptyId(4)] = 'wsl:Ubuntu'
+    useAppStore.setState({
+      pendingPaneAccountRestarts: {
+        [ptyId(1)]: 'claude',
+        [ptyId(2)]: 'claude',
+        [ptyId(4)]: 'claude'
+      }
+    })
+
+    expect(
+      findQueuedClaudeRestartsOnAccount({ owner: LOCAL, target: HOST, accountId: 'acct-b' })
+    ).toEqual([ptyId(1)])
   })
 })

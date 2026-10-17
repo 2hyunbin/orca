@@ -44,30 +44,18 @@ export function createTerminalRestartActions(
         suppressedPtyExitIds: { ...s.suppressedPtyExitIds, [ptyId]: true }
       }))
     },
-    queuePaneAccountRestarts: (ptyIds, agent, options) => {
-      if (agent === 'claude') {
-        set((s) => {
-          // Why replace: a new Claude switch answers afresh, so unrun restarts from the last one drop.
-          const kept = options?.replaceQueued
-            ? Object.fromEntries(
-                Object.entries(s.pendingPaneAccountRestarts).filter(
-                  ([, queued]) => queued !== agent
-                )
-              )
-            : s.pendingPaneAccountRestarts
-          return {
-            pendingPaneAccountRestarts: {
-              ...kept,
-              ...Object.fromEntries(ptyIds.map((ptyId) => [ptyId, agent] as const))
-            }
-          }
-        })
-        return
-      }
+    queuePaneAccountRestarts: (ptyIds, agent) => {
       if (ptyIds.length === 0) {
         return
       }
       set((s) => {
+        const pendingPaneAccountRestarts = {
+          ...s.pendingPaneAccountRestarts,
+          ...Object.fromEntries(ptyIds.map((ptyId) => [ptyId, agent] as const))
+        }
+        if (agent === 'claude') {
+          return { pendingPaneAccountRestarts }
+        }
         // Why: the prompt is answered the moment the user asks for a restart. A
         // pane whose tab isn't mounted can only restart when it next mounts, and
         // leaving the prompt up re-showed a button that now does nothing.
@@ -83,10 +71,7 @@ export function createTerminalRestartActions(
           }
         }
         return {
-          pendingPaneAccountRestarts: {
-            ...s.pendingPaneAccountRestarts,
-            ...Object.fromEntries(ptyIds.map((ptyId) => [ptyId, 'codex'] as const))
-          },
+          pendingPaneAccountRestarts,
           codexRestartNoticeByPtyId: nextCodexRestartNoticeByPtyId
         }
       })

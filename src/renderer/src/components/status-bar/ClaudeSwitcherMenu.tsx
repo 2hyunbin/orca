@@ -196,6 +196,7 @@ export function ClaudeSwitcherMenu({
           owner: runtimeTarget,
           target,
           previousAccountId: previousActiveAccountId,
+          nextAccountId: nextActiveAccountId,
           previousAccountLabel: getClaudeAccountLabel(accountState, previousActiveAccountId),
           nextAccountLabel: getClaudeAccountLabel(next, nextActiveAccountId)
         })

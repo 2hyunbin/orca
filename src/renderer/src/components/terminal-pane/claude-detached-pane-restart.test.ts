@@ -111,9 +111,12 @@ describe('detached Claude account-move restart', () => {
   })
 
   it('waits for a mid-turn session to finish before restarting it', async () => {
-    seedClaudePane({ state: 'blocked' })
+    seedClaudePane({ state: 'working' })
     useAppStore.getState().queuePaneAccountRestarts([OLD_PTY], 'claude')
 
+    await sweepUnclaimedCodexPaneRestarts()
+    // Why waiting: Claude's hooks report a permission prompt or question as waiting, mid-turn.
+    setPaneState('waiting')
     await sweepUnclaimedCodexPaneRestarts()
     expect(window.api.pty.spawn).not.toHaveBeenCalled()
     expect(useAppStore.getState().pendingPaneAccountRestarts).toEqual({ [OLD_PTY]: 'claude' })

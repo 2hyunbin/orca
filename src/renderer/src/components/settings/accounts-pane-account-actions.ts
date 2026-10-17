@@ -222,6 +222,7 @@ export function createClaudeAccountActionRunner(
           owner: accountOwner,
           target: actionRuntime,
           previousAccountId: previousActiveAccountId,
+          nextAccountId: nextActiveAccountId,
           previousAccountLabel: getClaudeAccountLabel(claudeAccounts, previousActiveAccountId),
           nextAccountLabel: getClaudeAccountLabel(next, nextActiveAccountId)
         }).then((outcome) => {

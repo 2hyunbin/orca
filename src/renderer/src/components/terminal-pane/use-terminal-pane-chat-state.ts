@@ -39,12 +39,15 @@ export function useTerminalPaneChatState(controller: TerminalPaneTitleController
     suppressPtyExit,
     toggleTabViewMode
   } = useTerminalPaneStoreActions()
-  const pendingPaneAccountRestarts = useAppStore((store) => store.pendingPaneAccountRestarts)
-  // Why null otherwise: panes only need status changes while a Claude restart waits on a turn.
-  const claudeTurnStatus = useAppStore((store) =>
-    Object.values(store.pendingPaneAccountRestarts).includes('claude')
-      ? store.agentStatusByPaneKey
-      : null
+  // Why claudeTurnStatus is null otherwise: panes only need status changes while a Claude
+  // restart waits on a turn. One selector keeps the per-pane subscription budget.
+  const { pendingPaneAccountRestarts, claudeTurnStatus } = useAppStore(
+    useShallow((store) => ({
+      pendingPaneAccountRestarts: store.pendingPaneAccountRestarts,
+      claudeTurnStatus: Object.values(store.pendingPaneAccountRestarts).includes('claude')
+        ? store.agentStatusByPaneKey
+        : null
+    }))
   )
   // Why one selector: five separate subscriptions each re-read the same unified
   // tab, so one publication paid the lookup five times per mounted tab.

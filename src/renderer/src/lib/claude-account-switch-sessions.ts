@@ -8,7 +8,10 @@ import { useAppStore } from '@/store'
 import type { CodexAccountSelectionTarget } from '../../../shared/codex-selection-lane'
 import type { ClaudeAccountSwitchRunningSessions } from '../../../shared/claude-account-switch-settings'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
-import { findMovableClaudeSessions } from './claude-session-account-move'
+import {
+  findMovableClaudeSessions,
+  findQueuedClaudeRestartsOnAccount
+} from './claude-session-account-move'
 
 export type ClaudeAccountSwitchPrompt = {
   /** Distinguishes one switch's question from the next. */
@@ -41,9 +44,8 @@ export function subscribeClaudeAccountSwitchPrompt(listener: () => void): () => 
   return () => promptListeners.delete(listener)
 }
 
-// Why replace: restarts queued by an earlier switch must not outlive a newer one.
 function queueClaudeRestarts(ptyIds: string[]): void {
-  useAppStore.getState().queuePaneAccountRestarts(ptyIds, 'claude', { replaceQueued: true })
+  useAppStore.getState().queuePaneAccountRestarts(ptyIds, 'claude')
 }
 
 /** Answers the open dialog; `remember` stores the answer as the default for later switches. */
@@ -73,13 +75,26 @@ export async function handleRunningClaudeSessionsAfterSwitch(args: {
   owner: RuntimeClientTarget
   target: CodexAccountSelectionTarget
   previousAccountId: string | null
+  nextAccountId: string | null
   previousAccountLabel: string
   nextAccountLabel: string
 }): Promise<ClaudeAccountSwitchOutcome> {
+  // Why first: a server's switch moves nothing here, so local questions and queued restarts stand.
+  if (args.owner.kind !== 'local') {
+    return 'none'
+  }
   const generation = ++switchGeneration
-  // Why: a newer switch replaces the old question, including restarts still waiting on a turn.
-  queueClaudeRestarts([])
   setPrompt(null)
+  // Why: an accepted restart relaunches on whatever is selected when it runs, so it outlives
+  // later switches; it drops only once its session is already on the newly selected account.
+  const store = useAppStore.getState()
+  for (const ptyId of findQueuedClaudeRestartsOnAccount({
+    owner: args.owner,
+    target: args.target,
+    accountId: args.nextAccountId
+  })) {
+    store.consumePendingPaneAccountRestart(ptyId)
+  }
   const found = await findMovableClaudeSessions({
     owner: args.owner,
     target: args.target,

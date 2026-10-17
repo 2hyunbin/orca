@@ -24,6 +24,7 @@ import { isClientOnlyUnverifiableInspection } from '../../../shared/terminal-pro
 import type { CodexAccountSelectionTarget } from '../../../shared/codex-selection-lane'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import type { ClaudeManagedAccount } from '../../../shared/managed-account-types'
+import type { TerminalTab } from '../../../shared/terminal-tab-types'
 import { resolveAgentAccountRestartResumeStartup } from './agent-account-restart-startup'
 import { getRendererAppPlatform } from './renderer-app-platform'
 import {
@@ -65,10 +66,10 @@ async function isClaudeInForeground(
   return isClaudeProcess(await confirmRuntimeTerminalForegroundProcess(ptyId))
 }
 
-/** Whether the pane's Claude is mid-turn; 'blocked' is a permission prompt, whose tool call a restart drops. */
+/** Whether the pane's Claude is mid-turn; a restart during a permission prompt or question drops it. */
 export function isClaudePaneMidTurn(state: AppState, paneKey: string): boolean {
   const entry = state.agentStatusByPaneKey[paneKey]
-  return entry?.agentType === 'claude' && (entry.state === 'working' || entry.state === 'blocked')
+  return entry?.agentType === 'claude' && entry.state !== 'done'
 }
 
 function normalizeFolder(path: string): string {
@@ -99,6 +100,71 @@ export function resolveClaudeSessionAccountId(
   return account ? account.id : null
 }
 
+type LocalClaudePane = {
+  worktreeId: string
+  tab: TerminalTab
+  leafId: string
+  ptyId: string
+  /** See resolveClaudeSessionAccountId. */
+  accountId: string | null | undefined
+}
+
+/** Local terminal panes with a terminal (not structured) Claude session in the switch's lane. */
+function* localClaudePanesInLane(
+  state: AppState,
+  owner: RuntimeClientTarget,
+  target: CodexAccountSelectionTarget
+): Generator<LocalClaudePane> {
+  const isLaneInScope = getCodexAccountSwitchLaneMatcher({ owner, target })
+  for (const [worktreeId, tabs] of Object.entries(state.tabsByWorktree)) {
+    for (const tab of tabs) {
+      const boundPtyIds = state.ptyIdsByTabId[tab.id] ?? []
+      const leaves = state.terminalLayoutsByTabId[tab.id]?.ptyIdsByLeafId ?? {}
+      for (const [leafId, ptyId] of Object.entries(leaves)) {
+        if (
+          !ptyId ||
+          !isTerminalLeafId(leafId) ||
+          !boundPtyIds.includes(ptyId) ||
+          isForeignMachineCodexPtyId(ptyId)
+        ) {
+          continue
+        }
+        const entry = state.agentStatusByPaneKey[makePaneKey(tab.id, leafId)]
+        if (entry?.agentType !== 'claude' || entry.structuredHostOwned) {
+          continue
+        }
+        if (!isLaneInScope(resolveCodexPaneSelectionLane({ state, tab, ptyId }).laneKey)) {
+          continue
+        }
+        const accountId = resolveClaudeSessionAccountId(
+          normalizeAgentProviderSession(entry.providerSession)?.transcriptPath,
+          state.settings?.claudeManagedAccounts ?? []
+        )
+        yield { worktreeId, tab, leafId, ptyId, accountId }
+      }
+    }
+  }
+}
+
+/** Queued Claude restarts in the switch's lane whose session already runs on `accountId`. */
+export function findQueuedClaudeRestartsOnAccount(args: {
+  owner: RuntimeClientTarget
+  target: CodexAccountSelectionTarget
+  accountId: string | null
+}): string[] {
+  const state = useAppStore.getState()
+  const ptyIds: string[] = []
+  for (const pane of localClaudePanesInLane(state, args.owner, args.target)) {
+    if (
+      state.pendingPaneAccountRestarts[pane.ptyId] === 'claude' &&
+      pane.accountId === args.accountId
+    ) {
+      ptyIds.push(pane.ptyId)
+    }
+  }
+  return ptyIds
+}
+
 /**
  * Finds local terminal panes running a resumable Claude session in the lane the
  * account switch wrote.
@@ -115,50 +181,19 @@ export async function findMovableClaudeSessions(args: {
   if (args.owner.kind !== 'local') {
     return []
   }
-  const state = useAppStore.getState()
-  const isLaneInScope = getCodexAccountSwitchLaneMatcher({
-    owner: args.owner,
-    target: args.target
-  })
   const candidates: ClaudeSessionMoveCandidate[] = []
-  for (const [worktreeId, tabs] of Object.entries(state.tabsByWorktree)) {
-    for (const tab of tabs) {
-      const boundPtyIds = state.ptyIdsByTabId[tab.id] ?? []
-      const leaves = state.terminalLayoutsByTabId[tab.id]?.ptyIdsByLeafId ?? {}
-      for (const [leafId, ptyId] of Object.entries(leaves)) {
-        if (
-          !ptyId ||
-          !isTerminalLeafId(leafId) ||
-          !boundPtyIds.includes(ptyId) ||
-          isForeignMachineCodexPtyId(ptyId)
-        ) {
-          continue
-        }
-        const entry = state.agentStatusByPaneKey[makePaneKey(tab.id, leafId)]
-        const session = normalizeAgentProviderSession(entry?.providerSession)
-        if (
-          entry?.agentType !== 'claude' ||
-          entry.structuredHostOwned ||
-          resolveClaudeSessionAccountId(
-            session?.transcriptPath,
-            state.settings?.claudeManagedAccounts ?? []
-          ) !== args.fromAccountId
-        ) {
-          continue
-        }
-        if (!isLaneInScope(resolveCodexPaneSelectionLane({ state, tab, ptyId }).laneKey)) {
-          continue
-        }
-        const resumeStartup = resolveAgentAccountRestartResumeStartup('claude', {
-          tabId: tab.id,
-          leafId,
-          worktreeId,
-          shellOverride: tab.shellOverride
-        })
-        if (resumeStartup) {
-          candidates.push({ ptyId, tabId: tab.id, leafId })
-        }
-      }
+  for (const pane of localClaudePanesInLane(useAppStore.getState(), args.owner, args.target)) {
+    if (pane.accountId !== args.fromAccountId) {
+      continue
+    }
+    const resumeStartup = resolveAgentAccountRestartResumeStartup('claude', {
+      tabId: pane.tab.id,
+      leafId: pane.leafId,
+      worktreeId: pane.worktreeId,
+      shellOverride: pane.tab.shellOverride
+    })
+    if (resumeStartup) {
+      candidates.push({ ptyId: pane.ptyId, tabId: pane.tab.id, leafId: pane.leafId })
     }
   }
   const inForeground = await Promise.all(
