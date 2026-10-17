@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest'
 import { DaemonRouterRetirement } from './daemon-router-retirement'
 import { createAdapter } from './daemon-pty-router-test-fixture'
-import { PROTOCOL_VERSION } from './types'
+import { PROTOCOL_VERSION, type SessionInfo } from './types'
 
 it.each(['inventory', 'protocol', 'spawn', 'live'] as const)(
   'does not reopen admission on a %s retry after partial retirement',
@@ -68,7 +68,7 @@ it('reports the router fence as closed admission while its census is still pendi
   const { installDaemonProvider, isDaemonTerminalAdmissionClosed } =
     await import('./daemon-provider-state')
   const current = createAdapter('current', [], undefined, PROTOCOL_VERSION)
-  const census = Promise.withResolvers<{ sessionId: string; isAlive: boolean }[]>()
+  const census = Promise.withResolvers<SessionInfo[]>()
   vi.mocked(current.listSessions).mockReturnValueOnce(census.promise)
   const router = new DaemonPtyRouter({ current, legacy: [] })
   installDaemonProvider(null, router)
