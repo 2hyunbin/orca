@@ -56,7 +56,7 @@ function queueClaudeRestarts(ptyIds: string[]): void {
 function currentPtyIds(sessions: readonly ClaudeSessionMoveCandidate[]): string[] {
   const layouts = useAppStore.getState().terminalLayoutsByTabId
   return sessions.flatMap((session) => {
-    const ptyId = layouts[session.tabId]?.ptyIdsByLeafId[session.leafId]
+    const ptyId = layouts[session.tabId]?.ptyIdsByLeafId?.[session.leafId]
     return ptyId ? [ptyId] : []
   })
 }
