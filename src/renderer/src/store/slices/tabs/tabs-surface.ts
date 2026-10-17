@@ -22,11 +22,7 @@ export function deriveActiveSurfaceForWorktree(
   state: ActiveSurfaceSourceState,
   worktreeId: string,
   preferredGroupId?: string | null,
-  options?: {
-    preferredTabId?: string
-    legacySelection?: 'remembered-type'
-    liveEditorIds?: ReadonlySet<string>
-  }
+  options?: { preferredTabId?: string; legacySelection?: 'remembered-type' }
 ): {
   activeBrowserTabId: string | null
   activeFileId: string | null
@@ -51,8 +47,7 @@ export function deriveActiveSurfaceForWorktree(
   const browserTabs = state.browserTabsByWorktree[worktreeId] ?? []
   const terminalTabs = state.tabsByWorktree[worktreeId] ?? []
   const fileStillOpen = restoredFileId
-    ? (options?.liveEditorIds?.has(restoredFileId) ??
-      state.openFiles.some((file) => file.id === restoredFileId && file.worktreeId === worktreeId))
+    ? state.openFiles.some((file) => file.id === restoredFileId && file.worktreeId === worktreeId)
     : false
   const browserTabStillOpen = restoredBrowserTabId
     ? browserTabs.some((tab) => tab.id === restoredBrowserTabId)
@@ -109,13 +104,11 @@ export function deriveActiveSurfaceForWorktree(
     activeBrowserTabId = browserTabs[0]?.id ?? null
     activeTabType = 'editor'
   } else {
-    const fallbackFileId = options?.liveEditorIds
-      ? (options.liveEditorIds.values().next().value ?? null)
-      : (state.openFiles.find((file) => file.worktreeId === worktreeId)?.id ?? null)
+    const fallbackFile = state.openFiles.find((file) => file.worktreeId === worktreeId) ?? null
     const fallbackBrowserTab = browserTabs[0] ?? null
-    activeFileId = fallbackFileId
+    activeFileId = fallbackFile?.id ?? null
     activeBrowserTabId = fallbackBrowserTab?.id ?? null
-    activeTabType = fallbackFileId ? 'editor' : fallbackBrowserTab ? 'browser' : 'terminal'
+    activeTabType = fallbackFile ? 'editor' : fallbackBrowserTab ? 'browser' : 'terminal'
   }
 
   return {

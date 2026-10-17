@@ -24,18 +24,44 @@ export function preferredWorkspaceViewerTab(
   )
 }
 
+/**
+ * Shows a viewer that has not chosen a tab the one the workspace was created for, through the
+ * actions a tab click uses, then lets the visible surface follow the focused group's tab.
+ * Returns the creation tab it selected, if any.
+ */
 export function selectWorkspaceCreationTab(
-  state: Pick<AppState, 'unifiedTabsByWorktree' | 'tabsByWorktree' | 'activateTab'>,
+  state: Pick<
+    AppState,
+    | 'unifiedTabsByWorktree'
+    | 'tabsByWorktree'
+    | 'groupsByWorktree'
+    | 'activeGroupIdByWorktree'
+    | 'activateTab'
+    | 'focusGroup'
+  >,
   worktreeId: string,
   createdWithAgent: TuiAgent | undefined
-): void {
+): string | null {
   const tab = preferredWorkspaceViewerTab(
     state.unifiedTabsByWorktree[worktreeId] ?? [],
     state.tabsByWorktree[worktreeId] ?? [],
     createdWithAgent
   )
-  if (tab) {
+  const groups = state.groupsByWorktree[worktreeId] ?? []
+  const focusedGroupId = state.activeGroupIdByWorktree[worktreeId]
+  // Why: reconciliation runs from effects; re-activating an already shown tab would loop them.
+  if (
+    tab &&
+    (focusedGroupId !== tab.groupId ||
+      groups.find((group) => group.id === tab.groupId)?.activeTabId !== tab.id)
+  ) {
     // Derived display never creates new evidence of a viewer choice.
     state.activateTab(tab.id, { worktreeId, recordFocus: false })
   }
+  const groupId = tab?.groupId ?? focusedGroupId
+  if (groupId && groups.some((group) => group.id === groupId)) {
+    // A no-op when the visible surface already shows the group's tab.
+    state.focusGroup(worktreeId, groupId)
+  }
+  return tab?.id ?? null
 }

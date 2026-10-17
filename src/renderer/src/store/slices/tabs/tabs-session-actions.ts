@@ -9,6 +9,9 @@ import {
 import { buildHydratedTabState } from '../tabs-hydration'
 import { projectWorktreeTabModelReconciliation } from './tabs-reconciliation'
 import { createWorktreeTabModelReconciliationBatch } from './tabs-reconciliation-batch'
+import { selectWorkspaceCreationTab } from '@/lib/workspace-creation-tab-selection'
+import { resolveWorktreeOperationRoute } from '@/lib/worktree-operation-route'
+import { findKnownWorktreeById } from '../worktrees/listing/detected-worktree-meta'
 import type { AppState } from '../../types'
 
 function replaceWorkspaceRecordKeys<T>(
@@ -70,9 +73,20 @@ export function createTabsSessionActions(
       if (Object.keys(reconciliation.patch).length > 0) {
         set(reconciliation.patch)
       }
+      const state = get()
+      // Why here: a creation tab that arrives after Setup is shown still wins until the viewer picks.
+      const creationTabId = selectWorkspaceCreationTab(
+        state,
+        worktreeId,
+        findKnownWorktreeById(
+          state,
+          worktreeId,
+          resolveWorktreeOperationRoute(state, worktreeId)?.executionHostId ?? undefined
+        )?.createdWithAgent
+      )
       return {
         renderableTabCount: reconciliation.renderableTabCount,
-        activeRenderableTabId: reconciliation.activeRenderableTabId
+        activeRenderableTabId: creationTabId ?? reconciliation.activeRenderableTabId
       }
     },
 
