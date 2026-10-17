@@ -37,10 +37,7 @@ import { structuredSessionNotices } from './native-chat-structured-session-notic
 import { NativeChatPromptSlotNotices } from './NativeChatComposerNotices'
 import { useNativeChatComposerError } from './use-native-chat-composer-notice'
 import { useNativeChatProvisionalLaunch } from './use-native-chat-provisional-launch'
-import {
-  useStructuredAgentSessionHostExecution,
-  useStructuredAgentSessionOptionStamp
-} from './StructuredAgentSessionStatusBridge'
+import { useStructuredAgentSessionHostExecution } from './StructuredAgentSessionStatusBridge'
 import { useNativeChatRewindHost } from './use-native-chat-rewind-host'
 import { NativeChatRewindContext } from './native-chat-rewind-context'
 import { NativeChatQueuedMessageList } from './NativeChatQueuedMessageList'
@@ -74,7 +71,6 @@ export function NativeChatStructuredSession(
   const { sendThroughLaunch } = provisionalLaunch
   // The host's own word on whether the provider child has answered startup yet.
   const hostExecution = useStructuredAgentSessionHostExecution(props.sessionId, props.target)
-  const hostOptionStamp = useStructuredAgentSessionOptionStamp(props.sessionId, props.target)
   const paneKey = useMemo(
     () => structuredAgentSessionPaneKey(props.tabId, props.sessionId),
     [props.sessionId, props.tabId]
@@ -92,7 +88,7 @@ export function NativeChatStructuredSession(
     queueFollowUps,
     hostStopping: hostExecution.stopping,
     optionSelection: hostExecution.optionSelection,
-    hostOptionStamp,
+    hostOptionStamp: hostExecution.optionStamp,
     providerStarting: hostExecution.phase === 'starting',
     // A start's own verdict (a signed-out agent) exists only once that start is proven.
     providerRunning: hostExecution.phase === 'ready',

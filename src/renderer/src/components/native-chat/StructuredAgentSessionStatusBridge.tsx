@@ -64,23 +64,6 @@ export function useStructuredAgentSessionStatusSummary(
   return { summary, observation }
 }
 
-/** The host status's option values as one stamp: another device's pick moves it, so options re-read. */
-export function useStructuredAgentSessionOptionStamp(
-  sessionId: string,
-  target: RuntimeClientTarget
-): string {
-  const feed = useMemo(() => getStructuredAgentSessionStatusFeed(target), [target])
-  useEffect(() => feed.activate(), [feed])
-  return useSyncExternalStore(
-    feed.subscribe,
-    () => {
-      const summary = feed.getSnapshot().get(sessionId)
-      return `${summary?.model ?? ''}|${summary?.permissionMode ?? ''}`
-    },
-    () => ''
-  )
-}
-
 /** Only the host's startup phase, so a chat re-renders when that changes, not on every status. */
 export function useStructuredAgentSessionHostExecutionPhase(
   sessionId: string,
@@ -111,12 +94,15 @@ export function useStructuredAgentSessionHostStopping(
 type HostExecutionSelection = {
   phase: AgentSessionStatusSummary['hostExecutionPhase'] | null
   stopping: boolean
+  /** The option values as one stamp: another device's pick moves it, so options re-read. */
+  optionStamp: string
   optionSelection: AgentSessionStatusSummary['optionSelection']
 }
 
 const EMPTY_HOST_EXECUTION: HostExecutionSelection = {
   phase: null,
   stopping: false,
+  optionStamp: '',
   optionSelection: undefined
 }
 
@@ -134,6 +120,7 @@ export function useStructuredAgentSessionHostExecution(
       const next = {
         phase: summary?.hostExecutionPhase ?? null,
         stopping: summary?.stopping === true,
+        optionStamp: `${summary?.model ?? ''}|${summary?.permissionMode ?? ''}`,
         optionSelection: structuralValuesEqual(previous.optionSelection, summary?.optionSelection)
           ? previous.optionSelection
           : summary?.optionSelection
@@ -141,6 +128,7 @@ export function useStructuredAgentSessionHostExecution(
       if (
         previous.phase === next.phase &&
         previous.stopping === next.stopping &&
+        previous.optionStamp === next.optionStamp &&
         previous.optionSelection === next.optionSelection
       ) {
         return previous
