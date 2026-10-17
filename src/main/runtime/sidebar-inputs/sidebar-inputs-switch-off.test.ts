@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { OrcaRuntimeService } from '../orca-runtime'
 import { ALL_RPC_METHODS } from '../rpc/methods'
+import { SIDEBAR_INPUT_METHODS } from '../rpc/methods/sidebar-inputs'
 
 describe('sidebar inputs with the switch off', () => {
   it('builds no producer and registers no sidebarInputs method', () => {
@@ -9,6 +10,9 @@ describe('sidebar inputs with the switch off', () => {
     expect(runtime.sidebarFacts).toBeNull()
     expect(runtime.pairedServerRows).toBeNull()
     expect(runtime.repoIconDataUrls).toBeNull()
-    expect(ALL_RPC_METHODS.filter((method) => method.name.startsWith('sidebarInputs.'))).toEqual([])
+    expect(runtime.workspaceCreations).toBeNull()
+    expect(runtime.collapseWriteOrder).toBeNull()
+    const gated = new Set<string>(SIDEBAR_INPUT_METHODS.map((method) => method.name))
+    expect(ALL_RPC_METHODS.filter((method) => gated.has(method.name))).toEqual([])
   })
 })
