@@ -42,6 +42,8 @@ vi.mock('./orcad-managed-tunnel', () => ({
 }))
 
 const { convertSshTargetToManagedOrcad } = await import('./orcad-runtime-conversion')
+const { runOrcadDeltaMove } = await import('./orcad-migration-delta-move')
+const { runTargetLifecycle } = await import('../ipc/ssh-target-lifecycle-queue')
 
 const TARGET: SshTarget = {
   id: 'ssh-shared',
@@ -361,6 +363,128 @@ describe('moving the host again after its server was stopped', () => {
     expect(store.getWorktreeMeta('desktop-repo::/root/migrepo')?.comment).toBe(
       'before the first move'
     )
+  })
+
+  function groupDesktopRepo(): string {
+    const group = store.createProjectGroup({
+      name: 'Before',
+      parentPath: '/root',
+      connectionId: TARGET.id,
+      createdFrom: 'manual'
+    })
+    store.moveProjectToGroup('desktop-repo', group.id)
+    return group.id
+  }
+  const groupName = (owner: Store, id: string) =>
+    owner.getProjectGroups().find((entry) => entry.id === id)?.name
+  // The delta move an older build's later edit asks for, against the real server store.
+  const runDelta = () => {
+    reconcileManagedOrcadSshTargets(userDataPath, store)
+    return runOrcadDeltaMove({
+      userDataPath,
+      store,
+      claims: targetStore.getOrcadRuntimeClaims(),
+      target: store.getSshTarget(TARGET.id)!,
+      environment: listEnvironments(userDataPath)[0]!,
+      destination,
+      censusHost: async () => ({ verdict: 'exited', count: 0 }),
+      ensureTunnel: async () => {},
+      runTargetLifecycle
+    })
+  }
+
+  // Review repro: the linked project's retained group was imported over the server's renamed one.
+  it('keeps the server’s project group when it changed while managed', async () => {
+    const groupId = groupDesktopRepo()
+    await expect(convert()).resolves.toMatchObject({ outcome: 'converted' })
+    server.updateProjectGroup(groupId, { name: 'Renamed on the server' })
+    stopServer()
+
+    await expect(convert()).resolves.toMatchObject({ outcome: 'converted' })
+    expect(groupName(server, groupId)).toBe('Renamed on the server')
+    expect(server.getRepo('desktop-repo')?.projectGroupId).toBe(groupId)
+    // This desktop's retained copy stays as it was, for a downgraded build.
+    expect(groupName(store, groupId)).toBe('Before')
+  })
+
+  it('moves a new project into a group the server holds in changed form', async () => {
+    const groupId = groupDesktopRepo()
+    await expect(convert()).resolves.toMatchObject({ outcome: 'converted' })
+    server.updateProjectGroup(groupId, { name: 'Renamed on the server' })
+    stopServer()
+    store.addRepo(repo('added-after-stop', '/root/later'))
+    store.moveProjectToGroup('added-after-stop', groupId)
+
+    await expect(convert()).resolves.toMatchObject({ outcome: 'converted' })
+    expect(server.getRepo('added-after-stop')?.projectGroupId).toBe(groupId)
+    expect(groupName(server, groupId)).toBe('Renamed on the server')
+  })
+
+  it('never offers the server’s group again in a later delta move', async () => {
+    const groupId = groupDesktopRepo()
+    await convert()
+    server.updateProjectGroup(groupId, { name: 'Renamed on the server' })
+    stopServer()
+    await convert()
+    store.addRepo(repo('added-later', '/root/later'))
+    reconcileManagedOrcadSshTargets(userDataPath, store)
+    const target = store.getSshTarget(TARGET.id)!
+    const plan = planOrcadDeltaMove(userDataPath, store, target)
+    expect(plan.added.map((row) => row.id)).toEqual(['added-later'])
+  })
+
+  // Codex repro: a nested group's moved parent was re-exported in a later delta.
+  it('keeps the server’s nested groups out of the relink and later deltas', async () => {
+    const parent = store.createProjectGroup({
+      name: 'Parent',
+      parentPath: '/root',
+      connectionId: TARGET.id,
+      createdFrom: 'manual'
+    })
+    const child = store.createProjectGroup({
+      name: 'Child',
+      parentPath: '/root',
+      parentGroupId: parent.id,
+      connectionId: TARGET.id,
+      createdFrom: 'manual'
+    })
+    store.moveProjectToGroup('desktop-repo', child.id)
+    await convert()
+    server.updateProjectGroup(parent.id, { name: 'Parent renamed on the server' })
+    stopServer()
+    await expect(convert()).resolves.toMatchObject({ outcome: 'converted' })
+    expect(groupName(server, parent.id)).toBe('Parent renamed on the server')
+
+    store.addRepo(repo('added-later', '/root/later'))
+    await expect(runDelta()).resolves.toMatchObject({ outcome: 'moved' })
+    expect(server.getRepo('added-later')).toBeDefined()
+    expect(groupName(server, parent.id)).toBe('Parent renamed on the server')
+  })
+
+  // Codex repro: hiding the group from the source also hid the host a folder takes from it.
+  it('still moves a later folder workspace that takes its host from the server’s group', async () => {
+    const groupId = groupDesktopRepo()
+    await convert()
+    stopServer()
+    await convert()
+    const folder = store.createFolderWorkspace({
+      projectGroupId: groupId,
+      folderPath: '/root/notes'
+    })
+    await expect(runDelta()).resolves.toMatchObject({ outcome: 'moved' })
+    expect(server.getFolderWorkspace(folder.id)?.projectGroupId).toBe(groupId)
+  })
+
+  // Codex repro: a group only a linked project used never reached the server, so it still moves.
+  it('moves a linked project’s group the server does not hold, so later rows can use it', async () => {
+    otherDesktopAddsSameCheckout()
+    const groupId = groupDesktopRepo()
+    await expect(convert()).resolves.toMatchObject({ outcome: 'converted' })
+    expect(groupName(server, groupId)).toBe('Before')
+    store.addRepo(repo('added-later', '/root/later'))
+    store.moveProjectToGroup('added-later', groupId)
+    await expect(runDelta()).resolves.toMatchObject({ outcome: 'moved' })
+    expect(server.getRepo('added-later')?.projectGroupId).toBe(groupId)
   })
 
   it('resumes, not relinks, a move the server committed before the reply was lost', async () => {
