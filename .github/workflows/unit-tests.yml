@@ -165,6 +165,8 @@ jobs:
           writeAssignment("ci-shards/unit-discovery.json", { files: discoverUnitFiles() });'
 
       - name: Test shard
+        # Leave time to upload diagnostics after a hung test.
+        timeout-minutes: 45
         env:
           NODE_COMPILE_CACHE: ${{ runner.temp }}/orca-node-compile-cache-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.node }}-${{ matrix.shard.index }}
           ORCA_BALANCE_UNIT_SHARDS: '1'
@@ -173,17 +175,9 @@ jobs:
         run: |
           ORCA_SHARD_SOURCE_SHA="$(git rev-parse HEAD)"
           export ORCA_SHARD_SOURCE_SHA
-          mkdir -p ci-shards
-          watchdog=()
-          if [ "$RUNNER_OS" = Linux ]; then
-            watchdog=(timeout --signal=TERM --kill-after=20s 12m)
-          fi
-          test_status=0
-          "${watchdog[@]}" node config/scripts/run-vitest.mjs run --config config/vitest.config.ts \
+          node config/scripts/run-vitest.mjs run --config config/vitest.config.ts \
             --shard=${{ matrix.shard.index }}/${{ matrix.shard.count }} \
-            ${{ (runner.arch == 'ARM64' || inputs.runner == 'blacksmith-4vcpu-ubuntu-2404') && '--maxWorkers=4' || '' }} > ci-shards/unit-output.log 2>&1 || test_status=$?
-          cat ci-shards/unit-output.log
-          exit "$test_status"
+            ${{ (runner.arch == 'ARM64' || inputs.runner == 'blacksmith-4vcpu-ubuntu-2404') && '--maxWorkers=4' || '' }}
 
       - name: Seal unit module cache
         id: module-cache-seal
