@@ -1,6 +1,7 @@
 import { Folder, GitBranch } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
 import { AgentIcon } from '@/lib/agent-catalog'
+import { formatAgentTypeLabel } from '@/lib/agent-status'
 import {
   isClaudePaneMidTurn,
   type ClaudeSessionMoveCandidate
@@ -173,7 +174,7 @@ function SessionRow({
       onCheckedChange={(next) => onToggle(session.ptyId, next)}
       checkboxLabel={title}
     >
-      <span role="img" aria-label="Claude" className="inline-flex shrink-0">
+      <span role="img" aria-label={formatAgentTypeLabel('claude')} className="inline-flex shrink-0">
         <AgentIcon agent="claude" size={13} />
       </span>
       <span className="min-w-0 flex-1 truncate text-xs text-foreground/90" title={title}>
