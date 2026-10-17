@@ -176,3 +176,22 @@ export function closeRemovedHostTwinState(
     get().closeUnifiedTab(tabId, { preserveWorktreeSelection: true })
   }
 }
+
+/** Keeps the three selection fields consistent once the removed host's copy is gone. */
+export function twinSelectionPatch(
+  state: Pick<AppState, 'activeWorktreeId' | 'activeWorkspaceExecutionHostId'>,
+  twinHostIds: ReadonlyMap<string, readonly ExecutionHostId[]>,
+  removedHostId: ExecutionHostId
+): Partial<AppState> {
+  if (state.activeWorkspaceExecutionHostId !== removedHostId) {
+    return {}
+  }
+  const survivor = state.activeWorktreeId ? twinHostIds.get(state.activeWorktreeId)?.[0] : null
+  if (survivor) {
+    return { activeWorkspaceExecutionHostId: survivor }
+  }
+  // Why: a teardown close already deselected the workspace; nothing may still name the removed host.
+  return state.activeWorktreeId === null
+    ? { activeWorkspaceKey: null, activeWorkspaceExecutionHostId: null }
+    : {}
+}

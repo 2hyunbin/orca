@@ -456,4 +456,36 @@ describe('removing a remote project keeps its local twin', () => {
       state.recentlyClosedEditorTabsByWorktree[WORKTREE_ID]?.map((snapshot) => snapshot.filePath)
     ).toEqual(['/work/same/old-remote.ts'])
   })
+
+  it('leaves no selection naming the removed host after its last editor closes', async () => {
+    const store = createTestStore()
+    store.setState({
+      repos: [localRow, remoteRow],
+      worktreesByRepo: {
+        [PROJECT_ID]: [
+          makeWorktree({ id: WORKTREE_ID, repoId: PROJECT_ID, hostId: 'local' }),
+          makeWorktree({ id: WORKTREE_ID, repoId: PROJECT_ID, hostId: REMOTE_HOST })
+        ]
+      },
+      openFiles: [
+        makeOpenFile({
+          id: 'editor:remote-only',
+          worktreeId: WORKTREE_ID,
+          runtimeEnvironmentId: 'env-b'
+        })
+      ],
+      activeFileId: 'editor:remote-only',
+      activeWorktreeId: WORKTREE_ID,
+      activeWorkspaceKey: WORKTREE_ID,
+      activeWorkspaceExecutionHostId: REMOTE_HOST
+    })
+
+    await store.getState().removeProject(PROJECT_ID, { hostId: REMOTE_HOST })
+
+    const state = store.getState()
+    expect(state.activeWorkspaceExecutionHostId).not.toBe(REMOTE_HOST)
+    if (state.activeWorktreeId === null) {
+      expect(state.activeWorkspaceKey).toBeNull()
+    }
+  })
 })

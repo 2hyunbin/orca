@@ -17,7 +17,7 @@ import { stopRuntimeProjectTerminalsBeforeRemoval } from './runtime-project-term
 import type { RepoSlice } from './repo-state'
 import { ERROR_TOAST_DURATION } from './repo-state'
 import { mergeProjectCompatibilityForHostRepoChange } from './repo-catalog-identity'
-import { closeRemovedHostTwinState } from './repo-removal-host-twin-teardown'
+import { closeRemovedHostTwinState, twinSelectionPatch } from './repo-removal-host-twin-teardown'
 import {
   collectRemovedHostTwinState,
   getSurvivingTwinHostIds,
@@ -277,13 +277,7 @@ export function createRepoRemovalActions(
               hostId: ownerHostId
             }),
             activeRepoId: s.activeRepoId === projectId ? null : s.activeRepoId,
-            ...(s.activeWorktreeId &&
-            s.activeWorkspaceExecutionHostId === ownerHostId &&
-            twinHostIds.has(s.activeWorktreeId)
-              ? {
-                  activeWorkspaceExecutionHostId: twinHostIds.get(s.activeWorktreeId)?.[0] ?? null
-                }
-              : {}),
+            ...twinSelectionPatch(s, twinHostIds, ownerHostId),
             filterRepoIds: s.filterRepoIds.filter((id) => id !== projectId),
             worktreesByRepo: nextWorktrees,
             detectedWorktreesByRepo: nextDetectedWorktrees,
