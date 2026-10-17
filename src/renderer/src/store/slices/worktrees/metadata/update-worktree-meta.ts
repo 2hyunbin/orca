@@ -16,7 +16,8 @@ import { displayNameUpdatePinsLabel } from '../../../../../../shared/worktree/di
 import { parseWorkspaceKey } from '../../../../../../shared/workspace-scope'
 import { applyWorktreeUpdates, getRepoIdFromWorktreeId } from '../../worktree-helpers'
 import { getHostedReviewCacheKey } from '../../hosted-review-cache-identity'
-import { getGitHubPRCacheKey, getLegacyGitHubPRCacheKey } from '../../github-cache-key'
+import { getGitHubPRCacheKey } from '../../../../../../shared/github/github-cache-key'
+import { getLegacyGitHubPRCacheKey } from '../../../../../../shared/github/github-cache-key'
 import {
   applyDetectedWorktreeUpdates,
   findKnownWorktreeById,

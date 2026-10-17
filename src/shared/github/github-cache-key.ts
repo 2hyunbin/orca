@@ -1,9 +1,9 @@
-import type { GlobalSettings } from '../../../../shared/global-settings-types'
+import type { GlobalSettings } from '../global-settings-types'
 import {
   LOCAL_EXECUTION_HOST_ID,
   normalizeExecutionHostId,
   toSshExecutionHostId
-} from '../../../../shared/execution-host'
+} from '../execution-host'
 
 type RuntimeFocusSettings = Pick<GlobalSettings, 'activeRuntimeEnvironmentId'> | null | undefined
 
