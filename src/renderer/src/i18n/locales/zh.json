@@ -414,9 +414,7 @@
       },
       "pairingSecurity": {
         "hide": "隐藏",
-        "storedCodeInsecureOrigin": "此浏览器会保存一个可重复使用的配对码，因为此页面是另一台机器上的纯 http 页面。任何能读取此浏览器存储的人都可以使用它。如需更安全的配对，请通过 https、本机的 localhost 或 SSH 隧道打开 Orca，然后重新配对。",
         "storedCodeNoEd25519": "此浏览器会保存一个可重复使用的配对码，因为它无法创建安全的登录密钥（Ed25519）。请使用最新版浏览器并重新配对，以获得更安全的配对。",
-        "sessionInsecureOrigin": "此配对仅在此标签页打开期间有效，因为此页面是另一台机器上的纯 http 页面。如需让此浏览器记住配对，请通过 https、本机的 localhost 或 SSH 隧道打开 Orca。",
         "sessionNoEd25519": "此配对仅在此标签页打开期间有效，因为此浏览器无法创建安全的登录密钥（Ed25519）。请使用最新版浏览器以获得此浏览器能记住的配对。"
       },
       "runtimeAuth": {
@@ -12335,9 +12333,6 @@
           "stopping": "停止…",
           "confirm": "停止清理"
         },
-        "NativeChatSupportedAgents": {
-          "label": "支持智能体："
-        },
         "contrast": {
           "title": "色彩对比",
           "description": "提高文本可读性或保留终端程序选择的颜色。",
@@ -17985,11 +17980,18 @@
         "title": "无法连接到你的 Orca 主机",
         "description": "没有任何内容丢失。主机响应后 Orca 会重新加载，在此之前不会保存更改。",
         "retry": "立即重试"
+      },
+      "webPairingRefused": {
+        "title": "Orca 拒绝了此浏览器",
+        "retry": "重试"
       }
     }
   },
   "components": {
     "native-chat": {
+      "install": {
+        "checking": "正在检查 {{agent}} 是否已在此主机上就绪…"
+      },
       "reasoning": "推理",
       "contextMenu": {
         "copyOrcaSessionId": "复制 Orca 会话 ID",
@@ -18659,6 +18661,9 @@
         "editFailed": "此消息无法编辑。",
         "editGone": "此消息已发送或移除。你编辑的内容已放入聊天输入框。",
         "editGonePrompt": "此消息已发送或移除。回答智能体后，你编辑的内容会出现在聊天输入框中。",
+        "imageCount": "{{count}} 张图片",
+        "imageCount_one": "{{count}} 张图片",
+        "imageCount_other": "{{count}} 张图片",
         "collapse": "收起",
         "expand": "展开",
         "queued": "已排队",

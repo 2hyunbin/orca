@@ -25,6 +25,7 @@ export const SQLITE_RUNTIME_INCLUDE = [
   'src/main/acp/acp-structured-prompt-failure.test.ts',
   'src/main/acp/acp-timeline-turn-failures.test.ts',
   'src/main/acp/acp-structured-session-adapter.test.ts',
+  'src/main/acp/acp-structured-session-adapter-resume.test.ts',
   'src/main/acp/acp-conversation-copy.test.ts',
   'src/main/pi/rpc-turn-races.test.ts',
   'src/main/acp/acp-structured-child-session-end.test.ts',

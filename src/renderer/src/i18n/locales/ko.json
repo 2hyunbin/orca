@@ -414,9 +414,7 @@
       },
       "pairingSecurity": {
         "hide": "숨기기",
-        "storedCodeInsecureOrigin": "이 브라우저는 재사용 가능한 페어링 코드를 보관합니다. 이 페이지는 다른 컴퓨터에 있고 일반 http이기 때문입니다. 이 브라우저의 저장소를 읽을 수 있는 사람은 누구나 이 코드를 사용할 수 있습니다. 더 안전하게 페어링하려면 https로, 이 컴퓨터의 localhost에서, 또는 SSH 터널을 통해 Orca를 열고 다시 페어링하세요.",
         "storedCodeNoEd25519": "이 브라우저는 보안 로그인 키(Ed25519)를 만들 수 없기 때문에 재사용 가능한 페어링 코드를 보관합니다. 더 안전하게 페어링하려면 최신 브라우저를 사용하고 다시 페어링하세요.",
-        "sessionInsecureOrigin": "이 페어링은 이 탭이 열려 있는 동안에만 유지됩니다. 이 페이지는 다른 컴퓨터에 있고 일반 http이기 때문입니다. 이 브라우저가 기억하는 페어링을 원한다면 https로, 이 컴퓨터의 localhost에서, 또는 SSH 터널을 통해 Orca를 여세요.",
         "sessionNoEd25519": "이 페어링은 이 탭이 열려 있는 동안에만 유지됩니다. 이 브라우저는 보안 로그인 키(Ed25519)를 만들 수 없기 때문입니다. 브라우저가 기억하는 페어링을 원한다면 최신 브라우저를 사용하세요."
       },
       "runtimeAuth": {
@@ -12335,9 +12333,6 @@
           "stopping": "중지 중…",
           "confirm": "정리 중지"
         },
-        "NativeChatSupportedAgents": {
-          "label": "지원되는 에이전트:"
-        },
         "contrast": {
           "title": "색상 대비",
           "description": "텍스트 가독성을 높이거나 터미널 프로그램에서 선택한 색상을 유지합니다.",
@@ -17985,6 +17980,10 @@
         "title": "Orca 호스트에 연결할 수 없습니다",
         "description": "손실된 내용은 없습니다. 호스트가 응답하면 Orca가 다시 로드되며, 그때까지 변경사항은 저장되지 않습니다.",
         "retry": "지금 다시 시도"
+      },
+      "webPairingRefused": {
+        "title": "Orca가 이 브라우저를 거부했습니다",
+        "retry": "다시 시도"
       }
     }
   },
@@ -18025,6 +18024,9 @@
       }
     },
     "native-chat": {
+      "install": {
+        "checking": "이 호스트에서 {{agent}}이(가) 준비되었는지 확인하는 중…"
+      },
       "reasoning": "추론",
       "contextMenu": {
         "copyOrcaSessionId": "Orca 세션 ID 복사",
@@ -18694,6 +18696,9 @@
         "editFailed": "이 메시지는 편집할 수 없습니다.",
         "editGone": "이 메시지는 이미 전송되었거나 삭제되었습니다. 편집한 내용은 채팅 입력란에 있습니다.",
         "editGonePrompt": "이 메시지는 이미 전송되었거나 삭제되었습니다. 에이전트에 답하면 편집한 내용이 채팅 입력란에 표시됩니다.",
+        "imageCount": "이미지 {{count}}개",
+        "imageCount_one": "이미지 {{count}}개",
+        "imageCount_other": "이미지 {{count}}개",
         "collapse": "접기",
         "expand": "펼치기",
         "queued": "대기 중",

@@ -57,6 +57,7 @@ export async function acquireAcpStructuredSession(input: {
 }> {
   const { acquire, deps, generation } = input
   const { spec } = deps
+  const agentName = acpAgentName(spec.agent)
   const sessionId = acquire.identity.sessionId
   const now = deps.now ?? Date.now
   const events = acquire.events
@@ -66,9 +67,7 @@ export async function acquireAcpStructuredSession(input: {
   }
   const closedBeforeSpawn = () => {
     if (input.abandoned()) {
-      throw new AgentSessionPreSpawnError(
-        new Error(`${acpAgentName(spec.agent)} was closed before it started`)
-      )
+      throw new AgentSessionPreSpawnError(new Error(`${agentName} was closed before it started`))
     }
   }
   closedBeforeSpawn()
@@ -112,14 +111,16 @@ export async function acquireAcpStructuredSession(input: {
     },
     {
       clientInfo: { name: 'orca', version: '1' },
+      ...(spec.signInPrompt ? { signInPrompt: spec.signInPrompt } : {}),
       onPermission: (request, context) => {
         if (!isAcpReadySession(session) || !session.turns?.acceptsRequests) {
           // No prompt of Orca's runs (a turn the agent began itself included), or a Stop or steer
           // is cutting it short: nobody is there to ask.
           return { outcome: { outcome: 'cancelled' } }
         }
-        // A request the dialect claims is a question for the person, which full access never answers.
-        if (launch.fullAccess && !spec.dialect.request?.('session/request_permission', request)) {
+        // Full access never answers a dialect's question, nor an agent that enforces the mode itself.
+        const claimed = spec.dialect.request?.('session/request_permission', request)
+        if (launch.fullAccess && !spec.permissionModeConfig && !claimed) {
           // Full access: Orca answers yes for the person, as the agent's own bypass flag would.
           const allow = request.options.find((option) => option.kind === 'allow_once')
           if (allow) {
@@ -190,7 +191,7 @@ export async function acquireAcpStructuredSession(input: {
       sink,
       sessionId,
       agent: spec.agent,
-      agentName: acpAgentName(spec.agent),
+      agentName,
       generation,
       providerSessionId,
       dialect: spec.dialect,

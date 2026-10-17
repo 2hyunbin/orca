@@ -34,6 +34,7 @@ export function recordOpenedEditorTabInLayoutOwner(state: EditorOwnerState, tab:
     // Open to the side: main makes the window's new split with the tab.
     ...newGroupSplitOf(state, tab.worktreeId, tab.groupId, tab.id),
     ...(tab.isPreview ? { preview: true } : {}),
+    createdAt: tab.createdAt,
     // Only edit-mode files are restored after restart; the window saves no other.
     ...(file?.mode === 'edit' ? { file: restorableEditorFile(file) } : {})
   })
@@ -92,33 +93,6 @@ export function recordDroppedEditorFilesInLayoutOwner(
     if (dropped.has(tab.entityId)) {
       recordClosedEditorTabInLayoutOwner(state, tab)
     }
-  }
-}
-
-/** Where a reopened editor tab ended up once the window restored its old position. */
-export function recordReopenedEditorTabPositionInLayoutOwner(
-  state: EditorOwnerState,
-  worktreeId: string,
-  fileId: string,
-  groupId: string | undefined
-): void {
-  const tab = (state.unifiedTabsByWorktree[worktreeId] ?? []).find(
-    (candidate) =>
-      candidate.entityId === fileId &&
-      isEditorTabContentType(candidate.contentType) &&
-      (groupId === undefined || candidate.groupId === groupId)
-  )
-  const group = tab
-    ? (state.groupsByWorktree[worktreeId] ?? []).find((candidate) => candidate.id === tab.groupId)
-    : undefined
-  const index = tab && group ? group.tabOrder.indexOf(tab.id) : -1
-  if (tab && group && index !== -1) {
-    recordLayoutApply(state, worktreeId, {
-      type: 'moveTab',
-      tabId: tab.id,
-      toGroupId: group.id,
-      index
-    })
   }
 }
 

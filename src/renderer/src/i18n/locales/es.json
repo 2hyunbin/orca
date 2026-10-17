@@ -414,9 +414,7 @@
       },
       "pairingSecurity": {
         "hide": "Ocultar",
-        "storedCodeInsecureOrigin": "Este navegador guarda un código de emparejamiento reutilizable porque esta página usa http sin cifrar en otro equipo. Cualquiera que pueda leer el almacenamiento de este navegador podría usarlo. Para un emparejamiento más seguro, abre Orca por https, en localhost en este equipo o a través de un túnel SSH, y vuelve a emparejar.",
         "storedCodeNoEd25519": "Este navegador guarda un código de emparejamiento reutilizable porque no puede crear claves de inicio de sesión seguras (Ed25519). Usa un navegador actual y vuelve a emparejar para un emparejamiento más seguro.",
-        "sessionInsecureOrigin": "Este emparejamiento solo dura mientras esta pestaña esté abierta, porque esta página usa http sin cifrar en otro equipo. Para un emparejamiento que este navegador recuerde, abre Orca por https, en localhost en este equipo o a través de un túnel SSH.",
         "sessionNoEd25519": "Este emparejamiento solo dura mientras esta pestaña esté abierta, porque este navegador no puede crear claves de inicio de sesión seguras (Ed25519). Usa un navegador actual para un emparejamiento que recuerde."
       },
       "runtimeAuth": {
@@ -12416,9 +12414,6 @@
           "downloadInstaller": "Descargar instalador",
           "manualInstallHint": "Las versiones de {{value0}} no están firmadas en Windows, por lo que el actualizador de la aplicación no puede instalarlas sobre una versión firmada. Ejecuta una vez el instalador descargado; Windows mostrará una advertencia de editor desconocido. Después podrás cambiar de versión desde aquí, incluso para volver a Stable."
         },
-        "NativeChatSupportedAgents": {
-          "label": "Agentes apoyados:"
-        },
         "TerminalRenderingSection": {
           "6d4c55bacc": "Imágenes en línea",
           "fffab5890b": "Muestre imágenes directamente en el terminal utilizando los protocolos gráficos SIXEL, iTerm2 (IIP) y Kitty."
@@ -17980,11 +17975,18 @@
         "title": "No se pudo contactar con tu host de Orca",
         "description": "No se perdió nada. Orca se recargará cuando el host responda y no guardará cambios hasta entonces.",
         "retry": "Reintentar ahora"
+      },
+      "webPairingRefused": {
+        "title": "Orca rechazó este navegador",
+        "retry": "Intentar de nuevo"
       }
     }
   },
   "components": {
     "native-chat": {
+      "install": {
+        "checking": "Comprobando si {{agent}} está listo en este host…"
+      },
       "reasoning": "Razonamiento",
       "contextMenu": {
         "copyOrcaSessionId": "Copiar ID de sesión de Orca",
@@ -18511,6 +18513,9 @@
         "editFailed": "Este mensaje no se puede editar.",
         "editGone": "Este mensaje ya se envió o se eliminó. Tu edición está en el cuadro de chat.",
         "editGonePrompt": "Este mensaje ya se envió o se eliminó. Tu edición estará en el cuadro de chat cuando respondas al agente.",
+        "imageCount": "{{count}} imágenes",
+        "imageCount_one": "{{count}} imagen",
+        "imageCount_other": "{{count}} imágenes",
         "collapse": "Contraer",
         "expand": "Expandir",
         "queued": "En cola",

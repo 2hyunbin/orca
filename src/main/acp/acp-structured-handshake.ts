@@ -102,6 +102,18 @@ export async function initializeAcpStructuredSession(
   assertStarting()
   options.adoptSession(started.response, started.kind === 'new' ? 'new' : 'loaded')
   liveLane.apply(liveLane.translator.contextModels(started.response.models, now()))
+  const mode = spec.permissionModeConfig
+  if (mode) {
+    // A refusal fails the start: the session would otherwise run another permission mode.
+    const requested = mode.values[acquire.permissionMode ?? 'ask'] ?? mode.values.ask
+    const configId = options.modeConfigId()
+    const { configOptions } = await connection.setConfigOption(configId, requested)
+    assertStarting()
+    if (configOptions.find((option) => option.id === configId)?.currentValue !== requested) {
+      throw new Error('Permission mode could not be confirmed')
+    }
+    options.adoptConfigOptions(configOptions)
+  }
   const link: AgentSessionProviderHandleLink = {
     linkId:
       deps.mintLinkId?.() ?? `${spec.agent}-${acquire.fence}-${started.sessionId}`.slice(0, 128),

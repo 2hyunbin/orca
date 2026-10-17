@@ -157,7 +157,7 @@ export function buildWorktreePurgeState(
     codexRestartNoticeByPtyId: omitByPtyId(s.codexRestartNoticeByPtyId),
     migrationUnsupportedByPtyId: omitByPtyId(s.migrationUnsupportedByPtyId),
     suppressedPtyExitIds: omitByPtyId(s.suppressedPtyExitIds),
-    pendingCodexPaneRestartIds: omitByPtyId(s.pendingCodexPaneRestartIds),
+    pendingPaneAccountRestarts: omitByPtyId(s.pendingPaneAccountRestarts),
     // Why: these agent-status/unread/input maps clear only on the single removeWorktree teardown path; the bulk reconcile / remove-project / hydration-stale paths run no teardown, so without this they orphan an entry per agent pane (plus a phantom unread badge).
     // retainedAgentsByPaneKey and runtimeAgentOrchestrationByPaneKey are omitted here — both self-heal (pruneRetainedAgents on worktreesByRepo change; runtime map replaced wholesale each sync).
     agentStatusByPaneKey: nextAgentStatusByPaneKey,

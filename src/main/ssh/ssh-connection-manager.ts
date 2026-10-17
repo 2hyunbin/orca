@@ -47,7 +47,7 @@ export class SshConnectionManager {
     // Why: background dials (managed tunnel, host status, census) would retry a cancelled sign-in
     // every few seconds; refuse them as an auth failure, without touching the network.
     if (isSshCredentialDeclined(target.id)) {
-      throw createSshCredentialDeclinedError(target.label)
+      throw createSshCredentialDeclinedError(target.id, target.label)
     }
 
     // Why: replacing a connection whose own reconnect is asking the user would close that dialog
