@@ -153,7 +153,7 @@ export function appendProjectGroupSections(
 export function getProjectGroupOccurrencePaths(projectGroups: readonly ProjectGroup[]) {
   const groupsById = new Map(projectGroups.map((group) => [group.id, group]))
   const paths = new Map<string, OccurrenceSectionPath>()
-  for (const group of projectGroups) {
+  for (const group of getDistinctProjectGroups(projectGroups)) {
     const pending: ProjectGroup[] = []
     const seen = new Set<string>()
     let current: ProjectGroup | undefined = group

@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest'
 import { buildRows } from './worktree-list/grouping/build-rows.test-fixture'
 import { repo, worktree } from './worktree-list-groups-test-fixtures'
 import { getRenderRowKey } from './worktree-list/listing/render-row'
+import { getSidebarRowRevealAncestorKeys } from './worktree-list/navigation/reveal-ancestors'
+import { getProjectGroupOccurrencePaths } from '../../../../shared/sidebar-list/project-group-sections'
 import type { ProjectGroup } from '../../../../shared/project-group-types'
 import type { Repo } from '../../../../shared/repo-types'
 import type { Worktree } from '../../../../shared/worktree/types'
@@ -96,5 +98,28 @@ describe('a project group both hosts publish under one id', () => {
       ['project-group:parent', 0],
       ['project-group:group-shared', 1]
     ])
+  })
+
+  it('reveals the drawn copy when the copies have different parents', () => {
+    const groups = [
+      group('local'),
+      group(REMOTE_HOST, { id: 'parent', name: 'Parent' }),
+      group(REMOTE_HOST, { parentGroupId: 'parent' })
+    ]
+
+    const collapsedParentRows = rowsFor(groups, new Set(['project-group:parent']))
+    expect(
+      collapsedParentRows.filter((row) => row.type === 'header').map((row) => row.key)
+    ).toEqual(['project-group:parent'])
+    expect(
+      getSidebarRowRevealAncestorKeys({
+        rowKey: 'project-group:group-shared',
+        repoMap: new Map(),
+        projectGroups: groups
+      })
+    ).toEqual(['project-group:parent'])
+    expect(getProjectGroupOccurrencePaths(groups).get('group-shared')?.parent?.key).toBe(
+      'project-group:parent'
+    )
   })
 })
