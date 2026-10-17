@@ -3,6 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentSessionRecord } from '../../shared/agent-session-record'
+import { structuredAgentSessionSeedCatalog } from '../../shared/structured-agent-session-seed-catalog'
+import {
+  applyStructuredAgentSessionModelCatalog,
+  createStructuredAgentSessionOptionState,
+  structuredAgentSessionOptionSnapshot
+} from '../../shared/structured-agent-session-options'
 import { createAgentModelCatalogService } from '../native-chat/agent-model-catalog/agent-model-catalog-service'
 import { AgentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
 import {
@@ -221,20 +227,64 @@ async function piHost() {
 
 describe('Pi process configuration metadata', () => {
   it('omits configured intent for restored, resumed, or forked chats', async () => {
-    const { chat } = await piHost()
+    const { chat, catalog } = await piHost()
     const clean = workspace('clean')
+    await chat(clean)
     for (const options of [
       { saved: { model: 'openai/gpt-6' } },
       { resumed: true },
       { forked: true }
     ]) {
       expect((await chat(clean, options)).listing).not.toHaveProperty('configuredDefault')
+      expect(
+        (await catalog.read({ agent: 'pi', workspacePath: clean, savedOnly: true })).choiceCatalog
+      ).not.toHaveProperty('configured')
     }
+    await chat(clean, { available: [AVAILABLE[0]!] })
+    expect(
+      (await catalog.read({ agent: 'pi', workspacePath: clean, savedOnly: true })).choiceCatalog
+    ).not.toHaveProperty('configured')
   })
 
   it('retains the whole process effort menu when a coarse text probe arrives later', async () => {
     const { catalog, chat, store, clock } = await piHost()
-    const { sessionId } = await chat(workspace('clean'), { thinking: 'xhigh' })
+    const clean = workspace('clean')
+    const { sessionId } = await chat(clean, {
+      thinking: 'xhigh',
+      afterStart: async ({ adapter, sessionId }) => {
+        await adapter.setOption({
+          sessionId,
+          fence: 1,
+          key: 'model',
+          value: 'anthropic/claude-sonnet-4'
+        })
+      }
+    })
+    const nextComposer = await catalog.read({ agent: 'pi', workspacePath: clean, savedOnly: true })
+    expect(nextComposer.choiceCatalog?.configured).toEqual({
+      model: 'openai/gpt-6',
+      effort: 'xhigh'
+    })
+    const seed = structuredAgentSessionSeedCatalog('pi')
+    const display = applyStructuredAgentSessionModelCatalog(
+      createStructuredAgentSessionOptionState('pi', seed),
+      seed,
+      nextComposer,
+      { newLaunch: true }
+    )
+    const snapshot = structuredAgentSessionOptionSnapshot(display)
+    expect(snapshot.find((option) => option.id === 'model')?.kind).toMatchObject({
+      currentValue: 'openai/gpt-6'
+    })
+    expect(snapshot.find((option) => option.id === 'effort')?.kind).toMatchObject({
+      currentValue: 'xhigh'
+    })
+    expect(display.record).toEqual({ agent: 'pi', valuesByModel: {} })
+    expect(
+      nextComposer.choiceCatalog?.models
+        .find((row) => row.id === 'openai/gpt-6')
+        ?.efforts.map((effort) => effort.value)
+    ).toContain('xhigh')
     const entry = catalog.peek(sessionId)!
     clock.now = 2_000
     store.recordSuccess(

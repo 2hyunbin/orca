@@ -30,7 +30,9 @@ import type {
 } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
 import type { NativeChatVisualsLaunch } from '../native-chat/native-chat-visuals-delivery'
 
-export type CodexSessionCatalogAccess = AgentModelCatalogSessionAccess
+export type CodexSessionCatalogAccess = AgentModelCatalogSessionAccess & {
+  demand?: () => Promise<void>
+}
 
 export type CodexStructuredLaunch = {
   command: string
@@ -125,6 +127,7 @@ export type CodexStructuredSessionAdapterDeps = {
   /** Host model catalog; sessions write their listings through and read back. */
   modelCatalog?: AgentModelCatalogStore
   readModelCatalog?: (sessionId: string) => ReturnType<AgentModelCatalogStore['get']>
+  demandModelCatalog?: (sessionId: string) => Promise<void>
 }
 
 export type CodexSession = {

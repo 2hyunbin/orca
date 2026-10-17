@@ -7,7 +7,10 @@ import { agentModelCatalogSessionAccess } from '../native-chat/agent-model-catal
 import { CODEX_STRUCTURED_AGENT } from './codex-structured-agent-definition'
 
 export function codexAcquireCatalogAccess(
-  deps: Pick<CodexStructuredSessionAdapterDeps, 'modelCatalog' | 'readModelCatalog'>,
+  deps: Pick<
+    CodexStructuredSessionAdapterDeps,
+    'modelCatalog' | 'readModelCatalog' | 'demandModelCatalog'
+  >,
   launch: Pick<CodexStructuredLaunch, 'codexHome'>,
   sessionId?: string
 ): CodexSessionCatalogAccess | undefined {
@@ -16,7 +19,14 @@ export function codexAcquireCatalogAccess(
     CODEX_STRUCTURED_AGENT,
     launch.codexHome
   )
-  return access && deps.readModelCatalog && sessionId
-    ? { ...access, read: () => deps.readModelCatalog?.(sessionId) ?? null }
+  const demand = deps.demandModelCatalog
+  return access && sessionId
+    ? {
+        ...access,
+        ...(deps.readModelCatalog
+          ? { read: () => deps.readModelCatalog?.(sessionId) ?? null }
+          : {}),
+        ...(demand ? { demand: () => demand(sessionId) } : {})
+      }
     : access
 }

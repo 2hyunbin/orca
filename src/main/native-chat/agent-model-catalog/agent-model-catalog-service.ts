@@ -14,6 +14,7 @@ import {
 } from './agent-model-catalog-fingerprint'
 import {
   agentModelCatalogResultFromEntry,
+  agentModelCatalogSessionObservation,
   retainedAgentModelCatalogModels
 } from './agent-model-catalog-entry'
 import type { AgentModelCatalogEntry } from './agent-model-catalog-store'
@@ -78,8 +79,9 @@ export function createAgentModelCatalogService(
       accountHome: home,
       wslDistro: null
     })
-    const cwd =
-      params.workspacePath === null
+    const cwd = params.accountDefault
+      ? homedir()
+      : params.workspacePath === null
         ? null
         : (params.workspacePath ??
           (record ? await deps.recordWorkspacePath?.(record).catch(() => null) : homedir()))
@@ -97,7 +99,7 @@ export function createAgentModelCatalogService(
       }
     }
     const namesDefault =
-      params.workspacePath === undefined && !params.inSessionWorkspace
+      params.accountDefault || (params.workspacePath === undefined && !params.inSessionWorkspace)
         ? true
         : deps.workspaceMayOverrideDefaultModel
           ? !(await deps
@@ -109,12 +111,14 @@ export function createAgentModelCatalogService(
               .catch(() => true))
           : false
     const probe = deps.probes?.[params.agent]
-    const resolved = await probe?.resolve?.(home, cwd, record?.options).catch(() => null)
+    const resolved = await probe
+      ?.resolve?.(home, cwd, params.accountDefault ? undefined : record?.options)
+      .catch(() => null)
     if (probe?.resolve && !resolved) {
       return unverified()
     }
     const fingerprint = agentModelCatalogScopeFingerprint(base, cwd, resolved?.identity)
-    if (params.sessionId) {
+    if (params.sessionId && !params.accountDefault) {
       if (sessionKeys.size >= 256 && !sessionKeys.has(params.sessionId)) {
         const oldest = sessionKeys.keys().next().value
         if (oldest !== undefined) {
@@ -133,7 +137,7 @@ export function createAgentModelCatalogService(
         deps.store.recordSuccess(
           fingerprint,
           record.provider,
-          { ...process.listing, origin: 'live-session', complete: false },
+          agentModelCatalogSessionObservation(process.listing),
           'live'
         )
       }
@@ -208,20 +212,12 @@ export function createAgentModelCatalogService(
           throw error
         }
       })
-      if ((!entry || deps.store.heldReasonDue(fingerprint)) && params.waitForListing) {
-        await deps.store.pendingListing(fingerprint, entry)
-        entry = deps.store.get(fingerprint)
-      } else if (!entry || deps.store.heldReasonDue(fingerprint)) {
-        return answer(entry, true)
-      }
-    } else if ((!entry || deps.store.heldReasonDue(fingerprint)) && params.waitForListing) {
+    }
+    if (params.waitForListing && deps.store.isListing(fingerprint)) {
       await deps.store.pendingListing(fingerprint, entry)
       entry = deps.store.get(fingerprint)
     }
-    return answer(
-      entry,
-      deps.store.isListing(fingerprint) && (!entry || deps.store.heldReasonDue(fingerprint))
-    )
+    return answer(entry, deps.store.isListing(fingerprint))
   }
   return {
     read,
@@ -253,12 +249,7 @@ export function createAgentModelCatalogService(
         deps.store.recordSuccess(
           fingerprint,
           record.provider,
-          {
-            models: listing.models,
-            complete: false,
-            origin: 'live-session',
-            ...(listing.fastModeSupport ? { fastModeSupport: listing.fastModeSupport } : {})
-          },
+          agentModelCatalogSessionObservation(listing),
           'live'
         )
       } else if (record.provider !== 'claude') {

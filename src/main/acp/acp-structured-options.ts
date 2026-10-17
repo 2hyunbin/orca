@@ -66,6 +66,7 @@ export class AcpStructuredOptions {
   private commands: AgentSessionSlashCommand[] | undefined
   // A loaded session keeps the model it ran; only a new one resolves the agent's own config.
   private resolvesConfig = false
+  private startConfigured: AgentModelCatalogConfiguredChoice | null | undefined
   private readonly picked = new Set<string>()
 
   /** The session state a new, load or resume response reported. */
@@ -81,6 +82,7 @@ export class AcpStructuredOptions {
     this.configOptions = response.configOptions ?? []
     this.models = response.models ?? null
     this.resolvesConfig = origin === 'new'
+    this.startConfigured = undefined
     this.observeMenu()
   }
 
@@ -187,7 +189,12 @@ export class AcpStructuredOptions {
 
   /** What this session's start hands the host once: its listing, with what it resolved. */
   startListing(): AgentModelCatalogLiveListing {
-    return withLiveCatalogListing(this.read(), this.configuredDefault()).catalogListing
+    this.startConfigured = this.configuredDefault()
+    return this.readWithCatalogListing().catalogListing
+  }
+
+  readWithCatalogListing() {
+    return withLiveCatalogListing(this.read(), this.startConfigured)
   }
 
   /** The values the agent reports now, as the record's options would name them. */
@@ -242,8 +249,7 @@ export async function readAcpLiveOptions(
   session: Parameters<typeof acpSessionAcceptsImages>[0] & { options: AcpStructuredOptions }
 ) {
   const acceptsImages = await acpSessionAcceptsImages(session)
-  // Only the start says what the config resolved: the session may have moved since.
-  return { ...withLiveCatalogListing(session.options.read()), acceptsImages }
+  return { ...session.options.readWithCatalogListing(), acceptsImages }
 }
 
 /** Sends a pick and adopts the agent's answer, even one that lands after the wait gave up: that is

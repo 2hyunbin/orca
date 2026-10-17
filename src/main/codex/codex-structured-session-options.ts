@@ -29,11 +29,12 @@ export type { CodexSessionOptionCatalog } from './codex-structured-model-catalog
 
 export { readCodexStructuredSessionOptionCatalog } from './codex-structured-model-catalog'
 
-/** Session reads never discover or publish the shared inventory. */
+/** Picker reads demand the host's discovery owner; acquisition and sends stay cache-only. */
 export async function codexSessionCatalogListingForPicker(
   session: CodexSession,
   _timeoutMs: number | undefined
 ): Promise<CodexModelCatalogListing> {
+  await session.catalogAccess?.demand?.().catch(() => {})
   return codexAcquireCatalogListing(session.catalogAccess) ?? { models: [] }
 }
 

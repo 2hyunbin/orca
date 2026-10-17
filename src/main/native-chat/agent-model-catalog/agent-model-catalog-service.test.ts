@@ -2,6 +2,7 @@ import { homedir } from 'node:os'
 import type { AgentSessionAccountHome } from '../../../shared/agent-session-account-home'
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
+import { joinHostModelListingWait } from '../../../shared/host-model-listing-waits'
 import {
   agentModelCatalogFingerprint,
   agentModelCatalogFingerprintForRecord,
@@ -11,6 +12,7 @@ import { createAgentModelCatalogService } from './agent-model-catalog-service'
 import {
   AGENT_MODEL_CATALOG_FRESH_MS,
   AgentModelCatalogStore,
+  type AgentModelCatalogProbe,
   type AgentModelCatalogSuccess
 } from './agent-model-catalog-store'
 
@@ -101,29 +103,54 @@ describe('agent model catalog service', () => {
     })
   })
 
-  it('bounds picker waits even when a new scope is queued behind occupied probes', async () => {
+  it('lands the seventh cold scope after its bounded picker wait without exceeding two probes', async () => {
     vi.useFakeTimers()
+    let active = 0
+    let peak = 0
+    const probe = vi.fn<AgentModelCatalogProbe>(async (_home, options) => {
+      active += 1
+      peak = Math.max(peak, active)
+      if (options?.cwd !== '/scope-6') {
+        await new Promise((resolve) => setTimeout(resolve, 14_000))
+      }
+      active -= 1
+      return listing(options?.cwd ?? '')
+    })
     const service = createAgentModelCatalogService({
       store: new AgentModelCatalogStore(),
       getRecord: () => undefined,
       drivesRecord: () => true,
       resolveAccountHome: async () => CODEX_HOME('/account'),
-      probes: { codex: async () => new Promise(() => {}) }
+      probes: { codex: probe }
     })
+    let leave: (() => void) | undefined
     try {
-      const reads = ['/one', '/two', '/three'].map((workspacePath) =>
-        service.read({ agent: 'codex', workspacePath, waitForListing: true })
+      await Promise.all(
+        Array.from({ length: 7 }, (_, index) =>
+          service.read({ agent: 'codex', workspacePath: `/scope-${index}` })
+        )
+      )
+      const landed = vi.fn()
+      leave = joinHostModelListingWait(
+        'seventh-scope',
+        () => service.read({ agent: 'codex', workspacePath: '/scope-6', waitForListing: true }),
+        landed
       )
       await vi.advanceTimersByTimeAsync(30_000)
-      expect(await Promise.all(reads)).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            origin: 'unknown',
-            choiceCatalog: expect.objectContaining({ complete: false, freshForMs: 0 })
-          })
-        ])
+      expect(landed).toHaveBeenLastCalledWith(
+        expect.objectContaining({ origin: 'unknown', listingInProgress: true })
       )
+      await vi.advanceTimersByTimeAsync(12_000)
+      expect(landed).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          origin: 'probe',
+          models: [expect.objectContaining({ id: '/scope-6' })]
+        })
+      )
+      expect(probe).toHaveBeenCalledTimes(7)
+      expect(peak).toBe(2)
     } finally {
+      leave?.()
       service.stop()
       vi.useRealTimers()
     }
@@ -388,7 +415,8 @@ describe('agent model catalog service', () => {
         'discovery'
       )
       now = AGENT_MODEL_CATALOG_FRESH_MS
-      const probe = vi.fn(() => new Promise<AgentModelCatalogSuccess>(() => {}))
+      const refreshed = deferredListing()
+      const probe = vi.fn(() => refreshed.promise)
       const service = createAgentModelCatalogService({
         store,
         getRecord: () => undefined,
@@ -397,8 +425,12 @@ describe('agent model catalog service', () => {
         resolveAccountHome: async () => CODEX_HOME('/homes/selected'),
         probes: { codex: probe }
       })
-      const result = await service.read({ agent: 'codex', waitForListing: true })
+      const result = await service.read({ agent: 'codex' })
       expect(result.origin === 'unknown' ? null : result.models[0]!.id).toBe('gpt-old')
+      expect(result.listingInProgress).toBe(true)
+      const waiting = service.read({ agent: 'codex', waitForListing: true })
+      refreshed.resolve(listing('gpt-new'))
+      expect(await waiting).toMatchObject({ models: [{ id: 'gpt-new' }] })
       expect(probe).toHaveBeenCalledTimes(1)
     })
   })

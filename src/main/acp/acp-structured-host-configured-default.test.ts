@@ -22,7 +22,10 @@ import { createAcpModelCatalogProbe } from './acp-model-catalog-probe'
 import { AcpScriptedAgent } from './acp-scripted-agent.test-support'
 import { AcpSessionRuntime } from './acp-session-runtime'
 import { GROK, GROK_CONFIG_OPTIONS } from './acp-structured-adapter.test-support'
-import { CALLER } from '../native-chat/agent-session-wire/structured-agent-session-host-test-harness'
+import {
+  CALLER,
+  envelope
+} from '../native-chat/agent-session-wire/structured-agent-session-host-test-harness'
 import { createTestParams } from '../native-chat/agent-session-wire/structured-agent-session-create-test-fixture'
 import type { StructuredAgentSessionFirstMessage } from '../../shared/structured-agent-session-create'
 import { attachParams, launch, openHostRig } from './acp-structured-host.test-support'
@@ -90,6 +93,7 @@ function firstFrame(answer: AgentSessionModelCatalogResult) {
     { newLaunch: true }
   )
   const snapshot = structuredAgentSessionOptionSnapshot(state)
+  expect(state.record).toEqual({ agent: 'grok', valuesByModel: {} })
   const select = (id: string) => {
     const entry = snapshot.find((descriptor) => descriptor.id === id)
     return entry?.kind.type === 'select' ? (entry.kind.currentValue ?? null) : null
@@ -101,11 +105,13 @@ function firstFrame(answer: AgentSessionModelCatalogResult) {
  *  `create` founds it with its first message, so only delivery starts the agent. */
 async function openGrokHost(runs: string, create?: StructuredAgentSessionFirstMessage) {
   const records: { store: AgentSessionRecordStore | null } = { store: null }
+  let processScope: () => string | null = () => null
   const discovery = GROK.modelDiscovery
   const catalog = createAgentModelCatalogService({
     store: new AgentModelCatalogStore(),
     getRecord: (sessionId) => records.store?.getRecord(sessionId) ?? undefined,
     drivesRecord: () => true,
+    processScope: () => processScope(),
     resolveAccountHome: async () => GROK_HOME,
     recordWorkspacePath: async () => '/workspace/project',
     agentReadsProjectModelConfig,
@@ -121,13 +127,22 @@ async function openGrokHost(runs: string, create?: StructuredAgentSessionFirstMe
   )
   const rig = await openHostRig({
     modelCatalog: catalog,
-    script: (agent) =>
+    script: (agent) => {
       agent.on('session/new', (frame) =>
         agent.reply(frame, { sessionId: 'acp-session-1', configOptions: opened })
-      ),
+      )
+      agent.on('session/set_config_option', (frame) =>
+        agent.reply(frame, {
+          configOptions: opened.map((option) =>
+            option.id === 'model' ? { ...option, currentValue: 'grok-4.7' } : option
+          )
+        })
+      )
+    },
     deps: { resolveLaunch: launch(() => false) }
   })
   records.store = rig.store
+  processScope = () => rig.host.modelCatalogProcessScope(SESSION)
   const listed = await catalog.read({ agent: 'grok', waitForListing: true })
   const opening = create
     ? rig.host.create(CALLER, createTestParams(create, attachParams()), { firstMessage: create })
@@ -144,8 +159,18 @@ describe('Grok process model authority', () => {
   })
 
   it('reports the owning process model rather than initialize currentModelId', async () => {
-    const { host } = await openGrokHost('grok-4.6')
+    const { host, catalog } = await openGrokHost('grok-4.6')
     expect((await host.readOptions(SESSION)).current).toMatchObject({ model: 'grok-4.6' })
+    const nextComposer = () =>
+      catalog.read({ agent: 'grok', workspacePath: '/workspace/project', savedOnly: true })
+    expect(firstFrame(await nextComposer())).toEqual({ model: 'grok-4.6', effort: 'high' })
+    const fields = { key: 'model', value: 'grok-4.7' }
+    await host.setOption(CALLER, {
+      envelope: envelope('agentSession.setOption', fields),
+      ...fields
+    })
+    await host.readOptions(SESSION)
+    expect(firstFrame(await nextComposer())).toEqual({ model: 'grok-4.6', effort: 'high' })
   })
 
   it('reports the process model when the first message acquires the child', async () => {

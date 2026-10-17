@@ -41,9 +41,9 @@ describe('a live Grok listing', () => {
     const [sessionId, listing] = vi.mocked(modelCatalog.recordLiveListing).mock.calls[1]!
     expect(sessionId).toBe(SESSION)
     expect(listing.models.map((model) => model.id)).toEqual(['grok-4.7', 'grok-4.6'])
-    // The session's picks are no one's default, and only its start says what its config resolved.
+    // Current rows do not become defaults; the generation keeps its startup configuration.
     expect(listing.models.every((model) => !model.isDefault)).toBe(true)
-    expect(listing).not.toHaveProperty('configuredDefault')
+    expect(listing.configuredDefault).toEqual({ modelId: 'grok-4.7', effort: 'high' })
     const conversation = host.collaboratorsForTests().sessions.get(SESSION)!
     const child = conversation.child!
     const ended = { ...child, cause: 'exit' as const, reason: null, duringStartup: false }

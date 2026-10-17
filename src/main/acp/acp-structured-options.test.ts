@@ -148,6 +148,13 @@ describe('what a new session with no pick says about the configured default', ()
     const options = new AcpStructuredOptions()
     options.adoptSession({ configOptions }, 'new')
     expect(options.configuredDefault()).toEqual({ modelId: 'model-b', effort: 'high' })
+    options.startListing()
+    expect(options.readWithCatalogListing().catalogListing.configuredDefault).toEqual({
+      modelId: 'model-b',
+      effort: 'high'
+    })
+    options.adoptSession({ configOptions })
+    expect(options.readWithCatalogListing().catalogListing).not.toHaveProperty('configuredDefault')
   })
 
   it('says nothing of a loaded session, which keeps the model it ran', () => {

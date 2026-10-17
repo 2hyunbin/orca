@@ -197,6 +197,29 @@ describe('host model catalog read', () => {
     unmount()
   })
 
+  it('spaces pending follow-ups and cancels them when the picker closes', async () => {
+    vi.useFakeTimers()
+    try {
+      answerCatalog([
+        () => Promise.resolve(LISTING),
+        () => Promise.resolve(LISTING),
+        () => Promise.resolve(LISTING)
+      ])
+      const { unmount } = renderOptions()
+      await flush()
+      expect(catalogReads()).toHaveLength(2)
+      await act(async () => vi.advanceTimersByTimeAsync(999))
+      expect(catalogReads()).toHaveLength(2)
+      await act(async () => vi.advanceTimersByTimeAsync(1))
+      expect(catalogReads()).toHaveLength(3)
+      unmount()
+      await act(async () => vi.advanceTimersByTimeAsync(60_000))
+      expect(catalogReads()).toHaveLength(3)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('the running provider list wins over a host listing that lands later', async () => {
     const live = deferred()
     const waited = deferred()

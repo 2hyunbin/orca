@@ -128,7 +128,8 @@ export function useMobileStructuredAgentOptions(args: {
     optionCatalog,
     activeOptionRecordRef,
     updateOptionState,
-    onListingLanded
+    onListingLanded,
+    optionStamp
   })
 
   useEffect(() => {

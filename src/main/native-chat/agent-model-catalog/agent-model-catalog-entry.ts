@@ -58,6 +58,26 @@ export type AgentModelCatalogConfiguredChoice = {
   effort?: string | null
 }
 
+export function agentModelCatalogSessionObservation(
+  listing: AgentModelCatalogLiveListing
+): AgentModelCatalogSuccess {
+  const configured = listing.configuredDefault
+  return {
+    models: listing.models,
+    origin: 'live-session',
+    complete: false,
+    ...(configured
+      ? {
+          configured: {
+            model: configured.modelId,
+            ...(configured.effort ? { effort: configured.effort } : {})
+          }
+        }
+      : {}),
+    ...(listing.fastModeSupport ? { fastModeSupport: listing.fastModeSupport } : {})
+  }
+}
+
 /** What a session that resolves its agent's own config reports as that scope's configured default:
  *  only a new session that restored no model pick and was sent none runs it. Undefined when the
  *  session can't say (it listed or runs no model); null when it runs a model it didn't list. */

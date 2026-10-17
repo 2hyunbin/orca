@@ -5,8 +5,10 @@ import '../unused-default-rpc-methods.test-fixture'
 
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { homedir } from 'node:os'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AGENT_SESSION_OPTIONAL_MODEL_CLIENT_CAPABILITY } from '../../../../shared/agent-session-optional-model-capability'
+import { AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY } from '../../../../shared/structured-agent-session-surface-capabilities'
 import { STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
 import {
   agentModelCatalogFingerprintForRecord,
@@ -41,7 +43,8 @@ const CURRENT_CLIENT = {
   clientKind: 'runtime' as const,
   clientCapabilities: [
     STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY,
-    AGENT_SESSION_OPTIONAL_MODEL_CLIENT_CAPABILITY
+    AGENT_SESSION_OPTIONAL_MODEL_CLIENT_CAPABILITY,
+    AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY
   ]
 }
 
@@ -65,7 +68,7 @@ async function readOptions(client: typeof OLDER_CLIENT | typeof CURRENT_CLIENT) 
 
 /** A Codex chat with no pick, at rest in a repo; `configured` gives the repo a `.codex/config.toml`
  *  that sets the effort. */
-async function chatAtRest(repoConfig: { configured: boolean }): Promise<void> {
+async function chatAtRest(repoConfig: { configured: boolean }) {
   await foundRestTestChat(rig)
   // The chat never picked: its next start runs whatever its config resolves.
   await rig.store.replaceSessionOptions({
@@ -78,7 +81,10 @@ async function chatAtRest(repoConfig: { configured: boolean }): Promise<void> {
   await mkdir(join(repo, '.codex'), { recursive: true })
   await writeFile(join(repo, '.git'), 'gitdir: /elsewhere')
   if (repoConfig.configured) {
-    await writeFile(join(repo, '.codex', 'config.toml'), 'model_reasoning_effort = "high"\n')
+    await writeFile(
+      join(repo, '.codex', 'config.toml'),
+      'model = "gpt-oss:20b"\nmodel_reasoning_effort = "high"\n'
+    )
   }
   const store = new AgentModelCatalogStore()
   const listing = {
@@ -103,6 +109,18 @@ async function chatAtRest(repoConfig: { configured: boolean }): Promise<void> {
       repo
     ),
     'codex',
+    {
+      ...listing,
+      ...(repoConfig.configured ? { configured: { model: 'gpt-oss:20b', effort: 'high' } } : {})
+    },
+    'discovery'
+  )
+  store.recordSuccess(
+    agentModelCatalogScopeFingerprint(
+      agentModelCatalogFingerprintForRecord(rig.store.getRecord(SESSION)!),
+      homedir()
+    ),
+    'codex',
     listing,
     'discovery'
   )
@@ -119,6 +137,7 @@ async function chatAtRest(repoConfig: { configured: boolean }): Promise<void> {
   await rig.restart({ modelCatalog })
   setStructuredAgentSessionHost(rig.host)
   rig.adapter.acquire.mockClear()
+  return { modelCatalog, repo }
 }
 
 beforeEach(async () => {
@@ -141,7 +160,7 @@ afterEach(async () => {
 
 describe('options at rest in a repo whose config may pick the model', () => {
   it('keeps the account default model, with no effort, for a client that needs a model', async () => {
-    await chatAtRest({ configured: true })
+    const { modelCatalog, repo } = await chatAtRest({ configured: true })
 
     const reply = await readOptions(OLDER_CLIENT)
 
@@ -151,6 +170,16 @@ describe('options at rest in a repo whose config may pick the model', () => {
     })
     expect(reply).not.toHaveProperty('result.current.effort')
     expect(rig.adapter.acquire).not.toHaveBeenCalled()
+    expect(modelCatalog.peek(SESSION)?.fingerprint).toBe(
+      agentModelCatalogScopeFingerprint(
+        agentModelCatalogFingerprintForRecord(rig.store.getRecord(SESSION)!),
+        repo
+      )
+    )
+    expect(modelCatalog.peek(SESSION)?.observation.configured).toEqual({
+      model: 'gpt-oss:20b',
+      effort: 'high'
+    })
   })
 
   it('names no model or effort for a client that takes an answer without one', async () => {
@@ -161,6 +190,14 @@ describe('options at rest in a repo whose config may pick the model', () => {
     expect(reply).toMatchObject({ ok: true, result: { conversationCommands: ['clear'] } })
     expect(reply).not.toHaveProperty('result.current.model')
     expect(reply).not.toHaveProperty('result.current.effort')
+    expect(reply).toMatchObject({
+      result: {
+        choiceCatalog: {
+          configured: { model: 'gpt-oss:20b', effort: 'high' },
+          models: [{ id: 'gpt-5.5' }]
+        }
+      }
+    })
   })
 })
 

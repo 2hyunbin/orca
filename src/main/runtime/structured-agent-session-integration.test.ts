@@ -47,6 +47,7 @@ import {
 import { createStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import { codexProviderHandle } from '../../shared/agent-session-provider-handle-encoding'
 import { scriptedCodexTransport } from './scripted-codex-transport.test-fixture'
+import { installScriptedCodexModelCatalog } from './scripted-codex-model-catalog.test-fixture'
 
 const journals = createTrackedJournalOpener()
 
@@ -427,18 +428,25 @@ describe('a structured codex session over agentSession.*', () => {
     // The previous process exits, closing its database.
     await journals.closeAll()
 
-    const created = await ok<{ page: { items: AgentJournalRenderItem[] } }>(
+    const created = await ok<{ fence: number; page: { items: AgentJournalRenderItem[] } }>(
       'agentSession.create',
       createIntentParams()
     )
     expect(created.page.items.map(textOf)).toContain('legacy question')
+    const { probe } = installScriptedCodexModelCatalog(SESSION, root)
     expect(await call('agentSession.options', { sessionId: SESSION })).toMatchObject({
       ok: true,
       result: {
-        models: [],
+        models: [{ id: 'gpt-live', serviceTiers: [{ value: 'fast' }] }],
         current: { model: 'gpt-live', effort: 'medium' }
       }
     })
+    const fields = { key: 'fastMode', value: 'true' }
+    await ok('agentSession.setOption', {
+      envelope: envelope('agentSession.setOption', fields, created.fence),
+      ...fields
+    })
+    expect(probe).toHaveBeenCalledTimes(1)
     expect(codex.live().calls.some((entry) => entry.method === 'model/list')).toBe(false)
   })
 

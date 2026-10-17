@@ -36,6 +36,8 @@ export type AgentModelCatalogRead = {
   sessionId?: string
   workspacePath?: string | null
   inSessionWorkspace?: true
+  /** Legacy model-required display under the pinned account's normal launch directory. */
+  accountDefault?: true
   waitForListing?: boolean
   savedOnly?: boolean
 }
