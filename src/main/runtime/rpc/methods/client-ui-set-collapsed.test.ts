@@ -97,18 +97,11 @@ describe('ui.setCollapsed', () => {
   })
 
   it.each([
-    ['a paired desktop or web client', { clientKind: 'runtime' as const }],
-    ['a delegated phone', { clientKind: 'mobile' as const, pairedDeviceParentId: 'desktop-2' }]
-  ])('refuses %s, which keeps its own view', async (_label, context) => {
+    ['a local caller', {}],
+    ['a paired desktop or web client', { clientKind: 'runtime' as const }]
+  ])('accepts %s, as ui.set does', async (_label, context) => {
     const host = makeHost()
-    const response = await host.collapse('other', 1, 'repo:a', true, context)
-    expect(response).toMatchObject({ ok: false, error: { code: 'forbidden' } })
-    expect(host.collapsed()).toEqual([])
-  })
-
-  it('accepts a local caller', async () => {
-    const host = makeHost()
-    await host.collapse('cli', 1, 'repo:a', true, {})
+    await host.collapse('writer', 1, 'repo:a', true, context)
     expect(host.collapsed()).toEqual(['repo:a'])
   })
 })

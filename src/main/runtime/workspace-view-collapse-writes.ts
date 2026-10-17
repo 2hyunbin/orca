@@ -26,9 +26,9 @@ export class CollapseWriteOrder {
     this.appliedSeq.delete(slot)
     this.appliedSeq.set(slot, opId.seq)
     if (this.appliedSeq.size > MAX_TRACKED_WRITES) {
-      for (const oldest of this.appliedSeq.keys()) {
+      const oldest = this.appliedSeq.keys().next().value
+      if (oldest !== undefined) {
         this.appliedSeq.delete(oldest)
-        break
       }
     }
   }
