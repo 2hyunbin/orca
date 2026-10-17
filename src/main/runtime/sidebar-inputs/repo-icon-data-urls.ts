@@ -24,7 +24,7 @@ const SUCCESS_TTL_MS = 60 * 60 * 1000
 const FAILURE_TTL_MS = 5 * 60 * 1000
 const MAX_CACHE_BYTES = 1024 * 1024
 const CACHE_ENTRY_OVERHEAD_BYTES = 128
-// Why 4: a full 16-id read of slow hosts then ends within 20 s, under the phone's 30 s timeout.
+// Why 4: a lone 16-id read of slow hosts then ends within 20 s, under the phone's 30 s timeout.
 const MAX_CONCURRENT_FETCHES = 4
 
 type ImageRepoIcon = Extract<RepoIcon, { type: 'image' }>
