@@ -142,7 +142,8 @@ describe('attach', () => {
           origin: 'created',
           mintedAtFence: fence + 1,
           observedAt: NOW
-        }
+        },
+        acquisitionGeneration: 'generation-stale'
       }))
       .mockImplementation(async ({ fence, spawnToken }) => ({
         process: {
@@ -157,7 +158,8 @@ describe('attach', () => {
           origin: 'created',
           mintedAtFence: fence,
           observedAt: NOW
-        }
+        },
+        acquisitionGeneration: `generation-${fence}`
       }))
     host = new StructuredAgentSessionHost({
       agents: NO_STRUCTURED_AGENTS,

@@ -29,7 +29,8 @@ function acquisition(fence: number, spawnToken: string): AgentSessionAcquisition
       origin: 'created',
       mintedAtFence: fence,
       observedAt: 1
-    }
+    },
+    acquisitionGeneration: `generation-${fence}`
   }
 }
 
@@ -38,6 +39,7 @@ function adapterOf(
 ): StructuredAgentSessionAdapter {
   return {
     acquire: vi.fn(async ({ fence, spawnToken }) => acquisition(fence, spawnToken)),
+    open: vi.fn(async () => ({ reportedOptions: { model: '' } })),
     releaseAcquisition,
     dispatch: vi.fn(),
     cancelTurn: vi.fn(),

@@ -127,6 +127,6 @@ it("answers a resting chat's `/` menu only for chats this host runs", async () =
   await vi.waitFor(() => expect(catalog.read(local)).toEqual(listed))
 
   // Same workspace and account on another host: only that host can read its folders.
-  const remote = { ...local, location: { ...local.location, executionHostId: 'ssh:box' } }
+  const remote = { ...local, location: { ...local.location, executionHostId: 'ssh:box' as const } }
   expect(catalog.read(remote)).toBeUndefined()
 })

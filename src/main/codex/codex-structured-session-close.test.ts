@@ -71,6 +71,7 @@ function adapterFixture() {
 function claudeAdapterStub(): StructuredAgentSessionAdapter {
   return {
     acquire: vi.fn(async () => ({ process: { pid: 1 } }) as never),
+    open: vi.fn(async () => ({ reportedOptions: { model: '' } })),
     dispatch: vi.fn(),
     cancelTurn: vi.fn(),
     answerPrompt: vi.fn(),

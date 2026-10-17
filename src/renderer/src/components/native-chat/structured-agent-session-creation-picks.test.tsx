@@ -44,7 +44,10 @@ import {
   SendParams,
   SetOptionParams
 } from '../../../../shared/rpc-contract/structured-agent-session-params'
-import type { AgentSessionHistoryPage } from '../../../../shared/agent-session-wire'
+import type {
+  AgentSessionHistoryPage,
+  AgentSessionModelCatalogResult
+} from '../../../../shared/agent-session-wire'
 import type { SessionOptionDescriptor } from '../../../../shared/native-chat-session-options'
 import { startStructuredAgentLaunch } from '@/lib/structured-agent-session-launch'
 import { resetStructuredAgentLaunchRegistryForTests } from '@/lib/structured-agent-session-launch-registry'
@@ -66,14 +69,14 @@ import { useStructuredAgentSessionSends } from './use-structured-agent-session-s
 
 const target = { kind: 'local' } as const
 const efforts = ['low', 'high'].map((value) => ({ value, label: value }))
-const LISTING = {
+const LISTING: AgentSessionModelCatalogResult = {
   origin: 'probe',
   fetchedAt: 1,
   models: [
     { id: 'sonnet', label: 'Sonnet', isDefault: true, defaultEffort: 'low', efforts },
-    { id: 'opus', label: 'Opus', defaultEffort: 'low', efforts }
+    { id: 'opus', label: 'Opus', isDefault: false, defaultEffort: 'low', efforts }
   ]
-} as const
+}
 
 function shown(snapshot: readonly SessionOptionDescriptor[], id: string): string | undefined {
   const kind = snapshot.find((entry) => entry.id === id)?.kind

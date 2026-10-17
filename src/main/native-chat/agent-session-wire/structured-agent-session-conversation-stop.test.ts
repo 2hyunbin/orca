@@ -100,6 +100,7 @@ beforeEach(async () => {
           }
         }
       },
+      open: async () => ({ reportedOptions: { model: '' } }),
       dispatch,
       closeSession,
       acknowledgeSessionRelease,

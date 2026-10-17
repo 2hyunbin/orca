@@ -12,6 +12,8 @@ import type { AgentJournalSubmission } from '../../../shared/agent-session-journ
 import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-session-mutation-envelope'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
 import { DISPATCH_REJECTED_CANCELLED } from '../../../shared/structured-agent-session-dispatch-rejection'
+import { NATIVE_CHAT_STOPPED_BEFORE_START_TEXT } from '../../../shared/native-chat-stopped-before-start'
+import { projectStructuredAgentSessionMessages } from '../../../shared/structured-agent-session-message-projection'
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-record-store-test-harness'
 import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
@@ -296,8 +298,14 @@ describe('a start that ends before it proves itself', () => {
     })
     expect((await submission(id))?.handedOverAt).toBeUndefined()
     expect(closeSession).toHaveBeenCalled()
-    const rows = (await host.journalSnapshot(SESSION)).items.map(({ body }) => body)
-    expect(rows).toContainEqual({ kind: 'status', text: 'Cancellation requested.' })
+    // The taken-back send carries the Stop's feedback; a host row would say it twice.
+    const snapshot = await host.journalSnapshot(SESSION)
+    expect(
+      projectStructuredAgentSessionMessages(snapshot.items, [], snapshot.submissions)
+    ).toMatchObject([
+      { role: 'user', blocks: [{ type: 'text', text: 'hello' }] },
+      { blocks: [{ type: 'text', text: NATIVE_CHAT_STOPPED_BEFORE_START_TEXT }] }
+    ])
     expect(dispatch).not.toHaveBeenCalled()
     expect(startupAttemptOpen()).toBe(false)
   })
