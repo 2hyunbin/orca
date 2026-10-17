@@ -26,12 +26,19 @@ import { OrcadInstanceLockError } from './orcad-data-root-privacy'
 import { orcadLockRecoveryPrefix } from './orcad-instance-lock-reclaim'
 
 // Runs once, right after the next rename out of the canonical lock path: a contender's turn.
-const afterLockRename = vi.hoisted((): { next: (() => void) | null } => ({ next: null }))
+const afterLockRename = vi.hoisted((): { next: (() => void) | null; failNext: boolean } => ({
+  next: null,
+  failNext: false
+}))
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof NodeFs>()
   return {
     ...actual,
     renameSync: (from: NodeFs.PathLike, to: NodeFs.PathLike) => {
+      if (afterLockRename.failNext && String(from).endsWith('orcad.lock')) {
+        afterLockRename.failNext = false
+        throw Object.assign(new Error('EBUSY: resource busy'), { code: 'EBUSY' })
+      }
       actual.renameSync(from, to)
       const contender = afterLockRename.next
       if (contender && String(from).endsWith('orcad.lock')) {
@@ -79,6 +86,7 @@ function persistedRecord(overrides: Partial<OrcadLockRecord> = {}): OrcadLockRec
 
 afterEach(() => {
   afterLockRename.next = null
+  afterLockRename.failNext = false
   for (const root of roots.splice(0)) {
     rmSync(root, { recursive: true, force: true })
   }
@@ -615,6 +623,28 @@ describe('acquireOrcadInstanceLock', () => {
       expect(readdirSync(root)).toEqual([ORCAD_LOCK_FILE_NAME])
       lock.release()
     }
+  })
+
+  it('never reuses a generation a failed recovery let go of', () => {
+    const root = makeRoot()
+    const lockPath = join(root, ORCAD_LOCK_FILE_NAME)
+    const stale = JSON.stringify(persistedRecord({ machineIdentity: 'machine-a' }))
+    const generation = (n: number): string => `${orcadLockRecoveryPrefix(lockPath, stale)}${n}`
+    writeFileSync(lockPath, stale)
+    // Its rename of the stale lock fails, so the stale record stays in place.
+    afterLockRename.failNext = true
+    expect(() => acquireOrcadInstanceLock(root, hooks())).toThrow(
+      expect.objectContaining({ code: 'orcad_instance_lock_held' })
+    )
+    expect(readdirSync(generation(0)).sort()).toEqual(['owner', 'released'])
+
+    // The next reclaimer, though this process is still alive, moves to a new generation.
+    const lock = acquireOrcadInstanceLock(
+      root,
+      hooks({ processIsAlive: (pid) => pid === process.pid })
+    )
+    expect(readOrcadInstanceLockRecord(lockPath)?.nonce).toBe(lock.record.nonce)
+    expect(readdirSync(root)).toEqual([ORCAD_LOCK_FILE_NAME])
   })
 
   it('never displaces a reclaimer that broke the same dead recovery owner first', () => {

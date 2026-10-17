@@ -4,6 +4,7 @@
  */
 import { createHash, randomUUID } from 'node:crypto'
 import {
+  existsSync,
   linkSync,
   mkdirSync,
   readdirSync,
@@ -22,6 +23,7 @@ export const MAX_ORCAD_LOCK_BYTES = 64 * 1024
 // Serializes stale-lock recovery, so no reclaimer ever renames away a lock another just published.
 const RECOVERY_DIR_SUFFIX = '.recovery'
 const RECOVERY_OWNER_FILE = 'owner'
+const RECOVERY_RELEASED_FILE = 'released'
 
 /** Who is recovering, as a lock record, and whether a recovery owner's holder provably exited. */
 export type OrcadLockRecoveryOwner = {
@@ -105,12 +107,15 @@ function withRecoveryLock<T>(
   const prefix = orcadLockRecoveryPrefix(lockPath, inspectedContents)
   const generations = recoveryGenerations(prefix)
   const newest = generations.at(-1)
+  const newestDir = `${prefix}${newest}`
   const ownerRecord =
-    newest === undefined
-      ? null
-      : readBoundedLockFile(join(`${prefix}${newest}`, RECOVERY_OWNER_FILE))
+    newest === undefined ? null : readBoundedLockFile(join(newestDir, RECOVERY_OWNER_FILE))
   // An owner-less generation is one whose cleanup a crash cut short; none is published empty.
-  const free = newest === undefined || ownerRecord === null || owner.exited(ownerRecord)
+  const free =
+    newest === undefined ||
+    ownerRecord === null ||
+    existsSync(join(newestDir, RECOVERY_RELEASED_FILE)) ||
+    owner.exited(ownerRecord)
   const generation = newest === undefined ? 0 : newest + 1
   if (!free || !takeRecoveryLock(`${prefix}${generation}`, owner.record)) {
     throw new OrcadInstanceLockError(
@@ -121,10 +126,15 @@ function withRecoveryLock<T>(
   try {
     return recover()
   } finally {
-    // Once the stale record is gone no reclaimer can use its recovery locks again.
-    const gone = readBoundedLockFile(lockPath) !== inspectedContents
-    for (const stale of gone ? recoveryGenerations(prefix) : [generation]) {
-      rmSync(`${prefix}${stale}`, { recursive: true, force: true })
+    if (readBoundedLockFile(lockPath) === inspectedContents) {
+      // Kept, marked released: a reused generation number could be judged by a contender that
+      // read this generation's owner before we let go.
+      writeQuietly(join(`${prefix}${generation}`, RECOVERY_RELEASED_FILE))
+    } else {
+      // Once the stale record is gone no reclaimer can use its recovery locks again.
+      for (const stale of recoveryGenerations(prefix)) {
+        rmSync(`${prefix}${stale}`, { recursive: true, force: true })
+      }
     }
   }
 }
@@ -197,6 +207,14 @@ function restoreDisplacedLock(
     } catch {
       // A newer contender won, or restoration is unavailable; fail closed.
     }
+  }
+}
+
+function writeQuietly(path: string): void {
+  try {
+    writeFileSync(path, '', { flag: 'wx', mode: 0o600 })
+  } catch {
+    // Unwritable: the owner record still releases it once this process exits.
   }
 }
 
