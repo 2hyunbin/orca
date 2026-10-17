@@ -45,6 +45,15 @@ export function buildHydratedEditorSessionState(
   const usedOpenFileIds = new Set<string>()
   const legacyFileIndex = new LegacyHydratedEditorFileIndex()
   const editorFileIdMigrationsByWorktree: Record<string, Map<string, string>> = {}
+  const tabEntityIdsByWorktree = new Map<string, ReadonlySet<string>>()
+  const savedTabEntityIds = (worktreeId: string): ReadonlySet<string> => {
+    let ids = tabEntityIdsByWorktree.get(worktreeId)
+    if (!ids) {
+      ids = new Set((session.unifiedTabs?.[worktreeId] ?? []).map((tab) => tab.entityId))
+      tabEntityIdsByWorktree.set(worktreeId, ids)
+    }
+    return ids
+  }
   for (const [worktreeId, files] of Object.entries(openFilesByWorktree)) {
     if (!validWorktreeIds.has(worktreeId)) {
       continue
@@ -69,6 +78,10 @@ export function buildHydratedEditorSessionState(
       usedOpenFileIds.add(id)
       // Why: map from the collision-derived legacy id; keying by filePath would collapse same-path local/runtime tabs onto the last owner to hydrate.
       addEditorFileIdMigration(editorFileIdMigrationsByWorktree, worktreeId, legacyId, id)
+      // Why: a tab Orca moved to the workspace owning its file was saved under the owned id (F42).
+      if (ownedId !== id && savedTabEntityIds(worktreeId).has(ownedId)) {
+        addEditorFileIdMigration(editorFileIdMigrationsByWorktree, worktreeId, ownedId, id)
+      }
       legacyFileIndex.add({
         id: legacyId,
         filePath: pf.filePath,
