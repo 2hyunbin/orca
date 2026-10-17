@@ -547,7 +547,9 @@
           "presenceProfileOverflow": "{{names}} +{{count}} más",
           "removeProjectFailed": "No se ha podido eliminar el proyecto ",
           "wslFilesystemBoundaryTitle": "Este proyecto se almacena en una unidad de Windows",
-          "wslFilesystemBoundaryDescription": "Git para este proyecto se ejecuta en {{distro}}, que llega a las unidades de Windows a través del puente del sistema de archivos WSL. Espera que git sea aproximadamente 20 veces más lento de lo que sería en una copia almacenada dentro de {{distro}}."
+          "wslFilesystemBoundaryDescription": "Git para este proyecto se ejecuta en {{distro}}, que llega a las unidades de Windows a través del puente del sistema de archivos WSL. Espera que git sea aproximadamente 20 veces más lento de lo que sería en una copia almacenada dentro de {{distro}}.",
+          "moveToGroupOtherHost": "No se pudo mover el proyecto al grupo",
+          "moveToGroupOtherHostDesc": "El equipo donde se ejecuta este proyecto no tiene este grupo. Un proyecto solo puede unirse a grupos guardados en su propio equipo."
         },
         "settings": {
           "e12dab333b": "No se pudo cambiar de servidor",

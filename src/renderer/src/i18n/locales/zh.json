@@ -548,7 +548,9 @@
           "presenceProfileOverflow": "{{names}} 及另外 {{count}} 个",
           "removeProjectFailed": "删除项目失败",
           "wslFilesystemBoundaryTitle": "该项目存储在 Windows 驱动器上",
-          "wslFilesystemBoundaryDescription": "该项目的 Git 在 {{distro}} 中运行，它通过 WSL 文件系统桥到达 Windows 驱动器。预计 git 的速度比存储在 {{distro}} 内的副本慢大约 20 倍。"
+          "wslFilesystemBoundaryDescription": "该项目的 Git 在 {{distro}} 中运行，它通过 WSL 文件系统桥到达 Windows 驱动器。预计 git 的速度比存储在 {{distro}} 内的副本慢大约 20 倍。",
+          "moveToGroupOtherHost": "无法将项目移动到分组",
+          "moveToGroupOtherHostDesc": "运行此项目的计算机上没有此分组。项目只能加入保存在其所在计算机上的分组。"
         },
         "settings": {
           "e12dab333b": "切换服务器失败",
