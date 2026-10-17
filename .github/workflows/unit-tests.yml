@@ -165,8 +165,6 @@ jobs:
           writeAssignment("ci-shards/unit-discovery.json", { files: discoverUnitFiles() });'
 
       - name: Test shard
-        # Leave time to upload diagnostics after a hung test.
-        timeout-minutes: 45
         env:
           NODE_COMPILE_CACHE: ${{ runner.temp }}/orca-node-compile-cache-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.node }}-${{ matrix.shard.index }}
           ORCA_BALANCE_UNIT_SHARDS: '1'
