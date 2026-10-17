@@ -28,9 +28,7 @@ export function MobileNativeChatQueuedMessageEditor({
     <View style={styles.editor} testID="queued-card-editor">
       <View style={styles.head}>
         <Pencil size={PENCIL_SIZE} color={colors.textMuted} strokeWidth={2} />
-        <Text style={styles.label} numberOfLines={1}>
-          Editing message
-        </Text>
+        <Text style={styles.label}>Editing message</Text>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Cancel editing queued message"
@@ -90,14 +88,17 @@ const styles = StyleSheet.create({
     paddingRight: spacing.xs,
     paddingBottom: spacing.sm
   },
+  // Wraps so at large text sizes Cancel and Save drop to a second line instead of squeezing the label.
   head: {
     minHeight: EDITOR_ACTION_HEIGHT,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacing.sm
   },
   label: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
     color: colors.textMuted,
     fontSize: typography.metaSize,
     lineHeight: typography.metaSize + spacing.xs
