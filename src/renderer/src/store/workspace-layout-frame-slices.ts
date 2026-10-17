@@ -102,22 +102,6 @@ function withLiveTitles(
   return { ...facts, terminalRows }
 }
 
-/** Restore resets agent titles because a prior session's agents have exited; a live one has not. */
-function withRowLiveTitles(
-  tabsByWorktree: AppState['tabsByWorktree'],
-  liveTitles: ReadonlyMap<string, string>
-): AppState['tabsByWorktree'] {
-  return Object.fromEntries(
-    Object.entries(tabsByWorktree).map(([key, rows]) => [
-      key,
-      rows.map((row) => {
-        const title = liveTitles.get(row.id)
-        return title === undefined || title === row.title ? row : { ...row, title }
-      })
-    ])
-  )
-}
-
 /** Each tab-bar entry names the host its frame names, which the frame alone knows per tab. */
 function stampExecutionHosts(
   unifiedTabs: NonNullable<WorkspaceSessionState['unifiedTabs']>,
@@ -170,7 +154,8 @@ export function buildLayoutFrameSlices({
   // The frames are the catalog: main publishes only workspaces it holds.
   const workspaceKeys = new Set(Object.keys(layouts))
 
-  const rows = buildWorkspaceTerminalRowPlan(session, workspaceKeys)
+  // Restore resets agent titles because a prior session's agents have exited; a live one has not.
+  const rows = buildWorkspaceTerminalRowPlan(session, workspaceKeys, liveTitles)
   const terminalLayoutsByTabId = buildWorkspaceTerminalLayoutPlan({
     ownershipTransfersByTabId: new Map(),
     ownershipTransferTabIds: new Set(),
@@ -212,7 +197,7 @@ export function buildLayoutFrameSlices({
     ...migrateHydratedEditorTabsAndGroups(tabs, editor.editorFileIdMigrationsByWorktree)
   }
   return {
-    tabsByWorktree: withRowLiveTitles(rows.tabsByWorktree, liveTitles),
+    tabsByWorktree: rows.tabsByWorktree,
     terminalLayoutsByTabId,
     activeTabIdByWorktree,
     ...editorTabs,
