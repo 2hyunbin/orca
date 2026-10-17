@@ -6,5 +6,11 @@ export const SIDEBAR_INPUT_METHODS = [
     permission: 'workspace',
     params: null,
     handler: async (_params, { runtime }) => runtime.getWorkspaceActivityFacts()
+  }),
+  defineMethod({
+    name: 'sidebarInputs.workspaceCreations',
+    permission: 'workspace',
+    params: null,
+    handler: async (_params, { runtime }) => runtime.getWorkspaceCreations()
   })
 ]

@@ -125,6 +125,7 @@ export function buildRuntimeWorktreeCreateParams(
     ...sharedCreateFields(request, attempt),
     // Why: the host defaults a bare `parentWorkspace` to CLI provenance; app picks are manual.
     ...(attempt.parentWorkspace ? { parentWorkspaceOrigin: 'manual' } : {}),
+    ...(request.creationId ? { creationId: request.creationId } : {}),
     ...(options?.startupDraft ? { startupDraft: options.startupDraft } : {}),
     ...(startup
       ? {

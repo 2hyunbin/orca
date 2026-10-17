@@ -91,13 +91,16 @@ export function installSidebarShadowComparison(checks: readonly SidebarShadowChe
     }
     inFlight = true
     void (async () => {
+      let comparedAll = true
       for (const check of checks) {
         const compared = await check(record).catch((error: unknown) => {
           console.warn('[sidebar-shadow] check failed', error)
           return false
         })
-        comparisons += compared ? 1 : 0
+        comparedAll &&= compared
       }
+      // A round counts only when every domain compared, so two rounds settle each of them.
+      comparisons += comparedAll ? 1 : 0
     })().finally(() => {
       inFlight = false
     })
