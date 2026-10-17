@@ -3,38 +3,46 @@
  *
  * Once the daemon accepts idle retirement, or may have accepted it, it never admits a terminal
  * again, so a server that stays up must replace it. A replacement ends whatever the old daemon
- * still runs, so it happens only when that is provably nothing.
+ * still runs, so it happens only after the daemon itself atomically agreed to retire.
  */
 import { withTimeout } from '../../shared/promise-timeout-fallback'
 import type { OrcadDaemonRetirement } from './orcad-daemon-retirement'
 import { ORCAD_DAEMON_RETIREMENT_TIMEOUT_MS } from './orcad-stop-deadlines'
 
+type RetirementOutcome = Pick<OrcadDaemonRetirement, 'retirement' | 'lateRetirement'>
+
 export type OrcadIdleStopDaemonRecoveryPorts = {
   admissionClosed: () => boolean
-  countLiveSessions: () => Promise<number | null>
+  /** Asks the daemon to retire again; its own census and fence make the verdict atomic. */
+  retireAgain: () => Promise<RetirementOutcome>
   replaceDaemon: () => Promise<unknown>
   timeoutMs?: number
 }
 
 /** `serving` when new terminals can start; `unservable` when this server cannot run any. */
 export async function recoverDaemonAfterCancelledIdleStop(
-  outcome: Pick<OrcadDaemonRetirement, 'retirement' | 'lateRetirement'>,
+  outcome: RetirementOutcome,
   ports: OrcadIdleStopDaemonRecoveryPorts
 ): Promise<'serving' | 'unservable'> {
   const timeoutMs = ports.timeoutMs ?? ORCAD_DAEMON_RETIREMENT_TIMEOUT_MS
-  const retired =
-    outcome.retirement === 'retired' ||
-    (outcome.lateRetirement !== undefined &&
-      (await withTimeout(outcome.lateRetirement, timeoutMs, false)))
-  if (!retired) {
+  const retired = async (candidate: RetirementOutcome): Promise<boolean> =>
+    candidate.retirement === 'retired' ||
+    (candidate.lateRetirement !== undefined &&
+      (await withTimeout(candidate.lateRetirement, timeoutMs, false)))
+  if (!(await retired(outcome))) {
     if (!ports.admissionClosed()) {
       return 'serving'
     }
-    // The stop request may have landed with its reply lost: replace only an empty daemon.
-    const live = await withTimeout(ports.countLiveSessions(), timeoutMs, null)
-    if (live !== 0) {
-      console.error('[orcad] the terminal daemon may be retiring and could not be proven empty')
-      return 'unservable'
+    // A lost stop reply leaves the daemon's verdict unknown; only the daemon can settle it.
+    const retry = await ports
+      .retireAgain()
+      .catch((): RetirementOutcome => ({ retirement: 'unverifiable' }))
+    if (!(await retired(retry))) {
+      if (ports.admissionClosed()) {
+        console.error('[orcad] the terminal daemon may be retiring and did not settle it')
+        return 'unservable'
+      }
+      return 'serving'
     }
   }
   try {

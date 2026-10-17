@@ -118,7 +118,7 @@ async function startOrcadManagedIdleExit(
         discardOrcadIdleStopRecord(input.userDataPath)
         const daemon = await recoverDaemonAfterCancelledIdleStop(outcome, {
           admissionClosed: isDaemonTerminalAdmissionClosed,
-          countLiveSessions: countLiveOrcadDaemonSessions,
+          retireAgain: () => retireOrcadDaemonIfIdle(),
           replaceDaemon: async () => {
             const { restartDaemon } = await import('../daemon/daemon-provider-restart')
             await restartDaemon()

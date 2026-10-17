@@ -1,12 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
 import { recoverDaemonAfterCancelledIdleStop } from './orcad-idle-stop-daemon-recovery'
 
-function ports(options: { admissionClosed?: boolean; liveSessions?: number | null } = {}) {
+function ports(
+  options: { admissionClosed?: boolean; retry?: 'retired' | 'live' | 'unverifiable' } = {}
+) {
+  let closed = options.admissionClosed ?? false
   return {
-    admissionClosed: vi.fn(() => options.admissionClosed ?? false),
-    countLiveSessions: vi.fn(async () =>
-      options.liveSessions === undefined ? 0 : options.liveSessions
-    ),
+    admissionClosed: vi.fn(() => closed),
+    retireAgain: vi.fn(async () => {
+      const retirement = options.retry ?? 'unverifiable'
+      // Only a refusal the daemon answered reopens admission.
+      closed = retirement !== 'live'
+      return { retirement }
+    }),
     replaceDaemon: vi.fn(async () => {}),
     timeoutMs: 20
   }
@@ -14,16 +20,16 @@ function ports(options: { admissionClosed?: boolean; liveSessions?: number | nul
 
 describe('daemon recovery after a cancelled idle stop', () => {
   it('replaces a daemon that retired', async () => {
-    const recovery = ports({ admissionClosed: true, liveSessions: null })
+    const recovery = ports({ admissionClosed: true })
     expect(await recoverDaemonAfterCancelledIdleStop({ retirement: 'retired' }, recovery)).toBe(
       'serving'
     )
     expect(recovery.replaceDaemon).toHaveBeenCalledOnce()
-    expect(recovery.countLiveSessions).not.toHaveBeenCalled()
+    expect(recovery.retireAgain).not.toHaveBeenCalled()
   })
 
   it('replaces a daemon whose retirement landed after the stop timed out', async () => {
-    const recovery = ports({ admissionClosed: true, liveSessions: null })
+    const recovery = ports({ admissionClosed: true })
     const outcome = { retirement: 'unverifiable' as const, lateRetirement: Promise.resolve(true) }
     expect(await recoverDaemonAfterCancelledIdleStop(outcome, recovery)).toBe('serving')
     expect(recovery.replaceDaemon).toHaveBeenCalledOnce()
@@ -36,11 +42,25 @@ describe('daemon recovery after a cancelled idle stop', () => {
     expect(recovery.replaceDaemon).not.toHaveBeenCalled()
   })
 
-  it.each([
-    ['live sessions', 2],
-    ['an unanswered census', null]
-  ])('never replaces a fenced daemon with %s', async (_name, liveSessions) => {
-    const recovery = ports({ admissionClosed: true, liveSessions })
+  it('asks a daemon whose stop reply was lost again, and replaces it once it retires', async () => {
+    const recovery = ports({ admissionClosed: true, retry: 'retired' })
+    expect(
+      await recoverDaemonAfterCancelledIdleStop({ retirement: 'unverifiable' }, recovery)
+    ).toBe('serving')
+    expect(recovery.retireAgain).toHaveBeenCalledOnce()
+    expect(recovery.replaceDaemon).toHaveBeenCalledOnce()
+  })
+
+  it('keeps a fenced daemon that refuses the second ask', async () => {
+    const recovery = ports({ admissionClosed: true, retry: 'live' })
+    expect(
+      await recoverDaemonAfterCancelledIdleStop({ retirement: 'unverifiable' }, recovery)
+    ).toBe('serving')
+    expect(recovery.replaceDaemon).not.toHaveBeenCalled()
+  })
+
+  it('never replaces a fenced daemon that stays unanswered', async () => {
+    const recovery = ports({ admissionClosed: true, retry: 'unverifiable' })
     expect(
       await recoverDaemonAfterCancelledIdleStop({ retirement: 'unverifiable' }, recovery)
     ).toBe('unservable')

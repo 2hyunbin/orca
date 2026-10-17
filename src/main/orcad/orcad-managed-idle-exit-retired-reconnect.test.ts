@@ -30,7 +30,7 @@ vi.mock('./orcad-managed-idle-exit', async (importOriginal) => ({
 }))
 
 /** A router over one adapter whose own fence behaves like the daemon adapter's. */
-function freshRouter(retirement?: Promise<DaemonIdleRetirementResult>): DaemonPtyRouter {
+function freshRouter(retirements: Promise<DaemonIdleRetirementResult>[] = []): DaemonPtyRouter {
   const current = createAdapter('current', [], undefined, PROTOCOL_VERSION)
   let fenced = false
   let fenceHeld = false
@@ -42,16 +42,14 @@ function freshRouter(retirement?: Promise<DaemonIdleRetirementResult>): DaemonPt
     return spawn(opts)
   })
   vi.mocked(current.isIdleRetirementAdmissionClosed).mockImplementation(() => fenced)
-  if (retirement) {
-    vi.mocked(current.requestIdleRetirement).mockImplementation(async () => {
-      fenced = true
-      const result = await retirement
-      // A lost reply keeps the adapter fenced, as an accepted stop may be behind it.
-      fenceHeld = result.state === 'retiring' || result.state === 'unverifiable'
-      fenced = fenceHeld
-      return result
-    })
-  }
+  vi.mocked(current.requestIdleRetirement).mockImplementation(async () => {
+    fenced = true
+    const result = await (retirements.shift() ?? { state: 'retiring' as const })
+    // A lost reply keeps the adapter fenced, as an accepted stop may be behind it.
+    fenceHeld = result.state === 'retiring' || result.state === 'unverifiable'
+    fenced = fenceHeld
+    return result
+  })
   vi.mocked(current.releaseIdleRetirementFence).mockImplementation(() => {
     fenced = fenceHeld
   })
@@ -60,10 +58,13 @@ function freshRouter(retirement?: Promise<DaemonIdleRetirementResult>): DaemonPt
 
 async function stopWithReturningClient(
   retirementState: DaemonIdleRetirementResult,
-  options: { automationsBusy?: boolean } = {}
+  options: { automationsBusy?: boolean; retry?: DaemonIdleRetirementResult } = {}
 ) {
   const retire = Promise.withResolvers<DaemonIdleRetirementResult>()
-  installDaemonProvider(null, freshRouter(retire.promise))
+  installDaemonProvider(
+    null,
+    freshRouter([retire.promise, ...(options.retry ? [Promise.resolve(options.retry)] : [])])
+  )
   const activity = { openConnections: 0, requestsInFlight: 0, lastRequestAt: 0 }
   let automationsBusy = false
   const shutdown = vi.fn(() => true)
@@ -128,8 +129,11 @@ it('finishes the stop when the retired daemon cannot be replaced', async () => {
   expect(shutdown).toHaveBeenCalledWith('idle', expect.any(Function))
 })
 
-it('replaces an empty daemon whose stop reply was lost, since it may be retiring', async () => {
-  const { stopped, shutdown } = await stopWithReturningClient({ state: 'unverifiable' })
+it('asks a daemon whose stop reply was lost again, and replaces it once it retires', async () => {
+  const { stopped, shutdown } = await stopWithReturningClient(
+    { state: 'unverifiable' },
+    { retry: { state: 'retiring' } }
+  )
 
   await expect(getLocalPtyProvider().spawn({ cols: 80, rows: 24 })).resolves.toEqual({
     id: 'current-new'
@@ -137,6 +141,20 @@ it('replaces an empty daemon whose stop reply was lost, since it may be retiring
   expect(stopped).toBe(false)
   expect(shutdown).not.toHaveBeenCalled()
   expect(restartDaemon).toHaveBeenCalledOnce()
+})
+
+it('keeps a daemon that refuses the second ask, and serves from it', async () => {
+  const { stopped, shutdown } = await stopWithReturningClient(
+    { state: 'unverifiable' },
+    { retry: { state: 'busy', liveSessions: 1 } }
+  )
+
+  expect(restartDaemon).not.toHaveBeenCalled()
+  expect(stopped).toBe(false)
+  expect(shutdown).not.toHaveBeenCalled()
+  await expect(getLocalPtyProvider().spawn({ cols: 80, rows: 24 })).resolves.toEqual({
+    id: 'current-new'
+  })
 })
 
 it('stays up for work the returning client started when the daemon cannot be replaced', async () => {
