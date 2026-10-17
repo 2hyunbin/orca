@@ -199,6 +199,21 @@ describe('moving onto a server another desktop already added the same project to
     })
   })
 
+  it.each([
+    ['a connection id', { connectionId: 'nested-target' }],
+    ['an SSH execution host', { executionHostId: 'ssh:nested-target' as const }],
+    ['a runtime execution host', { executionHostId: 'runtime:other-env' as const }]
+  ])(
+    'imports, not links, when the server’s same-path project lives on another machine (%s)',
+    async (_case, host) => {
+      // A project another host holds, reached through the server's own SSH target.
+      server.addRepo({ ...repo('nested-repo', '/root/migrepo', null), ...host })
+      await expect(convert()).resolves.toMatchObject({ outcome: 'converted' })
+      expect(serverRepoIds()).toEqual(['desktop-only', 'desktop-repo', 'nested-repo'])
+      expect(listOrcadMigrationSourceCutovers(userDataPath)[0]?.linkedRepositoryIds).toBeUndefined()
+    }
+  )
+
   it('says nothing was linked when the server held none of the projects', async () => {
     const result = await convert()
     expect(result.outcome).toBe('converted')
