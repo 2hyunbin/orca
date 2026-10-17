@@ -62,10 +62,12 @@ export const SESSION_TAB_METHODS = [
         )
       }
       return runtime.createMobileSessionTerminal(params.worktree, {
+        ...(params.sourceChatFork ? { sourceChatFork: params.sourceChatFork } : {}),
         terminalImageViewerSupported: terminalImageViewerSupported(context),
         afterTabId: params.afterTabId,
         targetGroupId: params.targetGroupId,
         command: params.command,
+        ...(params.shell ? { shellOverride: params.shell } : {}),
         cwd: params.cwd,
         ...(params.env ? { env: params.env } : {}),
         ...(params.envToDelete ? { envToDelete: params.envToDelete } : {}),
@@ -193,11 +195,16 @@ export const SESSION_TAB_METHODS = [
             }
           }
           if (snapshot.worktree === subscribedWorktree) {
+            // Why: clients file frames by `worktree`; a spelling switch mid-stream splits the tabs.
+            const streamSnapshot =
+              snapshot.worktree === initial.worktree
+                ? snapshot
+                : { ...snapshot, worktree: initial.worktree }
             emit({
               type: 'updated',
               ...tabDelta.update(
                 withProofDelta(
-                  projectSessionTabsForClient(snapshot, clientKind, clientCapabilities)
+                  projectSessionTabsForClient(streamSnapshot, clientKind, clientCapabilities)
                 )
               )
             })

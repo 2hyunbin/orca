@@ -5,6 +5,8 @@ import { waitForTerminalOutputParsed } from '@/lib/pane-manager/pane-terminal-ou
 import { executeTerminalStartupCommandPaste } from '../terminal-startup-command-paste'
 import { resolveTerminalPasteRuntime } from '../terminal-paste-runtime'
 import { CLIENT_PLATFORM } from '@/lib/new-workspace'
+import { recordPaneWakeThroughLayoutOwner } from '@/store/terminals/terminal-sleep-layout-owner'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 
 import { shouldKeepHiddenStartupRendererQueriesLive } from './hidden-startup-renderer-query'
 import { createForegroundImmediateBudget } from './foreground-output-budgets'
@@ -39,6 +41,15 @@ export function bindDeferredColdRestoreAndSnapshot(session: ConnectPanePtySessio
     startup: ColdRestoreAgentResumeStartup | null
   ): void => {
     if (startup && !startup.useLiveEntry && startup.sleepingRecordEntry) {
+      // Switch point: main records the wake of this pane alone, the one this window resumed.
+      // Before the drop below, whose record-only wake would leave main's wake nothing to wake.
+      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+        recordPaneWakeThroughLayoutOwner(
+          useAppStore.getState(),
+          session.deps.worktreeId,
+          session.cacheKey
+        )
+      }
       session.clearSleepingRecordProviderDuplicates(
         useAppStore.getState(),
         startup.sleepingRecordEntry

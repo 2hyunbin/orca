@@ -86,10 +86,10 @@
 2 src/renderer/src/components/native-chat/native-chat-attachment-upload.ts
 1 src/renderer/src/components/native-chat/native-chat-file-link.ts
 3 src/renderer/src/components/native-chat/native-chat-http-link-source-owner.ts
+1 src/renderer/src/components/native-chat/native-chat-link-target-actions.ts
 2 src/renderer/src/components/native-chat/native-chat-runtime-owner.ts
 1 src/renderer/src/components/native-chat/native-chat-skill-discovery-context.ts
 1 src/renderer/src/components/native-chat/use-native-chat-file-drops.ts
-1 src/renderer/src/components/native-chat/use-native-chat-link-actions.ts
 2 src/renderer/src/components/native-chat/use-native-chat-workspace-file-drop.ts
 1 src/renderer/src/components/new-workspace/use-jira-source-connection.ts
 4 src/renderer/src/components/new-workspace/use-linear-source-connection.ts
@@ -225,7 +225,6 @@
 1 src/renderer/src/components/terminal-pane/TerminalPaneSurface.tsx
 1 src/renderer/src/components/terminal-pane/pending-split-close-test-fixture.ts
 1 src/renderer/src/components/terminal-pane/pty-connection/agent-idle-working-handlers.ts
-1 src/renderer/src/components/terminal-pane/pty-connection/cold-restore-resume-startup.ts
 1 src/renderer/src/components/terminal-pane/pty-connection/interrupt-input-intent.ts
 1 src/renderer/src/components/terminal-pane/pty-connection/pane-agent-identity.ts
 1 src/renderer/src/components/terminal-pane/pty-connection/pane-host-capability-flags.ts
@@ -264,9 +263,7 @@
 2 src/renderer/src/components/use-task-page-store-bindings.ts
 2 src/renderer/src/components/use-terminal-activation-actions.ts
 2 src/renderer/src/components/use-terminal-bulk-close-actions.ts
-1 src/renderer/src/components/use-terminal-controller.ts
 8 src/renderer/src/components/use-terminal-create-actions.ts
-1 src/renderer/src/components/use-terminal-watcher-effects.ts
 2 src/renderer/src/components/use-worktree-jump-palette-controller.ts
 1 src/renderer/src/components/use-worktree-jump-palette-create-action.ts
 2 src/renderer/src/components/use-worktree-jump-palette-filter.ts
@@ -303,10 +300,11 @@
 4 src/renderer/src/lib/activate-ai-vault-structured-session.ts
 1 src/renderer/src/lib/active-agent-note-send.ts
 1 src/renderer/src/lib/active-agent-note-target.ts
+1 src/renderer/src/lib/agent-account-restart-startup.ts
 1 src/renderer/src/lib/agent-background-session-launch-host.ts
 1 src/renderer/src/lib/agent-detection-target-inventory.ts
 1 src/renderer/src/lib/agent-hibernation-coordinator-test-fixture.ts
-3 src/renderer/src/lib/agent-hibernation-coordinator.ts
+1 src/renderer/src/lib/agent-hibernation-coordinator.ts
 2 src/renderer/src/lib/agent-launch-route-input.ts
 1 src/renderer/src/lib/agent-message-send.ts
 1 src/renderer/src/lib/ai-vault-resume-platform.ts
@@ -314,7 +312,6 @@
 2 src/renderer/src/lib/ai-vault-tab-title-sync-inputs.ts
 1 src/renderer/src/lib/client-creation-action-error.ts
 3 src/renderer/src/lib/client-creation-action-policy.ts
-1 src/renderer/src/lib/codex-account-restart-startup.ts
 1 src/renderer/src/lib/default-creation-host.ts # the sanctioned reader of the default host
 1 src/renderer/src/lib/doc-preview-grants.ts
 1 src/renderer/src/lib/empty-workspace-default-agent-chat.ts
@@ -339,13 +336,11 @@
 2 src/renderer/src/lib/remap-open-editor-tabs-for-path-change.ts
 1 src/renderer/src/lib/remote-workspace-drop-test-fixtures.ts
 2 src/renderer/src/lib/repo-runtime-owner.ts
-2 src/renderer/src/lib/resume-sleeping-agent-session.ts
 1 src/renderer/src/lib/runtime-session-mirror-owners.ts
 1 src/renderer/src/lib/runtime-session-mirror-targets.ts
 1 src/renderer/src/lib/runtime-workspace-file-route.ts
 1 src/renderer/src/lib/single-runtime-legacy-owner.ts
 1 src/renderer/src/lib/sleeping-agent-session-launch.ts
-1 src/renderer/src/lib/sleeping-record-execution-host-scope.ts
 1 src/renderer/src/lib/structured-agent-session-launch.ts
 1 src/renderer/src/lib/structured-agent-session-provisional-tab.ts
 4 src/renderer/src/lib/structured-agent-session-tab-activation.ts
@@ -360,15 +355,13 @@
 1 src/renderer/src/lib/workspace-file-drag-source.ts
 1 src/renderer/src/lib/workspace-tab-commands.ts
 1 src/renderer/src/lib/workspace-tab-palette-activation.ts
-3 src/renderer/src/lib/workspace-terminal-host-authority.ts
 1 src/renderer/src/lib/worktree-activation-pty-inventory.ts
 3 src/renderer/src/lib/worktree-activation.ts
 1 src/renderer/src/lib/worktree-creation-agent-seeds.ts
-1 src/renderer/src/lib/worktree-initial-terminal-seeding.ts
 1 src/renderer/src/lib/worktree-jump-navigation.ts
 2 src/renderer/src/lib/worktree-operation-route.ts
 1 src/renderer/src/lib/worktree-row-open-in-owner.ts
-5 src/renderer/src/lib/worktree-runtime-owner.ts
+6 src/renderer/src/lib/worktree-runtime-owner.ts # typed owner resolver plus its null-collapsing wrapper; callers net -3
 1 src/renderer/src/lib/worktree-sort-order-host-split.ts
 1 src/renderer/src/runtime/close-mirrored-editor-tab.ts
 1 src/renderer/src/runtime/local-structured-session-tabs-sync/snapshot-apply.ts
@@ -428,7 +421,6 @@
 1 src/renderer/src/store/slices/editor/actions/open-file-action.ts
 1 src/renderer/src/store/slices/editor/actions/open-file-apply.ts
 1 src/renderer/src/store/slices/editor/create-editor-slice.ts
-1 src/renderer/src/store/slices/github-cache-key.ts
 1 src/renderer/src/store/slices/hosted-review-cache-identity.ts
 5 src/renderer/src/store/slices/jira-collection-read-actions.ts
 31 src/renderer/src/store/slices/jira-connection-actions.ts
@@ -487,7 +479,6 @@
 1 src/renderer/src/store/terminals/terminal-shutdown.ts
 1 src/renderer/src/store/terminals/terminal-tab-appearance.ts
 1 src/renderer/src/store/terminals/terminal-tab-close-providers.ts
-1 src/renderer/src/store/terminals/terminal-workspace-routing.ts
 1 src/renderer/src/web/preload-api/web-app-api.ts
 3 src/renderer/src/web/preload-api/web-preference-normalization.ts
 22 src/renderer/src/web/preload-api/web-preferences-store.ts

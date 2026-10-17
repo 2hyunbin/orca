@@ -65,6 +65,7 @@ export type RuntimeStore = {
   installOrcadMigrationReceivedBlobs?: Store['installOrcadMigrationReceivedBlobs']
   installPendingOrcadMigrationReceivedBlobs?: Store['installPendingOrcadMigrationReceivedBlobs']
   installDeferredOrcadMigrationShellHistory?: Store['installDeferredOrcadMigrationShellHistory']
+  hasPendingOrcadMigrationShellHistory?: Store['hasPendingOrcadMigrationShellHistory']
   peekOrcadMigrationTerminalRestoreHint?: Store['peekOrcadMigrationTerminalRestoreHint']
   consumeOrcadMigrationTerminalRestoreHint?: Store['consumeOrcadMigrationTerminalRestoreHint']
   persistPtyBinding?: Store['persistPtyBinding']
@@ -113,7 +114,6 @@ export type RuntimeStore = {
     branchPrefixCustom: string
     defaultTuiAgent?: GlobalSettings['defaultTuiAgent']
     newWorkspaceSetupOnly?: GlobalSettings['newWorkspaceSetupOnly']
-    setupScriptLaunchMode?: GlobalSettings['setupScriptLaunchMode']
     disabledTuiAgents?: GlobalSettings['disabledTuiAgents']
     agentCmdOverrides?: GlobalSettings['agentCmdOverrides']
     agentDefaultArgs?: GlobalSettings['agentDefaultArgs']
@@ -129,6 +129,7 @@ export type RuntimeStore = {
     tabAutoGenerateTitle?: GlobalSettings['tabAutoGenerateTitle']
     terminalCopyTrimsGutter?: GlobalSettings['terminalCopyTrimsGutter']
     experimentalNativeChat?: GlobalSettings['experimentalNativeChat']
+    nativeChatProviders?: GlobalSettings['nativeChatProviders']
     defaultTaskSource?: GlobalSettings['defaultTaskSource']
     defaultTaskViewPreset?: GlobalSettings['defaultTaskViewPreset']
     visibleTaskProviders?: GlobalSettings['visibleTaskProviders']

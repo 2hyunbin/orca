@@ -5,6 +5,7 @@ import type { TuiAgent } from '../tui-agent'
 import { isTuiAgent } from '../tui-agent-config'
 import { TerminalPaneLayoutNodeSchema } from './session-tabs-schemas-params'
 import { TerminalOrphanGroupLayout } from './terminal-orphan-params'
+import { SleepCommand, WakeCommand } from './workspace-layout-sleep-wake-params'
 
 export const LayoutSubscribeParams = z
   .object({
@@ -23,14 +24,21 @@ const OnPane = {
   leafId: z.string().min(1)
 }
 
+/** `newLeafId`: a pane the window already split under its own id (a tab's startup splits). */
 const SplitPaneCommand = z.object({
   type: z.literal('splitPane'),
   ...OnPane,
-  direction: z.enum(['horizontal', 'vertical'])
+  direction: z.enum(['horizontal', 'vertical']),
+  newLeafId: z.string().refine(isTerminalLeafId).optional()
 })
 
-/** Main marks a close as the user's; the window cannot send that mark. */
-const ClosePaneCommand = z.object({ type: z.literal('closePane'), ...OnPane })
+/** Main marks a close as the user's; the window cannot send that mark. `automatic`: not the
+ *  user's close (the pane's terminal ended), so no launch in it was stopped by the user. */
+const ClosePaneCommand = z.object({
+  type: z.literal('closePane'),
+  ...OnPane,
+  automatic: z.literal(true).optional()
+})
 
 /** A title is trimmed and non-empty; null clears it. */
 const RenamePaneCommand = z.object({
@@ -52,6 +60,14 @@ const SetPaneRatiosCommand = z.object({
   workspace: OnPane.workspace,
   tabId: OnPane.tabId,
   root: TerminalPaneLayoutNodeSchema
+})
+
+/** The pane a tab's chat view shows; null clears it. */
+const SetChatPaneCommand = z.object({
+  type: z.literal('setChatPane'),
+  workspace: OnPane.workspace,
+  tabId: OnPane.tabId,
+  leafId: z.union([z.string().min(1), z.null()])
 })
 
 const EqualizePanesCommand = z.object({
@@ -85,12 +101,51 @@ const SetGroupRatiosCommand = z.object({
   groupLayout: TerminalOrphanGroupLayout
 })
 
-/** The window's close of one tab it already closed; main records it, the window's reason kept. */
+/**
+ * The window's close of one tab it already closed; main records a terminal's close with the
+ * window's reason. An editor tab's close records nothing.
+ */
 const CloseTabsCommand = z.object({
   type: z.literal('closeTabs'),
   workspace: OnPane.workspace,
   tabIds: z.tuple([z.string().min(1)]),
-  recordClose: z.enum(['user', 'cleanup'])
+  recordClose: z.enum(['user', 'cleanup']).optional()
+})
+
+/** An open into a new group, named by the command's groupId, beside this one (NewGroupSplit). */
+const NewGroupSplit = z
+  .object({
+    besideGroupId: z.string().min(1),
+    besideLastGroupId: z.string().min(1).optional(),
+    direction: z.enum(['left', 'right', 'up', 'down'])
+  })
+  .optional()
+
+/** An edit-mode file's restorable record, as the window saves it. */
+const EditorFileRecord = z.object({
+  filePath: z.string().min(1),
+  relativePath: z.string(),
+  language: z.string(),
+  runtimeEnvironmentId: z.string().nullable().optional(),
+  externalSshTargetId: z.string().min(1).optional(),
+  readOnly: z.literal(true).optional(),
+  liveTail: z.literal(true).optional()
+})
+
+/**
+ * An editor tab under the id the window drew it with: its callers act on the tab at once. Main
+ * places it and replaces the group's preview by the same rules as the window.
+ */
+const OpenEditorTabCommand = z.object({
+  type: z.literal('openEditorTab'),
+  ...OnTab,
+  fileId: z.string().min(1),
+  contentType: z.enum(['editor', 'diff', 'conflict-review', 'check-details']),
+  file: EditorFileRecord.optional(),
+  groupId: z.string().min(1).optional(),
+  preview: z.literal(true).optional(),
+  createdAt: z.number().int().nonnegative().optional(),
+  split: NewGroupSplit
 })
 
 /** A window's drag-out of one pane into a new tab; main mints the tab's id. */
@@ -114,6 +169,7 @@ const CreateTerminalTabCommand = z.object({
   leafId: z.string().refine(isTerminalLeafId),
   groupId: z.string().min(1).optional(),
   viewMode: z.enum(['terminal', 'chat']).optional(),
+  createdAt: z.number().int().nonnegative().optional(),
   creation: z
     .object({
       defaultTitle: z.string().min(1).optional(),
@@ -126,27 +182,162 @@ const CreateTerminalTabCommand = z.object({
     })
     .optional(),
   /** Only into a workspace with no tab in main's copy; otherwise nothing is created. */
-  initial: z.literal('activation').optional()
+  initial: z.literal('activation').optional(),
+  split: NewGroupSplit
 })
 
-/** The tab bar's rename: a title as the window stores it today; null clears it. */
-const RenameTabCommand = z.object({
-  type: z.literal('renameTab'),
-  ...OnTab,
-  kind: z.literal('custom'),
-  title: z.union([z.string(), z.null()])
+const AiVaultTitle = z.object({
+  agent: z.enum(['claude', 'codex']),
+  sessionId: z.string(),
+  title: z.string()
 })
+
+/** A tab's rename: a title as the window stores it today; null clears it. */
+const RenameTabCommand = z.discriminatedUnion('kind', [
+  z.object({
+    type: z.literal('renameTab'),
+    ...OnTab,
+    kind: z.enum(['custom', 'generated']),
+    title: z.union([z.string(), z.null()])
+  }),
+  z.object({
+    type: z.literal('renameTab'),
+    ...OnTab,
+    kind: z.literal('aiVault'),
+    title: z.union([AiVaultTitle, z.null()])
+  })
+])
 
 const SetTabPropsCommand = z.object({
   type: z.literal('setTabProps'),
   ...OnTab,
   color: z.union([z.string(), z.null()]).optional(),
-  isPinned: z.boolean().optional()
+  isPinned: z.boolean().optional(),
+  viewMode: z.enum(['terminal', 'chat']).optional(),
+  clearLaunchAgent: z.literal(true).optional()
+})
+
+/**
+ * A browser tab under the ids the window drew it with: its pages and the tab's own callers need
+ * them at once. Main refuses an id another tab or page holds; the same open again changes nothing.
+ */
+const OpenBrowserTabCommand = z.object({
+  type: z.literal('openBrowserTab'),
+  workspace: OnPane.workspace,
+  tabId: z.string().min(1),
+  browserTabId: z.string().min(1),
+  pageId: z.string().min(1),
+  profileId: z.string().min(1).nullable().optional(),
+  sessionPartition: z.string().min(1).nullable().optional(),
+  groupId: z.string().min(1).optional(),
+  afterTabId: z.string().min(1).optional(),
+  index: z.number().int().nonnegative().optional(),
+  createdAt: z.number().int().nonnegative().optional(),
+  browserCreatedAt: z.number().int().nonnegative().optional(),
+  split: NewGroupSplit
+})
+
+/**
+ * A chat tab under the id the window drew it with: status and attention address it at once. The
+ * same open again changes nothing; an id another tab holds is refused.
+ */
+const OpenAgentSessionTabCommand = z.object({
+  type: z.literal('openAgentSessionTab'),
+  ...OnTab,
+  sessionId: z.string().min(1),
+  agent: z.string().min(1),
+  groupId: z.string().min(1).optional(),
+  afterTabId: z.string().min(1).optional(),
+  index: z.number().int().nonnegative().optional(),
+  createdAt: z.number().int().nonnegative().optional(),
+  split: NewGroupSplit
+})
+
+const OnBrowserPage = {
+  workspace: OnPane.workspace,
+  browserTabId: z.string().min(1),
+  pageId: z.string().min(1)
+}
+
+/** A page the window added to a browser tab, under its own id. */
+const OpenBrowserPageCommand = z.object({ type: z.literal('openBrowserPage'), ...OnBrowserPage })
+
+const CloseBrowserPageCommand = z.object({ type: z.literal('closeBrowserPage'), ...OnBrowserPage })
+
+/** A converted page: the window's new page takes the old one's place. */
+const ReplaceBrowserPageCommand = z.object({
+  type: z.literal('replaceBrowserPage'),
+  ...OnBrowserPage,
+  newPageId: z.string().min(1)
+})
+
+const SetBrowserTabProfileCommand = z.object({
+  type: z.literal('setBrowserTabProfile'),
+  workspace: OnPane.workspace,
+  browserTabId: z.string().min(1),
+  profileId: z.string().min(1).nullable(),
+  sessionPartition: z.string().min(1).nullable()
+})
+
+const PromotePreviewTabCommand = z.object({ type: z.literal('promotePreviewTab'), ...OnTab })
+
+/** A simulator tab under the id the window drew it with, which is also its entity. */
+const OpenSimulatorTabCommand = z.object({
+  type: z.literal('openSimulatorTab'),
+  ...OnTab,
+  groupId: z.string().min(1).optional(),
+  afterTabId: z.string().min(1).optional(),
+  index: z.number().int().nonnegative().optional(),
+  createdAt: z.number().int().nonnegative().optional(),
+  split: NewGroupSplit
+})
+
+/**
+ * Restored editor tabs the window moved to the workspace that owns their file (F42): the window
+ * resolved that owner. Main refuses it when the two workspaces are in different partitions.
+ */
+const MoveTabToWorkspaceCommand = z.object({
+  type: z.literal('moveTabToWorkspace'),
+  workspace: OnPane.workspace,
+  toWorkspace: z.string().min(1),
+  tabs: z
+    .array(
+      z.object({
+        tabId: z.string().min(1),
+        newTabId: z.string().min(1),
+        newEntityId: z.string().min(1)
+      })
+    )
+    .min(1),
+  groupId: z.string().min(1),
+  file: EditorFileRecord.optional()
+})
+
+/**
+ * Open files the window renamed or moved on disk, under the ids the window gave them; an edit-mode
+ * file's record moves from its old path.
+ */
+const RenameEditorFilesCommand = z.object({
+  type: z.literal('renameEditorFiles'),
+  workspace: OnPane.workspace,
+  renames: z
+    .array(
+      z.object({
+        fileId: z.string().min(1),
+        newFileId: z.string().min(1),
+        record: z.object({ fromFilePath: z.string().min(1), file: EditorFileRecord }).optional()
+      })
+    )
+    .min(1)
 })
 
 /**
  * A window's layout command (`layout.apply`, registered only in a layout-owner build). The window
- * names what it acts on; main mints every new id but a created tab's (see CreateTerminalTabCommand).
+ * names what it acts on; main mints every new id but a created terminal tab's
+ * (see CreateTerminalTabCommand), a browser tab's and page's, which the window already shows
+ * (see OpenBrowserTabCommand), an editor tab's (see OpenEditorTabCommand), a chat tab's (see
+ * OpenAgentSessionTabCommand), a simulator tab's (see OpenSimulatorTabCommand), and the group an
+ * open into a new split makes (see NewGroupSplit).
  */
 export const LayoutApplyParams = z.object({
   command: z.discriminatedUnion('type', [
@@ -157,12 +348,26 @@ export const LayoutApplyParams = z.object({
     EqualizePanesCommand,
     MovePaneCommand,
     SetPaneRatiosCommand,
+    SetChatPaneCommand,
     MoveTabCommand,
     SplitGroupCommand,
     SetGroupRatiosCommand,
     CloseTabsCommand,
     RenameTabCommand,
     SetTabPropsCommand,
-    MovePaneToNewTabCommand
+    MovePaneToNewTabCommand,
+    OpenBrowserTabCommand,
+    OpenBrowserPageCommand,
+    CloseBrowserPageCommand,
+    ReplaceBrowserPageCommand,
+    SetBrowserTabProfileCommand,
+    OpenEditorTabCommand,
+    OpenAgentSessionTabCommand,
+    PromotePreviewTabCommand,
+    OpenSimulatorTabCommand,
+    MoveTabToWorkspaceCommand,
+    RenameEditorFilesCommand,
+    SleepCommand,
+    WakeCommand
   ])
 })
