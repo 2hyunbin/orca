@@ -228,6 +228,10 @@ export function twinSelectionPatch(
   twinHostIds: ReadonlyMap<string, readonly ExecutionHostId[]>,
   removedHostId: ExecutionHostId
 ): Partial<AppState> {
+  // Why: with no surviving twin, the bulk purge owns the selection exactly as before.
+  if (twinHostIds.size === 0) {
+    return {}
+  }
   const selected = state.activeWorkspaceExecutionHostId
   // Why canonicalized: a copy reached through a paired runtime is selected under that runtime's id.
   const candidates = state.activeWorktreeId ? [state.activeWorktreeId] : [...twinHostIds.keys()]

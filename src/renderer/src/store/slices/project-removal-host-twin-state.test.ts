@@ -576,4 +576,25 @@ describe('removing a remote project keeps its local twin', () => {
     expect(ptyKill).toHaveBeenCalledWith('pty-local')
     expect(ptyKill).not.toHaveBeenCalledWith(remotePtyId)
   })
+
+  it('leaves the selection unchanged on a single-host removal', async () => {
+    const store = createTestStore()
+    const otherKey = worktreeWorkspaceKey('other-repo::/work/other')
+    const otherRepo: Repo = { ...localRow, id: 'other-repo', path: '/work/other' }
+    store.setState({
+      repos: [remoteRow, otherRepo],
+      worktreesByRepo: {
+        [PROJECT_ID]: [makeWorktree({ id: WORKTREE_ID, repoId: PROJECT_ID, hostId: REMOTE_HOST })]
+      },
+      activeWorktreeId: null,
+      activeWorkspaceKey: otherKey,
+      activeWorkspaceExecutionHostId: REMOTE_HOST
+    })
+
+    await store.getState().removeProject(PROJECT_ID, { hostId: REMOTE_HOST })
+
+    const state = store.getState()
+    expect(state.activeWorkspaceKey).toBe(otherKey)
+    expect(state.activeWorkspaceExecutionHostId).toBe(REMOTE_HOST)
+  })
 })
