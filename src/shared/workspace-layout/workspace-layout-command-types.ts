@@ -150,6 +150,9 @@ export type LayoutCommand =
       /** The window's own ids for a tab it drew: its tab-bar entry and its browser record. */
       tabId?: string
       browserTabId?: string
+      /** When the window drew the tab-bar entry and the browser record, so its later save matches. */
+      createdAt?: number
+      browserCreatedAt?: number
       split?: NewGroupSplit
     })
   | (On & { type: 'openBrowserPage'; browserTabId: string; pageId: string })

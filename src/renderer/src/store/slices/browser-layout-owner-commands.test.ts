@@ -59,7 +59,9 @@ describe('browser tabs in a layout-owner build', () => {
           profileId: 'p1',
           sessionPartition: null,
           groupId: firstEntry.groupId,
-          index: 0
+          index: 0,
+          createdAt: firstEntry.createdAt,
+          browserCreatedAt: first.createdAt
         }
       },
       {
@@ -88,6 +90,19 @@ describe('browser tabs in a layout-owner build', () => {
     expect(sent().map(({ command }) => command)).toEqual([
       { type: 'closeTabs', tabIds: [userEntry], recordClose: 'user' },
       { type: 'closeTabs', tabIds: [cleanupEntry], recordClose: 'cleanup' }
+    ])
+  })
+
+  it('records a slept tab’s close as not the user’s', async () => {
+    const store = seeded()
+    const slept = store.getState().createBrowserTab(WT, 'about:blank')
+    const sleptEntry = entryOf(store, slept.id).id
+    mocks.send.mockClear()
+
+    await store.getState().shutdownWorktreeBrowsers(WT, { reason: 'sleep' })
+
+    expect(sent().map(({ command }) => command)).toEqual([
+      { type: 'closeTabs', tabIds: [sleptEntry], recordClose: 'cleanup' }
     ])
   })
 

@@ -222,6 +222,8 @@ const OpenBrowserTabCommand = z.object({
   groupId: z.string().min(1).optional(),
   afterTabId: z.string().min(1).optional(),
   index: z.number().int().nonnegative().optional(),
+  createdAt: z.number().int().nonnegative().optional(),
+  browserCreatedAt: z.number().int().nonnegative().optional(),
   split: NewGroupSplit
 })
 

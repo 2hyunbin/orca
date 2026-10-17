@@ -65,6 +65,8 @@ export type WindowLayoutCommand =
       groupId?: string
       afterTabId?: string
       index?: number
+      createdAt: number
+      browserCreatedAt: number
       split?: NewGroupSplit
     }
   | { type: 'openBrowserPage' | 'closeBrowserPage'; browserTabId: string; pageId: string }
