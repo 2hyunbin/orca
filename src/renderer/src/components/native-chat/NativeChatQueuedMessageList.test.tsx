@@ -544,9 +544,9 @@ describe('NativeChatQueuedMessageList', () => {
 
   it('Resume shows it is pending and hands focus back', async () => {
     const focusComposer = vi.fn()
-    const owner = {
+    const owner: StructuredAgentSessionQueuedMessagesController = {
       ...controller([card({ messageId: 'waiting', hold: 'queue-paused' })], { reason: 'stopped' }),
-      queuePending: 'resume'
+      queuePending: 'resume' as const
     }
     render(
       <TooltipProvider delayDuration={0}>
