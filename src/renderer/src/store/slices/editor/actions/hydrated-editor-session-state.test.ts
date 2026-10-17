@@ -38,12 +38,10 @@ const session: WorkspaceSessionState = {
 }
 
 describe('buildHydratedEditorSessionState', () => {
-  it('maps a moved tab’s owned id to the restored file on restart only', () => {
-    const workspaces = new Set([SIBLING])
-    const restart = buildHydratedEditorSessionState(session, workspaces, null, true)
-    const frame = buildHydratedEditorSessionState(session, workspaces, null, false)
+  it('restores a moved tab’s file under the owned id the tab names, from a restart or a frame', () => {
+    const restored = buildHydratedEditorSessionState(session, new Set([SIBLING]), null)
 
-    expect(restart.editorFileIdMigrationsByWorktree[SIBLING]?.get(OWNED)).toBe(FILE_PATH)
-    expect(frame.editorFileIdMigrationsByWorktree[SIBLING]?.get(OWNED)).toBeUndefined()
+    expect(restored.state.openFiles.map((file) => file.id)).toEqual([OWNED])
+    expect(restored.editorFileIdMigrationsByWorktree[SIBLING]?.get(OWNED)).toBeUndefined()
   })
 })

@@ -26,14 +26,11 @@ export type HydratedEditorSessionState = Pick<
 /**
  * The editor state a stored session restores, and the file id each workspace's tabs must be
  * rekeyed to. `activeWorktreeId` is the store's, which workspace hydration may have nulled.
- * `restart`: a whole saved session; a frame's few workspaces would resolve ids against a partial
- * set of files, so they never map a moved tab's owned id.
  */
 export function buildHydratedEditorSessionState(
   session: WorkspaceSessionState,
   validWorktreeIds: ReadonlySet<string>,
-  activeWorktreeId: string | null,
-  restart: boolean
+  activeWorktreeId: string | null
 ): {
   state: HydratedEditorSessionState
   editorFileIdMigrationsByWorktree: Record<string, Map<string, string>>
@@ -71,7 +68,9 @@ export function buildHydratedEditorSessionState(
       const ownedId = buildOwnedEditorFileId(pf.filePath, worktreeId, pf.runtimeEnvironmentId)
       const id =
         shouldHydrateWithOwnedEditorFileId(worktreeId, pf.runtimeEnvironmentId) ||
-        usedOpenFileIds.has(pf.filePath)
+        usedOpenFileIds.has(pf.filePath) ||
+        // Why: a tab Orca moved to the workspace owning its file names it by its owned id (F42).
+        savedTabEntityIds(worktreeId).has(ownedId)
           ? ownedId
           : pf.filePath
       // Why: the persisted schema allows repeated (path, worktree, runtime) tuples, and an owned id repeats verbatim — restoring both would put two files under one id.
@@ -81,10 +80,6 @@ export function buildHydratedEditorSessionState(
       usedOpenFileIds.add(id)
       // Why: map from the collision-derived legacy id; keying by filePath would collapse same-path local/runtime tabs onto the last owner to hydrate.
       addEditorFileIdMigration(editorFileIdMigrationsByWorktree, worktreeId, legacyId, id)
-      // Why: a tab Orca moved to the workspace owning its file was saved under the owned id (F42).
-      if (restart && ownedId !== id && savedTabEntityIds(worktreeId).has(ownedId)) {
-        addEditorFileIdMigration(editorFileIdMigrationsByWorktree, worktreeId, ownedId, id)
-      }
       legacyFileIndex.add({
         id: legacyId,
         filePath: pf.filePath,

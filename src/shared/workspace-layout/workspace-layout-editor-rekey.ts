@@ -93,5 +93,7 @@ function renamedEditorFiles(
       heldEntityIds.has(move.newFileId) &&
       !files?.some((file) => file.filePath === move.fromFilePath)
   )
-  return [...kept, ...missing.map((move) => move.file)]
+  return files === undefined && missing.length === 0
+    ? files
+    : [...kept, ...missing.map((move) => move.file)]
 }
