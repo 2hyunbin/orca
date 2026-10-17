@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { OrcaRuntimeService } from '../orca-runtime'
 import { ALL_RPC_METHODS } from '../rpc/methods'
 import type { RuntimeStore } from '../runtime-store-contract'
+import { MAX_REPO_ICON_IDS_PER_READ } from '../../../shared/sidebar-list/repo-icon-data-urls-contract'
 import { repoIconId } from './repo-icon-data-urls'
 import { pngHeader } from './repo-icon-image-fixture'
 
@@ -14,6 +15,14 @@ const upload = {
   source: 'upload' as const
 }
 
+function repoIconsMethod() {
+  const method = ALL_RPC_METHODS.find((entry) => entry.name === 'sidebarInputs.repoIcons')
+  if (!method?.params) {
+    throw new Error('sidebarInputs.repoIcons is not registered with params')
+  }
+  return { method, params: method.params }
+}
+
 describe('sidebarInputs.repoIcons', () => {
   it('answers each id from the repos this host shows', async () => {
     const repo = { id: 'r', path: '/r', displayName: 'r', badgeColor: 'blue', addedAt: 1 }
@@ -22,15 +31,21 @@ describe('sidebarInputs.repoIcons', () => {
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the read touches only repos.
     const runtime = new OrcaRuntimeService(store as RuntimeStore)
-    const method = ALL_RPC_METHODS.find((entry) => entry.name === 'sidebarInputs.repoIcons')
-    const id = repoIconId(upload)!
+    const { method, params } = repoIconsMethod()
+    const id = repoIconId(upload)
 
-    expect(method).toBeDefined()
-    expect(await runtime.repoIconDataUrls?.read([id, 'unknown'])).toEqual({
+    await expect(
+      method.handler(params.parse({ ids: [id, 'unknown'] }), { runtime })
+    ).resolves.toEqual({
       icons: [
         { id, dataUrl: upload.src },
         { id: 'unknown', dataUrl: null }
       ]
     })
+  })
+
+  it('refuses more ids than one capped reply can carry', () => {
+    const ids = Array.from({ length: MAX_REPO_ICON_IDS_PER_READ + 1 }, (_, index) => `id${index}`)
+    expect(repoIconsMethod().params.safeParse({ ids }).success).toBe(false)
   })
 })

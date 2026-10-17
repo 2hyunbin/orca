@@ -5,8 +5,11 @@ export const MAX_REPO_ICON_DATA_URL_BYTES = 16 * 1024
 /** Bounds a reply to 256 KiB by construction: each id answers with at most one capped icon. */
 export const MAX_REPO_ICON_IDS_PER_READ = 16
 
-export const RepoIconDataUrlsParams = z.object({
-  ids: z.array(z.string().min(1).max(64)).max(MAX_REPO_ICON_IDS_PER_READ)
+// Why pure: only the switched-on method reads it, so a switch-off build must drop it.
+export const RepoIconDataUrlsParams = /* @__PURE__ */ z.object({
+  ids: /* @__PURE__ */ z
+    .array(/* @__PURE__ */ z.string().min(1).max(64))
+    .max(MAX_REPO_ICON_IDS_PER_READ)
 })
 
 /**
