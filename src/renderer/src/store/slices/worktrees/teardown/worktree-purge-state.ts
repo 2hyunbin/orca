@@ -1,3 +1,4 @@
+import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type { AppState } from '../../../types'
 import type { WorktreePurgeTarget, WorktreePurgeTargets } from '../../worktree-helpers'
 import { forgetHugeRepoWarningDismissalsForWorktrees } from '@/lib/source-control-huge-repo-warning-dismissals'
@@ -255,17 +256,17 @@ export function buildWorktreePurgeState(
   }
 }
 
-/** Cancels provisional structured-chat launches in these worktrees, on one host when given. */
+/** Cancels provisional structured-chat launches in these worktrees, on the given host only. */
 export function cancelStructuredLaunchesForWorktrees(
   worktreeIdSet: ReadonlySet<string>,
-  executionHostId?: string
+  ownedByHost?: (worktreeId: string, executionHostId: ExecutionHostId) => boolean
 ): Set<string> {
   const cancelledSessionIds = new Set<string>()
   for (const launch of structuredLaunchStates()) {
     const worktreeId = launch.intent.worktreeId
     if (
       worktreeIdSet.has(worktreeId) &&
-      (executionHostId === undefined || launch.intent.executionHostId === executionHostId) &&
+      (!ownedByHost || ownedByHost(worktreeId, launch.intent.executionHostId)) &&
       shouldRetainStructuredAgentSessionLaunchTab(worktreeId, launch.intent.sessionId)
     ) {
       markStructuredAgentSessionLaunchCancelledSilently(

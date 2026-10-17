@@ -344,6 +344,11 @@ describe('removing a remote project keeps its local twin', () => {
         'tab-ssh': [sshPtyId],
         'tab-ssh-mirrored': [remotePtyId]
       },
+      recentlyClosedEditorTabsByWorktree: {
+        [WORKTREE_ID]: [
+          { ...closedSnapshot('/work/same/via-runtime.ts'), runtimeEnvironmentId: 'env-b' }
+        ]
+      },
       // Records whose tabs are gone: only the host they name says whose they are.
       sleepingAgentSessionsByPaneKey: {
         'gone-ssh:leaf': sleepingRecord('gone-ssh:leaf', 'target-1'),
@@ -365,6 +370,7 @@ describe('removing a remote project keeps its local twin', () => {
     expect(ptyKill).toHaveBeenCalledWith(sshPtyId)
     // A parked layout hint closes its tab but is never killed: it may name another host's session.
     expect(ptyKill).not.toHaveBeenCalledWith(toAppSshPtyId('target-1', 'relay-2'))
+    expect(store.getState().recentlyClosedEditorTabsByWorktree[WORKTREE_ID] ?? []).toEqual([])
     expect(Object.keys(store.getState().sleepingAgentSessionsByPaneKey)).toEqual([
       'gone-local:leaf'
     ])

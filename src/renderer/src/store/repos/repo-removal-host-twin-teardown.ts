@@ -13,6 +13,7 @@ import {
   isRuntimeHost,
   mergeRemovedHostTwinState,
   openFileHostEvidence,
+  removedHostCanonicalizer,
   pageHostEvidence,
   type HostEvidence,
   type RemovedHostTwinState
@@ -44,8 +45,9 @@ function pruneRemovedHostReopenHistory(
   const kinds = { ...state.recentlyClosedTabKindsByWorktree }
   let changed = false
   for (const [worktreeId, survivors] of twinHostIds) {
+    const canonical = removedHostCanonicalizer(state, worktreeId, removedHostId, survivors)
     const editorPruned = prunedEntries(editors[worktreeId], (snapshot) =>
-      belongsToRemovedHost(openFileHostEvidence(snapshot), removedHostId, survivors)
+      belongsToRemovedHost(canonical(openFileHostEvidence(snapshot)), removedHostId, survivors)
     )
     const browserPruned = prunedEntries(
       browsers[worktreeId],
@@ -53,7 +55,7 @@ function pruneRemovedHostReopenHistory(
         snapshot.pages.length > 0 &&
         snapshot.pages
           .map(pageHostEvidence)
-          .every((evidence) => belongsToRemovedHost(evidence, removedHostId, survivors))
+          .every((evidence) => belongsToRemovedHost(canonical(evidence), removedHostId, survivors))
     )
     if (editorPruned) {
       editors[worktreeId] = (editors[worktreeId] ?? []).filter((_, i) => !editorPruned[i])
@@ -95,7 +97,11 @@ function omitRemovedHostSleepingSessions(
           : 'non-runtime'
     if (
       (record.tabId !== undefined && removed.terminalTabIds.has(record.tabId)) ||
-      belongsToRemovedHost(evidence, removedHostId, survivors)
+      belongsToRemovedHost(
+        removedHostCanonicalizer(state, record.worktreeId, removedHostId, survivors)(evidence),
+        removedHostId,
+        survivors
+      )
     ) {
       doomedPaneKeys.push(paneKey)
     }
@@ -186,7 +192,16 @@ export function closeRemovedHostTwinState(
     codexRestartNoticeByPtyId: omitRecordKeys(state.codexRestartNoticeByPtyId, retiredPtyIds)
   }))
   // Why: a pending chat's tab can already be gone, so its launch is cancelled through the registry.
-  cancelStructuredLaunchesForWorktrees(new Set(twinHostIds.keys()), removedHostId)
+  cancelStructuredLaunchesForWorktrees(
+    new Set(twinHostIds.keys()),
+    (worktreeId, hostId) =>
+      removedHostCanonicalizer(
+        get(),
+        worktreeId,
+        removedHostId,
+        twinHostIds.get(worktreeId) ?? []
+      )(hostId) === removedHostId
+  )
   for (const fileId of removed.fileIds) {
     // Why: a file the announcement's refresh already dropped would make closeFile reset the focused surface.
     if (get().openFiles.some((file) => file.id === fileId)) {

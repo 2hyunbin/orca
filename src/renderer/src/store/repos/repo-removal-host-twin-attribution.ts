@@ -153,6 +153,31 @@ export function belongsToRemovedHost(
   return !isRuntimeHost(removedHostId) && survivingHostIds.every(isRuntimeHost)
 }
 
+/**
+ * Maps a removed copy's transport aliases to its host id. Why: an SSH copy reached through a
+ * paired runtime stamps its tabs, launches and snapshots with that runtime's id.
+ */
+export function removedHostCanonicalizer(
+  state: Pick<AppState, 'worktreesByRepo' | 'detectedWorktreesByRepo'>,
+  worktreeId: string,
+  removedHostId: ExecutionHostId,
+  survivors: readonly ExecutionHostId[]
+): (evidence: HostEvidence) => HostEvidence {
+  const repoId = getRepoIdFromWorktreeId(worktreeId)
+  const removedRow = [
+    ...(state.worktreesByRepo[repoId] ?? []),
+    ...(state.detectedWorktreesByRepo[repoId]?.worktrees ?? [])
+  ].find((row) => row.id === worktreeId && row.hostId === removedHostId)
+  return (evidence) =>
+    evidence &&
+    evidence !== 'non-runtime' &&
+    evidence !== 'foreign' &&
+    !survivors.includes(evidence) &&
+    isExecutionHostAliasForWorktree(evidence, removedRow ?? { hostId: removedHostId })
+      ? removedHostId
+      : evidence
+}
+
 export function collectRemovedHostTwinState(
   state: AppState,
   twinWorktreeIds: ReadonlySet<string>,
@@ -169,19 +194,7 @@ export function collectRemovedHostTwinState(
   }
   for (const worktreeId of twinWorktreeIds) {
     const survivors = survivingHostIdsByWorktreeId.get(worktreeId) ?? []
-    const removedRow = [
-      ...(state.worktreesByRepo[getRepoIdFromWorktreeId(worktreeId)] ?? []),
-      ...(state.detectedWorktreesByRepo[getRepoIdFromWorktreeId(worktreeId)]?.worktrees ?? [])
-    ].find((row) => row.id === worktreeId && row.hostId === removedHostId)
-    // Why: an SSH copy reached through a paired runtime stamps its tabs with that runtime's id.
-    const canonical = (evidence: HostEvidence): HostEvidence =>
-      evidence &&
-      evidence !== 'non-runtime' &&
-      evidence !== 'foreign' &&
-      !survivors.includes(evidence) &&
-      isExecutionHostAliasForWorktree(evidence, removedRow ?? { hostId: removedHostId })
-        ? removedHostId
-        : evidence
+    const canonical = removedHostCanonicalizer(state, worktreeId, removedHostId, survivors)
     const owns = (evidence: HostEvidence): boolean =>
       belongsToRemovedHost(canonical(evidence), removedHostId, survivors)
     const unifiedTabs = state.unifiedTabsByWorktree[worktreeId] ?? []
@@ -193,7 +206,12 @@ export function collectRemovedHostTwinState(
     const ownsTerminal = (tabId: string, rowPtyId: string | null): boolean => {
       const stamped = stampedHostByEntityId.get(tabId)
       // Why every source: a restored tab can name its host only in its layout or reconnect maps.
-      const evidence = collectPtyIdsForTab(state, tabId, rowPtyId).map(ptyHostEvidence)
+      const live = new Set([...(state.ptyIdsByTabId[tabId] ?? []), ...(rowPtyId ? [rowPtyId] : [])])
+      // Why: an unprefixed id only in a layout or reconnect map may be a host-native hint.
+      const evidence = collectPtyIdsForTab(state, tabId, rowPtyId).map((ptyId) => {
+        const entry = ptyHostEvidence(ptyId)
+        return entry === 'non-runtime' && !live.has(ptyId) ? null : entry
+      })
       // Why every: one pane on another host means the tab is not only the removed host's; a
       // stamp still yields to a PTY that names another host.
       return stamped
