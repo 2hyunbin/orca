@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
 import type { RuntimeBrowserCommandHost } from '../runtime/browser/browser-command-contracts'
 import type { ExternalChromiumBrowserSession } from './external-chromium-browser-session'
 import { ExternalChromiumTabRegistry } from './external-chromium-tab-registry'
@@ -32,12 +33,12 @@ describe('external Chromium tab registry', () => {
     const commandHost = host as RuntimeBrowserCommandHost
     const registry = new ExternalChromiumTabRegistry(fakeSession())
 
-    const created = (await registry.createTab(commandHost, { worktree: 'id:folder:docs' })) as {
-      browserPageId: string
-    }
-    const listed = (await registry.listTabs(commandHost, { worktree: 'id:folder:docs' })) as {
-      tabs: { browserPageId: string }[]
-    }
+    const created = z
+      .object({ browserPageId: z.string() })
+      .parse(await registry.createTab(commandHost, { worktree: 'id:folder:docs' }))
+    const listed = z
+      .object({ tabs: z.array(z.object({ browserPageId: z.string() })) })
+      .parse(await registry.listTabs(commandHost, { worktree: 'id:folder:docs' }))
 
     expect(listed.tabs.map((tab) => tab.browserPageId)).toEqual([created.browserPageId])
     expect(resolveWorktreeSelector).not.toHaveBeenCalled()
