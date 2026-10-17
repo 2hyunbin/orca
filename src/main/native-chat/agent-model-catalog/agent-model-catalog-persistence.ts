@@ -156,14 +156,13 @@ function persistedListing(listing: AgentModelCatalogListing | null): unknown {
 /** Only the two listings and the configured default are written; the merged view is derived again on load. */
 function persistedEntry(entry: AgentModelCatalogEntry): unknown {
   const { discovered, live } = entry
+  const liveIsNewer = Boolean(liveLeads(discovered, live))
   // Starts die with this run; encode their winner without changing discovery's freshness.
   const savedLive =
     live && discovered
       ? {
           ...live,
-          at: liveLeads(discovered, live)
-            ? Math.max(live.at, discovered.at)
-            : Math.min(live.at, discovered.at - 1)
+          at: liveIsNewer ? Math.max(live.at, discovered.at) : Math.min(live.at, discovered.at - 1)
         }
       : live
   return {
