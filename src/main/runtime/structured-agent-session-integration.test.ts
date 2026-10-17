@@ -843,8 +843,9 @@ describe('a structured codex session over agentSession.*', () => {
     ).toBe(false)
   })
 
-  it('persists truncated command output before publishing its journal row', async () => {
+  it('persists complete command output while publishing a shortened copy', async () => {
     await ok<{ fence: number }>('agentSession.create', createIntentParams())
+    const stream = await subscribe('sub-large-output')
     const output = 'large command output\n'.repeat(2_000)
 
     codex.notify('item/completed', {
@@ -867,7 +868,18 @@ describe('a structured codex session over agentSession.*', () => {
     ).sessions.get(SESSION)!.journal
     const item = journal.snapshot().items.find((candidate) => candidate.body?.kind === 'tool-call')
     const bounded = item?.body?.kind === 'tool-call' ? item.body.output : undefined
-    expect(bounded).toMatchObject({ truncated: true, byteLength: Buffer.byteLength(output) })
+    expect(bounded).toMatchObject({
+      head: output, truncated: false, byteLength: Buffer.byteLength(output)
+    })
+    const published = itemsOf(stream).find((candidate) => candidate.itemId === item?.itemId)
+    expect(published).toMatchObject({
+      shortened: true,
+      body: {
+        output: {
+          head: output.slice(0, 16 * 1024), truncated: true, byteLength: Buffer.byteLength(output)
+        }
+      }
+    })
   })
 
   it('keeps an answered prompt resolved after the provider exits', async () => {
