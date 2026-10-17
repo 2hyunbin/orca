@@ -47,7 +47,7 @@ function listSelectors(): string[] {
   return mockRuntimeEnvironmentCall.mock.calls
     .map(([args]) => args)
     .filter((args) => args.method === 'terminal.list')
-    .map((args) => String(args.selector))
+    .map((args) => ('selector' in args ? String(args.selector) : ''))
 }
 
 describe('agent sleep coordinator with a twin-published worktree', () => {
