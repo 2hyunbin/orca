@@ -40,17 +40,7 @@ export function emitClaudeStructuredSessionEvent({
   if (event.type === 'message' && session?.commands.observe(event.message)) {
     session.events?.publish()
   }
-  const translate = (): void => {
-    session?.translator?.handle(event)
-    if (event.type === 'ended') {
-      session?.translator?.dispose()
-    }
-  }
-  if (event.type === 'ended' && session?.events?.sealInput) {
-    session.events.sealInput(translate)
-  } else {
-    translate()
-  }
+  session?.translator?.handle(event)
   deps.onEvent?.(event)
   const retired =
     event.type === 'message' && session ? retireClaudeLaunchedModel(session, event.message) : null
