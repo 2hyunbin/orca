@@ -1655,7 +1655,7 @@
           "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm test src/shared/agent-session-operation-ledger.test.ts src/shared/structured-agent-session-send-evidence.test.ts src/main/runtime/agent-session-operation-admission.test.ts src/main/native-chat/agent-session-wire/structured-agent-session-send-idempotency.test.ts src/main/native-chat/agent-session-wire/structured-agent-session-send.test.ts src/main/runtime/orchestration/structured-mailbox-pointer-delivery.test.ts src/main/runtime/orchestration/structured-mailbox-pointer-host.test.ts src/main/runtime/orchestration/structured-pointer-operation-id.test.ts src/renderer/src/components/native-chat/structured-agent-session-message-sender.test.ts src/renderer/src/components/native-chat/use-structured-agent-session.test.tsx src/renderer/src/lib/launch-structured-agent-session.test.ts",
           "result": "passed",
           "durationSeconds": 6.47,
-          "summary": "Eleven focused host, shared, renderer and orchestration files passed 196 tests, including unknown send outcomes, reused message IDs and host replay without duplicate dispatch. The retained send-idempotency suite replaces the removed branch-by-branch refusal matrix."
+          "summary": "Eleven focused host, shared, renderer and orchestration files passed 196 tests, including unknown send outcomes, reused message IDs and host replay without duplicate dispatch. The send-idempotency suite pins only that an unknown outcome is never resent; the removed refusal-retry matrix has no replacement here."
         }
       ],
       "runtimeBudget": {

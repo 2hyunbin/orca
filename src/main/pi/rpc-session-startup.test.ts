@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   closePiRpcAdapterFixtures,
+  file,
   restart,
   sessionId,
   setup,
@@ -51,5 +52,24 @@ describe('Pi host awaited open', () => {
     child.handlers.onClose?.(new Error('lane failed during startup'))
     stateReply.resolve(state)
     await expect(opening).rejects.toThrow('lane failed during startup')
+  })
+
+  it('teaches the account default only from a new session started with no pick', async () => {
+    const h = await setup()
+    expect(h.started.catalogListing?.configuredDefault).toEqual({
+      modelId: 'anthropic/model-1',
+      effort: null
+    })
+
+    h.resolveLaunch.mockResolvedValueOnce({ ...(await h.resolveLaunch()), sessionFile: file })
+    const { acquired } = await restart(h, () => {})
+    const resumed = await h.adapter.open({
+      sessionId,
+      fence: 8,
+      acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+      signal: new AbortController().signal
+    })
+    expect(resumed.catalogListing).toBeDefined()
+    expect(resumed.catalogListing).not.toHaveProperty('configuredDefault')
   })
 })

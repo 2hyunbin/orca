@@ -183,4 +183,20 @@ describe('failed create owner verdict', () => {
       deathEvidence: null
     })
   })
+
+  it('lets the sink a failed create wrote through go, so the next create and shutdown proceed', async () => {
+    acquire.mockImplementationOnce(async ({ events }) => {
+      // The child's exit reached the translator before any journal was attached.
+      events?.setActivity?.(null)
+      throw new Error(EXIT_REASON)
+    })
+
+    await expect(host.attach(CALLER, hostTestAttachParams(null))).resolves.toMatchObject({
+      ok: false
+    })
+    await expect(host.attach(CALLER, hostTestAttachParams(null))).resolves.toMatchObject({
+      ok: true
+    })
+    await expect(host.flushAllStreamedEvents()).resolves.toBeUndefined()
+  })
 })

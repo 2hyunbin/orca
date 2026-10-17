@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 import type { AgentSessionOwnerProbe } from '../../../shared/agent-session-lease-adjudication'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
-import type { AgentSessionSubscribeEvent } from '../../../shared/agent-session-wire'
+import type {
+  AgentSessionStatusEvent,
+  AgentSessionSubscribeEvent
+} from '../../../shared/agent-session-wire'
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-record-store-test-harness'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
@@ -625,8 +628,15 @@ describe('restart', () => {
     await reboot(async () => ({ outcome: 'indeterminate', reason: 'read does not need ownership' }))
     acquire.mockClear()
     const listRecords = vi.spyOn(store, 'listRecords')
+    // A list already on the stream hears of a chat restored without a child only from the restore.
+    const listed: AgentSessionStatusEvent[] = []
+    host.subscribeStatus({ id: 'session-list', emit: (event) => listed.push(event) })
 
     await host.restoreReadableSessions()
+    expect(listed.at(-1)).toEqual({
+      type: 'status',
+      session: expect.objectContaining({ sessionId: SESSION, status: 'idle' })
+    })
     const restoreReads = listRecords.mock.calls.length
     await host.restoreReadableSessions()
 

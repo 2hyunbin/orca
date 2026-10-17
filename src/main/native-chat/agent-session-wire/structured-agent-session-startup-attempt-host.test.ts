@@ -48,6 +48,7 @@ let closeSession: Mock<NonNullable<StructuredAgentSessionAdapter['closeSession']
 let setOption: Mock<StructuredAgentSessionAdapter['setOption']>
 let startupLimits: Partial<StructuredAgentSessionStartupLimits> | undefined
 const providerStarted = vi.fn()
+const recordLiveListing = vi.fn()
 const openGates = new Map<string, (model: string) => void>()
 
 async function proveOpen(model = 'default'): Promise<void> {
@@ -99,7 +100,7 @@ async function startHost(): Promise<void> {
     },
     modelCatalog: {
       read: vi.fn(async () => ({ origin: 'unknown' as const })),
-      recordLiveListing: vi.fn(),
+      recordLiveListing,
       prewarm: vi.fn(async () => {}),
       stop: vi.fn(),
       providerStarted
@@ -130,6 +131,7 @@ beforeEach(async () => {
   resetHostTestOperationIds()
   startupLimits = undefined
   providerStarted.mockReset()
+  recordLiveListing.mockReset()
   openGates.clear()
   acquire = vi.fn(async (input) => acquisition(input))
   dispatch = vi.fn(async () => ({
@@ -444,6 +446,25 @@ describe('what a started child reports', () => {
     })
     await host.flushStreamedEvents(SESSION)
     expect(store.getRecord(SESSION)?.options).toEqual({ model: 'picked' })
+  })
+
+  it('saves a settings readback that arrives before open proves the start', async () => {
+    await restartWith(publishFirst)
+    await heldBehindStart('hello')
+    const listing = { models: [], configuredDefault: { modelId: 'opus' } }
+    // Claude's settings readback can land while the host still holds the child as starting.
+    const reported = host.handleAdapterEvent({
+      type: 'options-reported',
+      sessionId: SESSION,
+      fence: store.getRecord(SESSION)!.lease.runtimeFence,
+      acquisitionGeneration: `generation-${acquire.mock.calls.length}`,
+      reportedOptions: { model: 'opus' },
+      catalogListing: listing
+    })
+    await proveOpen()
+    await reported
+
+    await eventually(() => expect(recordLiveListing).toHaveBeenCalledWith(SESSION, listing))
   })
 })
 
