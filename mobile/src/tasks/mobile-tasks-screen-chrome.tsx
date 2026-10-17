@@ -9,10 +9,10 @@ import {
   RefreshCw,
   Plus
 } from './mobile-tasks-dependencies'
+import { MobileTasksHostSubtitle } from './mobile-tasks-host-subtitle'
 import { styles } from './mobile-tasks-legacy-styles'
 import { renderMobileTasksProviderControls } from './mobile-tasks-provider-controls'
 import { renderMobileTasksSearchControl } from './mobile-tasks-search-control'
-import { MobileTasksHostSubtitle } from './mobile-tasks-host-subtitle'
 
 export function renderMobileTasksChrome(model: ConnectionPresentationModel) {
   const { setTaskCopyFeedbackRootRef } = model

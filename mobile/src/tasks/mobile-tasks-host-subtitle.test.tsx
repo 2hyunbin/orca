@@ -24,12 +24,25 @@ vi.mock('./mobile-tasks-provider-controls', () => ({
   renderMobileTasksProviderControls: () => null
 }))
 vi.mock('./mobile-tasks-search-control', () => ({ renderMobileTasksSearchControl: () => null }))
-vi.mock('../transport/host-store', () => ({
-  loadHosts: async () => [
+const hostStore = vi.hoisted(() => {
+  const hosts = [
     { id: 'studio', name: 'Studio Mac' },
     { id: 'buildbox', name: 'Build Box' }
   ]
-}))
+  const pending: (() => void)[] = []
+  return {
+    /** When set, each read waits for `resolveAll` instead of answering at once. */
+    deferred: false,
+    pending,
+    loadHosts(): Promise<typeof hosts> {
+      if (!hostStore.deferred) {
+        return Promise.resolve(hosts)
+      }
+      return new Promise((resolve) => pending.push(() => resolve(hosts)))
+    }
+  }
+})
+vi.mock('../transport/host-store', () => ({ loadHosts: () => hostStore.loadHosts() }))
 
 import { hostScreenStyles } from '../host-screen/host-screen-styles'
 import { renderMobileTasksStatusBar } from './mobile-tasks-screen-chrome'
@@ -37,7 +50,7 @@ import type { ConnectionPresentationModel } from './use-mobile-tasks-connection-
 
 let renderer: ReactTestRenderer | null = null
 
-async function renderStatusBar(hostId: string): Promise<ReactTestRenderer> {
+function StatusBar({ hostId }: { hostId: string }) {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the status bar reads only the fields set here.
   const model = {
     connState: 'connected',
@@ -45,34 +58,61 @@ async function renderStatusBar(hostId: string): Promise<ReactTestRenderer> {
     router: { back: () => {} },
     taskUiReady: true
   } as unknown as ConnectionPresentationModel
-  function StatusBar() {
-    return createElement(Fragment, null, renderMobileTasksStatusBar(model))
-  }
+  return createElement(Fragment, null, renderMobileTasksStatusBar(model))
+}
+
+async function renderStatusBar(hostId: string): Promise<ReactTestRenderer> {
   await act(async () => {
-    renderer = create(createElement(StatusBar))
+    renderer = create(createElement(StatusBar, { hostId }))
   })
   return renderer!
+}
+
+function subtitleOf(tree: ReactTestRenderer) {
+  return tree.root.find(
+    (node) => typeof node.type === 'string' && node.props.testID === 'mobile-tasks-host-subtitle'
+  )
 }
 
 describe('Tasks header desktop subtitle', () => {
   afterEach(() => {
     act(() => renderer?.unmount())
     renderer = null
+    hostStore.deferred = false
+    hostStore.pending.length = 0
   })
 
   it('names the desktop under the Tasks title in the host screen subtitle style', async () => {
     const tree = await renderStatusBar('buildbox')
-    const subtitle = tree.root.findByProps({ children: 'Build Box' })
-    expect(subtitle.props.style).toBe(hostScreenStyles.hostPlatformText)
+    const subtitle = subtitleOf(tree)
+    expect(subtitle.props.children).toBe('Build Box')
+    expect(subtitle.props.style).toContain(hostScreenStyles.hostPlatformText)
     expect(subtitle.props.numberOfLines).toBe(1)
-    const titleWrap = subtitle.parent!.parent!
-    expect(titleWrap.findByProps({ children: 'Tasks' }).props.style).toBeDefined()
+    expect(subtitle.parent!.parent!.findByProps({ children: 'Tasks' })).toBeTruthy()
   })
 
-  it('shows no subtitle for a desktop that is not paired', async () => {
+  it('reserves a blank line for a desktop that is not paired', async () => {
     const tree = await renderStatusBar('gone')
-    expect(
-      tree.root.findAll((node) => node.props.style === hostScreenStyles.hostPlatformText)
-    ).toHaveLength(0)
+    expect(subtitleOf(tree).props.children).toBe('')
+  })
+
+  it('reserves the line before the read and never shows the previous desktop after a switch', async () => {
+    hostStore.deferred = true
+    const tree = await renderStatusBar('studio')
+    // Reserved and blank while the first read is in flight, so the title does not move later.
+    expect(subtitleOf(tree).props.children).toBe('')
+    await act(async () => {
+      tree.update(createElement(StatusBar, { hostId: 'buildbox' }))
+    })
+    expect(subtitleOf(tree).props.children).toBe('')
+    // Studio Mac's read answers after the switch; only Build Box's may land.
+    await act(async () => {
+      hostStore.pending.shift()!()
+    })
+    expect(subtitleOf(tree).props.children).toBe('')
+    await act(async () => {
+      hostStore.pending.shift()!()
+    })
+    expect(subtitleOf(tree).props.children).toBe('Build Box')
   })
 })

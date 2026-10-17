@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Text } from 'react-native'
+import { StyleSheet, Text } from 'react-native'
 import { hostScreenStyles } from '../host-screen/host-screen-styles'
 import { loadHosts } from '../transport/host-store'
 import type { HostProfile } from '../transport/types'
@@ -11,20 +11,33 @@ export function MobileTasksHostSubtitle({ hostId }: { hostId: string }) {
   useEffect(() => {
     let stale = false
     setHost(null)
-    void loadHosts().then((hosts) => {
-      if (!stale) {
-        setHost(hosts.find((profile) => profile.id === hostId) ?? null)
-      }
-    })
+    loadHosts().then(
+      (hosts) => {
+        if (!stale) {
+          setHost(hosts.find((profile) => profile.id === hostId) ?? null)
+        }
+      },
+      // An unreadable profile leaves the line blank; the screen itself reports connection trouble.
+      () => {}
+    )
     return () => {
       stale = true
     }
   }, [hostId])
   const title = useHostDisplay(host).title
-  // Null until the profile is read: an unknown host would otherwise show the generic "Host".
-  return host ? (
-    <Text style={hostScreenStyles.hostPlatformText} numberOfLines={1}>
-      {title}
+  // The line is reserved before the read so the title does not jump; it stays blank for an
+  // unknown host, which would otherwise show the generic "Host".
+  return (
+    <Text
+      style={[hostScreenStyles.hostPlatformText, styles.reserved]}
+      numberOfLines={1}
+      testID="mobile-tasks-host-subtitle"
+    >
+      {host ? title : ''}
     </Text>
-  ) : null
+  )
 }
+
+const styles = StyleSheet.create({
+  reserved: { minHeight: hostScreenStyles.hostPlatformText.lineHeight }
+})
