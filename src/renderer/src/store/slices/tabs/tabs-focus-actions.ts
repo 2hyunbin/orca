@@ -11,11 +11,11 @@ import { recordPromotedEditorTabsInLayoutOwner } from '../editor/tabs/editor-tab
 
 /** Activation ends a preview. Switch point: main stores no `isPreview: false`, so neither does this. */
 function withPreviewOnActivation(tab: Tab, preservePreview: boolean): Tab {
-  if (preservePreview) {
-    return { ...tab, isPreview: tab.isPreview }
-  }
   if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
-    return { ...tab, isPreview: false }
+    return { ...tab, isPreview: preservePreview ? tab.isPreview : false }
+  }
+  if (preservePreview) {
+    return tab
   }
   const { isPreview: _ended, ...rest } = tab
   return rest

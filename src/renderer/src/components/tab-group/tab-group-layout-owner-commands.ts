@@ -56,7 +56,8 @@ function commandFor(worktreeId: string, drop: TabDrop): WindowLayoutCommand | nu
     return { type: 'splitGroup', tabId, besideGroupId: groupId, direction: drop.direction }
   }
   const group = groups.find((candidate) => candidate.id === groupId)
-  if (!group) {
+  // Why: a move into the tab's own group moves nothing today (a paired client can send one).
+  if (!group || (drop.kind === 'move' && group.tabOrder.includes(tabId))) {
     return null
   }
   const index =

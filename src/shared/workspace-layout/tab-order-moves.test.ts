@@ -36,5 +36,6 @@ describe('tabOrderMoves', () => {
     expect(tabOrderMoves(['a', 'b'], ['a', 'b'])).toEqual([])
     expect(tabOrderMoves(['a', 'b'], ['b', 'c'])).toEqual([])
     expect(tabOrderMoves(['a', 'b'], ['b'])).toEqual([])
+    expect(tabOrderMoves(['a', 'a', 'b'], ['b', 'a', 'a'])).toEqual([])
   })
 })

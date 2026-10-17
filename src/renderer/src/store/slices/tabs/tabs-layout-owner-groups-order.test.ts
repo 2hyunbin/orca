@@ -3,6 +3,7 @@ import type { recordLayoutApply } from '@/runtime/layout-apply-send'
 import { insertUnifiedTabAfterAnchor } from '@/lib/unified-tab-anchor-insertion'
 import { workspaceRootGroupId } from '../../../../../shared/workspace-layout/workspace-layout-minted-ids'
 import type { Tab } from '../../../../../shared/tab-types'
+import { restoreRecentlyClosedTabPosition } from '../recently-closed-tab-position'
 import { createTestStore } from '../store-test-helpers'
 import { createTabsSliceMockApi } from '../tabs-slice-test-harness'
 
@@ -88,6 +89,17 @@ describe('tab activation in a layout-owner build', () => {
     expect(a).not.toHaveProperty('isPreview')
     expect(b).not.toHaveProperty('isPreview')
   })
+
+  it('keeps a preview, and writes no flag, when the activation preserves it', () => {
+    const store = seeded([tab('tab-a'), tab('tab-b', { isPreview: true })])
+
+    store.getState().activateTab('tab-a', { preservePreview: true })
+    store.getState().activateTab('tab-b', { preservePreview: true })
+
+    const [a, b] = store.getState().unifiedTabsByWorktree[WT]!
+    expect(a).not.toHaveProperty('isPreview')
+    expect(b?.isPreview).toBe(true)
+  })
 })
 
 describe('tab order in a layout-owner build', () => {
@@ -121,5 +133,25 @@ describe('tab order in a layout-owner build', () => {
 
     expect(moves()).toEqual([])
     expect(store.getState().groupsByWorktree[WT]![0]!.tabOrder).toEqual(['tab-b', 'tab-a'])
+  })
+
+  it('records a reopened tab where the window shows it, even when no reorder was needed', () => {
+    const store = seeded([tab('tab-a'), tab('tab-b')])
+
+    restoreRecentlyClosedTabPosition(store.getState, WT, 'tab-b', { groupId: GROUP })
+
+    expect(moves()).toEqual([
+      { worktreeId: WT, type: 'moveTab', tabId: 'tab-b', toGroupId: GROUP, index: 1 }
+    ])
+  })
+
+  it('records a reopened tab moved to its old slot once', () => {
+    const store = seeded([tab('tab-a'), tab('tab-b'), tab('tab-c')])
+
+    restoreRecentlyClosedTabPosition(store.getState, WT, 'tab-c', { groupId: GROUP, groupIndex: 0 })
+
+    expect(moves()).toEqual([
+      { worktreeId: WT, type: 'moveTab', tabId: 'tab-c', toGroupId: GROUP, index: 0 }
+    ])
   })
 })
