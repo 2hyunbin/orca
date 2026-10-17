@@ -23,8 +23,9 @@ import { isTerminalLeafId, makePaneKey } from '../../../shared/stable-pane-id'
 import { isClientOnlyUnverifiableInspection } from '../../../shared/terminal-process-inspection'
 import type { CodexAccountSelectionTarget } from '../../../shared/codex-selection-lane'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
+import type { ClaudeManagedAccount } from '../../../shared/managed-account-types'
 import { resolveAgentAccountRestartResumeStartup } from './agent-account-restart-startup'
-import { recordClaudePaneAccount } from './claude-pane-account-tracker'
+import { getRendererAppPlatform } from './renderer-app-platform'
 import {
   getCodexAccountSwitchLaneMatcher,
   isForeignMachineCodexPtyId,
@@ -36,13 +37,6 @@ export type ClaudeSessionMoveCandidate = {
   tabId: string
   leafId: string
 }
-
-type ClaudeSessionMoveState = 'gone' | 'mid-turn' | 'ready'
-
-// Panes the user asked to move that were mid-turn; each restarts once its turn ends.
-const awaitingTurnEndByPtyId = new Map<string, ClaudeSessionMoveCandidate>()
-let awaitingTargetAccountId: string | null = null
-let unsubscribeAwaitingTurnEnd: (() => void) | null = null
 
 function isClaudeProcess(processName: string | null): boolean {
   return (
@@ -71,24 +65,38 @@ async function isClaudeInForeground(
   return isClaudeProcess(await confirmRuntimeTerminalForegroundProcess(ptyId))
 }
 
-function readClaudeSessionMoveState(
-  state: AppState,
-  candidate: ClaudeSessionMoveCandidate
-): ClaudeSessionMoveState {
-  if (
-    !(state.ptyIdsByTabId[candidate.tabId] ?? []).includes(candidate.ptyId) ||
-    state.terminalLayoutsByTabId[candidate.tabId]?.ptyIdsByLeafId?.[candidate.leafId] !==
-      candidate.ptyId
-  ) {
-    return 'gone'
+/** Whether the pane's Claude is mid-turn; 'blocked' is a permission prompt, whose tool call a restart drops. */
+export function isClaudePaneMidTurn(state: AppState, paneKey: string): boolean {
+  const entry = state.agentStatusByPaneKey[paneKey]
+  return entry?.agentType === 'claude' && (entry.state === 'working' || entry.state === 'blocked')
+}
+
+function normalizeFolder(path: string): string {
+  const slashed = path.replace(/\\/g, '/').replace(/\/+$/, '')
+  return getRendererAppPlatform() === 'win32' ? slashed.toLowerCase() : slashed
+}
+
+/**
+ * The Claude account a session runs on, read from where Claude writes its transcript
+ * (`<CLAUDE_CONFIG_DIR>/projects/...`): a managed account's folder, else System default
+ * (null). Undefined when the hook reported no transcript, so the caller cannot know.
+ */
+export function resolveClaudeSessionAccountId(
+  transcriptPath: string | undefined,
+  accounts: readonly ClaudeManagedAccount[]
+): string | null | undefined {
+  const transcript = transcriptPath ? normalizeFolder(transcriptPath) : ''
+  const projectsIndex = transcript.lastIndexOf('/projects/')
+  if (projectsIndex <= 0) {
+    return undefined
   }
-  const entry = state.agentStatusByPaneKey[makePaneKey(candidate.tabId, candidate.leafId)]
-  // Why a missing session reads as gone: without an id the restart would start a fresh conversation.
-  if (entry?.agentType !== 'claude' || !normalizeAgentProviderSession(entry.providerSession)) {
-    return 'gone'
-  }
-  // Why 'blocked': a permission prompt is mid-turn, and a restart drops the pending tool call.
-  return entry.state === 'working' || entry.state === 'blocked' ? 'mid-turn' : 'ready'
+  const configDir = transcript.slice(0, projectsIndex)
+  const account = accounts.find((candidate) =>
+    [candidate.managedAuthPath, candidate.wslLinuxAuthPath].some(
+      (folder) => folder && normalizeFolder(folder) === configDir
+    )
+  )
+  return account ? account.id : null
 }
 
 /**
@@ -101,6 +109,8 @@ function readClaudeSessionMoveState(
 export async function findMovableClaudeSessions(args: {
   owner: RuntimeClientTarget
   target: CodexAccountSelectionTarget
+  /** Only sessions known to run on this account count; null is System default. */
+  fromAccountId: string | null
 }): Promise<ClaudeSessionMoveCandidate[]> {
   if (args.owner.kind !== 'local') {
     return []
@@ -124,9 +134,16 @@ export async function findMovableClaudeSessions(args: {
         ) {
           continue
         }
-        const candidate = { ptyId, tabId: tab.id, leafId }
         const entry = state.agentStatusByPaneKey[makePaneKey(tab.id, leafId)]
-        if (entry?.structuredHostOwned || readClaudeSessionMoveState(state, candidate) === 'gone') {
+        const session = normalizeAgentProviderSession(entry?.providerSession)
+        if (
+          entry?.agentType !== 'claude' ||
+          entry.structuredHostOwned ||
+          resolveClaudeSessionAccountId(
+            session?.transcriptPath,
+            state.settings?.claudeManagedAccounts ?? []
+          ) !== args.fromAccountId
+        ) {
           continue
         }
         if (!isLaneInScope(resolveCodexPaneSelectionLane({ state, tab, ptyId }).laneKey)) {
@@ -139,7 +156,7 @@ export async function findMovableClaudeSessions(args: {
           shellOverride: tab.shellOverride
         })
         if (resumeStartup) {
-          candidates.push(candidate)
+          candidates.push({ ptyId, tabId: tab.id, leafId })
         }
       }
     }
@@ -153,73 +170,4 @@ export async function findMovableClaudeSessions(args: {
     )
   )
   return candidates.filter((_, index) => inForeground[index])
-}
-
-/** Drops every move still waiting for a turn to end. */
-export function cancelPendingClaudeSessionMoves(): void {
-  awaitingTurnEndByPtyId.clear()
-  syncAwaitingTurnEndSubscription()
-}
-
-/**
- * Restarts idle sessions now and mid-turn sessions when their turn ends.
- *
- * Why wait on 'working' and 'blocked': killing Claude mid-turn loses the in-flight turn.
- */
-export function moveClaudeSessionsToSelectedAccount(
-  candidates: readonly ClaudeSessionMoveCandidate[],
-  targetAccountId: string | null
-): void {
-  awaitingTurnEndByPtyId.clear()
-  awaitingTargetAccountId = targetAccountId
-  for (const candidate of candidates) {
-    awaitingTurnEndByPtyId.set(candidate.ptyId, candidate)
-  }
-  flushAwaitingTurnEnd(useAppStore.getState())
-  syncAwaitingTurnEndSubscription()
-}
-
-function flushAwaitingTurnEnd(state: AppState): void {
-  const ready: string[] = []
-  for (const [ptyId, candidate] of awaitingTurnEndByPtyId) {
-    const moveState = readClaudeSessionMoveState(state, candidate)
-    if (moveState === 'mid-turn') {
-      continue
-    }
-    awaitingTurnEndByPtyId.delete(ptyId)
-    if (moveState === 'ready') {
-      recordClaudePaneAccount(
-        makePaneKey(candidate.tabId, candidate.leafId),
-        awaitingTargetAccountId
-      )
-      ready.push(ptyId)
-    }
-  }
-  state.queueClaudePaneRestarts(ready)
-}
-
-function syncAwaitingTurnEndSubscription(): void {
-  if (awaitingTurnEndByPtyId.size === 0) {
-    unsubscribeAwaitingTurnEnd?.()
-    unsubscribeAwaitingTurnEnd = null
-    return
-  }
-  if (unsubscribeAwaitingTurnEnd) {
-    return
-  }
-  unsubscribeAwaitingTurnEnd = useAppStore.subscribe((state, previous) => {
-    if (
-      state.agentStatusByPaneKey === previous.agentStatusByPaneKey &&
-      state.ptyIdsByTabId === previous.ptyIdsByTabId &&
-      state.terminalLayoutsByTabId === previous.terminalLayoutsByTabId
-    ) {
-      return
-    }
-    flushAwaitingTurnEnd(state)
-    syncAwaitingTurnEndSubscription()
-  })
-}
-
-export function getPendingClaudeSessionMovePtyIdsForTests(): string[] {
-  return [...awaitingTurnEndByPtyId.keys()]
 }

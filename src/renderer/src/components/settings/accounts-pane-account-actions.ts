@@ -223,7 +223,6 @@ export function createClaudeAccountActionRunner(
           target: actionRuntime,
           previousAccountId: previousActiveAccountId,
           previousAccountLabel: getClaudeAccountLabel(claudeAccounts, previousActiveAccountId),
-          nextAccountId: nextActiveAccountId,
           nextAccountLabel: getClaudeAccountLabel(next, nextActiveAccountId)
         }).then((outcome) => {
           if (outcome === 'none' || outcome === 'kept') {

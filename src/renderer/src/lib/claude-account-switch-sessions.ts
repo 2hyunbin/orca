@@ -8,22 +8,13 @@ import { useAppStore } from '@/store'
 import type { CodexAccountSelectionTarget } from '../../../shared/codex-selection-lane'
 import type { ClaudeAccountSwitchRunningSessions } from '../../../shared/claude-account-switch-settings'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
-import { makePaneKey } from '../../../shared/stable-pane-id'
-import { mayBeOnClaudeAccount, recordClaudePaneAccount } from './claude-pane-account-tracker'
-import {
-  cancelPendingClaudeSessionMoves,
-  findMovableClaudeSessions,
-  moveClaudeSessionsToSelectedAccount,
-  type ClaudeSessionMoveCandidate
-} from './claude-session-account-move'
+import { findMovableClaudeSessions } from './claude-session-account-move'
 
 export type ClaudeAccountSwitchPrompt = {
   /** Distinguishes one switch's question from the next. */
   id: number
-  candidates: readonly ClaudeSessionMoveCandidate[]
-  previousAccountId: string | null
+  ptyIds: string[]
   previousAccountLabel: string
-  nextAccountId: string | null
   nextAccountLabel: string
 }
 
@@ -50,18 +41,9 @@ export function subscribeClaudeAccountSwitchPrompt(listener: () => void): () => 
   return () => promptListeners.delete(listener)
 }
 
-function keepSessions(request: ClaudeAccountSwitchPrompt): void {
-  // Why: unknown panes were counted as outgoing, so keeping them pins that answer for later switches.
-  for (const candidate of request.candidates) {
-    recordClaudePaneAccount(
-      makePaneKey(candidate.tabId, candidate.leafId),
-      request.previousAccountId
-    )
-  }
-}
-
-function restartSessions(request: ClaudeAccountSwitchPrompt): void {
-  moveClaudeSessionsToSelectedAccount(request.candidates, request.nextAccountId)
+// Why replace: restarts queued by an earlier switch must not outlive a newer one.
+function queueClaudeRestarts(ptyIds: string[]): void {
+  useAppStore.getState().queuePaneAccountRestarts(ptyIds, 'claude', { replaceQueued: true })
 }
 
 /** Answers the open dialog; `remember` stores the answer as the default for later switches. */
@@ -75,9 +57,7 @@ export function answerClaudeAccountSwitchPrompt(
   }
   setPrompt(null)
   if (answer === 'restart') {
-    restartSessions(request)
-  } else {
-    keepSessions(request)
+    queueClaudeRestarts(request.ptyIds)
   }
   if (options.remember) {
     void useAppStore.getState().updateSettings({ claudeAccountSwitchRunningSessions: answer })
@@ -94,44 +74,41 @@ export async function handleRunningClaudeSessionsAfterSwitch(args: {
   target: CodexAccountSelectionTarget
   previousAccountId: string | null
   previousAccountLabel: string
-  nextAccountId: string | null
   nextAccountLabel: string
 }): Promise<ClaudeAccountSwitchOutcome> {
   const generation = ++switchGeneration
   // Why: a newer switch replaces the old question, including restarts still waiting on a turn.
-  cancelPendingClaudeSessionMoves()
+  queueClaudeRestarts([])
   setPrompt(null)
-  const found = await findMovableClaudeSessions(args).catch((error: unknown) => {
+  const found = await findMovableClaudeSessions({
+    owner: args.owner,
+    target: args.target,
+    fromAccountId: args.previousAccountId
+  }).catch((error: unknown) => {
     console.warn('[claude-account-switch] session scan failed:', error)
     return []
   })
   if (generation !== switchGeneration) {
     return 'superseded'
   }
-  const candidates = found.filter((candidate) =>
-    mayBeOnClaudeAccount(makePaneKey(candidate.tabId, candidate.leafId), args.previousAccountId)
-  )
-  if (candidates.length === 0) {
+  if (found.length === 0) {
     return 'none'
   }
   const request: ClaudeAccountSwitchPrompt = {
     id: generation,
-    candidates,
-    previousAccountId: args.previousAccountId,
+    ptyIds: found.map((candidate) => candidate.ptyId),
     previousAccountLabel: args.previousAccountLabel,
-    nextAccountId: args.nextAccountId,
     nextAccountLabel: args.nextAccountLabel
   }
   const policy: ClaudeAccountSwitchRunningSessions =
     useAppStore.getState().settings?.claudeAccountSwitchRunningSessions ?? 'ask'
   if (policy === 'keep') {
-    keepSessions(request)
     return 'kept'
   }
   if (policy === 'restart') {
-    restartSessions(request)
+    queueClaudeRestarts(request.ptyIds)
     toast.success(
-      candidates.length === 1
+      request.ptyIds.length === 1
         ? translate(
             'accounts.claude.switchSessions.restartingOne',
             'Restarting 1 Claude session on {{account}}',
@@ -140,7 +117,7 @@ export async function handleRunningClaudeSessionsAfterSwitch(args: {
         : translate(
             'accounts.claude.switchSessions.restartingOther',
             'Restarting {{count}} Claude sessions on {{account}}',
-            { count: candidates.length, account: args.nextAccountLabel }
+            { count: request.ptyIds.length, account: args.nextAccountLabel }
           )
     )
     return 'restarted'

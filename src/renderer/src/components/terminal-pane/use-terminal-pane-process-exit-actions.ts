@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect } from 'react'
 import { useAppStore } from '../../store'
-import { buildAgentAccountRestartStartup } from '@/lib/agent-account-restart-startup'
+import { buildPaneAccountRestartStartup } from '@/lib/agent-account-restart-startup'
+import { isClaudePaneMidTurn } from '@/lib/claude-session-account-move'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { connectPanePty } from './pty-connection'
 import { bindPanePtyId } from '@/lib/pane-manager/mobile-fit-overrides'
@@ -38,6 +39,7 @@ export function useTerminalPaneProcessExitActions(controller: TerminalPaneCloseC
     panePtyBindingsRef,
     paneTransportsRef,
     pendingPaneAccountRestarts,
+    claudeTurnStatus,
     replayingPanesRef,
     savedLayout,
     setCacheTimerStartedAt,
@@ -54,28 +56,26 @@ export function useTerminalPaneProcessExitActions(controller: TerminalPaneCloseC
     worktreeId
   } = controller
 
+  const buildAccountRestartStartup = useCallback(
+    (agent: AccountRestartAgent, leafId: string) =>
+      buildPaneAccountRestartStartup(agent, {
+        tabId,
+        worktreeId,
+        leafId,
+        shellOverride: useAppStore
+          .getState()
+          .tabsByWorktree[worktreeId]?.find((tab) => tab.id === tabId)?.shellOverride
+      }),
+    [tabId, worktreeId]
+  )
+
   const handleRestartPane = useCallback(
-    (
-      paneId: number,
-      restartStartup: PtyConnectionDeps['startup'] | AccountRestartAgent,
-      focusPane = true
-    ) => {
+    (paneId: number, startup: PtyConnectionDeps['startup'], options: { focus: boolean }) => {
       const manager = managerRef.current
       const pane = manager?.getPanes().find((candidate) => candidate.id === paneId)
       if (!manager || !pane) {
         return
       }
-      const startup =
-        restartStartup === 'codex' || restartStartup === 'claude'
-          ? buildAgentAccountRestartStartup(restartStartup, {
-              tabId,
-              worktreeId,
-              leafId: pane.leafId,
-              shellOverride: useAppStore
-                .getState()
-                .tabsByWorktree[worktreeId]?.find((tab) => tab.id === tabId)?.shellOverride
-            })
-          : restartStartup
       const transport = paneTransportsRef.current.get(paneId)
       const panePtyBinding = panePtyBindingsRef.current.get(paneId)
       const existingPtyId = transport?.getPtyId()
@@ -127,7 +127,7 @@ export function useTerminalPaneProcessExitActions(controller: TerminalPaneCloseC
         clearExitedPanePtyLayoutBinding
       })
       panePtyBindingsRef.current.set(paneId, newPaneBinding)
-      if (focusPane) {
+      if (options.focus) {
         manager.setActivePane(paneId, { focus: true })
       }
     },
@@ -185,13 +185,16 @@ export function useTerminalPaneProcessExitActions(controller: TerminalPaneCloseC
   const handleRestartExitedPane = useCallback(
     (processExit: PaneProcessExit) => {
       clearPaneProcessExit(processExit.paneId)
-      // Why 'codex': preserves the pre-existing fallback; a null startup has always relaunched Codex here.
-      handleRestartPane(
-        processExit.paneId,
-        resolveTerminalProcessExitRestartStartup(processExit) ?? 'codex'
-      )
+      const leafId = managerRef.current
+        ?.getPanes()
+        .find((candidate) => candidate.id === processExit.paneId)?.leafId
+      // Why Codex: preserves the pre-existing fallback; a null startup has always relaunched Codex here.
+      const startup =
+        resolveTerminalProcessExitRestartStartup(processExit) ??
+        (leafId ? buildAccountRestartStartup('codex', leafId) : null)
+      handleRestartPane(processExit.paneId, startup, { focus: true })
     },
-    [clearPaneProcessExit, handleRestartPane]
+    [buildAccountRestartStartup, clearPaneProcessExit, handleRestartPane, managerRef]
   )
 
   const handleCloseExitedPane = useCallback(
@@ -236,17 +239,28 @@ export function useTerminalPaneProcessExitActions(controller: TerminalPaneCloseC
     }
     for (const pane of manager.getPanes()) {
       const ptyId = paneTransportsRef.current.get(pane.id)?.getPtyId()
-      if (!ptyId || !pendingPaneAccountRestarts[ptyId]) {
+      const queued = ptyId ? pendingPaneAccountRestarts[ptyId] : undefined
+      if (!ptyId || !queued) {
+        continue
+      }
+      // Why: a Claude restart waits out the turn; claudeTurnStatus re-runs this when it ends.
+      if (
+        queued === 'claude' &&
+        isClaudePaneMidTurn(useAppStore.getState(), makePaneKey(tabId, pane.leafId))
+      ) {
         continue
       }
       const agent = consumePendingPaneAccountRestart(ptyId)
-      if (agent) {
-        // Why: one Claude move restarts many panes at once; none was the one the user clicked.
-        handleRestartPane(pane.id, agent, agent !== 'claude')
+      const startup = agent ? buildAccountRestartStartup(agent, pane.leafId) : null
+      if (agent && startup) {
+        // Why: one Claude switch restarts many panes at once; none was the one the user clicked.
+        handleRestartPane(pane.id, startup, { focus: agent === 'codex' })
       }
     }
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- Preserve the pre-split dependency contract.
   }, [
+    buildAccountRestartStartup,
+    claudeTurnStatus,
     consumePendingPaneAccountRestart,
     handleRestartPane,
     panePtyLayoutBindings,

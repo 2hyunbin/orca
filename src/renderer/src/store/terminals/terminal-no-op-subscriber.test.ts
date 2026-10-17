@@ -84,7 +84,7 @@ describe('terminal no-op subscriber budget', () => {
   it('consumes real restart entries and leaves repeated consumes silent', () => {
     const store = createTestStore()
     store.getState().suppressPtyExit('pty')
-    store.getState().queueCodexPaneRestarts(['pty'])
+    store.getState().queuePaneAccountRestarts(['pty'], 'codex')
     const listener = vi.fn()
     store.subscribe(listener)
 
@@ -130,7 +130,7 @@ describe('terminal no-op subscriber budget', () => {
     ]
     for (const [index, action] of actions.entries()) {
       if (index === 1) {
-        store.getState().queueCodexPaneRestarts(['pty'])
+        store.getState().queuePaneAccountRestarts(['pty'], 'codex')
       }
       listener.mockClear()
       action()

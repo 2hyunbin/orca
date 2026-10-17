@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
+import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import { sweepUnclaimedCodexPaneRestarts } from './codex-detached-pane-restart'
 import { resetCodexDetachedPaneRestartExecutorForTests } from './codex-detached-pane-restart-scheduler'
 
@@ -9,7 +10,9 @@ const OLD_PTY = 'wt1@@old'
 const NEW_PTY = 'wt1@@new'
 const SESSION_ID = '01a006a6-1d07-70a1-bad5-f9110d5845c0'
 
-function seedClaudePane(): void {
+function seedClaudePane(
+  overrides: Partial<Pick<AgentStatusEntry, 'state' | 'providerSession'>> = {}
+): void {
   const paneKey = makePaneKey('tab-1', LEAF_ID)
   useAppStore.setState({
     tabsByWorktree: {
@@ -45,10 +48,17 @@ function seedClaudePane(): void {
         stateStartedAt: 1,
         stateHistory: [],
         agentType: 'claude',
-        providerSession: { key: 'session_id', id: SESSION_ID }
+        providerSession: { key: 'session_id', id: SESSION_ID },
+        ...overrides
       }
     }
   })
+}
+
+function setPaneState(state: AgentStatusEntry['state']): void {
+  const paneKey = makePaneKey('tab-1', LEAF_ID)
+  const entry = useAppStore.getState().agentStatusByPaneKey[paneKey]
+  useAppStore.setState({ agentStatusByPaneKey: { [paneKey]: { ...entry, state } } })
 }
 
 describe('detached Claude account-move restart', () => {
@@ -81,7 +91,7 @@ describe('detached Claude account-move restart', () => {
 
   it('respawns an unmounted Claude pane with a resume of its own session', async () => {
     seedClaudePane()
-    useAppStore.getState().queueClaudePaneRestarts([OLD_PTY])
+    useAppStore.getState().queuePaneAccountRestarts([OLD_PTY], 'claude')
 
     await sweepUnclaimedCodexPaneRestarts()
 
@@ -98,5 +108,28 @@ describe('detached Claude account-move restart', () => {
     const state = useAppStore.getState()
     expect(state.pendingPaneAccountRestarts).toEqual({})
     expect(state.terminalLayoutsByTabId['tab-1']?.ptyIdsByLeafId).toEqual({ [LEAF_ID]: NEW_PTY })
+  })
+
+  it('waits for a mid-turn session to finish before restarting it', async () => {
+    seedClaudePane({ state: 'blocked' })
+    useAppStore.getState().queuePaneAccountRestarts([OLD_PTY], 'claude')
+
+    await sweepUnclaimedCodexPaneRestarts()
+    expect(window.api.pty.spawn).not.toHaveBeenCalled()
+    expect(useAppStore.getState().pendingPaneAccountRestarts).toEqual({ [OLD_PTY]: 'claude' })
+
+    setPaneState('done')
+    await sweepUnclaimedCodexPaneRestarts()
+    expect(window.api.pty.spawn).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips a pane whose session can no longer be resumed instead of starting a fresh Claude', async () => {
+    seedClaudePane({ providerSession: undefined })
+    useAppStore.getState().queuePaneAccountRestarts([OLD_PTY], 'claude')
+
+    await sweepUnclaimedCodexPaneRestarts()
+
+    expect(window.api.pty.spawn).not.toHaveBeenCalled()
+    expect(useAppStore.getState().pendingPaneAccountRestarts).toEqual({})
   })
 })

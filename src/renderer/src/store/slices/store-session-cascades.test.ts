@@ -117,7 +117,7 @@ describe('restartCodexTabs', () => {
       pendingStartupByTabId: {}
     })
 
-    store.getState().queueCodexPaneRestarts(['pty-b'])
+    store.getState().queuePaneAccountRestarts(['pty-b'], 'codex')
     const state = store.getState()
 
     expect(state.pendingPaneAccountRestarts).toEqual({ 'pty-b': 'codex' })

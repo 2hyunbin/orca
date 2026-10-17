@@ -165,8 +165,12 @@ export type TerminalActions = {
   suppressPtyExit: (ptyId: string) => void
   consumeSuppressedPtyExit: (ptyId: string) => boolean
   isPtyShutdownPending: (ptyId: string) => boolean
-  queueCodexPaneRestarts: (ptyIds: string[]) => void
-  queueClaudePaneRestarts: (ptyIds: string[]) => void
+  /** Codex also marks its restart notices answered. `replaceQueued` (Claude) drops earlier Claude entries. */
+  queuePaneAccountRestarts: (
+    ptyIds: string[],
+    agent: AccountRestartAgent,
+    options?: { replaceQueued?: boolean }
+  ) => void
   consumePendingPaneAccountRestart: (ptyId: string) => AccountRestartAgent | null
   markCodexRestartNotices: (
     notices: (Pick<CodexRestartNotice, 'previousAccountLabel' | 'nextAccountLabel'> &

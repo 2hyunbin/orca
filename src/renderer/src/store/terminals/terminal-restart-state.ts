@@ -10,8 +10,7 @@ export function createTerminalRestartActions(
   | 'consumeSuppressedPtyExit'
   | 'isPtyShutdownPending'
   | 'suppressPtyExit'
-  | 'queueCodexPaneRestarts'
-  | 'queueClaudePaneRestarts'
+  | 'queuePaneAccountRestarts'
   | 'consumePendingPaneAccountRestart'
   | 'markCodexRestartNotices'
   | 'clearCodexRestartNotice'
@@ -38,7 +37,26 @@ export function createTerminalRestartActions(
         suppressedPtyExitIds: { ...s.suppressedPtyExitIds, [ptyId]: true }
       }))
     },
-    queueCodexPaneRestarts: (ptyIds) => {
+    queuePaneAccountRestarts: (ptyIds, agent, options) => {
+      if (agent === 'claude') {
+        set((s) => {
+          // Why replace: a new Claude switch answers afresh, so unrun restarts from the last one drop.
+          const kept = options?.replaceQueued
+            ? Object.fromEntries(
+                Object.entries(s.pendingPaneAccountRestarts).filter(
+                  ([, queued]) => queued !== agent
+                )
+              )
+            : s.pendingPaneAccountRestarts
+          return {
+            pendingPaneAccountRestarts: {
+              ...kept,
+              ...Object.fromEntries(ptyIds.map((ptyId) => [ptyId, agent] as const))
+            }
+          }
+        })
+        return
+      }
       if (ptyIds.length === 0) {
         return
       }
@@ -65,18 +83,6 @@ export function createTerminalRestartActions(
           codexRestartNoticeByPtyId: nextCodexRestartNoticeByPtyId
         }
       })
-    },
-    queueClaudePaneRestarts: (ptyIds) => {
-      if (ptyIds.length === 0) {
-        return
-      }
-      // Why no notice: Claude panes keep accepting input until the restart runs.
-      set((s) => ({
-        pendingPaneAccountRestarts: {
-          ...s.pendingPaneAccountRestarts,
-          ...Object.fromEntries(ptyIds.map((ptyId) => [ptyId, 'claude'] as const))
-        }
-      }))
     },
     consumePendingPaneAccountRestart: (ptyId) => {
       let queuedAgent: AccountRestartAgent | null = null

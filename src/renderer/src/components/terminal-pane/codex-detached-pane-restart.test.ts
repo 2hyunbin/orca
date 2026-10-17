@@ -72,7 +72,7 @@ function seedQueuedRestart(
     .markCodexRestartNotices([
       { ptyId: OLD_PTY, previousAccountLabel: ACCOUNT_A, nextAccountLabel: ACCOUNT_B }
     ])
-  useAppStore.getState().queueCodexPaneRestarts([OLD_PTY])
+  useAppStore.getState().queuePaneAccountRestarts([OLD_PTY], 'codex')
 }
 
 describe('codex detached pane restart executor', () => {
@@ -230,7 +230,7 @@ describe('codex detached pane restart executor', () => {
       .markCodexRestartNotices([
         { ptyId: UNLOCATED_PTY, previousAccountLabel: ACCOUNT_A, nextAccountLabel: ACCOUNT_B }
       ])
-    useAppStore.getState().queueCodexPaneRestarts([UNLOCATED_PTY])
+    useAppStore.getState().queuePaneAccountRestarts([UNLOCATED_PTY], 'codex')
     seedQueuedRestart()
     const consumePendingPaneAccountRestart = useAppStore.getState().consumePendingPaneAccountRestart
     useAppStore.setState({
@@ -287,7 +287,7 @@ describe('codex detached pane restart executor', () => {
       .markCodexRestartNotices([
         { ptyId: 'wt1@@gone', previousAccountLabel: ACCOUNT_A, nextAccountLabel: ACCOUNT_B }
       ])
-    useAppStore.getState().queueCodexPaneRestarts(['wt1@@gone'])
+    useAppStore.getState().queuePaneAccountRestarts(['wt1@@gone'], 'codex')
 
     await sweepUnclaimedCodexPaneRestarts()
 

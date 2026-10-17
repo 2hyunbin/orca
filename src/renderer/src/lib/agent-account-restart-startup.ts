@@ -22,18 +22,6 @@ import type {
 import type { AccountRestartAgent } from '@/store/terminals/terminal-contracts'
 import { CODEX_ACCOUNT_RESTART_STARTUP } from './codex-session-restart'
 
-// Why launchAgent: pty:spawn applies Claude's launch env only for launchAgent 'claude'.
-export const CLAUDE_ACCOUNT_RESTART_STARTUP = {
-  command: 'claude',
-  startupCommandDelivery: 'shell-ready',
-  launchAgent: 'claude'
-} as const
-
-const BARE_ACCOUNT_RESTART_STARTUP = {
-  codex: CODEX_ACCOUNT_RESTART_STARTUP,
-  claude: CLAUDE_ACCOUNT_RESTART_STARTUP
-} as const
-
 export type AgentAccountRestartStartup = {
   command: string
   startupCommandDelivery: 'shell-ready'
@@ -50,22 +38,16 @@ type AccountRestartPane = {
   shellOverride?: string
 }
 
-export function getBareAccountRestartStartup(
-  agent: AccountRestartAgent
-): AgentAccountRestartStartup {
-  return BARE_ACCOUNT_RESTART_STARTUP[agent]
-}
-
 /**
  * The resume startup for the pane's own session, or null when it has none to name.
  * Capture it before restart clears the old pane's status.
  */
 export function resolveAgentAccountRestartResumeStartup(
   agent: AccountRestartAgent,
-  args: AccountRestartPane,
-  options: { unrecordedLaunchUsesDefaults?: boolean } = {}
+  args: AccountRestartPane
 ): AgentAccountRestartStartup | null {
-  const unrecordedLaunchUsesDefaults = options.unrecordedLaunchUsesDefaults ?? true
+  // Why: a hand-started Claude must not come back with configured defaults such as a permission bypass.
+  const unrecordedLaunchUsesDefaults = agent !== 'claude'
   const state = useAppStore.getState()
   const paneKey = makePaneKey(args.tabId, args.leafId)
   const entry = state.agentStatusByPaneKey[paneKey]
@@ -130,7 +112,8 @@ export function resolveAgentAccountRestartResumeStartup(
     return null
   }
   return {
-    ...getBareAccountRestartStartup(agent),
+    startupCommandDelivery: 'shell-ready',
+    launchAgent: agent,
     command: startupPlan.launchCommand,
     ...(startupPlan.env ? { env: startupPlan.env } : {}),
     launchConfig: startupPlan.launchConfig,
@@ -140,21 +123,14 @@ export function resolveAgentAccountRestartResumeStartup(
   }
 }
 
-/** Resumes the pane's session when it can, else relaunches the agent bare. */
-export function buildAgentAccountRestartStartup(
+/**
+ * The startup an account-switch restart relaunches the pane with. Codex falls
+ * back to a bare relaunch; Claude only ever resumes, so null means skip it.
+ */
+export function buildPaneAccountRestartStartup(
   agent: AccountRestartAgent,
   args: AccountRestartPane
-): AgentAccountRestartStartup {
-  // Why: a hand-started Claude must not come back with configured defaults such as a permission bypass.
-  return (
-    resolveAgentAccountRestartResumeStartup(agent, args, {
-      unrecordedLaunchUsesDefaults: agent !== 'claude'
-    }) ?? getBareAccountRestartStartup(agent)
-  )
-}
-
-export function buildCodexAccountRestartStartup(
-  args: AccountRestartPane
-): AgentAccountRestartStartup {
-  return buildAgentAccountRestartStartup('codex', args)
+): AgentAccountRestartStartup | null {
+  const resume = resolveAgentAccountRestartResumeStartup(agent, args)
+  return resume ?? (agent === 'codex' ? CODEX_ACCOUNT_RESTART_STARTUP : null)
 }

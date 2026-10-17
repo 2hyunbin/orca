@@ -6,9 +6,9 @@ import { getDefaultSettings } from '../../../shared/constants'
 import type { ProjectExecutionRuntimeResolution } from '../../../shared/project-execution-runtime'
 import type * as localPreflightContext from '@/lib/local-preflight-context'
 import {
-  buildAgentAccountRestartStartup,
-  buildCodexAccountRestartStartup,
-  resolveAgentAccountRestartResumeStartup
+  buildPaneAccountRestartStartup,
+  resolveAgentAccountRestartResumeStartup,
+  type AgentAccountRestartStartup
 } from './agent-account-restart-startup'
 
 let projectRuntimeContext: ProjectExecutionRuntimeResolution | undefined
@@ -45,10 +45,19 @@ function seedAgentStatus(entry: Partial<AgentStatusEntry> | null): void {
   })
 }
 
-const build = (): ReturnType<typeof buildCodexAccountRestartStartup> =>
-  buildCodexAccountRestartStartup({ tabId: TAB_ID, leafId: LEAF_ID, worktreeId: WORKTREE_ID })
+function build(): AgentAccountRestartStartup {
+  const startup = buildPaneAccountRestartStartup('codex', {
+    tabId: TAB_ID,
+    leafId: LEAF_ID,
+    worktreeId: WORKTREE_ID
+  })
+  if (!startup) {
+    throw new Error('Codex always has a restart startup')
+  }
+  return startup
+}
 
-describe('buildCodexAccountRestartStartup', () => {
+describe('buildPaneAccountRestartStartup for Codex', () => {
   beforeEach(() => {
     seedAgentStatus(null)
     projectRuntimeContext = undefined
@@ -164,7 +173,7 @@ describe('buildCodexAccountRestartStartup', () => {
   })
 })
 
-describe('buildAgentAccountRestartStartup for Claude', () => {
+describe('buildPaneAccountRestartStartup for Claude', () => {
   const pane = { tabId: TAB_ID, leafId: LEAF_ID, worktreeId: WORKTREE_ID }
 
   beforeEach(() => {
@@ -179,14 +188,14 @@ describe('buildAgentAccountRestartStartup for Claude', () => {
       providerSession: { key: 'session_id', id: SESSION_ID }
     })
 
-    const startup = buildAgentAccountRestartStartup('claude', pane)
+    const startup = buildPaneAccountRestartStartup('claude', pane)
 
-    expect(startup.command).toMatch(/^claude\b/)
-    expect(startup.command).toContain('--resume')
-    expect(startup.command).toContain(SESSION_ID)
-    expect(startup.launchAgent).toBe('claude')
-    expect(startup.startupCommandDelivery).toBe('shell-ready')
-    expect(startup.resumeProviderSession?.id).toBe(SESSION_ID)
+    expect(startup?.command).toMatch(/^claude\b/)
+    expect(startup?.command).toContain('--resume')
+    expect(startup?.command).toContain(SESSION_ID)
+    expect(startup?.launchAgent).toBe('claude')
+    expect(startup?.startupCommandDelivery).toBe('shell-ready')
+    expect(startup?.resumeProviderSession?.id).toBe(SESSION_ID)
   })
 
   it('resumes a hand-started Claude without the configured default arguments', () => {
@@ -203,14 +212,23 @@ describe('buildAgentAccountRestartStartup for Claude', () => {
       }
     })
 
-    const startup = buildAgentAccountRestartStartup('claude', pane)
-    expect(startup.command).not.toContain('--dangerously-skip-permissions')
-    expect(startup.env?.CLAUDE_DEFAULT_ONLY).toBeUndefined()
+    const startup = buildPaneAccountRestartStartup('claude', pane)
+    expect(startup?.command).toContain(SESSION_ID)
+    expect(startup?.command).not.toContain('--dangerously-skip-permissions')
+    expect(startup?.env?.CLAUDE_DEFAULT_ONLY).toBeUndefined()
+  })
 
-    const withDefaults = resolveAgentAccountRestartResumeStartup('claude', pane, {
-      unrecordedLaunchUsesDefaults: true
+  it('still applies the configured default arguments to an unrecorded Codex launch', () => {
+    seedAgentStatus({
+      agentType: 'codex',
+      state: 'done',
+      providerSession: { key: 'session_id', id: SESSION_ID }
     })
-    expect(withDefaults?.command).toContain('--dangerously-skip-permissions')
+    useAppStore.setState({
+      settings: { ...getDefaultSettings('/home/dev'), agentDefaultArgs: { codex: '--search' } }
+    })
+
+    expect(buildPaneAccountRestartStartup('codex', pane)?.command).toContain('--search')
   })
 
   it('keeps a recorded Claude launch config on resume', () => {
@@ -224,14 +242,13 @@ describe('buildAgentAccountRestartStartup for Claude', () => {
       agentEnv: {}
     })
 
-    expect(buildAgentAccountRestartStartup('claude', pane).command).toContain('--model')
+    expect(buildPaneAccountRestartStartup('claude', pane)?.command).toContain('--model')
   })
 
   it('reports no resume when the Claude pane has no session id', () => {
     seedAgentStatus({ agentType: 'claude', state: 'done' })
 
-    expect(resolveAgentAccountRestartResumeStartup('claude', pane)).toBeNull()
-    expect(buildAgentAccountRestartStartup('claude', pane).command).toBe('claude')
+    expect(buildPaneAccountRestartStartup('claude', pane)).toBeNull()
   })
 
   it('never resumes a Codex session as Claude', () => {

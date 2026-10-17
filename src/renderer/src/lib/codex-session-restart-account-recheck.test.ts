@@ -66,7 +66,7 @@ describe('Codex account switch recheck against main', () => {
         nextAccountId: 'account-b'
       }
     ])
-    useAppStore.getState().queueCodexPaneRestarts(['pty-1'])
+    useAppStore.getState().queuePaneAccountRestarts(['pty-1'], 'codex')
 
     await markLiveCodexSessionsForRestart({
       owner: focusedOwner(),

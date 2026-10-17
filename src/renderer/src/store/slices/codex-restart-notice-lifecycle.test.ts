@@ -75,7 +75,7 @@ describe('codex restart notice lifecycle', () => {
 
   it('drops a queued restart when the user dismisses the same pane', () => {
     switchAccount('pty-1', A, B)
-    useAppStore.getState().queueCodexPaneRestarts(['pty-1'])
+    useAppStore.getState().queuePaneAccountRestarts(['pty-1'], 'codex')
 
     useAppStore.getState().dismissCodexRestartNotices(['pty-1'])
 
@@ -91,7 +91,7 @@ describe('codex restart notice lifecycle', () => {
     switchAccount('pty-1', A, B)
     useAppStore.getState().dismissCodexRestartNotices(['pty-1'])
 
-    useAppStore.getState().queueCodexPaneRestarts(['pty-1'])
+    useAppStore.getState().queuePaneAccountRestarts(['pty-1'], 'codex')
 
     // Why: the pane still runs under A until it relaunches, so the dismissal
     // that freed its keyboard must not outlive the restart request.
@@ -204,7 +204,7 @@ describe('codex restart notices with colliding account labels', () => {
 
   it('puts a failed accepted restart back to the unanswered prompt', () => {
     switchAccount('pty-1', A, B)
-    useAppStore.getState().queueCodexPaneRestarts(['pty-1'])
+    useAppStore.getState().queuePaneAccountRestarts(['pty-1'], 'codex')
 
     useAppStore.getState().reopenCodexRestartPrompt('pty-1')
 

@@ -329,7 +329,7 @@ describe('markLiveCodexSessionsForRestart', () => {
       previousAccountLabel: ACCOUNT_A,
       nextAccountLabel: ACCOUNT_B
     })
-    useAppStore.getState().queueCodexPaneRestarts(['pty-1'])
+    useAppStore.getState().queuePaneAccountRestarts(['pty-1'], 'codex')
 
     await markForFocusedHost({
       previousAccountLabel: ACCOUNT_B,
@@ -350,7 +350,7 @@ describe('markLiveCodexSessionsForRestart', () => {
       previousAccountLabel: ACCOUNT_A,
       nextAccountLabel: ACCOUNT_B
     })
-    useAppStore.getState().queueCodexPaneRestarts(['pty-1'])
+    useAppStore.getState().queuePaneAccountRestarts(['pty-1'], 'codex')
     await markForFocusedHost({
       previousAccountLabel: ACCOUNT_B,
       nextAccountLabel: 'account-c@example.com'

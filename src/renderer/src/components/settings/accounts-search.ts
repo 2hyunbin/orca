@@ -4,8 +4,6 @@ import { translateSearchKeyword } from './settings-search-keywords'
 import { createLocalizedCatalog } from '@/i18n/localized-catalog'
 import { getAccountsClaudeSearchEntries } from './accounts-claude-search'
 
-export { getAccountsClaudeSearchEntries }
-
 export const getAccountsLocationSearchEntries = createLocalizedCatalog(() => [
   {
     title: translate('auto.components.settings.accounts.search.d09fb5ca92', 'Account Location'),

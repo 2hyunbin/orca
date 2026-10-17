@@ -12,16 +12,7 @@ import {
 import ClaudeAccountSwitchDialog from './ClaudeAccountSwitchDialog'
 import type * as SwitchSessions from '@/lib/claude-account-switch-sessions'
 
-vi.mock('@/lib/claude-session-account-move', () => ({
-  cancelPendingClaudeSessionMoves: vi.fn(),
-  findMovableClaudeSessions: vi.fn(),
-  moveClaudeSessionsToSelectedAccount: vi.fn()
-}))
-vi.mock('@/lib/claude-pane-account-tracker', () => ({
-  installClaudePaneAccountTracker: () => () => {},
-  mayBeOnClaudeAccount: () => true,
-  recordClaudePaneAccount: vi.fn()
-}))
+vi.mock('@/lib/claude-session-account-move', () => ({ findMovableClaudeSessions: vi.fn() }))
 vi.mock('@/lib/claude-account-switch-sessions', async (importOriginal) => {
   const actual = await importOriginal<typeof SwitchSessions>()
   return {
@@ -43,7 +34,6 @@ async function switchWith(count: number): Promise<void> {
       target: { runtime: 'host' },
       previousAccountId: 'acct-a',
       previousAccountLabel: 'a@example.com',
-      nextAccountId: 'acct-b',
       nextAccountLabel: 'b@example.com'
     })
   })

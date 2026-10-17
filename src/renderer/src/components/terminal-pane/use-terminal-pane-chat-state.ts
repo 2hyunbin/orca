@@ -40,6 +40,12 @@ export function useTerminalPaneChatState(controller: TerminalPaneTitleController
     toggleTabViewMode
   } = useTerminalPaneStoreActions()
   const pendingPaneAccountRestarts = useAppStore((store) => store.pendingPaneAccountRestarts)
+  // Why null otherwise: panes only need status changes while a Claude restart waits on a turn.
+  const claudeTurnStatus = useAppStore((store) =>
+    Object.values(store.pendingPaneAccountRestarts).includes('claude')
+      ? store.agentStatusByPaneKey
+      : null
+  )
   // Why one selector: five separate subscriptions each re-read the same unified
   // tab, so one publication paid the lookup five times per mounted tab.
   const { unifiedTabId, isChatViewMode, unifiedTabLabel, isTabPinned } = useAppStore(
@@ -254,6 +260,7 @@ export function useTerminalPaneChatState(controller: TerminalPaneTitleController
     setTabCanExpandPane,
     suppressPtyExit,
     pendingPaneAccountRestarts,
+    claudeTurnStatus,
     consumePendingPaneAccountRestart,
     clearCodexRestartNotice,
     unifiedTabId,

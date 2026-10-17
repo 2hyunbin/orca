@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, useSyncExternalStore } from 'react'
+import { useId, useState, useSyncExternalStore } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -18,11 +18,8 @@ import {
   subscribeClaudeAccountSwitchPrompt,
   type ClaudeAccountSwitchPrompt
 } from '@/lib/claude-account-switch-sessions'
-import { installClaudePaneAccountTracker } from '@/lib/claude-pane-account-tracker'
 
 export default function ClaudeAccountSwitchDialog(): React.JSX.Element | null {
-  // Why here: this host is mounted once for the app's lifetime, like the tracker it needs.
-  useEffect(() => installClaudePaneAccountTracker(), [])
   const prompt = useSyncExternalStore(
     subscribeClaudeAccountSwitchPrompt,
     getClaudeAccountSwitchPrompt,
@@ -51,7 +48,7 @@ function ClaudeAccountSwitchDialogContent({
 }): React.JSX.Element {
   const [remember, setRemember] = useState(false)
   const checkboxId = useId()
-  const count = prompt.candidates.length
+  const count = prompt.ptyIds.length
   const accounts = {
     count,
     previous: prompt.previousAccountLabel,
