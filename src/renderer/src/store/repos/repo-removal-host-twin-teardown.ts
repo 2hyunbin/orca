@@ -5,15 +5,14 @@ import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import { buildTerminalTabRetirementPlans } from '../slices/terminal-tab-retirement'
 import { omitSleepingAgentSessionsForWorktrees } from '../slices/worktrees/teardown/sleeping-agent-session-omission'
 import type { RecentlyClosedTabKind } from '../slices/recently-closed-tabs'
-import {
-  getOpenFileExecutionHostId,
-  hasOpenFileExecutionHostEvidence
-} from '@/lib/unified-tab-host-ownership'
+import { omitRecordKeys } from '../slices/worktrees/teardown/record-key-omission'
+import { cancelStructuredLaunchesForWorktrees } from '../slices/worktrees/teardown/worktree-purge-state'
 import {
   belongsToRemovedHost,
   collectRemovedHostTwinState,
   isRuntimeHost,
   mergeRemovedHostTwinState,
+  openFileHostEvidence,
   pageHostEvidence,
   type HostEvidence,
   type RemovedHostTwinState
@@ -45,11 +44,8 @@ function pruneRemovedHostReopenHistory(
   const kinds = { ...state.recentlyClosedTabKindsByWorktree }
   let changed = false
   for (const [worktreeId, survivors] of twinHostIds) {
-    const editorPruned = prunedEntries(
-      editors[worktreeId],
-      (snapshot) =>
-        hasOpenFileExecutionHostEvidence(snapshot) &&
-        getOpenFileExecutionHostId(snapshot) === removedHostId
+    const editorPruned = prunedEntries(editors[worktreeId], (snapshot) =>
+      belongsToRemovedHost(openFileHostEvidence(snapshot), removedHostId, survivors)
     )
     const browserPruned = prunedEntries(
       browsers[worktreeId],
@@ -135,7 +131,16 @@ export function closeRemovedHostTwinState(
   const remoteCloseOwnedByHost = isRuntimeHost(removedHostId)
   // Why planned together: the planner keeps a PTY another surviving tab still binds.
   const plans = buildTerminalTabRetirementPlans(get(), [...removed.terminalTabIds])
+  const retiredPtyIds = new Set<string>()
   for (const [tabId, plan] of plans) {
+    for (const ptyId of [
+      ...plan.localOrSshPtyIds,
+      ...plan.runtimeTerminals.map((terminal) => terminal.ptyId),
+      ...plan.cleanupOnlyPtyIds,
+      ...plan.unroutablePtyIds
+    ]) {
+      retiredPtyIds.add(ptyId)
+    }
     if (!remoteCloseOwnedByHost) {
       // Why killed here: the shared id resolves to no single host, so the planner marks this
       // host's PTYs unroutable; attribution already proved they are the removed host's.
@@ -153,6 +158,14 @@ export function closeRemovedHostTwinState(
       precomputedRetirementPlan: plan
     })
   }
+  // Why: a parked or restored pane has no exit callback left to clear these; shared PTYs are not in the plans' lists.
+  set((state) => ({
+    suppressedPtyExitIds: omitRecordKeys(state.suppressedPtyExitIds, retiredPtyIds),
+    pendingCodexPaneRestartIds: omitRecordKeys(state.pendingCodexPaneRestartIds, retiredPtyIds),
+    codexRestartNoticeByPtyId: omitRecordKeys(state.codexRestartNoticeByPtyId, retiredPtyIds)
+  }))
+  // Why: a pending chat's tab can already be gone, so its launch is cancelled through the registry.
+  cancelStructuredLaunchesForWorktrees(new Set(twinHostIds.keys()), removedHostId)
   for (const fileId of removed.fileIds) {
     get().closeFile(fileId, { captureRecentlyClosed: false })
   }

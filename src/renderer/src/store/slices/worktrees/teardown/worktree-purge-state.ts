@@ -38,28 +38,7 @@ export function buildWorktreePurgeState(
   )
   const worktreeIdSet = new Set(normalizedTargets.map((target) => target.id))
   // Why: bulk purges bypass close actions, so provisional ownership must die before tab state does.
-  const cancelledSessionIds = new Set<string>()
-  for (const launch of structuredLaunchStates()) {
-    const worktreeId = launch.intent.worktreeId
-    if (
-      worktreeIdSet.has(worktreeId) &&
-      shouldRetainStructuredAgentSessionLaunchTab(worktreeId, launch.intent.sessionId)
-    ) {
-      markStructuredAgentSessionLaunchCancelledSilently(
-        worktreeId,
-        launch.intent.sessionId,
-        launch.intent.executionHostId
-      )
-      discardStructuredAgentSessionChatSends(launch.intent.sessionId)
-      retireStructuredAgentSessionReadOwner(launch.intent.sessionId, launch.intent.target)
-      clearWebSessionFocusIntentIfMatches(
-        structuredAgentSessionFocusOwner(launch.intent.target),
-        worktreeId,
-        `agent-session:${launch.intent.sessionId}`
-      )
-      cancelledSessionIds.add(launch.intent.sessionId)
-    }
-  }
+  const cancelledSessionIds = cancelStructuredLaunchesForWorktrees(worktreeIdSet)
   for (const worktreeId of worktreeIdSet) {
     // A launch tab that never spawned has no spawn left to answer its prompt's wait.
     for (const tab of s.tabsByWorktree[worktreeId] ?? []) {
@@ -274,4 +253,35 @@ export function buildWorktreePurgeState(
         : s.activeWorkspaceKey
     })()
   }
+}
+
+/** Cancels provisional structured-chat launches in these worktrees, on one host when given. */
+export function cancelStructuredLaunchesForWorktrees(
+  worktreeIdSet: ReadonlySet<string>,
+  executionHostId?: string
+): Set<string> {
+  const cancelledSessionIds = new Set<string>()
+  for (const launch of structuredLaunchStates()) {
+    const worktreeId = launch.intent.worktreeId
+    if (
+      worktreeIdSet.has(worktreeId) &&
+      (executionHostId === undefined || launch.intent.executionHostId === executionHostId) &&
+      shouldRetainStructuredAgentSessionLaunchTab(worktreeId, launch.intent.sessionId)
+    ) {
+      markStructuredAgentSessionLaunchCancelledSilently(
+        worktreeId,
+        launch.intent.sessionId,
+        launch.intent.executionHostId
+      )
+      discardStructuredAgentSessionChatSends(launch.intent.sessionId)
+      retireStructuredAgentSessionReadOwner(launch.intent.sessionId, launch.intent.target)
+      clearWebSessionFocusIntentIfMatches(
+        structuredAgentSessionFocusOwner(launch.intent.target),
+        worktreeId,
+        `agent-session:${launch.intent.sessionId}`
+      )
+      cancelledSessionIds.add(launch.intent.sessionId)
+    }
+  }
+  return cancelledSessionIds
 }

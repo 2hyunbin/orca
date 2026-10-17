@@ -439,5 +439,8 @@ describe('removing a remote project keeps its local twin', () => {
       'tab-mixed'
     ])
     expect(ptyKill).not.toHaveBeenCalledWith(remotePtyId)
+    expect(
+      state.recentlyClosedEditorTabsByWorktree[WORKTREE_ID]?.map((snapshot) => snapshot.filePath)
+    ).toEqual(['/work/same/old-remote.ts'])
   })
 })

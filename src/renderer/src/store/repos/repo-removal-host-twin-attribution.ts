@@ -108,6 +108,13 @@ function ptyHostEvidence(ptyId: string): HostEvidence {
   return host ?? 'non-runtime'
 }
 
+/** Runtime files always record their environment, so an unmarked one is local/SSH. */
+export function openFileHostEvidence(
+  file: Parameters<typeof hasOpenFileExecutionHostEvidence>[0]
+): HostEvidence {
+  return hasOpenFileExecutionHostEvidence(file) ? getOpenFileExecutionHostId(file) : 'non-runtime'
+}
+
 /** A browser page's host: null is explicitly this client, absent is unknown. */
 export function pageHostEvidence(page: {
   browserRuntimeEnvironmentId?: string | null
@@ -186,13 +193,7 @@ export function collectRemovedHostTwinState(
       if (file.worktreeId !== worktreeId) {
         continue
       }
-      const stamped = stampedHostByEntityId.get(file.id)
-      const evidence: HostEvidence =
-        stamped ??
-        (hasOpenFileExecutionHostEvidence(file)
-          ? getOpenFileExecutionHostId(file)
-          : // Why: runtime files always record their environment, so an unmarked one is local/SSH.
-            'non-runtime')
+      const evidence = stampedHostByEntityId.get(file.id) ?? openFileHostEvidence(file)
       if (owns(evidence)) {
         removed.fileIds.add(file.id)
       }
