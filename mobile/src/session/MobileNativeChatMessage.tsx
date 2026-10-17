@@ -1,6 +1,6 @@
 import { MobileSelectableText as Text } from '../components/MobileSelectableText'
 import { memo, useCallback, useContext, useState } from 'react'
-import { Image, Pressable, Text as NativeText, View } from 'react-native'
+import { Text as NativeText, View } from 'react-native'
 import { INLINE_TEXT_SELECTION } from '../components/inline-text-selection'
 import { MobileNativeChatMessageActionsSheet } from './MobileNativeChatMessageActionsSheet'
 import { MobileNativeChatLongPressContent as Content } from './MobileNativeChatLongPressContent'
@@ -15,23 +15,13 @@ import {
   isRenderableSubagentGroup,
   withoutSubagentGroupTwins
 } from '../../../src/shared/native-chat-subagent-summary'
-import type {
-  NativeChatBlock,
-  NativeChatImageRefBlock,
-  NativeChatMessage
-} from '../../../src/shared/native-chat-types'
-import { MobileMarkdown } from '../components/MobileMarkdown'
+import type { NativeChatBlock, NativeChatMessage } from '../../../src/shared/native-chat-types'
 import { MobileSourceCopyButton } from '../components/MobileSourceCopyButton'
 import { nativeChatMessagePlainText } from './mobile-native-chat-message-plain-text'
 import { deriveNativeChatRowContent } from '../../../src/shared/native-chat-row-content'
 import { MobileNativeChatReasoningRow } from './MobileNativeChatReasoningRow'
-import {
-  AGENT_SESSION_HOST_STATUS_COPY,
-  isAgentSessionHostStatusPresentation
-} from '../../../src/shared/agent-session-host-status-rows'
 import { MobileNativeChatTurnStatus } from './MobileNativeChatTurnStatus'
 import { MobileNativeChatNoticeRow } from './MobileNativeChatNoticeRow'
-import { MobileNativeChatImageViewerContext } from './mobile-native-chat-image-viewer-context'
 import { MobileNativeChatUserMessageFold } from './MobileNativeChatUserMessageFold'
 import { MobileNativeChatAwaitingInputRow } from './MobileNativeChatAwaitingInputRow'
 import { MobileNativeChatResolutionReceipt } from './MobileNativeChatResolutionReceipt'
@@ -43,118 +33,11 @@ import type { NativeChatResolvedPrompt } from '../../../src/shared/native-chat-r
 import { MobileNativeChatSubagentGroup } from './MobileNativeChatSubagentGroup'
 import { ToolRun } from './MobileNativeChatToolRun'
 import type { NativeChatTurnStatus } from './use-mobile-native-chat-turn-status'
-import { isRenderableImageUri } from './mobile-native-chat-image-preview'
-import {
-  CHAT_PROSE_SCALE,
-  scaledType,
-  styles,
-  TEXT_SIZE
-} from './mobile-native-chat-message-styles'
+import { styles } from './mobile-native-chat-message-styles'
 import { agentMessageAttribution } from './mobile-agent-message-attribution'
-import { withoutPendingNativeChatVisualDirectiveTail } from '../../../src/shared/native-chat-visual-directive'
-import {
-  MobileNativeChatVisualContext,
-  type MobileNativeChatVisualRender
-} from './mobile-native-chat-visual-context'
-
-function Prose({
-  block,
-  invert,
-  fontScale,
-  onOpenFile,
-  onLongPress,
-  renderVisual,
-  holdPendingVisual = false
-}: {
-  block: NativeChatBlock
-  invert?: boolean
-  fontScale: number
-  /** Assistant prose of a structured chat only. */
-  renderVisual?: MobileNativeChatVisualRender
-  /** The reply may still be growing: a directive still being typed at its tail is held back. */
-  holdPendingVisual?: boolean
-  onOpenFile?: (relativePath: string) => void
-  /** Android only: routes a long press on a link span to the row's actions sheet. */
-  onLongPress?: () => void
-}): React.JSX.Element | null {
-  if (isTextBlock(block)) {
-    // A host line standing in for a message too large to send, on the person's own row.
-    if (isAgentSessionHostStatusPresentation(block.presentation)) {
-      return (
-        <Text
-          selectable={INLINE_TEXT_SELECTION}
-          style={[styles.hostNotice, scaledType(TEXT_SIZE, fontScale)]}
-        >
-          {AGENT_SESSION_HOST_STATUS_COPY[block.presentation]}
-        </Text>
-      )
-    }
-    if (invert) {
-      return (
-        <MobileMarkdown
-          content={block.text}
-          tone="onBright"
-          rangeSelectable
-          textScale={CHAT_PROSE_SCALE * fontScale}
-          onOpenFile={onOpenFile}
-          onLongPress={onLongPress}
-        />
-      )
-    }
-    return (
-      <MobileMarkdown
-        content={
-          holdPendingVisual && renderVisual
-            ? withoutPendingNativeChatVisualDirectiveTail(block.text)
-            : block.text
-        }
-        renderVisual={renderVisual}
-        rangeSelectable
-        textScale={CHAT_PROSE_SCALE * fontScale}
-        onOpenFile={onOpenFile}
-        onLongPress={onLongPress}
-      />
-    )
-  }
-  if (isImageRefBlock(block)) {
-    return <ImageAttachment block={block} fontScale={fontScale} onLongPress={onLongPress} />
-  }
-  return null
-}
-
-/** A local preview (composer echo) or real URL draws as a thumbnail that opens full size; a bare
- *  host path (not loadable on the device) falls back to a text placeholder. */
-function ImageAttachment({
-  block,
-  fontScale,
-  onLongPress
-}: {
-  block: NativeChatImageRefBlock
-  fontScale: number
-  onLongPress?: () => void
-}): React.JSX.Element {
-  const openImage = useContext(MobileNativeChatImageViewerContext)
-  const uri = block.url ?? block.path
-  const label = block.alt ?? 'Attached image'
-  if (!isRenderableImageUri(uri)) {
-    return (
-      <NativeText style={[styles.imageRef, { fontSize: TEXT_SIZE * fontScale }]}>
-        🖼 {block.alt ?? block.path ?? block.url ?? 'image'}
-      </NativeText>
-    )
-  }
-  return (
-    <Pressable
-      onPress={() => openImage({ uri, label })}
-      onLongPress={onLongPress}
-      accessibilityRole="imagebutton"
-      accessibilityLabel={label}
-      accessibilityHint="Opens the image full size"
-    >
-      <Image source={{ uri }} style={styles.imageThumb} resizeMode="contain" />
-    </Pressable>
-  )
-}
+import { MobileNativeChatVisualContext } from './mobile-native-chat-visual-context'
+import { MobileNativeChatPacedProse } from './MobileNativeChatPacedProse'
+import { Prose } from './MobileNativeChatProse'
 
 function MobileNativeChatMessageImpl({
   message,
@@ -328,28 +211,30 @@ function MobileNativeChatMessageImpl({
     message.role === 'user' || message.role === 'assistant'
       ? nativeChatMessagePlainText(message)
       : ''
-  const proseRows = (blocks: NativeChatBlock[]) =>
-    blocks.map((block, index) =>
-      isSubagentGroupBlock(block) && isRenderableSubagentGroup(block) ? (
-        <MobileNativeChatSubagentGroup
-          key={`subagent-group:${block.groupId}`}
-          block={block}
-          open={subagentGroupsOpen?.has(block.groupId) === true}
-          onToggle={onToggleSubagentGroup}
-        />
-      ) : isSystem ? null : (
-        <Prose
-          key={index}
-          block={block}
-          invert={isUser}
-          fontScale={fontScale}
-          onOpenFile={onOpenFile}
-          onLongPress={onLongPress}
-          renderVisual={message.role === 'assistant' ? renderVisual : undefined}
-          holdPendingVisual={block === growingBlock}
-        />
-      )
+  const proseRow = (block: NativeChatBlock, index: number, text: string, revealing = false) =>
+    isSubagentGroupBlock(block) && isRenderableSubagentGroup(block) ? (
+      <MobileNativeChatSubagentGroup
+        key={`subagent-group:${block.groupId}`}
+        block={block}
+        open={subagentGroupsOpen?.has(block.groupId) === true}
+        onToggle={onToggleSubagentGroup}
+      />
+    ) : isSystem ? null : (
+      <Prose
+        key={index}
+        block={block}
+        invert={isUser}
+        fontScale={fontScale}
+        onOpenFile={onOpenFile}
+        onLongPress={onLongPress}
+        renderVisual={message.role === 'assistant' ? renderVisual : undefined}
+        text={text}
+        growing={block === growingBlock}
+        revealing={revealing}
+      />
     )
+  const proseRows = (blocks: NativeChatBlock[]) =>
+    blocks.map((block, index) => proseRow(block, index, isTextBlock(block) ? block.text : ''))
   return (
     <>
       {/* A turn with no user bubble carries its bar above its first row. */}
@@ -391,7 +276,14 @@ function MobileNativeChatMessageImpl({
               </MobileNativeChatUserMessageFold>
             </>
           ) : (
-            proseRows(drawnProse)
+            <MobileNativeChatPacedProse
+              rowKey={message.id}
+              blocks={drawnProse}
+              growingBlock={growingBlock}
+              paced={message.role === 'assistant'}
+            >
+              {(block, index, shown) => proseRow(block, index, shown.text, shown.revealing)}
+            </MobileNativeChatPacedProse>
           )}
           {askRow}
           {showToolRun ? (

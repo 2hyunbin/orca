@@ -6103,8 +6103,7 @@
                   "7edb8ebe24": "Cloner depuis une URL",
                   "a6c20dca96": "Ouvrir un projet depuis une cible SSH",
                   "serverSshTitle": "Projet sur un hôte SSH de ce serveur",
-                  "serverSshDescription": "Ouvrir un dossier de projet depuis un hôte SSH auquel ce serveur se connecte",
-                  "serverSshUpdate": "Mettez ce serveur à jour pour ajouter des projets sur ses hôtes SSH",
+                  "serverSshAddOnThisComputer": "Indisponible depuis un serveur. Ajoutez l’hôte SSH sur cet ordinateur pour ouvrir ses projets.",
                   "fb4fc5380e": "Projet local, dépôt Git ou dossier contenant plusieurs dépôts",
                   "2281fdc8c7": "Parcourir le dossier",
                   "runtimeBrowseDescription": "Dépôt Git existant ou dossier sur cette machine"

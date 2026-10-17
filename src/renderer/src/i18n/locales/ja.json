@@ -5975,8 +5975,7 @@
                   "7edb8ebe24": "URL からクローン",
                   "a6c20dca96": "SSH ターゲットからプロジェクトを開く",
                   "serverSshTitle": "このサーバーの SSH ホスト上のプロジェクト",
-                  "serverSshDescription": "このサーバーが接続する SSH ホストのプロジェクトフォルダーを開きます",
-                  "serverSshUpdate": "SSH ホストにプロジェクトを追加するには、このサーバーを更新してください",
+                  "serverSshAddOnThisComputer": "サーバーからは利用できません。プロジェクトを開くには、このコンピューターに SSH ホストを追加してください。",
                   "fb4fc5380e": "ローカルプロジェクト、Git リポジトリ、または多数のリポジトリを含むフォルダー",
                   "2281fdc8c7": "フォルダーを参照",
                   "runtimeBrowseDescription": "このホスト上の既存の Git リポジトリまたはフォルダー"

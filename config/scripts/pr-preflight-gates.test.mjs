@@ -243,7 +243,7 @@ it('pins every foreground and background step to its selected phase', () => {
     ['Enforce focus-read ratchet', staticPhase],
     ['Enforce layout-writer ratchets', staticPhase],
     ['Check Node runtime pin', staticPhase],
-    ['Boot orcad and round-trip a terminal', staticPhase],
+    ['Decide whether the orcad terminal smoke runs', staticPhase],
     ['Verify the generated RPC params catalog', staticPhase],
     ['Verify the generated ACP protocol schema', staticPhase],
     ['Verify bundled skill guides', staticPhase],
