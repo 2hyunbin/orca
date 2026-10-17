@@ -187,3 +187,20 @@ describe('electronHttpClient proxy authentication', () => {
     expect(stalled.destroyed).toBe(true)
   })
 })
+
+describe('electronHttpClient manual redirects', () => {
+  it('answers a manual redirect with the 3xx, like the Node client', async () => {
+    const { pending } = await startRequest({ redirect: 'manual' })
+
+    native.emit('redirect', 302, 'GET', 'https://cdn.example.com/a', {
+      location: ['https://cdn.example.com/a']
+    })
+    const response = await pending
+
+    expect(response.status).toBe(302)
+    expect(response.headers.get('location')).toBe('https://cdn.example.com/a')
+    expect(native.abort).toHaveBeenCalled()
+    expect(mocks.netRequest).toHaveBeenCalledWith(expect.objectContaining({ redirect: 'manual' }))
+    expect(mocks.netFetch).not.toHaveBeenCalled()
+  })
+})

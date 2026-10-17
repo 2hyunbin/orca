@@ -29,7 +29,8 @@ async function fetchFromDefaultSession(url: string, init?: RequestInit): Promise
   const proxySession = session.defaultSession
   if (
     isHttpUrl(url) &&
-    (await hasConfiguredProxyCredentials(proxySession, init?.signal ?? undefined))
+    (init?.redirect === 'manual' ||
+      (await hasConfiguredProxyCredentials(proxySession, init?.signal ?? undefined)))
   ) {
     return fetchWithProxyLogin(new Request(url, init), proxySession)
   }
@@ -39,7 +40,7 @@ async function fetchFromDefaultSession(url: string, init?: RequestInit): Promise
 
 /**
  * The desktop HTTP client: Chromium's network stack, which follows session and proxy
- * state and sends a Chrome user agent.
+ * state and sends a Chrome user agent. Manual redirects answer with the 3xx, as on Node.
  *
  * `session.defaultSession` throws before the app is ready, so it is read per call
  * rather than captured at install time.

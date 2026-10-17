@@ -2,6 +2,7 @@ import { defineMethod } from '../core'
 import { getRegisteredSshState, listRegisteredSshTargets } from '../../../ssh/ssh-target-registry'
 import { getWslHostService } from '../../../wsl/wsl-host-service-instance'
 import { readDesktopSidebarFacts } from '../../sidebar-inputs/desktop-sidebar-facts'
+import { RepoIconDataUrlsParams } from '../../../../shared/sidebar-list/repo-icon-data-urls-contract'
 
 export const SIDEBAR_INPUT_METHODS = [
   defineMethod({
@@ -9,6 +10,12 @@ export const SIDEBAR_INPUT_METHODS = [
     permission: 'workspace',
     params: null,
     handler: async (_params, { runtime }) => runtime.getWorkspaceActivityFacts()
+  }),
+  defineMethod({
+    name: 'sidebarInputs.repoIcons',
+    permission: 'workspace',
+    params: RepoIconDataUrlsParams,
+    handler: async ({ ids }, { runtime }) => runtime.repoIconDataUrls.read(ids)
   }),
   defineMethod({
     name: 'sidebarInputs.desktopFacts',

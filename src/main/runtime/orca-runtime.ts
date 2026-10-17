@@ -32,6 +32,9 @@ import { rekeyMovedPaneOwners } from './moved-pane-owner-rekey'
 import { applyWindowLayoutCommand, type WindowLayoutCommand } from './runtime-layout-apply'
 import type { TerminalCreateOptions } from './runtime-terminal-contracts'
 import { PairedServerRowsProducer } from './sidebar-inputs/paired-server-rows-producer'
+import { RepoIconDataUrls } from './sidebar-inputs/repo-icon-data-urls'
+import { getMainHttpClient } from '../network/http-client'
+import { getRuntimeDesktopSurface } from './runtime-desktop-surface'
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../shared/runtime-session-contracts'
 import { getHostDisplayLabelOverrides } from '../../shared/host-setting-overrides'
 
@@ -44,6 +47,11 @@ class OrcaRuntimeService extends OrcaRuntimeWithWorkspaceReviewFacts {
       this.authoritativeWindowId !== HEADLESS_RUNTIME_WINDOW_ID &&
       this.store?.getUI?.().sidebarOpen !== false,
     hostLabelOverrides: () => getHostDisplayLabelOverrides(this.getClientSettings())
+  })
+  readonly repoIconDataUrls = new RepoIconDataUrls({
+    repos: () => this.store?.getRepos() ?? [],
+    fetch: (url, init) => getMainHttpClient().fetch(url, init),
+    encoder: () => getRuntimeDesktopSurface().encodeRepoIconPng
   })
 
   private async selectReferenceCatalogWorkspace(selector: string, cwd?: string) {
