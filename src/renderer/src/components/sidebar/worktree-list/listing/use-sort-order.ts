@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useAppStore } from '@/store'
 import { getAllWorktreesFromState } from '@/store/selectors'
 import { track } from '@/lib/telemetry'
-import { tabHasLivePty } from '@/lib/tab-has-live-pty'
+import { tabHasLivePty } from '../../../../../../shared/tab-has-live-pty'
 import { persistWorktreeSortOrderByHost } from '@/lib/worktree-sort-order-persistence'
 import type { Repo } from '../../../../../../shared/repo-types'
 import {
@@ -10,13 +10,13 @@ import {
   buildWorktreeSortLabels,
   compareWorktreeSortLabel,
   type SortBy
-} from '../../smart-sort'
+} from '../../../../../../shared/sidebar-list/smart-sort'
 import {
   buildAttentionByWorktree,
   hasFreshAttributedAgentStatus,
   type SmartClass,
   type WorktreeAttention
-} from '../../smart-attention'
+} from '../../../../../../shared/sidebar-list/smart-attention'
 import {
   ranksFollowPersistedOrder,
   smartSortPhase

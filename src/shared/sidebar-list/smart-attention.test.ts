@@ -3,7 +3,7 @@ import {
   AGENT_STATUS_STALE_AFTER_MS,
   type AgentStateHistoryEntry,
   type AgentStatusEntry
-} from '../../../../shared/agent-status-types'
+} from '../agent-status-types'
 import {
   IDLE,
   buildAttentionByWorktree,
@@ -11,8 +11,8 @@ import {
   resolveAttention,
   type PaneInput
 } from './smart-attention'
-import type { TerminalLayoutSnapshot, TerminalTab } from '../../../../shared/terminal-tab-types'
-import type { Worktree } from '../../../../shared/worktree/types'
+import type { TerminalLayoutSnapshot, TerminalTab } from '../terminal-tab-types'
+import type { Worktree } from '../worktree/types'
 
 function hookPane(entry: AgentStatusEntry, hasLivePty = false): PaneInput {
   return { kind: 'hook', entry, hasLivePty }

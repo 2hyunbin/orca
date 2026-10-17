@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { Repo } from '../../../../shared/repo-types'
-import type { TerminalTab } from '../../../../shared/terminal-tab-types'
-import type { Worktree } from '../../../../shared/worktree/types'
+import type { Repo } from '../repo-types'
+import type { TerminalTab } from '../terminal-tab-types'
+import type { Worktree } from '../worktree/types'
 import {
   buildWorktreeComparator,
   CREATE_GRACE_MS,
@@ -13,8 +13,8 @@ import {
   AGENT_STATUS_STALE_AFTER_MS,
   type AgentStateHistoryEntry,
   type AgentStatusEntry
-} from '../../../../shared/agent-status-types'
-import { makePaneKey } from '../../../../shared/stable-pane-id'
+} from '../agent-status-types'
+import { makePaneKey } from '../stable-pane-id'
 
 const NOW = new Date('2026-03-27T12:00:00.000Z').getTime()
 const LEAF_ID_1 = '11111111-1111-4111-8111-111111111111'

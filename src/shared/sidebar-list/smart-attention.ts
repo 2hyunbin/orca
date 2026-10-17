@@ -1,22 +1,23 @@
-import { classifyTitleActivity, isExplicitAgentStatusFresh } from '@/lib/pane-agent-evidence'
-import { agentEntryCompletionAt } from '../../../../shared/agent-completion-time'
-import { agentTurnEndedOnPurpose } from '../../../../shared/agent-main-agent-verdict'
-import { migrationUnsupportedToAgentStatusEntry } from '@/lib/migration-unsupported-agent-entry'
-import { resolveDecayedAgentRowState } from '@/lib/agent-row-decay-state'
-import { tabHasLivePty } from '@/lib/tab-has-live-pty'
-import { isSyntheticAgentPermissionTitle } from '../../../../shared/synthetic-agent-title'
-import { resolveRuntimePaneTitleLeafId } from '@/lib/runtime-pane-title-leaf-id'
-import type { AgentStatus } from '../../../../shared/agent-detection'
-import type { TerminalLayoutSnapshot, TerminalTab } from '../../../../shared/terminal-tab-types'
-import type { Worktree } from '../../../../shared/worktree/types'
+import { detectAgentStatusFromTitle } from '../agent-detection'
+import { isAgentStatusFresh } from '../agent-status-freshness'
+import { agentEntryCompletionAt } from '../agent-completion-time'
+import { agentTurnEndedOnPurpose } from '../agent-main-agent-verdict'
+import { migrationUnsupportedToAgentStatusEntry } from '../migration-unsupported-agent-entry'
+import { resolveDecayedAgentRowState } from '../agent-row-decay-state'
+import { tabHasLivePty } from '../tab-has-live-pty'
+import { isSyntheticAgentPermissionTitle } from '../synthetic-agent-title'
+import { resolveRuntimePaneTitleLeafId } from '../runtime-pane-title-leaf-id'
+import type { AgentStatus } from '../agent-detection'
+import type { TerminalLayoutSnapshot, TerminalTab } from '../terminal-tab-types'
+import type { Worktree } from '../worktree/types'
 import {
   AGENT_STATUS_STALE_AFTER_MS,
   agentStatusEvidenceObservedAt,
   type AgentStateHistoryEntry,
   type AgentStatusEntry,
   type MigrationUnsupportedPtyEntry
-} from '../../../../shared/agent-status-types'
-import { parsePaneKey } from '../../../../shared/stable-pane-id'
+} from '../agent-status-types'
+import { parsePaneKey } from '../stable-pane-id'
 
 /**
  * Ordinal class for the "Smart" sort. Lower number = more attention-demanding.
@@ -67,7 +68,7 @@ export function hasFreshAttributedAgentStatus(
   const freshUnstampedTabIds = new Set<string>()
   for (const entry of Object.values(agentStatusByPaneKey ?? {})) {
     const parsed = parsePaneKey(entry.paneKey)
-    if (parsed === null || !isExplicitAgentStatusFresh(entry, now, AGENT_STATUS_STALE_AFTER_MS)) {
+    if (parsed === null || !isAgentStatusFresh(entry, now, AGENT_STATUS_STALE_AFTER_MS)) {
       continue
     }
     if (entry.worktreeId) {
@@ -134,7 +135,7 @@ export function resolveAttention(panes: PaneInput[], now: number): WorktreeAtten
 
     if (pane.kind === 'hook') {
       const entry = pane.entry
-      if (!isExplicitAgentStatusFresh(entry, now, AGENT_STATUS_STALE_AFTER_MS)) {
+      if (!isAgentStatusFresh(entry, now, AGENT_STATUS_STALE_AFTER_MS)) {
         // Why: a pane Orca still holds a PTY for outranks a genuinely empty one — the user may
         // know why it went quiet (a long build), which Orca never can. It never outranks a
         // reporting pane, and it never claims the agent finished.
@@ -310,7 +311,7 @@ export function collectTabPaneInputs(
     // Why: restored rows own their co-restored title without asserting live state.
     if (
       !entry.restoredUnconfirmed &&
-      !isExplicitAgentStatusFresh(entry, now, AGENT_STATUS_STALE_AFTER_MS)
+      !isAgentStatusFresh(entry, now, AGENT_STATUS_STALE_AFTER_MS)
     ) {
       continue
     }
@@ -333,7 +334,7 @@ export function collectTabPaneInputs(
       // Why: unmounted tabs (restored-but-unvisited) expose only the legacy tab title.
       panes.push({
         kind: 'title',
-        status: classifyTitleActivity(tab.title),
+        status: detectAgentStatusFromTitle(tab.title),
         worktreeLastActivityAt
       })
     }
@@ -353,7 +354,7 @@ export function collectTabPaneInputs(
     if ((leafId !== null && coveredLeafIds.has(leafId)) || hasSingleUnmappedHook) {
       continue
     }
-    panes.push({ kind: 'title', status: classifyTitleActivity(title), worktreeLastActivityAt })
+    panes.push({ kind: 'title', status: detectAgentStatusFromTitle(title), worktreeLastActivityAt })
   }
   return panes
 }

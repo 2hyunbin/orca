@@ -1,9 +1,6 @@
-import { FIRST_PANE_ID } from '../../../shared/pane-key'
-import { isTerminalLeafId } from '../../../shared/stable-pane-id'
-import type {
-  TerminalLayoutSnapshot,
-  TerminalPaneLayoutNode
-} from '../../../shared/terminal-tab-types'
+import { FIRST_PANE_ID } from './pane-key'
+import { isTerminalLeafId } from './stable-pane-id'
+import type { TerminalLayoutSnapshot, TerminalPaneLayoutNode } from './terminal-tab-types'
 
 export type RuntimePaneTitleLeafResolution = {
   title: string | null

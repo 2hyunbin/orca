@@ -1,19 +1,16 @@
-import type { Repo } from '../../../../shared/repo-types'
-import type { TerminalLayoutSnapshot, TerminalTab } from '../../../../shared/terminal-tab-types'
-import type { Worktree } from '../../../../shared/worktree/types'
-import type {
-  AgentStatusEntry,
-  MigrationUnsupportedPtyEntry
-} from '../../../../shared/agent-status-types'
-import { tabHasLivePty } from '@/lib/tab-has-live-pty'
-import { basename } from '@/lib/path'
+import type { Repo } from '../repo-types'
+import type { TerminalLayoutSnapshot, TerminalTab } from '../terminal-tab-types'
+import type { Worktree } from '../worktree/types'
+import type { AgentStatusEntry, MigrationUnsupportedPtyEntry } from '../agent-status-types'
+import { tabHasLivePty } from '../tab-has-live-pty'
+import { getRuntimePathBasename } from '../cross-platform-path'
 import {
   buildWorkspaceRowComparator,
   recentActivityWithCreateGrace,
   type WorkspaceSortBy
-} from '../../../../shared/workspace-view/workspace-row-sort'
-import { compareCodePoints, compareSidebarText } from '../../../../shared/sidebar-list/text-order'
-import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
+} from '../workspace-view/workspace-row-sort'
+import { compareCodePoints, compareSidebarText } from './text-order'
+import { getWorktreeHostIdentity } from '../worktree/host-qualified-identity'
 import {
   IDLE,
   buildAttentionByWorktree,
@@ -23,7 +20,7 @@ import {
 
 export type SortBy = WorkspaceSortBy
 
-export { CREATE_GRACE_MS } from '../../../../shared/workspace-view/workspace-row-sort'
+export { CREATE_GRACE_MS } from '../workspace-view/workspace-row-sort'
 
 /** Recent-sort rank: `lastActivityAt`, floored at `createdAt + CREATE_GRACE_MS` while that window is open. */
 export function effectiveRecentActivity(worktree: Worktree, now: number): number {
@@ -40,7 +37,8 @@ export function getWorktreeSortLabel(worktree: WorktreeSortLabelInput): string {
 
   // Why: persisted or remote worktree state can briefly omit displayName after
   // a custom workspace name is removed; sorting must stay render-safe.
-  const pathLabel = typeof worktree.path === 'string' ? basename(worktree.path).trim() : ''
+  const pathLabel =
+    typeof worktree.path === 'string' ? getRuntimePathBasename(worktree.path).trim() : ''
   return pathLabel || worktree.id
 }
 

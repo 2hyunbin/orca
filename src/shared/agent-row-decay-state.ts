@@ -2,7 +2,7 @@ import {
   agentStatusEvidenceObservedAt,
   type AgentStatusEntry,
   type AgentStatusState
-} from '../../../shared/agent-status-types'
+} from './agent-status-types'
 
 /** Row states: the hook-reported statuses plus the two Orca derives when an entry goes stale. */
 export type AgentRowState = AgentStatusState | 'idle' | 'unverifiable'
