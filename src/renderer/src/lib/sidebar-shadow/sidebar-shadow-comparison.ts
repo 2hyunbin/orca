@@ -8,8 +8,8 @@ import { e2eConfig } from '@/lib/e2e-config'
 export type SidebarShadowDomain<Value> = {
   name: string
   readWindow: () => ReadonlyMap<string, Value>
-  /** Null when this host does not publish the domain (an older host). */
-  readMain: () => Promise<{ revision: number; values: ReadonlyMap<string, Value> } | null>
+  /** Null when this host does not publish the domain (an older host); facts read on demand carry no revision. */
+  readMain: () => Promise<{ revision?: number; values: ReadonlyMap<string, Value> } | null>
   equals: (window: Value | undefined, main: Value | undefined) => boolean
 }
 
@@ -18,7 +18,7 @@ export type SidebarShadowMismatch = {
   key: string
   window: unknown
   main: unknown
-  mainRevision: number
+  mainRevision?: number
 }
 
 /** One domain's comparison, with its value type closed over; false when main published nothing. */
@@ -91,13 +91,16 @@ export function installSidebarShadowComparison(checks: readonly SidebarShadowChe
     }
     inFlight = true
     void (async () => {
+      let everyCompared = true
       for (const check of checks) {
         const compared = await check(record).catch((error: unknown) => {
           console.warn('[sidebar-shadow] check failed', error)
           return false
         })
-        comparisons += compared ? 1 : 0
+        everyCompared &&= compared
       }
+      // A round counts once every domain compared, so two rounds re-check each domain twice.
+      comparisons += everyCompared ? 1 : 0
     })().finally(() => {
       inFlight = false
     })

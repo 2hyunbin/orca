@@ -1245,6 +1245,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'settings.updatePRBotAuthorOverride': PRBotAuthorOverrideUpdate,
   'settings.updateTerminalQuickCommands': TerminalQuickCommandsUpdate,
   'sidebarInputs.activityFacts': null,
+  'sidebarInputs.desktopFacts': null,
   'skills.beginUpload': SkillUploadBeginRequestSchema,
   'skills.cancelInstall': SkillsCancelInstallParams,
   'skills.cancelUpload': SkillUploadCommitRequestSchema,
