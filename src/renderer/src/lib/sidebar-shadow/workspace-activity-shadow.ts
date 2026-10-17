@@ -8,7 +8,7 @@ import {
   parseExecutionHostId,
   type ExecutionHostId
 } from '../../../../shared/execution-host'
-import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
+import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
 import {
   IDLE_WORKSPACE_ACTIVITY,
   isIdleWorkspaceActivity,
@@ -61,29 +61,33 @@ export function readWindowWorkspaceActivityFacts(
   return facts
 }
 
-// The local runtime answers for the rows it owns. A paired server owns and publishes its own rows'
-// facts, which the server-row producer compares; an id with no owner in the catalog is no row.
+// The local runtime answers for the rows it owns; a paired server publishes its own rows' facts.
+// The window keys activity by bare id, so an id a paired server also lists cannot be attributed
+// to one host and is left out; an id with no owner in the catalog is no row.
 export function toLocallyOwnedRows<Value>(
   state: AppState,
   values: ReadonlyMap<string, Value>
 ): Map<string, Value> {
-  const worktreeById = new Map(getAllWorktreesFromState(state).map((row) => [row.id, row]))
-  const folderById = new Map((state.folderWorkspaces ?? []).map((folder) => [folder.id, folder]))
   const repoById = getRepoMapFromState(state)
-  const ownerOf = (id: string): ExecutionHostId | null => {
-    const worktree = worktreeById.get(id)
-    const scope = parseWorkspaceKey(id)
-    const hostFields = worktree
-      ? repoById.get(worktree.repoId)
-      : scope?.type === 'folder'
-        ? folderById.get(scope.folderWorkspaceId)
-        : undefined
-    return worktree?.hostId ?? (hostFields ? getRepoExecutionHostId(hostFields) : null)
+  const ownersById = new Map<string, Set<'local' | 'server'>>()
+  const own = (id: string, owner: ExecutionHostId | null | undefined): void => {
+    if (owner) {
+      const owners = ownersById.get(id) ?? new Set()
+      owners.add(parseExecutionHostId(owner)?.kind === 'runtime' ? 'server' : 'local')
+      ownersById.set(id, owners)
+    }
+  }
+  for (const worktree of getAllWorktreesFromState(state)) {
+    const repo = repoById.get(worktree.repoId)
+    own(worktree.id, worktree.hostId ?? (repo ? getRepoExecutionHostId(repo) : null))
+  }
+  for (const folder of state.folderWorkspaces ?? []) {
+    own(folderWorkspaceKey(folder.id), getRepoExecutionHostId(folder))
   }
   const scoped = new Map<string, Value>()
   for (const [id, value] of values) {
-    const owner = ownerOf(id)
-    if (owner !== null && parseExecutionHostId(owner)?.kind !== 'runtime') {
+    const owners = ownersById.get(id)
+    if (owners?.has('local') && !owners.has('server')) {
       scoped.set(id, value)
     }
   }
