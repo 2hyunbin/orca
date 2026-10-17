@@ -115,9 +115,7 @@ it('opens and retries missing user text without losing local disclosure', async 
   }
   await act(async () => {
     renderer = create(
-      <MobileNativeChatItemSourceContext.Provider value={value}>
-        <UserProbe />
-      </MobileNativeChatItemSourceContext.Provider>
+      createElement(MobileNativeChatItemSourceContext.Provider, { value }, createElement(UserProbe))
     )
   })
   await act(async () => {
