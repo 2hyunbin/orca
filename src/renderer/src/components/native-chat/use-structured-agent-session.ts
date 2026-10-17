@@ -1,4 +1,5 @@
 import { useMemo, useRef } from 'react'
+import { useStructuredAgentSessionSendOptions } from './use-structured-agent-session-send-options'
 import { useStructuredAgentSessionSends } from './use-structured-agent-session-sends'
 import { useStructuredAgentSessionCommandWrite } from './use-structured-agent-session-command-write'
 import { structuredAgentSessionNewSendsQueue } from './structured-agent-session-queue-request'
@@ -55,9 +56,6 @@ export function useStructuredAgentSession(args: {
   providerStarting?: boolean
   /** The host runs the session's provider and its start is proven. */
   providerRunning?: boolean
-  /** The current selection in a capable host's status, including an empty selection. */
-  optionSelection?: Readonly<Record<string, string>>
-  hostPermissionMode?: string
   /** This view started the session; only then does the stored selection name what it runs. */
   launch?: StructuredAgentSessionLaunchView
   /** The composer Edit copies a card's text into. */
@@ -108,7 +106,7 @@ export function useStructuredAgentSession(args: {
     optionSnapshot,
     optionSurface,
     setStructuredOption,
-    takesSendOptions,
+    sendSource,
     unavailable,
     threadGoal: threadGoalSupport,
     reportedThreadGoal,
@@ -123,8 +121,6 @@ export function useStructuredAgentSession(args: {
     isVisible,
     providerVisible,
     providerStarting,
-    optionSelection: args.optionSelection,
-    hostPermissionMode: args.hostPermissionMode,
     ...(args.providerRunning ? { providerRunning: true } : {}),
     ...(args.hostOptionStamp ? { hostOptionStamp: args.hostOptionStamp } : {}),
     fence: state.fence,
@@ -133,6 +129,7 @@ export function useStructuredAgentSession(args: {
     mutate,
     ...(launch ? { launch } : {})
   })
+  const sendOptions = useStructuredAgentSessionSendOptions(sessionId, launch, sendSource)
   // Only a capable host may see `delivery`; a card any host publishes shows, with its actions.
   const queueCapability = useStructuredAgentSessionHostQueuesMessagesState(target)
   const queuedMessageIds = useMemo(
@@ -164,8 +161,7 @@ export function useStructuredAgentSession(args: {
     historyLoaded: transportEnabled && state.status === 'ready',
     isWorking: transportState.isWorking,
     stopping: stopControl.stopping,
-    // Every send carries what the picker shows, to a host that keeps it with the message.
-    executionOptionSnapshot: takesSendOptions ? optionSnapshot : undefined
+    sendOptions
   })
 
   const contextUsage = useStructuredAgentSessionContextUsage(

@@ -22,8 +22,7 @@ vi.mock('./native-chat-session-option-settings-write', () => ({
 
 vi.mock('@/lib/structured-agent-session-launch-options', () => ({
   holdStructuredAgentSessionLaunchOption: mocks.hold,
-  getStructuredAgentSessionLaunchSelection: () => null,
-  getStructuredAgentSessionLaunchOptionToken: () => mocks.hold
+  getStructuredAgentSessionLaunchSelection: () => null
 }))
 
 import type { SessionOptionDescriptor } from '../../../../shared/native-chat-session-options'
@@ -423,11 +422,7 @@ describe('useStructuredAgentSessionOptions', () => {
 
     it('remembers a pick the launch applied as the next launch default', async () => {
       answer({ modelCatalog: () => Promise.resolve(SAVED_LIST) })
-      mocks.hold.mockResolvedValue({
-        kind: 'accepted',
-        fence: 1,
-        options: { model: 'gpt-5.6-luna' }
-      })
+      mocks.hold.mockResolvedValue({ kind: 'accepted', options: { model: 'gpt-5.6-luna' } })
       const { result, unmount } = renderOptions(
         { ...PROVISIONAL, launchSeedOptions: SEED },
         mutateWith(async () => null).mutate
@@ -503,31 +498,27 @@ describe('useStructuredAgentSessionOptions', () => {
 
   describe('before the provider starts', () => {
     it('keeps a picked effort visible after a model pick during startup', async () => {
-      let reads = 0
       answer({
-        options: async () => {
-          if (reads++ > 0) {
-            return new Promise(() => {})
-          }
-          return {
-            models: ['opus', 'sonnet'].map((id) => ({
-              id,
-              label: id,
-              efforts: ['low', 'high'].map((value) => ({ value, label: value }))
-            })),
-            current: { model: 'opus' }
-          }
-        }
+        options: async () => ({
+          models: ['opus', 'sonnet'].map((id) => ({
+            id,
+            label: id,
+            efforts: ['low', 'high'].map((value) => ({ value, label: value }))
+          })),
+          current: { model: 'opus' }
+        })
       })
-      const { mutate } = mutateWith(async (_description, _method, fields) => fields)
       const { result, unmount } = renderOptions(
         { ...REOPENED, agent: 'claude', providerStarting: true },
-        mutate
+        mutateWith(async () => new Promise(() => {})).mutate
       )
       await waitFor(() => expect(currentValue(result.current.optionSnapshot, 'model')).toBe('opus'))
-      await act(async () => {
-        await result.current.setStructuredOption('effort', 'low')
-        await result.current.setStructuredOption('model', 'sonnet')
+      act(() => {
+        void result.current.setStructuredOption('effort', 'low')
+      })
+      expect(currentValue(result.current.optionSnapshot, 'effort')).toBe('low')
+      act(() => {
+        void result.current.setStructuredOption('model', 'sonnet')
       })
       expect(currentValue(result.current.optionSnapshot, 'model')).toBe('sonnet')
       expect(currentValue(result.current.optionSnapshot, 'effort')).toBe('low')
@@ -589,7 +580,7 @@ describe('useStructuredAgentSessionOptions', () => {
   describe("a paired server's new chat", () => {
     it("shows the server's seed once its list answers and remembers a pick on the server under its model", async () => {
       answer({ modelCatalog: () => Promise.resolve(SAVED_LIST) })
-      mocks.hold.mockResolvedValue({ kind: 'accepted', fence: 1, options: { effort: 'high' } })
+      mocks.hold.mockResolvedValue({ kind: 'accepted', options: { effort: 'high' } })
       const { result, unmount } = renderOptions(
         { ...PROVISIONAL, paired: true, launchSeedOptions: SEED },
         mutateWith(async () => null).mutate
@@ -615,7 +606,7 @@ describe('useStructuredAgentSessionOptions', () => {
     // A server whose user never saved a model starts the CLI default, as a local chat does.
     it('shows the CLI default and takes picks when the server saved no model', async () => {
       answer({ modelCatalog: () => Promise.resolve(HOST_CATALOG) })
-      mocks.hold.mockResolvedValue({ kind: 'accepted', fence: 1, options: { model: 'gpt-hosted' } })
+      mocks.hold.mockResolvedValue({ kind: 'accepted', options: { model: 'gpt-hosted' } })
       const { result, unmount } = renderOptions(
         { ...PROVISIONAL, paired: true },
         mutateWith(async () => null).mutate

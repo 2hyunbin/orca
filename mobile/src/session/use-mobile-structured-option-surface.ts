@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState, type RefObject } from 'react'
+import { structuredAgentSessionShownSnapshot } from '../../../src/shared/structured-agent-session-option-view'
 import type { StructuredAgentSessionOptionState } from '../../../src/shared/structured-agent-session-options'
 import type {
   SessionOptionDescriptor,
@@ -12,10 +13,9 @@ export function useMobileStructuredOptionSurface(args: {
   setStructuredOption: (id: string, value: SessionOptionValue) => Promise<boolean>
   /** The latest option state, which a settled pick's snapshot is read from. */
   optionStateRef: RefObject<StructuredAgentSessionOptionState>
-  /** What the picker shows for a state. */
-  shownSnapshot: (state: StructuredAgentSessionOptionState) => SessionOptionDescriptor[]
+  takesSendOptions: boolean
 }) {
-  const { optionSnapshot, optionStateRef, setStructuredOption, shownSnapshot } = args
+  const { optionSnapshot, optionStateRef, setStructuredOption, takesSendOptions } = args
   const [optionPickerRequest, setOptionPickerRequest] = useState<{
     id: string
     sequence: number
@@ -35,9 +35,11 @@ export function useMobileStructuredOptionSurface(args: {
   const setOption = useCallback(
     async (id: string, value: SessionOptionValue) => {
       await setStructuredOption(id, value)
-      return { snapshot: shownSnapshot(optionStateRef.current) }
+      return {
+        snapshot: structuredAgentSessionShownSnapshot(optionStateRef.current, takesSendOptions)
+      }
     },
-    [optionStateRef, setStructuredOption, shownSnapshot]
+    [optionStateRef, setStructuredOption, takesSendOptions]
   )
 
   const optionSurface = useMemo<SessionOptionsSurface>(

@@ -243,8 +243,6 @@ export type AgentSessionStatusSummary = {
   model?: string
   /** The chat's saved permission mode; a client re-reads options when it or `model` moves. */
   permissionMode?: string
-  /** The host's saved option selection, including an empty selection. Absent on older hosts. */
-  optionSelection?: Readonly<Record<string, string>>
   /** The tool the running turn is inside, else the last one it used. Absent unless `status`
    *  is 'working'. */
   toolName?: string

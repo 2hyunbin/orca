@@ -59,7 +59,6 @@ export function structuredAgentSessionStatusSummary({
       : {}),
     ...(model ? { model } : {}),
     ...(isAgentChatPermissionMode(permissionMode) ? { permissionMode } : {}),
-    ...(record ? { optionSelection: record.options ?? {} } : {}),
     ...childWork,
     ...(providerSession ? { providerSession } : {}),
     ...(launchDirectory ? { launchDirectory } : {}),

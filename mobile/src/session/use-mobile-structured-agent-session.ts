@@ -23,16 +23,17 @@ import {
   projectStructuredPermission,
   projectStructuredQuestion
 } from './mobile-structured-agent-prompts'
-import type { StructuredMobileSession } from './mobile-structured-agent-session-contract'
+import type {
+  MobileStructuredAgentSessionArgs,
+  StructuredMobileSession
+} from './mobile-structured-agent-session-contract'
 import type { MobileNativeChatVisualSource } from './mobile-native-chat-visual-read'
-import type { RpcClient } from '../transport/rpc-client'
 import { useMobileStructuredAgentState } from './use-mobile-structured-agent-state'
 import { useMobileStructuredStopPress } from './use-mobile-structured-stop-press'
 import { useMobileStructuredSessionHostStopping } from './use-mobile-structured-session-host-stopping'
 import { useMobileStructuredPromptResponses } from './use-mobile-structured-prompt-responses'
-import type { StructuredAgentSessionHostSupport } from './mobile-structured-agent-session-host-support'
 import { useMobileStructuredAgentOptions } from './use-mobile-structured-agent-options'
-import { useMobileStructuredSessionOptionStatus } from './use-mobile-structured-session-option-status'
+import { useMobileStructuredSessionOptionStamp } from './use-mobile-structured-session-option-stamp'
 import { useMobileStructuredAgentTurnTiming } from './use-mobile-structured-agent-turn-timing'
 import {
   pendingStructuredPromptIdentity,
@@ -44,28 +45,13 @@ import {
   mobileStructuredSendQueues,
   useMobileStructuredSendWithOutcome
 } from './use-mobile-structured-send-with-outcome'
-import type { MobileNativeChatSendErrorReporter } from './use-mobile-native-chat-send-error'
 import { useMobileStructuredQueuedMessageControls } from './use-mobile-structured-queued-message-controls'
 import { useMobileStructuredBackgroundTasks } from './use-mobile-structured-background-tasks'
 import { useMobileStructuredSends } from './use-mobile-structured-sends'
 
-export function useMobileStructuredAgentSession(args: {
-  client: RpcClient | null
-  sessionId: string | null
-  /** Host/workspace scope used to keep same provider ids isolated. */
-  sourceIdentity?: string
-  enabled: boolean
-  /** Live transport only; gates the connection-scoped hold, and whether child rows may read live. */
-  connected: boolean
-  /** Capability facts from the shared runtime status probe; null follows the legacy wire. */
-  hostSupport: StructuredAgentSessionHostSupport | null
-  agent: string | null
-  /** The active pane's live composer; Edit copies a card's text through it. */
-  appendComposerText?: (text: string) => boolean
-  onSendError: MobileNativeChatSendErrorReporter
-  /** Called on any accepted queued-card action; retires the route's failure banner. */
-  onActionResolved?: () => void
-}): StructuredMobileSession {
+export function useMobileStructuredAgentSession(
+  args: MobileStructuredAgentSessionArgs
+): StructuredMobileSession {
   const {
     agent,
     appendComposerText,
@@ -102,7 +88,7 @@ export function useMobileStructuredAgentSession(args: {
     ...(agent ? { agentName: tuiAgentDisplayName(agent) ?? agent } : {})
   })
 
-  const optionStatus = useMobileStructuredSessionOptionStatus({
+  const optionStamp = useMobileStructuredSessionOptionStamp({
     client,
     sessionId,
     enabled: enabled && connected && hostSupport?.statusFeed === true
@@ -114,9 +100,7 @@ export function useMobileStructuredAgentSession(args: {
     enabled,
     fence: state.fence,
     mutate,
-    optionStamp: optionStatus.stamp,
-    hostSelection: optionStatus.selection,
-    hostPermissionMode: optionStatus.permissionMode,
+    optionStamp,
     hostSupport
   })
   const { conversationCommands, invokeStructuredOption, optionSnapshot, setStructuredOption } =
@@ -142,10 +126,12 @@ export function useMobileStructuredAgentSession(args: {
 
   // What the transcript reads, as desktop does: the journal plus the one notice a cut turn with no
   // row gets.
-  const agentName = agent ? (tuiAgentDisplayName(agent) ?? agent) : undefined
   const transcriptItems = useMemo(
-    () => withNativeChatCutTurnNotices(state.items, { agentName }),
-    [agentName, state.items]
+    () =>
+      withNativeChatCutTurnNotices(state.items, {
+        agentName: agent ? (tuiAgentDisplayName(agent) ?? agent) : undefined
+      }),
+    [agent, state.items]
   )
   const sends = useMobileStructuredSends({
     sessionKey,
@@ -246,12 +232,17 @@ export function useMobileStructuredAgentSession(args: {
   )
   const queued = useMobileStructuredQueuedMessageControls({
     sessionKey,
-    agentName,
+    agentName: agent ? (tuiAgentDisplayName(agent) ?? agent) : undefined,
     journalItems: state.items,
     queuedMessages,
     queuePause,
     submissions: state.submissions,
     agentWorking: isWorking,
+    client,
+    sessionId,
+    editCapable: hostSupport ? hostSupport.queuedMessageEdit === true : null,
+    chatActive: enabled,
+    enabled: enabled && connected,
     mutate,
     appendComposerText,
     onSendError,

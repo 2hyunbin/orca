@@ -3,7 +3,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({ call: vi.fn(), token: {} }))
+const mocks = vi.hoisted(() => ({ call: vi.fn() }))
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
 
@@ -17,8 +17,7 @@ vi.mock('./native-chat-session-option-settings-write', () => ({
 
 vi.mock('@/lib/structured-agent-session-launch-options', () => ({
   holdStructuredAgentSessionLaunchOption: vi.fn(() => Promise.resolve({ kind: 'held' })),
-  getStructuredAgentSessionLaunchSelection: () => null,
-  getStructuredAgentSessionLaunchOptionToken: () => mocks.token
+  getStructuredAgentSessionLaunchSelection: () => null
 }))
 
 import type { SessionOptionDescriptor } from '../../../../shared/native-chat-session-options'

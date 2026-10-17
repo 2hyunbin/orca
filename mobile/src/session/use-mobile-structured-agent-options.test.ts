@@ -12,7 +12,6 @@ import type {
   StructuredAgentSessionMutate,
   StructuredAgentSessionMutationResult
 } from './mobile-structured-agent-session-rpc'
-import { agentSessionExecutionOptionsFromSnapshot } from '../../../src/shared/agent-session-execution-option-snapshot'
 import { useMobileStructuredAgentOptions } from './use-mobile-structured-agent-options'
 import { rememberMobileCreatedStructuredSession } from './mobile-created-structured-sessions'
 
@@ -147,7 +146,6 @@ type ProbeProps = {
   sessionId: string | null
   fence: number | null
   mutate: StructuredAgentSessionMutate
-  hostSelection?: Readonly<Record<string, string>>
   onRender: (controller: Controller) => void
 }
 
@@ -160,7 +158,6 @@ function Probe(props: ProbeProps): null {
       enabled: true,
       fence: props.fence,
       mutate: props.mutate,
-      hostSelection: props.hostSelection,
       hostSupport: { sendOptions: true, permissionModes: true }
     })
   )
@@ -673,35 +670,4 @@ describe('useMobileStructuredAgentOptions host catalog', () => {
     })
     await harness.unmount()
   })
-})
-
-it('validates and sends the effort offered for the status model while its read waits', async () => {
-  const stale = deferred<AgentSessionOptionsResult>()
-  const first = optionsClient(
-    queuedReads({ ...OPTIONS, current: { model: 'gpt-fast', effort: 'low' } })
-  )
-  const delayed = optionsClient(() => stale.promise)
-  const { calls, mutate } = recordingMutate(async () =>
-    accepted(
-      { key: 'effort', value: 'high', options: { model: 'gpt-live', effort: 'high' } },
-      false
-    )
-  )
-  const harness = await mountOptions({ ...BASE, client: first.client, mutate })
-  await harness.rerender({ client: delayed.client, hostSelection: { model: 'gpt-live' } })
-  expect(currentValueOf(harness.current().optionSnapshot, 'model')).toBe('gpt-live')
-  expect(descriptorFor(harness.current().optionSnapshot, 'effort')?.kind).toMatchObject({
-    choices: expect.arrayContaining([{ value: 'high', label: 'High' }])
-  })
-  await act(async () =>
-    expect(await harness.current().setStructuredOption('effort', 'high')).toBe(true)
-  )
-  expect(calls).toEqual([
-    { method: 'agentSession.setOption', fields: { key: 'effort', value: 'high' } }
-  ])
-  expect(agentSessionExecutionOptionsFromSnapshot(harness.current().optionSnapshot)).toMatchObject({
-    model: 'gpt-live',
-    effort: 'high'
-  })
-  await harness.unmount()
 })

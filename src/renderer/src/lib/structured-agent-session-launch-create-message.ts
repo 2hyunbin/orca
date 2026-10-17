@@ -11,7 +11,7 @@ import {
   structuredAgentSessionSendSelection
 } from '../../../shared/structured-agent-session-option-view'
 import { structuredAgentSessionOptionSnapshot } from '../../../shared/structured-agent-session-options'
-import { firstFrameOptionState } from '@/components/native-chat/structured-agent-session-first-frame-options'
+import { firstFrameOptionState } from '@/components/native-chat/use-structured-agent-session-option-state'
 import {
   applyStructuredLaunchHeldOptions,
   settleStructuredLaunchCreateOptions
@@ -83,7 +83,7 @@ export function publishStructuredLaunchCreateOptions(
   if (state.intent.createMessageSupport !== true) {
     return applyStructuredLaunchHeldOptions(state, receipt)
   }
-  settleStructuredLaunchCreateOptions(state, state.intent.params.options ?? {}, receipt.fence)
+  settleStructuredLaunchCreateOptions(state, state.intent.params.options ?? {})
   void applyStructuredLaunchHeldOptions(state, receipt).catch((error: unknown) => {
     console.warn('[native-chat] applying a launch option failed', error)
   })

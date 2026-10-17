@@ -69,7 +69,6 @@ import {
   startStructuredAgentLaunch
 } from './structured-agent-session-launch'
 import {
-  getStructuredAgentSessionLaunchOptionToken,
   getStructuredAgentSessionLaunchSelection,
   holdStructuredAgentSessionLaunchOption
 } from './structured-agent-session-launch-options'
@@ -131,7 +130,7 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve }
 }
 
-const ACCEPTED = { ok: true, fence: 1, value: { key: 'model', value: 'x' } }
+const ACCEPTED = { ok: true, value: { key: 'model', value: 'x' } }
 
 function mutations(): { method: string; fence?: unknown; key?: unknown; value?: unknown }[] {
   return mocks.call.mock.calls
@@ -207,17 +206,15 @@ describe('picks made while a chat launches', () => {
     ])
     setOptionReplies[0]!.resolve({
       ok: true,
-      fence: 7,
       value: { key: 'model', value: 'gpt-picked', options: { model: 'gpt-picked' } }
     })
     await expect(modelPick).resolves.toEqual({
       kind: 'accepted',
-      fence: 7,
       options: { model: 'gpt-picked' }
     })
     await settle()
     expect(lifecycle()).toBe('pending')
-    setOptionReplies[1]!.resolve({ ...ACCEPTED, fence: 7 })
+    setOptionReplies[1]!.resolve(ACCEPTED)
     await launch.promptDeliveryResult
 
     expect(mutations()).toEqual([
@@ -352,23 +349,17 @@ describe('picks made while a chat launches', () => {
     startStructuredAgentLaunch(WORKTREE_ID, 'codex', { requestId: 'request-7' })
     holdStructuredAgentSessionLaunchOption(SESSION_ID, 'effort', 'high')
     await settle()
-    const token = getStructuredAgentSessionLaunchOptionToken(SESSION_ID, 'effort')
     const seen: unknown[] = []
     subscribeStructuredAgentLaunchStatus(() =>
       seen.push(getStructuredAgentSessionLaunchSelection(SESSION_ID))
     )
     setOptionReplies[0]!.resolve({
       ok: true,
-      fence: 1,
       value: { key: 'effort', value: 'high', options: { model: 'gpt-seeded', effort: 'high' } }
     })
     await settle()
 
-    expect(seen[0]).toEqual({
-      seed: { model: 'gpt-seeded', effort: 'high' },
-      held: {},
-      accepted: { options: { model: 'gpt-seeded', effort: 'high' }, fence: 1, token }
-    })
+    expect(seen[0]).toEqual({ seed: { model: 'gpt-seeded', effort: 'high' }, held: {} })
     expect(lifecycle()).toBeNull()
   })
 })

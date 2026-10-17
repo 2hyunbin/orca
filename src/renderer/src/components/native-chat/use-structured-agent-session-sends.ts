@@ -4,9 +4,6 @@ import type {
   AgentJournalSubmission
 } from '../../../../shared/agent-session-journal-types'
 import type { StructuredAgentSessionAttachment } from '../../../../shared/structured-agent-session-send-mutation'
-import type { SessionOptionDescriptor } from '../../../../shared/native-chat-session-options'
-import { agentSessionExecutionOptionsFromSnapshot } from '../../../../shared/agent-session-execution-option-snapshot'
-import { agentSessionExecutionOptionsRecord } from '../../../../shared/agent-session-execution-options'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import {
   structuredAgentSessionQueueRequest,
@@ -42,8 +39,8 @@ export function useStructuredAgentSessionSends(args: {
   isWorking?: boolean
   /** The chat reads Stopping: a send made now is drawn after the turn being stopped. */
   stopping?: boolean
-  /** What the picker shows, which each send carries; absent to a host that takes no send options. */
-  executionOptionSnapshot?: readonly SessionOptionDescriptor[]
+  /** The composer's model and effort each send carries; undefined to a host that takes none. */
+  sendOptions?: () => Readonly<Record<string, string>> | undefined
 }) {
   const {
     cursor,
@@ -52,11 +49,11 @@ export function useStructuredAgentSessionSends(args: {
     isWorking = false,
     queue,
     queuedMessageIds,
+    sendOptions,
     sessionId,
     stopping,
     submissions,
-    target,
-    executionOptionSnapshot
+    target
   } = args
   const subscribe = useCallback(
     (listener: () => void) => subscribeToStructuredAgentSessionPendingSends(sessionId, listener),
@@ -101,19 +98,15 @@ export function useStructuredAgentSessionSends(args: {
       if (!text.trim() && attachments.length === 0) {
         return false
       }
-      const delivery = structuredAgentSessionQueueRequest(queue, attachments)
-      const executionOptions = executionOptionSnapshot
-        ? agentSessionExecutionOptionsFromSnapshot(executionOptionSnapshot)
-        : undefined
+      const delivery = structuredAgentSessionQueueRequest(queue)
+      const options = sendOptions?.()
       const sent = sendStructuredAgentSessionMessage({
         sessionId,
         target,
         text,
         attachments,
         ...(delivery ? { delivery } : {}),
-        ...(executionOptions
-          ? { options: agentSessionExecutionOptionsRecord(executionOptions) }
-          : {}),
+        ...(options ? { options } : {}),
         ...(stopping ? { sentWhileStopping: true as const } : {})
       })
       // Refused while the chat's send is out: the text stays in the box.
@@ -129,7 +122,7 @@ export function useStructuredAgentSessionSends(args: {
         ? 'queued'
         : true
     },
-    [executionOptionSnapshot, isWorking, queue, queuedMessageIds, sessionId, stopping, target]
+    [isWorking, queue, queuedMessageIds, sendOptions, sessionId, stopping, target]
   )
 
   return {

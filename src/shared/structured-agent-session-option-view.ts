@@ -7,22 +7,6 @@ import type { SessionOptionDescriptor } from './native-chat-session-options'
 import { cloneNativeChatSessionOptionRecord } from './native-chat-session-option-state'
 import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from './agent-chat-permission-mode'
 
-export function acceptStructuredAgentSessionOptionValues(
-  state: StructuredAgentSessionOptionState,
-  values: Readonly<Record<string, string>>,
-  predecessor?: Readonly<Record<string, string>>
-): StructuredAgentSessionOptionState {
-  return {
-    ...commitStructuredAgentSessionOptionValues(state, {
-      ...(state.reconciliation ? {} : predecessor),
-      ...values
-    }),
-    reconciliation: {
-      permission: state.reconciliation?.permission === true || values.permissionMode !== undefined
-    }
-  }
-}
-
 function catalogListsSeedModel(
   state: StructuredAgentSessionOptionState,
   seed: Readonly<Record<string, string>>
@@ -45,28 +29,8 @@ export function structuredAgentSessionOptionView(
   state: StructuredAgentSessionOptionState,
   seed: Readonly<Record<string, string>> | undefined,
   held: Readonly<Record<string, string>>,
-  takesSendOptions: boolean,
-  host?: { selection?: Readonly<Record<string, string>>; permissionMode?: string }
+  takesSendOptions: boolean
 ): StructuredAgentSessionOptionState {
-  const selection = state.reconciliation || state.executionUnknown ? undefined : host?.selection
-  const pending = state.pendingPick
-  if (selection !== undefined || pending) {
-    state = { ...state, record: cloneNativeChatSessionOptionRecord(state.record) }
-    if (selection !== undefined) {
-      state = commitStructuredAgentSessionOptionValues(state, selection)
-    }
-    if (pending) {
-      state = commitStructuredAgentSessionOptionValues(state, { [pending.id]: pending.value })
-    }
-    state = { ...state, pendingPick: pending }
-  }
-  if (
-    !state.reconciliation?.permission &&
-    host?.permissionMode !== undefined &&
-    pending?.id !== AGENT_CHAT_PERMISSION_MODE_OPTION_ID
-  ) {
-    state = { ...state, permissionMode: host.permissionMode }
-  }
   const { [AGENT_CHAT_PERMISSION_MODE_OPTION_ID]: heldPermission, ...heldSelection } = held
   const replaced = takesSendOptions
     ? structuredAgentSessionListedPicks(state, seed, heldSelection)
@@ -118,7 +82,7 @@ function modelOptionView(
   if (seeded) {
     view = commitStructuredAgentSessionOptionValues(view, seed)
   }
-  return { ...commitStructuredAgentSessionOptionValues(view, held), pendingPick: state.pendingPick }
+  return { ...commitStructuredAgentSessionOptionValues(view, held), pendingId: state.pendingId }
 }
 
 const EFFORT_RANK = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
@@ -141,19 +105,24 @@ export function nearestAgentEffort(
     .sort((a, b) => distance(a) - distance(b) || rank(b) - rank(a))[0]
 }
 
-/** What a send moves a Claude chat to when the host's finished listing does not name its model
- *  (held, else recorded, else seeded): the listed row marked default, else the first, with the
+/** What a send moves a Claude chat to when the finished listing the picker shows does not name its
+ *  model (held, else recorded, else seeded): that listing's default row, else its first, with the
  *  effort moved to the nearest level offered. Null keeps the model. */
 export function structuredAgentSessionListedPicks(
   state: StructuredAgentSessionOptionState,
   seed: Readonly<Record<string, string>> | undefined,
   held: Readonly<Record<string, string>>
 ): Record<string, string> | null {
-  const { catalog, catalogSource, record, verifiedModelIds: verified = [] } = state
+  const { catalog, catalogSource, record, verifiedModelIds: own } = state
   const tracked = record.model?.value
   const model = held.model ?? (typeof tracked === 'string' ? tracked : seed?.model)
-  // Only the listing proves a row: the session's own unlisted model is shown but never listed.
-  const rows = catalog?.models.filter((row) => verified.includes(row.id)) ?? []
+  // Only the listing proves a row: the session's own unlisted model is shown but never listed. An
+  // older host's answer proves none, so only its own default may stand in, where the host lists it.
+  const verified = own ?? state.hostListedModelIds ?? []
+  const rows =
+    catalog?.models.filter(
+      (row) => verified.includes(row.id) && (own !== undefined || row.isDefault)
+    ) ?? []
   if (
     record.agent !== 'claude' ||
     (catalogSource !== 'host' && catalogSource !== 'live') ||

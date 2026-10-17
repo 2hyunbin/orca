@@ -15,7 +15,6 @@ import type { RpcClient } from '../transport/rpc-client'
 
 export type MobileStructuredSessionStatusFeed = {
   subscribe: (listener: () => void) => () => void
-  getSnapshotSample: (sessionId: string) => number
   getSnapshot: () => AgentSessionStatusSnapshot
 }
 
@@ -50,7 +49,6 @@ function streamRefusal(value: unknown): { code?: string; message?: string } | nu
 }
 
 function createFeed(client: RpcClient): MobileStructuredSessionStatusFeed {
-  const snapshotSamples = new Map<string, number>()
   let snapshot: AgentSessionStatusSnapshot = new Map()
   // `unavailable`: the host refused the method to phones; asked again only on a new connection.
   let stream: 'closed' | 'open' | 'unavailable' = 'closed'
@@ -79,11 +77,6 @@ function createFeed(client: RpcClient): MobileStructuredSessionStatusFeed {
         stream = 'closed'
         revokeLive()
         return
-      }
-      if (raw.type === 'snapshot') {
-        for (const session of raw.sessions) {
-          snapshotSamples.set(session.sessionId, (snapshotSamples.get(session.sessionId) ?? 0) + 1)
-        }
       }
       setSnapshot(foldAgentSessionStatusEvent(snapshot, raw))
       return
@@ -130,7 +123,6 @@ function createFeed(client: RpcClient): MobileStructuredSessionStatusFeed {
         listeners.delete(listener)
       }
     },
-    getSnapshotSample: (sessionId) => snapshotSamples.get(sessionId) ?? 0,
     getSnapshot: () => snapshot
   }
 }

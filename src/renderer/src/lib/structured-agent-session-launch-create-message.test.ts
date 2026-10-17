@@ -406,7 +406,7 @@ describe('the first message owned by create', () => {
       'agentSession.create',
       'agentSession.setOption'
     ])
-    option.resolve({ ok: true, fence: 1, value: { selected: 'later-pick' } })
+    option.resolve({ ok: true, value: { selected: 'later-pick' } })
   })
 
   it('recovers a reload by replaying the frozen create when the old row is outside history', async () => {

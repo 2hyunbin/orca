@@ -5,8 +5,6 @@ import { selectAgentSessionCurrentRequests } from '../../../src/shared/agent-ses
 // host advertises the queue and no pending prompt is one this build cannot answer.
 
 import { useCallback } from 'react'
-import { agentSessionExecutionOptionsFromSnapshot } from '../../../src/shared/agent-session-execution-option-snapshot'
-import { agentSessionExecutionOptionsRecord } from '../../../src/shared/agent-session-execution-options'
 import { runningStructuredAgentSessionTurnId } from '../../../src/shared/structured-agent-session-live-turn'
 import { pendingPromptsAllUnanswerableHere } from '../../../src/shared/agent-session-approval-subject'
 import {
@@ -23,6 +21,7 @@ import { sendMobileStructuredAgentSessionMessage } from './mobile-structured-age
 import type { MobileStructuredSends } from './use-mobile-structured-sends'
 import { structuredSessionOperationId } from './structured-session-operation-id'
 import { timeoutForDeadline } from './mobile-structured-agent-session-rpc'
+import { structuredAgentSessionSendSelection } from '../../../src/shared/structured-agent-session-option-view'
 import {
   actionableStructuredApproval,
   actionableStructuredQuestion
@@ -62,7 +61,7 @@ export function useMobileStructuredSendWithOutcome(args: {
     'snapshot' | 'setOption' | 'invokeAction' | 'conversationCommands'
   >
   onSendError: MobileNativeChatSendErrorReporter
-  /** Each send carries the choices the picker shows; an older host takes none. */
+  /** Each send carries the model and effort the picker shows; an older host takes neither. */
   carriesOptions?: boolean
 }): (
   text: string,
@@ -146,9 +145,10 @@ export function useMobileStructuredSendWithOutcome(args: {
         ...(stopping ? { sentWhileStopping: true as const } : {})
       }
       // A pick on its way holds the send, so the picker shows what the chat holds.
-      const executionOptions = carriesOptions
-        ? agentSessionExecutionOptionsFromSnapshot(controller.snapshot)
-        : undefined
+      const options =
+        carriesOptions && agent
+          ? structuredAgentSessionSendSelection(agent, controller.snapshot)
+          : undefined
       const outcome = await sendMobileStructuredAgentSessionMessage({
         client,
         sessionId,
@@ -158,9 +158,7 @@ export function useMobileStructuredSendWithOutcome(args: {
         ...(mobileStructuredSendQueues(queueCapable, stateRef.current)
           ? { delivery: 'queue-if-active' as const }
           : {}),
-        ...(executionOptions
-          ? { options: agentSessionExecutionOptionsRecord(executionOptions) }
-          : {}),
+        ...(options ? { options } : {}),
         deadline,
         clientMessageId: send.clientMessageId,
         onAccepted: (cursor) =>
