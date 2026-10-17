@@ -66,9 +66,12 @@ describe('fetchRepoIconWithManualRedirects', () => {
 
   it('answers a bodyless status without throwing', async () => {
     const pending = fetchRepoIconWithManualRedirects('https://github.com/o.png', {})
-    native.emit('response', Object.assign(Readable.from([]), { statusCode: 204, headers: {} }))
+    const empty = Object.assign(new Readable({ read() {} }), { statusCode: 204, headers: {} })
+    native.emit('response', empty)
 
     expect((await pending).status).toBe(204)
+    expect(empty.destroyed).toBe(true)
+    expect(native.abort).toHaveBeenCalled()
   })
 
   it('rejects at once for a deadline that already passed', async () => {

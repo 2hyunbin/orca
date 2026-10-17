@@ -69,6 +69,10 @@ export function fetchRepoIconWithManualRedirects(
         signal?.addEventListener('abort', () => response.destroy(signal.reason), { once: true })
         request.on('error', (error) => response.destroy(error))
         resolve(new Response(body, { headers, status: response.statusCode }))
+        if (!body) {
+          response.destroy()
+          request.abort()
+        }
       } catch (error) {
         response.destroy()
         fail(error)
