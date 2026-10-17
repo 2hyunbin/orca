@@ -6,10 +6,11 @@ import type { OrcaRuntimeService } from '../../orca-runtime'
 import { CollapseWriteOrder } from '../../workspace-view-collapse-writes'
 import type { RpcRequest } from '../core'
 import { RpcDispatcher } from '../dispatcher'
+import type { RpcDispatchStreamingOptions } from '../dispatcher-stream-options'
 import { CLIENT_UI_METHODS } from './client-ui'
 import { SIDEBAR_INPUT_METHODS } from './sidebar-inputs'
 
-const ownPhone = { clientKind: 'mobile' as const }
+const ownPhone: RpcDispatchStreamingOptions = { clientKind: 'mobile' }
 
 function makeHost(initialCollapsed: string[] = []) {
   let ui: PersistedUIState = { ...getDefaultUIState(), collapsedGroups: initialCollapsed }
@@ -29,7 +30,11 @@ function makeHost(initialCollapsed: string[] = []) {
     methods: [...CLIENT_UI_METHODS, ...SIDEBAR_INPUT_METHODS]
   })
   let requestId = 0
-  const call = async (method: string, params: unknown, context: object = ownPhone) => {
+  const call = async (
+    method: string,
+    params: unknown,
+    context: RpcDispatchStreamingOptions = ownPhone
+  ) => {
     const request: RpcRequest = { id: `req-${++requestId}`, authToken: 'tok', method, params }
     return dispatcher.dispatch(request, context)
   }
@@ -38,7 +43,7 @@ function makeHost(initialCollapsed: string[] = []) {
     seq: number,
     key: string,
     collapsed: boolean,
-    context: object = ownPhone
+    context: RpcDispatchStreamingOptions = ownPhone
   ) => call('ui.setCollapsed', { key, collapsed, opId: { writer, seq } }, context)
   return { collapse, call, collapsed: () => [...ui.collapsedGroups].sort() }
 }
