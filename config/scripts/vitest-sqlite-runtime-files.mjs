@@ -192,6 +192,7 @@ export const SQLITE_RUNTIME_INCLUDE = [
   'src/main/native-chat/agent-session-wire/structured-agent-session-signed-out-child.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-stale-turn-verdict.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-stale-turn-open.test.ts',
+  'src/main/native-chat/agent-session-wire/structured-agent-session-start-admission.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-start-failure-writer.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-startup-attempt-host.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-startup-attempt-registrations.test.ts',
