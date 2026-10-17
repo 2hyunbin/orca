@@ -42,15 +42,25 @@ const NO_SOURCES: SmartSortSources = {
   ptyIdsByTabId: {}
 }
 
+type World = {
+  sortBy: WorkspaceSortBy
+  showSleeping: boolean
+  worktrees: Worktree[]
+  sources: SmartSortSources
+  active: Set<string>
+  tabsOpen: Set<string>
+  gate: Promise<void> | null
+}
+
 function harness(initial: { sortBy: WorkspaceSortBy; worktrees: Worktree[] }) {
-  const world = {
+  const world: World = {
     sortBy: initial.sortBy,
     showSleeping: false,
     worktrees: initial.worktrees,
     sources: NO_SOURCES,
     active: new Set<string>(),
     tabsOpen: new Set<string>(),
-    gate: null as Promise<void> | null
+    gate: null
   }
   const owner = new SidebarTemporalOwner(new SidebarClock(), {
     sortBy: () => world.sortBy,
