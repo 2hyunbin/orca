@@ -32,6 +32,3 @@ export const SidebarTemporalSnapshotSchema = z.object({
 export type SidebarSortSnapshot = z.infer<typeof SortSnapshotSchema>
 export type SidebarRetention = z.infer<typeof RetentionSchema>
 export type SidebarTemporalSnapshot = z.infer<typeof SidebarTemporalSnapshotSchema>
-
-/** Sent when the window mounts its list; a new id resets Smart's latch and retention. */
-export const SidebarSessionBeginParams = z.object({ sessionId: z.string().min(1).max(128) })

@@ -2,7 +2,7 @@ import { defineMethod } from '../core'
 import { getRegisteredSshState, listRegisteredSshTargets } from '../../../ssh/ssh-target-registry'
 import { getWslHostService } from '../../../wsl/wsl-host-service-instance'
 import { readDesktopSidebarFacts } from '../../sidebar-inputs/desktop-sidebar-facts'
-import { SidebarSessionBeginParams } from '../../../../shared/sidebar-list/sidebar-temporal-snapshot'
+import { SidebarSessionBeginParams } from '../../../../shared/rpc-contract/sidebar-session-params'
 
 // Registered only with ORCA_SIDEBAR_INPUTS=main, so the producers below always exist.
 function requireSwitchedOn<Producer>(producer: Producer | null): Producer {
