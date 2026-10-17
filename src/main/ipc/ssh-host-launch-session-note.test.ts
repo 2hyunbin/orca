@@ -169,6 +169,19 @@ describe('noteEndedLaunchSshSession', () => {
     })
   })
 
+  it('never restores the warning for a host disconnected while its recheck failed', async () => {
+    let clock = 0
+    await noteEndedLaunchSshSession('ssh-1', 'env-1', () => clock)
+    mocks.status.current = undefined
+    mocks.read.mockImplementationOnce(async () => {
+      mocks.connection.current = { getConnectGeneration: () => 1 }
+      throw new Error('ssh closed')
+    })
+    clock = 11 * 60_000
+    await noteEndedLaunchSshSession('ssh-1', 'env-1', () => clock)
+    expect(mocks.publish).toHaveBeenCalledOnce()
+  })
+
   it('drops an answer whose server was unlinked or whose connection changed meanwhile', async () => {
     mocks.read.mockImplementationOnce(async () => {
       mocks.environments.current = []

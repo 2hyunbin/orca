@@ -48,17 +48,17 @@ export async function noteEndedLaunchSshSession(
     checked.set(connection, { generation, ended: true, at: now() })
     flag(targetId, environmentId)
   }
+  // Why: a disconnect, reconnect, unlink or relaunch during the probe makes its answer stale.
+  const stale = (): boolean =>
+    connectionManager?.getConnection(targetId) !== connection ||
+    connection.getConnectGeneration() !== generation ||
+    checked.get(connection) !== pending
   try {
     const session = await readManagedOrcadLaunchSshSession(
       getAppEnvironment().getPath('userData'),
       environmentId
     )
-    // Why: a disconnect, reconnect, unlink or relaunch during the probe makes its answer stale.
-    if (
-      connectionManager?.getConnection(targetId) !== connection ||
-      connection.getConnectGeneration() !== generation ||
-      checked.get(connection) !== pending
-    ) {
+    if (stale()) {
       return
     }
     const status = getSshHostServerStatus(targetId)
@@ -73,7 +73,7 @@ export async function noteEndedLaunchSshSession(
       clearLaunchSessionNote(targetId, environmentId)
     }
   } catch (error) {
-    if (provenEnded && checked.get(connection) === pending) {
+    if (provenEnded && !stale()) {
       markEnded()
     }
     console.warn('[ssh] Could not check which SSH session started the managed server:', error)
