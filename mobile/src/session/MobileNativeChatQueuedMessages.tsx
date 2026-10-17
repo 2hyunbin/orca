@@ -104,6 +104,13 @@ export function MobileNativeChatQueuedMessages({
           <Text style={[styles.headerLabel, pause && styles.headerLabelPaused]}>
             {pause ? 'Paused' : 'Queued'}
           </Text>
+          <Text
+            style={styles.headerLabel}
+            importantForAccessibility="no"
+            accessibilityElementsHidden
+          >
+            ·
+          </Text>
           <Text style={headerCountStyle} numberOfLines={1}>
             {attentionCaption ? `${cards.length} · ${attentionCaption}` : cards.length}
           </Text>

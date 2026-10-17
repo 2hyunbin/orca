@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { isWebClientLocation } from '@/lib/web-client-location'
+import { useAppStore } from '@/store'
+import { pairedServerMirrors } from '@/runtime/paired-server-workspace'
 import {
   isTabPaneTreeHeld,
   onTabPaneTreeRedraw,
@@ -22,7 +24,8 @@ export function useLayoutOwnerPaneTree(controller: TerminalPaneCloseController):
     managerRef,
     persistLayoutSnapshot,
     restoredLayout,
-    tabId
+    tabId,
+    worktreeId
   } = controller
   const [redraws, setRedraws] = useState(0)
   useEffect(
@@ -48,6 +51,8 @@ export function useLayoutOwnerPaneTree(controller: TerminalPaneCloseController):
     if (
       !manager ||
       isTabPaneTreeHeld(tabId) ||
+      // By host kind, as frames decide it: a paired-server tab may not have bound a remote PTY yet.
+      pairedServerMirrors(useAppStore.getState())(worktreeId) ||
       isHostAuthoritativeLayout({
         isWebClient: isWebClientLocation(),
         ptyIdsByLeafId: restoredLayout.ptyIdsByLeafId
@@ -73,5 +78,5 @@ export function useLayoutOwnerPaneTree(controller: TerminalPaneCloseController):
       persistLayoutSnapshot()
     }
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- Refs and stable callbacks.
-  }, [restoredLayout, redraws, zoomed, tabId])
+  }, [restoredLayout, redraws, zoomed, tabId, worktreeId])
 }
