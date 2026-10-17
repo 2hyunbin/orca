@@ -10,13 +10,14 @@ import type { ClaudeAccountSwitchRunningSessions } from '../../../shared/claude-
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import {
   findMovableClaudeSessions,
-  findQueuedClaudeRestartsOnAccount
+  findQueuedClaudeRestartsOnAccount,
+  type ClaudeSessionMoveCandidate
 } from './claude-session-account-move'
 
 export type ClaudeAccountSwitchPrompt = {
   /** Distinguishes one switch's question from the next. */
   id: number
-  ptyIds: string[]
+  sessions: ClaudeSessionMoveCandidate[]
   previousAccountLabel: string
   nextAccountLabel: string
 }
@@ -54,7 +55,11 @@ function queueClaudeRestarts(ptyIds: string[]): void {
  */
 export function answerClaudeAccountSwitchPrompt(
   answer: 'restart' | 'keep',
-  options: { dontAskAgain?: boolean } = {}
+  options: {
+    /** The sessions the user ticked; every listed session when absent. */
+    ptyIds?: readonly string[]
+    dontAskAgain?: boolean
+  } = {}
 ): void {
   const request = prompt
   if (!request) {
@@ -62,7 +67,10 @@ export function answerClaudeAccountSwitchPrompt(
   }
   setPrompt(null)
   if (answer === 'restart') {
-    queueClaudeRestarts(request.ptyIds)
+    const listed = request.sessions.map((session) => session.ptyId)
+    const chosen = options.ptyIds
+    // Why filtered: only sessions this question listed may restart.
+    queueClaudeRestarts(chosen ? listed.filter((ptyId) => chosen.includes(ptyId)) : listed)
   }
   if (options.dontAskAgain) {
     void useAppStore.getState().updateSettings({ claudeAccountSwitchRunningSessions: 'restart' })
@@ -114,7 +122,7 @@ export async function handleRunningClaudeSessionsAfterSwitch(args: {
   }
   const request: ClaudeAccountSwitchPrompt = {
     id: generation,
-    ptyIds: found.map((candidate) => candidate.ptyId),
+    sessions: found,
     previousAccountLabel: args.previousAccountLabel,
     nextAccountLabel: args.nextAccountLabel
   }
@@ -124,9 +132,9 @@ export async function handleRunningClaudeSessionsAfterSwitch(args: {
     return 'kept'
   }
   if (policy === 'restart') {
-    queueClaudeRestarts(request.ptyIds)
+    queueClaudeRestarts(found.map((candidate) => candidate.ptyId))
     toast.success(
-      request.ptyIds.length === 1
+      found.length === 1
         ? translate(
             'accounts.claude.switchSessions.restartingOne',
             'Restarting 1 Claude session on {{account}}',
@@ -135,7 +143,7 @@ export async function handleRunningClaudeSessionsAfterSwitch(args: {
         : translate(
             'accounts.claude.switchSessions.restartingOther',
             'Restarting {{count}} Claude sessions on {{account}}',
-            { count: request.ptyIds.length, account: args.nextAccountLabel }
+            { count: found.length, account: args.nextAccountLabel }
           )
     )
     return 'restarted'

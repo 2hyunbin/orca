@@ -35,6 +35,7 @@ import {
 
 export type ClaudeSessionMoveCandidate = {
   ptyId: string
+  worktreeId: string
   tabId: string
   leafId: string
 }
@@ -193,7 +194,12 @@ export async function findMovableClaudeSessions(args: {
       shellOverride: pane.tab.shellOverride
     })
     if (resumeStartup) {
-      candidates.push({ ptyId: pane.ptyId, tabId: pane.tab.id, leafId: pane.leafId })
+      candidates.push({
+        ptyId: pane.ptyId,
+        worktreeId: pane.worktreeId,
+        tabId: pane.tab.id,
+        leafId: pane.leafId
+      })
     }
   }
   const inForeground = await Promise.all(

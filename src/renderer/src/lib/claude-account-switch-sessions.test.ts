@@ -35,7 +35,12 @@ vi.mock('./claude-session-account-move', () => ({
   findQueuedClaudeRestartsOnAccount: vi.fn(() => [])
 }))
 
-const candidate = (n: number) => ({ ptyId: `pty-${n}`, tabId: `tab-${n}`, leafId: `leaf-${n}` })
+const candidate = (n: number) => ({
+  ptyId: `pty-${n}`,
+  worktreeId: 'wt-1',
+  tabId: `tab-${n}`,
+  leafId: `leaf-${n}`
+})
 const SWITCH = {
   owner: { kind: 'local' } as const,
   target: { runtime: 'host' } as const,
@@ -87,20 +92,34 @@ describe('handleRunningClaudeSessionsAfterSwitch', () => {
       })
     ).toBe('none')
 
-    expect(getClaudeAccountSwitchPrompt()?.ptyIds).toEqual(['pty-1'])
+    expect(getClaudeAccountSwitchPrompt()?.sessions.map((session) => session.ptyId)).toEqual([
+      'pty-1'
+    ])
     expect(findQueuedClaudeRestartsOnAccount).toHaveBeenCalledTimes(1)
   })
 
   it('restarts on the new account when the user picks Restart', async () => {
     vi.mocked(findMovableClaudeSessions).mockResolvedValue([candidate(1), candidate(2)])
     expect(await handleRunningClaudeSessionsAfterSwitch(SWITCH)).toBe('prompted')
-    expect(getClaudeAccountSwitchPrompt()?.ptyIds).toEqual(['pty-1', 'pty-2'])
+    expect(getClaudeAccountSwitchPrompt()?.sessions.map((session) => session.ptyId)).toEqual([
+      'pty-1',
+      'pty-2'
+    ])
 
     answerClaudeAccountSwitchPrompt('restart')
 
     expect(store.queuePaneAccountRestarts).toHaveBeenLastCalledWith(['pty-1', 'pty-2'], 'claude')
     expect(getClaudeAccountSwitchPrompt()).toBeNull()
     expect(store.updateSettings).not.toHaveBeenCalled()
+  })
+
+  it('restarts only the ticked sessions, and only ones this question listed', async () => {
+    vi.mocked(findMovableClaudeSessions).mockResolvedValue([candidate(1), candidate(2)])
+    await handleRunningClaudeSessionsAfterSwitch(SWITCH)
+
+    answerClaudeAccountSwitchPrompt('restart', { ptyIds: ['pty-2', 'pty-unlisted'] })
+
+    expect(store.queuePaneAccountRestarts).toHaveBeenLastCalledWith(['pty-2'], 'claude')
   })
 
   it('leaves sessions alone when the user keeps them', async () => {

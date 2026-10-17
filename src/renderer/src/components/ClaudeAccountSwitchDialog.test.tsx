@@ -14,7 +14,8 @@ import type * as SwitchSessions from '@/lib/claude-account-switch-sessions'
 
 vi.mock('@/lib/claude-session-account-move', () => ({
   findMovableClaudeSessions: vi.fn(),
-  findQueuedClaudeRestartsOnAccount: () => []
+  findQueuedClaudeRestartsOnAccount: () => [],
+  isClaudePaneMidTurn: () => false
 }))
 vi.mock('@/lib/claude-account-switch-sessions', async (importOriginal) => {
   const actual = await importOriginal<typeof SwitchSessions>()
@@ -25,7 +26,12 @@ vi.mock('@/lib/claude-account-switch-sessions', async (importOriginal) => {
 })
 
 const LEAF = (n: number): string => `0195f2ce-1111-4000-8000-00000000000${n}`
-const candidate = (n: number) => ({ ptyId: `pty-${n}`, tabId: `tab-${n}`, leafId: LEAF(n) })
+const candidate = (n: number) => ({
+  ptyId: `pty-${n}`,
+  worktreeId: 'wt-1',
+  tabId: `tab-${n}`,
+  leafId: LEAF(n)
+})
 
 async function switchWith(count: number): Promise<void> {
   vi.mocked(findMovableClaudeSessions).mockResolvedValue(
@@ -112,6 +118,30 @@ describe('ClaudeAccountSwitchDialog', () => {
     await user.click(screen.getByRole('checkbox', { name: /Don't ask again/ }))
     await user.click(screen.getByRole('button', { name: 'Restart 2 sessions' }))
 
-    expect(answerClaudeAccountSwitchPrompt).toHaveBeenCalledWith('restart', { dontAskAgain: true })
+    expect(answerClaudeAccountSwitchPrompt).toHaveBeenCalledWith('restart', {
+      ptyIds: ['pty-1', 'pty-2'],
+      dontAskAgain: true
+    })
+  })
+
+  it('restarts only the sessions left ticked', async () => {
+    const user = userEvent.setup()
+    render(<ClaudeAccountSwitchDialog />)
+    await switchWith(3)
+
+    await user.click(screen.getAllByRole('checkbox', { name: 'Claude session' })[0])
+    await user.click(screen.getByRole('button', { name: 'Restart 2 sessions' }))
+
+    expect(answerClaudeAccountSwitchPrompt).toHaveBeenCalledWith('restart', {
+      ptyIds: ['pty-2', 'pty-3'],
+      dontAskAgain: false
+    })
+  })
+
+  it('shows no session list for a single session', async () => {
+    render(<ClaudeAccountSwitchDialog />)
+    await switchWith(1)
+
+    expect(screen.queryByRole('tree')).toBeNull()
   })
 })

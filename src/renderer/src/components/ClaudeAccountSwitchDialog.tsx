@@ -11,6 +11,7 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { translate } from '@/i18n/i18n'
+import { ClaudeAccountSwitchSessionTree } from './ClaudeAccountSwitchSessionTree'
 import {
   answerClaudeAccountSwitchPrompt,
   getClaudeAccountSwitchPrompt,
@@ -39,6 +40,7 @@ export default function ClaudeAccountSwitchDialog(): React.JSX.Element | null {
     >
       {prompt ? (
         <ClaudeAccountSwitchDialogContent
+          key={prompt.id}
           prompt={prompt}
           dontAskAgain={dontAskAgain}
           onDontAskAgainChange={(checked) => setDontAskAgainFor(checked ? prompt.id : null)}
@@ -57,14 +59,34 @@ function ClaudeAccountSwitchDialogContent({
   dontAskAgain: boolean
   onDontAskAgainChange: (checked: boolean) => void
 }): React.JSX.Element {
-  const count = prompt.ptyIds.length
+  // Why unticks, not ticks: every listed session starts selected.
+  const [unticked, setUnticked] = useState<ReadonlySet<string>>(() => new Set())
+  const count = prompt.sessions.length
+  const chosen = prompt.sessions
+    .map((session) => session.ptyId)
+    .filter((ptyId) => !unticked.has(ptyId))
+  const toggle = (ptyId: string, checked: boolean): void => {
+    setUnticked((current) => {
+      const next = new Set(current)
+      if (checked) {
+        next.delete(ptyId)
+      } else {
+        next.add(ptyId)
+      }
+      return next
+    })
+  }
   const accounts = {
     count,
     previous: prompt.previousAccountLabel,
     next: prompt.nextAccountLabel
   }
   return (
-    <DialogContent className="sm:max-w-md" showCloseButton={false}>
+    <DialogContent
+      data-session-list={count > 1}
+      className="sm:max-w-md sm:data-[session-list=true]:max-w-lg"
+      showCloseButton={false}
+    >
       <DialogHeader>
         <DialogTitle>
           {translate('accounts.claude.switchSessions.title', 'Switched to {{account}}', {
@@ -85,6 +107,13 @@ function ClaudeAccountSwitchDialogContent({
               )}
         </DialogDescription>
       </DialogHeader>
+      {count > 1 && (
+        <ClaudeAccountSwitchSessionTree
+          sessions={prompt.sessions}
+          selected={new Set(chosen)}
+          onToggle={toggle}
+        />
+      )}
       <label className="flex min-w-0 items-start gap-2.5">
         <Checkbox
           checked={dontAskAgain}
@@ -119,17 +148,18 @@ function ClaudeAccountSwitchDialogContent({
           type="button"
           size="sm"
           autoFocus
-          onClick={() => answerClaudeAccountSwitchPrompt('restart', { dontAskAgain })}
+          disabled={chosen.length === 0}
+          onClick={() =>
+            answerClaudeAccountSwitchPrompt('restart', { ptyIds: chosen, dontAskAgain })
+          }
         >
           <RefreshCw className="size-3.5" aria-hidden="true" />
-          {count === 1
+          {chosen.length <= 1
             ? translate('accounts.claude.switchSessions.restartOne', 'Restart session')
             : translate(
                 'accounts.claude.switchSessions.restartOther',
                 'Restart {{count}} sessions',
-                {
-                  count
-                }
+                { count: chosen.length }
               )}
         </Button>
       </DialogFooter>
