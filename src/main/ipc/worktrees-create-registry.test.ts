@@ -86,6 +86,13 @@ vi.mock('./pty/provider/state-cleanup', async () =>
   (await import('./worktrees-test-module-mocks')).ptyStateCleanupModuleMock()
 )
 
+function creationsOf(stub: WorktreeRuntimeStub): Record<string, unknown> {
+  if (!stub.workspaceCreations) {
+    throw new Error('the switch is mocked on')
+  }
+  return stub.workspaceCreations.snapshot().creations
+}
+
 describe('worktree create registry', () => {
   let runtimeStub: WorktreeRuntimeStub
 
@@ -106,7 +113,7 @@ describe('worktree create registry', () => {
     const announced: unknown[] = []
     vi.mocked(mainWindow.webContents.send).mockImplementation((channel: string) => {
       if (channel === 'worktrees:changed') {
-        announced.push(runtimeStub.workspaceCreations.snapshot().creations)
+        announced.push(creationsOf(runtimeStub))
       }
     })
 
@@ -119,7 +126,7 @@ describe('worktree create registry', () => {
     expect(announced[0]).toEqual({
       'creation-1': { repoId: 'repo-1', worktreeId: 'repo-1::/workspace/improve-dashboard' }
     })
-    expect(runtimeStub.workspaceCreations.snapshot().creations).toEqual({})
+    expect(creationsOf(runtimeStub)).toEqual({})
   })
 
   it('drops a failed create', async () => {
@@ -132,6 +139,6 @@ describe('worktree create registry', () => {
         creationId: 'creation-1'
       })
     ).rejects.toThrow('git worktree add failed')
-    expect(runtimeStub.workspaceCreations.snapshot().creations).toEqual({})
+    expect(creationsOf(runtimeStub)).toEqual({})
   })
 })
