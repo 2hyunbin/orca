@@ -12333,9 +12333,6 @@
           "stopping": "停止中…",
           "confirm": "クリーンアップを停止する"
         },
-        "NativeChatSupportedAgents": {
-          "label": "サポートされている Agent:"
-        },
         "contrast": {
           "title": "色のコントラスト",
           "description": "テキストの読みやすさを向上させるか、ターミナルプログラムによって選択された色を保持します。",
@@ -18699,6 +18696,9 @@
         "editFailed": "このメッセージは編集できません。",
         "editGone": "このメッセージはすでに送信または削除されています。編集したテキストはチャット入力欄にあります。",
         "editGonePrompt": "このメッセージはすでに送信または削除されています。Agent に回答すると、編集したテキストがチャット入力欄に表示されます。",
+        "imageCount": "画像 {{count}} 枚",
+        "imageCount_one": "画像 {{count}} 枚",
+        "imageCount_other": "画像 {{count}} 枚",
         "collapse": "折りたたむ",
         "expand": "展開",
         "queued": "キュー待ち",

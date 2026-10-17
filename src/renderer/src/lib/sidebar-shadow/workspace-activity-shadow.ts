@@ -63,7 +63,7 @@ export function readWindowWorkspaceActivityFacts(
 
 // The local runtime answers for the rows it owns. A paired server owns and publishes its own rows'
 // facts, which the server-row producer compares; an id with no owner in the catalog is no row.
-function toLocallyOwnedRows<Value>(
+export function toLocallyOwnedRows<Value>(
   state: AppState,
   values: ReadonlyMap<string, Value>
 ): Map<string, Value> {

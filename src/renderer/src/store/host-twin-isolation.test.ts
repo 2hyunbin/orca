@@ -109,7 +109,8 @@ type TwinAction = {
   applied: (fixture: HostTwinFixture, target: HostTwinSide) => void
 }
 
-const isFolderKind = (kind: HostTwinKind) => kind === 'folder local+ssh'
+const isFolderKind = (kind: HostTwinKind) =>
+  kind === 'folder local+ssh' || kind === 'folder group local+ssh'
 const settle = async (run: () => unknown) => {
   try {
     await run()
@@ -132,7 +133,8 @@ const TWIN_ACTIONS: readonly TwinAction[] = [
   {
     id: 'delete folder workspace',
     source: 'store/folder-workspaces/folder-workspace-mutations.ts deleteFolderWorkspace',
-    appliesTo: isFolderKind,
+    // Why: one unstamped row can't be deleted on one host only; the no-host case is below.
+    appliesTo: (kind) => kind === 'folder local+ssh',
     run: (f, target) =>
       f.store.getState().deleteFolderWorkspace(f.projectId, { executionHostId: target.hostId }),
     applied: (f, target) =>
@@ -171,7 +173,8 @@ const TWIN_ACTIONS: readonly TwinAction[] = [
   {
     id: 'select',
     source: 'store/slices/worktrees.ts setActiveWorktree / setActiveFolderWorkspace',
-    appliesTo: () => true,
+    // Why: a single unstamped folder row has no SSH copy to select.
+    appliesTo: (kind) => kind !== 'folder group local+ssh',
     run: async (f, target) =>
       isFolderKind(f.kind)
         ? f.store.getState().setActiveFolderWorkspace(f.projectId, target.hostId)
@@ -181,7 +184,12 @@ const TWIN_ACTIONS: readonly TwinAction[] = [
   }
 ]
 
-const TWIN_KINDS: readonly HostTwinKind[] = ['local+ssh', 'local+runtime', 'folder local+ssh']
+const TWIN_KINDS: readonly HostTwinKind[] = [
+  'local+ssh',
+  'local+runtime',
+  'folder local+ssh',
+  'folder group local+ssh'
+]
 
 function everyCell(actionId: string, reason: string, kinds = TWIN_KINDS): [string, string][] {
   return kinds.flatMap((kind) =>
@@ -245,6 +253,27 @@ describe('an action on one twin leaves the other twin alone', () => {
         })
       }
     }
+  }
+})
+
+describe('a folder action that names no host', () => {
+  for (const kind of ['folder local+ssh', 'folder group local+ssh'] as const) {
+    it(`refuses to delete a ${kind} twin and touches neither host`, async () => {
+      const fixture = createHostTwinFixture(kind)
+      current = fixture
+      appStore.current = fixture.store
+      const before = [fixture.local, fixture.remote].map((s) => projectHostTwinState(fixture, s))
+
+      await expect(fixture.store.getState().deleteFolderWorkspace(fixture.projectId)).resolves.toBe(
+        false
+      )
+
+      expect(window.api.folderWorkspaces.delete).not.toHaveBeenCalled()
+      const calls = vi.mocked(window.api.runtimeEnvironments.call).mock.calls
+      expect(calls.map(([request]) => request.method)).not.toContain('folderWorkspace.delete')
+      const after = [fixture.local, fixture.remote].map((s) => projectHostTwinState(fixture, s))
+      expect(after.map((state, i) => changedHostTwinState(before[i], state))).toEqual([[], []])
+    })
   }
 })
 

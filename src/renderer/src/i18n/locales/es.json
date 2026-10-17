@@ -12414,9 +12414,6 @@
           "downloadInstaller": "Descargar instalador",
           "manualInstallHint": "Las versiones de {{value0}} no están firmadas en Windows, por lo que el actualizador de la aplicación no puede instalarlas sobre una versión firmada. Ejecuta una vez el instalador descargado; Windows mostrará una advertencia de editor desconocido. Después podrás cambiar de versión desde aquí, incluso para volver a Stable."
         },
-        "NativeChatSupportedAgents": {
-          "label": "Agentes apoyados:"
-        },
         "TerminalRenderingSection": {
           "6d4c55bacc": "Imágenes en línea",
           "fffab5890b": "Muestre imágenes directamente en el terminal utilizando los protocolos gráficos SIXEL, iTerm2 (IIP) y Kitty."
@@ -18516,6 +18513,9 @@
         "editFailed": "Este mensaje no se puede editar.",
         "editGone": "Este mensaje ya se envió o se eliminó. Tu edición está en el cuadro de chat.",
         "editGonePrompt": "Este mensaje ya se envió o se eliminó. Tu edición estará en el cuadro de chat cuando respondas al agente.",
+        "imageCount": "{{count}} imágenes",
+        "imageCount_one": "{{count}} imagen",
+        "imageCount_other": "{{count}} imágenes",
         "collapse": "Contraer",
         "expand": "Expandir",
         "queued": "En cola",
