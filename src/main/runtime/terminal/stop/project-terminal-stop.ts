@@ -5,6 +5,24 @@ import type { Repo } from '../../../../shared/repo-types'
 
 const PROJECT_INVENTORY_REFRESH_BUDGET_MS = 3_000
 
+/** The value, or null once the deadline passes first. */
+async function raceDeadline<T>(value: Promise<T>, deadline: number | undefined): Promise<T | null> {
+  if (deadline === undefined) {
+    return await value
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      value,
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), Math.max(0, deadline - Date.now()))
+      })
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /** Distinct worktree ids of a project that still hold a pane or PTY on this host. */
 export function listProjectTerminalWorktreeIds(
   repoId: string,
@@ -52,14 +70,7 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
     })().catch((error: unknown) => {
       console.warn('[runtime] project terminal inventory refresh failed', error)
     })
-    let timer: ReturnType<typeof setTimeout> | undefined
-    await Promise.race([
-      refresh,
-      new Promise<void>((resolve) => {
-        timer = setTimeout(resolve, Math.max(0, refreshDeadline - Date.now()))
-      })
-    ])
-    clearTimeout(timer)
+    await raceDeadline(refresh, refreshDeadline)
     // Why not the row's stamp: a `runtime:` stamp is how paired clients address a project that runs
     // here, natively or over its nested SSH connection.
     const fence = { resolvedConnectionId: getRepoSshConnectionId(repo) }
@@ -69,11 +80,18 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
     }
     for (const id of projectWorktreeIds) {
       const opts = { resolvedWorktreeId: id, ...fence, ...options }
-      // Why exclusive: it waits out a spawn that holds the shared lease, so its PTY is registered and stopped.
-      stopped += await this.runWorktreeTerminalMutation(
-        id,
-        async () => (await this.stopTerminalsForWorktree(`id:${id}`, opts)).stopped
-      )
+      // Why exclusive: it waits out a spawn that holds the shared lease, so its PTY is registered
+      // and stopped. Bounded by the deadline so repo.rm still answers; past it the stop is skipped.
+      const lease = this.acquireWorktreeTerminalMutation(id, 'exclusive')
+      const release = await raceDeadline(lease, options.deadline)
+      if (!release) {
+        void lease.then((late) => late())
+      }
+      try {
+        stopped += (await this.stopTerminalsForWorktree(`id:${id}`, opts)).stopped
+      } finally {
+        release?.()
+      }
     }
     return { stopped }
   }
