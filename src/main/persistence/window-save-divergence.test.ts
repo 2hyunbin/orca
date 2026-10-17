@@ -254,6 +254,23 @@ describe('writeWindowSaveWatchingLayout', () => {
     expect(warn).toHaveBeenCalledTimes(2)
   })
 
+  it('reports a closed tab record the save moves into a workspace only it names', () => {
+    const from = 'repo-1::/Users/dev/old'
+    const to = 'repo-1::/Users/dev/new'
+    const closedIn = (key: string) => ({
+      ...emptySession(),
+      closedTerminalTabTombstonesByTabId: { 'tab-x': { worktreeId: key, closedAt: 1 } }
+    })
+
+    save(closedIn(from), { ...closedIn(to), unifiedTabs: { [to]: [] } })
+
+    expect(warn).toHaveBeenCalledWith(
+      '[layout-owner] window save changed main layout:',
+      'session:set',
+      expect.objectContaining({ workspace: to, paths: ['closed tab tab-x added'] })
+    )
+  })
+
   it('still reports a workspace with tabs that the save adds or drops', () => {
     save(emptySession(), session([{ id: 'tab-a' }]))
     save(session([{ id: 'tab-a' }]), emptySession())

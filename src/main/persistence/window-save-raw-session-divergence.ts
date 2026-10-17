@@ -99,7 +99,7 @@ export function closedTabsOfOneSidedWorkspaces(
         continue
       }
       for (const tabId of Object.keys(layout.closedTerminalTabs ?? {})) {
-        if (!other.closed?.[tabId]) {
+        if (other.closed?.[tabId]?.worktreeId !== layout.worktreeId) {
           addPath(paths, workspace, `closed tab ${tabId} ${change}`)
         }
       }
