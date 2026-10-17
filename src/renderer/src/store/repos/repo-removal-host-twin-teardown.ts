@@ -131,7 +131,12 @@ export function closeRemovedHostTwinState(
   const remoteCloseOwnedByHost = isRuntimeHost(removedHostId)
   // Why planned together: the planner keeps a PTY another surviving tab still binds.
   const plans = buildTerminalTabRetirementPlans(get(), [...removed.terminalTabIds])
+  // Why batch-wide: the planner may give a PTY's teardown to a tab that only holds it as a hint.
+  const liveInBatch = new Set(
+    [...removed.terminalTabIds].flatMap((tabId) => get().ptyIdsByTabId[tabId] ?? [])
+  )
   const retiredPtyIds = new Set<string>()
+  const killedPtyIds = new Set<string>()
   for (const [tabId, plan] of plans) {
     for (const ptyId of [
       ...plan.localOrSshPtyIds,
@@ -145,9 +150,14 @@ export function closeRemovedHostTwinState(
       // Why killed here: the shared id resolves to no single host, so the planner marks this
       // host's PTYs unroutable; attribution already proved they are the removed host's.
       // Only live-indexed PTYs, as before: a parked layout hint may be another host's session id.
-      const live = new Set(get().ptyIdsByTabId[tabId] ?? [])
-      for (const ptyId of [...plan.localOrSshPtyIds, ...plan.unroutablePtyIds]) {
-        if (live.has(ptyId) && !isRemoteRuntimePtyId(ptyId)) {
+      const candidates = [
+        ...plan.localOrSshPtyIds,
+        ...plan.unroutablePtyIds,
+        ...plan.cleanupOnlyPtyIds
+      ]
+      for (const ptyId of candidates) {
+        if (liveInBatch.has(ptyId) && !isRemoteRuntimePtyId(ptyId) && !killedPtyIds.has(ptyId)) {
+          killedPtyIds.add(ptyId)
           window.api.pty.kill(ptyId)
         }
       }

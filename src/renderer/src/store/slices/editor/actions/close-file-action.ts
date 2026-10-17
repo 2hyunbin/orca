@@ -224,6 +224,7 @@ export function createCloseFileAction(
           )
         const shouldDeactivateWorktree =
           activeWorktreeId !== null &&
+          !closesBackgroundFile &&
           remainingForWorktree.length === 0 &&
           browserTabsForWorktree.length === 0 &&
           terminalTabsForWorktree.length === 0 &&
