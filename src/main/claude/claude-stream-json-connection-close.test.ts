@@ -116,10 +116,10 @@ describe('Claude stream-json close ordering', () => {
     const deferred = createDeferredStructuredAgentSessionEventSink(testEventSinkLogging())
     deferred.bind({ journal: rig.journal, fence: 1, publish: () => {} })
     const translator = createClaudeJournalTranslator({ sink: deferred.sink })
-    const first = Promise.withResolvers<IteratorResult<Record<string, unknown>>>()
+    const first = Promise.withResolvers<Record<string, unknown>>()
     const next = vi
       .fn<() => Promise<IteratorResult<Record<string, unknown>>>>()
-      .mockReturnValueOnce(first.promise)
+      .mockImplementationOnce(async () => ({ value: await first.promise, done: false }))
       .mockResolvedValue({ value: undefined, done: true })
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This injected query exercises only the async iterator used by the connection.
     const queryImpl = ((params: Parameters<typeof query>[0]) => {
@@ -159,15 +159,12 @@ describe('Claude stream-json close ordering', () => {
     expect(events).toEqual([])
     // Resolve and exit in one stack, before the awaiting reader can consume the complete result.
     first.resolve({
-      done: false,
-      value: {
-        type: 'user',
-        uuid: 'resolved-before-exit',
-        session_id: 'provider-session',
-        message: {
-          role: 'user',
-          content: [{ type: 'tool_result', tool_use_id: 'received', content: 'MIDDLE:TAIL' }]
-        }
+      type: 'user',
+      uuid: 'resolved-before-exit',
+      session_id: 'provider-session',
+      message: {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 'received', content: 'MIDDLE:TAIL' }]
       }
     })
     child.emit('exit', 1, null)
