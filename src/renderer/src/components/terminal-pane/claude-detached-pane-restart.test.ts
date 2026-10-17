@@ -3,7 +3,10 @@ import { useAppStore } from '@/store'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import { sweepUnclaimedCodexPaneRestarts } from './codex-detached-pane-restart'
-import { resetCodexDetachedPaneRestartExecutorForTests } from './codex-detached-pane-restart-scheduler'
+import {
+  installCodexDetachedPaneRestartExecutor,
+  resetCodexDetachedPaneRestartExecutorForTests
+} from './codex-detached-pane-restart-scheduler'
 
 const LEAF_ID = '11111111-1111-4111-8111-111111111111'
 const OLD_PTY = 'wt1@@old'
@@ -61,6 +64,13 @@ function setPaneState(state: AgentStatusEntry['state']): void {
   useAppStore.setState({ agentStatusByPaneKey: { [paneKey]: { ...entry, state } } })
 }
 
+/** Lets a queued sweep run to completion. */
+async function settle(): Promise<void> {
+  for (let i = 0; i < 5; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+}
+
 describe('detached Claude account-move restart', () => {
   const originalWindow = (globalThis as { window?: typeof window }).window
 
@@ -110,20 +120,25 @@ describe('detached Claude account-move restart', () => {
     expect(state.terminalLayoutsByTabId['tab-1']?.ptyIdsByLeafId).toEqual({ [LEAF_ID]: NEW_PTY })
   })
 
-  it('waits for a mid-turn session to finish before restarting it', async () => {
-    seedClaudePane({ state: 'working' })
-    useAppStore.getState().queuePaneAccountRestarts([OLD_PTY], 'claude')
+  it('restarts a mid-turn session once its turn ends, via the store subscription', async () => {
+    const uninstall = installCodexDetachedPaneRestartExecutor()
+    try {
+      seedClaudePane({ state: 'working' })
+      useAppStore.getState().queuePaneAccountRestarts([OLD_PTY], 'claude')
+      await settle()
+      // Why waiting: Claude's hooks report a permission prompt or question as waiting, mid-turn.
+      setPaneState('waiting')
+      await settle()
+      expect(window.api.pty.spawn).not.toHaveBeenCalled()
+      expect(useAppStore.getState().pendingPaneAccountRestarts).toEqual({ [OLD_PTY]: 'claude' })
 
-    await sweepUnclaimedCodexPaneRestarts()
-    // Why waiting: Claude's hooks report a permission prompt or question as waiting, mid-turn.
-    setPaneState('waiting')
-    await sweepUnclaimedCodexPaneRestarts()
-    expect(window.api.pty.spawn).not.toHaveBeenCalled()
-    expect(useAppStore.getState().pendingPaneAccountRestarts).toEqual({ [OLD_PTY]: 'claude' })
+      setPaneState('done')
 
-    setPaneState('done')
-    await sweepUnclaimedCodexPaneRestarts()
-    expect(window.api.pty.spawn).toHaveBeenCalledTimes(1)
+      await vi.waitFor(() => expect(window.api.pty.spawn).toHaveBeenCalledTimes(1))
+      await vi.waitFor(() => expect(useAppStore.getState().pendingPaneAccountRestarts).toEqual({}))
+    } finally {
+      uninstall()
+    }
   })
 
   it('skips a pane whose session can no longer be resumed instead of starting a fresh Claude', async () => {

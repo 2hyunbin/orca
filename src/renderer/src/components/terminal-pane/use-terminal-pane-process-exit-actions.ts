@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useAppStore } from '../../store'
 import { buildPaneAccountRestartStartup } from '@/lib/agent-account-restart-startup'
-import { isClaudePaneMidTurn } from '@/lib/claude-session-account-move'
+import {
+  isAccountRestartReady,
+  selectReadyAccountRestartPtyIds
+} from './pane-account-restart-readiness'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { connectPanePty } from './pty-connection'
 import { bindPanePtyId } from '@/lib/pane-manager/mobile-fit-overrides'
@@ -38,8 +42,6 @@ export function useTerminalPaneProcessExitActions(controller: TerminalPaneCloseC
     paneMode2031Ref,
     panePtyBindingsRef,
     paneTransportsRef,
-    pendingPaneAccountRestarts,
-    claudeTurnStatus,
     replayingPanesRef,
     savedLayout,
     setCacheTimerStartedAt,
@@ -232,21 +234,21 @@ export function useTerminalPaneProcessExitActions(controller: TerminalPaneCloseC
     }
   }, [managerRef, panePtyLayoutBindings, paneTransportsRef, tabId])
 
+  // Why primitive ids: unrelated status publications leave the list shallow-equal, so they skip this pane.
+  const readyRestartPtyIds = useAppStore(
+    useShallow((state) => selectReadyAccountRestartPtyIds(state, tabId))
+  )
   useEffect(() => {
     const manager = managerRef.current
-    if (!manager) {
+    if (!manager || readyRestartPtyIds.length === 0) {
       return
     }
     for (const pane of manager.getPanes()) {
       const ptyId = paneTransportsRef.current.get(pane.id)?.getPtyId()
-      const queued = ptyId ? pendingPaneAccountRestarts[ptyId] : undefined
-      if (!ptyId || !queued) {
-        continue
-      }
-      // Why: a Claude restart waits out the turn; claudeTurnStatus re-runs this when it ends.
       if (
-        queued === 'claude' &&
-        isClaudePaneMidTurn(useAppStore.getState(), makePaneKey(tabId, pane.leafId))
+        !ptyId ||
+        !readyRestartPtyIds.includes(ptyId) ||
+        !isAccountRestartReady(useAppStore.getState(), tabId, pane.leafId, ptyId)
       ) {
         continue
       }
@@ -260,11 +262,10 @@ export function useTerminalPaneProcessExitActions(controller: TerminalPaneCloseC
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- Preserve the pre-split dependency contract.
   }, [
     buildAccountRestartStartup,
-    claudeTurnStatus,
     consumePendingPaneAccountRestart,
     handleRestartPane,
     panePtyLayoutBindings,
-    pendingPaneAccountRestarts
+    readyRestartPtyIds
   ])
 
   return { handleRestartExitedPane, handleCloseExitedPane }
