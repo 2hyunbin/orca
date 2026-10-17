@@ -14,7 +14,13 @@ import { saveWorkspaceLayout } from '../../../shared/workspace-layout/workspace-
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { buildWorkspaceSessionPayload } from '@/lib/workspace-session'
 import { createBrowserUuid } from '@/lib/browser-uuid'
-import { createTestStore, makeWorktree, seedStore } from '@/store/slices/store-test-helpers'
+import {
+  createTestStore,
+  makeRuntimeOwnedWorktree,
+  makeWorktree,
+  runtimeOwnedRepoState,
+  seedStore
+} from '@/store/slices/store-test-helpers'
 import { createStoreCascadesMockApi } from '@/store/slices/store-cascades-test-harness'
 
 type LayoutLoad = ReturnType<typeof loadWorkspaceLayoutWithoutReport>
@@ -243,6 +249,34 @@ describe('chat tabs in a layout-owner build', () => {
         .unifiedTabsByWorktree[WORKTREE]?.map((tab) => tab.entityId)
     ).toEqual([TERMINAL])
     expectSaveTeachesMainNothing()
+  })
+
+  it('leaves a paired server’s chat tabs to that server', async () => {
+    const remote = 'repo2::/path/remote'
+    seedStore(
+      store(),
+      runtimeOwnedRepoState('env-1', 'repo2', '/path/remote', {
+        worktreesByRepo: {
+          repo1: [makeWorktree({ id: WORKTREE, repoId: 'repo1', path: '/path/wt' })],
+          repo2: [makeRuntimeOwnedWorktree({ id: remote, repoId: 'repo2' }, 'env-1')]
+        }
+      })
+    )
+    const tab = openStructuredAgentSessionProvisionalTab({
+      worktreeId: remote,
+      executionHostId: 'runtime:env-1',
+      sessionId: 'chat-5',
+      agent: 'codex'
+    })
+    expect(
+      store()
+        .getState()
+        .unifiedTabsByWorktree[remote]?.map((entry) => entry.id)
+    ).toEqual([tab.id])
+    store().getState().closeUnifiedTab(tab.id)
+    await settled()
+    expect(store().getState().unifiedTabsByWorktree[remote]).toEqual([])
+    expect(mocks.sent).toEqual([])
   })
 
   it('sends nothing with the switch off', async () => {
