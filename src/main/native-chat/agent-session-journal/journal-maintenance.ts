@@ -77,7 +77,8 @@ export class JournalMaintenance {
     if (this.timer || this.closed) {
       return
     }
-    this.timer = timers.setTimeout<[]>(() => this.advance(), delay)
+    const setNodeTimeout: (run: () => void, ms: number) => NodeJS.Timeout = timers.setTimeout
+    this.timer = setNodeTimeout(() => this.advance(), delay)
     this.timer.unref()
   }
 
