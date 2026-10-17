@@ -36,7 +36,10 @@ vi.mock('@/components/native-chat/native-chat-composer-draft-store', () => ({
 
 import { beginStructuredAgentSessionProvisionalLaunch } from './structured-agent-session-provisional-tab'
 import { StructuredAgentSessionCreateRefusalError } from './structured-agent-session-launch-errors'
-import { addNativeChatPendingAttachment, clearNativeChatPendingAttachmentsForTests } from '@/components/native-chat/native-chat-pending-attachment-cache'
+import {
+  addNativeChatPendingAttachment,
+  clearNativeChatPendingAttachmentsForTests
+} from '@/components/native-chat/native-chat-pending-attachment-cache'
 
 function planSettlingAs(
   settlement: StructuredAgentLaunchSettlement,
@@ -107,7 +110,9 @@ describe('a provisional structured chat tab', () => {
     })
     mocks.draftText.value = typed
     if (pasting) {
-      addNativeChatPendingAttachment('agent-session:claude_1', { id: 'paste-1', path: '', pending: true })
+      addNativeChatPendingAttachment('agent-session:claude_1', {
+        id: 'paste-1', path: '', pending: true
+      })
     }
 
     await expect(launch?.settlement).resolves.toMatchObject(settled)
@@ -117,10 +122,14 @@ describe('a provisional structured chat tab', () => {
 
   it('keeps text entered while its fallback terminal is opening', async () => {
     let open!: (terminal: { opened: boolean }) => void
-    const onHostDeclined = vi.fn(() => new Promise<{ opened: boolean }>((resolve) => { open = resolve }))
+    const onHostDeclined = vi.fn(
+      () => new Promise<{ opened: boolean }>((resolve) => { open = resolve })
+    )
     const launch = beginStructuredAgentSessionProvisionalLaunch({
-      plan: planSettlingAs(declined()), hooks: {},
-      focusIntent: { request: mocks.requestFocus, cancel: mocks.cancelFocus }, onHostDeclined
+      plan: planSettlingAs(declined()),
+      hooks: {},
+      focusIntent: { request: mocks.requestFocus, cancel: mocks.cancelFocus },
+      onHostDeclined
     })
     await Promise.resolve()
     expect(onHostDeclined).toHaveBeenCalledOnce()

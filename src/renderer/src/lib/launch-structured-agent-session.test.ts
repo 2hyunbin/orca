@@ -48,7 +48,12 @@ describe('structured agent session launch', () => {
       ...intent.params.envelope
     })
     createStructuredAgentSessionLaunchIntent(
-      worktreeId, 'codex', 'runtime:server-1', undefined, undefined, false
+      worktreeId,
+      'codex',
+      'runtime:server-1',
+      undefined,
+      undefined,
+      false
     )
     expect(peekWebSessionFocusIntent(owner, worktreeId)).toBeNull()
   })
@@ -372,27 +377,30 @@ describe('structured agent session launch', () => {
     }
   })
 
-  it.each([undefined, { model: 'sonnet' }])("reports the paired host's seed answer, including a seedless older host (%s)", async (seedOptions) => {
-    vi.mocked(callStructuredAgentSession).mockImplementation(async (_target, method) =>
-      method === 'agentSession.createSupport'
-        ? { supported: true, seedOptions }
-        : { ok: true, replayed: false, value: { sessionId: 'claude_1', fence: 1 } }
-    )
-    const paired = vi.fn()
-    const local = vi.fn()
+  it.each([undefined, { model: 'sonnet' }])(
+    "reports the paired host's seed answer, including a seedless older host (%s)",
+    async (seedOptions) => {
+      vi.mocked(callStructuredAgentSession).mockImplementation(async (_target, method) =>
+        method === 'agentSession.createSupport'
+          ? { supported: true, seedOptions }
+          : { ok: true, replayed: false, value: { sessionId: 'claude_1', fence: 1 } }
+      )
+      const paired = vi.fn()
+      const local = vi.fn()
 
-    await launchStructuredAgentSession(
-      createStructuredAgentSessionLaunchIntent('workspace-1', 'claude', 'runtime:server-1'),
-      paired
-    )
-    await launchStructuredAgentSession(
-      createStructuredAgentSessionLaunchIntent('workspace-1', 'claude', 'local'),
-      local
-    )
+      await launchStructuredAgentSession(
+        createStructuredAgentSessionLaunchIntent('workspace-1', 'claude', 'runtime:server-1'),
+        paired
+      )
+      await launchStructuredAgentSession(
+        createStructuredAgentSessionLaunchIntent('workspace-1', 'claude', 'local'),
+        local
+      )
 
-    expect(paired).toHaveBeenCalledWith(seedOptions)
-    expect(local).not.toHaveBeenCalled()
-  })
+      expect(paired).toHaveBeenCalledWith(seedOptions)
+      expect(local).not.toHaveBeenCalled()
+    }
+  )
 
   it("seeds a paired chat with the server's reported selection, kept through a retry", () => {
     const intent = createStructuredAgentSessionLaunchIntent(

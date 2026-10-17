@@ -167,17 +167,23 @@ describe('useNativeChatExternalAttachments', () => {
     const probe = await renderProbe({
       structuredWorktreeId: 'folder-1',
       structuredSession: {
-        sessionId: 'codex-1', runtimeEnvironmentId: 'server-1',
-        sessionPending: true, sessionPendingNotice: notice
+        sessionId: 'codex-1',
+        runtimeEnvironmentId: 'server-1',
+        sessionPending: true,
+        sessionPendingNotice: notice
       },
-      attachResolvedPaths, setNotice
+      attachResolvedPaths,
+      setNotice
     })
-    await act(async () => { await probe.latest().captureExternalDrop()(['/local/a.txt']) })
+    await act(async () => {
+      await probe.latest().captureExternalDrop()(['/local/a.txt'])
+    })
     expect(setNotice).toHaveBeenCalledWith(notice)
     expect(mocks.prepareNativeChatSessionAttachmentUpload).not.toHaveBeenCalled()
     expect(mocks.uploadNativeChatSessionAttachmentPaths).not.toHaveBeenCalled()
     expect(attachResolvedPaths).not.toHaveBeenCalled()
   })
+
   it('attaches local worktree paths unchanged', async () => {
     mocks.resolveNativeChatAttachmentOwner.mockReturnValue({ kind: 'local' })
     const attachResolvedPaths = vi.fn()

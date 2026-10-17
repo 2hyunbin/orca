@@ -178,10 +178,14 @@ describe('a chat pane over its own launch', () => {
         method === 'agentSession.modelCatalog'
           ? Promise.resolve({
               ...SAVED_LIST,
+              listingNamesConfiguredModel: true,
               models: SAVED_LIST.models.map((model) => ({
                 ...model,
                 isDefault: model.id === 'gpt-5.5',
-                efforts: [{ value: 'low', label: 'Low' }, { value: 'high', label: 'High' }]
+                efforts: [
+                  { value: 'low', label: 'Low' },
+                  { value: 'high', label: 'High' }
+                ]
               }))
             })
           : new Promise(() => {})
@@ -193,12 +197,7 @@ describe('a chat pane over its own launch', () => {
         executionHostId: 'runtime:server-1'
       })
       const fresh = renderLaunchedChat(worktreeId, launch.sessionId, 'codex', target)
-      await waitFor(() =>
-        expect(fresh.result.current.optionSnapshot.find((entry) => entry.id === 'model')).toMatchObject({
-          settable: false,
-          kind: { choices: expect.arrayContaining([expect.objectContaining({ value: 'gpt-5.5' })]) }
-        })
-      )
+      expect(fresh.result.current.launchView?.seedPending).toBe(true)
       fresh.unmount()
       resetStructuredAgentLaunchRegistryForTests()
       resetStructuredAgentLaunchPersistenceForTests()
