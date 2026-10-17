@@ -1,3 +1,5 @@
+import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
+
 /** Phone methods the relaying Mac always answers itself, even when the call names a server. */
 export const PAIRED_DESKTOP_METHODS = [
   // Device and pairing concerns of the phone's own pairing.
@@ -36,7 +38,6 @@ export const PAIRED_DESKTOP_METHODS = [
   'ui.get',
   'ui.recordFeatureInteraction',
   'ui.set',
-  'ui.setCollapsed',
   // The desktop's accounts pane, Linear and project pickers target its active runtime, not a workspace's host.
   'accounts.consumeCodexResetCredit',
   'accounts.list',
@@ -106,5 +107,7 @@ export const PAIRED_DESKTOP_METHODS = [
   'settings.update',
   'settings.updateTerminalQuickCommands',
   'terminal.getAutoRestoreFit',
-  'terminal.setAutoRestoreFit'
+  'terminal.setAutoRestoreFit',
+  // Switch point: the per-section collapse write exists only with ORCA_SIDEBAR_INPUTS=main.
+  ...(ORCA_SIDEBAR_INPUTS_IS_MAIN ? (['ui.setCollapsed'] as const) : [])
 ] as const

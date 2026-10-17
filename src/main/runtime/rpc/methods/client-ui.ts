@@ -18,8 +18,6 @@ import {
   SettingsUpdate
 } from '../../../../shared/rpc-contract/client-settings-params'
 import { FeatureInteractionIdParam, UiUpdate } from './client-ui-schemas'
-import { SetCollapsedParams } from '../../../../shared/rpc-contract/workspace-view-collapse-params'
-import { setCollapsedSection } from '../../workspace-view-collapse-writes'
 // Type-only side effect: keeps the schema/PersistedUIState parity assertions in
 // the typecheck graph so drift fails the build instead of a paired client.
 
@@ -167,14 +165,6 @@ export const CLIENT_UI_METHODS = [
       } as Partial<PersistedUIState>
       return { ui: uiForCaller(context.runtime.updateUIState(updates), context) }
     }
-  }),
-  defineMethod({
-    name: 'ui.setCollapsed',
-    permission: 'workspace',
-    params: SetCollapsedParams,
-    // Why the same callers as ui.set: collapsedGroups is not pairing-local, so both writes share one view.
-    handler: (params, { runtime }) =>
-      setCollapsedSection(runtime, runtime.collapseWriteOrder, params)
   }),
   defineMethod({
     name: 'ui.recordFeatureInteraction',

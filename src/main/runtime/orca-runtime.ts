@@ -62,7 +62,8 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
         hostLabelOverrides: () => getHostDisplayLabelOverrides(this.getClientSettings())
       })
     : null
-  readonly collapseWriteOrder = new CollapseWriteOrder()
+  // Switch point: the per-writer ordering behind ui.setCollapsed.
+  readonly collapseWriteOrder = ORCA_SIDEBAR_INPUTS_IS_MAIN ? new CollapseWriteOrder() : null
 
   private async selectReferenceCatalogWorkspace(selector: string, cwd?: string) {
     const catalog = listReferenceWorkspaces(
