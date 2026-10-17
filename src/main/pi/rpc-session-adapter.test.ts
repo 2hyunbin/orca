@@ -168,6 +168,31 @@ describe('Pi RPC session ownership and delivery', () => {
     expect(h.connection.sent).toMatchObject([{ type: 'prompt', message: 'chosen' }])
   })
 
+  it('rejects a known-unsent prompt when an option times out and preserves Stop reason', async () => {
+    const h = await setup()
+    const timeout = new Error('Pi did not answer set_model')
+    h.connection.requestOverride = (command) =>
+      command === 'set_model' ? Promise.reject(timeout) : undefined
+    const input = {
+      sessionId,
+      fence: 7,
+      clientMessageId: 'unsent',
+      body: {
+        kind: 'message' as const,
+        role: 'user' as const,
+        blocks: [{ type: 'text' as const, text: 'go' }]
+      },
+      executionOptions: { model: 'anthropic/model-2' }
+    }
+    await expect(h.adapter.dispatch(input)).rejects.toMatchObject({
+      name: 'AgentSessionOptionRejectedError'
+    })
+    expect(h.connection.sent).toEqual([])
+    const controller = new AbortController()
+    controller.abort(timeout)
+    await expect(h.adapter.dispatch({ ...input, signal: controller.signal })).rejects.toBe(timeout)
+  })
+
   it('rejects stale fences and a Stop for a different turn before sending abort', async () => {
     const h = await setup()
     await expect(

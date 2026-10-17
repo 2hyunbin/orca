@@ -241,6 +241,7 @@ export function createStructuredAgentSessionConversationLifetime(host: {
       host.context().runtimeState.acquireAborts.abort(sessionId, 'closed while starting')
       return serialize(sessionId, async () => {
         readRefusals.forget(sessionId)
+        host.context().runtimeState.acquireAborts.abort(sessionId, 'closed while starting')
         const session = sessions.get(sessionId)
         if (session) {
           // Settled and marked before the stop, so no start delivers it, and nothing it closed with

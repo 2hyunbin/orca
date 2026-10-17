@@ -48,6 +48,7 @@ export type CodexTurnHost = {
   connection: Pick<CodexAppServerConnection, 'request'>
   threadId: string
   options: Map<string, string>
+  appliedTurnOptions?: Readonly<Record<string, string>>
   reportedOptions?: { model?: string }
   dispatchEchoes: CodexDispatchEchoes
   activeTurnIds?: ReadonlySet<string>
@@ -134,6 +135,7 @@ export async function startCodexTurn(
   if (steered) {
     return steered
   }
+  const previousApplied = host.appliedTurnOptions
   const previousOptions = input.turnOptions ? new Map(host.options) : null
   if (input.turnOptions) {
     host.options.clear()
@@ -141,6 +143,7 @@ export async function startCodexTurn(
       host.options.set(key, value)
     }
   }
+  host.appliedTurnOptions = input.turnOptions ?? Object.fromEntries(host.options)
   let answer: unknown
   try {
     answer = await host.connection.request(
@@ -159,6 +162,7 @@ export async function startCodexTurn(
       previousOptions &&
       (isCodexAppServerRequestError(error) || isCodexAppServerUnsupportedError(error))
     ) {
+      host.appliedTurnOptions = previousApplied
       host.options.clear()
       for (const [key, value] of previousOptions) {
         host.options.set(key, value)

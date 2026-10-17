@@ -57,6 +57,7 @@ export function useStructuredAgentSession(args: {
   providerRunning?: boolean
   /** The current selection in a capable host's status, including an empty selection. */
   optionSelection?: Readonly<Record<string, string>>
+  hostPermissionMode?: string
   /** This view started the session; only then does the stored selection name what it runs. */
   launch?: StructuredAgentSessionLaunchView
   /** The composer Edit copies a card's text into. */
@@ -123,6 +124,7 @@ export function useStructuredAgentSession(args: {
     providerVisible,
     providerStarting,
     optionSelection: args.optionSelection,
+    hostPermissionMode: args.hostPermissionMode,
     ...(args.providerRunning ? { providerRunning: true } : {}),
     ...(args.hostOptionStamp ? { hostOptionStamp: args.hostOptionStamp } : {}),
     fence: state.fence,

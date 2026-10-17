@@ -58,18 +58,20 @@ export async function publishAttachedChild(
     owner === 'acquired' ? attempt.startup?.permissionMode : current?.permissionMode
   const startedFor = owner === 'acquired' ? input.startedFor : current?.startedFor
   // A replayed create over a chat at rest has no child to index.
-  if (owner !== 'none') {
-    attempt.candidate = {
-      sink: eventSink,
-      child: {
-        generation: acquisitionGeneration ?? current?.generation ?? null,
-        fence,
-        // A spawned child starts unready; a re-attach keeps what its child already proved.
-        phase: owner === 'acquired' ? 'starting' : (current?.phase ?? 'ready'),
-        ...(startedFor === undefined ? {} : { startedFor }),
-        ...(permissionMode === undefined ? {} : { permissionMode })
-      }
-    }
+  const child =
+    owner === 'acquired'
+      ? {
+          generation: acquisitionGeneration,
+          fence,
+          phase: 'starting' as const,
+          ...(startedFor === undefined ? {} : { startedFor }),
+          ...(permissionMode === undefined ? {} : { permissionMode })
+        }
+      : owner === 'kept' && current
+        ? { ...current, fence }
+        : null
+  if (child) {
+    attempt.candidate = { sink: eventSink, child }
   }
   if (attempt.candidate?.child.phase === 'ready') {
     await applyStructuredRewindRecovery(

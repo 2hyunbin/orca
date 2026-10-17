@@ -214,7 +214,7 @@ it.each([false, true])(
         }
       }))
     }
-    const startAgent = vi.spyOn(ctx, 'startAgent')
+    const startAgent = vi.spyOn(ctx, 'claimAgent')
     const error = new Error('receipt read failed')
     const warn = vi.spyOn(ctx.deps.logger, 'warn')
     vi.spyOn(rig.store, 'readCommandReceipt').mockImplementationOnce(() => {

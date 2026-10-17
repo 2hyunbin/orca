@@ -62,13 +62,21 @@ export class PiRpcSessionStartup {
 
   /** After the open: the listing and the `/` commands reach the host as later reports, and a read
    *  that fails only leaves the chat without them. */
-  async readAfterOpen(generation: string): Promise<void> {
+  async readAfterOpen(
+    generation: string,
+    opening: AgentSessionOptionsResult['current']
+  ): Promise<void> {
     const options = await this.readListing()
     if (options && !this.failedCause() && !this.connection.closed) {
       // What it started on names its config's default once; a later switch teaches nothing.
       const { catalogListing } = withLiveCatalogListing(
         options,
-        unpickedSessionConfiguredChoice({ resolvesConfig: this.resolvesConfig, ...options })
+        unpickedSessionConfiguredChoice({
+          resolvesConfig: this.resolvesConfig,
+          picked: new Set(Object.keys(this.input.options ?? {})),
+          models: options.models,
+          current: opening
+        })
       )
       this.deps.onLifecycle({
         type: 'options-reported',

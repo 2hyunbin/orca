@@ -9,7 +9,10 @@ export class StructuredAgentSessionAcquireAborts {
   private quitReason: Error | null = null
 
   /** For the provider wait about to run; `end` once it settles. */
-  begin(sessionId: string, handover = false): { signal: AbortSignal; end: () => void } {
+  begin(
+    sessionId: string,
+    handover = false
+  ): { signal: AbortSignal; abort: () => void; end: () => void } {
     const controller = new AbortController()
     if (this.quitReason) {
       controller.abort(this.quitReason)
@@ -21,6 +24,7 @@ export class StructuredAgentSessionAcquireAborts {
     this.inFlight.set(sessionId, waits)
     return {
       signal: controller.signal,
+      abort: () => controller.abort(new Error('stopped while starting')),
       end: () => {
         waits.delete(active)
         if (waits.size === 0 && this.inFlight.get(sessionId) === waits) {

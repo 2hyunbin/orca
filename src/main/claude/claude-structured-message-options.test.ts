@@ -5,6 +5,8 @@ import {
   fakeClaude,
   USER_MESSAGE
 } from './claude-structured-session-test-support'
+import { captureStructuredExecutionOptions } from '../native-chat/agent-session-wire/structured-agent-session-execution-options'
+import { claudeAndCodexAgents } from '../native-chat/agent-session-wire/structured-agent-session-adapter-router-test-support'
 import type { ClaudeStructuredSessionEvent } from './claude-structured-session-state'
 
 const MODELS = [
@@ -94,6 +96,59 @@ describe('Claude accepted message choices', () => {
       })
     ).resolves.toEqual({ state: 'admitted' })
     expect(order).toEqual(['model:opus', 'effort:{"effortLevel":"high"}', 'prompt'])
+  })
+
+  it('keeps saved Fast for an older partial send, freezes it, and honors explicit false', async () => {
+    let fastMode = true
+    const supported = MODELS.map((model) => ({ ...model, supportsFastMode: true }))
+    const claude = fakeClaude({
+      initModels: supported,
+      routes: {
+        list_models: () => supported,
+        apply_flag_settings: ({ settings } = {}) => {
+          if (
+            typeof settings === 'object' &&
+            settings !== null &&
+            'fastMode' in settings &&
+            typeof settings.fastMode === 'boolean'
+          ) {
+            fastMode = settings.fastMode
+          }
+        }
+      }
+    })
+    const adapter = await acquired(claude)
+    const saved = { model: 'sonnet', effort: 'high', fastMode: 'true' }
+    const ctx = { agents: claudeAndCodexAgents(), agent: 'claude', persistedOptions: saved }
+    const captured = captureStructuredExecutionOptions(ctx, { model: 'sonnet', effort: 'high' })
+    if ('refusal' in captured) {
+      throw new Error(captured.refusal.message)
+    }
+    saved.fastMode = 'false'
+    const connection = claude.connections[0]!
+    connection.getSettings = async () => ({ effective: { effortLevel: 'high', fastMode } })
+    for (const [id, options] of [
+      ['old', captured.options],
+      ['off', { ...captured.options, fastMode: 'false' }]
+    ] as const) {
+      await expect(
+        adapter.dispatch({
+          sessionId: 'session-1',
+          clientMessageId: id,
+          body: USER_MESSAGE,
+          executionOptions: options,
+          fence: 7
+        })
+      ).resolves.toEqual({ state: 'admitted' })
+    }
+    expect(captured.options.fastMode).toBe('true')
+    expect(connection.calls.filter((call) => call.subtype === 'apply_flag_settings')).toEqual(
+      expect.arrayContaining([
+        { subtype: 'apply_flag_settings', params: { settings: { fastMode: true } } },
+        { subtype: 'apply_flag_settings', params: { settings: { fastMode: false } } }
+      ])
+    )
+    expect(connection.sent).toHaveLength(2)
   })
 
   it('restores the configured model and effort for an empty snapshot', async () => {

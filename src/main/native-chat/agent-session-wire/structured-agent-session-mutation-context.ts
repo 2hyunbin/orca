@@ -17,6 +17,8 @@ import type { StructuredAgentSessionStopEnding } from './structured-agent-sessio
 import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
 import type { StructuredAgentSessionDeliveryOrder } from './structured-agent-session-delivery-order'
 import type { CapturedChildWorkStops } from './structured-agent-session-status-ownership'
+import type { StructuredAgentSessionStartClaim } from './structured-agent-session-agent-start'
+import type { StructuredAgentSessionStartFlights } from './structured-agent-session-start-flight'
 import type { StructuredAgentSessionStartupAttempts } from './structured-agent-session-startup-attempt'
 import { hostStructuredAgentSessionCurrentWork } from './structured-agent-session-host-current-work'
 import type {
@@ -41,9 +43,9 @@ export type StructuredAgentSessionMutationContext = {
   serialize: <T>(sessionId: string, task: () => Promise<T>) => Promise<T>
   /** The session's conversation, opened when closed; inside the caller's serialize. */
   openConversation: (sessionId: string) => Promise<StructuredAgentSessionHostSession | null>
-  /** Gives the session a provider child; OUTSIDE the caller's serialize, which the start's own
-   *  commits take. */
-  startAgent: (sessionId: string) => Promise<AgentSessionMutationSessionPreparation>
+  /** Claims a provider start on the caller's lane; its outcome is awaited outside. */
+  claimAgent: (sessionId: string) => StructuredAgentSessionStartClaim
+  startFlights: Pick<StructuredAgentSessionStartFlights, 'get'>
   startupAttempts: Pick<StructuredAgentSessionStartupAttempts, 'readiness'>
   deliveryOrder: StructuredAgentSessionDeliveryOrder
   /** Joins a close a stop began on the session's child, for an operation that starts no child;

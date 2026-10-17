@@ -116,6 +116,7 @@ export function useMobileStructuredAgentSession(args: {
     mutate,
     optionStamp: optionStatus.stamp,
     hostSelection: optionStatus.selection,
+    hostPermissionMode: optionStatus.permissionMode,
     hostSupport
   })
   const { conversationCommands, invokeStructuredOption, optionSnapshot, setStructuredOption } =

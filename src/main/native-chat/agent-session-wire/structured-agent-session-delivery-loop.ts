@@ -26,7 +26,7 @@ import {
   structuredAgentSessionStartFailure,
   type StructuredAgentSessionStartFailureCause
 } from './structured-agent-session-failure-text'
-import type { StructuredAgentSessionResumeOutcome } from './structured-agent-session-agent-start'
+import type { StructuredAgentSessionStartClaim } from './structured-agent-session-agent-start'
 import type {
   StructuredAgentSessionHostSession,
   StructuredAgentSessionProviderChildIdentity
@@ -61,12 +61,8 @@ export type StructuredAgentSessionDeliveryLoopDeps = {
   serialize: <T>(sessionId: string, task: () => Promise<T>) => Promise<T>
   /** A start step, tracked from enqueue so quit waits for the child it may produce. */
   trackStart: <T>(start: Promise<T>) => Promise<T>
-  /** Starts a child for `startedFor`, the queued message at the head, if the session has none;
-   *  outside `serialize`. */
-  startProviderChild: (
-    sessionId: string,
-    startedFor: string
-  ) => Promise<StructuredAgentSessionResumeOutcome>
+  /** Claims the start for the queued head inside the ordered preparation. */
+  startProviderChild: (sessionId: string, startedFor: string) => StructuredAgentSessionStartClaim
   /** Stops a child the chat outgrew (a new login or permission mode); inside `serialize`. */
   retireOutgrownChild: (sessionId: string) => Promise<void>
   readiness: (
@@ -95,7 +91,7 @@ export type StructuredAgentSessionDeliveryLoopDeps = {
 
 type Prepared =
   | 'stop'
-  | { start: string; acceptedBy: AgentJournalCursor }
+  | { start: StructuredAgentSessionStartClaim; acceptedBy: AgentJournalCursor }
   | {
       ok: true
       awaited: StructuredAgentSessionProviderChildIdentity
@@ -158,7 +154,7 @@ export class StructuredAgentSessionDeliveryLoop {
         }
         if ('start' in prepared) {
           // Outside the serialize: sends are accepted while the agent starts.
-          const started = await this.deps.startProviderChild(sessionId, prepared.start)
+          const started = await prepared.start.outcome
           if (started.ok || started.aborted) {
             // Aborted: a close, Stop or quit stopped this start on purpose, and settled what it
             // was for; a message accepted since gets its own start, and quit's next step stops the
@@ -251,7 +247,10 @@ export class StructuredAgentSessionDeliveryLoop {
     await this.deps.retireOutgrownChild(sessionId)
     const child = this.deps.sessions.get(sessionId)?.child
     if (!child || child.close) {
-      return { start: oldest.clientMessageId, acceptedBy: session.journal.cursor() }
+      return {
+        start: this.deps.startProviderChild(sessionId, oldest.clientMessageId),
+        acceptedBy: session.journal.cursor()
+      }
     }
     // The child this run waits on; handover checks it is still the one there.
     return {

@@ -120,7 +120,7 @@ export class StructuredAgentSessionHost {
       // Quit drains a delivery start before it evicts, so the child it produces is stopped.
       trackStart: (start) => this.tasks.trackAttach(start),
       startProviderChild: (sessionId, startedFor) =>
-        agentStart.startStructuredAgentSessionAgent(this.attachContext(), sessionId, startedFor),
+        agentStart.claimStructuredAgentSessionAgent(this.attachContext(), sessionId, startedFor),
       deliveryOrder: this.runtimeState.deliveryOrder,
       readiness: (id, child) => this.runtimeState.startupAttempts.readiness(id, child),
       // Put to rest like an idle agent: the stop writes nothing, and the next start is new.
@@ -283,8 +283,8 @@ export class StructuredAgentSessionHost {
       childWorkIncomplete: this.clientDelivery.childWorkIncomplete,
       serialize: (sessionId, task) => this.serialize(sessionId, task),
       openConversation: this.conversationDelivery.open,
-      startAgent: (sessionId) =>
-        agentStart.startStructuredAgentSessionAgentForOperation(this.attachContext(), sessionId),
+      claimAgent: (sessionId) => agentStart.claimOperationStart(this.attachContext(), sessionId),
+      startFlights: this.runtimeState.startFlights,
       startupAttempts: this.runtimeState.startupAttempts,
       deliveryOrder: this.runtimeState.deliveryOrder,
       joinChildClose: (sessionId) =>

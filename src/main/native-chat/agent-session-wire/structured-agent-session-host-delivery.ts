@@ -16,7 +16,7 @@ import type { StructuredAgentSessionClientDelivery } from './structured-agent-se
 import type { StructuredAgentSessionDeliveryOrder } from './structured-agent-session-delivery-order'
 import { StructuredAgentSessionDeliveryLoop } from './structured-agent-session-delivery-loop'
 import { structuredAgentSessionCommandRunning } from './structured-agent-session-command-turn'
-import type { StructuredAgentSessionResumeOutcome } from './structured-agent-session-agent-start'
+import type { StructuredAgentSessionStartClaim } from './structured-agent-session-agent-start'
 import type { StructuredAgentSessionStartReadiness } from './structured-agent-session-startup-attempt'
 import type {
   StructuredAgentSessionHostDeps,
@@ -60,12 +60,8 @@ export function createStructuredAgentSessionConversationDelivery(input: {
   sessions: Map<string, StructuredAgentSessionHostSession>
   serialize: <T>(sessionId: string, task: () => Promise<T>) => Promise<T>
   trackStart: <T>(start: Promise<T>) => Promise<T>
-  /** Starts a child for `startedFor`, the queued message at the head, if the session has none;
-   *  for a caller outside the session's serialize. */
-  startProviderChild: (
-    sessionId: string,
-    startedFor: string
-  ) => Promise<StructuredAgentSessionResumeOutcome>
+  /** Claims the queued head's start during its ordered preparation. */
+  startProviderChild: (sessionId: string, startedFor: string) => StructuredAgentSessionStartClaim
   deliveryOrder: StructuredAgentSessionDeliveryOrder
   readiness: (
     sessionId: string,

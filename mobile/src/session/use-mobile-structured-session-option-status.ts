@@ -9,6 +9,7 @@ const noSubscription = (): (() => void) => () => {}
 type OptionStatus = {
   stamp: string
   selection: AgentSessionStatusSummary['optionSelection']
+  permissionMode?: string
 }
 
 const EMPTY_OPTION_STATUS: OptionStatus = { stamp: '', selection: undefined }
@@ -34,7 +35,7 @@ export function useMobileStructuredSessionOptionStatus(args: {
         ? previous.selection
         : summary?.optionSelection
       if (previous.stamp !== stamp || previous.selection !== selection) {
-        previous = { stamp, selection }
+        previous = { stamp, selection, permissionMode: summary?.permissionMode }
       }
       return previous
     }

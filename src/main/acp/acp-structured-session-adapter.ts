@@ -192,7 +192,8 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
       input.executionOptions,
       (key, value) => this.setOption({ sessionId, fence, key, value, signal }),
       () =>
-        this.children.sessions.get(input.sessionId) === session && session.journalClosed === null
+        this.children.sessions.get(input.sessionId) === session && session.journalClosed === null,
+      signal
     )
     if (!optionsApplied) {
       return this.rejected(session, 'providerExited')

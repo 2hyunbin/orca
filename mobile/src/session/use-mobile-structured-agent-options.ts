@@ -11,23 +11,17 @@ import {
   applyStructuredAgentSessionOptions,
   canSetStructuredAgentSessionOption,
   commitStructuredAgentSessionOption,
-  commitStructuredAgentSessionOptionValues,
   createStructuredAgentSessionOptionState,
   structuredAgentSessionOptionPicks,
   type StructuredAgentSessionOptionState
 } from '../../../src/shared/structured-agent-session-options'
-import { structuredAgentSessionOptionView } from '../../../src/shared/structured-agent-session-option-view'
 import {
   AGENT_CHAT_PERMISSION_MODE_OPTION_ID,
   agentChatPermissionModes
 } from '../../../src/shared/agent-chat-permission-mode'
 import { legacyHostPermissionDescriptor } from '../../../src/shared/structured-agent-session-permission-option'
-import type { RpcClient } from '../transport/rpc-client'
-import type { StructuredAgentSessionHostSupport } from './mobile-structured-agent-session-host-support'
-import {
-  callAgentSession,
-  type StructuredAgentSessionMutate
-} from './mobile-structured-agent-session-rpc'
+import type { MobileStructuredAgentOptionsInput } from './mobile-structured-agent-options-input'
+import { callAgentSession } from './mobile-structured-agent-session-rpc'
 import { persistMobileStructuredOptionPicks } from './mobile-native-chat-session-option-persistence'
 import { useMobileHostModelCatalogUpgrade } from './use-mobile-host-model-catalog-upgrade'
 import {
@@ -35,22 +29,14 @@ import {
   mobileCreatedStructuredSession
 } from './mobile-created-structured-sessions'
 import { encodeStructuredAgentSessionOptionValue } from '../../../src/shared/structured-agent-session-option-codec'
-import { mobileStructuredOptionSnapshot } from './mobile-structured-option-snapshot'
+import {
+  commitMobileStructuredOptions,
+  mobileStructuredOptionSnapshot,
+  mobileStructuredOptionView
+} from './mobile-structured-option-snapshot'
 import { useMobileStructuredOptionSurface } from './use-mobile-structured-option-surface'
 
-export function useMobileStructuredAgentOptions(args: {
-  agent: string | null
-  client: RpcClient | null
-  sessionId: string | null
-  enabled: boolean
-  fence: number | null
-  mutate: StructuredAgentSessionMutate
-  /** Moves when the host's status says a session option changed; each move re-reads them. */
-  optionStamp?: string
-  /** What the host advertised; null until its status probe answers. */
-  hostSupport: Pick<StructuredAgentSessionHostSupport, 'sendOptions' | 'permissionModes'> | null
-  hostSelection?: Readonly<Record<string, string>>
-}) {
+export function useMobileStructuredAgentOptions(args: MobileStructuredAgentOptionsInput) {
   const {
     agent,
     client,
@@ -59,10 +45,12 @@ export function useMobileStructuredAgentOptions(args: {
     mutate,
     optionStamp,
     hostSelection,
+    hostPermissionMode,
     sessionId,
     hostSupport
   } = args
   const takesSendOptions = hostSupport?.sendOptions === true
+  const observed = hostSelection !== undefined
   // Every agent's seed, as on the desktop: a built-in list or the provider-default pill.
   const optionCatalog = useMemo(
     () => (agent ? structuredAgentSessionSeedCatalog(agent) : null),
@@ -157,7 +145,7 @@ export function useMobileStructuredAgentOptions(args: {
           setConversationSupport({ sessionId, commands: result.conversationCommands ?? [] })
           updateOptionState((current) =>
             current.record === activeOptionRecordRef.current
-              ? applyStructuredAgentSessionOptions(current, optionCatalog, result)
+              ? applyStructuredAgentSessionOptions(current, optionCatalog, result, observed)
               : current
           )
         }
@@ -171,6 +159,7 @@ export function useMobileStructuredAgentOptions(args: {
     enabled,
     optionCatalog,
     optionStamp,
+    observed,
     listingsLanded,
     sessionId,
     fence,
@@ -187,8 +176,8 @@ export function useMobileStructuredAgentOptions(args: {
     optionState.permissionMode === null
   const shownSnapshot = useCallback(
     (state: StructuredAgentSessionOptionState) =>
-      mobileStructuredOptionSnapshot(agent ?? 'codex', state, hostSelection, takesSendOptions),
-    [agent, hostSelection, takesSendOptions]
+      mobileStructuredOptionSnapshot(state, hostSelection, takesSendOptions, hostPermissionMode),
+    [hostSelection, takesSendOptions, hostPermissionMode]
   )
   const optionSnapshot = useMemo(() => {
     const shown = shownSnapshot(optionState)
@@ -197,22 +186,23 @@ export function useMobileStructuredAgentOptions(args: {
 
   const setStructuredOption = useCallback(
     async (id: string, value: SessionOptionValue): Promise<boolean> => {
-      const currentState = optionStateRef.current
+      const currentState = mobileStructuredOptionView(
+        optionStateRef.current,
+        hostSelection,
+        takesSendOptions,
+        hostPermissionMode
+      )
+      const targetRecord = optionStateRef.current.record
       const encoded = encodeStructuredAgentSessionOptionValue(id, value)
       if (
         !client ||
         !sessionId ||
         !optionCatalog ||
         encoded === null ||
-        !canSetStructuredAgentSessionOption(
-          structuredAgentSessionOptionView(currentState, undefined, {}, takesSendOptions),
-          id,
-          value
-        )
+        !canSetStructuredAgentSessionOption(currentState, id, value)
       ) {
         return false
       }
-      const targetRecord = currentState.record
       const mutationGeneration = ++optionMutationGeneration.current
       const isCurrent = (): boolean =>
         activeOptionRecordRef.current === targetRecord &&
@@ -242,7 +232,7 @@ export function useMobileStructuredAgentOptions(args: {
           const committed = result.value.options ?? { [id]: encoded }
           updateOptionState((current) =>
             current.record === targetRecord && result.sameFence
-              ? commitStructuredAgentSessionOptionValues(current, committed)
+              ? commitMobileStructuredOptions(current, hostSelection, committed)
               : current
           )
           // Only an accepted pick: an `unknown` outcome commits optimistically to the
@@ -262,7 +252,7 @@ export function useMobileStructuredAgentOptions(args: {
           readsBack = false
           updateOptionState((current) =>
             current.record === targetRecord
-              ? commitStructuredAgentSessionOption(current, id, encoded)
+              ? commitMobileStructuredOptions(current, hostSelection, { [id]: encoded })
               : current
           )
           return true
@@ -277,7 +267,7 @@ export function useMobileStructuredAgentOptions(args: {
               if (isCurrent()) {
                 updateOptionState((latest) =>
                   latest.record === targetRecord
-                    ? applyStructuredAgentSessionOptions(latest, optionCatalog, refreshed)
+                    ? applyStructuredAgentSessionOptions(latest, optionCatalog, refreshed, observed)
                     : latest
                 )
               }
@@ -293,7 +283,18 @@ export function useMobileStructuredAgentOptions(args: {
         }
       }
     },
-    [agent, client, mutate, optionCatalog, sessionId, takesSendOptions, updateOptionState]
+    [
+      agent,
+      client,
+      mutate,
+      optionCatalog,
+      sessionId,
+      takesSendOptions,
+      hostSelection,
+      hostPermissionMode,
+      observed,
+      updateOptionState
+    ]
   )
 
   const { optionPickerRequest, invokeStructuredOption, optionSurface } =

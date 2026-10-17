@@ -13,12 +13,13 @@ export function captureStructuredExecutionOptions(
   supplied?: Readonly<Record<string, string>>
 ): { options: AgentSessionExecutionOptions } | { refusal: AgentSessionWireRefusal } {
   const saved = ctx.persistedOptions ?? {}
-  const candidate = supplied ?? {
+  const candidate = {
     ...(saved.model ? { model: saved.model } : {}),
     ...(saved.effort ? { effort: saved.effort } : {}),
     ...(saved.personality ? { personality: saved.personality } : {}),
     ...(saved.fastMode ? { fastMode: saved.fastMode } : {}),
-    ...(saved.serviceTier ? { serviceTier: saved.serviceTier } : {})
+    ...(saved.serviceTier ? { serviceTier: saved.serviceTier } : {}),
+    ...supplied
   }
   const options = readAgentSessionExecutionOptions(candidate)
   if (!options) {

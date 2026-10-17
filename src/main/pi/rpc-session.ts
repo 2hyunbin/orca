@@ -164,13 +164,15 @@ export class PiRpcSession {
       ...(result.reportedOptions.effort ? { effort: result.reportedOptions.effort } : {})
     }
     this.openedLink = result.link ?? null
-    void this.startup.readAfterOpen(this.generation).catch((error: unknown) =>
-      this.deps.logger.warn('Pi startup reports failed', {
-        scope: 'pi-startup-reports',
-        sessionId: this.input.identity.sessionId,
-        error
-      })
-    )
+    void this.startup
+      .readAfterOpen(this.generation, result.reportedOptions)
+      .catch((error: unknown) =>
+        this.deps.logger.warn('Pi startup reports failed', {
+          scope: 'pi-startup-reports',
+          sessionId: this.input.identity.sessionId,
+          error
+        })
+      )
     return result
   }
 

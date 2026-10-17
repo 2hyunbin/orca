@@ -87,6 +87,7 @@ export async function dispatchPiRpcMessage(
         input.signal
       )
     } catch (error) {
+      input.signal?.throwIfAborted()
       if (session.connection.closed) {
         return exited()
       }
@@ -96,7 +97,7 @@ export async function dispatchPiRpcMessage(
           providerDiagnostic(error.message, 'person')
         )
       }
-      throw error
+      throw new AgentSessionOptionRejectedError(error)
     }
   }
   input.signal?.throwIfAborted()

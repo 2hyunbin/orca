@@ -4,6 +4,7 @@ import type { AgentSessionModelCatalogResult } from './agent-session-wire'
 import {
   applyStructuredAgentSessionModelCatalog,
   applyStructuredAgentSessionOptions,
+  canSetStructuredAgentSessionOption,
   createStructuredAgentSessionOptionState,
   structuredAgentSessionOptionSnapshot,
   type StructuredAgentSessionOptionState
@@ -216,4 +217,37 @@ describe('nearestAgentEffort', () => {
     expect(nearestAgentEffort('max', ['low', 'xhigh'])).toBe('xhigh')
     expect(nearestAgentEffort('turbo', ['low', 'high'])).toBeUndefined()
   })
+})
+
+it('offers, validates and snapshots the status model without carrying another model’s observation', () => {
+  const catalog = CLAUDE_SESSION_OPTION_CATALOG
+  const state = applyStructuredAgentSessionOptions(
+    fresh(),
+    catalog,
+    {
+      models: [SONNET, OPUS],
+      current: { model: 'sonnet', effort: 'high', permissionMode: 'ask' }
+    },
+    true
+  )
+  const view = structuredAgentSessionOptionView(state, undefined, {}, true, {
+    selection: { model: 'opus[1m]' }
+  })
+  expect(shown(state, undefined, {}, true, { selection: { model: 'opus[1m]' } })).toEqual({
+    model: 'opus[1m]',
+    effort: undefined
+  })
+  expect(canSetStructuredAgentSessionOption(view, 'effort', 'xhigh')).toBe(true)
+  const picked = structuredAgentSessionOptionView(
+    { ...state, pendingPick: { id: 'effort', value: 'xhigh' } },
+    undefined,
+    {},
+    true,
+    { selection: { model: 'opus[1m]' } }
+  )
+  expect(
+    structuredAgentSessionSendSelection('claude', structuredAgentSessionOptionSnapshot(picked))
+  ).toEqual({ model: 'opus[1m]', effort: 'xhigh' })
+  expect(state.record.model).toEqual({ value: 'sonnet', source: 'reported' })
+  expect(state.record.valuesByModel['opus[1m]']).toBeUndefined()
 })

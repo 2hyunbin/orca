@@ -144,11 +144,12 @@ export function mutateWithChatStop<TValue>(
     )
   }
   const stop = async (ctx: AgentSessionTurnContext): Promise<ChatStopOutcome> => {
+    const flight = context.startFlights.get(sessionId)
     const target = captureChatStopTarget(ctx, {
       child: context.sessions.get(ctx.sessionId)?.child ?? null,
       ...named,
       endsSession: ctx.adapter.stopEndsSession?.(ctx.sessionId) === true,
-      stoppedPrePrompt: params.stoppedPrePrompt
+      stoppedPrePrompt: params.stoppedPrePrompt || flight !== undefined
     })
     if (!target) {
       // Late, or nothing to stop: answered as a no-op, its receipt committed before the answer.
@@ -157,6 +158,10 @@ export function mutateWithChatStop<TValue>(
     const accepted = await accept(ctx, target)
     if (!accepted.ok) {
       return accepted
+    }
+    // Invalidation belongs to the accepted Stop, including a claim made after its early abort.
+    if (flight && (target.queued || target.reach === 'withdraw' || target.reach === 'starting')) {
+      flight.abort()
     }
     if (params.stoppedPrePrompt && target.reach === 'withdraw') {
       await writeStructuredAgentSessionStopNote(
@@ -167,7 +172,7 @@ export function mutateWithChatStop<TValue>(
       )
     }
     try {
-      return await act(ctx, target, accepted.value.settled)
+      return await act(ctx, target, accepted.value.settled || flight !== undefined)
     } catch (error) {
       // Saved, then failed: noted on the chat, then thrown so the answer is the Stop's receipt.
       // On the turn its event named, else the one it named, else the one live now.

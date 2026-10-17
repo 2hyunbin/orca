@@ -254,25 +254,35 @@ export async function readStructuredAgentSessionOptions(
   const selected = live
     ? await readStructuredAgentSessionOptionsAtRest(context.deps, sessionId, reader)
     : options
-  const confirmed = options.current.confirmed?.filter((key) => {
-    if (key === 'model') {
-      return selected.current.model === options.current.model
-    }
-    if (key === 'effort') {
-      return selected.current.effort === options.current.effort
-    }
-    if (key === 'fastMode') {
-      return selected.current.fastMode === options.current.fastMode
-    }
-    if (key === 'serviceTier') {
-      return selected.current.serviceTier === options.current.serviceTier
-    }
-    return false
-  })
+  const saved = record?.options ?? {}
+  const model = saved.model ?? (options.current.model || selected.current.model)
+  const current = {
+    ...selected.current,
+    ...options.current,
+    model,
+    effort:
+      saved.effort ??
+      (model === options.current.model
+        ? options.current.effort
+        : model === selected.current.model
+          ? selected.current.effort
+          : undefined),
+    fastMode:
+      saved.fastMode !== undefined
+        ? selected.current.fastMode
+        : (options.current.fastMode ?? selected.current.fastMode),
+    serviceTier: saved.serviceTier ?? options.current.serviceTier ?? selected.current.serviceTier
+  }
+  const confirmed = options.current.confirmed?.filter((key) =>
+    key === 'model' || key === 'effort' || key === 'fastMode' || key === 'serviceTier'
+      ? current[key] === options.current[key]
+      : false
+  )
   return {
     ...options,
     current: {
-      ...selected.current,
+      ...current,
+      confirmed,
       ...(options.current.fastModeState ? { fastModeState: options.current.fastModeState } : {}),
       ...(confirmed?.length ? { confirmed } : {}),
       ...(permissionMode ? { permissionMode } : {})

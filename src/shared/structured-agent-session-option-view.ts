@@ -29,8 +29,23 @@ export function structuredAgentSessionOptionView(
   state: StructuredAgentSessionOptionState,
   seed: Readonly<Record<string, string>> | undefined,
   held: Readonly<Record<string, string>>,
-  takesSendOptions: boolean
+  takesSendOptions: boolean,
+  host?: { selection?: Readonly<Record<string, string>>; permissionMode?: string }
 ): StructuredAgentSessionOptionState {
+  const pending = state.pendingPick
+  if (host?.selection !== undefined || pending) {
+    state = { ...state, record: cloneNativeChatSessionOptionRecord(state.record) }
+    if (host?.selection !== undefined) {
+      state = commitStructuredAgentSessionOptionValues(state, host.selection)
+    }
+    if (pending) {
+      state = commitStructuredAgentSessionOptionValues(state, { [pending.id]: pending.value })
+    }
+    state = { ...state, pendingPick: pending }
+  }
+  if (host?.permissionMode !== undefined && pending?.id !== AGENT_CHAT_PERMISSION_MODE_OPTION_ID) {
+    state = { ...state, permissionMode: host.permissionMode }
+  }
   const { [AGENT_CHAT_PERMISSION_MODE_OPTION_ID]: heldPermission, ...heldSelection } = held
   const replaced = takesSendOptions
     ? structuredAgentSessionListedPicks(state, seed, heldSelection)

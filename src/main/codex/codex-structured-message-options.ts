@@ -1,11 +1,12 @@
 import type { AgentSessionExecutionOptions } from '../../shared/agent-session-execution-options'
 import { AgentSessionOptionRejectedError } from '../native-chat/agent-session-wire/structured-agent-session-option-error'
+import { readCodexConfiguredLaunchDefaults } from './codex-configured-launch-defaults'
 import { codexAcquireCatalogListing } from './codex-structured-catalog-entry'
 import { CODEX_DEFAULT_SERVICE_TIER } from './codex-structured-service-tier'
 import type { CodexSession } from './codex-structured-session-state'
 import { applyCodexStructuredSessionOption } from './codex-structured-session-options'
 
-/** Validate one message against known facts without reading the provider or changing the next pick. */
+/** Resolve one message's choices and baseline without changing the next pick. */
 export async function resolvedCodexMessageOptions(
   session: CodexSession,
   choices: AgentSessionExecutionOptions | undefined
@@ -32,13 +33,43 @@ export async function resolvedCodexMessageOptions(
   if (choices.effort === undefined && priorEffort && !defaultEffort) {
     throw new AgentSessionOptionRejectedError(new Error('codex default effort is unavailable'))
   }
-  // Codex retains turn overrides, so defaults must be named after an earlier override.
+  // Capture configuration before our first override, never from mutable turn reports.
+  if (
+    (choices.personality && !session.nativeDefaults?.personality) ||
+    ((choices.serviceTier || choices.fastMode) && !session.nativeDefaults?.serviceTier)
+  ) {
+    const configured = await readCodexConfiguredLaunchDefaults(session.connection)
+    session.nativeDefaults = {
+      ...session.nativeDefaults,
+      ...(configured?.personality && !session.nativeDefaults?.personality
+        ? { personality: configured.personality }
+        : {}),
+      ...(configured?.serviceTier && !session.nativeDefaults?.serviceTier
+        ? { serviceTier: configured.serviceTier }
+        : {})
+    }
+  }
+  const restored: Record<string, string> = {}
+  for (const key of ['personality', 'serviceTier'] as const) {
+    const applied = session.appliedTurnOptions?.[key]
+    if (
+      choices[key] !== undefined ||
+      (key === 'serviceTier' && choices.fastMode !== undefined) ||
+      !applied
+    ) {
+      continue
+    }
+    const baseline = session.nativeDefaults?.[key]
+    if (!baseline) {
+      throw new AgentSessionOptionRejectedError(new Error(`codex default ${key} is unavailable`))
+    }
+    if (applied !== baseline) {
+      restored[key] = baseline
+    }
+  }
   const selected = {
     ...session,
-    options: new Map<string, string>([
-      ['personality', 'none'],
-      ['serviceTier', CODEX_DEFAULT_SERVICE_TIER]
-    ]),
+    options: new Map<string, string>(Object.entries(restored)),
     reportedOptions: { ...session.reportedOptions, effort: undefined }
   }
   if (

@@ -158,7 +158,9 @@ export type CodexSession = {
     serviceTierKnown?: true
   }
   /** A fresh thread opened without a model override proved these native defaults. */
-  nativeDefaults?: { model: string; effort?: string }
+  nativeDefaults?: { model?: string; effort?: string; personality?: string; serviceTier?: string }
+  /** Overrides actually attempted on this child, independently of future saved picks. */
+  appliedTurnOptions?: Readonly<Record<string, string>>
   /** Absent when the adapter runs without a host catalog store (tests). */
   catalogAccess?: CodexSessionCatalogAccess
   /** Sends whose identity is still to be settled by the provider echo. */

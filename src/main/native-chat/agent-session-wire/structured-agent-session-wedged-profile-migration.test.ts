@@ -155,7 +155,10 @@ function openHost(overrides: Partial<StructuredAgentSessionHostDeps> = {}): void
 
 /** The host starting the agent with no message to deliver, as an operation that needs it does. */
 function startAgent(): Promise<unknown> {
-  return host['mutationContext']().startAgent(SESSION)
+  const context = host['mutationContext']()
+  return context
+    .serialize(SESSION, async () => context.claimAgent(SESSION))
+    .then((claim) => claim.outcome)
 }
 
 beforeEach(async () => {

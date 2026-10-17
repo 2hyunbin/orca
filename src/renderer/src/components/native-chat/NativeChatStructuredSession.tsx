@@ -88,6 +88,7 @@ export function NativeChatStructuredSession(
     queueFollowUps,
     hostStopping: hostExecution.stopping,
     optionSelection: hostExecution.optionSelection,
+    hostPermissionMode: hostExecution.permissionMode,
     hostOptionStamp: hostExecution.optionStamp,
     providerStarting: hostExecution.phase === 'starting',
     // A start's own verdict (a signed-out agent) exists only once that start is proven.

@@ -95,6 +95,46 @@ describe('Pi host awaited open', () => {
     })
   })
 
+  it('learns the immutable opening model and effort while listing spans a message switch', async () => {
+    const h = await setup()
+    const listing = Promise.withResolvers<unknown>()
+    let current = { ...state, thinkingLevel: 'low' }
+    const { acquired, child } = await restart(h, (connection) => {
+      connection.requestOverride = (command) => {
+        if (command === 'get_available_models') {
+          return listing.promise
+        }
+        if (command === 'get_state') {
+          return Promise.resolve(current)
+        }
+        if (command === 'set_model') {
+          current = { ...current, model: { provider: 'anthropic', id: 'model-2' } }
+        }
+        if (command === 'set_thinking_level') {
+          current = { ...current, thinkingLevel: 'high' }
+          return Promise.resolve({})
+        }
+        return undefined
+      }
+    })
+    await openAt8(h, acquired.acquisitionGeneration)
+    await h.adapter.dispatch({
+      sessionId,
+      fence: 8,
+      clientMessageId: 'switch',
+      body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'go' }] },
+      executionOptions: { model: 'anthropic/model-2', effort: 'high' }
+    })
+    listing.resolve({ models: [state.model, current.model] })
+    await vi.waitFor(() =>
+      expect(reportedEvent(h.lifecycle, 'options-reported')).toMatchObject({
+        reportedOptions: { model: 'anthropic/model-2', effort: 'high' },
+        catalogListing: { configuredDefault: { modelId: 'anthropic/model-1', effort: 'low' } }
+      })
+    )
+    expect(child.sent).toMatchObject([{ type: 'prompt', message: 'go' }])
+  })
+
   it('teaches the account default only from a new session started with no pick', async () => {
     const h = await setup()
     await vi.waitFor(() =>

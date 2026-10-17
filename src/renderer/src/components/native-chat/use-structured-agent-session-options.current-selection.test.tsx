@@ -233,3 +233,41 @@ it('fences a late pick when the same session moves to another host', async () =>
   expect(pill(view.result.current.optionSnapshot).model).toBe('gpt-one')
   view.unmount()
 })
+
+it('restores an unpicked chat’s observed model/effort and independent status permission', async () => {
+  const mutate = vi.fn<StructuredAgentSessionMutate>()
+  const selection = {}
+  const view = renderHook(
+    ({ mode }: { mode: string }) =>
+      useStructuredAgentSessionOptions({
+        agent: 'codex',
+        sessionId: 'restored',
+        target: LOCAL,
+        transportEnabled: true,
+        isVisible: true,
+        providerVisible: true,
+        optionSelection: selection,
+        hostPermissionMode: mode,
+        fence: 1,
+        turnId: null,
+        unloadedTurnRevisions: undefined,
+        mutate
+      }),
+    { initialProps: { mode: 'ask' } }
+  )
+  await waitFor(() =>
+    expect(pill(view.result.current.optionSnapshot)).toEqual({ model: 'gpt-one', effort: 'medium' })
+  )
+  const permission = () =>
+    view.result.current.optionSnapshot.find((option) => option.id === 'permissionMode')?.kind
+      .currentValue
+  expect(permission()).toBe('ask')
+  expect(
+    view.result.current.optionSnapshot.find((option) => option.id === 'model')?.valueSource
+  ).toBe('reported')
+  view.rerender({ mode: 'full-access' })
+  expect(permission()).toBe('full-access')
+  expect(mutate).not.toHaveBeenCalled()
+  expect(mocks.settings).not.toHaveBeenCalled()
+  view.unmount()
+})

@@ -142,7 +142,8 @@ export function applyStructuredAgentSessionModelCatalog(
 export function applyStructuredAgentSessionOptions(
   state: StructuredAgentSessionOptionState,
   seed: AgentSessionOptionCatalog,
-  result: AgentSessionOptionsResult
+  result: AgentSessionOptionsResult,
+  observed = false
 ): StructuredAgentSessionOptionState {
   if (result.current.fastMode === undefined) {
     clearTrackedSessionOption(state.record, result.current.model ?? null, 'fastMode')
@@ -158,7 +159,7 @@ export function applyStructuredAgentSessionOptions(
       ...(result.current.fastMode !== undefined ? { fastMode: result.current.fastMode } : {}),
       ...(result.current.serviceTier ? { serviceTier: result.current.serviceTier } : {})
     },
-    result.current.confirmed ?? []
+    observed ? undefined : (result.current.confirmed ?? [])
   )
   return {
     ...state,
@@ -167,7 +168,7 @@ export function applyStructuredAgentSessionOptions(
         ? state.catalog
         : structuredAgentSessionOptionCatalog(seed, result),
     catalogSource: result.modelsKnown === false ? state.catalogSource : 'live',
-    permissionMode: result.current.permissionMode ?? null
+    permissionMode: result.current.permissionMode ?? state.permissionMode
   }
 }
 
@@ -269,7 +270,7 @@ export function commitStructuredAgentSessionOption(
     id === 'model' ? getTrackedSessionOption(state.record, effectiveModel, 'effort') : undefined
   setTrackedSessionOption(state.record, id, decoded, 'dispatched', effectiveModel)
   // The host saves effort for the conversation, including across model picks.
-  if (effort) {
+  if (effort?.source === 'dispatched') {
     setTrackedSessionOption(state.record, 'effort', effort.value, 'dispatched')
   }
   return { ...state, pendingPick: null }

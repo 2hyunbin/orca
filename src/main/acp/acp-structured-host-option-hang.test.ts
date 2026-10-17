@@ -100,8 +100,9 @@ describe('a Grok model pick Grok never answers during send', () => {
     await waitFor(() =>
       expect(
         host.collaboratorsForTests().sessions.get(SESSION)?.journal.submissions()[0]?.dispatchState
-      ).toBe('unknown')
+      ).toBe('rejected')
     )
+    expect(framesOf(rig.child(), 'session/prompt')).toEqual([])
     // The chat's queue moved on: a later operation runs.
     expect(await within(host.readOptions(SESSION), 1_000)).not.toBe('pending')
     const [frame] = framesOf(rig.child(), 'session/set_config_option')

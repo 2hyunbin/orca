@@ -129,6 +129,9 @@ export async function openCodexStructuredSession(
       start.forceCloseUnexpected(sessionId, input.fence, generation, reason),
     ...(start.unbindReadingControl ? { unbindReadingControl: start.unbindReadingControl } : {})
   }
+  if (opened.serviceTier) {
+    session.nativeDefaults = { ...session.nativeDefaults, serviceTier: opened.serviceTier }
+  }
   current()
   sessions.set(sessionId, session)
   for (const event of attempt.window.drain()) {

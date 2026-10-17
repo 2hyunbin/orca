@@ -7,9 +7,7 @@ import type { AgentSessionOptionCatalog } from '../../../../shared/agent-session
 import {
   applyStructuredAgentSessionModelCatalog,
   applyStructuredAgentSessionOptions,
-  commitStructuredAgentSessionOptionValues,
   createStructuredAgentSessionOptionState,
-  structuredAgentSessionOptionCatalog,
   type StructuredAgentSessionOptionState
 } from '../../../../shared/structured-agent-session-options'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
@@ -19,10 +17,7 @@ import { AGENT_SESSION_SEND_OPTIONS_RUNTIME_CAPABILITY } from '../../../../share
 import { useStructuredAgentSessionHostCapability } from '@/runtime/structured-agent-session-host-capability'
 import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
 import { readHostModelCatalogSnapshot } from '@/runtime/host-model-catalog-snapshots'
-import {
-  cloneNativeChatSessionOptionRecord,
-  createNativeChatSessionOptionRecord
-} from '../../../../shared/native-chat-session-option-state'
+import { cloneNativeChatSessionOptionRecord } from '../../../../shared/native-chat-session-option-state'
 import {
   createCoalescedPollRunner,
   type CoalescedPollRunner
@@ -46,6 +41,7 @@ export function useStructuredAgentSessionOptionState(args: {
   /** The option values the host's status carries: a pick made on another device moves it. */
   hostOptionStamp: string
   readsBeforeStart: boolean
+  hostPermissionMode?: string
   hostSelection: Readonly<Record<string, string>> | undefined
   launchSeedOptions: Readonly<Record<string, string>> | undefined
   held: Readonly<Record<string, string>>
@@ -64,6 +60,7 @@ export function useStructuredAgentSessionOptionState(args: {
     providerVisible,
     readsBeforeStart,
     hostSelection,
+    hostPermissionMode,
     launchSeedOptions,
     held,
     sessionId,
@@ -175,14 +172,12 @@ export function useStructuredAgentSessionOptionState(args: {
           if (current.record !== activeOptionRecordRef.current) {
             return current
           }
-          if (!selectionFromStatus) {
-            return applyStructuredAgentSessionOptions(current, optionCatalog, result)
-          }
-          if (result.modelsKnown === false) {
-            return current
-          }
-          const catalog = structuredAgentSessionOptionCatalog(optionCatalog, result)
-          return { ...current, catalog, catalogSource: 'live' }
+          return applyStructuredAgentSessionOptions(
+            current,
+            optionCatalog,
+            result,
+            selectionFromStatus
+          )
         })
       }
     })
@@ -250,7 +245,7 @@ export function useStructuredAgentSessionOptionState(args: {
         : undefined
       const defaultEffort = defaultModel?.options.find((option) => option.id === 'effort')?.kind
       const catalog =
-        optionState.catalog && selectionFromStatus
+        optionState.catalog && selectionFromStatus && defaultModel
           ? {
               ...optionState.catalog,
               defaultModelIsCliDefault: defaultModel ? (true as const) : undefined,
@@ -277,24 +272,16 @@ export function useStructuredAgentSessionOptionState(args: {
               }))
             }
           : optionState.catalog
-      const selected = selectionFromStatus
-        ? commitStructuredAgentSessionOptionValues(
-            { ...optionState, catalog, record: createNativeChatSessionOptionRecord(agent) },
-            hostSelection
-          )
-        : optionState
-      // A pick on its way to the host shows, and so rides the next send, as the host will hold it.
-      const pending = optionIdentityRef.current === identity ? optionState.pendingPick : null
       return structuredAgentSessionOptionView(
         {
-          ...(pending
-            ? commitStructuredAgentSessionOptionValues(selected, { [pending.id]: pending.value })
-            : selected),
-          pendingPick: pending
+          ...optionState,
+          catalog,
+          pendingPick: optionIdentityRef.current === identity ? optionState.pendingPick : null
         },
         selectionFromStatus ? undefined : launchSeedOptions,
         held,
-        takesSendOptions
+        takesSendOptions,
+        { selection: hostSelection, permissionMode: hostPermissionMode }
       )
     }, [
       agent,
@@ -304,6 +291,7 @@ export function useStructuredAgentSessionOptionState(args: {
       optionCatalog,
       held,
       hostSelection,
+      hostPermissionMode,
       launchSeedOptions,
       optionState,
       selectionFromStatus,

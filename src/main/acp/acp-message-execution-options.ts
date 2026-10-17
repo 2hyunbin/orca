@@ -9,7 +9,8 @@ export async function applyAcpMessageOptions(
   session: AcpStructuredSession,
   options: AgentSessionExecutionOptions | undefined,
   setOption: (key: 'model' | 'effort', value: string) => Promise<unknown>,
-  isCurrent: () => boolean
+  isCurrent: () => boolean,
+  signal?: AbortSignal
 ): Promise<boolean> {
   if (!options) {
     return true
@@ -36,13 +37,17 @@ export async function applyAcpMessageOptions(
     try {
       await setOption(key, value)
     } catch (error) {
+      signal?.throwIfAborted()
+      if (!isCurrent()) {
+        return false
+      }
       if (error instanceof AcpAgentError) {
         throw withProviderDiagnostic(
           new AgentSessionOptionRejectedError(error),
           providerDiagnostic(acpPromptErrorDetail(session.spec.dialect, error), 'person')
         )
       }
-      throw error
+      throw new AgentSessionOptionRejectedError(error)
     }
     if (!isCurrent()) {
       return false

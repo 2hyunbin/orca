@@ -28,6 +28,7 @@ import {
   resetHostTestOperationIds
 } from './structured-agent-session-host-test-data'
 import { createStructuredAgentSessionLogger } from './structured-agent-session-logger'
+import { runWithReadyStructuredAgentSessionOperation } from './structured-agent-session-ready-operation'
 import { persistRewindRecord } from './structured-rewind-recovery'
 
 const CALLER = { callerKey: 'client-1' }
@@ -67,6 +68,7 @@ let closeSession: Mock<NonNullable<StructuredAgentSessionAdapter['closeSession']
 let releaseAcquisition: Mock<NonNullable<StructuredAgentSessionAdapter['releaseAcquisition']>>
 let probeOwner: Mock<(record: unknown) => Promise<AgentSessionOwnerProbe>>
 let delivered: string[]
+let initialAttach: ReturnType<typeof hostTestAttachParams>
 let idleSweep: { intervalMs: number; idleMs: number }
 
 function startHost(): void {
@@ -237,7 +239,8 @@ beforeEach(async () => {
   probeOwner = vi.fn(async () => PID_ABSENT)
   store = await openTestAgentSessionRecordStore(root)
   startHost()
-  expect(await host.attach(CALLER, hostTestAttachParams(null))).toMatchObject({ ok: true })
+  initialAttach = hostTestAttachParams(null)
+  expect(await host.attach(CALLER, initialAttach)).toMatchObject({ ok: true })
 })
 
 afterEach(async () => {
@@ -370,6 +373,84 @@ describe('a Stop while the agent start is held', () => {
 })
 
 describe('a start racing the host', () => {
+  it('honors Stop admitted while preparation yields, then starts later work once', async () => {
+    await restart()
+    const { loop } = host.collaboratorsForTests().conversationDelivery
+    const preparation = Promise.withResolvers<void>()
+    const entered = Promise.withResolvers<void>()
+    vi.spyOn(loop['deps'], 'retireOutgrownChild').mockImplementationOnce(async () => {
+      entered.resolve()
+      await preparation.promise
+    })
+    const spawned = acquire.mock.calls.length
+    const first = send('withdraw before claim')
+    await entered.promise
+    expect(host.collaboratorsForTests().runtimeState.startFlights.has(SESSION)).toBe(false)
+    const stopped = stop()
+    preparation.resolve()
+    expect(await stopped).toMatchObject({ ok: true })
+    await eventually(async () =>
+      expect((await submission(first.id))?.dispatchState).toBe('rejected')
+    )
+    await eventually(() =>
+      expect(host.collaboratorsForTests().runtimeState.startFlights.has(SESSION)).toBe(false)
+    )
+    expect(acquire).toHaveBeenCalledTimes(spawned)
+    expect(child()).toBeNull()
+    const later = send('new demand')
+    await eventually(async () =>
+      expect((await submission(later.id))?.dispatchState).toBe('accepted')
+    )
+    expect(delivered).toEqual([later.id])
+    expect(acquire).toHaveBeenCalledTimes(spawned + 1)
+  })
+
+  it('replays eager attach through the unpublished flight without inventing readiness', async () => {
+    const { first, release, spawned } = await heldAt('drain')
+    await first.sent
+    expect(child()).toBeNull()
+    expect(store.getRecord(SESSION)?.lease.claimStatus).toBe('live')
+    const opened = Promise.withResolvers<void>()
+    holds.set('open', opened)
+    let operationRan = false
+    const operation = runWithReadyStructuredAgentSessionOperation(
+      host['mutationContext'](),
+      CALLER.callerKey,
+      envelope('agentSession.setOption', {}),
+      { method: 'agentSession.setOption', fields: {} },
+      async () => {
+        operationRan = true
+        return {
+          ok: true,
+          replayed: false,
+          fence: child()!.fence,
+          cursor: host.collaboratorsForTests().sessions.get(SESSION)!.journal.cursor(),
+          value: {}
+        }
+      }
+    )
+    let replayed = false
+    const replay = host.attach(CALLER, initialAttach).then((result) => {
+      replayed = true
+      return result
+    })
+    await host.collaboratorsForTests().serialize(SESSION, async () => {})
+    expect(replayed).toBe(false)
+    expect(child()).toBeNull()
+    release()
+    expect(await replay).toMatchObject({ ok: true, replayed: true })
+    expect(child()).toMatchObject({ phase: 'starting', generation: `generation-${spawned + 1}` })
+    expect(operationRan).toBe(false)
+    opened.resolve()
+    expect(await operation).toMatchObject({ ok: true })
+    expect(operationRan).toBe(true)
+    await eventually(async () =>
+      expect((await submission(first.id))?.dispatchState).toBe('accepted')
+    )
+    expect(child()).toMatchObject({ phase: 'ready', generation: `generation-${spawned + 1}` })
+    expect(acquire).toHaveBeenCalledTimes(spawned + 1)
+  })
+
   it('spawns nothing when quit lands before the spawn', async () => {
     const { first, release, spawned } = await heldAt('resolver')
     await first.sent

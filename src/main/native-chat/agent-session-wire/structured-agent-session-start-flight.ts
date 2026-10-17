@@ -14,6 +14,7 @@ import type { StructuredAgentSessionResumeOutcome } from './structured-agent-ses
 
 export type StructuredAgentSessionStartFlight = {
   /** The start's generation: the startup attempt it mints carries the same id. */
+  readonly abort: () => void
   readonly attemptId: string
   /** Settles once the start is over: its child published, refused, or aborted. */
   readonly outcome: Promise<StructuredAgentSessionResumeOutcome>

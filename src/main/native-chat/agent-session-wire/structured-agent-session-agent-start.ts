@@ -23,6 +23,7 @@ import type {
   AgentSessionWireRefusal
 } from '../../../shared/agent-session-wire'
 import type { StructuredAgentSessionAttachContext } from './structured-agent-session-attach-context'
+import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
 import { randomUUID } from 'node:crypto'
 import { attachStructuredAgentSessionForStart } from './structured-agent-session-attach-orchestration'
 import type { StructuredAgentSessionAttachLock } from './structured-agent-session-attach-lock'
@@ -59,31 +60,49 @@ export type StructuredAgentSessionResumeOutcome =
 /** The attach's caller key: the ledger row a start settles is Orca's own. */
 const AGENT_START_CALLER_KEY = 'trusted-local:agent-start'
 
-/**
- * Gives the session a provider child if it has none, for a caller OUTSIDE its serialize. The short
- * step that registers the start is what makes "if it has none" exact: a second asker finds the
- * first one's child, or joins its start. A failed start leaves the next asker to make its own.
- */
+export type StructuredAgentSessionStartClaim = {
+  outcome: Promise<StructuredAgentSessionResumeOutcome>
+}
+
+/** Claims the effect in the ordered decision that needs it; waiting happens outside that lane. */
+export function claimStructuredAgentSessionAgent(
+  context: StructuredAgentSessionAttachContext,
+  sessionId: string,
+  startedFor?: string
+): StructuredAgentSessionStartClaim {
+  const session = context.sessions.get(sessionId)
+  const child = session?.child
+  if (
+    startedFor &&
+    !session?.journal
+      .submissions()
+      .some(
+        (submission) =>
+          submission.clientMessageId === startedFor && isQueuedAgentJournalSubmission(submission)
+      )
+  ) {
+    return { outcome: Promise.resolve({ ok: false, aborted: true, refusal: startFailedRefusal() }) }
+  }
+  if (child && !child.close) {
+    return { outcome: Promise.resolve({ ok: true }) }
+  }
+  return {
+    outcome:
+      context.runtimeState.startFlights.get(sessionId)?.outcome ??
+      registerStart(context, sessionId, startedFor)
+  }
+}
+
+/** Convenience for callers outside the lane; the claim itself never awaits its execution. */
 export async function startStructuredAgentSessionAgent(
   context: StructuredAgentSessionAttachContext,
   sessionId: string,
   startedFor?: string
 ): Promise<StructuredAgentSessionResumeOutcome> {
-  // Wrapped, so the step settles at registration and never waits on the start it registered.
-  const registered = await context.serialize<{
-    outcome: Promise<StructuredAgentSessionResumeOutcome>
-  }>(sessionId, async () => {
-    const child = context.sessions.get(sessionId)?.child
-    if (child && !child.close) {
-      return { outcome: Promise.resolve({ ok: true }) }
-    }
-    return {
-      outcome:
-        context.runtimeState.startFlights.get(sessionId)?.outcome ??
-        registerStart(context, sessionId, startedFor)
-    }
-  })
-  return registered.outcome
+  const claim = await context.serialize(sessionId, async () =>
+    claimStructuredAgentSessionAgent(context, sessionId, startedFor)
+  )
+  return claim.outcome
 }
 
 /** The same, for an operation's admission: a start that throws is that operation's refusal. */
@@ -91,15 +110,26 @@ export function startStructuredAgentSessionAgentForOperation(
   context: StructuredAgentSessionAttachContext,
   sessionId: string
 ): Promise<StructuredAgentSessionResumeOutcome> {
-  return startStructuredAgentSessionAgent(context, sessionId).catch((error: unknown) => {
-    // The error is Orca's own and goes to the log; the refusal says only that the start failed.
-    context.deps.logger.warn('starting the agent for an operation failed', {
-      scope: 'operation-agent-start',
-      sessionId,
-      error
+  return context
+    .serialize(sessionId, async () => claimOperationStart(context, sessionId))
+    .then((claim) => claim.outcome)
+}
+
+export function claimOperationStart(
+  context: StructuredAgentSessionAttachContext,
+  sessionId: string
+): StructuredAgentSessionStartClaim {
+  const claim = claimStructuredAgentSessionAgent(context, sessionId)
+  return {
+    outcome: claim.outcome.catch((error: unknown) => {
+      context.deps.logger.warn('starting the agent for an operation failed', {
+        scope: 'operation-agent-start',
+        sessionId,
+        error
+      })
+      return { ok: false, refusal: startFailedRefusal() }
     })
-    return { ok: false, refusal: startFailedRefusal() }
-  })
+  }
 }
 
 /** Inside the register step, before any wait: the controller a Stop, close or quit aborts, the
@@ -140,7 +170,11 @@ function registerStart(
         runtimeState.startupAttempts.abandon(sessionId, attemptId)
       })
   )
-  runtimeState.startFlights.register(sessionId, { attemptId, outcome })
+  runtimeState.startFlights.register(sessionId, {
+    attemptId,
+    outcome,
+    abort: acquire.abort
+  })
   return outcome
 }
 

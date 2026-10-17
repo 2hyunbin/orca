@@ -22,6 +22,7 @@ import { commandReceiptScope } from '../agent-session-journal/command-receipt-sc
 import { parseAgentSessionOperationTimestamp } from '../../../shared/agent-session-host-authority'
 import { waitForStructuredAgentSessionStart } from './structured-agent-session-start-readiness'
 import type { StructuredAgentSessionDeliveryPlace } from './structured-agent-session-delivery-order'
+import type { StructuredAgentSessionStartClaim } from './structured-agent-session-agent-start'
 import type { StructuredAgentSessionStartReadiness } from './structured-agent-session-startup-attempt'
 
 import {
@@ -49,6 +50,7 @@ type QueuedReadyOperation<T> =
       /** Null: the session has no child to run on yet, so the operation starts one outside. */
       child: StructuredAgentSessionProviderChildIdentity | null
       readiness: StructuredAgentSessionStartReadiness | null
+      start: StructuredAgentSessionStartClaim | null
       place: StructuredAgentSessionDeliveryPlace
     }
 
@@ -213,6 +215,7 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
       )
       const place = context.deliveryOrder.reserve(envelope.sessionId)
       return {
+        start: child.child ? null : context.claimAgent(envelope.sessionId),
         child: child.child,
         readiness: child.readiness,
         place
@@ -225,9 +228,9 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
   try {
     let { child, readiness } = selected
     if (!child) {
-      const started = await context.startAgent(envelope.sessionId)
-      if (!started.ok) {
-        return started
+      const started = await selected.start?.outcome
+      if (!started?.ok) {
+        return started ?? operationDidNotRun()
       }
       const selection = selectStructuredAgentSessionOperationChild(context, envelope.sessionId)
       if (!selection.ok || !selection.child) {

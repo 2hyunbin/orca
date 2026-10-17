@@ -96,6 +96,7 @@ type HostExecutionSelection = {
   stopping: boolean
   /** The option values as one stamp: another device's pick moves it, so options re-read. */
   optionStamp: string
+  permissionMode: AgentSessionStatusSummary['permissionMode']
   optionSelection: AgentSessionStatusSummary['optionSelection']
 }
 
@@ -103,6 +104,7 @@ const EMPTY_HOST_EXECUTION: HostExecutionSelection = {
   phase: null,
   stopping: false,
   optionStamp: '',
+  permissionMode: undefined,
   optionSelection: undefined
 }
 
@@ -121,6 +123,7 @@ export function useStructuredAgentSessionHostExecution(
         phase: summary?.hostExecutionPhase ?? null,
         stopping: summary?.stopping === true,
         optionStamp: `${summary?.model ?? ''}|${summary?.permissionMode ?? ''}`,
+        permissionMode: summary?.permissionMode,
         optionSelection: structuralValuesEqual(previous.optionSelection, summary?.optionSelection)
           ? previous.optionSelection
           : summary?.optionSelection
@@ -129,6 +132,7 @@ export function useStructuredAgentSessionHostExecution(
         previous.phase === next.phase &&
         previous.stopping === next.stopping &&
         previous.optionStamp === next.optionStamp &&
+        previous.permissionMode === next.permissionMode &&
         previous.optionSelection === next.optionSelection
       ) {
         return previous

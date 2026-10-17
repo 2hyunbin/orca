@@ -14,6 +14,8 @@ import {
 // queue — so leaving it inline made the host grow every time any of them did. The host keeps the
 // state; this owns the ordering between them.
 
+import { agentSessionLeaseAdmitsWriter } from '../../../shared/agent-session-lease-adjudication'
+import { refuse } from '../../../shared/agent-session-wire-refusals'
 import { randomUUID } from 'node:crypto'
 import { isFloatingWorkspaceId } from '../../../shared/floating-workspace-worktree'
 import type {
@@ -89,9 +91,38 @@ export function attachStructuredAgentSession(
   // evicts, so no child is spawned behind the eviction and orphaned.
   const run = (recordPhase?: AgentSessionCreatePhaseRecorder) =>
     context.tasks.trackAttach(
-      context.serialize(sessionId, () =>
-        runAttach(context, callerKey, params, { ...options, recordPhase })
-      )
+      (async () => {
+        for (;;) {
+          const selected = await context.serialize(sessionId, async () => {
+            const child = context.sessions.get(sessionId)?.child
+            const flight = context.runtimeState.startFlights.get(sessionId)
+            // The owning flight alone publishes its acquisition; replay waits outside its lane.
+            if (!child && flight) {
+              return { flight }
+            }
+            const record = context.deps.store.getRecord(sessionId)
+            if (!child && record && agentSessionLeaseAdmitsWriter(record.lease)) {
+              return {
+                result: {
+                  ok: false as const,
+                  refusal: refuse(
+                    'agent_session_ownership_unknown',
+                    { reason: 'noProviderChild' },
+                    'The session has no provider child to write to.'
+                  )
+                }
+              }
+            }
+            return {
+              result: await runAttach(context, callerKey, params, { ...options, recordPhase })
+            }
+          })
+          if ('result' in selected) {
+            return selected.result
+          }
+          await selected.flight.outcome
+        }
+      })()
     )
   if (params.envelope.expectedRuntimeFence !== null) {
     return run()
@@ -272,7 +303,7 @@ async function runAttachUnderAbort(
         if (barrier && !barrier.ok) {
           throw barrier.error
         }
-        if (owner === 'kept' && (attempt.bound?.current?.phase ?? 'ready') === 'ready') {
+        if (owner === 'kept' && attempt.bound?.current?.phase === 'ready') {
           attempt.rewind = await readStructuredRewindRecovery(
             context.deps,
             sessionId,

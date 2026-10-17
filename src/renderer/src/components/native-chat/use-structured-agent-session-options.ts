@@ -45,6 +45,7 @@ export function useStructuredAgentSessionOptions(args: {
   providerRunning?: boolean
   hostOptionStamp?: string
   optionSelection?: Readonly<Record<string, string>>
+  hostPermissionMode?: string
   fence: number | null
   turnId: string | null
   unloadedTurnRevisions: number | undefined
@@ -96,6 +97,7 @@ export function useStructuredAgentSessionOptions(args: {
     // holds the model it ran, so only the former waits rather than show the host's guess.
     readsBeforeStart: launch?.kind !== 'new',
     hostSelection: args.optionSelection,
+    hostPermissionMode: args.hostPermissionMode,
     launchSeedOptions,
     held,
     turnId,
