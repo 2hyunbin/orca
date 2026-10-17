@@ -8,10 +8,16 @@ import {
   resetClaudeAccountSwitchSessionsForTests
 } from './claude-account-switch-sessions'
 
+type SwitchSettings = { claudeAccountSwitchRunningSessions?: ClaudeAccountSwitchRunningSessions }
+
 type StoreStub = {
-  settings: { claudeAccountSwitchRunningSessions?: ClaudeAccountSwitchRunningSessions }
-  updateSettings: (updates: object) => Promise<void>
-  queuePaneAccountRestarts: (ptyIds: string[], agent: string, options?: object) => void
+  settings: SwitchSettings
+  updateSettings: (updates: SwitchSettings) => Promise<void>
+  queuePaneAccountRestarts: (
+    ptyIds: string[],
+    agent: string,
+    options?: { replaceQueued?: boolean }
+  ) => void
 }
 
 const store = vi.hoisted((): StoreStub => ({
