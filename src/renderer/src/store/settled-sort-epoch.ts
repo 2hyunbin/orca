@@ -33,13 +33,14 @@ export function installSettledSortEpoch(
   let settleState = INITIAL_SORT_SETTLE_STATE
   let timer: ReturnType<typeof setTimeout> | undefined
 
-  const apply = (event: SortSettleEvent): void => {
+  const dispatch = (event: SortSettleEvent): void => {
     const now = Date.now()
     const step = reduceSortSettle(settleState, event, now)
+    // Why: the timer mirrors the reducer's deadline, re-armed only when it moves.
     if (step.state.deadline !== settleState.deadline) {
       clearTimeout(timer)
       if (step.state.deadline !== null) {
-        timer = setTimeout(() => apply({ kind: 'deadline' }), step.state.deadline - now)
+        timer = setTimeout(() => dispatch({ kind: 'deadline' }), step.state.deadline - now)
       }
     }
     settleState = step.state
@@ -49,15 +50,18 @@ export function installSettledSortEpoch(
   }
 
   api.subscribe((state, previous) => {
-    const epochChanged = state.sortEpoch !== previous.sortEpoch
+    const epochBumped = state.sortEpoch !== previous.sortEpoch
     // Why also on row writes: a bump-less add during a pending window must still settle now.
     const rowsChanged = state.worktreesByRepo !== previous.worktreesByRepo
-    apply({
+    dispatch({
       kind: 'write',
-      epochChanged,
-      liveCount: epochChanged || rowsChanged ? countLiveWorktrees(state.worktreesByRepo) : null,
+      change:
+        epochBumped || rowsChanged
+          ? { epochBumped, liveCount: countLiveWorktrees(state.worktreesByRepo) }
+          : null,
       settled: state.settledSortEpoch === state.sortEpoch,
-      immediate: state.sortBy === 'manual' || state.sortBy !== previous.sortBy
+      sortBy: state.sortBy,
+      previousSortBy: previous.sortBy
     })
   })
 }

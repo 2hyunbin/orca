@@ -67,12 +67,11 @@ export function useSidebarWorktreeSortOrder(args: {
   // Why a latching ref: a live signal makes Smart authoritative for the session, even after that activity ends.
   const sessionHasHadLiveSmartSignal = useRef(false)
   // Why: cold Smart and Manual fallback rows rank by sortOrder and never persist it, so they can follow another client's save without looping.
-  const persistedRankTrigger = ranksFollowPersistedOrder(
+  const followsPersistedRanks = ranksFollowPersistedOrder(
     sortBy,
     sessionHasHadLiveSmartSignal.current
   )
-    ? sortOrderEpoch
-    : 0
+  const persistedRankTrigger = followsPersistedRanks ? sortOrderEpoch : 0
 
   const recomputedSort = useMemo(() => {
     const state = useAppStore.getState()
