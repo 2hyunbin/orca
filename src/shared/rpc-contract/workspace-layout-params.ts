@@ -135,6 +135,7 @@ const OpenEditorTabCommand = z.object({
   file: EditorFileRecord.optional(),
   groupId: z.string().min(1).optional(),
   preview: z.literal(true).optional(),
+  createdAt: z.number().int().nonnegative().optional(),
   split: NewGroupSplit
 })
 
@@ -159,6 +160,7 @@ const CreateTerminalTabCommand = z.object({
   leafId: z.string().refine(isTerminalLeafId),
   groupId: z.string().min(1).optional(),
   viewMode: z.enum(['terminal', 'chat']).optional(),
+  createdAt: z.number().int().nonnegative().optional(),
   creation: z
     .object({
       defaultTitle: z.string().min(1).optional(),
@@ -175,19 +177,35 @@ const CreateTerminalTabCommand = z.object({
   split: NewGroupSplit
 })
 
-/** The tab bar's rename: a title as the window stores it today; null clears it. */
-const RenameTabCommand = z.object({
-  type: z.literal('renameTab'),
-  ...OnTab,
-  kind: z.literal('custom'),
-  title: z.union([z.string(), z.null()])
+const AiVaultTitle = z.object({
+  agent: z.enum(['claude', 'codex']),
+  sessionId: z.string(),
+  title: z.string()
 })
+
+/** A tab's rename: a title as the window stores it today; null clears it. */
+const RenameTabCommand = z.discriminatedUnion('kind', [
+  z.object({
+    type: z.literal('renameTab'),
+    ...OnTab,
+    kind: z.enum(['custom', 'generated']),
+    title: z.union([z.string(), z.null()])
+  }),
+  z.object({
+    type: z.literal('renameTab'),
+    ...OnTab,
+    kind: z.literal('aiVault'),
+    title: z.union([AiVaultTitle, z.null()])
+  })
+])
 
 const SetTabPropsCommand = z.object({
   type: z.literal('setTabProps'),
   ...OnTab,
   color: z.union([z.string(), z.null()]).optional(),
-  isPinned: z.boolean().optional()
+  isPinned: z.boolean().optional(),
+  viewMode: z.enum(['terminal', 'chat']).optional(),
+  clearLaunchAgent: z.literal(true).optional()
 })
 
 /**
@@ -205,6 +223,8 @@ const OpenBrowserTabCommand = z.object({
   groupId: z.string().min(1).optional(),
   afterTabId: z.string().min(1).optional(),
   index: z.number().int().nonnegative().optional(),
+  createdAt: z.number().int().nonnegative().optional(),
+  browserCreatedAt: z.number().int().nonnegative().optional(),
   split: NewGroupSplit
 })
 
@@ -257,18 +277,40 @@ const MoveTabToWorkspaceCommand = z.object({
   file: EditorFileRecord.optional()
 })
 
+/**
+ * Open files the window renamed or moved on disk, under the ids the window gave them; an edit-mode
+ * file's record moves from its old path.
+ */
+const RenameEditorFilesCommand = z.object({
+  type: z.literal('renameEditorFiles'),
+  workspace: OnPane.workspace,
+  renames: z
+    .array(
+      z.object({
+        fileId: z.string().min(1),
+        newFileId: z.string().min(1),
+        record: z.object({ fromFilePath: z.string().min(1), file: EditorFileRecord }).optional()
+      })
+    )
+    .min(1)
+})
+
 /** Pane keys of the command's own tab only, so a sleep or wake never reaches past it. */
 function paneKeysNameTab(command: { tabId: string; paneKeys: string[] }): boolean {
   return command.paneKeys.every((paneKey) => parsePaneKey(paneKey)?.tabId === command.tabId)
 }
 
-/** The window's sleep of panes of one tab it already stopped; main records how each resumes. */
+/**
+ * The window's sleep of panes of one tab it already stopped; main records how each resumes.
+ * `recordOnly`: a resume record of a running agent (a live or quit capture); nothing stops.
+ */
 const SleepCommand = z
   .object({
     type: z.literal('sleep'),
     ...OnTab,
     paneKeys: z.array(z.string().min(1)).min(1),
-    records: z.array(sleepingAgentSessionRecordSchema)
+    records: z.array(sleepingAgentSessionRecordSchema),
+    recordOnly: z.literal(true).optional()
   })
   .refine(paneKeysNameTab)
   .refine((command) =>
@@ -278,9 +320,18 @@ const SleepCommand = z
     )
   )
 
-/** The window's wake of the one pane it shows; never more, so agents are not resumed in bulk. */
+/**
+ * The window's wake of the one pane it shows; never more, so agents are not resumed in bulk.
+ * `recordOnly`: the window dropped the panes' resume records; nothing starts, so any count.
+ */
 const WakeCommand = z
-  .object({ type: z.literal('wake'), ...OnTab, paneKeys: z.tuple([z.string().min(1)]) })
+  .object({
+    type: z.literal('wake'),
+    ...OnTab,
+    paneKeys: z.array(z.string().min(1)).min(1),
+    recordOnly: z.literal(true).optional()
+  })
+  .refine((command) => command.recordOnly === true || command.paneKeys.length === 1)
   .refine(paneKeysNameTab)
 
 /**
@@ -314,6 +365,7 @@ export const LayoutApplyParams = z.object({
     OpenEditorTabCommand,
     PromotePreviewTabCommand,
     MoveTabToWorkspaceCommand,
+    RenameEditorFilesCommand,
     SleepCommand,
     WakeCommand
   ])

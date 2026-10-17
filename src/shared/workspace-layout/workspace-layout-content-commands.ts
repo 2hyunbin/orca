@@ -80,6 +80,7 @@ export function openEditorTab(
   }
   const tab = contentTab(context, {
     ...(command.tabId ? { id: command.tabId } : {}),
+    ...(command.createdAt !== undefined ? { createdAt: command.createdAt } : {}),
     kind: command.contentType,
     entityId: command.fileId,
     ...(command.preview ? { isPreview: true } : {})
@@ -134,7 +135,8 @@ export function openBrowserTab(
   const tab = contentTab(context, {
     kind: 'browser',
     id: tabId,
-    entityId: browserTabId
+    entityId: browserTabId,
+    ...(command.createdAt !== undefined ? { createdAt: command.createdAt } : {})
   })
   const next = placeContentTab(model, key, tab, command, context).model
   const workspace = next.workspaces[key]!
@@ -143,7 +145,7 @@ export function openBrowserTab(
     sessionProfileId: command.profileId ?? null,
     ...(command.sessionPartition ? { sessionPartition: command.sessionPartition } : {}),
     pageIds: [pageId],
-    createdAt: tab.createdAt
+    createdAt: command.browserCreatedAt ?? tab.createdAt
   }
   return applied(
     withWorkspace(next, key, {

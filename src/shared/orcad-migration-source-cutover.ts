@@ -4,6 +4,7 @@
  */
 import { z } from 'zod'
 import {
+  MAX_ORCAD_MIGRATION_PROJECT_GROUPS,
   MAX_ORCAD_MIGRATION_REPOSITORIES,
   parseOrcadMigrationManifest,
   type OrcadMigrationManifest
@@ -52,6 +53,11 @@ const CutoverRecordSchema = z.object({
   linkedRepositoryIds: z
     .array(z.string().min(1).max(1_024))
     .max(MAX_ORCAD_MIGRATION_REPOSITORIES)
+    .optional(),
+  // Source project groups the server already holds, or only linked projects used: its record wins.
+  linkedProjectGroupIds: z
+    .array(z.string().min(1).max(1_024))
+    .max(MAX_ORCAD_MIGRATION_PROJECT_GROUPS)
     .optional(),
   manifest: z.unknown()
 })

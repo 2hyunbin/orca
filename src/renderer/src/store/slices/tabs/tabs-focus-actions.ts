@@ -9,6 +9,18 @@ import type { Tab } from '../../../../../shared/tab-types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import { recordPromotedEditorTabsInLayoutOwner } from '../editor/tabs/editor-tab-layout-owner'
 
+/** Activation ends a preview. Switch point: main stores no `isPreview: false`, so neither does this. */
+function withPreviewOnActivation(tab: Tab, preservePreview: boolean): Tab {
+  if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+    return { ...tab, isPreview: preservePreview ? tab.isPreview : false }
+  }
+  if (preservePreview) {
+    return tab
+  }
+  const { isPreview: _ended, ...rest } = tab
+  return rest
+}
+
 export function createTabsFocusActions(
   _set: TabsSliceSet,
   get: TabsSliceGet
@@ -69,8 +81,7 @@ export function createTabsFocusActions(
             [worktreeId]: (state.unifiedTabsByWorktree[worktreeId] ?? []).map((item) =>
               item.id === tabId
                 ? {
-                    ...item,
-                    isPreview: opts?.preservePreview ? item.isPreview : false,
+                    ...withPreviewOnActivation(item, opts?.preservePreview === true),
                     ...(opts?.recordFocus === false ? {} : { lastFocusedAt: Date.now() })
                   }
                 : item

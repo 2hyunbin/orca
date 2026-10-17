@@ -313,6 +313,30 @@ describe('layout.apply', () => {
     expect(parse({ ...move, toWorkspace: '' })?.success).toBe(false)
   })
 
+  it('accepts open files renamed on disk under the window’s ids, with an edit file’s record', async () => {
+    const apply = eraseRpcMethods(LAYOUT_APPLY_METHODS).find(
+      (method) => method.name === 'layout.apply'
+    )
+    const parse = (command: Record<string, unknown>) => apply?.params?.safeParse({ command })
+    const edit = {
+      fileId: '/work/one/a.ts',
+      newFileId: '/work/one/b.ts',
+      record: {
+        fromFilePath: '/work/one/a.ts',
+        file: { filePath: '/work/one/b.ts', relativePath: 'b.ts', language: 'typescript' }
+      }
+    }
+    const rename = { type: 'renameEditorFiles', workspace: WORKTREE, renames: [edit] }
+
+    expect(parse(rename)?.success).toBe(true)
+    expect(parse({ ...rename, renames: [{ fileId: 'd1', newFileId: 'd2' }] })?.success).toBe(true)
+    expect(parse({ ...rename, renames: [] })?.success).toBe(false)
+    expect(parse({ ...rename, renames: [{ ...edit, newFileId: '' }] })?.success).toBe(false)
+    expect(
+      parse({ ...rename, renames: [{ ...edit, record: { fromFilePath: 'x' } }] })?.success
+    ).toBe(false)
+  })
+
   it('takes an open into a new split under the window’s group id, on every open kind', async () => {
     const apply = (await registeredMethods(true)).find((method) => method.name === 'layout.apply')
     const parse = (command: Record<string, unknown>) => apply?.params?.safeParse({ command })
@@ -402,6 +426,34 @@ describe('layout.apply', () => {
     expect(parse({ ...wake, paneKeys: [otherTabPane] })?.success).toBe(false)
   })
 
+  it('accepts a record-only sleep and a record-only wake of any of one tab’s panes', () => {
+    const apply = eraseRpcMethods(LAYOUT_APPLY_METHODS).find(
+      (method) => method.name === 'layout.apply'
+    )
+    const parse = (command: Record<string, unknown>) => apply?.params?.safeParse({ command })
+    const paneKey = 'tab-1:11111111-1111-4111-8111-111111111111'
+    const secondPane = 'tab-1:33333333-3333-4333-8333-333333333333'
+    const otherTabPane = 'tab-2:22222222-2222-4222-8222-222222222222'
+    const record = {
+      paneKey,
+      worktreeId: WORKTREE,
+      agent: 'codex',
+      providerSession: { key: 'session_id', id: 'session-1' },
+      prompt: '',
+      state: 'working',
+      capturedAt: 1,
+      updatedAt: 1,
+      origin: 'live'
+    }
+    const sleep = { type: 'sleep', workspace: WORKTREE, tabId: 'tab-1', recordOnly: true }
+    const wake = { type: 'wake', workspace: WORKTREE, tabId: 'tab-1', recordOnly: true }
+
+    expect(parse({ ...sleep, paneKeys: [paneKey], records: [record] })?.success).toBe(true)
+    expect(parse({ ...wake, paneKeys: [paneKey, secondPane] })?.success).toBe(true)
+    expect(parse({ ...wake, paneKeys: [paneKey, otherTabPane] })?.success).toBe(false)
+    expect(parse({ ...wake, paneKeys: [] })?.success).toBe(false)
+  })
+
   it('applies group sizes to the workspace’s routed partition', async () => {
     const { runtime, applyLayoutCommand } = runtimeHolding('ssh:target-1')
     const ratios = {
@@ -454,7 +506,7 @@ describe('layout.apply', () => {
     expect(applyLayoutCommand).toHaveBeenCalledWith(create, ['local'])
   })
 
-  it('takes a tab’s custom title, color and pin, and no other tab kind or property', async () => {
+  it('takes a tab’s titles, color, pin, view and ended launch agent, and no other property', async () => {
     const apply = eraseRpcMethods(LAYOUT_APPLY_METHODS).find(
       (method) => method.name === 'layout.apply'
     )
@@ -464,13 +516,22 @@ describe('layout.apply', () => {
 
     expect(parses({ type: 'renameTab', kind: 'custom', title: ' Build ' })).toBe(true)
     expect(parses({ type: 'renameTab', kind: 'custom', title: null })).toBe(true)
-    expect(parses({ type: 'renameTab', kind: 'generated', title: 'x' })).toBe(false)
+    expect(parses({ type: 'renameTab', kind: 'generated', title: 'x' })).toBe(true)
+    expect(parses({ type: 'renameTab', kind: 'generated', title: { agent: 'claude' } })).toBe(false)
+    const vault = { agent: 'codex', sessionId: 's-1', title: 'Fix it' }
+    expect(parses({ type: 'renameTab', kind: 'aiVault', title: vault })).toBe(true)
+    expect(parses({ type: 'renameTab', kind: 'aiVault', title: null })).toBe(true)
+    expect(parses({ type: 'renameTab', kind: 'aiVault', title: 'Fix it' })).toBe(false)
+    expect(parses({ type: 'renameTab', kind: 'other', title: 'x' })).toBe(false)
     expect(parses({ type: 'setTabProps', color: '#f00', isPinned: true })).toBe(true)
     expect(parses({ type: 'setTabProps', color: null })).toBe(true)
     expect(parses({ type: 'setTabProps', isPinned: 'yes' })).toBe(false)
-    expect(
-      apply?.params?.parse({ command: { ...tab, type: 'setTabProps', viewMode: 'chat' } })
-    ).toEqual({ command: { ...tab, type: 'setTabProps' } })
+    expect(parses({ type: 'setTabProps', viewMode: 'chat', clearLaunchAgent: true })).toBe(true)
+    expect(parses({ type: 'setTabProps', viewMode: 'split' })).toBe(false)
+    expect(parses({ type: 'setTabProps', clearLaunchAgent: false })).toBe(false)
+    expect(apply?.params?.parse({ command: { ...tab, type: 'setTabProps', title: 'x' } })).toEqual({
+      command: { ...tab, type: 'setTabProps' }
+    })
   })
 
   it('applies to the partition that holds the tab, such as an SSH host’s', async () => {
