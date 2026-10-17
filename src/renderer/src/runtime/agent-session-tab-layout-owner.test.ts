@@ -60,13 +60,9 @@ vi.mock('./runtime-rpc-client', () => ({
       }
       mocks.sent.push(params.command)
       const main = mainLoad()
-      // As runtime-layout-apply.ts: main forces a window's close and marks its chat open as drawn.
+      // As runtime-layout-apply.ts: the window already confirmed its close, so main forces it.
       const command: LayoutCommand =
-        params.command.type === 'closeTabs'
-          ? { ...params.command, force: true }
-          : params.command.type === 'openAgentSessionTab'
-            ? { ...params.command, drawn: true }
-            : params.command
+        params.command.type === 'closeTabs' ? { ...params.command, force: true } : params.command
       const applied = applyLayoutCommand(main.layout, command, {
         mintId: createBrowserUuid,
         mintLeafId: createBrowserUuid,

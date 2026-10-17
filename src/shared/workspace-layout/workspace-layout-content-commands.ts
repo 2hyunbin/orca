@@ -1,6 +1,7 @@
 // Opening editor, browser and agent-session tabs: the tab and its content record in one apply.
 
 import type { EditorTabView } from '../editor-tab-view-types'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../layout-owner-switch'
 import { applied, refuse, workspaceOrEmpty, type Applied } from './workspace-layout-command-steps'
 import type { CommandOf, LayoutContext } from './workspace-layout-command-types'
 import { admitsInitialSurface } from './workspace-layout-initial-surface'
@@ -35,7 +36,7 @@ export function openEditorTab(
   const workspace = model.workspaces[key]
   const sameFile = (tab: LayoutTab): boolean =>
     tab.entityId === command.fileId && tab.kind === command.contentType
-  const drawn = drawnTabOpen(model, key, command.tabId, sameFile)
+  const drawn = drawnTabOpen(model, key, command.tabId, sameFile, true)
   if (drawn) {
     return drawn
   }
@@ -186,14 +187,14 @@ export function openAgentSessionTab(
   if (command.initial && !admitsInitialSurface(model, command.workspace, command.initial)) {
     return applied(model)
   }
-  const drawn =
-    command.drawn &&
-    drawnTabOpen(
-      model,
-      command.workspace,
-      command.tabId,
-      (tab) => tab.kind === 'agent-session' && tab.entityId === command.sessionId
-    )
+  const drawn = drawnTabOpen(
+    model,
+    command.workspace,
+    command.tabId,
+    (tab) => tab.kind === 'agent-session' && tab.entityId === command.sessionId,
+    // Switch point: shipped builds still save a chat tab whose id another tab holds.
+    ORCA_LAYOUT_OWNER_IS_MAIN
+  )
   if (drawn) {
     return drawn
   }
@@ -204,7 +205,7 @@ export function openAgentSessionTab(
     entityId: command.sessionId,
     agentSessionAgent: command.agent
   })
-  const target = command.drawn ? withSendersGroup(model, command.workspace, command.groupId) : model
+  const target = withSendersGroup(model, command.workspace, command.groupId)
   return applied(placeContentTab(target, command.workspace, tab, command, context).model, {
     tabId: tab.id
   })
@@ -212,13 +213,15 @@ export function openAgentSessionTab(
 
 /**
  * An open naming a tab id: the same open again (a tab a window drew, then sent twice or saved
- * first) changes nothing; an id another tab holds refuses it. Null when the open goes ahead.
+ * first) changes nothing; with `refuseTaken`, an id another tab holds refuses it. Null when the
+ * open goes ahead.
  */
 function drawnTabOpen(
   model: WorkspaceLayoutModel,
   key: string,
   tabId: string | undefined,
-  sameContent: (tab: LayoutTab) => boolean
+  sameContent: (tab: LayoutTab) => boolean,
+  refuseTaken: boolean
 ): Applied | null {
   if (!tabId) {
     return null
@@ -230,7 +233,7 @@ function drawnTabOpen(
   const holds = Object.values(model.workspaces).some((entry) =>
     entry.tabs.some((tab) => tab.id === tabId)
   )
-  return holds ? refuse('tab_exists') : null
+  return refuseTaken && holds ? refuse('tab_exists') : null
 }
 
 /** A workspace with no group takes the sender's, as the window keeps its emptied root group. */

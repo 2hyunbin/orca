@@ -98,10 +98,6 @@ export async function applyWindowLayoutCommand(
   if (command.type === 'sleep' || command.type === 'wake') {
     return store.applyLayoutCommand(command, holders)
   }
-  if (command.type === 'openAgentSessionTab') {
-    // The window drew the chat's tab first; a windowless host's own saves keep their old rules.
-    return store.applyLayoutCommand({ ...command, drawn: true }, [hostIds[0]])
-  }
   if (command.type !== 'closePane') {
     return store.applyLayoutCommand(command, [hostIds[0]])
   }

@@ -42,6 +42,7 @@ describe('a windowless host’s chat tab saves', () => {
     expect(groups[0]?.id).not.toBe(firstGroup)
   })
 
+  // Preserved legacy behaviour: with the build switch off a duplicate chat tab id is still saved.
   it('save a chat whose tab id another tab already holds, as they always have', () => {
     const saved = change(EMPTY, [open('chat-a', 'structured-agent-session-shared')])
     const both = change(saved, [open('chat-b', 'structured-agent-session-shared')])

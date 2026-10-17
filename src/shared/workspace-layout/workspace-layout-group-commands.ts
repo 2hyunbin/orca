@@ -154,7 +154,7 @@ export function openInNewGroup(
     return open(model)
   }
   const workspaces = Object.values(model.workspaces)
-  // The same open again finds its tab; `open` decides between no change and a taken id.
+  // A tab id already held goes to `open`, which decides what a repeat or a taken id does.
   if (
     command.tabId &&
     workspaces.some((entry) => entry.tabs.some((tab) => tab.id === command.tabId))

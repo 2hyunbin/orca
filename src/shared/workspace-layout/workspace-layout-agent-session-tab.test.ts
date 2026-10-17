@@ -1,7 +1,19 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { applyLayoutCommand } from './workspace-layout-commands'
 import type { CommandOf } from './workspace-layout-command-types'
 import { build, emptyModel, testContext, WS } from './workspace-layout-command.test-fixture'
+
+const switchState = vi.hoisted(() => ({ layoutOwnerIsMain: true }))
+
+vi.mock('../layout-owner-switch', () => ({
+  get ORCA_LAYOUT_OWNER_IS_MAIN() {
+    return switchState.layoutOwnerIsMain
+  }
+}))
+
+beforeEach(() => {
+  switchState.layoutOwnerIsMain = true
+})
 
 const drawn = (
   fields: Partial<CommandOf<'openAgentSessionTab'>> = {}
@@ -11,7 +23,6 @@ const drawn = (
   tabId: 'structured-agent-session-chat-1',
   sessionId: 'chat-1',
   agent: 'codex',
-  drawn: true,
   ...fields
 })
 
@@ -72,20 +83,14 @@ describe('a chat tab a window drew', () => {
     expect(model.workspaces[WS]?.groups).toHaveLength(1)
   })
 
-  it('keeps a windowless host’s rules when not drawn by a window', () => {
+  it('with the switch off, still takes a taken id as shipped builds do (legacy duplicate)', () => {
+    switchState.layoutOwnerIsMain = false
     const ctx = testContext()
-    const { model } = build(ctx, [drawn({ drawn: undefined, groupId: 'g1' })])
-    expect(model.workspaces[WS]?.groups.map((group) => group.id)).not.toEqual(['g1'])
-    const again = applyLayoutCommand(model, drawn({ drawn: undefined, sessionId: 'chat-2' }), ctx)
-    expect(again.ok && again.model.workspaces[WS]?.tabs).toHaveLength(2)
-  })
-
-  it('mints its own group for an open naming none, drawn or not', () => {
-    const { model } = build(
-      testContext(),
-      [drawn({ tabId: undefined, drawn: undefined })],
-      emptyModel()
-    )
-    expect(model.workspaces[WS]?.groups).toHaveLength(1)
+    const { model } = build(ctx, [drawn()])
+    const again = applyLayoutCommand(model, drawn({ sessionId: 'chat-2' }), ctx)
+    expect(again.ok && again.model.workspaces[WS]?.tabs.map((tab) => tab.entityId)).toEqual([
+      'chat-1',
+      'chat-2'
+    ])
   })
 })

@@ -176,11 +176,6 @@ export type LayoutCommand =
       createdAt?: number
       initial?: InitialSurfaceReason
       split?: NewGroupSplit
-      /**
-       * A tab a window drew first (main sets it on `layout.apply`): the same open again changes
-       * nothing, a taken id is refused, and a workspace with no group takes the window's.
-       */
-      drawn?: true
     })
   | (On & { type: 'startPane'; paneKey: string })
   | (On & { type: 'restartPane'; paneKey: string })
