@@ -10,6 +10,7 @@ import {
   updateSleepingSweepRetention
 } from '../../../../../../shared/sidebar-list/sleeping-sweep-retention'
 import { recordWindowSleepingRetention } from '@/lib/sidebar-shadow/window-sidebar-temporal-readout'
+import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../../../shared/sidebar-inputs-switch'
 
 type SweepActivityInputs = Pick<
   VisibleWorktreeOptions,
@@ -78,7 +79,9 @@ export function useSleepingSweepRetention(
 
   useEffect(() => {
     committedStateRef.current = pass.state ?? createSleepingSweepRetentionState()
-    recordWindowSleepingRetention(pass.retainedIds)
+    if (ORCA_SIDEBAR_INPUTS_IS_MAIN) {
+      recordWindowSleepingRetention(pass.retainedIds)
+    }
   }, [pass.state, pass.retainedIds])
 
   // Why: without a wake the last grace window holds its row until an unrelated store change.

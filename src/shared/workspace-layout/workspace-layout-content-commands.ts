@@ -218,7 +218,7 @@ export function openAgentSessionTab(
  * first) changes nothing; with `refuseTaken`, an id another tab holds refuses it. Null when the
  * open goes ahead.
  */
-function drawnTabOpen(
+export function drawnTabOpen(
   model: WorkspaceLayoutModel,
   key: string,
   tabId: string | undefined,
@@ -239,7 +239,7 @@ function drawnTabOpen(
 }
 
 /** A workspace with no group takes the sender's, as the window keeps its emptied root group. */
-function withSendersGroup(
+export function withSendersGroup(
   model: WorkspaceLayoutModel,
   key: string,
   groupId: string | undefined

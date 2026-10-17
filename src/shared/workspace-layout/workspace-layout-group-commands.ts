@@ -135,7 +135,11 @@ export function setGroupRatios(
 }
 
 type NewGroupOpen = CommandOf<
-  'createTerminalTab' | 'openEditorTab' | 'openBrowserTab' | 'openAgentSessionTab'
+  | 'createTerminalTab'
+  | 'openEditorTab'
+  | 'openBrowserTab'
+  | 'openAgentSessionTab'
+  | 'openSimulatorTab'
 >
 
 /**

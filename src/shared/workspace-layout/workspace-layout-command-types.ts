@@ -125,6 +125,18 @@ export type LayoutCommand =
     })
   | (On & { type: 'promotePreviewTab'; tabId: string })
   | (On & {
+      type: 'openSimulatorTab'
+      /** The window's id for the tab it drew; also the tab's entity. */
+      tabId: string
+      groupId?: string
+      /** Placement in the group: after this tab, else at this index, else at its end. */
+      afterTabId?: string
+      index?: number
+      /** When the window drew the tab, so a later save of it matches main's copy. */
+      createdAt?: number
+      split?: NewGroupSplit
+    })
+  | (On & {
       type: 'moveTabToWorkspace'
       /** The workspace that owns the tabs' file, as the window resolved it; same partition. */
       toWorkspace: string

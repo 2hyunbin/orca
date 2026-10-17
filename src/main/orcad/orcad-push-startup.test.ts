@@ -130,9 +130,7 @@ vi.mock('../server/serve-readiness', () => ({
 }))
 vi.mock('../runtime/orca-runtime', () => ({
   OrcaRuntimeService: class {
-    attachSidebarAgentStatusStore() {
-      return () => {}
-    }
+    readonly sidebarFacts = null
     getRuntimeId() {
       return 'headless-runtime'
     }
