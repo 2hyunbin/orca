@@ -21,6 +21,7 @@ import { clearRuntimeCompatibilityCacheForTests } from '../../runtime/runtime-rp
 import { toRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import type { BrowserWorkspace } from '../../../../shared/browser-workspace-types'
 import type { Tab } from '../../../../shared/tab-types'
+import type { ClosedEditorTabSnapshot } from './editor/types/open-file'
 import { toAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import {
   readNativeChatComposerDraft,
@@ -86,6 +87,18 @@ beforeEach(() => {
     }
   })
 })
+
+function closedSnapshot(filePath: string): ClosedEditorTabSnapshot {
+  const {
+    id: _id,
+    isDirty: _dirty,
+    ...snapshot
+  } = makeOpenFile({
+    id: filePath,
+    worktreeId: WORKTREE_ID
+  })
+  return snapshot
+}
 
 function seedTwins(): ReturnType<typeof createTestStore> {
   const store = createTestStore()
@@ -156,7 +169,13 @@ function seedTwins(): ReturnType<typeof createTestStore> {
         isDirty: true
       })
     ],
-    editorDrafts: { [localFileId]: 'unsaved local edit', [remoteFileId]: 'unsaved remote edit' }
+    editorDrafts: { [localFileId]: 'unsaved local edit', [remoteFileId]: 'unsaved remote edit' },
+    recentlyClosedEditorTabsByWorktree: {
+      [WORKTREE_ID]: [
+        { ...closedSnapshot('/work/same/old-remote.ts'), runtimeEnvironmentId: 'env-b' },
+        closedSnapshot('/work/same/old-local.ts')
+      ]
+    }
   })
   return store
 }
@@ -180,8 +199,10 @@ describe('removing a remote project keeps its local twin', () => {
     expect(state.openFiles.map((file) => file.id)).toEqual(['/work/same/local.ts'])
     expect(state.editorDrafts).toEqual({ '/work/same/local.ts': 'unsaved local edit' })
     expect(readNativeChatComposerDraft('tab-local:leaf-1').text).toBe('local chat draft')
-    // The survivor's reopen stack must not offer the removed host's file.
-    expect(state.recentlyClosedEditorTabsByWorktree[WORKTREE_ID] ?? []).toEqual([])
+    // The survivor's reopen stack must not offer the removed host's files, then or before.
+    expect(
+      state.recentlyClosedEditorTabsByWorktree[WORKTREE_ID]?.map((snapshot) => snapshot.filePath)
+    ).toEqual(['/work/same/old-local.ts'])
   })
 
   it('closes the removed host’s browsers, chats and hydrated terminals, and tabs opened meanwhile', async () => {

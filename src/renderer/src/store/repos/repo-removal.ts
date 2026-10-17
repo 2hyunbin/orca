@@ -219,6 +219,8 @@ export function createRepoRemovalActions(
         )
         closeRemovedHostTwinState(
           get,
+          set,
+          survivingTwinHostIds.keys(),
           mergeRemovedHostTwinState(removedTwinState, settledTwinState),
           ownerHostId
         )

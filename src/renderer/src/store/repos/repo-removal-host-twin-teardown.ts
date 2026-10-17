@@ -163,12 +163,42 @@ export function mergeRemovedHostTwinState(
   }
 }
 
+/** Drops the removed host's closed editors from a twin id's reopen stack; the survivor's stay. */
+function pruneRemovedHostReopenHistory(
+  state: AppState,
+  twinWorktreeIds: Iterable<string>,
+  removedHostId: ExecutionHostId
+): Partial<AppState> | null {
+  let next = state.recentlyClosedEditorTabsByWorktree
+  for (const worktreeId of twinWorktreeIds) {
+    const stack = next[worktreeId]
+    // Why evidence only: an unmarked snapshot may be the survivor's.
+    const kept = stack?.filter(
+      (snapshot) =>
+        !hasOpenFileExecutionHostEvidence(snapshot) ||
+        getOpenFileExecutionHostId(snapshot) !== removedHostId
+    )
+    if (stack && kept && kept.length !== stack.length) {
+      next = { ...next, [worktreeId]: kept }
+    }
+  }
+  return next === state.recentlyClosedEditorTabsByWorktree
+    ? null
+    : { recentlyClosedEditorTabsByWorktree: next }
+}
+
 /** Closes only the removed host's twin state; the survivor's tabs, files and drafts stay. */
 export function closeRemovedHostTwinState(
   get: () => AppState,
+  set: (patch: (state: AppState) => Partial<AppState>) => void,
+  twinWorktreeIds: Iterable<string>,
   removed: RemovedHostTwinState,
   removedHostId: ExecutionHostId
 ): void {
+  const historyPatch = pruneRemovedHostReopenHistory(get(), twinWorktreeIds, removedHostId)
+  if (historyPatch) {
+    set(() => historyPatch)
+  }
   // Why: a runtime host stopped its own shells on removal, so no close is sent back to it.
   const remoteCloseOwnedByHost = isRuntimeHost(removedHostId)
   for (const tabId of removed.terminalTabIds) {
