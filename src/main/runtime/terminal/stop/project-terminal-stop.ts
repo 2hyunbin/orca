@@ -116,7 +116,12 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
         void lease.then((late) => late())
       }
       try {
-        stopped += (await this.stopTerminalsForWorktree(`id:${id}`, opts)).stopped
+        // Why raced: a provider's own exit wait can outlast the budget that keeps repo.rm answering.
+        const result = await raceDeadline(
+          this.stopTerminalsForWorktree(`id:${id}`, opts),
+          options.deadline
+        )
+        stopped += result?.stopped ?? 0
       } finally {
         release?.()
       }
