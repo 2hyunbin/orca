@@ -186,6 +186,8 @@ export function movePaneToNewTab(
     createdAt: context.now(),
     customTitle: null,
     color: null,
+    // The chat pane's new tab opens in chat view, as the window's drag-out opens it.
+    ...(tab.panes.chatLeafId === leafId ? { viewMode: 'chat' as const } : {}),
     kind: 'terminal',
     terminal: {
       defaultTitle: `Terminal ${ordinal}`,

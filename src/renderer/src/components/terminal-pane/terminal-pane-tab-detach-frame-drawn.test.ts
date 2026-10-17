@@ -4,6 +4,14 @@ import type { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
 import { createTestStore, makeWorktree, seedStore } from '../../store/slices/store-test-helpers'
 import { createStoreCascadesMockApi } from '../../store/slices/store-cascades-test-harness'
 import { detachTerminalPaneToTab } from './terminal-pane-tab-detach'
+import { buildWorkspaceSessionPayload } from '@/lib/workspace-session'
+import { buildLayoutFrameSlices } from '../../store/workspace-layout-frame-slices'
+import { buildLayoutFrameStorePatch } from '../../store/workspace-layout-frame-store-patch'
+import { applyLayoutCommand } from '../../../../shared/workspace-layout/workspace-layout-commands'
+import { testContext } from '../../../../shared/workspace-layout/workspace-layout-command.test-fixture'
+import { loadWorkspaceLayoutWithoutReport } from '../../../../shared/workspace-layout/workspace-layout-load'
+import { nameBasedLoadContext } from '../../../../shared/workspace-layout/workspace-layout-minted-ids'
+import { publishWorkspaceLayout } from '../../../../shared/workspace-layout/workspace-layout-published'
 import { LEAF_1, LEAF_2, splitLayout } from './terminal-pane-tab-detach-fixture'
 
 const mocks = vi.hoisted(() => ({
@@ -96,6 +104,61 @@ function storeWithFrameDrawnMove() {
   return store
 }
 
+/** The source tab alone, split in two, its second pane showing chat. */
+function storeWithChatSplit() {
+  const store = createTestStore()
+  seedStore(store, {
+    worktreesByRepo: { repo1: [makeWorktree({ id: WT, repoId: 'repo1', path: '/path/wt' })] },
+    tabsByWorktree: { [WT]: [row(SOURCE, 'pty-left', 1)] },
+    unifiedTabsByWorktree: { [WT]: [{ ...entry(SOURCE, 1), viewMode: 'chat' }] },
+    groupsByWorktree: {
+      [WT]: [
+        { id: GROUP, worktreeId: WT, activeTabId: SOURCE, tabOrder: [SOURCE], recentTabIds: [] }
+      ]
+    },
+    activeGroupIdByWorktree: { [WT]: GROUP },
+    terminalLayoutsByTabId: {
+      [SOURCE]: {
+        ...splitLayout(),
+        chatLeafId: LEAF_2,
+        ptyIdsByLeafId: { [LEAF_1]: 'pty-left', [LEAF_2]: 'pty-right' }
+      }
+    }
+  })
+  return store
+}
+
+/** Main applies the window's drag-out to its copy and the frame with the result is drawn. */
+function drawMainMove(store: ReturnType<typeof createTestStore>): void {
+  const state = store.getState()
+  const loaded = loadWorkspaceLayoutWithoutReport(
+    'local',
+    buildWorkspaceSessionPayload(state),
+    nameBasedLoadContext()
+  )
+  const applied = applyLayoutCommand(
+    loaded.layout,
+    {
+      type: 'movePaneToNewTab',
+      workspace: WT,
+      tabId: SOURCE,
+      leafId: LEAF_2,
+      groupId: GROUP,
+      windowDetach: { ptyId: 'pty-right', tabId: MOVED }
+    },
+    testContext()
+  )
+  if (!applied.ok) {
+    throw new Error(`main refused the move: ${applied.code}`)
+  }
+  const slices = buildLayoutFrameSlices({
+    layouts: { [WT]: publishWorkspaceLayout(applied.model.workspaces[WT]!, 'local') },
+    facts: loaded.facts,
+    view: loaded.desktopView
+  })
+  store.setState(buildLayoutFrameStorePatch(state, slices, [WT]))
+}
+
 beforeEach(() => {
   mocks.send.mockReset()
   mocks.callRuntimeRpc.mockClear()
@@ -130,5 +193,32 @@ describe('a drag-out whose new tab main’s frame drew first', () => {
     expect(state.terminalLayoutsByTabId[SOURCE]!.root).toEqual({ type: 'leaf', leafId: LEAF_1 })
     expect(state.terminalLayoutsByTabId[MOVED]!.root).toEqual({ type: 'leaf', leafId: LEAF_2 })
     expect(state.activeTabIdByWorktree[WT]).toBe(MOVED)
+  })
+
+  it('opens a dragged-out chat pane’s tab in chat view, as a window-owned build does', async () => {
+    const store = storeWithChatSplit()
+    mocks.send.mockImplementation((_worktreeId, _command, handlers) => {
+      drawMainMove(store)
+      handlers.apply({ tabId: MOVED, ptyId: 'pty-right' })
+      return true
+    })
+
+    await detachTerminalPaneToTab({
+      getStore: () => store.getState(),
+      manager: {
+        getPanes: () => [{ id: 1 }, { id: 2 }],
+        getLeafId: (paneId: number) => (paneId === 2 ? LEAF_2 : LEAF_1),
+        detachPaneForExternalMove: () => true
+      },
+      persistLayoutSnapshot: vi.fn(),
+      sourcePaneId: 2,
+      sourceTabId: SOURCE,
+      targetGroupId: GROUP,
+      worktreeId: WT
+    })
+
+    const moved = store.getState().unifiedTabsByWorktree[WT]!.find((tab) => tab.entityId === MOVED)
+    expect(moved?.viewMode).toBe('chat')
+    expect(store.getState().terminalLayoutsByTabId[MOVED]?.chatLeafId).toBe(LEAF_2)
   })
 })

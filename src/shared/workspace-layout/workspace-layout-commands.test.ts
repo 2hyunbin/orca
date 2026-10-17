@@ -157,6 +157,27 @@ describe('layout command refusals', () => {
     ).toBe('same_pane')
   })
 
+  it('movePaneToNewTab opens the chat pane’s new tab in chat view, as the window does', () => {
+    const { ctx, model, tabA, leafA, leafA2 } = setup()
+    const chat = build(
+      ctx,
+      [{ type: 'setChatPane', workspace: WS, tabId: tabA, leafId: leafA2 }],
+      model
+    ).model
+    const moveOut = (leafId: string) =>
+      build(ctx, [{ type: 'movePaneToNewTab', workspace: WS, tabId: tabA, leafId }], chat)
+    const chatMove = moveOut(leafA2)
+    const chatTab = chatMove.model.workspaces[WS]!.tabs.find(
+      (tab) => tab.id === chatMove.results[0]!.tabId
+    )
+    expect(chatTab).toMatchObject({ viewMode: 'chat', panes: { chatLeafId: leafA2 } })
+    const shellMove = moveOut(leafA)
+    const shellTab = shellMove.model.workspaces[WS]!.tabs.find(
+      (tab) => tab.id === shellMove.results[0]!.tabId
+    )
+    expect(shellTab).not.toHaveProperty('viewMode')
+  })
+
   it('movePaneToNewTab refuses the last pane, which moves as a tab instead', () => {
     const { model, tabB, leafB } = setup()
     expect(
