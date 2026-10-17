@@ -25,40 +25,12 @@ export default function ClaudeAccountSwitchDialog(): React.JSX.Element | null {
     getClaudeAccountSwitchPrompt,
     getClaudeAccountSwitchPrompt
   )
-  // Why keyed by prompt id: each switch asks afresh, and closing must read the box too.
-  const [dontAskAgainFor, setDontAskAgainFor] = useState<number | null>(null)
-  const dontAskAgain = prompt !== null && dontAskAgainFor === prompt.id
-  return (
-    <Dialog
-      open={prompt !== null}
-      onOpenChange={(open) => {
-        // Why: closing never undoes the switch; it answers "Keep as is".
-        if (!open) {
-          answerClaudeAccountSwitchPrompt('keep', { dontAskAgain })
-        }
-      }}
-    >
-      {prompt ? (
-        <ClaudeAccountSwitchDialogContent
-          key={prompt.id}
-          prompt={prompt}
-          dontAskAgain={dontAskAgain}
-          onDontAskAgainChange={(checked) => setDontAskAgainFor(checked ? prompt.id : null)}
-        />
-      ) : null}
-    </Dialog>
-  )
+  // Why keyed: each switch asks afresh, with the box unticked and every session selected.
+  return prompt ? <SwitchPromptDialog key={prompt.id} prompt={prompt} /> : null
 }
 
-function ClaudeAccountSwitchDialogContent({
-  prompt,
-  dontAskAgain,
-  onDontAskAgainChange
-}: {
-  prompt: ClaudeAccountSwitchPrompt
-  dontAskAgain: boolean
-  onDontAskAgainChange: (checked: boolean) => void
-}): React.JSX.Element {
+function SwitchPromptDialog({ prompt }: { prompt: ClaudeAccountSwitchPrompt }): React.JSX.Element {
+  const [dontAskAgain, setDontAskAgain] = useState(false)
   // Why unticks, not ticks: every listed session starts selected.
   const [unticked, setUnticked] = useState<ReadonlySet<string>>(() => new Set())
   const count = prompt.sessions.length
@@ -82,87 +54,97 @@ function ClaudeAccountSwitchDialogContent({
     next: prompt.nextAccountLabel
   }
   return (
-    <DialogContent
-      data-session-list={count > 1}
-      className="sm:max-w-md sm:data-[session-list=true]:max-w-lg"
-      showCloseButton={false}
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        // Why: closing never undoes the switch; it answers "Keep as is".
+        if (!open) {
+          answerClaudeAccountSwitchPrompt('keep', { dontAskAgain })
+        }
+      }}
     >
-      <DialogHeader>
-        <DialogTitle>
-          {translate('accounts.claude.switchSessions.title', 'Switched to {{account}}', {
-            account: prompt.nextAccountLabel
-          })}
-        </DialogTitle>
-        <DialogDescription>
-          {count === 1
-            ? translate(
-                'accounts.claude.switchSessions.bodyOne',
-                '1 Claude session is still running on {{previous}}. Restarting continues the conversation on {{next}}. Busy sessions wait for idle before restarting.',
-                accounts
-              )
-            : translate(
-                'accounts.claude.switchSessions.bodyOther',
-                '{{count}} Claude sessions are still running on {{previous}}. Restarting continues each conversation on {{next}}. Busy sessions wait for idle before restarting.',
-                accounts
+      <DialogContent
+        data-session-list={count > 1}
+        className="sm:max-w-md sm:data-[session-list=true]:max-w-lg"
+        showCloseButton={false}
+      >
+        <DialogHeader>
+          <DialogTitle>
+            {translate('accounts.claude.switchSessions.title', 'Switched to {{account}}', {
+              account: prompt.nextAccountLabel
+            })}
+          </DialogTitle>
+          <DialogDescription>
+            {count === 1
+              ? translate(
+                  'accounts.claude.switchSessions.bodyOne',
+                  '1 Claude session is still running on {{previous}}. Restarting continues the conversation on {{next}}. Busy sessions wait for idle before restarting.',
+                  accounts
+                )
+              : translate(
+                  'accounts.claude.switchSessions.bodyOther',
+                  '{{count}} Claude sessions are still running on {{previous}}. Restarting continues each conversation on {{next}}. Busy sessions wait for idle before restarting.',
+                  accounts
+                )}
+          </DialogDescription>
+        </DialogHeader>
+        {count > 1 && (
+          <ClaudeAccountSwitchSessionTree
+            sessions={prompt.sessions}
+            selected={new Set(chosen)}
+            onToggle={toggle}
+          />
+        )}
+        <label className="flex min-w-0 items-start gap-2.5">
+          <Checkbox
+            checked={dontAskAgain}
+            onCheckedChange={(checked) => setDontAskAgain(checked === true)}
+            className="mt-0.5"
+          />
+          <span className="min-w-0 space-y-0.5">
+            <span className="block text-sm">
+              {translate(
+                'accounts.claude.switchSessions.dontAskAgain',
+                "Don't ask again (restart automatically)"
               )}
-        </DialogDescription>
-      </DialogHeader>
-      {count > 1 && (
-        <ClaudeAccountSwitchSessionTree
-          sessions={prompt.sessions}
-          selected={new Set(chosen)}
-          onToggle={toggle}
-        />
-      )}
-      <label className="flex min-w-0 items-start gap-2.5">
-        <Checkbox
-          checked={dontAskAgain}
-          onCheckedChange={(checked) => onDontAskAgainChange(checked === true)}
-          className="mt-0.5"
-        />
-        <span className="min-w-0 space-y-0.5">
-          <span className="block text-sm">
-            {translate(
-              'accounts.claude.switchSessions.dontAskAgain',
-              "Don't ask again (restart automatically)"
-            )}
-          </span>
-          <span className="block text-xs text-muted-foreground">
-            {translate(
-              'accounts.claude.switchSessions.dontAskAgainHint',
-              'You can turn this off in Settings → AI Provider Accounts.'
-            )}
-          </span>
-        </span>
-      </label>
-      <DialogFooter className="sm:justify-between">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => answerClaudeAccountSwitchPrompt('keep', { dontAskAgain })}
-        >
-          {translate('accounts.claude.switchSessions.keep', 'Keep as is')}
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          autoFocus
-          disabled={chosen.length === 0}
-          onClick={() =>
-            answerClaudeAccountSwitchPrompt('restart', { ptyIds: chosen, dontAskAgain })
-          }
-        >
-          <RefreshCw className="size-3.5" aria-hidden="true" />
-          {chosen.length <= 1
-            ? translate('accounts.claude.switchSessions.restartOne', 'Restart session')
-            : translate(
-                'accounts.claude.switchSessions.restartOther',
-                'Restart {{count}} sessions',
-                { count: chosen.length }
+            </span>
+            <span className="block text-xs text-muted-foreground">
+              {translate(
+                'accounts.claude.switchSessions.dontAskAgainHint',
+                'You can turn this off in Settings → AI Provider Accounts.'
               )}
-        </Button>
-      </DialogFooter>
-    </DialogContent>
+            </span>
+          </span>
+        </label>
+        <DialogFooter className="sm:justify-between">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => answerClaudeAccountSwitchPrompt('keep', { dontAskAgain })}
+          >
+            {translate('accounts.claude.switchSessions.keep', 'Keep as is')}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            autoFocus
+            disabled={chosen.length === 0}
+            onClick={() =>
+              answerClaudeAccountSwitchPrompt('restart', { ptyIds: chosen, dontAskAgain })
+            }
+          >
+            <RefreshCw className="size-3.5" aria-hidden="true" />
+            {chosen.length <= 1
+              ? translate('accounts.claude.switchSessions.restartOne', 'Restart session')
+              : translate(
+                  'accounts.claude.switchSessions.restartOther',
+                  'Restart {{count}} sessions',
+                  { count: chosen.length }
+                )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

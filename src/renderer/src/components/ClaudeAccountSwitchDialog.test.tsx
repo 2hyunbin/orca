@@ -3,27 +3,21 @@
 import { act, cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { useAppStore } from '@/store'
 import { findMovableClaudeSessions } from '@/lib/claude-session-account-move'
 import {
-  answerClaudeAccountSwitchPrompt,
   handleRunningClaudeSessionsAfterSwitch,
   resetClaudeAccountSwitchSessionsForTests
 } from '@/lib/claude-account-switch-sessions'
 import ClaudeAccountSwitchDialog from './ClaudeAccountSwitchDialog'
-import type * as SwitchSessions from '@/lib/claude-account-switch-sessions'
+import type * as AccountMove from '@/lib/claude-session-account-move'
 
-vi.mock('@/lib/claude-session-account-move', () => ({
+vi.mock('@/lib/claude-session-account-move', async (importOriginal) => ({
+  ...(await importOriginal<typeof AccountMove>()),
   findMovableClaudeSessions: vi.fn(),
   findQueuedClaudeRestartsOnAccount: () => [],
   isClaudePaneMidTurn: () => false
 }))
-vi.mock('@/lib/claude-account-switch-sessions', async (importOriginal) => {
-  const actual = await importOriginal<typeof SwitchSessions>()
-  return {
-    ...actual,
-    answerClaudeAccountSwitchPrompt: vi.fn(actual.answerClaudeAccountSwitchPrompt)
-  }
-})
 
 const LEAF = (n: number): string => `0195f2ce-1111-4000-8000-00000000000${n}`
 const candidate = (n: number) => ({
@@ -32,8 +26,18 @@ const candidate = (n: number) => ({
   tabId: `tab-${n}`,
   leafId: LEAF(n)
 })
+const row = (id: string) => ({
+  id,
+  email: `${id}@example.com`,
+  authMethod: 'subscription-oauth' as const,
+  createdAt: 1,
+  updatedAt: 1,
+  lastAuthenticatedAt: 1
+})
+const ROSTER = { accounts: [row('account-a'), row('account-b')] }
+const updateSettings = vi.fn(async () => {})
 
-async function switchWith(count: number): Promise<void> {
+async function switchWith(count: number, from = 'account-a', to = 'account-b'): Promise<void> {
   vi.mocked(findMovableClaudeSessions).mockResolvedValue(
     Array.from({ length: count }, (_, index) => candidate(index + 1))
   )
@@ -41,18 +45,33 @@ async function switchWith(count: number): Promise<void> {
     await handleRunningClaudeSessionsAfterSwitch({
       owner: { kind: 'local' },
       target: { runtime: 'host' },
-      previousAccountId: 'acct-a',
-      nextAccountId: 'acct-b',
-      previousAccountLabel: 'a@example.com',
-      nextAccountLabel: 'b@example.com'
+      before: { state: ROSTER, accountId: from },
+      after: { state: ROSTER, accountId: to }
     })
   })
 }
+
+const queued = (): Record<string, string> => useAppStore.getState().pendingPaneAccountRestarts
 
 describe('ClaudeAccountSwitchDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     resetClaudeAccountSwitchSessionsForTests()
+    useAppStore.setState({
+      updateSettings,
+      pendingPaneAccountRestarts: {},
+      terminalLayoutsByTabId: Object.fromEntries(
+        [1, 2, 3].map((n) => [
+          `tab-${n}`,
+          {
+            root: null,
+            activeLeafId: null,
+            expandedLeafId: null,
+            ptyIdsByLeafId: { [LEAF(n)]: `pty-${n}` }
+          }
+        ])
+      )
+    })
   })
 
   afterEach(() => {
@@ -71,10 +90,10 @@ describe('ClaudeAccountSwitchDialog', () => {
     await switchWith(2)
 
     expect(screen.getByRole('dialog')).toBeTruthy()
-    expect(screen.getByText('Switched to b@example.com')).toBeTruthy()
+    expect(screen.getByText('Switched to account-b@example.com')).toBeTruthy()
     expect(
       screen.getByText(
-        '2 Claude sessions are still running on a@example.com. Restarting continues each conversation on b@example.com. Busy sessions wait for idle before restarting.'
+        '2 Claude sessions are still running on account-a@example.com. Restarting continues each conversation on account-b@example.com. Busy sessions wait for idle before restarting.'
       )
     ).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Keep as is' })).toBeTruthy()
@@ -95,8 +114,9 @@ describe('ClaudeAccountSwitchDialog', () => {
 
     await user.keyboard('{Escape}')
 
-    expect(answerClaudeAccountSwitchPrompt).toHaveBeenCalledWith('keep', { dontAskAgain: false })
     expect(screen.queryByRole('dialog')).toBeNull()
+    expect(queued()).toEqual({})
+    expect(updateSettings).not.toHaveBeenCalled()
   })
 
   it("carries Don't ask again into an Escape", async () => {
@@ -107,10 +127,11 @@ describe('ClaudeAccountSwitchDialog', () => {
     await user.click(screen.getByRole('checkbox', { name: /Don't ask again/ }))
     await user.keyboard('{Escape}')
 
-    expect(answerClaudeAccountSwitchPrompt).toHaveBeenCalledWith('keep', { dontAskAgain: true })
+    expect(queued()).toEqual({})
+    expect(updateSettings).toHaveBeenCalledWith({ claudeAccountSwitchRunningSessions: 'restart' })
   })
 
-  it("passes Don't ask again with the restart answer", async () => {
+  it("restarts every session and saves Don't ask again", async () => {
     const user = userEvent.setup()
     render(<ClaudeAccountSwitchDialog />)
     await switchWith(2)
@@ -118,10 +139,8 @@ describe('ClaudeAccountSwitchDialog', () => {
     await user.click(screen.getByRole('checkbox', { name: /Don't ask again/ }))
     await user.click(screen.getByRole('button', { name: 'Restart 2 sessions' }))
 
-    expect(answerClaudeAccountSwitchPrompt).toHaveBeenCalledWith('restart', {
-      ptyIds: ['pty-1', 'pty-2'],
-      dontAskAgain: true
-    })
+    expect(queued()).toEqual({ 'pty-1': 'claude', 'pty-2': 'claude' })
+    expect(updateSettings).toHaveBeenCalledWith({ claudeAccountSwitchRunningSessions: 'restart' })
   })
 
   it('restarts only the sessions left ticked', async () => {
@@ -132,10 +151,24 @@ describe('ClaudeAccountSwitchDialog', () => {
     await user.click(screen.getAllByRole('checkbox', { name: 'Claude session' })[0])
     await user.click(screen.getByRole('button', { name: 'Restart 2 sessions' }))
 
-    expect(answerClaudeAccountSwitchPrompt).toHaveBeenCalledWith('restart', {
-      ptyIds: ['pty-2', 'pty-3'],
-      dontAskAgain: false
-    })
+    expect(queued()).toEqual({ 'pty-2': 'claude', 'pty-3': 'claude' })
+    expect(updateSettings).not.toHaveBeenCalled()
+  })
+
+  it("asks a newer switch afresh, with Don't ask again and every session reset", async () => {
+    const user = userEvent.setup()
+    render(<ClaudeAccountSwitchDialog />)
+    await switchWith(3)
+    await user.click(screen.getByRole('checkbox', { name: /Don't ask again/ }))
+    await user.click(screen.getAllByRole('checkbox', { name: 'Claude session' })[0])
+
+    await switchWith(3, 'account-b', 'account-a')
+
+    expect(screen.getByText('Switched to account-a@example.com')).toBeTruthy()
+    expect(
+      screen.getByRole('checkbox', { name: /Don't ask again/ }).getAttribute('aria-checked')
+    ).toBe('false')
+    expect(screen.getByRole('button', { name: 'Restart 3 sessions' })).toBeTruthy()
   })
 
   it('shows no session list for a single session', async () => {

@@ -29,9 +29,8 @@ import {
   isClaudeAccountCancellation,
   isCodexAccountCancellation
 } from './accounts-pane-action-errors'
-import { getClaudeAccountLabel } from './accounts-pane-runtime'
+import { getClaudeAccountLabel } from '@/lib/claude-account-label'
 import { handleRunningClaudeSessionsAfterSwitch } from '@/lib/claude-account-switch-sessions'
-import { claudeLaunchAccountId } from '@/lib/claude-session-account-move'
 
 type CodexActionContext = {
   settings: GlobalSettings
@@ -222,12 +221,10 @@ export function createClaudeAccountActionRunner(
         void handleRunningClaudeSessionsAfterSwitch({
           owner: accountOwner,
           target: actionRuntime,
-          previousAccountId: claudeLaunchAccountId(claudeAccounts, previousActiveAccountId),
-          nextAccountId: claudeLaunchAccountId(next, nextActiveAccountId),
-          previousAccountLabel: getClaudeAccountLabel(claudeAccounts, previousActiveAccountId),
-          nextAccountLabel: getClaudeAccountLabel(next, nextActiveAccountId)
+          before: { state: claudeAccounts, accountId: previousActiveAccountId },
+          after: { state: next, accountId: nextActiveAccountId }
         }).then((outcome) => {
-          if (outcome === 'none' || outcome === 'kept') {
+          if (outcome === 'show-confirmation') {
             showUpdatedToast()
           }
         })

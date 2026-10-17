@@ -8,7 +8,10 @@ import { useAppStore } from '@/store'
 import type { CodexAccountSelectionTarget } from '../../../shared/codex-selection-lane'
 import type { ClaudeAccountSwitchRunningSessions } from '../../../shared/claude-account-switch-settings'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
+import type { ClaudeRateLimitAccountsState } from '../../../shared/managed-account-types'
+import { getClaudeAccountLabel } from './claude-account-label'
 import {
+  claudeLaunchAccountId,
   findMovableClaudeSessions,
   findQueuedClaudeRestartsOnAccount,
   type ClaudeSessionMoveCandidate
@@ -21,9 +24,6 @@ export type ClaudeAccountSwitchPrompt = {
   previousAccountLabel: string
   nextAccountLabel: string
 }
-
-/** 'none' and 'kept' leave the caller's own switch confirmation to show. */
-export type ClaudeAccountSwitchOutcome = 'none' | 'kept' | 'restarted' | 'prompted' | 'superseded'
 
 let switchGeneration = 0
 let prompt: ClaudeAccountSwitchPrompt | null = null
@@ -49,10 +49,7 @@ function queueClaudeRestarts(ptyIds: string[]): void {
   useAppStore.getState().queuePaneAccountRestarts(ptyIds, 'claude')
 }
 
-/**
- * The panes' PTYs as they are now. Why: a reattach can rebind a pane while the dialog is open,
- * and a closed pane has none, so the ids it listed may name nothing.
- */
+/** Why now: a reattach can rebind a pane while the dialog is open, and a closed pane has none. */
 function currentPtyIds(sessions: readonly ClaudeSessionMoveCandidate[]): string[] {
   const layouts = useAppStore.getState().terminalLayoutsByTabId
   return sessions.flatMap((session) => {
@@ -91,62 +88,59 @@ export function answerClaudeAccountSwitchPrompt(
   }
 }
 
+/** A selected account row and the roster it was selected from. */
+export type ClaudeAccountSnapshot = {
+  state: Pick<ClaudeRateLimitAccountsState, 'accounts'>
+  accountId: string | null
+}
+
 /**
- * Runs after a Claude account switch has already applied. Finds Claude sessions
- * still on the outgoing account and asks, restarts, or keeps them per the
- * saved setting.
+ * Runs after a Claude account switch has already applied: asks, restarts, or keeps Claude
+ * sessions still on the outgoing account. 'show-confirmation' leaves the caller's own toast.
  */
 export async function handleRunningClaudeSessionsAfterSwitch(args: {
   owner: RuntimeClientTarget
   target: CodexAccountSelectionTarget
-  /** Where launches ran and now run; see claudeLaunchAccountId. */
-  previousAccountId: string | null
-  nextAccountId: string | null
-  previousAccountLabel: string
-  nextAccountLabel: string
-}): Promise<ClaudeAccountSwitchOutcome> {
-  // Why first: a server's switch moves nothing here, so local questions and queued restarts stand;
-  // nor does one whose launches run on the same folder as before (see claudeLaunchAccountId).
-  if (args.owner.kind !== 'local' || args.previousAccountId === args.nextAccountId) {
-    return 'none'
+  before: ClaudeAccountSnapshot
+  after: ClaudeAccountSnapshot
+}): Promise<'show-confirmation' | 'handled'> {
+  const fromAccountId = claudeLaunchAccountId(args.before.state, args.before.accountId)
+  const toAccountId = claudeLaunchAccountId(args.after.state, args.after.accountId)
+  // Why: a server's switch moves nothing here, and one between launch folders that coincide moves nothing.
+  if (args.owner.kind !== 'local' || fromAccountId === toAccountId) {
+    return 'show-confirmation'
   }
   const generation = ++switchGeneration
   setPrompt(null)
-  // Why: an accepted restart relaunches on whatever is selected when it runs, so it outlives
-  // later switches; it drops only once its session is already on the newly selected account.
+  // Why: an accepted restart relaunches on whatever is selected when it runs, so it outlives later switches.
   const store = useAppStore.getState()
   for (const ptyId of findQueuedClaudeRestartsOnAccount({
     owner: args.owner,
     target: args.target,
-    accountId: args.nextAccountId
+    accountId: toAccountId
   })) {
     store.consumePendingPaneAccountRestart(ptyId)
+  }
+  if (readPolicy() === 'keep') {
+    return 'show-confirmation'
   }
   const found = await findMovableClaudeSessions({
     owner: args.owner,
     target: args.target,
-    fromAccountId: args.previousAccountId
+    fromAccountId
   }).catch((error: unknown) => {
     console.warn('[claude-account-switch] session scan failed:', error)
     return []
   })
   if (generation !== switchGeneration) {
-    return 'superseded'
+    return 'handled'
   }
-  if (found.length === 0) {
-    return 'none'
+  // Why re-read: the setting may change while the scan runs.
+  const policy = readPolicy()
+  if (found.length === 0 || policy === 'keep') {
+    return 'show-confirmation'
   }
-  const request: ClaudeAccountSwitchPrompt = {
-    id: generation,
-    sessions: found,
-    previousAccountLabel: args.previousAccountLabel,
-    nextAccountLabel: args.nextAccountLabel
-  }
-  const policy: ClaudeAccountSwitchRunningSessions =
-    useAppStore.getState().settings?.claudeAccountSwitchRunningSessions ?? 'ask'
-  if (policy === 'keep') {
-    return 'kept'
-  }
+  const nextAccountLabel = getClaudeAccountLabel(args.after.state, args.after.accountId)
   if (policy === 'restart') {
     queueClaudeRestarts(found.map((candidate) => candidate.ptyId))
     toast.success(
@@ -154,18 +148,27 @@ export async function handleRunningClaudeSessionsAfterSwitch(args: {
         ? translate(
             'accounts.claude.switchSessions.restartingOne',
             'Restarting 1 Claude session on {{account}}',
-            { account: args.nextAccountLabel }
+            { account: nextAccountLabel }
           )
         : translate(
             'accounts.claude.switchSessions.restartingOther',
             'Restarting {{count}} Claude sessions on {{account}}',
-            { count: found.length, account: args.nextAccountLabel }
+            { count: found.length, account: nextAccountLabel }
           )
     )
-    return 'restarted'
+    return 'handled'
   }
-  setPrompt(request)
-  return 'prompted'
+  setPrompt({
+    id: generation,
+    sessions: found,
+    previousAccountLabel: getClaudeAccountLabel(args.before.state, args.before.accountId),
+    nextAccountLabel
+  })
+  return 'handled'
+}
+
+function readPolicy(): ClaudeAccountSwitchRunningSessions {
+  return useAppStore.getState().settings?.claudeAccountSwitchRunningSessions ?? 'ask'
 }
 
 export function resetClaudeAccountSwitchSessionsForTests(): void {
