@@ -32,7 +32,6 @@ import { CLIENT_HISTORY_READER } from './agent-session-item-wire-form'
 import {
   boundHistoryItemsByBytes,
   type HistoryReader,
-  type HistoryItemForm,
   measureHistoryItem,
   newestWholeSequenceGroups,
   wholeSubagentGroupsStart,
@@ -236,7 +235,7 @@ function readForward(
   // submissions AND removal ids — a legal pre-bounding tombstone id can dwarf
   // every item on the page.
   const pageContentBytes = (
-    items: readonly HistoryItemForm[],
+    items: readonly ReturnType<HistoryReader['form']>[],
     removedItemIds: readonly string[]
   ): number =>
     items.reduce(
