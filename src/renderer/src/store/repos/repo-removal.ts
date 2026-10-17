@@ -20,7 +20,8 @@ import { mergeProjectCompatibilityForHostRepoChange } from './repo-catalog-ident
 import {
   closeRemovedHostTwinState,
   collectRemovedHostTwinState,
-  getSurvivingTwinHostIds
+  getSurvivingTwinHostIds,
+  mergeRemovedHostTwinState
 } from './repo-removal-host-twin-teardown'
 import {
   captureWorkspaceChatDraftKeys,
@@ -127,7 +128,7 @@ export function createRepoRemovalActions(
         )
         const removedTwinEntityIds = new Set([
           ...removedTwinState.terminalTabIds,
-          ...removedTwinState.conversationTabIds
+          ...removedTwinState.conversationIds
         ])
         const chatDraftKeys = captureWorkspaceChatDraftKeys(
           get(),
@@ -209,7 +210,18 @@ export function createRepoRemovalActions(
         }
 
         // Why: use the canonical per-worktree purge to evict all worktree-scoped maps (hand-deletion leaked most); runs before the set() below so it still sees tabsByWorktree.
-        closeRemovedHostTwinState(get, removedTwinState, ownerHostId)
+        // Why merged: the pre-call snapshot survives the announcement's refresh; this adds tabs opened meanwhile.
+        const settledTwinState = collectRemovedHostTwinState(
+          get(),
+          new Set(survivingTwinHostIds.keys()),
+          ownerHostId,
+          survivingTwinHostIds
+        )
+        closeRemovedHostTwinState(
+          get,
+          mergeRemovedHostTwinState(removedTwinState, settledTwinState),
+          ownerHostId
+        )
         get().purgeWorktreeTerminalState(exclusiveWorktreeIds)
         deleteWorkspaceChatDrafts(chatDraftKeys)
         get().clearLocalDetectedAgentContextsForProjects(localAgentContextProjectIds)

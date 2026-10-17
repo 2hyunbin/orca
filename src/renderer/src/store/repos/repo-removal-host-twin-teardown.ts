@@ -46,9 +46,13 @@ export function getSurvivingTwinHostIds(
  * Anything without host evidence stays: it may be the survivor's.
  */
 export type RemovedHostTwinState = {
-  terminalTabIds: string[]
-  fileIds: string[]
-  conversationTabIds: Set<string>
+  terminalTabIds: Set<string>
+  fileIds: Set<string>
+  browserTabIds: Set<string>
+  /** Unified tab ids of the removed host's structured chats. */
+  agentSessionTabIds: Set<string>
+  /** Their conversation ids, which key the chats' drafts. */
+  conversationIds: Set<string>
 }
 
 type HostEvidence = ExecutionHostId | 'non-runtime' | null
@@ -87,9 +91,13 @@ export function collectRemovedHostTwinState(
   removedHostId: ExecutionHostId,
   survivingHostIdsByWorktreeId: ReadonlyMap<string, readonly ExecutionHostId[]>
 ): RemovedHostTwinState {
-  const terminalTabIds: string[] = []
-  const fileIds: string[] = []
-  const conversationTabIds = new Set<string>()
+  const removed: RemovedHostTwinState = {
+    terminalTabIds: new Set(),
+    fileIds: new Set(),
+    browserTabIds: new Set(),
+    agentSessionTabIds: new Set(),
+    conversationIds: new Set()
+  }
   for (const worktreeId of twinWorktreeIds) {
     const survivors = survivingHostIdsByWorktreeId.get(worktreeId) ?? []
     const owns = (evidence: HostEvidence): boolean =>
@@ -106,7 +114,7 @@ export function collectRemovedHostTwinState(
       const evidence = stamped ? [stamped] : ptyIds.map(ptyHostEvidence)
       // Why every: one pane on another host means the tab is not only the removed host's.
       if (evidence.length > 0 && evidence.every(owns)) {
-        terminalTabIds.push(tab.id)
+        removed.terminalTabIds.add(tab.id)
       }
     }
     for (const file of state.openFiles) {
@@ -121,16 +129,39 @@ export function collectRemovedHostTwinState(
           : // Why: runtime files always record their environment, so an unmarked one is local/SSH.
             'non-runtime')
       if (owns(evidence)) {
-        fileIds.push(file.id)
+        removed.fileIds.add(file.id)
       }
     }
     for (const tab of unifiedTabs) {
-      if (tab.contentType === 'agent-session' && tab.executionHostId === removedHostId) {
-        conversationTabIds.add(tab.entityId)
+      if (tab.executionHostId !== removedHostId) {
+        continue
+      }
+      if (tab.contentType === 'terminal') {
+        // Why: a hydrated terminal can exist only as a unified tab, with no legacy row above.
+        removed.terminalTabIds.add(tab.entityId)
+      } else if (tab.contentType === 'browser') {
+        removed.browserTabIds.add(tab.entityId)
+      } else if (tab.contentType === 'agent-session') {
+        removed.agentSessionTabIds.add(tab.id)
+        removed.conversationIds.add(tab.entityId)
       }
     }
   }
-  return { terminalTabIds, fileIds, conversationTabIds }
+  return removed
+}
+
+/** Union of two attributions: one taken before the host call, one after it settled. */
+export function mergeRemovedHostTwinState(
+  a: RemovedHostTwinState,
+  b: RemovedHostTwinState
+): RemovedHostTwinState {
+  return {
+    terminalTabIds: new Set([...a.terminalTabIds, ...b.terminalTabIds]),
+    fileIds: new Set([...a.fileIds, ...b.fileIds]),
+    browserTabIds: new Set([...a.browserTabIds, ...b.browserTabIds]),
+    agentSessionTabIds: new Set([...a.agentSessionTabIds, ...b.agentSessionTabIds]),
+    conversationIds: new Set([...a.conversationIds, ...b.conversationIds])
+  }
 }
 
 /** Closes only the removed host's twin state; the survivor's tabs, files and drafts stay. */
@@ -150,5 +181,11 @@ export function closeRemovedHostTwinState(
   }
   for (const fileId of removed.fileIds) {
     get().closeFile(fileId)
+  }
+  for (const browserTabId of removed.browserTabIds) {
+    get().closeBrowserTab(browserTabId, { reason: 'cleanup' })
+  }
+  for (const tabId of removed.agentSessionTabIds) {
+    get().closeUnifiedTab(tabId, { preserveWorktreeSelection: true })
   }
 }

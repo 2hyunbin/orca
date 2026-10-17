@@ -19,6 +19,8 @@ import {
 } from '../../runtime/runtime-compatibility-test-fixture'
 import { clearRuntimeCompatibilityCacheForTests } from '../../runtime/runtime-rpc-client'
 import { toRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
+import type { BrowserWorkspace } from '../../../../shared/browser-workspace-types'
+import type { Tab } from '../../../../shared/tab-types'
 import {
   readNativeChatComposerDraft,
   updateNativeChatComposerDraft
@@ -39,11 +41,30 @@ const remoteRow: Repo = { ...localRow, executionHostId: REMOTE_HOST }
 const remotePtyId = toRemoteRuntimePtyId('handle-1', 'env-b')
 
 const ptyKill = vi.fn()
+let onRepoRemoved: (() => void) | null = null
+
+function browserWorkspace(id: string): BrowserWorkspace {
+  return {
+    id,
+    worktreeId: WORKTREE_ID,
+    url: 'about:blank',
+    title: id,
+    loading: false,
+    faviconUrl: null,
+    canGoBack: false,
+    canGoForward: false,
+    loadError: null,
+    createdAt: 1
+  }
+}
 
 function answerLikeRuntimeHost(args: RuntimeEnvironmentCallRequest): unknown {
   const compatible = createCompatibleRuntimeStatusResponseIfNeeded(args)
   if (compatible) {
     return compatible
+  }
+  if (args.method === 'repo.rm') {
+    onRepoRemoved?.()
   }
   return { id: args.method, ok: true, result: {}, _meta: { runtimeId: 'runtime-remote' } }
 }
@@ -51,6 +72,7 @@ function answerLikeRuntimeHost(args: RuntimeEnvironmentCallRequest): unknown {
 beforeEach(() => {
   clearRuntimeCompatibilityCacheForTests()
   ptyKill.mockReset()
+  onRepoRemoved = null
   vi.stubGlobal('window', {
     api: {
       repos: { remove: vi.fn(), removeForHost: vi.fn().mockResolvedValue(undefined) },
@@ -157,5 +179,51 @@ describe('removing a remote project keeps its local twin', () => {
     expect(state.openFiles.map((file) => file.id)).toEqual(['/work/same/local.ts'])
     expect(state.editorDrafts).toEqual({ '/work/same/local.ts': 'unsaved local edit' })
     expect(readNativeChatComposerDraft('tab-local:leaf-1').text).toBe('local chat draft')
+  })
+
+  it('closes the removed host’s browsers, chats and hydrated terminals, and tabs opened meanwhile', async () => {
+    const store = seedTwins()
+    const unified = (overrides: Partial<Tab> & { id: string }): Tab =>
+      makeUnifiedTab({ worktreeId: WORKTREE_ID, groupId: 'group-1', ...overrides })
+    store.setState((s) => ({
+      browserTabsByWorktree: {
+        [WORKTREE_ID]: [browserWorkspace('browser-local'), browserWorkspace('browser-remote')]
+      },
+      unifiedTabsByWorktree: {
+        [WORKTREE_ID]: [
+          ...(s.unifiedTabsByWorktree[WORKTREE_ID] ?? []),
+          unified({ id: 'browser-local', contentType: 'browser', executionHostId: 'local' }),
+          unified({ id: 'browser-remote', contentType: 'browser', executionHostId: REMOTE_HOST }),
+          unified({
+            id: 'chat-remote',
+            contentType: 'agent-session',
+            executionHostId: REMOTE_HOST
+          }),
+          unified({ id: 'hydrated-remote', executionHostId: REMOTE_HOST })
+        ]
+      }
+    }))
+    // Opened while the host call was pending, so the pre-call snapshot cannot see it.
+    onRepoRemoved = () =>
+      store.setState((s) => ({
+        unifiedTabsByWorktree: {
+          [WORKTREE_ID]: [
+            ...(s.unifiedTabsByWorktree[WORKTREE_ID] ?? []),
+            unified({ id: 'late-remote', executionHostId: REMOTE_HOST })
+          ]
+        }
+      }))
+
+    await store.getState().removeProject(PROJECT_ID, { hostId: REMOTE_HOST })
+
+    const state = store.getState()
+    expect(state.browserTabsByWorktree[WORKTREE_ID]?.map((tab) => tab.id)).toEqual([
+      'browser-local'
+    ])
+    expect(state.unifiedTabsByWorktree[WORKTREE_ID]?.map((tab) => tab.id)).toEqual([
+      'tab-local',
+      '/work/same/local.ts',
+      'browser-local'
+    ])
   })
 })
