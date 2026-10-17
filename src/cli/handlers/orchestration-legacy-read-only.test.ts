@@ -8,6 +8,7 @@ vi.mock('../selectors', () => ({ getTerminalHandle: vi.fn() }))
 import { printResult } from '../format'
 import { parseArgs, validateCommandAndFlags } from '../args'
 import { COMMAND_SPECS } from '../specs'
+import { RuntimeClient } from '../runtime-client'
 import { ORCHESTRATION_HANDLERS } from './orchestration'
 
 beforeEach(() => {
@@ -22,12 +23,14 @@ describe('legacy orchestration CLI inspection', () => {
       'orchestration inbox --id old_report --terminal term_coord --full'.split(' ')
     )
     validateCommandAndFlags(COMMAND_SPECS, parsed)
+    const client = new RuntimeClient('/tmp/orca-pr-28567-cli-test', 60_000, null, null)
+    client.call = callMock
     await ORCHESTRATION_HANDLERS['orchestration inbox']({
       flags: parsed.flags,
-      client: { call: callMock },
+      client,
       cwd: '/repo',
       json: true
-    } as never)
+    })
     const printed = vi.mocked(printResult).mock.calls[0]
     expect(callMock).toHaveBeenCalledWith(
       'orchestration.inbox',
