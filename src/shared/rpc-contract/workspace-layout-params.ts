@@ -256,6 +256,17 @@ const SetBrowserTabProfileCommand = z.object({
 
 const PromotePreviewTabCommand = z.object({ type: z.literal('promotePreviewTab'), ...OnTab })
 
+/** A simulator tab under the id the window drew it with, which is also its entity. */
+const OpenSimulatorTabCommand = z.object({
+  type: z.literal('openSimulatorTab'),
+  ...OnTab,
+  groupId: z.string().min(1).optional(),
+  afterTabId: z.string().min(1).optional(),
+  index: z.number().int().nonnegative().optional(),
+  createdAt: z.number().int().nonnegative().optional(),
+  split: NewGroupSplit
+})
+
 /**
  * Restored editor tabs the window moved to the workspace that owns their file (F42): the window
  * resolved that owner. Main refuses it when the two workspaces are in different partitions.
@@ -338,8 +349,8 @@ const WakeCommand = z
  * A window's layout command (`layout.apply`, registered only in a layout-owner build). The window
  * names what it acts on; main mints every new id but a created terminal tab's
  * (see CreateTerminalTabCommand), a browser tab's and page's, which the window already shows
- * (see OpenBrowserTabCommand), an editor tab's (see OpenEditorTabCommand), and the group an open
- * into a new split makes (see NewGroupSplit).
+ * (see OpenBrowserTabCommand), an editor tab's (see OpenEditorTabCommand), a simulator tab's (see
+ * OpenSimulatorTabCommand), and the group an open into a new split makes (see NewGroupSplit).
  */
 export const LayoutApplyParams = z.object({
   command: z.discriminatedUnion('type', [
@@ -364,6 +375,7 @@ export const LayoutApplyParams = z.object({
     SetBrowserTabProfileCommand,
     OpenEditorTabCommand,
     PromotePreviewTabCommand,
+    OpenSimulatorTabCommand,
     MoveTabToWorkspaceCommand,
     RenameEditorFilesCommand,
     SleepCommand,
