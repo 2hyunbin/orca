@@ -18,7 +18,7 @@ it.each(['direct', 'transition'] as const)('persists complete content through %s
   const identity = { provider: 'legacy' as const, agent: 'grok', sessionId: SESSION, recordId: 'full' }
   const options = { turnScope: AGENT_JOURNAL_THREAD_SCOPE, lifecycle: true }
   const text = `${'\u0001'.repeat(3 * 1024 * 1024)}MIDDLE${'x'.repeat(5 * 1024 * 1024)}TAIL`
-  const body = { kind: 'tool-call' as const, name: 'bash', input: { large: 'i'.repeat(1024 * 1024) }, state: 'completed', output: journalPayload(text) }
+  const body = { kind: 'tool-call' as const, name: 'bash', input: { large: 'i'.repeat(1024 * 1024) }, state: 'completed' as const, output: journalPayload(text) }
   const cursor = rig.journal.cursor()
   const snapshot = rig.journal.snapshot()
   const blocked = rig.journal.readInOrder(() => {

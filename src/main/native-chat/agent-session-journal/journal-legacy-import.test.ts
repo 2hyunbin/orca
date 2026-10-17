@@ -20,7 +20,10 @@ import {
 } from './journal-legacy-import'
 import { openAgentSessionJournal } from './journal-store-factory'
 import type { AgentSessionJournal } from './journal-store'
-import { openTestJournalHostDatabase } from './journal-host-database-test-support'
+import {
+  createTrackedJournalOpener,
+  openTestJournalHostDatabase
+} from './journal-host-database-test-support'
 import {
   claudeProviderHandle,
   codexProviderHandle
@@ -45,6 +48,7 @@ const CODEX_SESSION = '019fd532-7c11-7a90-b6de-4e1a2c3d5f60'
 
 let root: string
 let clock = 1_000
+const journals = createTrackedJournalOpener()
 
 function tick(): number {
   clock += 1
@@ -77,13 +81,15 @@ async function open(
   sessionId: string,
   overrides: Partial<Parameters<typeof openAgentSessionJournal>[0]> = {}
 ): Promise<AgentSessionJournal> {
-  return openAgentSessionJournal({
-    identity: identity(agent, sessionId),
-    database: openTestJournalHostDatabase(root),
-    now: tick,
-    mintEpoch: () => `epoch-${clock}`,
-    ...overrides
-  })
+  return journals.track(
+    await openAgentSessionJournal({
+      identity: identity(agent, sessionId),
+      database: openTestJournalHostDatabase(root),
+      now: tick,
+      mintEpoch: () => `epoch-${clock}`,
+      ...overrides
+    })
+  )
 }
 
 function legacyKey(recordId: string): string {
@@ -210,6 +216,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   decodedClaudeOverride.message = null
+  await journals.closeAll()
   await rm(root, { recursive: true, force: true })
 })
 
