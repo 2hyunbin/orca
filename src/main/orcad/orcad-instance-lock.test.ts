@@ -563,23 +563,57 @@ describe('acquireOrcadInstanceLock', () => {
     expect(readdirSync(root)).toEqual([ORCAD_LOCK_FILE_NAME])
   })
 
-  it('serializes recovery, and breaks only a recovery lock a crash abandoned', () => {
+  it('breaks a recovery lock only once its owner provably exited, however old it is', () => {
     const root = makeRoot()
     const lockPath = join(root, ORCAD_LOCK_FILE_NAME)
     const recovery = `${lockPath}.recovery`
+    const longAgo = new Date(Date.now() - 60_000)
+    const leaveRecovery = (owner: string | null): void => {
+      rmSync(recovery, { recursive: true, force: true })
+      mkdirSync(recovery)
+      if (owner !== null) {
+        writeFileSync(join(recovery, 'owner'), owner)
+      }
+      utimesSync(recovery, longAgo, longAgo)
+    }
+    const reclaimer = (overrides: Partial<OrcadLockRecord>): string =>
+      JSON.stringify(persistedRecord({ pid: 5150, nonce: 'reclaimer', ...overrides }))
+    const refused = expect.objectContaining({ message: expect.stringContaining('is reclaiming') })
+    // Only pid 5150, the paused reclaimer, is running.
+    const paused = hooks({ processIsAlive: (pid) => pid === 5150 })
     writeFileSync(lockPath, JSON.stringify(persistedRecord()))
-    mkdirSync(recovery)
-    writeFileSync(join(recovery, 'owner'), 'live-reclaimer')
-    expect(() => acquireOrcadInstanceLock(root, hooks())).toThrow(
-      expect.objectContaining({ message: expect.stringContaining('is reclaiming') })
-    )
+
+    for (const owner of [
+      reclaimer({ machineIdentity: 'machine-a' }),
+      // Dead here, but on another machine.
+      reclaimer({ pid: 6160, machineIdentity: 'machine-b' }),
+      'not a record'
+    ]) {
+      leaveRecovery(owner)
+      expect(() => acquireOrcadInstanceLock(root, paused)).toThrow(refused)
+      expect(readOrcadInstanceLockRecord(lockPath)?.nonce).toBe('stale')
+    }
+    // Dead here, on a machine this cannot tell apart from this one.
+    writeFileSync(lockPath, JSON.stringify(persistedRecord({ machineIdentity: 'machine-a' })))
+    leaveRecovery(reclaimer({ pid: 6160 }))
+    expect(() =>
+      acquireOrcadInstanceLock(root, hooks({ ...paused, dataRootIsOnLocalDisk: () => false }))
+    ).toThrow(refused)
     expect(readOrcadInstanceLockRecord(lockPath)?.nonce).toBe('stale')
 
-    const longAgo = new Date(Date.now() - 60_000)
-    utimesSync(recovery, longAgo, longAgo)
-    const lock = acquireOrcadInstanceLock(root, hooks())
-    expect(readOrcadInstanceLockRecord(lockPath)?.nonce).toBe(lock.record.nonce)
-    expect(readdirSync(root)).toEqual([ORCAD_LOCK_FILE_NAME])
+    // An owner that exited on this machine, and an owner file never written, are a crash's.
+    for (const owner of [reclaimer({ pid: 6160, machineIdentity: 'machine-a' }), null]) {
+      writeFileSync(lockPath, JSON.stringify(persistedRecord({ machineIdentity: 'machine-a' })))
+      leaveRecovery(owner)
+      const lock = acquireOrcadInstanceLock(root, paused)
+      expect(readOrcadInstanceLockRecord(lockPath)?.nonce).toBe(lock.record.nonce)
+      expect(readdirSync(root)).toEqual([ORCAD_LOCK_FILE_NAME])
+      lock.release()
+    }
+    // A fresh owner-less recovery lock is a reclaimer between mkdir and its first write.
+    writeFileSync(lockPath, JSON.stringify(persistedRecord()))
+    mkdirSync(recovery)
+    expect(() => acquireOrcadInstanceLock(root, paused)).toThrow(refused)
   })
 
   it.runIf(process.platform !== 'win32')(

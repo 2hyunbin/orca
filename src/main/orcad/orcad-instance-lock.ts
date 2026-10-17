@@ -38,7 +38,8 @@ import {
   MAX_ORCAD_LOCK_BYTES,
   readBoundedLockFile,
   reclaimAndPublish,
-  unlinkQuietly
+  unlinkQuietly,
+  type OrcadLockRecoveryOwner
 } from './orcad-instance-lock-reclaim'
 
 export const ORCAD_LOCK_FILE_NAME = 'orcad.lock'
@@ -199,6 +200,22 @@ export function acquireOrcadInstanceLock(
     return makeLock(lockPath, record)
   }
 
+  const dataRootIsLocal = (): boolean =>
+    (hooks.dataRootIsOnLocalDisk ?? orcadDataRootIsOnLocalDisk)(dataRoot)
+  // A recovery lock is ours by the same record, and broken only on the same proof of exit.
+  const recoveryOwner: OrcadLockRecoveryOwner = {
+    record: serialized,
+    exited: (ownerRecord) => {
+      const owner = parseOrcadInstanceLockRecord(ownerRecord)
+      return Boolean(
+        owner &&
+        owner.identity === identity &&
+        holderLocality(owner, record, dataRootIsLocal) === 'local' &&
+        (!isAlive(owner.pid) || holderIdentity(owner) === 'differs')
+      )
+    }
+  }
+
   const existingContents = readBoundedLockFile(lockPath)
   if (existingContents === null) {
     // Why fail closed: a record we cannot read proves nothing about its holder having exited.
@@ -214,7 +231,7 @@ export function acquireOrcadInstanceLock(
     // Only a torn write (an older build, or a crash mid-write) leaves this; once it has aged
     // past any live writer, no owner can be behind it.
     if (garbledLockIsAbandoned(lockPath)) {
-      reclaimAndPublish(lockPath, dataRoot, existingContents, publish)
+      reclaimAndPublish(lockPath, dataRoot, existingContents, publish, recoveryOwner)
       return makeLock(lockPath, record)
     }
     throw new OrcadInstanceLockError(
@@ -230,9 +247,7 @@ export function acquireOrcadInstanceLock(
         'root corrupts it. Give each its own ORCA_USER_DATA.'
     )
   }
-  const locality = holderLocality(existing, record, () =>
-    (hooks.dataRootIsOnLocalDisk ?? orcadDataRootIsOnLocalDisk)(dataRoot)
-  )
+  const locality = holderLocality(existing, record, dataRootIsLocal)
   if (locality !== 'local') {
     // Its PID means nothing here, so neither a missing nor a reused one proves it exited.
     throw new OrcadInstanceLockError(
@@ -259,7 +274,7 @@ export function acquireOrcadInstanceLock(
         'before starting another, or use a different ORCA_USER_DATA.'
     )
   }
-  reclaimAndPublish(lockPath, dataRoot, existingContents, publish)
+  reclaimAndPublish(lockPath, dataRoot, existingContents, publish, recoveryOwner)
   return makeLock(lockPath, record)
 }
 

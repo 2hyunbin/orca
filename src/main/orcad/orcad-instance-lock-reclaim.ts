@@ -22,8 +22,14 @@ export const MAX_ORCAD_LOCK_BYTES = 64 * 1024
 // Serializes stale-lock recovery, so no reclaimer ever renames away a lock another just published.
 const RECOVERY_DIR_SUFFIX = '.recovery'
 const RECOVERY_OWNER_FILE = 'owner'
-// Recovery takes milliseconds; a recovery lock older than this was left by a crash.
-const RECOVERY_GRACE_MS = 10_000
+// Only an owner file never written (a crash right after mkdir) is judged by age instead.
+const OWNERLESS_RECOVERY_GRACE_MS = 10_000
+
+/** Who is recovering, as a lock record, and whether a recovery owner's holder provably exited. */
+export type OrcadLockRecoveryOwner = {
+  record: string
+  exited: (ownerRecord: string) => boolean
+}
 
 /**
  * Why rename-and-then-publish rather than unlink-and-write: rename claims one exact directory
@@ -34,9 +40,10 @@ export function reclaimAndPublish(
   lockPath: string,
   dataRoot: string,
   inspectedContents: string,
-  publish: () => boolean
+  publish: () => boolean,
+  owner: OrcadLockRecoveryOwner
 ): void {
-  return withRecoveryLock(lockPath, () => {
+  return withRecoveryLock(lockPath, owner, () => {
     // Another reclaimer finished first: whatever it published is authoritative, not stale.
     if (readBoundedLockFile(lockPath) !== inspectedContents) {
       throw new OrcadInstanceLockError(
@@ -85,12 +92,11 @@ function renameAndPublish(
   }
 }
 
-function withRecoveryLock<T>(lockPath: string, recover: () => T): T {
+function withRecoveryLock<T>(lockPath: string, owner: OrcadLockRecoveryOwner, recover: () => T): T {
   const dir = `${lockPath}${RECOVERY_DIR_SUFFIX}`
-  const nonce = randomUUID()
   if (
-    !takeRecoveryLock(dir, nonce) &&
-    !(breakAbandonedRecoveryLock(dir) && takeRecoveryLock(dir, nonce))
+    !takeRecoveryLock(dir, owner.record) &&
+    !(breakAbandonedRecoveryLock(dir, owner.exited) && takeRecoveryLock(dir, owner.record))
   ) {
     throw new OrcadInstanceLockError(
       'orcad_instance_lock_held',
@@ -100,13 +106,13 @@ function withRecoveryLock<T>(lockPath: string, recover: () => T): T {
   try {
     return recover()
   } finally {
-    if (readBoundedLockFile(join(dir, RECOVERY_OWNER_FILE)) === nonce) {
+    if (readBoundedLockFile(join(dir, RECOVERY_OWNER_FILE)) === owner.record) {
       rmSync(dir, { recursive: true, force: true })
     }
   }
 }
 
-function takeRecoveryLock(dir: string, nonce: string): boolean {
+function takeRecoveryLock(dir: string, ownerRecord: string): boolean {
   try {
     mkdirSync(dir, { mode: 0o700 })
   } catch (error) {
@@ -119,7 +125,7 @@ function takeRecoveryLock(dir: string, nonce: string): boolean {
     )
   }
   try {
-    writeFileSync(join(dir, RECOVERY_OWNER_FILE), nonce, { flag: 'wx', mode: 0o600 })
+    writeFileSync(join(dir, RECOVERY_OWNER_FILE), ownerRecord, { flag: 'wx', mode: 0o600 })
     return true
   } catch {
     rmSync(dir, { recursive: true, force: true })
@@ -128,13 +134,16 @@ function takeRecoveryLock(dir: string, nonce: string): boolean {
 }
 
 /**
- * Only a crash mid-recovery leaves this. Renamed aside and re-inspected, like the lock itself, so a
- * recovery lock a live reclaimer just took is put back rather than deleted.
+ * Only a crash mid-recovery leaves this, so it is broken only once its owner provably exited: a
+ * paused owner (stalled NFS, a suspended laptop) still holds it however long ago it started.
+ * Renamed aside and re-inspected, like the lock itself, so one a live reclaimer just took is put back.
  */
-function breakAbandonedRecoveryLock(dir: string): boolean {
-  const owner = join(dir, RECOVERY_OWNER_FILE)
-  const inspected = readBoundedLockFile(owner)
-  if (!recoveryLockIsAbandoned(dir)) {
+function breakAbandonedRecoveryLock(
+  dir: string,
+  exited: (ownerRecord: string) => boolean
+): boolean {
+  const inspected = readBoundedLockFile(join(dir, RECOVERY_OWNER_FILE))
+  if (inspected === null ? !ownerlessRecoveryLockIsAbandoned(dir) : !exited(inspected)) {
     return false
   }
   const aside = `${dir}.abandoned-${process.pid}-${randomUUID()}`
@@ -157,9 +166,9 @@ function breakAbandonedRecoveryLock(dir: string): boolean {
   return false
 }
 
-function recoveryLockIsAbandoned(dir: string): boolean {
+function ownerlessRecoveryLockIsAbandoned(dir: string): boolean {
   try {
-    return Date.now() - statSync(dir).mtimeMs > RECOVERY_GRACE_MS
+    return Date.now() - statSync(dir).mtimeMs > OWNERLESS_RECOVERY_GRACE_MS
   } catch {
     return false
   }
