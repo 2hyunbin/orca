@@ -86,9 +86,10 @@ function Global:claude {
         if ($env:ORCA_CLAUDE_PROFILE_POINTER -and (Test-Path -LiteralPath $env:ORCA_CLAUDE_PROFILE_POINTER -PathType Leaf)) {
             $orcaClaudeHome = [IO.File]::ReadAllText($env:ORCA_CLAUDE_PROFILE_POINTER).TrimEnd()
         }
-        $own = "$env:ORCA_CLAUDE_USER_CONFIG_DIR".TrimEnd('\\', '/')
+        # Why the separator swap: Orca records the user's folder resolved, with backslashes.
+        $own = ("$env:ORCA_CLAUDE_USER_CONFIG_DIR" -replace '/', '\\').TrimEnd('\\')
         if ($env:CLAUDE_CONFIG_DIR -and $env:CLAUDE_CONFIG_DIR -ne $env:ORCA_CLAUDE_INJECTED_CONFIG_DIR -and
-            (-not $own -or "$env:CLAUDE_CONFIG_DIR".TrimEnd('\\', '/') -ne $own)) {
+            (-not $own -or ("$env:CLAUDE_CONFIG_DIR" -replace '/', '\\').TrimEnd('\\') -ne $own)) {
             # A value set in this pane, other than the user's own, wins.
         } elseif (-not $orcaClaudeHome) {
             Remove-Item Env:ORCA_CLAUDE_INJECTED_CONFIG_DIR -ErrorAction SilentlyContinue

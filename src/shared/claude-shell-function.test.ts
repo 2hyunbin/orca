@@ -239,10 +239,12 @@ it('restores the user’s own value on PowerShell System default rather than rem
   )
 })
 
-it('follows the PowerShell selection over the user’s own value, ignoring a trailing separator', () => {
+it('follows the PowerShell selection over the user’s own value, whatever its separators', () => {
   const script = getPowerShellClaudeShellFunction()
-  expect(script).toContain(`$own = "$env:ORCA_CLAUDE_USER_CONFIG_DIR".TrimEnd('\\', '/')`)
   expect(script).toContain(
-    `(-not $own -or "$env:CLAUDE_CONFIG_DIR".TrimEnd('\\', '/') -ne $own)) {`
+    `$own = ("$env:ORCA_CLAUDE_USER_CONFIG_DIR" -replace '/', '\\').TrimEnd('\\')`
+  )
+  expect(script).toContain(
+    `(-not $own -or ("$env:CLAUDE_CONFIG_DIR" -replace '/', '\\').TrimEnd('\\') -ne $own)) {`
   )
 })
