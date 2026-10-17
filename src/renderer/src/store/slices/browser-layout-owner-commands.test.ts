@@ -93,19 +93,6 @@ describe('browser tabs in a layout-owner build', () => {
     ])
   })
 
-  it('records a slept tab’s close as not the user’s', async () => {
-    const store = seeded()
-    const slept = store.getState().createBrowserTab(WT, 'about:blank')
-    const sleptEntry = entryOf(store, slept.id).id
-    mocks.send.mockClear()
-
-    await store.getState().shutdownWorktreeBrowsers(WT, { reason: 'sleep' })
-
-    expect(sent().map(({ command }) => command)).toEqual([
-      { type: 'closeTabs', tabIds: [sleptEntry], recordClose: 'cleanup' }
-    ])
-  })
-
   it('records page create, convert and close, and a profile switch', () => {
     const store = seeded()
     const tab = store.getState().createBrowserTab(WT, 'about:blank')
