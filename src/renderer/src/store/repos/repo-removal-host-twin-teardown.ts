@@ -5,6 +5,7 @@ import {
   type ExecutionHostId
 } from '../../../../shared/execution-host'
 import { getPtyExecutionHost } from '../../../../shared/terminal-execution-host'
+import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import { collectPtyIdsForTab } from '../slices/terminal-tab-retirement'
 import {
   getOpenFileExecutionHostId,
@@ -171,14 +172,26 @@ export function closeRemovedHostTwinState(
   // Why: a runtime host stopped its own shells on removal, so no close is sent back to it.
   const remoteCloseOwnedByHost = isRuntimeHost(removedHostId)
   for (const tabId of removed.terminalTabIds) {
+    if (!remoteCloseOwnedByHost) {
+      // Why killed here: closeTab re-resolves the shared id's host and would skip these as unroutable.
+      const tab = Object.values(get().tabsByWorktree)
+        .flat()
+        .find((candidate) => candidate.id === tabId)
+      for (const ptyId of collectPtyIdsForTab(get(), tabId, tab?.ptyId)) {
+        if (!isRemoteRuntimePtyId(ptyId)) {
+          window.api.pty.kill(ptyId)
+        }
+      }
+    }
     get().closeTab(tabId, {
       reason: 'cleanup',
       captureRecentlyClosed: false,
-      remoteCloseOwnedByHost
+      remoteCloseOwnedByHost,
+      localPtyTeardownOwnedExternally: !remoteCloseOwnedByHost
     })
   }
   for (const fileId of removed.fileIds) {
-    get().closeFile(fileId)
+    get().closeFile(fileId, { captureRecentlyClosed: false })
   }
   for (const browserTabId of removed.browserTabIds) {
     get().closeBrowserTab(browserTabId, { reason: 'cleanup' })

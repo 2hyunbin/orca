@@ -180,6 +180,8 @@ describe('removing a remote project keeps its local twin', () => {
     expect(state.openFiles.map((file) => file.id)).toEqual(['/work/same/local.ts'])
     expect(state.editorDrafts).toEqual({ '/work/same/local.ts': 'unsaved local edit' })
     expect(readNativeChatComposerDraft('tab-local:leaf-1').text).toBe('local chat draft')
+    // The survivor's reopen stack must not offer the removed host's file.
+    expect(state.recentlyClosedEditorTabsByWorktree[WORKTREE_ID] ?? []).toEqual([])
   })
 
   it('closes the removed host’s browsers, chats and hydrated terminals, and tabs opened meanwhile', async () => {
@@ -262,6 +264,8 @@ describe('removing a remote project keeps its local twin', () => {
     await store.getState().removeProject(PROJECT_ID, { hostId: 'ssh:target-1' })
 
     expect(ptyKill).not.toHaveBeenCalledWith('pty-local')
+    expect(ptyKill).toHaveBeenCalledWith(sshPtyId)
+    expect(ptyKill).toHaveBeenCalledWith(toAppSshPtyId('target-1', 'relay-2'))
     expect(store.getState().tabsByWorktree[WORKTREE_ID]?.map((tab) => tab.id)).toEqual([
       'tab-local'
     ])

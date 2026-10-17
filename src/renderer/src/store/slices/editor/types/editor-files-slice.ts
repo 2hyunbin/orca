@@ -74,7 +74,8 @@ export type EditorFilesSlice = {
   ) => void
   makePreviewFilePermanent: (fileId: string, tabId?: string) => void
   pinFile: (fileId: string, tabId?: string) => void
-  closeFile: (fileId: string) => void
+  /** captureRecentlyClosed false keeps a cleanup close out of the reopen stack. */
+  closeFile: (fileId: string, opts?: { captureRecentlyClosed?: boolean }) => void
   closeAllFiles: () => void
   /** Most recently closed editor tabs per worktree (for Cmd/Ctrl+Shift+T). */
   recentlyClosedEditorTabsByWorktree: Record<string, ClosedEditorTabSnapshot[]>

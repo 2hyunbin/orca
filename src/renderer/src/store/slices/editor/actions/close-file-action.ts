@@ -73,7 +73,7 @@ export function createCloseFileAction(
   get: EditorGet
 ): Pick<EditorSlice, 'closeFile'> {
   return {
-    closeFile: (fileId) => {
+    closeFile: (fileId, opts) => {
       // Why: capture untitled+dirty state before set() mutates the store, so cleanup of throwaway untitled files can decide after removal.
       const preClose = get().openFiles.find((f) => f.id === fileId)
       // Why: stale same-owner records survive tab close; retain other owners and pending drafts.
@@ -243,6 +243,7 @@ export function createCloseFileAction(
         if (
           closedFile &&
           wtRecent &&
+          opts?.captureRecentlyClosed !== false &&
           !shouldDeleteFromDisk &&
           closedFile.mode !== 'markdown-preview'
         ) {
