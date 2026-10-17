@@ -19,6 +19,7 @@ import type {
 import type { TabGroupLayoutNode } from '../../shared/tab-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import {
+  closedTabsOfOneSidedWorkspaces,
   droppedTabBarEntries,
   overriddenPaneTrees,
   terminalTabBarEntries,
@@ -234,11 +235,10 @@ export function windowSaveDivergences(
         paths.push(`${record} changed`)
       }
     }
-    // An empty row only counts in a workspace that holds something: the Loader owns every key.
+    // Counted for an empty workspace too: a relaunch reads it there to skip the first terminal.
     if (
-      (hasContent(before) || hasContent(after)) &&
       Boolean(was?.legacy.terminalRowOwners[workspace]) !==
-        Boolean(now?.legacy.terminalRowOwners[workspace])
+      Boolean(now?.legacy.terminalRowOwners[workspace])
     ) {
       paths.push('terminal row owner changed')
     }
@@ -290,11 +290,13 @@ export function writeWindowSaveWatchingLayout(
   }
   let was: WorkspaceLayoutModel | null | undefined
   let wasEntries: Map<string, Set<string>> | undefined
+  let wasClosed: WorkspaceSessionState['closedTerminalTabTombstonesByTabId']
   const rawPaths = new Map<string, string[]>()
   try {
     const stored = read()
     was = layoutModelOf(stored, partition)
     wasEntries = stored ? terminalTabBarEntries(stored) : new Map()
+    wasClosed = stored?.closedTerminalTabTombstonesByTabId
     if (savedPaneTrees) {
       overriddenPaneTrees(stored, was, savedPaneTrees, rawPaths)
     }
@@ -308,8 +310,14 @@ export function writeWindowSaveWatchingLayout(
   }
   try {
     const now = read()
+    const nowModel = layoutModelOf(now, partition)
     droppedTabBarEntries(wasEntries, now, rawPaths)
-    for (const divergence of windowSaveDivergences(was, layoutModelOf(now, partition), rawPaths)) {
+    closedTabsOfOneSidedWorkspaces(
+      { model: was, closed: wasClosed },
+      { model: nowModel, closed: now?.closedTerminalTabTombstonesByTabId },
+      rawPaths
+    )
+    for (const divergence of windowSaveDivergences(was, nowModel, rawPaths)) {
       report(source, partition, divergence)
     }
   } catch (error) {
