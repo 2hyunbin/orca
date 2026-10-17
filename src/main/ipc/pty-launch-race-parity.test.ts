@@ -3,11 +3,11 @@ import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 import { getHiddenRendererPtyIds, isHiddenRendererPty } from './pty-hidden-delivery-gate'
 import { ptySizes } from './pty/delivery/visibility-state'
 import { clearProviderPtyState } from './pty/provider/state-cleanup'
+import * as paneSpawnReservations from './pty/pane/spawn-reservation'
 import { WORKTREE_TERMINALS_SLEEPING_ERROR } from '../runtime/worktree-terminals-sleeping-error'
 import {
   LAUNCH_RACE_LANES,
   createLaunchRaceRuntime,
-  flushMacrotasks,
   gatedClaudeAuth,
   launchRacePane,
   registerLaunchRaceLanes,
@@ -96,8 +96,13 @@ describe('launch race parity, both spawn lanes', () => {
 
         const winner = lanes.spawn.ipc(pane.args)
         await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce())
+        const joinPaneSpawn = vi.spyOn(paneSpawnReservations, 'joinPaneSpawn')
+        onTestFinished(() => joinPaneSpawn.mockRestore())
         const joiner = lanes.spawn[lane]({ ...pane.args, command: 'claude' })
-        await flushMacrotasks()
+        if (lane === 'runtime') {
+          // Runtime preflight does filesystem work before it can join the reserved pane.
+          await vi.waitFor(() => expect(joinPaneSpawn).toHaveBeenCalledOnce())
+        }
         finishSpawn()
 
         await expect(winner).resolves.toMatchObject({ id: 'pty-join-winner' })
@@ -128,8 +133,10 @@ describe('launch race parity, both spawn lanes', () => {
 
       const automatic = lanes.spawn.runtime({ ...pane.args, refuseSleptWorktree: true })
       await vi.waitFor(() => expect(lock.acquireWorktreeTerminalSpawn).toHaveBeenCalledOnce())
+      const joinPaneSpawn = vi.spyOn(paneSpawnReservations, 'joinPaneSpawn')
+      onTestFinished(() => joinPaneSpawn.mockRestore())
       const joiner = lanes.spawn.runtime(pane.args)
-      await flushMacrotasks()
+      await vi.waitFor(() => expect(joinPaneSpawn).toHaveBeenCalledOnce())
       refused = true
       lock.refuse()
 
