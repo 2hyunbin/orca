@@ -6,7 +6,7 @@ import { agentJournalItemForWire, shortenedAgentJournalItem } from './agent-sess
 
 it('preserves the full previously readable desktop message range', () => {
   const item: AgentJournalRenderItem = { itemId: 'message', revision: 1, sequence: 1, observedAt: 1,
-    body: { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: 'x'.repeat(1_200_000) + 'TAIL' }] } }
+    body: { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: `${'x'.repeat(1_200_000)}TAIL` }] } }
   expect(agentJournalItemForWire(item)).toBe(item)
 })
 

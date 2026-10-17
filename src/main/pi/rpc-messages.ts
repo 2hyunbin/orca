@@ -137,14 +137,21 @@ export class PiRpcMessages {
         input === undefined
           ? (previous?.input ?? null)
           : state === 'running'
-            ? boundToolInput(input, JOURNAL_RUNNING_PREVIEW_LIMITS)
+            ? event.args === undefined && previous
+              ? previous.input
+              : boundToolInput(input, JOURNAL_RUNNING_PREVIEW_LIMITS)
             : input,
       state,
       ...(output === undefined
         ? previous?.output
           ? { output: previous.output }
           : {}
-        : { output: journalToolPayload(output, state === 'running') })
+        : {
+            output:
+              state === 'running' && result === undefined && previous?.output
+                ? previous.output
+                : journalToolPayload(output, state === 'running')
+          })
     }
     if (state === 'running') {
       if (this.tools.size >= 128 && !previous) {

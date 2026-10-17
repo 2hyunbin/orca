@@ -97,6 +97,11 @@ export function MobileNativeChatOverlay({
   })
   const visuals = useMobileNativeChatVisualRenderer(controller.nativeChatVisualSource)
   const replyReveals = useMobileNativeChatReplyReveals(folded, streaming !== null, sendSurfaceId)
+  const itemSource = controller.nativeChatItemSource
+  const detailSource = useMemo(
+    () => itemSource ? { ...itemSource, messageDetail: fullContent.detail } : null,
+    [itemSource, fullContent.detail]
+  )
   if (!controller.showNativeChat) {
     return null
   }
@@ -104,7 +109,7 @@ export function MobileNativeChatOverlay({
     <MobileNativeChatRowOverlaysHost conversation={{ surfaceId: sendSurfaceId, sessionId }}>
       <View style={styles.overlay}>
         <MobileNativeChatVisualContext.Provider value={visuals}>
-          <MobileNativeChatItemSourceContext.Provider value={controller.nativeChatItemSource ? { ...controller.nativeChatItemSource, messageDetail: fullContent.detail } : null}>
+          <MobileNativeChatItemSourceContext.Provider value={detailSource}>
             <MobileNativeChatReplyRevealsContext.Provider value={replyReveals}>
               <MobileNativeChatView
                 messages={session.messages}

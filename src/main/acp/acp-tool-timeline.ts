@@ -152,7 +152,9 @@ export class AcpToolTimeline {
         input === undefined
           ? (previous?.body.input ?? null)
           : state === 'running'
-            ? boundToolInput(input, JOURNAL_RUNNING_PREVIEW_LIMITS)
+            ? update.rawInput === undefined && previous
+              ? previous.body.input
+              : boundToolInput(input, JOURNAL_RUNNING_PREVIEW_LIMITS)
             : input,
       state,
       ...(exitCode === undefined ? {} : { exitCode }),
@@ -160,7 +162,12 @@ export class AcpToolTimeline {
         ? previous?.body.output
           ? { output: previous.body.output }
           : {}
-        : { output: journalToolPayload(output, state === 'running') })
+        : {
+            output:
+              state === 'running' && suppliedOutput === undefined && previous?.body.output
+                ? previous.body.output
+                : journalToolPayload(output, state === 'running')
+          })
     }
     const turn = join.turn ?? this.turn(update.toolCallId)
     this.turns.delete(update.toolCallId)

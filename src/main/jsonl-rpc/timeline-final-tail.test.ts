@@ -81,8 +81,8 @@ describe('Pi final tail before host eviction', () => {
     expect(append('lifecycle-refused', true)).toEqual({ accepted: false, reason: 'backpressure' })
     const before = journal.snapshot().items.length
     vi.useFakeTimers()
-    const reply = 'Final reply' + 'r'.repeat(2 * 1024 * 1024)
-    const status = 'Final status' + 's'.repeat(17 * 1024 * 1024)
+    const reply = `Final reply${'r'.repeat(2 * 1024 * 1024)}`
+    const status = `Final status${'s'.repeat(17 * 1024 * 1024)}`
     lane.apply([
       { type: 'text.delta', item: { id: 'reply' }, channel: 'assistant', text: reply },
       {

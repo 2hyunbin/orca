@@ -18,18 +18,20 @@ it.each(['direct', 'transition'] as const)('persists complete content through %s
   const blocked = rig.journal.readInOrder(() => gate.promise)
   const identity = { provider: 'legacy' as const, agent: 'grok', sessionId: SESSION, recordId: 'full' }
   const options = { turnScope: AGENT_JOURNAL_THREAD_SCOPE, lifecycle: true }
-  const text = '\u0001'.repeat(3 * 1024 * 1024) + 'MIDDLE' + 'x'.repeat(5 * 1024 * 1024) + 'TAIL'
+  const text = `${'\u0001'.repeat(3 * 1024 * 1024)}MIDDLE${'x'.repeat(5 * 1024 * 1024)}TAIL`
   const body = { kind: 'tool-call' as const, name: 'bash', input: { large: 'i'.repeat(1024 * 1024) }, state: 'completed', output: journalPayload(text) }
   expect(rig.eventSink.tryAppendItem?.({ ...identity, recordId: 'before' }, { kind: 'status', tone: 'info', text: 'before' }, options)).toEqual({ accepted: true })
   const append = () => path === 'direct'
     ? rig.eventSink.tryAppendItem?.(identity, body, options)
     : rig.sink.tryAppendTransition({ lifecycle: true, publish: true, steps: [{ kind: 'item', reservedBytes: estimateStructuredAgentSessionItemBytes(identity, body), options, resolve: () => ({ identity, body }) }] })
-  expect(append()).toEqual({ accepted: false, reason: 'backpressure' })
+  expect(append()).toEqual({ accepted: true })
+  let landed = false
+  const written = rig.eventSink.written?.().then((result) => { landed = true; return result })
+  await Promise.resolve()
+  expect(landed).toBe(false)
   gate.resolve()
   await blocked
-  await rig.eventSink.written?.()
-  expect(append()).toEqual({ accepted: true })
-  await rig.eventSink.written?.()
+  expect(await written).toEqual({ ok: true })
   const reopened = await rig.reopenJournal()
   expect(reopened.snapshot().items.map((item) => item.body)).toEqual([
     { kind: 'status', tone: 'info', text: 'before' }, body
@@ -52,6 +54,18 @@ it.each(['acp', 'pi'] as const)('transfers %s full fields at an omitted-field cl
     lane.apply(agent === 'acp' ? acp.translate({ toolCallId: id, rawOutput: output }, {}, {})
       : pi.tool({ type: 'tool_execution_update', toolCallId: id, toolName: 'bash', partialResult: { content: [{ type: 'text', text: output }] } }))
     await rig.rows(); lane.retry(); await lane.drained()
+    const update = agent === 'acp' ? acp.translate({ toolCallId: id, status: 'in_progress' }, {}, {})
+      : pi.tool({ type: 'tool_execution_update', toolCallId: id, toolName: 'bash' })
+    const changed = update.find((event) => event.type === 'item.update')
+    const again = agent === 'acp' ? acp.translate({ toolCallId: id, status: 'in_progress' }, {}, {})
+      : pi.tool({ type: 'tool_execution_update', toolCallId: id, toolName: 'bash' })
+    const repeated = again.find((event) => event.type === 'item.update')
+    if (changed?.type !== 'item.update' || repeated?.type !== 'item.update' ||
+        changed.body.kind !== 'tool-call' || repeated.body.kind !== 'tool-call') {
+      throw new Error('Expected running tool updates')
+    }
+    expect(repeated.body.input).toBe(changed.body.input)
+    expect(repeated.body.output).toBe(changed.body.output)
   }
   expect(agent === 'acp' ? acp.retainedToolBytes : pi.retainedToolBytes).toBeGreaterThan(4 * size)
   expect((await rig.rows()).filter((row) => row.body.kind === 'tool-call').every((row) => JSON.stringify(row.body).length < 40_000)).toBe(true)

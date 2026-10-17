@@ -27,7 +27,9 @@ export function useMobileNativeChatMessageDetail(
   useEffect(() => {
     cache.raw = new Set(messages)
     for (const raw of cache.entries.keys()) {
-      if (!cache.raw.has(raw)) cache.entries.delete(raw)
+      if (!cache.raw.has(raw)) {
+        cache.entries.delete(raw)
+      }
     }
   }, [cache, messages])
   const byId = useMemo(() => new Map(messages.map((message) => [message.id, message])), [messages])
@@ -38,17 +40,23 @@ export function useMobileNativeChatMessageDetail(
       raw,
       state: (id) => {
         const original = raw(id)
-        if (!original?.shortened || !original.blocks.some(isTextBlock)) return null
+        if (!original?.shortened || !original.blocks.some(isTextBlock)) {
+          return null
+        }
         const loaded = cache.entries.get(original)
         return loaded ? (loaded.shortened ? 'partial' : 'complete') : 'available'
       },
       load: async (id) => {
         const original = raw(id)
-        if (!original?.shortened || !original.blocks.some(isTextBlock)) throw new Error('Message unavailable')
+        if (!original?.shortened || !original.blocks.some(isTextBlock)) {
+          throw new Error('Message unavailable')
+        }
         const item = await readMobileNativeChatItem(source, id)
         const projected = item?.itemId === id && item.body.kind === 'message'
           ? projectStructuredItemToNativeChat(item) : null
-        if (!projected?.blocks.some(isTextBlock)) throw new Error('Message unavailable')
+        if (!projected?.blocks.some(isTextBlock)) {
+          throw new Error('Message unavailable')
+        }
         if (cache.live && cache.raw.has(original)) {
           cache.entries.set(original, projected)
           refresh()

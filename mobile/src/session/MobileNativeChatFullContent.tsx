@@ -95,14 +95,16 @@ export function useMobileNativeChatFullMessage(message: NativeChatMessage): {
   shown: NativeChatMessage
   showFull: React.JSX.Element | null
 } {
-  const detail = useContext(MobileNativeChatItemSourceContext)?.messageDetail
+  const source = useContext(MobileNativeChatItemSourceContext)
+  const detail = source?.messageDetail
+  const client = source?.client, sessionId = source?.sessionId
   const raw = detail?.raw(message.id)
-  const [request, setRequest] = useState<{ raw: typeof raw; load: Load } | null>(null)
-  const load = request?.raw === raw ? request?.load ?? 'idle' : 'idle'
+  const [request, setRequest] = useState<{ raw: typeof raw; client: typeof client; sessionId: typeof sessionId; load: Load } | null>(null)
+  const load = request?.raw === raw && request?.client === client && request?.sessionId === sessionId ? request?.load ?? 'idle' : 'idle'
   const state = detail?.state(message.id)
   const showFull = (): void => {
-    setRequest({ raw, load: 'loading' })
-    const finish = (load: Load): void => setRequest((held) => held?.raw === raw ? { raw, load } : held)
+    setRequest({ raw, client, sessionId, load: 'loading' })
+    const finish = (load: Load): void => setRequest((held) => held?.raw === raw && held?.client === client && held?.sessionId === sessionId ? { raw, client, sessionId, load } : held)
     void detail?.load(message.id).then(() => finish('idle')).catch(() => finish('failed'))
   }
   return {

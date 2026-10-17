@@ -22,8 +22,8 @@ afterEach(() => { act(() => renderer?.unmount()); reads.mockReset() })
 it('prepares full raw user rows with their neighboring images and fences late same-head detail', async () => {
   const row = (id: string, text: string): NativeChatMessage => ({ id, role: 'user', source: 'transcript', timestamp: 1, blocks: [{ type: 'text', text }] })
   const image = row('image', '[Image: source: /repo/p.png]')
-  const prompt = { ...row('prompt', '[Image #1] head…'), shortened: true }
-  const skill = { ...row('skill', '<command-name>/plugin:example</command-name><command-args>head…</command-args>'), shortened: true }
+  const prompt: NativeChatMessage = { ...row('prompt', '[Image #1] head…'), shortened: true }
+  const skill: NativeChatMessage = { ...row('skill', '<command-name>/plugin:example</command-name><command-args>head…</command-args>'), shortened: true }
   const messages = [image, prompt, skill]
   const item = (id: string, text: string, shortened = false): AgentJournalRenderItem => ({ itemId: id, sequence: 1, observedAt: 1, revision: 2, body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text }] }, ...(shortened ? { shortened: true as const } : {}) })
   await act(async () => { renderer = create(createElement(Probe, { messages })) })
