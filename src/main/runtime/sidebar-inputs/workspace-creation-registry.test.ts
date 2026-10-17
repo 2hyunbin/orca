@@ -80,3 +80,15 @@ describe('WorkspaceCreationRegistry', () => {
     expect(registry.snapshot().creations).toEqual({})
   })
 })
+
+describe('WorkspaceCreationRegistry owners', () => {
+  it('closes nothing for an owner that never opened', () => {
+    const registry = new WorkspaceCreationRegistry()
+    const listed = {}
+    registry.open(listed, { creationId: 'c1', repoId: 'repo-1' })
+    registry.close({})
+    expect(registry.snapshot().creations).toEqual({ c1: { repoId: 'repo-1' } })
+    registry.close(listed)
+    expect(registry.snapshot().creations).toEqual({})
+  })
+})

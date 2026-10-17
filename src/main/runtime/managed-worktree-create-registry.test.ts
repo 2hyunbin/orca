@@ -102,7 +102,7 @@ describe('runtime creation registry', () => {
     const runtime = makeRuntime()
     const seen: Record<string, unknown>[] = []
     const record = (): void => {
-      seen.push(runtime.getWorkspaceCreations().creations)
+      seen.push(runtime.workspaceCreations.snapshot().creations)
     }
     mocks.createLocal.mockReset().mockImplementation(async (args: LocalCreateArgs) => {
       record()
@@ -132,7 +132,7 @@ describe('runtime creation registry', () => {
       { 'phone-op-1': { repoId: 'repo-1', worktreeId: 'wt-1' } }
     ])
     expect(onWorkspaceCreated).toHaveBeenCalledWith('wt-1')
-    expect(runtime.getWorkspaceCreations().creations).toEqual({})
+    expect(runtime.workspaceCreations.snapshot().creations).toEqual({})
   })
 
   it('drops a failed create', async () => {
@@ -142,20 +142,20 @@ describe('runtime creation registry', () => {
     await expect(
       runtime.createManagedWorktree({ repoSelector: 'repo-1', name: 'app' })
     ).rejects.toThrow('could not create')
-    expect(runtime.getWorkspaceCreations().creations).toEqual({})
+    expect(runtime.workspaceCreations.snapshot().creations).toEqual({})
   })
 
   it('lists a folder workspace create too', async () => {
     const runtime = makeRuntime({ id: 'folder', path: '/notes', kind: 'folder' })
     let during: Record<string, unknown> = {}
     mocks.createFolder.mockReset().mockImplementation(async () => {
-      during = runtime.getWorkspaceCreations().creations
+      during = runtime.workspaceCreations.snapshot().creations
       return { worktree: { id: 'folder::/notes' } }
     })
 
     await runtime.createManagedWorktree({ repoSelector: 'folder', name: 'notes' })
 
     expect(Object.values(during)).toEqual([{ repoId: 'folder' }])
-    expect(runtime.getWorkspaceCreations().creations).toEqual({})
+    expect(runtime.workspaceCreations.snapshot().creations).toEqual({})
   })
 })

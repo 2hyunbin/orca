@@ -25,12 +25,15 @@ import { resolveWorktreeCreateAgentStartup } from '../runtime-worktree-agent-sta
 import type { RuntimeWorkspaceCreateEvents } from '../../workspace-create-telemetry'
 import { createdWorkspaceActivationCallbacks } from './workspace-create-activation'
 import { assertWslMoveRepoWritable } from '../../persistence/moving-wsl-projects/wsl-move-scope-guard'
+import { WorkspaceCreationRegistry } from '../sidebar-inputs/workspace-creation-registry'
 
 export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWithGetWorktreeTerminalProvisioningHost {
   protected abstract resolveLineageForWorktreeCreate(
     input?: WorktreeLineageInput,
     childRepo?: Repo
   ): Promise<WorktreeLineageResolution>
+
+  readonly workspaceCreations = new WorkspaceCreationRegistry()
 
   async createManagedWorktree(
     args: RuntimeManagedWorktreeCreateArgs
@@ -42,6 +45,7 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
         this.performManagedWorktreeCreate(args, rearm, events)
       )
     } finally {
+      this.workspaceCreations.close(args)
       rearm.fire()
     }
   }
@@ -61,6 +65,9 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
     )
 
     const repo = await this.resolveRepoSelector(args.repoSelector)
+    // Opened once the project is known; a create refused before this is never listed.
+    this.workspaceCreations.open(args, { creationId: args.creationId, repoId: repo.id })
+    const onWorkspaceCreated = this.workspaceCreations.naming(args, args.onWorkspaceCreated)
     assertWslMoveRepoWritable(this.store, repo)
     const createSettings = this.store.getSettings()
     const requestedAgent = args.startupAgent ?? args.createdWithAgent
@@ -128,7 +135,7 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
         startupLaunchRuntime,
         createdWithAgent: effectiveCreatedWithAgent,
         promisedAgentChat: args.promisedAgentChat,
-        onWorkspaceCreated: args.onWorkspaceCreated,
+        onWorkspaceCreated,
         draftPaste: effectiveDraftPaste,
         deps: {
           store: this.store,
@@ -171,7 +178,7 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
       fetchRemote: (path, remote, ...options) =>
         this.fetchRemoteWithCache(path, remote, ...options),
       onWorktreeMetadataPersisted: (persistedWorktree) => {
-        args.onWorkspaceCreated?.(persistedWorktree.id)
+        onWorkspaceCreated(persistedWorktree.id)
         return this.recordCreatedWorktreeLineage(persistedWorktree, lineageResolution)
       },
       rearm,
