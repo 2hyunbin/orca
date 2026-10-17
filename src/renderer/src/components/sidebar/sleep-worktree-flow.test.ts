@@ -88,8 +88,7 @@ describe('runSleepWorktree', () => {
     // the Chromium guests while browserTabsByWorktree/browserPagesByWorkspace
     // are still populated. If terminals ran first and kept its old
     // browserTabsByWorktree delete, browsers would no-op and leak webviews.
-    // Why the reason: a slept tab must not land on the reopen-closed list.
-    expect(mocks.state.shutdownWorktreeBrowsers).toHaveBeenCalledWith('wt-1', { reason: 'sleep' })
+    expect(mocks.state.shutdownWorktreeBrowsers).toHaveBeenCalledWith('wt-1')
     expect(mocks.state.shutdownWorktreeTerminals).toHaveBeenCalledWith('wt-1', {
       keepIdentifiers: true
     })
@@ -301,7 +300,7 @@ describe('runSleepWorktree', () => {
     expect(mocks.state.shutdownWorktreeTerminals).not.toHaveBeenCalledWith('wt-1', {
       keepIdentifiers: true
     })
-    expect(mocks.state.shutdownWorktreeBrowsers).toHaveBeenCalledWith('wt-2', { reason: 'sleep' })
+    expect(mocks.state.shutdownWorktreeBrowsers).toHaveBeenCalledWith('wt-2')
     expect(mocks.state.shutdownWorktreeTerminals).toHaveBeenCalledWith('wt-2', {
       keepIdentifiers: true
     })
@@ -334,15 +333,11 @@ describe('runSleepWorktree', () => {
 
     expect(mocks.state.setActiveWorktree).toHaveBeenCalledTimes(1)
     expect(mocks.state.setActiveWorktree).toHaveBeenCalledWith(null)
-    expect(mocks.state.shutdownWorktreeBrowsers).toHaveBeenNthCalledWith(1, 'wt-1', {
-      reason: 'sleep'
-    })
+    expect(mocks.state.shutdownWorktreeBrowsers).toHaveBeenNthCalledWith(1, 'wt-1')
     expect(mocks.state.shutdownWorktreeTerminals).toHaveBeenNthCalledWith(1, 'wt-1', {
       keepIdentifiers: true
     })
-    expect(mocks.state.shutdownWorktreeBrowsers).toHaveBeenNthCalledWith(2, 'wt-2', {
-      reason: 'sleep'
-    })
+    expect(mocks.state.shutdownWorktreeBrowsers).toHaveBeenNthCalledWith(2, 'wt-2')
     expect(mocks.state.shutdownWorktreeTerminals).toHaveBeenNthCalledWith(2, 'wt-2', {
       keepIdentifiers: true
     })

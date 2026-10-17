@@ -25,8 +25,6 @@ export function createBrowserCloseActions(
       // Why: a cleanup close unwinds a tab that never finished being created — it owns no host
       // page to close and must not enter the reopen stack as if the user had closed something.
       const isCleanup = options?.reason === 'cleanup'
-      // Why: a slept tab is released, not closed by the user, so it must not be reopenable.
-      const recordsReopen = !isCleanup && options?.reason !== 'sleep'
       let remotePagesToClose: { worktreeId: string; handle: RemoteBrowserPageHandle }[] = []
       // Why collected rather than released inside the reducer: revoking is main-process work, and a
       // grant is the only authority the preview scheme honors — a closed document must stop being
@@ -116,7 +114,7 @@ export function createBrowserCloseActions(
         }
 
         const nextRecentlyClosedBrowserTabsByWorktree = { ...s.recentlyClosedBrowserTabsByWorktree }
-        if (recordsReopen) {
+        if (!isCleanup) {
           const existingSnapshots = nextRecentlyClosedBrowserTabsByWorktree[owningWorktreeId] ?? []
           const position = getRecentlyClosedTabPosition(s, owningWorktreeId, tabId)
           nextRecentlyClosedBrowserTabsByWorktree[owningWorktreeId] = [
@@ -128,13 +126,13 @@ export function createBrowserCloseActions(
             ...existingSnapshots.filter((entry) => entry.workspace.id !== closedWorkspace.id)
           ].slice(0, 10)
         }
-        const nextRecentlyClosedTabKindsByWorktree = recordsReopen
-          ? pushRecentlyClosedTabKind(
+        const nextRecentlyClosedTabKindsByWorktree = isCleanup
+          ? s.recentlyClosedTabKindsByWorktree
+          : pushRecentlyClosedTabKind(
               s.recentlyClosedTabKindsByWorktree,
               owningWorktreeId,
               'browser'
             )
-          : s.recentlyClosedTabKindsByWorktree
 
         const nextRecentlyClosedBrowserPagesByWorkspace = {
           ...s.recentlyClosedBrowserPagesByWorkspace
@@ -198,7 +196,7 @@ export function createBrowserCloseActions(
             get(),
             workspaceItem.worktreeId,
             tabId,
-            recordsReopen ? 'user' : 'cleanup'
+            isCleanup ? 'cleanup' : 'user'
           )
         }
         if (workspaceItem) {
@@ -239,13 +237,13 @@ export function createBrowserCloseActions(
       }
     },
 
-    shutdownWorktreeBrowsers: async (worktreeId, options) => {
+    shutdownWorktreeBrowsers: async (worktreeId) => {
       const workspaces = get().browserTabsByWorktree[worktreeId] ?? []
       // Why: snapshot before the loop — closeBrowserTab empties the array, so set() below couldn't recompute hadBrowserTabs.
       const hadBrowserTabs = workspaces.length > 0
       for (const workspace of workspaces) {
         const browserPagesByWorkspace = get().browserPagesByWorkspace
-        get().closeBrowserTab(workspace.id, options)
+        get().closeBrowserTab(workspace.id)
         destroyWorkspaceWebviews(browserPagesByWorkspace, workspace.id)
       }
       set((s) => {

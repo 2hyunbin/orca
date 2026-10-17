@@ -32,9 +32,6 @@ import type { ExecutionHostId } from '../../../../../shared/execution-host'
 import type { TabSplitTarget } from '../tabs/tabs-slice-contract'
 import type { RuntimeBrowserPlacement } from '../../../../../shared/runtime-browser-placement'
 
-/** A close the user did not ask for. */
-export type BrowserTabCloseReason = 'cleanup' | 'sleep'
-
 export type CreateBrowserTabOptions = {
   activate?: boolean
   browserPageId?: string
@@ -151,13 +148,8 @@ export type BrowserSlice = {
     url: string,
     profileId: string | null
   ) => Promise<boolean>
-  /** `cleanup` unwinds an unfinished create; `sleep` releases a slept workspace's tab. Neither
-   *  enters the reopen-closed list. */
-  closeBrowserTab: (tabId: string, options?: { reason?: BrowserTabCloseReason }) => void
-  shutdownWorktreeBrowsers: (
-    worktreeId: string,
-    options?: { reason?: BrowserTabCloseReason }
-  ) => Promise<void>
+  closeBrowserTab: (tabId: string, options?: { reason?: 'cleanup' }) => void
+  shutdownWorktreeBrowsers: (worktreeId: string) => Promise<void>
   reopenClosedBrowserTab: (worktreeId: string) => BrowserWorkspace | null
   /** Activation uses the tab's workspace unless a target is supplied; global selection
    *  moves only when that workspace is active. */
