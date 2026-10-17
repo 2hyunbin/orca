@@ -128,6 +128,63 @@ describe('project removal on the execution host', () => {
     expect(stopAndWait.mock.calls.map(([ptyId]) => ptyId)).toContain('pty-in-flight')
   })
 
+  it('refuses a spawn that reaches its lease after the project is gone', async () => {
+    let removed = false
+    const repo = store.getRepo(TEST_REPO_ID)!
+    const runtime = new OrcaRuntimeService({
+      ...store,
+      getRepo: (id: string) => (id === TEST_REPO_ID && !removed ? repo : undefined),
+      getRepos: () => (removed ? [] : [repo]),
+      removeProjectForHost: () => {
+        removed = true
+      }
+    } as never)
+    runtime.setPtyController({
+      write: () => true,
+      kill: vi.fn(() => false),
+      stopAndWait: vi.fn(async () => true),
+      getForegroundProcess: async () => null
+    })
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
+
+    await runtime.removeProject(TEST_REPO_ID)
+
+    await expect(runtime.acquireWorktreeTerminalSpawn(TEST_WORKTREE_ID)).rejects.toThrow(
+      'repo_not_found'
+    )
+  })
+
+  it('stops nothing when a same-id sibling row would claim the same PTYs', async () => {
+    const removeProjectForHost = vi.fn()
+    const stopAndWait = vi.fn(async (_ptyId: string) => true)
+    const localRow = store.getRepo(TEST_REPO_ID)!
+    const foreignRow = {
+      ...localRow,
+      path: '/srv/foreign-copy',
+      executionHostId: 'runtime:env-other'
+    }
+    const runtime = new OrcaRuntimeService({
+      ...store,
+      getRepos: () => [localRow, foreignRow],
+      removeProjectForHost
+    } as never)
+    runtime.setPtyController({
+      write: () => true,
+      kill: vi.fn(() => false),
+      stopAndWait,
+      getForegroundProcess: async () => null
+    })
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
+    runtime.registerPty('pty-local-sibling', TEST_WORKTREE_ID, null)
+
+    await runtime.removeProject('path:/srv/foreign-copy')
+
+    expect(stopAndWait).not.toHaveBeenCalled()
+    expect(removeProjectForHost).toHaveBeenCalledTimes(1)
+  })
+
   it('stops a terminal spawned while the first sweep ran', async () => {
     const { runtime, stopAndWait } = createRemovableRuntime(() =>
       runtime.registerPty('pty-late', TEST_WORKTREE_ID, null)

@@ -1,5 +1,5 @@
 import { OrcaRuntimeWithStopExactTerminalsForWorktree } from './worktree-terminal-stop-targets'
-import { getRepoSshConnectionId } from '../../../../shared/execution-host'
+import { getRepoExecutionHostId, getRepoSshConnectionId } from '../../../../shared/execution-host'
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
 import type { Repo } from '../../../../shared/repo-types'
 
@@ -44,6 +44,23 @@ export function listProjectTerminalWorktreeIds(
 }
 
 export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntimeWithStopExactTerminalsForWorktree {
+  /** Projects this host removed; ids are UUIDs, so a remaining row means a same-id sibling. */
+  private readonly removedProjectIds = new Set<string>()
+
+  override async acquireWorktreeTerminalSpawn(
+    worktreeId?: string,
+    opts: { refuseSleptWorktree?: boolean } = {}
+  ): Promise<() => void> {
+    const release = await super.acquireWorktreeTerminalSpawn(worktreeId, opts)
+    const repoId = worktreeId ? getRepoIdFromWorktreeId(worktreeId) : null
+    // Why under the lease: a spawn that resolved its workspace before removal queues behind the sweep.
+    if (repoId && this.removedProjectIds.has(repoId) && !this.store?.getRepo?.(repoId)) {
+      release()
+      throw new Error('repo_not_found')
+    }
+    return release
+  }
+
   /**
    * Stops every terminal this host runs for a project, found through its own PTY table rather
    * than a client's workspace list, which can be unhydrated or hide workspaces.
@@ -74,6 +91,17 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
     // Why not the row's stamp: a `runtime:` stamp is how paired clients address a project that runs
     // here, natively or over its nested SSH connection.
     const fence = { resolvedConnectionId: getRepoSshConnectionId(repo) }
+    this.removedProjectIds.add(repo.id)
+    // Why: a same-id sibling row with the same fence owns PTYs this table cannot tell apart.
+    const siblingSharesFence = (this.store?.getRepos?.() ?? []).some(
+      (row) =>
+        row.id === repo.id &&
+        getRepoExecutionHostId(row) !== getRepoExecutionHostId(repo) &&
+        getRepoSshConnectionId(row) === fence.resolvedConnectionId
+    )
+    if (siblingSharesFence) {
+      return { stopped: 0 }
+    }
     let stopped = 0
     for (const id of listProjectTerminalWorktreeIds(repo.id, this.leaves, this.ptysById)) {
       projectWorktreeIds.add(id)
