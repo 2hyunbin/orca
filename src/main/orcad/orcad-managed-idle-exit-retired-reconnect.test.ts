@@ -29,25 +29,50 @@ vi.mock('./orcad-managed-idle-exit', async (importOriginal) => ({
   installOrcadManagedIdleExit: vi.fn(() => () => {})
 }))
 
+/** A router over one adapter whose own fence behaves like the daemon adapter's. */
 function freshRouter(retirement?: Promise<DaemonIdleRetirementResult>): DaemonPtyRouter {
   const current = createAdapter('current', [], undefined, PROTOCOL_VERSION)
+  let fenced = false
+  let fenceHeld = false
+  const spawn = current.spawn
+  current.spawn = vi.fn(async (opts) => {
+    if (fenced) {
+      throw new Error('Terminal daemon is decommissioning')
+    }
+    return spawn(opts)
+  })
+  vi.mocked(current.isIdleRetirementAdmissionClosed).mockImplementation(() => fenced)
   if (retirement) {
-    vi.mocked(current.requestIdleRetirement).mockImplementation(() => retirement)
+    vi.mocked(current.requestIdleRetirement).mockImplementation(async () => {
+      fenced = true
+      const result = await retirement
+      // A lost reply keeps the adapter fenced, as an accepted stop may be behind it.
+      fenceHeld = result.state === 'retiring' || result.state === 'unverifiable'
+      fenced = fenceHeld
+      return result
+    })
   }
+  vi.mocked(current.releaseIdleRetirementFence).mockImplementation(() => {
+    fenced = fenceHeld
+  })
   return new DaemonPtyRouter({ current, legacy: [] })
 }
 
-async function stopWithReturningClient(retirementState: DaemonIdleRetirementResult) {
+async function stopWithReturningClient(
+  retirementState: DaemonIdleRetirementResult,
+  options: { automationsBusy?: boolean } = {}
+) {
   const retire = Promise.withResolvers<DaemonIdleRetirementResult>()
   installDaemonProvider(null, freshRouter(retire.promise))
   const activity = { openConnections: 0, requestsInFlight: 0, lastRequestAt: 0 }
+  let automationsBusy = false
   const shutdown = vi.fn(() => true)
   bindOrcadIdleShutdown(shutdown)
   await beginOrcadIdleExit('test-profile').start({
     rpc: { readClientActivity: () => activity },
     agentStates: () => [],
     hasStagedMigration: () => false,
-    automationsBusy: () => false,
+    automationsBusy: () => automationsBusy,
     registerCleanup: () => {}
   })
   const installed = vi.mocked(installOrcadManagedIdleExit).mock.calls.at(-1)?.[0]
@@ -58,7 +83,9 @@ async function stopWithReturningClient(retirementState: DaemonIdleRetirementResu
   await vi.waitFor(() =>
     expect(getLocalPtyProvider().spawn({ cols: 80, rows: 24 })).rejects.toThrow('decommissioning')
   )
+  // The returning client may also start work an exit would end.
   activity.openConnections = 1
+  automationsBusy = options.automationsBusy ?? false
   retire.resolve(retirementState)
   return { stopped: await stopping, shutdown }
 }
@@ -99,6 +126,28 @@ it('finishes the stop when the retired daemon cannot be replaced', async () => {
 
   expect(stopped).toBe(true)
   expect(shutdown).toHaveBeenCalledWith('idle', expect.any(Function))
+})
+
+it('replaces an empty daemon whose stop reply was lost, since it may be retiring', async () => {
+  const { stopped, shutdown } = await stopWithReturningClient({ state: 'unverifiable' })
+
+  await expect(getLocalPtyProvider().spawn({ cols: 80, rows: 24 })).resolves.toEqual({
+    id: 'current-new'
+  })
+  expect(stopped).toBe(false)
+  expect(shutdown).not.toHaveBeenCalled()
+  expect(restartDaemon).toHaveBeenCalledOnce()
+})
+
+it('stays up for work the returning client started when the daemon cannot be replaced', async () => {
+  vi.mocked(restartDaemon).mockRejectedValueOnce(new Error('spawn failed'))
+  const { stopped, shutdown } = await stopWithReturningClient(
+    { state: 'retiring' },
+    { automationsBusy: true }
+  )
+
+  expect(stopped).toBe(false)
+  expect(shutdown).not.toHaveBeenCalled()
 })
 
 it('never replaces a daemon that kept its admission open', async () => {

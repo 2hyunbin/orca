@@ -4,6 +4,7 @@ import { getDaemonRuntimeDir as getRuntimeDir } from './daemon-launch-paths'
 import { readDaemonPidRecord as readDaemonPidRecordAt } from './daemon-endpoint-incarnation'
 import type { ParsedDaemonPid } from './daemon-pid-file-parse'
 import {
+  getCurrentDaemonAdapter,
   getLegacyDaemonAdapters,
   listEveryDaemonGeneration,
   type DaemonProvider
@@ -168,6 +169,16 @@ export async function requestIdleDaemonRetirement(): Promise<DaemonIdleRetiremen
     return { state: 'unverifiable' }
   }
   return adapter.requestIdleRetirement()
+}
+
+/** Whether an idle-retirement attempt left the daemon refusing new terminals. */
+// Fresh terminals go to the current generation; the router's own fence reopens unless it retired.
+export function isDaemonTerminalAdmissionClosed(): boolean {
+  return Boolean(
+    adapter &&
+    !(adapter instanceof DegradedDaemonPtyProvider) &&
+    getCurrentDaemonAdapter(adapter).isIdleRetirementAdmissionClosed()
+  )
 }
 
 /** Reopens terminal admission when an idle-retirement attempt did not retire the daemon. */

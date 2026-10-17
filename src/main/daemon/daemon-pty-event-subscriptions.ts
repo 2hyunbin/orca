@@ -157,6 +157,11 @@ export abstract class DaemonPtyEventSubscriptions extends DaemonPtySessionInvent
     return this.idleRetirementState === 'retiring'
   }
 
+  /** Whether an idle-retirement attempt still refuses new terminals here. */
+  isIdleRetirementAdmissionClosed(): boolean {
+    return this.idleRetirementAdmissionClosed
+  }
+
   /** Reopens admission an idle-retirement attempt fenced without retiring the daemon. */
   releaseIdleRetirementFence(): void {
     // An unverifiable attempt may have been accepted, so it stays fenced like a retiring one.

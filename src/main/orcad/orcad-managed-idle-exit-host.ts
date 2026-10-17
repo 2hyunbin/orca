@@ -4,10 +4,14 @@ import type { RuntimeRpcClientActivity } from '../runtime/runtime-rpc/runtime-rp
 import type { OrcadIdleExitEvidence } from './orcad-idle-exit-monitor'
 import {
   activationFenceExists,
+  createOrcadIdleProbes,
   installOrcadManagedIdleExit,
   resolveOrcadManagedIdleExit,
-  type OrcadManagedIdleExitConfig
+  type OrcadManagedIdleExitConfig,
+  type OrcadManagedIdleExitPorts
 } from './orcad-managed-idle-exit'
+import type { OrcadDaemonRetirement } from './orcad-daemon-retirement'
+import { recoverDaemonAfterCancelledIdleStop } from './orcad-idle-stop-daemon-recovery'
 import {
   consumeOrcadIdleStopRecord,
   discardOrcadIdleStopRecord,
@@ -64,25 +68,43 @@ async function startOrcadManagedIdleExit(
   }
 ): Promise<void> {
   const { getLocalPtyProvider } = await import('../ipc/pty/provider/registry')
-  const { getDaemonEndpointFacts } = await import('../daemon/daemon-provider-state')
+  const { getDaemonEndpointFacts, isDaemonTerminalAdmissionClosed } =
+    await import('../daemon/daemon-provider-state')
   const { countLiveOrcadDaemonSessions, retireOrcadDaemonIfIdle } =
     await import('./orcad-daemon-retirement')
   const idleRecord = createIdleStopRecordOwnership(input.userDataPath)
   const hasChatProviders = (): boolean =>
     getStructuredAgentSessionHost()?.hasLoadedProviders() ?? false
+  const ports: OrcadManagedIdleExitPorts = {
+    readClientActivity: () => input.rpc.readClientActivity(),
+    listTerminals: () => getLocalPtyProvider().listProcesses(),
+    countDaemonSessions: countLiveOrcadDaemonSessions,
+    hasDaemon: () => getDaemonEndpointFacts() !== null,
+    agentStates: input.agentStates,
+    hasChatProviders,
+    hasStagedMigration: input.hasStagedMigration,
+    automationsBusy: input.automationsBusy,
+    activationFenceExists
+  }
+  // Work that an exit would end; clients and terminals are excluded, as the stop already weighed them.
+  const nonTerminalWorkProbes = createOrcadIdleProbes(input.config, ports).filter(
+    (probe) => probe.name !== 'clients' && probe.name !== 'terminals'
+  )
+  const hasNonTerminalWork = async (): Promise<boolean> => {
+    for (const probe of nonTerminalWorkProbes) {
+      if (
+        (await Promise.resolve()
+          .then(probe.read)
+          .catch(() => 'unverifiable')) !== 'idle'
+      ) {
+        return true
+      }
+    }
+    return false
+  }
   const dispose = installOrcadManagedIdleExit({
     config: input.config,
-    ports: {
-      readClientActivity: () => input.rpc.readClientActivity(),
-      listTerminals: () => getLocalPtyProvider().listProcesses(),
-      countDaemonSessions: countLiveOrcadDaemonSessions,
-      hasDaemon: () => getDaemonEndpointFacts() !== null,
-      agentStates: input.agentStates,
-      hasChatProviders,
-      hasStagedMigration: input.hasStagedMigration,
-      automationsBusy: input.automationsBusy,
-      activationFenceExists
-    },
+    ports,
     stop: async (evidence) => {
       const outcome = await stopForIdle(input, evidence, retireOrcadDaemonIfIdle)
       // Clients or providers may return while daemon retirement awaits its reply.
@@ -94,15 +116,18 @@ async function startOrcadManagedIdleExit(
         activity.lastRequestAt > evidence.quietSince
       ) {
         discardOrcadIdleStopRecord(input.userDataPath)
-        // A retired daemon never admits terminals again; stay up only with a fresh one.
-        if (
-          outcome.retirement !== 'retired' ||
-          (await replaceRetiredDaemon()) ||
-          hasChatProviders()
-        ) {
+        const daemon = await recoverDaemonAfterCancelledIdleStop(outcome, {
+          admissionClosed: isDaemonTerminalAdmissionClosed,
+          countLiveSessions: countLiveOrcadDaemonSessions,
+          replaceDaemon: async () => {
+            const { restartDaemon } = await import('../daemon/daemon-provider-restart')
+            await restartDaemon()
+          }
+        })
+        if (daemon === 'serving' || (await hasNonTerminalWork())) {
           return false
         }
-        // No terminal daemon here; the returning client's reconnect relaunches a server with one.
+        // The returning client's reconnect relaunches a server that can run terminals.
         idleRecord.requestShutdown(requestIdleShutdown)
         return true
       }
@@ -147,8 +172,8 @@ export function createIdleStopRecordOwnership(userDataPath: string): {
 async function stopForIdle(
   input: { userDataPath: string; version: string },
   evidence: OrcadIdleExitEvidence,
-  retireDaemon: () => Promise<{ retirement: string; reason: string | null }>
-): Promise<{ retirement: string }> {
+  retireDaemon: () => Promise<OrcadDaemonRetirement>
+): Promise<OrcadDaemonRetirement> {
   console.error(`[orcad] stopping: no client, terminal or job for ${evidence.timeoutMs}ms`)
   try {
     writeOrcadIdleStopRecord(input.userDataPath, evidence, input.version)
@@ -156,25 +181,13 @@ async function stopForIdle(
     console.error('[orcad] could not record the idle stop:', error)
   }
   // The daemon leaves only if it proves itself empty; a busy one stays up with its terminals.
-  const outcome = await retireDaemon().catch((error: unknown) => ({
+  const outcome = await retireDaemon().catch((error: unknown): OrcadDaemonRetirement => ({
     retirement: 'unverifiable',
+    liveSessions: null,
     reason: String(error)
   }))
   console.error(
     `[orcad] terminal daemon on idle stop: ${outcome.retirement}${outcome.reason ? ` (${outcome.reason})` : ''}`
   )
   return outcome
-}
-
-/** Safe only after retirement: the daemon proved itself empty and admission has stayed fenced since. */
-async function replaceRetiredDaemon(): Promise<boolean> {
-  try {
-    const { restartDaemon } = await import('../daemon/daemon-provider-restart')
-    await restartDaemon()
-    console.error('[orcad] a client returned during idle stop; started a fresh terminal daemon')
-    return true
-  } catch (error) {
-    console.error('[orcad] could not replace the retired terminal daemon:', error)
-    return false
-  }
 }
