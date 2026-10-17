@@ -1,4 +1,3 @@
-import { formatAgentTypeLabel } from '@/lib/agent-status'
 import { useState, useSyncExternalStore } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -30,71 +29,6 @@ export default function AccountSwitchSessionsDialog(): React.JSX.Element | null 
   return prompt ? <SwitchPromptDialog key={prompt.id} prompt={prompt} /> : null
 }
 
-function dialogTitle(prompt: AgentAccountSwitchPrompt): string {
-  if (prompt.reason === 'restored') {
-    return translate(
-      'accounts.switchSessions.restoredTitle',
-      '{{agent}} is still on a previous account',
-      { agent: formatAgentTypeLabel(prompt.agent) }
-    )
-  }
-  return prompt.nextAccountLabel === null
-    ? translate('accounts.switchSessions.titleUnnamed', 'Account switched')
-    : translate('accounts.switchSessions.title', 'Switched to {{account}}', {
-        account: prompt.nextAccountLabel
-      })
-}
-
-function dialogBody(prompt: AgentAccountSwitchPrompt): string {
-  const values = {
-    count: prompt.sessions.length,
-    previous:
-      prompt.previousAccountLabel ??
-      translate('accounts.switchSessions.previousAccount', 'a previous account'),
-    next:
-      prompt.nextAccountLabel ??
-      translate('accounts.switchSessions.currentAccount', 'the current account')
-  }
-  const one = prompt.sessions.length === 1
-  if (prompt.agent === 'claude') {
-    return one
-      ? translate(
-          'accounts.switchSessions.claude.bodyOne',
-          '1 Claude session is still running on {{previous}}. Restarting continues the conversation on {{next}}. Busy sessions wait for idle before restarting.',
-          values
-        )
-      : translate(
-          'accounts.switchSessions.claude.bodyOther',
-          '{{count}} Claude sessions are still running on {{previous}}. Restarting continues each conversation on {{next}}. Busy sessions wait for idle before restarting.',
-          values
-        )
-  }
-  if (prompt.reason === 'restored') {
-    return one
-      ? translate(
-          'accounts.switchSessions.codex.restoredBodyOne',
-          '1 Codex session from your last run is still on {{previous}}. Restarting relaunches it on {{next}} and stops any work in progress.',
-          values
-        )
-      : translate(
-          'accounts.switchSessions.codex.restoredBodyOther',
-          '{{count}} Codex sessions from your last run are still on {{previous}}. Restarting relaunches them on {{next}} and stops any work in progress.',
-          values
-        )
-  }
-  return one
-    ? translate(
-        'accounts.switchSessions.codex.bodyOne',
-        '1 Codex session is still running on {{previous}}. Restarting relaunches it on {{next}} and stops any work in progress.',
-        values
-      )
-    : translate(
-        'accounts.switchSessions.codex.bodyOther',
-        '{{count}} Codex sessions are still running on {{previous}}. Restarting relaunches them on {{next}} and stops any work in progress.',
-        values
-      )
-}
-
 function SwitchPromptDialog({ prompt }: { prompt: AgentAccountSwitchPrompt }): React.JSX.Element {
   const [dontAskAgain, setDontAskAgain] = useState(false)
   // Why unticks, not ticks: every listed session starts selected.
@@ -114,8 +48,7 @@ function SwitchPromptDialog({ prompt }: { prompt: AgentAccountSwitchPrompt }): R
       return next
     })
   }
-  // Why Keep for Codex: its restart stops work at once, so a stray Enter must not trigger it (#10863).
-  const focusRestart = prompt.agent === 'claude'
+  const focusRestart = prompt.agent.defaultButton === 'restart'
   return (
     <Dialog
       open
@@ -132,12 +65,22 @@ function SwitchPromptDialog({ prompt }: { prompt: AgentAccountSwitchPrompt }): R
         showCloseButton={false}
       >
         <DialogHeader>
-          <DialogTitle>{dialogTitle(prompt)}</DialogTitle>
-          <DialogDescription>{dialogBody(prompt)}</DialogDescription>
+          <DialogTitle>
+            {translate('accounts.switchSessions.title', 'Switched to {{account}}', {
+              account: prompt.nextAccountLabel
+            })}
+          </DialogTitle>
+          <DialogDescription>
+            {prompt.agent.copy.body({
+              count,
+              previous: prompt.previousAccountLabel,
+              next: prompt.nextAccountLabel
+            })}
+          </DialogDescription>
         </DialogHeader>
         {count > 1 && (
           <AccountSwitchSessionTree
-            agent={prompt.agent}
+            agent={prompt.agent.agent}
             sessions={prompt.sessions}
             selected={new Set(chosen)}
             onToggle={toggle}

@@ -1,54 +1,44 @@
-import { formatAgentTypeLabel } from '../../../shared/agent-type-label'
 /**
- * What happens to running agent terminal sessions after the user switches that
- * agent's account: ask in a dialog, or apply the saved setting. Shared by
- * Claude and Codex; each agent supplies how it finds its sessions.
+ * What happens to running agent terminal sessions after the user switches that agent's account:
+ * ask in a dialog, or apply the saved setting. Agent-neutral; each agent is an AccountSwitchAgent.
  */
 import { toast } from 'sonner'
+import { formatAgentTypeLabel } from '../../../shared/agent-type-label'
 import { translate } from '@/i18n/i18n'
 import type { AppState } from '@/store'
 import { useAppStore } from '@/store'
 import type { AccountRestartAgent } from '@/store/terminals/terminal-contracts'
-import type {
-  AccountSwitchRunningSessions,
-  AgentAccountSwitchSettings
-} from '../../../shared/agent-account-switch-settings'
+import type { AccountSwitchRunningSessions } from '../../../shared/agent-account-switch-settings'
+import {
+  getCodexSelectionLaneKey,
+  normalizeCodexAccountSelectionTarget,
+  type CodexAccountSelectionTarget
+} from '../../../shared/codex-selection-lane'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
+import type { AccountSwitchAgent, AgentAccountSnapshot } from './agent-account-switch-agent'
+import {
+  findMovableAgentSessions,
+  findQueuedAccountRestartsOnAccount
+} from './agent-account-switch-discovery'
 
 export type AccountSwitchSession = {
   ptyId: string
   worktreeId: string
   tabId: string
-  /** Null when the pane's layout has no usable leaf for it (pre-UUID layouts). */
-  leafId: string | null
+  leafId: string
 }
 
 export type AgentAccountSwitchPrompt = {
   /** Distinguishes one question from the next. */
   id: number
-  agent: AccountRestartAgent
-  /** 'restored': sessions that outlived an app restart on an earlier account. */
-  reason: 'switch' | 'restored'
+  agent: AccountSwitchAgent
   sessions: AccountSwitchSession[]
-  /** Null when the listed sessions sit on different accounts. */
-  previousAccountLabel: string | null
-  nextAccountLabel: string | null
-}
-
-/** What an agent adds to the shared answer path. */
-export type AgentAccountSwitchHooks = {
-  /** Records the sessions the user chose to leave on their account. */
-  keep?: (ptyIds: string[]) => void
-  /** False once a listed session no longer needs the answer (moved back, kept, or queued). */
-  isStillOwed?: (ptyId: string) => boolean
+  previousAccountLabel: string
+  nextAccountLabel: string
 }
 
 /** 'show-confirmation' leaves the caller's own switch confirmation to show. */
 export type AgentAccountSwitchOutcome = 'show-confirmation' | 'handled'
-
-const POLICY_SETTING = {
-  claude: 'claudeAccountSwitchRunningSessions',
-  codex: 'codexAccountSwitchRunningSessions'
-} as const satisfies Record<AccountRestartAgent, keyof AgentAccountSwitchSettings>
 
 /** Whether the pane's agent is mid-turn; a Claude restart during a permission prompt or question drops it. */
 export function isAgentPaneMidTurn(
@@ -60,7 +50,7 @@ export function isAgentPaneMidTurn(
   return entry?.agentType === agent && entry.state !== 'done'
 }
 
-type PromptSlot = { key: string; prompt: AgentAccountSwitchPrompt; hooks: AgentAccountSwitchHooks }
+type PromptSlot = { key: string; prompt: AgentAccountSwitchPrompt }
 
 let nextPromptId = 0
 const generationBySlot = new Map<string, number>()
@@ -85,23 +75,16 @@ export function subscribeAgentAccountSwitchPrompt(listener: () => void): () => v
 }
 
 /**
- * Starts a switch's question in `slotKey`, dropping the open ones it `covers` (by default
- * just its own). The returned check is false once a newer switch in the same slot has started.
+ * Starts a switch's question in `slotKey`, dropping the open ones it `covers`. The returned
+ * check is false once a newer switch in the same slot has started.
  */
-export function beginAgentAccountSwitch(
-  slotKey: string,
-  covers: (openSlotKey: string) => boolean = (openSlotKey) => openSlotKey === slotKey
-): () => boolean {
+function beginSlot(slotKey: string, covers: (openSlotKey: string) => boolean): () => boolean {
   const generation = (generationBySlot.get(slotKey) ?? 0) + 1
   generationBySlot.set(slotKey, generation)
   if (slots.some((slot) => covers(slot.key))) {
     setSlots(slots.filter((slot) => !covers(slot.key)))
   }
   return () => generationBySlot.get(slotKey) === generation
-}
-
-export function hasOpenAgentAccountSwitchSlot(slotKey: string): boolean {
-  return slots.some((slot) => slot.key === slotKey)
 }
 
 /**
@@ -111,11 +94,8 @@ export function hasOpenAgentAccountSwitchSlot(slotKey: string): boolean {
  * restarting or keeping the old id would act on nothing.
  */
 function resolveCurrentPtyId(session: AccountSwitchSession): string | null {
-  const state = useAppStore.getState()
-  if (session.leafId) {
-    return state.terminalLayoutsByTabId[session.tabId]?.ptyIdsByLeafId?.[session.leafId] ?? null
-  }
-  return (state.ptyIdsByTabId[session.tabId] ?? []).includes(session.ptyId) ? session.ptyId : null
+  const layouts = useAppStore.getState().terminalLayoutsByTabId
+  return layouts[session.tabId]?.ptyIdsByLeafId?.[session.leafId] ?? null
 }
 
 function restartSessions(agent: AccountRestartAgent, ptyIds: readonly string[]): void {
@@ -140,135 +120,129 @@ export function answerAgentAccountSwitchPrompt(
   }
   setSlots(rest)
   const { agent, sessions } = current.prompt
-  const { hooks } = current
-  const chosen = options.ptyIds ? new Set(options.ptyIds) : null
-  const restarting: string[] = []
-  const keeping: string[] = []
-  for (const session of sessions) {
-    const ptyId = resolveCurrentPtyId(session)
-    if (!ptyId || (hooks.isStillOwed && !hooks.isStillOwed(ptyId))) {
-      continue
+  if (answer === 'restart') {
+    const chosen = options.ptyIds ? new Set(options.ptyIds) : null
+    // Why filtered on the listed id: that is what the dialog's ticks name.
+    const restarting = sessions
+      .filter((session) => !chosen || chosen.has(session.ptyId))
+      .flatMap((session) => resolveCurrentPtyId(session) ?? [])
+    if (restarting.length > 0) {
+      restartSessions(agent.agent, restarting)
     }
-    // Why matched on the listed id: that is what the dialog's ticks name.
-    const ticked = answer === 'restart' && (!chosen || chosen.has(session.ptyId))
-    ;(ticked ? restarting : keeping).push(ptyId)
-  }
-  if (restarting.length > 0) {
-    restartSessions(agent, restarting)
-  }
-  if (keeping.length > 0) {
-    hooks.keep?.(keeping)
   }
   if (options.dontAskAgain) {
-    void useAppStore.getState().updateSettings({ [POLICY_SETTING[agent]]: 'restart' })
+    void useAppStore.getState().updateSettings({ [agent.settingKey]: 'restart' })
   }
 }
 
-function showRestartingToast(
-  agent: AccountRestartAgent,
-  count: number,
-  accountLabel: string | null
-): void {
-  const values = { agent: formatAgentTypeLabel(agent), count }
+function showRestartingToast(agent: AccountRestartAgent, count: number, account: string): void {
+  const values = { agent: formatAgentTypeLabel(agent), count, account }
   toast.success(
-    accountLabel === null
-      ? count === 1
-        ? translate(
-            'accounts.switchSessions.restartingOneCurrent',
-            'Restarting 1 {{agent}} session on the current account',
-            values
-          )
-        : translate(
-            'accounts.switchSessions.restartingOtherCurrent',
-            'Restarting {{count}} {{agent}} sessions on the current account',
-            values
-          )
-      : count === 1
-        ? translate(
-            'accounts.switchSessions.restartingOne',
-            'Restarting 1 {{agent}} session on {{account}}',
-            { ...values, account: accountLabel }
-          )
-        : translate(
-            'accounts.switchSessions.restartingOther',
-            'Restarting {{count}} {{agent}} sessions on {{account}}',
-            { ...values, account: accountLabel }
-          )
+    count === 1
+      ? translate(
+          'accounts.switchSessions.restartingOne',
+          'Restarting 1 {{agent}} session on {{account}}',
+          values
+        )
+      : translate(
+          'accounts.switchSessions.restartingOther',
+          'Restarting {{count}} {{agent}} sessions on {{account}}',
+          values
+        )
   )
 }
 
-export function readAgentAccountSwitchPolicy(
-  agent: AccountRestartAgent
-): AccountSwitchRunningSessions {
-  return useAppStore.getState().settings?.[POLICY_SETTING[agent]] ?? 'ask'
+function readPolicy(agent: AccountSwitchAgent): AccountSwitchRunningSessions {
+  return useAppStore.getState().settings?.[agent.settingKey] ?? 'ask'
 }
 
+const SLOT_WSL_PREFIX = 'wsl:'
+// Why its own key: clearing a distro-less WSL selection moves every distro's panes at once.
+const SLOT_EVERY_WSL = 'wsl:*'
+
 /**
- * Applies the agent's saved policy to the sessions a switch left on the old account,
- * or asks. `merge` adds to the slot's open question instead of replacing it.
+ * Runs after an account switch has already applied: asks, restarts, or keeps the agent's sessions
+ * still on the outgoing account. 'show-confirmation' leaves the caller's own toast.
  */
-export function settleAgentAccountSwitch(args: {
-  slotKey: string
-  isCurrent: () => boolean
-  agent: AccountRestartAgent
-  reason: AgentAccountSwitchPrompt['reason']
-  sessions: readonly AccountSwitchSession[]
-  previousAccountLabel: string | null
-  nextAccountLabel: string | null
-  merge?: boolean
-  hooks?: AgentAccountSwitchHooks
-}): AgentAccountSwitchOutcome {
-  const hooks = args.hooks ?? {}
-  if (!args.isCurrent()) {
-    return 'handled'
+export async function handleRunningAgentSessionsAfterSwitch(
+  agent: AccountSwitchAgent,
+  args: {
+    /** Host whose roster the switch wrote. */
+    owner: RuntimeClientTarget
+    /** The selection slot the switch wrote. */
+    target?: CodexAccountSelectionTarget | null
+    before: AgentAccountSnapshot
+    after: AgentAccountSnapshot
+    /** Set when the switch cleared every WSL distro slot at once. */
+    clearsEveryWslDistro?: boolean
   }
-  if (args.sessions.length === 0) {
+): Promise<AgentAccountSwitchOutcome> {
+  const fromAccountId = agent.launchAccountId(args.before)
+  const toAccountId = agent.launchAccountId(args.after)
+  // Why: a server's switch keeps its own login, and one between coinciding homes moves nothing.
+  if (args.owner.kind !== 'local' || fromAccountId === toAccountId) {
     return 'show-confirmation'
   }
-  // Why read here: the setting may change while the caller's scan runs.
-  const policy = readAgentAccountSwitchPolicy(args.agent)
-  const ptyIds = args.sessions.map((session) => session.ptyId)
-  if (policy === 'keep') {
-    hooks.keep?.(ptyIds)
+  const target = normalizeCodexAccountSelectionTarget(args.target)
+  const clearsEveryWsl =
+    args.clearsEveryWslDistro === true && target.runtime === 'wsl' && target.wslDistro === null
+  const scope = { owner: args.owner, target, clearsEveryWslDistro: clearsEveryWsl }
+  // Why per lane: a switch moves only its own lane's sessions, so it must not replace another
+  // lane's open question; the every-distro question overlaps each distro's.
+  const lane = clearsEveryWsl ? SLOT_EVERY_WSL : getCodexSelectionLaneKey(target)
+  const slotKey = `${agent.agent}:${lane}`
+  const isCurrent = beginSlot(slotKey, (openSlotKey) => {
+    const [openAgent, openLane = ''] = openSlotKey.split(/:(.*)/)
+    return (
+      openAgent === agent.agent &&
+      (openLane === lane ||
+        (lane.startsWith(SLOT_WSL_PREFIX) &&
+          (clearsEveryWsl ? openLane.startsWith(SLOT_WSL_PREFIX) : openLane === SLOT_EVERY_WSL)))
+    )
+  })
+  // Why: an accepted restart relaunches on whatever is selected when it runs, so it outlives
+  // switches; it drops only once its session is already on the newly selected account.
+  const store = useAppStore.getState()
+  for (const ptyId of findQueuedAccountRestartsOnAccount(agent, {
+    ...scope,
+    accountId: toAccountId
+  })) {
+    store.consumePendingPaneAccountRestart(ptyId)
+  }
+  if (readPolicy(agent) === 'keep') {
     return 'show-confirmation'
   }
-  if (policy === 'restart') {
-    restartSessions(args.agent, ptyIds)
-    showRestartingToast(args.agent, ptyIds.length, args.nextAccountLabel)
-    return 'handled'
-  }
-  const open = args.merge ? slots.find((slot) => slot.key === args.slotKey) : undefined
-  if (open) {
-    const known = new Set(open.prompt.sessions.map((session) => session.ptyId))
-    const merged: AgentAccountSwitchPrompt = {
-      ...open.prompt,
-      sessions: [
-        ...open.prompt.sessions,
-        ...args.sessions.filter((session) => !known.has(session.ptyId))
-      ],
-      previousAccountLabel:
-        open.prompt.previousAccountLabel === args.previousAccountLabel
-          ? args.previousAccountLabel
-          : null,
-      nextAccountLabel:
-        open.prompt.nextAccountLabel === args.nextAccountLabel ? args.nextAccountLabel : null
+  const sessions = await findMovableAgentSessions(agent, { ...scope, fromAccountId }).catch(
+    (error: unknown) => {
+      console.warn(`[${agent.agent}-account-switch] session scan failed:`, error)
+      return []
     }
-    // Why the same id: the open dialog keeps the user's unticks and checkbox state.
-    setSlots(slots.map((slot) => (slot === open ? { ...slot, prompt: merged } : slot)))
+  )
+  if (!isCurrent()) {
+    return 'handled'
+  }
+  // Why re-read: the setting may change while the scan runs.
+  const policy = readPolicy(agent)
+  if (sessions.length === 0 || policy === 'keep') {
+    return 'show-confirmation'
+  }
+  const nextAccountLabel = agent.accountLabel(args.after)
+  if (policy === 'restart') {
+    restartSessions(
+      agent.agent,
+      sessions.map((session) => session.ptyId)
+    )
+    showRestartingToast(agent.agent, sessions.length, nextAccountLabel)
     return 'handled'
   }
   const prompt: AgentAccountSwitchPrompt = {
     id: ++nextPromptId,
-    agent: args.agent,
-    reason: args.reason,
-    sessions: [...args.sessions],
-    previousAccountLabel: args.previousAccountLabel,
-    nextAccountLabel: args.nextAccountLabel
+    agent,
+    sessions,
+    previousAccountLabel: agent.accountLabel(args.before),
+    nextAccountLabel
   }
-  setSlots([
-    ...slots.filter((slot) => slot.key !== args.slotKey),
-    { key: args.slotKey, prompt, hooks }
-  ])
+  setSlots([...slots.filter((slot) => slot.key !== slotKey), { key: slotKey, prompt }])
   return 'handled'
 }
 

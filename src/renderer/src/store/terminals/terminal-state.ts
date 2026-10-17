@@ -11,11 +11,7 @@ import type { SessionOptionValue } from '../../../../shared/native-chat-session-
 import type { AgentStartedTelemetry } from '../../lib/worktree-startup-payload'
 import type { NativeChatLaunchDraft, NativeChatLaunchPrompt } from '@/lib/native-chat-launch-prompt'
 import type { HostSessionSlices } from '@/lib/workspace-session-host-split'
-import type {
-  AccountRestartAgent,
-  AutomaticAgentResumeClaim,
-  CodexStalePane
-} from './terminal-contracts'
+import type { AccountRestartAgent, AutomaticAgentResumeClaim } from './terminal-contracts'
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
 import type { TerminalActions } from './terminal-actions'
@@ -33,7 +29,6 @@ export type TerminalState = {
   pendingPtyShutdownIds: Record<string, number>
   /** Account-switch restarts awaiting execution, keyed by the PTY they replace. */
   pendingPaneAccountRestarts: Record<string, AccountRestartAgent>
-  codexStalePaneByPtyId: Record<string, CodexStalePane>
   expandedPaneByTabId: Record<string, boolean>
   canExpandPaneByTabId: Record<string, boolean>
   terminalLayoutsByTabId: Record<string, TerminalLayoutSnapshot>

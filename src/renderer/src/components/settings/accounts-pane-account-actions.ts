@@ -8,7 +8,8 @@ import type {
 } from '../../../../shared/managed-account-types'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
-import { handleRunningCodexSessionsAfterSwitch } from '@/lib/codex-account-switch-sessions'
+import { handleRunningAgentSessionsAfterSwitch } from '@/lib/agent-account-switch-sessions'
+import { CODEX_ACCOUNT_SWITCH_AGENT } from '@/lib/codex-account-switch-agent'
 import {
   getProviderAccountActiveIdForView,
   getProviderAccountRuntime
@@ -27,7 +28,7 @@ import {
   isCodexAccountCancellation
 } from './accounts-pane-action-errors'
 import { getClaudeAccountLabel } from '@/lib/claude-account-label'
-import { handleRunningClaudeSessionsAfterSwitch } from '@/lib/claude-account-switch-sessions'
+import { CLAUDE_ACCOUNT_SWITCH_AGENT } from '@/lib/claude-account-switch-agent'
 
 type CodexActionContext = {
   settings: GlobalSettings
@@ -105,9 +106,9 @@ export function createCodexAccountActionRunner(
         // and picking one of those would aim the question at an unrelated lane.
         // Falling back to the row is the pre-existing behaviour, not a new risk.
         const addedAccount = newAccounts.length === 1 ? newAccounts[0] : undefined
-        void handleRunningCodexSessionsAfterSwitch({
-          before: { accounts: codexAccounts.accounts, accountId: previousActiveAccountId },
-          after: { accounts: next.accounts, accountId: nextActiveAccountId },
+        void handleRunningAgentSessionsAfterSwitch(CODEX_ACCOUNT_SWITCH_AGENT, {
+          before: { state: codexAccounts, accountId: previousActiveAccountId },
+          after: { state: next, accountId: nextActiveAccountId },
           // Why: the mutation wrote this row's slot only, so panes on any other
           // lane still launch under the account they already had.
           owner: accountOwner,
@@ -205,7 +206,7 @@ export function createClaudeAccountActionRunner(
       }
       if (switched) {
         // Why: the restart dialog and confirmation already name the new account.
-        void handleRunningClaudeSessionsAfterSwitch({
+        void handleRunningAgentSessionsAfterSwitch(CLAUDE_ACCOUNT_SWITCH_AGENT, {
           owner: accountOwner,
           target: actionRuntime,
           before: { state: claudeAccounts, accountId: previousActiveAccountId },

@@ -10,7 +10,8 @@ import {
   selectCodexProviderAccount
 } from '@/runtime/runtime-provider-accounts-client'
 import { translate } from '@/i18n/i18n'
-import { handleRunningCodexSessionsAfterSwitch } from '@/lib/codex-account-switch-sessions'
+import { handleRunningAgentSessionsAfterSwitch } from '@/lib/agent-account-switch-sessions'
+import { CODEX_ACCOUNT_SWITCH_AGENT } from '@/lib/codex-account-switch-agent'
 import {
   getWindowsTerminalCapabilityOwnerKey,
   useWindowsTerminalCapabilities
@@ -145,9 +146,9 @@ export function useCodexSwitcherController(codex: ProviderRateLimits) {
       }
       const nextActiveAccountId = getCodexStatusActiveId(next, target)
       if (previousActiveAccountId !== nextActiveAccountId) {
-        await handleRunningCodexSessionsAfterSwitch({
-          before: { accounts: accountState.accounts, accountId: previousActiveAccountId },
-          after: { accounts: next.accounts, accountId: nextActiveAccountId },
+        await handleRunningAgentSessionsAfterSwitch(CODEX_ACCOUNT_SWITCH_AGENT, {
+          before: { state: accountState, accountId: previousActiveAccountId },
+          after: { state: next, accountId: nextActiveAccountId },
           // Why: the mutation wrote this row's slot only, so panes on any other
           // lane still launch under the account they already had.
           owner: runtimeTarget,

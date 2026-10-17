@@ -18,8 +18,6 @@ import {
   resetCodexDetachedPaneRestartExecutorForTests
 } from './codex-detached-pane-restart-scheduler'
 
-const ACCOUNT_A = 'a@example.com'
-const ACCOUNT_B = 'b@example.com'
 const LEAF_ID = '11111111-1111-4111-8111-111111111111'
 const OLD_PTY = 'wt1@@old'
 const NEW_PTY = 'wt1@@new'
@@ -66,11 +64,6 @@ function seedQueuedRestart(
         }
       : {}
   })
-  useAppStore
-    .getState()
-    .markCodexStalePanes([
-      { ptyId: OLD_PTY, previousAccountLabel: ACCOUNT_A, nextAccountLabel: ACCOUNT_B }
-    ])
   useAppStore.getState().queuePaneAccountRestarts([OLD_PTY], 'codex')
 }
 
@@ -145,9 +138,6 @@ describe('codex detached pane restart executor', () => {
     expect(state.terminalLayoutsByTabId['tab-1']?.ptyIdsByLeafId).toEqual({ [LEAF_ID]: NEW_PTY })
     expect(state.pendingPaneAccountRestarts).toEqual({})
     expect(state.suppressedPtyExitIds[OLD_PTY]).toBeUndefined()
-    // The restart completed, so neither id is still on the old account.
-    expect(state.codexStalePaneByPtyId[OLD_PTY]).toBeUndefined()
-    expect(state.codexStalePaneByPtyId[NEW_PTY]).toBeUndefined()
   })
 
   it('adopts the replacement when the replaced PTY exit clears the tab binding mid-spawn', async () => {
@@ -165,7 +155,6 @@ describe('codex detached pane restart executor', () => {
     expect(window.api.pty.kill).not.toHaveBeenCalled()
     expect(state.ptyIdsByTabId['tab-1']).toEqual([NEW_PTY])
     expect(state.terminalLayoutsByTabId['tab-1']?.ptyIdsByLeafId).toEqual({ [LEAF_ID]: NEW_PTY })
-    expect(state.codexStalePaneByPtyId[NEW_PTY]).toBeUndefined()
   })
 
   it('keeps the replaced PTY exit away from a tab revealed mid-restart', async () => {
@@ -399,7 +388,6 @@ describe('codex detached pane restart executor', () => {
     const restart = sweepUnclaimedCodexPaneRestarts()
     await vi.waitFor(() => expect(window.api.pty.spawn).toHaveBeenCalledTimes(1))
     const state = useAppStore.getState()
-    const stalePane = state.codexStalePaneByPtyId[OLD_PTY]
     useAppStore.setState({
       tabsByWorktree: {
         wt1: [{ ...state.tabsByWorktree.wt1![0]!, generation: 1, ptyId: 'wt1@@successor' }]
@@ -410,8 +398,7 @@ describe('codex detached pane restart executor', () => {
           ...state.terminalLayoutsByTabId['tab-1']!,
           ptyIdsByLeafId: { [LEAF_ID]: 'wt1@@successor' }
         }
-      },
-      codexStalePaneByPtyId: { 'wt1@@successor': stalePane! }
+      }
     })
 
     pendingSpawn.resolve({ id: NEW_PTY })
@@ -420,7 +407,6 @@ describe('codex detached pane restart executor', () => {
     const after = useAppStore.getState()
     expect(after.ptyIdsByTabId['tab-1']).toEqual(['wt1@@successor'])
     expect(after.terminalLayoutsByTabId['tab-1']?.ptyIdsByLeafId?.[LEAF_ID]).toBe('wt1@@successor')
-    expect(after.codexStalePaneByPtyId['wt1@@successor']).toEqual(stalePane)
     await restart
     pendingKill.resolve()
   })
@@ -448,8 +434,6 @@ describe('codex detached pane restart executor', () => {
     expect(window.api.pty.kill).not.toHaveBeenCalled()
     expect(state.ptyIdsByTabId['tab-1']).toEqual([OLD_PTY])
     expect(state.pendingPaneAccountRestarts).toEqual({})
-    // Still on the old account, so its launch-account memory must survive.
-    expect(state.codexStalePaneByPtyId[OLD_PTY]).toBeDefined()
   })
 
   it('keeps parked watchers and buffered output for the old PTY when main cannot stop it', async () => {
@@ -475,7 +459,6 @@ describe('codex detached pane restart executor', () => {
       const replayed: string[] = []
       drainPreHandlerPtyData(OLD_PTY, (data) => replayed.push(data))
       expect(replayed).toEqual(['still running'])
-      expect(useAppStore.getState().codexStalePaneByPtyId[OLD_PTY]).toBeDefined()
     } finally {
       parkedWatchersByTabId.delete('tab-1')
       clearPreHandlerPtyState(OLD_PTY)
@@ -498,7 +481,6 @@ describe('codex detached pane restart executor', () => {
         launchAgent: 'codex'
       })
     )
-    expect(state.codexStalePaneByPtyId[OLD_PTY]).toBeUndefined()
   })
 
   it('publishes a rootless replacement startup before waiting for old PTY teardown', async () => {

@@ -25,7 +25,6 @@ import type {
 import type {
   AccountRestartAgent,
   AutomaticAgentResumeClaim,
-  CodexStalePane,
   HydrateWorkspaceSessionOptions
 } from './terminal-contracts'
 
@@ -166,15 +165,6 @@ export type TerminalActions = {
   isPtyShutdownPending: (ptyId: string) => boolean
   queuePaneAccountRestarts: (ptyIds: string[], agent: AccountRestartAgent) => void
   consumePendingPaneAccountRestart: (ptyId: string) => AccountRestartAgent | null
-  /** Records stale panes and returns the ones still owed a question. */
-  markCodexStalePanes: (
-    panes: (Pick<CodexStalePane, 'previousAccountLabel' | 'nextAccountLabel'> &
-      Partial<Pick<CodexStalePane, 'previousAccountId' | 'nextAccountId'>> & {
-        ptyId: string
-      })[]
-  ) => string[]
-  clearCodexStalePane: (ptyId: string) => void
-  keepCodexStalePanes: (ptyIds: string[]) => void
   replaceTerminalLayoutPanePtyId: (tabId: string, leafId: string, ptyId: string) => void
   setTabPaneExpanded: (tabId: string, expanded: boolean) => void
   setTabCanExpandPane: (tabId: string, canExpand: boolean) => void

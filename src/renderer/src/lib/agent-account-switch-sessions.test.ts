@@ -1,204 +1,351 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentAccountSwitchSettings } from '../../../shared/agent-account-switch-settings'
+import { getDefaultSettings } from '../../../shared/constants'
+import type { GlobalSettings } from '../../../shared/global-settings-types'
+import type {
+  ClaudeManagedAccountSummary,
+  ClaudeRateLimitAccountsState
+} from '../../../shared/managed-account-types'
+import {
+  getClaudeStatusActiveId,
+  resolveClaudeStatusAccountState
+} from '../components/status-bar/status-bar-claude-accounts'
+import {
+  findMovableAgentSessions,
+  findQueuedAccountRestartsOnAccount
+} from './agent-account-switch-discovery'
+import type * as Discovery from './agent-account-switch-discovery'
+import type { AccountSwitchAgent } from './agent-account-switch-agent'
+import { CLAUDE_ACCOUNT_SWITCH_AGENT } from './claude-account-switch-agent'
+import { CODEX_ACCOUNT_SWITCH_AGENT } from './codex-account-switch-agent'
 import {
   answerAgentAccountSwitchPrompt,
   getAgentAccountSwitchPrompt,
-  resetAgentAccountSwitchSessionsForTests,
-  settleAgentAccountSwitch,
-  type AccountSwitchSession,
-  type AgentAccountSwitchHooks
+  handleRunningAgentSessionsAfterSwitch,
+  resetAgentAccountSwitchSessionsForTests
 } from './agent-account-switch-sessions'
 
 type StoreStub = {
   settings: AgentAccountSwitchSettings
-  ptyIdsByTabId: Record<string, string[]>
-  terminalLayoutsByTabId: Record<string, { ptyIdsByLeafId?: Record<string, string> }>
   updateSettings: (updates: AgentAccountSwitchSettings) => Promise<void>
+  terminalLayoutsByTabId: Record<string, { ptyIdsByLeafId: Record<string, string> }>
   queuePaneAccountRestarts: (ptyIds: string[], agent: string) => void
+  consumePendingPaneAccountRestart: (ptyId: string) => void
 }
 
 const store = vi.hoisted((): StoreStub => ({
   settings: {},
-  ptyIdsByTabId: {},
   terminalLayoutsByTabId: {},
   updateSettings: vi.fn(async () => {}),
-  queuePaneAccountRestarts: vi.fn()
+  queuePaneAccountRestarts: vi.fn(),
+  consumePendingPaneAccountRestart: vi.fn()
 }))
 const toastSuccess = vi.hoisted(() => vi.fn())
 
 vi.mock('@/store', () => ({ useAppStore: { getState: () => store } }))
 vi.mock('sonner', () => ({ toast: { success: toastSuccess } }))
+vi.mock('./agent-account-switch-discovery', async (importOriginal) => ({
+  ...(await importOriginal<typeof Discovery>()),
+  findMovableAgentSessions: vi.fn(),
+  findQueuedAccountRestartsOnAccount: vi.fn(() => [])
+}))
 
-const leafOf = (ptyId: string): string => `leaf-${ptyId}`
-const session = (ptyId: string): AccountSwitchSession => ({
-  ptyId,
+const CLAUDE = CLAUDE_ACCOUNT_SWITCH_AGENT
+const CODEX = CODEX_ACCOUNT_SWITCH_AGENT
+const candidate = (n: number) => ({
+  ptyId: `pty-${n}`,
   worktreeId: 'wt-1',
-  tabId: `tab-${ptyId}`,
-  leafId: leafOf(ptyId)
+  tabId: `tab-${n}`,
+  leafId: `leaf-${n}`
+})
+const row = (id: string, extra: Partial<ClaudeManagedAccountSummary> = {}) => ({
+  id,
+  email: `${id}@example.com`,
+  managedAuthRuntime: 'host' as const,
+  wslDistro: null,
+  authMethod: 'subscription-oauth' as const,
+  createdAt: 1,
+  updatedAt: 1,
+  lastAuthenticatedAt: 1,
+  ...extra
+})
+const ROSTER = { accounts: [row('account-a'), row('account-b')] }
+const SWITCH = {
+  owner: { kind: 'local' } as const,
+  target: { runtime: 'host' } as const,
+  before: { state: ROSTER, accountId: 'account-a' },
+  after: { state: ROSTER, accountId: 'account-b' }
+}
+const SWITCH_BACK = { ...SWITCH, before: SWITCH.after, after: SWITCH.before }
+const wslSwitch = (wslDistro: string | null) => ({
+  ...SWITCH,
+  target: { runtime: 'wsl', wslDistro } as const
 })
 
-/** Seeds each pane bound to its listed PTY. */
-function bindPanes(ptyIds: string[]): void {
-  for (const ptyId of ptyIds) {
-    store.ptyIdsByTabId[`tab-${ptyId}`] = [ptyId]
-    store.terminalLayoutsByTabId[`tab-${ptyId}`] = { ptyIdsByLeafId: { [leafOf(ptyId)]: ptyId } }
-  }
-}
-
-function ask(args: {
-  agent: 'claude' | 'codex'
-  slotKey?: string
-  ptyIds: string[]
-  merge?: boolean
-  previous?: string | null
-  hooks?: AgentAccountSwitchHooks
-}): ReturnType<typeof settleAgentAccountSwitch> {
-  bindPanes(args.ptyIds)
-  return settleAgentAccountSwitch({
-    slotKey: args.slotKey ?? `${args.agent}:local`,
-    isCurrent: () => true,
-    agent: args.agent,
-    reason: args.merge ? 'restored' : 'switch',
-    sessions: args.ptyIds.map(session),
-    previousAccountLabel: args.previous === undefined ? 'a@example.com' : args.previous,
-    nextAccountLabel: 'b@example.com',
-    merge: args.merge,
-    hooks: args.hooks
-  })
-}
-
+const switchAgent = (
+  agent: AccountSwitchAgent,
+  args: Partial<Parameters<typeof handleRunningAgentSessionsAfterSwitch>[1]> = {}
+) => handleRunningAgentSessionsAfterSwitch(agent, { ...SWITCH, ...args })
 const listed = (): string[] | undefined =>
-  getAgentAccountSwitchPrompt()?.sessions.map((entry) => entry.ptyId)
+  getAgentAccountSwitchPrompt()?.sessions.map((session) => session.ptyId)
 
-describe('agent account switch sessions', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    resetAgentAccountSwitchSessionsForTests()
-    store.settings = {}
-    store.ptyIdsByTabId = {}
+beforeEach(() => {
+  vi.clearAllMocks()
+  resetAgentAccountSwitchSessionsForTests()
+  store.settings = {}
+  store.terminalLayoutsByTabId = Object.fromEntries(
+    [1, 2, 3].map((n) => [`tab-${n}`, { ptyIdsByLeafId: { [`leaf-${n}`]: `pty-${n}` } }])
+  )
+  vi.mocked(findMovableAgentSessions).mockResolvedValue([])
+})
+
+describe.each([CLAUDE, CODEX])('the $agent account switch', (agent) => {
+  it('asks nothing when no session runs on the outgoing account', async () => {
+    expect(await switchAgent(agent)).toBe('show-confirmation')
+    expect(getAgentAccountSwitchPrompt()).toBeNull()
+    expect(findMovableAgentSessions).toHaveBeenCalledWith(
+      agent,
+      expect.objectContaining({ fromAccountId: 'account-a' })
+    )
+  })
+
+  it('restarts the listed sessions on the new account when the user picks Restart', async () => {
+    vi.mocked(findMovableAgentSessions).mockResolvedValue([candidate(1), candidate(2)])
+    expect(await switchAgent(agent)).toBe('handled')
+    expect(getAgentAccountSwitchPrompt()).toMatchObject({
+      agent,
+      previousAccountLabel: 'account-a@example.com',
+      nextAccountLabel: 'account-b@example.com'
+    })
+
+    answerAgentAccountSwitchPrompt('restart')
+
+    expect(store.queuePaneAccountRestarts).toHaveBeenLastCalledWith(['pty-1', 'pty-2'], agent.agent)
+    expect(getAgentAccountSwitchPrompt()).toBeNull()
+    expect(store.updateSettings).not.toHaveBeenCalled()
+  })
+
+  it('restarts only ticked sessions this question listed, on the PTY each has now', async () => {
+    vi.mocked(findMovableAgentSessions).mockResolvedValue([candidate(1), candidate(2)])
+    await switchAgent(agent)
+    // A reattach moved pane 1 onto a new PTY while the question was open.
+    store.terminalLayoutsByTabId['tab-1'] = { ptyIdsByLeafId: { 'leaf-1': 'pty-1-reattached' } }
+
+    answerAgentAccountSwitchPrompt('restart', { ptyIds: ['pty-1', 'pty-unlisted'] })
+
+    expect(store.queuePaneAccountRestarts).toHaveBeenLastCalledWith(
+      ['pty-1-reattached'],
+      agent.agent
+    )
+  })
+
+  it('queues nothing for a pane closed while the question was open', async () => {
+    vi.mocked(findMovableAgentSessions).mockResolvedValue([candidate(1)])
+    await switchAgent(agent)
     store.terminalLayoutsByTabId = {}
+
+    answerAgentAccountSwitchPrompt('restart')
+
+    expect(store.queuePaneAccountRestarts).not.toHaveBeenCalled()
   })
 
-  it('hands the unticked sessions to the agent keep hook when restarting the rest', () => {
-    const keep = vi.fn()
-    ask({ agent: 'codex', ptyIds: ['pty-1', 'pty-2', 'pty-3'], hooks: { keep } })
-
-    answerAgentAccountSwitchPrompt('restart', { ptyIds: ['pty-2', 'pty-unlisted'] })
-
-    expect(store.queuePaneAccountRestarts).toHaveBeenCalledWith(['pty-2'], 'codex')
-    expect(keep).toHaveBeenCalledWith(['pty-1', 'pty-3'])
-  })
-
-  it.each(['claude', 'codex'] as const)(
-    'restarts the pane PTY a %s session moved to while the question was open',
-    (agent) => {
-      ask({ agent, ptyIds: ['pty-old'] })
-      // A reattach rebinds the same pane onto a new PTY.
-      store.ptyIdsByTabId['tab-pty-old'] = ['pty-new']
-      store.terminalLayoutsByTabId['tab-pty-old'] = {
-        ptyIdsByLeafId: { [leafOf('pty-old')]: 'pty-new' }
-      }
-
-      answerAgentAccountSwitchPrompt('restart')
-
-      expect(store.queuePaneAccountRestarts).toHaveBeenCalledWith(['pty-new'], agent)
-    }
-  )
-
-  it.each(['claude', 'codex'] as const)(
-    'queues nothing for a %s pane closed while the question was open',
-    (agent) => {
-      const keep = vi.fn()
-      ask({ agent, ptyIds: ['pty-1'], hooks: { keep } })
-      store.ptyIdsByTabId = {}
-      store.terminalLayoutsByTabId = {}
-
-      answerAgentAccountSwitchPrompt('restart')
-      expect(store.queuePaneAccountRestarts).not.toHaveBeenCalled()
-      expect(keep).not.toHaveBeenCalled()
-    }
-  )
-
-  it('skips sessions the agent says no longer need the answer', () => {
-    const keep = vi.fn()
-    ask({
-      agent: 'codex',
-      ptyIds: ['pty-1', 'pty-2'],
-      hooks: { keep, isStillOwed: (ptyId) => ptyId !== 'pty-1' }
-    })
+  it('leaves sessions alone when the user keeps them', async () => {
+    vi.mocked(findMovableAgentSessions).mockResolvedValue([candidate(1)])
+    await switchAgent(agent)
 
     answerAgentAccountSwitchPrompt('keep')
 
-    expect(keep).toHaveBeenCalledWith(['pty-2'])
-  })
-
-  it("turns on the agent's own automatic restart when told not to ask again", () => {
-    ask({ agent: 'codex', ptyIds: ['pty-1'] })
-
-    answerAgentAccountSwitchPrompt('keep', { dontAskAgain: true })
-
-    expect(store.updateSettings).toHaveBeenCalledWith({
-      codexAccountSwitchRunningSessions: 'restart'
-    })
-  })
-
-  it("applies the agent's saved setting without asking", () => {
-    const keep = vi.fn()
-    store.settings = { codexAccountSwitchRunningSessions: 'restart' }
-    expect(ask({ agent: 'codex', ptyIds: ['pty-1', 'pty-2'] })).toBe('handled')
-    expect(store.queuePaneAccountRestarts).toHaveBeenCalledWith(['pty-1', 'pty-2'], 'codex')
-    expect(toastSuccess).toHaveBeenCalledWith('Restarting 2 Codex sessions on b@example.com')
-
-    store.settings = { codexAccountSwitchRunningSessions: 'keep' }
-    expect(ask({ agent: 'codex', ptyIds: ['pty-3'], hooks: { keep } })).toBe('show-confirmation')
-    expect(keep).toHaveBeenCalledWith(['pty-3'])
+    expect(store.queuePaneAccountRestarts).not.toHaveBeenCalled()
     expect(getAgentAccountSwitchPrompt()).toBeNull()
   })
 
-  it('reads each agent its own setting', () => {
-    store.settings = { claudeAccountSwitchRunningSessions: 'restart' }
+  it.each(['restart', 'keep'] as const)(
+    "turns on the agent's own automatic restarts on %s when told not to ask again",
+    async (answer) => {
+      vi.mocked(findMovableAgentSessions).mockResolvedValue([candidate(1)])
+      await switchAgent(agent)
 
-    expect(ask({ agent: 'codex', ptyIds: ['pty-1'] })).toBe('handled')
+      answerAgentAccountSwitchPrompt(answer, { dontAskAgain: true })
+
+      expect(store.updateSettings).toHaveBeenCalledWith({ [agent.settingKey]: 'restart' })
+    }
+  )
+
+  it('restarts without asking when the setting is Always restart', async () => {
+    store.settings = { [agent.settingKey]: 'restart' }
+    vi.mocked(findMovableAgentSessions).mockResolvedValue([candidate(1), candidate(2)])
+
+    expect(await switchAgent(agent)).toBe('handled')
+    expect(getAgentAccountSwitchPrompt()).toBeNull()
+    expect(store.queuePaneAccountRestarts).toHaveBeenLastCalledWith(['pty-1', 'pty-2'], agent.agent)
+    expect(toastSuccess).toHaveBeenCalledWith(
+      `Restarting 2 ${agent.agent === 'claude' ? 'Claude' : 'Codex'} sessions on account-b@example.com`
+    )
   })
 
-  it('shows a waiting question once the one before it is answered', () => {
-    ask({ agent: 'claude', ptyIds: ['pty-claude'] })
-    ask({ agent: 'codex', ptyIds: ['pty-codex'] })
+  it('keeps sessions without scanning when the setting is Never restart', async () => {
+    store.settings = { [agent.settingKey]: 'keep' }
+    vi.mocked(findQueuedAccountRestartsOnAccount).mockReturnValueOnce(['pty-home'])
 
-    expect(getAgentAccountSwitchPrompt()?.agent).toBe('claude')
-    answerAgentAccountSwitchPrompt('keep')
-    expect(getAgentAccountSwitchPrompt()?.agent).toBe('codex')
+    expect(await switchAgent(agent)).toBe('show-confirmation')
+    expect(findMovableAgentSessions).not.toHaveBeenCalled()
+    expect(store.consumePendingPaneAccountRestart).toHaveBeenCalledWith('pty-home')
+    expect(store.queuePaneAccountRestarts).not.toHaveBeenCalled()
   })
 
-  it('adds merged sessions to the open question without resetting it', () => {
-    ask({ agent: 'codex', slotKey: 'codex:local:host', ptyIds: ['pty-1'], merge: true })
-    const firstId = getAgentAccountSwitchPrompt()?.id
-
-    ask({
-      agent: 'codex',
-      slotKey: 'codex:local:host',
-      ptyIds: ['pty-1', 'pty-2'],
-      merge: true,
-      previous: 'c@example.com'
+  it('applies Never restart chosen while the scan runs', async () => {
+    vi.mocked(findMovableAgentSessions).mockImplementation(async () => {
+      store.settings = { [agent.settingKey]: 'keep' }
+      return [candidate(1)]
     })
 
-    expect(getAgentAccountSwitchPrompt()?.id).toBe(firstId)
-    expect(listed()).toEqual(['pty-1', 'pty-2'])
-    expect(getAgentAccountSwitchPrompt()?.previousAccountLabel).toBeNull()
+    expect(await switchAgent(agent)).toBe('show-confirmation')
+    expect(getAgentAccountSwitchPrompt()).toBeNull()
   })
 
-  it('drops a superseded question', () => {
+  it('drops queued restarts already on the new account and keeps the rest', async () => {
+    vi.mocked(findQueuedAccountRestartsOnAccount).mockReturnValueOnce(['pty-home'])
+
+    await switchAgent(agent)
+
+    expect(findQueuedAccountRestartsOnAccount).toHaveBeenCalledWith(
+      agent,
+      expect.objectContaining({ accountId: 'account-b' })
+    )
+    expect(store.consumePendingPaneAccountRestart).toHaveBeenCalledTimes(1)
+    expect(store.consumePendingPaneAccountRestart).toHaveBeenCalledWith('pty-home')
+  })
+
+  it('leaves local questions and queued restarts alone on a server account switch', async () => {
+    vi.mocked(findMovableAgentSessions).mockResolvedValue([candidate(1)])
+    await switchAgent(agent)
+
     expect(
-      settleAgentAccountSwitch({
-        slotKey: 'codex:local:host',
-        isCurrent: () => false,
-        agent: 'codex',
-        reason: 'switch',
-        sessions: [session('pty-1')],
-        previousAccountLabel: null,
-        nextAccountLabel: null
+      await handleRunningAgentSessionsAfterSwitch(agent, {
+        ...SWITCH,
+        owner: { kind: 'environment', environmentId: 'env-1' }
       })
-    ).toBe('handled')
+    ).toBe('show-confirmation')
+
+    expect(listed()).toEqual(['pty-1'])
+    expect(findQueuedAccountRestartsOnAccount).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks nothing when the account does not change', async () => {
+    expect(await switchAgent(agent, { after: SWITCH.before })).toBe('show-confirmation')
+    expect(findMovableAgentSessions).not.toHaveBeenCalled()
+  })
+
+  it('keeps only the newer question when an older scan resolves last', async () => {
+    const older = Promise.withResolvers<ReturnType<typeof candidate>[]>()
+    const newer = Promise.withResolvers<ReturnType<typeof candidate>[]>()
+    vi.mocked(findMovableAgentSessions)
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise)
+    const first = switchAgent(agent)
+    const second = handleRunningAgentSessionsAfterSwitch(agent, SWITCH_BACK)
+
+    newer.resolve([candidate(2)])
+    expect(await second).toBe('handled')
+    older.resolve([candidate(1)])
+    expect(await first).toBe('handled')
+
+    expect(listed()).toEqual(['pty-2'])
+    expect(getAgentAccountSwitchPrompt()?.nextAccountLabel).toBe('account-a@example.com')
+  })
+})
+
+describe('questions across agents and lanes', () => {
+  it('shows a waiting question once the one before it is answered', async () => {
+    vi.mocked(findMovableAgentSessions)
+      .mockResolvedValueOnce([candidate(1)])
+      .mockResolvedValueOnce([candidate(2)])
+    await switchAgent(CLAUDE)
+    await switchAgent(CODEX)
+
+    expect(getAgentAccountSwitchPrompt()?.agent).toBe(CLAUDE)
+    answerAgentAccountSwitchPrompt('keep')
+    expect(getAgentAccountSwitchPrompt()?.agent).toBe(CODEX)
+  })
+
+  it('reads each agent its own setting', async () => {
+    store.settings = { claudeAccountSwitchRunningSessions: 'keep' }
+    vi.mocked(findMovableAgentSessions).mockResolvedValue([candidate(1)])
+
+    expect(await switchAgent(CODEX)).toBe('handled')
+    expect(getAgentAccountSwitchPrompt()?.agent).toBe(CODEX)
+  })
+
+  it('keeps the host question open through a WSL switch', async () => {
+    vi.mocked(findMovableAgentSessions)
+      .mockResolvedValueOnce([candidate(1)])
+      .mockResolvedValueOnce([candidate(2)])
+    await switchAgent(CODEX)
+    await switchAgent(CODEX, wslSwitch('Ubuntu'))
+
+    expect(listed()).toEqual(['pty-1'])
+    answerAgentAccountSwitchPrompt('keep')
+    expect(listed()).toEqual(['pty-2'])
+  })
+
+  it('lets clearing every WSL distro replace a single distro question', async () => {
+    vi.mocked(findMovableAgentSessions)
+      .mockResolvedValueOnce([candidate(1)])
+      .mockResolvedValueOnce([candidate(2)])
+      .mockResolvedValueOnce([candidate(3)])
+    await switchAgent(CODEX)
+    await switchAgent(CODEX, wslSwitch('Ubuntu'))
+    await handleRunningAgentSessionsAfterSwitch(CODEX, {
+      ...wslSwitch(null),
+      clearsEveryWslDistro: true
+    })
+
+    expect(listed()).toEqual(['pty-1'])
+    answerAgentAccountSwitchPrompt('keep')
+    expect(listed()).toEqual(['pty-3'])
+    answerAgentAccountSwitchPrompt('keep')
     expect(getAgentAccountSwitchPrompt()).toBeNull()
+  })
+})
+
+describe('switching from a saved Claude account that runs on System default, as the status bar shows it', () => {
+  const host: ClaudeRateLimitAccountsState = {
+    accounts: [row('account-a', { runsOnSystemDefault: true }), row('account-b')],
+    activeAccountId: 'account-a',
+    activeAccountIdsByRuntime: { host: 'account-a', wsl: {} }
+  }
+  const settingsSelecting = (accountId: string | null): GlobalSettings => ({
+    ...getDefaultSettings('/tmp'),
+    claudeManagedAccounts: [
+      { ...row('account-a'), managedAuthPath: '/claude/account-a' },
+      { ...row('account-b'), managedAuthPath: '/claude/account-b' }
+    ],
+    activeClaudeManagedAccountId: accountId,
+    activeClaudeManagedAccountIdsByRuntime: { host: accountId, wsl: {} }
+  })
+  const hostTarget = { runtime: 'host', wslDistro: null } as const
+  const before = resolveClaudeStatusAccountState(settingsSelecting('account-a'), host, null)
+  const switchTo = (hostAccountId: string | null) => {
+    const after = { ...host, activeAccountIdsByRuntime: { host: hostAccountId, wsl: {} } }
+    return handleRunningAgentSessionsAfterSwitch(CLAUDE, {
+      owner: { kind: 'local' },
+      target: hostTarget,
+      before: { state: before, accountId: getClaudeStatusActiveId(before, hostTarget) },
+      after: { state: after, accountId: getClaudeStatusActiveId(after, hostTarget) }
+    })
+  }
+
+  it('looks for its sessions on System default when switching to another account', async () => {
+    await switchTo('account-b')
+
+    expect(findMovableAgentSessions).toHaveBeenCalledWith(
+      CLAUDE,
+      expect.objectContaining({ fromAccountId: null })
+    )
+  })
+
+  it('moves nothing when switching to System default itself', async () => {
+    expect(await switchTo(null)).toBe('show-confirmation')
+    expect(findMovableAgentSessions).not.toHaveBeenCalled()
   })
 })

@@ -4,20 +4,22 @@ import { act, cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
-import { findMovableClaudeSessions } from '@/lib/claude-session-account-move'
-import { handleRunningClaudeSessionsAfterSwitch } from '@/lib/claude-account-switch-sessions'
+import { findMovableAgentSessions } from '@/lib/agent-account-switch-discovery'
+import type { AccountSwitchAgent } from '@/lib/agent-account-switch-agent'
+import { CLAUDE_ACCOUNT_SWITCH_AGENT } from '@/lib/claude-account-switch-agent'
+import { CODEX_ACCOUNT_SWITCH_AGENT } from '@/lib/codex-account-switch-agent'
 import {
-  resetAgentAccountSwitchSessionsForTests,
-  settleAgentAccountSwitch
+  handleRunningAgentSessionsAfterSwitch,
+  resetAgentAccountSwitchSessionsForTests
 } from '@/lib/agent-account-switch-sessions'
 import AccountSwitchSessionsDialog from './AccountSwitchSessionsDialog'
-import type * as AccountMove from '@/lib/claude-session-account-move'
+import type * as Discovery from '@/lib/agent-account-switch-discovery'
 import type * as SwitchSessions from '@/lib/agent-account-switch-sessions'
 
-vi.mock('@/lib/claude-session-account-move', async (importOriginal) => ({
-  ...(await importOriginal<typeof AccountMove>()),
-  findMovableClaudeSessions: vi.fn(),
-  findQueuedClaudeRestartsOnAccount: () => []
+vi.mock('@/lib/agent-account-switch-discovery', async (importOriginal) => ({
+  ...(await importOriginal<typeof Discovery>()),
+  findMovableAgentSessions: vi.fn(),
+  findQueuedAccountRestartsOnAccount: () => []
 }))
 vi.mock('@/lib/agent-account-switch-sessions', async (importOriginal) => ({
   ...(await importOriginal<typeof SwitchSessions>()),
@@ -42,12 +44,17 @@ const row = (id: string) => ({
 const ROSTER = { accounts: [row('account-a'), row('account-b')] }
 const updateSettings = vi.fn(async () => {})
 
-async function switchWith(count: number, from = 'account-a', to = 'account-b'): Promise<void> {
-  vi.mocked(findMovableClaudeSessions).mockResolvedValue(
+async function switchWith(
+  count: number,
+  from = 'account-a',
+  to = 'account-b',
+  agent: AccountSwitchAgent = CLAUDE_ACCOUNT_SWITCH_AGENT
+): Promise<void> {
+  vi.mocked(findMovableAgentSessions).mockResolvedValue(
     Array.from({ length: count }, (_, index) => candidate(index + 1))
   )
   await act(async () => {
-    await handleRunningClaudeSessionsAfterSwitch({
+    await handleRunningAgentSessionsAfterSwitch(agent, {
       owner: { kind: 'local' },
       target: { runtime: 'host' },
       before: { state: ROSTER, accountId: from },
@@ -57,20 +64,8 @@ async function switchWith(count: number, from = 'account-a', to = 'account-b'): 
 }
 
 const queued = (): Record<string, string> => useAppStore.getState().pendingPaneAccountRestarts
-
-function askCodex(count: number, reason: 'switch' | 'restored' = 'switch'): void {
-  act(() => {
-    settleAgentAccountSwitch({
-      slotKey: `codex:local:host`,
-      isCurrent: () => true,
-      agent: 'codex',
-      reason,
-      sessions: Array.from({ length: count }, (_, index) => candidate(index + 1)),
-      previousAccountLabel: 'account-a@example.com',
-      nextAccountLabel: 'account-b@example.com'
-    })
-  })
-}
+const askCodex = (count: number) =>
+  switchWith(count, 'account-a', 'account-b', CODEX_ACCOUNT_SWITCH_AGENT)
 
 describe('AccountSwitchSessionsDialog', () => {
   beforeEach(() => {
@@ -79,9 +74,6 @@ describe('AccountSwitchSessionsDialog', () => {
     useAppStore.setState({
       updateSettings,
       pendingPaneAccountRestarts: {},
-      codexStalePaneByPtyId: Object.fromEntries(
-        [1, 2, 3].map((n) => [`pty-${n}`, { previousAccountLabel: 'a', nextAccountLabel: 'b' }])
-      ),
       ptyIdsByTabId: Object.fromEntries([1, 2, 3].map((n) => [`tab-${n}`, [`pty-${n}`]])),
       terminalLayoutsByTabId: Object.fromEntries(
         [1, 2, 3].map((n) => [
@@ -201,9 +193,9 @@ describe('AccountSwitchSessionsDialog', () => {
     expect(screen.queryByRole('tree')).toBeNull()
   })
 
-  it('asks the same question for Codex, with Codex copy and Keep focused', () => {
+  it('asks the same question for Codex, with Codex copy and Keep focused', async () => {
     render(<AccountSwitchSessionsDialog />)
-    askCodex(2)
+    await askCodex(2)
 
     expect(screen.getByText('Switched to account-b@example.com')).toBeTruthy()
     expect(
@@ -218,22 +210,10 @@ describe('AccountSwitchSessionsDialog', () => {
   it('restarts the ticked Codex sessions', async () => {
     const user = userEvent.setup()
     render(<AccountSwitchSessionsDialog />)
-    askCodex(2)
+    await askCodex(2)
 
     await user.click(screen.getByRole('button', { name: 'Restart 2 sessions' }))
 
     expect(queued()).toEqual({ 'pty-1': 'codex', 'pty-2': 'codex' })
-  })
-
-  it('names restored Codex sessions as from the last run', () => {
-    render(<AccountSwitchSessionsDialog />)
-    askCodex(1, 'restored')
-
-    expect(screen.getByText('Codex is still on a previous account')).toBeTruthy()
-    expect(
-      screen.getByText(
-        '1 Codex session from your last run is still on account-a@example.com. Restarting relaunches it on account-b@example.com and stops any work in progress.'
-      )
-    ).toBeTruthy()
   })
 })

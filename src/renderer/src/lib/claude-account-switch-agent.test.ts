@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
-import type { AgentStatusEntry } from '../../../shared/agent-status-types'
-import { makePaneKey } from '../../../shared/stable-pane-id'
-import type { TerminalTab } from '../../../shared/terminal-tab-types'
 import type { ClaudeManagedAccount } from '../../../shared/managed-account-types'
-import { getDefaultSettings } from '../../../shared/constants'
 import type * as localPreflightContext from '@/lib/local-preflight-context'
 import type * as paneSelectionLane from './codex-pane-selection-lane'
 import {
@@ -12,12 +8,22 @@ import {
   inspectRuntimeTerminalProcess
 } from '@/runtime/runtime-terminal-inspection'
 import {
+  CLAUDE_ACCOUNT_SWITCH_AGENT,
   claudeLaunchAccountId,
-  findMovableClaudeSessions,
-  findQueuedClaudeRestartsOnAccount,
   resolveClaudeSessionAccountId
-} from './claude-session-account-move'
+} from './claude-account-switch-agent'
+import {
+  findMovableAgentSessions,
+  findQueuedAccountRestartsOnAccount
+} from './agent-account-switch-discovery'
 import { isAgentPaneMidTurn } from './agent-account-switch-sessions'
+import {
+  SEEDED_SESSION_ID,
+  paneKeyOf,
+  ptyId,
+  seedAgentPanes,
+  type SeededAgentPane
+} from './agent-account-switch-test-panes'
 
 const laneByPtyId: Record<string, string> = {}
 
@@ -40,7 +46,6 @@ vi.mock('./codex-pane-selection-lane', async (importOriginal) => ({
 
 const LOCAL = { kind: 'local' } as const
 const HOST = { runtime: 'host' } as const
-const SESSION_ID = '01a006a6-1d07-70a1-bad5-f9110d5845c0'
 const FOLDER_A = '/data/claude-accounts/acct-a'
 const FOLDER_B = '/data/claude-accounts/acct-b'
 const SYSTEM_FOLDER = '/home/dev/.claude'
@@ -57,91 +62,35 @@ function account(id: string, managedAuthPath: string): ClaudeManagedAccount {
   }
 }
 
-type SeededPane = {
-  n: number
-  agentType?: 'claude' | 'codex'
-  state?: AgentStatusEntry['state']
-  sessionId?: string | null
+type SeededPane = Omit<SeededAgentPane, 'transcriptPath'> & {
   /** Folder Claude writes this session's transcript under; null leaves it unreported. */
   configDir?: string | null
 }
 
-const tabId = (n: number): string => `tab-${n}`
-const leafId = (n: number): string => `0195f2ce-1111-4000-8000-00000000000${n}`
-const ptyId = (n: number): string => `pty-${n}`
-
-function makeTab(n: number): TerminalTab {
-  return {
-    id: tabId(n),
-    ptyId: ptyId(n),
-    worktreeId: 'wt1',
-    title: 'claude',
-    customTitle: null,
-    color: null,
-    sortOrder: n,
-    createdAt: n
-  }
-}
-
-function providerSession(pane: SeededPane): AgentStatusEntry['providerSession'] {
-  const id = pane.sessionId ?? SESSION_ID
-  const configDir = pane.configDir === undefined ? FOLDER_A : pane.configDir
-  return configDir
-    ? { key: 'session_id', id, transcriptPath: `${configDir}/projects/-repo/${id}.jsonl` }
-    : { key: 'session_id', id }
-}
-
 function seedPanes(panes: SeededPane[]): void {
-  const statuses: Record<string, AgentStatusEntry> = {}
-  for (const pane of panes) {
-    if (!pane.agentType) {
-      continue
-    }
-    const paneKey = makePaneKey(tabId(pane.n), leafId(pane.n))
-    statuses[paneKey] = {
-      paneKey,
-      tabId: tabId(pane.n),
-      state: pane.state ?? 'done',
-      prompt: '',
-      updatedAt: 1,
-      stateStartedAt: 1,
-      stateHistory: [],
-      agentType: pane.agentType,
-      ...(pane.sessionId === null ? {} : { providerSession: providerSession(pane) })
-    }
-  }
-  useAppStore.setState({
-    settings: {
-      ...getDefaultSettings('/home/dev'),
-      claudeManagedAccounts: [account('acct-a', FOLDER_A), account('acct-b', FOLDER_B)]
-    },
-    tabsByWorktree: { wt1: panes.map((pane) => makeTab(pane.n)) },
-    ptyIdsByTabId: Object.fromEntries(panes.map((pane) => [tabId(pane.n), [ptyId(pane.n)]])),
-    terminalLayoutsByTabId: Object.fromEntries(
-      panes.map((pane) => [
-        tabId(pane.n),
-        {
-          root: { type: 'leaf', leafId: leafId(pane.n) },
-          activeLeafId: leafId(pane.n),
-          expandedLeafId: null,
-          ptyIdsByLeafId: { [leafId(pane.n)]: ptyId(pane.n) }
-        }
-      ])
-    ),
-    agentStatusByPaneKey: statuses,
-    agentLaunchConfigByPaneKey: {},
-    sleepingAgentSessionsByPaneKey: {},
-    pendingPaneAccountRestarts: {}
-  })
+  seedAgentPanes(
+    panes.map(({ configDir, ...pane }) => {
+      const folder = configDir === undefined ? FOLDER_A : configDir
+      return {
+        ...pane,
+        transcriptPath: folder ? `${folder}/projects/-repo/${SEEDED_SESSION_ID}.jsonl` : null
+      }
+    }),
+    { claudeManagedAccounts: [account('acct-a', FOLDER_A), account('acct-b', FOLDER_B)] }
+  )
 }
 
 const movable = async (
   fromAccountId: string | null = 'acct-a',
   target: { runtime: 'host' | 'wsl'; wslDistro?: string } = HOST
 ) =>
-  (await findMovableClaudeSessions({ owner: LOCAL, target, fromAccountId })).map(
-    (pane) => pane.ptyId
-  )
+  (
+    await findMovableAgentSessions(CLAUDE_ACCOUNT_SWITCH_AGENT, {
+      owner: LOCAL,
+      target,
+      fromAccountId
+    })
+  ).map((pane) => pane.ptyId)
 
 beforeEach(() => {
   for (const key of Object.keys(laneByPtyId)) {
@@ -149,7 +98,7 @@ beforeEach(() => {
   }
 })
 
-describe('findMovableClaudeSessions', () => {
+describe('finding Claude sessions to move', () => {
   beforeEach(() => {
     // Why the version name: the native macOS install reports its version folder, not `claude`.
     vi.mocked(inspectRuntimeTerminalProcess).mockResolvedValue({
@@ -198,7 +147,7 @@ describe('findMovableClaudeSessions', () => {
   it('never offers a move for a remote-server switch or SSH panes', async () => {
     seedPanes([{ n: 1, agentType: 'claude' }])
     expect(
-      await findMovableClaudeSessions({
+      await findMovableAgentSessions(CLAUDE_ACCOUNT_SWITCH_AGENT, {
         owner: { kind: 'environment', environmentId: 'env-1' },
         target: HOST,
         fromAccountId: 'acct-a'
@@ -254,15 +203,13 @@ describe('isAgentPaneMidTurn', () => {
       { n: 4, agentType: 'claude', state: 'done' }
     ])
     const state = useAppStore.getState()
-    const midTurn = [1, 2, 3, 4].map((n) =>
-      isAgentPaneMidTurn(state, makePaneKey(tabId(n), leafId(n)), 'claude')
-    )
+    const midTurn = [1, 2, 3, 4].map((n) => isAgentPaneMidTurn(state, paneKeyOf(n), 'claude'))
 
     expect(midTurn).toEqual([true, true, true, false])
   })
 })
 
-describe('findQueuedClaudeRestartsOnAccount', () => {
+describe('queued Claude restarts already on the account', () => {
   it('lists queued Claude restarts in the lane whose session already runs on the account', () => {
     seedPanes([
       { n: 1, agentType: 'claude', configDir: FOLDER_B },
@@ -280,7 +227,11 @@ describe('findQueuedClaudeRestartsOnAccount', () => {
     })
 
     expect(
-      findQueuedClaudeRestartsOnAccount({ owner: LOCAL, target: HOST, accountId: 'acct-b' })
+      findQueuedAccountRestartsOnAccount(CLAUDE_ACCOUNT_SWITCH_AGENT, {
+        owner: LOCAL,
+        target: HOST,
+        accountId: 'acct-b'
+      })
     ).toEqual([ptyId(1)])
   })
 })

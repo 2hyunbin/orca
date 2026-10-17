@@ -1,5 +1,6 @@
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { AccountSwitchRunningSessions } from '../../../../shared/agent-account-switch-settings'
+import { ACCOUNT_SWITCH_AGENTS } from '@/lib/agent-account-switch-agents'
 import type { AccountRestartAgent } from '@/store/terminals/terminal-contracts'
 import { translate } from '@/i18n/i18n'
 import { Label } from '../ui/label'
@@ -7,11 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { SearchableSetting } from './SearchableSetting'
 
 const POLICIES: readonly AccountSwitchRunningSessions[] = ['ask', 'restart', 'keep']
-
-const SETTING_KEY = {
-  claude: 'claudeAccountSwitchRunningSessions',
-  codex: 'codexAccountSwitchRunningSessions'
-} as const satisfies Record<AccountRestartAgent, keyof GlobalSettings>
 
 function isPolicy(value: string): value is AccountSwitchRunningSessions {
   return POLICIES.some((policy) => policy === value)
@@ -26,27 +22,9 @@ export function RunningSessionSwitchSetting({
   settings: GlobalSettings
   updateSettings: (updates: Partial<GlobalSettings>) => void
 }): React.JSX.Element {
-  const title =
-    agent === 'claude'
-      ? translate(
-          'accounts.switchSessions.claude.settingTitle',
-          'When you switch accounts while Claude is running'
-        )
-      : translate(
-          'accounts.switchSessions.codex.settingTitle',
-          'When you switch accounts while Codex is running'
-        )
-  const description =
-    agent === 'claude'
-      ? translate(
-          'accounts.switchSessions.claude.settingDescription',
-          'Restarting continues each running conversation on the new account.'
-        )
-      : translate(
-          'accounts.switchSessions.codex.settingDescription',
-          'Restarting relaunches each running Codex session on the new account.'
-        )
-  const key = SETTING_KEY[agent]
+  const { copy, settingKey: key } = ACCOUNT_SWITCH_AGENTS[agent]
+  const title = copy.settingTitle()
+  const description = copy.settingDescription()
   return (
     <SearchableSetting
       title={title}

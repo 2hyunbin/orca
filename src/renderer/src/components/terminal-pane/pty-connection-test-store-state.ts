@@ -82,14 +82,6 @@ export type StoreState = {
     agentDefaultArgs?: Record<string, string>
     agentDefaultEnv?: Record<string, Record<string, string>>
   } | null
-  codexStalePaneByPtyId: Record<
-    string,
-    {
-      previousAccountLabel: string
-      nextAccountLabel: string
-      kept?: true
-    }
-  >
   deferredSshReconnectTargets: string[]
   deferredSshSessionIdsByTabId: Record<string, string>
   removeDeferredSshReconnectTarget: ReturnType<typeof vi.fn>

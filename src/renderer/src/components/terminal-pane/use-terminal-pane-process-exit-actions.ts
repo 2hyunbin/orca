@@ -19,7 +19,6 @@ import type { AccountRestartAgent } from '@/store/terminals/terminal-contracts'
 /** Owns the restart/close actions for panes whose PTY process has exited. */
 export function useTerminalPaneProcessExitActions(controller: TerminalPaneCloseController) {
   const {
-    clearCodexStalePane,
     clearExitedPanePtyLayoutBinding,
     clearRuntimePaneTitle,
     clearTabPtyId,
@@ -83,7 +82,6 @@ export function useTerminalPaneProcessExitActions(controller: TerminalPaneCloseC
       const existingPtyId = transport?.getPtyId()
       if (existingPtyId) {
         suppressPtyExit(existingPtyId)
-        clearCodexStalePane(existingPtyId)
         clearTabPtyId(tabId, existingPtyId)
       }
       panePtyBinding?.dispose()
@@ -135,7 +133,6 @@ export function useTerminalPaneProcessExitActions(controller: TerminalPaneCloseC
     },
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- Preserve the pre-split dependency contract.
     [
-      clearCodexStalePane,
       clearExitedPanePtyLayoutBinding,
       clearRuntimePaneTitle,
       clearTabPtyId,

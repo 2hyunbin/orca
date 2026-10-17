@@ -61,46 +61,6 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       await restoreTerminalTestGlobals()
     })
 
-    it('forwards input to a Codex pane still on the previous account', async () => {
-      const { connectPanePty } = await import('./pty-connection')
-
-      // Why: a stale pane keeps running correctly on its launch account's own home; the
-      // switch dialog asks about it, so its keyboard stays the user's.
-      const transport = createMockTransport('pty-codex-stale')
-      transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
-        tabsByWorktree: {
-          'wt-1': [{ id: 'tab-1', ptyId: 'pty-codex-stale' }]
-        },
-        ptyIdsByTabId: {
-          'tab-1': ['pty-codex-stale']
-        },
-        codexStalePaneByPtyId: {
-          'pty-codex-stale': { previousAccountLabel: 'A', nextAccountLabel: 'B' }
-        }
-      }
-
-      const pane = createPane(1)
-      let onDataHandler: ((data: string) => void) | null = null
-      pane.terminal.onData = vi.fn(((handler: (data: string) => void) => {
-        onDataHandler = handler
-        return { dispose: vi.fn() }
-      }) as typeof pane.terminal.onData)
-      const manager = createManager(1)
-      const deps = createDeps()
-
-      connectPanePty(pane as never, manager as never, deps as never)
-
-      expect(onDataHandler).toBeDefined()
-      if (!onDataHandler) {
-        throw new Error('expected onData handler to be registered')
-      }
-      ;(onDataHandler as (data: string) => void)('a')
-
-      expect(transport.sendInput).toHaveBeenCalledWith('a', 'query-reply')
-    })
-
     it('does not infer interrupts when mobile presence lock blocks terminal input', async () => {
       const { connectPanePty } = await import('./pty-connection')
       const { setDriverForPty } = await import('@/lib/pane-manager/mobile-driver-state')

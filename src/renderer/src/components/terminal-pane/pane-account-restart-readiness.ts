@@ -1,16 +1,31 @@
 import type { AppState } from '@/store'
+import type { AccountRestartAgent } from '@/store/terminals/terminal-contracts'
 import { isAgentPaneMidTurn } from '@/lib/agent-account-switch-sessions'
+import { ACCOUNT_SWITCH_AGENTS } from '@/lib/agent-account-switch-agents'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 
-/** PTYs whose queued account restart can run now: Codex at once, this tab's Claude once its turn ends. */
+/** Whether a queued restart for `agent` may run in `paneKey` now, per its agent's idle rule. */
+export function isQueuedAccountRestartReady(
+  state: AppState,
+  agent: AccountRestartAgent,
+  paneKey: string
+): boolean {
+  return !ACCOUNT_SWITCH_AGENTS[agent].waitsForIdle || !isAgentPaneMidTurn(state, paneKey, agent)
+}
+
+/** PTYs whose queued account restart can run now: at once, or once the turn ends where it waits. */
 export function selectReadyAccountRestartPtyIds(state: AppState, tabId: string): string[] {
   const pending = state.pendingPaneAccountRestarts
-  const ready = Object.keys(pending).filter((ptyId) => pending[ptyId] === 'codex')
+  const ready = Object.keys(pending).filter(
+    (ptyId) => !ACCOUNT_SWITCH_AGENTS[pending[ptyId]].waitsForIdle
+  )
   const ptyIdsByLeafId = state.terminalLayoutsByTabId[tabId]?.ptyIdsByLeafId ?? {}
   for (const [leafId, ptyId] of Object.entries(ptyIdsByLeafId)) {
+    const queued = pending[ptyId]
     if (
-      pending[ptyId] === 'claude' &&
-      !isAgentPaneMidTurn(state, makePaneKey(tabId, leafId), 'claude')
+      queued &&
+      ACCOUNT_SWITCH_AGENTS[queued].waitsForIdle &&
+      isQueuedAccountRestartReady(state, queued, makePaneKey(tabId, leafId))
     ) {
       ready.push(ptyId)
     }
@@ -27,7 +42,6 @@ export function isAccountRestartReady(
 ): boolean {
   const queued = state.pendingPaneAccountRestarts[ptyId]
   return (
-    queued === 'codex' ||
-    (queued === 'claude' && !isAgentPaneMidTurn(state, makePaneKey(tabId, leafId), 'claude'))
+    queued !== undefined && isQueuedAccountRestartReady(state, queued, makePaneKey(tabId, leafId))
   )
 }

@@ -66,7 +66,6 @@ export function commitTerminalShutdownState({
       const suppressedPtyExitIds = copyOnWriteRecord(state.suppressedPtyExitIds)
       const pendingPtyShutdownIds = copyOnWriteRecord(state.pendingPtyShutdownIds)
       const pendingPaneAccountRestarts = copyOnWriteRecord(state.pendingPaneAccountRestarts)
-      const codexStalePaneByPtyId = copyOnWriteRecord(state.codexStalePaneByPtyId)
       for (const ptyId of exitGuardPtyIds) {
         if (state.suppressedPtyExitIds[ptyId] !== true) {
           suppressedPtyExitIds.set(ptyId, true)
@@ -84,7 +83,6 @@ export function commitTerminalShutdownState({
         if (!keepIdentifiers) {
           pendingPaneAccountRestarts.delete(ptyId)
         }
-        codexStalePaneByPtyId.delete(ptyId)
       }
 
       const runtimePaneTitlesByTabId = copyOnWriteRecord(state.runtimePaneTitlesByTabId)
@@ -123,7 +121,6 @@ export function commitTerminalShutdownState({
         suppressedPtyExitIds: suppressedPtyExitIds.read(),
         pendingPtyShutdownIds: pendingPtyShutdownIds.read(),
         pendingPaneAccountRestarts: pendingPaneAccountRestarts.read(),
-        codexStalePaneByPtyId: codexStalePaneByPtyId.read(),
         pendingIssueCommandSplitByTabId: pendingIssueCommandSplitByTabId.read(),
         terminalLayoutsByTabId: terminalLayoutsByTabId.read(),
         ...removeTabsAttention(

@@ -210,10 +210,6 @@ export function createTerminalPaneHibernationActions(
             }
             nextTabsByWorktree[worktreeId] = nextTabs
           }
-          const nextCodexStalePaneByPtyId = { ...s.codexStalePaneByPtyId }
-          for (const ptyId of exitGuardPtyIds) {
-            delete nextCodexStalePaneByPtyId[ptyId]
-          }
           const nextLastKnownRelay =
             remainingPtyIds.length === 0
               ? { ...s.lastKnownRelayPtyIdByTabId }
@@ -249,7 +245,6 @@ export function createTerminalPaneHibernationActions(
               ...s.suppressedPtyExitIds,
               ...Object.fromEntries(exitGuardPtyIds.map((ptyId) => [ptyId, true] as const))
             },
-            codexStalePaneByPtyId: nextCodexStalePaneByPtyId,
             ...(nextRuntimePaneTitlesByTabId !== s.runtimePaneTitlesByTabId
               ? { runtimePaneTitlesByTabId: nextRuntimePaneTitlesByTabId }
               : {}),

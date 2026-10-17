@@ -15,7 +15,8 @@ import { singlePaneLayoutSnapshot } from '@/store/slices/terminal-helpers'
 import { hasRegisteredRuntimeTerminalTab } from '@/runtime/mounted-terminal-tab-registry'
 import { buildPaneAccountRestartStartup } from '@/lib/agent-account-restart-startup'
 import { CODEX_ACCOUNT_RESTART_STARTUP } from '@/lib/codex-session-restart'
-import { isAgentPaneMidTurn } from '@/lib/agent-account-switch-sessions'
+import { ACCOUNT_SWITCH_AGENTS } from '@/lib/agent-account-switch-agents'
+import { isQueuedAccountRestartReady } from './pane-account-restart-readiness'
 import type { AccountRestartAgent } from '@/store/terminals/terminal-contracts'
 import { isForeignMachineCodexPtyId } from '@/lib/codex-pane-selection-lane'
 import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
@@ -68,11 +69,12 @@ async function sweepUnclaimedCodexPaneRestart(ptyId: string): Promise<void> {
     if (hasRegisteredRuntimeTerminalTab(located.tab.id, located.worktreeId)) {
       return
     }
-    // Why: a Claude restart waits out the turn; the scheduler re-sweeps on status changes.
+    // Why: some agents' restarts wait out the turn; the scheduler re-sweeps on status changes.
+    const queued = state.pendingPaneAccountRestarts[ptyId]
     if (
-      state.pendingPaneAccountRestarts[ptyId] === 'claude' &&
+      queued &&
       located.leafId &&
-      isAgentPaneMidTurn(state, makePaneKey(located.tab.id, located.leafId), 'claude')
+      !isQueuedAccountRestartReady(state, queued, makePaneKey(located.tab.id, located.leafId))
     ) {
       return
     }
@@ -130,8 +132,8 @@ async function executeDetachedCodexPaneRestart(
 ): Promise<void> {
   const state = useAppStore.getState()
   if (!located.leafId) {
-    // Why: Claude cannot resume without a leaf's session, and a fresh Claude would lose the conversation.
-    if (agent === 'claude') {
+    // Why: an agent that only resumes cannot without a leaf's session, and a fresh one would lose it.
+    if (ACCOUNT_SWITCH_AGENTS[agent].requiresResume) {
       return
     }
     // Why: without a usable layout leaf the replacement cannot be bound in
@@ -144,7 +146,6 @@ async function executeDetachedCodexPaneRestart(
     store.clearTabPtyId(located.tab.id, ptyId)
     store.consumeSuppressedPtyExit(ptyId)
     store.queueTabStartupCommand(located.tab.id, { ...CODEX_ACCOUNT_RESTART_STARTUP })
-    store.clearCodexStalePane(ptyId)
     killReplacedCodexPanePty(ptyId)
     return
   }
@@ -213,15 +214,10 @@ async function executeDetachedCodexPaneRestart(
   if (!useAppStore.getState().ptyIdsByTabId[tab.id]?.includes(spawned.id)) {
     // Why: the tab was retired while the spawn was in flight; without a binding
     // the fresh PTY would idle in the daemon forever, so reap it and stand down.
-    store.clearCodexStalePane(ptyId)
     reapUnboundCodexPty(spawned.id, 'retired-tab spawn')
     return
   }
   rebindCodexPaneLayoutLeaf(tab.id, leafId, spawned.id)
-  // Why both ids: updateTabPtyId migrates the replaced pane's stale record onto the
-  // new PTY, and the replacement now runs on the current account.
-  store.clearCodexStalePane(spawned.id)
-  store.clearCodexStalePane(ptyId)
   releaseReplacedCodexPanePty(ptyId)
 }
 

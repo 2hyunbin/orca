@@ -19965,10 +19965,6 @@
     },
     "switchSessions": {
       "title": "Switched to {{account}}",
-      "titleUnnamed": "Account switched",
-      "restoredTitle": "{{agent}} is still on a previous account",
-      "previousAccount": "a previous account",
-      "currentAccount": "the current account",
       "claude": {
         "bodyOne": "1 Claude session is still running on {{previous}}. Restarting continues the conversation on {{next}}. Busy sessions wait for idle before restarting.",
         "bodyOther": "{{count}} Claude sessions are still running on {{previous}}. Restarting continues each conversation on {{next}}. Busy sessions wait for idle before restarting.",
@@ -19978,8 +19974,6 @@
       "codex": {
         "bodyOne": "1 Codex session is still running on {{previous}}. Restarting relaunches it on {{next}} and stops any work in progress.",
         "bodyOther": "{{count}} Codex sessions are still running on {{previous}}. Restarting relaunches them on {{next}} and stops any work in progress.",
-        "restoredBodyOne": "1 Codex session from your last run is still on {{previous}}. Restarting relaunches it on {{next}} and stops any work in progress.",
-        "restoredBodyOther": "{{count}} Codex sessions from your last run are still on {{previous}}. Restarting relaunches them on {{next}} and stops any work in progress.",
         "settingTitle": "When you switch accounts while Codex is running",
         "settingDescription": "Restarting relaunches each running Codex session on the new account."
       },
@@ -20004,9 +19998,7 @@
       "settingRestart": "Always restart",
       "settingKeep": "Never restart",
       "restartingOne": "Restarting 1 {{agent}} session on {{account}}",
-      "restartingOther": "Restarting {{count}} {{agent}} sessions on {{account}}",
-      "restartingOneCurrent": "Restarting 1 {{agent}} session on the current account",
-      "restartingOtherCurrent": "Restarting {{count}} {{agent}} sessions on the current account"
+      "restartingOther": "Restarting {{count}} {{agent}} sessions on {{account}}"
     }
   },
   "fileSearch": {
