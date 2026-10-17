@@ -44,4 +44,44 @@ describe('buildHydratedEditorSessionState', () => {
     expect(restored.state.openFiles.map((file) => file.id)).toEqual([OWNED])
     expect(restored.editorFileIdMigrationsByWorktree[SIBLING]?.get(OWNED)).toBeUndefined()
   })
+
+  it('keeps the moved tab’s owned id apart from a sibling showing the same path, in any frame', () => {
+    const OTHER = 'repo-a::/repo-a'
+    const both: WorkspaceSessionState = {
+      ...session,
+      openFilesByWorktree: {
+        ...session.openFilesByWorktree,
+        [OTHER]: [
+          {
+            filePath: FILE_PATH,
+            relativePath: 'src/a.ts',
+            worktreeId: OTHER,
+            language: 'typescript'
+          }
+        ]
+      },
+      unifiedTabs: {
+        ...session.unifiedTabs,
+        [OTHER]: [
+          {
+            ...session.unifiedTabs![SIBLING]![0]!,
+            id: 'tab-2',
+            entityId: FILE_PATH,
+            worktreeId: OTHER
+          }
+        ]
+      }
+    }
+    const idsOf = (workspaces: string[]) =>
+      buildHydratedEditorSessionState(both, new Set(workspaces), null).state.openFiles.map(
+        (file) => [file.worktreeId, file.id]
+      )
+
+    expect(idsOf([SIBLING, OTHER])).toEqual([
+      [SIBLING, OWNED],
+      [OTHER, FILE_PATH]
+    ])
+    expect(idsOf([SIBLING])).toEqual([[SIBLING, OWNED]])
+    expect(idsOf([OTHER])).toEqual([[OTHER, FILE_PATH]])
+  })
 })
