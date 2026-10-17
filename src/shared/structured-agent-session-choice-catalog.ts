@@ -80,7 +80,8 @@ export function applyStructuredAgentChoiceCatalog(
           catalog: {
             ...seed,
             models,
-            defaultModelIsCliDefault: newLaunch && configured !== undefined
+            defaultModelIsCliDefault:
+              newLaunch && configured !== undefined ? (true as const) : undefined
           },
           catalogSource: choice.authority === 'session' ? ('live' as const) : ('host' as const)
         }

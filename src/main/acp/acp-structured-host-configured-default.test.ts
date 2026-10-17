@@ -104,7 +104,7 @@ async function openGrokHost(runs: string, create?: StructuredAgentSessionFirstMe
   const discovery = GROK.modelDiscovery
   const catalog = createAgentModelCatalogService({
     store: new AgentModelCatalogStore(),
-    getRecord: (sessionId) => records.store?.getRecord(sessionId),
+    getRecord: (sessionId) => records.store?.getRecord(sessionId) ?? undefined,
     drivesRecord: () => true,
     resolveAccountHome: async () => GROK_HOME,
     recordWorkspacePath: async () => '/workspace/project',

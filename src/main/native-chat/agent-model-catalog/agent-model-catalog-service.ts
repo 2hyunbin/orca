@@ -85,16 +85,15 @@ export function createAgentModelCatalogService(
           (record ? await deps.recordWorkspacePath?.(record).catch(() => null) : homedir()))
     if (!cwd) {
       const legacy = deps.store.get(base)
+      if (!legacy) {
+        return unverified()
+      }
       return {
-        ...(legacy ? agentModelCatalogResultFromEntry(legacy, false, false) : {}),
+        ...agentModelCatalogResultFromEntry(legacy, false, false),
         ...unverified(),
-        ...(legacy
-          ? {
-              origin: legacy.origin,
-              models: legacy.models.map((row) => ({ ...row, isDefault: false })),
-              fetchedAt: legacy.fetchedAt
-            }
-          : {})
+        origin: legacy.origin,
+        models: legacy.models.map((row) => ({ ...row, isDefault: false })),
+        fetchedAt: legacy.fetchedAt
       }
     }
     const namesDefault =
