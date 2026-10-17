@@ -92,8 +92,7 @@ it('opens and retries missing user text without losing local disclosure', async 
     sessionId: 'session',
     messageDetail: {
       raw: () => raw,
-      state: () =>
-        text.endsWith('FULL TAIL') ? ('complete' as const) : ('available' as const),
+      state: () => (text.endsWith('FULL TAIL') ? ('complete' as const) : ('available' as const)),
       load
     }
   }
