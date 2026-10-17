@@ -113,6 +113,16 @@ function ptyHostEvidence(ptyId: string): HostEvidence {
   return host ?? 'non-runtime'
 }
 
+/** A browser page's host: null is explicitly this client, absent is unknown. */
+function pageHostEvidence(page: { browserRuntimeEnvironmentId?: string | null }): HostEvidence {
+  if (page.browserRuntimeEnvironmentId === null) {
+    return 'non-runtime'
+  }
+  return page.browserRuntimeEnvironmentId
+    ? toRuntimeExecutionHostId(page.browserRuntimeEnvironmentId)
+    : null
+}
+
 function belongsToRemovedHost(
   evidence: HostEvidence,
   removedHostId: ExecutionHostId,
@@ -178,12 +188,8 @@ export function collectRemovedHostTwinState(
     }
     // Why: a browser restored or opened in an inactive twin has no tab stamp, only its pages' host.
     for (const workspace of state.browserTabsByWorktree[worktreeId] ?? []) {
-      const pageHosts = (state.browserPagesByWorkspace[workspace.id] ?? []).flatMap((page) =>
-        page.browserRuntimeEnvironmentId
-          ? [toRuntimeExecutionHostId(page.browserRuntimeEnvironmentId)]
-          : []
-      )
-      if (pageHosts.length > 0 && pageHosts.every((hostId) => hostId === removedHostId)) {
+      const pages = state.browserPagesByWorkspace[workspace.id] ?? []
+      if (pages.length > 0 && pages.map(pageHostEvidence).every(owns)) {
         removed.browserTabIds.add(workspace.id)
       }
     }
@@ -196,7 +202,11 @@ export function collectRemovedHostTwinState(
         removed.terminalTabIds.add(tab.entityId)
       } else if (tab.contentType === 'browser') {
         removed.browserTabIds.add(tab.entityId)
-      } else if (toVisibleTabType(tab.contentType) !== 'editor') {
+      } else if (
+        toVisibleTabType(tab.contentType) !== 'editor' ||
+        // Why: a stale editor tab with no open file has nothing for the file close to find.
+        !state.openFiles.some((file) => file.id === tab.entityId)
+      ) {
         removed.otherTabIds.add(tab.id)
         if (tab.contentType === 'agent-session') {
           removed.conversationIds.add(tab.entityId)
@@ -240,26 +250,27 @@ function dropPrunedKinds(
 
 function pruneRemovedHostReopenHistory(
   state: AppState,
-  twinWorktreeIds: Iterable<string>,
+  twinHostIds: ReadonlyMap<string, readonly ExecutionHostId[]>,
   removedHostId: ExecutionHostId
 ): Partial<AppState> | null {
   const editors = { ...state.recentlyClosedEditorTabsByWorktree }
   const browsers = { ...state.recentlyClosedBrowserTabsByWorktree }
   const kinds = { ...state.recentlyClosedTabKindsByWorktree }
   let changed = false
-  for (const worktreeId of twinWorktreeIds) {
+  for (const [worktreeId, survivors] of twinHostIds) {
     const editorPruned = prunedEntries(
       editors[worktreeId],
       (snapshot) =>
         hasOpenFileExecutionHostEvidence(snapshot) &&
         getOpenFileExecutionHostId(snapshot) === removedHostId
     )
-    const browserPruned = prunedEntries(browsers[worktreeId], (snapshot) =>
-      snapshot.pages.some(
-        (page) =>
-          !!page.browserRuntimeEnvironmentId &&
-          toRuntimeExecutionHostId(page.browserRuntimeEnvironmentId) === removedHostId
-      )
+    const browserPruned = prunedEntries(
+      browsers[worktreeId],
+      (snapshot) =>
+        snapshot.pages.length > 0 &&
+        snapshot.pages
+          .map(pageHostEvidence)
+          .every((evidence) => belongsToRemovedHost(evidence, removedHostId, survivors))
     )
     if (editorPruned) {
       editors[worktreeId] = (editors[worktreeId] ?? []).filter((_, i) => !editorPruned[i])
@@ -296,7 +307,7 @@ export function closeRemovedHostTwinState(
     beforeCall,
     collectRemovedHostTwinState(get(), twinWorktreeIds, removedHostId, twinHostIds)
   )
-  const historyPatch = pruneRemovedHostReopenHistory(get(), twinWorktreeIds, removedHostId)
+  const historyPatch = pruneRemovedHostReopenHistory(get(), twinHostIds, removedHostId)
   if (historyPatch) {
     set(() => historyPatch)
   }

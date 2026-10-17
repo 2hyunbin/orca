@@ -362,4 +362,43 @@ describe('removing a remote project keeps its local twin', () => {
       'tab-other'
     ])
   })
+
+  it('removing the local copy drops its local-only browser history and stale editor tabs', async () => {
+    const store = seedTwins()
+    const closedBrowser = (id: string, browserRuntimeEnvironmentId: string | null) => ({
+      workspace: browserWorkspace(id),
+      pages: [{ ...browserWorkspace(id), workspaceId: id, browserRuntimeEnvironmentId }]
+    })
+    store.setState((s) => ({
+      recentlyClosedBrowserTabsByWorktree: {
+        [WORKTREE_ID]: [
+          closedBrowser('closed-local', null),
+          closedBrowser('closed-remote', 'env-b')
+        ]
+      },
+      unifiedTabsByWorktree: {
+        [WORKTREE_ID]: [
+          ...(s.unifiedTabsByWorktree[WORKTREE_ID] ?? []),
+          makeUnifiedTab({
+            id: 'stale-editor',
+            worktreeId: WORKTREE_ID,
+            groupId: 'group-1',
+            contentType: 'editor',
+            executionHostId: 'local'
+          })
+        ]
+      }
+    }))
+
+    await store.getState().removeProject(PROJECT_ID, { hostId: 'local' })
+
+    const state = store.getState()
+    expect(
+      state.recentlyClosedBrowserTabsByWorktree[WORKTREE_ID]?.map((entry) => entry.workspace.id)
+    ).toEqual(['closed-remote'])
+    expect(state.unifiedTabsByWorktree[WORKTREE_ID]?.map((tab) => tab.id)).toEqual([
+      'tab-remote',
+      'editor:remote-file'
+    ])
+  })
 })
