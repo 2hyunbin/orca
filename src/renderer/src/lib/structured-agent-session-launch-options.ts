@@ -35,12 +35,19 @@ export type StructuredLaunchSelection = {
   seed?: Readonly<Record<string, string>>
   /** Encoded picks made before publish; the launch applies them before it publishes. */
   held: Readonly<Record<string, string>>
+  accepted?: StructuredLaunchAcceptedOptions
 }
 
 export type StructuredLaunchOptionOutcome =
-  | { kind: 'accepted'; options: Readonly<Record<string, string>> }
+  | { kind: 'accepted'; options: Readonly<Record<string, string>>; fence: number }
   | { kind: 'refused'; failure: AgentSessionWriteFailure }
   | { kind: 'superseded' }
+
+export type StructuredLaunchAcceptedOptions = {
+  options: Readonly<Record<string, string>>
+  fence: number
+  token: object
+}
 
 type OptionReply = (outcome: StructuredLaunchOptionOutcome) => void
 
@@ -110,7 +117,7 @@ async function setLaunchOption(
       ...fields
     })
     return result.ok
-      ? { kind: 'accepted', options: result.value.options ?? { [key]: value } }
+      ? { kind: 'accepted', options: result.value.options ?? { [key]: value }, fence: result.fence }
       : { kind: 'refused', failure: agentSessionRefusalFailure(result.refusal) }
   } catch (error) {
     return {
@@ -135,7 +142,17 @@ function settleHeldOption(
   } = state.selection
   // A pick made while this one was in flight superseded it and stays held for the next pass.
   const settled = current === encoded
+  const token = settled ? repliesFor(state).get(id) : undefined
+  const accepted =
+    outcome.kind === 'accepted' && token
+      ? {
+          options: { ...state.selection.accepted?.options, ...outcome.options },
+          fence: outcome.fence,
+          token
+        }
+      : state.selection.accepted
   state.selection = {
+    accepted,
     seed: outcome.kind === 'accepted' ? { ...seed, ...outcome.options } : seed,
     held: settled ? rest : state.selection.held
   }
@@ -151,10 +168,11 @@ function settleHeldOption(
 /** Selections included in the durable create are already the host's option intent. */
 export function settleStructuredLaunchCreateOptions(
   state: StructuredLaunchState,
-  options: Readonly<Record<string, string>>
+  options: Readonly<Record<string, string>>,
+  fence: number
 ): void {
   for (const [id, encoded] of Object.entries(options)) {
-    settleHeldOption(state, id, encoded, { kind: 'accepted', options })
+    settleHeldOption(state, id, encoded, { kind: 'accepted', options, fence })
   }
 }
 
@@ -186,6 +204,14 @@ export async function applyStructuredLaunchHeldOptions(
     )
     settleHeldOption(state, id, encoded, outcome)
   }
+}
+
+export function getStructuredAgentSessionLaunchOptionToken(
+  sessionId: string,
+  id: string
+): object | undefined {
+  const state = getStructuredLaunchStateBySessionId(sessionId)
+  return state ? optionReplies.get(state)?.get(id) : undefined
 }
 
 export function getStructuredAgentSessionLaunchSelection(

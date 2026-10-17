@@ -1,3 +1,4 @@
+import type { StructuredLaunchAcceptedOptions } from '@/lib/structured-agent-session-launch-options'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AgentSessionConversationCommand } from '../../../../shared/agent-session-conversation-command'
 import type { AgentSessionOptionsResult } from '../../../../shared/agent-session-wire'
@@ -5,18 +6,18 @@ import type { AgentSessionRewindSupport } from '../../../../shared/agent-session
 import type { AgentType } from '../../../../shared/agent-status-types'
 import type { AgentSessionOptionCatalog } from '../../../../shared/agent-session-option-catalog'
 import {
-  applyStructuredAgentSessionModelCatalog,
   applyStructuredAgentSessionOptions,
-  createStructuredAgentSessionOptionState,
   type StructuredAgentSessionOptionState
 } from '../../../../shared/structured-agent-session-options'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
-import { firstFrameOptionState } from './structured-agent-session-first-frame-options'
-import { structuredAgentSessionOptionView } from '../../../../shared/structured-agent-session-option-view'
+import {
+  firstFrameOptionState,
+  structuredAgentSessionConfiguredOptionView
+} from './structured-agent-session-first-frame-options'
+import { acceptStructuredAgentSessionOptionValues } from '../../../../shared/structured-agent-session-option-view'
 import { AGENT_SESSION_SEND_OPTIONS_RUNTIME_CAPABILITY } from '../../../../shared/agent-session-create-capabilities'
 import { useStructuredAgentSessionHostCapability } from '@/runtime/structured-agent-session-host-capability'
 import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
-import { readHostModelCatalogSnapshot } from '@/runtime/host-model-catalog-snapshots'
 import { cloneNativeChatSessionOptionRecord } from '../../../../shared/native-chat-session-option-state'
 import {
   createCoalescedPollRunner,
@@ -45,6 +46,7 @@ export function useStructuredAgentSessionOptionState(args: {
   hostSelection: Readonly<Record<string, string>> | undefined
   launchSeedOptions: Readonly<Record<string, string>> | undefined
   held: Readonly<Record<string, string>>
+  acceptedOptions?: StructuredLaunchAcceptedOptions
   turnId: string | null
   unloadedTurnRevisions: number | undefined
 }) {
@@ -60,9 +62,6 @@ export function useStructuredAgentSessionOptionState(args: {
     providerVisible,
     readsBeforeStart,
     hostSelection,
-    hostPermissionMode,
-    launchSeedOptions,
-    held,
     sessionId,
     target,
     turnId,
@@ -106,14 +105,59 @@ export function useStructuredAgentSessionOptionState(args: {
     },
     []
   )
+  const heldPick = useRef<{
+    token: object | undefined
+    record: typeof optionState.record
+    generation: number
+    identity: string
+    fence: number | null
+  } | null>(null)
+  const beginLaunchPick = useCallback(
+    (token: object | undefined) => {
+      const pick = {
+        token,
+        record: activeOptionRecordRef.current,
+        generation: ++optionMutationGeneration.current,
+        identity,
+        fence
+      }
+      heldPick.current = pick
+      return () =>
+        heldPick.current === pick &&
+        activeOptionRecordRef.current === pick.record &&
+        optionMutationGeneration.current === pick.generation
+    },
+    [identity, fence]
+  )
+  const optionsReadRef = useRef<CoalescedPollRunner | null>(null)
+  const acceptedPacket = useRef<StructuredLaunchAcceptedOptions | undefined>(undefined)
+  if (args.acceptedOptions && acceptedPacket.current !== args.acceptedOptions) {
+    acceptedPacket.current = args.acceptedOptions
+    const accepted = args.acceptedOptions
+    const pick = heldPick.current
+    if (
+      pick &&
+      pick.token === args.acceptedOptions.token &&
+      pick.identity === identity &&
+      pick.record === activeOptionRecordRef.current &&
+      pick.generation === optionMutationGeneration.current &&
+      ((fence === null && pick.fence === null) ||
+        (fence === accepted.fence && (pick.fence === null || pick.fence === fence)))
+    ) {
+      pick.fence = accepted.fence
+      pick.generation = ++optionMutationGeneration.current
+      updateOptionState((current) =>
+        acceptStructuredAgentSessionOptionValues(current, accepted.options, hostSelection)
+      )
+      optionsReadRef.current?.run()
+    }
+  }
   const optionIdentityRef = useRef(identity)
   useEffect(() => {
     const previous = optionStateRef.current
     const sameSession = optionIdentityRef.current === identity
     optionIdentityRef.current = identity
-    if (sameSession && selectionFromStatus) {
-      optionMutationGeneration.current += 1
-      updateOptionState((current) => ({ ...current, pendingPick: null, reconciliation: undefined }))
+    if (sameSession && (selectionFromStatus || heldPick.current?.fence === null)) {
       return
     }
     const launch = firstFrameLaunch.current
@@ -141,7 +185,8 @@ export function useStructuredAgentSessionOptionState(args: {
     updateOptionState(() => next)
   }, [agent, fence, identity, selectionFromStatus, updateOptionState])
 
-  const optionsReadRef = useRef<CoalescedPollRunner | null>(null)
+  const currentHostStamp = useRef(hostOptionStamp)
+  currentHostStamp.current = hostOptionStamp
   // The read also carries commands, goal, context, image and rewind support. A capable host's
   // selection comes from status even when this metadata read returns an older model.
   useEffect(() => {
@@ -151,35 +196,46 @@ export function useStructuredAgentSessionOptionState(args: {
     let stale = false
     const runner = createCoalescedPollRunner(async () => {
       const readGeneration = optionMutationGeneration.current
+      const readRecord = activeOptionRecordRef.current
+      const readStamp = currentHostStamp.current
       const result = await callStructuredAgentSession<AgentSessionOptionsResult>(
         target,
         'agentSession.options',
         { sessionId }
       )
-      if (!stale && optionMutationGeneration.current === readGeneration) {
-        setConversationSupport({
-          sessionId,
-          commands: result.conversationCommands ?? [],
-          threadGoal: result.threadGoal,
-          reportedThreadGoal: result.reportedThreadGoal,
-          contextUsage: result.contextUsage,
-          acceptsImages: result.acceptsImages,
-          // A host that predates rewind does not name it.
-          rewind: result.rewind ?? { supported: false, reason: 'unsupported' },
-          fence
-        })
-        updateOptionState((current) => {
-          if (current.record !== activeOptionRecordRef.current) {
-            return current
-          }
-          return applyStructuredAgentSessionOptions(
-            current,
-            optionCatalog,
-            result,
-            selectionFromStatus
-          )
-        })
+      if (stale) {
+        return
       }
+      if (
+        optionMutationGeneration.current !== readGeneration ||
+        readRecord !== activeOptionRecordRef.current ||
+        readStamp !== currentHostStamp.current
+      ) {
+        runner.run()
+        return
+      }
+      setConversationSupport({
+        sessionId,
+        commands: result.conversationCommands ?? [],
+        threadGoal: result.threadGoal,
+        reportedThreadGoal: result.reportedThreadGoal,
+        contextUsage: result.contextUsage,
+        acceptsImages: result.acceptsImages,
+        // A host that predates rewind does not name it.
+        rewind: result.rewind ?? { supported: false, reason: 'unsupported' },
+        fence
+      })
+      updateOptionState((current) => {
+        if (current.record !== activeOptionRecordRef.current) {
+          return current
+        }
+        return applyStructuredAgentSessionOptions(
+          current,
+          optionCatalog,
+          result,
+          selectionFromStatus
+        )
+      })
     })
     optionsReadRef.current = runner
     runner.run()
@@ -218,84 +274,23 @@ export function useStructuredAgentSessionOptionState(args: {
     AGENT_SESSION_SEND_OPTIONS_RUNTIME_CAPABILITY
   )
 
-  const configured = readHostModelCatalogSnapshot(target, agent, {
-    newLaunch,
-    worktree,
-    seedsModel
-  })
   return {
+    beginLaunchPick,
     takesSendOptions,
     conversationSupport,
     rereadOptions,
     optionState,
-    optionView: useMemo(() => {
-      // Live rows supply choices; the latest scoped host answer supplies the launch default.
-      const scoped =
-        configured && optionCatalog
-          ? applyStructuredAgentSessionModelCatalog(
-              createStructuredAgentSessionOptionState(agent),
-              optionCatalog,
-              configured,
-              { newLaunch }
-            ).catalog
-          : null
-      const defaultModel = scoped?.defaultModelIsCliDefault
-        ? scoped.models.find((model) => model.isDefault)
-        : undefined
-      const defaultEffort = defaultModel?.options.find((option) => option.id === 'effort')?.kind
-      const catalog =
-        optionState.catalog && selectionFromStatus && defaultModel
-          ? {
-              ...optionState.catalog,
-              defaultModelIsCliDefault: defaultModel ? (true as const) : undefined,
-              models: optionState.catalog.models.map((model) => ({
-                ...model,
-                isDefault: model.id === defaultModel?.id,
-                options: model.options.map((option) =>
-                  model.id === defaultModel?.id &&
-                  option.id === 'effort' &&
-                  option.kind.type === 'select' &&
-                  defaultEffort?.type === 'select' &&
-                  defaultEffort.defaultIsCliDefault &&
-                  option.kind.choices.some((choice) => choice.value === defaultEffort.defaultValue)
-                    ? {
-                        ...option,
-                        kind: {
-                          ...option.kind,
-                          defaultValue: defaultEffort.defaultValue,
-                          defaultIsCliDefault: true as const
-                        }
-                      }
-                    : option
-                )
-              }))
-            }
-          : optionState.catalog
-      return structuredAgentSessionOptionView(
-        {
-          ...optionState,
-          catalog,
-          pendingPick: optionIdentityRef.current === identity ? optionState.pendingPick : null
-        },
-        selectionFromStatus ? undefined : launchSeedOptions,
-        held,
-        takesSendOptions,
-        { selection: hostSelection, permissionMode: hostPermissionMode }
-      )
-    }, [
-      agent,
-      configured,
-      identity,
-      newLaunch,
-      optionCatalog,
-      held,
-      hostSelection,
-      hostPermissionMode,
-      launchSeedOptions,
-      optionState,
-      selectionFromStatus,
-      takesSendOptions
-    ]),
+    optionView: useMemo(
+      () =>
+        structuredAgentSessionConfiguredOptionView(
+          args,
+          optionState,
+          takesSendOptions,
+          optionIdentityRef.current === identity
+        ),
+      [args, identity, optionState, takesSendOptions]
+    ),
+
     optionStateRef,
     activeOptionRecordRef,
     optionMutationGeneration,

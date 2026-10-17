@@ -63,6 +63,7 @@ export function createClaudeSessionPublication(input: {
       reportedOptions: {},
       reportedModelMutation: 0,
       confirmedOptions: new Set(),
+      reusableOptions: new Map(),
       launchedModel: null,
       fastModeAtStart: false,
       translator: input.translator,

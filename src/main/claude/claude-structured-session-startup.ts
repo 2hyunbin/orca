@@ -119,6 +119,13 @@ function applyClaudeInitializeFacts(session: ClaudeSession, facts: ClaudeInitial
   const { init, initialization } = facts
   // A turn's own init frame may already have reported the running model.
   if (init?.model && session.reportedOptions.model === undefined) {
+    if (session.optionMutationSequence === 0) {
+      session.reusableOptions.set('model', init.model)
+    } else if (session.reusableOptions.get('model') !== init.model) {
+      session.reusableOptions.delete('model')
+      session.reusableOptions.delete('effort')
+      session.reusableOptions.delete('fastMode')
+    }
     session.reportedOptions.model = init.model
     session.reportedModelMutation = session.optionMutationSequence
   }
@@ -161,6 +168,7 @@ function applyClaudeSettingsFacts(
   const agrees = (key: string, reported: string): boolean =>
     !session.options.has(key) || session.options.get(key) === reported
   if (effort) {
+    session.reusableOptions.set('effort', effort)
     session.reportedOptions.effort = effort
     if (agrees('effort', effort)) {
       session.confirmedOptions.add('effort')
@@ -169,9 +177,11 @@ function applyClaudeSettingsFacts(
   // A launch `--effort` shows only in `applied`, never in `effective` (measured on 2.1.280).
   const launchedEffort = session.options.get('effort')
   if (launchedEffort !== undefined && session.appliedOptions?.effort === launchedEffort) {
+    session.reusableOptions.set('effort', launchedEffort)
     session.confirmedOptions.add('effort')
   }
   if (published.fastMode !== null) {
+    session.reusableOptions.set('fastMode', String(published.fastMode))
     session.reportedOptions.fastMode = published.fastMode
     if (agrees('fastMode', String(published.fastMode))) {
       session.confirmedOptions.add('fastMode')

@@ -178,6 +178,8 @@ export type ClaudeSession = {
   reportedModelMutation: number
   /** Options whose recorded value the provider reported, not merely accepted. */
   confirmedOptions: Set<string>
+  /** Value-bound execution evidence, revoked before any possible write. */
+  reusableOptions: Map<string, string>
   /** The model the child was launched with, as `--model`; null when it runs the CLI's own. */
   launchedModel: string | null
   /** Fast was omitted from launch settings and needs confirmation at message input. */

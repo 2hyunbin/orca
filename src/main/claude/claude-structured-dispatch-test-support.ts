@@ -29,6 +29,7 @@ export function sessionFor(send: Mock = vi.fn().mockResolvedValue(undefined)): C
     reportedOptions: {},
     reportedModelMutation: 0,
     confirmedOptions: new Set(),
+    reusableOptions: new Map(),
     launchedModel: null,
     fastModeAtStart: false,
     capabilities: [],

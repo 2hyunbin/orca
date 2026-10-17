@@ -22,7 +22,8 @@ vi.mock('./native-chat-session-option-settings-write', () => ({
 
 vi.mock('@/lib/structured-agent-session-launch-options', () => ({
   holdStructuredAgentSessionLaunchOption: mocks.hold,
-  getStructuredAgentSessionLaunchSelection: () => null
+  getStructuredAgentSessionLaunchSelection: () => null,
+  getStructuredAgentSessionLaunchOptionToken: () => mocks.hold
 }))
 
 import type { SessionOptionDescriptor } from '../../../../shared/native-chat-session-options'
@@ -422,7 +423,11 @@ describe('useStructuredAgentSessionOptions', () => {
 
     it('remembers a pick the launch applied as the next launch default', async () => {
       answer({ modelCatalog: () => Promise.resolve(SAVED_LIST) })
-      mocks.hold.mockResolvedValue({ kind: 'accepted', options: { model: 'gpt-5.6-luna' } })
+      mocks.hold.mockResolvedValue({
+        kind: 'accepted',
+        fence: 1,
+        options: { model: 'gpt-5.6-luna' }
+      })
       const { result, unmount } = renderOptions(
         { ...PROVISIONAL, launchSeedOptions: SEED },
         mutateWith(async () => null).mutate
@@ -584,7 +589,7 @@ describe('useStructuredAgentSessionOptions', () => {
   describe("a paired server's new chat", () => {
     it("shows the server's seed once its list answers and remembers a pick on the server under its model", async () => {
       answer({ modelCatalog: () => Promise.resolve(SAVED_LIST) })
-      mocks.hold.mockResolvedValue({ kind: 'accepted', options: { effort: 'high' } })
+      mocks.hold.mockResolvedValue({ kind: 'accepted', fence: 1, options: { effort: 'high' } })
       const { result, unmount } = renderOptions(
         { ...PROVISIONAL, paired: true, launchSeedOptions: SEED },
         mutateWith(async () => null).mutate
@@ -610,7 +615,7 @@ describe('useStructuredAgentSessionOptions', () => {
     // A server whose user never saved a model starts the CLI default, as a local chat does.
     it('shows the CLI default and takes picks when the server saved no model', async () => {
       answer({ modelCatalog: () => Promise.resolve(HOST_CATALOG) })
-      mocks.hold.mockResolvedValue({ kind: 'accepted', options: { model: 'gpt-hosted' } })
+      mocks.hold.mockResolvedValue({ kind: 'accepted', fence: 1, options: { model: 'gpt-hosted' } })
       const { result, unmount } = renderOptions(
         { ...PROVISIONAL, paired: true },
         mutateWith(async () => null).mutate

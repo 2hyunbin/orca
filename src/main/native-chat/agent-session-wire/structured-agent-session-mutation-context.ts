@@ -62,7 +62,7 @@ export type StructuredAgentSessionMutationContext = {
   wakeQueuedDrain?: (sessionId: string) => void
   /** The provider wait each session's serialize is on (a start, an option write), which a caller
    *  outside that serialize aborts. */
-  acquireAborts: Pick<StructuredAgentSessionAcquireAborts, 'abort' | 'begin'>
+  acquireAborts: Pick<StructuredAgentSessionAcquireAborts, 'abort' | 'begin' | 'captureOperations'>
   /** Moved by every pick a running child takes, so a report it read before is never persisted. */
   now: () => number
 }

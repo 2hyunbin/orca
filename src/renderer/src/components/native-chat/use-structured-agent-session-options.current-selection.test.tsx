@@ -3,7 +3,12 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({ call: vi.fn(), summary: vi.fn(), settings: vi.fn() }))
+const mocks = vi.hoisted(() => ({
+  call: vi.fn(),
+  summary: vi.fn(),
+  settings: vi.fn(),
+  hold: vi.fn()
+}))
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
 vi.mock('@/runtime/structured-agent-session-client', () => ({
@@ -13,10 +18,12 @@ vi.mock('./native-chat-session-option-settings-write', () => ({
   enqueueSessionOptionSettingsWrite: mocks.settings
 }))
 vi.mock('@/lib/structured-agent-session-launch-options', () => ({
-  holdStructuredAgentSessionLaunchOption: vi.fn(),
+  holdStructuredAgentSessionLaunchOption: mocks.hold,
+  getStructuredAgentSessionLaunchOptionToken: () => mocks.hold,
   getStructuredAgentSessionLaunchSelection: () => null
 }))
 
+import type { StructuredLaunchAcceptedOptions } from '@/lib/structured-agent-session-launch-options'
 import type { SessionOptionDescriptor } from '../../../../shared/native-chat-session-options'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { resetHostModelCatalogSnapshotsForTests } from '@/runtime/host-model-catalog-snapshots'
@@ -59,6 +66,7 @@ beforeEach(() => {
   mocks.call.mockReset()
   mocks.summary.mockReset()
   mocks.settings.mockReset()
+  mocks.hold.mockReset()
   resetHostModelCatalogSnapshotsForTests()
   mocks.call.mockImplementation(async (_target: unknown, method: string) =>
     method === 'agentSession.modelCatalog'
@@ -141,31 +149,39 @@ it('uses the existing options read when an older host omits the selection field'
   view.unmount()
 })
 
-it('keeps accepted B, adopts current C without its echo, then reads a fresh equal A snapshot', async () => {
+it.each([false, true])('reconciles choices (held: %s)', async (held) => {
   mocks.summary.mockImplementation(() => ({ optionSelection: { model: 'gpt-one' } }))
   const write = deferred<{ options: Record<string, string> }>()
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the deferred result is the setOption reply the hook reads.
   const mutate = vi.fn(() => write.promise) as unknown as StructuredAgentSessionMutate
+  let created = !held
+  let acceptedOptions: StructuredLaunchAcceptedOptions | undefined
+  mocks.hold.mockImplementation(() =>
+    write.promise.then(({ options }) => ({ kind: 'accepted', options, fence: 1 }))
+  )
   const view = renderHook(() =>
     useStructuredAgentSessionOptions({
       agent: 'codex',
       sessionId: 'session-1',
       target: LOCAL,
-      transportEnabled: true,
+      transportEnabled: created,
       isVisible: true,
       providerVisible: true,
       optionSelection: mocks.summary()?.optionSelection,
       hostOptionStamp: mocks.summary()?.stamp,
       hostPermissionMode: 'ask',
-      fence: 1,
+      fence: created ? 1 : null,
       turnId: null,
       unloadedTurnRevisions: undefined,
       mutate,
-      launch: { kind: 'new', heldOptions: {} }
+      launch: { kind: 'new', heldOptions: {}, acceptedOptions }
     })
   )
   await waitFor(() => expect(pill(view.result.current.optionSnapshot).model).toBe('gpt-one'))
-  const readback = deferred<{ models: typeof MODELS; current: { model: string; effort: string } }>()
+  const readback = deferred<{
+    models: typeof MODELS
+    current: { model: string; effort: string }
+  }>()
   const during = deferred<{ models: typeof MODELS; current: { model: string; effort: string } }>()
   let reads = 0
   mocks.call.mockImplementation((_target: unknown, method: string) =>
@@ -179,9 +195,13 @@ it('keeps accepted B, adopts current C without its echo, then reads a fresh equa
   let second!: Promise<boolean>
   act(() => {
     first = view.result.current.setStructuredOption('model', 'gpt-two')
-    second = view.result.current.setStructuredOption('model', 'gpt-two')
+    if (!held) {
+      second = view.result.current.setStructuredOption('model', 'gpt-two')
+    }
   })
-  await expect(second).resolves.toBe(false)
+  if (!held) {
+    await expect(second).resolves.toBe(false)
+  }
   mocks.summary.mockImplementation(() => ({
     optionSelection: { model: 'gpt-one' },
     stamp: 'during-write'
@@ -189,11 +209,18 @@ it('keeps accepted B, adopts current C without its echo, then reads a fresh equa
   view.rerender()
   await waitFor(() => expect(reads).toBe(1))
   await act(async () => {
-    expect(await view.result.current.setStructuredOption('model', 'gpt-two')).toBe(false)
+    if (!held) {
+      expect(await view.result.current.setStructuredOption('model', 'gpt-two')).toBe(false)
+    }
+    if (held) {
+      acceptedOptions = { options: { model: 'gpt-two' }, fence: 1, token: mocks.hold }
+    }
+    created = true
+    view.rerender()
     write.resolve({ options: { model: 'gpt-two' } })
     await first
   })
-  expect(mutate).toHaveBeenCalledOnce()
+  expect(held ? mocks.hold : mutate).toHaveBeenCalledOnce()
   expect(pill(view.result.current.optionSnapshot).model).toBe('gpt-two')
   expect(
     view.result.current.optionSnapshot.find((option) => option.id === 'permissionMode')?.kind
@@ -210,7 +237,10 @@ it('keeps accepted B, adopts current C without its echo, then reads a fresh equa
   await waitFor(() =>
     expect(pill(view.result.current.optionSnapshot)).toEqual({ model: 'gpt-one', effort: 'low' })
   )
-  mocks.call.mockResolvedValue({ models: MODELS, current: { model: 'gpt-one', effort: 'medium' } })
+  mocks.call.mockResolvedValue({
+    models: MODELS,
+    current: { model: 'gpt-one', effort: 'medium' }
+  })
   mocks.summary.mockImplementation(() => ({
     optionSelection: { model: 'gpt-one' },
     stamp: 'fresh-snapshot'

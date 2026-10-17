@@ -6,7 +6,10 @@ import {
   useStructuredAgentSessionLaunchFailure,
   useStructuredAgentSessionLaunchLifecycle
 } from '@/lib/structured-agent-session-launch'
-import { getStructuredAgentSessionLaunchSelection } from '@/lib/structured-agent-session-launch-options'
+import {
+  type StructuredLaunchAcceptedOptions,
+  getStructuredAgentSessionLaunchSelection
+} from '@/lib/structured-agent-session-launch-options'
 import { subscribeStructuredAgentLaunchStatus } from '@/lib/structured-agent-session-launch-registry'
 import { relaunchFailedStructuredAgentSessionWithMessage } from '@/lib/structured-agent-session-launch-message'
 import { toRuntimeWorktreeSelector } from '@/runtime/runtime-worktree-selector'
@@ -18,6 +21,7 @@ export type StructuredAgentSessionLaunchView = {
   seedOptions?: Readonly<Record<string, string>>
   /** Picks the launch holds and applies before it publishes. */
   heldOptions: Readonly<Record<string, string>>
+  acceptedOptions?: StructuredLaunchAcceptedOptions
   /** Where the chat runs; its own config may replace the listed default. */
   worktree?: string
 }
@@ -36,7 +40,7 @@ function useLaunchView(
       if (current) {
         snapshot = current
       } else if (snapshot && snapshot.held !== NO_HELD_OPTIONS) {
-        snapshot = { seed: snapshot.seed, held: NO_HELD_OPTIONS }
+        snapshot = { seed: snapshot.seed, held: NO_HELD_OPTIONS, accepted: snapshot.accepted }
       }
       return snapshot
     }
@@ -76,10 +80,11 @@ function useLaunchView(
             kind: intent.kind,
             ...(selection?.seed ? { seedOptions: selection.seed } : {}),
             heldOptions: held,
+            acceptedOptions: selection?.accepted,
             ...(worktreeId ? { worktree: toRuntimeWorktreeSelector(worktreeId) } : {})
           }
         : undefined,
-    [held, intent.kind, selection?.seed, worktreeId]
+    [held, intent.kind, selection?.seed, selection?.accepted, worktreeId]
   )
 }
 

@@ -238,10 +238,11 @@ export async function changeStructuredAgentSessionThreadGoal(
         context,
         caller,
         params.envelope,
-        plan,
+        threadGoalPlan({ ...params, signal: selection.signal }),
         openWithReadyStructuredAgentSessionChild(context, params.envelope, selection)
       ),
     {
+      goal: true,
       beforeAgent: (record) =>
         refuseThreadGoalUnsupported(context.deps.adapter, context.deps.agents, record?.provider)
     }

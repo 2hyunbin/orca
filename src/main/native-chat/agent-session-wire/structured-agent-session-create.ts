@@ -200,6 +200,7 @@ async function foundConversation(
             agent: params.agent,
             logger: deps.logger,
             resolvedBy: callerKey,
+            persistedOptions: candidate.record.options,
             persistOptions: async () => {},
             publish: () => {},
             operationReceipt: observedReceipt(store, store.founding.receipt(request)),

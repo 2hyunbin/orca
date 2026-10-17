@@ -98,6 +98,35 @@ describe('Claude accepted message choices', () => {
     expect(order).toEqual(['model:opus', 'effort:{"effortLevel":"high"}', 'prompt'])
   })
 
+  it('restores A after an applied unanswered B and an uncorrelated old init', async () => {
+    let actual = 'sonnet'
+    const claude = fakeClaude({ initModels: MODELS, routes: { list_models: () => MODELS } })
+    const adapter = await acquired(claude)
+    const connection = claude.connections[0]!
+    connection.setModel = async (model) => {
+      actual = model
+      if (model === 'opus') {
+        throw new Error('answer lost')
+      }
+    }
+    await adapter.setOption({ sessionId: 'session-1', key: 'model', value: 'sonnet', fence: 7 })
+    await expect(
+      adapter.setOption({ sessionId: 'session-1', key: 'model', value: 'opus', fence: 7 })
+    ).rejects.toThrow('answer lost')
+    claudeFrame(connection, { type: 'system', subtype: 'init', model: 'sonnet' })
+    await expect(
+      adapter.dispatch({
+        sessionId: 'session-1',
+        clientMessageId: 'restore',
+        body: USER_MESSAGE,
+        executionOptions: { model: 'sonnet' },
+        fence: 7
+      })
+    ).resolves.toEqual({ state: 'admitted' })
+    expect(actual).toBe('sonnet')
+    expect(connection.sent).toHaveLength(1)
+  })
+
   it('keeps saved Fast for an older partial send, freezes it, and honors explicit false', async () => {
     let fastMode = true
     const supported = MODELS.map((model) => ({ ...model, supportsFastMode: true }))

@@ -291,7 +291,8 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
       this.session(input.sessionId),
       input.change,
       input.replacesGoal,
-      this.deps.requestTimeoutMs
+      this.deps.requestTimeoutMs,
+      input.signal
     )
 
   answerPrompt: StructuredAgentSessionAdapter['answerPrompt'] = (request) =>

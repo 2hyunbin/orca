@@ -7,6 +7,22 @@ import type { SessionOptionDescriptor } from './native-chat-session-options'
 import { cloneNativeChatSessionOptionRecord } from './native-chat-session-option-state'
 import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from './agent-chat-permission-mode'
 
+export function acceptStructuredAgentSessionOptionValues(
+  state: StructuredAgentSessionOptionState,
+  values: Readonly<Record<string, string>>,
+  predecessor?: Readonly<Record<string, string>>
+): StructuredAgentSessionOptionState {
+  return {
+    ...commitStructuredAgentSessionOptionValues(state, {
+      ...(state.reconciliation ? {} : predecessor),
+      ...values
+    }),
+    reconciliation: {
+      permission: state.reconciliation?.permission === true || values.permissionMode !== undefined
+    }
+  }
+}
+
 function catalogListsSeedModel(
   state: StructuredAgentSessionOptionState,
   seed: Readonly<Record<string, string>>
@@ -32,7 +48,7 @@ export function structuredAgentSessionOptionView(
   takesSendOptions: boolean,
   host?: { selection?: Readonly<Record<string, string>>; permissionMode?: string }
 ): StructuredAgentSessionOptionState {
-  const selection = state.reconciliation ? undefined : host?.selection
+  const selection = state.reconciliation || state.executionUnknown ? undefined : host?.selection
   const pending = state.pendingPick
   if (selection !== undefined || pending) {
     state = { ...state, record: cloneNativeChatSessionOptionRecord(state.record) }

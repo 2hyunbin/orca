@@ -127,9 +127,12 @@ it('steers a matching choice but holds an empty default choice for a new turn', 
     )
   await rig.host.flushStreamedEvents(SESSION)
 
-  const matching = rig.send('same choices', undefined, { carried: choices })
+  const extras = { ...choices, personality: 'friendly', serviceTier: 'priority', fastMode: 'true' }
+  const matching = rig.send('same choices', undefined, { carried: extras })
+
   await matching.result
   await eventually(() => expect(rig.dispatch).toHaveBeenCalledTimes(2))
+  expect(rig.dispatch.mock.calls[1]?.[0].executionOptions).toEqual(extras)
   await rig.host.settleLateDispatch({
     sessionId: SESSION,
     clientMessageId: matching.id,

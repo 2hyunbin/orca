@@ -3,7 +3,7 @@
 export class StructuredAgentSessionAcquireAborts {
   private readonly inFlight = new Map<
     string,
-    Set<{ controller: AbortController; handover: boolean }>
+    Set<{ controller: AbortController; handover: boolean; goal: boolean }>
   >()
   /** Set by quit: the host is going away, so an attach that begins after it starts aborted. */
   private quitReason: Error | null = null
@@ -11,15 +11,17 @@ export class StructuredAgentSessionAcquireAborts {
   /** For the provider wait about to run; `end` once it settles. */
   begin(
     sessionId: string,
-    handover = false
+    handover = false,
+    goal = false
   ): { signal: AbortSignal; abort: () => void; end: () => void } {
     const controller = new AbortController()
     if (this.quitReason) {
       controller.abort(this.quitReason)
     }
     const waits =
-      this.inFlight.get(sessionId) ?? new Set<{ controller: AbortController; handover: boolean }>()
-    const active = { controller, handover }
+      this.inFlight.get(sessionId) ??
+      new Set<{ controller: AbortController; handover: boolean; goal: boolean }>()
+    const active = { controller, handover, goal }
     waits.add(active)
     this.inFlight.set(sessionId, waits)
     return {
@@ -34,14 +36,24 @@ export class StructuredAgentSessionAcquireAborts {
     }
   }
 
+  captureOperations(sessionId: string): (() => void)[] {
+    return [...(this.inFlight.get(sessionId) ?? [])]
+      .filter(({ controller, goal }) => goal && !controller.signal.aborted)
+      .map(
+        ({ controller }) =>
+          () =>
+            controller.abort(new Error('stopped during goal change'))
+      )
+  }
+
   /** A no-op when the session has nothing in flight. */
   abort(sessionId: string, reason: string | Error): boolean {
-    let stoppedHandover = false
-    for (const { controller, handover } of this.inFlight.get(sessionId) ?? []) {
-      stoppedHandover ||= handover && !controller.signal.aborted
+    let reached = false
+    for (const { controller, handover, goal } of this.inFlight.get(sessionId) ?? []) {
+      reached ||= (handover || goal) && !controller.signal.aborted
       controller.abort(typeof reason === 'string' ? new Error(reason) : reason)
     }
-    return stoppedHandover
+    return reached
   }
 
   /** Quit: every provider wait under way stops, including those queued in the attach drain. */

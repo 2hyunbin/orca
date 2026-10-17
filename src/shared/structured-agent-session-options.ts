@@ -61,6 +61,7 @@ export type StructuredAgentSessionOptionState = {
   permissionMode: string | null
   /** Accepted or read-back facts supersede the preceding cached status. */
   reconciliation?: { permission: boolean }
+  executionUnknown?: boolean
   pendingPick: { id: string; value: string } | null
 }
 
@@ -172,7 +173,8 @@ export function applyStructuredAgentSessionOptions(
     catalogSource: result.modelsKnown === false ? state.catalogSource : 'live',
     reconciliation: state.reconciliation
       ? {
-          permission: result.current.permissionMode !== undefined || state.reconciliation.permission
+          permission:
+            result.current.permissionMode !== undefined || state.reconciliation?.permission === true
         }
       : undefined,
     permissionMode: result.current.permissionMode ?? state.permissionMode

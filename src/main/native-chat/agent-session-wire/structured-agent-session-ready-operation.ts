@@ -25,6 +25,8 @@ import type { StructuredAgentSessionDeliveryPlace } from './structured-agent-ses
 import type { StructuredAgentSessionStartClaim } from './structured-agent-session-agent-start'
 import type { StructuredAgentSessionStartReadiness } from './structured-agent-session-startup-attempt'
 
+import { waitForPromiseWithSignal } from '../../../shared/abort-signal-reason'
+
 import {
   operationDidNotRun,
   selectStructuredAgentSessionOperationChild,
@@ -79,6 +81,7 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
     beforeAgent?: (
       record: AgentSessionRecord | null
     ) => AgentSessionMutationSessionPreparation | null
+    goal?: boolean
     needsAgent?: (record: AgentSessionRecord | null) => boolean
   } = {}
 ): Promise<AgentSessionMutationResult<T>> {
@@ -92,9 +95,13 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
     return { ok: false, refusal: conflict }
   }
   const deadline = Date.now() + STRUCTURED_AGENT_SESSION_START_WAIT_MS
-  const selected = await context.serialize<QueuedReadyOperation<T>>(
+  let authority: ReturnType<typeof context.acquireAborts.begin> | undefined
+  const preparedOperation = context.serialize<QueuedReadyOperation<T>>(
     envelope.sessionId,
     async () => {
+      authority = options.goal
+        ? context.acquireAborts.begin(envelope.sessionId, false, true)
+        : undefined
       const record = context.deps.store.getRecord(envelope.sessionId)
       if (options.needsAgent && !options.needsAgent(record)) {
         return { result: await run({ ok: true, child: null }) }
@@ -203,6 +210,9 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
         })
         return operationDidNotRun()
       })
+      if (authority?.signal.aborted) {
+        return { result: operationDidNotRun() }
+      }
       if (!child.ok) {
         return { result: child }
       }
@@ -211,7 +221,9 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
         !child.readiness &&
         !context.deliveryOrder.hasActiveSend(envelope.sessionId)
       ) {
-        return { result: await run({ ok: true, child: child.child, deadline }) }
+        return {
+          result: await run({ ok: true, child: child.child, deadline, signal: authority?.signal })
+        }
       }
       context.deliveryOrder.reconcile(
         envelope.sessionId,
@@ -226,13 +238,33 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
       }
     }
   )
+  const selected = await preparedOperation.then(
+    (selection) => {
+      if ('result' in selection) {
+        authority?.end()
+      }
+      return selection
+    },
+    (error: unknown) => {
+      authority?.end()
+      throw error
+    }
+  )
   if ('result' in selected) {
     return selected.result
   }
   try {
     let { child, readiness } = selected
     if (!child) {
-      const started = await selected.start?.outcome
+      const started = await waitForPromiseWithSignal(
+        selected.start?.outcome ?? Promise.resolve(undefined),
+        authority?.signal
+      ).catch((error: unknown) => {
+        if (authority?.signal.aborted) {
+          return undefined
+        }
+        throw error
+      })
       if (!started?.ok) {
         return started ?? operationDidNotRun()
       }
@@ -244,11 +276,19 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
       readiness = selection.readiness
     }
     const ready = readiness?.wait() ?? Promise.resolve('ready' as const)
-    const outcome = await waitForStructuredAgentSessionStart(
+    const waiting = waitForStructuredAgentSessionStart(
       Promise.all([ready, selected.place.before]).then(([outcome]) =>
         outcome === 'ready' ? 'ready' : 'ended'
       ),
       deadline - Date.now()
+    )
+    const outcome = await waitForPromiseWithSignal(waiting, authority?.signal).catch(
+      (error: unknown) => {
+        if (authority?.signal.aborted) {
+          return 'ended' as const
+        }
+        throw error
+      }
     )
     if (outcome !== 'ready') {
       return operationDidNotRun(outcome === 'timeout')
@@ -259,9 +299,10 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
     const ran = child
     return await context.serialize(envelope.sessionId, () =>
       // Admission re-reads the journal here after readiness and answers a competing settlement.
-      run({ ok: true, child: ran, deadline })
+      run({ ok: true, child: ran, deadline, signal: authority?.signal })
     )
   } finally {
+    authority?.end()
     selected.place.release()
   }
 }

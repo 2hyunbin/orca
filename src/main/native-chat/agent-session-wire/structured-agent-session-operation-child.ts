@@ -18,6 +18,7 @@ export type ReadyOperationSelection = {
   ok: true
   child: ReadyOperationChild
   replay?: true
+  signal?: AbortSignal
   deadline?: number
 }
 
@@ -74,6 +75,9 @@ export function openWithReadyStructuredAgentSessionChild(
     const opened = await openForProviderWrite(context, envelope)()
     if (!opened.ok || ledger === 'replay') {
       return opened
+    }
+    if (selection.signal?.aborted) {
+      return operationDidNotRun()
     }
     if (!selection.child) {
       return selection.replay

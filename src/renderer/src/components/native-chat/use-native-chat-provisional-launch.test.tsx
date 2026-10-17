@@ -187,7 +187,11 @@ describe('a chat pane over its own launch', () => {
           return Promise.resolve(catalog)
         }
         if (method === 'agentSession.setOption') {
-          return Promise.resolve({ ok: true, value: { options: { model: 'opus', effort: 'low' } } })
+          return Promise.resolve({
+            ok: true,
+            fence: 1,
+            value: { options: { model: 'opus', effort: 'low' } }
+          })
         }
         return new Promise(() => {})
       })

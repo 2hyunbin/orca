@@ -329,6 +329,7 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
     /** True when the journal records a goal, whatever its status: a `set` must
      *  start a new goal rather than rewrite that one's objective in place. */
     replacesGoal: boolean
+    signal?: AbortSignal
   }): Promise<{ ok: true } | { ok: false; rejected: string }>
   /** Stops exactly the tasks `taskIds` names, which the host resolves from its child records.
    *  `stillRunning` is the provider's own answer that one survived its stop; a throw leaves the

@@ -237,9 +237,13 @@ function observeClaudeSettingsReadback(
     const perSessionOptIn = readClaudeSettingsFastModePerSessionOptIn(settings)
     observeClaudeSettingsApplied(session, settings)
     if (effort) {
+      if (session.reusableOptions.get('effort') !== 'max') {
+        session.reusableOptions.set('effort', effort)
+      }
       session.reportedOptions.effort = effort
     }
     if (fastMode !== null) {
+      session.reusableOptions.set('fastMode', String(fastMode))
       session.reportedOptions.fastMode = fastMode
       if (decodedFastMode(session) !== undefined) {
         session.options.set('fastMode', String(fastMode))
@@ -293,6 +297,7 @@ export function claudeStructuredSessionOptionsFrom(
     readMutationSequence === session.optionMutationSequence
   ) {
     session.options.set('fastMode', 'false')
+    session.reusableOptions.delete('fastMode')
     session.confirmedOptions.delete('fastMode')
     desiredFastMode = false
   }

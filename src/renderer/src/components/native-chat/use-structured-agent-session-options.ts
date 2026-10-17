@@ -12,6 +12,7 @@ import {
   structuredAgentSessionOptionSnapshot,
   type StructuredAgentSessionOptionState
 } from '../../../../shared/structured-agent-session-options'
+import { acceptStructuredAgentSessionOptionValues } from '../../../../shared/structured-agent-session-option-view'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { structuredAgentSessionHostKey } from '@/runtime/structured-agent-session-host-capability'
 import { enqueueSessionOptionSettingsWrite } from './native-chat-session-option-settings-write'
@@ -23,6 +24,7 @@ import { useStructuredAgentSessionOptionSurface } from './use-structured-agent-s
 import { agentSessionWriteFailureText } from './agent-session-write-notice-text'
 import type { StructuredAgentSessionLaunchView } from './use-native-chat-provisional-launch'
 import {
+  getStructuredAgentSessionLaunchOptionToken,
   holdStructuredAgentSessionLaunchOption,
   type StructuredLaunchOptionOutcome
 } from '@/lib/structured-agent-session-launch-options'
@@ -66,6 +68,7 @@ export function useStructuredAgentSessionOptions(args: {
   const identity = `${agent}:${sessionId}:${structuredAgentSessionHostKey(target)}`
   const selectionFromStatus = args.optionSelection !== undefined
   const {
+    beginLaunchPick,
     takesSendOptions,
     optionState,
     optionView,
@@ -95,6 +98,7 @@ export function useStructuredAgentSessionOptions(args: {
     hostPermissionMode: args.hostPermissionMode,
     launchSeedOptions,
     held,
+    acceptedOptions: launch?.acceptedOptions,
     turnId,
     unloadedTurnRevisions: args.unloadedTurnRevisions
   })
@@ -158,17 +162,11 @@ export function useStructuredAgentSessionOptions(args: {
           committed = acceptedValues
           updateOptionState((current) =>
             current.record === targetRecord
-              ? {
-                  ...commitStructuredAgentSessionOptionValues(current, {
-                    ...(current.reconciliation ? {} : args.optionSelection),
-                    ...acceptedValues
-                  }),
-                  reconciliation: {
-                    permission:
-                      current.reconciliation?.permission ||
-                      acceptedValues.permissionMode !== undefined
-                  }
-                }
+              ? acceptStructuredAgentSessionOptionValues(
+                  current,
+                  acceptedValues,
+                  args.optionSelection
+                )
               : current
           )
           rememberOptionPicks(optionView, acceptedValues)
@@ -235,12 +233,22 @@ export function useStructuredAgentSessionOptions(args: {
       if (!transportEnabled || fence === null) {
         // No fence yet: the launch holds it and applies it before anything else is sent.
         const applied = holdStructuredAgentSessionLaunchOption(sessionId, id, encoded)
-        void applied?.then(settleLaunchOptionPick)
+        if (applied) {
+          const isCurrent = beginLaunchPick(
+            getStructuredAgentSessionLaunchOptionToken(sessionId, id)
+          )
+          void applied.then((outcome) => {
+            if (isCurrent()) {
+              settleLaunchOptionPick(outcome)
+            }
+          })
+        }
         return applied === null ? null : { [id]: encoded }
       }
       return sendStructuredOption(id, encoded)
     },
     [
+      beginLaunchPick,
       fence,
       optionCatalog,
       optionView,

@@ -70,17 +70,38 @@ describe('Codex captured message choices', () => {
       const turnOptions = await resolvedCodexMessageOptions(session, { model, effort })
       await startCodexTurn(session, { clientMessageId: id, body, turnOptions })
     }
+    session.activeTurnIds = new Set(['turn-1'])
+    await startCodexTurn(session, {
+      clientMessageId: 'steer',
+      body,
+      turnOptions: { personality: 'friendly', serviceTier: 'priority' }
+    })
+    expect(request.mock.calls.at(-1)?.[0]).toBe('turn/steer')
+    expect(request.mock.calls.at(-1)?.[1]).not.toHaveProperty('personality')
+    expect(request.mock.calls.at(-1)?.[1]).not.toHaveProperty('serviceTier')
+    expect(session.appliedTurnOptions).toEqual({ model: 'model-b', effort: 'low' })
+    session.activeTurnIds = new Set()
+    await startCodexTurn(session, {
+      clientMessageId: 'next',
+      body,
+      turnOptions: { personality: 'friendly', serviceTier: 'priority' }
+    })
+    expect(request.mock.calls.at(-1)?.[1]).toMatchObject({
+      personality: 'friendly',
+      serviceTier: 'priority'
+    })
     expect(
       request.mock.calls
         .filter(([method]) => method === 'turn/start')
         .map(([, params]) => [params?.model, params?.effort])
     ).toEqual([
       ['model-a', 'high'],
-      ['model-b', 'low']
+      ['model-b', 'low'],
+      [undefined, undefined]
     ])
     expect(Object.fromEntries(session.options)).toEqual({
-      model: 'model-b',
-      effort: 'low'
+      personality: 'friendly',
+      serviceTier: 'priority'
     })
   })
 
