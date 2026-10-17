@@ -74,7 +74,7 @@ function toRuntimeOwner(environmentId: string | null | undefined): WorktreeRunti
 
 /**
  * Non-destructive reads only: ambiguous collapses to `null` ("local"). Teardown callers must use
- * {@link resolveRuntimeOwnerForWorktree} so an ambiguous owner can't silently skip the host RPC.
+ * the typed owner below so an ambiguous owner can't silently skip the host RPC.
  */
 export function getRuntimeEnvironmentIdForWorktree(
   state: WorktreeRuntimeOwnerState,

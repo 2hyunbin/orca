@@ -71,9 +71,21 @@ function seedTwin(store: ReturnType<typeof createTestStore>, ptyIds: string[]): 
     )
 }
 
+function isRuntimeCall(value: unknown): value is { selector: string; method: string } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'selector' in value &&
+    typeof value.selector === 'string' &&
+    'method' in value &&
+    typeof value.method === 'string'
+  )
+}
+
 function runtimeCallsFor(method: string): { selector: string }[] {
   return mockApi.runtimeEnvironments.call.mock.calls
-    .map(([args]) => args as { selector: string; method: string })
+    .map((call: unknown[]) => call[0])
+    .filter(isRuntimeCall)
     .filter((args) => args.method === method)
 }
 

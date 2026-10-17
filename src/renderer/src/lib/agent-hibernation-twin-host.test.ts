@@ -10,25 +10,26 @@ import {
   runtimeListResult,
   tab
 } from './agent-hibernation-coordinator-test-fixture'
+import { makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
 
 afterEach(resetAgentHibernationCoordinatorFixture)
 
 // One repo id + path published by both an SSH host and a managed runtime (mid-migration).
 const twinRows = {
   'fixture-repo': [
-    { id: 'wt-bg', repoId: 'fixture-repo', hostId: 'ssh:ssh-1' },
-    {
+    makeWorktree({ id: 'wt-bg', repoId: 'fixture-repo', hostId: 'ssh:ssh-1' }),
+    makeWorktree({
       id: 'wt-bg',
       repoId: 'fixture-repo',
       hostId: 'local',
       runtimeOwnerEnvironmentId: 'runtime-1'
-    }
+    })
   ]
 }
 
 function installTwin(ptyId: string) {
   return installEligibleState(vi.fn().mockResolvedValue(undefined), {
-    worktreesByRepo: twinRows as never,
+    worktreesByRepo: twinRows,
     tabsByWorktree: { 'wt-bg': [tab()] },
     terminalLayoutsByTabId: {
       'tab-1': {
