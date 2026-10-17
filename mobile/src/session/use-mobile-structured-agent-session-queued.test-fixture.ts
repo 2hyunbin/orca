@@ -17,6 +17,7 @@ export const CAPABLE: StructuredAgentSessionHostSupport = {
   questionAnswers: false,
   queuedMessages: true,
   queuedCommands: false,
+  queuedMessageEdit: true,
   statusFeed: false,
   quietRepeatedStop: false,
   sendOptions: false,
@@ -24,7 +25,11 @@ export const CAPABLE: StructuredAgentSessionHostSupport = {
   permissionModes: false,
   itemDetail: false
 }
-export const LEGACY: StructuredAgentSessionHostSupport = { ...CAPABLE, queuedMessages: false }
+export const LEGACY: StructuredAgentSessionHostSupport = {
+  ...CAPABLE,
+  queuedMessages: false,
+  queuedMessageEdit: false
+}
 
 export function ok(result: unknown): RpcResponse {
   return { id: 'request-1', ok: true, result, _meta: { runtimeId: 'runtime-1' } }

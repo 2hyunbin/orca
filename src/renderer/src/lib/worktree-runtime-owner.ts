@@ -73,8 +73,8 @@ function toRuntimeOwner(environmentId: string | null | undefined): WorktreeRunti
 }
 
 /**
- * Non-destructive reads only: ambiguous collapses to `null` ("local"). Teardown callers must use
- * the typed owner below so an ambiguous owner can't silently skip the host RPC.
+ * @deprecated Use `resolveOwner` (`./resolve-owner`), which keeps the host and reports twins as
+ * `ambiguous`. Here ambiguous collapses to `null`, which callers read as local; read-only use only.
  */
 export function getRuntimeEnvironmentIdForWorktree(
   state: WorktreeRuntimeOwnerState,
@@ -84,6 +84,10 @@ export function getRuntimeEnvironmentIdForWorktree(
   return owner.kind === 'runtime' ? owner.environmentId : null
 }
 
+/**
+ * @deprecated Use `resolveOwner` (`./resolve-owner`). This drops the host, reads local, SSH and
+ * unknown alike as `non-runtime`, and sends folder twins to the focused runtime.
+ */
 export function resolveRuntimeOwnerForWorktree(
   state: WorktreeRuntimeOwnerState,
   worktreeId: string | null | undefined

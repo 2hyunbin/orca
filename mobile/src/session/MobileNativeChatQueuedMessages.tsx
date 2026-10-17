@@ -17,6 +17,8 @@ import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 import type { MobileQueuedMessageCard } from './mobile-structured-queued-message-cards'
 import type { MobileQueuePause } from './mobile-structured-queued-message-feed'
 import type { MobileQueuedMessageEdit } from './use-mobile-structured-queued-message-controls'
+import type { MobileQueuedMessageInlineEditor } from './use-mobile-structured-queued-edit'
+import { MobileNativeChatQueuedMessageEditor } from './MobileNativeChatQueuedMessageEditor'
 import { MobileQueuedCardText } from './MobileQueuedCardText'
 
 /** The header's in-flight keys beside the cards' message ids, which never contain NUL. */
@@ -30,8 +32,9 @@ export type MobileNativeChatQueuedMessagesProps = {
   onSend?: (messageId: string) => Promise<boolean>
   onDelete?: (messageId: string) => Promise<boolean>
   onClearAll?: (messageIds: string[]) => Promise<boolean>
-  /** Copy the card's text into the composer, then delete the card. */
+  /** Opens an editor in the card; older hosts copy its text to the composer. */
   onEdit?: MobileQueuedMessageEdit
+  editor?: MobileQueuedMessageInlineEditor
   /** The whole queue's pause: the header reads Paused, with Clear all and Resume. */
   pause?: MobileQueuePause
   onResume?: () => Promise<boolean>
@@ -47,6 +50,7 @@ export function MobileNativeChatQueuedMessages({
   onDelete,
   onClearAll,
   onEdit,
+  editor,
   pause,
   onResume,
   steerHeld = false
@@ -163,7 +167,9 @@ export function MobileNativeChatQueuedMessages({
           </Pressable>
         </View>
         {(expanded ? cards : []).map((card) => {
+          const editing = editor?.messageId === card.messageId
           const busy = busyIds.has(card.messageId)
+          const editBlocked = busy || editor !== undefined || !onEdit
           const returned = card.state === 'returned'
           // "Steer" submits beside the running turn, the paused queue's cards too; a card whose
           // own send failed, or a returned one, is sent again.
@@ -185,7 +191,11 @@ export function MobileNativeChatQueuedMessages({
                     {card.attribution}
                   </Text>
                 ) : null}
-                <MobileQueuedCardText text={card.text} />
+                {editing ? (
+                  <MobileNativeChatQueuedMessageEditor editor={editor} />
+                ) : (
+                  <MobileQueuedCardText text={card.text} />
+                )}
                 {card.caption ? (
                   // A returned card's reason only reads whole, often at its end; a hold is one line.
                   <Text
@@ -197,7 +207,7 @@ export function MobileNativeChatQueuedMessages({
                 ) : null}
               </View>
               {/* A command never steers: its Send shows only while the agent is idle. */}
-              {card.waitsForAgent ? null : (
+              {editing || card.waitsForAgent ? null : (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityState={{ disabled: busy || steerHeld }}
@@ -224,32 +234,34 @@ export function MobileNativeChatQueuedMessages({
                   <Text style={styles.actionLabel}>{steers ? 'Steer' : 'Send'}</Text>
                 </Pressable>
               )}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ disabled: busy }}
-                accessibilityLabel="Delete this queued message"
-                style={({ pressed }) => [
-                  styles.iconAction,
-                  pressed && styles.pressed,
-                  busy && styles.disabled
-                ]}
-                disabled={busy}
-                onPress={() => void run(card.messageId, onDelete)}
-              >
-                <Trash2 size={14} color={colors.textPrimary} strokeWidth={2} />
-              </Pressable>
-              {/* The menu holds only Edit, which a command does not take. */}
-              {card.command ? null : (
+              {editing ? null : (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityState={{ disabled: busy }}
-                  accessibilityLabel="More actions"
+                  accessibilityLabel="Delete this queued message"
                   style={({ pressed }) => [
                     styles.iconAction,
                     pressed && styles.pressed,
                     busy && styles.disabled
                   ]}
                   disabled={busy}
+                  onPress={() => void run(card.messageId, onDelete)}
+                >
+                  <Trash2 size={14} color={colors.textPrimary} strokeWidth={2} />
+                </Pressable>
+              )}
+              {/* The menu holds only Edit, which a command does not take. */}
+              {editing || card.command ? null : (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: editBlocked }}
+                  accessibilityLabel="More actions"
+                  style={({ pressed }) => [
+                    styles.iconAction,
+                    pressed && styles.pressed,
+                    editBlocked && styles.disabled
+                  ]}
+                  disabled={editBlocked}
                   onPress={() => setMenuFor(card.messageId)}
                 >
                   <MoreHorizontal size={14} color={colors.textPrimary} strokeWidth={2} />

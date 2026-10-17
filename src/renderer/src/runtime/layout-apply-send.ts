@@ -34,6 +34,7 @@ export type WindowLayoutCommand =
   | { type: 'equalizePanes'; tabId: string }
   | { type: 'movePane'; tabId: string; leafId: string; targetLeafId: string; side: PaneSide }
   | { type: 'setPaneRatios'; tabId: string; root: TerminalPaneLayoutNode }
+  | { type: 'setChatPane'; tabId: string; leafId: string | null }
   | { type: 'moveTab'; tabId: string; toGroupId: string; index: number }
   | { type: 'splitGroup'; tabId: string; besideGroupId: string; direction: GroupSide }
   | { type: 'setGroupRatios'; groupLayout: TabGroupLayoutNode }
@@ -65,6 +66,8 @@ export type WindowLayoutCommand =
       groupId?: string
       afterTabId?: string
       index?: number
+      createdAt: number
+      browserCreatedAt: number
       split?: NewGroupSplit
     }
   | { type: 'openBrowserPage' | 'closeBrowserPage'; browserTabId: string; pageId: string }
@@ -83,9 +86,30 @@ export type WindowLayoutCommand =
       file?: LayoutEditorFile
       groupId?: string
       preview?: true
+      createdAt: number
+      split?: NewGroupSplit
+    }
+  | {
+      type: 'openAgentSessionTab'
+      tabId: string
+      sessionId: string
+      agent: string
+      groupId: string
+      afterTabId?: string
+      index?: number
+      createdAt: number
       split?: NewGroupSplit
     }
   | { type: 'promotePreviewTab'; tabId: string }
+  | {
+      type: 'openSimulatorTab'
+      tabId: string
+      groupId: string
+      afterTabId?: string
+      index?: number
+      createdAt: number
+      split?: NewGroupSplit
+    }
   | {
       type: 'moveTabToWorkspace'
       toWorkspace: string
@@ -94,8 +118,17 @@ export type WindowLayoutCommand =
       file?: LayoutEditorFile
     }
   | { type: 'renameEditorFiles'; renames: EditorFileRename[] }
-  | { type: 'sleep'; tabId: string; paneKeys: string[]; records: SleepingAgentSessionRecord[] }
+  | {
+      type: 'sleep'
+      tabId: string
+      paneKeys: string[]
+      records: SleepingAgentSessionRecord[]
+      /** Records how the panes' agents resume without stopping them (a live or quit capture). */
+      recordOnly?: true
+    }
   | { type: 'wake'; tabId: string; paneKeys: [string] }
+  /** Drops the panes' resume records without starting them. */
+  | { type: 'wake'; tabId: string; paneKeys: string[]; recordOnly: true }
 
 export type LayoutApplyHandlers = {
   apply: (result: LayoutCommandResult) => void
@@ -115,6 +148,7 @@ const PANE_COMMANDS: ReadonlySet<WindowLayoutCommand['type']> = new Set([
   'equalizePanes',
   'movePane',
   'setPaneRatios',
+  'setChatPane',
   'movePaneToNewTab'
 ])
 
