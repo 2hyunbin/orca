@@ -197,7 +197,9 @@ export async function sleepWorktreesReportingFailures(
         // other teardown runs, terminals second so the PTY kill uses the same
         // ordering on both paths. Without the browser thunk here, sleep leaks
         // browserPagesByWorkspace entries and live webviews for the slept worktree.
-        await withWorktreeSleepTeardown(worktreeId, () => shutdownWorktreeBrowsers(worktreeId))
+        await withWorktreeSleepTeardown(worktreeId, () =>
+          shutdownWorktreeBrowsers(worktreeId, { reason: 'sleep' })
+        )
       } catch (err) {
         console.error('[sleep-worktree] browser shutdown failed', { worktreeId, error: err })
         failedWorktreeIds.add(worktreeId)
