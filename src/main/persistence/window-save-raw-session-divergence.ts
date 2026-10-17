@@ -73,7 +73,7 @@ export function overriddenPaneTrees(
   }
   for (const [tabId, layout] of Object.entries(saved)) {
     const mains = stored?.terminalLayoutsByTabId?.[tabId]?.root
-    if (mains && layout.root && stableJson(mains) !== stableJson(layout.root)) {
+    if (mains && stableJson(mains) !== stableJson(layout.root ?? null)) {
       addPath(paths, homes.get(tabId) ?? UNPLACED, `pane tree ${tabId} kept over the save’s`)
     }
   }

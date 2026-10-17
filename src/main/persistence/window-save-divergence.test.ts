@@ -355,6 +355,27 @@ describe('writeWindowSaveWatchingLayout', () => {
     )
   })
 
+  it('reports a save that sends no pane tree for a tab main keeps one for', () => {
+    const stored = session([{ id: 'tab-a' }])
+    const saved = { 'tab-a': { ...stored.terminalLayoutsByTabId['tab-a']!, root: null } }
+    writeWindowSaveWatchingLayout(
+      () => stored,
+      'local',
+      () => {},
+      'session:set',
+      saved
+    )
+
+    expect(warn).toHaveBeenCalledWith(
+      '[layout-owner] window save changed main layout:',
+      'session:set',
+      expect.objectContaining({
+        workspace: GIT_KEY,
+        paths: ['pane tree tab-a kept over the save’s']
+      })
+    )
+  })
+
   it('stays quiet for a save whose pane trees match main’s', () => {
     const stored = session([{ id: 'tab-a' }])
     const incoming = structuredClone(stored)
