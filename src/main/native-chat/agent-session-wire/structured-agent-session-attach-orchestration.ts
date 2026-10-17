@@ -117,7 +117,7 @@ export function attachStructuredAgentSession(
               result: await runAttach(context, callerKey, params, { ...options, recordPhase })
             }
           })
-          if ('result' in selected) {
+          if (selected.result !== undefined) {
             return selected.result
           }
           await selected.flight.outcome

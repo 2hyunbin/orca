@@ -215,3 +215,20 @@ export function spawnManagedProviderProcess(
     }
   }
 }
+
+/** Watches stdout only once its reader subscribes: a listener of our own would start the stream
+ *  flowing and drop whatever arrived before a reader that subscribes late. */
+function observeReaderOutput(
+  stdout: Pick<NodeJS.ReadableStream, 'on' | 'removeListener'>,
+  onOutput: () => void
+): void {
+  const onSubscribe = (event: string | symbol): void => {
+    if (event !== 'data' && event !== 'readable') {
+      return
+    }
+    stdout.removeListener('newListener', onSubscribe)
+    // After the reader's own listener lands; no chunk can arrive before a microtask runs.
+    queueMicrotask(() => stdout.on('data', onOutput))
+  }
+  stdout.on('newListener', onSubscribe)
+}

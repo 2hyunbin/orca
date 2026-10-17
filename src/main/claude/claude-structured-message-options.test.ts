@@ -99,7 +99,7 @@ describe('Claude accepted message choices', () => {
   })
 
   it('restores A after an applied unanswered B and an uncorrelated old init', async () => {
-    let actual = 'sonnet'
+    let actual: string | undefined = 'sonnet'
     const claude = fakeClaude({ initModels: MODELS, routes: { list_models: () => MODELS } })
     const adapter = await acquired(claude)
     const connection = claude.connections[0]!
