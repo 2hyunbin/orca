@@ -2,6 +2,7 @@
 // creation registry while it runs, and names its workspace before the host announces it.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+vi.mock('../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
 vi.mock('electron', () => ({
   BrowserWindow: { fromId: vi.fn(() => null) },
   webContents: { fromId: vi.fn(() => null) },
@@ -91,6 +92,13 @@ function makeRuntime(repo: Record<string, unknown> = gitRepo): OrcaRuntimeServic
 
 type LocalCreateArgs = { onWorktreeMetadataPersisted: (created: { id: string }) => unknown }
 
+function creationsOf(runtime: OrcaRuntimeService): Record<string, unknown> {
+  if (!runtime.workspaceCreations) {
+    throw new Error('the switch is mocked on')
+  }
+  return runtime.workspaceCreations.snapshot().creations
+}
+
 describe('runtime creation registry', () => {
   beforeEach(() => {
     mocks.track.mockReset()
@@ -102,7 +110,7 @@ describe('runtime creation registry', () => {
     const runtime = makeRuntime()
     const seen: Record<string, unknown>[] = []
     const record = (): void => {
-      seen.push(runtime.workspaceCreations.snapshot().creations)
+      seen.push(creationsOf(runtime))
     }
     mocks.createLocal.mockReset().mockImplementation(async (args: LocalCreateArgs) => {
       record()
@@ -132,7 +140,7 @@ describe('runtime creation registry', () => {
       { 'phone-op-1': { repoId: 'repo-1', worktreeId: 'wt-1' } }
     ])
     expect(onWorkspaceCreated).toHaveBeenCalledWith('wt-1')
-    expect(runtime.workspaceCreations.snapshot().creations).toEqual({})
+    expect(creationsOf(runtime)).toEqual({})
   })
 
   it('drops a failed create', async () => {
@@ -142,20 +150,20 @@ describe('runtime creation registry', () => {
     await expect(
       runtime.createManagedWorktree({ repoSelector: 'repo-1', name: 'app' })
     ).rejects.toThrow('could not create')
-    expect(runtime.workspaceCreations.snapshot().creations).toEqual({})
+    expect(creationsOf(runtime)).toEqual({})
   })
 
   it('lists a folder workspace create too', async () => {
     const runtime = makeRuntime({ id: 'folder', path: '/notes', kind: 'folder' })
     let during: Record<string, unknown> = {}
     mocks.createFolder.mockReset().mockImplementation(async () => {
-      during = runtime.workspaceCreations.snapshot().creations
+      during = creationsOf(runtime)
       return { worktree: { id: 'folder::/notes' } }
     })
 
     await runtime.createManagedWorktree({ repoSelector: 'folder', name: 'notes' })
 
     expect(Object.values(during)).toEqual([{ repoId: 'folder' }])
-    expect(runtime.workspaceCreations.snapshot().creations).toEqual({})
+    expect(creationsOf(runtime)).toEqual({})
   })
 })

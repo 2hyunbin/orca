@@ -67,7 +67,7 @@ export function registerWorktreeCreateHandlers(context: WorktreeIpcContext): voi
           fromExistingBranch: typeof args.baseBranch === 'string' && args.baseBranch.length > 0,
           isFolder: isFolderRepo(repo)
         })
-        const creation = runtime.workspaceCreations.open({
+        const creation = runtime.workspaceCreations?.open({
           creationId: args.creationId,
           repoId: repo.id
         })
@@ -93,7 +93,7 @@ export function registerWorktreeCreateHandlers(context: WorktreeIpcContext): voi
               mainWindow,
               runtime,
               telemetry.timing,
-              creation.named
+              creation?.named
             )
           }
         } catch (error) {
@@ -101,7 +101,7 @@ export function registerWorktreeCreateHandlers(context: WorktreeIpcContext): voi
           telemetry.failed(error)
           throw error
         } finally {
-          creation.close()
+          creation?.close()
         }
         finishAutomationWorkspaceProvenanceRequest(args.automationProvenanceRequest)
         if (result.timing) {

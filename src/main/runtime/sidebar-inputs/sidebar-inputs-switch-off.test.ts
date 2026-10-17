@@ -8,6 +8,7 @@ describe('sidebar inputs with the switch off', () => {
     const runtime = new OrcaRuntimeService()
     expect(runtime.sidebarFacts).toBeNull()
     expect(runtime.pairedServerRows).toBeNull()
+    expect(runtime.workspaceCreations).toBeNull()
     expect(ALL_RPC_METHODS.filter((method) => method.name.startsWith('sidebarInputs.'))).toEqual([])
   })
 })

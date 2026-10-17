@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as GitUsernameModule from '../git/git-username'
-import { WorkspaceCreationRegistry } from '../runtime/sidebar-inputs/workspace-creation-registry'
 
 const {
   handleMock,
@@ -300,7 +299,6 @@ describe('registerWorktreeHandlers – Windows path handling', () => {
     // Why: createLocalWorktree routes `git fetch` through
     // `runtime.fetchRemoteWithCache` (§3.3 Lifecycle). Stub it for path tests.
     const runtimeStub = {
-      workspaceCreations: new WorkspaceCreationRegistry(),
       resolveRemoteTrackingBase: vi.fn().mockResolvedValue(null),
       hasRemoteTrackingRef: vi.fn().mockResolvedValue(false),
       getOrStartRemoteTrackingBaseRefresh: vi.fn().mockResolvedValue({ ok: true }),
