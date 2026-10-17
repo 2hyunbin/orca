@@ -21,6 +21,7 @@ import { clearRuntimeCompatibilityCacheForTests } from '../../runtime/runtime-rp
 import { toRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import type { BrowserWorkspace } from '../../../../shared/browser-workspace-types'
 import type { Tab } from '../../../../shared/tab-types'
+import { toAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import {
   readNativeChatComposerDraft,
   updateNativeChatComposerDraft
@@ -224,6 +225,45 @@ describe('removing a remote project keeps its local twin', () => {
       'tab-local',
       '/work/same/local.ts',
       'browser-local'
+    ])
+  })
+
+  it('attributes unstamped terminals by the host their PTY ids name, wherever those are kept', async () => {
+    const store = createTestStore()
+    const sshRow: Repo = { ...localRow, connectionId: 'target-1', executionHostId: 'ssh:target-1' }
+    const sshPtyId = toAppSshPtyId('target-1', 'relay-1')
+    store.setState({
+      repos: [localRow, sshRow, remoteRow],
+      worktreesByRepo: {
+        [PROJECT_ID]: [
+          makeWorktree({ id: WORKTREE_ID, repoId: PROJECT_ID, hostId: 'local' }),
+          makeWorktree({ id: WORKTREE_ID, repoId: PROJECT_ID, hostId: 'ssh:target-1' })
+        ]
+      },
+      tabsByWorktree: {
+        [WORKTREE_ID]: [
+          makeTab({ id: 'tab-local', worktreeId: WORKTREE_ID, ptyId: 'pty-local' }),
+          makeTab({ id: 'tab-ssh', worktreeId: WORKTREE_ID, ptyId: sshPtyId }),
+          // Restored: the only record of its host is the layout's pane binding.
+          makeTab({ id: 'tab-ssh-restored', worktreeId: WORKTREE_ID })
+        ]
+      },
+      ptyIdsByTabId: { 'tab-local': ['pty-local'], 'tab-ssh': [sshPtyId] },
+      terminalLayoutsByTabId: {
+        'tab-ssh-restored': {
+          root: null,
+          activeLeafId: null,
+          expandedLeafId: null,
+          ptyIdsByLeafId: { 'leaf-1': toAppSshPtyId('target-1', 'relay-2') }
+        }
+      }
+    })
+
+    await store.getState().removeProject(PROJECT_ID, { hostId: 'ssh:target-1' })
+
+    expect(ptyKill).not.toHaveBeenCalledWith('pty-local')
+    expect(store.getState().tabsByWorktree[WORKTREE_ID]?.map((tab) => tab.id)).toEqual([
+      'tab-local'
     ])
   })
 })

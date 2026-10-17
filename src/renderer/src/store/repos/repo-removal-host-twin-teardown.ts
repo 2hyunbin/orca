@@ -2,13 +2,10 @@ import type { AppState } from '../types'
 import {
   LOCAL_EXECUTION_HOST_ID,
   parseExecutionHostId,
-  toRuntimeExecutionHostId,
   type ExecutionHostId
 } from '../../../../shared/execution-host'
-import {
-  isRemoteRuntimePtyId,
-  parseRemoteRuntimePtyId
-} from '../../../../shared/remote-runtime-pty-id'
+import { getPtyExecutionHost } from '../../../../shared/terminal-execution-host'
+import { collectPtyIdsForTab } from '../slices/terminal-tab-retirement'
 import {
   getOpenFileExecutionHostId,
   hasOpenFileExecutionHostEvidence
@@ -62,12 +59,12 @@ function isRuntimeHost(hostId: ExecutionHostId): boolean {
 }
 
 function ptyHostEvidence(ptyId: string): HostEvidence {
-  if (!isRemoteRuntimePtyId(ptyId)) {
-    // Why: a runtime host's PTYs are always `remote:` ids, so this one runs on a local/SSH host.
-    return 'non-runtime'
+  const host = getPtyExecutionHost(ptyId)
+  if (host === 'foreign') {
+    return null
   }
-  const environmentId = parseRemoteRuntimePtyId(ptyId)?.environmentId
-  return environmentId ? toRuntimeExecutionHostId(environmentId) : null
+  // Why: SSH and runtime PTY ids name their host, so an unprefixed one runs on a local/SSH host.
+  return host ?? 'non-runtime'
 }
 
 function belongsToRemovedHost(
@@ -86,7 +83,7 @@ function belongsToRemovedHost(
 }
 
 export function collectRemovedHostTwinState(
-  state: Pick<AppState, 'tabsByWorktree' | 'unifiedTabsByWorktree' | 'ptyIdsByTabId' | 'openFiles'>,
+  state: AppState,
   twinWorktreeIds: ReadonlySet<string>,
   removedHostId: ExecutionHostId,
   survivingHostIdsByWorktreeId: ReadonlyMap<string, readonly ExecutionHostId[]>
@@ -110,7 +107,8 @@ export function collectRemovedHostTwinState(
     )
     for (const tab of state.tabsByWorktree[worktreeId] ?? []) {
       const stamped = stampedHostByEntityId.get(tab.id)
-      const ptyIds = [...(state.ptyIdsByTabId[tab.id] ?? []), ...(tab.ptyId ? [tab.ptyId] : [])]
+      // Why every source: a restored tab can name its host only in its layout or reconnect maps.
+      const ptyIds = collectPtyIdsForTab(state, tab.id, tab.ptyId)
       const evidence = stamped ? [stamped] : ptyIds.map(ptyHostEvidence)
       // Why every: one pane on another host means the tab is not only the removed host's.
       if (evidence.length > 0 && evidence.every(owns)) {
