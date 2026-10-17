@@ -14,6 +14,10 @@ import {
   localizeTerminalSpawnHints,
   withoutTerminalSpawnIssueRequest
 } from './terminal-spawn-error-display'
+import {
+  describeSshSignInRequiredTerminalError,
+  isSshSignInRequiredTerminalError
+} from './terminal-ssh-sign-in-error'
 
 const SSH_PREFIX = 'SSH connection is not active'
 // Produced by pty-connection.ts reportError() when a PTY reattach can't reach its SSH host.
@@ -200,7 +204,8 @@ export function TerminalErrorToast({
   onRestartDaemon?: () => void
   onRetry?: () => Promise<boolean>
 }): React.JSX.Element {
-  const ssh = isSshReconnectOwnedTerminalError(error)
+  const signInRequired = isSshSignInRequiredTerminalError(error)
+  const ssh = signInRequired || isSshReconnectOwnedTerminalError(error)
   // Why: the client's OS and shell describe neither the host nor its shell, and the renderer knows neither.
   const showClientEnvironment = paneOnClient && !ssh
   const paneOwnerUnverified = isPaneOwnerUnverifiedError(error)
@@ -212,7 +217,9 @@ export function TerminalErrorToast({
     !showDaemonRestart &&
     !isExplainedTerminalError(error) &&
     !isFolderWorkspacePathOnlyError(error)
-  const humanizedError = humanizeTerminalError(error)
+  const humanizedError = signInRequired
+    ? describeSshSignInRequiredTerminalError(error)
+    : humanizeTerminalError(error)
   // Why: the toast appends its own linked request, so the host's plain-text one would repeat it.
   const displayError = showIssueLink
     ? withoutTerminalSpawnIssueRequest(humanizedError)
