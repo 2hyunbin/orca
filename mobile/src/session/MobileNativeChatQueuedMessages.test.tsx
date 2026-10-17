@@ -5,7 +5,9 @@ import type { ActionSheetAction } from '../components/ActionSheetModal'
 import { MobileNativeChatQueuedMessages } from './MobileNativeChatQueuedMessages'
 import type { MobileQueuedMessageCard } from './mobile-structured-queued-message-cards'
 
+let fontScale = 1
 vi.mock('react-native', () => ({
+  useWindowDimensions: () => ({ fontScale }),
   Platform: { OS: 'ios' },
   Pressable: 'Pressable',
   ScrollView: 'ScrollView',
@@ -604,8 +606,6 @@ describe('MobileNativeChatQueuedMessages', () => {
       const mounted = await mountPaused({ pause: { reason: 'stopped' } })
       const row = mounted.root.findByProps({ testID: 'queued-header' })
       expect(row.props.accessibilityLiveRegion).toBe('polite')
-      // Large text: the buttons wrap below the label rather than squeezing it out.
-      expect(flatStyle(row.props.style).flexWrap).toBe('wrap')
       // Android drops touches outside the parent: nothing may pull a row or a button past its edge.
       const styled = mounted.root.findAll(
         (node) => typeof node.type === 'string' && node.props.style !== undefined
@@ -619,6 +619,38 @@ describe('MobileNativeChatQueuedMessages', () => {
         )
         const margins = Object.entries(style).filter(([key]) => key.startsWith('margin'))
         expect(margins.filter(([, value]) => typeof value === 'number' && value < 0)).toEqual([])
+      }
+    })
+
+    it('gives the header and editor buttons a line of their own at large text sizes', async () => {
+      fontScale = 2
+      try {
+        const editor = {
+          messageId: 'waiting-1',
+          text: 'next',
+          saving: false,
+          canSave: true,
+          change: vi.fn(),
+          save: vi.fn(async () => undefined),
+          cancel: vi.fn()
+        }
+        const mounted = await mountPaused({ pause: { reason: 'stopped' }, editor })
+        const header = mounted.root.findByProps({ testID: 'queued-header' })
+        const head = mounted.root.find(
+          (node) => String(node.type) === 'Text' && node.props.children === 'Editing message'
+        ).parent!
+        for (const label of [
+          'Delete every queued message',
+          'Resume sending the queued messages',
+          'Cancel editing queued message',
+          'Save queued message'
+        ]) {
+          const button = mounted.root.findByProps({ accessibilityLabel: label })
+          expect(header.findAll((node) => node === button)).toHaveLength(0)
+          expect(head.findAll((node) => node === button)).toHaveLength(0)
+        }
+      } finally {
+        fontScale = 1
       }
     })
 

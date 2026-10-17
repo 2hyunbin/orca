@@ -19,14 +19,19 @@ export const queuedMessageStyles = StyleSheet.create({
     borderColor: colors.borderSubtle,
     overflow: 'hidden'
   },
-  // Wraps so at large text sizes the buttons drop to a second line instead of squeezing the label.
   header: {
     minHeight: HEADER_HEIGHT,
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacing.xs,
     paddingLeft: spacing.md
+  },
+  // Large text: Clear all and Resume on a line of their own, under the label.
+  headerActionsLine: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.xs
   },
   headerToggle: {
     position: 'absolute',
@@ -35,10 +40,9 @@ export const queuedMessageStyles = StyleSheet.create({
     bottom: 0,
     left: 0
   },
-  // Grows from its natural width, so a line break comes before the label is squeezed.
   headerLabels: {
-    flexGrow: 1,
-    flexShrink: 1,
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs
@@ -63,7 +67,7 @@ export const queuedMessageStyles = StyleSheet.create({
     paddingVertical: spacing.sm,
     fontVariant: ['tabular-nums']
   },
-  // Zero basis: a long reason truncates in the space left rather than forcing the line break.
+  // A long reason truncates in the space left; the count beside it never does.
   headerCaption: {
     flex: 1,
     minWidth: 0,

@@ -3,6 +3,7 @@ import { Pressable, Text, View } from 'react-native'
 import { ChevronDown, ChevronRight, Pencil, Play, Trash2 } from 'lucide-react-native'
 import { ActionSheetModal } from '../components/ActionSheetModal'
 import { colors } from '../theme/mobile-theme'
+import { useLargeSystemText } from '../theme/use-large-system-text'
 import type { MobileQueuedMessageCard } from './mobile-structured-queued-message-cards'
 import type { MobileQueuePause } from './mobile-structured-queued-message-feed'
 import type { MobileQueuedMessageEdit } from './use-mobile-structured-queued-message-controls'
@@ -51,6 +52,7 @@ export function MobileNativeChatQueuedMessages({
   const inFlightRef = useRef(new Set<string>())
   const [menuFor, setMenuFor] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(true)
+  const largeText = useLargeSystemText()
   if (!cards || cards.length === 0) {
     // Collapsing is local to this queue's run: once it empties, the next card shows open.
     if (!expanded) {
@@ -79,6 +81,42 @@ export function MobileNativeChatQueuedMessages({
   if (menuFor !== null && !menuCard) {
     setMenuFor(null)
   }
+  const headerActions = pause ? (
+    <>
+      {onClearAll ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ disabled: clearing }}
+          accessibilityLabel="Delete every queued message"
+          style={({ pressed }) => [
+            styles.headerAction,
+            pressed && styles.pressed,
+            clearing && styles.disabled
+          ]}
+          disabled={clearing}
+          onPress={() => void run(CLEAR_KEY, () => onClearAll(cards.map((card) => card.messageId)))}
+        >
+          <Trash2 size={12} color={colors.textPrimary} strokeWidth={2} />
+          <Text style={styles.actionLabel}>Clear all</Text>
+        </Pressable>
+      ) : null}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ disabled: resuming }}
+        accessibilityLabel="Resume sending the queued messages"
+        style={({ pressed }) => [
+          styles.headerAction,
+          pressed && styles.pressed,
+          resuming && styles.disabled
+        ]}
+        disabled={resuming}
+        onPress={() => void run(RESUME_KEY, onResume && (() => onResume()))}
+      >
+        <Play size={12} color={colors.textPrimary} strokeWidth={2} />
+        <Text style={styles.actionLabel}>Resume</Text>
+      </Pressable>
+    </>
+  ) : null
   const attentionCaption = !expanded ? cards.find((card) => card.needsAttention)?.caption : null
   const headerCountStyle = [styles.headerCount, attentionCaption && styles.captionReturned]
   return (
@@ -118,44 +156,7 @@ export function MobileNativeChatQueuedMessages({
               </Text>
             ) : null}
           </View>
-          {pause ? (
-            <>
-              {onClearAll ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: clearing }}
-                  accessibilityLabel="Delete every queued message"
-                  style={({ pressed }) => [
-                    styles.headerAction,
-                    pressed && styles.pressed,
-                    clearing && styles.disabled
-                  ]}
-                  disabled={clearing}
-                  onPress={() =>
-                    void run(CLEAR_KEY, () => onClearAll(cards.map((card) => card.messageId)))
-                  }
-                >
-                  <Trash2 size={12} color={colors.textPrimary} strokeWidth={2} />
-                  <Text style={styles.actionLabel}>Clear all</Text>
-                </Pressable>
-              ) : null}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ disabled: resuming }}
-                accessibilityLabel="Resume sending the queued messages"
-                style={({ pressed }) => [
-                  styles.headerAction,
-                  pressed && styles.pressed,
-                  resuming && styles.disabled
-                ]}
-                disabled={resuming}
-                onPress={() => void run(RESUME_KEY, onResume && (() => onResume()))}
-              >
-                <Play size={12} color={colors.textPrimary} strokeWidth={2} />
-                <Text style={styles.actionLabel}>Resume</Text>
-              </Pressable>
-            </>
-          ) : null}
+          {largeText ? null : headerActions}
           <View style={styles.chevron} pointerEvents="none">
             {expanded ? (
               <ChevronDown size={12} color={colors.textMuted} strokeWidth={2} />
@@ -164,6 +165,9 @@ export function MobileNativeChatQueuedMessages({
             )}
           </View>
         </View>
+        {largeText && headerActions ? (
+          <View style={[styles.headerActionsLine, styles.headerPaused]}>{headerActions}</View>
+        ) : null}
         {expanded ? (
           <MobileQueuedMessageScrollList
             messageIds={cards.map((card) => card.messageId)}

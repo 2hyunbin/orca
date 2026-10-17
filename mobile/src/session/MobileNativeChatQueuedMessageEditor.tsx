@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { Pencil } from 'lucide-react-native'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
+import { useLargeSystemText } from '../theme/use-large-system-text'
 import { TEXT_INPUT_FONT_SIZE } from '../platform/text-input-font-size'
 import type { MobileQueuedMessageInlineEditor } from './use-mobile-structured-queued-edit'
 
@@ -24,41 +25,48 @@ export function MobileNativeChatQueuedMessageEditor({
     input.current?.focus()
   }, [])
   const saveDisabled = editor.saving || !editor.canSave
+  const largeText = useLargeSystemText()
+  const actions = (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Cancel editing queued message"
+        accessibilityState={{ disabled: editor.saving }}
+        disabled={editor.saving}
+        style={({ pressed }) => [
+          styles.cancel,
+          pressed && styles.pressed,
+          editor.saving && styles.disabled
+        ]}
+        onPress={editor.cancel}
+      >
+        <Text style={styles.cancelLabel}>Cancel</Text>
+      </Pressable>
+      {/* A 40pt target around a smaller pill, so the line stays one button tall. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Save queued message"
+        accessibilityState={{ disabled: saveDisabled }}
+        disabled={saveDisabled}
+        style={[styles.save, saveDisabled && styles.disabled]}
+        onPress={() => void editor.save()}
+      >
+        {({ pressed }) => (
+          <View style={[styles.savePill, pressed && styles.savePillPressed]}>
+            <Text style={styles.saveLabel}>Save</Text>
+          </View>
+        )}
+      </Pressable>
+    </>
+  )
   return (
     <View style={styles.editor} testID="queued-card-editor">
       <View style={styles.head}>
         <Pencil size={PENCIL_SIZE} color={colors.textMuted} strokeWidth={2} />
         <Text style={styles.label}>Editing message</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Cancel editing queued message"
-          accessibilityState={{ disabled: editor.saving }}
-          disabled={editor.saving}
-          style={({ pressed }) => [
-            styles.cancel,
-            pressed && styles.pressed,
-            editor.saving && styles.disabled
-          ]}
-          onPress={editor.cancel}
-        >
-          <Text style={styles.cancelLabel}>Cancel</Text>
-        </Pressable>
-        {/* A 40pt target around a smaller pill, so the line stays one button tall. */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Save queued message"
-          accessibilityState={{ disabled: saveDisabled }}
-          disabled={saveDisabled}
-          style={[styles.save, saveDisabled && styles.disabled]}
-          onPress={() => void editor.save()}
-        >
-          {({ pressed }) => (
-            <View style={[styles.savePill, pressed && styles.savePillPressed]}>
-              <Text style={styles.saveLabel}>Save</Text>
-            </View>
-          )}
-        </Pressable>
+        {largeText ? null : actions}
       </View>
+      {largeText ? <View style={styles.actionsLine}>{actions}</View> : null}
       {attribution ? (
         <Text style={styles.attribution} numberOfLines={1}>
           {attribution}
@@ -88,17 +96,20 @@ const styles = StyleSheet.create({
     paddingRight: spacing.xs,
     paddingBottom: spacing.sm
   },
-  // Wraps so at large text sizes Cancel and Save drop to a second line instead of squeezing the label.
   head: {
     minHeight: EDITOR_ACTION_HEIGHT,
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacing.sm
   },
+  // Large text: Cancel and Save on a line of their own, under the heading.
+  actionsLine: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm
+  },
   label: {
-    flexGrow: 1,
-    flexShrink: 1,
+    flex: 1,
     color: colors.textMuted,
     fontSize: typography.metaSize,
     lineHeight: typography.metaSize + spacing.xs
