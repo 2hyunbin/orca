@@ -107,7 +107,9 @@ function parseListing(value: unknown): AgentModelCatalogListing | null {
         }
       : {}),
     origin: row.origin,
-    at: row.at
+    at: row.at,
+    // Its producer is gone, so it ranks oldest; ties fall back to arrival.
+    startedAt: 0
   }
 }
 
@@ -136,8 +138,18 @@ function parseEntry(value: unknown): AgentModelCatalogEntry | null {
           ...(configuredEffort ? { effort: configuredEffort } : {}),
           at: configured.at
         }
-      : null
+      : null,
+    0
   )
+}
+
+/** A listing as saved: its producer's start means nothing to another run. */
+function persistedListing(listing: AgentModelCatalogListing | null): unknown {
+  if (!listing) {
+    return null
+  }
+  const { startedAt: _startedAt, ...saved } = listing
+  return saved
 }
 
 /** Only the two listings and the configured default are written; the merged view is derived again on load. */
@@ -145,8 +157,8 @@ function persistedEntry(entry: AgentModelCatalogEntry): unknown {
   return {
     agent: entry.agent,
     fingerprint: entry.fingerprint,
-    discovered: entry.discovered,
-    live: entry.live,
+    discovered: persistedListing(entry.discovered),
+    live: persistedListing(entry.live),
     ...(entry.configured ? { configured: entry.configured } : {})
   }
 }
