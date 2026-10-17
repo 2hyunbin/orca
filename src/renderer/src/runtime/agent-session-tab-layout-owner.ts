@@ -58,15 +58,27 @@ export function recordSyncedAgentSessionTabsInLayoutOwner(
         recordClosedAgentSessionTabInLayoutOwner(after, tab)
       }
     }
+    const opened: Tab[] = []
     for (const [id, tab] of now) {
       const old = was.get(id)
       if (!old) {
-        recordOpenedAgentSessionTabInLayoutOwner(after, tab)
+        opened.push(tab)
       } else if (old !== tab) {
         recordChatTabProps(after, tab, old)
       }
     }
+    // In tab order, so each open's anchor (the tab before it) already reached main.
+    const position = tabOrderPositions(after, worktreeId)
+    opened.sort((a, b) => (position.get(a.id) ?? Infinity) - (position.get(b.id) ?? Infinity))
+    for (const tab of opened) {
+      recordOpenedAgentSessionTabInLayoutOwner(after, tab)
+    }
   }
+}
+
+function tabOrderPositions(state: ChatTabState, worktreeId: string): Map<string, number> {
+  const ids = (state.groupsByWorktree[worktreeId] ?? []).flatMap((group) => group.tabOrder)
+  return new Map(ids.map((id, index) => [id, index]))
 }
 
 function chatTabsById(state: ChatTabState, worktreeId: string): Map<string, Tab> {

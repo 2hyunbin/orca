@@ -11,6 +11,7 @@ const drawn = (
   tabId: 'structured-agent-session-chat-1',
   sessionId: 'chat-1',
   agent: 'codex',
+  drawn: true,
   ...fields
 })
 
@@ -68,6 +69,23 @@ describe('a chat tab a window drew', () => {
 
   it('mints its own group still when the open names none', () => {
     const { model } = build(testContext(), [drawn({ tabId: undefined })], emptyModel())
+    expect(model.workspaces[WS]?.groups).toHaveLength(1)
+  })
+
+  it('keeps a windowless host’s rules when not drawn by a window', () => {
+    const ctx = testContext()
+    const { model } = build(ctx, [drawn({ drawn: undefined, groupId: 'g1' })])
+    expect(model.workspaces[WS]?.groups.map((group) => group.id)).not.toEqual(['g1'])
+    const again = applyLayoutCommand(model, drawn({ drawn: undefined, sessionId: 'chat-2' }), ctx)
+    expect(again.ok && again.model.workspaces[WS]?.tabs).toHaveLength(2)
+  })
+
+  it('mints its own group for an open naming none, drawn or not', () => {
+    const { model } = build(
+      testContext(),
+      [drawn({ tabId: undefined, drawn: undefined })],
+      emptyModel()
+    )
     expect(model.workspaces[WS]?.groups).toHaveLength(1)
   })
 })

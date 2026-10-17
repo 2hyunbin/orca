@@ -60,9 +60,13 @@ vi.mock('./runtime-rpc-client', () => ({
       }
       mocks.sent.push(params.command)
       const main = mainLoad()
-      // As runtime-layout-apply.ts: the window already confirmed its close, so main forces it.
+      // As runtime-layout-apply.ts: main forces a window's close and marks its chat open as drawn.
       const command: LayoutCommand =
-        params.command.type === 'closeTabs' ? { ...params.command, force: true } : params.command
+        params.command.type === 'closeTabs'
+          ? { ...params.command, force: true }
+          : params.command.type === 'openAgentSessionTab'
+            ? { ...params.command, drawn: true }
+            : params.command
       const applied = applyLayoutCommand(main.layout, command, {
         mintId: createBrowserUuid,
         mintLeafId: createBrowserUuid,
@@ -82,6 +86,7 @@ createStoreCascadesMockApi()
 import { openStructuredAgentSessionProvisionalTab } from '@/lib/structured-agent-session-provisional-tab'
 import { applyStructuredSessionTabSnapshots } from './local-structured-session-tabs-sync/snapshot-apply'
 import { resetLocalStructuredSessionVersionForTests } from './local-structured-session-tabs-sync/inventory-generation-fence'
+import { recordSyncedAgentSessionTabsInLayoutOwner } from './agent-session-tab-layout-owner'
 
 const WORKTREE = 'repo1::/path/wt'
 const TERMINAL = 'terminal-1'
@@ -249,6 +254,49 @@ describe('chat tabs in a layout-owner build', () => {
         .unifiedTabsByWorktree[WORKTREE]?.map((tab) => tab.entityId)
     ).toEqual([TERMINAL])
     expectSaveTeachesMainNothing()
+  })
+
+  it('sends a listing’s new chats in tab order, so each anchor is already in main', async () => {
+    const before = store().getState()
+    const chat = (sessionId: string): Tab => ({
+      id: `structured-agent-session-${sessionId}`,
+      entityId: sessionId,
+      groupId: GROUP,
+      worktreeId: WORKTREE,
+      contentType: 'agent-session',
+      agentSessionAgent: 'codex',
+      label: 'Codex Chat',
+      customLabel: null,
+      color: null,
+      sortOrder: 0,
+      createdAt: 5
+    })
+    const [a, b] = [chat('chat-a'), chat('chat-b')]
+    const after = {
+      ...before,
+      // The tab bar lists b first; the group shows a first.
+      unifiedTabsByWorktree: { [WORKTREE]: [...before.unifiedTabsByWorktree[WORKTREE]!, b, a] },
+      groupsByWorktree: {
+        [WORKTREE]: [
+          { ...before.groupsByWorktree[WORKTREE]![0]!, tabOrder: [TERMINAL, a.id, b.id] }
+        ]
+      }
+    }
+    recordSyncedAgentSessionTabsInLayoutOwner(before, after, [WORKTREE])
+    await settled()
+    expect(
+      mocks.sent.flatMap((command) =>
+        command.type === 'openAgentSessionTab' ? [[command.tabId, command.afterTabId]] : []
+      )
+    ).toEqual([
+      [a.id, TERMINAL],
+      [b.id, a.id]
+    ])
+    expect(mainLoad().layout.workspaces[WORKTREE]?.groups[0]?.tabOrder).toEqual([
+      TERMINAL,
+      a.id,
+      b.id
+    ])
   })
 
   it('leaves a paired server’s chat tabs to that server', async () => {

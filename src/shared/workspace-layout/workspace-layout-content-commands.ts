@@ -186,12 +186,14 @@ export function openAgentSessionTab(
   if (command.initial && !admitsInitialSurface(model, command.workspace, command.initial)) {
     return applied(model)
   }
-  const drawn = drawnTabOpen(
-    model,
-    command.workspace,
-    command.tabId,
-    (tab) => tab.kind === 'agent-session' && tab.entityId === command.sessionId
-  )
+  const drawn =
+    command.drawn &&
+    drawnTabOpen(
+      model,
+      command.workspace,
+      command.tabId,
+      (tab) => tab.kind === 'agent-session' && tab.entityId === command.sessionId
+    )
   if (drawn) {
     return drawn
   }
@@ -202,7 +204,7 @@ export function openAgentSessionTab(
     entityId: command.sessionId,
     agentSessionAgent: command.agent
   })
-  const target = withSendersGroup(model, command.workspace, command.groupId)
+  const target = command.drawn ? withSendersGroup(model, command.workspace, command.groupId) : model
   return applied(placeContentTab(target, command.workspace, tab, command, context).model, {
     tabId: tab.id
   })
