@@ -138,8 +138,7 @@ describe.each(
       expect(acquire.mock.calls[0]?.[0]).toMatchObject({
         attemptId: expect.any(String),
         fence: record.lease.runtimeFence,
-        launch: { location: record.location, accountHome: record.accountHome },
-        onOutput: expect.any(Function)
+        launch: { location: record.location, accountHome: record.accountHome }
       })
 
       const body = hostTestMessage('hello')

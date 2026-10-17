@@ -1,5 +1,5 @@
-// Claude initialize is awaited by the host after process publication. Settings enrichment follows
-// independently; the host owns a failed open and its single close.
+// Claude initialize is awaited by the host after process publication, under its own bound. Settings
+// enrichment follows independently; the host owns a failed open and its single close.
 
 import type { AgentSessionAccountKind } from '../../shared/agent-session-availability'
 import type { StructuredAgentSessionProviderOpenResult } from '../native-chat/agent-session-wire/structured-agent-session-provider-open-contract'
@@ -56,7 +56,10 @@ export type ClaudeStartupFacts = ClaudeInitializeFacts & {
   prepared: ReturnType<typeof prepareClaudeStructuredSessionAcquisitionOptions>
 }
 
-/** Settles on the CLI's initialize answer, or on its exit or a refused proof. */
+/** The CLI's initialize answer is a start step like any other: past this the start fails. */
+export const CLAUDE_INITIALIZE_TIMEOUT_MS = 60_000
+
+/** Settles on the CLI's initialize answer, or on its exit, a refused proof or the bound. */
 export async function readClaudeStartupFacts(input: {
   connection: ClaudeStreamJsonConnection
   initProof: ClaudeInitProof
@@ -67,7 +70,7 @@ export async function readClaudeStartupFacts(input: {
   requestTimeoutMs: number | undefined
   emit: (event: ClaudeStructuredSessionEvent) => void
 }): Promise<ClaudeInitializeFacts> {
-  // The CLI's first answer has no request deadline of its own; the reads after it do.
+  let timer: ReturnType<typeof setTimeout> | undefined
   const initialization = await Promise.race([
     input.connection
       .initializationResult()
@@ -83,8 +86,18 @@ export async function readClaudeStartupFacts(input: {
         }
         return result
       }),
-    input.initProof.promise.then(() => new Promise<never>(() => {}))
-  ])
+    input.initProof.promise.then(() => new Promise<never>(() => {})),
+    new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(
+            new Error(`claude did not answer initialize within ${CLAUDE_INITIALIZE_TIMEOUT_MS}ms`)
+          ),
+        CLAUDE_INITIALIZE_TIMEOUT_MS
+      )
+      timer.unref?.()
+    })
+  ]).finally(() => clearTimeout(timer))
   if (input.connection.closed) {
     throw new Error('claude session closed before startup completed')
   }

@@ -45,8 +45,7 @@ async function connectCodexAppServer(
 ): Promise<CodexAppServerConnection> {
   const managed = spawnManagedProviderProcess(launch, {
     spawnImpl,
-    site: 'codex-app-server-teardown',
-    ...(handlers.onOutput ? { onOutput: handlers.onOutput } : {})
+    site: 'codex-app-server-teardown'
   })
   const { child, terminateTree: terminateProcessTree } = managed
 

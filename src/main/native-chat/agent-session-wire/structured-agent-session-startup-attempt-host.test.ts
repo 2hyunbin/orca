@@ -318,10 +318,13 @@ describe('a start that ends before it proves itself', () => {
     expect(startupAttemptOpen()).toBe(false)
   })
 
-  it('stops a published start that goes silent and fails what it held', async () => {
-    startupLimits = { silenceMs: 50 }
+  it('stops a published start that never readies at the ceiling, not before, and fails what it held', async () => {
+    startupLimits = { ceilingMs: 400 }
     await restartWith(publishFirst)
     const id = await heldBehindStart('hello')
+    await vi.advanceTimersByTimeAsync(200)
+    expect(closeSession).not.toHaveBeenCalled()
+    expect(startupAttemptOpen()).toBe(true)
 
     await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'), 50)
     expect(await submission(id)).toMatchObject(HOST_STOPPED)
@@ -331,33 +334,8 @@ describe('a start that ends before it proves itself', () => {
     expect(startupAttemptOpen()).toBe(false)
   })
 
-  it('keeps a slow start that is still talking, and stops one that never readies at the ceiling', async () => {
-    startupLimits = { silenceMs: 50, ceilingMs: 400 }
-    const chatter: ReturnType<typeof setInterval>[] = []
-    await restartWith(async (input) => {
-      await input.onSpawned?.(acquisition(input).process)
-      chatter.push(setInterval(() => input.onOutput?.(), 10))
-      return acquisition(input)
-    })
-    try {
-      const id = await heldBehindStart('hello')
-      await vi.advanceTimersByTimeAsync(200)
-      expect(closeSession).not.toHaveBeenCalled()
-      expect(startupAttemptOpen()).toBe(true)
-
-      await eventually(
-        async () => expect((await submission(id))?.dispatchState).toBe('rejected'),
-        50
-      )
-      expect(await submission(id)).toMatchObject(HOST_STOPPED)
-      expect(dispatch).not.toHaveBeenCalled()
-    } finally {
-      chatter.forEach(clearInterval)
-    }
-  })
-
-  it('aborts an acquire still in its handshake once it goes silent and fails what it held', async () => {
-    startupLimits = { silenceMs: 50 }
+  it('aborts an acquire still in its handshake at the ceiling and fails what it held', async () => {
+    startupLimits = { ceilingMs: 50 }
     await restartWith(
       (input) =>
         new Promise((_resolve, reject) => {
@@ -395,7 +373,7 @@ describe('a start that ends before it proves itself', () => {
   })
 
   it('is not ended by the limit once it proved itself', async () => {
-    startupLimits = { silenceMs: 50 }
+    startupLimits = { ceilingMs: 50 }
     await restartWith(publishFirst)
     const id = await heldBehindStart('hello')
     await proveOpen()
@@ -473,7 +451,7 @@ function startupAttemptOpen(): boolean {
 }
 
 describe('the attempt an acquire runs under', () => {
-  it('is minted by the host with the lease, the pinned launch and its progress report', async () => {
+  it('is minted by the host with the lease and the pinned launch', async () => {
     await restartWith(publishFirst)
     await heldBehindStart('hello')
 
@@ -483,7 +461,6 @@ describe('the attempt an acquire runs under', () => {
       fence: record.lease.runtimeFence,
       launch: { location: record.location, accountHome: record.accountHome }
     })
-    expect(input.onOutput).toEqual(expect.any(Function))
     expect(input.attemptId).toEqual(expect.any(String))
     expect(input.signal).toBeInstanceOf(AbortSignal)
   })

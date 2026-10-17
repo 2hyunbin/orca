@@ -7,15 +7,12 @@ import type { AgentChildWorkEvidence } from '../../../shared/agent-status-child-
 import type { StructuredAgentSessionEventSink } from './structured-agent-session-event-sink'
 import type { AgentChatPermissionMode } from '../../../shared/agent-chat-permission-mode'
 
-/** A spawned child with no stdout frame or stderr line for this long has stopped starting. */
-export const STRUCTURED_AGENT_SESSION_STARTUP_SILENCE_MS = 60_000
-/** No start, however chatty, outlives this from its spawn. */
+/** No start outlives this from its registration; each protocol step has its own shorter bound. */
 export const STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS = 10 * 60_000
 
-export type StructuredAgentSessionStartupLimits = { silenceMs: number; ceilingMs: number }
+export type StructuredAgentSessionStartupLimits = { ceilingMs: number }
 
 export const STRUCTURED_AGENT_SESSION_STARTUP_LIMITS: StructuredAgentSessionStartupLimits = {
-  silenceMs: STRUCTURED_AGENT_SESSION_STARTUP_SILENCE_MS,
   ceilingMs: STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS
 }
 
@@ -39,8 +36,6 @@ export type StructuredAgentSessionStartupAttempt = {
   /** Aborted by a close, a Stop admitted now, quit, or the startup limit: the adapter stops what it
    *  started and spawn fails. */
   readonly signal?: AbortSignal
-  /** Any stdout frame or stderr line from the child: proof the start is still moving. */
-  readonly onOutput?: () => void
 }
 
 /** The startup limit's own reason, so an expired start is told from a close, Stop or quit. */

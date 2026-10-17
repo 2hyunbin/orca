@@ -2,11 +2,8 @@ import type { CodexAppServerConnection } from './codex-app-server-connection-typ
 
 const HANDSHAKE_TIMEOUT_MS = 15_000
 
-/** `timeoutMs`: a native chat's start passes the host's start ceiling, whose attempt owns when a
- *  start gives up; other callers keep the handshake's own bound. */
 export async function initializeCodexAppServerConnection(
-  connection: CodexAppServerConnection,
-  timeoutMs = HANDSHAKE_TIMEOUT_MS
+  connection: CodexAppServerConnection
 ): Promise<void> {
   await connection.request(
     'initialize',
@@ -19,7 +16,7 @@ export async function initializeCodexAppServerConnection(
         extensions: {}
       }
     },
-    { timeoutMs }
+    { timeoutMs: HANDSHAKE_TIMEOUT_MS }
   )
   connection.notify('initialized')
 }

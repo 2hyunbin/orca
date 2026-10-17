@@ -79,7 +79,7 @@ export type AttachFlowInput = {
   /** The id the host registered this start under; see `StructuredAgentSessionStartupAttempts`. */
   startupAttemptId?: string
   /** The attempt this attach's acquire runs under, minted before the adapter is called; what it
-   *  answers learns of the child's spawn and output. */
+   *  answers learns of the child's spawn. */
   onStartupAttempt?: (
     attempt: StructuredAgentSessionStartupAttempt
   ) => StructuredAgentSessionStartupProgress

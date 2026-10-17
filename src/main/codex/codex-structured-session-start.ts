@@ -32,7 +32,6 @@ import {
   type CodexStructuredSessionAdapterDeps
 } from './codex-structured-session-state'
 import type { CodexStructuredSessionTeardown } from './codex-structured-session-teardown'
-import { STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS } from '../native-chat/agent-session-wire/structured-agent-session-startup-attempt-contract'
 
 type CodexOpenContext = {
   input: StructuredAgentSessionAcquireInput
@@ -76,10 +75,7 @@ export async function openCodexStructuredSession(
     assertCodexConnectionOpen(connection, sessionId)
   }
   current()
-  await waitForPromiseWithSignal(
-    initializeCodexAppServerConnection(connection, STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS),
-    openInput.signal
-  )
+  await waitForPromiseWithSignal(initializeCodexAppServerConnection(connection), openInput.signal)
   current()
   const threadLaunch = await waitForPromiseWithSignal(
     withCodexVisualsThreadConfig(connection, launch, {
@@ -90,12 +86,7 @@ export async function openCodexStructuredSession(
   )
   current()
   const opened = await waitForPromiseWithSignal(
-    openCodexThread(
-      connection,
-      threadLaunch,
-      STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS,
-      openInput.signal
-    ),
+    openCodexThread(connection, threadLaunch, deps.requestTimeoutMs, openInput.signal),
     openInput.signal
   )
   current()

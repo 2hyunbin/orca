@@ -189,7 +189,6 @@ export async function acquireClaudeSession({
           onMessage,
           canUseTool,
           onUserDialog,
-          ...(input.onOutput ? { onOutput: input.onOutput } : {}),
           onFault: (error) => {
             childEnded ??= error
             initProof.reject(error)

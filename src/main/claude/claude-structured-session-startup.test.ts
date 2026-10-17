@@ -7,6 +7,7 @@ import {
   USER_MESSAGE
 } from './claude-structured-session-test-support'
 import type { ClaudeStructuredSessionEvent } from './claude-structured-session-state'
+import { CLAUDE_INITIALIZE_TIMEOUT_MS } from './claude-structured-session-startup'
 
 const ACQUIRE = { identity: identityFor(), fence: 7, spawnToken: 'spawn-9' }
 
@@ -117,6 +118,19 @@ describe('Claude host-awaited open', () => {
     const { adapter } = adapterFor(claude)
     await adapter.acquire(ACQUIRE)
     await expect(claudeOpened(adapter, 'session-1')).rejects.toThrow('provider session expected')
+    await adapter.closeSession('session-1')
+    expect(claude.connections[0].closeCount).toBe(1)
+  })
+
+  it('fails open when initialize does not answer within its own bound', async () => {
+    const claude = fakeClaude({ initDelayMs: 10 * 60_000 })
+    const { adapter } = adapterFor(claude)
+    await adapter.acquire(ACQUIRE)
+    const open = expect(claudeOpened(adapter, 'session-1')).rejects.toThrow(
+      'did not answer initialize'
+    )
+    await vi.advanceTimersByTimeAsync(CLAUDE_INITIALIZE_TIMEOUT_MS)
+    await open
     await adapter.closeSession('session-1')
     expect(claude.connections[0].closeCount).toBe(1)
   })

@@ -63,7 +63,6 @@ export async function acquireOwner(
     const progress = input.onStartupAttempt?.(attempt)
     const acquired = await input.adapter.acquire({
       ...attempt,
-      ...(progress ? { onOutput: progress.output } : {}),
       ...(input.recordPhase ? { recordPhase: input.recordPhase } : {}),
       onSpawned: async (process) => {
         progress?.spawned()

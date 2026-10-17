@@ -14,8 +14,6 @@ export type AcpAgentConnectionOptions = Omit<AcpSessionRuntimeOptions, 'peer'> &
   peer?: Omit<AcpPeerOptions, 'closeOnInputEnd'>
   /** Process exit evidence, including expected closes and processless spawn failures. */
   onExit?: (error: Error, context: { expected: boolean; exit: ProviderProcessExit }) => void
-  /** Any stdout or stderr chunk from the child. */
-  onOutput?: () => void
 }
 
 /** The execution host owns the child and protocol lifetime; the adapter owns turns and Stop. */
@@ -42,8 +40,7 @@ export class AcpAgentConnection extends AcpSessionRuntime {
     const peer = resolveAcpPeerOptions({ ...options.peer, closeOnInputEnd: false })
     const managed = spawnManagedProviderProcess(launch, {
       spawnImpl,
-      site: 'acp-agent-teardown',
-      ...(options.onOutput ? { onOutput: options.onOutput } : {})
+      site: 'acp-agent-teardown'
     })
     const lifecycle: { closing: boolean; error?: Error } = { closing: false }
     const diagnose = (message: string): void => {
