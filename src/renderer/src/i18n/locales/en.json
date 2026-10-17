@@ -19915,8 +19915,8 @@
       "signInLinkCopyFailed": "Could not copy the link.",
       "switchSessions": {
         "title": "Switched to {{account}}",
-        "bodyOne": "1 Claude session is still running on {{previous}}. Restarting continues the conversation on {{next}}. A session that's replying restarts when it finishes.",
-        "bodyOther": "{{count}} Claude sessions are still running on {{previous}}. Restarting continues each conversation on {{next}}. A session that's replying restarts when it finishes.",
+        "bodyOne": "1 Claude session is still running on {{previous}}. Restarting continues the conversation on {{next}}. If it's busy, it restarts when it's done.",
+        "bodyOther": "{{count}} Claude sessions are still running on {{previous}}. Restarting continues each conversation on {{next}}. A busy session restarts when it's done.",
         "remember": "Remember my choice",
         "keep": "Keep as is",
         "restartOne": "Restart session",
