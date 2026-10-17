@@ -146,15 +146,18 @@ describe('noteEndedLaunchSshSession', () => {
 
   it.each([
     ['cannot ask', () => mocks.read.mockResolvedValue('unverifiable')],
+    ['finds no record', () => mocks.read.mockResolvedValue('not-recorded')],
     ['fails', () => mocks.read.mockRejectedValue(new Error('ssh down'))]
   ])('keeps a proven ended verdict when the later probe %s', async (_name, unanswered) => {
     let clock = 0
     await noteEndedLaunchSshSession('ssh-1', 'env-1', () => clock)
-    mocks.status.current = { kind: 'managed', environmentId: 'env-1', launchSessionEnded: true }
     unanswered()
     clock = 11 * 60_000
+    // A connect replaced the status before the recheck, which republishes the warning.
+    mocks.status.current = { kind: 'managed', environmentId: 'env-1' }
     await noteEndedLaunchSshSession('ssh-1', 'env-1', () => clock)
     expect(mocks.clear).not.toHaveBeenCalled()
+    expect(mocks.publish).toHaveBeenCalledTimes(2)
     // A status a later connect replaced still gets the warning back.
     mocks.status.current = { kind: 'managed', environmentId: 'env-1' }
     await noteEndedLaunchSshSession('ssh-1', 'env-1', () => clock)

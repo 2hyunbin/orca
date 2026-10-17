@@ -42,6 +42,12 @@ export async function noteEndedLaunchSshSession(
   }
   const pending = { generation, ended: false, at: now() }
   checked.set(connection, pending)
+  // Only a live probe disproves a proven end; unanswered or unknown keeps it.
+  const provenEnded = sameSession && prior.ended
+  const markEnded = (): void => {
+    checked.set(connection, { generation, ended: true, at: now() })
+    flag(targetId, environmentId)
+  }
   try {
     const session = await readManagedOrcadLaunchSshSession(
       getAppEnvironment().getPath('userData'),
@@ -61,16 +67,14 @@ export async function noteEndedLaunchSshSession(
       checked.delete(connection)
       return
     }
-    if (session === 'exited' || (session === 'unverifiable' && sameSession && prior.ended)) {
-      // Why unverifiable keeps it: an unanswered probe disproves nothing already proven.
-      checked.set(connection, { generation, ended: true, at: now() })
-      flag(targetId, environmentId)
-    } else if (session !== 'unverifiable' && launchSessionNoted(targetId, environmentId)) {
+    if (session === 'exited' || (session !== 'live' && provenEnded)) {
+      markEnded()
+    } else if (session === 'live' && launchSessionNoted(targetId, environmentId)) {
       clearLaunchSessionNote(targetId, environmentId)
     }
   } catch (error) {
-    if (sameSession && prior.ended && checked.get(connection) === pending) {
-      checked.set(connection, { ...prior, at: now() })
+    if (provenEnded && checked.get(connection) === pending) {
+      markEnded()
     }
     console.warn('[ssh] Could not check which SSH session started the managed server:', error)
   }
