@@ -76,19 +76,46 @@ export function shownLiveTitle(
   return (panes.find((pane) => pane.leafId === focusedLeafId) ?? panes[0])?.liveTitle
 }
 
-function withLiveTitles(
+/** Terminal entity id → the live title main reports for the pane this view focuses. */
+function liveTitlesByTabId(
   layouts: WorkspaceLayoutCache,
-  facts: LayoutContentFacts,
   view: DesktopLayoutView
-): LayoutContentFacts {
-  const terminalRows = { ...facts.terminalRows }
+): Map<string, string> {
+  const titles = new Map<string, string>()
   for (const tab of Object.values(layouts).flatMap((layout) => layout.tabs)) {
     const liveTitle = shownLiveTitle(tab, view.panes[tab.entityId]?.activeLeafId)
     if (liveTitle !== undefined) {
-      terminalRows[tab.entityId] = { ...terminalRows[tab.entityId], title: liveTitle }
+      titles.set(tab.entityId, liveTitle)
     }
   }
+  return titles
+}
+
+function withLiveTitles(
+  facts: LayoutContentFacts,
+  liveTitles: ReadonlyMap<string, string>
+): LayoutContentFacts {
+  const terminalRows = { ...facts.terminalRows }
+  for (const [tabId, title] of liveTitles) {
+    terminalRows[tabId] = { ...terminalRows[tabId], title }
+  }
   return { ...facts, terminalRows }
+}
+
+/** Restore resets agent titles because a prior session's agents have exited; a live one has not. */
+function withRowLiveTitles(
+  tabsByWorktree: AppState['tabsByWorktree'],
+  liveTitles: ReadonlyMap<string, string>
+): AppState['tabsByWorktree'] {
+  return Object.fromEntries(
+    Object.entries(tabsByWorktree).map(([key, rows]) => [
+      key,
+      rows.map((row) => {
+        const title = liveTitles.get(row.id)
+        return title === undefined || title === row.title ? row : { ...row, title }
+      })
+    ])
+  )
 }
 
 /** Each tab-bar entry names the host its frame names, which the frame alone knows per tab. */
@@ -132,10 +159,11 @@ export function buildLayoutFrameSlices({
   view,
   holdsEditorFile
 }: LayoutFrameSliceInput): LayoutFrameSlices {
+  const liveTitles = liveTitlesByTabId(layouts, view)
   const saved = saveWorkspaceLayout({
     layout: workspaceLayoutModelFromPublished(LOCAL_EXECUTION_HOST_ID, layouts),
     desktopView: view,
-    facts: withLiveTitles(layouts, facts, view),
+    facts: withLiveTitles(facts, liveTitles),
     carried: NOTHING_CARRIED
   })
   const session = { ...saved, unifiedTabs: stampExecutionHosts(saved.unifiedTabs ?? {}, layouts) }
@@ -184,7 +212,7 @@ export function buildLayoutFrameSlices({
     ...migrateHydratedEditorTabsAndGroups(tabs, editor.editorFileIdMigrationsByWorktree)
   }
   return {
-    tabsByWorktree: rows.tabsByWorktree,
+    tabsByWorktree: withRowLiveTitles(rows.tabsByWorktree, liveTitles),
     terminalLayoutsByTabId,
     activeTabIdByWorktree,
     ...editorTabs,
