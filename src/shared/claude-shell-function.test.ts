@@ -167,14 +167,20 @@ describe.each(SHELLS)('the claude function in %s', (shell) => {
 
   it('follows the selection over the user’s own CLAUDE_CONFIG_DIR, inherited or exported by an rc', () => {
     const f = fixture()
-    const own = ['CLAUDE_CONFIG_DIR=/user/own/', 'ORCA_CLAUDE_USER_CONFIG_DIR=/user/own']
+    // Why the slash: Claude keys its login by the exact string, so System default keeps the spelling.
+    const own = ['CLAUDE_CONFIG_DIR=/user/own/', 'ORCA_CLAUDE_USER_CONFIG_DIR=/user/own/']
     writeFileSync(f.pointer, f.a)
     expect(f.run(shell, own).stdout).toBe(`HOME=${f.a} KEY=fake TWIN=${f.a}\n`)
     // The rc re-exported it after Orca injected another account.
     const rc = [...own, `ORCA_CLAUDE_INJECTED_CONFIG_DIR=${f.b}`]
     expect(f.run(shell, rc).stdout).toBe(`HOME=${f.a} KEY=fake TWIN=${f.a}\n`)
     writeFileSync(f.pointer, '')
-    expect(f.run(shell, own).stdout).toBe('HOME=/user/own KEY=fake TWIN=none\n')
+    expect(f.run(shell, own).stdout).toBe('HOME=/user/own/ KEY=fake TWIN=none\n')
+    // An rc may spell it without the slash; it still follows the selection.
+    writeFileSync(f.pointer, f.a)
+    expect(
+      f.run(shell, ['CLAUDE_CONFIG_DIR=/user/own', 'ORCA_CLAUDE_USER_CONFIG_DIR=/user/own/']).stdout
+    ).toBe(`HOME=${f.a} KEY=fake TWIN=${f.a}\n`)
     const deliberate = [
       'CLAUDE_CONFIG_DIR=/somewhere/else',
       'ORCA_CLAUDE_USER_CONFIG_DIR=/user/own'

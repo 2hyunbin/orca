@@ -408,6 +408,14 @@ describe('ClaudeProfileRouter', () => {
     expect(f.router.preparation().envPatch).not.toHaveProperty('CLAUDE_CONFIG_DIR')
   })
 
+  it('carries the user’s own value exactly as set, since Claude keys its login by that string', () => {
+    const f = fixture({ CLAUDE_CONFIG_DIR: 'C:/Claude Config/' })
+    f.settings.activeClaudeManagedAccountId = null
+    expect(f.router.terminalEnv()).toMatchObject({
+      ORCA_CLAUDE_USER_CONFIG_DIR: 'C:/Claude Config/'
+    })
+  })
+
   it('carries the user’s own value in every host terminal, beside an injected one too', () => {
     const f = fixture({ CLAUDE_CONFIG_DIR: resolve('/user/own') })
     mkdirSync(f.home('a'), { recursive: true })

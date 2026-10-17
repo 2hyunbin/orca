@@ -18,6 +18,7 @@ import {
   describeClaudeProfile,
   type ClaudeProfileDescriptor,
   readUserClaudeConfigDir,
+  readUserClaudeConfigDirAsSet,
   resolveClaudeDefaultHome
 } from './claude-profile-paths'
 import type { ClaudeProfileSetupReport } from './claude-profile-setup'
@@ -315,7 +316,7 @@ export class ClaudeProfileRouter {
    * export, or the inherited value) and restores it on System default; any other value wins.
    */
   private withUserConfigDir(env: ClaudeEnvPatch): ClaudeEnvPatch {
-    const userConfigDir = this.userConfigDir()
+    const userConfigDir = readUserClaudeConfigDirAsSet(this.env)
     return userConfigDir ? { ...env, [CLAUDE_USER_CONFIG_DIR_ENV]: userConfigDir } : env
   }
 
