@@ -60,7 +60,7 @@ export function createTerminalTab(
     terminal: { defaultTitle: `Terminal ${ordinal}`, ...command.creation },
     panes: { root: { type: 'leaf', leafId } }
   }
-  const placed = placeNewTab(workspace, tab, command, context)
+  const placed = placeNewTab(workspace, command.workspace, tab, command, context)
   const paneKey = paneKeyOf(id, leafId)
   return applied(
     withWorkspace(model, command.workspace, placed),
@@ -275,8 +275,14 @@ export function placeContentTab(
     key,
     placeNewTab(
       workspace,
+      key,
       tab,
-      { groupId: group?.id, afterTabId: placement.afterTabId, index: placement.index },
+      // The sender's group names a workspace's first group.
+      {
+        groupId: group?.id ?? placement.groupId,
+        afterTabId: placement.afterTabId,
+        index: placement.index
+      },
       context
     )
   )

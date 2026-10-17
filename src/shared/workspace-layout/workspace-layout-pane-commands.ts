@@ -211,6 +211,7 @@ export function movePaneToNewTab(
   }
   const placed = placeNewTab(
     withSource,
+    command.workspace,
     moved,
     {
       groupId: command.groupId ?? sourceGroup?.id,

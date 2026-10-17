@@ -38,8 +38,8 @@ export function terminalTabCreateCommand(
     tabId: tab.id,
     // createTab always lays out a single first pane.
     leafId: root?.type === 'leaf' ? root.leafId : '',
-    // Main makes a split made with the tab along with it. Another group main lacks (the
-    // workspace's first) falls back to main's own placement until the window's save names it.
+    // Main makes a split made with the tab along with it, and takes the group as a workspace's
+    // first when it holds none.
     ...(entry
       ? {
           groupId: entry.groupId,

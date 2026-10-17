@@ -13,6 +13,7 @@ import {
   patchTerminalTabRow
 } from './tabs-host-mirroring'
 import { sendTabChangeToLayoutOwner } from '../../terminals/tab-change-through-layout-owner'
+import { recordTabOrderInLayoutOwner } from './tab-order-layout-owner'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 
 function oppositeViewMode(mode: 'terminal' | 'chat'): 'terminal' | 'chat' {
@@ -132,6 +133,7 @@ export function createTabsLabelActions(
   return {
     reorderUnifiedTabs: (groupId, tabIds, opts) => {
       let reordered = false
+      const changes: { worktreeId: string; from: string[]; to: string[] }[] = []
       set((state) => {
         for (const [worktreeId, groups] of Object.entries(state.groupsByWorktree)) {
           const group = groups.find((candidate) => candidate.id === groupId)
@@ -141,6 +143,7 @@ export function createTabsLabelActions(
           // Why: dedupe at the store boundary so each tab keeps one canonical position and later group ops don't branch on duplicate ids.
           const nextTabOrder = dedupeTabOrder(tabIds)
           reordered = true
+          changes.push({ worktreeId, from: group.tabOrder, to: nextTabOrder })
           const orderMap = new Map(nextTabOrder.map((id, index) => [id, index]))
           return {
             groupsByWorktree: {
@@ -158,6 +161,12 @@ export function createTabsLabelActions(
         }
         return state
       })
+      // Switch point: main takes the window's new order unless the caller already asked it.
+      if (ORCA_LAYOUT_OWNER_IS_MAIN && !opts?.layoutOwnerHandled) {
+        for (const change of changes) {
+          recordTabOrderInLayoutOwner(get(), groupId, change)
+        }
+      }
       if (reordered && opts?.recordInteraction !== false) {
         get().recordFeatureInteraction?.('terminal-tabs')
       }

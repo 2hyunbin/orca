@@ -50,6 +50,8 @@ function moveCreatedTabToIndex(args: {
   tabId: string
   targetIndex: number | undefined
   worktreeId: string
+  /** Main placed the new tab at this index itself. */
+  mainPlaced: boolean
 }): void {
   if (args.targetIndex === undefined) {
     return
@@ -64,7 +66,10 @@ function moveCreatedTabToIndex(args: {
   const insertionIndex = Math.min(Math.max(args.targetIndex, 0), orderWithoutCreatedTab.length)
   const nextOrder = [...orderWithoutCreatedTab]
   nextOrder.splice(insertionIndex, 0, args.tabId)
-  args.store.reorderUnifiedTabs(args.groupId, nextOrder, { recordInteraction: false })
+  args.store.reorderUnifiedTabs(args.groupId, nextOrder, {
+    recordInteraction: false,
+    layoutOwnerHandled: args.mainPlaced
+  })
 }
 
 function reportMoveFailed(): void {
@@ -228,7 +233,8 @@ function applyMove(
     store: afterCreateStore,
     tabId: tab.id,
     targetIndex: args.targetIndex,
-    worktreeId
+    worktreeId,
+    mainPlaced: mainMoved
   })
   if (split) {
     afterCreateStore.setTabLayout(sourceTabId, split.sourceLayout)

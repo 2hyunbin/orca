@@ -71,7 +71,8 @@ function moveAsToday(worktreeId: string, drop: TabDrop, newGroupId?: string): bo
   const state = useAppStore.getState()
   const { tabId, groupId: targetGroupId } = drop
   if (drop.kind === 'reorder') {
-    state.reorderUnifiedTabs(targetGroupId, drop.tabOrder)
+    // Why handled: main already moved the tab, or cannot.
+    state.reorderUnifiedTabs(targetGroupId, drop.tabOrder, { layoutOwnerHandled: true })
     mirrorWebRuntimeTabMove({
       kind: 'reorder',
       worktreeId,

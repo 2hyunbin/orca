@@ -12,6 +12,12 @@ import {
   resolvePinnedTabLabel
 } from '../../store/pinned-tab-close-guard'
 import { useAppStore } from '../../store'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import type { RuntimeMobileSessionTabMove } from '../../../../shared/runtime-types'
+import {
+  dropTabThroughLayoutOwner,
+  type TabDrop
+} from '@/components/tab-group/tab-group-layout-owner-commands'
 import { resolveBrowserSessionTabTarget } from './browser-session-tab-target'
 import { resolveWindowTabIdForHostTab } from './host-session-tab-target'
 
@@ -112,6 +118,13 @@ export function registerSessionTabIpcBridge(unsubs: (() => void)[]): void {
   unsubs.push(
     window.api.ui.onMoveSessionTab((move) => {
       const { tabId, targetGroupId } = move
+      // Switch point: main moves the tab first, as for a tab-bar drag.
+      if (
+        ORCA_LAYOUT_OWNER_IS_MAIN &&
+        dropTabThroughLayoutOwner(move.worktreeId, tabDropOf(move))
+      ) {
+        return
+      }
       const store = useAppStore.getState()
       if (move.kind === 'reorder') {
         store.reorderUnifiedTabs(targetGroupId, move.tabOrder)
@@ -124,4 +137,15 @@ export function registerSessionTabIpcBridge(unsubs: (() => void)[]): void {
       })
     })
   )
+}
+
+function tabDropOf(move: RuntimeMobileSessionTabMove): TabDrop {
+  const { tabId, targetGroupId: groupId } = move
+  if (move.kind === 'reorder') {
+    return { kind: 'reorder', tabId, groupId, tabOrder: move.tabOrder }
+  }
+  if (move.kind === 'split') {
+    return { kind: 'split', tabId, groupId, direction: move.splitDirection }
+  }
+  return { kind: 'move', tabId, groupId, index: move.index }
 }
