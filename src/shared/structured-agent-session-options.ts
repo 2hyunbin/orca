@@ -59,6 +59,8 @@ export type StructuredAgentSessionOptionState = {
   record: NativeChatSessionOptionRecord
   /** The permission mode the host or launch last stated; null shows no picker. */
   permissionMode: string | null
+  /** Accepted or read-back facts supersede the preceding cached status. */
+  reconciliation?: { permission: boolean }
   pendingPick: { id: string; value: string } | null
 }
 
@@ -168,6 +170,11 @@ export function applyStructuredAgentSessionOptions(
         ? state.catalog
         : structuredAgentSessionOptionCatalog(seed, result),
     catalogSource: result.modelsKnown === false ? state.catalogSource : 'live',
+    reconciliation: state.reconciliation
+      ? {
+          permission: result.current.permissionMode !== undefined || state.reconciliation.permission
+        }
+      : undefined,
     permissionMode: result.current.permissionMode ?? state.permissionMode
   }
 }

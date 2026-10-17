@@ -63,8 +63,10 @@ export class AcpStructuredOptions {
   private commands: AgentSessionSlashCommand[] | undefined
   // A loaded session keeps the model it ran; only a new one resolves the agent's own config.
   private resolvesConfig = false
-  private readonly picked = new Set<string>()
+  readonly picked = new Set<string>()
   private initialChoice: Readonly<Record<string, string>> = {}
+  currentProof = new Set<string>()
+  writeRevision = 0
 
   /** The session state a new, load or resume response reported. */
   adoptSession(
@@ -78,6 +80,7 @@ export class AcpStructuredOptions {
     this.models = response.models ?? null
     this.resolvesConfig = origin === 'new'
     this.initialChoice = this.reported()
+    this.currentProof = new Set(Object.keys(this.initialChoice))
   }
 
   /** The native selection before any message changed this child. */
@@ -235,26 +238,42 @@ export async function readAcpLiveOptions(
   return { ...withLiveCatalogListing(session.options.read()), acceptsImages }
 }
 
-/** Sends a pick and adopts the agent's answer, even one that lands after the wait gave up: that is
- *  still what the agent runs. The wait fails at `timeoutMs`, or once `signal` aborts. */
+/** Only the current, still-awaited write may establish reusable option proof. */
 export function writeAcpSessionOption(
   connection: Pick<AcpStructuredConnection, 'setConfigOption' | 'setModel'>,
   options: AcpStructuredOptions,
   write: AcpOptionWrite,
-  bound: { agent: string; timeoutMs: number; signal?: AbortSignal }
+  bound: { agent: string; timeoutMs: number; signal?: AbortSignal; key: string }
 ): Promise<void> {
   const { agent, timeoutMs, signal } = bound
   if (signal?.aborted) {
     return Promise.reject(abortSignalReason(signal))
   }
+  const revision = ++options.writeRevision
+  options.currentProof.delete(bound.key)
+  if (bound.key === 'model') {
+    options.currentProof.delete('effort')
+  }
+  const adopt = (apply: () => void): void => {
+    if (options.writeRevision !== revision) {
+      throw new Error(`${agent} option write was superseded`)
+    }
+    apply()
+    options.currentProof.add(bound.key)
+  }
   const applied =
     write.method === 'config'
       ? connection
           .setConfigOption(write.configId, write.value)
-          .then((result) => options.adoptConfigOptions(result.configOptions))
-      : connection.setModel(write.modelId).then(() => options.adoptModel(write.modelId))
+          .then((result) => adopt(() => options.adoptConfigOptions(result.configOptions)))
+      : connection
+          .setModel(write.modelId)
+          .then(() => adopt(() => options.adoptModel(write.modelId)))
   return new Promise<void>((resolve, reject) => {
     const fail = (error: Error): void => {
+      if (options.writeRevision === revision) {
+        options.writeRevision += 1
+      }
       settle()
       reject(error)
     }

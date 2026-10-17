@@ -23,17 +23,20 @@ import {
   structuredAgentSessionHandoverOrigin,
   type StructuredAgentSessionCommandHandoverContext
 } from './structured-agent-session-command-turn'
+import type { StructuredAgentSessionDeliveryOrder } from './structured-agent-session-delivery-order'
 import { carriedStoppedHistory } from './structured-agent-session-stopped-history-selection'
 import { withStoppedHistory } from '../../../shared/agent-session-stopped-history'
 
 export type AgentSessionHandoverContext = StructuredAgentSessionCommandHandoverContext & {
   acquireAborts?: Pick<StructuredAgentSessionAcquireAborts, 'begin'>
+  deliveryOrder?: StructuredAgentSessionDeliveryOrder
 }
 
 /** A handover whose pending row and abort handle are committed: the provider call runs outside the
  *  session's serialize and answers with the commit that resolves it. */
 export type StructuredAgentSessionPendingHandover = {
   dispatch: () => Promise<() => Promise<void>>
+  release?: () => void
 }
 
 /**
@@ -68,6 +71,7 @@ export async function beginSubmissionHandover(
   // on this same row before anything is written.
   const turnScope = contextStructuredAgentSessionCurrentWork(ctx).turnScope()
   const carried = carriedStoppedHistory(ctx, turnScope, submission, body)
+  const release = ctx.deliveryOrder?.activateSend(ctx.sessionId, clientMessageId)
   const attempt = ctx.acquireAborts?.begin(ctx.sessionId, true)
   try {
     await ctx.journal.resolveDispatch({
@@ -78,6 +82,7 @@ export async function beginSubmissionHandover(
       ...(carried ? { carries: carried.covers } : {})
     })
   } catch (error) {
+    release?.()
     attempt?.end()
     throw error
   }
@@ -85,6 +90,7 @@ export async function beginSubmissionHandover(
   // live counter never re-anchors at turn-open.
   const requestedAt = structuredAgentSessionHandoverOrigin(ctx.journal, submission)
   return {
+    release,
     dispatch: async () => {
       let outcome: AgentSessionDispatchOutcome | null
       try {

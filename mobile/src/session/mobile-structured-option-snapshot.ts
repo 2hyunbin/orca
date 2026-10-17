@@ -11,7 +11,15 @@ export function commitMobileStructuredOptions(
   hostSelection: Readonly<Record<string, string>> | undefined,
   values: Readonly<Record<string, string>>
 ): StructuredAgentSessionOptionState {
-  return commitStructuredAgentSessionOptionValues(state, { ...hostSelection, ...values })
+  return {
+    ...commitStructuredAgentSessionOptionValues(state, {
+      ...(state.reconciliation ? {} : hostSelection),
+      ...values
+    }),
+    reconciliation: {
+      permission: state.reconciliation?.permission || values.permissionMode !== undefined
+    }
+  }
 }
 
 /** Display, validation and send share the host selection and this phone's pending pick. */

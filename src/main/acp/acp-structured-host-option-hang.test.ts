@@ -87,7 +87,7 @@ describe('a Grok model pick Grok never answers during send', () => {
     expect(framesOf(rig.child(), 'session/prompt')).toEqual([])
   })
 
-  it('bounds its write, frees the chat, and keeps what Grok answers late', async () => {
+  it('re-establishes opening A after uncertain B without adopting B’s late reply', async () => {
     const { rig, host, store, fence } = await openAttachedHostRig({
       optionWriteTimeoutMs: 100,
       script: (agent) => agent.on('session/set_config_option', () => {})
@@ -105,17 +105,31 @@ describe('a Grok model pick Grok never answers during send', () => {
     expect(framesOf(rig.child(), 'session/prompt')).toEqual([])
     // The chat's queue moved on: a later operation runs.
     expect(await within(host.readOptions(SESSION), 1_000)).not.toBe('pending')
-    const [frame] = framesOf(rig.child(), 'session/set_config_option')
-    rig.child().agent.reply(frame!, {
+    const restore = rig.adapter.dispatch({
+      sessionId: SESSION,
+      fence: fence(),
+      clientMessageId: 'restore-A',
+      executionOptions: { model: 'grok-4.7' },
+      body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'A again' }] }
+    })
+    await waitFor(() => expect(framesOf(rig.child(), 'session/set_config_option')).toHaveLength(2))
+    const [old, current] = framesOf(rig.child(), 'session/set_config_option')
+    rig.child().agent.reply(current!, { configOptions: GROK_CONFIG_OPTIONS })
+    await waitFor(() => expect(framesOf(rig.child(), 'session/set_config_option')).toHaveLength(3))
+    rig.child().agent.reply(framesOf(rig.child(), 'session/set_config_option')[2]!, {
+      configOptions: GROK_CONFIG_OPTIONS
+    })
+    await restore
+    expect(framesOf(rig.child(), 'session/prompt')).toHaveLength(1)
+    rig.child().agent.reply(old!, {
       configOptions: GROK_CONFIG_OPTIONS.map((option) =>
-        option.id === 'model' ? { ...option, currentValue: 'grok-4.7' } : option
+        option.id === 'model' ? { ...option, currentValue: 'grok-4.6' } : option
       )
     })
-    await waitFor(async () =>
-      expect(
-        (await rig.adapter.readOptions({ sessionId: SESSION, fence: fence() })).current.model
-      ).toBe('grok-4.7')
-    )
+    await rig.settle()
+    expect(
+      (await rig.adapter.readOptions({ sessionId: SESSION, fence: fence() })).current.model
+    ).toBe('grok-4.7')
     expect((await host.readOptions(SESSION)).current.model).toBe(savedModel)
     expect(store.getRecord(SESSION)?.options?.model).toBe(savedModel)
     await host.close(SESSION, 'user-close')

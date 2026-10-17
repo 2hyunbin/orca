@@ -1,14 +1,10 @@
 import { toast } from 'sonner'
 import { useCallback, useMemo } from 'react'
-import type {
-  AgentSessionOptionResult,
-  AgentSessionOptionsResult
-} from '../../../../shared/agent-session-wire'
+import type { AgentSessionOptionResult } from '../../../../shared/agent-session-wire'
 import type { AgentType } from '../../../../shared/agent-status-types'
 import { structuredAgentSessionSeedCatalog } from '../../../../shared/structured-agent-session-seed-catalog'
 import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from '../../../../shared/agent-chat-permission-mode'
 import {
-  applyStructuredAgentSessionOptions,
   canSetStructuredAgentSessionOption,
   commitStructuredAgentSessionOptionValues,
   lockedStructuredAgentSessionOptionSnapshot,
@@ -18,7 +14,6 @@ import {
 } from '../../../../shared/structured-agent-session-options'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { structuredAgentSessionHostKey } from '@/runtime/structured-agent-session-host-capability'
-import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
 import { enqueueSessionOptionSettingsWrite } from './native-chat-session-option-settings-write'
 import { encodeStructuredAgentSessionOptionValue } from '../../../../shared/structured-agent-session-option-codec'
 import type { StructuredAgentSessionMutate } from './use-structured-agent-session-mutate'
@@ -138,7 +133,7 @@ export function useStructuredAgentSessionOptions(args: {
   const sendStructuredOption = useCallback(
     async (id: string, encoded: string): Promise<Readonly<Record<string, string>> | null> => {
       const targetRecord = optionStateRef.current.record
-      const mutationGeneration = ++optionMutationGeneration.current
+      let mutationGeneration = ++optionMutationGeneration.current
       const isCurrent = (): boolean =>
         activeOptionRecordRef.current === targetRecord &&
         optionMutationGeneration.current === mutationGeneration
@@ -158,48 +153,31 @@ export function useStructuredAgentSessionOptions(args: {
           { key: id, value: encoded }
         )
         if (result && isCurrent()) {
+          mutationGeneration = ++optionMutationGeneration.current
           const acceptedValues = result.options ?? { [id]: encoded }
           committed = acceptedValues
           updateOptionState((current) =>
-            current.record === targetRecord && !selectionFromStatus
-              ? commitStructuredAgentSessionOptionValues(current, acceptedValues)
+            current.record === targetRecord
+              ? {
+                  ...commitStructuredAgentSessionOptionValues(current, {
+                    ...(current.reconciliation ? {} : args.optionSelection),
+                    ...acceptedValues
+                  }),
+                  reconciliation: {
+                    permission:
+                      current.reconciliation?.permission ||
+                      acceptedValues.permissionMode !== undefined
+                  }
+                }
               : current
           )
           rememberOptionPicks(optionView, acceptedValues)
-          if (!selectionFromStatus) {
-            void callStructuredAgentSession<AgentSessionOptionsResult>(
-              target,
-              'agentSession.options',
-              { sessionId }
-            )
-              .then((refreshed) => {
-                if (isCurrent()) {
-                  updateOptionState((latest) =>
-                    latest.record === targetRecord && optionCatalog
-                      ? applyStructuredAgentSessionOptions(latest, optionCatalog, refreshed)
-                      : latest
-                  )
-                }
-              })
-              .catch(() => {})
-          }
+          rereadOptions()
         }
         return committed
       } finally {
         if (shownAtOnce && !result && !selectionFromStatus && isCurrent()) {
-          void callStructuredAgentSession<AgentSessionOptionsResult>(
-            target,
-            'agentSession.options',
-            { sessionId }
-          )
-            .then((refreshed) => {
-              if (isCurrent() && optionCatalog) {
-                updateOptionState((latest) =>
-                  applyStructuredAgentSessionOptions(latest, optionCatalog, refreshed)
-                )
-              }
-            })
-            .catch(() => {})
+          rereadOptions()
         }
         if (isCurrent()) {
           updateOptionState((current) =>
@@ -212,15 +190,14 @@ export function useStructuredAgentSessionOptions(args: {
     },
     [
       activeOptionRecordRef,
+      args.optionSelection,
       mutate,
-      optionCatalog,
       optionMutationGeneration,
       optionStateRef,
       rememberOptionPicks,
+      rereadOptions,
       optionView,
       selectionFromStatus,
-      sessionId,
-      target,
       updateOptionState
     ]
   )

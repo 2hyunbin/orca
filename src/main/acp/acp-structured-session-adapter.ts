@@ -258,6 +258,7 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
     session.options.notePick(input.key)
     // Bounded, and abandoned by a close or Stop: the session's queue waits on it.
     await writeAcpSessionOption(session.connection, session.options, write, {
+      key: input.key,
       agent: session.spec.agent,
       timeoutMs: this.deps.optionWriteTimeoutMs ?? ACP_OPTION_WRITE_TIMEOUT_MS,
       ...(input.signal ? { signal: input.signal } : {})

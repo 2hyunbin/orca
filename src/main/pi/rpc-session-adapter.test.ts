@@ -193,6 +193,41 @@ describe('Pi RPC session ownership and delivery', () => {
     await expect(h.adapter.dispatch({ ...input, signal: controller.signal })).rejects.toBe(timeout)
   })
 
+  it('re-establishes opening A after an unanswered unary B and ignores B’s late answer', async () => {
+    const h = await setup()
+    const unanswered = Promise.withResolvers<unknown>()
+    const controller = new AbortController()
+    h.connection.requestOverride = (command) =>
+      command === 'set_model' ? unanswered.promise : undefined
+    const pick = h.adapter.setOption({
+      sessionId,
+      fence: 7,
+      key: 'model',
+      value: 'anthropic/model-2',
+      signal: controller.signal
+    })
+    await vi.waitFor(() => expect(h.connection.requests).toContain('set_model'))
+    controller.abort(new Error('Stop'))
+    await expect(pick).rejects.toThrow('Stop')
+    h.connection.requestOverride = (command) =>
+      command === 'set_thinking_level' ? Promise.resolve({}) : undefined
+    await expect(
+      h.adapter.dispatch({
+        sessionId,
+        fence: 7,
+        clientMessageId: 'restore',
+        executionOptions: { model: 'anthropic/model-1', effort: 'low' },
+        body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'A again' }] }
+      })
+    ).resolves.toEqual({ state: 'admitted' })
+    expect(h.connection.requests.filter((command) => command === 'set_model')).toHaveLength(2)
+    unanswered.resolve({})
+    await Promise.resolve()
+    expect((await h.adapter.readOptions({ sessionId, fence: 7 })).current.model).toBe(
+      'anthropic/model-1'
+    )
+  })
+
   it('rejects stale fences and a Stop for a different turn before sending abort', async () => {
     const h = await setup()
     await expect(

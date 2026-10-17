@@ -122,7 +122,7 @@ export function useStructuredAgentSessionHostExecution(
       const next = {
         phase: summary?.hostExecutionPhase ?? null,
         stopping: summary?.stopping === true,
-        optionStamp: `${summary?.model ?? ''}|${summary?.permissionMode ?? ''}`,
+        optionStamp: `${summary?.model ?? ''}|${summary?.permissionMode ?? ''}|${JSON.stringify(summary?.optionSelection)}|${feed.getSnapshotSample(sessionId)}`,
         permissionMode: summary?.permissionMode,
         optionSelection: structuralValuesEqual(previous.optionSelection, summary?.optionSelection)
           ? previous.optionSelection

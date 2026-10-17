@@ -42,6 +42,13 @@ export function isCodexTurnOptionKey(key: string): boolean {
   return CODEX_TURN_OPTION_KEYS.has(key)
 }
 
+function checkDispatchAuthority(host: CodexTurnHost, id: string, signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    host.dispatchEchoes.disarm(id)
+    signal.throwIfAborted()
+  }
+}
+
 /** The session state one turn needs. */
 export type CodexTurnHost = {
   account?: AgentSessionAccountKind
@@ -79,9 +86,15 @@ function turnInputFor(body: AgentJournalMessageItem): Record<string, unknown>[] 
 async function steerCodexTurn(
   host: CodexTurnHost,
   expectedTurnId: string,
-  input: { clientMessageId: string; body: AgentJournalMessageItem; timeoutMs?: number }
+  input: {
+    clientMessageId: string
+    body: AgentJournalMessageItem
+    timeoutMs?: number
+    signal?: AbortSignal
+  }
 ): Promise<{ turnId: string; via: 'steer' } | null> {
   try {
+    checkDispatchAuthority(host, input.clientMessageId, input.signal)
     const answer = await host.connection.request(
       'turn/steer',
       {
@@ -114,6 +127,7 @@ export async function startCodexTurn(
     requestedAt?: number
     timeoutMs?: number
     turnOptions?: Readonly<Record<string, string>>
+    signal?: AbortSignal
   }
 ): Promise<{ turnId: string | null; via: AgentJournalTurnJoin } | false> {
   // Armed before the write: the echo and `turn/started` can both land while the
@@ -125,7 +139,13 @@ export async function startCodexTurn(
   // the send opens its own turn.
   const steerable = (turnId: string | null | undefined): turnId is string =>
     typeof turnId === 'string' && turnId !== '' && !host.abortedTurnIds?.has(turnId)
-  const runningTurnId = await codexRunningOrOpeningTurn(host)
+  let runningTurnId: string | null
+  try {
+    runningTurnId = await codexRunningOrOpeningTurn(host, input.signal)
+  } catch (error) {
+    host.dispatchEchoes.disarm(input.clientMessageId)
+    throw error
+  }
   let steered = steerable(runningTurnId) ? await steerCodexTurn(host, runningTurnId, input) : null
   // Refused because a turn Orca heard of meanwhile is running: steer that one, once.
   const runningSince = steered ? undefined : [...(host.activeTurnIds ?? [])].at(-1)
@@ -135,6 +155,7 @@ export async function startCodexTurn(
   if (steered) {
     return steered
   }
+  checkDispatchAuthority(host, input.clientMessageId, input.signal)
   const previousApplied = host.appliedTurnOptions
   const previousOptions = input.turnOptions ? new Map(host.options) : null
   if (input.turnOptions) {
@@ -187,6 +208,7 @@ export async function dispatchCodexTurn(
     body: AgentJournalMessageItem
     requestedAt?: number
     turnOptions?: Readonly<Record<string, string>>
+    signal?: AbortSignal
   },
   timeoutMs: number | undefined
 ): Promise<AgentSessionDispatchOutcome> {

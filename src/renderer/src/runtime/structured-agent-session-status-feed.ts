@@ -20,6 +20,7 @@ export type StructuredAgentSessionStatusSnapshot = AgentSessionStatusSnapshot
 
 export type StructuredAgentSessionStatusFeedOwner = {
   activate: () => () => void
+  getSnapshotSample: (sessionId: string) => number
   getSnapshot: () => StructuredAgentSessionStatusSnapshot
   getSessionObservation: (sessionId: string) => 'live' | 'unverifiable'
   subscribe: (listener: () => void) => () => void
@@ -37,6 +38,7 @@ export function structuredAgentSessionStatusFeedKey(target: RuntimeClientTarget)
 }
 
 function createOwner(target: RuntimeClientTarget): OwnedStatusFeed {
+  const snapshotSamples = new Map<string, number>()
   let snapshot: StructuredAgentSessionStatusSnapshot = new Map()
   const confirmedSessions = new Set<string>()
   const listeners = new Set<() => void>()
@@ -59,6 +61,7 @@ function createOwner(target: RuntimeClientTarget): OwnedStatusFeed {
     if (event.type === 'snapshot') {
       reconnectAttempt = 0
       for (const session of event.sessions) {
+        snapshotSamples.set(session.sessionId, (snapshotSamples.get(session.sessionId) ?? 0) + 1)
         confirmedSessions.add(session.sessionId)
       }
     } else if (event.type === 'status') {
@@ -197,6 +200,7 @@ function createOwner(target: RuntimeClientTarget): OwnedStatusFeed {
         }
       }
     },
+    getSnapshotSample: (sessionId) => snapshotSamples.get(sessionId) ?? 0,
     getSnapshot: () => snapshot,
     getSessionObservation: (sessionId) =>
       confirmedSessions.has(sessionId) ? 'live' : 'unverifiable',

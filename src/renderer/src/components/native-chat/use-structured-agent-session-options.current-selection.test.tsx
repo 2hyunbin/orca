@@ -141,7 +141,7 @@ it('uses the existing options read when an older host omits the selection field'
   view.unmount()
 })
 
-it('admits one pending pick, including after the picker re-renders', async () => {
+it('keeps accepted B, adopts current C without its echo, then reads a fresh equal A snapshot', async () => {
   mocks.summary.mockImplementation(() => ({ optionSelection: { model: 'gpt-one' } }))
   const write = deferred<{ options: Record<string, string> }>()
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the deferred result is the setOption reply the hook reads.
@@ -155,6 +155,8 @@ it('admits one pending pick, including after the picker re-renders', async () =>
       isVisible: true,
       providerVisible: true,
       optionSelection: mocks.summary()?.optionSelection,
+      hostOptionStamp: mocks.summary()?.stamp,
+      hostPermissionMode: 'ask',
       fence: 1,
       turnId: null,
       unloadedTurnRevisions: undefined,
@@ -163,6 +165,16 @@ it('admits one pending pick, including after the picker re-renders', async () =>
     })
   )
   await waitFor(() => expect(pill(view.result.current.optionSnapshot).model).toBe('gpt-one'))
+  const readback = deferred<{ models: typeof MODELS; current: { model: string; effort: string } }>()
+  const during = deferred<{ models: typeof MODELS; current: { model: string; effort: string } }>()
+  let reads = 0
+  mocks.call.mockImplementation((_target: unknown, method: string) =>
+    method === 'agentSession.options'
+      ? ++reads === 1
+        ? during.promise
+        : readback.promise
+      : Promise.resolve({ models: MODELS })
+  )
   let first!: Promise<boolean>
   let second!: Promise<boolean>
   act(() => {
@@ -170,12 +182,41 @@ it('admits one pending pick, including after the picker re-renders', async () =>
     second = view.result.current.setStructuredOption('model', 'gpt-two')
   })
   await expect(second).resolves.toBe(false)
+  mocks.summary.mockImplementation(() => ({
+    optionSelection: { model: 'gpt-one' },
+    stamp: 'during-write'
+  }))
+  view.rerender()
+  await waitFor(() => expect(reads).toBe(1))
   await act(async () => {
     expect(await view.result.current.setStructuredOption('model', 'gpt-two')).toBe(false)
     write.resolve({ options: { model: 'gpt-two' } })
     await first
   })
   expect(mutate).toHaveBeenCalledOnce()
+  expect(pill(view.result.current.optionSnapshot).model).toBe('gpt-two')
+  expect(
+    view.result.current.optionSnapshot.find((option) => option.id === 'permissionMode')?.kind
+      .currentValue
+  ).toBe('ask')
+  await act(async () =>
+    during.resolve({ models: MODELS, current: { model: 'gpt-one', effort: 'medium' } })
+  )
+  await waitFor(() => expect(reads).toBe(2))
+  expect(pill(view.result.current.optionSnapshot).model).toBe('gpt-two')
+  await act(async () =>
+    readback.resolve({ models: MODELS, current: { model: 'gpt-one', effort: 'low' } })
+  )
+  await waitFor(() =>
+    expect(pill(view.result.current.optionSnapshot)).toEqual({ model: 'gpt-one', effort: 'low' })
+  )
+  mocks.call.mockResolvedValue({ models: MODELS, current: { model: 'gpt-one', effort: 'medium' } })
+  mocks.summary.mockImplementation(() => ({
+    optionSelection: { model: 'gpt-one' },
+    stamp: 'fresh-snapshot'
+  }))
+  view.rerender()
+  await waitFor(() => expect(pill(view.result.current.optionSnapshot).effort).toBe('medium'))
   view.unmount()
 })
 

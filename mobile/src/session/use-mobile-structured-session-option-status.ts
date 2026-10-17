@@ -30,7 +30,7 @@ export function useMobileStructuredSessionOptionStatus(args: {
     let previous = EMPTY_OPTION_STATUS
     return (): OptionStatus => {
       const summary = feed && sessionId ? feed.getSnapshot().get(sessionId) : undefined
-      const stamp = `${summary?.model ?? ''}|${summary?.permissionMode ?? ''}`
+      const stamp = `${summary?.model ?? ''}|${summary?.permissionMode ?? ''}|${JSON.stringify(summary?.optionSelection)}|${feed?.getSnapshotSample(sessionId ?? '')}`
       const selection = structuralValuesEqual(previous.selection, summary?.optionSelection)
         ? previous.selection
         : summary?.optionSelection

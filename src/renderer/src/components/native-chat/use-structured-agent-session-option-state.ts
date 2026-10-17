@@ -113,7 +113,7 @@ export function useStructuredAgentSessionOptionState(args: {
     optionIdentityRef.current = identity
     if (sameSession && selectionFromStatus) {
       optionMutationGeneration.current += 1
-      updateOptionState((current) => ({ ...current, pendingPick: null }))
+      updateOptionState((current) => ({ ...current, pendingPick: null, reconciliation: undefined }))
       return
     }
     const launch = firstFrameLaunch.current
@@ -190,8 +190,6 @@ export function useStructuredAgentSessionOptionState(args: {
   }, [
     fence,
     optionCatalog,
-    // Another device's pick moves it.
-    hostOptionStamp,
     providerStarting,
     providerVisible,
     readsBeforeStart,
@@ -204,13 +202,14 @@ export function useStructuredAgentSessionOptionState(args: {
 
   // Reads share the session's host queue with sends and interrupts, so a burst of
   // missed revisions keeps one read in flight and at most one behind it.
-  const seenContextRefresh = useRef(contextRefresh)
+  const refresh = `${contextRefresh}|${hostOptionStamp}`
+  const seenContextRefresh = useRef(refresh)
   useEffect(() => {
-    if (contextRefresh !== seenContextRefresh.current) {
-      seenContextRefresh.current = contextRefresh
+    if (refresh !== seenContextRefresh.current) {
+      seenContextRefresh.current = refresh
       optionsReadRef.current?.run()
     }
-  }, [contextRefresh])
+  }, [refresh])
 
   // An options answer made before the account's listing landed listed none of it.
   const rereadOptions = useCallback(() => optionsReadRef.current?.run(), [])

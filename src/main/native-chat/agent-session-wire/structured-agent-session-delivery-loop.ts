@@ -188,7 +188,10 @@ export class StructuredAgentSessionDeliveryLoop {
           // The provider call runs outside; its resolution is the next commit. Tracked, so quit's
           // drain waits for both after its abort ends the call.
           await this.deps.trackStart(
-            handed.dispatch().then((resolve) => this.deps.serialize(sessionId, resolve))
+            handed
+              .dispatch()
+              .then((resolve) => this.deps.serialize(sessionId, resolve))
+              .finally(() => handed.release?.())
           )
         }
       }
@@ -326,7 +329,8 @@ export class StructuredAgentSessionDeliveryLoop {
         childWork: () => this.deps.readChildWork(sessionId),
         childWorkOpen: () => this.deps.childWorkOpen(sessionId),
         now: this.deps.now,
-        acquireAborts: this.deps.acquireAborts
+        acquireAborts: this.deps.acquireAborts,
+        deliveryOrder: this.deps.deliveryOrder
       },
       next,
       // Re-read right before the provider call, which runs outside the serialize.
