@@ -11,9 +11,9 @@ import {
   type FetchedRepoIcon,
   type RepoIconFetch
 } from './repo-icon-remote-fetch'
+import type { RuntimeDesktopSurface } from '../runtime-desktop-surface'
 
-/** Re-encodes an image as a PNG no larger than `maxEdge` on either side; null if undecodable. */
-export type RepoIconPngEncoder = (bytes: Uint8Array, maxEdge: number) => Uint8Array | null
+export type RepoIconPngEncoder = NonNullable<RuntimeDesktopSurface['encodeRepoIconPng']>
 
 // Why two decode caps: fetched bytes are untrusted; local icons were picked by the user and already
 // show on the desktop, so only a decode-bomb bound applies.
@@ -24,6 +24,7 @@ const SUCCESS_TTL_MS = 60 * 60 * 1000
 const FAILURE_TTL_MS = 5 * 60 * 1000
 const MAX_CACHE_BYTES = 1024 * 1024
 const CACHE_ENTRY_OVERHEAD_BYTES = 128
+// Why 4: a full 16-id read of slow hosts then ends within 20 s, under the phone's 30 s timeout.
 const MAX_CONCURRENT_FETCHES = 4
 
 type ImageRepoIcon = Extract<RepoIcon, { type: 'image' }>
@@ -55,7 +56,7 @@ function asDataUrl(mimeType: string, bytes: Uint8Array): string | null {
 export class RepoIconDataUrls {
   private readonly cache = new Map<string, CacheEntry & { bytes: number }>()
   private readonly inFlight = new Map<string, Promise<string | null>>()
-  private idsBySrc = new Map<string, string>()
+  private idsBySrc = new Map<string, { source: string; id: string }>()
   private cacheBytes = 0
   private activeFetches = 0
   private readonly fetchQueue: (() => void)[] = []
@@ -78,16 +79,17 @@ export class RepoIconDataUrls {
 
   private currentIcons(): Map<string, ImageRepoIcon> {
     const icons = new Map<string, ImageRepoIcon>()
-    const idsBySrc = new Map<string, string>()
+    const idsBySrc = new Map<string, { source: string; id: string }>()
     for (const { repoIcon } of this.options.repos()) {
       if (repoIcon?.type !== 'image') {
         continue
       }
-      const key = `${repoIcon.source}\n${repoIcon.src}`
-      // Why memoized: an upload's src is up to 400 KB, and every read would re-hash it.
-      const id = this.idsBySrc.get(key) ?? repoIconId(repoIcon)
+      // Why keyed by the src itself: an upload's src is up to 400 KB, and hydration keeps handing
+      // back the same string, so its hash is cached on it instead of re-hashing every read.
+      const known = this.idsBySrc.get(repoIcon.src)
+      const id = known?.source === repoIcon.source ? known.id : repoIconId(repoIcon)
       if (id) {
-        idsBySrc.set(key, id)
+        idsBySrc.set(repoIcon.src, { source: repoIcon.source, id })
         icons.set(id, repoIcon)
       }
     }
@@ -132,12 +134,18 @@ export class RepoIconDataUrls {
     if (!dimensions || dimensions.width > maxEdge || dimensions.height > maxEdge) {
       return null
     }
+    // Why pass through when encoding fails: Electron decodes only PNG and JPEG everywhere, and
+    // a small GIF, WebP or ICO the phone can draw must not show worse than on orcad.
+    return this.encodeFitting(image.bytes) ?? asDataUrl(image.mimeType, image.bytes)
+  }
+
+  private encodeFitting(bytes: Uint8Array): string | null {
     const encode = this.options.encoder()
     if (!encode) {
-      return asDataUrl(image.mimeType, image.bytes)
+      return null
     }
     for (const edge of ENCODED_EDGES_PX) {
-      const png = encode(image.bytes, edge)
+      const png = encode(bytes, edge)
       if (!png) {
         return null
       }

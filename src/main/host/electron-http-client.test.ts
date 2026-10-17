@@ -203,4 +203,27 @@ describe('electronHttpClient manual redirects', () => {
     expect(mocks.netRequest).toHaveBeenCalledWith(expect.objectContaining({ redirect: 'manual' }))
     expect(mocks.netFetch).not.toHaveBeenCalled()
   })
+
+  it('falls back to the followed URL when the redirect carries no Location', async () => {
+    const { pending } = await startRequest({ redirect: 'manual' })
+
+    native.emit('redirect', 301, 'GET', 'https://cdn.example.com/b', {})
+
+    expect((await pending).headers.get('location')).toBe('https://cdn.example.com/b')
+  })
+
+  it('keeps following redirects for a follow request', async () => {
+    setElectronProxyCredentialsForSession(mocks.defaultSession, PROXY)
+    const { pending } = await startRequest()
+
+    native.emit('redirect', 302, 'GET', 'https://cdn.example.com/a', {
+      location: ['https://cdn.example.com/a']
+    })
+    native.respond(200, 'final')
+    const response = await pending
+
+    expect(response.status).toBe(200)
+    expect(await response.text()).toBe('final')
+    expect(native.abort).not.toHaveBeenCalled()
+  })
 })

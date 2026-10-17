@@ -1,5 +1,4 @@
 import type { BrowserWindow, IpcMainEvent } from 'electron'
-import type { RepoIconPngEncoder } from './sidebar-inputs/repo-icon-data-urls'
 
 /**
  * The desktop facilities `OrcaRuntimeService` uses, which a Node host does not have.
@@ -26,8 +25,8 @@ export type RuntimeDesktopSurface = {
   findWindowById(id: number): BrowserWindow | null
   onIpc(channel: string, listener: (event: IpcMainEvent, ...args: never[]) => void): void
   removeIpcListener(channel: string, listener: (...args: never[]) => void): void
-  /** Absent on Node hosts, which pass small icons through unchanged instead. */
-  encodeRepoIconPng?: RepoIconPngEncoder
+  /** Re-encodes as a PNG fitting `maxEdge`; null if undecodable. Absent on Node hosts. */
+  encodeRepoIconPng?(bytes: Uint8Array, maxEdge: number): Uint8Array | null
 }
 
 const inertDesktopSurface: RuntimeDesktopSurface = {

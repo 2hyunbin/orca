@@ -112,9 +112,21 @@ describe('RepoIconDataUrls with an encoder (desktop)', () => {
     expect(encoder.mock.calls.map(([, edge]) => edge)).toEqual([64, 32])
   })
 
-  it('falls back when the decoder rejects the image', async () => {
+  it('passes a small image the decoder cannot read through, as orcad would', async () => {
     const { icons } = setup([repo('a', AVATAR)], { encoder: () => null })
-    expect((await icons.read([repoIconId(AVATAR)!])).icons[0].dataUrl).toBeNull()
+    expect((await icons.read([repoIconId(AVATAR)!])).icons[0].dataUrl).toMatch(
+      /^data:image\/png;base64,/
+    )
+  })
+
+  it('falls back when neither encoding nor passthrough fits the cap', async () => {
+    const icon = upload(pngHeader(64, 64, MAX_REPO_ICON_DATA_URL_BYTES))
+    const huge = new Uint8Array(MAX_REPO_ICON_DATA_URL_BYTES)
+    const encoder = vi.fn<RepoIconPngEncoder>(() => huge)
+    const { icons } = setup([repo('a', icon)], { encoder })
+
+    expect((await icons.read([repoIconId(icon)!])).icons[0].dataUrl).toBeNull()
+    expect(encoder).toHaveBeenCalledTimes(2)
   })
 })
 
