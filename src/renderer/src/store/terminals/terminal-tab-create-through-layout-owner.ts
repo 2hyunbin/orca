@@ -20,22 +20,19 @@ import type {
 } from '../../../../shared/workspace-layout/workspace-layout-command-types'
 import type { AppState } from '../types'
 
-/** The row a tab main made itself is drawn with: main's creation facts over the window's. */
+/**
+ * The row a tab main made itself is drawn with: main's time, title and the creation fields main
+ * recorded. A field main's copy lacks keeps the window's: a runtime create records a shell only
+ * when its launch named one, so a WSL worktree's resolved shell lives only here.
+ */
 export function withMainTerminalFacts(tab: TerminalTab): TerminalTab {
   const main = layoutFrameTerminalTab(tab.worktreeId, tab.id)
   if (!main) {
     return tab
   }
-  const {
-    shellOverride: _shellOverride,
-    startupCwd: _startupCwd,
-    forceHostRuntime: _forceHostRuntime,
-    launchAgent: _launchAgent,
-    ...windowFields
-  } = tab
   const terminal = main.terminal
   return {
-    ...windowFields,
+    ...tab,
     createdAt: main.createdAt,
     ...(terminal?.defaultTitle
       ? { title: terminal.defaultTitle, defaultTitle: terminal.defaultTitle }

@@ -2,6 +2,7 @@ import type { SleepingAgentSessionRecord } from '../../../../shared/agent-sessio
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import type { WorktreeRuntimeOwnerState } from '@/lib/worktree-runtime-owner-state'
 import { recordLayoutApply } from '@/runtime/layout-apply-send'
+import type { AppState } from '../types'
 
 type SleepingRecords = Readonly<Record<string, SleepingAgentSessionRecord>>
 
@@ -45,7 +46,7 @@ export function recordPaneSleepThroughLayoutOwner(
  * Without these main learned the records only from the window's session save.
  */
 export function recordSleepingRecordChangesThroughLayoutOwner(
-  state: WorktreeRuntimeOwnerState,
+  state: WorktreeRuntimeOwnerState & Pick<AppState, 'tabsByWorktree'>,
   previous: SleepingRecords,
   next: SleepingRecords
 ): void {
@@ -61,7 +62,15 @@ export function recordSleepingRecordChangesThroughLayoutOwner(
   for (const [worktreeId, records] of changedByWorktree) {
     recordPaneSleepThroughLayoutOwner(state, worktreeId, records, true)
   }
-  const dropped = Object.entries(previous).filter(([paneKey]) => !(paneKey in next))
+  // A closed tab's or removed workspace's records went with it in main too.
+  const dropped = Object.entries(previous).filter(
+    ([paneKey, record]) =>
+      !(paneKey in next) &&
+      (state.tabsByWorktree[record.worktreeId]?.some(
+        (tab) => tab.id === parsePaneKey(paneKey)?.tabId
+      ) ??
+        false)
+  )
   for (const [tabId, entries] of byTab(dropped, ([paneKey]) => paneKey)) {
     recordLayoutApply(state, entries[0]![1].worktreeId, {
       type: 'wake',

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SleepingAgentSessionRecord } from '../../../../shared/agent-session-resume'
+import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { recordLayoutApply } from '@/runtime/layout-apply-send'
 import {
   recordPaneSleepThroughLayoutOwner,
@@ -27,6 +28,24 @@ function record(paneKey: string): SleepingAgentSessionRecord {
     state: 'done',
     capturedAt: 1,
     updatedAt: 1
+  }
+}
+
+/** A window holding these terminal tabs in WT. */
+function holding(tabIds: string[]): { tabsByWorktree: Record<string, TerminalTab[]> } {
+  return {
+    tabsByWorktree: {
+      [WT]: tabIds.map((id) => ({
+        id,
+        ptyId: null,
+        worktreeId: WT,
+        title: 'Terminal',
+        customTitle: null,
+        color: null,
+        sortOrder: 0,
+        createdAt: 1
+      }))
+    }
   }
 }
 
@@ -73,7 +92,7 @@ describe('sleep and wake through the layout owner', () => {
     const kept = record(B1)
 
     recordSleepingRecordChangesThroughLayoutOwner(
-      STATE,
+      holding(['tab-a', 'tab-b']),
       { [A2]: record(A2), [B1]: kept },
       { [A1]: live, [B1]: kept }
     )
@@ -82,5 +101,11 @@ describe('sleep and wake through the layout owner', () => {
       { type: 'sleep', tabId: 'tab-a', paneKeys: [A1], records: [live], recordOnly: true },
       { type: 'wake', tabId: 'tab-a', paneKeys: [A2], recordOnly: true }
     ])
+  })
+
+  it('sends no drop for a tab the window closed: main dropped its records with the tab', () => {
+    recordSleepingRecordChangesThroughLayoutOwner(holding(['tab-b']), { [A2]: record(A2) }, {})
+
+    expect(mocks.send).not.toHaveBeenCalled()
   })
 })

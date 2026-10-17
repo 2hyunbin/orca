@@ -209,19 +209,26 @@ function applyMove(
   const sourceShellOverride = latestStore.tabsByWorktree[worktreeId]?.find(
     (candidate) => candidate.id === sourceTabId
   )?.shellOverride
-  const tab = latestStore.createTab(worktreeId, args.targetGroupId, sourceShellOverride, {
-    id: targetTabId,
-    activate: true,
-    ...(detachedLayout.chatLeafId ? { viewMode: 'chat' as const } : {}),
-    initialPtyId: ptyId ?? undefined,
-    ...(!ptyId
-      ? {
-          pendingActivationSpawn: true,
-          ...(args.sourcePaneCwd?.cwd ? { startupCwd: args.sourcePaneCwd.cwd } : {})
-        }
-      : { initialLeafId: leafId }),
-    recordInteraction: true
-  })
+  // Switch point: the reply runs after the frame with main's new tab, which may have drawn it.
+  const frameDrawn =
+    ORCA_LAYOUT_OWNER_IS_MAIN && mainMoved
+      ? latestStore.tabsByWorktree[worktreeId]?.find((candidate) => candidate.id === targetTabId)
+      : undefined
+  const tab =
+    frameDrawn ??
+    latestStore.createTab(worktreeId, args.targetGroupId, sourceShellOverride, {
+      id: targetTabId,
+      activate: true,
+      ...(detachedLayout.chatLeafId ? { viewMode: 'chat' as const } : {}),
+      initialPtyId: ptyId ?? undefined,
+      ...(!ptyId
+        ? {
+            pendingActivationSpawn: true,
+            ...(args.sourcePaneCwd?.cwd ? { startupCwd: args.sourcePaneCwd.cwd } : {})
+          }
+        : { initialLeafId: leafId }),
+      recordInteraction: true
+    })
   const afterCreateStore = args.getStore()
   moveCreatedTabToIndex({
     groupId: args.targetGroupId,

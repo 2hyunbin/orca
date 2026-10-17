@@ -129,7 +129,8 @@ describe('createTab in a layout-owner build', () => {
       startupCwd: '/path/wt',
       ptyId: 'pty-1'
     })
-    expect(tab).not.toHaveProperty('shellOverride')
+    // Main's copy names no shell: the one the window resolved stays.
+    expect(tab.shellOverride).toBe('zsh')
     expect(store.getState().unifiedTabsByWorktree[WORKTREE]?.[0]).toMatchObject({
       createdAt: 42,
       label: 'Terminal 3'
