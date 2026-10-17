@@ -15,9 +15,9 @@ import type * as TranscriptLineDecoders from '../transcript-line-decoders'
 import { createLegacyIdentityTracker } from './journal-legacy-identity'
 import {
   importLegacyTranscriptIntoJournal,
-  prepareLegacyTranscriptImport
+  prepareLegacyTranscriptImport,
+  LEGACY_IMPORT_BLOCK_LIMITS
 } from './journal-legacy-import'
-import { LEGACY_IMPORT_BLOCK_LIMITS } from './journal-legacy-import'
 import { openAgentSessionJournal } from './journal-store-factory'
 import type { AgentSessionJournal } from './journal-store'
 import { openTestJournalHostDatabase } from './journal-host-database-test-support'

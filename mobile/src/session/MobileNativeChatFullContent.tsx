@@ -4,8 +4,14 @@ import {
   truncateToolDetail,
   MAX_TOOL_DETAIL_LENGTH
 } from '../../../src/shared/native-chat-tool-summary'
-import type { NativeChatMessage, NativeChatToolResultBlock } from '../../../src/shared/native-chat-types'
-import type { AgentJournalBoundedPayload, AgentJournalItemBody } from '../../../src/shared/agent-session-journal-types'
+import type {
+  NativeChatMessage,
+  NativeChatToolResultBlock
+} from '../../../src/shared/native-chat-types'
+import type {
+  AgentJournalBoundedPayload,
+  AgentJournalItemBody
+} from '../../../src/shared/agent-session-journal-types'
 import { styles } from './mobile-native-chat-message-styles'
 import {
   MobileNativeChatItemSourceContext,
@@ -56,16 +62,31 @@ export function MobileNativeChatToolOutput({
 }): React.JSX.Element {
   const source = useContext(MobileNativeChatItemSourceContext)
   const { output, isError, fullOutputItemId } = body
-  const client = source?.client, sessionId = source?.sessionId
+  const client = source?.client,
+    sessionId = source?.sessionId
   const [expanded, setExpanded] = useState(false)
   const [detail, setDetail] = useState<{
-    body: typeof body; client: typeof client; sessionId: typeof sessionId;
-    full?: AgentJournalBoundedPayload; load: Load
+    body: typeof body
+    client: typeof client
+    sessionId: typeof sessionId
+    full?: AgentJournalBoundedPayload
+    load: Load
   } | null>(null)
-  useEffect(() => () => setDetail((held) => held?.body === body && held.client === client && held.sessionId === sessionId ? null : held), [body, client, sessionId])
-  const current = detail?.body === body && detail.client === client && detail.sessionId === sessionId ? detail : null
+  useEffect(
+    () => () =>
+      setDetail((held) =>
+        held?.body === body && held.client === client && held.sessionId === sessionId ? null : held
+      ),
+    [body, client, sessionId]
+  )
+  const current =
+    detail?.body === body && detail.client === client && detail.sessionId === sessionId
+      ? detail
+      : null
   const full = current?.full
-  const clipped = !full && (fullOutputItemId !== undefined || (!expanded && output.length > MAX_TOOL_DETAIL_LENGTH))
+  const clipped =
+    !full &&
+    (fullOutputItemId !== undefined || (!expanded && output.length > MAX_TOOL_DETAIL_LENGTH))
   const showFull = (): void => {
     if (fullOutputItemId === undefined || source === null) {
       setExpanded(true)
@@ -73,19 +94,33 @@ export function MobileNativeChatToolOutput({
     }
     setDetail({ body, client, sessionId, load: 'loading' })
     const finish = (full?: AgentJournalBoundedPayload): void => {
-      setDetail((held) => held?.body === body && held.client === client && held.sessionId === sessionId ? { body, client, sessionId, full, load: full ? 'idle' : 'failed' } : held)
+      setDetail((held) =>
+        held?.body === body && held.client === client && held.sessionId === sessionId
+          ? { body, client, sessionId, full, load: full ? 'idle' : 'failed' }
+          : held
+      )
     }
     readMobileNativeChatItem(source, fullOutputItemId)
-      .then((item) => finish(item?.itemId === fullOutputItemId ? outputOf(item.body) ?? undefined : undefined))
+      .then((item) =>
+        finish(item?.itemId === fullOutputItemId ? (outputOf(item.body) ?? undefined) : undefined)
+      )
       .catch(() => finish())
   }
   return (
     <View>
       <View style={[styles.toolResult, isError && styles.toolResultError]}>
-        <Text style={styles.mono}>{full ? full.head : expanded ? output : truncateToolDetail(output)}</Text>
+        <Text style={styles.mono}>
+          {full ? full.head : expanded ? output : truncateToolDetail(output)}
+        </Text>
       </View>
-      {full?.truncated ? <Text style={styles.showFullText}>Showing {new TextEncoder().encode(full.head).length} of {full.byteLength} bytes.</Text> : null}
-      {clipped ? <ShowFull label="Show full output" load={current?.load ?? 'idle'} onPress={showFull} /> : null}
+      {full?.truncated ? (
+        <Text style={styles.showFullText}>
+          Showing {new TextEncoder().encode(full.head).length} of {full.byteLength} bytes.
+        </Text>
+      ) : null}
+      {clipped ? (
+        <ShowFull label="Show full output" load={current?.load ?? 'idle'} onPress={showFull} />
+      ) : null}
     </View>
   )
 }
@@ -97,19 +132,40 @@ export function useMobileNativeChatFullMessage(message: NativeChatMessage): {
 } {
   const source = useContext(MobileNativeChatItemSourceContext)
   const detail = source?.messageDetail
-  const client = source?.client, sessionId = source?.sessionId
+  const client = source?.client,
+    sessionId = source?.sessionId
   const raw = detail?.raw(message.id)
-  const [request, setRequest] = useState<{ raw: typeof raw; client: typeof client; sessionId: typeof sessionId; load: Load } | null>(null)
-  const load = request?.raw === raw && request?.client === client && request?.sessionId === sessionId ? request?.load ?? 'idle' : 'idle'
+  const [request, setRequest] = useState<{
+    raw: typeof raw
+    client: typeof client
+    sessionId: typeof sessionId
+    load: Load
+  } | null>(null)
+  const load =
+    request?.raw === raw && request?.client === client && request?.sessionId === sessionId
+      ? (request?.load ?? 'idle')
+      : 'idle'
   const state = detail?.state(message.id)
   const showFull = (): void => {
     setRequest({ raw, client, sessionId, load: 'loading' })
-    const finish = (load: Load): void => setRequest((held) => held?.raw === raw && held?.client === client && held?.sessionId === sessionId ? { raw, client, sessionId, load } : held)
-    void detail?.load(message.id).then(() => finish('idle')).catch(() => finish('failed'))
+    const finish = (load: Load): void =>
+      setRequest((held) =>
+        held?.raw === raw && held?.client === client && held?.sessionId === sessionId
+          ? { raw, client, sessionId, load }
+          : held
+      )
+    void detail
+      ?.load(message.id)
+      .then(() => finish('idle'))
+      .catch(() => finish('failed'))
   }
   return {
     shown: message,
-    showFull: state === 'partial' ? <Text style={styles.showFullText}>Showing part of this message.</Text>
-      : state === 'available' ? <ShowFull label="Show full message" load={load} onPress={showFull} /> : null
+    showFull:
+      state === 'partial' ? (
+        <Text style={styles.showFullText}>Showing part of this message.</Text>
+      ) : state === 'available' ? (
+        <ShowFull label="Show full message" load={load} onPress={showFull} />
+      ) : null
   }
 }

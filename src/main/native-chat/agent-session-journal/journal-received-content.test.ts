@@ -26,8 +26,18 @@ it.each(['claude', 'codex'] as const)('journals a large received %s result befor
   await deferred.drained()
   const gate = Promise.withResolvers<void>()
   releases.push(() => gate.resolve())
-  const blocked = rig.journal.readInOrder(() => gate.promise)
-  deferred.sink.appendItem({ provider: 'legacy', agent: 'grok', sessionId: SESSION, recordId: 'before' }, { kind: 'status', text: 'before', tone: 'info' }, { turnScope: AGENT_JOURNAL_THREAD_SCOPE })
+  const cursor = rig.journal.cursor()
+  const snapshot = rig.journal.snapshot()
+  const blocked = rig.journal.readInOrder(() => {
+    expect(deferred.sink.tryAppendItem?.(
+      { provider: 'legacy', agent: 'grok', sessionId: SESSION, recordId: 'before' },
+      { kind: 'status', text: 'before', tone: 'info' },
+      { turnScope: AGENT_JOURNAL_THREAD_SCOPE }
+    )).toEqual({ accepted: true })
+    return gate.promise
+  })
+  expect(rig.journal.cursor()).toEqual(cursor)
+  expect(rig.journal.snapshot()).toEqual(snapshot)
   const registration = vi.spyOn(rig.journal, 'appendItem')
   if (agent === 'claude') {
     claudeFrame(claude.connections[0], { type: 'user', uuid: 'large-result', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'received', content: text }] } })
@@ -44,13 +54,21 @@ it.each(['claude', 'codex'] as const)('journals a large received %s result befor
   expect(pressure).toHaveBeenCalledWith(true, expect.objectContaining({ backpressured: true }))
   let landed = false
   const written = deferred.sink.written?.().then((result) => { landed = true; return result })
-  await Promise.resolve()
+  await new Promise((resolve) => setImmediate(resolve))
+  expect(rig.journal.cursor()).toEqual(cursor)
+  expect(rig.journal.snapshot()).toEqual(snapshot)
   expect(landed).toBe(false)
   gate.resolve()
   await blocked
   expect(await written).toEqual({ ok: true })
   await deferred.drained()
   const reopened = await rig.reopenJournal()
+  const replay = reopened.readSince(cursor)
+  if (!replay.ok) {
+    throw new Error('Expected the held writes to remain replayable')
+  }
+  expect(replay.rows[0]).toMatchObject({ kind: 'item', body: { kind: 'status', text: 'before' } })
+  expect(replay.rows.findIndex((row) => row.kind === 'item' && row.body.kind === 'tool-call' && row.body.state === 'completed')).toBeGreaterThan(0)
   expect(reopened.snapshot().items.flatMap(({ body }) => body.kind === 'tool-call' ? [body] : [])).toContainEqual(expect.objectContaining({ callId: 'received', state: 'completed', output: expect.objectContaining({ head: text, truncated: false }) }))
   expect(deferred.state().queuedBytes).toBe(0)
   expect(pressure).toHaveBeenLastCalledWith(false, expect.objectContaining({ backpressured: false }))
@@ -71,19 +89,37 @@ it('hands an ACP omitted-field completion to SQLite before root exit with a bloc
   await session.settle()
   const gate = Promise.withResolvers<void>()
   releases.push(() => gate.resolve())
-  const blocked = rig.journal.readInOrder(() => gate.promise)
-  rig.eventSink.appendItem({ provider: 'legacy', agent: 'grok', sessionId: SESSION, recordId: 'before' }, { kind: 'status', tone: 'info', text: 'before' }, { turnScope: AGENT_JOURNAL_THREAD_SCOPE, lifecycle: true })
+  const cursor = rig.journal.cursor()
+  const snapshot = rig.journal.snapshot()
+  const blocked = rig.journal.readInOrder(() => {
+    expect(rig.eventSink.tryAppendItem?.(
+      { provider: 'legacy', agent: 'grok', sessionId: SESSION, recordId: 'before' },
+      { kind: 'status', tone: 'info', text: 'before' },
+      { turnScope: AGENT_JOURNAL_THREAD_SCOPE, lifecycle: true }
+    )).toEqual({ accepted: true })
+    return gate.promise
+  })
+  expect(rig.journal.cursor()).toEqual(cursor)
+  expect(rig.journal.snapshot()).toEqual(snapshot)
   const registration = vi.spyOn(rig.journal, 'appendSteps')
   child().agent.notify('session/update', shellCall('prompt:large', 'completed'))
-  expect(registration).toHaveBeenCalled()
+  await vi.waitFor(() => expect(registration).toHaveBeenCalled())
   child().exit()
   let landed = false
   const written = rig.eventSink.written?.().then((result) => { landed = true; return result })
-  await Promise.resolve()
+  await new Promise((resolve) => setImmediate(resolve))
+  expect(rig.journal.cursor()).toEqual(cursor)
+  expect(rig.journal.snapshot()).toEqual(snapshot)
   expect(landed).toBe(false)
   gate.resolve()
   await blocked
   expect(await written).toEqual({ ok: true })
   const reopened = await rig.reopenJournal()
+  const replay = reopened.readSince(cursor)
+  if (!replay.ok) {
+    throw new Error('Expected the held writes to remain replayable')
+  }
+  expect(replay.rows[0]).toMatchObject({ kind: 'item', body: { kind: 'status', text: 'before' } })
+  expect(replay.rows.findIndex((row) => row.kind === 'item' && row.body.kind === 'tool-call' && row.body.state === 'completed')).toBeGreaterThan(0)
   expect(reopened.snapshot().items.flatMap(({ body }) => body.kind === 'tool-call' ? [body] : [])).toContainEqual(expect.objectContaining({ callId: 'sleep-1', state: 'completed', input, output: expect.objectContaining({ head: output, truncated: false }) }))
 })

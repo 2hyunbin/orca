@@ -15,19 +15,27 @@ it.each(['direct', 'transition'] as const)('persists complete content through %s
   const rig = await openProviderTimelineRig()
   const gate = Promise.withResolvers<void>()
   cleanups.push(() => gate.resolve())
-  const blocked = rig.journal.readInOrder(() => gate.promise)
   const identity = { provider: 'legacy' as const, agent: 'grok', sessionId: SESSION, recordId: 'full' }
   const options = { turnScope: AGENT_JOURNAL_THREAD_SCOPE, lifecycle: true }
   const text = `${'\u0001'.repeat(3 * 1024 * 1024)}MIDDLE${'x'.repeat(5 * 1024 * 1024)}TAIL`
   const body = { kind: 'tool-call' as const, name: 'bash', input: { large: 'i'.repeat(1024 * 1024) }, state: 'completed', output: journalPayload(text) }
-  expect(rig.eventSink.tryAppendItem?.({ ...identity, recordId: 'before' }, { kind: 'status', tone: 'info', text: 'before' }, options)).toEqual({ accepted: true })
+  const cursor = rig.journal.cursor()
+  const snapshot = rig.journal.snapshot()
+  const blocked = rig.journal.readInOrder(() => {
+    expect(rig.eventSink.tryAppendItem?.({ ...identity, recordId: 'before' }, { kind: 'status', tone: 'info', text: 'before' }, options)).toEqual({ accepted: true })
+    return gate.promise
+  })
+  expect(rig.journal.cursor()).toEqual(cursor)
+  expect(rig.journal.snapshot()).toEqual(snapshot)
   const append = () => path === 'direct'
     ? rig.eventSink.tryAppendItem?.(identity, body, options)
     : rig.sink.tryAppendTransition({ lifecycle: true, publish: true, steps: [{ kind: 'item', reservedBytes: estimateStructuredAgentSessionItemBytes(identity, body), options, resolve: () => ({ identity, body }) }] })
   expect(append()).toEqual({ accepted: true })
   let landed = false
   const written = rig.eventSink.written?.().then((result) => { landed = true; return result })
-  await Promise.resolve()
+  await new Promise((resolve) => setImmediate(resolve))
+  expect(rig.journal.cursor()).toEqual(cursor)
+  expect(rig.journal.snapshot()).toEqual(snapshot)
   expect(landed).toBe(false)
   gate.resolve()
   await blocked

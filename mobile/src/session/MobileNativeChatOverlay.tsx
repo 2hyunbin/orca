@@ -67,7 +67,10 @@ export function MobileNativeChatOverlay({
   const session = controller.nativeChatSession
   // The chat is drawn only with a resolved agent; the fallback never reaches the screen.
   const agent = controller.nativeChatAgent ?? ''
-  const fullContent = useMobileNativeChatMessageDetail(session.messages, controller.nativeChatItemSource)
+  const fullContent = useMobileNativeChatMessageDetail(
+    session.messages,
+    controller.nativeChatItemSource
+  )
   const folded = useMemo(
     () => foldMobileNativeChatMessages(fullContent.messages, agent),
     [fullContent.messages, agent]
@@ -99,7 +102,7 @@ export function MobileNativeChatOverlay({
   const replyReveals = useMobileNativeChatReplyReveals(folded, streaming !== null, sendSurfaceId)
   const itemSource = controller.nativeChatItemSource
   const detailSource = useMemo(
-    () => itemSource ? { ...itemSource, messageDetail: fullContent.detail } : null,
+    () => (itemSource ? { ...itemSource, messageDetail: fullContent.detail } : null),
     [itemSource, fullContent.detail]
   )
   if (!controller.showNativeChat) {

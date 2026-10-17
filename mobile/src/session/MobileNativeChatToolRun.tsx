@@ -62,11 +62,7 @@ function ResultBody({
   if (diff) {
     return <DiffView lines={diff} />
   }
-  return (
-    <MobileNativeChatToolOutput
-      body={result}
-    />
-  )
+  return <MobileNativeChatToolOutput body={result} />
 }
 
 /** One request: a tool call and its result rendered together as a single
