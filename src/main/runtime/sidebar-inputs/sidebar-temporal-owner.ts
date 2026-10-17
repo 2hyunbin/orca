@@ -120,16 +120,16 @@ export class SidebarTemporalOwner {
   }
 
   /** Rows changed: Manual and cold Smart follow saved ranks at once, as the window does. */
-  noteRowsChange(liveWorktreeCount?: number): void {
+  noteRowsChange(liveWorktreeCount: number): void {
     this.noteSortInputChange(liveWorktreeCount)
     if (ranksFollowPersistedOrder(this.sortBy, this.smartLatched)) {
       this.settleNow()
     }
   }
 
+  /** Activity alone never re-sorts; its sort-relevant causes arrive as their own changes. */
   noteActivityChange(): void {
     this.retentionPass()
-    this.noteSortInputChange()
   }
 
   /** The sort mode or the sleeping filter may have changed. */

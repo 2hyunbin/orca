@@ -1,5 +1,7 @@
 import { OrcaRuntimeWithWorkspaceReviewFacts } from './orca-runtime-workspace-review-facts'
 import { DEFAULT_SHOW_SLEEPING_WORKSPACES } from '../../../shared/constants'
+import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
+import { detectAgentStatusFromTitle } from '../../../shared/agent-detection'
 import type { SidebarTemporalSnapshot } from '../../../shared/sidebar-list/sidebar-temporal-snapshot'
 import { getMigrationUnsupportedPtySnapshot } from '../../agent-hooks/migration-unsupported-pty-state'
 import {
@@ -14,8 +16,8 @@ import type { AgentStatusStoreView } from './workspace-activity-facts-producer'
 type Runtime = OrcaRuntimeWithWorkspaceReviewFacts
 
 /**
- * Feeds main's temporal owner. Its sort inputs bump the settle window the way the window's
- * sortEpoch does: row and catalog changes, agent rows, activity, and terminal titles or bindings.
+ * Feeds main's temporal owner. Its sort inputs restart the settle window where the window's
+ * sortEpoch bumps and main can see the cause: catalog changes, agent rows, and pane titles.
  */
 export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWorkspaceReviewFacts {
   private readonly smartSortAgentEntries = new SmartSortAgentEntries()
@@ -31,6 +33,26 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     super(...args)
     this.workspaceActivityFacts.onChange(() => this.sidebarTemporal.noteActivityChange())
     this.store?.onUIChanged?.(() => this.sidebarTemporal.noteViewChange())
+    // Every catalog change, from IPC or the runtime, reaches clients through this one bus.
+    this.clientEvents.on(
+      (event) => {
+        if (event.type === 'worktreesChanged' || event.type === 'reposChanged') {
+          this.noteSidebarRowsChange()
+        }
+      },
+      { consumesTerminalSideEffects: false }
+    )
+  }
+
+  // Whether rows came or went decides if the change settles at once, so count after it lands.
+  private noteSidebarRowsChange(): void {
+    void this.listResolvedWorktreeSnapshot().then(
+      ({ worktrees }) =>
+        this.sidebarTemporal.noteRowsChange(
+          worktrees.filter((worktree) => !worktree.isArchived).length
+        ),
+      (error: unknown) => console.warn('[sidebar-temporal] could not count rows', error)
+    )
   }
 
   getSidebarTemporalSnapshot(): SidebarTemporalSnapshot {
@@ -50,43 +72,55 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     }
   }
 
-  override notifyWorktreesChanged(...args: Parameters<Runtime['notifyWorktreesChanged']>): void {
-    super.notifyWorktreesChanged(...args)
-    // A scan here would race the change's own listing; the last listing's count is enough.
-    const worktrees = this.resolvedWorktrees.peek()?.worktrees
-    this.sidebarTemporal.noteRowsChange(
-      worktrees?.filter((worktree) => !worktree.isArchived).length
-    )
-  }
-
   override syncWindowGraph(...args: Parameters<Runtime['syncWindowGraph']>) {
-    const before = this.sidebarTerminalSortSignature()
+    const before = this.readSidebarGraphSortCauses()
     const result = super.syncWindowGraph(...args)
-    if (this.sidebarTerminalSortSignature() !== before) {
+    const after = this.readSidebarGraphSortCauses()
+    // A title's reading counts both ways; a tab only re-sorts when it gains its first terminal.
+    const resorts = (key: string): boolean =>
+      key.startsWith('title:')
+        ? (before.get(key) ?? '') !== (after.get(key) ?? '')
+        : after.has(key) && !before.has(key)
+    if ([...new Set([...before.keys(), ...after.keys()])].some(resorts)) {
       this.sidebarTemporal.noteSortInputChange()
     }
     return result
   }
 
-  // Titles and bindings Smart scores; a graph sync that leaves them alone re-sorts nothing.
-  private sidebarTerminalSortSignature(): string {
-    const parts: string[] = []
-    for (const tab of this.tabs.values()) {
-      parts.push(`${tab.tabId}\u0000${tab.title ?? ''}`)
-    }
+  /**
+   * What a graph sync can change that the window re-sorts on: a pane title's agent reading on a
+   * workspace not in front, and the first live terminal of a tab in the workspace in front.
+   */
+  private readSidebarGraphSortCauses(): Map<string, string> {
+    const active = this.store?.getWorkspaceSession?.(LOCAL_EXECUTION_HOST_ID)?.activeWorktreeId
+    const causes = new Map<string, string>()
     for (const leaf of this.leaves.values()) {
-      parts.push(
-        `${leaf.tabId}\u0000${leaf.paneRuntimeId}\u0000${leaf.paneTitle ?? ''}\u0000${leaf.ptyId ?? ''}`
-      )
+      if (leaf.worktreeId === active) {
+        if (leaf.ptyId) {
+          causes.set(`pty:${leaf.tabId}`, 'live')
+        }
+      } else if (leaf.paneTitle) {
+        causes.set(
+          `title:${leaf.tabId}:${leaf.paneRuntimeId}`,
+          detectAgentStatusFromTitle(leaf.paneTitle) ?? ''
+        )
+      }
     }
-    return parts.join('\u0001')
+    return causes
   }
 
   private async readSidebarSortSample(): Promise<SidebarSortSample> {
     const { worktrees } = await this.listResolvedWorktreeSnapshot()
+    const repoMap = new Map((this.store?.getRepos() ?? []).map((repo) => [repo.id, repo]))
     return {
-      worktrees,
-      repoMap: new Map((this.store?.getRepos() ?? []).map((repo) => [repo.id, repo])),
+      // Ranks are host-qualified; a row without a stamped host belongs to its repo's host.
+      worktrees: worktrees.map((worktree) => {
+        const repo = repoMap.get(worktree.repoId)
+        return worktree.hostId || !repo
+          ? worktree
+          : { ...worktree, hostId: getRepoExecutionHostId(repo) }
+      }),
+      repoMap,
       sources: buildRuntimeSmartSortSources({
         tabs: this.tabs.values(),
         leaves: this.leaves.values(),

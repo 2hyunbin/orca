@@ -1,4 +1,10 @@
-import type { AgentStatusEntry, AgentStatusIpcPayload } from '../../../shared/agent-status-types'
+import {
+  AGENT_STATUS_STALE_AFTER_MS,
+  type AgentStatusEntry,
+  type AgentStatusIpcPayload
+} from '../../../shared/agent-status-types'
+import { isAgentStatusFresh } from '../../../shared/agent-status-freshness'
+import { isSmartSortRelevantAgentChange } from '../../../shared/sidebar-list/smart-sort-agent-change'
 import { resolveAgentStatusLiveEntryStateHistory } from '../../../shared/agent-status-live-entry-state-history'
 import type { AgentStatusStoreView } from './workspace-activity-facts-producer'
 
@@ -16,12 +22,15 @@ export class SmartSortAgentEntries {
       this.refreshPane(row.paneKey)
     }
     const unsubscribe = store.subscribeStatusRowMutations(({ before, after }) => {
+      let relevant = false
       for (const paneKey of new Set([before?.paneKey, after?.paneKey])) {
         if (paneKey) {
-          this.refreshPane(paneKey)
+          relevant = this.refreshPane(paneKey) || relevant
         }
       }
-      onChange()
+      if (relevant) {
+        onChange()
+      }
     })
     return () => {
       unsubscribe()
@@ -34,7 +43,8 @@ export class SmartSortAgentEntries {
     return Object.fromEntries(this.entries)
   }
 
-  private refreshPane(paneKey: string): void {
+  /** True when the change can move the pane in the Smart order, as the window decides. */
+  private refreshPane(paneKey: string): boolean {
     // The window applies a pane's rows in arrival order, so the newest is the one it holds.
     const rows = (this.store?.getStatusSnapshotForPane(paneKey) ?? []).filter(
       (row) => !row.providerSessionOnly
@@ -43,17 +53,20 @@ export class SmartSortAgentEntries {
       (newest, row) => (newest && newest.receivedAt >= row.receivedAt ? newest : row),
       null
     )
+    const existing = this.entries.get(paneKey)
     if (!latest) {
       this.entries.delete(paneKey)
-      return
+      return (
+        existing !== undefined &&
+        isAgentStatusFresh(existing, Date.now(), AGENT_STATUS_STALE_AFTER_MS)
+      )
     }
-    const existing = this.entries.get(paneKey)
     const { history, stateObservedAt } = resolveAgentStatusLiveEntryStateHistory(
       existing,
       latest,
       latest.receivedAt
     )
-    this.entries.set(paneKey, {
+    const entry: AgentStatusEntry = {
       state: latest.state,
       ...(latest.workingMode !== undefined ? { workingMode: latest.workingMode } : {}),
       prompt: latest.prompt,
@@ -74,6 +87,8 @@ export class SmartSortAgentEntries {
       interrupted: latest.interrupted,
       sessionBoundary: latest.sessionBoundary,
       ...(latest.mainAgent ? { mainAgent: latest.mainAgent } : {})
-    })
+    }
+    this.entries.set(paneKey, entry)
+    return isSmartSortRelevantAgentChange(existing, entry, latest.receivedAt)
   }
 }
