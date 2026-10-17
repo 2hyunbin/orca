@@ -11,6 +11,7 @@ import type { StructuredAgentSessionMutationContext } from './structured-agent-s
 import { readStructuredAgentSessionOptions } from './structured-agent-session-options-read'
 import { AcpStructuredOptions } from '../../acp/acp-structured-options'
 import { GROK_CONFIG_OPTIONS } from '../../acp/acp-structured-adapter.test-support'
+import { SessionConfigOptionSchema } from '../../acp/generated/acp-protocol.generated'
 import { withLiveCatalogListing } from '../agent-model-catalog/agent-model-catalog-entry'
 import { StructuredAgentSessionTaskQueue } from './structured-agent-session-task-queue'
 import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-test-support'
@@ -86,6 +87,7 @@ describe('options at rest', () => {
       })
       let live = false
       const reader = new AcpStructuredOptions()
+      const configOptions = SessionConfigOptionSchema.array().parse(GROK_CONFIG_OPTIONS)
       const resting = {
         child: null,
         params: { provider: 'codex' },
@@ -119,13 +121,15 @@ describe('options at rest', () => {
       })
       for (const emptyStart of [false, true]) {
         modelCatalog.recordLiveListing(SESSION, {
-          models: [{ id: 'old', label: 'Old', efforts: [] }]
+          models: [{ id: 'old', label: 'Old', isDefault: true, efforts: [] }]
         })
-        reader.adoptSession(emptyStart ? {} : { configOptions: GROK_CONFIG_OPTIONS })
+        reader.adoptSession(emptyStart ? {} : { configOptions })
         modelCatalog.recordLiveListing(SESSION, reader.startListing())
         reader.adoptConfigOptions(
-          GROK_CONFIG_OPTIONS.map((option) =>
-            option.category === 'model' ? { ...option, currentValue: 'grok-4.6' } : option
+          configOptions.map((option) =>
+            option.type === 'select' && option.category === 'model'
+              ? { ...option, currentValue: 'grok-4.6' }
+              : option
           )
         )
         record.options = { model: 'grok-4.6', effort: 'high' }
