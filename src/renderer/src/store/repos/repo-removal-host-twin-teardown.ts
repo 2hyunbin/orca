@@ -144,8 +144,10 @@ export function closeRemovedHostTwinState(
     if (!remoteCloseOwnedByHost) {
       // Why killed here: the shared id resolves to no single host, so the planner marks this
       // host's PTYs unroutable; attribution already proved they are the removed host's.
+      // Only live-indexed PTYs, as before: a parked layout hint may be another host's session id.
+      const live = new Set(get().ptyIdsByTabId[tabId] ?? [])
       for (const ptyId of [...plan.localOrSshPtyIds, ...plan.unroutablePtyIds]) {
-        if (!isRemoteRuntimePtyId(ptyId)) {
+        if (live.has(ptyId) && !isRemoteRuntimePtyId(ptyId)) {
           window.api.pty.kill(ptyId)
         }
       }

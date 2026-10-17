@@ -334,7 +334,8 @@ describe('removing a remote project keeps its local twin', () => {
 
     expect(ptyKill).not.toHaveBeenCalledWith('pty-local')
     expect(ptyKill).toHaveBeenCalledWith(sshPtyId)
-    expect(ptyKill).toHaveBeenCalledWith(toAppSshPtyId('target-1', 'relay-2'))
+    // A parked layout hint closes its tab but is never killed: it may name another host's session.
+    expect(ptyKill).not.toHaveBeenCalledWith(toAppSshPtyId('target-1', 'relay-2'))
     expect(Object.keys(store.getState().sleepingAgentSessionsByPaneKey)).toEqual([
       'gone-local:leaf'
     ])

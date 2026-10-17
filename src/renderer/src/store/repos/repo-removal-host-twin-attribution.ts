@@ -202,6 +202,9 @@ export function collectRemovedHostTwinState(
     }
     // Why: a browser restored or opened in an inactive twin has no tab stamp, only its pages' host.
     for (const workspace of state.browserTabsByWorktree[worktreeId] ?? []) {
+      if (stampedHostByEntityId.has(workspace.id)) {
+        continue
+      }
       const pages = state.browserPagesByWorkspace[workspace.id] ?? []
       if (pages.length > 0 && pages.map(pageHostEvidence).every(owns)) {
         removed.browserTabIds.add(workspace.id)
