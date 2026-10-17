@@ -1,3 +1,5 @@
+import { parseExecutionHostId } from '../../shared/execution-host'
+
 export type WorktreePtyHostFence = {
   /** `null` is this machine; ABSENT is no fence at all, so every host matches. */
   resolvedConnectionId?: string | null
@@ -21,4 +23,12 @@ export function worktreePtyBelongsToHost(
     fence.resolvedConnectionId === undefined ||
     (connectionId ?? null) === fence.resolvedConnectionId
   )
+}
+
+/** Fence for work on one execution host; an unparseable id fences to this machine. */
+export function hostFenceForExecutionHost(hostId: string): WorktreePtyHostFence {
+  const parsedHost = parseExecutionHostId(hostId)
+  return parsedHost?.kind === 'runtime'
+    ? { resolvedRuntimeEnvironmentId: parsedHost.environmentId }
+    : { resolvedConnectionId: parsedHost?.kind === 'ssh' ? parsedHost.targetId : null }
 }

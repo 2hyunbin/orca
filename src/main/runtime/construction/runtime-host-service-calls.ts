@@ -20,6 +20,12 @@ export type StopTerminalsForWorktreeArgs = Parameters<
 export type StopTerminalsForWorktreeResult = ReturnType<
   StopTerminalsForWorktree['stopTerminalsForWorktree']
 >
+export type StopTerminalsForProjectArgs = Parameters<
+  StopTerminalsForWorktree['stopTerminalsForProject']
+>
+export type StopTerminalsForProjectResult = ReturnType<
+  StopTerminalsForWorktree['stopTerminalsForProject']
+>
 export type ResolveOrchestrationWorkerServerArgs = Parameters<
   GetRuntimeId['resolveOrchestrationWorkerServer']
 >

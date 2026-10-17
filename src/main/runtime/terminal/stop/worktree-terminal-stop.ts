@@ -16,11 +16,17 @@ import type { WorkspaceSessionState } from '../../../../shared/workspace-session
 import { cloneWorkspaceSessionState } from '../../../persistence/restoring-sessions/session-owner-fields'
 import { rollbackWorkspaceSessionAfterFailedAsyncWrite } from '../../../persistence/restoring-sessions/workspace-session-write-rollback'
 import {
+  getRepoExecutionHostId,
   getWorktreeExecutionHostId,
-  parseExecutionHostId,
   type ExecutionHostId
 } from '../../../../shared/execution-host'
-import { worktreePtyBelongsToHost, type WorktreePtyHostFence } from '../../worktree-pty-host-fence'
+import type { Repo } from '../../../../shared/repo-types'
+import {
+  hostFenceForExecutionHost,
+  worktreePtyBelongsToHost,
+  type WorktreePtyHostFence
+} from '../../worktree-pty-host-fence'
+import { listProjectTerminalWorktreeIds } from './project-terminal-worktrees'
 import { summarizeWorktreePtyStopVerdict } from '../../worktree-pty-stop-verdict'
 import { describeMobileSessionTabCloseRefusal } from '../../mobile-session-tab-close-refusal-message'
 import { clearClosedWorktreeResumeRecords } from './worktree-sleep-resume-records'
@@ -61,10 +67,24 @@ export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntim
     worktree: { id: string; repoId?: string } & Parameters<typeof getWorktreeExecutionHostId>[0]
   ): WorktreePtyHostFence {
     const repo = worktree.repoId ? this.store?.getRepo?.(worktree.repoId) : undefined
-    const parsedHost = parseExecutionHostId(getWorktreeExecutionHostId(worktree, repo))
-    return parsedHost?.kind === 'runtime'
-      ? { resolvedRuntimeEnvironmentId: parsedHost.environmentId }
-      : { resolvedConnectionId: parsedHost?.kind === 'ssh' ? parsedHost.targetId : null }
+    return hostFenceForExecutionHost(getWorktreeExecutionHostId(worktree, repo))
+  }
+
+  /**
+   * Stops every terminal this host runs for a project, found through its live PTY table rather
+   * than a client's workspace list, which can be unhydrated or hide workspaces.
+   */
+  async stopTerminalsForProject(
+    repo: Pick<Repo, 'id' | 'connectionId' | 'executionHostId'>,
+    options: Pick<WorktreeTerminalStopOptions, 'deadline'> = {}
+  ): Promise<{ stopped: number }> {
+    const fence = hostFenceForExecutionHost(getRepoExecutionHostId(repo))
+    let stopped = 0
+    for (const id of listProjectTerminalWorktreeIds(repo.id, this.leaves, this.ptysById)) {
+      const opts = { resolvedWorktreeId: id, ...fence, ...options }
+      stopped += (await this.stopTerminalsForWorktree(`id:${id}`, opts)).stopped
+    }
+    return { stopped }
   }
 
   async closeTerminalsForWorktree(

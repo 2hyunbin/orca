@@ -8,10 +8,14 @@ import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
 import type { RuntimeStore } from './runtime-store-contract'
 import { assertWslMoveRepoWritable } from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
 
+const PROJECT_TERMINAL_STOP_BUDGET_MS = 10_000
+
 type RuntimeRepositorySettingsDependencies = {
   getStore: () => RuntimeStore | null
   resolveRepo: (selector: string) => Promise<Repo>
   forgetTerminalTopology: (repoId: string) => void
+  /** Optional so test doubles and older wiring keep removing without it. */
+  stopProjectTerminals?: (repo: Repo, deadline: number) => Promise<unknown>
   invalidateResolvedWorktrees: () => void
   invalidateWorktreeScan: (repoId: string) => void
   notifyReposChanged: () => void
@@ -123,6 +127,13 @@ export class RuntimeRepositorySettingsController {
     const repo = await this.deps.resolveRepo(repoSelector)
     const hostId = getRepoExecutionHostId(repo)
     assertWslMoveRepoWritable(store, repo)
+    // Why here: the host owns these shells; a client only stops the workspaces it has loaded,
+    // and older clients stop none. Bounded so repo.rm still answers inside the client's timeout.
+    await this.deps
+      .stopProjectTerminals?.(repo, Date.now() + PROJECT_TERMINAL_STOP_BUDGET_MS)
+      .catch((error: unknown) => {
+        console.warn('[runtime] failed to stop project terminals before removal', error)
+      })
     store.removeProjectForHost(repo.id, hostId)
     this.deps.forgetTerminalTopology(repo.id)
     this.deps.invalidateResolvedWorktrees()
