@@ -40,18 +40,21 @@ export function applyActiveStateUpdates(context: ActiveStateContext) {
     nextActiveBrowserWorkspaceId,
     nextActiveEditorFileId,
     intentTerminalId,
-    intentBrowserWorkspaceId
+    intentBrowserWorkspaceId,
+    viewerSelectedUnifiedTabId
   } = context
 
   const activeUnifiedTab =
     nextActiveUnifiedTabId && nextUnifiedTabs
       ? (nextUnifiedTabs.find((tab) => tab.id === nextActiveUnifiedTabId) ?? null)
       : null
+  // Why: a tab picked from the snapshot's fallback must not outrank the still-valid visible type.
+  const viewerSelectedTab = viewerSelectedUnifiedTabId ? activeUnifiedTab : null
   const selectedSessionTabId =
-    activeUnifiedTab?.contentType === 'agent-session'
-      ? activeUnifiedTab.id
-      : activeUnifiedTab?.contentType === 'terminal'
-        ? activeUnifiedTab.entityId
+    viewerSelectedTab?.contentType === 'agent-session'
+      ? viewerSelectedTab.id
+      : viewerSelectedTab?.contentType === 'terminal'
+        ? viewerSelectedTab.entityId
         : null
   const nextActiveGroupId = clientOwnedPlacement
     ? clientOwnedPlacement.activeGroupId
@@ -238,7 +241,7 @@ export function applyActiveStateUpdates(context: ActiveStateContext) {
           : nextActiveEditorFileId
             ? ('editor' as const)
             : ('terminal' as const)
-  const selectedVisibleTabType = activeUnifiedTab ? toVisibleTabType(activeUnifiedTab) : null
+  const selectedVisibleTabType = viewerSelectedTab ? toVisibleTabType(viewerSelectedTab) : null
   const nextVisibleTabType = honorSnapshotActiveFocus
     ? (focusIntentVisibleTabType ??
       selectedVisibleTabType ??

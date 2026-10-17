@@ -74,7 +74,6 @@ describe('seeding beside a caller-provided chat surface', () => {
       expect(primary).toBeNull()
       expect(store.createTab).toHaveBeenCalledExactlyOnceWith('wt-1', undefined, undefined, {
         recordInteraction: false,
-        recordFocus: false,
         activate: false,
         pendingStartup: {
           command: 'bash /tmp/repo/.git/orca/setup-runner.sh',

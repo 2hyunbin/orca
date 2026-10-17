@@ -220,10 +220,13 @@ export function prepareWebSessionTabsSnapshotUnified(
             ? (intentMirroredEditor?.unifiedTab.id ?? null)
             : null
     : null
+  // Why: this viewer's own selection, the creation tab or its visible tab, absent an explicit intent.
+  const viewerSelectedUnifiedTabId = intentUnifiedTabId
+    ? null
+    : (preferredViewerTab?.id ?? currentVisibleUnifiedTabId)
   const nextActiveUnifiedTabId =
     intentUnifiedTabId ??
-    preferredViewerTab?.id ??
-    currentVisibleUnifiedTabId ??
+    viewerSelectedUnifiedTabId ??
     reservedEmptyPreviewFallbackTabId ??
     (snapshot.activeTabType === 'agent-session'
       ? (activeMirroredAgentTabId ?? mirroredAgentUnifiedTabs[0]?.id ?? nextActiveTerminalId)
@@ -296,6 +299,7 @@ export function prepareWebSessionTabsSnapshotUnified(
     currentVisibleStructuredTabId,
     reservedEmptyPreviewFallbackTabId,
     intentUnifiedTabId,
+    viewerSelectedUnifiedTabId,
     nextActiveUnifiedTabId,
     mirroredUnifiedIds,
     hostToLocalTabId

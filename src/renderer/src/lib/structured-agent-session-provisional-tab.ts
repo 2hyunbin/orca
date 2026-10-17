@@ -58,7 +58,7 @@ export function openStructuredAgentSessionProvisionalTab(args: {
       state.activateTab(existing.id, { worktreeId: args.worktreeId })
       state.setActiveTabType('agent-session', args.worktreeId)
     } else if (args.activate !== false) {
-      state.reconcileWorktreeTabModel(args.worktreeId)
+      showUnchosenWorkspaceSurface(args.worktreeId)
     }
     return existing
   }
@@ -75,9 +75,19 @@ export function openStructuredAgentSessionProvisionalTab(args: {
   if (activate) {
     state.setActiveTabType('agent-session', args.worktreeId)
   } else if (args.activate !== false) {
-    state.reconcileWorktreeTabModel(args.worktreeId)
+    showUnchosenWorkspaceSurface(args.worktreeId)
   }
   return tab
+}
+
+/** An automatic chat opens unchosen: the screen shows what the focused group holds, chat included. */
+function showUnchosenWorkspaceSurface(worktreeId: string): void {
+  useAppStore.getState().reconcileWorktreeTabModel(worktreeId)
+  const state = useAppStore.getState()
+  const groupId = state.activeGroupIdByWorktree[worktreeId]
+  if (groupId && state.groupsByWorktree[worktreeId]?.some((group) => group.id === groupId)) {
+    state.focusGroup(worktreeId, groupId)
+  }
 }
 
 /** The host a structured launch would run on, which admits the chat before it exists. */

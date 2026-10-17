@@ -50,9 +50,9 @@ export function applyDefaultTerminalTabs(
     const tab = store.createTab(worktreeId, undefined, undefined, {
       pendingActivationSpawn: true,
       recordInteraction: false,
-      recordFocus: false,
       ...(launchAgent ? { launchAgent } : {}),
-      ...(opts?.activateCreatedTabs === false ? { activate: false } : {}),
+      // Why: an automatic tab is shown, not chosen; only an activated create would record focus.
+      ...(opts?.activateCreatedTabs === false ? { activate: false } : { recordFocus: false }),
       ...(pendingStartup ? { pendingStartup } : {})
     })
     if (index === 0) {
