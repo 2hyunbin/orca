@@ -24,26 +24,35 @@ vi.mock('../layout-owner-switch', () => ({
 
 const SSH_HOST: ExecutionHostId = 'ssh:box'
 
-function duplicatePtySession(key: string, activeLeaf = leaf(1)): WorkspaceSessionState {
-  return addWorkspace(emptySession(), key, [
-    {
-      id: 'g1',
-      tabs: [
-        {
-          id: 'tab-a',
-          leaves: [
-            [leaf(1), 'pty-a'],
-            [leaf(2), 'pty-a']
-          ],
-          layout: {
-            activeLeafId: activeLeaf,
-            titlesByLeafId: { [leaf(2)]: 'second' },
-            buffersByLeafId: { [leaf(2)]: 'scrollback' }
+function duplicatePtySession(
+  key: string,
+  activeLeaf = leaf(1),
+  hostId: ExecutionHostId = LOCAL_EXECUTION_HOST_ID
+): WorkspaceSessionState {
+  return addWorkspace(
+    emptySession(),
+    key,
+    [
+      {
+        id: 'g1',
+        tabs: [
+          {
+            id: 'tab-a',
+            leaves: [
+              [leaf(1), 'pty-a'],
+              [leaf(2), 'pty-a']
+            ],
+            layout: {
+              activeLeafId: activeLeaf,
+              titlesByLeafId: { [leaf(2)]: 'second' },
+              buffersByLeafId: { [leaf(2)]: 'scrollback' }
+            }
           }
-        }
-      ]
-    }
-  ])
+        ]
+      }
+    ],
+    hostId
+  )
 }
 
 function load(hostId: ExecutionHostId, session: WorkspaceSessionState) {
@@ -65,7 +74,7 @@ describe('Loader: one terminal in two panes of one tab', () => {
     ['folder workspace', LOCAL_EXECUTION_HOST_ID, FOLDER_KEY],
     ['SSH workspace', SSH_HOST, SSH_KEY]
   ])('keeps one pane bound to it in a %s', (_name, hostId, key) => {
-    const loaded = load(hostId, duplicatePtySession(key))
+    const loaded = load(hostId, duplicatePtySession(key, leaf(1), hostId))
     const workspace = loaded.layout.workspaces[key]!
     const tab = workspace.tabs.find((candidate) => candidate.id === 'tab-a')
     expect(tab?.kind === 'terminal' ? tab.panes.root : undefined).toEqual({
