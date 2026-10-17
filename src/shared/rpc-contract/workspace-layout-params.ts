@@ -62,6 +62,14 @@ const SetPaneRatiosCommand = z.object({
   root: TerminalPaneLayoutNodeSchema
 })
 
+/** The pane a tab's chat view shows; null clears it. */
+const SetChatPaneCommand = z.object({
+  type: z.literal('setChatPane'),
+  workspace: OnPane.workspace,
+  tabId: OnPane.tabId,
+  leafId: z.union([z.string().min(1), z.null()])
+})
+
 const EqualizePanesCommand = z.object({
   type: z.literal('equalizePanes'),
   workspace: OnPane.workspace,
@@ -350,6 +358,7 @@ export const LayoutApplyParams = z.object({
     EqualizePanesCommand,
     MovePaneCommand,
     SetPaneRatiosCommand,
+    SetChatPaneCommand,
     MoveTabCommand,
     SplitGroupCommand,
     SetGroupRatiosCommand,
