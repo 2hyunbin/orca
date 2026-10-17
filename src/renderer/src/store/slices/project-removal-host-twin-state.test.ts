@@ -332,4 +332,34 @@ describe('removing a remote project keeps its local twin', () => {
     expect(state.unifiedTabsByWorktree[WORKTREE_ID] ?? []).toEqual([])
     expect(state.openFiles).toEqual([])
   })
+
+  it('keeps a PTY that a tab outside the removal still binds', async () => {
+    const store = createTestStore()
+    const sshRow: Repo = { ...localRow, connectionId: 'target-1', executionHostId: 'ssh:target-1' }
+    const sharedPtyId = toAppSshPtyId('target-1', 'relay-shared')
+    const otherWorktreeId = 'other-repo::/work/other'
+    store.setState({
+      repos: [localRow, sshRow],
+      worktreesByRepo: {
+        [PROJECT_ID]: [
+          makeWorktree({ id: WORKTREE_ID, repoId: PROJECT_ID, hostId: 'local' }),
+          makeWorktree({ id: WORKTREE_ID, repoId: PROJECT_ID, hostId: 'ssh:target-1' })
+        ]
+      },
+      tabsByWorktree: {
+        [WORKTREE_ID]: [makeTab({ id: 'tab-ssh', worktreeId: WORKTREE_ID, ptyId: sharedPtyId })],
+        [otherWorktreeId]: [
+          makeTab({ id: 'tab-other', worktreeId: otherWorktreeId, ptyId: sharedPtyId })
+        ]
+      },
+      ptyIdsByTabId: { 'tab-ssh': [sharedPtyId], 'tab-other': [sharedPtyId] }
+    })
+
+    await store.getState().removeProject(PROJECT_ID, { hostId: 'ssh:target-1' })
+
+    expect(ptyKill).not.toHaveBeenCalledWith(sharedPtyId)
+    expect(store.getState().tabsByWorktree[otherWorktreeId]?.map((tab) => tab.id)).toEqual([
+      'tab-other'
+    ])
+  })
 })

@@ -7,7 +7,10 @@ import {
 } from '../../../../shared/execution-host'
 import { getPtyExecutionHost } from '../../../../shared/terminal-execution-host'
 import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
-import { collectPtyIdsForTab } from '../slices/terminal-tab-retirement'
+import {
+  buildTerminalTabRetirementPlans,
+  collectPtyIdsForTab
+} from '../slices/terminal-tab-retirement'
 import { toVisibleTabType } from '../../../../shared/tab-types'
 import type { RecentlyClosedTabKind } from '../slices/recently-closed-tabs'
 import {
@@ -299,13 +302,13 @@ export function closeRemovedHostTwinState(
   }
   // Why: a runtime host stopped its own shells on removal, so no close is sent back to it.
   const remoteCloseOwnedByHost = isRuntimeHost(removedHostId)
-  for (const tabId of removed.terminalTabIds) {
+  // Why planned together: the planner keeps a PTY another surviving tab still binds.
+  const plans = buildTerminalTabRetirementPlans(get(), [...removed.terminalTabIds])
+  for (const [tabId, plan] of plans) {
     if (!remoteCloseOwnedByHost) {
-      // Why killed here: closeTab re-resolves the shared id's host and would skip these as unroutable.
-      const tab = Object.values(get().tabsByWorktree)
-        .flat()
-        .find((candidate) => candidate.id === tabId)
-      for (const ptyId of collectPtyIdsForTab(get(), tabId, tab?.ptyId)) {
+      // Why killed here: the shared id resolves to no single host, so the planner marks this
+      // host's PTYs unroutable; attribution already proved they are the removed host's.
+      for (const ptyId of [...plan.localOrSshPtyIds, ...plan.unroutablePtyIds]) {
         if (!isRemoteRuntimePtyId(ptyId)) {
           window.api.pty.kill(ptyId)
         }
@@ -315,7 +318,8 @@ export function closeRemovedHostTwinState(
       reason: 'cleanup',
       captureRecentlyClosed: false,
       remoteCloseOwnedByHost,
-      localPtyTeardownOwnedExternally: !remoteCloseOwnedByHost
+      localPtyTeardownOwnedExternally: !remoteCloseOwnedByHost,
+      precomputedRetirementPlan: plan
     })
   }
   for (const fileId of removed.fileIds) {
