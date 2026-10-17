@@ -1,5 +1,5 @@
 import { OrcaRuntimeWithWorkspaceReviewFacts } from './orca-runtime-workspace-review-facts'
-import { DEFAULT_SHOW_SLEEPING_WORKSPACES } from '../../../shared/constants'
+import { DEFAULT_HIDE_SLEEPING_WORKSPACES } from '../../../shared/constants'
 import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { detectAgentStatusFromTitle } from '../../../shared/agent-detection'
 import type { SidebarTemporalSnapshot } from '../../../shared/sidebar-list/sidebar-temporal-snapshot'
@@ -23,8 +23,9 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
   private readonly smartSortAgentEntries = new SmartSortAgentEntries()
   private readonly sidebarTemporal = new SidebarTemporalOwner(this.sidebarClock, {
     sortBy: () => this.store?.getUI?.().sortBy ?? 'smart',
+    // The durable file keeps the hide form; the window reads it the same way at hydration.
     showSleepingWorkspaces: () =>
-      this.store?.getUI?.().showSleepingWorkspaces ?? DEFAULT_SHOW_SLEEPING_WORKSPACES,
+      !(this.store?.getUI?.().hideSleepingWorkspaces ?? DEFAULT_HIDE_SLEEPING_WORKSPACES),
     readSortSample: () => this.readSidebarSortSample(),
     retentionCandidates: () => this.readSidebarRetentionCandidates()
   })
