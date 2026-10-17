@@ -3,7 +3,6 @@
 
 import type { UnreadAgentSessionFailureFact } from './agent-session-failure'
 import type { AgentJournalMessageItem } from './agent-session-journal-types'
-import type { AgentSessionExecutionOptions } from './agent-session-execution-options'
 
 /** The draft could not be converted into a send; an explicit Send retries it. */
 export const QUEUED_MESSAGE_PAUSED_SEND_FAILED = 'send_failed' as const
@@ -36,7 +35,6 @@ export type AgentSessionQueuedMessagesResumeResult = {
  *  subscribe stream and on history pages. Text-only v1. */
 export type AgentSessionQueuedMessage = {
   messageId: string
-  executionOptions?: AgentSessionExecutionOptions
   position: number
   body: AgentJournalMessageItem
   state: 'waiting' | 'returned'

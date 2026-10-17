@@ -2,7 +2,7 @@
 // chat's view reads.
 
 import type { structuredAgentSessionSendBody } from '../../../../shared/structured-agent-session-send-mutation'
-import type { AgentSessionExecutionOptions } from '../../../../shared/agent-session-execution-options'
+import type { AgentJournalCursor } from '../../../../shared/agent-session-journal-types'
 
 export type StructuredAgentSessionPendingSend = {
   clientMessageId: string
@@ -11,12 +11,14 @@ export type StructuredAgentSessionPendingSend = {
   previewUris: readonly string[]
   queuedAt: number
   delivery?: 'queue-if-active'
-  executionOptions?: AgentSessionExecutionOptions
+  options?: Readonly<Record<string, string>>
   /**
    * `sending`: on its way, its one request out or about to be; the chat takes no other send meanwhile.
    * `recorded`: the host holds it; an open chat draws it until the host's row or card arrives.
    */
   phase: 'sending' | 'recorded'
+  /** A read past this acknowledgement supersedes the echo even when its row is off-page. */
+  recordedCursor?: AgentJournalCursor
   /** Its request went out, so it may have reached the host. */
   issued: boolean
   /** A sender outside the chat keeps its own copy, so nothing goes to the chat's composer. */

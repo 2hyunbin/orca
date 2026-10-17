@@ -37,7 +37,6 @@ export function isUnsettledQueuedMessage(row: Pick<QueuedMessageRow, 'state'>): 
 
 export type QueuedMessageRow = {
   sessionId: string
-  executionOptions?: AgentSessionExecutionOptions
   messageId: string
   position: number
   body: AgentJournalMessageItem
@@ -63,10 +62,12 @@ export type QueuedMessageRow = {
   /** Where the journal stood when it was queued: a Stop's pause holds only cards queued before
    *  it. Null on rows from builds before it was recorded, which read as queued before any Stop. */
   queuedAt: AgentJournalCursor | null
+  /** The choices its send carried, applied to the turn it starts when it goes out. */
+  options?: AgentSessionExecutionOptions
 }
 
 const COLUMNS =
-  'session_id, message_id, position, body_json, fingerprint, created_at, host_instance, state, hold_reason, returned_reason, returned_rejection, settled_at, settled_by_op, consumed_as, carried_from, queued_epoch, queued_sequence, execution_options_json'
+  'session_id, message_id, position, body_json, fingerprint, created_at, host_instance, state, hold_reason, returned_reason, returned_rejection, settled_at, settled_by_op, consumed_as, carried_from, queued_epoch, queued_sequence, options_json'
 
 export function insertQueuedMessage(
   db: Database.Database,
@@ -74,7 +75,6 @@ export function insertQueuedMessage(
     sessionId: string
     messageId: string
     body: AgentJournalMessageItem
-    executionOptions?: AgentSessionExecutionOptions
     fingerprint: string
     hostInstance: string
     queuedAt: AgentJournalCursor
@@ -82,6 +82,7 @@ export function insertQueuedMessage(
     /** Absent: after every other card. */
     position?: number
     holdReason?: QueuedMessageHoldReason
+    options?: AgentSessionExecutionOptions
   }
 ): QueuedMessageRow {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the statement selects exactly one aliased numeric column; better-sqlite3 types rows as unknown.
@@ -104,14 +105,13 @@ export function insertQueuedMessage(
     null,
     input.queuedAt.epoch,
     input.queuedAt.sequence,
-    input.executionOptions ? JSON.stringify(input.executionOptions) : null
+    input.options ? JSON.stringify(input.options) : null
   )
   return {
     sessionId: input.sessionId,
     messageId: input.messageId,
     position,
     body: input.body,
-    ...(input.executionOptions ? { executionOptions: input.executionOptions } : {}),
     fingerprint: input.fingerprint,
     createdAt: input.now,
     hostInstance: input.hostInstance,
@@ -123,7 +123,8 @@ export function insertQueuedMessage(
     settledByOp: null,
     consumedAs: null,
     carriedFrom: null,
-    queuedAt: input.queuedAt
+    queuedAt: input.queuedAt,
+    ...(input.options ? { options: input.options } : {})
   }
 }
 

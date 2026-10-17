@@ -5,10 +5,12 @@ import { parseWorkspaceKey } from '../../../../../../shared/workspace-scope'
 import { pruneHostedReviewLinkMutationGenerations } from '../metadata/hosted-review-link-mutation'
 import { collectWorktreePurgeDoomedIds } from './worktree-purge-doomed-ids'
 import { createWorktreePurgeOmitters } from './worktree-purge-omitters'
+import { omitSleepingAgentSessionsForWorktrees } from './sleeping-agent-session-omission'
 import { removeDeleteStatesForWorktreeIds } from './worktree-delete-state'
 import { removeWorktreeVisitEntriesForTargets } from '@/lib/worktree-visit-recency'
 import { forgetAmbiguousOwnerWarnings } from '../listing/worktree-owner-settings'
 import { forgetWorktreeSleepIntent } from '@/lib/worktree-sleep-intent'
+import { settleAgentLaunchPaneStart } from '@/lib/agent-launch-pane-start'
 import {
   getStructuredAgentSessionLaunchOwner,
   markStructuredAgentSessionLaunchCancelledSilently,
@@ -23,6 +25,8 @@ import {
   structuredAgentSessionTargetForTab,
   structuredAgentSessionTargetForHost
 } from '@/runtime/structured-agent-session-owner'
+import { removeTabsAttention } from '../../workspace-attention/subject-attention-transitions'
+import { removeWorktreeLayout } from '../../tabs/worktree-layout-lifecycle'
 
 /** Builds a bulk cleanup patch and clears auxiliary warning records without requiring individual terminal teardown. */
 export function buildWorktreePurgeState(
@@ -57,6 +61,12 @@ export function buildWorktreePurgeState(
     }
   }
   for (const worktreeId of worktreeIdSet) {
+    // A launch tab that never spawned has no spawn left to answer its prompt's wait.
+    for (const tab of s.tabsByWorktree[worktreeId] ?? []) {
+      if (tab.agentLaunchPane) {
+        settleAgentLaunchPaneStart(tab.id, tab.agentLaunchPane.leafId, null)
+      }
+    }
     for (const tab of s.unifiedTabsByWorktree[worktreeId] ?? []) {
       if (tab.contentType === 'agent-session') {
         const target = structuredAgentSessionTargetForTab(s, tab)
@@ -107,13 +117,8 @@ export function buildWorktreePurgeState(
     omitByFileId
   } = createWorktreePurgeOmitters(s, worktreeIdSet, doomed)
 
-  const nextOpenFiles = s.openFiles.some((f) => worktreeIdSet.has(f.worktreeId))
-    ? s.openFiles.filter((f) => !worktreeIdSet.has(f.worktreeId))
-    : s.openFiles
-
   const removedActive = s.activeWorktreeId != null && worktreeIdSet.has(s.activeWorktreeId)
   const activeFileCleared = s.activeFileId != null && doomed.removedFileIds.has(s.activeFileId)
-  const activeTabCleared = s.activeTabId != null && doomed.doomedTabIds.has(s.activeTabId)
 
   const nextEverActivatedWorktreeIds = (() => {
     let hit = false
@@ -133,15 +138,26 @@ export function buildWorktreePurgeState(
     return next
   })()
   const nextAgentStatusByPaneKey = omitByPaneKeyTabPrefix(s.agentStatusByPaneKey)
+  const tabPrefixedSleeping = {
+    sleepingAgentSessionsByPaneKey: omitByPaneKeyTabPrefix(s.sleepingAgentSessionsByPaneKey),
+    agentLaunchConfigByPaneKey: omitByPaneKeyTabPrefix(s.agentLaunchConfigByPaneKey)
+  }
+  // Why both: tab-prefix omission misses a sleeping record whose tab is already gone.
+  const nextSleeping = {
+    ...tabPrefixedSleeping,
+    ...omitSleepingAgentSessionsForWorktrees(tabPrefixedSleeping, worktreeIdSet)
+  }
 
   return {
+    ...removeWorktreeLayout(s, {
+      worktreeIds: worktreeIdSet,
+      tabIds: doomed.doomedTabIds,
+      activeFileCleared
+    }),
     // Worktree-scoped terminal/tab state
     worktreeLineageById: omitByWorktree(s.worktreeLineageById),
     workspaceLineageByChildKey: omitWorkspaceLineageByWorktree(s.workspaceLineageByChildKey),
-    tabsByWorktree: omitByWorktree(s.tabsByWorktree),
-    terminalLayoutsByTabId: omitByTabId(s.terminalLayoutsByTabId),
     localOnlyScrollbackByTabId: omitByTabId(s.localOnlyScrollbackByTabId),
-    ptyIdsByTabId: omitByTabId(s.ptyIdsByTabId),
     runtimePaneTitlesByTabId: omitByTabId(s.runtimePaneTitlesByTabId),
     automaticAgentResumeClaimsByTabId: omitByTabId(s.automaticAgentResumeClaimsByTabId),
     nativeChatLaunchPromptByTabId: omitByTabId(s.nativeChatLaunchPromptByTabId),
@@ -157,7 +173,6 @@ export function buildWorktreePurgeState(
     deferredSshSessionIdsByTabId: omitByTabId(s.deferredSshSessionIdsByTabId),
     pendingInitialCwdByTabId: omitByTabId(s.pendingInitialCwdByTabId),
     pendingIssueCommandSplitByTabId: omitByTabId(s.pendingIssueCommandSplitByTabId),
-    pendingSetupSplitByTabId: omitByTabId(s.pendingSetupSplitByTabId),
     pendingStartupByTabId: omitByTabId(s.pendingStartupByTabId),
     codexRestartNoticeByPtyId: omitByPtyId(s.codexRestartNoticeByPtyId),
     migrationUnsupportedByPtyId: omitByPtyId(s.migrationUnsupportedByPtyId),
@@ -169,15 +184,13 @@ export function buildWorktreePurgeState(
     ...(nextAgentStatusByPaneKey !== s.agentStatusByPaneKey
       ? { agentStatusEpoch: s.agentStatusEpoch + 1 }
       : {}),
-    agentLaunchConfigByPaneKey: omitByPaneKeyTabPrefix(s.agentLaunchConfigByPaneKey),
+    agentLaunchConfigByPaneKey: nextSleeping.agentLaunchConfigByPaneKey,
     acknowledgedAgentsByPaneKey: omitByPaneKeyTabPrefix(s.acknowledgedAgentsByPaneKey),
     activityClearedAtByPaneKey: omitByPaneKeyTabPrefix(s.activityClearedAtByPaneKey),
     manuallyUnreadTurnsByPaneKey: omitByPaneKeyTabPrefix(s.manuallyUnreadTurnsByPaneKey),
     paneForegroundAgentByPaneKey: omitByPaneKeyTabPrefix(s.paneForegroundAgentByPaneKey),
-    sleepingAgentSessionsByPaneKey: omitByPaneKeyTabPrefix(s.sleepingAgentSessionsByPaneKey),
-    unreadTerminalTabs: omitByTabId(s.unreadTerminalTabs),
-    unreadTerminalPanes: omitByPaneKeyTabPrefix(s.unreadTerminalPanes),
-    unreadAgentCompletionPanes: omitByPaneKeyTabPrefix(s.unreadAgentCompletionPanes),
+    sleepingAgentSessionsByPaneKey: nextSleeping.sleepingAgentSessionsByPaneKey,
+    ...removeTabsAttention(s, doomed.doomedTabIds),
     lastTerminalInputAtByPaneKey: omitByPaneKeyTabPrefix(s.lastTerminalInputAtByPaneKey),
     // Delete state
     deleteStateByWorktreeId: removeDeleteStatesForWorktreeIds(
@@ -189,10 +202,8 @@ export function buildWorktreePurgeState(
     // File search
     fileSearchStateByWorktree: omitByWorktree(s.fileSearchStateByWorktree),
     // Browser state
-    browserTabsByWorktree: omitByWorktree(s.browserTabsByWorktree),
     browserPagesByWorkspace: omitByBrowserWorkspaceId(s.browserPagesByWorkspace),
     recentlyClosedBrowserTabsByWorktree: omitByWorktree(s.recentlyClosedBrowserTabsByWorktree),
-    activeBrowserTabIdByWorktree: omitByWorktree(s.activeBrowserTabIdByWorktree),
     // Why: keyed by page/workspace id, only cleaned by closeBrowserTab on the single-removal path; the bulk reconcile missed them, orphaning an entry per page of externally-removed worktrees.
     browserAnnotationsByPageId: omitByPageId(s.browserAnnotationsByPageId),
     browserAnnotationMarkerIdsByPageId: omitByPageId(s.browserAnnotationMarkerIdsByPageId),
@@ -206,18 +217,9 @@ export function buildWorktreePurgeState(
       s.recentlyClosedBrowserPagesByWorkspace
     ),
     // Editor state
-    activeFileIdByWorktree: omitByWorktree(s.activeFileIdByWorktree),
-    activeTabTypeByWorktree: omitByWorktree(s.activeTabTypeByWorktree),
-    activeTabIdByWorktree: omitByWorktree(s.activeTabIdByWorktree),
-    tabBarOrderByWorktree: omitByWorktree(s.tabBarOrderByWorktree),
     pendingReconnectTabByWorktree: omitByWorktree(s.pendingReconnectTabByWorktree),
     rightSidebarTabByWorktree: pruneRightSidebarTabByWorktree(),
     rightSidebarExplorerViewByWorktree: omitByWorktree(s.rightSidebarExplorerViewByWorktree ?? {}),
-    // Split-tab / unified tab state
-    unifiedTabsByWorktree: omitByWorktree(s.unifiedTabsByWorktree),
-    groupsByWorktree: omitByWorktree(s.groupsByWorktree),
-    layoutByWorktree: omitByWorktree(s.layoutByWorktree),
-    activeGroupIdByWorktree: omitByWorktree(s.activeGroupIdByWorktree),
     // Git status caches
     gitStatusByWorktree: omitByWorktree(s.gitStatusByWorktree),
     // Why: keyed by worktreeId; re-keyed on rename but missed by both removal paths (upstream-status entry).
@@ -251,7 +253,6 @@ export function buildWorktreePurgeState(
     recentlyClosedTerminalTabsByWorktree: omitByWorktree(s.recentlyClosedTerminalTabsByWorktree),
     recentlyClosedTabKindsByWorktree: omitByWorktree(s.recentlyClosedTabKindsByWorktree),
     // Top-level actives
-    openFiles: nextOpenFiles,
     everActivatedWorktreeIds: nextEverActivatedWorktreeIds,
     lastVisitedAtByWorktreeId: removeWorktreeVisitEntriesForTargets(
       s.lastVisitedAtByWorktreeId,
@@ -271,10 +272,6 @@ export function buildWorktreePurgeState(
       return activeScope?.type === 'worktree' && worktreeIdSet.has(activeScope.worktreeId)
         ? null
         : s.activeWorkspaceKey
-    })(),
-    activeFileId: activeFileCleared ? null : s.activeFileId,
-    activeBrowserTabId: removedActive ? null : s.activeBrowserTabId,
-    activeTabId: activeTabCleared ? null : s.activeTabId,
-    activeTabType: removedActive || activeFileCleared ? 'terminal' : s.activeTabType
+    })()
   }
 }

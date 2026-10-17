@@ -42,7 +42,7 @@ describe('options at rest', () => {
     const starting = {
       child: { phase: 'starting' },
       params: { provider: 'codex' },
-      journal: { context: { floor: () => null } }
+      journal: { threadGoal: () => null, context: { floor: () => null } }
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
     const context = {
@@ -84,7 +84,7 @@ describe('options at rest', () => {
       const resting = {
         child: null,
         params: { provider: 'codex' },
-        journal: { context: { floor: () => null } }
+        journal: { threadGoal: () => null, context: { floor: () => null } }
       }
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the resting read touches only these members.
       const context = {
@@ -106,7 +106,7 @@ describe('options at rest', () => {
       expect(result.models).toEqual([])
       expect(result.current).not.toHaveProperty('model')
       record.options = { model: 'later-model', effort: 'off' }
-      // Of these, only Codex's chats state a permission mode.
+      // Only Codex is registered here, and a mode is stated only for a registered agent's chat.
       expect(
         (await readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true }))
           .current
@@ -174,7 +174,7 @@ describe('live Codex option reads', () => {
     const live = {
       child: { fence: 7 },
       params: { provider: 'codex' },
-      journal: { context: { floor: () => null } }
+      journal: { threadGoal: () => null, context: { floor: () => null } }
     }
     const failure = new Error('model/list unavailable')
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the failed read ends before touching the remaining context fields.
@@ -212,7 +212,7 @@ describe('live Codex option reads', () => {
     const live = {
       child: { fence: 7 },
       params: { provider: 'codex' },
-      journal: { context: { floor: () => null } }
+      journal: { threadGoal: () => null, context: { floor: () => null } }
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
     const context = {

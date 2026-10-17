@@ -12,6 +12,7 @@ import {
   decideHostServer,
   recheckWhenManagedFenceClears,
   publishHostServerDecisionFailure,
+  publishBridgedUnservedHostServer,
   publishManagedServerConnect,
   publishUnservedHostServer
 } from './ssh-host-server-connect'
@@ -24,12 +25,20 @@ import { connectionManager } from './ssh-ipc-context'
 import { abandonDecisionTransport } from './ssh-session-teardown'
 import { awaitTargetLifecycle } from './ssh-target-lifecycle-queue'
 import { startLegacyRelayBridge } from '../ssh/legacy-relay-bridge/legacy-relay-bridge-registry'
+import { clearSshCredentialDeclined } from '../ssh/ssh-credential-decline'
 
-export async function connectTarget(targetId: string): Promise<SshConnectionState> {
+/** `automatic`: no user asked for this connect, so a cancelled sign-in stays cancelled. */
+export async function connectTarget(
+  targetId: string,
+  options: { automatic?: boolean } = {}
+): Promise<SshConnectionState> {
   const e2eProbePath = process.env.ORCA_E2E_FORBID_LOCAL_SSH_CONNECT_PROBE
   if (e2eProbePath) {
     appendFileSync(e2eProbePath, `${JSON.stringify(targetId)}\n`)
     throw new Error('e2e_forbidden_local_ssh_connect')
+  }
+  if (!options.automatic) {
+    clearSshCredentialDeclined(targetId)
   }
   // Why: fence callers that entered before a same-turn disconnect/reset but resume after its cleanup.
   const admissionAuthority = getSshProviderAuthority(targetId)
@@ -119,12 +128,36 @@ async function doConnect(
     }
     // COMPAT(legacy-relay-bridge): panes an older relay still runs are known before the host is.
     await startLegacyRelayBridge(targetId)
-    return publishManagedServerConnect(
+    // A disconnect or shutdown during the bridge wait already published; "connected" would be stale.
+    assertSshConnectsNotFenced()
+    if (!isCurrentConnectAttempt(targetId, authority)) {
+      await abandonDecisionTransport(targetId, owner, authority)
+      throw createCancelledConnectAttemptError()
+    }
+    const published = publishManagedServerConnect(
       targetId,
       server.environmentId,
       server.update,
-      server.serving
+      server.serving,
+      server.linked
     )
+    // Why after publishing: the check costs round trips, and only a macOS host shows a result.
+    void import('./ssh-host-launch-session-note')
+      .then(({ noteEndedLaunchSshSession }) =>
+        noteEndedLaunchSshSession(targetId, server.environmentId)
+      )
+      .catch(() => {})
+    return published
+  }
+  if (server.bridged) {
+    // COMPAT(legacy-relay-bridge): the move waits for relay terminals the bridge keeps serving.
+    await startLegacyRelayBridge(targetId)
+    assertSshConnectsNotFenced()
+    if (!isCurrentConnectAttempt(targetId, authority)) {
+      await abandonDecisionTransport(targetId, owner, authority)
+      throw createCancelledConnectAttemptError()
+    }
+    return publishBridgedUnservedHostServer(target, server)
   }
   // This version has no relay to fall back to: a host its managed server doesn't serve fails here.
   await abandonDecisionTransport(targetId, owner, authority)

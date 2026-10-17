@@ -17,12 +17,14 @@ export function useStructuredAgentSessionOptionSurface(args: {
   sessionId: string
   optionView: StructuredAgentSessionOptionState
   optionSnapshot: SessionOptionDescriptor[]
+  /** The host keeps a send's choices, so the picker shows a gone model's replacement. */
+  takesSendOptions: boolean
   changeOption: (
     id: string,
     value: string | boolean
   ) => Promise<Readonly<Record<string, string>> | null>
 }): SessionOptionsSurface {
-  const { sessionId, optionView, optionSnapshot, changeOption } = args
+  const { sessionId, optionView, optionSnapshot, takesSendOptions, changeOption } = args
   const setOption = useCallback(
     async (id: string, value: string | boolean) => {
       const committed = await changeOption(id, value)
@@ -35,11 +37,11 @@ export function useStructuredAgentSessionOptionSurface(args: {
         : optionView
       return {
         snapshot: structuredAgentSessionOptionSnapshot(
-          structuredAgentSessionOptionView(selected, undefined, held ?? {})
+          structuredAgentSessionOptionView(selected, undefined, held ?? {}, takesSendOptions)
         )
       }
     },
-    [changeOption, optionView, sessionId]
+    [changeOption, optionView, sessionId, takesSendOptions]
   )
   return useMemo(
     () => ({

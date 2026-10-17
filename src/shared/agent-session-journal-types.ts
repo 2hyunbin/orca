@@ -468,8 +468,6 @@ export type AgentJournalDispatchState = (typeof AGENT_JOURNAL_DISPATCH_STATES)[n
  *  the turn reads as delivery unconfirmed, never as sent and never as failed. */
 export type AgentJournalSubmission = {
   clientMessageId: string
-  /** Immutable choices captured on acceptance; absent on older submissions. */
-  executionOptions?: AgentSessionExecutionOptions
   /** Execution fence of the latest dispatch attempt or recovery. */
   fence: number
   payloadFingerprint: string
@@ -520,6 +518,9 @@ export type AgentJournalSubmission = {
    *  card, so no surface draws this send, before or after the card is sent, edited or deleted.
    *  Recorded in the rejection's own transaction (`journal-unsent-send-hold.ts`). */
   keptAsQueuedMessageId?: string
+  /** Immutable choices captured on acceptance and applied when the agent is handed the message;
+   *  absent on older submissions. The host's alone: clients ignore it. */
+  options?: AgentSessionExecutionOptions
 }
 
 /** Durable answer to "did my send land?", keyed by client message id. Only an

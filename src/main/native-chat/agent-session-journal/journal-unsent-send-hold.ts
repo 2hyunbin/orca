@@ -140,16 +140,15 @@ export async function holdUnsentSends(
                 ? {
                     messageId: clientMessageId,
                     body: card.body,
-                    ...(submission.executionOptions
-                      ? { executionOptions: submission.executionOptions }
-                      : {}),
                     fingerprint: agentSessionSendBodyFingerprint(
                       journal.queuedMessages.sessionId,
                       card.body
                     ),
                     hostInstance: input.hostInstance,
                     queuedAt: { epoch, sequence: submission.acceptedSequence ?? 0 },
-                    position: card.position
+                    position: card.position,
+                    // Kept with the message, so the card runs on what it was sent with.
+                    ...(submission.options ? { options: submission.options } : {})
                   }
                 : null,
               positions: moves

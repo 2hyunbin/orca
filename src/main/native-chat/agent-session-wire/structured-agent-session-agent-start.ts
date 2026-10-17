@@ -146,7 +146,8 @@ async function startStructuredAgentSessionAgent(
   }
   const params = structuredAgentSessionResumeParams(
     record,
-    structuredAgentSessionResumeOperationId(context.now())
+    structuredAgentSessionResumeOperationId(context.now()),
+    context.sessions.get(sessionId)?.lastEndedChild
   )
   if (!params) {
     return record.lease.unreconciled
@@ -175,7 +176,7 @@ async function startStructuredAgentSessionAgent(
     ? context.sessions
         .get(sessionId)
         ?.journal.submissions()
-        .find((submission) => submission.clientMessageId === startedFor)?.executionOptions
+        .find((submission) => submission.clientMessageId === startedFor)?.options
     : undefined
   try {
     attached = await attachStructuredAgentSessionUnderSerialize(context, callerKey, params, {

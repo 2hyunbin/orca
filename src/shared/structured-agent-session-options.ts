@@ -1,5 +1,6 @@
 import type { AgentSessionOptionCatalog, CatalogModel } from './agent-session-option-catalog'
 import { discoveredModel } from './structured-agent-session-discovered-model'
+import { finishedModelListingIds } from './agent-session-finished-model-listing'
 import {
   buildNativeChatSessionOptionSnapshot,
   resolveEffectiveNativeChatModelId,
@@ -52,6 +53,9 @@ export type StructuredAgentSessionOptionState = {
    *  built-in list before the host answered (shown as the quiet placeholder); `builtin` is the
    *  same list once the host said it has none, usable but naming nothing the host may replace. */
   catalogSource: 'seed' | 'builtin' | 'host' | 'live' | null
+  /** The models the host's latest answer names when it is a finished, well-formed listing: the
+   *  only rows that can stand in for a model it lacks, whatever list the picker shows. */
+  verifiedModelIds?: readonly string[]
   record: NativeChatSessionOptionRecord
   /** The permission mode the host or launch last stated; null shows no picker. */
   permissionMode: string | null
@@ -78,7 +82,17 @@ export function createStructuredAgentSessionOptionState(
 export function settleStructuredAgentSessionBuiltinCatalog(
   state: StructuredAgentSessionOptionState
 ): StructuredAgentSessionOptionState {
-  return state.catalogSource === 'seed' ? { ...state, catalogSource: 'builtin' } : state
+  const settled = withVerifiedModelIds(state, undefined)
+  return settled.catalogSource === 'seed' ? { ...settled, catalogSource: 'builtin' } : settled
+}
+
+function withVerifiedModelIds(
+  state: StructuredAgentSessionOptionState,
+  ids: readonly string[] | undefined
+): StructuredAgentSessionOptionState {
+  return String(state.verifiedModelIds) === String(ids)
+    ? state
+    : { ...state, verifiedModelIds: ids }
 }
 
 /**
@@ -93,8 +107,9 @@ export function applyStructuredAgentSessionModelCatalog(
   catalog: AgentSessionModelCatalogResult,
   options: { newLaunch: boolean }
 ): StructuredAgentSessionOptionState {
+  const verifiedModelIds = finishedModelListingIds(catalog)
   if (state.catalogSource === 'live') {
-    return state
+    return withVerifiedModelIds(state, verifiedModelIds)
   }
   const models =
     catalog.origin === 'unknown'
@@ -119,7 +134,8 @@ export function applyStructuredAgentSessionModelCatalog(
       models,
       ...(namesDefault ? { defaultModelIsCliDefault: true } : {})
     },
-    catalogSource: 'host'
+    catalogSource: 'host',
+    verifiedModelIds
   }
 }
 

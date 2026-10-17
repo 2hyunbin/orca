@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { pairedRuntimeConnectionFromOffer } from '../../shared/paired-runtime-connection'
 import {
   parseOrcadMigrationCatalogAbortResult,
@@ -13,6 +14,14 @@ import {
   type OrcadMigrationSnapshotChunkRequest,
   type OrcadMigrationSnapshotChunkResult
 } from '../../shared/orcad-migration-scrollback'
+import {
+  findUnsupportedMigrationBlobKind,
+  orcadMigrationBlobKindUnsupportedBlocker,
+  parseOrcadMigrationBlobChunkResult,
+  type OrcadMigrationBlobChunkRequest,
+  type OrcadMigrationBlobChunkResult,
+  type OrcadMigrationBlobDescriptor
+} from '../../shared/orcad-migration-blob-transfer'
 import { parsePairingCode } from '../../shared/pairing'
 import { ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES } from '../../shared/electron-remote-runtime-client-capabilities'
 import { ORCAD_MIGRATION_CATALOG_RUNTIME_CAPABILITY } from '../../shared/orcad-runtime-capabilities'
@@ -21,6 +30,7 @@ import type { RuntimeRpcResponse } from '../../shared/runtime-rpc-envelope'
 import { AUTOMATION_EXTRA_AGENT_ARGS_RUNTIME_CAPABILITY } from '../../shared/protocol-version'
 import { hasExtraAgentArgs } from '../../shared/automation-extra-agent-args'
 import { requiredOrcadMigrationSourceCapability } from '../../shared/orcad-migration-source-kind'
+import type { OrcadServerRepository } from './orcad-migration-repository-link'
 
 type OrcadCatalogMigrationOperation = 'abort' | 'commit' | 'stage' | 'state'
 
@@ -58,12 +68,16 @@ export function stageRemoteOrcadMigrationCatalog(
   return requestCatalogState(pairingCode, 'stage', manifest, options)
 }
 
-export function commitRemoteOrcadMigrationCatalog(
+/** `expectedBlobs` names what was moved so the destination refuses a commit missing any. */
+export async function commitRemoteOrcadMigrationCatalog(
   pairingCode: string,
   manifest: OrcadMigrationManifest,
-  options: CatalogRequestOptions = {}
+  options: CatalogRequestOptions & {
+    expectedBlobs?: readonly OrcadMigrationBlobDescriptor[]
+  } = {}
 ): Promise<OrcadMigrationCatalogState> {
-  return requestCatalogState(pairingCode, 'commit', manifest, options)
+  const result = await request(pairingCode, 'commit', manifest, options, options.expectedBlobs)
+  return parseOrcadMigrationCatalogState(result, manifest)
 }
 
 export function readRemoteOrcadMigrationCatalogState(
@@ -109,6 +123,71 @@ export async function stageRemoteOrcadMigrationSnapshotChunk(
   return parseOrcadMigrationSnapshotChunkResult(response.result, request)
 }
 
+export async function stageRemoteOrcadMigrationBlobChunk(
+  pairingCode: string,
+  request: OrcadMigrationBlobChunkRequest,
+  options: CatalogRequestOptions = {}
+): Promise<OrcadMigrationBlobChunkResult> {
+  const pairing = parsePairingCode(pairingCode)
+  if (!pairing) {
+    throw new Error('orcad_migration_pairing_code_invalid')
+  }
+  const response = await sendSupportedMigrationRequest(
+    pairing,
+    'orcad.migration.stageBlobChunk',
+    request,
+    options,
+    false,
+    null,
+    // Per request: a downgraded destination must refuse the kind, never stage what it can't install.
+    (capabilities) => {
+      const unsupported = findUnsupportedMigrationBlobKind([request.blob], capabilities)
+      if (unsupported) {
+        throw new Error(orcadMigrationBlobKindUnsupportedBlocker(unsupported))
+      }
+    }
+  )
+  if (!response.ok) {
+    throw new Error(`orcad_migration_blob_failed:${response.error.message}`)
+  }
+  return parseOrcadMigrationBlobChunkResult(response.result, request)
+}
+
+// Every orcad's repo.list returns stored rows whole, so a row without host fields is its own.
+const ServerRepositoriesSchema = z.object({
+  repos: z.array(
+    z.object({
+      id: z.string().min(1),
+      path: z.string().min(1),
+      connectionId: z.string().nullish(),
+      executionHostId: z.string().nullish()
+    })
+  )
+})
+
+/** The projects the destination already holds, with the host each one's files are on. */
+export async function listRemoteOrcadRepositories(
+  pairingCode: string,
+  options: CatalogRequestOptions = {}
+): Promise<OrcadServerRepository[]> {
+  const pairing = parsePairingCode(pairingCode)
+  if (!pairing) {
+    throw new Error('orcad_migration_pairing_code_invalid')
+  }
+  const response = await sendSupportedMigrationRequest(pairing, 'repo.list', undefined, options)
+  if (!response.ok) {
+    throw new Error(`orcad_migration_repositories_failed:${response.error.message}`)
+  }
+  return ServerRepositoriesSchema.parse(response.result).repos.map(
+    ({ id, path, connectionId, executionHostId }) => ({
+      id,
+      path,
+      ...(connectionId != null ? { connectionId } : {}),
+      ...(executionHostId != null ? { executionHostId } : {})
+    })
+  )
+}
+
 async function requestCatalogState(
   pairingCode: string,
   operation: Exclude<OrcadCatalogMigrationOperation, 'abort'>,
@@ -123,7 +202,8 @@ async function request(
   pairingCode: string,
   operation: OrcadCatalogMigrationOperation,
   manifest: OrcadMigrationManifest,
-  options: CatalogRequestOptions
+  options: CatalogRequestOptions,
+  expectedBlobs: readonly OrcadMigrationBlobDescriptor[] = []
 ): Promise<unknown> {
   const pairing = parsePairingCode(pairingCode)
   if (!pairing) {
@@ -137,11 +217,19 @@ async function request(
   const response = await sendSupportedMigrationRequest(
     pairing,
     METHOD_BY_OPERATION[operation],
-    { manifest },
+    // Only with blobs: SSH and blob-free moves keep sending exactly `{ manifest }`.
+    expectedBlobs.length > 0 ? { manifest, expectedBlobs } : { manifest },
     options,
     carriesExtraAgentArgs,
     // Every operation: an older destination would parse a non-SSH source as malformed or as SSH.
-    requiredOrcadMigrationSourceCapability(manifest.source)
+    requiredOrcadMigrationSourceCapability(manifest.source),
+    // A destination without the blob channel would strip the field and commit unchecked.
+    (capabilities) => {
+      const unsupported = findUnsupportedMigrationBlobKind(expectedBlobs, capabilities)
+      if (unsupported) {
+        throw new Error(orcadMigrationBlobKindUnsupportedBlocker(unsupported))
+      }
+    }
   )
   if (!response.ok) {
     throw new Error(`orcad_migration_${operation}_failed:${response.error.message}`)
@@ -155,7 +243,8 @@ async function sendSupportedMigrationRequest(
   params: unknown,
   options: CatalogRequestOptions,
   requiresExtraAgentArgs = false,
-  requiredSourceCapability: string | null = null
+  requiredSourceCapability: string | null = null,
+  assertCapabilities: (capabilities: readonly string[]) => void = () => {}
 ): Promise<RuntimeRpcResponse<unknown>> {
   const response = await sendRemoteRuntimeRequestWithStatusPreflight<unknown>(
     pairedRuntimeConnectionFromOffer(pairing),
@@ -187,6 +276,7 @@ async function sendSupportedMigrationRequest(
       ) {
         throw new Error(ORCAD_MIGRATION_DESTINATION_SOURCE_KIND_UNSUPPORTED)
       }
+      assertCapabilities(status.result.capabilities ?? [])
     },
     undefined,
     ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES,

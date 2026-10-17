@@ -8,17 +8,18 @@
 // an operation only the provider can perform starts it before admission.
 
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
-import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import type {
   AgentSessionCancelResult,
   AgentSessionMutationEnvelope,
   AgentSessionMutationResult,
   AgentSessionOptionResult,
   AgentSessionPromptResult,
-  AgentSessionSendResult,
+  AgentSessionSendResult
+} from '../../../shared/agent-session-wire'
+import type {
   AgentSessionThreadGoalChange,
   AgentSessionThreadGoalResult
-} from '../../../shared/agent-session-wire'
+} from '../../../shared/agent-session-thread-goal-wire'
 import type { AgentSessionPromptRequest } from './structured-agent-session-turns-prompt'
 import { refuseThreadGoalUnsupported, threadGoalPlan } from './structured-agent-session-thread-goal'
 import {
@@ -56,6 +57,8 @@ import {
   recordStructuredAgentSessionOptionIntent,
   type StructuredAgentSessionOptionsReader
 } from './structured-agent-session-options-read'
+import { settleStructuredAgentSessionLateDispatch } from './structured-agent-session-late-dispatch'
+import { releaseStructuredAgentSessionUnansweredDispatches } from './structured-agent-session-unanswered-dispatch-release'
 
 export function sendStructuredAgentSessionTurn(
   context: StructuredAgentSessionMutationContext,
@@ -65,7 +68,7 @@ export function sendStructuredAgentSessionTurn(
     body: AgentJournalMessageItem
     retryUnknown?: true
     delivery?: 'queue-if-active'
-    executionOptions?: AgentSessionExecutionOptions
+    options?: Readonly<Record<string, string>>
     /** Host-local, set only by the client-facing `agentSession.send` RPC (the
      *  renderer's launch prompt included): recorded as the submission's `client`
      *  origin, so a restart or a close keeps it as a card if it never reached the
@@ -266,6 +269,11 @@ export function structuredAgentSessionMutationDelegates(
     readOptions: (
       sessionId: string,
       reader: StructuredAgentSessionOptionsReader = IN_PROCESS_OPTIONS_READER
-    ) => readStructuredAgentSessionOptions(context(), sessionId, reader)
+    ) => readStructuredAgentSessionOptions(context(), sessionId, reader),
+    settleLateDispatch: (input: Parameters<typeof settleStructuredAgentSessionLateDispatch>[1]) =>
+      settleStructuredAgentSessionLateDispatch(context(), input),
+    releaseUnansweredDispatches: (
+      input: Parameters<typeof releaseStructuredAgentSessionUnansweredDispatches>[1]
+    ) => releaseStructuredAgentSessionUnansweredDispatches(context(), input)
   }
 }

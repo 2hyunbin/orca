@@ -34,5 +34,5 @@ export function waitsForCodexTurnOptions(
     }
     return agentJournalSubmissionKey(submission.clientMessageId) === turn.userItemId
   })
-  return active ? !sameOptions(active.executionOptions, next.executionOptions) : true
+  return active ? !sameOptions(active.options, next.options) : true
 }

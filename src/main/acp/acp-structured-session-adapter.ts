@@ -44,17 +44,23 @@ import {
   type AcpStructuredChild
 } from './acp-structured-child'
 import { AcpStructuredChildren } from './acp-structured-child-lifecycle'
+import { AcpConversationCopies } from './acp-conversation-copies'
 
 export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapter {
   private readonly children: AcpStructuredChildren
+  private readonly copies: AcpConversationCopies
   constructor(private readonly deps: AcpStructuredSessionAdapterDeps) {
     this.children = new AcpStructuredChildren(deps)
+    this.copies = new AcpConversationCopies(deps)
   }
 
   /** Restart recovery's evidence; null for an agent whose own store Orca cannot read. */
-  providerHistoryWindow: NonNullable<StructuredAgentSessionAdapter['providerHistoryWindow']> = ({
-    identity
-  }) => readAcpRecoveryHistory(this.deps, identity)
+  providerHistoryWindow: NonNullable<StructuredAgentSessionAdapter['providerHistoryWindow']> = (
+    input
+  ) => readAcpRecoveryHistory(this.deps, input.identity)
+
+  copyConversation: NonNullable<StructuredAgentSessionAdapter['copyConversation']> = (input) =>
+    this.copies.copy(input)
 
   // The child runs on this runtime's own machine; Windows needs process start-time proof.
   supportsLocation = (location: AgentSessionExecutionLocation): boolean =>
@@ -298,6 +304,7 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
   forceCloseSession = (sessionId: string): Promise<boolean> => this.children.stop(sessionId, false)
 
   async closeAll(): Promise<void> {
+    const copiedChildren = this.copies.closeAll()
     const ids = new Set([
       ...this.children.sessions.keys(),
       ...this.children.starts.failedSessionIds()
@@ -306,18 +313,19 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
     const proven = await Promise.all(
       [...ids].map((sessionId) => this.children.stop(sessionId, true))
     )
-    if (proven.includes(false)) {
+    if (!(await copiedChildren) || proven.includes(false)) {
       throw new Error('an ACP agent child could not be proven stopped')
     }
   }
 
+  /** Only for a send refused before its prompt was written. */
   private rejected(
     session: AcpStructuredChild,
     kind: 'providerExited'
   ): AgentSessionDispatchOutcome {
     return {
       state: 'rejected',
-      ...agentSessionFailureWords(agentSessionFailureFact(kind), {
+      ...agentSessionFailureWords(agentSessionFailureFact(kind, { neverReachedAgent: true }), {
         surface: 'rejection',
         agentName: acpAgentName(session.spec.agent)
       })
@@ -332,11 +340,6 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
     return session
   }
 
-  private stopGraceMs(): number {
-    return this.deps.stopGraceMs ?? ACP_STOP_GRACE_MS
-  }
-
-  private now(): number {
-    return (this.deps.now ?? Date.now)()
-  }
+  private readonly stopGraceMs = (): number => this.deps.stopGraceMs ?? ACP_STOP_GRACE_MS
+  private readonly now = (): number => (this.deps.now ?? Date.now)()
 }

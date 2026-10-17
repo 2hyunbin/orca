@@ -1,8 +1,6 @@
-import type { StoredAgentAttentionUnread } from '@/attention/agent-attention-contract'
 import type { ClosedTerminalTabTombstonesByTabId } from '../../../../shared/closed-terminal-tab-tombstones'
 import type { TerminalLayoutSnapshot, TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
-import type { SetupSplitDirection } from '../../../../shared/worktree/launch-types'
 import type {
   AgentProviderSessionMetadata,
   SleepingAgentLaunchConfig
@@ -17,6 +15,7 @@ import type { AutomaticAgentResumeClaim, CodexRestartNotice } from './terminal-c
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
 import type { TerminalActions } from './terminal-actions'
+import type { AgentPaneLaunchRequest } from '../../../../shared/agent-pane-launch-request'
 
 export type TerminalState = {
   tabsByWorktree: Record<string, TerminalTab[]>
@@ -25,9 +24,6 @@ export type TerminalState = {
   activeTabIdByWorktree: Record<string, string | null>
   ptyIdsByTabId: Record<string, string[]>
   runtimePaneTitlesByTabId: Record<string, Record<number, string>>
-  unreadTerminalTabs: Record<string, StoredAgentAttentionUnread>
-  unreadTerminalPanes: Record<string, StoredAgentAttentionUnread>
-  unreadAgentCompletionPanes: Record<string, StoredAgentAttentionUnread>
   /** Scoped exit suppression and reference-counted shutdown ownership prevent teardown races. */
   suppressedPtyExitIds: Record<string, true>
   pendingPtyShutdownIds: Record<string, number>
@@ -56,6 +52,8 @@ export type TerminalState = {
       resumeProviderSession?: AgentProviderSessionMetadata
       launchToken?: string
       launchAgent?: TuiAgent
+      /** The agent launch the pane's own spawn starts, instead of `command`. */
+      agentLaunch?: AgentPaneLaunchRequest
       agentArgsOverride?: string | null
       draftPrompt?: string
       sessionOptions?: Record<string, SessionOptionValue>
@@ -68,14 +66,6 @@ export type TerminalState = {
     }
   >
   pendingInitialCwdByTabId: Record<string, string>
-  pendingSetupSplitByTabId: Record<
-    string,
-    {
-      command: string
-      env?: Record<string, string>
-      direction: SetupSplitDirection
-    }
-  >
   pendingIssueCommandSplitByTabId: Record<
     string,
     {

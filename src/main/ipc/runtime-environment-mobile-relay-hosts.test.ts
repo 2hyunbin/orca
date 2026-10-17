@@ -12,7 +12,8 @@ vi.mock('electron', () => ({ app: { getPath: () => '/user-data' } }))
 vi.mock('../../shared/runtime-environment-store', () => ({
   listEnvironments: () => mocks.environments
 }))
-vi.mock('../../shared/runtime-environments', () => ({
+vi.mock('../../shared/runtime-environments', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   getPreferredPairingOffer: (environment: { endpoint: string }) => ({
     endpoint: environment.endpoint
   })
@@ -65,6 +66,27 @@ describe('runtime environment mobile relay hosts', () => {
     expect(hosts.list().environments.map((environment) => environment.id)).toEqual(['env-1'])
     await expect(hosts.resolve('wsl:ubuntu')).resolves.toBeNull()
     expect(mocks.resolveManaged).not.toHaveBeenCalled()
+  })
+
+  it('relays SSH-managed servers, with and without the persisted deployment kind', async () => {
+    const tunnel = { sshTargetId: 't', sshTargetGeneration: 1, localPort: 1, remotePort: 2 }
+    mocks.environments = [
+      { id: 'legacy', name: 'A', createdAt: 1, runtimeId: null, orcadDeployment: tunnel },
+      {
+        id: 'managed',
+        name: 'B',
+        createdAt: 2,
+        runtimeId: null,
+        orcadDeployment: { kind: 'ssh', ...tunnel }
+      }
+    ]
+    const hosts = createRuntimeEnvironmentMobileRelayHosts()
+    expect(hosts.list().environments.map((environment) => environment.id)).toEqual([
+      'legacy',
+      'managed'
+    ])
+    await hosts.resolve('managed')
+    expect(mocks.resolveManaged).toHaveBeenCalledWith('/user-data', 'managed')
   })
 
   it("lists configured servers with the desktop's own status, ignoring another pairing's snapshot", () => {

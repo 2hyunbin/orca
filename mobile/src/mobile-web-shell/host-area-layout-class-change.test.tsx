@@ -53,7 +53,9 @@ vi.mock('expo-file-system', () => ({ Directory: class {}, File: class {}, Paths:
 vi.mock('../transport/mobile-endpoint-supervisor-support', () => ({
   encodeBase64Url: () => 'session-id'
 }))
-vi.mock('../components/HostProtocolGate', () => ({ useHostProtocolGates: () => doubles.gates }))
+vi.mock('../components/host-protocol-gates-context', () => ({
+  useHostProtocolGates: () => doubles.gates
+}))
 vi.mock('../transport/client-context', () => ({
   useHostClient: () => ({ client: {}, state: 'connected' })
 }))
@@ -86,7 +88,6 @@ const store: GenerationStore = {
   abortStagedGeneration: async () => undefined,
   sweepStagedGenerations: async () => undefined,
   deleteHostCache: async () => undefined,
-  persistActiveManifest: async () => 'persisted',
   recordUpdateFailure: async () => undefined,
   readUpdateFailures: async () => [],
   forgetHostUpdateFailures: async () => undefined

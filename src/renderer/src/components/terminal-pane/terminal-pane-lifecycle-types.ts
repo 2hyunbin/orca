@@ -1,11 +1,10 @@
+import type { WorkspaceAttentionSlice } from '@/store/slices/workspace-attention/workspace-attention-contract'
 import type { NotificationWorkspaceOwner } from '../../../../shared/notification-source'
-import type { AgentAttentionUnreadReason } from '@/attention/agent-attention-contract'
 import type { IDisposable } from '@xterm/xterm'
 import type { ParsedAgentStatusPayload } from '../../../../shared/agent-status-types'
 import type { TerminalKittyKeyboardModeTracker } from '../../../../shared/terminal-kitty-keyboard-mode-tracker'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { TerminalLayoutSnapshot } from '../../../../shared/terminal-tab-types'
-import type { SetupSplitDirection } from '../../../../shared/worktree/launch-types'
 import type {
   PaneExternalDropHandler,
   PaneExternalDropResolver,
@@ -23,12 +22,6 @@ import type { PaneLayoutEditIntent } from '../../../../shared/rpc-contract/sessi
 
 export type TerminalPaneStartup = Exclude<PtyPaneStartup, null>
 
-export type TerminalPaneSetupSplit = {
-  command: string
-  env?: Record<string, string>
-  direction: SetupSplitDirection
-}
-
 export type TerminalPaneIssueCommandSplit = {
   command: string
   env?: Record<string, string>
@@ -39,8 +32,6 @@ export type UseTerminalPaneLifecycleDeps = {
   worktreeId: string
   cwd?: string
   startup?: TerminalPaneStartup | null
-  /** Split pane runs the setup command so the main terminal stays interactive. */
-  setupSplit?: TerminalPaneSetupSplit | null
   /** Split pane runs the repo's issue-automation command with the issue number interpolated. */
   issueCommandSplit?: TerminalPaneIssueCommandSplit | null
   isActive: boolean
@@ -86,12 +77,7 @@ export type UseTerminalPaneLifecycleDeps = {
   setRuntimePaneTitle: (tabId: string, paneId: number, title: string) => void
   clearRuntimePaneTitle: (tabId: string, paneId: number) => void
   updateTabPtyId: (tabId: string, ptyId: string, replacedPtyId?: string) => void
-  markWorktreeUnread: (worktreeId: string) => void
-  markTerminalTabUnread: (tabId: string, reason: AgentAttentionUnreadReason) => void
-  markTerminalPaneUnread: (paneKey: string, reason: AgentAttentionUnreadReason) => void
-  clearWorktreeUnread: (worktreeId: string) => void
-  clearTerminalTabUnread: (tabId: string) => void
-  clearTerminalPaneUnread: (paneKey: string) => void
+  markTerminalBell: WorkspaceAttentionSlice['markTerminalBell']
   onShowSessionRestoredBanner: (paneId: number, reason?: SessionRestoredBannerReason) => void
   dispatchNotification: (event: {
     source: 'terminal-bell' | 'agent-task-complete'

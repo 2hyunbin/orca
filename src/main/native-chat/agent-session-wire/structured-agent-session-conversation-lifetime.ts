@@ -82,6 +82,13 @@ export function createStructuredAgentSessionConversationLifetime(host: {
     )
   }
 
+  const hasOpenDispatch = (sessionId: string): boolean => {
+    const record = deps().store.getRecord(sessionId)
+    return record !== null && deps().hasOpenDispatch?.(record) === true
+  }
+  const providerHoldsDispatch = (sessionId: string): boolean =>
+    deps().adapter.holdsDispatch?.(sessionId) === true
+
   const idleSweep = new StructuredAgentSessionIdleSweep({
     sessions,
     serialize,
@@ -89,11 +96,12 @@ export function createStructuredAgentSessionConversationLifetime(host: {
     isDisposed: () => disposed,
     deliveryActive: host.deliveryActive,
     childWork: host.readChildWork,
-    hasOpenDispatch: (sessionId) => {
-      const record = deps().store.getRecord(sessionId)
-      return record !== null && deps().hasOpenDispatch?.(record) === true
+    store: {
+      getRecord: (sessionId) => deps().store.getRecord(sessionId),
+      replacedRuntime: (sessionId) => deps().store.replacedRuntime(sessionId)
     },
-    providerHoldsDispatch: (sessionId) => deps().adapter.holdsDispatch?.(sessionId) === true,
+    hasOpenDispatch,
+    providerHoldsDispatch,
     // The host puts an idle agent to rest: a turn it cuts short is news, not the user's Stop.
     stopAgent: (sessionId) => stopAgent(sessionId, { cause: 'evict', resting: true }),
     // A host stop: the child's end rejects what it was handed and writes the one error row, and
@@ -175,6 +183,17 @@ export function createStructuredAgentSessionConversationLifetime(host: {
           host.context().runtimeState.startupAttempts.childEnded(sessionId, child)
         }
       }),
+    /** Runs `task` in the chat's lane only when execution is idle. */
+    runWhileExecutionIdle: <T>(sessionId: string, task: () => Promise<T>): Promise<T | null> =>
+      serialize(sessionId, async () =>
+        disposed ||
+        sessions.get(sessionId)?.child ||
+        host.deliveryActive(sessionId) ||
+        providerHoldsDispatch(sessionId) ||
+        hasOpenDispatch(sessionId)
+          ? null
+          : await task()
+      ),
     /** Quit has begun: nothing opens a conversation or sweeps one after this. */
     dispose: (): void => {
       disposed = true

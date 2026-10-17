@@ -2,15 +2,16 @@ import { createNativeChatSessionOptionRecord } from '../../../src/shared/native-
 import type { SessionOptionDescriptor } from '../../../src/shared/native-chat-session-options'
 import {
   commitStructuredAgentSessionOptionValues,
-  structuredAgentSessionOptionSnapshot,
   type StructuredAgentSessionOptionState
 } from '../../../src/shared/structured-agent-session-options'
+import { structuredAgentSessionShownSnapshot } from '../../../src/shared/structured-agent-session-option-view'
 
-/** The host's saved choice with this phone's still-pending pick on top. */
+/** The host's saved choice with this phone's still-pending pick on top, as the picker shows it. */
 export function mobileStructuredOptionSnapshot(
   agent: string,
   state: StructuredAgentSessionOptionState,
-  hostSelection: Readonly<Record<string, string>> | undefined
+  hostSelection: Readonly<Record<string, string>> | undefined,
+  takesSendOptions: boolean
 ): SessionOptionDescriptor[] {
   const selected = hostSelection
     ? commitStructuredAgentSessionOptionValues(
@@ -19,9 +20,10 @@ export function mobileStructuredOptionSnapshot(
       )
     : state
   const pending = state.pendingPick
-  return structuredAgentSessionOptionSnapshot(
+  return structuredAgentSessionShownSnapshot(
     pending
       ? commitStructuredAgentSessionOptionValues(selected, { [pending.id]: pending.value })
-      : selected
+      : selected,
+    takesSendOptions
   )
 }

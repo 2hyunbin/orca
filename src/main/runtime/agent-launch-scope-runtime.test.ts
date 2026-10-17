@@ -91,21 +91,21 @@ describe("the window's runtime rule, on the host", () => {
 it("answers from main's WSL cache, which the window may not have read yet", () => {
   _setWslCachesForTests({ available: true, distros: ['Debian'] })
   expect(() => claudeRuntime(store({ project: UBUNTU }), scope(WIN, { repo: repo(WIN) }))).toThrow(
-    'requires repair before terminal spawn: wsl-distro-missing'
+    'Ubuntu is not installed in WSL'
   )
   // A `\\wsl$` path proves its distro, so a stale cache never refuses it.
   expect(claudeRuntime(store({}), scope(SHARE, { repo: repo(SHARE) })).platform).toBe('linux')
 })
 
-// TEMPORARY parity: the host finds a repo's project by its source repos only, as main does.
-it("finds a repo's project by its source repos, not a project named after the repo", () => {
+// The window's lookup: a project named after the repo counts as its project, as does one listing it.
+it("finds a repo's project the way the window does, by its id too", () => {
   const projects = [
     { id: 'r', sourceRepoIds: [], localWindowsRuntimePreference: UBUNTU },
     { id: 'p', sourceRepoIds: ['r'], localWindowsRuntimePreference: { kind: 'windows-host' } }
   ]
   const fake = { getProjects: () => projects, getSettings: () => ({}), getRepo: () => repo(WIN) }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the resolver reads only these members.
-  expect(agentLaunchPlatformForScope(fake as never, scope(WIN, { repo: repo(WIN) }))).toBe('win32')
+  expect(agentLaunchPlatformForScope(fake as never, scope(WIN, { repo: repo(WIN) }))).toBe('linux')
 })
 
 // Relied on by C2: the pane's pty:spawn takes the fact as is, for quoting and shell alike.

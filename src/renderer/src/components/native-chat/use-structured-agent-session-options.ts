@@ -70,6 +70,7 @@ export function useStructuredAgentSessionOptions(args: {
   const identity = `${agent}:${sessionId}:${structuredAgentSessionHostKey(target)}`
   const selectionFromStatus = args.optionSelection !== undefined
   const {
+    takesSendOptions,
     optionState,
     optionView,
     optionStateRef,
@@ -142,9 +143,7 @@ export function useStructuredAgentSessionOptions(args: {
       const shownAtOnce = id === AGENT_CHAT_PERMISSION_MODE_OPTION_ID
       if (shownAtOnce && !selectionFromStatus) {
         updateOptionState((current) =>
-          current.record === targetRecord
-            ? commitStructuredAgentSessionOptionValues(current, { [id]: encoded })
-            : current
+          commitStructuredAgentSessionOptionValues(current, { [id]: encoded })
         )
       }
       updateOptionState((current) => ({ ...current, pendingPick: { id, value: encoded } }))
@@ -282,6 +281,7 @@ export function useStructuredAgentSessionOptions(args: {
     sessionId,
     optionView,
     optionSnapshot,
+    takesSendOptions,
     changeOption: changeStructuredOption
   })
 
@@ -291,6 +291,8 @@ export function useStructuredAgentSessionOptions(args: {
     conversationCommands: support?.commands ?? [],
     /** Absent unless this host and session can change the goal. */
     threadGoal: support?.threadGoal,
+    /** A goal only the agent's own `/goal` changes; absent from a host that predates it. */
+    reportedThreadGoal: support?.reportedThreadGoal,
     /** Absent from a host that predates it or a session that writes no context facts. */
     contextUsage: support?.contextUsage,
     /** Absent from a host that predates it, and until the options read answers. */
@@ -300,6 +302,7 @@ export function useStructuredAgentSessionOptions(args: {
     optionSnapshot,
     optionSurface,
     setStructuredOption,
+    takesSendOptions,
     unavailable: hostCatalog.unavailable
   }
 }

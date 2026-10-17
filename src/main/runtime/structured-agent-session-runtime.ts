@@ -48,10 +48,7 @@ import {
 import type { NativeChatShellEnvironmentPolicy } from '../../shared/native-chat-shell-environment'
 import { createStructuredAgentEnvironmentResolvers } from './structured-agent-shell-environment'
 import type { ClaudeStructuredAuthPolicy } from '../claude-accounts/claude-structured-auth-policy'
-import {
-  STRUCTURED_AGENT_RUNTIME_REGISTRATIONS,
-  type StructuredAgentAdapterContext
-} from './structured-agent-runtime-registrations'
+import type { StructuredAgentAdapterContext } from './structured-agent-runtime-registration-types'
 import { createStructuredAgentSessionLifecycleDelivery } from './structured-agent-session-lifecycle-delivery'
 import { createStructuredAgentSessionDispatchFollowUps } from './structured-agent-session-dispatch-followups'
 import { agentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
@@ -64,10 +61,9 @@ import {
   type RuntimeAgentAccountHomeResolver
 } from './structured-agent-model-catalog-wiring'
 import type { ClaudeCliFlagSupport } from '../claude/claude-cli-flag-support'
-import {
-  scheduleNativeChatVisualsSweep,
-  type NativeChatVisualsSweepDeps
-} from '../native-chat/native-chat-visuals-sweep'
+import { migrateLegacyNativeChatVisualsFolders } from '../native-chat/native-chat-scratch-folder-migration'
+import { scheduleNativeChatVisualsSweep } from '../native-chat/native-chat-visuals-sweep'
+import { readJournalSessionLastActivityAt } from '../native-chat/agent-session-journal/journal-row-table'
 
 /** Whether this profile holds a structured chat: a record or tab in the journal database. */
 export function hasPersistedStructuredAgentSessionStore(
@@ -96,21 +92,21 @@ export type StructuredAgentSessionRuntimeDeps = StructuredAgentSessionTransportO
   claimKeyId: string
   resolveWorkspacePath: (workspaceId: string) => Promise<string>
   resolveCodexCommand?: (options?: { pathEnv?: string | null; homePath?: string }) => string
-  resolveClaudeCommand?: () => string
+  resolveClaudeCommand?: (options?: { pathEnv?: string | null; homePath?: string }) => string
   /** Which version-gated flags a Claude CLI takes; absent never passes one. */
   claudeCliFlags?: ClaudeCliFlagSupport
-  /** Gives each chat a visuals folder and the skill that teaches it, and sweeps folders whose chat
-   *  is gone. Wired by the real hosts only, so a test runtime never loads the bundled skill. */
+  /** Gives each chat a scratch folder and the visuals skill that teaches it, and sweeps folders
+   *  whose chat is gone or long unused. Wired by the real hosts only, so a test runtime never loads
+   *  the bundled skill. */
   nativeChatVisuals?: {
     /** Read this host's preference when a chat starts a provider process. */
     isEnabled: () => boolean
-    workspaceVerdicts: NonNullable<NativeChatVisualsSweepDeps['workspaceVerdicts']>
   }
   /** Required, and asserted at install time — saved Arguments must never be silently omitted. */
   resolveLaunchArgs: (provider: AgentSessionRecord['provider']) => Promise<string[]> | string[]
   /** Required, and asserted at install time — an absent policy must not degrade to a guess. */
   resolveClaudeAuthPolicy: () => Promise<ClaudeStructuredAuthPolicy> | ClaudeStructuredAuthPolicy
-  /** Agent Permissions for an ACP agent; also fills Claude and Codex chats saved before modes. */
+  /** What a chat saved before its agent had modes ran with; fills that chat's mode once. */
   resolveAgentFullAccess?: (agent: string) => boolean
   /** The user's per-agent environment overlay from settings, laid over every agent's base env. */
   resolveAgentLaunchEnv?: (agent: string) => Record<string, string>
@@ -232,9 +228,7 @@ export async function stopStructuredAgentSessionRuntime(options?: {
 }
 
 async function install(deps: StructuredAgentSessionRuntimeDeps): Promise<InstalledRuntime> {
-  // Why thrown rather than defaulted: the caller is `@ts-nocheck`, so a dropped
-  // field arrives here as `undefined`. Refusing to install is loud; guessing a
-  // policy is the silent under-strip this assertion exists to prevent.
+  // A default policy could attribute sign-in failures to the wrong account.
   if (typeof deps.resolveClaudeAuthPolicy !== 'function') {
     throw new Error(CLAUDE_STRUCTURED_AUTH_POLICY_REQUIRED)
   }
@@ -264,6 +258,8 @@ async function install(deps: StructuredAgentSessionRuntimeDeps): Promise<Install
       error
     })
   }
+  // Before the host serves reads: a chat opened right after an update finds its visuals in place.
+  await migrateLegacyNativeChatVisualsFolders(deps.stateDirectory, logger)
   return await installOnJournal({ ...deps, logger }, recordStore)
 }
 
@@ -295,6 +291,8 @@ async function installOnJournal(
     }),
     host: () => host
   }
+  const { STRUCTURED_AGENT_RUNTIME_REGISTRATIONS } =
+    await import('./structured-agent-runtime-registrations')
   const registrations = STRUCTURED_AGENT_RUNTIME_REGISTRATIONS.map(
     ({ definition, createAdapter }) => ({ definition, adapter: createAdapter(context) })
   )
@@ -358,8 +356,9 @@ async function installOnJournal(
     ? scheduleNativeChatVisualsSweep({
         stateDirectory: deps.stateDirectory,
         listHeldSessionIds: () => (store.readOnly ? null : store.listHeldSessionIds()),
-        locationOf: (sessionId) => store.getRecord(sessionId)?.location ?? null,
-        workspaceVerdicts: deps.nativeChatVisuals.workspaceVerdicts,
+        lastJournalActivityAt: (sessionId) =>
+          readJournalSessionLastActivityAt(journalDatabase.db, sessionId),
+        runWhileExecutionIdle: host.runWhileExecutionIdle,
         logger: deps.logger
       })
     : undefined

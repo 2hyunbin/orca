@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  NATIVE_CHAT_VISUALS_DIR_ENV,
+  NATIVE_CHAT_SCRATCH_DIR_ENV,
   type NativeChatVisualsLaunch
 } from '../native-chat/native-chat-visuals-delivery'
 import { CodexAppServerRequestError } from './codex-app-server-request-error'
@@ -22,7 +22,7 @@ import {
 import { codexStructuredPermissionPolicy } from './codex-structured-permission-policy'
 
 const VISUALS: NativeChatVisualsLaunch = {
-  folder: '/state/native-chat-visuals/abc',
+  folder: '/state/chat-scratch/abc',
   skill: { pluginDir: '/app/native-chat-visuals', skillsRoot: '/app/native-chat-visuals/skills' }
 }
 const MANUAL = codexStructuredPermissionPolicy('ask')
@@ -215,19 +215,19 @@ describe('a Codex chat acquisition with visuals', () => {
         ...MANUAL,
         config: { 'sandbox_workspace_write.writable_roots': ['/home/me/scratch', VISUALS.folder] }
       })
-      expect(connection.launch.env?.[NATIVE_CHAT_VISUALS_DIR_ENV]).toBe(VISUALS.folder)
+      expect(connection.launch.env?.[NATIVE_CHAT_SCRATCH_DIR_ENV]).toBe(VISUALS.folder)
     }
   })
 
   it('opens the thread exactly as before for a chat without visuals', async () => {
     const codex = fakeCodex()
-    await acquired(codex, { env: { [NATIVE_CHAT_VISUALS_DIR_ENV]: '/other' } })
+    await acquired(codex, { env: { [NATIVE_CHAT_SCRATCH_DIR_ENV]: '/other' } })
     const connection = codex.connections[0]!
     const methods = connection.calls.map((call) => call.method)
     // The adapter sends `initialize` itself now; nothing comes between it and the thread.
     expect(methods.slice(0, 2)).toEqual(['initialize', 'thread/start'])
     expect(methods).not.toContain('skills/extraRoots/set')
     expect(connection.calls[1]?.params).not.toHaveProperty('config')
-    expect(connection.launch.env).not.toHaveProperty(NATIVE_CHAT_VISUALS_DIR_ENV)
+    expect(connection.launch.env).not.toHaveProperty(NATIVE_CHAT_SCRATCH_DIR_ENV)
   })
 })

@@ -132,7 +132,7 @@ export async function openCodexStructuredSession(
     backgroundTasks: new CodexBackgroundTaskTracker(
       opened.threadId,
       start.subagentExecutions,
-      codexChildWorkSink(sessionId, deps)
+      codexChildWorkSink(sessionId, deps, input.events)
     ),
     forceCloseUnexpected: (reason) =>
       start.forceCloseUnexpected(sessionId, input.fence, generation, reason),

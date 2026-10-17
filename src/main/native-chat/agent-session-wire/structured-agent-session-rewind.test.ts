@@ -267,8 +267,9 @@ describe('host rewind', () => {
       await attachAndStart(store.getRecord(HOST_TEST_SESSION)!.lease.runtimeFence)
     ).toMatchObject({ ok: true })
     expect((await host.journalSnapshot(HOST_TEST_SESSION)).items).toHaveLength(1)
+    // A person's own message keeps the words Orca recorded, not the provider's copy.
     expect((await host.journalSnapshot(HOST_TEST_SESSION)).items[0]?.body).toEqual(
-      hostTestMessage('verified history')
+      hostTestMessage('0')
     )
     expect(recoverRewind).toHaveBeenCalledTimes(2)
     expect(rewind).toHaveBeenCalledTimes(1)
@@ -542,7 +543,7 @@ describe('host rewind', () => {
         body
       }))
     ).toEqual([
-      { itemId: agentJournalItemKey(message('kept')), body: hostTestMessage('kept from provider') },
+      { itemId: agentJournalItemKey(message('kept')), body: hostTestMessage('kept') },
       { itemId: agentJournalItemKey(goalRow), body: goalBody },
       { itemId: agentJournalItemKey(turnRow('kept')), body: keptTurn }
     ])
@@ -586,7 +587,7 @@ describe('host rewind', () => {
         body
       }))
     ).toEqual([
-      { itemId: agentJournalItemKey(message('kept')), body: hostTestMessage('kept from provider') },
+      { itemId: agentJournalItemKey(message('kept')), body: hostTestMessage('kept') },
       { itemId: agentJournalItemKey(newerRow), body: newerBody }
     ])
   })
@@ -737,7 +738,7 @@ describe('host rewind', () => {
         body
       }))
     ).toEqual([
-      { itemId: agentJournalItemKey(message('kept')), body: hostTestMessage('kept from recovery') },
+      { itemId: agentJournalItemKey(message('kept')), body: hostTestMessage('kept') },
       { itemId: agentJournalItemKey(goalRow), body: goalBody }
     ])
     expect(store.getRecord(HOST_TEST_SESSION)?.rewind?.phase).toBe('completed')

@@ -32,6 +32,10 @@ import {
 } from '../../../shared/agent-session-wire'
 import { isAgentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
 import { DISPATCH_DOUBT_PERSISTENCE_FAILED } from '../agent-session-journal/journal-dispatch-doubt-reasons'
+import {
+  contextStructuredAgentSessionCurrentWork,
+  type StructuredAgentSessionCurrentWork
+} from './structured-agent-session-current-work'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import type { JournalOperationReceipt } from '../agent-session-journal/journal-row-writer'
 import type {
@@ -53,6 +57,8 @@ import type { StructuredAgentSessionLogger } from './structured-agent-session-lo
 import { isAgentSessionAttachmentExpiredError } from '../agent-session-attachments/agent-session-attachment-claims'
 import { CommandReceiptExistsError } from '../agent-session-journal/command-receipt-transaction'
 import type { StructuredAgentRegistry } from './structured-agent-registry'
+import { carriedStoppedHistory } from './structured-agent-session-stopped-history-selection'
+import { withStoppedHistory } from '../../../shared/agent-session-stopped-history'
 export { performPrompt } from './structured-agent-session-turns-prompt'
 export { performCancel } from './structured-agent-session-turns-cancel'
 
@@ -60,6 +66,9 @@ export type AgentSessionTurnContext = {
   sessionId: string
   journal: AgentSessionJournal
   fence: number
+  /** The host's projection of what work is current (`structuredAgentSessionCurrentWork`), read
+   *  fresh per call: a child's end can move it mid-operation. */
+  currentWork?: () => StructuredAgentSessionCurrentWork | null
   adapter: StructuredAgentSessionAdapter
   /** What each agent declares; the session's own answer is `agents.capabilities(agent)`. */
   agents: StructuredAgentRegistry
@@ -175,12 +184,13 @@ export async function performSend(
   input: {
     clientMessageId: string
     payloadFingerprint: string
-    executionOptions?: AgentSessionExecutionOptions
     body: AgentJournalMessageItem
     /** Who asked for the turn; absent on callers that predate it. */
     origin?: 'client' | 'host'
     /** Who it is from; the submission keeps the kind only. */
     source?: AgentSessionMessageSource
+    /** The send's `options` record, read once here into the choices the message keeps. */
+    options?: Readonly<Record<string, string>>
   }
 ): Promise<TurnOutcome<AgentSessionSendResult>> {
   const existing = ctx.journal
@@ -198,13 +208,13 @@ export async function performSend(
       value: { clientMessageId: input.clientMessageId, submission: { ...existing } }
     }
   }
-  const captured = captureStructuredExecutionOptions(ctx, input.executionOptions)
+  const captured = captureStructuredExecutionOptions(ctx, input.options)
   if ('refusal' in captured) {
     return { ok: false, refusal: captured.refusal }
   }
   try {
     await ctx.journal.appendSubmission(
-      { ...input, executionOptions: captured.options, fence: ctx.fence, handoverRecorded: true },
+      { ...input, options: captured.options, fence: ctx.fence, handoverRecorded: true },
       undefined,
       ctx.operationReceipt
     )
@@ -268,12 +278,17 @@ export async function handOverSubmission(
     await handOverStructuredAgentSessionCommand(ctx, submission, body)
     return
   }
-  // The message joins the turn running at handover, a steer, or opens its own.
+  // The message joins the turn the child it goes to is running, a steer, or opens its own; never a
+  // turn an ended generation left. A new turn carries the stopped messages owed to the agent, named
+  // on this same row before anything is written.
+  const turnScope = contextStructuredAgentSessionCurrentWork(ctx).turnScope()
+  const carried = carriedStoppedHistory(ctx, turnScope, submission, body)
   await ctx.journal.resolveDispatch({
     clientMessageId,
     state: 'pending',
     fence: ctx.fence,
-    turnScope: ctx.journal.liveTurnScope()
+    turnScope,
+    ...(carried ? { carries: carried.covers } : {})
   })
   // The handover row's instant on the host clock; the turn this dispatch opens records it so the
   // live counter never re-anchors at turn-open.
@@ -283,9 +298,9 @@ export async function handOverSubmission(
     outcome = await dispatchSafely(
       ctx,
       clientMessageId,
-      body,
+      carried ? withStoppedHistory(body, carried.messages) : body,
       structuredAgentSessionHandoverOrigin(ctx.journal, submission),
-      submission.executionOptions,
+      submission.options,
       attempt?.signal
     )
   } finally {
