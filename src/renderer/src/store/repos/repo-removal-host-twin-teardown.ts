@@ -39,6 +39,45 @@ export function getSurvivingTwinHostIds(
   return survivors
 }
 
+/** The twins whose surviving host still holds a row now, after the removal's host call. */
+export function retainSurvivingTwinHostIds(
+  state: Pick<AppState, 'worktreesByRepo' | 'detectedWorktreesByRepo'>,
+  projectId: string,
+  twins: ReadonlyMap<string, readonly ExecutionHostId[]>
+): Map<string, ExecutionHostId[]> {
+  const rows = [
+    ...(state.worktreesByRepo[projectId] ?? []),
+    ...(state.detectedWorktreesByRepo[projectId]?.worktrees ?? [])
+  ]
+  const retained = new Map<string, ExecutionHostId[]>()
+  for (const [worktreeId, hostIds] of twins) {
+    const live = hostIds.filter((hostId) =>
+      rows.some(
+        (row) => row.id === worktreeId && (row.hostId ?? LOCAL_EXECUTION_HOST_ID) === hostId
+      )
+    )
+    if (live.length > 0) {
+      retained.set(worktreeId, live)
+    }
+  }
+  return retained
+}
+
+/**
+ * Every id the removal covers, and those it may purge outright. State under an id another host
+ * still publishes is shared, so there only the removed host's attributed tabs and files go.
+ */
+export function splitRemovedWorktreeIds(
+  knownIds: readonly string[],
+  twinsBeforeCall: ReadonlyMap<string, unknown>,
+  twinsNow: ReadonlyMap<string, unknown>
+): { worktreeIds: string[]; exclusiveWorktreeIds: string[] } {
+  const worktreeIds = [
+    ...new Set([...knownIds, ...[...twinsBeforeCall.keys()].filter((id) => !twinsNow.has(id))])
+  ]
+  return { worktreeIds, exclusiveWorktreeIds: worktreeIds.filter((id) => !twinsNow.has(id)) }
+}
+
 /**
  * State under a worktree id that a surviving host also publishes, attributed to the removed host.
  * Anything without host evidence stays: it may be the survivor's.
@@ -150,7 +189,7 @@ export function collectRemovedHostTwinState(
 }
 
 /** Union of two attributions: one taken before the host call, one after it settled. */
-export function mergeRemovedHostTwinState(
+function mergeRemovedHostTwinState(
   a: RemovedHostTwinState,
   b: RemovedHostTwinState
 ): RemovedHostTwinState {
@@ -169,32 +208,50 @@ function pruneRemovedHostReopenHistory(
   twinWorktreeIds: Iterable<string>,
   removedHostId: ExecutionHostId
 ): Partial<AppState> | null {
-  let next = state.recentlyClosedEditorTabsByWorktree
+  let snapshots = state.recentlyClosedEditorTabsByWorktree
+  let kinds = state.recentlyClosedTabKindsByWorktree
   for (const worktreeId of twinWorktreeIds) {
-    const stack = next[worktreeId]
+    const stack = snapshots[worktreeId] ?? []
     // Why evidence only: an unmarked snapshot may be the survivor's.
-    const kept = stack?.filter(
+    const pruned = stack.map(
       (snapshot) =>
-        !hasOpenFileExecutionHostEvidence(snapshot) ||
-        getOpenFileExecutionHostId(snapshot) !== removedHostId
+        hasOpenFileExecutionHostEvidence(snapshot) &&
+        getOpenFileExecutionHostId(snapshot) === removedHostId
     )
-    if (stack && kept && kept.length !== stack.length) {
-      next = { ...next, [worktreeId]: kept }
+    if (!pruned.includes(true)) {
+      continue
+    }
+    snapshots = { ...snapshots, [worktreeId]: stack.filter((_, index) => !pruned[index]) }
+    // Why: the n-th 'editor' kind is the n-th snapshot, so drop the same ones to keep reopen order.
+    let editorIndex = 0
+    kinds = {
+      ...kinds,
+      [worktreeId]: (kinds[worktreeId] ?? []).filter(
+        (kind) => kind !== 'editor' || !pruned[editorIndex++]
+      )
     }
   }
-  return next === state.recentlyClosedEditorTabsByWorktree
+  return snapshots === state.recentlyClosedEditorTabsByWorktree
     ? null
-    : { recentlyClosedEditorTabsByWorktree: next }
+    : { recentlyClosedEditorTabsByWorktree: snapshots, recentlyClosedTabKindsByWorktree: kinds }
 }
 
-/** Closes only the removed host's twin state; the survivor's tabs, files and drafts stay. */
+/**
+ * Closes only the removed host's twin state; the survivor's tabs, files and drafts stay. Merges
+ * the pre-call snapshot, which survives the announcement's refresh, with tabs opened meanwhile.
+ */
 export function closeRemovedHostTwinState(
   get: () => AppState,
   set: (patch: (state: AppState) => Partial<AppState>) => void,
-  twinWorktreeIds: Iterable<string>,
-  removed: RemovedHostTwinState,
+  twinHostIds: ReadonlyMap<string, readonly ExecutionHostId[]>,
+  beforeCall: RemovedHostTwinState,
   removedHostId: ExecutionHostId
 ): void {
+  const twinWorktreeIds = new Set(twinHostIds.keys())
+  const removed = mergeRemovedHostTwinState(
+    beforeCall,
+    collectRemovedHostTwinState(get(), twinWorktreeIds, removedHostId, twinHostIds)
+  )
   const historyPatch = pruneRemovedHostReopenHistory(get(), twinWorktreeIds, removedHostId)
   if (historyPatch) {
     set(() => historyPatch)

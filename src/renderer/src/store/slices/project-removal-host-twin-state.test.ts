@@ -175,7 +175,8 @@ function seedTwins(): ReturnType<typeof createTestStore> {
         { ...closedSnapshot('/work/same/old-remote.ts'), runtimeEnvironmentId: 'env-b' },
         closedSnapshot('/work/same/old-local.ts')
       ]
-    }
+    },
+    recentlyClosedTabKindsByWorktree: { [WORKTREE_ID]: ['editor', 'browser', 'editor'] }
   })
   return store
 }
@@ -203,6 +204,7 @@ describe('removing a remote project keeps its local twin', () => {
     expect(
       state.recentlyClosedEditorTabsByWorktree[WORKTREE_ID]?.map((snapshot) => snapshot.filePath)
     ).toEqual(['/work/same/old-local.ts'])
+    expect(state.recentlyClosedTabKindsByWorktree[WORKTREE_ID]).toEqual(['browser', 'editor'])
   })
 
   it('closes the removed host’s browsers, chats and hydrated terminals, and tabs opened meanwhile', async () => {
@@ -290,5 +292,20 @@ describe('removing a remote project keeps its local twin', () => {
     expect(store.getState().tabsByWorktree[WORKTREE_ID]?.map((tab) => tab.id)).toEqual([
       'tab-local'
     ])
+  })
+
+  it('purges the shared state when both copies are removed at once', async () => {
+    const store = seedTwins()
+
+    await Promise.all([
+      store.getState().removeProject(PROJECT_ID, { hostId: REMOTE_HOST }),
+      store.getState().removeProject(PROJECT_ID, { hostId: 'local' })
+    ])
+
+    const state = store.getState()
+    expect(state.repos).toEqual([])
+    expect(state.tabsByWorktree[WORKTREE_ID] ?? []).toEqual([])
+    expect(state.unifiedTabsByWorktree[WORKTREE_ID] ?? []).toEqual([])
+    expect(state.openFiles).toEqual([])
   })
 })
