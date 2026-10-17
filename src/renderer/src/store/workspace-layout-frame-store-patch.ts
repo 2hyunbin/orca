@@ -10,10 +10,8 @@ import type { AppState } from './types'
 import type { LayoutFrameSlices } from './workspace-layout-frame-slices'
 
 /** Row fields this window owns: what its mounted panes are doing, and which terminal each row
- *  binds (main publishes the saved binding; the live one stays the window's until main owns it).
- *  `generation` keys the window's pane mount, which a recovery remount bumps. */
+ *  binds (main publishes the saved binding; the live one stays the window's until main owns it). */
 const WINDOW_TERMINAL_TAB_FIELDS = [
-  'generation',
   'ptyId',
   'pendingActivationSpawn',
   'recovery',

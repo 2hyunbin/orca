@@ -93,19 +93,35 @@ export function createTabsLabelActions(
     }
   }
 
+  /** Tab-bar id → the mode last sent to main and not yet answered: a toggle flips from that. */
+  const viewModeSent = new Map<string, 'terminal' | 'chat'>()
+
   function sendViewMode(tabId: string, mode: 'terminal' | 'chat', local: () => void): boolean {
     const state = get()
-    return sendTabChangeToLayoutOwner(
+    const settle = (): void => {
+      if (viewModeSent.get(tabId) === mode) {
+        viewModeSent.delete(tabId)
+      }
+    }
+    const sent = sendTabChangeToLayoutOwner(
       state,
       findTabAndWorktree(state.unifiedTabsByWorktree, tabId)?.tab,
       (id) => ({ type: 'setTabProps', tabId: id, viewMode: mode }),
-      local
+      () => {
+        settle()
+        local()
+      },
+      settle
     )
+    if (sent) {
+      viewModeSent.set(tabId, mode)
+    }
+    return sent
   }
 
   function sendViewModeToggle(tabId: string): boolean {
-    const found = findTabAndWorktree(get().unifiedTabsByWorktree, tabId)
-    const to = oppositeViewMode(found?.tab.viewMode === 'chat' ? 'chat' : 'terminal')
+    const shown = findTabAndWorktree(get().unifiedTabsByWorktree, tabId)?.tab.viewMode
+    const to = oppositeViewMode(viewModeSent.get(tabId) ?? (shown === 'chat' ? 'chat' : 'terminal'))
     return sendViewMode(tabId, to, () => toggleTabViewModeHere(tabId, to))
   }
 

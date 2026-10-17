@@ -1,11 +1,15 @@
 import type { AppState } from '../types'
 import {
   applyGeneratedTabTitleUpdates,
+  getTabIdFromPaneKey,
   type GeneratedTabTitleUpdate
 } from '../slices/terminal-tab-title-batch'
 import { getTerminalTabOwnerWorktreeId } from '../slices/terminal-tab-owner-index'
 import type { TerminalSlice, TerminalStoreGet } from './terminal-state'
-import { sendTerminalTabChangesToLayoutOwner } from './tab-change-through-layout-owner'
+import {
+  sendRenamableTabChangeToLayoutOwner,
+  type TabChange
+} from './tab-change-through-layout-owner'
 
 type RoutedActions = Pick<
   TerminalSlice,
@@ -17,29 +21,28 @@ type RoutedActions = Pick<
   | 'clearTabLaunchAgent'
 >
 
-type Changes = Parameters<typeof sendTerminalTabChangesToLayoutOwner>[1]
-
 function terminalTab(state: AppState, tabId: string) {
   const owner = getTerminalTabOwnerWorktreeId(state.tabsByWorktree, tabId)
   return owner ? state.tabsByWorktree[owner]?.find((tab) => tab.id === tabId) : undefined
 }
 
-/** The generated titles the window would give its tabs, one rename each. */
+/** Each tab's generated title the window would give it now, with the updates that give it. */
 function generatedTitleChanges(state: AppState, updates: readonly GeneratedTabTitleUpdate[]) {
   const patched = applyGeneratedTabTitleUpdates(state, updates).patch?.tabsByWorktree ?? {}
-  const changes: Changes[number][] = []
-  for (const tabs of Object.values(patched)) {
-    for (const tab of tabs) {
+  return Object.values(patched)
+    .flat()
+    .flatMap((tab) => {
       const title = tab.generatedTitle ?? null
-      if (title !== (terminalTab(state, tab.id)?.generatedTitle ?? null)) {
-        changes.push({
-          tabId: tab.id,
-          change: (id) => ({ type: 'renameTab', tabId: id, kind: 'generated', title })
-        })
-      }
-    }
-  }
-  return changes
+      return title === (terminalTab(state, tab.id)?.generatedTitle ?? null)
+        ? []
+        : [
+            {
+              tabId: tab.id,
+              title,
+              updates: updates.filter((u) => getTabIdFromPaneKey(u.paneKey) === tab.id)
+            }
+          ]
+    })
 }
 
 /**
@@ -52,47 +55,59 @@ export function routeTerminalTabChangesThroughLayoutOwner(
   actions: RoutedActions,
   get: TerminalStoreGet
 ): RoutedActions {
-  const route = (changes: Changes, local: () => void): void =>
-    sendTerminalTabChangesToLayoutOwner(get(), changes, local)
+  const route = (tabId: string, change: TabChange, local: () => void): void =>
+    sendRenamableTabChangeToLayoutOwner(get(), tabId, change, local)
+  const routeGeneratedTitles = (updates: readonly GeneratedTabTitleUpdate[]): void => {
+    for (const { tabId, title, updates: ofTab } of generatedTitleChanges(get(), updates)) {
+      route(
+        tabId,
+        (id) => ({ type: 'renameTab', tabId: id, kind: 'generated', title }),
+        () => actions.setGeneratedTabTitlesFromAgentPrompts(ofTab)
+      )
+    }
+  }
   return {
     setTabCustomTitle: (tabId, title, opts) =>
       route(
-        [{ tabId, change: (id) => ({ type: 'renameTab', tabId: id, kind: 'custom', title }) }],
+        tabId,
+        (id) => ({ type: 'renameTab', tabId: id, kind: 'custom', title }),
         () => actions.setTabCustomTitle(tabId, title, opts)
       ),
     setTabColor: (tabId, color) =>
-      route([{ tabId, change: (id) => ({ type: 'setTabProps', tabId: id, color }) }], () =>
-        actions.setTabColor(tabId, color)
+      route(
+        tabId,
+        (id) => ({ type: 'setTabProps', tabId: id, color }),
+        () => actions.setTabColor(tabId, color)
       ),
     setAiVaultTabTitle: (tabId, title) => {
       const current = terminalTab(get(), tabId)?.aiVaultTitle ?? null
-      const changed = JSON.stringify(current) !== JSON.stringify(title ?? null)
+      if (JSON.stringify(current) === JSON.stringify(title ?? null)) {
+        actions.setAiVaultTabTitle(tabId, title)
+        return
+      }
       route(
-        changed
-          ? [{ tabId, change: (id) => ({ type: 'renameTab', tabId: id, kind: 'aiVault', title }) }]
-          : [],
+        tabId,
+        (id) => ({ type: 'renameTab', tabId: id, kind: 'aiVault', title }),
         () => actions.setAiVaultTabTitle(tabId, title)
       )
     },
-    setGeneratedTabTitleFromAgentPrompt: (paneKey, prompt, options) =>
-      route(generatedTitleChanges(get(), [{ paneKey, prompt, options }]), () =>
-        actions.setGeneratedTabTitleFromAgentPrompt(paneKey, prompt, options)
-      ),
-    setGeneratedTabTitlesFromAgentPrompts: (updates) =>
-      route(generatedTitleChanges(get(), updates), () =>
-        actions.setGeneratedTabTitlesFromAgentPrompts(updates)
-      ),
-    clearTabLaunchAgent: (tabId) =>
+    setGeneratedTabTitleFromAgentPrompt: (paneKey, prompt, options) => {
+      // Why: called on every agent status; only a tab that would get a title is worth a dry run.
+      if (get().settings?.tabAutoGenerateTitle === true && prompt.length > 0) {
+        routeGeneratedTitles([{ paneKey, prompt, options }])
+      }
+    },
+    setGeneratedTabTitlesFromAgentPrompts: routeGeneratedTitles,
+    clearTabLaunchAgent: (tabId) => {
+      if (!terminalTab(get(), tabId)?.launchAgent) {
+        actions.clearTabLaunchAgent(tabId)
+        return
+      }
       route(
-        terminalTab(get(), tabId)?.launchAgent
-          ? [
-              {
-                tabId,
-                change: (id) => ({ type: 'setTabProps', tabId: id, clearLaunchAgent: true })
-              }
-            ]
-          : [],
+        tabId,
+        (id) => ({ type: 'setTabProps', tabId: id, clearLaunchAgent: true }),
         () => actions.clearTabLaunchAgent(tabId)
       )
+    }
   }
 }

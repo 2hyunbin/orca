@@ -15,7 +15,14 @@ type Reply = { ok: boolean; result?: object; code?: string }
 
 const mocks = vi.hoisted(() => ({
   layoutOwnerIsMain: true,
-  callRuntimeRpc: vi.fn(async (..._args: unknown[]): Promise<Reply> => ({ ok: true, result: {} }))
+  toggled: vi.fn(),
+  callRuntimeRpc: vi.fn(
+    async (
+      _target: unknown,
+      _method: string,
+      _params: { command: { viewMode?: string } }
+    ): Promise<Reply> => ({ ok: true, result: {} })
+  )
 }))
 
 vi.mock('../../../../shared/layout-owner-switch', () => ({
@@ -31,6 +38,7 @@ vi.mock('@/components/terminal-pane/pty-dispatcher', () => ({
   restorePtyDataHandlersAfterFailedShutdown: vi.fn(),
   unregisterPtyDataHandlers: vi.fn(() => [])
 }))
+vi.mock('@/lib/native-chat-telemetry', () => ({ emitNativeChatToggled: mocks.toggled }))
 vi.mock('@/lib/agent-status', async (importOriginal) => {
   const actual = await importOriginal<typeof AgentStatusModule>()
   return { ...actual, detectAgentStatusFromTitle: vi.fn().mockReturnValue(null) }
@@ -59,12 +67,15 @@ function storeWithTab(options: { launchAgent?: 'claude' } = {}) {
 /** The layout commands sent after the tab's create. */
 const sent = () => mocks.callRuntimeRpc.mock.calls.map((call) => call[2])
 
+const sentViewModes = () => sent().map((params) => params.command.viewMode)
+
 const row = (store: ReturnType<typeof createTestStore>) =>
   store.getState().tabsByWorktree[WORKTREE]![0]!
 
 beforeEach(() => {
   mocks.layoutOwnerIsMain = true
   mocks.callRuntimeRpc.mockReset()
+  mocks.toggled.mockReset()
   mocks.callRuntimeRpc.mockResolvedValue({ ok: true, result: {} })
   vi.spyOn(console, 'warn').mockImplementation(() => {})
 })
@@ -155,6 +166,75 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
     ])
     expect(row(store).viewMode).toBeUndefined()
     await vi.waitFor(() => expect(row(store).viewMode).toBe('chat'))
+  })
+
+  it('flips a second toggle sent before main answers the first, as the window would', async () => {
+    const { store, tabBarId } = storeWithTab()
+
+    store.getState().toggleTabViewMode(tabBarId)
+    store.getState().toggleTabViewMode(tabBarId)
+
+    expect(sentViewModes()).toEqual(['chat', 'terminal'])
+    await vi.waitFor(() => expect(mocks.toggled).toHaveBeenCalledTimes(2))
+    expect(mocks.toggled.mock.calls.map(([event]) => [event.from, event.to])).toEqual([
+      ['terminal', 'chat'],
+      ['chat', 'terminal']
+    ])
+    expect(row(store).viewMode).toBe('terminal')
+  })
+
+  it('toggles from the mode last set while main has not answered it', async () => {
+    const { store, tabBarId } = storeWithTab()
+
+    store.getState().setTabViewMode(tabBarId, 'chat')
+    store.getState().toggleTabViewMode(tabBarId)
+
+    expect(sentViewModes()).toEqual(['chat', 'terminal'])
+    await vi.waitFor(() => expect(mocks.toggled).toHaveBeenCalledTimes(1))
+    expect(row(store).viewMode).toBe('terminal')
+  })
+
+  it('gives each tab of an agent-title batch its title once main has it, and a paired server’s tab at once', async () => {
+    const store = createTestStore()
+    const remote = 'repo2::/path/remote'
+    seedStore(
+      store,
+      runtimeOwnedRepoState('env-1', 'repo2', '/path/remote', {
+        settings: { ...getDefaultSettings('/tmp'), tabAutoGenerateTitle: true },
+        worktreesByRepo: {
+          repo1: [makeWorktree({ id: WORKTREE, repoId: 'repo1', path: '/path/wt' })],
+          repo2: [makeRuntimeOwnedWorktree({ id: remote, repoId: 'repo2' }, 'env-1')]
+        }
+      })
+    )
+    const local = store
+      .getState()
+      .createTab(WORKTREE, undefined, undefined, { initialLeafId: LEAF })
+    const paired = store.getState().createTab(remote, undefined, undefined, { initialLeafId: LEAF })
+    mocks.callRuntimeRpc.mockClear()
+    let answer: (reply: { ok: boolean; result: object }) => void = () => {}
+    mocks.callRuntimeRpc.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)))
+    const title = (worktreeId: string) =>
+      store.getState().tabsByWorktree[worktreeId]![0]!.generatedTitle
+
+    store.getState().setGeneratedTabTitlesFromAgentPrompts([
+      { paneKey: makePaneKey(local.id, LEAF), prompt: 'Refactor the auth middleware' },
+      { paneKey: makePaneKey(paired.id, LEAF), prompt: 'Fix the login page' }
+    ])
+
+    expect(sent()).toEqual([
+      {
+        command: expect.objectContaining({
+          type: 'renameTab',
+          kind: 'generated',
+          workspace: WORKTREE
+        })
+      }
+    ])
+    expect(title(remote)).toBeTruthy()
+    expect(title(WORKTREE)).toBeUndefined()
+    answer({ ok: true, result: {} })
+    await vi.waitFor(() => expect(title(WORKTREE)).toBeTruthy())
   })
 
   it('acts as today at once for a paired server’s workspace', () => {
