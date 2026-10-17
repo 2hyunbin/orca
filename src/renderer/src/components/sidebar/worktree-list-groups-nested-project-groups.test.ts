@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildRows } from './worktree-list/grouping/build-rows'
+import { buildRows } from './worktree-list/grouping/build-rows.test-fixture'
 import { getGroupKeysForWorktree } from '../../../../shared/sidebar-list/worktree-group-keys'
 import { repo, worktree, repoMap } from './worktree-list-groups-test-fixtures'
 import type { FolderWorkspace } from '../../../../shared/folder-workspace-types'
@@ -380,7 +380,6 @@ describe('project groups', () => {
         new Map([[groupedRepo.id, groupedRepo]]),
         null,
         undefined,
-        undefined,
         [group]
       )
     ).toEqual(['project-group:group-1', 'repo:repo-1'])
@@ -407,7 +406,6 @@ describe('project groups', () => {
         worktree,
         new Map([[groupedRepo.id, groupedRepo]]),
         null,
-        undefined,
         undefined,
         [loadedGroup]
       )

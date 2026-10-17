@@ -6,7 +6,7 @@ import {
   isPinnedSectionWorktree
 } from '../../../../shared/sidebar-list/pinned-section-worktrees'
 import { worktree, repoMap } from './worktree-list-groups-test-fixtures'
-import { buildRows } from './worktree-list/grouping/build-rows'
+import { buildRows } from './worktree-list/grouping/build-rows.test-fixture'
 
 function makeWorktree(id: string, overrides: Partial<Worktree> = {}): Worktree {
   return {

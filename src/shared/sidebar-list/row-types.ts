@@ -2,14 +2,8 @@ import type { WorktreeOccurrence } from '../worktree-occurrence-plan'
 import type { FolderWorkspace } from '../folder-workspace-types'
 import type { ProjectGroup } from '../project-group-types'
 import type { Repo } from '../repo-types'
-import type {
-  DetectedWorktree,
-  WorkspaceStatus,
-  WorkspaceStatusDefinition,
-  Worktree
-} from '../worktree/types'
+import type { DetectedWorktree, WorkspaceStatus, Worktree } from '../worktree/types'
 import type { ExecutionHostId } from '../execution-host'
-import type { GlobalSettings } from '../global-settings-types'
 import type { PRGroupKey } from '../workspace-view/workspace-pr-groups'
 
 export type WorktreeGroupBy = 'none' | 'workspace-status' | 'repo' | 'pr-status'
@@ -21,34 +15,25 @@ export function getPinnedWorktreeDisplayPolicy(
   return settings?.showPinnedWorktreesInGroups === true ? 'duplicate-in-groups' : 'single-location'
 }
 
-/** Settings the list reads: PR cache scoping and the pinned display policy. */
-export type SidebarListSettings = Pick<
-  GlobalSettings,
-  'activeRuntimeEnvironmentId' | 'showPinnedWorktreesInGroups'
-> | null
-
-/** Localized header labels, supplied by each client so the builder stays free of i18n. */
-export type SidebarListLabels = {
-  pinned: string
-  all: string
-  prGroups: Readonly<Record<PRGroupKey, string>>
-}
-
 /** Which glyph a group header draws; each client maps it to its own icon and tone. */
 export type SidebarHeaderIcon =
   | { kind: 'pinned' }
   | { kind: 'all' }
   | { kind: 'project' }
   | { kind: 'pr-status'; prGroup: PRGroupKey }
-  | { kind: 'workspace-status'; status: WorkspaceStatus | WorkspaceStatusDefinition }
+  | { kind: 'workspace-status'; status: WorkspaceStatus }
+
+/** A worktree's PR lane, read by each client from its own PR facts. */
+export type SidebarPRGroupReader = (worktree: Worktree) => PRGroupKey
 
 export type GroupHeaderRow = {
   type: 'header'
   collapseKey?: string
   key: string
-  label: string
+  /** Data label (project, project group, status); absent when the client names the header from its icon. */
+  label?: string
   count: number
-  icon?: SidebarHeaderIcon
+  icon: SidebarHeaderIcon
   repo?: Repo
   projectGroup?: ProjectGroup | { id: null; name: 'Ungrouped'; tabOrder: number }
   projectGroupDepth?: number

@@ -116,6 +116,7 @@ describe('folder workspace host counts', () => {
       key: 'workspace-status:in-progress',
       label: 'In progress',
       count: 1,
+      icon: { kind: 'workspace-status', status: 'in-progress' },
       hostWorktreeCounts: new Map([['ssh:builder', 1]]),
       hostWorktreeIds: new Map([['ssh:builder', []]])
     }

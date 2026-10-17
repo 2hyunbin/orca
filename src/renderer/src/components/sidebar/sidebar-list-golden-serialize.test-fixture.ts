@@ -2,14 +2,14 @@ import type {
   WorktreeOccurrence,
   WorktreeOccurrencePlan
 } from '../../../../shared/worktree-occurrence-plan'
-import type { Worktree } from '../../../../shared/worktree/types'
+import type { WorkspaceStatusDefinition, Worktree } from '../../../../shared/worktree/types'
 import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import type { HostSectionRow } from '../../../../shared/sidebar-list/host-section-rows'
 import type { VisibleWorktreeShortcutTarget } from './visible-worktrees'
-import { getSidebarHeaderVisual } from './worktree-list/grouping/header-visuals'
+import { getSidebarHeaderVisual } from './worktree-list/rows/header-visuals'
 
-function iconName(icon: { displayName?: string; name?: string } | undefined): string {
-  return icon ? (icon.displayName ?? icon.name ?? 'anonymous') : '-'
+function iconName(icon: { displayName?: string; name?: string }): string {
+  return icon.displayName ?? icon.name ?? 'anonymous'
 }
 
 function hostMap(map: ReadonlyMap<string, number | readonly string[]> | undefined): string {
@@ -40,7 +40,10 @@ function line(kind: string, fields: (string | null)[]): string {
 }
 
 /** One stable line per row: every field a reader of the row model can observe. */
-export function serializeSidebarRow(row: HostSectionRow): string {
+export function serializeSidebarRow(
+  row: HostSectionRow,
+  workspaceStatuses: readonly WorkspaceStatusDefinition[]
+): string {
   switch (row.type) {
     case 'host-header':
       return line('HOST', [
@@ -52,14 +55,15 @@ export function serializeSidebarRow(row: HostSectionRow): string {
         field('collapsed', row.collapsed),
         field('count', row.count)
       ])
-    case 'header':
+    case 'header': {
+      const headerVisual = getSidebarHeaderVisual(row.icon, workspaceStatuses)
       return line('HEADER', [
         field('key', row.key),
         field('collapseKey', row.collapseKey),
-        field('label', JSON.stringify(row.label)),
+        field('label', JSON.stringify(row.label ?? headerVisual.label)),
         field('count', row.count),
-        field('tone', row.icon ? JSON.stringify(getSidebarHeaderVisual(row.icon).tone) : undefined),
-        field('icon', iconName(row.icon ? getSidebarHeaderVisual(row.icon).icon : undefined)),
+        field('tone', JSON.stringify(headerVisual.tone)),
+        field('icon', iconName(headerVisual.icon)),
         field('repo', row.repo?.id),
         field('projectGroup', row.projectGroup ? (row.projectGroup.id ?? 'ungrouped') : undefined),
         field('projectGroupDepth', row.projectGroupDepth),
@@ -68,6 +72,7 @@ export function serializeSidebarRow(row: HostSectionRow): string {
         field('hostIds', row.hostWorktreeIds ? hostMap(row.hostWorktreeIds) : undefined),
         field('ids', row.worktreeIds ? `[${row.worktreeIds.join(',')}]` : undefined)
       ])
+    }
     case 'item':
       return line('ITEM', [
         field('rowKey', row.rowKey),

@@ -18,6 +18,7 @@ const repo: Repo = {
 const makeHeaderRow = (key: string): Extract<Row, { type: 'header' }> => ({
   type: 'header',
   key,
+  icon: { kind: 'project' },
   label: key,
   count: 0
 })

@@ -4,7 +4,7 @@
  * its only chance at host attribution.
  */
 import { describe, expect, it } from 'vitest'
-import { buildRows } from './worktree-list/grouping/build-rows'
+import { buildRows } from './worktree-list/grouping/build-rows.test-fixture'
 import type { Row } from '../../../../shared/sidebar-list/row-types'
 import {
   LOCAL_HOST_LABEL,

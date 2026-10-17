@@ -15,7 +15,7 @@ export type VisibleSidebarWorktreeInputs = {
   /** Every catalog row, one per host-qualified identity. */
   rows: readonly Worktree[]
   /** Non-archived rows by id, the lineage ancestors a visible child may pull in. */
-  ancestorById: Map<string, Worktree>
+  ancestorById: ReadonlyMap<string, Worktree>
   /** Rank of each id in the frozen sort order; unranked rows go last. */
   rankById: ReadonlyMap<string, number>
   filters: WorkspaceRowFilters
@@ -28,18 +28,28 @@ export type VisibleSidebarWorktreeInputs = {
 }
 
 /** The sidebar's visible worktrees, in display order, before grouping. */
-export function selectVisibleSidebarWorktrees(inputs: VisibleSidebarWorktreeInputs): Worktree[] {
+export function selectVisibleSidebarWorktrees({
+  rows,
+  ancestorById,
+  rankById,
+  filters,
+  facts,
+  worktreeLineageById,
+  filterRepoIds,
+  injectLineageAncestors,
+  preserveLineageParentOrder,
+  forcedVisibleWorktreeIds
+}: VisibleSidebarWorktreeInputs): Worktree[] {
   // Why: sidebar lineage is structural. Archived workspaces stay hidden, but
   // every other valid ancestor can bypass filters so children never orphan.
-  const lineageAncestorById = inputs.ancestorById
-  const selectedRepoIds = inputs.filterRepoIds.length > 0 ? new Set(inputs.filterRepoIds) : null
+  const selectedRepoIds = filterRepoIds.length > 0 ? new Set(filterRepoIds) : null
 
-  let all = filterWorkspaceRows(inputs.rows, inputs.filters, inputs.facts)
+  let all = filterWorkspaceRows(rows, filters, facts)
 
-  if (inputs.forcedVisibleWorktreeIds && inputs.forcedVisibleWorktreeIds.length > 0) {
+  if (forcedVisibleWorktreeIds && forcedVisibleWorktreeIds.length > 0) {
     const includedIds = new Set(all.map((worktree) => worktree.id))
-    for (const worktreeId of inputs.forcedVisibleWorktreeIds) {
-      const worktree = lineageAncestorById.get(worktreeId)
+    for (const worktreeId of forcedVisibleWorktreeIds) {
+      const worktree = ancestorById.get(worktreeId)
       if (worktree && !includedIds.has(worktreeId)) {
         includedIds.add(worktreeId)
         all.push(worktree)
@@ -50,33 +60,23 @@ export function selectVisibleSidebarWorktrees(inputs: VisibleSidebarWorktreeInpu
   // Apply cached sort order. Items not yet in the cache (e.g. brand-new
   // worktrees before the next sortEpoch bump) are appended at the end.
   // Manual placement belongs to the parent, even when a hidden child has a higher rank.
-  if (inputs.injectLineageAncestors !== false && inputs.preserveLineageParentOrder) {
-    all = addVisibleLineageAncestors(
-      all,
-      lineageAncestorById,
-      inputs.worktreeLineageById,
-      selectedRepoIds
-    )
+  if (injectLineageAncestors !== false && preserveLineageParentOrder) {
+    all = addVisibleLineageAncestors(all, ancestorById, worktreeLineageById, selectedRepoIds)
   }
-  const orderIndex = inputs.rankById
   all.sort((a, b) => {
-    const ai = orderIndex.get(a.id) ?? Infinity
-    const bi = orderIndex.get(b.id) ?? Infinity
+    const ai = rankById.get(a.id) ?? Infinity
+    const bi = rankById.get(b.id) ?? Infinity
     return ai - bi
   })
 
-  return inputs.injectLineageAncestors === false || inputs.preserveLineageParentOrder
+  return injectLineageAncestors === false || preserveLineageParentOrder
     ? all
-    : addVisibleLineageAncestors(
-        all,
-        lineageAncestorById,
-        inputs.worktreeLineageById,
-        selectedRepoIds
-      )
+    : addVisibleLineageAncestors(all, ancestorById, worktreeLineageById, selectedRepoIds)
 }
+
 function addVisibleLineageAncestors(
   worktrees: Worktree[],
-  worktreeById: Map<string, Worktree>,
+  worktreeById: ReadonlyMap<string, Worktree>,
   lineageById: Record<string, WorktreeLineage>,
   selectedRepoIds: ReadonlySet<string> | null
 ): Worktree[] {

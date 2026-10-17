@@ -15,7 +15,6 @@ import type { ImportedWorktreesCardCandidate, Row } from './row-types'
  * emission has its own ordering and imported-fallback placement rules.
  */
 export function emitPinnedGroup(
-  pinnedLabel: string,
   pinnedSectionWorktrees: Worktree[],
   repoMap: Map<string, Repo>,
   defaultHostId: ExecutionHostId,
@@ -50,7 +49,6 @@ export function emitPinnedGroup(
   result.push({
     type: 'header',
     key: PINNED_GROUP_KEY,
-    label: pinnedLabel,
     count: pinnedSectionWorktrees.length,
     icon: { kind: 'pinned' },
     hostWorktreeCounts,

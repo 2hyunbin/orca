@@ -1,3 +1,4 @@
+import type { AppState } from '@/store/types'
 import type { FolderWorkspace } from '../../../../../../shared/folder-workspace-types'
 import type { ProjectGroup } from '../../../../../../shared/project-group-types'
 import type { Repo } from '../../../../../../shared/repo-types'
@@ -13,7 +14,6 @@ import type { ProjectGroupingModel } from '../../../../../../shared/project-sect
 import { getPinnedWorktreeDisplayPolicy } from '../../../../../../shared/sidebar-list/row-types'
 import type {
   ImportedWorktreesCardCandidate,
-  SidebarListSettings,
   NewExternalWorktreesInboxCandidate,
   PendingCreationRef,
   PinnedWorktreeDisplayPolicy,
@@ -21,9 +21,9 @@ import type {
   WorktreeGroupBy
 } from '../../../../../../shared/sidebar-list/row-types'
 import { planSidebarRows } from '../../../../../../shared/sidebar-list/sidebar-row-plan'
-import { getSidebarListLabels } from './header-visuals'
+import { createSidebarPRGroupReader } from './pr-group-key'
 
-/** The window's entry to the shared row builder: positional defaults plus localized labels. */
+/** Test-only positional entry to the shared row builder, with the window's defaults. */
 export function buildSidebarRowPlan(
   groupBy: WorktreeGroupBy,
   worktrees: Worktree[],
@@ -36,7 +36,7 @@ export function buildSidebarRowPlan(
   lineageById: Record<string, WorktreeLineage> = {},
   worktreeMap = new Map<string, Worktree>(worktrees.map((worktree) => [worktree.id, worktree])),
   nestLineage = false,
-  settings?: SidebarListSettings,
+  settings?: AppState['settings'],
   projectGroups: readonly ProjectGroup[] = [],
   placeholderRepoIds: ReadonlySet<string> = new Set(),
   importedWorktreesByRepo: ReadonlyMap<string, ImportedWorktreesCardCandidate> = new Map(),
@@ -56,14 +56,13 @@ export function buildSidebarRowPlan(
     groupBy,
     worktrees,
     repoMap,
-    prCache,
+    prGroupOf: createSidebarPRGroupReader(repoMap, prCache, settings),
     repoOrder,
     workspaceStatuses,
     projectOrderBy,
     lineageById,
     worktreeMap,
     nestLineage,
-    settings,
     projectGroups,
     placeholderRepoIds,
     importedWorktreesByRepo,
@@ -74,8 +73,7 @@ export function buildSidebarRowPlan(
     hostLabelById,
     defaultHostId,
     pinnedDisplayPolicy,
-    filterRepoIds,
-    labels: getSidebarListLabels()
+    filterRepoIds
   })
 }
 

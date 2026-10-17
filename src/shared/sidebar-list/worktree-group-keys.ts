@@ -6,18 +6,18 @@ import {
   getWorkspaceStatus,
   getWorkspaceStatusGroupKey
 } from '../workspace-statuses'
-import { ALL_GROUP_KEY, getPRGroupKey, getProjectGroupHeaderKey } from './group-keys'
+import { ALL_GROUP_KEY, getPRLaneKey, getProjectGroupHeaderKey } from './group-keys'
 import { buildProjectGroupingIndex, getProjectGroupingForRepo } from '../project-section-grouping'
 import type { ProjectGroupingModel } from '../project-section-grouping'
-import type { SidebarListSettings, WorktreeGroupBy } from './row-types'
+import type { SidebarPRGroupReader, WorktreeGroupBy } from './row-types'
 
 export function getGroupKeyForWorktree(
   groupBy: WorktreeGroupBy,
   worktree: Worktree,
   repoMap: Map<string, Repo>,
-  prCache: Record<string, unknown> | null,
+  /** Null reads every worktree as having no PR, which is the in-progress lane. */
+  prGroupOf: SidebarPRGroupReader | null,
   workspaceStatuses: readonly WorkspaceStatusDefinition[] = cloneDefaultWorkspaceStatuses(),
-  settings?: SidebarListSettings,
   projectGrouping?: ProjectGroupingModel
 ): string | null {
   if (groupBy === 'none') {
@@ -33,16 +33,15 @@ export function getGroupKeyForWorktree(
       buildProjectGroupingIndex(projectGrouping)
     ).key
   }
-  return `pr:${getPRGroupKey(worktree, repoMap, prCache, settings)}`
+  return getPRLaneKey(prGroupOf?.(worktree) ?? 'in-progress')
 }
 
 export function getGroupKeysForWorktree(
   groupBy: WorktreeGroupBy,
   worktree: Worktree,
   repoMap: Map<string, Repo>,
-  prCache: Record<string, unknown> | null,
+  prGroupOf: SidebarPRGroupReader | null,
   workspaceStatuses: readonly WorkspaceStatusDefinition[] = cloneDefaultWorkspaceStatuses(),
-  settings?: SidebarListSettings,
   projectGroups: readonly ProjectGroup[] = [],
   projectGrouping?: ProjectGroupingModel
 ): string[] {
@@ -50,9 +49,8 @@ export function getGroupKeysForWorktree(
     groupBy,
     worktree,
     repoMap,
-    prCache,
+    prGroupOf,
     workspaceStatuses,
-    settings,
     projectGrouping
   )
   if (!groupKey) {

@@ -10,7 +10,7 @@
  * candidates, or a label would appear and disappear with the sidebar filter.
  */
 import { describe, expect, it } from 'vitest'
-import { buildRows } from './worktree-list/grouping/build-rows'
+import { buildRows } from './worktree-list/grouping/build-rows.test-fixture'
 import { getNoticeHostContextLabels } from '../../../../shared/sidebar-list/host-labels'
 import { buildProjectGroupingIndex } from '../../../../shared/project-section-grouping'
 import { repo, worktree, project, projectHostSetups } from './worktree-list-groups-test-fixtures'

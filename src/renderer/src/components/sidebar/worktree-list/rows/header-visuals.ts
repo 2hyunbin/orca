@@ -2,10 +2,8 @@ import { CircleX, FolderTree, List, Pin } from 'lucide-react'
 import type React from 'react'
 import { translate } from '@/i18n/i18n'
 import type { PRGroupKey } from '../../../../../../shared/workspace-view/workspace-pr-groups'
-import type {
-  SidebarHeaderIcon,
-  SidebarListLabels
-} from '../../../../../../shared/sidebar-list/row-types'
+import type { SidebarHeaderIcon } from '../../../../../../shared/sidebar-list/row-types'
+import type { WorkspaceStatusDefinition } from '../../../../../../shared/worktree/types'
 import {
   ConductorDoneIcon,
   ConductorProgressIcon,
@@ -13,7 +11,7 @@ import {
 } from '../../workspace-status-icons'
 import { getWorkspaceStatusVisualMeta } from '../../workspace-status'
 
-export const PR_GROUP_META: Record<
+const PR_GROUP_META: Record<
   PRGroupKey,
   {
     label: string
@@ -72,27 +70,18 @@ const ALL_GROUP_META = {
   icon: List
 } as const
 
-/** The header labels the shared row builder needs, in the current locale. */
-export function getSidebarListLabels(): SidebarListLabels {
-  return {
-    pinned: PINNED_GROUP_META.label,
-    all: ALL_GROUP_META.label,
-    prGroups: {
-      done: PR_GROUP_META.done.label,
-      'in-review': PR_GROUP_META['in-review'].label,
-      'in-progress': PR_GROUP_META['in-progress'].label,
-      closed: PR_GROUP_META.closed.label
-    }
-  }
-}
-
 type SidebarHeaderVisual = {
-  tone: string
   icon: React.ComponentType<{ className?: string }>
+  tone: string
+  /** Set for headers the builder leaves unnamed: Pinned, All and the PR lanes. */
+  label?: string
 }
 
-/** The glyph and tone the window draws for a header's icon key. */
-export function getSidebarHeaderVisual(icon: SidebarHeaderIcon): SidebarHeaderVisual {
+/** What the window draws for a header's icon key; read at paint so labels follow the locale. */
+export function getSidebarHeaderVisual(
+  icon: SidebarHeaderIcon,
+  workspaceStatuses: readonly WorkspaceStatusDefinition[]
+): SidebarHeaderVisual {
   switch (icon.kind) {
     case 'pinned':
       return PINNED_GROUP_META
@@ -102,7 +91,11 @@ export function getSidebarHeaderVisual(icon: SidebarHeaderIcon): SidebarHeaderVi
       return PROJECT_GROUP_META
     case 'pr-status':
       return PR_GROUP_META[icon.prGroup]
-    case 'workspace-status':
-      return getWorkspaceStatusVisualMeta(icon.status)
+    case 'workspace-status': {
+      const { icon: statusIcon, tone } = getWorkspaceStatusVisualMeta(
+        workspaceStatuses.find((status) => status.id === icon.status) ?? icon.status
+      )
+      return { icon: statusIcon, tone }
+    }
   }
 }

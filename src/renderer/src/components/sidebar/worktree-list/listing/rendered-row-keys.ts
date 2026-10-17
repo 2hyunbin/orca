@@ -1,6 +1,6 @@
-import { getFolderWorkspaceHostIdentity } from '../folder-workspace-worktree'
-import { folderWorkspaceKey } from '../workspace-scope'
-import type { HostSectionRow } from './host-section-rows'
+import { getFolderWorkspaceHostIdentity } from '../../../../../../shared/folder-workspace-worktree'
+import { folderWorkspaceKey } from '../../../../../../shared/workspace-scope'
+import type { HostSectionRow } from '../../../../../../shared/sidebar-list/host-section-rows'
 
 /** Every key the rendered rows answer to, for reveal and scroll lookups. */
 export function collectRenderedSidebarRowKeys(sectionRows: readonly HostSectionRow[]): Set<string> {

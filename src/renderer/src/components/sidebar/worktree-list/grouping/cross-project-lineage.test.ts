@@ -10,7 +10,7 @@ import {
 } from '../../worktree-list-groups-test-fixtures'
 import { makeProjectGroup } from '../../folder-workspace-composer-submit-fixtures'
 import { getWorktreeRevealCollapsedGroupKeys } from '../navigation/worktree-reveal-group-keys'
-import { buildRows, buildSidebarRowPlan } from './build-rows'
+import { buildRows, buildSidebarRowPlan } from './build-rows.test-fixture'
 import {
   getWorktreeLineageGroupKey,
   getProjectGroupHeaderKey,

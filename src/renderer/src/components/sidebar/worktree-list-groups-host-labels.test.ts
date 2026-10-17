@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildRows } from './worktree-list/grouping/build-rows'
+import { buildRows } from './worktree-list/grouping/build-rows.test-fixture'
 import { getGroupKeyForWorktree } from '../../../../shared/sidebar-list/worktree-group-keys'
 import {
   LOCAL_HOST_LABEL,
@@ -331,7 +331,6 @@ describe('buildRows with pinned worktrees', () => {
         remoteWorktree,
         new Map([[remoteRepo.id, remoteRepo]]),
         null,
-        undefined,
         undefined,
         {
           projects: [project],

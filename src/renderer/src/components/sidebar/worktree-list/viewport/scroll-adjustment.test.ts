@@ -31,6 +31,7 @@ const makeHeaderRow = (
   key,
   label: key,
   count: 0,
+  icon: { kind: 'project' },
   ...overrides
 })
 

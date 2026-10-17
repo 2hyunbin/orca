@@ -141,12 +141,16 @@ function captureGolden(state: Partial<AppState>): string {
   useAppStore.setState(state)
   const { result, unmount } = renderHook(() => useGoldenSidebarPipeline())
   const { visibleWorktrees, rowModel, selection } = result.current
+  const statuses = useAppStore.getState().workspaceStatuses
   const lines = [
     `visible: ${visibleWorktrees.map((worktree) => worktree.id).join(' ') || '-'}`,
-    ...rowModel.sectionRows.map(serializeSidebarRow)
+    ...rowModel.sectionRows.map((row) => serializeSidebarRow(row, statuses))
   ]
   if (rowModel.sectionRows.length !== rowModel.rows.length) {
-    lines.push('-- rows before host sections --', ...rowModel.rows.map(serializeSidebarRow))
+    lines.push(
+      '-- rows before host sections --',
+      ...rowModel.rows.map((row) => serializeSidebarRow(row, statuses))
+    )
   }
   lines.push(
     ...serializeOccurrencePlan(

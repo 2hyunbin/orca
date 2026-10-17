@@ -43,8 +43,7 @@ import type {
   PendingCreationRef,
   PinnedWorktreeDisplayPolicy,
   Row,
-  SidebarListLabels,
-  SidebarListSettings,
+  SidebarPRGroupReader,
   WorktreeGroupBy
 } from './row-types'
 import { orderMainWorktreeFirst, getRenderedNaturalAnchorRepoIds } from './section-order'
@@ -59,14 +58,13 @@ export type SidebarRowPlanInputs = {
   /** Visible worktrees in the frozen sort order. */
   worktrees: Worktree[]
   repoMap: Map<string, Repo>
-  prCache: Record<string, unknown> | null
+  prGroupOf: SidebarPRGroupReader
   repoOrder?: Map<string, number>
   workspaceStatuses: readonly WorkspaceStatusDefinition[]
   projectOrderBy: ProjectOrderBy
   lineageById: Record<string, WorktreeLineage>
   worktreeMap: Map<string, Worktree>
   nestLineage: boolean
-  settings?: SidebarListSettings
   projectGroups: readonly ProjectGroup[]
   placeholderRepoIds: ReadonlySet<string>
   importedWorktreesByRepo: ReadonlyMap<string, ImportedWorktreesCardCandidate>
@@ -78,7 +76,6 @@ export type SidebarRowPlanInputs = {
   defaultHostId: ExecutionHostId
   pinnedDisplayPolicy: PinnedWorktreeDisplayPolicy
   filterRepoIds: readonly string[]
-  labels: SidebarListLabels
 }
 
 /** Plans the sidebar's sections once; `render` emits rows for a collapse state. */
@@ -87,14 +84,13 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
     groupBy,
     worktrees,
     repoMap,
-    prCache,
+    prGroupOf,
     repoOrder,
     workspaceStatuses,
     projectOrderBy,
     lineageById,
     worktreeMap,
     nestLineage,
-    settings,
     projectGroups,
     placeholderRepoIds,
     importedWorktreesByRepo,
@@ -105,8 +101,7 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
     hostLabelById,
     defaultHostId,
     pinnedDisplayPolicy,
-    filterRepoIds,
-    labels
+    filterRepoIds
   } = inputs
   const projectIndex = buildProjectGroupingIndex(projectGrouping)
   // Membership is decided once, above the groupBy switch: every mode renders the
@@ -134,13 +129,12 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
     sectionsOf: ({ pinned, natural, displayRootByIdentity }) => {
       const groups: OrderedGroupEntry[] =
         groupBy === 'none'
-          ? [[ALL_GROUP_KEY, { label: labels.all, items: [...natural], repoIds: new Set() }]]
+          ? [[ALL_GROUP_KEY, { label: '', items: [...natural], repoIds: new Set() }]]
           : buildOrderedGroups({
               groupBy,
               naturalWorktrees: natural,
               repoMap,
-              prCache,
-              settings,
+              prGroupOf,
               workspaceStatuses,
               projectIndex,
               displayRootByIdentity,
@@ -150,14 +144,10 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
               pendingByRepo,
               repoOrder,
               projectOrderBy,
-              folderWorkspaces: renderableFolderWorkspaces,
-              labels
+              folderWorkspaces: renderableFolderWorkspaces
             })
       if (pinned.length > 0) {
-        groups.unshift([
-          PINNED_GROUP_KEY,
-          { label: labels.pinned, items: pinned, repoIds: new Set() }
-        ])
+        groups.unshift([PINNED_GROUP_KEY, { label: '', items: pinned, repoIds: new Set() }])
       }
       return groups.map(([key, group]): SidebarOccurrenceSection => {
         const revealPath =
@@ -183,11 +173,7 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
     .filter((section) => section.key !== PINNED_GROUP_KEY)
     .map((section) => [section.key, section.group])
   const naturalWorktrees = orderedGroups.flatMap(([, group]) => group.items)
-  // Why labels again at render: header copy follows the locale on every re-emit, as it always has.
-  const render = (
-    collapsedGroups: Set<string>,
-    renderLabels: SidebarListLabels = labels
-  ): Row[] => {
+  const render = (collapsedGroups: Set<string>): Row[] => {
     const result: Row[] = []
     if (groupBy !== 'repo') {
       for (const creation of pendingCreations) {
@@ -218,14 +204,12 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
       groupBy,
       worktrees: naturalWorktrees,
       repoMap,
-      prCache,
+      prGroupOf,
       collapsedGroups,
       workspaceStatuses,
-      settings,
       projectGrouping
     })
     emitPinnedGroup(
-      renderLabels.pinned,
       pinnedSectionWorktrees,
       repoMap,
       defaultHostId,
@@ -245,7 +229,6 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
         result.push({
           type: 'header',
           key: ALL_GROUP_KEY,
-          label: renderLabels.all,
           count: naturalWorktrees.length + renderableFolderWorkspaces.length,
           icon: { kind: 'all' },
           hostWorktreeCounts: getLaneHostWorktreeCounts(
@@ -293,8 +276,7 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
       pendingByRepo,
       mixedWorktreeHostContextLabels,
       noticeHostContextLabelByRepoId,
-      occurrencePlan,
-      labels: renderLabels
+      occurrencePlan
     }
 
     if (groupBy !== 'repo' || projectGroups.length === 0) {

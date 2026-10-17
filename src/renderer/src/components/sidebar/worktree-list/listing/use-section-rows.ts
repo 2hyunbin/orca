@@ -10,11 +10,13 @@ import type { WorkspaceStatusDefinition, Worktree } from '../../../../../../shar
 import type { WorktreeLineage } from '../../../../../../shared/worktree/lineage-types'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import { getHostDisplayLabelOverrides } from '../../../../../../shared/host-setting-overrides'
-import { buildSidebarRowPlan } from '../grouping/build-rows'
-import { getSidebarListLabels } from '../grouping/header-visuals'
+import { planSidebarRows } from '../../../../../../shared/sidebar-list/sidebar-row-plan'
+import { createSidebarPRGroupReader } from '../grouping/pr-group-key'
 import { useEffectiveCollapsedGroups } from './use-collapsed-groups'
 import type { ProjectGroupingModel } from '../../../../../../shared/project-section-grouping'
 import type {
+  ImportedWorktreesCardCandidate,
+  NewExternalWorktreesInboxCandidate,
   PinnedWorktreeDisplayPolicy,
   Row,
   WorktreeGroupBy
@@ -26,7 +28,7 @@ import {
   scopeHostSectionCollapse
 } from '../../../../../../shared/sidebar-list/host-section-collapse'
 import { addHostSectionRows } from '../../../../../../shared/sidebar-list/host-section-rows'
-import { collectRenderedSidebarRowKeys } from '../../../../../../shared/sidebar-list/rendered-row-keys'
+import { collectRenderedSidebarRowKeys } from './rendered-row-keys'
 import { orderHostSectionOptions } from '../../../../../../shared/sidebar-list/host-section-order'
 import { buildSidebarHostOptions } from '../../sidebar-host-options'
 import { selectPendingWorktreeCreationKeys } from './pending-worktree-creation-keys'
@@ -50,8 +52,8 @@ type SectionRowsArgs = {
   visibleReposForRows: readonly Repo[]
   visibleProjectGroupsForRows: readonly ProjectGroup[]
   visibleFolderWorkspacesForRows: readonly FolderWorkspace[]
-  importedWorktreesByRepo: Parameters<typeof buildSidebarRowPlan>[14]
-  newExternalWorktreesInboxByRepo: Parameters<typeof buildSidebarRowPlan>[15]
+  importedWorktreesByRepo: ReadonlyMap<string, ImportedWorktreesCardCandidate>
+  newExternalWorktreesInboxByRepo: ReadonlyMap<string, NewExternalWorktreesInboxCandidate>
   filterRepoIds: readonly string[]
   visibleWorkspaceHostIds: readonly ExecutionHostId[] | null
   workspaceHostScope: AppState['workspaceHostScope']
@@ -143,31 +145,29 @@ export function useSidebarSectionRows(args: SectionRowsArgs) {
     args.workspaceHostScope !== 'all' || args.visibleWorkspaceHostIds !== null
   const rowPlan = useMemo(
     () =>
-      buildSidebarRowPlan(
-        args.groupBy,
+      planSidebarRows({
+        groupBy: args.groupBy,
         worktrees,
         repoMap,
-        args.prCache,
-        new Set(),
+        prGroupOf: createSidebarPRGroupReader(repoMap, args.prCache, args.settings),
         repoOrder,
-        args.workspaceStatuses,
-        args.projectOrderBy,
-        args.worktreeLineageById,
-        args.worktreeMap,
-        true,
-        args.settings,
-        args.visibleProjectGroupsForRows,
+        workspaceStatuses: args.workspaceStatuses,
+        projectOrderBy: args.projectOrderBy,
+        lineageById: args.worktreeLineageById,
+        worktreeMap: args.worktreeMap,
+        nestLineage: true,
+        projectGroups: args.visibleProjectGroupsForRows,
         placeholderRepoIds,
-        args.importedWorktreesByRepo,
-        args.newExternalWorktreesInboxByRepo,
+        importedWorktreesByRepo: args.importedWorktreesByRepo,
+        newExternalWorktreesInboxByRepo: args.newExternalWorktreesInboxByRepo,
         pendingCreations,
-        args.projectGrouping,
-        args.visibleFolderWorkspacesForRows,
+        projectGrouping: args.projectGrouping,
+        folderWorkspaces: args.visibleFolderWorkspacesForRows,
         hostLabelById,
         defaultHostId,
-        args.pinnedDisplayPolicy,
-        args.filterRepoIds
-      ),
+        pinnedDisplayPolicy: args.pinnedDisplayPolicy,
+        filterRepoIds: args.filterRepoIds
+      }),
     [
       args.groupBy,
       worktrees,
@@ -221,7 +221,7 @@ export function useSidebarSectionRows(args: SectionRowsArgs) {
     [effectiveCollapsedGroups, hostScopedGroups]
   )
   const rows: Row[] = useMemo(
-    () => rowPlan.render(rowCollapsedGroups, getSidebarListLabels()),
+    () => rowPlan.render(rowCollapsedGroups),
     [rowPlan, rowCollapsedGroups]
   )
   const orderedHostOptions = useMemo(

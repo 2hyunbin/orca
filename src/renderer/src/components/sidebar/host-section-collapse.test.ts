@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeRepo, makeWorktree } from './worktree-list-lineage-card-test-fixtures'
-import { buildRows } from './worktree-list/grouping/build-rows'
+import { buildRows } from './worktree-list/grouping/build-rows.test-fixture'
 import { addHostSectionRows } from '../../../../shared/sidebar-list/host-section-rows'
 import {
   scopeHostSectionCollapse,

@@ -48,6 +48,7 @@ function header(key: string, label = key): Extract<Row, { type: 'header' }> {
     type: 'header',
     key,
     label,
+    icon: { kind: 'project' },
     count: 1
   }
 }

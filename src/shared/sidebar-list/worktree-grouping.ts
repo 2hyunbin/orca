@@ -2,18 +2,13 @@ import type { Repo } from '../repo-types'
 import type { ProjectOrderBy } from '../ui-chrome-types'
 import type { WorkspaceStatusDefinition, Worktree } from '../worktree/types'
 import { getWorktreeHostIdentity } from '../worktree/host-qualified-identity'
-import {
-  getWorkspaceStatus,
-  getWorkspaceStatusFromGroupKey,
-  getWorkspaceStatusGroupKey
-} from '../workspace-statuses'
+import { getWorkspaceStatus, getWorkspaceStatusGroupKey } from '../workspace-statuses'
 import {
   compareFolderWorkspacesForDisplay,
   getFolderWorkspaceLaneKey,
   type RenderableFolderWorkspace
 } from './folder-workspace-lanes'
-import { PR_GROUP_ORDER, getPRGroupKey, getPRLaneKey } from './group-keys'
-import type { PRGroupKey } from './group-keys'
+import { PR_GROUP_ORDER, getPRLaneKey } from './group-keys'
 import type { OrderedGroupEntry, WorktreeGroupEntry } from './worktree-group-entry'
 import { buildProjectSections, type ProjectGroupingIndex } from '../project-section-grouping'
 import { orderProjectSections } from '../project-section-order'
@@ -21,36 +16,16 @@ import type {
   ImportedWorktreesCardCandidate,
   NewExternalWorktreesInboxCandidate,
   PendingCreationRef,
-  SidebarListLabels,
-  SidebarListSettings,
+  SidebarPRGroupReader,
   WorktreeGroupBy
 } from './row-types'
-
-/** Lane label for a lane a folder workspace opened before any worktree did. */
-function getLaneLabelForKey(
-  key: string,
-  groupBy: Exclude<WorktreeGroupBy, 'repo'>,
-  workspaceStatuses: readonly WorkspaceStatusDefinition[],
-  labels: SidebarListLabels
-): string {
-  if (groupBy === 'workspace-status') {
-    const status = getWorkspaceStatusFromGroupKey(key, workspaceStatuses)
-    return workspaceStatuses.find((entry) => entry.id === status)?.label ?? status ?? key
-  }
-  if (groupBy === 'pr-status') {
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: pr-status lane keys come from getPRLaneKey(PRGroupKey).
-    return labels.prGroups[key.replace(/^pr:/, '') as PRGroupKey]
-  }
-  return key
-}
 
 /** Buckets worktrees into their sections and returns them in render order. */
 export function buildOrderedGroups(args: {
   groupBy: WorktreeGroupBy
   naturalWorktrees: readonly Worktree[]
   repoMap: Map<string, Repo>
-  prCache: Record<string, unknown> | null
-  settings: SidebarListSettings | undefined
+  prGroupOf: SidebarPRGroupReader
   workspaceStatuses: readonly WorkspaceStatusDefinition[]
   projectIndex: ProjectGroupingIndex | null
   displayRootByIdentity?: ReadonlyMap<string, Worktree>
@@ -61,14 +36,12 @@ export function buildOrderedGroups(args: {
   repoOrder: Map<string, number> | undefined
   projectOrderBy: ProjectOrderBy
   folderWorkspaces?: readonly RenderableFolderWorkspace[]
-  labels: SidebarListLabels
 }): OrderedGroupEntry[] {
   const {
     groupBy,
     naturalWorktrees,
     repoMap,
-    prCache,
-    settings,
+    prGroupOf,
     workspaceStatuses,
     projectIndex,
     displayRootByIdentity,
@@ -78,8 +51,7 @@ export function buildOrderedGroups(args: {
     pendingByRepo,
     repoOrder,
     projectOrderBy,
-    folderWorkspaces = [],
-    labels
+    folderWorkspaces = []
   } = args
 
   if (groupBy === 'repo') {
@@ -106,22 +78,15 @@ export function buildOrderedGroups(args: {
     })
   }
 
+  // Why no lane labels: status and PR headers are named by the section emitter and the client.
   const grouped = new Map<string, WorktreeGroupEntry>()
   for (const w of naturalWorktrees) {
-    let key: string
-    let label: string
-    if (groupBy === 'workspace-status') {
-      const workspaceStatus = getWorkspaceStatus(w, workspaceStatuses)
-      key = getWorkspaceStatusGroupKey(workspaceStatus)
-      label =
-        workspaceStatuses.find((status) => status.id === workspaceStatus)?.label ?? workspaceStatus
-    } else {
-      const prGroup = getPRGroupKey(w, repoMap, prCache, settings)
-      key = getPRLaneKey(prGroup)
-      label = labels.prGroups[prGroup]
-    }
+    const key =
+      groupBy === 'workspace-status'
+        ? getWorkspaceStatusGroupKey(getWorkspaceStatus(w, workspaceStatuses))
+        : getPRLaneKey(prGroupOf(w))
     if (!grouped.has(key)) {
-      grouped.set(key, { label, items: [], repo: undefined, repoIds: new Set() })
+      grouped.set(key, { label: '', items: [], repo: undefined, repoIds: new Set() })
     }
     const group = grouped.get(key)!
     group.items.push(w)
@@ -134,7 +99,7 @@ export function buildOrderedGroups(args: {
     const key = getFolderWorkspaceLaneKey(pair, groupBy, workspaceStatuses)
     if (!grouped.has(key)) {
       grouped.set(key, {
-        label: getLaneLabelForKey(key, groupBy, workspaceStatuses, labels),
+        label: '',
         items: [],
         repo: undefined,
         repoIds: new Set()

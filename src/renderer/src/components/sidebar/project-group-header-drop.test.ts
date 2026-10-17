@@ -68,14 +68,23 @@ describe('getSidebarOrderedProjectGroupHeaderIdsByBucket', () => {
         key: 'project-group:root-a',
         label: 'A',
         count: 0,
+        icon: { kind: 'project' },
         projectGroup: rootA
       },
-      { type: 'header', key: 'repo:repo-a', label: 'repo', count: 0, repo },
+      {
+        type: 'header',
+        key: 'repo:repo-a',
+        label: 'repo',
+        count: 0,
+        icon: { kind: 'project' },
+        repo
+      },
       {
         type: 'header',
         key: 'project-group:child-a',
         label: 'A child',
         count: 0,
+        icon: { kind: 'project' },
         projectGroup: childA
       },
       {
@@ -83,6 +92,7 @@ describe('getSidebarOrderedProjectGroupHeaderIdsByBucket', () => {
         key: 'project-group:root-b',
         label: 'B',
         count: 0,
+        icon: { kind: 'project' },
         projectGroup: rootB
       }
     ]

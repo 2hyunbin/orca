@@ -16,7 +16,8 @@ import type {
   PinnedWorktreeDisplayPolicy,
   WorktreeGroupBy
 } from '../../../../../../shared/sidebar-list/row-types'
-import { buildSidebarRowPlan } from '../grouping/build-rows'
+import { planSidebarRows } from '../../../../../../shared/sidebar-list/sidebar-row-plan'
+import { createSidebarPRGroupReader } from '../grouping/pr-group-key'
 
 export function getWorktreeRevealCollapsedGroupKeys(args: {
   occurrencePlan?: WorktreeOccurrencePlan<Worktree>
@@ -44,31 +45,27 @@ export function getWorktreeRevealCollapsedGroupKeys(args: {
   )
   const plan =
     args.occurrencePlan ??
-    buildSidebarRowPlan(
-      args.groupBy,
-      [...(args.visibleWorktrees ?? args.worktrees)],
-      args.repoMap,
-      args.prCache,
-      new Set(),
-      undefined,
-      args.workspaceStatuses,
-      undefined,
-      { ...args.worktreeLineageById },
-      new Map(args.worktrees.map((row) => [row.id, row])),
-      true,
-      args.settings,
-      args.projectGroups,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      args.projectGrouping,
-      undefined,
-      undefined,
-      args.defaultHostId,
-      args.pinnedDisplayPolicy,
-      args.filterRepoIds
-    ).occurrencePlan
+    planSidebarRows({
+      groupBy: args.groupBy,
+      worktrees: [...(args.visibleWorktrees ?? args.worktrees)],
+      repoMap: args.repoMap,
+      prGroupOf: createSidebarPRGroupReader(args.repoMap, args.prCache, args.settings),
+      workspaceStatuses: args.workspaceStatuses,
+      projectOrderBy: 'manual',
+      lineageById: { ...args.worktreeLineageById },
+      worktreeMap: new Map(args.worktrees.map((row) => [row.id, row])),
+      nestLineage: true,
+      projectGroups: args.projectGroups,
+      placeholderRepoIds: new Set(),
+      importedWorktreesByRepo: new Map(),
+      newExternalWorktreesInboxByRepo: new Map(),
+      pendingCreations: [],
+      projectGrouping: args.projectGrouping,
+      folderWorkspaces: [],
+      defaultHostId: args.defaultHostId,
+      pinnedDisplayPolicy: args.pinnedDisplayPolicy,
+      filterRepoIds: args.filterRepoIds ?? []
+    }).occurrencePlan
   const occurrence = plan.preferredByIdentity.get(getWorktreeHostIdentity(args.worktree))
   if (!occurrence) {
     return []

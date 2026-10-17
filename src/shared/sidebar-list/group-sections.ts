@@ -24,7 +24,6 @@ import type {
   NewExternalWorktreesInboxCandidate,
   PendingCreationRef,
   Row,
-  SidebarListLabels,
   WorktreeGroupBy
 } from './row-types'
 
@@ -44,7 +43,6 @@ export type SectionAppendContext = {
   mixedWorktreeHostContextLabels: Map<string, string> | undefined
   noticeHostContextLabelByRepoId: Map<string, NoticeHostContext> | undefined
   occurrencePlan: WorktreeOccurrencePlan<Worktree>
-  labels: SidebarListLabels
 }
 
 export function appendOrderedGroups(
@@ -65,8 +63,7 @@ export function appendOrderedGroups(
     newExternalWorktreesInboxByRepo,
     pendingByRepo,
     mixedWorktreeHostContextLabels,
-    occurrencePlan,
-    labels
+    occurrencePlan
   } = ctx
   for (const [key, group] of groupsToAppend) {
     const isCollapsed = collapsedGroups.has(key)
@@ -95,7 +92,7 @@ export function appendOrderedGroups(
                 key,
                 label: definition?.label ?? workspaceStatus,
                 count: group.items.length + folderPairs.length,
-                icon: { kind: 'workspace-status' as const, status: definition ?? workspaceStatus },
+                icon: { kind: 'workspace-status' as const, status: workspaceStatus },
                 hostWorktreeCounts: getLaneHostWorktreeCounts(
                   group.items,
                   folderPairs,
@@ -116,7 +113,6 @@ export function appendOrderedGroups(
               return {
                 type: 'header' as const,
                 key,
-                label: labels.prGroups[prGroup],
                 count: group.items.length + folderPairs.length,
                 icon: { kind: 'pr-status' as const, prGroup },
                 hostWorktreeCounts: getLaneHostWorktreeCounts(
