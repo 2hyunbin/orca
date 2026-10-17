@@ -1,15 +1,19 @@
 import { e2eConfig } from '@/lib/e2e-config'
 
+/** Facts read on demand carry no revision. */
+export type SidebarShadowMainRead<Value> = { revision?: number; values: ReadonlyMap<string, Value> }
+
 /**
  * One sidebar input main is taking over: what the window derives itself next to what main
  * publishes, keyed by workspace. Both reads cover the same scope; another producer's rows are
  * left out of both.
  */
-export type SidebarShadowDomain<Value> = {
+export type SidebarShadowDomain<Value, Main extends SidebarShadowMainRead<Value>> = {
   name: string
-  readWindow: () => ReadonlyMap<string, Value>
-  /** Null when this host does not publish the domain (an older host); facts read on demand carry no revision. */
-  readMain: () => Promise<{ revision?: number; values: ReadonlyMap<string, Value> } | null>
+  /** Given main's read, so a domain can scope the window's side to what main covers. */
+  readWindow: (main: Main) => ReadonlyMap<string, Value>
+  /** Null when this host does not publish the domain (an older host). */
+  readMain: () => Promise<Main | null>
   equals: (window: Value | undefined, main: Value | undefined) => boolean
 }
 
@@ -32,9 +36,10 @@ const CHECK_INTERVAL_MS = 1_500
  * Records settled disagreements only: a key is recorded once both sides held the same differing
  * values across a whole check interval, so propagation lag between window and main never counts.
  */
-export function defineSidebarShadowDomain<Value>(
-  domain: SidebarShadowDomain<Value>
-): SidebarShadowCheck {
+export function defineSidebarShadowDomain<
+  Value,
+  Main extends SidebarShadowMainRead<Value> = SidebarShadowMainRead<Value>
+>(domain: SidebarShadowDomain<Value, Main>): SidebarShadowCheck {
   let pending = new Map<string, string>()
   const recorded = new Set<string>()
   return async (record) => {
@@ -42,7 +47,7 @@ export function defineSidebarShadowDomain<Value>(
     if (!main) {
       return false
     }
-    const window = domain.readWindow()
+    const window = domain.readWindow(main)
     const next = new Map<string, string>()
     for (const key of new Set([...window.keys(), ...main.values.keys()])) {
       const windowValue = window.get(key) ?? null

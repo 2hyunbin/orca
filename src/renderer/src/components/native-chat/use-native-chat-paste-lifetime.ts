@@ -30,13 +30,19 @@ export function useNativeChatPasteLifetime(args: {
     options: { deferPreview: boolean; canShow: () => boolean }
   ) => { id: string | null; reveal: () => void }
   /** Register the operation for the native clipboard's picture; `reveal` previews its thumbnail. */
-  startClipboardImageChip: (owner: NativeChatAttachmentOwner, pendingName?: string) => {
+  startClipboardImageChip: (
+    owner: NativeChatAttachmentOwner,
+    pendingName?: string
+  ) => {
     id: string | null
     reveal: () => void
   }
   /** One chip per file a macOS paste may attach. `reveal` previews the first as the clipboard's
    *  picture; `transfer` hands the chips still in the draft to the file intake to settle. */
-  startClipboardCandidateChips: (owner: NativeChatAttachmentOwner, paths: string[]) => {
+  startClipboardCandidateChips: (
+    owner: NativeChatAttachmentOwner,
+    paths: string[]
+  ) => {
     reserved: NativeChatReservedAttachment[]
     reveal: () => void
     transfer: () => NativeChatReservedAttachment[]

@@ -51,6 +51,7 @@ import { SshConnectionManager } from './ssh-connection-manager'
 import {
   clearSshCredentialDeclined,
   recordSshCredentialDeclined,
+  recordSshSignInAwaited,
   resetSshCredentialDeclinesForTests
 } from './ssh-credential-decline'
 import { isAuthError } from './ssh-connection-utils'
@@ -244,6 +245,19 @@ describe('SshConnectionManager after a cancelled sign-in', () => {
     recordSshCredentialDeclined(target.id)
 
     await expect(manager.connect(target)).resolves.toBe(conn)
+  })
+
+  it('refuses a background dial to a host awaiting its first sign-in, saying so', async () => {
+    const manager = new SshConnectionManager({ onStateChange: vi.fn() })
+    recordSshSignInAwaited(target.id)
+
+    const error = await manager.connect(target).catch((err: unknown) => err)
+
+    expect(error instanceof Error && isAuthError(error)).toBe(true)
+    expect(error instanceof Error && error.message).toBe(
+      'Target 1 needs you to sign in. Reconnect to sign in.'
+    )
+    expect(mockState.instances).toHaveLength(0)
   })
 
   it('dials again once an explicit sign-in lifts the decline', async () => {

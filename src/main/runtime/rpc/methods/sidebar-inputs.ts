@@ -23,9 +23,15 @@ export const SIDEBAR_INPUT_METHODS = [
       })
   }),
   defineMethod({
+    name: 'sidebarInputs.pairedServerRows',
+    permission: 'workspace',
+    params: null,
+    handler: async (_params, { runtime }) => runtime.pairedServerRows.snapshot()
+  }),
+  defineMethod({
     name: 'sidebarInputs.workspaceCreations',
     permission: 'workspace',
     params: null,
-    handler: async (_params, { runtime }) => runtime.getWorkspaceCreations()
+    handler: async (_params, { runtime }) => runtime.workspaceCreations.snapshot()
   })
 ]
