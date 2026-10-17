@@ -120,8 +120,8 @@ export function MobileHomeScreen() {
             <MobileHomeListFooter
               accountsHosts={data.accountsHosts}
               connectedHosts={data.connectedHosts}
-              connectedTaskProviders={data.connectedTaskProviders}
               resumeCard={data.resumeCard}
+              taskProvidersByHost={data.taskProvidersByHost}
               onCreateWorkspace={(hostId) => data.router.push(hostNewWorktreeRoute(hostId))}
               onOpenAccounts={openMobileAccounts}
               onOpenResume={openResume}

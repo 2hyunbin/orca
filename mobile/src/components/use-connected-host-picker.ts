@@ -22,41 +22,48 @@ function hostPickerOptions(hosts: HostProfile[]) {
   })
 }
 
-/** Runs an action on the only connected host, or on the one picked when several are connected. */
+/** Runs an action on the only offered host, or on the one picked when several are offered. */
 export function useConnectedHostPicker(connectedHosts: HostProfile[]) {
-  const [pickerForHostSet, setPickerForHostSet] = useState<string | null>(null)
-  const pendingActionRef = useRef<((hostId: string) => void) | null>(null)
-  const pendingHostIdRef = useRef<string | null>(null)
-  const hostSetKey = JSON.stringify(connectedHosts.map((host) => host.id))
-  const visible = pickerForHostSet === hostSetKey
-  if (pickerForHostSet !== null && !visible) {
-    setPickerForHostSet(null)
+  const [offer, setOffer] = useState<{ hostIds: readonly string[]; open: boolean }>({
+    hostIds: [],
+    open: false
+  })
+  const pendingRef = useRef<{ action: (hostId: string) => void; hostId?: string } | null>(null)
+  const offeredHosts = connectedHosts.filter((host) => offer.hostIds.includes(host.id))
+  const visible = offer.open && offeredHosts.length === offer.hostIds.length
+  if (offer.open && !visible) {
+    setOffer({ ...offer, open: false })
   }
 
-  function pickHost(action: (hostId: string) => void) {
-    if (connectedHosts.length === 1) {
-      action(connectedHosts[0].id)
+  function pickHost(action: (hostId: string) => void, hosts: HostProfile[] = connectedHosts) {
+    if (hosts.length === 1) {
+      action(hosts[0].id)
       return
     }
-    if (connectedHosts.length > 1) {
-      pendingActionRef.current = action
-      setPickerForHostSet(hostSetKey)
+    if (hosts.length > 1) {
+      pendingRef.current = { action }
+      setOffer({ hostIds: hosts.map((host) => host.id), open: true })
     }
+  }
+
+  function close() {
+    setOffer((previous) => ({ ...previous, open: false }))
   }
 
   function onSelect(hostId: string) {
-    pendingHostIdRef.current = hostId
-    setPickerForHostSet(null)
+    if (pendingRef.current) {
+      pendingRef.current = { ...pendingRef.current, hostId }
+    }
+    close()
   }
 
   function onAfterClose() {
-    setPickerForHostSet(null)
-    const hostId = pendingHostIdRef.current
-    const action = pendingActionRef.current
-    pendingHostIdRef.current = null
-    pendingActionRef.current = null
-    if (hostId && action && connectedHosts.some((host) => host.id === hostId)) {
-      action(hostId)
+    close()
+    const pending = pendingRef.current
+    pendingRef.current = null
+    const hostId = pending?.hostId
+    if (pending && hostId && connectedHosts.some((host) => host.id === hostId)) {
+      pending.action(hostId)
     }
   }
 
@@ -64,10 +71,10 @@ export function useConnectedHostPicker(connectedHosts: HostProfile[]) {
     pickHost,
     pickerProps: {
       visible,
-      options: hostPickerOptions(connectedHosts),
+      options: hostPickerOptions(offeredHosts),
       selected: '',
       onSelect,
-      onClose: () => setPickerForHostSet(null),
+      onClose: close,
       onAfterClose
     }
   }

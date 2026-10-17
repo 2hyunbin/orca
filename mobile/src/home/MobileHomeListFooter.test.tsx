@@ -1,5 +1,5 @@
 import { createElement } from 'react'
-import { act, create, type ReactTestRenderer } from 'react-test-renderer'
+import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { TaskProvider } from '../../../src/shared/task-providers'
 import type { HostProfile } from '../transport/types'
@@ -41,6 +41,8 @@ function host(id: string, name: string, endpoint: string): HostProfile {
 const desk = host('desk', 'Desk', 'ws://192.168.1.2:6768')
 const laptop = host('laptop', 'Laptop', 'wss://relay.example.com/mobile')
 
+const server = host('server', 'Server', 'wss://ssh.example.com/mobile')
+
 describe('MobileHomeListFooter tasks', () => {
   let renderer: ReactTestRenderer | null = null
 
@@ -50,10 +52,12 @@ describe('MobileHomeListFooter tasks', () => {
     vi.restoreAllMocks()
   })
 
-  async function renderFooter(connectedHosts: HostProfile[]) {
+  async function renderFooter(
+    connectedHosts: HostProfile[],
+    taskProvidersByHost: Record<string, TaskProvider[]> = {}
+  ) {
     const onOpenTasks = vi.fn()
     const onCreateWorkspace = vi.fn()
-    const providers: TaskProvider[] = ['github', 'jira']
     const consoleError = vi.spyOn(console, 'error').mockImplementation((...args) => {
       if (typeof args[0] !== 'string' || !args[0].includes('react-test-renderer is deprecated')) {
         throw new Error(String(args[0]))
@@ -64,8 +68,8 @@ describe('MobileHomeListFooter tasks', () => {
         createElement(MobileHomeListFooter, {
           accountsHosts: [],
           connectedHosts,
-          connectedTaskProviders: providers,
           resumeCard: null,
+          taskProvidersByHost,
           onCreateWorkspace,
           onOpenAccounts: vi.fn(),
           onOpenResume: vi.fn(),
@@ -78,38 +82,26 @@ describe('MobileHomeListFooter tasks', () => {
     return { onOpenTasks, onCreateWorkspace }
   }
 
-  function pressablesWithLabel(label: string) {
-    return renderer!.root
-      .findAll((node) => String(node.type) === 'Pressable')
-      .filter((node) => node.props.accessibilityLabel === label)
+  function pressable(matches: (node: ReactTestInstance) => boolean) {
+    const node = renderer!.root
+      .findAll((candidate) => String(candidate.type) === 'Pressable')
+      .find(matches)
+    if (!node) {
+      throw new Error('Pressable not rendered')
+    }
+    return node
   }
 
-  function tasksCard() {
-    const card = renderer!.root
-      .findAll((node) => String(node.type) === 'Pressable')
-      .find((node) =>
-        node
-          .findAll((node) => String(node.type) === 'Text')
-          .some((text) => text.props.children === 'Tasks')
-      )
-    if (!card) {
-      throw new Error('Tasks card not rendered')
-    }
-    return card
+  function pressableWithText(text: string) {
+    return pressable((node) =>
+      node
+        .findAll((candidate) => String(candidate.type) === 'Text')
+        .some((candidate) => candidate.props.children === text)
+    )
   }
 
-  function newWorkspaceButton() {
-    const button = renderer!.root
-      .findAll((node) => String(node.type) === 'Pressable')
-      .find((node) =>
-        node
-          .findAll((node) => String(node.type) === 'Text')
-          .some((text) => text.props.children === 'New Workspace')
-      )
-    if (!button) {
-      throw new Error('New Workspace not rendered')
-    }
-    return button
+  function providerChip(label: string) {
+    return pressable((node) => node.props.accessibilityLabel === `Open ${label} tasks`)
   }
 
   function picker(title: string) {
@@ -118,64 +110,88 @@ describe('MobileHomeListFooter tasks', () => {
       .find((node) => node.props.title === title)!
   }
 
+  function tasksPicker() {
+    return picker('Open Tasks On')
+  }
+
   it('opens the only connected host directly', async () => {
     const callbacks = await renderFooter([desk])
 
-    act(() => tasksCard().props.onPress())
+    act(() => pressableWithText('Tasks').props.onPress())
 
     expect(callbacks.onOpenTasks).toHaveBeenCalledWith('desk', undefined)
-    expect(picker('Open Tasks On').props.visible).toBe(false)
+    expect(tasksPicker().props.visible).toBe(false)
   })
 
-  it('asks which host to open when several are connected', async () => {
+  it('asks which connected host to open from the card', async () => {
     const callbacks = await renderFooter([desk, laptop])
 
-    act(() => tasksCard().props.onPress())
+    act(() => pressableWithText('Tasks').props.onPress())
 
     expect(callbacks.onOpenTasks).not.toHaveBeenCalled()
-    expect(picker('Open Tasks On').props.visible).toBe(true)
-    expect(picker('Open Tasks On').props.options).toEqual([
+    expect(tasksPicker().props.visible).toBe(true)
+    expect(tasksPicker().props.options).toEqual([
       { value: 'desk', label: 'Desk', subtitle: '192.168.1.2:6768' },
       { value: 'laptop', label: 'Laptop', subtitle: 'relay.example.com' }
     ])
 
-    act(() => picker('Open Tasks On').props.onSelect('laptop'))
-    expect(callbacks.onOpenTasks).not.toHaveBeenCalled()
-    act(() => picker('Open Tasks On').props.onAfterClose())
+    act(() => tasksPicker().props.onSelect('laptop'))
+    act(() => tasksPicker().props.onAfterClose())
 
     expect(callbacks.onOpenTasks).toHaveBeenCalledWith('laptop', undefined)
   })
 
-  it('opens the tapped provider on the picked host', async () => {
-    const callbacks = await renderFooter([desk, laptop])
+  it('lists each provider once, in the order connected hosts report them', async () => {
+    await renderFooter([desk, laptop, server], {
+      desk: ['github', 'jira'],
+      laptop: ['gitlab', 'github'],
+      server: ['jira', 'linear']
+    })
 
-    const [jira] = pressablesWithLabel('Open Jira tasks')
-    act(() => jira.props.onPress({ stopPropagation: () => {} }))
-    expect(picker('Open Tasks On').props.visible).toBe(true)
+    const labels = renderer!.root
+      .findAll((node) => String(node.type) === 'TaskProviderLogo')
+      .map((node) => node.props.provider)
+    expect(labels).toEqual(['github', 'jira', 'gitlab', 'linear'])
+  })
 
-    act(() => picker('Open Tasks On').props.onSelect('laptop'))
-    act(() => picker('Open Tasks On').props.onAfterClose())
+  it('opens a provider directly on the only host that has it', async () => {
+    const callbacks = await renderFooter([desk, laptop], {
+      desk: ['github'],
+      laptop: ['github', 'jira']
+    })
 
+    act(() => providerChip('Jira').props.onPress({ stopPropagation: () => {} }))
+
+    expect(tasksPicker().props.visible).toBe(false)
     expect(callbacks.onOpenTasks).toHaveBeenCalledWith('laptop', 'jira')
   })
 
-  it('opens nothing when the picker is dismissed', async () => {
-    const callbacks = await renderFooter([desk, laptop])
+  it('offers only the hosts that have the tapped provider', async () => {
+    const callbacks = await renderFooter([desk, laptop, server], {
+      desk: ['github', 'jira'],
+      laptop: ['github'],
+      server: ['jira']
+    })
 
-    act(() => tasksCard().props.onPress())
-    act(() => picker('Open Tasks On').props.onClose())
-    act(() => picker('Open Tasks On').props.onAfterClose())
+    act(() => providerChip('Jira').props.onPress({ stopPropagation: () => {} }))
 
-    expect(picker('Open Tasks On').props.visible).toBe(false)
-    expect(callbacks.onOpenTasks).not.toHaveBeenCalled()
+    expect(tasksPicker().props.visible).toBe(true)
+    expect(tasksPicker().props.options.map((option: { value: string }) => option.value)).toEqual([
+      'desk',
+      'server'
+    ])
+    act(() => tasksPicker().props.onSelect('server'))
+    act(() => tasksPicker().props.onAfterClose())
+
+    expect(callbacks.onOpenTasks).toHaveBeenCalledWith('server', 'jira')
   })
 
   it('keeps the New Workspace picker separate from the Tasks picker', async () => {
     const callbacks = await renderFooter([desk, laptop])
 
-    act(() => newWorkspaceButton().props.onPress())
+    act(() => pressableWithText('New Workspace').props.onPress())
     expect(picker('Create Workspace On').props.visible).toBe(true)
-    expect(picker('Open Tasks On').props.visible).toBe(false)
+    expect(tasksPicker().props.visible).toBe(false)
 
     act(() => picker('Create Workspace On').props.onSelect('desk'))
     act(() => picker('Create Workspace On').props.onAfterClose())
