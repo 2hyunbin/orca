@@ -117,9 +117,9 @@ beforeEach(async () => {
     logger: createStructuredAgentSessionLogger(),
     store,
     adapter: {
+      open: () => new Promise(() => {}),
       acquire: vi.fn(async ({ fence, spawnToken }) => {
         const child = {
-          providerChildPhase: 'starting' as const,
           process: {
             hostId: 'local',
             pid: 4242,

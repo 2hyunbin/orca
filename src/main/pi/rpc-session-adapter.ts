@@ -94,8 +94,7 @@ export class PiRpcSessionAdapter implements StructuredAgentSessionAdapter {
       }
       return {
         process,
-        acquisitionGeneration: session.generation,
-        providerChildPhase: 'starting'
+        acquisitionGeneration: session.generation
       }
     } catch (error) {
       if (!session) {

@@ -71,7 +71,6 @@ async function hostFor(definition: StructuredAgentDefinition): Promise<{
         spawnToken: input.spawnToken
       },
       acquisitionGeneration: `generation-${acquire.mock.calls.length}`,
-      providerChildPhase: 'starting' as const,
       link: {
         linkId: `link-${input.fence}`,
         handle: handle(definition),

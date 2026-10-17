@@ -31,13 +31,13 @@ export type StructuredAgentSessionStartupAttempt = {
   readonly options?: Readonly<Record<string, string>>
   /** The permission mode the start launches with; absent for an agent with none. */
   readonly permissionMode?: AgentChatPermissionMode
-  /** Provider events may begin before acquisition returns. */
+  /** Provider events may begin before spawn returns. */
   readonly events?: StructuredAgentSessionEventSink
   /** Background work this start's child reports, scoped to the attempt. Unset until the host routes
    *  child work by attempt; adapters report through their registration until then. */
   readonly childWork?: (evidence: AgentChildWorkEvidence[]) => void
   /** Aborted by a close, a Stop admitted now, quit, or the startup limit: the adapter stops what it
-   *  started and the acquire fails. */
+   *  started and spawn fails. */
   readonly signal?: AbortSignal
   /** Any stdout frame or stderr line from the child: proof the start is still moving. */
   readonly onOutput?: () => void

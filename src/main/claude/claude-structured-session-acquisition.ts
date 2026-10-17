@@ -266,7 +266,7 @@ export async function acquireClaudeSession({
       )
     }
     // The host calls open after publication and holds input until it settles.
-    return { ...publication.acquisition, providerChildPhase: 'starting' }
+    return publication.acquisition
   } catch (error) {
     unbindReadingControl?.()
     const acquisitionError = await resolveClaudeAcquisitionError({

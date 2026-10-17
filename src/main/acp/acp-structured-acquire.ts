@@ -39,7 +39,7 @@ export async function acquireAcpStructuredSession(input: {
   acquire: StructuredAgentSessionAcquireInput
   deps: AcpStructuredSessionAdapterDeps
   generation: string
-  /** The acquire was aborted; checked until the spawn, after which `track` hands it the connection. */
+  /** The spawn was aborted; checked until the spawn, after which `track` hands it the connection. */
   abandoned: () => boolean
   /** Registers the connection so a close during the acquire can stop it. */
   track: (connection: AcpStructuredConnection) => void
@@ -269,7 +269,7 @@ export async function acquireAcpStructuredSession(input: {
   session = child
   assertAcpStartingSession(child, input.abandoned)
   return {
-    acquisition: { process, acquisitionGeneration: generation, providerChildPhase: 'starting' },
+    acquisition: { process, acquisitionGeneration: generation },
     session: child
   }
 }

@@ -339,7 +339,7 @@ describe('ACP startup that never answers', () => {
       .open({
         sessionId: SESSION,
         fence: 1,
-        acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+        acquisitionGeneration: acquired.acquisitionGeneration,
         signal: new AbortController().signal
       })
       .catch((error: unknown) => error)
@@ -348,7 +348,6 @@ describe('ACP startup that never answers', () => {
     expect(await opening).toBeInstanceOf(Error)
     expect(rig.child().exited).toBe(true)
     expect(rig.ended).toMatchObject([{ cause: 'requested-close' }])
-    expect(rig.lifecycle.some((event) => event.type === 'started')).toBe(false)
   })
 
   it('leaves a published child alone when the acquisition signal aborts later', async () => {
@@ -368,7 +367,7 @@ describe('ACP startup that never answers', () => {
       .open({
         sessionId: SESSION,
         fence: 1,
-        acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+        acquisitionGeneration: acquired.acquisitionGeneration,
         signal: new AbortController().signal
       })
       .catch((error: unknown) => error)
@@ -392,7 +391,7 @@ describe('ACP startup that never answers', () => {
       .open({
         sessionId: SESSION,
         fence: 1,
-        acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+        acquisitionGeneration: acquired.acquisitionGeneration,
         signal: new AbortController().signal
       })
       .catch((error: unknown) => error)

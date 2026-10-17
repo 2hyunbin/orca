@@ -170,7 +170,7 @@ export type ClaudeSession = {
   confirmedOptions: Set<string>
   /** The model the child was launched with, as `--model`; null when it runs the CLI's own. */
   launchedModel: string | null
-  /** The launch left the saved Fast out, so the start applies it once the settings are read. */
+  /** Fast was omitted from launch settings and needs confirmation at message input. */
   fastModeAtStart: boolean
   /** CLI-advertised protocol capabilities from init; gates interrupt-receipt handling. */
   capabilities: readonly string[]

@@ -17,7 +17,6 @@ import {
 import { agentModelCatalogSessionAccess } from '../native-chat/agent-model-catalog/agent-model-catalog-fingerprint'
 import type { CodexStructuredSessionAdapter } from './codex-structured-session-adapter'
 import { CODEX_STRUCTURED_AGENT } from './codex-structured-agent-definition'
-import { nativeSessionOptionsFromReport } from '../native-chat/agent-session-wire/structured-agent-session-option-restoration'
 
 function listing(tier = 'priority') {
   return {
@@ -260,18 +259,5 @@ describe('Codex service tier across clients and rest', () => {
   it('takes a tier at rest but not an older client Fast toggle', () => {
     expect(CODEX_STRUCTURED_AGENT.restingOptions?.acceptsKey('serviceTier')).toBe(true)
     expect(CODEX_STRUCTURED_AGENT.restingOptions?.acceptsKey('fastMode')).toBe(false)
-  })
-
-  it('keeps only the reported tier, not the Fast it implies, on the record', () => {
-    expect(
-      nativeSessionOptionsFromReport({
-        reported: { model: 'gpt-live', serviceTier: 'priority', fastMode: true },
-        priorOptions: { fastMode: 'true', serviceTier: 'ultrafast' }
-      })
-    ).toEqual({ model: 'gpt-live', serviceTier: 'priority' })
-    // An agent that reports Fast with no tier still keeps it.
-    expect(nativeSessionOptionsFromReport({ reported: { fastMode: true } })).toEqual({
-      fastMode: 'true'
-    })
   })
 })

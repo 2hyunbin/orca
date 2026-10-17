@@ -117,7 +117,6 @@ beforeEach(async () => {
   resetHostTestOperationIds()
   generation = 0
   acquire = vi.fn(async ({ fence, spawnToken }) => ({
-    providerChildPhase: 'starting' as const,
     process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
     link: {
       linkId: `link-${fence}`,
@@ -134,6 +133,7 @@ beforeEach(async () => {
     logger: createStructuredAgentSessionLogger(),
     store,
     adapter: {
+      open: () => new Promise(() => {}),
       acquire,
       releaseAcquisition: vi.fn(async () => true),
       closeSession: vi.fn(async () => true),

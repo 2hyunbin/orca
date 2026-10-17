@@ -34,9 +34,13 @@ let host: StructuredAgentSessionHost
 function adapter(): StructuredAgentSessionAdapter {
   return {
     supportsCreate: () => true,
+    open: async () => ({
+      reportedOptions: { model: '' }
+    }),
     acquire: vi
       .fn<StructuredAgentSessionAdapter['acquire']>()
       .mockImplementation(async ({ fence, spawnToken }) => ({
+        acquisitionGeneration: globalThis.crypto.randomUUID(),
         process: {
           hostId: 'local',
           pid: 4242,

@@ -200,8 +200,6 @@ async function runAttachUnderAbort(
       now: () => context.now(),
       recordPhase,
       acquireSignal,
-      onStartCatalogListing: (listing) =>
-        context.deps.modelCatalog?.recordLiveListing(sessionId, listing),
       onStartupAttempt: (startup) => {
         attempt.startup = startup
         return startupAttempts.track(sessionId, startup)
@@ -220,7 +218,7 @@ async function runAttachUnderAbort(
       // The cleanup released the acquisition, which for a re-attach is the live child itself.
       onAcquisitionReleased: (cause, verdict) =>
         endStructuredAgentSessionReleasedChild(context, sessionId, cause, verdict),
-      onAttached: async (attached, acquisitionGeneration, owner, providerChildPhase) => {
+      onAttached: async (attached, acquisitionGeneration, owner) => {
         const fence = structuredAgentSessionConversationFence(context.deps.store, sessionId)
         const current = context.sessions.get(sessionId)?.child ?? null
         const startedFor = owner === 'acquired' ? options.startedFor : current?.startedFor
@@ -254,15 +252,15 @@ async function runAttachUnderAbort(
             child: {
               generation: acquisitionGeneration ?? current?.generation ?? null,
               fence,
-              // An acquire reports its phase; a re-attach keeps what its child already proved.
-              phase: owner === 'acquired' ? providerChildPhase : (current?.phase ?? 'ready'),
+              // A spawned child starts unready; a re-attach keeps what its child already proved.
+              phase: owner === 'acquired' ? 'starting' : (current?.phase ?? 'ready'),
               ...(startedFor === undefined ? {} : { startedFor }),
               ...(permissionMode === undefined ? {} : { permissionMode })
             }
           }
         }
         // Only a proven child has the protocol session recovery asks; a starting one recovers in
-        // its `started` step, before it is handed anything.
+        // its open step, before it is handed anything.
         if (attempt.candidate?.child.phase === 'ready') {
           await recoverStructuredRewind(
             context.deps,

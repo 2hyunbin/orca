@@ -6,10 +6,8 @@ export { FakeAcpChild, PID } from './acp-scripted-connection.test-fixture'
 import { vi } from 'vitest'
 import { z } from 'zod'
 import type { AgentJournalMessageItem } from '../../shared/agent-session-journal-types'
-import type {
-  StructuredAgentSessionLifecycleEvent,
-  StructuredAgentSessionStartedEvent
-} from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import type { StructuredAgentSessionLifecycleEvent } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import type { StructuredAgentSessionProviderOpenResult } from '../native-chat/agent-session-wire/structured-agent-session-provider-open-contract'
 import {
   openProviderTimelineRig,
   SESSION,
@@ -56,7 +54,7 @@ export type AcpAdapterRig = {
   spawned: string[]
   lifecycle: StructuredAgentSessionLifecycleEvent[]
   readonly ended: Extract<StructuredAgentSessionLifecycleEvent, { type: 'ended' }>[]
-  started(): StructuredAgentSessionStartedEvent
+  started(): StructuredAgentSessionProviderOpenResult
   openFailure(): unknown
   settled: Parameters<NonNullable<AcpStructuredSessionAdapterDeps['onDispatchSettledLate']>>[0][]
   acquire(options?: {
@@ -89,6 +87,7 @@ export async function openAcpAdapterRig(
   const lifecycle: StructuredAgentSessionLifecycleEvent[] = []
   const settled: AcpAdapterRig['settled'] = []
   let openFailure: unknown
+  let opened: StructuredAgentSessionProviderOpenResult | null = null
   const startListeners = new Set<() => void>()
   const spec = options.spec ?? GROK
   const resolveLaunch: AcpStructuredSessionAdapterDeps['resolveLaunch'] =
@@ -173,16 +172,16 @@ export async function openAcpAdapterRig(
       return lifecycle.filter((event) => event.type === 'ended')
     },
     started: () => {
-      const event = lifecycle.findLast((entry) => entry.type === 'started')
-      if (event?.type !== 'started') {
+      if (!opened) {
         throw new Error('ACP session has not started')
       }
-      return event
+      return opened
     },
     openFailure: () => openFailure,
     settled,
     acquire: async (acquireOptions = {}) => {
       openFailure = undefined
+      opened = null
       const acquisition = await adapter.acquire({
         identity: {
           sessionId: SESSION,
@@ -203,18 +202,11 @@ export async function openAcpAdapterRig(
       })
       if (acquireOptions.waitForStart !== false) {
         try {
-          const opened = await adapter.open({
+          opened = await adapter.open({
             sessionId: SESSION,
             fence: acquireOptions.fence ?? 1,
-            acquisitionGeneration: acquisition.acquisitionGeneration ?? null,
+            acquisitionGeneration: acquisition.acquisitionGeneration,
             signal: acquireOptions.signal ?? new AbortController().signal
-          })
-          lifecycle.push({
-            ...opened,
-            type: 'started',
-            sessionId: SESSION,
-            fence: acquireOptions.fence ?? 1,
-            acquisitionGeneration: acquisition.acquisitionGeneration ?? ''
           })
         } catch (error) {
           openFailure = error

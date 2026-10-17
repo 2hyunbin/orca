@@ -54,7 +54,10 @@ import type { ProviderHistoryWindow } from '../agent-session-journal/journal-sub
 import type { StructuredAgentSessionStartupAttempt } from './structured-agent-session-startup-attempt-contract'
 import type { AgentSessionCreatePhaseRecorder } from '../../observability/agent-session-instrumentation'
 import type { AgentModelCatalogLiveListing } from '../agent-model-catalog/agent-model-catalog-entry'
-import type { StructuredAgentSessionProviderOpen } from './structured-agent-session-provider-open-contract'
+import type {
+  StructuredAgentSessionProviderOpen,
+  StructuredAgentSessionProviderOpenResult
+} from './structured-agent-session-provider-open-contract'
 
 /** A live options read, plus what the child listed for its account's saved catalog. The host
  *  saves that listing and strips it before answering; an adapter whose listing reaches the
@@ -104,22 +107,14 @@ export {
   AgentSessionAcquisitionRootExitObservedError
 } from './structured-agent-session-acquisition-errors'
 
-/** What a reservation turns into once something is actually running under it:
- *  the process the host can probe, and the provider handle it was minted with. */
+/** The owned process returned before protocol construction begins. */
 export type AgentSessionAcquisition = {
   process: AgentSessionProcessIdentity
+  /** Only a handle the adapter already holds at spawn; protocol handles come from open. */
   link?: AgentSessionProviderHandleLink
   /** Host-local identity for this exact provider child, distinct even when the durable fence is
    *  reused by a superseding acquisition. */
-  acquisitionGeneration?: string
-  /** `starting`: published at spawn, proven later by a `started` event. Absent means `ready`, an
-   *  acquire that ran the whole handshake before answering; that bridge ends once every adapter
-   *  publishes at spawn. Either way the host holds input until the child is `ready`. */
-  providerChildPhase?: StructuredAgentSessionProviderChildPhase
-  /** What a `ready` child listed at its start, with the configured default its start resolved;
-   *  the host saves it once. A `starting` child (Claude) hands its listing on `started` and its
-   *  resolved default on the settings readback's `options-reported`. */
-  catalogListing?: AgentModelCatalogLiveListing
+  acquisitionGeneration: string
 }
 
 /** A refusal before spawn that a person can act on; the site that refused names it. */
@@ -207,37 +202,20 @@ export type StructuredAgentSessionEndedEvent = {
   startupUnanswered?: true
 }
 
-/** The child a publish-first acquire handed over has now proven its start: startup facts applied.
- *  What it reports from here on is fact, not a catalog guess. */
-export type StructuredAgentSessionStartedEvent = {
-  /** The handle supplied when the provider finishes starting. */
-  link?: AgentSessionProviderHandleLink
-  type: 'started'
-  sessionId: string
-  fence: number
-  acquisitionGeneration: string
-  /** What the child proved, snapshotted by the adapter from what startup already read. The host
-   *  handles this inside the session's serialized step, so it must not ask the CLI. */
-  reportedOptions: AgentSessionOptionsResult['current']
-  /** What the child listed at startup, saved as its account's catalog even if no view reads it. */
-  catalogListing?: AgentModelCatalogLiveListing
-}
-
-/** What a child that already proved its start reports later, such as an optional read that came
- *  after `started`: persisted as the start's report is. Never delays a start. */
-export type StructuredAgentSessionOptionsReportedEvent = Omit<
-  StructuredAgentSessionStartedEvent,
-  'type' | 'link'
-> & { type: 'options-reported' }
+/** An optional report after open; it never delays readiness. */
+export type StructuredAgentSessionOptionsReportedEvent =
+  StructuredAgentSessionProviderOpenResult & {
+    type: 'options-reported'
+    sessionId: string
+    fence: number
+    acquisitionGeneration: string
+  }
 
 export type StructuredAgentSessionLifecycleEvent =
   | StructuredAgentSessionEndedEvent
-  | StructuredAgentSessionStartedEvent
   | StructuredAgentSessionOptionsReportedEvent
 
-/** Whether the provider child behind an acquisition has proven its start. A publish-first
- *  acquire hands over a `starting` child, which the host gives no input until the `started`
- *  lifecycle event flips it. */
+/** Whether the host's open has proven the child ready for input. */
 export type StructuredAgentSessionProviderChildPhase = 'starting' | 'ready'
 
 /** The host's startup attempt (`structured-agent-session-startup-attempt`), which the host always
@@ -265,7 +243,7 @@ export type StructuredAgentSessionSetOptionInput = {
 
 export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & {
   /** Opens the published process under the host's startup signal. */
-  open?: StructuredAgentSessionProviderOpen
+  open: StructuredAgentSessionProviderOpen
   /** Provider-aware capability check for hosts that route more than one adapter. */
   supportsCreate?(location: AgentSessionExecutionLocation, agent: string): boolean
   /** Provider/runtime support, kept here so remote enablement changes adapter data, not UI logic. */
@@ -389,9 +367,6 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   setOption(
     input: StructuredAgentSessionSetOptionInput
   ): Promise<void | Readonly<Record<string, string>>>
-  /** False while the live child has not answered its start, so it has run nothing it was handed.
-   *  Absent or undefined reads as answered. */
-  startAnswered?(sessionId: string): boolean | undefined
   /** Fetch off the lane, then apply the result under the same child's fence. */
   prepareReadOptions?(input: {
     sessionId: string
@@ -401,15 +376,6 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
     sessionId: string
     fence: number
   }): Promise<StructuredAgentSessionLiveOptions>
-  /** Effective options already known after acquisition, without discovering picker choices. */
-  readAcquisitionOptions?(input: {
-    sessionId: string
-    fence: number
-    priorOptions?: Readonly<Record<string, string>>
-  }):
-    | Promise<Readonly<Record<string, string>> | undefined>
-    | Readonly<Record<string, string>>
-    | undefined
   /** Provider history for restart reconciliation, bounded to what the provider
    *  recorded after the journal's last committed item. Only the adapter can say
    *  whether the read has a proven start and whether a turn is still running, so

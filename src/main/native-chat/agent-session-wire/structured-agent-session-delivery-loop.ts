@@ -31,9 +31,9 @@ import type {
 } from './structured-agent-session-host-types'
 import {
   oldestQueuedSubmission,
-  startThatFailedWhileQueued,
   recordStructuredAgentSessionStartFailure,
-  refusedStructuredAgentSessionStart
+  refusedStructuredAgentSessionStart,
+  startThatFailedWhileQueued
 } from './structured-agent-session-start-failure-row'
 import { handOverSubmission } from './structured-agent-session-turns'
 import { structuredAgentSessionNextHandover } from './structured-agent-session-opening-send'

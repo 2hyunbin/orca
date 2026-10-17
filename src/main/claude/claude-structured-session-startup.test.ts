@@ -23,7 +23,7 @@ describe('Claude host-awaited open', () => {
     const claude = fakeClaude({ initDelayMs: 12_000 })
     const { adapter, events } = adapterFor(claude)
     const acquisition = await adapter.acquire(ACQUIRE)
-    expect(acquisition).toMatchObject({ providerChildPhase: 'starting', process: { pid: 4321 } })
+    expect(acquisition).toMatchObject({ process: { pid: 4321 } })
     expect(acquisition.link).toBeUndefined()
     expect(claude.connections[0].calls).toEqual([])
     expect(events.some((event) => event.type === 'options')).toBe(false)
@@ -129,7 +129,7 @@ describe('Claude host-awaited open', () => {
     const open = adapter.open({
       sessionId: 'session-1',
       fence: 7,
-      acquisitionGeneration: acquisition.acquisitionGeneration ?? null,
+      acquisitionGeneration: acquisition.acquisitionGeneration,
       signal: controller.signal
     })
     controller.abort(new Error('host start expired'))

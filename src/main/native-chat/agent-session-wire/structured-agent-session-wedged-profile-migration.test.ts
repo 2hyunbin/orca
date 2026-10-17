@@ -132,14 +132,17 @@ function openHost(overrides: Partial<StructuredAgentSessionHostDeps> = {}): void
     logger: createStructuredAgentSessionLogger(),
     store,
     adapter: {
+      open: async () => ({
+        reportedOptions: { model: '' }
+      }),
       acquire,
-      releaseAcquisition: vi.fn(async () => undefined),
+      releaseAcquisition: vi.fn(async () => false),
       dispatch: vi.fn(),
       cancelTurn: vi.fn(),
       answerPrompt: vi.fn(),
       setOption: vi.fn(),
       supportsCreate: () => true
-    } as unknown as StructuredAgentSessionAdapter,
+    },
     journalDatabase: openTestJournalHostDatabase(root),
     claimKeyId: 'key-1',
     mintSpawnToken: () => 'spawn-new',
@@ -158,6 +161,7 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-wedged-profile-'))
   resetHostTestOperationIds()
   acquire = vi.fn(async ({ fence }) => ({
+    acquisitionGeneration: globalThis.crypto.randomUUID(),
     process: {
       hostId: 'local',
       pid: 4242,
@@ -695,6 +699,7 @@ describe('already-wedged profiles become usable on load', () => {
     acquire.mockImplementation(async ({ fence }) => {
       order.push('acquire')
       return {
+        acquisitionGeneration: globalThis.crypto.randomUUID(),
         process: { hostId: 'local', pid: 4242, processStartTimeMs: 1, spawnToken: 'spawn-new' },
         link: {
           linkId: `link-${fence}`,

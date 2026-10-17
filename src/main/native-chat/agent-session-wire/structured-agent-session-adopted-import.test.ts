@@ -106,9 +106,13 @@ function attachParams(
 
 function adapter(): StructuredAgentSessionAdapter {
   return {
+    open: async () => ({
+      reportedOptions: { model: '' }
+    }),
     acquire: vi
       .fn<StructuredAgentSessionAdapter['acquire']>()
       .mockImplementation(async ({ fence, spawnToken }) => ({
+        acquisitionGeneration: globalThis.crypto.randomUUID(),
         process: { hostId: 'local', pid: 4242, processStartTimeMs: NOW, spawnToken },
         link: {
           linkId: 'resumed-link',
@@ -184,6 +188,7 @@ describe('adopting a provider conversation on create', () => {
     const handle = { transport: 'acp', agent: 'grok', nativeId: THREAD }
     const sessionAdapter = adapter()
     vi.mocked(sessionAdapter.acquire).mockImplementation(async ({ fence, spawnToken }) => ({
+      acquisitionGeneration: `generation-${fence}`,
       process: { hostId: 'local', pid: 4242, processStartTimeMs: NOW, spawnToken },
       link: {
         linkId: 'resumed-link',

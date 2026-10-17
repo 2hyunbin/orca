@@ -8,7 +8,7 @@ export class StructuredAgentSessionAcquireAborts {
   /** Set by quit: the host is going away, so an attach that begins after it starts aborted. */
   private quitReason: Error | null = null
 
-  /** For the attach about to run; `end` once it settles. */
+  /** For the provider wait about to run; `end` once it settles. */
   begin(sessionId: string, handover = false): { signal: AbortSignal; end: () => void } {
     const controller = new AbortController()
     if (this.quitReason) {
@@ -40,7 +40,7 @@ export class StructuredAgentSessionAcquireAborts {
     return stoppedHandover
   }
 
-  /** Quit: every start under way stops, and so does any the attach drain still runs. */
+  /** Quit: every provider wait under way stops, including those queued in the attach drain. */
   abortAll(reason: string): void {
     this.quitReason ??= new Error(reason)
     for (const waits of this.inFlight.values()) {

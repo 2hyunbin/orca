@@ -85,7 +85,7 @@ describe('ACP child published before its handshake', () => {
         .open({
           sessionId: SESSION,
           fence: 1,
-          acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+          acquisitionGeneration: acquired.acquisitionGeneration,
           signal: new AbortController().signal
         })
         .catch((error: unknown) => error)
@@ -146,7 +146,7 @@ describe('ACP child published before its handshake', () => {
       rig.adapter.open({
         sessionId: SESSION,
         fence: 1,
-        acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+        acquisitionGeneration: acquired.acquisitionGeneration,
         signal: new AbortController().signal
       })
     ).rejects.toMatchObject({ reason: 'notSignedIn' })

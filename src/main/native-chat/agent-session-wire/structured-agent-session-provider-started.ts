@@ -1,9 +1,7 @@
 // Opening records the provider handle and recovers history before delivery; reports never replace picks.
 
-import type {
-  StructuredAgentSessionOptionsReportedEvent,
-  StructuredAgentSessionStartedEvent
-} from './structured-agent-session-adapter'
+import type { StructuredAgentSessionOptionsReportedEvent } from './structured-agent-session-adapter'
+import type { StructuredAgentSessionProviderOpenResult } from './structured-agent-session-provider-open-contract'
 import type {
   StructuredAgentSessionHostDeps,
   StructuredAgentSessionHostSession,
@@ -40,9 +38,15 @@ export type StructuredAgentSessionProviderStartedContext = {
   stopStartingChild: (sessionId: string, child: StructuredAgentSessionProviderChildIdentity) => void
 }
 
+type OpenedProvider = StructuredAgentSessionProviderOpenResult & {
+  sessionId: string
+  fence: number
+  acquisitionGeneration: string
+}
+
 export async function settleStructuredAgentSessionProviderStarted(
   context: StructuredAgentSessionProviderStartedContext,
-  event: StructuredAgentSessionStartedEvent,
+  event: OpenedProvider,
   signal?: AbortSignal
 ): Promise<void> {
   // Serialized behind the attach that published this child, so the lease it proved is committed.
@@ -124,12 +128,12 @@ async function recoverRewindAtStart(
  *  without it a later start could not resume what this child ran. False when there is none. */
 async function recordStartedHandle(
   context: StructuredAgentSessionProviderStartedContext,
-  event: StructuredAgentSessionStartedEvent
+  event: OpenedProvider
 ): Promise<boolean> {
   const { store, logger } = context.deps
   const { link } = event
   if (!link) {
-    // Only an acquisition that already held its handle may prove its start without one.
+    // Only a spawn that already held its handle may prove its open without one.
     return store.getRecord(event.sessionId)?.lease.provenHandleLinkId != null
   }
   try {

@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { isPersistedAgentSessionRecord } from '../../shared/agent-session-record'
 import { agentSessionRecordFixture } from '../../shared/agent-session-record.test-fixture'
-import { nativeSessionOptionsFromReport } from '../native-chat/agent-session-wire/structured-agent-session-option-restoration'
 import { replaceAgentSessionRecordOptions } from '../runtime/agent-session-record-options'
 import { agentSessionStoreDraftRowWrites } from '../runtime/agent-session-store-draft'
 import type { AgentSessionStoreState } from '../runtime/agent-session-store-state'
@@ -45,10 +44,7 @@ function writtenOptions(provider: string, reader: AcpStructuredOptions) {
     unreadableRecords: new Map(),
     sessionTabs: null
   }
-  // What the host writes from the report a started child sends.
-  const options = nativeSessionOptionsFromReport({
-    reported: reader.read().current
-  })
+  const options = reader.reported()
   const changed = replaceAgentSessionRecordOptions(record, {
     sessionId: record.sessionId,
     fence: record.lease.runtimeFence,
@@ -67,7 +63,7 @@ function writtenOptions(provider: string, reader: AcpStructuredOptions) {
 }
 
 describe('ACP sessions without a reported model', () => {
-  it('writes the captured Windows OMP startup through the live reader and shared normalizer', async () => {
+  it('writes the captured Windows OMP startup through the provider reader', async () => {
     const reader = new AcpStructuredOptions()
     reader.adoptSession(response)
     expect(reader.read()).toEqual({
