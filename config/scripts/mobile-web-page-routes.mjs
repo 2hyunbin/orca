@@ -86,7 +86,7 @@ export const MOBILE_WEB_PAGE_ROUTES = [
   //
   // `pr` and `history` are not listed and never will be. Both are `Redirect`s into this route, so
   // listing one would put a redirect inside a page whose session stays bound to the pathname it
-  // left; left native they replace into this route and its switch opens the page once. The hop
+  // left; left native they replace into this route and it opens the page once. The hop
   // census sees them as call sites naming `source-control`, never as targets of their own.
   {
     pathname: '/h/[hostId]/source-control/[worktreeId]',

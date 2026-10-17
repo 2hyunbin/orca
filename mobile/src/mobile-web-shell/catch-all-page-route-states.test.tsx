@@ -8,7 +8,7 @@
  */
 import { createElement } from 'react'
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer'
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import type { OrcaMobileWebShellViewProps } from '../../modules/orca-mobile-web-shell/src'
 import type { MobileWebShellSessionState } from './mobile-web-shell-session-contract'
 
@@ -184,11 +184,6 @@ beforeEach(() => {
   dependencies.params = { hostId: 'host-1', page: ['settings'] }
   dependencies.replace.mockClear()
   dependencies.push.mockClear()
-  vi.stubEnv('EXPO_PUBLIC_MOBILE_SHELL', 'ota')
-})
-
-afterEach(() => {
-  vi.unstubAllEnvs()
 })
 
 describe('the screen the catch-all paints for each shell state', () => {
@@ -199,8 +194,8 @@ describe('the screen the catch-all paints for each shell state', () => {
     expect(backControl(tree)).toBeDefined()
   })
 
-  it('shows the same refusal on a native-shell build, with no shell mounted', async () => {
-    vi.stubEnv('EXPO_PUBLIC_MOBILE_SHELL', '')
+  it('shows the same refusal, with no shell mounted, for a pathname naming no screen', async () => {
+    dependencies.params = { hostId: 'host-1', page: [] }
     const tree = await renderRoute({ kind: 'checking' })
     expect(textOf(tree)).toContain('This workspace screen is not available on this host.')
     expect(backControl(tree)).toBeDefined()
@@ -274,9 +269,9 @@ describe('the screen the catch-all paints for each shell state', () => {
   /**
    * The presence precondition for every case above: the shell is what rendered them.
    *
-   * Outside an OTA build the switch returns the refusal on its own, with the same text and the same
+   * A route naming no screen gets the refusal without a shell, with the same text and the same
    * control, so the two cases that assert the refusal would pass against a screen no shell ever
-   * saw. `Checking host` is a string only the shell paints, and the switch cannot reach this state
+   * saw. `Checking host` is a string only the shell paints, and the route cannot reach this state
    * without having mounted one.
    */
   it('waits on the shell while the answer is still coming', async () => {

@@ -1,31 +1,30 @@
 import { createElement, type ComponentType } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 type SwitchDependencies = {
   /** Committed mounts, not renders: what this file is about is what the user was shown. */
-  natives: string[]
+  refusals: number
   shells: string[]
   params: Record<string, string | string[] | undefined>
 }
 
 const dependencies = vi.hoisted((): SwitchDependencies => ({
-  natives: [],
+  refusals: 0,
   shells: [],
   params: {}
 }))
 
-const nativeScreen = vi.hoisted(
-  () =>
-    async (name: string): Promise<ComponentType<Record<string, unknown>>> => {
-      const React = await import('react')
-      return function NativeScreen() {
-        React.useEffect(() => {
-          dependencies.natives.push(name)
-        }, [])
-        return null
-      }
+const refusalScreen = vi.hoisted(
+  () => async (): Promise<ComponentType<Record<string, unknown>>> => {
+    const React = await import('react')
+    return function RefusalScreen() {
+      React.useEffect(() => {
+        dependencies.refusals += 1
+      }, [])
+      return null
     }
+  }
 )
 
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -45,7 +44,6 @@ vi.mock('../transport/workspace-server', () => ({
   useWorkspaceServer: () => ({ routeHost: undefined, server: null })
 }))
 vi.mock('expo-router', () => ({
-  Redirect: 'Redirect',
   useLocalSearchParams: () => dependencies.params,
   useRouter: () => ({ setParams: () => {} })
 }))
@@ -63,36 +61,8 @@ vi.mock('./MobileWebShellScreen', async () => {
   }
 })
 
-vi.mock('../host-screen/HostScreen', async () => ({ HostScreen: await nativeScreen('host-list') }))
-vi.mock('../components/WorkspaceDetailPlaceholder', async () => ({
-  WorkspaceDetailPlaceholder: await nativeScreen('workspace-detail-placeholder')
-}))
-vi.mock('../layout/responsive-layout', () => ({
-  useResponsiveLayout: () => ({ isWideLayout: false })
-}))
-vi.mock('../tasks/MobileTasksScreen', async () => ({
-  MobileTasksScreen: await nativeScreen('tasks')
-}))
-vi.mock('../agent-history/MobileAgentSessionHistoryPanel', async () => ({
-  MobileAgentSessionHistoryPanel: await nativeScreen('agent-history')
-}))
-vi.mock('../files/MobileFileExplorerPanel', async () => ({
-  MobileFileExplorerPanel: await nativeScreen('files')
-}))
-vi.mock('../files/MobileFilePreviewScreen', async () => ({
-  MobileFilePreviewScreen: await nativeScreen('files-preview')
-}))
-vi.mock('../source-control/MobileSourceControlPanel', async () => ({
-  MobileSourceControlPanel: await nativeScreen('source-control')
-}))
-vi.mock('../session/MobileDiffReviewRouteScreen', async () => ({
-  MobileDiffReviewRouteScreen: await nativeScreen('review')
-}))
-vi.mock('../session/MobileSessionRouteScreen', async () => ({
-  MobileSessionRouteScreen: await nativeScreen('session')
-}))
 vi.mock('./PageRouteUnavailableScreen', async () => ({
-  PageRouteUnavailableScreen: await nativeScreen('catch-all')
+  PageRouteUnavailableScreen: await refusalScreen()
 }))
 
 import HostListRoute from '../../app/h/[hostId]/index'
@@ -106,16 +76,14 @@ import SessionRoute from '../../app/h/[hostId]/session/[worktreeId]'
 import CatchAllRoute from './catch-all-page-route'
 
 /**
- * Every switch the build kind decides, with the params each needs to name a route the shell could
- * open. `native` is what that switch renders outside an OTA build — a panel for most of them and the
- * refusal screen for the catch-all, which has no native screen behind it.
+ * Every route switch, with params naming a route the shell could open and params naming none (which
+ * get the refusal screen).
  */
 type SwitchCase = {
   readonly name: string
   readonly Route: ComponentType
   readonly params: Record<string, string | string[]>
-  /** What the mocked native screen pushes when it mounts. */
-  readonly native: string
+  readonly unroutableParams: Record<string, string | string[]>
   readonly pathname: string
 }
 
@@ -124,63 +92,63 @@ const SWITCHES: readonly SwitchCase[] = [
     name: 'host list',
     Route: HostListRoute,
     params: { hostId: 'host-1' },
-    native: 'host-list',
+    unroutableParams: { hostId: '' },
     pathname: '/h/host-1'
   },
   {
     name: 'tasks',
     Route: TasksRoute,
     params: { hostId: 'host-1' },
-    native: 'tasks',
+    unroutableParams: { hostId: '' },
     pathname: '/h/host-1/tasks'
   },
   {
     name: 'agent history',
     Route: AgentHistoryRoute,
     params: { hostId: 'host-1', worktreeId: 'wt-1' },
-    native: 'agent-history',
+    unroutableParams: { hostId: 'host-1', worktreeId: '' },
     pathname: '/h/host-1/agent-history/wt-1'
   },
   {
     name: 'files',
     Route: FilesRoute,
     params: { hostId: 'host-1', worktreeId: 'wt-1' },
-    native: 'files',
+    unroutableParams: { hostId: 'host-1', worktreeId: '..' },
     pathname: '/h/host-1/files/wt-1'
   },
   {
     name: 'file preview',
     Route: FilesPreviewRoute,
     params: { hostId: 'host-1', worktreeId: 'wt-1', relativePath: 'src/index.ts' },
-    native: 'files-preview',
+    unroutableParams: { hostId: 'host-1', worktreeId: 'wt-1' },
     pathname: '/h/host-1/files/preview/wt-1'
   },
   {
     name: 'source control',
     Route: SourceControlRoute,
     params: { hostId: 'host-1', worktreeId: 'wt-1' },
-    native: 'source-control',
+    unroutableParams: { hostId: 'host-1', worktreeId: '' },
     pathname: '/h/host-1/source-control/wt-1'
   },
   {
     name: 'review',
     Route: ReviewRoute,
     params: { hostId: 'host-1', worktreeId: 'wt-1' },
-    native: 'review',
+    unroutableParams: { hostId: 'host-1', worktreeId: '' },
     pathname: '/h/host-1/review/wt-1'
   },
   {
     name: 'session',
     Route: SessionRoute,
     params: { hostId: 'host-1', worktreeId: 'wt-1' },
-    native: 'session',
+    unroutableParams: { hostId: 'host-1', worktreeId: '' },
     pathname: '/h/host-1/session/wt-1'
   },
   {
     name: 'catch-all',
     Route: CatchAllRoute,
     params: { hostId: 'host-1', page: ['settings'] },
-    native: 'catch-all',
+    unroutableParams: { hostId: 'host-1' },
     pathname: '/h/host-1/settings'
   }
 ]
@@ -199,30 +167,24 @@ function renderFirstFrame(Route: ComponentType): ReactTestRenderer {
 
 describe.each(SWITCHES)('the $name switch', (entry) => {
   beforeEach(() => {
-    dependencies.natives.length = 0
+    dependencies.refusals = 0
     dependencies.shells.length = 0
+  })
+
+  it('commits the shell on its first frame', async () => {
     dependencies.params = { ...entry.params }
-  })
-
-  afterEach(() => {
-    vi.unstubAllEnvs()
-  })
-
-  it('commits the shell on its first frame in an OTA build, and never native', async () => {
-    vi.stubEnv('EXPO_PUBLIC_MOBILE_SHELL', 'ota')
     renderFirstFrame(entry.Route)
     expect(dependencies.shells).toEqual([entry.pathname])
     await act(async () => {})
-    expect(dependencies.natives).toEqual([])
+    expect(dependencies.refusals).toBe(0)
     expect(dependencies.shells).toEqual([entry.pathname])
   })
 
-  it('commits native on its first frame in any other build, and never the shell', async () => {
-    vi.stubEnv('EXPO_PUBLIC_MOBILE_SHELL', undefined)
+  it('commits the refusal for params that name no screen the shell could open', async () => {
+    dependencies.params = { ...entry.unroutableParams }
     renderFirstFrame(entry.Route)
-    expect(dependencies.natives).toEqual([entry.native])
     await act(async () => {})
-    expect(dependencies.natives).toEqual([entry.native])
+    expect(dependencies.refusals).toBe(1)
     expect(dependencies.shells).toEqual([])
   })
 })

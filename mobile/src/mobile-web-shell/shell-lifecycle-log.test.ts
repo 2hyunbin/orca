@@ -331,11 +331,11 @@ describe('shell lifecycle lines in the exported report', () => {
       lastConnectedAt: 500,
       platform: 'ios',
       appVersion: '0.0.56',
+      bridgeProtocolVersion: 1,
       entries: entries([...opened.lines, ...page.lines, ...present(stall(page))]),
-      shell: { kind: 'ota', bridgeProtocolVersion: 1 },
       nowMs: 60_000
     })
-    expect(report).toContain('Shell: ota · bridge protocol 1')
+    expect(report).toContain('Bridge protocol: 1')
     expect(report).toContain('Likely cause: Connection is healthy.')
     expect(report).toContain('[web-shell-flow] Web shell: activating app')
     expect(report).toContain(
@@ -357,6 +357,7 @@ describe('shell lifecycle lines in the exported report', () => {
       lastConnectedAt: null,
       platform: 'ios',
       appVersion: '0.0.56',
+      bridgeProtocolVersion: 1,
       entries: entries([
         ...failed.lines,
         ...present(stall(replay(DOWNLOAD_OPEN.slice(0, 6)))),
@@ -387,6 +388,7 @@ describe('shell lifecycle lines in the exported report', () => {
       lastConnectedAt: null,
       platform: 'ios',
       appVersion: '0.0.56',
+      bridgeProtocolVersion: 1,
       entries: [timeout, ...entries(replay(DOWNLOAD_OPEN).lines)],
       nowMs: 60_000
     })

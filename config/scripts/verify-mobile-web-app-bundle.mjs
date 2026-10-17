@@ -50,9 +50,9 @@ export const MOBILE_WEB_APP_BUNDLE_MAX_TOTAL_BYTES = 9 * 1024 * 1024
  * A chunk is emitted per distinct set of importers, not per route, so a route's marginal cost is
  * what it fails to share rather than what it weighs. Re-measured on this head by building
  * `routes.slice(0, n)` for every n, which is what the fence below is derived from rather than
- * fitted to. The spread it shows is 1 to 11: `pr` and `web` add one script each, `tasks` adds eleven.
+ * fitted to. The spread it shows is 1 to 11: `pr` adds one script, `tasks` adds eleven.
  * The root `./_layout.tsx` (the page's web sibling of the native root) sorts first; with it the
- * swept tree reads 78 scripts at 16 routes.
+ * swept tree reads 77 scripts at 15 routes.
  *
  * This table is the fence's only input, so a route added to the tree stales it and the pins beside
  * the fence fail until it is re-measured. That is the point: the bound is re-derived, never bumped.
@@ -72,8 +72,7 @@ export const MOBILE_WEB_APP_BUNDLE_SCRIPT_SWEEP = [
   ['./h/[hostId]/session/[worktreeId].tsx', 58],
   ['./h/[hostId]/source-control/[worktreeId].tsx', 63],
   ['./h/[hostId]/tasks.tsx', 74],
-  ['./h/[hostId]/web.tsx', 75],
-  ['./h/_layout.tsx', 78]
+  ['./h/_layout.tsx', 77]
 ]
 
 const sweptScripts = MOBILE_WEB_APP_BUNDLE_SCRIPT_SWEEP.map(([, scripts]) => scripts)

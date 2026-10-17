@@ -8,7 +8,7 @@
  */
 import { createElement } from 'react'
 import { act, create } from 'react-test-renderer'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 type RouteDependencies = {
   routes: { pathname: string; params?: Record<string, string> }[]
@@ -71,11 +71,6 @@ beforeEach(() => {
   dependencies.routes.length = 0
   dependencies.refusals.length = 0
   dependencies.params = { hostId: 'host-1', page: ['settings'] }
-  vi.stubEnv('EXPO_PUBLIC_MOBILE_SHELL', 'ota')
-})
-
-afterEach(() => {
-  vi.unstubAllEnvs()
 })
 
 describe('the catch-all switch', () => {
@@ -106,18 +101,11 @@ describe('the catch-all switch', () => {
     expect(dependencies.routes[0]?.pathname).toBe('/h/host-a/settings')
   })
 
-  it('refuses rather than falling back to a native screen it does not have', async () => {
+  it('refuses a pathname with no segment past the host', async () => {
     dependencies.params = { hostId: 'host-1', page: [] }
     await render()
     expect(dependencies.routes).toEqual([])
     expect([...new Set(dependencies.refusals)]).toEqual(['host-1'])
-  })
-
-  it('refuses in a build without the shell', async () => {
-    vi.stubEnv('EXPO_PUBLIC_MOBILE_SHELL', undefined)
-    await render()
-    expect(dependencies.routes).toEqual([])
-    expect(dependencies.refusals.length).toBeGreaterThan(0)
   })
 
   it("carries the deep link's query through to the route it mounts the shell on", async () => {

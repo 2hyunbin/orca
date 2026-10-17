@@ -306,7 +306,7 @@ export function MobileWebShellScreen({
     onBinaryFramesDropped: reportDroppedBinaryFrames
   })
 
-  // A route that moved under a screen that stayed mounted: the session switch keeps `paneKey` out
+  // A route that moved under a screen that stayed mounted: the session route keeps `paneKey` out
   // of its key so a notification tap for another pane is a tab switch rather than a page reload,
   // and this is how the page hears about it. Nothing is tracked here — which route the page has,
   // and which one is still owed it, belong to the host, which outlives any one run of this effect.

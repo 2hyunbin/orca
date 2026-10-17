@@ -11,7 +11,6 @@ src/components/MobileHomeQuickActions.test.ts
 src/components/MobileHostCard-truthful-status.test.tsx
 src/components/MobileHostCard.test.ts
 src/components/MobileMarkdown.file-links.test.ts
-src/components/MobileRichMarkdownEditor.test.tsx
 src/components/NewWorktreeModal.test.tsx
 src/components/PickerModal.accessibility.test.ts
 src/components/WorktreeAgentList.test.tsx

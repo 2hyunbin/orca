@@ -116,6 +116,7 @@ const CloseTabsCommand = z.object({
 const NewGroupSplit = z
   .object({
     besideGroupId: z.string().min(1),
+    besideLastGroupId: z.string().min(1).optional(),
     direction: z.enum(['left', 'right', 'up', 'down'])
   })
   .optional()

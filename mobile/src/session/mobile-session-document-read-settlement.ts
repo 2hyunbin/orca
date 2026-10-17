@@ -72,13 +72,22 @@ export function settleMarkdownRead(
 ): MarkdownDocState | undefined {
   if (current.status === 'ready') {
     if (
-      current !== visibleAtStart ||
+      visibleAtStart?.status !== 'ready' ||
+      current.localRevision !== visibleAtStart.localRevision ||
+      current.content !== visibleAtStart.content ||
+      current.localContent !== visibleAtStart.localContent ||
+      current.baseVersion !== visibleAtStart.baseVersion ||
       current.isDirty ||
       current.saving ||
       nextDoc.status !== 'ready'
     ) {
       return undefined
     }
+    // A snapshot received during the read may describe a newer desktop edit than its reply.
+    const refreshed =
+      current !== visibleAtStart && current.stale && !nextDoc.stale
+        ? { ...nextDoc, stale: true }
+        : nextDoc
     if (
       (
         [
@@ -94,11 +103,13 @@ export function settleMarkdownRead(
           'saving',
           'saveError'
         ] as const
-      ).every((field) => current[field] === nextDoc[field])
+      ).every((field) => current[field] === refreshed[field])
     ) {
       return undefined
     }
-    return nextDoc
+    return current.localRevision === undefined
+      ? refreshed
+      : { ...refreshed, localRevision: current.localRevision }
   }
   if (current !== loading) {
     return undefined

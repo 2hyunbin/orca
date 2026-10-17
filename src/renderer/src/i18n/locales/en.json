@@ -19948,7 +19948,7 @@
     "claude": {
       "added": "Account added. Select it to use it for the next Claude you start.",
       "nextLaunch": "{{value0}} → {{value1}}. The next Claude you start uses it. Running sessions keep their account.",
-      "profileSwitching": "Switching applies to the next Claude you start in any tab. Running sessions keep their account.",
+      "profileSwitching": "Switching applies to the next Claude you start in any tab.",
       "systemDefaultNamed": "System default: {{value0}}",
       "systemDefaultIsSaved": "System default is signed in as {{value0}}, which is also a saved account. An earlier Orca version may have copied that login there. If it is not your own login, select System default and run claude /login.",
       "systemDefaultIsSavedDismiss": "Dismiss",
@@ -19960,7 +19960,36 @@
       "moreSignInOptions": "More sign-in options",
       "copySignInLink": "Copy sign-in link instead",
       "signInLinkCopied": "Sign-in link copied. Open it in a private window to sign in with a different account.",
-      "signInLinkCopyFailed": "Could not copy the link."
+      "signInLinkCopyFailed": "Could not copy the link.",
+      "switchSessions": {
+        "title": "Switched to {{account}}",
+        "bodyOne": "1 Claude session is still running on {{previous}}. Restarting continues the conversation on {{next}}. Busy sessions wait for idle before restarting.",
+        "bodyOther": "{{count}} Claude sessions are still running on {{previous}}. Restarting continues each conversation on {{next}}. Busy sessions wait for idle before restarting.",
+        "dontAskAgain": "Don't ask again (restart automatically)",
+        "dontAskAgainHint": "You can turn this off in Settings → AI Provider Accounts.",
+        "keep": "Keep as is",
+        "restartOne": "Restart session",
+        "restartOther": "Restart {{count}} sessions",
+        "listLabel": "Claude sessions to restart",
+        "selectAll": "Select all",
+        "selectAllSessions": "Select all sessions",
+        "selectedCount": "{{selected}} of {{total}} selected",
+        "selectWorkspace": "Select all sessions in {{workspace}}",
+        "session": "Claude session",
+        "busy": "Working",
+        "idle": "Idle",
+        "settingTitle": "When you switch accounts while Claude is running",
+        "settingDescription": "Restarting continues each running conversation on the new account.",
+        "keyword": {
+          "restart": "restart",
+          "running": "running"
+        },
+        "settingAsk": "Ask",
+        "settingRestart": "Always restart",
+        "settingKeep": "Never restart",
+        "restartingOne": "Restarting 1 Claude session on {{account}}",
+        "restartingOther": "Restarting {{count}} Claude sessions on {{account}}"
+      }
     },
     "managedData": {
       "description": "Add accounts by running this command in a terminal on the Orca host. Selection applies to new explicit agent launches on that host; direct SSH relay and Windows-hosted WSL launches use their own credentials.",
