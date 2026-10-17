@@ -17984,6 +17984,9 @@
   },
   "components": {
     "native-chat": {
+      "install": {
+        "checking": "Comprobando si {{agent}} está listo en este host…"
+      },
       "reasoning": "Razonamiento",
       "contextMenu": {
         "copyOrcaSessionId": "Copiar ID de sesión de Orca",
@@ -18510,6 +18513,9 @@
         "editFailed": "Este mensaje no se puede editar.",
         "editGone": "Este mensaje ya se envió o se eliminó. Tu edición está en el cuadro de chat.",
         "editGonePrompt": "Este mensaje ya se envió o se eliminó. Tu edición estará en el cuadro de chat cuando respondas al agente.",
+        "imageCount": "{{count}} imágenes",
+        "imageCount_one": "{{count}} imagen",
+        "imageCount_other": "{{count}} imágenes",
         "collapse": "Contraer",
         "expand": "Expandir",
         "queued": "En cola",

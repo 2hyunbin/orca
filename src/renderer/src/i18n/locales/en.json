@@ -18244,6 +18244,9 @@
       "empty": "No users found"
     },
     "native-chat": {
+      "install": {
+        "checking": "Checking whether {{agent}} is ready on this host…"
+      },
       "reasoning": "Reasoning",
       "failureWords": {
         "theAgent": "The agent",
@@ -18937,6 +18940,9 @@
         "editFailed": "This message can't be edited.",
         "editGone": "This message was already sent or removed. Your edit is in the chat box.",
         "editGonePrompt": "This message was already sent or removed. Your edit will be in the chat box after you answer the agent.",
+        "imageCount": "{{count}} images",
+        "imageCount_one": "{{count}} image",
+        "imageCount_other": "{{count}} images",
         "collapse": "Collapse",
         "expand": "Expand",
         "queued": "Queued",

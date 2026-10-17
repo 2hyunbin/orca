@@ -18024,6 +18024,9 @@
       }
     },
     "native-chat": {
+      "install": {
+        "checking": "このホストで {{agent}} の準備ができているか確認しています…"
+      },
       "reasoning": "推論",
       "contextMenu": {
         "copyOrcaSessionId": "Orca セッション ID をコピー",
@@ -18693,6 +18696,9 @@
         "editFailed": "このメッセージは編集できません。",
         "editGone": "このメッセージはすでに送信または削除されています。編集したテキストはチャット入力欄にあります。",
         "editGonePrompt": "このメッセージはすでに送信または削除されています。Agent に回答すると、編集したテキストがチャット入力欄に表示されます。",
+        "imageCount": "画像 {{count}} 枚",
+        "imageCount_one": "画像 {{count}} 枚",
+        "imageCount_other": "画像 {{count}} 枚",
         "collapse": "折りたたむ",
         "expand": "展開",
         "queued": "キュー待ち",

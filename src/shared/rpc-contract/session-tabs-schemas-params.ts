@@ -141,7 +141,10 @@ export const SetTabProps = WorktreeTabSelector.extend({
 })
 
 export const CreateTerminalTab = WorktreeTabSelector.extend({
-  sourceChatFork: z.object({ sessionId: z.string().min(1) }).strict().optional(),
+  sourceChatFork: z
+    .object({ sessionId: z.string().min(1) })
+    .strict()
+    .optional(),
   afterTabId: z.string().optional(),
   targetGroupId: z.string().optional(),
   command: z.string().optional(),
@@ -183,14 +186,32 @@ export const CreateTerminalTab = WorktreeTabSelector.extend({
 }).superRefine((value, context) => {
   if (value.sourceChatFork) {
     if (!value.clientMutationId) {
-      context.addIssue({ code: 'custom', path: ['clientMutationId'], message: 'A fork needs a mutation id' })
+      context.addIssue({
+        code: 'custom',
+        path: ['clientMutationId'],
+        message: 'A fork needs a mutation id'
+      })
     }
     for (const field of [
-      'command', 'shell', 'agent', 'agentPrompt', 'env', 'envToDelete', 'cwd', 'launchConfig',
-      'launchToken', 'launchAgent', 'startupCommandDelivery', 'viewMode'
+      'command',
+      'shell',
+      'agent',
+      'agentPrompt',
+      'env',
+      'envToDelete',
+      'cwd',
+      'launchConfig',
+      'launchToken',
+      'launchAgent',
+      'startupCommandDelivery',
+      'viewMode'
     ] as const) {
       if (value[field] !== undefined) {
-        context.addIssue({ code: 'custom', path: [field], message: 'A fork uses host launch settings' })
+        context.addIssue({
+          code: 'custom',
+          path: [field],
+          message: 'A fork uses host launch settings'
+        })
       }
     }
   }

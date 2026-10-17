@@ -48,11 +48,12 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 }
 
 function noPendingChips(): NativeChatPendingAttachmentChips {
+  let id = 0
   return {
-    begin: vi.fn(() => null),
-    resolve: vi.fn(),
+    begin: vi.fn(() => String(++id)),
+    resolve: vi.fn(() => true),
     drop: vi.fn(() => true),
-    attachReferences: vi.fn()
+    attachReferences: vi.fn(() => true)
   }
 }
 
@@ -171,7 +172,8 @@ describe('useNativeChatExternalAttachments', () => {
       access: { kind: 'user-file' }
     })
     expect(attachResolvedPaths).toHaveBeenCalledWith(['/local/a.txt'], undefined, {
-      destinationIsCurrent: expect.any(Function)
+      destinationIsCurrent: expect.any(Function),
+      operation: expect.any(Object)
     })
   })
 
@@ -215,7 +217,7 @@ describe('useNativeChatExternalAttachments', () => {
     expect(attachResolvedPaths).toHaveBeenCalledExactlyOnceWith(
       ['/external/a.png', '/external/c.png'],
       undefined,
-      { destinationIsCurrent: expect.any(Function) }
+      { destinationIsCurrent: expect.any(Function), operation: expect.any(Object) }
     )
     expect(mocks.stat).toHaveBeenCalledTimes(3)
   })
@@ -365,9 +367,9 @@ describe('useNativeChatExternalAttachments', () => {
           begun.push(name ?? '')
           return `chip-${begun.length}`
         }),
-        resolve: vi.fn(),
+        resolve: vi.fn(() => true),
         drop: vi.fn((id: string) => !removed.has(id)),
-        attachReferences: vi.fn()
+        attachReferences: vi.fn(() => true)
       }
     }
 
@@ -618,7 +620,8 @@ describe('useNativeChatExternalAttachments', () => {
       expect(mocks.resolveNativeChatAttachmentOwnerForWorktree).toHaveBeenCalled()
       expect(mocks.prepareNativeChatSessionAttachmentUpload).not.toHaveBeenCalled()
       expect(attachResolvedPaths).toHaveBeenCalledWith(['/local/a.txt'], undefined, {
-        destinationIsCurrent: expect.any(Function)
+        destinationIsCurrent: expect.any(Function),
+        operation: expect.any(Object)
       })
     })
   })
