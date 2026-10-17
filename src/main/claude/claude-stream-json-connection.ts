@@ -21,6 +21,7 @@ import {
 import type { ClaudeStructuredSdkOptions } from './claude-structured-launch-resolution'
 import { providerStderrForDisplay } from '../provider-process/provider-spawn-failure-report'
 import { withMissingProviderExecutable } from '../provider-process/provider-executable-missing'
+import type { StructuredAgentSessionInputPermit } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 
 export { ClaudeControlRequestError }
 
@@ -66,6 +67,7 @@ function withoutKeys(env: Record<string, string>, keys: readonly string[]): Reco
 }
 
 export type ClaudeStreamJsonConnectionHandlers = {
+  reserveInput?: () => StructuredAgentSessionInputPermit | null
   onMessage?: (message: Record<string, unknown>) => void
   /**
    * The SDK owns inbound permission control: it hands `can_use_tool` to this callback with
@@ -238,16 +240,38 @@ export async function openClaudeStreamJsonConnection(
       try {
         for (;;) {
           await waitUntilReadable()
-          const next = await iterator.next()
-          if (next.done) {
-            completed = true
-            break
+          const permit = handlers.reserveInput?.()
+          if (handlers.reserveInput && !permit) {
+            if (closing || rootSettled() || terminalError) {
+              break
+            }
+            await waitUntilReadable()
+            continue
           }
-          await waitUntilReadable()
-          if (!isRecord(next.value)) {
-            throw new Error('claude stream-json yielded a non-object message')
+          try {
+            const next = await iterator.next()
+            if (next.done) {
+              completed = true
+              break
+            }
+            if (!permit) {
+              await waitUntilReadable()
+            }
+            if (!isRecord(next.value)) {
+              throw new Error('claude stream-json yielded a non-object message')
+            }
+            const message = next.value
+            const receive = (): void => {
+              handlers.onMessage?.(message)
+            }
+            if (permit) {
+              permit.run(receive)
+            } else {
+              receive()
+            }
+          } finally {
+            permit?.cancel()
           }
-          handlers.onMessage?.(next.value)
         }
       } finally {
         if (!completed) {

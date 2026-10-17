@@ -331,7 +331,18 @@ export const tick = (): Promise<void> => new Promise((resolve) => setImmediate(r
 
 /** Delivers one frame from Claude on `connection`, under the provider session it runs. */
 export function claudeFrame(connection: FakeConnection, message: Record<string, unknown>): void {
-  connection.handlers.onMessage?.({ session_id: PROVIDER_SESSION_ID, ...message })
+  const receive = (): void => {
+    connection.handlers.onMessage?.({ session_id: PROVIDER_SESSION_ID, ...message })
+  }
+  if (connection.handlers.reserveInput) {
+    const permit = connection.handlers.reserveInput()
+    if (!permit) {
+      throw new Error('test delivered a Claude frame while its reader was paused')
+    }
+    permit.run(receive)
+  } else {
+    receive()
+  }
 }
 
 /** Whether anything sent to Claude on `connection` carries `text`. */

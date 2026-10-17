@@ -29,6 +29,11 @@ export type StructuredAgentSessionSinkState = {
   failed: boolean
 }
 
+export type StructuredAgentSessionInputPermit = {
+  run: (receive: () => void) => void
+  cancel: () => void
+}
+
 export type StructuredAgentSessionSinkBarrier = { ok: true } | { ok: false; error: unknown }
 
 /** Linkage a producer stamps on the rows it writes. Absent on every append the
@@ -85,6 +90,10 @@ export type StructuredAgentSessionRevisionResolver = (
 export type StructuredAgentSessionRevisionOptions = StructuredAgentSessionItemAppendOptions
 
 export type StructuredAgentSessionEventSink = StructuredAgentSessionTransitionSink & {
+  /** Reserve before consuming a source batch; an unused permit owns no journal sequence. */
+  reserveInput?(): StructuredAgentSessionInputPermit | null
+  /** Transfer the finite stopped producer's remaining writes before its lifecycle notification. */
+  sealInput?(receive: () => void): void
   appendItem(
     identity: AgentJournalItemIdentity,
     body: AgentJournalItemBody,
@@ -286,6 +295,8 @@ export function createDeferredStructuredAgentSessionEventSink(deps: {
 
   return {
     sink: {
+      reserveInput: queue.reserveInput,
+      sealInput: queue.sealInput,
       appendItem: (identity, body, options) => {
         appendItem(identity, body, options)
       },

@@ -75,7 +75,11 @@ export function settleClaudeExitedSession(session: ClaudeSession): void {
   for (const prompt of session.prompts.clear()) {
     prompt.settle(null)
   }
-  session.translator?.dispose()
+  if (session.events?.sealInput) {
+    session.events.sealInput(() => session.translator?.dispose())
+  } else {
+    session.translator?.dispose()
+  }
 }
 
 type CloseClaudePublishedSessionInput = {
@@ -149,17 +153,24 @@ async function finalizeClaudePublishedSession(
       acquisitionGeneration: session.acquisitionGeneration,
       observedAt: Date.now()
     }
-    try {
+    const finish = (): void => {
       try {
         session.translator?.handle(ended)
-      } catch (error) {
-        callbackThrew = true
-        callbackError ??= error
+      } finally {
+        session.translator?.dispose()
       }
-      deliver(ended)
-    } finally {
-      session.translator?.dispose()
     }
+    try {
+      if (session.events?.sealInput) {
+        session.events.sealInput(finish)
+      } else {
+        finish()
+      }
+    } catch (error) {
+      callbackThrew = true
+      callbackError ??= error
+    }
+    deliver(ended)
   }
   session.closePersistence ??= persistClosedClaudeSession(input, session)
   if (rootExitVerdict) {

@@ -187,6 +187,7 @@ export async function acquireClaudeSession({
         },
         {
           onMessage,
+          ...(input.events?.reserveInput ? { reserveInput: input.events.reserveInput } : {}),
           canUseTool,
           onUserDialog,
           ...(input.onOutput ? { onOutput: input.onOutput } : {}),

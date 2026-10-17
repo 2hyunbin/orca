@@ -1,13 +1,23 @@
 import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { query } from '@anthropic-ai/claude-agent-sdk'
 import {
   CLAUDE_READER_DRAIN_AFTER_EXIT_MS,
   openClaudeStreamJsonConnection,
   type ClaudeStreamJsonLaunch
 } from './claude-stream-json-connection'
+import { createClaudeJournalTranslator } from './claude-structured-journal-translation'
+import { createDeferredStructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
+import { testEventSinkLogging } from '../native-chat/agent-session-wire/structured-agent-session-logger-test-support'
+import {
+  closeProviderTimelineRigs,
+  openProviderTimelineRig,
+  SESSION
+} from '../native-chat/agent-session-timeline/provider-timeline-assembler-test-support'
+
+afterEach(closeProviderTimelineRigs)
 
 const mocks = vi.hoisted(() => {
   const refresh = vi.fn()
@@ -96,12 +106,16 @@ describe('Claude stream-json close ordering', () => {
     await expect(connection.close()).resolves.toBe(true)
   })
 
-  it('releases a pulled frame when provider exit is reported', async () => {
+  it.each([false, true])('retains an SDK result resolved just before root exit (reserved=%s)', async (reserved) => {
     mocks.refresh.mockReset()
     mocks.proveClaudeChildExit.mockReset()
     mocks.refresh.mockResolvedValue(undefined)
     mocks.proveClaudeChildExit.mockResolvedValue(true)
     const child = fakeChild()
+    const rig = await openProviderTimelineRig()
+    const deferred = createDeferredStructuredAgentSessionEventSink(testEventSinkLogging())
+    deferred.bind({ journal: rig.journal, fence: 1, publish: () => {} })
+    const translator = createClaudeJournalTranslator({ sink: deferred.sink })
     const first = Promise.withResolvers<Record<string, unknown>>()
     const next = vi
       .fn<() => Promise<IteratorResult<Record<string, unknown>>>>()
@@ -123,21 +137,49 @@ describe('Claude stream-json close ordering', () => {
     const connection = await openClaudeStreamJsonConnection(
       { pathToClaudeCodeExecutable: 'claude', options: {}, cwd: '/work/repo' },
       {
-        onMessage: (message) => events.push(`message:${String(message.type)}`),
-        onExit: () => events.push('exit')
+        ...(reserved ? { reserveInput: deferred.sink.reserveInput } : {}),
+        onMessage: (message) => {
+          events.push(`message:${String(message.type)}`)
+          translator.handle({ type: 'message', sessionId: SESSION, message })
+        },
+        onExit: () => {
+          events.push('exit')
+          deferred.sink.sealInput?.(() => {
+            translator.handle({ type: 'ended', sessionId: SESSION, reason: 'root exit' })
+            translator.dispose()
+          })
+        }
       },
       () => child,
       queryImpl
     )
 
     connection.pauseReading?.()
-    first.resolve({ type: 'task_notification' })
     await vi.waitFor(() => expect(next).toHaveBeenCalledOnce())
     expect(events).toEqual([])
-
+    // Resolve and exit in one stack, before the awaiting reader can consume the complete result.
+    first.resolve({
+      type: 'user',
+      uuid: 'resolved-before-exit',
+      session_id: 'provider-session',
+      message: {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 'received', content: 'MIDDLE:TAIL' }]
+      }
+    })
     child.emit('exit', 1, null)
-    await vi.waitFor(() => expect(events).toEqual(['exit', 'message:task_notification']))
     await expect(connection.close()).resolves.toBe(true)
+    await deferred.drained()
+    const reopened = await rig.reopenJournal()
+    expect(reopened.snapshot().items.map((row) => row.body)).toContainEqual(
+      expect.objectContaining({
+        kind: 'tool-call',
+        callId: 'received',
+        output: expect.objectContaining({ head: 'MIDDLE:TAIL', truncated: false })
+      })
+    )
+    expect(events).toEqual(['exit', 'message:user'])
+    deferred.close()
   })
 
   // Stdout can end before the exit is seen, as when the provider supervisor's own exit closes it.
