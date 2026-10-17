@@ -5,7 +5,6 @@
  */
 import { statfsSync } from 'node:fs'
 import process from 'node:process'
-import { runProcessSync } from '@orca/process-host'
 
 // Linux `statfs` f_type magics (linux/magic.h) of local disk and memory filesystems.
 const LINUX_LOCAL_FILESYSTEM_MAGICS = new Set([
@@ -31,24 +30,19 @@ export function orcadDataRootIsOnLocalDisk(
   dataRoot: string,
   platform: NodeJS.Platform = process.platform
 ): boolean {
+  if (platform === 'win32') {
+    // `\\?\C:\` and `\\.\C:\` name local drives; any other `\\` path is a share. Mapped network
+    // drives look local here, but every Windows writer records its MachineGuid anyway.
+    return !/^[\\/]{2}/u.test(dataRoot) || /^[\\/]{2}[?.][\\/][a-z]:/iu.test(dataRoot)
+  }
   try {
+    const type = statfsSync(dataRoot).type
     if (platform === 'linux') {
-      return LINUX_LOCAL_FILESYSTEM_MAGICS.has(statfsSync(dataRoot).type)
+      return LINUX_LOCAL_FILESYSTEM_MAGICS.has(type)
     }
-    if (platform === 'win32') {
-      // Mapped network drives still resolve to a drive letter; only UNC is provably remote.
-      return !/^[\\/]{2}/u.test(dataRoot)
-    }
-    // macOS numbers its filesystem types per boot, so its df source names the device instead.
-    const result = runProcessSync({
-      program: '/bin/df',
-      args: ['-P', dataRoot],
-      timeoutMs: 2_000,
-      maxOutputBytes: 16 * 1024
-    })
-    const source =
-      result.code === 0 ? result.stdout.trim().split('\n').at(-1)?.split(/\s+/u)[0] : ''
-    return Boolean(source?.startsWith('/dev/'))
+    // macOS numbers filesystem types as their drivers load, so compare against the boot volume's,
+    // which is always a local disk; network filesystems never share its type.
+    return platform === 'darwin' && type === statfsSync('/').type
   } catch {
     return false
   }

@@ -20,6 +20,8 @@ describe('orcadDataRootIsOnLocalDisk', () => {
 
   it('treats a Windows UNC data root as reachable from other machines', () => {
     expect(orcadDataRootIsOnLocalDisk('\\\\filer\\home\\orca', 'win32')).toBe(false)
+    expect(orcadDataRootIsOnLocalDisk('\\\\?\\UNC\\filer\\home\\orca', 'win32')).toBe(false)
     expect(orcadDataRootIsOnLocalDisk('C:\\Users\\u\\AppData\\Roaming\\orca', 'win32')).toBe(true)
+    expect(orcadDataRootIsOnLocalDisk('\\\\?\\C:\\Users\\u\\orca', 'win32')).toBe(true)
   })
 })
