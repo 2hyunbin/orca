@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util'
+import { abortSignalReason } from '../../../shared/abort-signal-reason'
 import type {
   AgentSessionProcessIdentity,
   AgentSessionRecord
@@ -40,12 +41,14 @@ export async function acquireOwner(
   try {
     try {
       await input.onAcquiring?.()
-      // A close or Stop that landed while the attach was still reconciling launches nothing.
-      input.acquireSignal?.throwIfAborted()
     } catch (error) {
       throw new AgentSessionPreSpawnError(error)
     }
     const permissionMode = await input.launchPermissionMode?.(record)
+    // Right before the spawn: a close, Stop or quit that landed during any wait above launches nothing.
+    if (input.acquireSignal?.aborted) {
+      throw new AgentSessionPreSpawnError(abortSignalReason(input.acquireSignal))
+    }
     const attempt = mintStructuredAgentSessionStartupAttempt({
       record,
       identity: journalIdentityFor(record, input.params),
@@ -54,7 +57,8 @@ export async function acquireOwner(
       ...(permissionMode ? { permissionMode } : {}),
       ...(input.eventSink ? { events: input.eventSink } : {}),
       ...(input.acquireSignal ? { signal: input.acquireSignal } : {}),
-      ...(input.startupOptions ? { startupOptions: input.startupOptions } : {})
+      ...(input.startupOptions ? { startupOptions: input.startupOptions } : {}),
+      ...(input.startupAttemptId ? { attemptId: input.startupAttemptId } : {})
     })
     const progress = input.onStartupAttempt?.(attempt)
     const acquired = await input.adapter.acquire({

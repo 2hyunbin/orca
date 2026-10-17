@@ -28,6 +28,7 @@ import { structuredAgentSessionFailureWordsContext } from './structured-agent-se
 import { recoverStructuredRewind } from './structured-rewind-recovery'
 import { retireOutgrownStructuredAgentSessionChild } from './structured-agent-session-outgrown-child'
 import { structuredAgentSessionLaunchPermission } from './structured-agent-session-launch-permission'
+import { acceptedNoLaterThan } from './structured-agent-session-start-failure-row'
 import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
 
 export type StructuredAgentSessionConversationDelivery = {
@@ -59,8 +60,9 @@ export function createStructuredAgentSessionConversationDelivery(input: {
   sessions: Map<string, StructuredAgentSessionHostSession>
   serialize: <T>(sessionId: string, task: () => Promise<T>) => Promise<T>
   trackStart: <T>(start: Promise<T>) => Promise<T>
-  /** Starts a child for `startedFor`, the queued message at the head, if the session has none. */
-  ensureProviderChild: (
+  /** Starts a child for `startedFor`, the queued message at the head, if the session has none;
+   *  for a caller outside the session's serialize. */
+  startProviderChild: (
     sessionId: string,
     startedFor: string
   ) => Promise<StructuredAgentSessionResumeOutcome>
@@ -83,7 +85,8 @@ export function createStructuredAgentSessionConversationDelivery(input: {
     agents: deps.agents,
     serialize: input.serialize,
     trackStart: input.trackStart,
-    ensureProviderChild: async (sessionId, startedFor) => {
+    startProviderChild: input.startProviderChild,
+    retireOutgrownChild: async (sessionId) => {
       // A send waiting on a person's Stop is not handed over yet; the step after the Stop decides.
       const session = input.clientDelivery.readStopping(sessionId)
         ? undefined
@@ -106,20 +109,20 @@ export function createStructuredAgentSessionConversationDelivery(input: {
         stopAgent: input.stopOutgrownAgent,
         logger: deps.logger
       })
-      return input.ensureProviderChild(sessionId, startedFor)
     },
     readiness: input.readiness,
     deliveryOrder: input.deliveryOrder,
     conversationFence: (sessionId) =>
       structuredAgentSessionConversationFence(deps.store, sessionId),
-    holdClosed: async (sessionId, which) => {
+    closeWhatTheUserClosed: async (sessionId) => {
       const session = sessions.get(sessionId)
-      return session
-        ? holdClosedStructuredAgentSessionSends(deps, sessionId, session.journal, {
+      const ended = session?.lastEndedChild
+      return !session || session.child || ended?.cause !== 'user-close'
+        ? true
+        : holdClosedStructuredAgentSessionSends(deps, sessionId, session.journal, {
             mark: 'settled',
-            which
+            which: acceptedNoLaterThan(session.journal, ended.endedAt)
           })
-        : true
     },
     failureTextContext: (sessionId) =>
       structuredAgentSessionFailureWordsContext(

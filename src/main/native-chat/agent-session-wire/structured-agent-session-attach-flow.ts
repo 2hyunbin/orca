@@ -1,5 +1,8 @@
 import { refuse } from '../../../shared/agent-session-wire-refusals'
-import { settlePostAcquisitionAttachFailure } from './structured-agent-session-attach-failure'
+import {
+  settlePostAcquisitionAttachFailure,
+  settleUnsupportedReservation
+} from './structured-agent-session-attach-failure'
 import {
   failedAcquisitionRefusal,
   failedAcquisitionSettlement,
@@ -51,6 +54,10 @@ import type { StructuredAgentSessionStartupAttempt } from './structured-agent-se
 import type { StructuredAgentSessionStartupProgress } from './structured-agent-session-startup-attempt'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
+import {
+  heldStructuredAgentSessionAttachLock,
+  type StructuredAgentSessionAttachLock
+} from './structured-agent-session-attach-lock'
 
 export type AttachedOwner = 'acquired' | 'kept' | 'none'
 
@@ -67,6 +74,10 @@ export type AttachFlowInput = {
   recordPhase?: AgentSessionCreatePhaseRecorder
   /** Aborted when a close, or a Stop admitted now, must not wait behind this attach's acquire. */
   acquireSignal?: AbortSignal
+  /** How the steps below meet the session's serialize; absent, the caller holds it. */
+  lock?: StructuredAgentSessionAttachLock
+  /** The id the host registered this start under; see `StructuredAgentSessionStartupAttempts`. */
+  startupAttemptId?: string
   /** The attempt this attach's acquire runs under, minted before the adapter is called; what it
    *  answers learns of the child's spawn and output. */
   onStartupAttempt?: (
@@ -84,6 +95,11 @@ export type AttachFlowInput = {
     acquisitionGeneration: string | null,
     owner: AttachedOwner
   ) => Promise<void> | void
+  /** The waits the publish needs (the sink's drain, a provider read), outside any commit. */
+  beforePublish?: (owner: AttachedOwner) => Promise<void>
+  /** The commit that makes the attach's child the session's; it records the attach's outcome, which
+   *  comes before the child is indexed. */
+  onPublish?: (attached: AttachedJournal, recordOutcome: () => Promise<void>) => Promise<void>
   /** Host-owned provider sink, bound to the journal inside `onAttached`. */
   eventSink?: StructuredAgentSessionEventSink
   /** Stops acquisition-window events targeting the superseded journal. */
@@ -136,6 +152,7 @@ export async function performAttach(
   let unsupportedReservationSettlementAttempted = false
   let replayed = false
   let providerHistoryWindow: ProviderHistoryWindow | null = null
+  const lock = input.lock ?? heldStructuredAgentSessionAttachLock(input.acquireSignal)
   const preparedTranscript = store.getRecord(sessionId)
     ? { ok: true as const, items: null }
     : await prepareAdoptedTranscript(params)
@@ -144,15 +161,17 @@ export async function performAttach(
   }
   try {
     const reserved = await withAgentSessionCreatePhase('reserve_owner', input.recordPhase, () =>
-      store.reserveOwner(
-        reserveRequestFor({
-          sessionId,
-          params,
-          authority: input.authority,
-          callerKey: input.callerKey,
-          fingerprint: admitted.fingerprint,
-          now: input.now()
-        })
+      lock.commit(() =>
+        store.reserveOwner(
+          reserveRequestFor({
+            sessionId,
+            params,
+            authority: input.authority,
+            callerKey: input.callerKey,
+            fingerprint: admitted.fingerprint,
+            now: input.now()
+          })
+        )
       )
     )
     record = reserved.record
@@ -189,12 +208,14 @@ export async function performAttach(
     // Sample provider history before a new child is acquired. Once acquireOwner
     // starts the child, the adapter's liveness signal intentionally becomes
     // conservative and an absent prompt can no longer prove non-delivery.
-    providerHistoryWindow = await readProviderHistoryWindow({
-      adapter: input.adapter,
-      identity: journalIdentityFor(record, params),
-      accountHome: record.accountHome,
-      ownerAlreadyAdmitted: agentSessionLeaseAdmitsWriter(record.lease)
-    })
+    providerHistoryWindow = await lock.wait(
+      readProviderHistoryWindow({
+        adapter: input.adapter,
+        identity: journalIdentityFor(record, params),
+        accountHome: record.accountHome,
+        ownerAlreadyAdmitted: agentSessionLeaseAdmitsWriter(record.lease)
+      })
+    )
     if (agentSessionLeaseAdmitsWriter(record.lease)) {
       // Kept: re-attached to the live child.
     } else if (replayed && reserved.operationRow.outcome.status === 'succeeded') {
@@ -259,21 +280,30 @@ export async function performAttach(
 
   let attached: AttachedJournal
   try {
-    await input.beforeJournalOpen?.()
-    attached = await attachJournal({
-      record,
-      params,
-      adapter: input.adapter,
-      openConversation: input.openConversation,
-      providerHistoryWindow
+    const acquired = record
+    attached = await lock.commit(async () => {
+      await input.beforeJournalOpen?.()
+      const journal = await attachJournal({
+        record: acquired,
+        params,
+        adapter: input.adapter,
+        openConversation: input.openConversation,
+        providerHistoryWindow
+      })
+      await importAdoptedTranscript(params, journal, acquired, preparedTranscript.items)
+      await input.onAttached(journal, acquisitionGeneration, owner)
+      return journal
     })
-    await importAdoptedTranscript(params, attached, record, preparedTranscript.items)
-    await input.onAttached(attached, acquisitionGeneration, owner)
-    await store.recordOperationOutcome({
-      callerKey: input.callerKey,
-      operationId: params.envelope.clientOperationId,
-      outcome: { status: 'succeeded', sessionId }
-    })
+    await lock.wait(input.beforePublish?.(owner) ?? Promise.resolve())
+    const recordOutcome = () =>
+      store.recordOperationOutcome({
+        callerKey: input.callerKey,
+        operationId: params.envelope.clientOperationId,
+        outcome: { status: 'succeeded', sessionId }
+      })
+    await lock.commit(() =>
+      input.onPublish ? input.onPublish(attached, recordOutcome) : recordOutcome()
+    )
   } catch (error) {
     return settlePostAcquisitionAttachFailure(input, record, error)
   }
@@ -296,34 +326,5 @@ export async function performAttach(
       unconfirmedClientMessageIds: attached.unconfirmedClientMessageIds,
       ...(tabId ? { tabId } : {})
     }
-  }
-}
-
-async function settleUnsupportedReservation(
-  input: AttachFlowInput,
-  record: AgentSessionRecord
-): Promise<void> {
-  const spawnToken = record.lease.reservedSpawnToken
-  if (!spawnToken) {
-    return
-  }
-  try {
-    await input.store.settleFailedAcquisition({
-      sessionId: record.sessionId,
-      fence: record.lease.runtimeFence,
-      spawnToken,
-      callerKey: input.callerKey,
-      operationId: input.params.envelope.clientOperationId,
-      outcome: {
-        status: 'failed',
-        code: 'structured_agent_session_unsupported',
-        details: { reason: 'hostUnsupported' },
-        message: 'Structured session support changed before the provider could start.'
-      },
-      exitProof: 'processless',
-      now: input.now()
-    })
-  } catch (error) {
-    throw new AggregateError([error], 'agent session unsupported reservation settlement failed')
   }
 }

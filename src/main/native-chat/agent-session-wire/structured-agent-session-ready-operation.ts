@@ -2,22 +2,15 @@ import {
   agentSessionFingerprintConflict,
   computeAgentSessionPayloadFingerprint
 } from '../../../shared/agent-session-mutation-envelope'
-import { refuse, refuseUnclassified } from '../../../shared/agent-session-wire-refusals'
 import type {
   AgentSessionMutationEnvelope,
-  AgentSessionMutationResult,
-  AgentSessionWireRefusal
+  AgentSessionMutationResult
 } from '../../../shared/agent-session-wire'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { StructuredAgentSessionMutationContext } from './structured-agent-session-mutation-context'
 import type { StructuredAgentSessionProviderChildIdentity } from './structured-agent-session-host-types'
-import { sameProviderChild } from './structured-agent-session-provider-child'
 import { STRUCTURED_AGENT_SESSION_START_WAIT_MS } from './structured-agent-session-send-settlement'
-import {
-  openForWrite,
-  openForProviderWrite,
-  rewindInDoubt
-} from './structured-agent-session-send-preparation'
+import { openForWrite, rewindInDoubt } from './structured-agent-session-send-preparation'
 import { agentSessionOperationOutcomeUnknown } from './structured-agent-session-replay-outcome'
 import {
   replayRecordedOperation,
@@ -31,6 +24,18 @@ import { waitForStructuredAgentSessionStart } from './structured-agent-session-s
 import type { StructuredAgentSessionDeliveryPlace } from './structured-agent-session-delivery-order'
 import type { StructuredAgentSessionStartReadiness } from './structured-agent-session-startup-attempt'
 
+import {
+  operationDidNotRun,
+  selectStructuredAgentSessionOperationChild,
+  type ReadyOperationSelection
+} from './structured-agent-session-operation-child'
+export {
+  openWithReadyStructuredAgentSessionChild,
+  operationDidNotRun,
+  type ReadyOperationChild,
+  type ReadyOperationSelection
+} from './structured-agent-session-operation-child'
+
 type ReadyOperationPlan<T> = Pick<
   MutationPlan<T>,
   'method' | 'fields' | 'operationIdScope' | 'commandReceipt'
@@ -41,18 +46,11 @@ type ReadyOperationPlan<T> = Pick<
 type QueuedReadyOperation<T> =
   | { result: AgentSessionMutationResult<T> }
   | {
-      child: StructuredAgentSessionProviderChildIdentity
-      readiness: StructuredAgentSessionStartReadiness
+      /** Null: the session has no child to run on yet, so the operation starts one outside. */
+      child: StructuredAgentSessionProviderChildIdentity | null
+      readiness: StructuredAgentSessionStartReadiness | null
       place: StructuredAgentSessionDeliveryPlace
     }
-
-export type ReadyOperationChild = StructuredAgentSessionProviderChildIdentity | null
-export type ReadyOperationSelection = {
-  ok: true
-  child: ReadyOperationChild
-  replay?: true
-  deadline?: number
-}
 
 /** A send or conversation command waits only when an earlier rewind needs its provider. */
 export async function runAfterRewindStart<T>(
@@ -67,26 +65,8 @@ export async function runAfterRewindStart<T>(
   })
 }
 
-export function operationDidNotRun(expired = false): {
-  ok: false
-  refusal: AgentSessionWireRefusal
-} {
-  return {
-    ok: false,
-    refusal: expired
-      ? refuse(
-          'agent_session_operation_expired',
-          { reason: 'operationExpired' },
-          'The operation did not run because its wait expired. Try again.'
-        )
-      : refuseUnclassified(
-          'agent_session_owner_restart_failed',
-          'The operation did not run because the agent is not ready.'
-        )
-  }
-}
-
-/** A ready child runs in this queue turn; only a starting child releases it to wait. */
+/** A ready child runs in this queue turn; a starting child, or none, releases it to wait, and a
+ *  start the operation needs runs outside the queue, as the delivery loop's does. */
 export async function runWithReadyStructuredAgentSessionOperation<T>(
   context: StructuredAgentSessionMutationContext,
   callerKey: string,
@@ -211,20 +191,7 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
         if (checked && !checked.ok) {
           return checked
         }
-        const ensured = await context.ensureAgent(envelope.sessionId)
-        if (!ensured.ok) {
-          return ensured
-        }
-        const child = context.sessions.get(envelope.sessionId)?.child
-        if (!child || child.close) {
-          return operationDidNotRun()
-        }
-        const identity = { generation: child.generation, fence: child.fence }
-        if (child.phase === 'ready') {
-          return { ok: true as const, child: identity, deadline }
-        }
-        const readiness = context.startupAttempts.readiness(envelope.sessionId, identity)
-        return readiness ? { ok: true as const, child: identity, readiness } : operationDidNotRun()
+        return selectStructuredAgentSessionOperationChild(context, envelope.sessionId)
       }
       const child = await select().catch((error: unknown) => {
         context.deps.logger.warn('selecting an agent for an operation failed', {
@@ -237,8 +204,8 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
       if (!child.ok) {
         return { result: child }
       }
-      if (!child.readiness) {
-        return { result: await run(child) }
+      if (child.child && !child.readiness) {
+        return { result: await run({ ok: true, child: child.child, deadline }) }
       }
       context.deliveryOrder.reconcile(
         envelope.sessionId,
@@ -256,7 +223,20 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
     return selected.result
   }
   try {
-    const ready = selected.readiness.wait()
+    let { child, readiness } = selected
+    if (!child) {
+      const started = await context.startAgent(envelope.sessionId)
+      if (!started.ok) {
+        return started
+      }
+      const selection = selectStructuredAgentSessionOperationChild(context, envelope.sessionId)
+      if (!selection.ok || !selection.child) {
+        return selection.ok ? operationDidNotRun() : selection
+      }
+      child = selection.child
+      readiness = selection.readiness
+    }
+    const ready = readiness?.wait() ?? Promise.resolve('ready' as const)
     const outcome = await waitForStructuredAgentSessionStart(
       Promise.all([ready, selected.place.before]).then(([outcome]) =>
         outcome === 'ready' ? 'ready' : 'ended'
@@ -269,37 +249,12 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
     if (Date.now() >= deadline) {
       return operationDidNotRun(true)
     }
+    const ran = child
     return await context.serialize(envelope.sessionId, () =>
       // Admission re-reads the journal here after readiness and answers a competing settlement.
-      run({ ok: true, child: selected.child, deadline })
+      run({ ok: true, child: ran, deadline })
     )
   } finally {
     selected.place.release()
-  }
-}
-
-/** Replay uses the ledger answer; a new operation uses only its selected ready child. */
-export function openWithReadyStructuredAgentSessionChild(
-  context: StructuredAgentSessionMutationContext,
-  envelope: AgentSessionMutationEnvelope,
-  selection: ReadyOperationSelection
-): (ledger: 'admit' | 'replay') => Promise<AgentSessionMutationSessionPreparation> {
-  return async (ledger) => {
-    const opened = await openForProviderWrite(context, envelope)()
-    if (!opened.ok || ledger === 'replay') {
-      return opened
-    }
-    if (!selection.child) {
-      return selection.replay
-        ? { ok: false, refusal: agentSessionOperationOutcomeUnknown(envelope.clientOperationId) }
-        : operationDidNotRun()
-    }
-    if (selection.deadline !== undefined && Date.now() >= selection.deadline) {
-      return operationDidNotRun(true)
-    }
-    const child = context.sessions.get(envelope.sessionId)?.child
-    return child?.phase === 'ready' && !child.close && sameProviderChild(child, selection.child)
-      ? opened
-      : operationDidNotRun()
   }
 }

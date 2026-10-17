@@ -119,8 +119,8 @@ export class StructuredAgentSessionHost {
       serialize: (sessionId, task) => this.serialize(sessionId, task),
       // Quit drains a delivery start before it evicts, so the child it produces is stopped.
       trackStart: (start) => this.tasks.trackAttach(start),
-      ensureProviderChild: (sessionId, startedFor) =>
-        agentStart.ensureStructuredAgentSessionAgent(this.attachContext(), sessionId, startedFor),
+      startProviderChild: (sessionId, startedFor) =>
+        agentStart.startStructuredAgentSessionAgent(this.attachContext(), sessionId, startedFor),
       deliveryOrder: this.runtimeState.deliveryOrder,
       readiness: (id, child) => this.runtimeState.startupAttempts.readiness(id, child),
       // Put to rest like an idle agent: the stop writes nothing, and the next start is new.
@@ -163,7 +163,10 @@ export class StructuredAgentSessionHost {
       sessions: this.sessions,
       serialize: (sessionId, task) => this.serialize(sessionId, task),
       open: (sessionId) => this.conversationDelivery.open(sessionId),
-      deliveryActive: (sessionId) => this.conversationDelivery.loop.isRunning(sessionId),
+      // A start in flight is execution under way, even before the loop or an operation sees a child.
+      deliveryActive: (sessionId) =>
+        this.conversationDelivery.loop.isRunning(sessionId) ||
+        this.runtimeState.startFlights.get(sessionId) !== undefined,
       closeStatus: (sessionId, options) => this.clientDelivery.closeSession(sessionId, options),
       readChildWork: this.clientDelivery.readChildWork
     })
@@ -279,8 +282,8 @@ export class StructuredAgentSessionHost {
       childWorkIncomplete: this.clientDelivery.childWorkIncomplete,
       serialize: (sessionId, task) => this.serialize(sessionId, task),
       openConversation: this.conversationDelivery.open,
-      ensureAgent: (sessionId) =>
-        agentStart.ensureStructuredAgentSessionAgentForOperation(this.attachContext(), sessionId),
+      startAgent: (sessionId) =>
+        agentStart.startStructuredAgentSessionAgentForOperation(this.attachContext(), sessionId),
       startupAttempts: this.runtimeState.startupAttempts,
       deliveryOrder: this.runtimeState.deliveryOrder,
       joinChildClose: (sessionId) =>

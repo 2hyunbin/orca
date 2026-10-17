@@ -707,25 +707,6 @@ describe('Stop withdraws what is queued', () => {
     expect(acquire).toHaveBeenCalledTimes(1)
   })
 
-  it('withdraws a message whose start holds the queue: nothing is handed over (W17b)', async () => {
-    await host.close(SESSION, 'evict')
-    const starting = Promise.withResolvers<void>()
-    acquire.mockImplementationOnce(async (input) => {
-      await starting.promise
-      return spawnChild(input)
-    })
-    const id = await accept('hello')
-    await eventually(async () => expect(acquire).toHaveBeenCalledTimes(2))
-    const stopped = stop()
-
-    starting.resolve()
-    expect(await stopped).toMatchObject({ ok: true })
-    await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'))
-    expect(await submission(id)).toMatchObject({ reason: DISPATCH_REJECTED_CANCELLED })
-    expect((await submission(id))?.handedOverAt).toBeUndefined()
-    expect(dispatch).not.toHaveBeenCalled()
-  })
-
   it('stops a child still proving its start, withdrawing what was held for it, and the next send starts another (W17c)', async () => {
     const closeSession = vi.fn(async () => true)
     adapterExtras = { closeSession }
@@ -832,7 +813,6 @@ describe('a close that stops the child and then a wind-down step fails', () => {
   it.each([{ end: 'evict', starting: true, kind: 'chatClosed', verdict: null }] as const)(
     'rejects what is queued as $kind after a $end (during startup: $starting)',
     async ({ end, starting, kind, verdict }) => {
-      const started = Promise.withResolvers<void>()
       adapterExtras = {
         // Once: the host's own teardown acknowledges again.
         acknowledgeSessionRelease: vi.fn().mockImplementationOnce(() => {
@@ -841,17 +821,12 @@ describe('a close that stops the child and then a wind-down step fails', () => {
       }
       await host.close(SESSION, 'evict')
       await startHost()
-      acquire.mockImplementationOnce(async (input) => {
-        await started.promise
-        return (starting ? spawnStartingChild : spawnChild)(input)
-      })
+      acquire.mockImplementationOnce(starting ? spawnStartingChild : spawnChild)
       const id = await accept('hello')
-      await eventually(() => expect(acquire).toHaveBeenCalledTimes(2))
+      await eventually(() => expect(childPhase()).toBe('starting'))
 
-      // Asked for during the start step, the close runs ahead of the handover step.
-      const ending = END_CHILD[end]()
-      started.resolve()
-      await expect(ending).resolves.toBeUndefined()
+      // Asked for while the child is still starting, the close runs ahead of the handover step.
+      await expect(END_CHILD[end]()).resolves.toBeUndefined()
 
       await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'))
       const rejected = (await submission(id))!

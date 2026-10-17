@@ -38,8 +38,9 @@ export type StructuredAgentSessionMutationContext = {
   serialize: <T>(sessionId: string, task: () => Promise<T>) => Promise<T>
   /** The session's conversation, opened when closed; inside the caller's serialize. */
   openConversation: (sessionId: string) => Promise<StructuredAgentSessionHostSession | null>
-  /** Gives the session a provider child; inside the caller's serialize. */
-  ensureAgent: (sessionId: string) => Promise<AgentSessionMutationSessionPreparation>
+  /** Gives the session a provider child; OUTSIDE the caller's serialize, which the start's own
+   *  commits take. */
+  startAgent: (sessionId: string) => Promise<AgentSessionMutationSessionPreparation>
   startupAttempts: Pick<StructuredAgentSessionStartupAttempts, 'readiness'>
   deliveryOrder: StructuredAgentSessionDeliveryOrder
   /** Joins a close a stop began on the session's child, for an operation that starts no child;

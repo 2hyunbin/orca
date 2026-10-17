@@ -64,6 +64,7 @@ export class StructuredAgentSessionEventRecovery {
       ...this.context,
       logger: deps.logger,
       startupAttempts: runtimeState.startupAttempts,
+      startFlights: runtimeState.startFlights,
       holdUnrunSends: async (sessionId, fence, cause) => {
         const journal = this.context.sessions.get(sessionId)?.journal
         if (journal) {

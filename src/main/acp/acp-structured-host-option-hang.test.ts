@@ -52,7 +52,8 @@ describe('a Grok model pick Grok never answers during send', () => {
     const invalid = host.cancel(CALLER, {
       envelope: envelope('agentSession.cancel', {}, { payloadFingerprint: 'invalid' })
     })
-    expect(await within(invalid, 100)).toBe('pending')
+    // The write runs outside the session's serialize, so even a refused Stop is answered at once.
+    expect(await within(invalid, 100)).toMatchObject({ settled: 'resolved' })
     const request = { envelope: envelope('agentSession.cancel', {}) }
     expect(await within(host.cancel(CALLER, request), 2_000)).toMatchObject({ settled: 'resolved' })
     expect(await invalid).toMatchObject({ ok: false })

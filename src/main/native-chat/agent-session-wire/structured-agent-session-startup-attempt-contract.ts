@@ -42,3 +42,15 @@ export type StructuredAgentSessionStartupAttempt = {
   /** Any stdout frame or stderr line from the child: proof the start is still moving. */
   readonly onOutput?: () => void
 }
+
+/** The startup limit's own reason, so an expired start is told from a close, Stop or quit. */
+export class StructuredAgentSessionStartupExpiredError extends Error {
+  constructor() {
+    super('the agent stopped making progress before it finished starting')
+    this.name = 'StructuredAgentSessionStartupExpiredError'
+  }
+}
+
+export function isStructuredAgentSessionStartupExpired(reason: unknown): boolean {
+  return reason instanceof Error && reason.name === 'StructuredAgentSessionStartupExpiredError'
+}
