@@ -186,4 +186,45 @@ describe('adopting live terminals in a layout-owner build', () => {
     expect(adoption).toEqual({ surfaced: false, declinedPtyIds: [LEFT_PTY] })
     expect(createTab).not.toHaveBeenCalled()
   })
+
+  it('declines a terminal, then the snapshot arriving after the sweep draws its tab with no new sweep', async () => {
+    const { window: windowSession, main } = sessions()
+    const store = createTestStore()
+    await bootWindowFromPartitions(store, [{ hostId: 'local', session: windowSession }])
+    sync = openWorkspaceLayoutFrameSync(store)
+    provideLayoutFrameTerminalPanes(sync.holdsTerminalPane)
+    sync.start()
+    const createTab = vi.spyOn(store.getState(), 'createTab')
+    const readOwners = vi.fn(async () => owners)
+
+    await expect(
+      adoptLiveWorkspacePtySurfaces(store.getState, GIT_KEY, [LEFT_PTY, RIGHT_PTY], readOwners)
+    ).resolves.toEqual({ surfaced: false, declinedPtyIds: [LEFT_PTY, RIGHT_PTY] })
+
+    frames.onFrame!(snapshotOf(main))
+    await flushMicrotasks()
+
+    expect(store.getState().terminalLayoutsByTabId['tab-split']?.ptyIdsByLeafId).toEqual({
+      [leaf(2)]: LEFT_PTY,
+      [leaf(3)]: RIGHT_PTY
+    })
+    expect(createTab).not.toHaveBeenCalled()
+    expect(readOwners).toHaveBeenCalledOnce()
+  })
+
+  it('declines a terminal in a workspace the window does not show yet, which frames do not draw', async () => {
+    const { main } = sessions()
+    const store = createTestStore()
+    await bootWindowFromPartitions(store, [{ hostId: 'local', session: emptySession() }])
+    sync = openWorkspaceLayoutFrameSync(store)
+    provideLayoutFrameTerminalPanes(sync.holdsTerminalPane)
+    sync.start()
+    frames.onFrame!(snapshotOf(main))
+    await flushMicrotasks()
+
+    expect(
+      sync.holdsTerminalPane(GIT_KEY, { tabId: 'tab-split', leafId: leaf(2), ptyId: LEFT_PTY })
+    ).toBe(false)
+    expect(store.getState().terminalLayoutsByTabId['tab-split']).toBeUndefined()
+  })
 })

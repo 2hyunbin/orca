@@ -21,6 +21,7 @@ import { createStoreSessionMockApi } from '../store/slices/store-session-test-ha
 import { createTestStore } from '../store/slices/store-test-helpers'
 import type { LayoutFrameSlices } from '../store/workspace-layout-frame-slices'
 import { afterLayoutFrame, endLayoutFramePositions } from './layout-frame-position'
+import { holdTabPaneTree, requestTabPaneTreeRedraw } from './layout-owner-pane-intents'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
 
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
@@ -233,6 +234,88 @@ describe('the window drawn from layout frames', () => {
     reportWindowSessionWriteActivity(false)
     await flushMicrotasks()
     expect(shellTitle()).toBe('renamed')
+    sync.close()
+  })
+
+  it('shows main’s pane tree at once even while a write is owed, except a tab the window’s own pane command holds', async () => {
+    const { store, sync, layouts } = await bootWithFrames('local', localDesktopSession())
+    sync.start()
+    reportWindowSessionWriteActivity(true)
+    const shellRoot = () => store.getState().terminalLayoutsByTabId['tab-shell']!.root
+    const withRatio = (ratio: number) => {
+      const next = structuredClone(layouts[GIT_KEY]!)
+      const root = next.tabs.find((tab) => tab.id === 'tab-shell')!.terminal!.root!
+      if (root.type === 'split') {
+        root.ratio = ratio
+      }
+      return next
+    }
+    expect(shellRoot()?.type).toBe('split')
+
+    stream.onFrame!({ type: 'workspace', key: GIT_KEY, layout: withRatio(0.2) })
+    await flushMicrotasks()
+    expect(shellRoot()).toMatchObject({ ratio: 0.2 })
+
+    const release = holdTabPaneTree('tab-shell')
+    stream.onFrame!({ type: 'workspace', key: GIT_KEY, layout: withRatio(0.7) })
+    await flushMicrotasks()
+    expect(shellRoot()).toMatchObject({ ratio: 0.2 })
+
+    release()
+    await flushMicrotasks()
+    expect(shellRoot()).toMatchObject({ ratio: 0.7 })
+    reportWindowSessionWriteActivity(false)
+    sync.close()
+  })
+
+  it('shows main’s pane tree going back to one the window last showed before an owed write', async () => {
+    const { store, sync, layouts } = await bootWithFrames('local', localDesktopSession())
+    sync.start()
+    const shellRoot = () => store.getState().terminalLayoutsByTabId['tab-shell']!.root
+    const original = shellRoot()
+    reportWindowSessionWriteActivity(true)
+    const changed = structuredClone(layouts[GIT_KEY]!)
+    const root = changed.tabs.find((tab) => tab.id === 'tab-shell')!.terminal!.root!
+    if (root.type === 'split') {
+      root.ratio = 0.15
+    }
+    stream.onFrame!({ type: 'workspace', key: GIT_KEY, layout: changed })
+    await flushMicrotasks()
+    expect(shellRoot()).toMatchObject({ ratio: 0.15 })
+
+    // Same structure as the frame shown before the write: its pane tree still shows.
+    stream.onFrame!({ type: 'workspace', key: GIT_KEY, layout: structuredClone(layouts[GIT_KEY]!) })
+    await flushMicrotasks()
+    expect(shellRoot()).toEqual(original)
+    reportWindowSessionWriteActivity(false)
+    sync.close()
+  })
+
+  it('keeps the window’s own pane trees once the stream has ended', async () => {
+    const { store, sync, layouts } = await bootWithFrames('local', localDesktopSession())
+    sync.start()
+    await flushMicrotasks()
+    // A frame queued behind an owed write when the stream ends.
+    reportWindowSessionWriteActivity(true)
+    stream.onFrame!({ type: 'workspace', key: GIT_KEY, layout: structuredClone(layouts[GIT_KEY]!) })
+    stream.onStatus!({ state: 'lost' })
+    const drawn = { type: 'leaf' as const, leafId: 'drawn-by-the-window' }
+    store.setState({
+      terminalLayoutsByTabId: {
+        ...store.getState().terminalLayoutsByTabId,
+        'tab-shell': { ...store.getState().terminalLayoutsByTabId['tab-shell']!, root: drawn }
+      }
+    })
+
+    requestTabPaneTreeRedraw('tab-shell')
+    await flushMicrotasks()
+    expect(store.getState().terminalLayoutsByTabId['tab-shell']!.root).toEqual(drawn)
+
+    // Nor does a later flush, such as an owed write ending.
+    reportWindowSessionWriteActivity(true)
+    reportWindowSessionWriteActivity(false)
+    await flushMicrotasks()
+    expect(store.getState().terminalLayoutsByTabId['tab-shell']!.root).toEqual(drawn)
     sync.close()
   })
 
