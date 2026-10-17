@@ -82,7 +82,6 @@ export type EditorFilesSlice = {
   /** Activation uses the file's workspace unless a target is supplied; global selection
    *  moves only when that workspace is active. */
   setActiveFile: (fileId: string, targetWorktreeId?: string) => void
-  reorderFiles: (fileIds: string[]) => void
   markFileDirty: (fileId: string, dirty: boolean) => void
   setExternalMutation: (fileId: string, mutation: 'deleted' | 'renamed' | 'changed' | null) => void
   setLastKnownDiskSignature: (fileId: string, signature: string) => void
