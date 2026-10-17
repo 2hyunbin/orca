@@ -4,18 +4,27 @@ import { getWslHostService } from '../../../wsl/wsl-host-service-instance'
 import { readDesktopSidebarFacts } from '../../sidebar-inputs/desktop-sidebar-facts'
 import { RepoIconDataUrlsParams } from '../../../../shared/sidebar-list/repo-icon-data-urls-contract'
 
+// Registered only with ORCA_SIDEBAR_INPUTS=main, so the producers below always exist.
+function requireSwitchedOn<Producer>(producer: Producer | null): Producer {
+  if (producer === null) {
+    throw new Error('sidebar inputs are off in this build')
+  }
+  return producer
+}
+
 export const SIDEBAR_INPUT_METHODS = [
   defineMethod({
     name: 'sidebarInputs.activityFacts',
     permission: 'workspace',
     params: null,
-    handler: async (_params, { runtime }) => runtime.getWorkspaceActivityFacts()
+    handler: async (_params, { runtime }) =>
+      requireSwitchedOn(runtime.sidebarFacts).getWorkspaceActivityFacts()
   }),
   defineMethod({
     name: 'sidebarInputs.repoIcons',
     permission: 'workspace',
     params: RepoIconDataUrlsParams,
-    handler: async ({ ids }, { runtime }) => runtime.repoIconDataUrls.read(ids)
+    handler: async ({ ids }, { runtime }) => requireSwitchedOn(runtime.repoIconDataUrls).read(ids)
   }),
   defineMethod({
     name: 'sidebarInputs.desktopFacts',
@@ -33,12 +42,13 @@ export const SIDEBAR_INPUT_METHODS = [
     name: 'sidebarInputs.pairedServerRows',
     permission: 'workspace',
     params: null,
-    handler: async (_params, { runtime }) => runtime.pairedServerRows.snapshot()
+    handler: async (_params, { runtime }) => requireSwitchedOn(runtime.pairedServerRows).snapshot()
   }),
   defineMethod({
     name: 'sidebarInputs.reviewFacts',
     permission: 'workspace',
     params: null,
-    handler: async (_params, { runtime }) => runtime.getWorkspaceReviewFacts()
+    handler: async (_params, { runtime }) =>
+      requireSwitchedOn(runtime.sidebarFacts).getWorkspaceReviewFacts()
   })
 ]

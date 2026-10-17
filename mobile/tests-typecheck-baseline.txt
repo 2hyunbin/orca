@@ -2,7 +2,6 @@
 # This is a RATCHET: the list may only SHRINK. Do NOT add entries to get CI green —
 # an unchecked test is one whose type-level pins prove nothing.
 # Regenerate/prune: node scripts/check-tests-typecheck-ratchet.mjs --prune
-src/accounts-route-reset-credit.test.ts
 src/browser/browser-command-reply-schema.test.ts
 src/browser/mobile-browser-frameless-stream.test.tsx
 src/components/CodexResetCreditAction.test.ts
