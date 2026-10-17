@@ -10,8 +10,8 @@ export const DesktopSidebarFactsSchema = z.object({
     hostId: z.string().nullable(),
     worktreeId: z.string().nullable()
   }),
-  /** Pinned workspaces this host's metadata records, git and folder. */
-  pinnedWorktreeIds: z.array(z.string()),
+  /** Pins in this host's metadata, git and folder; may name a workspace no longer listed, so read against rows. */
+  pinnedWorkspaceIds: z.array(z.string()),
   /** This host's projects in the desktop's manual order. */
   repoOrder: z.array(z.object({ hostId: z.string(), repoId: z.string() })),
   /** The saved host-section order; hosts it omits follow in discovery order. */

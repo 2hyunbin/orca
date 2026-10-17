@@ -12,25 +12,27 @@ import type { SshConnectionState, SshTarget } from '../../../shared/ssh-types'
 import type { WslHostStatus } from '../../../shared/wsl-host-types'
 import type { PersistedUIState } from '../../../shared/persisted-ui-state-types'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
-import type { WorktreeMeta } from '../../../shared/worktree/meta-types'
 import { folderWorkspaceKey } from '../../../shared/workspace-scope'
+import { readAllWorktreeMetaForHost } from '../../persistence/host-qualified-worktree-meta'
 import type { RuntimeStore } from '../runtime-store-contract'
 import { runtimeVisibleFolderWorkspaces, runtimeVisibleRepos } from '../runtime-visible-catalog'
-
-type PinMetaById = Record<string, Pick<WorktreeMeta, 'isPinned'>>
 
 export type DesktopSidebarFactSources = {
   store: Pick<
     RuntimeStore,
-    'getRepos' | 'getProjectGroups' | 'getFolderWorkspaces' | 'getSshTargets'
+    | 'getRepos'
+    | 'getProjectGroups'
+    | 'getFolderWorkspaces'
+    | 'getSshTargets'
+    | 'getAllWorktreeMeta'
+    | 'getAllWorktreeMetaForHost'
   > & {
-    getAllWorktreeMeta: () => PinMetaById
-    getAllWorktreeMetaForHost?: (hostId: ExecutionHostId) => PinMetaById
     getWorkspaceSession?: (
       hostId: ExecutionHostId
     ) => Pick<WorkspaceSessionState, 'activeWorktreeId' | 'activeWorkspaceExecutionHostId'>
     getUI?: () => Pick<PersistedUIState, 'manualRepoOrder' | 'workspaceHostOrder'>
   }
+  /** The registry's list, which leaves out targets a paired server owns; the window lists the same. */
   sshTargets: readonly Pick<SshTarget, 'id' | 'label'>[]
   sshStateOf: (targetId: string) => Pick<SshConnectionState, 'status'> | undefined
   /** Empty where WSL hosts cannot exist. */
@@ -48,8 +50,7 @@ export function readDesktopSidebarFacts(sources: DesktopSidebarFactSources): Des
 
   const pinned = new Set<string>()
   for (const hostId of repoHostIds) {
-    const metaById = store.getAllWorktreeMetaForHost?.(hostId) ?? store.getAllWorktreeMeta()
-    for (const [worktreeId, meta] of Object.entries(metaById)) {
+    for (const [worktreeId, meta] of Object.entries(readAllWorktreeMetaForHost(store, hostId))) {
       if (meta.isPinned) {
         pinned.add(worktreeId)
       }
@@ -66,7 +67,7 @@ export function readDesktopSidebarFacts(sources: DesktopSidebarFactSources): Des
       hostId: session?.activeWorkspaceExecutionHostId ?? null,
       worktreeId: session?.activeWorktreeId ?? null
     },
-    pinnedWorktreeIds: [...pinned].sort(),
+    pinnedWorkspaceIds: [...pinned].sort(),
     repoOrder: applyManualRepoOrder(repos, ui?.manualRepoOrder).map((repo) => ({
       hostId: getRepoExecutionHostId(repo),
       repoId: repo.id

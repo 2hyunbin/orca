@@ -36,7 +36,7 @@ describe('readWindowDesktopSidebarFacts', () => {
     })
     expect(facts).toEqual({
       desktopActive: { hostId: 'local', worktreeId: 'repo-1::/a' },
-      pinnedWorktreeIds: ['folder:f1', 'repo-1::/b'],
+      pinnedWorkspaceIds: ['folder:f1', 'repo-1::/b'],
       // A paired server orders its own projects; only this host's are compared.
       repoOrder: [
         { hostId: 'ssh:box', repoId: 'repo-ssh' },

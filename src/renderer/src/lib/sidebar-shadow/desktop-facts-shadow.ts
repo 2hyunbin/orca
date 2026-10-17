@@ -42,7 +42,7 @@ export function readWindowDesktopSidebarFacts(state: WindowFactsState): DesktopS
       hostId: state.activeWorkspaceExecutionHostId ?? null,
       worktreeId: state.activeWorktreeId ?? null
     },
-    pinnedWorktreeIds: [...new Set(pinned)].sort(),
+    pinnedWorkspaceIds: [...new Set(pinned)].sort(),
     repoOrder: state.repos
       .map((repo) => ({ hostId: getRepoExecutionHostId(repo), repoId: repo.id }))
       .filter((entry) => parseExecutionHostId(entry.hostId)?.kind !== 'runtime'),
@@ -71,7 +71,7 @@ function toComparedFacts(state: AppState, facts: DesktopSidebarFacts): Map<strin
   ])
   const pinned = toLocallyOwnedRows(
     state,
-    new Map(facts.pinnedWorktreeIds.map((id) => [id, 'pinned']))
+    new Map(facts.pinnedWorkspaceIds.map((id) => [id, 'pinned']))
   )
   for (const [id, value] of pinned) {
     compared.set(`pinned:${id}`, value)

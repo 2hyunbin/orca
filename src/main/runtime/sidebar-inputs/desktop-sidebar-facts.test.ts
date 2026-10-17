@@ -5,6 +5,7 @@ import type { ProjectGroup } from '../../../shared/project-group-types'
 import type { Repo } from '../../../shared/repo-types'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { ManualRepoOrderEntry } from '../../../shared/ui-chrome-types'
+import type { WorktreeMeta } from '../../../shared/worktree/meta-types'
 import { readDesktopSidebarFacts, type DesktopSidebarFactSources } from './desktop-sidebar-facts'
 
 function repo(id: string, connectionId: string | null = null): Repo {
@@ -29,14 +30,30 @@ function folder(id: string, isPinned: boolean): FolderWorkspace {
   }
 }
 
+function meta(isPinned: boolean, hostId?: ExecutionHostId): WorktreeMeta {
+  return {
+    displayName: '',
+    comment: '',
+    linkedIssue: null,
+    linkedPR: null,
+    linkedLinearIssue: null,
+    isArchived: false,
+    isUnread: false,
+    isPinned,
+    sortOrder: 0,
+    lastActivityAt: 0,
+    ...(hostId ? { hostId } : {})
+  }
+}
+
 function sources(overrides: {
   repos?: Repo[]
-  metaByHost?: Record<string, Record<string, { isPinned: boolean }>>
+  metaByHost?: Record<string, Record<string, WorktreeMeta>>
   folders?: FolderWorkspace[]
   session?: { activeWorktreeId: string; activeWorkspaceExecutionHostId: ExecutionHostId }
   ui?: { manualRepoOrder?: ManualRepoOrderEntry[]; workspaceHostOrder?: ExecutionHostId[] }
 }): DesktopSidebarFactSources {
-  const metaFor = (hostId: string): Record<string, { isPinned: boolean }> =>
+  const metaFor = (hostId: string): Record<string, WorktreeMeta> =>
     overrides.metaByHost?.[hostId] ?? {}
   const group: ProjectGroup = {
     id: 'group-1',
@@ -90,13 +107,30 @@ describe('readDesktopSidebarFacts', () => {
       sources({
         repos: [repo('repo-1'), repo('repo-2', 'box')],
         metaByHost: {
-          local: { 'repo-1::/a': { isPinned: true }, 'repo-1::/b': {} },
-          'ssh:box': { 'repo-2::/c': { isPinned: true } }
+          local: { 'repo-1::/a': meta(true), 'repo-1::/b': meta(false) },
+          'ssh:box': { 'repo-2::/c': meta(true) }
         },
         folders: [folder('f1', true), folder('f2', false)]
       })
     )
-    expect(facts.pinnedWorktreeIds).toEqual(['folder:f1', 'repo-1::/a', 'repo-2::/c'])
+    expect(facts.pinnedWorkspaceIds).toEqual(['folder:f1', 'repo-1::/a', 'repo-2::/c'])
+  })
+
+  it('keeps each host to its own pins on a store without host-qualified metadata', () => {
+    const base = sources({ repos: [repo('repo-1'), repo('repo-2', 'box')] })
+    const facts = readDesktopSidebarFacts({
+      ...base,
+      store: {
+        ...base.store,
+        getAllWorktreeMetaForHost: undefined,
+        getAllWorktreeMeta: () => ({
+          'repo-1::/a': meta(true, 'local'),
+          'repo-2::/c': meta(true, 'ssh:box'),
+          'repo-9::/gone': meta(true, 'ssh:other')
+        })
+      }
+    })
+    expect(facts.pinnedWorkspaceIds).toEqual(['repo-1::/a', 'repo-2::/c'])
   })
 
   it('orders projects by the manual order, with unranked ones after in store order', () => {
