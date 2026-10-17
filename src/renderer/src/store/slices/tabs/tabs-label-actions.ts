@@ -14,6 +14,7 @@ import {
 } from './tabs-host-mirroring'
 import { sendTabChangeToLayoutOwner } from '../../terminals/tab-change-through-layout-owner'
 import { recordTabOrderInLayoutOwner } from './tab-order-layout-owner'
+import { withPreviewEnded } from './tab-preview-flag'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 
 function oppositeViewMode(mode: 'terminal' | 'chat'): 'terminal' | 'chat' {
@@ -216,7 +217,7 @@ export function createTabsLabelActions(
         }
         const { tab, worktreeId } = found
         const tabs = (state.unifiedTabsByWorktree[worktreeId] ?? []).map((candidate) =>
-          candidate.id === tabId ? { ...candidate, isPinned: true, isPreview: false } : candidate
+          candidate.id === tabId ? withPreviewEnded({ ...candidate, isPinned: true }) : candidate
         )
         const groups = state.groupsByWorktree[worktreeId] ?? []
         const group = groups.find((candidate) => candidate.id === tab.groupId)

@@ -1,7 +1,12 @@
 import type { RuntimeLinearCommandSurface } from './runtime-linear-command-surface'
 import { installRuntimeLinearCommandSurface } from './runtime-linear-command-surface'
 import { publishWorkspaceViewChanges } from './runtime-workspace-view-change-events'
-import { OrcaRuntimeWithWorkspaceReviewFacts } from './sidebar-inputs/orca-runtime-workspace-review-facts'
+import {
+  OrcaRuntimeWithWorkspaceReviewFacts,
+  sidebarFactsRuntime
+} from './sidebar-inputs/orca-runtime-workspace-review-facts'
+import { OrcaRuntimeWithMigrationCatalog } from './orca-runtime-migration-catalog'
+import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../shared/sidebar-inputs-switch'
 import type { RuntimeCommandSurfaceHost } from './orca-runtime-core'
 import type {
   AgentLaunchTabPublished,
@@ -35,16 +40,27 @@ import { PairedServerRowsProducer } from './sidebar-inputs/paired-server-rows-pr
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../shared/runtime-session-contracts'
 import { getHostDisplayLabelOverrides } from '../../shared/host-setting-overrides'
 
+// Switch point: a window-fed build keeps no sidebar facts layer.
+const OrcaRuntimeSidebarBase: typeof OrcaRuntimeWithMigrationCatalog = ORCA_SIDEBAR_INPUTS_IS_MAIN
+  ? OrcaRuntimeWithWorkspaceReviewFacts
+  : OrcaRuntimeWithMigrationCatalog
+
 // oxlint-disable-next-line typescript/no-unsafe-declaration-merging -- SAFETY: The existing Linear installer supplies the canonical prototype surface.
-class OrcaRuntimeService extends OrcaRuntimeWithWorkspaceReviewFacts {
-  // Idle until relay hosts attach. The fallback refresh runs while a window shows the sidebar.
-  readonly pairedServerRows = new PairedServerRowsProducer({
-    hasDemand: () =>
-      this.authoritativeWindowId !== null &&
-      this.authoritativeWindowId !== HEADLESS_RUNTIME_WINDOW_ID &&
-      this.store?.getUI?.().sidebarOpen !== false,
-    hostLabelOverrides: () => getHostDisplayLabelOverrides(this.getClientSettings())
-  })
+class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
+  /** This runtime as its sidebar facts layer; null unless built with ORCA_SIDEBAR_INPUTS=main. */
+  get sidebarFacts() {
+    return sidebarFactsRuntime(this)
+  }
+  // Switch point. Idle until relay hosts attach; the fallback refresh runs while a window shows the sidebar.
+  readonly pairedServerRows = ORCA_SIDEBAR_INPUTS_IS_MAIN
+    ? new PairedServerRowsProducer({
+        hasDemand: () =>
+          this.authoritativeWindowId !== null &&
+          this.authoritativeWindowId !== HEADLESS_RUNTIME_WINDOW_ID &&
+          this.store?.getUI?.().sidebarOpen !== false,
+        hostLabelOverrides: () => getHostDisplayLabelOverrides(this.getClientSettings())
+      })
+    : null
 
   private async selectReferenceCatalogWorkspace(selector: string, cwd?: string) {
     const catalog = listReferenceWorkspaces(
@@ -99,7 +115,7 @@ class OrcaRuntimeService extends OrcaRuntimeWithWorkspaceReviewFacts {
     })
   }
 
-  constructor(...args: ConstructorParameters<typeof OrcaRuntimeWithWorkspaceReviewFacts>) {
+  constructor(...args: ConstructorParameters<typeof OrcaRuntimeWithMigrationCatalog>) {
     super(...args)
     // Why: the runtime listing re-runs a scan the worktree-change generation overtook and re-lists
     // through this runtime's scan cache, so a worktree change must reach both. The desktop IPC

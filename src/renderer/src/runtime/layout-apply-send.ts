@@ -34,6 +34,7 @@ export type WindowLayoutCommand =
   | { type: 'equalizePanes'; tabId: string }
   | { type: 'movePane'; tabId: string; leafId: string; targetLeafId: string; side: PaneSide }
   | { type: 'setPaneRatios'; tabId: string; root: TerminalPaneLayoutNode }
+  | { type: 'setChatPane'; tabId: string; leafId: string | null }
   | { type: 'moveTab'; tabId: string; toGroupId: string; index: number }
   | { type: 'splitGroup'; tabId: string; besideGroupId: string; direction: GroupSide }
   | { type: 'setGroupRatios'; groupLayout: TabGroupLayoutNode }
@@ -101,6 +102,15 @@ export type WindowLayoutCommand =
     }
   | { type: 'promotePreviewTab'; tabId: string }
   | {
+      type: 'openSimulatorTab'
+      tabId: string
+      groupId: string
+      afterTabId?: string
+      index?: number
+      createdAt: number
+      split?: NewGroupSplit
+    }
+  | {
       type: 'moveTabToWorkspace'
       toWorkspace: string
       tabs: { tabId: string; newTabId: string; newEntityId: string }[]
@@ -138,6 +148,7 @@ const PANE_COMMANDS: ReadonlySet<WindowLayoutCommand['type']> = new Set([
   'equalizePanes',
   'movePane',
   'setPaneRatios',
+  'setChatPane',
   'movePaneToNewTab'
 ])
 

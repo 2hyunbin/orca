@@ -21,6 +21,7 @@ import {
   splitGroup
 } from './workspace-layout-group-commands'
 import { renameEditorFiles } from './workspace-layout-editor-rekey'
+import { openSimulatorTab } from './workspace-layout-simulator-tab'
 import { updateLegacyPersistence } from './workspace-layout-legacy-persistence'
 import type { WorkspaceLayoutModel } from './workspace-layout-model'
 import {
@@ -47,7 +48,8 @@ const CREATES_WORKSPACE = new Set<LayoutCommand['type']>([
   'createTerminalTab',
   'openEditorTab',
   'openBrowserTab',
-  'openAgentSessionTab'
+  'openAgentSessionTab',
+  'openSimulatorTab'
 ])
 
 export function applyLayoutCommand(
@@ -106,6 +108,8 @@ function applyCommand(
       return setChatPane(model, command)
     case 'openEditorTab':
       return openInNewGroup(model, command, (next) => openEditorTab(next, command, context))
+    case 'openSimulatorTab':
+      return openInNewGroup(model, command, (next) => openSimulatorTab(next, command, context))
     case 'promotePreviewTab':
       return promotePreviewTab(model, command)
     case 'moveTabToWorkspace':
