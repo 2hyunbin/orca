@@ -17,12 +17,13 @@ const EXCLUDED_FILES = new Set(['config/scripts/ci-shard-timings.json'])
 // Command strings in manifests and scripts name paths unquoted; in code only quoted literals count,
 // so prose in comments is not scanned.
 const UNQUOTED_ALLOWED = /\.(?:jsonc?|ya?ml|sh|ps1)$/
+// Group 1 is a relative import's `../` chain: imports must resolve exactly, not as a prefix.
 const QUOTED_LITERAL = new RegExp(
-  `(?:['"\`]|:\\(glob\\))(?:\\.\\.\\/)*(src\\/(?:${SOURCE_ROOTS})\\/[\\w@\\-./]*)`,
+  `(?:['"\`]|:\\(glob\\))((?:\\.\\.\\/)*)(src\\/(?:${SOURCE_ROOTS})\\/[\\w@\\-./]*)`,
   'g'
 )
 const ANY_LITERAL = new RegExp(
-  `(?:['"\`\\s=]|:\\(glob\\)|^)(?:\\.\\.\\/)*(src\\/(?:${SOURCE_ROOTS})\\/[\\w@\\-./]*)`,
+  `(?:['"\`\\s=]|:\\(glob\\)|^)((?:\\.\\.\\/)*)(src\\/(?:${SOURCE_ROOTS})\\/[\\w@\\-./]*)`,
   'gm'
 )
 
@@ -35,17 +36,22 @@ export function isScannedPath(rel) {
   )
 }
 
-/** Every `src/...` literal in one file, with a trailing glob or sentence period cut off. */
+/**
+ * Every `src/...` literal in one file, with a trailing glob or sentence period cut off. Relative
+ * imports are marked so they resolve exactly.
+ */
 export function extractPathLiterals(rel, text) {
   const pattern = UNQUOTED_ALLOWED.test(rel) ? ANY_LITERAL : QUOTED_LITERAL
-  const literals = new Set()
-  for (const match of text.matchAll(pattern)) {
-    literals.add(match[1].replace(/\.+$/, ''))
+  const literals = new Map()
+  for (const [, parents, literal] of text.matchAll(pattern)) {
+    const key = literal.replace(/\.+$/, '')
+    literals.set(key, (literals.get(key) ?? true) && parents.length > 0)
   }
-  return [...literals]
+  return [...literals].map(([literal, isImport]) => ({ literal, isImport }))
 }
 
-/** A literal resolves when it names a file or folder, an import without extension, or a prefix. */
+/** A literal resolves when it names a file or folder, a module without extension, or (unless it
+ * is an import) a prefix of a tracked file. */
 export function createPathResolver(root, trackedFiles) {
   const sorted = [...trackedFiles].sort()
   const hasPrefix = (prefix) => {
@@ -61,8 +67,8 @@ export function createPathResolver(root, trackedFiles) {
     }
     return low < sorted.length && sorted[low].startsWith(prefix)
   }
-  return (literal) =>
-    hasPrefix(literal) ||
+  return (literal, isImport = false) =>
+    (!isImport && hasPrefix(literal)) ||
     fs.existsSync(path.join(root, literal)) ||
     RESOLVED_EXTENSIONS.some((extension) => fs.existsSync(path.join(root, literal + extension)))
 }
@@ -71,8 +77,8 @@ export function collectUnresolvedPathLiterals(root = process.cwd()) {
   const resolves = createPathResolver(root, listTrackedFiles(root, ['src']))
   const entries = []
   for (const [rel, text] of readTrackedSources(root, SCAN_ROOTS, isScannedPath)) {
-    for (const literal of extractPathLiterals(rel, text)) {
-      if (!resolves(literal)) {
+    for (const { literal, isImport } of extractPathLiterals(rel, text)) {
+      if (!resolves(literal, isImport)) {
         entries.push(`${rel} ${literal}`)
       }
     }

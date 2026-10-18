@@ -18,20 +18,20 @@ describe('extractPathLiterals', () => {
       '// src/main/ipc/pty.ts is prose, not a reference'
     ].join('\n')
     expect(extractPathLiterals('config/scripts/route.mjs', text)).toEqual([
-      'src/main/ssh/ssh-connection.ts',
-      'src/shared/protocol-version',
-      'src/shared/windows-'
+      { literal: 'src/main/ssh/ssh-connection.ts', isImport: false },
+      { literal: 'src/shared/protocol-version', isImport: true },
+      { literal: 'src/shared/windows-', isImport: false }
     ])
   })
 
   it('reads unquoted command arguments in manifests and workflows', () => {
     const text = '"command": "pnpm test src/main/a.test.ts src/renderer/src/b.test.ts"'
     expect(extractPathLiterals('config/reliability-gates.jsonc', text)).toEqual([
-      'src/main/a.test.ts',
-      'src/renderer/src/b.test.ts'
+      { literal: 'src/main/a.test.ts', isImport: false },
+      { literal: 'src/renderer/src/b.test.ts', isImport: false }
     ])
     expect(extractPathLiterals('.github/workflows/x.yml', "  - 'src/main/ssh/**'\n")).toEqual([
-      'src/main/ssh/'
+      { literal: 'src/main/ssh/', isImport: false }
     ])
   })
 
@@ -58,7 +58,11 @@ describe('createPathResolver', () => {
   const root = mkdtempSync(join(tmpdir(), 'path-literal-'))
   mkdirSync(join(root, 'src/main/ssh'), { recursive: true })
   writeFileSync(join(root, 'src/main/ssh/ssh-connection.ts'), '')
-  const resolves = createPathResolver(root, ['src/main/ssh/ssh-connection.ts'])
+  writeFileSync(join(root, 'src/main/ssh/ssh-types.test.ts'), '')
+  const resolves = createPathResolver(root, [
+    'src/main/ssh/ssh-connection.ts',
+    'src/main/ssh/ssh-types.test.ts'
+  ])
 
   it('accepts a file, an extensionless import, a folder and a prefix', () => {
     expect(resolves('src/main/ssh/ssh-connection.ts')).toBe(true)
@@ -70,5 +74,11 @@ describe('createPathResolver', () => {
   it('flags a literal whose file moved', () => {
     expect(resolves('src/main/ssh/connection/ssh-connection.ts')).toBe(false)
     expect(resolves('src/main/managed-server/')).toBe(false)
+  })
+
+  it('resolves an import exactly, so a same-prefix sibling cannot hide a moved module', () => {
+    expect(resolves('src/main/ssh/ssh-connection', true)).toBe(true)
+    expect(resolves('src/main/ssh/ssh-types', true)).toBe(false)
+    expect(resolves('src/main/ssh/ssh-types')).toBe(true)
   })
 })
