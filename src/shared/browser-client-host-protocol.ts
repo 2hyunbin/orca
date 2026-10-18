@@ -200,8 +200,6 @@ export const BrowserClientHostLeaseAuthority = BrowserHostLeaseAuthority.extend(
 
 export type BrowserClientHostLeaseAuthority = z.infer<typeof BrowserClientHostLeaseAuthority>
 
-export { BrowserNetworkExecutionHost } from './browser-network-execution-host'
-
 const BrowserClientPageCommandAuthority = BrowserClientHostLeaseAuthority.extend({
   pageCommandProtocolVersion: PageCommandProtocolVersion,
   browserPageId: Identity,
