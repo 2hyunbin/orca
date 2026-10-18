@@ -21,7 +21,11 @@ import { reportWindowSessionWriteActivity } from '../lib/window-session-write-ac
 import { createStoreSessionMockApi } from '../store/slices/store-session-test-harness'
 import { createTestStore } from '../store/slices/store-test-helpers'
 import type { LayoutFrameSlices } from '../store/workspace-layout-frame-slices'
-import { afterLayoutFrame, endLayoutFramePositions } from './layout-frame-position'
+import {
+  afterLayoutFrame,
+  endLayoutFramePositions,
+  layoutFramesFlowing
+} from './layout-frame-position'
 import { holdTabPaneTree, requestTabPaneTreeRedraw } from './layout-owner-pane-intents'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
 
@@ -341,6 +345,36 @@ describe('the window drawn from layout frames', () => {
     reportWindowSessionWriteActivity(false)
     await flushMicrotasks()
     expect(store.getState().terminalLayoutsByTabId['tab-shell']!.root).toEqual(drawn)
+    sync.close()
+  })
+
+  it('after a lost stream reopens, its snapshot redraws every workspace from main', async () => {
+    const { store, sync, layouts } = await bootWithFrames('local', localDesktopSession())
+    sync.start()
+    await flushMicrotasks()
+    stream.onStatus!({ state: 'lost' })
+    expect(layoutFramesFlowing()).toBe(false)
+    // Drawn while no frame came; main's snapshot does not have it.
+    const drawn = { type: 'leaf' as const, leafId: 'drawn-by-the-window' }
+    store.setState({
+      terminalLayoutsByTabId: {
+        ...store.getState().terminalLayoutsByTabId,
+        'tab-shell': { ...store.getState().terminalLayoutsByTabId['tab-shell']!, root: drawn }
+      }
+    })
+
+    stream.onStatus!({ state: 'connecting' })
+    expect(layoutFramesFlowing()).toBe(true)
+    const renamed = structuredClone(layouts)
+    renamed[GIT_KEY]!.tabs.find((tab) => tab.id === 'tab-unbound')!.customTitle = 'from main'
+    stream.onFrame!(snapshot(renamed))
+    stream.onStatus!({ state: 'live' })
+    await flushMicrotasks()
+
+    const rows = store.getState().tabsByWorktree[GIT_KEY]!
+    expect(rows.find((tab) => tab.id === 'tab-unbound')!.customTitle).toBe('from main')
+    expect(store.getState().terminalLayoutsByTabId['tab-shell']!.root).not.toEqual(drawn)
+    expect(sync.terminalTab(GIT_KEY, 'tab-shell')).toBeDefined()
     sync.close()
   })
 
