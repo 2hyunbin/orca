@@ -12,7 +12,11 @@ export const SIDEBAR_INPUTS_BUILD = existsSync(
  * Main's sidebar inputs agree with what the window derives itself (dev/test shadow mode). Without
  * an ORCA_SIDEBAR_INPUTS=main build there is nothing to compare, and no comparison may run.
  */
-export async function expectNoSidebarShadowMismatches(page: Page): Promise<void> {
+export async function expectNoSidebarShadowMismatches(
+  page: Page,
+  /** Only these domains' mismatches count; every domain still has to compare. */
+  domains?: readonly string[]
+): Promise<void> {
   if (!SIDEBAR_INPUTS_BUILD) {
     expect(await page.evaluate(() => window.__sidebarShadow === undefined)).toBe(true)
     return
@@ -24,6 +28,8 @@ export async function expectNoSidebarShadowMismatches(page: Page): Promise<void>
   await expect
     .poll(comparisons, { timeout: 15_000, message: 'main never answered a shadow comparison' })
     .toBeGreaterThanOrEqual(Math.max(start, 0) + 2)
-  const mismatches = await page.evaluate(() => window.__sidebarShadow?.mismatches() ?? [])
+  const mismatches = (await page.evaluate(() => window.__sidebarShadow?.mismatches() ?? [])).filter(
+    (mismatch) => !domains || domains.includes(mismatch.domain)
+  )
   expect(mismatches, JSON.stringify(mismatches, null, 2)).toEqual([])
 }

@@ -1260,6 +1260,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'sidebarInputs.reviewFacts': null,
   'sidebarInputs.temporal': null,
   'sidebarInputs.workspaceCreations': null,
+  'sidebarInputs.workspaceRows': null,
   'sidebarSession.begin': SidebarSessionBeginParams,
   'skills.beginUpload': SkillUploadBeginRequestSchema,
   'skills.cancelInstall': SkillsCancelInstallParams,

@@ -38,6 +38,7 @@ import { applyWindowLayoutCommand, type WindowLayoutCommand } from './runtime-la
 import type { TerminalCreateOptions } from './runtime-terminal-contracts'
 import { PairedServerRowsProducer } from './sidebar-inputs/paired-server-rows-producer'
 import { RepoIconDataUrls } from './sidebar-inputs/repo-icon-data-urls'
+import { WorkspaceRowsProducer } from './sidebar-inputs/workspace-rows-producer'
 import { getMainHttpClient } from '../network/http-client'
 import { getRuntimeDesktopSurface } from './runtime-desktop-surface'
 import { CollapseWriteOrder } from './workspace-view-collapse-writes'
@@ -85,6 +86,15 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
     : null
   // Switch point: the per-writer ordering behind ui.setCollapsed.
   readonly collapseWriteOrder = ORCA_SIDEBAR_INPUTS_IS_MAIN ? new CollapseWriteOrder() : null
+  // Switch point: this host's workspace rows, from the listing worktree.ps reads.
+  readonly workspaceRows = ORCA_SIDEBAR_INPUTS_IS_MAIN
+    ? new WorkspaceRowsProducer({
+        store: this.store,
+        listVisibleWorktrees: () => this.listVisibleResolvedWorktreeSnapshot(),
+        invalidateListing: () => this.invalidateResolvedWorktreeCache(),
+        onClientEvent: (listener, options) => this.onClientEvent(listener, options)
+      })
+    : null
   // Switch point: the phone's feed of the producers above; idle until this host's own phone reads.
   readonly sidebarInputsFeed = ORCA_SIDEBAR_INPUTS_IS_MAIN
     ? new SidebarInputsFeed(
@@ -93,6 +103,7 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
             facts: requireSwitchedOn(this.sidebarFacts),
             pairedServerRows: requireSwitchedOn(this.pairedServerRows),
             workspaceCreations: requireSwitchedOn(this.workspaceCreations),
+            workspaceRows: requireSwitchedOn(this.workspaceRows),
             store: () => this.store,
             onClientEvent: (listener, options) => this.onClientEvent(listener, options)
           }),
