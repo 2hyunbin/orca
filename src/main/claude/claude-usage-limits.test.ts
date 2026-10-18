@@ -62,7 +62,7 @@ describe('a Claude usage limit', () => {
     const t = setup()
     t.handle(userFrame('turn-a', 1_000))
     t.handle(rateLimitEvent('rejected', 1_100))
-    t.handle(assistantFrame('first', 1_150, 20))
+    t.handle(frame({ ...assistantFrame('first', 1_150, 20).message, user_message_uuid: 'ask-a' }, 1_150))
     t.handle(frame({
       ...refusedFrame('a', 1_200, LIMIT_TEXT).message,
       user_message_uuid: undefined,
@@ -84,7 +84,11 @@ describe('a Claude usage limit', () => {
         detail: { text: LIMIT_TEXT, audience: 'person' }
       }
     }
-    expect(statusRows(t)).toEqual([limitRow, limitRow])
+    expect(statusRows(t)).toEqual([
+      { ...limitRow, failure: { ...limitRow.failure,
+        detail: { text: `${LIMIT_TEXT}\nRequest failed`, audience: 'person' } } },
+      limitRow
+    ])
     expect(messageTexts(t)).not.toContain(LIMIT_TEXT)
     t.translator.dispose()
   })

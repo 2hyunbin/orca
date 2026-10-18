@@ -98,11 +98,11 @@ export class ClaudeUsageLimits {
       return null
     }
     const prior = evidence?.row
-    const text = claudeText(message.result) ?? ''
-    const detail = prior?.failure.detail?.text ?? ''
+    const details = [prior?.failure.detail?.text, claudeText(message.result)]
+      .filter((value): value is string => Boolean(value))
     return (
-      this.row(text.length > detail.length ? text : detail, evidence?.cause === 'quota') ??
-      prior ?? null
+      this.row([...new Set(details)].join('\n'), evidence?.cause === 'quota' || prior != null,
+        prior?.failure.usageLimit) ?? prior ?? null
     )
   }
 
@@ -144,8 +144,12 @@ export class ClaudeUsageLimits {
     return { ...(window ? { window } : {}), ...(resetsAt ? { resetsAt } : {}) }
   }
 
-  private row(providerText: string, typed = false): ClaudeUsageLimitRow | null {
-    const limit = this.limit()
+  private row(
+    providerText: string,
+    typed = false,
+    previousLimit?: AgentSessionUsageLimit
+  ): ClaudeUsageLimitRow | null {
+    const limit = this.limit() ?? previousLimit ?? null
     if (!limit && !typed) {
       return null
     }
