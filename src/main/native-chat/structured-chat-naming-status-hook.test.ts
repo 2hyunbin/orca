@@ -148,7 +148,9 @@ describe.each(['claude', 'codex'] as const)('%s first-message naming status hook
             summary.agent === provider && summary.status === 'working' && !options.replay
         )
       ).toBe(true)
-      expect(store.getRecord(HOST_TEST_SESSION)?.conversationName).toBeUndefined()
+      expect(store.getRecord(HOST_TEST_SESSION)?.conversationName).toBe(
+        'Please repair the login flow'
+      )
       finish('auth/login')
       await vi.waitFor(() =>
         expect(store.getRecord(HOST_TEST_SESSION)?.conversationName).toBe('auth/login')
