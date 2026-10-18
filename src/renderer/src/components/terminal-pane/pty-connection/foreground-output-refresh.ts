@@ -1,3 +1,4 @@
+import * as unhideCoverage from './hidden-unhide-snapshot-coverage'
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
 import { recordTerminalFreezeBreadcrumb } from '../terminal-freeze-breadcrumbs'
 import { redactPtyIdForDiagnostics } from '../../../../../shared/pty-delivery-diagnostics'
@@ -81,7 +82,7 @@ export function bindForegroundOutputRefresh(session: ConnectPanePtySession): voi
     session.transport.resetCrossChunkParserState?.()
     // Why gated (rc.7.perf loop): on a visible pane these markers come from our own restore starving ACKs; re-arming per marker kept the fetch loop alive all flood, so defer to one post-flood repaint.
     if (session.isForegroundRestoreBackpressureContext()) {
-      session.noteHiddenOutputRestoreFloodBackpressure()
+      unhideCoverage.handleUnhideRestoreBackpressure(session, event)
       return
     }
     // Why the emulator too: it carries state across chunks exactly like the
