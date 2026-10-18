@@ -2959,7 +2959,7 @@
       "src/main/ipc/worktree-logic-wsl.test.ts": 95,
       "src/main/ipc/worktree-logic.test.ts": 203,
       "src/main/ipc/worktree-metadata-merge.test.ts": 42,
-      "src/main/ipc/worktree-path-deduplication.test.ts": 63,
+      "src/main/git/worktree-path-deduplication.test.ts": 63,
       "src/main/ipc/worktree-push-target-cleanup.test.ts": 639,
       "src/main/ipc/worktree-push-target-reconciliation-real-git.test.ts": 950,
       "src/main/ipc/worktree-push-target-reconciliation.test.ts": 600,

@@ -28,7 +28,10 @@ describe('dedupeWorktreesByPath', () => {
         { id: 'temp-private', path: '/private/tmp/orca/feature' },
         { id: 'temp-short', path: '/tmp/orca/feature' },
         { id: 'relative-first', path: 'workspaces/feature' },
-        { id: 'relative-duplicate', path: 'workspaces/./feature' }
+        { id: 'relative-duplicate', path: 'workspaces/./feature' },
+        { id: 'wsl-upper', path: '\\\\wsl.localhost\\Ubuntu\\home\\dev\\Feature' },
+        { id: 'wsl-lower', path: '\\\\wsl$\\ubuntu\\home\\dev\\feature' },
+        { id: 'wsl-alias', path: '//wsl$/UBUNTU/home/dev/feature' }
       ]
 
       for (let offset = 0; offset < worktrees.length; offset += 1) {
@@ -43,6 +46,34 @@ describe('dedupeWorktreesByPath', () => {
       }
     }
   )
+
+  // An ext4 tail is case-sensitive: folding it merged two real checkouts into one row.
+  it.each<NodeJS.Platform>(['darwin', 'linux', 'win32'])(
+    'keeps WSL worktrees that differ only in tail case on %s',
+    (platform) => {
+      const ids = dedupeWorktreesByPath(
+        [
+          { id: 'upper', path: '\\\\wsl.localhost\\Ubuntu\\home\\dev\\Feature' },
+          { id: 'lower', path: '\\\\wsl$\\ubuntu\\home\\dev\\feature' },
+          { id: 'alias', path: '//wsl$/UBUNTU/home/dev/feature' }
+        ],
+        platform
+      ).map((worktree) => worktree.id)
+      expect(ids).toEqual(['upper', 'lower'])
+    }
+  )
+
+  it('treats a trailing separator on a WSL path as the same worktree', () => {
+    const ids = dedupeWorktreesByPath([
+      { id: 'bare', path: '//wsl$/Ubuntu/home/dev/feature' },
+      { id: 'slash', path: '//wsl$/Ubuntu/home/dev/feature/' },
+      { id: 'backslash', path: '\\\\wsl.localhost\\Ubuntu\\home\\dev\\feature\\' }
+    ]).map((worktree) => worktree.id)
+    expect(ids).toEqual(['bare'])
+    expect(
+      areWorktreePathsEqual('//wsl$/Ubuntu/home/dev/feature/', '//wsl$/Ubuntu/home/dev/feature')
+    ).toBe(true)
+  })
 
   it('reads each path once for a large unique list', () => {
     let pathReads = 0
