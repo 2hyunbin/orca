@@ -102,7 +102,9 @@ export type PtySpawnLaunchOptionsInput = {
   sessionId: string | undefined
   /** Each lane's own admission rule for which caller intents reach the provider. */
   spawnIntent: PtySpawnOptions['spawnIntent']
-  settings: GlobalSettings | undefined
+  /** Host history is sampled before preparation; otherwise read it after OpenCode preparation. */
+  historyIsolationEnabled?: boolean
+  getSettings?: () => GlobalSettings | undefined
   store: TrustInput['store']
   claudeAuth: TrustInput['claudeAuth']
 }
@@ -139,7 +141,10 @@ export async function assemblePtySpawnLaunchOptions(input: PtySpawnLaunchOptions
       ? { prevalidatedCwd: input.prevalidatedCwd }
       : {}),
     env,
-    historyIsolationEnabled: input.settings?.terminalScopeHistoryByWorktree ?? true,
+    historyIsolationEnabled:
+      input.historyIsolationEnabled ??
+      input.getSettings?.()?.terminalScopeHistoryByWorktree ??
+      true,
     ...(input.isNewSession ? { isNewSession: true } : {}),
     envToDelete: input.envToDelete
   }
@@ -183,7 +188,7 @@ export async function assemblePtySpawnLaunchOptions(input: PtySpawnLaunchOptions
     cwd: input.cwd,
     store: input.store,
     isFreshLaunch: !input.preAdoptedStablePane && launchCommand !== undefined,
-    settings: input.settings,
+    settings: input.getSettings?.(),
     env,
     claudeAuth: input.claudeAuth,
     wslDistro: input.expectedWslDistro,
@@ -211,13 +216,13 @@ export async function assemblePtySpawnLaunchOptions(input: PtySpawnLaunchOptions
       connectionId,
       requestedShellOverride: args.shellOverride,
       launchCommand,
-      settings: input.settings
+      settings: input.getSettings?.()
     })
     if (process.platform === 'win32') {
       // Why: the renderer models PowerShell as one shell family; thread the implementation choice so both PTY paths resolve the same executable.
       spawnOptions.terminalWindowsWslDistro = input.expectedWslDistro
-      spawnOptions.terminalWindowsPowerShellImplementation = input.settings
-        ? (input.settings.terminalWindowsPowerShellImplementation ?? 'auto')
+      spawnOptions.terminalWindowsPowerShellImplementation = input.getSettings
+        ? (input.getSettings()?.terminalWindowsPowerShellImplementation ?? 'auto')
         : undefined
     }
   }

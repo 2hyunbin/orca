@@ -30,6 +30,8 @@ export async function buildRuntimePtySpawnOptions(
 > {
   const args = ctx.args
   const settings = ctx.deps.getSettings?.()
+  // Host history is sampled before preparation; the window samples it afterwards.
+  const historyIsolationEnabled = ctx.deps.getSettings?.()?.terminalScopeHistoryByWorktree ?? true
   let ptySpawnCommitReported = false
   ctx.reportPtySpawnCommitted = (): void => {
     if (ptySpawnCommitReported) {
@@ -88,7 +90,8 @@ export async function buildRuntimePtySpawnOptions(
     paneKey: ctx.spawnIdentityPaneKey,
     sessionId: ctx.sessionId,
     spawnIntent: ctx.preAdoptedStablePane ? undefined : args.spawnIntent,
-    settings,
+    historyIsolationEnabled,
+    getSettings: ctx.deps.getSettings,
     store: ctx.deps.store,
     claudeAuth: ctx.claudeAuth
   })
