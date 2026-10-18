@@ -1,39 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { getWorkspaceLastActiveAt, withCleanupVisitEvidence } from './workspace-last-active'
-import type { WorkspaceCleanupCandidate } from './workspace-cleanup'
+import { makeCleanupCandidate as candidate } from './workspace-last-active.test-fixture'
 
 vi.mock('./sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const NOW = 100 * DAY_MS
-
-function candidate(
-  overrides: Pick<WorkspaceCleanupCandidate, 'lastActivityAt' | 'reasons'>
-): WorkspaceCleanupCandidate {
-  return {
-    worktreeId: 'repo::/w',
-    repoId: 'repo',
-    repoName: 'Repo',
-    connectionId: null,
-    displayName: 'w',
-    branch: 'w',
-    path: '/w',
-    tier: 'ready',
-    selectedByDefault: true,
-    blockers: [],
-    localContext: {
-      terminalTabCount: 1,
-      cleanEditorTabCount: 0,
-      browserTabCount: 0,
-      diffCommentCount: 0,
-      newestDiffCommentAt: null,
-      retainedDoneAgentCount: 0
-    },
-    git: { clean: true, upstreamAhead: 0, upstreamBehind: 0, checkedAt: NOW },
-    fingerprint: 'f',
-    ...overrides
-  }
-}
 
 describe('workspace last active with the switch on', () => {
   it('takes the later of the Recent stamp and the last visit', () => {
@@ -41,6 +13,7 @@ describe('workspace last active with the switch on', () => {
     expect(getWorkspaceLastActiveAt(9, 5)).toBe(9)
     expect(getWorkspaceLastActiveAt(5, undefined)).toBe(5)
     expect(getWorkspaceLastActiveAt(5, Number.NaN)).toBe(5)
+    expect(getWorkspaceLastActiveAt(Number.NaN, 9)).toBe(9)
   })
 
   it('a newer visit only drops the idle reasons it disproves', () => {

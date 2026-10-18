@@ -14,12 +14,32 @@ import {
   getWorkspaceSpaceWorktreeIdentity
 } from './workspace-space-delete-selection'
 import type { WorkspaceSpaceWorktree } from '../../../../shared/workspace-space-types'
+import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
+import { getWorkspaceLastActiveAt } from '../../../../shared/workspace-last-active'
+import { getWorktreeVisitTimestamp } from '@/lib/worktree-visit-recency'
+import { useAppStore } from '@/store'
 import { getWorkspaceSpaceProgressLabel } from './workspace-space-format'
 import type { useWorkspaceSpaceManagerBindings } from './use-workspace-space-manager-bindings'
 import type { useWorkspaceSpaceDecisionProjection } from './use-workspace-space-decision-projection'
 import type { useWorkspaceSpaceGitRefreshAction } from './use-workspace-space-git-refresh-action'
 
 const GIT_STATUS_REFRESH_CONCURRENCY = 6
+
+function withVisitActivity(
+  rows: readonly WorkspaceSpaceWorktree[],
+  visits: Readonly<Record<string, number>> | undefined
+): readonly WorkspaceSpaceWorktree[] {
+  if (!visits) {
+    return rows
+  }
+  return rows.map((row) => {
+    const lastActivityAt = getWorkspaceLastActiveAt(
+      row.lastActivityAt,
+      getWorktreeVisitTimestamp(visits, { id: row.worktreeId, hostId: row.executionHostId })
+    )
+    return lastActivityAt === row.lastActivityAt ? row : { ...row, lastActivityAt }
+  })
+}
 type WorkspaceSpaceManagerBindings = ReturnType<typeof useWorkspaceSpaceManagerBindings>
 type WorkspaceSpaceDecisionProjection = ReturnType<typeof useWorkspaceSpaceDecisionProjection>
 
@@ -66,10 +86,18 @@ export function useWorkspaceSpaceManagerProjection(args: {
     [decisionDetailsByWorktreeId, isWorktreeDeleting]
   )
 
+  // Switch point: a visit counts as activity once terminals stop stamping Recent.
+  const lastVisitedAtByWorktreeId = useAppStore((s) =>
+    ORCA_SIDEBAR_INPUTS_IS_MAIN ? s.lastVisitedAtByWorktreeId : undefined
+  )
   const rows = useMemo(
     () =>
       sortWorkspaceSpaceRows(
-        filterWorkspaceSpaceRows(sourceRows, query, onlyDeletable).filter(
+        filterWorkspaceSpaceRows(
+          withVisitActivity(sourceRows, lastVisitedAtByWorktreeId),
+          query,
+          onlyDeletable
+        ).filter(
           (row) =>
             !onlyDeletable ||
             decisionDetailsByWorktreeId.get(getWorkspaceSpaceWorktreeIdentity(row))
@@ -78,7 +106,15 @@ export function useWorkspaceSpaceManagerProjection(args: {
         sortKey,
         sortDirection
       ),
-    [decisionDetailsByWorktreeId, onlyDeletable, query, sortDirection, sortKey, sourceRows]
+    [
+      decisionDetailsByWorktreeId,
+      lastVisitedAtByWorktreeId,
+      onlyDeletable,
+      query,
+      sortDirection,
+      sortKey,
+      sourceRows
+    ]
   )
 
   const nextInspectedWorktreeId = resolveWorkspaceSpaceInspectedWorktreeId(

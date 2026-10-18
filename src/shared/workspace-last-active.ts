@@ -16,7 +16,9 @@ export function getWorkspaceLastActiveAt(
   if (!ORCA_SIDEBAR_INPUTS_IS_MAIN) {
     return lastActivityAt
   }
-  return Math.max(lastActivityAt, Number.isFinite(lastVisitedAt) ? (lastVisitedAt ?? 0) : 0)
+  const finite = (value: number | undefined): number =>
+    value !== undefined && Number.isFinite(value) ? value : 0
+  return Math.max(finite(lastActivityAt), finite(lastVisitedAt))
 }
 
 /** A cleanup candidate seen with the client's visit; a newer visit can only drop idle reasons. */
