@@ -260,15 +260,20 @@ export async function readStructuredAgentSessionOptions(
   const permissionMode = record
     ? await structuredAgentSessionLaunchPermission(context.deps, record)
     : null
+  // The saved pick shows, except one the running child could not take (a model its provider says
+  // does not exist): that shows what the child runs instead.
+  const refused = live ? (adapter.readOptionRestoreFailures?.(sessionId) ?? []) : []
   const saved = record?.options
+  const shownSaved = (key: 'model' | 'effort'): boolean =>
+    saved?.[key] !== undefined && !refused.includes(key)
   const selected =
-    live && (saved?.model !== undefined || saved?.effort !== undefined)
+    live && (shownSaved('model') || shownSaved('effort'))
       ? await readStructuredAgentSessionOptionsAtRest(context.deps, sessionId, reader)
       : options
   const current = {
     ...options.current,
-    ...(saved?.model !== undefined ? { model: selected.current.model } : {}),
-    ...(saved?.effort !== undefined ? { effort: selected.current.effort } : {})
+    ...(shownSaved('model') ? { model: selected.current.model } : {}),
+    ...(shownSaved('effort') ? { effort: selected.current.effort } : {})
   }
   const confirmed = current.confirmed?.filter((key) =>
     key === 'model'
