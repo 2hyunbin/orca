@@ -26,10 +26,9 @@ import {
   isAuthError,
   isAgentFallbackError,
   shellEscape,
-  findDefaultKeyFile,
-  buildConnectConfig,
-  resolveAgentSocket
+  buildConnectConfig
 } from './ssh-connection-utils'
+import { findDefaultKeyFile, resolveAgentSocket } from './ssh-auth-resolution'
 import { resolveEffectiveProxy } from './ssh-proxy-command'
 import { walkInitialAuthLadder } from './ssh-connection-test-fixtures'
 import type { SshTarget } from '../../shared/ssh-types'

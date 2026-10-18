@@ -12,8 +12,6 @@ import {
 import { configurePrivateKeyAuthentication } from './ssh-private-key-authentication'
 import { isOpenSshConfigBackedTarget } from './system-ssh-args'
 
-export { findDefaultKeyFile, resolveAgentSocket } from './ssh-auth-resolution'
-
 export type SshCredentialKind = 'passphrase' | 'password' | 'keyboard-interactive'
 
 export type SshConnectionCallbacks = {
