@@ -1,8 +1,12 @@
 import type { Worktree } from '../../../shared/worktree/types'
 import { getWorktreeHostIdentity } from '../../../shared/worktree/host-qualified-identity'
+import { structuralValuesEqualIgnoringUndefined } from '../../../shared/structural-value-equality'
 
 /** One listing, as the window's catalog would hold it: each row's fields apart from sortOrder. */
-export type CatalogListing = ReadonlyMap<string, { row: string; sortOrder: number }>
+export type CatalogListing = ReadonlyMap<
+  string,
+  { row: Record<string, unknown>; sortOrder: number }
+>
 
 // Fields main's listing carries that the window's catalog rows do not.
 const MAIN_ONLY_FIELDS = new Set([
@@ -18,8 +22,8 @@ export function indexCatalogListing(worktrees: readonly Worktree[]): CatalogList
     worktrees.map((worktree) => [
       getWorktreeHostIdentity(worktree),
       {
-        row: JSON.stringify(worktree, (key, value: unknown) =>
-          MAIN_ONLY_FIELDS.has(key) ? undefined : value
+        row: Object.fromEntries(
+          Object.entries(worktree).filter(([key]) => !MAIN_ONLY_FIELDS.has(key))
         ),
         sortOrder: worktree.sortOrder
       }
@@ -29,7 +33,8 @@ export function indexCatalogListing(worktrees: readonly Worktree[]): CatalogList
 
 /**
  * How the window's catalog merge would read a new listing: a row change bumps its sort, a save
- * that only moved sortOrder does not (#27268), and an identical listing writes nothing.
+ * that only moved sortOrder does not (#27268), and an identical listing writes nothing. Rows
+ * match by identity; the window also bumps on a reorder, which a listing's fixed scan order avoids.
  */
 export function classifyCatalogListingChange(
   previous: CatalogListing,
@@ -41,7 +46,7 @@ export function classifyCatalogListingChange(
   let sortOrderMoved = false
   for (const [identity, entry] of next) {
     const before = previous.get(identity)
-    if (before?.row !== entry.row) {
+    if (!before || !structuralValuesEqualIgnoringUndefined(before.row, entry.row)) {
       return 'rows'
     }
     sortOrderMoved ||= before.sortOrder !== entry.sortOrder

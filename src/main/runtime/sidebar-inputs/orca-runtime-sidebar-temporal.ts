@@ -6,6 +6,7 @@ import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../../shared
 import { detectAgentStatusFromTitle } from '../../../shared/agent-detection'
 import type { SidebarTemporalSnapshot } from '../../../shared/sidebar-list/sidebar-temporal-snapshot'
 import type { Worktree } from '../../../shared/worktree/types'
+import type { Repo } from '../../../shared/repo-types'
 import { getMigrationUnsupportedPtySnapshot } from '../../agent-hooks/migration-unsupported-pty-state'
 import {
   SidebarTemporalOwner,
@@ -121,9 +122,8 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
   }
 
   // Ranks are host-qualified; a row without a stamped host belongs to its repo's host.
-  private async listSidebarRows(): Promise<Worktree[]> {
+  private async listSidebarRows(repoById = this.readSidebarRepoMap()): Promise<Worktree[]> {
     const { worktrees } = await this.listResolvedWorktreeSnapshot()
-    const repoById = new Map((this.store?.getRepos() ?? []).map((repo) => [repo.id, repo]))
     return worktrees.map((worktree) => {
       const repo = repoById.get(worktree.repoId)
       return worktree.hostId || !repo
@@ -132,10 +132,15 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     })
   }
 
+  private readSidebarRepoMap(): Map<string, Repo> {
+    return new Map((this.store?.getRepos() ?? []).map((repo) => [repo.id, repo]))
+  }
+
   private async readSidebarSortSample(): Promise<SidebarSortSample> {
+    const repoMap = this.readSidebarRepoMap()
     return {
-      worktrees: await this.listSidebarRows(),
-      repoMap: new Map((this.store?.getRepos() ?? []).map((repo) => [repo.id, repo])),
+      worktrees: await this.listSidebarRows(repoMap),
+      repoMap,
       sources: buildRuntimeSmartSortSources({
         tabs: this.tabs.values(),
         leaves: this.leaves.values(),

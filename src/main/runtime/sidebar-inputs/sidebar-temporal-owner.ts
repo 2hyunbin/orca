@@ -145,23 +145,14 @@ export class SidebarTemporalOwner {
     const previous = this.listing
     this.listing = indexCatalogListing(worktrees)
     const liveCount = countLiveRows(worktrees)
-    const change = this.takeRowsSeed(liveCount)
-      ? 'none'
-      : classifyCatalogListingChange(previous, this.listing)
-    if (change === 'none' && !repoChanged) {
+    if (this.takeRowsSeed(liveCount)) {
+      // The session's first sample may have read older rows; these replace it.
+      this.settleNow()
       return
     }
-    const settled =
-      change === 'rows'
-        ? this.noteSortInputChange(liveCount)
-        : // A catalog write with no sort bump: the window only checks whether rows came or went.
-          this.dispatchSettle({
-            kind: 'write',
-            change: { epochBumped: false, liveCount },
-            settled: false,
-            sortBy: this.sortBy,
-            previousSortBy: this.sortBy
-          })
+    const change = classifyCatalogListingChange(previous, this.listing)
+    // Every row change bumps here, so the count can only move on a bump; no other write settles.
+    const settled = change === 'rows' && this.noteSortInputChange(liveCount)
     const followsSave =
       change === 'sort-order' && ranksFollowPersistedOrder(this.sortBy, this.smartLatched)
     if (!settled && (repoChanged || followsSave)) {
