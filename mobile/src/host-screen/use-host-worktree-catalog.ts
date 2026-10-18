@@ -94,8 +94,10 @@ export function useHostWorktreeCatalog(args: {
     [hostCapabilities]
   )
 
+  // A re-read asked for during a flight: that flight may predate the change that asked.
+  const fetchWorktreesQueuedRef = useRef(false)
   const fetchWorktrees = useCallback(
-    async (options: { allowDuringModal?: boolean } = {}) => {
+    async (options: { allowDuringModal?: boolean; queueIfInFlight?: boolean } = {}) => {
       if (!client || connState !== 'connected' || !hostId) {
         return
       }
@@ -104,6 +106,7 @@ export function useHostWorktreeCatalog(args: {
       }
       // Why: prevent slow remote hosts from stacking overlapping worktree.ps requests during polling.
       if (fetchWorktreesInFlightRef.current) {
+        fetchWorktreesQueuedRef.current ||= options.queueIfInFlight === true
         return
       }
       fetchWorktreesInFlightRef.current = true
@@ -185,6 +188,10 @@ export function useHostWorktreeCatalog(args: {
         }
       } finally {
         fetchWorktreesInFlightRef.current = false
+        if (fetchWorktreesQueuedRef.current) {
+          fetchWorktreesQueuedRef.current = false
+          void fetchWorktrees(options)
+        }
       }
     },
     [client, connState, hostId, fetchServerRows]

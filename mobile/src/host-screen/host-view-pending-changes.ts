@@ -43,16 +43,50 @@ export function withPendingViewChanges(
   )
 }
 
-function sameValue(a: unknown, b: unknown): boolean {
-  return JSON.stringify(a) === JSON.stringify(b)
+/** Each stored value the change sets, keyed by what it writes; a collapse writes its one key. */
+function writesOf(change: PendingViewChange): Map<string, (ui: WorkspaceViewSettings) => boolean> {
+  if (change.kind === 'collapse') {
+    return new Map([
+      [
+        `collapse:${change.key}`,
+        (ui) => (ui.collapsedGroups?.includes(change.key) ?? false) === change.collapsed
+      ]
+    ])
+  }
+  return new Map(
+    Object.entries(change.payload).map(([field, value]) => [
+      field,
+      (ui) => JSON.stringify(new Map(Object.entries(ui)).get(field)) === JSON.stringify(value)
+    ])
+  )
 }
 
-/** Whether the desktop's saved values already hold what the change asked for. */
-export function isSettledByDesktop(change: PendingViewChange, ui: WorkspaceViewSettings): boolean {
-  if (change.kind === 'collapse') {
-    return (ui.collapsedGroups?.includes(change.key) ?? false) === change.collapsed
-  }
-  return Object.entries(change.payload).every(([field, value]) =>
-    sameValue(value, Object.entries(ui).find(([key]) => key === field)?.[1])
-  )
+/** Adds a change; an earlier one whose every write it repeats is no longer the user's intent. */
+export function addPendingViewChange(
+  pending: readonly PendingViewChange[],
+  change: PendingViewChange
+): PendingViewChange[] {
+  const writes = writesOf(change)
+  return [
+    ...pending.filter((earlier) => [...writesOf(earlier).keys()].some((key) => !writes.has(key))),
+    change
+  ]
+}
+
+/**
+ * The changes the desktop's values do not hold yet. Only changes sent before the read are judged
+ * by it, and a value a later change also writes is that change's to settle.
+ */
+export function reconcilePendingViewChanges(
+  pending: readonly PendingViewChange[],
+  ui: WorkspaceViewSettings,
+  sentByOpId: number
+): PendingViewChange[] {
+  return pending.filter((change, index) => {
+    if (change.opId > sentByOpId) {
+      return true
+    }
+    const later = new Set(pending.slice(index + 1).flatMap((next) => [...writesOf(next).keys()]))
+    return [...writesOf(change)].some(([key, holds]) => !later.has(key) && !holds(ui))
+  })
 }

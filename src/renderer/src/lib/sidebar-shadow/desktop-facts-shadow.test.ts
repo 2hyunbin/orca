@@ -32,7 +32,8 @@ describe('readWindowDesktopSidebarFacts', () => {
       sshConnectionStates: new Map([['box', sshState('auth-failed')]]),
       wslHostStatuses: {
         'env-2': { environmentId: 'env-2', distro: 'Ubuntu', state: 'ready', detail: null }
-      }
+      },
+      settings: null
     })
     expect(facts).toEqual({
       desktopActive: { hostId: 'local', worktreeId: 'repo-1::/a' },
@@ -44,7 +45,9 @@ describe('readWindowDesktopSidebarFacts', () => {
       ],
       workspaceHostOrder: ['ssh:box', 'local'],
       sshHosts: { 'ssh:box': { label: 'Build box', status: 'auth-failed' } },
-      wslHosts: { 'runtime:env-2': { distro: 'Ubuntu', state: 'ready' } }
+      wslHosts: { 'runtime:env-2': { distro: 'Ubuntu', state: 'ready' } },
+      focusedHostId: 'local',
+      hostLabels: {}
     })
   })
 })

@@ -117,7 +117,8 @@ export function sidebarInputsFeedDomains(
         const detaches = [
           watchCatalog(changed),
           store?.onUIChanged?.(changed),
-          store?.onWorkspaceSessionWritten?.(changed)
+          store?.onWorkspaceSessionWritten?.(changed),
+          store?.onSettingsChanged?.(changed)
         ]
         return () => detaches.forEach((detach) => detach?.())
       },

@@ -2,8 +2,10 @@ import {
   ALL_EXECUTION_HOSTS_SCOPE,
   LOCAL_EXECUTION_HOST_ID,
   getLocalExecutionHostLabel,
+  normalizeExecutionHostId,
   type ExecutionHostId
 } from '../../../src/shared/execution-host'
+import type { DesktopSidebarFacts } from '../../../src/shared/sidebar-list/desktop-sidebar-facts'
 import type { ProjectGroup } from '../../../src/shared/project-group-types'
 import type { Repo } from '../../../src/shared/repo-types'
 import type {
@@ -15,17 +17,6 @@ import type { ServedProjectSections } from '../worktree/project-sections-operati
 import type { MobileViewState } from '../worktree/workspace-view-settings'
 import type { SectionRepo } from '../worktree/workspace-list-types'
 
-/** Which host the desktop has focused and what it calls its hosts (settings.get). */
-export type DesktopHostFocus = {
-  focusedHostId: ExecutionHostId
-  hostLabelOverrides: ReadonlyMap<ExecutionHostId, string>
-}
-
-export const INITIAL_DESKTOP_HOST_FOCUS: DesktopHostFocus = {
-  focusedHostId: LOCAL_EXECUTION_HOST_ID,
-  hostLabelOverrides: new Map()
-}
-
 /**
  * The view the desktop's sidebar shows, from the shared UI state and settings this phone mirrors.
  * The host list is passed resolved with an "all" scope, which every builder step reads the same
@@ -35,12 +26,18 @@ export function buildHostFeedView(args: {
   view: MobileViewState
   projectOrderBy: ProjectOrderBy
   showPinnedInGroups: boolean
-  desktop: DesktopHostFocus
+  /** The feed's desktop facts: its focused host and its own names for its hosts. */
+  desktop: DesktopSidebarFacts | null
   /** The desktop's platform names its own host; the phone's must never. */
   hostPlatform: NodeJS.Platform | null
 }): SidebarFeedView {
   const { view, desktop, hostPlatform } = args
-  const hostLabelOverrides = new Map(desktop.hostLabelOverrides)
+  const hostLabelOverrides = new Map<ExecutionHostId, string>(
+    Object.entries(desktop?.hostLabels ?? {}).flatMap(([hostId, label]) => {
+      const id = normalizeExecutionHostId(hostId)
+      return id ? [[id, label] as const] : []
+    })
+  )
   if (hostPlatform && !hostLabelOverrides.has(LOCAL_EXECUTION_HOST_ID)) {
     hostLabelOverrides.set(LOCAL_EXECUTION_HOST_ID, getLocalExecutionHostLabel(hostPlatform))
   }
@@ -54,7 +51,7 @@ export function buildHostFeedView(args: {
     visibleWorkspaceHostIds: view.filters.visibleHostIds,
     workspaceStatuses: view.workspaceStatuses,
     pinnedDisplayPolicy: args.showPinnedInGroups ? 'duplicate-in-groups' : 'single-location',
-    defaultHostId: desktop.focusedHostId,
+    defaultHostId: normalizeExecutionHostId(desktop?.focusedHostId) ?? LOCAL_EXECUTION_HOST_ID,
     hostLabelOverrides
   }
 }

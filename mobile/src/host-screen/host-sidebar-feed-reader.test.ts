@@ -116,10 +116,7 @@ describe('readHostSidebarFeed', () => {
     expect(readHostSidebarFeed({ installed: null, unavailable: false })).toEqual({
       kind: 'loading'
     })
-    expect(readHostSidebarFeed({ installed, unavailable: false })).toMatchObject({
-      kind: 'ready',
-      revision: 'g:3'
-    })
+    expect(readHostSidebarFeed({ installed, unavailable: false })).toMatchObject({ kind: 'ready' })
   })
 
   it('asks to reopen when the host means other things by its inputs', () => {

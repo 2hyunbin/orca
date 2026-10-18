@@ -2,6 +2,7 @@ import { useAppStore, type AppState } from '@/store'
 import { getAllWorktreesFromState } from '@/store/selectors'
 import {
   getRepoExecutionHostId,
+  getSettingsFocusedExecutionHostId,
   parseExecutionHostId,
   toRuntimeExecutionHostId,
   toSshExecutionHostId
@@ -11,6 +12,7 @@ import {
   type DesktopSidebarFacts
 } from '../../../../shared/sidebar-list/desktop-sidebar-facts'
 import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
+import { getHostDisplayLabelOverrides } from '../../../../shared/host-setting-overrides'
 import { defineSidebarShadowDomain } from './sidebar-shadow-comparison'
 import { toLocallyOwnedRows } from './workspace-activity-shadow'
 
@@ -25,6 +27,7 @@ type WindowFactsState = Pick<
   | 'sshTargetLabels'
   | 'sshConnectionStates'
   | 'wslHostStatuses'
+  | 'settings'
 >
 
 /** The same facts from the window's own store, in main's shape, for the rows the local runtime owns. */
@@ -58,7 +61,9 @@ export function readWindowDesktopSidebarFacts(state: WindowFactsState): DesktopS
         toRuntimeExecutionHostId(status.environmentId),
         { distro: status.distro, state: status.state }
       ])
-    )
+    ),
+    focusedHostId: getSettingsFocusedExecutionHostId(state.settings),
+    hostLabels: Object.fromEntries(getHostDisplayLabelOverrides(state.settings))
   }
 }
 
@@ -67,7 +72,9 @@ function toComparedFacts(state: AppState, facts: DesktopSidebarFacts): Map<strin
   const compared = new Map<string, string>([
     ['desktopActive', JSON.stringify(facts.desktopActive)],
     ['repoOrder', JSON.stringify(facts.repoOrder)],
-    ['workspaceHostOrder', JSON.stringify(facts.workspaceHostOrder)]
+    ['workspaceHostOrder', JSON.stringify(facts.workspaceHostOrder)],
+    ['focusedHostId', JSON.stringify(facts.focusedHostId ?? null)],
+    ['hostLabels', JSON.stringify(facts.hostLabels ?? {})]
   ])
   const pinned = toLocallyOwnedRows(
     state,

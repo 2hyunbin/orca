@@ -17,8 +17,7 @@ const SUPPORTED_SIDEBAR_SEMANTICS_VERSIONS: readonly number[] = [SIDEBAR_INPUTS_
 
 export type HostSidebarFeed =
   | { kind: 'loading' }
-  /** `revision` names the installed batch, so a reader can follow each install. */
-  | { kind: 'ready'; domains: SidebarFeedDomains; revision: string }
+  | { kind: 'ready'; domains: SidebarFeedDomains }
   /** The host lacks the feed or means other things by it: only reopening the page can match it. */
   | { kind: 'reopen' }
 
@@ -43,16 +42,13 @@ export function readHostSidebarFeed({
   if (!SUPPORTED_SIDEBAR_SEMANTICS_VERSIONS.includes(installed.semanticsVersion)) {
     return { kind: 'reopen' }
   }
-  return {
-    kind: 'ready',
-    domains: readSidebarFeedDomains(installed),
-    revision: `${installed.generation}:${String(installed.revision)}`
-  }
+  return { kind: 'ready', domains: readSidebarFeedDomains(installed) }
 }
 
 /** The connected host's installed sidebar feed; a new client is a new host, read from scratch. */
 export function useHostSidebarFeed(client: RpcClient | null): HostSidebarFeedControls {
   const readerRef = useRef<HostSidebarFeedReader | null>(null)
+  const installListenersRef = useRef(new Set<() => void>())
   const [read, setRead] = useState(NOTHING_READ)
 
   useEffect(() => {
@@ -60,7 +56,14 @@ export function useHostSidebarFeed(client: RpcClient | null): HostSidebarFeedCon
     if (!client) {
       return
     }
-    const reader = new HostSidebarFeedReader(client, setRead)
+    let lastInstalled: HostSidebarFeedRead['installed'] = null
+    const reader = new HostSidebarFeedReader(client, (next) => {
+      setRead(next)
+      if (next.installed && next.installed !== lastInstalled) {
+        installListenersRef.current.forEach((listener) => listener())
+      }
+      lastInstalled = next.installed
+    })
     readerRef.current = reader
     return () => {
       reader.dispose()
@@ -74,7 +77,11 @@ export function useHostSidebarFeed(client: RpcClient | null): HostSidebarFeedCon
     (): HostSidebarFeedTriggers => ({
       refresh: () => readerRef.current?.refresh(),
       changed: (notice: Pick<SidebarInputsChangedEvent, 'generation' | 'revision'>) =>
-        readerRef.current?.changed(notice)
+        readerRef.current?.changed(notice),
+      onInstalled: (listener: () => void) => {
+        installListenersRef.current.add(listener)
+        return () => installListenersRef.current.delete(listener)
+      }
     }),
     []
   )

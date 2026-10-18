@@ -1,106 +1,108 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../src/shared/sidebar-inputs-switch'
 import type { RpcClient } from '../transport/rpc-client'
 import type { MobileViewPatch, WorkspaceViewSettings } from '../worktree/workspace-view-settings'
 import { hostViewSettingsWrite } from './host-screen-operations'
 import { readHostMethodReply, setCollapsedWrite } from './host-sidebar-feed-operations'
 import {
   PENDING_VIEW_CHANGE_STALE_MS,
-  isSettledByDesktop,
+  addPendingViewChange,
+  reconcilePendingViewChanges,
   type PendingViewChange
 } from './host-view-pending-changes'
 
-const REFUSED_NOTE = 'The desktop did not take that change.'
+/** How the desktop answered: `waiting` keeps the change (no answer is not a refusal). */
+export type PendingViewOutcome = 'settled' | 'refused' | 'unavailable' | 'waiting'
 
-export type HostPendingViewChanges = {
+export type PendingViewStatus = {
   pending: readonly PendingViewChange[]
   /** Some change has waited past PENDING_VIEW_CHANGE_STALE_MS. */
   stale: boolean
-  sendView: (patch: MobileViewPatch, payload: WorkspaceViewSettings) => void
-  /** `wholeList` writes the change the old way, for a host without ui.setCollapsed. */
-  sendCollapse: (key: string, collapsed: boolean, wholeList: () => void) => void
-  /** The changes still waiting once the desktop's values are read; after a reconnect each is resent. */
-  reconcile: (ui: WorkspaceViewSettings, options: { reconnected: boolean }) => PendingViewChange[]
 }
 
-/**
- * The phone's own option changes until the desktop answers each: acknowledged, refused (the
- * change is undone and a note says so), or already holding the asked value.
- */
-export function useHostPendingViewChanges(args: {
-  client: RpcClient | null
-  setActionError: (message: string) => void
-  /** Re-reads the desktop's values after a refusal, which undoes the change locally. */
-  resync: () => void
-}): HostPendingViewChanges {
-  const { client, setActionError, resync } = args
-  const pendingRef = useRef<PendingViewChange[]>([])
-  const [pending, setPending] = useState<readonly PendingViewChange[]>([])
-  const [stale, setStale] = useState(false)
+/** Stable for one client, so callers' callbacks never change with what is pending. */
+export type PendingViewControls = {
+  sendView: (patch: MobileViewPatch, payload: WorkspaceViewSettings) => Promise<PendingViewOutcome>
+  /** `unavailable`: the host has no ui.setCollapsed. */
+  sendCollapse: (key: string, collapsed: boolean) => Promise<PendingViewOutcome>
+  /** The last change sent; a read sent after it judges every change up to it. */
+  lastOpId: () => number
+  /** The changes still waiting once the desktop's values are read; after a reconnect each is resent. */
+  reconcile: (
+    ui: WorkspaceViewSettings,
+    options: { reconnected: boolean; sentByOpId: number }
+  ) => PendingViewChange[]
+}
+
+export type HostPendingViewChanges = { status: PendingViewStatus; controls: PendingViewControls }
+
+type OwnedChanges = { client: RpcClient | null; pending: readonly PendingViewChange[] }
+
+const NO_CHANGES: readonly PendingViewChange[] = []
+
+/** The phone's own option changes until the desktop answers each, for the client that sent them. */
+function useHostPendingViewChanges(client: RpcClient | null): HostPendingViewChanges {
+  const [owned, setOwned] = useState<OwnedChanges>({ client, pending: NO_CHANGES })
+  const ownedRef = useRef(owned)
   const seqRef = useRef(0)
   // A fresh writer per screen: its seq restarts at zero.
   const [writer] = useState(
     () => `phone-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
   )
+  // Another host's changes never show or settle here.
+  const pending = owned.client === client ? owned.pending : NO_CHANGES
+  const [stale, setStale] = useState(false)
 
-  const update = useCallback((next: PendingViewChange[]) => {
-    pendingRef.current = next
-    setPending(next)
-  }, [])
-  const settle = useCallback(
-    (opId: number) => update(pendingRef.current.filter((change) => change.opId !== opId)),
-    [update]
+  const current = useCallback(
+    () => (ownedRef.current.client === client ? ownedRef.current.pending : NO_CHANGES),
+    [client]
   )
-  const refuse = useCallback(
-    (opId: number) => {
-      settle(opId)
-      setActionError(REFUSED_NOTE)
-      resync()
+  const write = useCallback(
+    (next: readonly PendingViewChange[]) => {
+      ownedRef.current = { client, pending: next }
+      setOwned(ownedRef.current)
     },
-    [settle, setActionError, resync]
+    [client]
   )
 
   const send = useCallback(
-    (change: PendingViewChange, wholeList?: () => void) => {
+    async (change: PendingViewChange): Promise<PendingViewOutcome> => {
       if (!client) {
-        return
+        return 'waiting'
       }
-      if (change.kind === 'view') {
-        hostViewSettingsWrite.request(client, change.payload).then(
-          (reply) => (reply.ok ? settle(change.opId) : refuse(change.opId)),
-          // No answer is not a refusal: the value stays, waiting.
-          () => {}
-        )
-        return
+      let outcome: PendingViewOutcome
+      try {
+        if (change.kind === 'view') {
+          const reply = await hostViewSettingsWrite.request(client, change.payload)
+          outcome = reply.ok ? 'settled' : 'refused'
+        } else {
+          const reply = await setCollapsedWrite.request(client, {
+            key: change.key,
+            collapsed: change.collapsed,
+            opId: { writer, seq: change.opId }
+          })
+          const unavailable =
+            readHostMethodReply(reply, setCollapsedWrite.interpret).kind === 'unavailable'
+          outcome = unavailable ? 'unavailable' : reply.ok ? 'settled' : 'refused'
+        }
+      } catch {
+        return 'waiting'
       }
-      setCollapsedWrite
-        .request(client, {
-          key: change.key,
-          collapsed: change.collapsed,
-          opId: { writer, seq: change.opId }
-        })
-        .then(
-          (reply) => {
-            if (readHostMethodReply(reply, setCollapsedWrite.interpret).kind === 'unavailable') {
-              settle(change.opId)
-              wholeList?.()
-            } else if (reply.ok) {
-              settle(change.opId)
-            } else {
-              refuse(change.opId)
-            }
-          },
-          () => {}
-        )
+      if (ownedRef.current.client !== client) {
+        return 'waiting'
+      }
+      write(current().filter((candidate) => candidate.opId !== change.opId))
+      return outcome
     },
-    [client, settle, refuse, writer]
+    [client, writer, current, write]
   )
 
   const add = useCallback(
-    (change: PendingViewChange, wholeList?: () => void) => {
-      update([...pendingRef.current, change])
-      send(change, wholeList)
+    (change: PendingViewChange) => {
+      write(addPendingViewChange(current(), change))
+      return send(change)
     },
-    [update, send]
+    [current, write, send]
   )
   const nextOp = (): { opId: number; sentAt: number } => {
     seqRef.current += 1
@@ -113,23 +115,23 @@ export function useHostPendingViewChanges(args: {
     [add]
   )
   const sendCollapse = useCallback(
-    (key: string, collapsed: boolean, wholeList: () => void) =>
-      add({ ...nextOp(), kind: 'collapse', key, collapsed }, wholeList),
+    (key: string, collapsed: boolean) => add({ ...nextOp(), kind: 'collapse', key, collapsed }),
     [add]
   )
+  const lastOpId = useCallback(() => seqRef.current, [])
   const reconcile = useCallback(
-    (ui: WorkspaceViewSettings, { reconnected }: { reconnected: boolean }) => {
-      const waiting = pendingRef.current.filter((change) => !isSettledByDesktop(change, ui))
-      if (waiting.length !== pendingRef.current.length) {
-        update(waiting)
+    (ui: WorkspaceViewSettings, options: { reconnected: boolean; sentByOpId: number }) => {
+      const waiting = reconcilePendingViewChanges(current(), ui, options.sentByOpId)
+      if (waiting.length !== current().length) {
+        write(waiting)
       }
-      if (reconnected) {
+      if (options.reconnected) {
         // Each sets a desired value, so sending one again is safe.
-        waiting.forEach((change) => send(change))
+        waiting.forEach((change) => void send(change))
       }
       return waiting
     },
-    [update, send]
+    [current, write, send]
   )
 
   useEffect(() => {
@@ -139,14 +141,25 @@ export function useHostPendingViewChanges(args: {
       return
     }
     const wait = oldest.sentAt + PENDING_VIEW_CHANGE_STALE_MS - Date.now()
+    setStale(wait <= 0)
     if (wait <= 0) {
-      setStale(true)
       return
     }
-    setStale(false)
     const timer = setTimeout(() => setStale(true), wait)
     return () => clearTimeout(timer)
   }, [pending])
 
-  return { pending, stale, sendView, sendCollapse, reconcile }
+  const controls = useMemo(
+    () => ({ sendView, sendCollapse, lastOpId, reconcile }),
+    [sendView, sendCollapse, lastOpId, reconcile]
+  )
+  const status = useMemo(() => ({ pending, stale }), [pending, stale])
+  return { status, controls }
 }
+
+/** Switch point: a page built without the feed sends its changes best-effort, with no pending state. */
+export const useSwitchedHostPendingViewChanges: (
+  client: RpcClient | null
+) => HostPendingViewChanges | null = ORCA_SIDEBAR_INPUTS_IS_MAIN
+  ? useHostPendingViewChanges
+  : () => null

@@ -166,7 +166,7 @@ describe('startHostWorktreeRefresh', () => {
 
   describe('with the host’s sidebar feed', () => {
     it('reads it at start, on every ready and on foreground, and never polls', async () => {
-      const sidebarFeed = { refresh: vi.fn(), changed: vi.fn() }
+      const sidebarFeed = { refresh: vi.fn(), changed: vi.fn(), onInstalled: vi.fn(() => () => {}) }
       start(sidebarFeed)
       expect(sidebarFeed.refresh).toHaveBeenCalledTimes(1)
       eventListener?.({ type: 'ready', subscriptionId: 'events-1' })
@@ -182,8 +182,28 @@ describe('startHostWorktreeRefresh', () => {
       expect(fetchWorktrees).not.toHaveBeenCalled()
     })
 
+    it('re-reads each row’s live content on every install, queued behind a read in flight', () => {
+      let installed = (): void => {}
+      const stopFollowing = vi.fn()
+      const sidebarFeed = {
+        refresh: vi.fn(),
+        changed: vi.fn(),
+        onInstalled: vi.fn((listener: () => void) => {
+          installed = listener
+          return stopFollowing
+        })
+      }
+      start(sidebarFeed)
+      fetchWorktrees.mockClear()
+      installed()
+      expect(fetchWorktrees).toHaveBeenCalledWith({ queueIfInFlight: true })
+      stop?.()
+      stop = null
+      expect(stopFollowing).toHaveBeenCalledOnce()
+    })
+
     it('hands each change notice to the feed', () => {
-      const sidebarFeed = { refresh: vi.fn(), changed: vi.fn() }
+      const sidebarFeed = { refresh: vi.fn(), changed: vi.fn(), onInstalled: vi.fn(() => () => {}) }
       start(sidebarFeed)
       eventListener?.({ type: 'sidebarInputsChanged', generation: 'g', revision: 4 })
       expect(sidebarFeed.changed).toHaveBeenCalledWith(

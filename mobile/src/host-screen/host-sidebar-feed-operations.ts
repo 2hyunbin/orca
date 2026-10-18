@@ -1,6 +1,4 @@
 import { z } from 'zod'
-import { getSettingsFocusedExecutionHostId } from '../../../src/shared/execution-host'
-import { getHostDisplayLabelOverrides } from '../../../src/shared/host-setting-overrides'
 import { SidebarInputsReadResultSchema } from '../../../src/shared/sidebar-list/sidebar-inputs-feed-contract'
 import { bindDeferredRpcOperation, defineRpcOperation } from '../transport/rpc-operation'
 import { rpcResultVariant } from '../transport/rpc-operation-result-reader'
@@ -44,38 +42,6 @@ export const setCollapsedWrite = bindDeferredRpcOperation(
       'collapse-written',
       z.object({ collapsed: z.boolean(), applied: z.boolean() })
     )
-  })
-)
-
-const hostSidebarFocusSchema = z
-  .object({
-    settings: z
-      .object({
-        activeRuntimeEnvironmentId: z.string().nullable().optional().catch(null),
-        hostSettingOverrides: z
-          .record(z.string(), z.object({ displayLabel: z.string().optional() }).catch({}))
-          .optional()
-          .catch({})
-      })
-      .catch({})
-  })
-  .transform(({ settings }) => ({
-    focusedHostId: getSettingsFocusedExecutionHostId(settings),
-    hostLabelOverrides: getHostDisplayLabelOverrides(settings)
-  }))
-
-/**
- * The desktop settings a feed-built list reads beside the shared view: the host its sidebar has
- * focused, where rows that name no owner land, and its own names for its hosts. Read off the
- * settings.get reply the list settings already come from.
- */
-export const hostSidebarFocusRead = bindDeferredRpcOperation(
-  defineRpcOperation({
-    name: 'settings.host-sidebar-focus-or-skip',
-    method: 'settings.get',
-    acceptance: 'success-result-or-skip',
-    barrier: 'after-caller-barrier',
-    read: rpcResultVariant('host-sidebar-focus', hostSidebarFocusSchema)
   })
 )
 

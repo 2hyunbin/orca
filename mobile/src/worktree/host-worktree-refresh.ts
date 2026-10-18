@@ -5,7 +5,7 @@ import type { SidebarInputsChangedEvent } from '../../../src/shared/sidebar-list
 
 const WORKTREE_REFRESH_MS = 3000
 
-type WorktreeRefreshOptions = { allowDuringModal?: boolean }
+type WorktreeRefreshOptions = { allowDuringModal?: boolean; queueIfInFlight?: boolean }
 type RepoRefreshOptions = { force?: boolean; queueIfInFlight?: boolean }
 
 type HostWorktreeRefreshArgs = {
@@ -21,6 +21,8 @@ type HostWorktreeRefreshArgs = {
 export type HostSidebarFeedTriggers = {
   refresh: () => void
   changed: (notice: Pick<SidebarInputsChangedEvent, 'generation' | 'revision'>) => void
+  /** Each new install; returns the unsubscribe. */
+  onInstalled: (listener: () => void) => () => void
 }
 
 export function startHostWorktreeRefresh({
@@ -103,6 +105,10 @@ export function startHostWorktreeRefresh({
     }
   )
 
+  // A row's live content (agents, terminals) may follow any install; worktree.ps carries it.
+  const stopFollowingFeed = sidebarFeed?.onInstalled(
+    () => void fetchWorktrees({ queueIfInFlight: true })
+  )
   sidebarFeed?.refresh()
   void fetchWorktrees()
   void fetchRepoMetadata({ force: true, queueIfInFlight: true })
@@ -112,6 +118,7 @@ export function startHostWorktreeRefresh({
     if (interval) {
       clearInterval(interval)
     }
+    stopFollowingFeed?.()
     appStateSubscription.remove()
     unsubscribe()
   }

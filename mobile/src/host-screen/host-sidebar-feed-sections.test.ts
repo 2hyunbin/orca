@@ -5,11 +5,7 @@ import {
 } from '../../../src/shared/sidebar-list/sidebar-feed-rows'
 import type { ExecutionHostScope } from '../../../src/shared/execution-host'
 import { resolveVisibleWorkspaceHostIds } from '../../../src/shared/workspace-view/workspace-host-visibility'
-import {
-  buildHostFeedCatalog,
-  buildHostFeedView,
-  INITIAL_DESKTOP_HOST_FOCUS
-} from './host-sidebar-feed-inputs'
+import { buildHostFeedCatalog, buildHostFeedView } from './host-sidebar-feed-inputs'
 import { buildHostFeedSections } from './host-sidebar-feed-sections'
 import { SERVED_SECTIONS, feedDomains, liveRow, phoneView } from './host-sidebar-feed.test-fixture'
 import type { MobileViewState } from '../worktree/workspace-view-settings'
@@ -21,7 +17,7 @@ function phoneFeedView(view: MobileViewState, showPinnedInGroups = false): Sideb
     view,
     projectOrderBy: 'manual',
     showPinnedInGroups,
-    desktop: INITIAL_DESKTOP_HOST_FOCUS,
+    desktop: feedDomains().desktop,
     hostPlatform: 'darwin'
   })
 }
@@ -136,6 +132,16 @@ describe('the phone list from the sidebar feed', () => {
       liveTerminalCount: 0,
       isPinned: true
     })
+  })
+
+  it('never draws one host’s live row under another host’s workspace of the same id', () => {
+    const sections = sectionsFor(phoneView(), {
+      live: [liveRow({ worktreeId: 'lab::/w/gpu', hostId: 'local', liveTerminalCount: 5 })]
+    })
+    const remote = sections
+      .flatMap((section) => section.data)
+      .find((row) => row.worktreeId === 'lab::/w/gpu')
+    expect(remote).toMatchObject({ hostId: 'ssh:gpu', liveTerminalCount: 0 })
   })
 
   it('keeps a collapsed section’s header and count with no rows under it', () => {

@@ -56,6 +56,11 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
   } = controller
   const { rawSections, sections, repoById } = sectionsResult
   const { pending } = settings.pendingViewChanges
+  // A feed-built list counts its own rows: worktree.ps only adds what each row draws.
+  const feedRowCount = useMemo(
+    () => sections.reduce((count, section) => count + section.data.length, 0),
+    [sections]
+  )
   // A collapse the desktop has not answered spins on its header.
   const pendingCollapseKeys = useMemo(
     () => new Set(pending.flatMap((change) => (change.kind === 'collapse' ? [change.key] : []))),
@@ -140,7 +145,7 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
           worktreesLoaded={
             controller.feed ? controller.feed.kind === 'ready' : state.worktreesLoaded
           }
-          displayCount={controller.feed?.kind === 'loading' ? 0 : displayWorktrees.length}
+          displayCount={controller.feed ? feedRowCount : displayWorktrees.length}
           sectionCount={sections.length}
           catalogError={state.catalogError}
           search={state.search}

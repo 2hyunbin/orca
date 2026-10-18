@@ -11,7 +11,6 @@ import type { ServedProjectSections } from '../worktree/project-sections-operati
 import type { SectionRepo } from '../worktree/workspace-list-types'
 import { NO_SERVER_WORKSPACES, type ServerWorkspaces } from '../worktree/server-workspaces'
 import type { ProjectGroup } from '../../../src/shared/project-group-types'
-import { INITIAL_DESKTOP_HOST_FOCUS } from './host-sidebar-feed-inputs'
 
 export function useHostScreenState(hostId: string | undefined, action: string | undefined) {
   const [initialCache] = useState(() =>
@@ -83,8 +82,7 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set())
   // Desktop's "Also show pinned worktrees in their original lists"; off by default.
   const [showPinnedInGroups, setShowPinnedInGroups] = useState(false)
-  // A feed-built list's: the desktop's focused host and host names, and a windowless host's groups.
-  const [desktopHostFocus, setDesktopHostFocus] = useState(INITIAL_DESKTOP_HOST_FOCUS)
+  // A feed-built list's project groups on a host with no window to publish them.
   const [hostProjectGroups, setHostProjectGroups] = useState<readonly ProjectGroup[]>([])
 
   return {
@@ -93,7 +91,6 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     clientRef,
     confirmDelete,
     confirmRemoveHost,
-    desktopHostFocus,
     hostProjectGroups,
     actionError,
     error,
@@ -122,7 +119,6 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     setCatalogError,
     setConfirmDelete,
     setConfirmRemoveHost,
-    setDesktopHostFocus,
     setHostProjectGroups,
     setActionError,
     setError,

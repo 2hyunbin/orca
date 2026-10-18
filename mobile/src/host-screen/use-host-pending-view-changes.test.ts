@@ -1,6 +1,9 @@
 import { createElement } from 'react'
 import { act, create } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('../../../src/shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
+
 import {
   SetCollapsedParams,
   type SetCollapsedRequest
@@ -10,12 +13,15 @@ import type { RpcResponse } from '../transport/types'
 import { INITIAL_MOBILE_VIEW } from '../worktree/workspace-view-settings'
 import {
   PENDING_VIEW_CHANGE_STALE_MS,
-  isSettledByDesktop,
-  withPendingViewChanges
+  addPendingViewChange,
+  reconcilePendingViewChanges,
+  withPendingViewChanges,
+  type PendingViewChange
 } from './host-view-pending-changes'
 import {
-  useHostPendingViewChanges,
-  type HostPendingViewChanges
+  useSwitchedHostPendingViewChanges,
+  type HostPendingViewChanges,
+  type PendingViewOutcome
 } from './use-host-pending-view-changes'
 
 function ok(): RpcResponse {
@@ -34,21 +40,15 @@ function refused(code: string): RpcResponse {
 function mount(sendRequest: (method: string, params: unknown) => Promise<RpcResponse>) {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the hook calls only sendRequest.
   const client = { sendRequest: vi.fn(sendRequest) } as unknown as RpcClient
-  const notes: string[] = []
-  const resync = vi.fn()
   let changes: HostPendingViewChanges | null = null
   function Probe(): null {
-    changes = useHostPendingViewChanges({
-      client,
-      setActionError: (note) => notes.push(note),
-      resync
-    })
+    changes = useSwitchedHostPendingViewChanges(client)
     return null
   }
   act(() => {
     create(createElement(Probe))
   })
-  return { client, notes, resync, current: () => changes! }
+  return { client, current: () => changes! }
 }
 
 async function flush(): Promise<void> {
@@ -66,106 +66,141 @@ describe('the phone’s own option changes', () => {
   it('show as pending until the desktop acknowledges them', async () => {
     let answer: (reply: RpcResponse) => void = () => {}
     const screen = mount(() => new Promise((resolve) => (answer = resolve)))
-    act(() => screen.current().sendView({ groupBy: 'none' }, { groupBy: 'none' }))
-    expect(screen.current().pending).toHaveLength(1)
+    let outcome: Promise<PendingViewOutcome> | null = null
+    act(() => {
+      outcome = screen.current().controls.sendView({ groupBy: 'none' }, { groupBy: 'none' })
+    })
+    expect(screen.current().status.pending).toHaveLength(1)
     answer(ok())
     await flush()
-    expect(screen.current().pending).toEqual([])
-    expect(screen.notes).toEqual([])
+    expect(await outcome).toBe('settled')
+    expect(screen.current().status.pending).toEqual([])
   })
 
-  it('undo a refused change and say so', async () => {
+  it('drop a refused change and say it was refused', async () => {
     const screen = mount(async () => refused('invalid_params'))
-    act(() => screen.current().sendView({ groupBy: 'none' }, { groupBy: 'none' }))
+    let outcome: Promise<PendingViewOutcome> | null = null
+    act(() => {
+      outcome = screen.current().controls.sendView({ groupBy: 'none' }, { groupBy: 'none' })
+    })
     await flush()
-    expect(screen.current().pending).toEqual([])
-    expect(screen.notes).toEqual(['The desktop did not take that change.'])
-    expect(screen.resync).toHaveBeenCalledTimes(1)
+    expect(await outcome).toBe('refused')
+    expect(screen.current().status.pending).toEqual([])
   })
 
-  it('keep a change the desktop has not answered, saying so after ten seconds', async () => {
+  it('keep a change the desktop has not answered, saying so after ten seconds', () => {
     vi.useFakeTimers()
     const screen = mount(() => new Promise(() => {}))
-    act(() => screen.current().sendView({ sortBy: 'name' }, { sortBy: 'name' }))
-    expect(screen.current().stale).toBe(false)
+    act(() => void screen.current().controls.sendView({ sortBy: 'name' }, { sortBy: 'name' }))
+    expect(screen.current().status.stale).toBe(false)
     act(() => vi.advanceTimersByTime(PENDING_VIEW_CHANGE_STALE_MS))
-    expect(screen.current().stale).toBe(true)
-    expect(screen.current().pending).toHaveLength(1)
-    expect(screen.notes).toEqual([])
+    expect(screen.current().status.stale).toBe(true)
+    expect(screen.current().status.pending).toHaveLength(1)
   })
 
   it('keep a change whose request dropped, and resend it after a reconnect', async () => {
     const screen = mount(async () => {
       throw new Error('client_disconnected')
     })
-    act(() => screen.current().sendView({ sortBy: 'name' }, { sortBy: 'name' }))
+    act(() => void screen.current().controls.sendView({ sortBy: 'name' }, { sortBy: 'name' }))
     await flush()
-    expect(screen.current().pending).toHaveLength(1)
-    let waiting: unknown[] = []
+    expect(screen.current().status.pending).toHaveLength(1)
+    const sentByOpId = screen.current().controls.lastOpId()
     act(() => {
-      waiting = screen.current().reconcile({ sortBy: 'recent' }, { reconnected: true })
+      screen.current().controls.reconcile({ sortBy: 'recent' }, { reconnected: true, sentByOpId })
     })
-    expect(waiting).toHaveLength(1)
     expect(screen.client.sendRequest).toHaveBeenCalledTimes(2)
     act(() => {
-      waiting = screen.current().reconcile({ sortBy: 'name' }, { reconnected: false })
+      screen.current().controls.reconcile({ sortBy: 'name' }, { reconnected: false, sentByOpId })
     })
-    expect(waiting).toEqual([])
-    expect(screen.current().pending).toEqual([])
+    expect(screen.current().status.pending).toEqual([])
   })
 
-  it('collapse one section with ui.setCollapsed, falling back to the whole list without it', async () => {
-    const methods: string[] = []
-    const screen = mount(async (method) => {
-      methods.push(method)
-      return refused('method_not_found')
+  it('report a host without ui.setCollapsed, which then takes the whole list', async () => {
+    const screen = mount(async () => refused('method_not_found'))
+    let outcome: Promise<PendingViewOutcome> | null = null
+    act(() => {
+      outcome = screen.current().controls.sendCollapse('repo:orca', true)
     })
-    const wholeList = vi.fn()
-    act(() => screen.current().sendCollapse('repo:orca', true, wholeList))
     await flush()
-    expect(methods).toEqual(['ui.setCollapsed'])
-    expect(wholeList).toHaveBeenCalledTimes(1)
-    expect(screen.current().pending).toEqual([])
+    expect(await outcome).toBe('unavailable')
+    expect(screen.current().status.pending).toEqual([])
   })
 
-  it('sends a collapse with a growing seq under one writer', async () => {
+  it('send collapses under one writer with a growing seq', async () => {
     const sent: SetCollapsedRequest[] = []
     const screen = mount(async (_method, params) => {
       sent.push(SetCollapsedParams.parse(params))
       return ok()
     })
-    act(() => screen.current().sendCollapse('a', true, () => {}))
-    act(() => screen.current().sendCollapse('a', false, () => {}))
+    act(() => void screen.current().controls.sendCollapse('a', true))
+    act(() => void screen.current().controls.sendCollapse('a', false))
     await flush()
     const [first, second] = sent
     expect(second.opId.writer).toBe(first.opId.writer)
     expect(second.opId.seq).toBeGreaterThan(first.opId.seq)
   })
+
+  it('keep the same controls while changes come and go', async () => {
+    const screen = mount(async () => ok())
+    const before = screen.current().controls
+    act(() => void screen.current().controls.sendView({ sortBy: 'name' }, { sortBy: 'name' }))
+    await flush()
+    expect(screen.current().controls).toBe(before)
+  })
 })
 
 describe('pending changes over the desktop’s values', () => {
+  const collapse = (opId: number, collapsed: boolean): PendingViewChange => ({
+    opId,
+    sentAt: 0,
+    kind: 'collapse',
+    key: 'k',
+    collapsed
+  })
+
   it('lay the desired values over the view, oldest first', () => {
     const view = withPendingViewChanges(INITIAL_MOBILE_VIEW, [
       { opId: 1, sentAt: 0, kind: 'view', patch: { groupBy: 'none' }, payload: {} },
-      { opId: 2, sentAt: 0, kind: 'collapse', key: 'k', collapsed: true },
+      collapse(2, true),
       { opId: 3, sentAt: 0, kind: 'view', patch: { groupBy: 'pr-status' }, payload: {} }
     ])
     expect(view.groupBy).toBe('pr-status')
     expect(view.collapsedGroups).toEqual(['k'])
   })
 
-  it('settle once the desktop holds the asked value', () => {
-    const collapse = { opId: 1, sentAt: 0, kind: 'collapse' as const, key: 'k', collapsed: true }
-    expect(isSettledByDesktop(collapse, { collapsedGroups: ['k'] })).toBe(true)
-    expect(isSettledByDesktop(collapse, { collapsedGroups: [] })).toBe(false)
-    const filter = {
+  it('keep only the latest intent for a section toggled twice', () => {
+    const pending = addPendingViewChange([collapse(1, true)], collapse(2, false))
+    expect(pending.map((change) => change.opId)).toEqual([2])
+    // The desktop already shows it expanded, the latest intent, so nothing waits.
+    expect(reconcilePendingViewChanges(pending, { collapsedGroups: [] }, 2)).toEqual([])
+  })
+
+  it('judge only changes sent before the read', () => {
+    const pending = [collapse(3, true)]
+    expect(reconcilePendingViewChanges(pending, { collapsedGroups: ['k'] }, 2)).toHaveLength(1)
+    expect(reconcilePendingViewChanges(pending, { collapsedGroups: ['k'] }, 3)).toEqual([])
+  })
+
+  it('leave a value a later change also writes to that change', () => {
+    const narrowed: PendingViewChange = {
+      opId: 1,
+      sentAt: 0,
+      kind: 'view',
+      patch: {},
+      payload: { visibleWorkspaceHostIds: ['ssh:a'], workspaceHostScope: 'ssh:a' }
+    }
+    const widened: PendingViewChange = {
       opId: 2,
       sentAt: 0,
-      kind: 'view' as const,
+      kind: 'view',
       patch: {},
-      payload: { filterRepoIds: ['a'] }
+      payload: { visibleWorkspaceHostIds: ['ssh:a', 'local'] }
     }
-    expect(isSettledByDesktop(filter, { filterRepoIds: ['a'] })).toBe(true)
-    expect(isSettledByDesktop(filter, { filterRepoIds: [] })).toBe(false)
+    const pending = addPendingViewChange([narrowed], widened)
+    expect(pending).toHaveLength(2)
+    // The scope the first wrote holds; its host list is the second's to settle.
+    const waiting = reconcilePendingViewChanges(pending, { workspaceHostScope: 'ssh:a' }, 2)
+    expect(waiting.map((change) => change.opId)).toEqual([2])
   })
 })

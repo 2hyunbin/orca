@@ -9,6 +9,7 @@ import type { HostSectionRow } from '../../../src/shared/sidebar-list/host-secti
 import type { GroupHeaderRow } from '../../../src/shared/sidebar-list/row-types'
 import { PR_GROUP_LABELS } from '../../../src/shared/workspace-view/workspace-pr-groups'
 import type { Worktree as HostWorktree } from '../../../src/shared/worktree/types'
+import { composeWorktreeHostIdentity } from '../../../src/shared/worktree/host-qualified-identity'
 import type { Section, Worktree } from '../worktree/workspace-list-types'
 import { resolveWorktreeHostId } from '../worktree/worktree-host-context-labels'
 
@@ -41,17 +42,18 @@ function indexLiveRows(
   rows: readonly Worktree[],
   repoHostIdByRepoId: ReadonlyMap<string, ExecutionHostId>
 ): (id: string, hostId: ExecutionHostId) => Worktree | undefined {
-  const byId = new Map<string, Worktree[]>()
+  const byIdentity = new Map<string, Worktree>()
   for (const row of rows) {
-    byId.set(row.worktreeId, [...(byId.get(row.worktreeId) ?? []), row])
+    const identity = composeWorktreeHostIdentity(
+      resolveWorktreeHostId(row, repoHostIdByRepoId),
+      row.worktreeId
+    )
+    if (!byIdentity.has(identity)) {
+      byIdentity.set(identity, row)
+    }
   }
-  return (id, hostId) => {
-    const candidates = byId.get(id) ?? []
-    // One row with the id is that row, whatever host spelling either side used.
-    return candidates.length === 1
-      ? candidates[0]
-      : candidates.find((row) => resolveWorktreeHostId(row, repoHostIdByRepoId) === hostId)
-  }
+  // The same id can live on two hosts; only the row's own host's copy draws it.
+  return (id, hostId) => byIdentity.get(composeWorktreeHostIdentity(hostId, id))
 }
 
 /** A row worktree.ps has not listed yet: drawn from the feed alone, with no live content. */
@@ -175,11 +177,13 @@ export function buildHostFeedSections(sources: HostFeedListSources): Section[] {
   return query ? narrowSections(sections, query) : sections
 }
 
+/** A section whose title matches keeps every row; otherwise only matching rows, counted as shown. */
 function narrowSections(sections: readonly Section[], query: string): Section[] {
   return sections.flatMap((section) => {
+    if (section.title.toLowerCase().includes(query)) {
+      return [section]
+    }
     const data = section.data.filter((row) => matchesSearch(row, query))
-    return data.length > 0 || section.title.toLowerCase().includes(query)
-      ? [{ ...section, data }]
-      : []
+    return data.length > 0 ? [{ ...section, data, count: data.length }] : []
   })
 }

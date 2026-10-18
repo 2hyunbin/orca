@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useLocalSearchParams, usePathname } from 'expo-router'
 import { useRouteHandoff } from '../navigation/route-handoff'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -124,14 +124,6 @@ export function useHostScreenController({
   const feed = sidebarFeed?.feed ?? null
   const sectionsResult = useHostListSections({ client, feed, displayWorktrees, state })
   const { collapsedGroups, projectOrderBy } = sectionsResult
-  // Each install may follow a change a row draws (an agent, a terminal); worktree.ps carries those.
-  const feedRevision = feed?.kind === 'ready' ? feed.revision : null
-  const { fetchWorktrees } = catalog
-  useEffect(() => {
-    if (feedRevision) {
-      void fetchWorktrees()
-    }
-  }, [feedRevision, fetchWorktrees])
   const { uniqueRepos } = sectionsResult
   const activeFilterCount = useMemo(
     () =>
