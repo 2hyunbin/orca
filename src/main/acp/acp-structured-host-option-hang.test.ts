@@ -76,6 +76,7 @@ describe('a Grok model pick Grok never answers', () => {
     expect(await within(host.readOptions(SESSION), 1_000)).not.toBe('pending')
     const [frame] = framesOf(rig.child(), 'session/set_config_option')
     const savedModel = store.getRecord(SESSION)?.options?.model
+    expect(savedModel).toBe('grok-4.7')
     rig.child().agent.reply(frame!, {
       configOptions: GROK_CONFIG_OPTIONS.map((option) =>
         option.id === 'model' ? { ...option, currentValue: 'grok-4.6' } : option
@@ -86,7 +87,7 @@ describe('a Grok model pick Grok never answers', () => {
         (await rig.adapter.readOptions({ sessionId: SESSION, fence: fence() })).current.model
       ).toBe('grok-4.6')
     )
-    expect((await host.readOptions(SESSION)).current.model).toBe(savedModel)
+    expect((await host.readOptions(SESSION)).current.model).toBe('grok-4.6')
     expect(store.getRecord(SESSION)?.options?.model).toBe(savedModel)
     await host.close(SESSION, 'user-close')
   })

@@ -1,4 +1,4 @@
-import type { AgentSessionAccountHome } from '../../../shared/agent-session-account-home'
+import type { AgentModelCatalogProbe } from './agent-model-catalog-discovery'
 import type { AgentModelCatalogPersistence } from './agent-model-catalog-persistence'
 import { startSpan } from '../../observability/tracer'
 import {
@@ -37,24 +37,10 @@ export type { AgentModelCatalogFailure }
 export const AGENT_MODEL_CATALOG_FRESH_MS = 2 * 60_000
 export const AGENT_MODEL_CATALOG_MAX_ENTRIES = 256
 
-/** Lists an agent's models without a session, under the account a launch would pin. `signal`
- *  stops the listing and its child once the host that asked is going away. */
-export type AgentModelCatalogResolvedProbe = {
-  identity: unknown
-  run: (signal?: AbortSignal) => Promise<AgentModelCatalogSuccess>
-}
-
-export type AgentModelCatalogProbe = ((
-  accountHome: AgentSessionAccountHome,
-  options?: { signal?: AbortSignal; cwd?: string }
-) => Promise<AgentModelCatalogSuccess>) & {
-  resolveLegacy?: (home: AgentSessionAccountHome) => Promise<AgentModelCatalogResolvedProbe>
-  resolve?: (
-    accountHome: AgentSessionAccountHome,
-    cwd: string,
-    saved?: Readonly<Record<string, string>>
-  ) => Promise<AgentModelCatalogResolvedProbe>
-}
+export type {
+  AgentModelCatalogProbe,
+  AgentModelCatalogResolvedProbe
+} from './agent-model-catalog-discovery'
 
 /** Who lists, by identity: a live session's per-spawn handle, or the session-less probe. */
 export type AgentModelCatalogLister = AgentModelCatalogSessionAccess | AgentModelCatalogProbe

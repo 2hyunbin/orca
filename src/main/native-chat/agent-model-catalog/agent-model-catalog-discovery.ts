@@ -1,3 +1,4 @@
+import type { AgentSessionAccountHome } from '../../../shared/agent-session-account-home'
 import type { AgentSessionModelCatalogResult } from '../../../shared/agent-session-wire'
 import type {
   AgentModelCatalogEntry,
@@ -6,7 +7,24 @@ import type {
   AgentModelCatalogSuccess
 } from './agent-model-catalog-entry'
 
-import type { AgentModelCatalogProbe } from './agent-model-catalog-store'
+/** Lists an agent's models without a session, under the account a launch would pin. `signal`
+ *  stops the listing and its child once the host that asked is going away. */
+export type AgentModelCatalogResolvedProbe = {
+  identity: unknown
+  run: (signal?: AbortSignal) => Promise<AgentModelCatalogSuccess>
+}
+
+export type AgentModelCatalogProbe = ((
+  accountHome: AgentSessionAccountHome,
+  options?: { signal?: AbortSignal; cwd?: string }
+) => Promise<AgentModelCatalogSuccess>) & {
+  resolveLegacy?: (home: AgentSessionAccountHome) => Promise<AgentModelCatalogResolvedProbe>
+  resolve?: (
+    accountHome: AgentSessionAccountHome,
+    cwd: string,
+    saved?: Readonly<Record<string, string>>
+  ) => Promise<AgentModelCatalogResolvedProbe>
+}
 
 /**
  * What every agent registration must say about its models: a probe that lists them without
