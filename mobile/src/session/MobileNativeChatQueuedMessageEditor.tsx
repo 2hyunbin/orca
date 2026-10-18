@@ -4,6 +4,7 @@ import { Check, X } from 'lucide-react-native'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 import { mobileNativeChatInputStyles } from './mobile-native-chat-input-styles'
 import type { MobileQueuedMessageInlineEditor } from './use-mobile-structured-queued-edit'
+import { useTextInputContentHeight } from '../platform/text-input-content-height'
 
 const BUTTON_SIZE = 28
 const ICON_SIZE = 16
@@ -12,6 +13,8 @@ const BUTTON_HIT_SLOP = (44 - BUTTON_SIZE) / 2
 const LINE_HEIGHT = 20
 const FIELD_PADDING_VERTICAL = 7
 const FIELD_BORDER = 1
+const FIELD_MIN_HEIGHT = LINE_HEIGHT + 2 * (FIELD_PADDING_VERTICAL + FIELD_BORDER)
+const FIELD_MAX_HEIGHT = 4 * LINE_HEIGHT + 2 * (FIELD_PADDING_VERTICAL + FIELD_BORDER)
 
 /** The editor that replaces a queued card's row: the composer's text field, with an X and a
  *  checkmark beside it, so it needs no line of its own for Cancel and Save. */
@@ -24,6 +27,8 @@ export function MobileNativeChatQueuedMessageEditor({
   attribution: string | null
 }): React.JSX.Element {
   const input = useRef<TextInput>(null)
+  // Grows from one line to four, then scrolls inside.
+  const contentHeight = useTextInputContentHeight(input, editor.text)
   const [focused, setFocused] = useState(false)
   useEffect(() => {
     input.current?.focus()
@@ -50,6 +55,9 @@ export function MobileNativeChatQueuedMessageEditor({
           style={[
             mobileNativeChatInputStyles.freeInput,
             styles.field,
+            contentHeight !== undefined && {
+              height: Math.min(FIELD_MAX_HEIGHT, Math.max(FIELD_MIN_HEIGHT, contentHeight))
+            },
             focused && !editor.saving && styles.fieldFocused,
             editor.saving && styles.disabled
           ]}
@@ -124,8 +132,8 @@ const styles = StyleSheet.create({
   },
   // One line, then four before it scrolls; a constant border width so focus never shifts the text.
   field: {
-    minHeight: LINE_HEIGHT + 2 * (FIELD_PADDING_VERTICAL + FIELD_BORDER),
-    maxHeight: 4 * LINE_HEIGHT + 2 * (FIELD_PADDING_VERTICAL + FIELD_BORDER),
+    minHeight: FIELD_MIN_HEIGHT,
+    maxHeight: FIELD_MAX_HEIGHT,
     lineHeight: LINE_HEIGHT,
     paddingTop: FIELD_PADDING_VERTICAL,
     paddingBottom: FIELD_PADDING_VERTICAL,
