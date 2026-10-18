@@ -41,8 +41,17 @@ vi.mock('./use-structured-agent-session-host-label', () => ({
 
 import type { NativeChatStructuredComposerTransport } from './native-chat-composer-types'
 import { useStructuredAgentSessionSends } from './use-structured-agent-session-sends'
+import {
+  getStructuredAgentSessionSendNotice,
+  setStructuredAgentSessionSendNotice
+} from './structured-agent-session-pending-sends'
 import { resetStructuredAgentSessionSendsForTests } from './structured-agent-session-message-sender'
-import { clearNativeChatComposerDraftsForTests, readNativeChatComposerDraft, updateNativeChatComposerDraft, structuredAgentSessionDraftScopeKey } from './native-chat-composer-draft-store'
+import {
+  clearNativeChatComposerDraftsForTests,
+  readNativeChatComposerDraft,
+  updateNativeChatComposerDraft,
+  structuredAgentSessionDraftScopeKey
+} from './native-chat-composer-draft-store'
 import { reportStructuredSessionUserInput } from '@/lib/worker-terminal-takeover-report'
 import { emitNativeChatMessageSent } from '@/lib/native-chat-telemetry'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -340,7 +349,9 @@ it('keeps the draft through Continue admission, refusal, uncertainty and recorde
   mocks.capability = 'supported'
   rerender(<LiveHarness />)
   fireEvent.click(screen.getByRole('button', { name: 'compose' }))
+  act(() => setStructuredAgentSessionSendNotice('session-1', 'Previous send failed'))
   fireEvent.click(continueButton()!)
+  expect(getStructuredAgentSessionSendNotice('session-1')).toBeNull()
   expect(screen.getByTestId('error')).toHaveTextContent('none')
   expect(continueButton()).toBeNull()
   await waitFor(() => expect(mocks.call).toHaveBeenCalledOnce())

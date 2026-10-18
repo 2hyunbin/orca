@@ -7,7 +7,11 @@ import { structuredAgentLabel } from '@/lib/structured-agent-session-launch-labe
 import type { AgentType } from '../../../../shared/agent-status-types'
 import { AGENT_SESSION_SEND_USAGE_LIMIT_CONTINUATION_RUNTIME_CAPABILITY } from '../../../../shared/agent-session-create-capabilities'
 import { completeNativeChatStructuredUserAction } from './native-chat-structured-user-action'
-import { getStructuredAgentSessionPendingSends, type StructuredAgentSessionPendingSend } from './structured-agent-session-pending-sends'
+import {
+  getStructuredAgentSessionPendingSends,
+  publishStructuredAgentSessionSends,
+  type StructuredAgentSessionPendingSend
+} from './structured-agent-session-pending-sends'
 import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
 import { useStructuredAgentSessionHostCapabilityState } from '@/runtime/structured-agent-session-host-capability'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
@@ -117,6 +121,8 @@ export function useNativeChatInterruptedContinuation(input: {
     const turnItemId = usageLimitTurnItemId
     setUsageFailure(null)
     reportComposerError(null)
+    // Keeping the draft must not keep the previous send's error.
+    publishStructuredAgentSessionSends(sessionId, { notice: null })
     const admission = transport.send(NATIVE_CHAT_USAGE_LIMIT_CONTINUE_MESSAGE, [], {
       callerKeepsText: true,
       ...(usageCapability === 'supported' ? { usageLimitContinuationOfTurnItemId: turnItemId } : {}),
