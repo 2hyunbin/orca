@@ -104,8 +104,15 @@ ${getPowerShellCodexShellLaunchPreflight() + getPowerShellClaudeShellFunction()}
 }
 `
 
+// Why strip comment lines: they document the source, but in the payload they only spend the
+// command-line budget that lets a startup command ride along (windows-shell-args.ts).
+const POWERSHELL_OSC133_BOOTSTRAP_PAYLOAD = POWERSHELL_OSC133_BOOTSTRAP.replace(
+  /^[ \t]*#.*\n/gm,
+  ''
+)
+
 export function getPowerShellOsc133Bootstrap(): string {
-  return POWERSHELL_OSC133_BOOTSTRAP
+  return POWERSHELL_OSC133_BOOTSTRAP_PAYLOAD
 }
 
 export function isPowerShellExecutableName(shellName: string): boolean {

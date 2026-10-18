@@ -8,6 +8,10 @@ import { resolveWindowsShellLaunchArgs } from './providers/windows-shell-args'
 import { STARTUP_COMMAND_FEATURES } from './shell-startup-launch-intent-fixtures'
 
 describe('PowerShell OSC 133 bootstrap', () => {
+  it('ships no comment lines in the payload', () => {
+    expect(getPowerShellOsc133Bootstrap()).not.toMatch(/^[ \t]*#/m)
+  })
+
   it('wraps prompt/readline without bypassing profiles or execution policy', () => {
     const script = getPowerShellOsc133Bootstrap()
 
