@@ -49,18 +49,32 @@ async function closeTerminals(page: Page, worktreeId: string): Promise<void> {
   }, worktreeId)
 }
 
-async function openEditor(page: Page, worktreeId: string, filePath: string): Promise<void> {
+async function openEditor(
+  page: Page,
+  worktreeId: string,
+  filePath: string,
+  readOnly?: true
+): Promise<void> {
   await page.evaluate(
-    ({ id, file }) => {
+    ({ id, file, readOnly }) => {
       window.__store!.getState().openFile({
         filePath: file,
         relativePath: file.split('/').pop()!,
         worktreeId: id,
         language: 'plaintext',
-        mode: 'edit'
+        mode: 'edit',
+        ...(readOnly ? { readOnly } : {})
       })
     },
-    { id: worktreeId, file: filePath }
+    { id: worktreeId, file: filePath, readOnly }
+  )
+}
+
+async function isReadOnly(page: Page, filePath: string): Promise<boolean | null> {
+  return page.evaluate(
+    (file) =>
+      window.__store!.getState().openFiles.find((open) => open.filePath === file)?.readOnly ?? null,
+    filePath
   )
 }
 
@@ -75,6 +89,8 @@ async function worktreePath(page: Page, worktreeId: string): Promise<string> {
   )
 }
 
+// The editor-only workspace's file also opens read-only, then again for editing: a relaunch
+// restores it editable, as the reopen left it.
 test('a relaunch seeds only a workspace that was never opened', async ({
   testRepoPath
 }, testInfo) => {
@@ -107,7 +123,10 @@ test('a relaunch seeds only a workspace that was never opened', async ({
     await waitForTabs(first.page, editorOnly, { terminals: 1, editors: 0 })
     const notes = path.join(await worktreePath(first.page, editorOnly), 'relaunch-notes.txt')
     writeFileSync(notes, 'notes\n')
+    await openEditor(first.page, editorOnly, notes, true)
+    await expect.poll(() => isReadOnly(first.page, notes)).toBe(true)
     await openEditor(first.page, editorOnly, notes)
+    await expect.poll(() => isReadOnly(first.page, notes)).toBe(null)
     await closeTerminals(first.page, editorOnly)
     await waitForTabs(first.page, editorOnly, { terminals: 0, editors: 1 })
     // Long enough for the window's debounced save and main's commands to land.
@@ -127,6 +146,7 @@ test('a relaunch seeds only a workspace that was never opened', async ({
     await waitForTabs(second.page, neverOpened, { terminals: 1, editors: 0 })
     expect(await workspaceTabs(second.page, emptied)).toEqual({ terminals: 0, editors: 0 })
     expect(await workspaceTabs(second.page, editorOnly)).toEqual({ terminals: 0, editors: 1 })
+    expect(await isReadOnly(second.page, notes)).toBe(null)
     expect(refusals).toEqual([])
   } finally {
     await session.dispose(app)
