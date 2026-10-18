@@ -9,14 +9,11 @@ import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
 import { workspaceSessionPartitionHostId } from '../../shared/workspace-session-partition-owner'
-import {
-  contestedPartitionHosts,
-  pickPrimaryHostForClaims
-} from '../../shared/workspace-session-contested-primary-host'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import { parseWorkspaceKey } from '../../shared/workspace-scope'
 import { workspaceSessionListsTerminalTab } from '../../shared/workspace-session-terminal-tab-close'
 import type { RuntimeStore } from './runtime-store-contract'
+import { resolveTwinRepoSessionHostId, type CachedWorktreeHost } from './twin-repo-session-host'
 
 type RuntimeWorkspaceSessionDependencies = {
   getStore: () => RuntimeStore | null
@@ -26,6 +23,7 @@ type RuntimeWorkspaceSessionDependencies = {
     worktreeId: string,
     tabs: WorkspaceSessionState['tabsByWorktree'][string]
   ) => boolean
+  getCachedWorktrees?: () => readonly CachedWorktreeHost[] | null
 }
 
 export class RuntimeWorkspaceSessionController {
@@ -53,22 +51,30 @@ export class RuntimeWorkspaceSessionController {
     }
     const resolvedWorktreeId = scope?.type === 'worktree' ? scope.worktreeId : worktreeId
     const repoId = getRepoIdFromWorktreeId(resolvedWorktreeId)
-    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-      const twinPartitions = contestedPartitionHosts(
-        (store.getRepos?.() ?? [])
-          .filter((entry) => entry.id === repoId)
-          .map((entry) => getRepoExecutionHostId(entry))
-      )
-      if (twinPartitions.length > 1) {
-        // Why: a twin repo's first row is arbitrary; the window saves to this primary. Main has
-        // repo rows, not the window's per-worktree claims, so it contests every twin's id.
-        return pickPrimaryHostForClaims(twinPartitions)
-      }
+    const twinHostId = this.getTwinRepoHostId(store, repoId, resolvedWorktreeId)
+    if (twinHostId) {
+      return twinHostId
     }
     const repo = store?.getRepo?.(repoId)
     return repo
       ? workspaceSessionPartitionHostId(getRepoExecutionHostId(repo))
       : LOCAL_EXECUTION_HOST_ID
+  }
+
+  // Why: a twin repo's first row is arbitrary; the window saves to the host chosen here.
+  private getTwinRepoHostId(
+    store: RuntimeStore,
+    repoId: string,
+    worktreeId: string
+  ): ExecutionHostId | null {
+    return ORCA_LAYOUT_OWNER_IS_MAIN
+      ? resolveTwinRepoSessionHostId(
+          store,
+          repoId,
+          worktreeId,
+          this.deps.getCachedWorktrees?.() ?? null
+        )
+      : null
   }
 
   private resolveHostId(
@@ -220,12 +226,14 @@ export class RuntimeWorkspaceSessionController {
     for (const [hostId, session] of sessionsByHostId) {
       for (const [worktreeId, tabs] of Object.entries(session.tabsByWorktree ?? {})) {
         const scope = parseWorkspaceKey(worktreeId)
+        const rawWorktreeId = scope?.type === 'worktree' ? scope.worktreeId : worktreeId
+        const repoId = getRepoIdFromWorktreeId(rawWorktreeId)
         const catalogOwnerHostId =
           scope?.type === 'folder'
             ? (folderHostIdByWorkspaceId.get(scope.folderWorkspaceId) ?? null)
-            : (repoHostIdByRepoId.get(
-                getRepoIdFromWorktreeId(scope?.type === 'worktree' ? scope.worktreeId : worktreeId)
-              ) ?? LOCAL_EXECUTION_HOST_ID)
+            : (this.getTwinRepoHostId(store, repoId, rawWorktreeId) ??
+              repoHostIdByRepoId.get(repoId) ??
+              LOCAL_EXECUTION_HOST_ID)
         const ownerHostId = this.resolveHostId(
           worktreeId,
           catalogOwnerHostId ?? LOCAL_EXECUTION_HOST_ID,
