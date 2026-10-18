@@ -32,6 +32,7 @@
     "../src/main/jira/adf-text-marks.ts",
     "../src/main/jira/adf-media-destination.ts",
     "../src/main/ipc/deferred-emoji-shortcode-dataset.ts",
+    "../src/main/ipc/pty-hidden-delivery-gate.ts",
     "../src/main/ipc/worktree-branch-name.ts",
     "../src/main/ipc/worktree-logic.ts",
     "../src/main/ipc/worktree-display-name.ts",

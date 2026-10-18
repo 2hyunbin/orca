@@ -3,7 +3,8 @@ import type { ConnectPanePtySession } from './connect-pane-pty-session'
 
 export function handleUnhideRestoreBackpressure(
   session: ConnectPanePtySession,
-  event: PtyModelRestoreNeededEvent
+  event: PtyModelRestoreNeededEvent,
+  previousDropEpisode: number | null
 ): void {
   if (
     event.reason !== 'unhide' ||
@@ -11,10 +12,26 @@ export function handleUnhideRestoreBackpressure(
     typeof event.markerSeq !== 'number' ||
     !Number.isFinite(event.markerSeq)
   ) {
+    if (session.hiddenOutputRestorePtyId === event.id) {
+      session.hiddenOutputRestoreUnhideSeq = null
+    }
     session.noteHiddenOutputRestoreFloodBackpressure()
     return
   }
-  // The pending snapshot may already cover this repeat of the hidden gap.
+  if (
+    session.hiddenOutputRestorePtyId === event.id &&
+    (previousDropEpisode === null ||
+      !Number.isFinite(previousDropEpisode) ||
+      previousDropEpisode !== event.hiddenDropEpisode ||
+      session.hiddenOutputRestoreFloodRepaintTimer !== null ||
+      session.cancelHiddenOutputRestoreFloodRepaintPark !== null)
+  ) {
+    // Leave recovery to the quiet timer when this snapshot cannot retire the episode.
+    session.hiddenOutputRestoreUnhideSeq = null
+    session.noteHiddenOutputRestoreFloodBackpressure()
+    return
+  }
+  // A current or successor restore must cover the retained marker before finishing.
   session.hiddenOutputRestoreUnhideSeq = Math.max(
     session.hiddenOutputRestoreUnhideSeq ?? 0,
     event.markerSeq

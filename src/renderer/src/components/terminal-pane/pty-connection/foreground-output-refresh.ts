@@ -60,6 +60,7 @@ export function bindForegroundOutputRefresh(session: ConnectPanePtySession): voi
       return
     }
     const episode = typeof event.hiddenDropEpisode === 'number' ? event.hiddenDropEpisode : null
+    const previousDropEpisode = session.hiddenOutputRestoreLatestDropEpisode
     // Why: main's latch stays armed until a restore paints, so a gap it can never serve re-marks
     // on every unhide. A repeat of the disclosed episode is that same gap; any other marker may
     // be new loss and proceeds, failing toward recovery.
@@ -72,9 +73,7 @@ export function bindForegroundOutputRefresh(session: ConnectPanePtySession): voi
     ) {
       return
     }
-    if (episode !== null) {
-      session.hiddenOutputRestoreLatestDropEpisode = episode
-    }
+    session.hiddenOutputRestoreLatestDropEpisode = episode ?? previousDropEpisode
     recordTerminalFreezeBreadcrumb('restore-marker', {
       id: redactPtyIdForDiagnostics(session.transport.getPtyId() ?? '')
     })
@@ -82,7 +81,7 @@ export function bindForegroundOutputRefresh(session: ConnectPanePtySession): voi
     session.transport.resetCrossChunkParserState?.()
     // Why gated (rc.7.perf loop): on a visible pane these markers come from our own restore starving ACKs; re-arming per marker kept the fetch loop alive all flood, so defer to one post-flood repaint.
     if (session.isForegroundRestoreBackpressureContext()) {
-      unhideCoverage.handleUnhideRestoreBackpressure(session, event)
+      unhideCoverage.handleUnhideRestoreBackpressure(session, event, previousDropEpisode)
       return
     }
     // Why the emulator too: it carries state across chunks exactly like the
