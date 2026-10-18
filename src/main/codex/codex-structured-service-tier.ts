@@ -93,7 +93,7 @@ function codexListsServiceTier(
 
 /** Codex also takes the thread's reported tier when no model lists it, such as a configured `flex`. */
 export function codexOffersServiceTier(
-  session: CodexSession,
+  session: { reportedOptions?: { serviceTier?: string | null } },
   model: AgentSessionModelOption | undefined,
   models: readonly AgentSessionModelOption[],
   tier: string
@@ -101,18 +101,18 @@ export function codexOffersServiceTier(
   return (
     tier === CODEX_DEFAULT_SERVICE_TIER ||
     codexListsServiceTier(model, tier) ||
-    (tier === session.reportedOptions.serviceTier &&
+    (tier === session.reportedOptions?.serviceTier &&
       !models.some((entry) => codexListsServiceTier(entry, tier)))
   )
 }
 
 /** The chat's tier, picked or reported, falls back to standard where the model does not offer it. */
 export function dropUnlistedCodexServiceTier(
-  session: CodexSession,
+  session: { options: Map<string, string>; reportedOptions?: { serviceTier?: string | null } },
   modelId: string | undefined,
   models: readonly AgentSessionModelOption[]
 ): void {
-  const tier = session.options.get('serviceTier') ?? session.reportedOptions.serviceTier
+  const tier = session.options.get('serviceTier') ?? session.reportedOptions?.serviceTier
   const model = models.find((entry) => entry.id === modelId)
   if (tier && model?.serviceTiers && !codexOffersServiceTier(session, model, models, tier)) {
     session.options.set('serviceTier', CODEX_DEFAULT_SERVICE_TIER)

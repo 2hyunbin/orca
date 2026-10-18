@@ -11,10 +11,11 @@ type ListingWait = {
   joiners: Set<HostModelListingJoiner>
   continuation: ReturnType<typeof setTimeout> | null
 }
+type HostModelListingTransport = { close: () => void }
 const waits = new Map<string, ListingWait>()
-const ownerWaits = new WeakMap<object, Map<string, ListingWait>>()
+const ownerWaits = new WeakMap<HostModelListingTransport, Map<string, ListingWait>>()
 
-function listingWaits(owner?: object): Map<string, ListingWait> {
+function listingWaits(owner?: HostModelListingTransport): Map<string, ListingWait> {
   if (!owner) {
     return waits
   }
@@ -31,7 +32,7 @@ export function joinHostModelListingWait(
   key: string,
   read: () => Promise<AgentSessionModelCatalogResult>,
   onSettled: HostModelListingJoiner,
-  owner?: object
+  owner?: HostModelListingTransport
 ): () => void {
   const waits = listingWaits(owner)
   let wait = waits.get(key)
@@ -72,6 +73,9 @@ export function joinHostModelListingWait(
   }
 }
 
-export function isHostModelListingWaitInFlight(key: string, owner?: object): boolean {
+export function isHostModelListingWaitInFlight(
+  key: string,
+  owner?: HostModelListingTransport
+): boolean {
   return listingWaits(owner).has(key)
 }

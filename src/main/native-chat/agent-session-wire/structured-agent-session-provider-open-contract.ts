@@ -14,6 +14,7 @@ export type StructuredAgentSessionProviderOpenResult = {
   link?: AgentSessionProviderHandleLink
   reportedOptions: AgentSessionOptionsResult['current']
   catalogListing?: AgentModelCatalogLiveListing
+  catalogReadback?: Promise<AgentModelCatalogLiveListing | undefined>
 }
 
 export type StructuredAgentSessionProviderOpen = (

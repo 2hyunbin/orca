@@ -227,6 +227,7 @@ export type StructuredAgentSessionStartedEvent = {
   reportedOptions: AgentSessionOptionsResult['current']
   /** What the child listed at startup, saved as its account's catalog even if no view reads it. */
   catalogListing?: AgentModelCatalogLiveListing
+  catalogReadback?: Promise<AgentModelCatalogLiveListing | undefined>
 }
 
 /** What a child that already proved its start reports later, such as an optional read that came
@@ -264,6 +265,7 @@ export type StructuredAgentSessionSetOptionInput = {
   key: string
   value: string
   fence: number
+  catalogListing?: { models: AgentSessionOptionsResult['models']; complete?: boolean } | null
   /** Aborted by a close, a Stop admitted now, or quit, which must not wait behind a pick the
    *  provider never answers: the write fails. An adapter that bounds its own write may ignore it. */
   signal?: AbortSignal
@@ -401,6 +403,7 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   prepareReadOptions?(input: {
     sessionId: string
     fence: number
+    legacyCatalog?: boolean
   }): Promise<() => AgentSessionOptionsResult> | undefined
   readOptions?(input: {
     sessionId: string

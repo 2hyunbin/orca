@@ -14,6 +14,7 @@ import {
 } from './agent-model-catalog-fingerprint'
 import {
   agentModelCatalogResultFromEntry,
+  agentModelCatalogUnknownResult,
   agentModelCatalogSessionObservation,
   retainedAgentModelCatalogModels
 } from './agent-model-catalog-entry'
@@ -37,20 +38,9 @@ export function createAgentModelCatalogService(
   const admission = new PrioritySemaphore(2)
   const sessionKeys = new Map<string, string>()
   const processes = createAgentModelCatalogProcessObservations(deps)
-  const processCatalog = processes.read
   const read = async (params: AgentModelCatalogRead): Promise<AgentSessionModelCatalogResult> => {
-    const unverified = (): AgentSessionModelCatalogResult => ({
-      origin: 'unknown',
-      choiceCatalog: params.sessionId
-        ? (processCatalog(params.sessionId) ?? {
-            authority: 'discovery',
-            scopeId: '',
-            models: [],
-            complete: false,
-            freshForMs: 0
-          })
-        : { authority: 'discovery', scopeId: '', models: [], complete: false, freshForMs: 0 }
-    })
+    const unverified = (): AgentSessionModelCatalogResult =>
+      agentModelCatalogUnknownResult(params.sessionId ? processes.read(params.sessionId) : null)
     const record = params.sessionId ? deps.getRecord(params.sessionId) : undefined
     if (
       record &&
@@ -69,6 +59,10 @@ export function createAgentModelCatalogService(
         }
       }
     }
+    const process = await processes.readFlat(params)
+    if (process) {
+      return process
+    }
     const home =
       record?.accountHome ?? (await deps.resolveAccountHome(params.agent).catch(() => null))
     if (!home) {
@@ -79,13 +73,15 @@ export function createAgentModelCatalogService(
       accountHome: home,
       wslDistro: null
     })
-    const cwd = params.accountDefault
-      ? homedir()
-      : params.workspacePath === null
-        ? null
-        : (params.workspacePath ??
-          (record ? await deps.recordWorkspacePath?.(record).catch(() => null) : homedir()))
-    if (!cwd) {
+    const legacyAccount = params.legacy && (params.agent === 'claude' || params.agent === 'codex')
+    const cwd =
+      params.accountDefault && !legacyAccount
+        ? homedir()
+        : params.workspacePath === null
+          ? null
+          : (params.workspacePath ??
+            (record ? await deps.recordWorkspacePath?.(record).catch(() => null) : homedir()))
+    if (!cwd && !legacyAccount) {
       const legacy = deps.store.get(base)
       if (!legacy) {
         return unverified()
@@ -101,7 +97,7 @@ export function createAgentModelCatalogService(
     const namesDefault =
       params.accountDefault || (params.workspacePath === undefined && !params.inSessionWorkspace)
         ? true
-        : deps.workspaceMayOverrideDefaultModel
+        : cwd && deps.workspaceMayOverrideDefaultModel
           ? !(await deps
               .workspaceMayOverrideDefaultModel({
                 agent: params.agent,
@@ -111,21 +107,31 @@ export function createAgentModelCatalogService(
               .catch(() => true))
           : false
     const probe = deps.probes?.[params.agent]
-    const resolved = await probe
-      ?.resolve?.(home, cwd, params.accountDefault ? undefined : record?.options)
-      .catch(() => null)
-    if (probe?.resolve && !resolved) {
+    const resolved = await (
+      legacyAccount
+        ? probe?.resolveLegacy?.(home)
+        : cwd
+          ? probe?.resolve?.(home, cwd, params.accountDefault ? undefined : record?.options)
+          : undefined
+    )?.catch(() => null)
+    if ((legacyAccount ? probe?.resolveLegacy : probe?.resolve) && !resolved) {
       return unverified()
     }
-    const fingerprint = agentModelCatalogScopeFingerprint(base, cwd, resolved?.identity)
-    if (params.sessionId && !params.accountDefault) {
+    const fingerprint = agentModelCatalogScopeFingerprint(
+      base,
+      legacyAccount ? 'legacy-account' : (cwd ?? ''),
+      resolved?.identity
+    )
+    if (params.sessionId && !params.accountDefault && !legacyAccount) {
       if (sessionKeys.size >= 256 && !sessionKeys.has(params.sessionId)) {
         const oldest = sessionKeys.keys().next().value
         if (oldest !== undefined) {
           sessionKeys.delete(oldest)
         }
       }
-      sessionKeys.set(params.sessionId, fingerprint)
+      if (!params.legacy) {
+        sessionKeys.set(params.sessionId, fingerprint)
+      }
       const process = processes.get(params.sessionId)
       if (
         record &&
@@ -149,8 +155,12 @@ export function createAgentModelCatalogService(
       listed: AgentModelCatalogEntry | null,
       listingInProgress = false
     ): AgentSessionModelCatalogResult => {
+      const owned = params.legacy && params.sessionId ? processes.flat(params.sessionId) : null
+      if (owned) {
+        return owned
+      }
       const unavailable = deps.store.failure(fingerprint)?.unavailable
-      const process = params.sessionId ? processCatalog(params.sessionId) : null
+      const process = params.sessionId ? processes.read(params.sessionId) : null
       const observation = listed?.observation
       const discovery = params.agent === 'claude' || params.agent === 'codex'
       const choiceCatalog: AgentSessionChoiceCatalog = process ?? {
@@ -191,14 +201,21 @@ export function createAgentModelCatalogService(
     ) {
       return answer(entry)
     }
+    const started = await processes.readFlat(params)
+    if (started) {
+      return started
+    }
     if (probe && !lifetime.signal.aborted && deps.store.probeDue(fingerprint)) {
       deps.store.refresh(fingerprint, params.agent, probe, async () => {
         try {
-          const release = await admission.acquire(0, lifetime.signal)
+          const release = legacyAccount ? () => {} : await admission.acquire(0, lifetime.signal)
           try {
             const result = resolved
               ? await resolved.run(lifetime.signal)
-              : await probe(home, { cwd, signal: lifetime.signal })
+              : await probe(home, {
+                  ...(legacyAccount || !cwd ? {} : { cwd }),
+                  signal: lifetime.signal
+                })
             return params.agent === 'claude' || params.agent === 'codex'
               ? result
               : { ...result, advisory: true as const }
@@ -217,12 +234,24 @@ export function createAgentModelCatalogService(
       await deps.store.pendingListing(fingerprint, entry)
       entry = deps.store.get(fingerprint)
     }
-    return answer(entry, deps.store.isListing(fingerprint))
+    return (await processes.readFlat(params)) ?? answer(entry, deps.store.isListing(fingerprint))
   }
   return {
     read,
-    processCatalog,
-    peek: (sessionId) => deps.store.get(sessionKeys.get(sessionId) ?? ''),
+    processCatalog: processes.read,
+    legacyProcessCatalog: processes.flat,
+    processListingChanged: processes.notify,
+    trackProcessListing: processes.track,
+    peek: (sessionId, verifiedOnly) => {
+      const entry = deps.store.get(sessionKeys.get(sessionId) ?? '')
+      return entry &&
+        (!verifiedOnly ||
+          (deps.store.freshForMs(entry) > 0 &&
+            !deps.store.hasActiveFailure(entry.fingerprint) &&
+            !deps.store.failure(entry.fingerprint)?.unavailable))
+        ? entry
+        : null
+    },
     providerStarted(record) {
       const key = sessionKeys.get(record.sessionId)
       if (key) {

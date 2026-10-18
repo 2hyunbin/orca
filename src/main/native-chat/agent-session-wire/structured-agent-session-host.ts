@@ -176,6 +176,7 @@ export class StructuredAgentSessionHost {
   sessionAgent = (sessionId: string) => this.deps.store.getRecord(sessionId)?.provider ?? null
   modelCatalogProcessScope = (id: string): string | null =>
     processCatalogScope(id, this.deps.store.getRecord(id), this.sessions.get(id))
+  modelCatalogListingPending = (id: string): boolean => this.runtimeState.startupAttempts.isOpen(id)
 
   handleAdapterEvent = (event: Parameters<StructuredAgentSessionEventRecovery['handle']>[0]) =>
     this.eventRecovery.handle(event)

@@ -22,6 +22,7 @@ export type AgentModelCatalogServiceDeps = {
   listingNamesConfiguredModel?: ReadonlySet<string>
   recordWorkspacePath?: (record: AgentSessionRecord) => Promise<string | null>
   processScope?: (sessionId: string) => string | null
+  processListingPending?: (sessionId: string) => boolean
   agentReadsProjectModelConfig?: (agent: string) => boolean
   workspaceMayOverrideDefaultModel?: (input: {
     agent: string
@@ -40,14 +41,18 @@ export type AgentModelCatalogRead = {
   accountDefault?: true
   waitForListing?: boolean
   savedOnly?: boolean
+  legacy?: boolean
 }
 
 export type AgentModelCatalogService = {
   read: (params: AgentModelCatalogRead) => Promise<AgentSessionModelCatalogResult>
   retainedLiveModelIds: (sessionId: string, listing: AgentModelCatalogLiveListing) => string[]
   recordLiveListing: (sessionId: string, listing: AgentModelCatalogLiveListing) => void
-  peek: (sessionId: string) => AgentModelCatalogEntry | null
+  peek: (sessionId: string, verifiedOnly?: boolean) => AgentModelCatalogEntry | null
   processCatalog: (sessionId: string) => AgentSessionChoiceCatalog | null
+  legacyProcessCatalog: (sessionId: string) => AgentSessionModelCatalogResult | null
+  processListingChanged: (sessionId: string) => void
+  trackProcessListing: (sessionId: string, work: Promise<void>) => void
   prewarm: () => Promise<void>
   stop: () => void
   providerStarted: (

@@ -74,6 +74,8 @@ export const STRUCTURED_AGENT_SESSION_OPTIONS_READ_METHODS = [
     // terminal-backed chat's session-less read must not open the journal where none runs.
     handler: async ({ worktree, ...params }, ctx) => {
       requireStructuredAgentAudience(ctx, params.agent)
+      const legacyReader = !clientReadsCoherentModelCatalog(ctx)
+      const request = { ...params, legacy: legacyReader }
       const host =
         params.sessionId === undefined
           ? requireStructuredHost(ctx)
@@ -88,15 +90,15 @@ export const STRUCTURED_AGENT_SESSION_OPTIONS_READ_METHODS = [
         // A floating chat runs in the folder it was created in, not the floating setting's current one.
         const launchDirectory = record ? agentSessionPinnedLaunchDirectory(record) : undefined
         if (launchDirectory) {
-          return catalog.read({ ...params, workspacePath: launchDirectory })
+          return catalog.read({ ...request, workspacePath: launchDirectory })
         }
         if (worktree === undefined) {
-          return catalog.read(params)
+          return catalog.read(request)
         }
         const workspacePath = await ctx.runtime
           .resolveStructuredAgentSessionLocalWorkspacePath(worktree)
           .catch(() => null)
-        return catalog.read({ ...params, workspacePath })
+        return catalog.read({ ...request, workspacePath })
       }
       const answer = await read()
       // The chat's running agent can say what no listing does: a Pi that started with no model.

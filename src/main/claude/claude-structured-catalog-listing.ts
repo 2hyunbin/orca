@@ -77,6 +77,7 @@ export function claudeCatalogListing(
   return {
     // No default effort here: the CLI's effort is a config fact, saved with the configured model.
     models: wireClaudeModels(discovered),
+    listingComplete: options.complete !== false,
     complete:
       options.complete !== false &&
       session.launchedModel === null &&

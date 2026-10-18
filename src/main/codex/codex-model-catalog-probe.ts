@@ -5,6 +5,7 @@ import { isMissingProviderExecutable } from '../provider-process/provider-execut
 import { CODEX_SHORT_LIVED_PROBE_APP_SERVER_ARGS } from '../codex-cli/codex-read-only-app-server-args'
 import { runCodexAppServerSession } from './codex-app-server-session'
 import { fetchCodexModelCatalogListing } from './codex-structured-model-catalog'
+import { applyCodexConfiguredLaunchDefaults } from './codex-configured-launch-defaults'
 import {
   resolveCodexStructuredInvocation,
   type CodexStructuredInvocationDeps
@@ -45,27 +46,27 @@ function definedEnv(env: NodeJS.ProcessEnv | undefined): Record<string, string> 
 export function createCodexModelCatalogProbe(
   deps: CodexModelCatalogProbeDeps
 ): AgentModelCatalogProbe {
-  const resolve: NonNullable<AgentModelCatalogProbe['resolve']> = async (accountHome, cwd) => {
+  const resolve = async (accountHome: Parameters<AgentModelCatalogProbe>[0], cwd?: string) => {
     const accountHomePath = requireLegacyAgentSessionAccountHome(accountHome).path
     const { command, environment } = await resolveCodexStructuredInvocation({
       ...deps,
-      resolveWorkingDirectory: () => cwd
+      ...(cwd ? { resolveWorkingDirectory: () => cwd } : {})
     })
     const args = [
-      ...codexStructuredLaunchArgs((await deps.resolveLaunchArgs?.()) ?? []),
+      ...(cwd ? codexStructuredLaunchArgs((await deps.resolveLaunchArgs?.()) ?? []) : []),
       ...CODEX_SHORT_LIVED_PROBE_APP_SERVER_ARGS
     ]
     const env = { ...definedEnv(environment), CODEX_HOME: accountHomePath }
     return {
       identity: { command, args, env, cwd },
-      run: async (signal): Promise<AgentModelCatalogSuccess> => {
+      run: async (signal?: AbortSignal): Promise<AgentModelCatalogSuccess> => {
         deps.prepareHome?.(accountHomePath)
         const run = deps.runSession ?? runCodexAppServerSession
         const { listing, unavailable } = await run(
           {
             command,
             args,
-            cwd,
+            ...(cwd ? { cwd } : {}),
             cliPath: command,
             env,
             timeoutMs: AGENT_MODEL_CATALOG_PROBE_TIMEOUT_MS,
@@ -109,18 +110,26 @@ export function createCodexModelCatalogProbe(
           throw new Error('codex app-server listed no models')
         }
         return {
-          models: listing.models,
+          models: cwd
+            ? listing.models
+            : applyCodexConfiguredLaunchDefaults(listing.models, {
+                model: listing.configured?.model ?? null,
+                effort: listing.configured?.effort ?? null
+              }),
           complete: listing.complete !== false,
-          ...(listing.configured ? { configured: listing.configured } : {}),
+          ...(cwd && listing.configured ? { configured: listing.configured } : {}),
           origin: 'probe',
           ...(unavailable ? { unavailable } : {})
         }
       }
     }
   }
-  return Object.assign<AgentModelCatalogProbe, Pick<AgentModelCatalogProbe, 'resolve'>>(
+  return Object.assign<
+    AgentModelCatalogProbe,
+    Pick<AgentModelCatalogProbe, 'resolve' | 'resolveLegacy'>
+  >(
     async (home, options) =>
       (await resolve(home, options?.cwd ?? process.cwd())).run(options?.signal),
-    { resolve }
+    { resolve, resolveLegacy: (home) => resolve(home) }
   )
 }

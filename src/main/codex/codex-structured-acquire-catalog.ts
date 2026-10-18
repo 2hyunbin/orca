@@ -24,9 +24,12 @@ export function codexAcquireCatalogAccess(
     ? {
         ...access,
         ...(deps.readModelCatalog
-          ? { read: () => deps.readModelCatalog?.(sessionId) ?? null }
+          ? {
+              read: (verifiedOnly?: boolean) =>
+                deps.readModelCatalog?.(sessionId, verifiedOnly) ?? null
+            }
           : {}),
-        ...(demand ? { demand: () => demand(sessionId) } : {})
+        ...(demand ? { demand: (legacy?: boolean) => demand(sessionId, legacy) } : {})
       }
     : access
 }

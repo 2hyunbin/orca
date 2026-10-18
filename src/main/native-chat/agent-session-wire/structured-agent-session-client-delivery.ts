@@ -99,7 +99,10 @@ export class StructuredAgentSessionClientDelivery {
     return record ? adapter.atRestCommands?.read(record) : undefined
   }
 
-  publishStatus = (sessionId: string): void => this.statusFeed.publish(sessionId)
+  publishStatus = (sessionId: string): void => {
+    this.statusFeed.publish(sessionId)
+    this.deps().modelCatalog?.processListingChanged(sessionId)
+  }
 
   publishConversationName = (sessionId: string): void =>
     this.statusFeed.publishConversationName(sessionId)
@@ -125,14 +128,13 @@ export class StructuredAgentSessionClientDelivery {
   captureChildWorkStops = (
     sessionId: string,
     handleIds: readonly string[]
-  ): CapturedChildWorkStops =>
-    this.statusFeed.captureChildWorkStops(sessionId, handleIds)
+  ): CapturedChildWorkStops => this.statusFeed.captureChildWorkStops(sessionId, handleIds)
 
   childWorkIncomplete = (sessionId: string): boolean =>
     this.statusFeed.childWorkIncomplete(sessionId)
 
   publishStatusAndSettlement = (sessionId: string): void => {
-    this.statusFeed.publish(sessionId)
+    this.publishStatus(sessionId)
     const journal = this.sessions.get(sessionId)?.journal
     if (journal) {
       this.sendSettlement.publish(sessionId, this.settlementReading(sessionId, journal))
@@ -145,6 +147,7 @@ export class StructuredAgentSessionClientDelivery {
    *  whatever became of the cleanup's own write. An end is no activity: it renews no idle clock.
    *  `restate`: each chat re-baselines at the fence, as a death of the child's own does. */
   publishGenerationEnded = (sessionId: string, options: { restate?: boolean } = {}): void => {
+    this.deps().modelCatalog?.processListingChanged(sessionId)
     const session = this.sessions.get(sessionId)
     if (!session) {
       return

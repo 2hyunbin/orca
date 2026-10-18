@@ -13,6 +13,9 @@ import {
 import { isCodexAppServerUnsupportedError } from './codex-app-server-session'
 import type { CodexDispatchEchoes } from './codex-structured-dispatch-echo'
 import { readCodexTurnId } from './codex-structured-thread-facts'
+import { codexAcquireCatalogListing } from './codex-structured-catalog-entry'
+import { dropUnlistedCodexServiceTier } from './codex-structured-service-tier'
+import type { CodexSessionCatalogAccess } from './codex-structured-session-state'
 import {
   codexRunningOrOpeningTurn,
   type CodexTurnOpenWaits
@@ -48,7 +51,8 @@ export type CodexTurnHost = {
   connection: Pick<CodexAppServerConnection, 'request'>
   threadId: string
   options: Map<string, string>
-  reportedOptions?: { model?: string }
+  reportedOptions?: { model?: string; serviceTier?: string | null }
+  catalogAccess?: CodexSessionCatalogAccess
   dispatchEchoes: CodexDispatchEchoes
   activeTurnIds?: ReadonlySet<string>
   /** Running turns whose interrupt Codex already answered: aborted, so never steered. */
@@ -133,13 +137,20 @@ export async function startCodexTurn(
   if (steered) {
     return steered
   }
+  const listing = codexAcquireCatalogListing(host.catalogAccess, true)
+  if (listing) {
+    dropUnlistedCodexServiceTier(
+      host,
+      host.options.get('model') ?? host.reportedOptions?.model,
+      listing.models
+    )
+  }
   const answer = await host.connection.request(
     'turn/start',
     {
       threadId: host.threadId,
       clientUserMessageId: input.clientMessageId,
       input: turnInputFor(input.body),
-      // Codex omits a tier the model does not list.
       ...Object.fromEntries(host.options)
     },
     { timeoutMs: input.timeoutMs }

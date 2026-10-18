@@ -36,7 +36,7 @@ import {
 
 export type ClaudeOpenFacts = Pick<
   StructuredAgentSessionProviderOpenResult,
-  'reportedOptions' | 'catalogListing'
+  'reportedOptions' | 'catalogListing' | 'catalogReadback'
 >
 
 /** A lifecycle event the start reports, before the session's identity is stamped on it. */
@@ -212,14 +212,15 @@ export async function openClaudeSession(input: {
       session.fastModeAtStart ? session.optionMutationSequence - 1 : undefined
     )
   }
-  void settleClaudeStartupSettings(input, initialized)
-  return result
+  const catalogReadback = settleClaudeStartupSettings(input, initialized)
+  void catalogReadback.catch(() => {})
+  return { ...result, catalogReadback }
 }
 
 async function settleClaudeStartupSettings(
   input: Parameters<typeof openClaudeSession>[0],
   initialized: ClaudeInitializeFacts
-): Promise<void> {
+): Promise<ClaudeOpenFacts['catalogListing']> {
   const { session } = input
   const sequence = session.optionMutationSequence
   const settings = await input.readSettings()
@@ -246,15 +247,17 @@ async function settleClaudeStartupSettings(
   const writtenSinceRead = sequence !== session.optionMutationSequence
   applyClaudeSettingsFacts(session, facts, writtenSinceRead)
   const startFastMode = writtenSinceRead ? null : admitClaudeStartFastMode(session, facts)
+  const resolved = claudeResolvedCatalogListing(session, readClaudeModels(facts.initialization))
   input.report({
     type: 'options-reported',
     // Open already returned the initialize listing to the host.
     reportedOptions: claudeStartedReportedOptions(session, readClaudeModels(facts.initialization))
       .reportedOptions,
     // The one report of what the config resolved: the readback just applied it.
-    ...claudeResolvedCatalogListing(session, readClaudeModels(facts.initialization))
+    ...resolved
   })
   if (startFastMode !== null) {
     void applyClaudeStartFastMode(session, facts, startFastMode)
   }
+  return resolved.catalogListing
 }

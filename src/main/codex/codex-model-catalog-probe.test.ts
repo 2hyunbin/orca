@@ -14,6 +14,41 @@ const MODEL_ROW = {
 }
 
 describe('codex model catalog probe', () => {
+  it('uses the released account invocation and config overlay without a spawn or config cwd', async () => {
+    const resolveLaunchArgs = vi.fn(() => ['-c', 'model="project"'])
+    const probe = createCodexModelCatalogProbe({
+      resolveCommand: () => './relative-codex',
+      resolveWorkingDirectory: () => '/resolver-cwd',
+      resolveLaunchArgs,
+      runSession: async (invocation, body) => {
+        expect(invocation).not.toHaveProperty('cwd')
+        expect(invocation.command).toBe('./relative-codex')
+        expect(invocation.env).toHaveProperty('CODEX_HOME', '/account')
+        return body({
+          request: async (method, params) => {
+            if (method === 'config/read') {
+              expect(params).toEqual({})
+              return { config: { model: 'configured', model_reasoning_effort: 'high' } }
+            }
+            return {
+              data: [MODEL_ROW, { ...MODEL_ROW, model: 'configured', isDefault: false }],
+              nextCursor: null
+            }
+          },
+          notify: () => {}
+        })
+      }
+    })
+    const result = await (
+      await probe.resolveLegacy!({ variable: 'CODEX_HOME', path: '/account' })
+    ).run()
+    expect(result.models.find((row) => row.isDefault)).toMatchObject({
+      id: 'configured',
+      defaultEffort: 'high'
+    })
+    expect(result).not.toHaveProperty('configured')
+    expect(resolveLaunchArgs).not.toHaveBeenCalled()
+  })
   it.each([`"${process.execPath}"`, ''])(
     'lists with the session executable for Command %j',
     async (command) => {

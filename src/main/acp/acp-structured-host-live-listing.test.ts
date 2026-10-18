@@ -18,6 +18,9 @@ describe('a live Grok listing', () => {
       read: vi.fn(async () => ({ origin: 'unknown' as const })),
       peek: () => null,
       processCatalog: () => null,
+      legacyProcessCatalog: () => null,
+      processListingChanged: () => {},
+      trackProcessListing: () => {},
       retainedLiveModelIds: vi.fn(() => []),
       recordLiveListing: vi.fn(() => {
         scopes.push(readScope())
@@ -60,6 +63,9 @@ describe('a live Grok listing', () => {
       read: vi.fn(async () => ({ origin: 'unknown' as const })),
       peek: () => null,
       processCatalog: () => null,
+      legacyProcessCatalog: () => null,
+      processListingChanged: () => {},
+      trackProcessListing: () => {},
       retainedLiveModelIds: vi.fn(() => []),
       recordLiveListing: vi.fn().mockImplementationOnce(() => {
         throw new Error('catalog unavailable')

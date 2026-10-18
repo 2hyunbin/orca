@@ -1,6 +1,7 @@
 import { refuse, type AgentSessionOptionResult } from '../../../shared/agent-session-wire'
 import { isAgentSessionOptionRejectedError } from './structured-agent-session-option-error'
 import type { AgentSessionTurnContext, TurnOutcome } from './structured-agent-session-turns'
+import type { StructuredAgentSessionSetOptionInput } from './structured-agent-session-adapter'
 
 export async function performSetOption(
   ctx: Pick<
@@ -8,7 +9,8 @@ export async function performSetOption(
     'sessionId' | 'adapter' | 'fence' | 'persistOptions' | 'publish'
   >,
   input: { key: string; value: string },
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  catalogListing?: StructuredAgentSessionSetOptionInput['catalogListing']
 ): Promise<TurnOutcome<AgentSessionOptionResult>> {
   let applied: void | Readonly<Record<string, string>>
   try {
@@ -16,6 +18,7 @@ export async function performSetOption(
       sessionId: ctx.sessionId,
       ...input,
       fence: ctx.fence,
+      ...(catalogListing !== undefined ? { catalogListing } : {}),
       ...(signal ? { signal } : {})
     })
   } catch (error) {

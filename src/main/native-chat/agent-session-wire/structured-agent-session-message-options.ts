@@ -6,13 +6,16 @@ import type { StructuredAgentSessionMutationContext } from './structured-agent-s
 import { recordStructuredAgentSessionOptionIntent } from './structured-agent-session-options-read'
 import { performSetOption } from './structured-agent-session-turns-options'
 import type { TurnOutcome } from './structured-agent-session-turns'
+import { providerChildRootExited } from './structured-agent-session-provider-child'
+import { AGENT_SESSION_NOT_ATTACHED } from './structured-agent-session-mutation-refusals'
 
 /** With no child running, intent the next start replays; else the running child's own write. Either
  *  is recorded on the chat at `fence` and published. */
 export async function writeStructuredAgentSessionOption(
   context: StructuredAgentSessionMutationContext,
   target: { sessionId: string; fence: number },
-  input: { key: string; value: string }
+  input: { key: string; value: string },
+  readsCoherentCatalog = true
 ): Promise<TurnOutcome<AgentSessionOptionResult>> {
   const { sessionId, fence } = target
   const session = context.sessions.get(sessionId)
@@ -39,7 +42,41 @@ export async function writeStructuredAgentSessionOption(
   // Held where a start is, so a close, a Stop admitted now or quit ends the wait from outside.
   const wait = context.acquireAborts.begin(sessionId)
   try {
-    return await performSetOption(ctx, input, wait.signal)
+    const record = context.deps.store.getRecord(sessionId)
+    const catalog =
+      !readsCoherentCatalog && record?.provider === 'codex'
+        ? await context.deps.modelCatalog
+            ?.read({
+              agent: 'codex',
+              sessionId,
+              legacy: true,
+              savedOnly: true,
+              inSessionWorkspace: true
+            })
+            .catch(() => null)
+        : undefined
+    wait.signal.throwIfAborted()
+    if (
+      context.sessions.get(sessionId) !== session ||
+      session.child !== child ||
+      child.close ||
+      providerChildRootExited(session) ||
+      context.deps.store.getRecord(sessionId)?.lease.runtimeFence !== fence
+    ) {
+      return { ok: false, refusal: AGENT_SESSION_NOT_ATTACHED }
+    }
+    const listing =
+      catalog?.choiceCatalog?.authority === 'discovery' &&
+      catalog.choiceCatalog.models.length &&
+      catalog.origin !== 'unknown'
+        ? { models: catalog.models, complete: catalog.choiceCatalog.complete }
+        : null
+    return await performSetOption(
+      ctx,
+      input,
+      wait.signal,
+      readsCoherentCatalog || record?.provider !== 'codex' ? undefined : listing
+    )
   } finally {
     wait.end()
   }

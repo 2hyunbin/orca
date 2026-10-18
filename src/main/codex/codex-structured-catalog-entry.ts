@@ -12,10 +12,13 @@ export function listingFromEntry(entry: AgentModelCatalogEntry): CodexModelCatal
 
 /** Acquisition uses known choices only; picker reads discover new choices later. */
 export function codexAcquireCatalogListing(
-  catalogAccess: CodexSessionCatalogAccess | undefined
+  catalogAccess: CodexSessionCatalogAccess | undefined,
+  verifiedOnly = false
 ): CodexModelCatalogListing | null {
-  const entry = catalogAccess?.read
-    ? catalogAccess.read()
-    : catalogAccess?.store.get(catalogAccess.fingerprint)
+  const entry = verifiedOnly
+    ? catalogAccess?.read?.(true)
+    : catalogAccess?.read
+      ? catalogAccess.read()
+      : catalogAccess?.store.get(catalogAccess.fingerprint)
   return entry ? listingFromEntry(entry) : null
 }

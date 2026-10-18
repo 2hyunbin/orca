@@ -11,11 +11,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type {
-  CodexAppServerConnection,
-  CodexAppServerConnectionHandlers,
-  openCodexAppServerConnection
-} from '../codex/codex-app-server-connection'
+import { AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY } from '../../shared/structured-agent-session-surface-capabilities'
 import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
 import {
   AGENT_SESSION_PENDING_SEND_RESULT_RUNTIME_CAPABILITY,
@@ -46,8 +42,15 @@ import {
 } from './structured-agent-session-runtime'
 import { createStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import { codexProviderHandle } from '../../shared/agent-session-provider-handle-encoding'
-import { scriptedCodexTransport } from './scripted-codex-transport.test-fixture'
-import { installScriptedCodexModelCatalog } from './scripted-codex-model-catalog.test-fixture'
+import {
+  scriptedCodexAppServer,
+  scriptedCodexTransport,
+  type CodexScript
+} from './scripted-codex-transport.test-fixture'
+import {
+  installScriptedCodexModelCatalog,
+  verifyScriptedCodexRecipientCatalogs
+} from './scripted-codex-model-catalog.test-fixture'
 
 const journals = createTrackedJournalOpener()
 
@@ -71,87 +74,6 @@ const CLIENT = {
     AGENT_SESSION_PENDING_SEND_RESULT_RUNTIME_CAPABILITY,
     STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY
   ]
-}
-
-// ─── the fake `codex app-server` ────────────────────────────────────────────
-
-type CodexScript = {
-  connections: FakeConnection[]
-  openConnection: typeof openCodexAppServerConnection
-  live: () => FakeConnection
-  notify: (method: string, params: unknown) => void
-  ask: (id: number, method: string, params: unknown) => void
-}
-
-// `closed` is readonly on the real connection; the fake flips it so the test can
-// see the takeover reap the previous child.
-type FakeConnection = Omit<CodexAppServerConnection, 'closed'> & {
-  closed: boolean
-  handlers: CodexAppServerConnectionHandlers
-  calls: { method: string; params?: Record<string, unknown> }[]
-  replies: { id: number | string; result?: unknown; code?: number }[]
-  resumedThreadId: string | null
-  launch: Parameters<typeof openCodexAppServerConnection>[0]
-}
-
-function fakeCodex(): CodexScript {
-  const connections: FakeConnection[] = []
-  const openConnection: typeof openCodexAppServerConnection = async (launch, handlers = {}) => {
-    const connection: FakeConnection = {
-      launch,
-      handlers,
-      calls: [],
-      replies: [],
-      resumedThreadId: null,
-      pid: 4321,
-      closed: false,
-      request: async (method, params) => {
-        connection.calls.push({ method, params })
-        if (method === 'thread/start') {
-          return {
-            thread: { id: THREAD, path: '/rollouts/integration.jsonl' },
-            model: 'gpt-live',
-            reasoningEffort: 'medium'
-          }
-        }
-        if (method === 'thread/resume') {
-          connection.resumedThreadId = (params as { threadId: string }).threadId
-          return {
-            thread: { id: connection.resumedThreadId },
-            model: 'gpt-live',
-            reasoningEffort: 'medium'
-          }
-        }
-        if (method === 'turn/start') {
-          return { turn: { id: TURN } }
-        }
-        return {}
-      },
-      notify: () => {},
-      respond: (id, result) => connection.replies.push({ id, result }),
-      respondWithError: (id, code) => connection.replies.push({ id, code }),
-      close: async () => {
-        connection.closed = true
-        return true
-      }
-    }
-    connections.push(connection)
-    return connection
-  }
-  const live = (): FakeConnection => {
-    const connection = connections.at(-1)
-    if (!connection) {
-      throw new Error('no codex app-server has been opened')
-    }
-    return connection
-  }
-  return {
-    connections,
-    openConnection,
-    live,
-    notify: (method, params) => live().handlers.onNotification?.(method, params),
-    ask: (id, method, params) => live().handlers.onServerRequest?.({ id, method, params })
-  }
 }
 
 // ─── the RPC client ─────────────────────────────────────────────────────────
@@ -232,10 +154,22 @@ let configuredCodexProfile: string
 let shellEnvironmentPolicy: NativeChatShellEnvironmentPolicy
 
 /** Runs a one-shot method and returns its decoded reply. */
-async function call(method: string, params: unknown): Promise<RpcResponse> {
+async function call(method: string, params: unknown, modern = false): Promise<RpcResponse> {
   const replies: RpcResponse[] = []
   const request: RpcRequest = { id: `req-${operations}`, authToken: 'token', method, params }
-  await dispatcher.dispatchStreaming(request, (raw) => replies.push(JSON.parse(raw)), CLIENT)
+  await dispatcher.dispatchStreaming(
+    request,
+    (raw) => replies.push(JSON.parse(raw)),
+    modern
+      ? {
+          ...CLIENT,
+          clientCapabilities: [
+            ...CLIENT.clientCapabilities,
+            AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY
+          ]
+        }
+      : CLIENT
+  )
   const first = replies[0]
   if (!first) {
     throw new Error(`no reply for ${method}`)
@@ -311,7 +245,7 @@ async function historyPage(
 beforeEach(async () => {
   operations = 0
   root = await mkdtemp(join(tmpdir(), 'orca-structured-integration-'))
-  codex = fakeCodex()
+  codex = scriptedCodexAppServer(THREAD, TURN)
   bootEnvironmentReads = 0
   codexOverrideReads = 0
   configuredCodexProfile = 'configured'
@@ -437,7 +371,7 @@ describe('a structured codex session over agentSession.*', () => {
     expect(await call('agentSession.options', { sessionId: SESSION })).toMatchObject({
       ok: true,
       result: {
-        models: [{ id: 'gpt-live', serviceTiers: [{ value: 'fast' }] }],
+        models: [{ id: 'gpt-live', serviceTiers: [{ value: 'priority' }] }],
         current: { model: 'gpt-live', effort: 'medium' }
       }
     })
@@ -448,6 +382,54 @@ describe('a structured codex session over agentSession.*', () => {
     })
     expect(probe).toHaveBeenCalledTimes(1)
     expect(codex.live().calls.some((entry) => entry.method === 'model/list')).toBe(false)
+    expect(
+      getStructuredAgentSessionHost()?.deps.store.getRecord(SESSION)?.options?.serviceTier
+    ).toBe('priority')
+    expect(await call('agentSession.options', { sessionId: SESSION })).toMatchObject({
+      result: { current: { serviceTier: 'priority', fastMode: true } }
+    })
+    const body = { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'chosen speed' }] }
+    await ok('agentSession.send', {
+      envelope: envelope('agentSession.send', { body }, created.fence),
+      body
+    })
+    await handedOverAs({ serviceTier: 'priority' })
+    expect(
+      codex.live().calls.find((entry) => entry.method === 'turn/start')?.params
+    ).not.toHaveProperty('fastMode')
+    await verifyScriptedCodexRecipientCatalogs(
+      SESSION,
+      root,
+      (key, value, modern) => {
+        const fields = { key, value }
+        return call(
+          'agentSession.setOption',
+          { envelope: envelope('agentSession.setOption', fields, created.fence), ...fields },
+          modern
+        )
+      },
+      async () => {
+        codex.notify('turn/started', { turn: { id: TURN } })
+        codex.notify('turn/completed', { turn: { id: TURN, status: 'completed' } })
+        await drainStreamedEvents()
+        const starts = codex.live().calls.filter((entry) => entry.method === 'turn/start').length
+        await ok('agentSession.send', {
+          envelope: envelope('agentSession.send', { body }, created.fence),
+          body
+        })
+        await vi.waitFor(() =>
+          expect(codex.live().calls.filter((entry) => entry.method === 'turn/start')).toHaveLength(
+            starts + 1
+          )
+        )
+        expect(
+          codex.live().calls.findLast((entry) => entry.method === 'turn/start')?.params
+        ).toMatchObject({ serviceTier: 'default' })
+        expect(await call('agentSession.options', { sessionId: SESSION })).toMatchObject({
+          result: { current: { serviceTier: 'default', fastMode: false } }
+        })
+      }
+    )
   })
 
   it('dispatches and streams a plain first send from a fresh session', async () => {

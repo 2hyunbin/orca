@@ -75,6 +75,7 @@ async function readStructuredAgentSessionOptionsAtRest(
         agent: record.provider,
         sessionId,
         savedOnly: true,
+        legacy: !reader.readsCoherentCatalog,
         ...(inSessionWorkspace
           ? { inSessionWorkspace: true as const }
           : { accountDefault: true as const })
@@ -150,9 +151,13 @@ export async function readStructuredAgentSessionOptions(
     const child = session?.child
     // A starting child is asked nothing: the answer is the saved intent and the catalog.
     if (!child || child.phase === 'starting' || providerChildRootExited(session)) {
-      return { kind: 'rest' as const }
+      return { kind: 'rest' as const, child }
     }
-    const prepared = adapter.prepareReadOptions?.({ sessionId, fence: child.fence })
+    const prepared = adapter.prepareReadOptions?.({
+      sessionId,
+      fence: child.fence,
+      legacyCatalog: !reader.readsCoherentCatalog
+    })
     if (prepared) {
       return { kind: 'prepared' as const, child, prepared }
     }
@@ -209,7 +214,12 @@ export async function readStructuredAgentSessionOptions(
       ...(process ? { choiceCatalog: process } : {})
     }
   }
-  // Re-acquired after the reads above: the handle they saw may have closed and reopened since.
+  const permissionRecord = store.getRecord(sessionId)
+  // What a start launches now, live or at rest: a child never reports it.
+  const permissionMode = permissionRecord
+    ? await structuredAgentSessionLaunchPermission(context.deps, permissionRecord)
+    : null
+  // Reacquire after the last async read: a close/reopen can replace the whole handle.
   const session = await context.conversation(sessionId)
   const record = store.getRecord(sessionId)
   const phase = record?.rewind?.phase
@@ -217,26 +227,18 @@ export async function readStructuredAgentSessionOptions(
   const capabilities = agents.capabilities(agent)
   const floor = session.journal.context.floor()
   const contextFloor = floor ? { contextFloor: floor } : {}
-  // What a start launches now, live or at rest: a child never reports it.
-  const permissionMode = record
-    ? await structuredAgentSessionLaunchPermission(context.deps, record)
-    : null
   const saved = record?.options
-  const selected =
-    live && (saved?.model !== undefined || saved?.effort !== undefined)
-      ? await readStructuredAgentSessionOptionsAtRest(context.deps, sessionId, reader)
-      : options
   const current = {
     ...options.current,
-    ...(saved?.model !== undefined ? { model: selected.current.model } : {}),
-    ...(saved?.effort !== undefined ? { effort: selected.current.effort } : {})
+    ...(saved?.model !== undefined ? { model: saved.model } : {}),
+    ...(saved?.effort !== undefined ? { effort: saved.effort } : {})
   }
   const confirmed = current.confirmed?.filter((key) =>
     key === 'model'
       ? current.model === options.current.model
       : key !== 'effort' || current.effort === options.current.effort
   )
-  return {
+  const result: AgentSessionOptionsResult = {
     ...options,
     current: {
       ...current,
@@ -262,6 +264,37 @@ export async function readStructuredAgentSessionOptions(
       ? { contextUsage: { current: session.journal.contextUsage(), ...contextFloor } }
       : {})
   }
+  const catalog = context.deps.modelCatalog
+  const process = catalog?.processCatalog(sessionId)
+  const changed = session.child !== started.child || providerChildRootExited(session)
+  if (changed || (process && !live)) {
+    const picked = store.getRecord(sessionId)?.options
+    result.current = {
+      ...(picked?.model ? { model: picked.model } : {}),
+      ...(picked?.effort ? { effort: picked.effort } : {}),
+      ...(permissionMode ? { permissionMode } : {})
+    }
+    result.models = []
+    delete result.listedModelIds
+    delete result.fastModeSupport
+    delete result.choiceCatalog
+    delete result.choiceAuthority
+  }
+  if (process) {
+    const flat = reader.readsCoherentCatalog ? null : catalog?.legacyProcessCatalog(sessionId)
+    result.models = reader.readsCoherentCatalog
+      ? changed || !live
+        ? process.models
+        : result.models
+      : flat && flat.origin !== 'unknown'
+        ? structuredAgentSessionOptionModels(flat.models, result.current.model, (row) => row)
+        : []
+    if (reader.readsCoherentCatalog) {
+      result.choiceCatalog = process
+      result.choiceAuthority = 'session'
+    }
+  }
+  return result
 }
 
 /** A goal the host can change, or one only the agent's own `/goal` changes, reported apart. */

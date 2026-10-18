@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { AcpStructuredOptions, restoreAcpSessionOptions } from './acp-structured-options'
 import { GROK_ACP_DIALECT } from './acp-dialects/grok-dialect'
+import { grokModelCatalogFromState } from './acp-dialects/grok-model-catalog'
 
 const configOptions = [
   {
@@ -119,22 +120,41 @@ describe('ACP session options', () => {
     expect(options.reported()).toEqual({ model: 'model-b', effort: 'high' })
   })
 
-  it('preserves an advertised empty effort menu', () => {
+  it('uses observed efforts for unknown Grok metadata and preserves advertised empty menus', () => {
     const options = new AcpStructuredOptions(GROK_ACP_DIALECT)
-    options.adoptSession({
-      configOptions,
-      models: {
-        currentModelId: 'model-b',
-        availableModels: [
-          { modelId: 'model-a', name: 'Model A' },
-          { modelId: 'model-b', name: 'Model B', _meta: { supportsReasoningEffort: false } }
-        ]
-      }
-    })
+    const models = {
+      currentModelId: 'model-b',
+      availableModels: [
+        { modelId: 'model-a', name: 'Model A' },
+        { modelId: 'model-b', name: 'Model B', _meta: { supportsReasoningEffort: false } }
+      ]
+    }
+    options.adoptSession({ configOptions, models })
     const [modelA, modelB] = options.read().models
     expect(modelA?.efforts).toEqual([])
     expect(modelB?.efforts).toEqual([])
     expect(modelB?.defaultEffort).toBeUndefined()
+    const unknownModels = {
+      ...models,
+      availableModels: models.availableModels.map(({ modelId, name }) => ({ modelId, name }))
+    }
+    options.adoptSession({ configOptions, models: unknownModels })
+    expect(options.read().models[0]?.effortsKnown).toBe(false)
+    expect(options.read().models[1]?.efforts).toEqual([
+      { value: 'low', label: 'Low' },
+      { value: 'high', label: 'High' }
+    ])
+    expect(options.read().current).toEqual({
+      model: 'model-b',
+      effort: 'high',
+      confirmed: ['model', 'effort']
+    })
+    expect(options.read().models[1]?.defaultEffort).toBeUndefined()
+    expect(
+      grokModelCatalogFromState(unknownModels).every((model) => model.effortsKnown === false)
+    ).toBe(true)
+    options.adoptSession({ models: unknownModels })
+    expect(options.read().models.every((model) => model.effortsKnown === false)).toBe(true)
   })
 })
 

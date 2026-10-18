@@ -17,6 +17,7 @@ import { CodexStructuredSessionTeardown } from './codex-structured-session-teard
 import {
   applyCodexStructuredSessionOption,
   prepareLiveCodexSessionOptions,
+  readCodexAcquisitionOptions,
   readLiveCodexSessionOptions
 } from './codex-structured-session-options'
 import {
@@ -289,41 +290,29 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
     if (!isCodexTurnOptionKey(input.key) && input.key !== 'fastMode') {
       throw new Error(`codex app-server has no thread option named ${input.key}`)
     }
-    return applyCodexStructuredSessionOption(this.session(input.sessionId), input.key, input.value)
+    return applyCodexStructuredSessionOption(
+      this.session(input.sessionId),
+      input.key,
+      input.value,
+      input.catalogListing
+    )
   }
 
   readOptions = (input: { sessionId: string; fence: number }) =>
     readLiveCodexSessionOptions(this.session(input.sessionId), this.deps.requestTimeoutMs)
 
-  prepareReadOptions = (input: { sessionId: string; fence: number }) =>
-    prepareLiveCodexSessionOptions(this.session(input.sessionId), this.deps.requestTimeoutMs)
+  prepareReadOptions = (input: { sessionId: string; fence: number; legacyCatalog?: boolean }) =>
+    prepareLiveCodexSessionOptions(
+      this.session(input.sessionId),
+      this.deps.requestTimeoutMs,
+      input.legacyCatalog
+    )
 
   readAcquisitionOptions = (input: {
     sessionId: string
     fence: number
     priorOptions?: Readonly<Record<string, string>>
-  }) => {
-    const session = this.session(input.sessionId)
-    const options = {
-      ...Object.fromEntries(
-        Object.entries(input.priorOptions ?? {}).filter(([key]) => !isCodexTurnOptionKey(key))
-      ),
-      ...Object.fromEntries(session.options)
-    }
-    const reported = session.reportedOptions
-    // The thread's effort belongs to the thread's model, not to a different saved one.
-    if (
-      options.effort === undefined &&
-      reported.effort &&
-      (options.model === undefined || options.model === reported.model)
-    ) {
-      options.effort = reported.effort
-    }
-    if (options.model === undefined && reported.model) {
-      options.model = reported.model
-    }
-    return Object.keys(options).length > 0 ? options : undefined
-  }
+  }) => readCodexAcquisitionOptions(this.session(input.sessionId), input.priorOptions)
 
   closeSession = (sessionId: string): Promise<boolean> => this.teardown.close(sessionId)
   forceCloseSession = (sessionId: string): Promise<boolean> => this.teardown.forceClose(sessionId)

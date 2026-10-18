@@ -1,6 +1,7 @@
 import type { StructuredAgentSessionChildWorkProducer } from '../native-chat/agent-session-wire/structured-agent-session-subagent-rows'
 import type { StructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import type { AgentSessionAccountKind } from '../../shared/agent-session-availability'
+import type { AgentSessionModelCatalogResult } from '../../shared/agent-session-wire'
 import type {
   AgentJournalAnsweredTurnIdentity,
   AgentJournalItemIdentity
@@ -31,7 +32,7 @@ import type {
 import type { NativeChatVisualsLaunch } from '../native-chat/native-chat-visuals-delivery'
 
 export type CodexSessionCatalogAccess = AgentModelCatalogSessionAccess & {
-  demand?: () => Promise<void>
+  demand?: (legacy?: boolean) => Promise<AgentSessionModelCatalogResult | void>
 }
 
 export type CodexStructuredLaunch = {
@@ -126,8 +127,14 @@ export type CodexStructuredSessionAdapterDeps = {
   requestTimeoutMs?: number
   /** Host model catalog; sessions write their listings through and read back. */
   modelCatalog?: AgentModelCatalogStore
-  readModelCatalog?: (sessionId: string) => ReturnType<AgentModelCatalogStore['get']>
-  demandModelCatalog?: (sessionId: string) => Promise<void>
+  readModelCatalog?: (
+    sessionId: string,
+    verifiedOnly?: boolean
+  ) => ReturnType<AgentModelCatalogStore['get']>
+  demandModelCatalog?: (
+    sessionId: string,
+    legacy?: boolean
+  ) => Promise<AgentSessionModelCatalogResult | void>
 }
 
 export type CodexSession = {

@@ -4,25 +4,23 @@ export const AGENT_MODEL_CATALOG_PICKER_WAIT_MS = 30_000
 
 /** Pickers following a fingerprint's listing work: each settles once a catalog lands, all work
  *  ends, or its fixed deadline expires. */
-export class AgentModelCatalogListingWaiters {
+export class AgentModelCatalogListingWaiters<T = AgentModelCatalogEntry> {
   private readonly waiters = new Map<string, Set<() => void>>()
+  private stopped = false
 
   constructor(
-    private readonly read: (fingerprint: string) => AgentModelCatalogEntry | null,
+    private readonly read: (fingerprint: string) => T | null,
     private readonly listing: (fingerprint: string) => boolean
   ) {}
 
-  wait(
-    fingerprint: string,
-    after?: AgentModelCatalogEntry | null
-  ): Promise<AgentModelCatalogEntry | null> | null {
-    if (!this.listing(fingerprint)) {
+  wait(fingerprint: string, after?: T | null): Promise<T | null> | null {
+    if (this.stopped || !this.listing(fingerprint)) {
       return null
     }
     return new Promise((resolve) => {
       const waiters = this.waiters.get(fingerprint) ?? new Set<() => void>()
       let settled = false
-      const finish = (entry: AgentModelCatalogEntry | null): void => {
+      const finish = (entry: T | null): void => {
         if (settled) {
           return
         }
@@ -36,7 +34,7 @@ export class AgentModelCatalogListingWaiters {
       }
       const check = (): void => {
         const entry = this.read(fingerprint)
-        if ((entry && entry !== after) || !this.listing(fingerprint)) {
+        if (this.stopped || (entry && entry !== after) || !this.listing(fingerprint)) {
           finish(entry)
         }
       }
@@ -53,6 +51,12 @@ export class AgentModelCatalogListingWaiters {
   notify(fingerprint: string): void {
     for (const check of this.waiters.get(fingerprint) ?? []) {
       check()
+    }
+  }
+  close(): void {
+    this.stopped = true
+    for (const key of this.waiters.keys()) {
+      this.notify(key)
     }
   }
 }

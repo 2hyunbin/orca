@@ -15,6 +15,7 @@ import { SessionConfigOptionSchema } from '../../acp/generated/acp-protocol.gene
 import { withLiveCatalogListing } from '../agent-model-catalog/agent-model-catalog-entry'
 import { StructuredAgentSessionTaskQueue } from './structured-agent-session-task-queue'
 import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-test-support'
+import { CLAUDE_STRUCTURED_AGENT } from '../../claude/claude-structured-agent-definition'
 
 const SESSION = 'session-1'
 
@@ -31,6 +32,71 @@ function restingRecord(): AgentSessionRecord {
 }
 
 describe('options at rest', () => {
+  it.each([false, true])(
+    'uses the current handle after a late permission read (coherent %s)',
+    async (coherent) => {
+      const gate = Promise.withResolvers<void>()
+      const entered = Promise.withResolvers<void>()
+      const row = (id: string) => ({ id, label: id, isDefault: false, efforts: [] })
+      const handle = (fence: number) => ({
+        child: { fence },
+        params: { provider: 'claude' },
+        journal: { threadGoal: () => null, context: { floor: () => null } }
+      })
+      let active = handle(7)
+      const successor = handle(8)
+      const record = { ...restingRecord(), provider: 'claude', permissionMode: 'auto' }
+      const process = {
+        authority: 'session',
+        scopeId: 'successor',
+        models: [row('successor')],
+        complete: true,
+        freshForMs: 1000
+      }
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read uses only the declared lifecycle, catalog and journal fields.
+      const context = {
+        deps: {
+          adapter: {
+            readOptions: async () => ({
+              models: [row('predecessor')],
+              current: { model: 'predecessor' }
+            })
+          },
+          agents: { definition: () => CLAUDE_STRUCTURED_AGENT, capabilities: () => null },
+          store: { getRecord: () => record },
+          modelCatalog: {
+            read: async () => {
+              entered.resolve()
+              await gate.promise
+              return { origin: 'unknown' }
+            },
+            recordLiveListing: () => {},
+            processCatalog: () => (active === successor ? process : null),
+            legacyProcessCatalog: () => ({
+              origin: 'live-session',
+              models: process.models,
+              fetchedAt: 1
+            })
+          }
+        },
+        serialize: (_id: string, task: () => Promise<unknown>) => task(),
+        openConversation: async () => active,
+        conversation: async () => active
+      } as unknown as StructuredAgentSessionMutationContext
+      const reading = readStructuredAgentSessionOptions(context, SESSION, {
+        readsWithoutModel: true,
+        readsCoherentCatalog: coherent
+      })
+      await entered.promise
+      active = successor
+      gate.resolve()
+      const answer = await reading
+      expect(answer.models.map((model) => model.id)).toEqual(['successor'])
+      expect(answer.current.model).toBeUndefined()
+      expect(answer.choiceCatalog?.scopeId).toBe(coherent ? 'successor' : undefined)
+    }
+  )
+
   it('keeps the account model for an older client when the starting child has no folder default', async () => {
     const record = restingRecord()
     const read = vi.fn(async (params: { inSessionWorkspace?: true }) => ({
@@ -56,7 +122,7 @@ describe('options at rest', () => {
         adapter: {},
         agents: NO_STRUCTURED_AGENTS,
         store: { getRecord: () => record },
-        modelCatalog: { read }
+        modelCatalog: { read, processCatalog: () => null }
       },
       serialize: (_sessionId: string, task: () => Promise<unknown>) => task(),
       openConversation: async () => starting,
@@ -72,7 +138,13 @@ describe('options at rest', () => {
       readsWithoutModel: false
     })
     expect(older.current).toEqual({ model: 'gpt-account', permissionMode: 'ask' })
-    expect(read).toHaveBeenLastCalledWith({ agent: 'codex', sessionId: SESSION, savedOnly: true })
+    expect(read).toHaveBeenLastCalledWith({
+      agent: 'codex',
+      sessionId: SESSION,
+      savedOnly: true,
+      legacy: true,
+      accountDefault: true
+    })
   })
 
   it.each(['omp', 'grok', 'opencode'] as const)(
@@ -180,7 +252,11 @@ describe('live Codex option reads', () => {
 
     const reading = readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true })
     await vi.waitFor(() =>
-      expect(prepareReadOptions).toHaveBeenCalledWith({ sessionId: SESSION, fence: 7 })
+      expect(prepareReadOptions).toHaveBeenCalledWith({
+        sessionId: SESSION,
+        fence: 7,
+        legacyCatalog: true
+      })
     )
     await expect(queue.serialize(SESSION, async () => 'delivery can proceed')).resolves.toBe(
       'delivery can proceed'

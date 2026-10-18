@@ -55,6 +55,105 @@ const CODEX_HOME = (path: string): { variable: 'CODEX_HOME'; path: string } => (
 })
 
 describe('agent model catalog service', () => {
+  it('coalesces legacy folders outside the modern queue without rebinding exact session reads', async () => {
+    const releases: (() => void)[] = []
+    const probe = Object.assign(
+      vi.fn(async () => listing('unused')),
+      {
+        resolve: async (_home: AgentSessionAccountHome, cwd: string) => ({
+          identity: cwd,
+          run: async () => {
+            await new Promise<void>((resolve) => releases.push(resolve))
+            return listing(cwd)
+          }
+        }),
+        resolveLegacy: async () => ({
+          identity: 'account-launch',
+          run: vi.fn(async () => listing('account'))
+        })
+      }
+    )
+    const service = createAgentModelCatalogService({
+      store: new AgentModelCatalogStore(),
+      getRecord: () => record('/pinned'),
+      drivesRecord: () => true,
+      resolveAccountHome: async () => CODEX_HOME('/selected'),
+      recordWorkspacePath: async () => '/exact',
+      probes: { codex: probe }
+    })
+    for (let i = 0; i < 6; i++) {
+      await service.read({ agent: 'codex', sessionId: `s${i}`, workspacePath: `/folder-${i}` })
+    }
+    expect(releases).toHaveLength(2)
+    const answers = await Promise.all(
+      Array.from({ length: 7 }, (_, i) =>
+        service.read({
+          agent: 'codex',
+          sessionId: 's0',
+          workspacePath: i ? `/legacy-${i}` : null,
+          legacy: true,
+          waitForListing: true
+        })
+      )
+    )
+    expect(
+      answers.every((answer) => answer.origin !== 'unknown' && answer.models[0]?.id === 'account')
+    ).toBe(true)
+    expect(answers[0]).toMatchObject({ models: [{ isDefault: false }] })
+    expect(service.peek('s0')).toBeNull()
+    service.stop()
+    for (const release of releases) {
+      release()
+    }
+  })
+
+  it('keeps flat process membership in one generation and joins only actual startup work', async () => {
+    let scope: string | null = 'one',
+      starting = true
+    const pinned = { ...record('/claude'), provider: 'claude' }
+    const probe = vi.fn(async () => listing('new-account'))
+    const service = createAgentModelCatalogService({
+      store: new AgentModelCatalogStore(),
+      getRecord: () => pinned,
+      drivesRecord: () => true,
+      resolveAccountHome: async () => pinned.accountHome,
+      processScope: () => scope,
+      processListingPending: () => starting,
+      probes: { claude: probe }
+    })
+    const read = (waitForListing = false) =>
+      service.read({ agent: 'claude', sessionId: 'session-1', legacy: true, waitForListing })
+    expect(await read()).toEqual({ origin: 'unknown', listingInProgress: true })
+    const pending = read(true)
+    service.recordLiveListing('session-1', { models: listing('opus[1m]').models, complete: true })
+    starting = false
+    service.processListingChanged('session-1')
+    expect(await pending).toMatchObject({ models: [{ id: 'opus[1m]' }] })
+    service.recordLiveListing('session-1', {
+      models: listing('opus[1m]').models,
+      complete: false,
+      listingComplete: true,
+      launchOnlyModelId: 'opus[1m]'
+    })
+    expect(await read()).toMatchObject({ models: [{ id: 'opus[1m]' }] })
+    scope = 'two'
+    service.recordLiveListing('session-1', {
+      models: listing('opus[1m]').models,
+      complete: false,
+      listingComplete: true,
+      launchOnlyModelId: 'opus[1m]'
+    })
+    expect(await read()).toMatchObject({ models: [] })
+    service.recordLiveListing('session-1', { models: [], complete: false })
+    expect(await read()).toEqual({ origin: 'unknown' })
+    expect(probe).not.toHaveBeenCalled()
+    scope = 'three'
+    starting = true
+    const shutdown = read(true)
+    await Promise.resolve()
+    service.stop()
+    expect(await shutdown).toMatchObject({ origin: 'unknown' })
+  })
   it('selects process authority before the first options read and ends it on positive exit', async () => {
     let scope: string | null = 'generation-one'
     const pinned = {

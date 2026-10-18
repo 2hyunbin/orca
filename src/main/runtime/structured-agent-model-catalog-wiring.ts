@@ -89,6 +89,8 @@ export async function modelCatalogHostDeps(input: {
     resolveAccountHome: deps.resolveAgentAccountHome,
     processScope: (sessionId) =>
       getStructuredAgentSessionHost()?.modelCatalogProcessScope(sessionId) ?? null,
+    processListingPending: (sessionId) =>
+      getStructuredAgentSessionHost()?.modelCatalogListingPending(sessionId) === true,
     recordWorkspacePath: async (record) =>
       agentSessionPinnedLaunchDirectory(record) ??
       (await deps.resolveWorkspacePath(record.location.workspaceId).catch(() => null)),

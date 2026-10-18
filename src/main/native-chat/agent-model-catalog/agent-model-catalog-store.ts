@@ -46,6 +46,7 @@ export type AgentModelCatalogProbe = ((
   accountHome: AgentSessionAccountHome,
   options?: { signal?: AbortSignal; cwd?: string }
 ) => Promise<AgentModelCatalogSuccess>) & {
+  resolveLegacy?: (home: AgentSessionAccountHome) => Promise<AgentModelCatalogResolvedProbe>
   resolve?: (
     accountHome: AgentSessionAccountHome,
     cwd: string,
@@ -63,7 +64,7 @@ export type AgentModelCatalogSessionAccess = {
   store: AgentModelCatalogStore
   fingerprint: string
   accountHomePath: string
-  read?: () => AgentModelCatalogEntry | null
+  read?: (verifiedOnly?: boolean) => AgentModelCatalogEntry | null
 }
 
 export class AgentModelCatalogStore {

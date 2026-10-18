@@ -1,3 +1,10 @@
+import {
+  USER_MESSAGE,
+  adapterFor,
+  answerWithOpenedTurn,
+  fakeCodex,
+  identityFor
+} from './codex-structured-session-adapter-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { createCodexDispatchEchoes } from './codex-structured-dispatch-echo'
 import { createCodexTurnOpenWaits } from './codex-structured-turn-open-wait'
@@ -147,5 +154,47 @@ describe('Codex session options through independent discovery', () => {
     } finally {
       clock.mockRestore()
     }
+  })
+})
+
+describe('Codex option picks before the model list arrives', () => {
+  it('accepts and sends launch-held picks without starting discovery in the user process', async () => {
+    const codex = fakeCodex({
+      'model/list': () => {
+        throw new Error('a user process must not discover models')
+      }
+    })
+    codex.routes['turn/start'] = answerWithOpenedTurn(codex, 'turn-1')
+    const adapter = adapterFor(codex, { codexHome: '/codex/home' }, [], {
+      modelCatalog: new AgentModelCatalogStore()
+    })
+    await adapter.acquire({ identity: identityFor('session-1'), fence: 7, spawnToken: 'spawn-1' })
+    const pick = (key: string, value: string) =>
+      adapter.setOption({ sessionId: 'session-1', key, value, fence: 7 })
+
+    await expect(pick('model', 'gpt-next')).resolves.toMatchObject({ model: 'gpt-next' })
+    await expect(pick('effort', 'low')).resolves.toMatchObject({ model: 'gpt-next', effort: 'low' })
+    await expect(pick('serviceTier', 'priority')).resolves.toEqual({
+      model: 'gpt-next',
+      effort: 'low',
+      serviceTier: 'priority'
+    })
+    expect(adapter.readAcquisitionOptions({ sessionId: 'session-1', fence: 7 })).toEqual({
+      model: 'gpt-next',
+      effort: 'low',
+      serviceTier: 'priority'
+    })
+    await adapter.dispatch({
+      sessionId: 'session-1',
+      clientMessageId: 'first',
+      body: USER_MESSAGE,
+      fence: 7
+    })
+    expect(
+      codex.connections[0].calls.find((call) => call.method === 'turn/start')?.params
+    ).toMatchObject({ model: 'gpt-next', effort: 'low', serviceTier: 'priority' })
+    expect(codex.connections[0].calls.filter((call) => call.method === 'model/list')).toHaveLength(
+      0
+    )
   })
 })

@@ -61,6 +61,28 @@ const LISTED = `${JSON.stringify({
 })}\n`
 
 describe('claude model catalog probe', () => {
+  it('preserves the released omitted-cwd account invocation without project or settings requests', async () => {
+    const calls: ListingCall[] = []
+    const resolveLaunchArgs = vi.fn(() => ['--model', 'picked', '--add-dir', '/project'])
+    const probe = createClaudeModelCatalogProbe({
+      ...probeDeps(),
+      resolveLaunchArgs,
+      resolveWorkingDirectory: () => '/resolver-cwd',
+      runListing: async (...call) => {
+        calls.push(call)
+        return LISTED
+      }
+    })
+    const success = await (await probe.resolveLegacy!(HOME('/account'))).run()
+    expect(calls[0]![0]).toEqual({
+      command: expect.any(String),
+      args: [...CLAUDE_MODEL_LIST_ARGS],
+      stdin: CLAUDE_MODEL_LIST_STDIN
+    })
+    expect(resolveLaunchArgs).not.toHaveBeenCalled()
+    expect(success).not.toHaveProperty('configured')
+    expect(calls[0]![1].inheritedEnv).toHaveProperty('CLAUDE_CONFIG_DIR', '/account')
+  })
   it.each([`"${process.execPath}"`, ''])(
     'lists with the session executable and env for Command %j',
     async (command) => {
