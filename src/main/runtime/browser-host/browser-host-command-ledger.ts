@@ -4,7 +4,7 @@ import {
   type BrowserClientHostCommandEvent,
   type BrowserClientHostCommandResult,
   type BrowserClientHostLeaseAuthority
-} from '../../shared/browser-client-host-protocol'
+} from '../../../shared/browser-client-host-protocol'
 import {
   assertBrowserHostCommandResultAuthority,
   assertBrowserHostCommandOrder,

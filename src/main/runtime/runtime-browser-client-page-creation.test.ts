@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   BrowserHostPagePlacementRegistry,
   type RuntimeBrowserClientPlacement
-} from './browser-host-page-placement'
+} from './browser-host/browser-host-page-placement'
 import {
   closeRuntimeBrowserClientPage,
   createRuntimeBrowserClientPage,

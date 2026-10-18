@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { getBrowserClientDownloadTransferStore } from './browser-client-download-transfer-store'
+import { getBrowserClientDownloadTransferStore } from '../browser-client-download-transfer-store'
 import { getBrowserHostLeaseRegistry } from './browser-host-lease-registry-instance'
 
 function createRuntime() {

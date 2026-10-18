@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type {
   BrowserClientHostCommandResult,
   BrowserClientHostLeaseAuthority
-} from '../../shared/browser-client-host-protocol'
+} from '../../../shared/browser-client-host-protocol'
 import { BrowserHostCommandLedger } from './browser-host-command-ledger'
 
 const authority: BrowserClientHostLeaseAuthority = {

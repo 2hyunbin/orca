@@ -1,4 +1,4 @@
-import type { BrowserClientHostedPageInventory } from '../../shared/browser-client-host-protocol'
+import type { BrowserClientHostedPageInventory } from '../../../shared/browser-client-host-protocol'
 
 const DEFAULT_MAX_PAGES = 256
 const MAX_GENERATION = 0xffff_ffff
@@ -23,7 +23,7 @@ export type BrowserHostRuntimePageIntent = BrowserHostPageAuthority &
     reclaimFrom?: BrowserHostPageAuthority & Readonly<{ pairedDeviceId: string }>
   }>
 
-export type { BrowserClientHostedPageInventory } from '../../shared/browser-client-host-protocol'
+export type { BrowserClientHostedPageInventory } from '../../../shared/browser-client-host-protocol'
 
 type PagePair = Readonly<{
   intent: BrowserHostRuntimePageIntent

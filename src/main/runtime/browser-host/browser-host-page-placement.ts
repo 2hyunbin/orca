@@ -2,7 +2,7 @@ import type {
   RuntimeBrowserClientPlacement,
   RuntimeBrowserPlacement,
   RuntimeBrowserServerPlacement
-} from '../../shared/runtime-browser-placement'
+} from '../../../shared/runtime-browser-placement'
 import {
   assertBrowserHostPlacementIdentity,
   assertBrowserPageGeneration,
@@ -15,7 +15,7 @@ export type {
   RuntimeBrowserClientPlacement,
   RuntimeBrowserPlacement,
   RuntimeBrowserServerPlacement
-} from '../../shared/runtime-browser-placement'
+} from '../../../shared/runtime-browser-placement'
 
 const DEFAULT_MAX_PAGE_PLACEMENTS = 256
 

@@ -1,6 +1,6 @@
 import type { BrowserHostLeaseState } from './browser-host-lease-records'
 import type { BrowserHostPagePlacementRegistry } from './browser-host-page-placement'
-import type { RuntimeBrowserClientPlacement } from '../../shared/runtime-browser-placement'
+import type { RuntimeBrowserClientPlacement } from '../../../shared/runtime-browser-placement'
 import { requireBrowserHostLeaseState } from './browser-host-lease-state-resolution'
 
 export function requireBrowserClientPageConnection(

@@ -1,9 +1,9 @@
-import { releaseBrowserClientDownloadTransfersForPage } from './browser-client-download-transfer-store'
+import { releaseBrowserClientDownloadTransfersForPage } from '../browser-client-download-transfer-store'
 import { BrowserHostLeaseRegistry } from './browser-host-lease-registry'
 import {
   retainRuntimeBrowserClientPageRecord,
   type RuntimeBrowserClientPageReleaseHost
-} from './runtime-browser-client-page-release'
+} from '../runtime-browser-client-page-release'
 
 const registries = new WeakMap<object, BrowserHostLeaseRegistry>()
 

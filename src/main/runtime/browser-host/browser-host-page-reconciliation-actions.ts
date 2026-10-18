@@ -2,7 +2,7 @@ import type {
   BrowserClientHostedPageInventory,
   BrowserClientHostCommandEvent,
   BrowserClientHostCommandResult
-} from '../../shared/browser-client-host-protocol'
+} from '../../../shared/browser-client-host-protocol'
 import { assertBrowserHostPageCommandAdmission } from './browser-host-page-command-admission'
 import type { BrowserHostLeaseState } from './browser-host-lease-records'
 import type {

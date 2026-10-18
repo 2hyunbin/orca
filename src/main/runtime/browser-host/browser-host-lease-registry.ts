@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type {
   BrowserClientHostCommandEvent,
   BrowserClientHostCommandResult
-} from '../../shared/browser-client-host-protocol'
+} from '../../../shared/browser-client-host-protocol'
 import type { BrowserHostCommandResultParams } from './browser-host-command-state'
 import {
   assertBrowserHostLeaseAdmission,

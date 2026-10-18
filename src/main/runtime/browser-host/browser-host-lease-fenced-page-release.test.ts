@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { RuntimeBrowserClientPlacement } from '../../shared/runtime-browser-placement'
+import type { RuntimeBrowserClientPlacement } from '../../../shared/runtime-browser-placement'
 import { getBrowserHostLeaseRegistry } from './browser-host-lease-registry-instance'
 import {
   releaseRuntimeBrowserClientPageRecord,
   retainRuntimeBrowserClientPageRecord
-} from './runtime-browser-client-page-release'
-import { getRuntimeBrowserPageRegistry } from './runtime-browser-page-registry'
+} from '../runtime-browser-client-page-release'
+import { getRuntimeBrowserPageRegistry } from '../runtime-browser-page-registry'
 
 type FencedPageReleaseRuntime = ReturnType<typeof createRuntime>
 

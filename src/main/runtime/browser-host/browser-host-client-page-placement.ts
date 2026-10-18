@@ -1,6 +1,6 @@
 import type { BrowserHostLease } from './browser-host-lease-records'
 import type { BrowserHostPagePlacementRegistry } from './browser-host-page-placement'
-import type { RuntimeBrowserPlacement } from '../../shared/runtime-browser-placement'
+import type { RuntimeBrowserPlacement } from '../../../shared/runtime-browser-placement'
 import { BROWSER_HOST_WEBVIEW_CAPABILITY } from './browser-host-capability-selection'
 
 export function placeBrowserHostClientPage(options: {

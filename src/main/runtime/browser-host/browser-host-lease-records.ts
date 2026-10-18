@@ -1,5 +1,5 @@
-import type { BrowserClientHostedPageInventory } from '../../shared/browser-client-host-protocol'
-import type { BrowserExecutionHostGrantRegistry } from './browser-execution-host-grant-registry'
+import type { BrowserClientHostedPageInventory } from '../../../shared/browser-client-host-protocol'
+import type { BrowserExecutionHostGrantRegistry } from '../browser-execution-host-grant-registry'
 import type { BrowserHostCommandLedger } from './browser-host-command-ledger'
 import type { BrowserHostFence, BrowserHostFenceReason } from './browser-host-lease-fence'
 

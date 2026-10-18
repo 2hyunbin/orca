@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { RuntimeBrowserPlacement } from '../../shared/runtime-browser-placement'
+import type { RuntimeBrowserPlacement } from '../../../shared/runtime-browser-placement'
 import { adoptBrowserHostClientPages } from './browser-host-client-page-adoption'
 import type { BrowserClientPageExecutionHostGrant } from './browser-host-client-page-creation'
 import type { BrowserHostLeaseState } from './browser-host-lease-records'

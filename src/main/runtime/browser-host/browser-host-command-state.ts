@@ -2,7 +2,7 @@ import type {
   BrowserClientHostCommandEvent,
   BrowserClientHostCommandResult,
   BrowserClientHostLeaseAuthority
-} from '../../shared/browser-client-host-protocol'
+} from '../../../shared/browser-client-host-protocol'
 
 export const DEFAULT_MAX_OUTSTANDING_COMMANDS = 256
 export const DEFAULT_MAX_OUTSTANDING_COMMANDS_PER_PAGE = 32
