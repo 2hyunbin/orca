@@ -4,6 +4,7 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join, relative, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { buildSkillsInstaller } from './build-skills-installer.mjs'
 import { removeTree } from '../../src/shared/windows-transient-lock-removal.ts'
 
 const require = createRequire(import.meta.url)
@@ -412,7 +413,7 @@ describe('packaged runtime resources', () => {
         )
         await seedBundledRipgrep(resourcesDir)
         await seedPackagedWebClient(resourcesDir)
-        await seedPackagedSkillsInstaller(resourcesDir)
+        await buildSkillsInstaller(join(resourcesDir, 'app.asar.unpacked', 'out', 'cli'))
 
         const unpackedMainDir = join(resourcesDir, 'app.asar.unpacked', 'out', 'main')
         await mkdir(unpackedMainDir, { recursive: true })
@@ -480,7 +481,7 @@ describe('packaged runtime resources', () => {
         )
         await seedBundledRipgrep(resourcesDir)
         await seedPackagedWebClient(resourcesDir)
-        await seedPackagedSkillsInstaller(resourcesDir)
+        await buildSkillsInstaller(join(resourcesDir, 'app.asar.unpacked', 'out', 'cli'))
         // Layout fixtures use a cross-arch slice; native PTY probes need real packaged binaries.
         const target =
           process.arch === 'x64'
@@ -564,19 +565,6 @@ async function seedPackagedWebClient(resourcesDir) {
   await mkdir(join(resourcesDir, 'app.asar.unpacked', 'out', 'cli'), { recursive: true })
   await writeFile(join(webDir, 'web-index.html'), '<script src="./assets/web.js"></script>')
   await writeFile(join(webDir, 'assets', 'web.js'), '')
-}
-
-async function seedPackagedSkillsInstaller(resourcesDir) {
-  const directory = join(resourcesDir, 'app.asar.unpacked', 'out', 'cli', 'skills-installer')
-  await mkdir(join(directory, 'dist'), { recursive: true })
-  await writeFile(join(directory, 'dist', 'cli.mjs'), "console.log('1.7.2')\n")
-  await writeFile(
-    join(directory, 'package.json'),
-    JSON.stringify({ version: '1.7.2', type: 'module' })
-  )
-  for (const filename of ['LICENSE', 'ThirdPartyNoticeText.txt']) {
-    await writeFile(join(directory, filename), 'Packaging fixture notice.\n')
-  }
 }
 
 async function seedBundledRipgrep(resourcesDir) {
