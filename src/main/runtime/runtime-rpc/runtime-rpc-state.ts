@@ -66,7 +66,6 @@ export class RuntimeRpcState {
   protected e2eeKeypair: E2EEKeypair | null = null
   protected hostDescriptor: RuntimeHostDescriptor | null = null
   protected pairingInitializationFailure: PairingOfferUnavailable | null = null
-  protected tlsFingerprint: string | null = null
   protected activeTransports: RpcTransport[] = []
   protected transports: RuntimeTransportMetadata[] = []
   protected metadataOwnershipWatch: RuntimeMetadataOwnershipWatch | null = null

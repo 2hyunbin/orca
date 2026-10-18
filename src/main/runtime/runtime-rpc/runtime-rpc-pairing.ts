@@ -30,10 +30,6 @@ export class RuntimeRpcPairing extends RuntimeRpcNetworkExposure {
     return this.deviceRegistry
   }
 
-  getTlsFingerprint(): string | null {
-    return this.tlsFingerprint
-  }
-
   getE2EEPublicKey(): string | null {
     return this.e2eeKeypair?.publicKeyB64 ?? null
   }
