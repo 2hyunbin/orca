@@ -28,7 +28,8 @@ function placementPayload(blue = false): string {
 test.use({ launchEnv: { ORCA_BACKGROUND_LAUNCH: '1' } })
 
 for (const acceleration of ['off', 'on'] as const) {
-  test(`${acceleration}: deleting and replacing repeated Kitty placements releases all old pixels`, async ({
+  const rendererTag = acceleration === 'on' ? '@headful ' : ''
+  test(`${rendererTag}${acceleration}: deleting and replacing repeated Kitty placements releases all old pixels`, async ({
     orcaPage
   }, testInfo) => {
     await waitForSessionReady(orcaPage)
