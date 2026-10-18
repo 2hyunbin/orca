@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useAppStore } from '../store'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { createSessionWriteSubscriber } from '../lib/session-write-subscriber'
 import { buildActiveViewUnloadPatch } from '../lib/active-view-persist'
 import {
@@ -19,6 +20,8 @@ import {
   createShutdownCheckpointGuard
 } from '../lib/shutdown-checkpoint-guard'
 import { createShutdownCheckpointPersist } from './shutdown-checkpoint-persist'
+import { changedSleepingRecords } from '../store/terminals/terminal-sleep-layout-owner'
+import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-resume'
 import { shutdownBufferCaptures } from '../components/terminal-pane/shutdown-buffer-captures'
 import {
   dispatchWindowCloseRequest,
@@ -81,8 +84,17 @@ export function useAppSessionPersistence(): void {
       // which is in-memory. Capture them into the persisted sleeping-session
       // map so a daemon/session death while the app is closed can still
       // cold-restore via the agent's resume command (#5232).
-      captureSleepingAgentSessions: () =>
-        useAppStore.getState().captureAllSleepingAgentSessions('quit'),
+      captureSleepingAgentSessions: (): SleepingAgentSessionRecord[] | undefined => {
+        const previous = useAppStore.getState().sleepingAgentSessionsByPaneKey
+        useAppStore.getState().captureAllSleepingAgentSessions('quit')
+        // Switch point: the stage writes only the capture's changes into main's records.
+        if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+          const state = useAppStore.getState()
+          return changedSleepingRecords(state, previous, state.sleepingAgentSessionsByPaneKey)
+            .recorded
+        }
+        return undefined
+      },
       // Why: re-read state after capture() calls populated scrollback buffers
       // into the store via Zustand setters. The shouldCaptureSession read is
       // only for the gating flags and would miss those updates.
