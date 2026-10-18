@@ -2,7 +2,11 @@ import { OrcaRuntimeWithWorkspaceReviewFacts } from './orca-runtime-workspace-re
 import type { OrcaRuntimeWithMigrationCatalog } from '../orca-runtime-migration-catalog'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
 import { DEFAULT_HIDE_SLEEPING_WORKSPACES } from '../../../shared/constants'
-import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
+import {
+  getRepoExecutionHostId,
+  isLocalExecutionHost,
+  LOCAL_EXECUTION_HOST_ID
+} from '../../../shared/execution-host'
 import { detectAgentStatusFromTitle } from '../../../shared/agent-detection'
 import type { SidebarTemporalSnapshot } from '../../../shared/sidebar-list/sidebar-temporal-snapshot'
 import type { Worktree } from '../../../shared/worktree/types'
@@ -17,10 +21,7 @@ import { SmartSortAgentEntries } from './smart-sort-agent-entries'
 import { buildRuntimeSmartSortSources } from './runtime-smart-sort-sources'
 import type { AgentStatusStoreView } from './workspace-activity-facts-producer'
 import { SortStampsProducer } from './sort-stamps-producer'
-import {
-  isLocalExecutionHost,
-  resolveAgentWorkspaceExecutionHostId
-} from '../../agent-hooks/restored-status-dead-terminal-sweep'
+import { resolveAgentWorkspaceExecutionHostId } from '../../agent-hooks/restored-status-dead-terminal-sweep'
 import {
   isWslMoveProjectBlocked,
   wslMoveProjectRefForWorkspace
