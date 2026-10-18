@@ -86,6 +86,7 @@ describe('useOrderHeldWhileEngaged', () => {
       { initialProps: { ids: ['a', 'b'], sortBy: 'manual' } }
     )
     fire(row, 'pointerover')
+    fire(row, 'dragstart')
     rerender({ ids: ['b', 'a'], sortBy: 'manual' })
     expect(result.current).toEqual(['b', 'a'])
     rerender({ ids: ['a', 'b'], sortBy: 'name' })

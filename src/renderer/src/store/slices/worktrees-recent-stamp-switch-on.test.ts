@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { makeWorktree } from './worktrees-slice-test-fixtures'
+import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
+import { makeFolderWorkspace, makeWorktree } from './worktrees-slice-test-fixtures'
 import {
   createTestStore,
   mockApi,
@@ -79,5 +80,25 @@ describe('window-side Recent stamps with the sidebar-inputs switch on', () => {
     expect(store.getState().worktreesByRepo.repo1[0].comment).toBe('note')
     expect(lastActivityAt(store)).toBe(5)
     expect(persistedStamp()).toBe(false)
+  })
+
+  it('a folder workspace’s terminal activity and unread mark write no stamp', async () => {
+    const store = createTestStore()
+    const folder = makeFolderWorkspace({ id: 'folder-1', lastActivityAt: 5 })
+    store.setState({ folderWorkspaces: [folder], projectGroups: [] })
+    store.getState().bumpWorktreeActivity(folderWorkspaceKey(folder.id))
+    store.getState().markAgentAttentionUnread({
+      workspaceId: folderWorkspaceKey(folder.id),
+      subjectKey: null,
+      groupId: null,
+      reason: 'agent-completion'
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(store.getState().folderWorkspaces[0]).toMatchObject({
+      isUnread: true,
+      lastActivityAt: 5
+    })
+    const folderWrites = vi.mocked(store.getState().updateFolderWorkspace).mock.calls
+    expect(folderWrites.some(([, updates]) => 'lastActivityAt' in updates)).toBe(false)
   })
 })
