@@ -53,7 +53,7 @@ const folder: FolderWorkspace = {
 }
 
 describe('buildWorkspaceRows', () => {
-  it('keys rows by host and keeps catalog and metadata only', () => {
+  it('keys rows by host and keeps catalog, metadata and sort stamps only', () => {
     const rows = buildWorkspaceRows({
       worktrees: [
         worktree({ hostId: 'local', isPinned: true, linkedPR: 12, lastActivityAt: 99 }),
@@ -125,6 +125,39 @@ describe('buildWorkspaceRows', () => {
         parentWorktreeInstanceId: 'p-1'
       }
     })
+  })
+
+  it('carries the owning host’s sort stamps, on worktrees and folder workspaces', () => {
+    const rows = buildWorkspaceRows({
+      worktrees: [
+        worktree({ hostId: 'local', lastActivityAt: 40, smartTier: 'needs-you', smartAt: 30 })
+      ],
+      folderWorkspaces: [{ ...folder, smartTier: 'done', smartAt: 4 }],
+      repos: [localRepo],
+      lineageById: {}
+    })
+    expect(rows.get('local|repo-1::/r/a')).toMatchObject({
+      recentAt: 40,
+      smartTier: 'needs-you',
+      smartAt: 30
+    })
+    expect(rows.get('local|folder:f1')).toMatchObject({
+      recentAt: 5,
+      smartTier: 'done',
+      smartAt: 4
+    })
+    // Rest has no tier, and an older host's row parses without any stamp.
+    const rest = buildWorkspaceRows({
+      worktrees: [worktree({ hostId: 'local' })],
+      folderWorkspaces: [],
+      repos: [localRepo],
+      lineageById: {}
+    }).get('local|repo-1::/r/a')
+    expect(rest).not.toHaveProperty('smartTier')
+    const { recentAt: _recentAt, ...older } = rest!
+    expect(WorkspaceRowsSnapshotSchema.parse({ revision: 1, rows: { a: older } }).rows.a).toEqual(
+      older
+    )
   })
 
   it('parses what it builds', () => {

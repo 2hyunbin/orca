@@ -16,6 +16,7 @@ import {
 import { SmartSortAgentEntries } from './smart-sort-agent-entries'
 import { buildRuntimeSmartSortSources } from './runtime-smart-sort-sources'
 import type { AgentStatusStoreView } from './workspace-activity-facts-producer'
+import { SortStampsProducer } from './sort-stamps-producer'
 
 type Runtime = OrcaRuntimeWithWorkspaceReviewFacts
 
@@ -32,6 +33,13 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
       !(this.store?.getUI?.().hideSleepingWorkspaces ?? DEFAULT_HIDE_SLEEPING_WORKSPACES),
     readSortSample: () => this.readSidebarSortSample(),
     retentionCandidates: () => this.readSidebarRetentionCandidates()
+  })
+  readonly sortStamps = new SortStampsProducer({
+    store: () => this.store,
+    resolveTabWorktreeId: (tabId) => this.tabs.get(tabId)?.worktreeId,
+    subscribeToPtyExit: (ptyId, listener) => this.subscribeToPtyExit(ptyId, listener),
+    onClientEvent: (listener, options) => this.onClientEvent(listener, options),
+    now: Date.now
   })
 
   constructor(...args: ConstructorParameters<typeof OrcaRuntimeWithWorkspaceReviewFacts>) {
@@ -75,11 +83,13 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
   /** Attaches every sidebar producer that reads the hook server's store. */
   attachSidebarAgentStatusStore(store: AgentStatusStoreView): () => void {
     const detachActivity = this.workspaceActivityFacts.attachAgentStatusStore(store)
+    const detachStamps = this.sortStamps.attachAgentStatusStore(store)
     const detachEntries = this.smartSortAgentEntries.attach(store, () =>
       this.sidebarTemporal.noteSortInputChange()
     )
     return () => {
       detachActivity()
+      detachStamps()
       detachEntries()
       this.sidebarTemporal.dispose()
     }

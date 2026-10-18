@@ -14,10 +14,11 @@ import { composeWorktreeHostIdentity } from '../worktree/host-qualified-identity
 import type { WorktreeLineage } from '../worktree/lineage-types'
 import type { Worktree } from '../worktree/types'
 import { getWorkspaceRowKindFacts } from '../worktree/workspace-kinds'
+import { SMART_TIERS } from './sort-stamps'
 
 /**
- * One workspace this host lists, as the sidebar reads it: catalog and metadata only. Activity,
- * order and PR state are their own domains, so terminal output never changes a row.
+ * One workspace this host lists, as the sidebar reads it: catalog, metadata and the host's sort
+ * stamps. Activity and PR state are their own domains, so terminal output never changes a row.
  */
 const WorkspaceRowSchema = z.object({
   id: z.string(),
@@ -63,7 +64,11 @@ const WorkspaceRowSchema = z.object({
   cliCreated: z.literal(true).optional(),
   detachedHead: z.literal(true).optional(),
   /** Main's alone: the platform a terminal in the workspace runs on. */
-  terminalPlatform: z.string().optional()
+  terminalPlatform: z.string().optional(),
+  /** The owning host's sort stamps (sort-stamps.ts); optional, as older hosts write no tier. */
+  recentAt: z.number().optional(),
+  smartTier: z.enum(SMART_TIERS).optional(),
+  smartAt: z.number().optional()
 })
 
 /** Keyed by host-qualified id, the form the frozen sort order and paired-server rows use. */
@@ -115,7 +120,11 @@ function toWorkspaceRow(
     linkedGitLabIssue: worktree.linkedGitLabIssue ?? null,
     linkedItems: getWorkspaceAttachments(worktree),
     ...kindFacts,
-    defaultBranch: kindFacts.defaultBranch ?? false
+    defaultBranch: kindFacts.defaultBranch ?? false,
+    recentAt: worktree.lastActivityAt,
+    ...(worktree.smartTier !== undefined
+      ? { smartTier: worktree.smartTier, smartAt: worktree.smartAt }
+      : {})
   }
 }
 
