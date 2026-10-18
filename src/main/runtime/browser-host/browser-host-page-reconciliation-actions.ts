@@ -7,9 +7,9 @@ import { assertBrowserHostPageCommandAdmission } from './browser-host-page-comma
 import type { BrowserHostLeaseState } from './browser-host-lease-records'
 import type {
   BrowserClientPagePlacementReservation,
-  BrowserHostPagePlacementRegistry,
-  RuntimeBrowserPlacement
+  BrowserHostPagePlacementRegistry
 } from './browser-host-page-placement'
+import type { RuntimeBrowserPlacement } from '../../../shared/runtime-browser-placement'
 import type { BrowserHostPageReconciliationActions as ActionHandlers } from './browser-host-page-reconciliation-executor'
 import type {
   BrowserHostPageReconciliationPlan,

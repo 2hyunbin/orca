@@ -11,7 +11,8 @@ import { readRelayAuthContext } from './relay-auth-context'
 import { relayIdentityKey } from './relay-auth-identity'
 import { RelayAuthCoordinator } from './relay-auth-coordinator'
 import { RelayUnavailableError } from './relay-readiness'
-import { RelaySessionBroker, type RelayBrokerStatus } from './relay-session-broker'
+import { RelaySessionBroker } from './relay-session-broker'
+import type { RelayBrokerStatus } from './relay-session-broker-contract'
 import type { PairingRelay } from '../../../shared/mobile-relay-pairing-offer'
 import type {
   RelayRevokeOutbox,

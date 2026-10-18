@@ -11,12 +11,6 @@ import {
   type BrowserHostPlacementIdentity
 } from './browser-host-page-placement-validation'
 
-export type {
-  RuntimeBrowserClientPlacement,
-  RuntimeBrowserPlacement,
-  RuntimeBrowserServerPlacement
-} from '../../../shared/runtime-browser-placement'
-
 const DEFAULT_MAX_PAGE_PLACEMENTS = 256
 
 export type BrowserPageRetirement = Readonly<{

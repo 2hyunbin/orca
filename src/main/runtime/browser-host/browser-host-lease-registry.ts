@@ -19,10 +19,12 @@ import { issueBrowserHostClientPageCommand } from './browser-host-client-page-co
 import {
   BrowserHostPagePlacementRegistry,
   type BrowserClientPageAuthority,
-  type BrowserPageRetirement,
-  type RuntimeBrowserClientPlacement,
-  type RuntimeBrowserPlacement
+  type BrowserPageRetirement
 } from './browser-host-page-placement'
+import type {
+  RuntimeBrowserClientPlacement,
+  RuntimeBrowserPlacement
+} from '../../../shared/runtime-browser-placement'
 import { requireLiveBrowserClientPage } from './browser-host-page-authority'
 import type { BrowserHostFenceReason } from './browser-host-lease-fence'
 import { dispatchBrowserHostLeaseFence } from './browser-host-lease-fence-dispatch'
