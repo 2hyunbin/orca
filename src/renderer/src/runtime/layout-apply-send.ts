@@ -1,5 +1,8 @@
 // Store-free so store slices can send; `layout-owner-command` reads the store for other callers.
-import { runtimeEnvironmentIdUnlessTwin } from '@/lib/resolve-owner'
+import {
+  runtimeEnvironmentIdForWorkspaceOwner,
+  runtimeEnvironmentIdUnlessTwin
+} from '@/lib/resolve-owner'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import { afterLayoutFrame } from '@/runtime/layout-frame-position'
 import { holdTabPaneTree } from '@/runtime/layout-owner-pane-intents'
@@ -131,13 +134,14 @@ export type WindowLayoutCommand =
   | { type: 'wake'; tabId: string; paneKeys: string[]; recordOnly: true }
   | { type: 'setDefaultTabsApplied' }
 
-type WindowRefusalCode = LayoutRefusalCode | 'wsl_move_in_progress'
+/** `call_failed`: the call threw, and a thrown write is rolled back. */
+type WindowRefusalCode = LayoutRefusalCode | 'wsl_move_in_progress' | 'call_failed'
 
 export type LayoutApplyHandlers = {
   apply: (result: LayoutCommandResult) => void
   asToday: () => void
   refused?: (code: WindowRefusalCode) => void
-  /** Main's copy lacks the target, or the call threw; `asToday` when absent. A pane split or move
+  /** Main's copy lacks the target; `asToday` when absent. A pane split or move
    *  passes one: main keeps its pane trees over the window's saves, so that change would not last.
    *  A close keeps `asToday`: a pane main lacks has nothing to keep it. */
   unapplied?: () => void
@@ -157,10 +161,11 @@ const PANE_COMMANDS: ReadonlySet<WindowLayoutCommand['type']> = new Set([
 
 /**
  * A layout command in a layout-owner build: main applies it first, then, once the window has the
- * frame with main's change, `apply` shows main's result. `asToday` runs instead when main cannot
- * act on it: a paired server holds the tab (#18202), a move's workspaces are in two partitions,
- * main's copy lacks the workspace, tab, pane or group, or the call threw. `refused` on any other
- * refusal. False when a paired server owns the workspace's layout; the caller acts as today.
+ * frame with main's change, `apply` shows main's result. `asToday` runs instead only when a paired
+ * server may hold the tab (#18202), or main's copy lacks the workspace, tab, pane or group. Any
+ * other refusal, and a call that threw, is logged and `refused`: main's frame stays what is drawn,
+ * since a window save no longer carries the change. False when a paired server owns the
+ * workspace's layout; the caller acts as today.
  */
 export function sendLayoutApply(
   state: Parameters<typeof runtimeEnvironmentIdUnlessTwin>[0],
@@ -190,17 +195,17 @@ export function sendLayoutApply(
       (reply) =>
         afterLayoutFrame(reply.frameSeq, () => {
           try {
-            handleReply(command, reply, handlers)
+            handleReply(state, worktreeId, command, reply, handlers)
           } finally {
             release()
           }
         }),
       (error: unknown) => {
         // Why: a thrown write is rolled back. An indeterminate disk write is not, and may leave a
-        // pane main minted; accepted until main is the only writer.
-        console.warn(`[layout-owner] ${command.type} failed:`, errorMessage(error))
+        // pane main minted, which its frame then draws.
+        console.warn(`[layout-owner] ${command.type} refused: call_failed`, errorMessage(error))
         try {
-          unapplied(handlers)
+          handlers.refused?.('call_failed')
         } finally {
           release()
         }
@@ -214,22 +219,34 @@ export function sendLayoutApply(
 }
 
 function handleReply(
+  state: Parameters<typeof runtimeEnvironmentIdUnlessTwin>[0],
+  worktreeId: string,
   command: WindowLayoutCommand,
   reply: LayoutApplyReply,
   handlers: LayoutApplyHandlers
 ): void {
   if (reply.ok) {
     handlers.apply(reply.result)
-  } else if (reply.code === 'host_not_owned' || reply.code === 'other_partition') {
+  } else if (reply.code === 'host_not_owned' && mayBePairedServers(state, worktreeId)) {
     handlers.asToday()
   } else if (mainLacksTarget(reply.code)) {
-    // Why: main's copy lags the window's here (the window still saves its tabs).
+    // Why: main's copy can lag the window's: a tab the window drew before main's create answered.
     console.warn(`[layout-owner] ${command.type} found no target:`, reply.code)
     unapplied(handlers)
   } else {
     console.warn(`[layout-owner] ${command.type} refused:`, reply.code)
     handlers.refused?.(reply.code)
   }
+}
+
+/** A twin: main may route it to a paired server, whose layout the window still mirrors. */
+function mayBePairedServers(
+  state: Parameters<typeof runtimeEnvironmentIdUnlessTwin>[0],
+  worktreeId: string
+): boolean {
+  return (
+    runtimeEnvironmentIdForWorkspaceOwner(state, { workspaceId: worktreeId }).kind !== 'resolved'
+  )
 }
 
 function unapplied(handlers: LayoutApplyHandlers): void {

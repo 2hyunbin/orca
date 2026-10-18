@@ -86,9 +86,8 @@ export function terminalTabCreateCommand(
 }
 
 /**
- * Sends a tab the window just drew to main. Nothing to undo on any answer: main holding the same
- * pane already, or a paired server or no partition holding the workspace, leaves the window's own
- * session save to carry the tab, as today.
+ * Sends a tab the window just drew to main. Nothing to undo on any answer: main's frame is what
+ * stays drawn, since the window's session save no longer carries the tab. A refusal is logged.
  */
 export function recordCreatedTerminalTabInLayoutOwner(
   state: AppState,
@@ -105,13 +104,13 @@ export function recordCreatedTerminalTabInLayoutOwner(
   }
   void callRuntimeRpc<LayoutApplyReply>({ kind: 'local' }, 'layout.apply', { command }).then(
     (reply) => {
-      if (!reply.ok && reply.code !== 'host_not_owned') {
+      if (!reply.ok) {
         console.warn('[layout-owner] createTerminalTab refused:', reply.code)
       }
     },
     (error: unknown) => {
       console.warn(
-        '[layout-owner] createTerminalTab failed:',
+        '[layout-owner] createTerminalTab refused: call_failed',
         error instanceof Error ? error.message : error
       )
     }
