@@ -300,7 +300,8 @@ describe('CodexStructuredSessionAdapter lifecycle', () => {
         state: 'interrupted',
         userItemId: `codex:${THREAD_ID}:turn-1:0`,
         startedAt: expect.any(Number),
-        completedAt: expect.any(Number)
+        completedAt: expect.any(Number),
+        endedBy: 'host'
       }
     })
   })

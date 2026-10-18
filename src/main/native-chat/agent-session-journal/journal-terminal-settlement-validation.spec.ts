@@ -116,7 +116,8 @@ export function registerJournalTerminalSettlementValidationTests(): void {
       expect(journal.itemBody(agentJournalItemKey(identity))).toEqual({
         kind: 'turn',
         turnId: 'old',
-        state: 'interrupted'
+        state: 'interrupted',
+        endedBy: 'host'
       })
       expect(journal.runningTurn()?.turnId ?? null).toBeNull()
       const ended = journal.snapshot()
@@ -144,7 +145,8 @@ export function registerJournalTerminalSettlementValidationTests(): void {
         kind: 'turn',
         turnId: 'old',
         state: 'interrupted',
-        completedAt: 1_000
+        completedAt: 1_000,
+        endedBy: 'host'
       })
       expect(journal.runningTurn()?.turnId ?? null).toBeNull()
       await expectSendStillWritable()

@@ -657,7 +657,8 @@ describe('stale session state on a cold acquire', () => {
         turnId: 'turn-2',
         state: 'interrupted',
         startedAt: 100,
-        completedAt: 100
+        completedAt: 100,
+        endedBy: 'host'
       })
       const revised = journal.cursor()
       await expect(settle(PROVEN)).resolves.toBe(0)
