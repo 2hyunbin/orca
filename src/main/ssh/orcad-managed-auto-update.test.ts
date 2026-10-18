@@ -100,7 +100,7 @@ describe('updating a managed orcad on connect', () => {
     autoUpdateManagedOrcadEnvironment('/user-data', {
       environmentId: 'env-1',
       appVersion: '1.5.0',
-      failedBefore: false,
+      failedBefore: () => false,
       onUpdating: vi.fn()
     })
 

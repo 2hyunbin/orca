@@ -3,13 +3,13 @@ import type {
   SSH_MANAGED_SERVER_PHASES,
   SshConnectionState,
   SshManagedServerLinkedProject,
-  SshManagedServerUpdateNote,
   SshTarget
 } from '../../../shared/ssh-types'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import { launchSessionEndedLine } from './ssh-host-launch-session-copy'
 import { bridgedTerminalsLine } from './ssh-host-bridged-terminals-copy'
+import { managedUpdateLine } from './ssh-host-server-update-copy'
 
 export type SshHostServerStatusLine = {
   text: string
@@ -210,37 +210,6 @@ function linkedProjectsLine(
             'This host’s Orca server already had {{paths}}, so this desktop now uses the server’s copy. This desktop’s tabs there were not moved, and worktrees it created there show as external worktrees.',
             { paths }
           )
-  }
-}
-
-function managedUpdateLine(update: SshManagedServerUpdateNote): SshHostServerStatusLine {
-  switch (update.state) {
-    case 'host-newer':
-      return {
-        tone: 'muted',
-        text: translate(
-          'auto.components.settings.sshHostServer.hostNewer',
-          'Runs a managed Orca server from a newer Orca; it keeps that version.'
-        )
-      }
-    case 'deferred':
-      return {
-        tone: 'muted',
-        text: translate(
-          'auto.components.settings.sshHostServer.updateDeferredLater',
-          'Runs a managed Orca server; it updates on a later connect.'
-        ),
-        ...withDetail(update.detail)
-      }
-    case 'failed':
-      return {
-        tone: 'warning',
-        text: translate(
-          'auto.components.settings.sshHostServer.updateFailedPrevious',
-          'Runs a managed Orca server on its previous version; updating it failed.'
-        ),
-        ...withDetail(update.detail)
-      }
   }
 }
 
