@@ -15,7 +15,7 @@ import { buildJournalSendAnsweredRow } from './journal-stop-and-resume-rows'
 import type { JournalObservedSend } from './journal-store-contracts'
 
 /** A saved fact: never a removal, and no item for a client. */
-export function isJournalFactRow(row: JournalRow): row is JournalTombstoneRow {
+export function isJournalFactRow(row: JournalRow): boolean {
   return row.kind === 'tombstone' && isAgentJournalFactKey(row.itemId)
 }
 

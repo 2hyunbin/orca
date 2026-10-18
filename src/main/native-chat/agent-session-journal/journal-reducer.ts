@@ -140,7 +140,7 @@ export function applyJournalRow(
     foldJournalQueuePauseMark(state.queuePauseMarks, row)
     return
   }
-  if (isJournalFactRow(row)) {
+  if (row.kind === 'tombstone' && isJournalFactRow(row)) {
     foldJournalSendAnswered(state.sendAnswers, row)
     return
   }

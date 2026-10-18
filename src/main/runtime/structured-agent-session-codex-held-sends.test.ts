@@ -14,7 +14,10 @@ import type {
 } from '../codex/codex-app-server-connection'
 import { codexTurnLifecycleFake } from '../codex/codex-turn-lifecycle-fake'
 import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
-import type { AgentJournalSubmission } from '../../shared/agent-session-journal-types'
+import type {
+  AgentJournalItemBody,
+  AgentJournalSubmission
+} from '../../shared/agent-session-journal-types'
 import type { AgentSessionSubscribeEvent } from '../../shared/agent-session-wire'
 import { hasUnansweredStructuredAgentSessionDispatch } from '../../shared/structured-agent-session-unanswered-dispatch'
 import {
@@ -37,7 +40,6 @@ import {
   loadTestJournal
 } from '../native-chat/agent-session-journal/journal-host-database-test-support'
 import type Database from '../sqlite/sync-database'
-import type { AgentJournalItemBody } from '../../shared/agent-session-journal-types'
 import {
   agentJournalItemKey,
   agentJournalSendAnsweredKey
