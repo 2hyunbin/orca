@@ -7,6 +7,7 @@ import { Button } from './ui/button'
 import { Card } from './ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible'
 import { shouldShowUnexpectedSignoutCard } from './unexpected-signout/unexpected-signout-visibility'
+import { OrcaSignInWaitNotice } from './OrcaSignInWaitNotice'
 
 function readPreviewFlag(): boolean {
   if (!import.meta.env.DEV) {
@@ -248,6 +249,7 @@ export function UnexpectedSignoutCard(): React.JSX.Element | null {
               {translate('auto.components.UnexpectedSignoutCard.c5b3e8a17d', 'Sign in to Orca')}
             </Button>
           </div>
+          <OrcaSignInWaitNotice />
         </div>
       </Card>
     </div>

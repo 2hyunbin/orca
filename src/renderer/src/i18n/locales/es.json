@@ -11622,11 +11622,7 @@
           "localTitle": "LAN",
           "retrying": "Reintentando",
           "relayCell": "celda de relevo",
-          "relaySignInDetail": "Inicia la sesión de este escritorio en Orca y enruta el teléfono a través de los servidores de Orca. LAN no necesita una cuenta.",
-          "signInWaiting": "Esperando el inicio de sesión en tu navegador",
-          "copySignInLink": "Copiar enlace de inicio de sesión",
-          "signInLinkCopied": "Enlace de inicio de sesión copiado",
-          "signInLinkCopyFailed": "No se pudo copiar el enlace."
+          "relaySignInDetail": "Inicia la sesión de este escritorio en Orca y enruta el teléfono a través de los servidores de Orca. LAN no necesita una cuenta."
         },
         "MobilePairingSetupSection": {
           "title": "Vincular un teléfono",
@@ -17946,6 +17942,12 @@
         "a62f9db53d": "Cancel",
         "c77189bc0c": "Update filter",
         "19af906d12": "Save filter"
+      },
+      "OrcaSignInWaitNotice": {
+        "waiting": "Esperando el inicio de sesión en tu navegador",
+        "copyLink": "Copiar enlace de inicio de sesión",
+        "copied": "Enlace de inicio de sesión copiado",
+        "copyFailed": "No se pudo copiar el enlace."
       }
     },
     "i18n": {

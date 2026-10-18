@@ -10,6 +10,7 @@ import { useAppStore } from '@/store'
 import { ArtifactPublishedLinkPanel } from './ArtifactPublishedLinkPanel'
 import { getPublishedArtifactLink } from './artifact-published-link-client'
 import { publishArtifactFromSurface } from './artifact-publish-flow'
+import { OrcaSignInWaitNotice } from '../OrcaSignInWaitNotice'
 
 type PublishedLinkLookup = {
   key: string
@@ -226,6 +227,7 @@ export function ArtifactPublishButton({
               </Button>
             </div>
           ) : null}
+          {!signedIn ? <OrcaSignInWaitNotice buttonSize="xs" /> : null}
 
           {!sharingEnabled ? (
             <div className={cn('space-y-2', !signedIn && 'border-t border-border/60 pt-3')}>

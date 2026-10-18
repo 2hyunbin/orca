@@ -11627,11 +11627,7 @@
           "localTitle": "LAN",
           "retrying": "再試行中",
           "relayCell": "リレーセル",
-          "relaySignInDetail": "このデスクトップを Orca にサインインさせ、スマートフォンの通信を Orca のサーバー経由でルーティングします。LAN ではアカウントは不要です。",
-          "signInWaiting": "ブラウザでのサインインを待っています",
-          "copySignInLink": "サインインリンクをコピー",
-          "signInLinkCopied": "サインインリンクをコピーしました",
-          "signInLinkCopyFailed": "リンクをコピーできませんでした。"
+          "relaySignInDetail": "このデスクトップを Orca にサインインさせ、スマートフォンの通信を Orca のサーバー経由でルーティングします。LAN ではアカウントは不要です。"
         },
         "MobilePairingSetupSection": {
           "title": "スマートフォンをペアリング",
@@ -17951,6 +17947,12 @@
         "a62f9db53d": "Cancel",
         "c77189bc0c": "Update filter",
         "19af906d12": "Save filter"
+      },
+      "OrcaSignInWaitNotice": {
+        "waiting": "ブラウザでのサインインを待っています",
+        "copyLink": "サインインリンクをコピー",
+        "copied": "サインインリンクをコピーしました",
+        "copyFailed": "リンクをコピーできませんでした。"
       }
     },
     "i18n": {

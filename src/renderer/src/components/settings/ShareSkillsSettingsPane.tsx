@@ -5,6 +5,7 @@ import { translate } from '@/i18n/i18n'
 import { isWebClientLocation } from '@/lib/web-client-location'
 import { useAppStore } from '@/store'
 import { SettingsSwitchRow } from './SettingsFormControls'
+import { OrcaSignInWaitNotice } from '../OrcaSignInWaitNotice'
 
 type HowToStep = { key: string; title: string; description: string }
 
@@ -142,6 +143,7 @@ export function ShareSkillsSettingsPane(): React.JSX.Element {
                 : translate('auto.components.settings.shareSkills.signIn', 'Sign in to Orca')}
             </Button>
           ) : null}
+          {!isWebClient ? <OrcaSignInWaitNotice className="basis-full" /> : null}
         </section>
       ) : null}
 

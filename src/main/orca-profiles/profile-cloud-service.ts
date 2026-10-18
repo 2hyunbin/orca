@@ -53,6 +53,12 @@ export function getPendingOrcaCloudSignInLink(): string | null {
   return pendingSignInLink?.url ?? null
 }
 
+function releasePendingSignInLink(attempt: number): void {
+  if (pendingSignInLink?.attempt === attempt) {
+    pendingSignInLink = null
+  }
+}
+
 function activeAuth(
   active: ReturnType<typeof ensureActiveOrcaProfile>,
   userDataPath: string
@@ -93,6 +99,8 @@ export async function connectCurrentOrcaProfile(
         pendingSignInLink = { attempt, url }
       }
     })
+    // Why: the callback listener closes once the browser answers, so the link is dead.
+    releasePendingSignInLink(attempt)
     if (attempt < linkedCloudConnectAttempt) {
       return {
         status: 'cancelled',
@@ -138,9 +146,7 @@ export async function connectCurrentOrcaProfile(
       error: message
     }
   } finally {
-    if (pendingSignInLink?.attempt === attempt) {
-      pendingSignInLink = null
-    }
+    releasePendingSignInLink(attempt)
   }
 }
 

@@ -11855,11 +11855,7 @@
           "localDescription": "Phone must be on this Wi‑Fi or connected through Tailscale. No account needed.",
           "retrying": "Retrying",
           "relayCell": "Relay cell",
-          "relaySignInDetail": "Signs this desktop in to Orca and routes the phone through Orca’s servers. LAN does not need an account.",
-          "signInWaiting": "Waiting for sign-in in your browser",
-          "copySignInLink": "Copy sign-in link",
-          "signInLinkCopied": "Sign-in link copied",
-          "signInLinkCopyFailed": "Could not copy the link."
+          "relaySignInDetail": "Signs this desktop in to Orca and routes the phone through Orca’s servers. LAN does not need an account."
         },
         "MobilePairingSetupSection": {
           "title": "Pair a phone",
@@ -18166,6 +18162,12 @@
         "a62f9db53d": "Cancel",
         "c77189bc0c": "Update filter",
         "19af906d12": "Save filter"
+      },
+      "OrcaSignInWaitNotice": {
+        "waiting": "Waiting for sign-in in your browser",
+        "copyLink": "Copy sign-in link",
+        "copied": "Sign-in link copied",
+        "copyFailed": "Could not copy the link."
       }
     },
     "i18n": {

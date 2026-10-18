@@ -9,6 +9,7 @@ import { useOrcaProfileAuthStatusRefresh } from '@/hooks/use-orca-profile-auth-s
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
+import { OrcaSignInWaitNotice } from '../OrcaSignInWaitNotice'
 
 const LONG_WORKSPACE_NAME = 'feature/dev-toast-layout-with-a-long-workspace-name'
 const DEV_TOAST_DESCRIPTION =
@@ -180,6 +181,7 @@ function OrcaCloudDevSubsection(): React.JSX.Element {
                 )}
               </Button>
             )}
+            {connected ? null : <OrcaSignInWaitNotice className="basis-full" />}
             <Button type="button" variant="ghost" size="sm" onClick={() => void refresh()}>
               {translate(
                 'auto.components.settings.DevToolsPane.orcaCloudRefresh',

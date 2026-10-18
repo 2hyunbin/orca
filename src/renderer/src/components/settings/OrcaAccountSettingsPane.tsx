@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import { OrcaProfileSignOutConfirmDialog } from '../orca-profiles/OrcaProfileSignOutConfirmDialog'
+import { OrcaSignInWaitNotice } from '../OrcaSignInWaitNotice'
 
 function accountStatusCopy(
   state: 'local' | 'unconfigured' | 'connected' | 'reconnect-required' | undefined,
@@ -122,6 +123,7 @@ export function OrcaAccountSettingsPane(): React.JSX.Element {
                 : translate('auto.components.settings.orcaAccount.signIn', 'Sign in to Orca')}
             </Button>
           )}
+          {connected ? null : <OrcaSignInWaitNotice className="basis-full" />}
         </div>
 
         <div className="space-y-4 border-t border-border/60 pt-5">

@@ -6,6 +6,7 @@ import { useOrcaProfileAuthStatusRefresh } from '@/hooks/use-orca-profile-auth-s
 import { useAppStore } from '@/store'
 import { isWebClientLocation } from '@/lib/web-client-location'
 import { translate } from '@/i18n/i18n'
+import { OrcaSignInWaitNotice } from '../OrcaSignInWaitNotice'
 
 type HowToStep = { key: string; title: string; description: string }
 
@@ -134,6 +135,7 @@ export function ArtifactsSettingsPane({
               ? translate('auto.components.settings.artifacts.signInAgain', 'Sign in again')
               : translate('auto.components.settings.artifacts.signIn', 'Sign in to Orca')}
           </Button>
+          <OrcaSignInWaitNotice className="basis-full" />
         </section>
       ) : null}
       <section className="space-y-4 py-5">

@@ -11713,11 +11713,7 @@
           "localDescription": "Le téléphone doit être sur ce Wi‑Fi ou connecté via Tailscale. Aucun compte requis.",
           "retrying": "Nouvelle tentative",
           "relayCell": "Cellule relais",
-          "relaySignInDetail": "Connecte ce bureau à Orca et fait passer le téléphone par les serveurs d'Orca. Le LAN ne nécessite pas de compte.",
-          "signInWaiting": "En attente de la connexion dans votre navigateur",
-          "copySignInLink": "Copier le lien de connexion",
-          "signInLinkCopied": "Lien de connexion copié",
-          "signInLinkCopyFailed": "Impossible de copier le lien."
+          "relaySignInDetail": "Connecte ce bureau à Orca et fait passer le téléphone par les serveurs d'Orca. Le LAN ne nécessite pas de compte."
         },
         "MobilePairingSetupSection": {
           "title": "Jumeler un téléphone",
@@ -18055,6 +18051,12 @@
         "a62f9db53d": "Annuler",
         "c77189bc0c": "Mettre à jour le filtre",
         "19af906d12": "Enregistrer le filtre"
+      },
+      "OrcaSignInWaitNotice": {
+        "waiting": "En attente de la connexion dans votre navigateur",
+        "copyLink": "Copier le lien de connexion",
+        "copied": "Lien de connexion copié",
+        "copyFailed": "Impossible de copier le lien."
       }
     },
     "i18n": {

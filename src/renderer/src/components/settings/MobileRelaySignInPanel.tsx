@@ -1,31 +1,7 @@
-import { toast } from 'sonner'
 import { Button } from '../ui/button'
 import { translate } from '../../i18n/i18n'
 import { useAppStore } from '../../store'
-
-async function copyPendingSignInLink(): Promise<void> {
-  try {
-    const link = await window.api.orcaProfiles.pendingSignInLink()
-    if (!link) {
-      return
-    }
-    await window.api.ui.writeClipboardText(link)
-    toast.success(
-      translate(
-        'auto.components.settings.MobilePairingConnectionOptions.signInLinkCopied',
-        'Sign-in link copied'
-      )
-    )
-  } catch (error) {
-    console.warn('Could not copy the Orca sign-in link:', error)
-    toast.error(
-      translate(
-        'auto.components.settings.MobilePairingConnectionOptions.signInLinkCopyFailed',
-        'Could not copy the link.'
-      )
-    )
-  }
-}
+import { CopyOrcaSignInLinkButton, orcaSignInWaitingLabel } from '../OrcaSignInWaitNotice'
 
 /** The Relay sub-step that signs this desktop in to Orca. */
 export function MobileRelaySignInPanel({
@@ -57,29 +33,14 @@ export function MobileRelaySignInPanel({
     >
       <p className="min-w-0 flex-1 text-xs text-muted-foreground" aria-live="polite">
         {pending
-          ? translate(
-              'auto.components.settings.MobilePairingConnectionOptions.signInWaiting',
-              'Waiting for sign-in in your browser'
-            )
+          ? orcaSignInWaitingLabel()
           : translate(
               'auto.components.settings.MobilePairingConnectionOptions.relaySignInDetail',
               'Signs this desktop in to Orca and routes the phone through Orca’s servers. LAN does not need an account.'
             )}
       </p>
       <div className="flex shrink-0 items-center gap-2">
-        {pending ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => void copyPendingSignInLink()}
-          >
-            {translate(
-              'auto.components.settings.MobilePairingConnectionOptions.copySignInLink',
-              'Copy sign-in link'
-            )}
-          </Button>
-        ) : null}
+        {pending ? <CopyOrcaSignInLinkButton /> : null}
         <Button type="button" size="sm" onClick={onSignIn}>
           {reconnectRequired
             ? translate(
