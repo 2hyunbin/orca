@@ -128,6 +128,7 @@ export function openDetectedFilePath(
   void (async () => {
     let statResult
     let fileContext = getTerminalFileContext(worktreeId, worktreePath, runtimeEnvironmentId)
+    const sourceRuntimeOwnerId = runtimeTargetEnvironmentId(fileContext.target)
     let hostWorkspaceFile: HostWorkspaceFile | null = null
     let hostGrantId: string | null = null
     let clientLocal = false
@@ -261,7 +262,7 @@ export function openDetectedFilePath(
 
     const store = useAppStore.getState()
     let targetWorktreeId = worktreeId
-    const runtimeOwnerId = runtimeTargetEnvironmentId(fileContext.target)
+    const runtimeOwnerId = runtimeTargetEnvironmentId(fileContext.target) ?? sourceRuntimeOwnerId
     let targetExecutionHostId =
       hostWorkspaceFile?.executionHostId ??
       (runtimeOwnerId
