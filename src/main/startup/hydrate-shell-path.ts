@@ -1,4 +1,4 @@
-import type { ChildProcess } from 'node:child_process'
+import type { SpawnedProcess } from '@orca/process-host/process-spec'
 import { delimiter, win32 as pathWin32 } from 'node:path'
 import { spawnProcess } from '@orca/process-host'
 import type { ShellHydrationFailureReason } from '../../shared/shell-path-hydration-types'
@@ -189,7 +189,7 @@ function spawnShellAndReadPath(shell: string): Promise<HydrationResult> {
     let stdout = ''
     let timer: ReturnType<typeof setTimeout> | null = null
 
-    let child: ChildProcess
+    let child: SpawnedProcess
     try {
       child = spawnProcess({
         program: shell,
