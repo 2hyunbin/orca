@@ -140,6 +140,21 @@ async function startChild(
       },
       'discovery'
     )
+    // Independent default-launch discovery, unaffected by this child's picks or reported model.
+    store.recordSuccess(
+      agentModelCatalogScopeFingerprint(
+        agentModelCatalogFingerprintForRecord(restingRecord({})),
+        'legacy-account'
+      ),
+      'claude',
+      {
+        models: wireClaudeModels(listedModels({ models: CATALOG })),
+        configured: { model: 'claude-opus-5-5[1m]', effort: 'medium' },
+        complete: true,
+        origin: 'probe'
+      },
+      'discovery'
+    )
   }
   return adapter
 }
@@ -276,6 +291,15 @@ describe('Claude effort default at rest', () => {
       'discovery'
     )
 
+    store.recordSuccess(
+      agentModelCatalogScopeFingerprint(
+        agentModelCatalogFingerprintForRecord(record),
+        'legacy-account'
+      ),
+      'codex',
+      { ...listing, origin: 'probe', complete: true },
+      'discovery'
+    )
     const resting = await readAtRest(store, record)
     const live = composeCodexSessionOptionCatalog(listing, {
       current: { model: 'gpt-unlisted', effort: 'high' }

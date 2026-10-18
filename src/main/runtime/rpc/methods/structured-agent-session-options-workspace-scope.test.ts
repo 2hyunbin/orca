@@ -134,10 +134,21 @@ async function chatAtRest(repoConfig: { configured: boolean }) {
     agentReadsProjectModelConfig,
     workspaceMayOverrideDefaultModel
   })
+  store.recordSuccess(
+    agentModelCatalogScopeFingerprint(
+      agentModelCatalogFingerprintForRecord(rig.store.getRecord(SESSION)!),
+      'legacy-account'
+    ),
+    'codex',
+    listing,
+    'discovery'
+  )
+  await modelCatalog.read({ agent: 'codex', sessionId: SESSION, savedOnly: true })
+  const modernEntry = modelCatalog.peek(SESSION)
   await rig.restart({ modelCatalog })
   setStructuredAgentSessionHost(rig.host)
   rig.adapter.acquire.mockClear()
-  return { modelCatalog, repo }
+  return { modelCatalog, repo, modernEntry }
 }
 
 beforeEach(async () => {
@@ -160,7 +171,7 @@ afterEach(async () => {
 
 describe('options at rest in a repo whose config may pick the model', () => {
   it('keeps the account default model, with no effort, for a client that needs a model', async () => {
-    const { modelCatalog, repo } = await chatAtRest({ configured: true })
+    const { modelCatalog, repo, modernEntry } = await chatAtRest({ configured: true })
 
     const reply = await readOptions(OLDER_CLIENT)
 
@@ -170,6 +181,7 @@ describe('options at rest in a repo whose config may pick the model', () => {
     })
     expect(reply).not.toHaveProperty('result.current.effort')
     expect(rig.adapter.acquire).not.toHaveBeenCalled()
+    expect(modelCatalog.peek(SESSION)).toBe(modernEntry)
     expect(modelCatalog.peek(SESSION)?.fingerprint).toBe(
       agentModelCatalogScopeFingerprint(
         agentModelCatalogFingerprintForRecord(rig.store.getRecord(SESSION)!),

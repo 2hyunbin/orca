@@ -45,6 +45,7 @@ let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
 let adapter: ClaudeStructuredSessionAdapter
 let lifecycle: Promise<void>[]
+let completedListingCounts: number[]
 let statuses: AgentSessionStatusEvent[]
 let savedListings: { sessionId: string; listing: AgentModelCatalogLiveListing }[]
 
@@ -52,6 +53,7 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-provider-started-'))
   resetHostTestOperationIds()
   lifecycle = []
+  completedListingCounts = []
   statuses = []
   savedListings = []
   // A CLI whose own default is not the catalog's: startup reports it through get_settings,
@@ -107,7 +109,12 @@ beforeEach(async () => {
       processCatalog: vi.fn(() => null),
       legacyProcessCatalog: () => null,
       processListingChanged: () => {},
-      trackProcessListing: () => {},
+      trackProcessListing: (_sessionId, work) =>
+        lifecycle.push(
+          work.then(() => {
+            completedListingCounts.push(savedListings.length)
+          })
+        ),
       retainedLiveModelIds: vi.fn(() => []),
       recordLiveListing: (sessionId, listing) => savedListings.push({ sessionId, listing }),
       prewarm: async () => {},
@@ -220,6 +227,7 @@ describe('a publish-first Claude create whose init is slow', () => {
       }
     ])
     expect(savedListings[0]?.listing).not.toHaveProperty('configuredDefault')
+    expect(completedListingCounts).toEqual([2])
   })
   it('reports the configured default from a chat created with its first message and no pick', async () => {
     const first = { clientMessageId: 'opening', body: hostTestMessage('hello') }

@@ -189,6 +189,17 @@ function host(agent: string, record: AgentSessionRecord) {
       : {})
   }
   store.recordSuccess(fingerprint, agent, listing, 'discovery')
+  if (agent === 'codex') {
+    store.recordSuccess(
+      agentModelCatalogScopeFingerprint(
+        agentModelCatalogFingerprintForRecord(record),
+        'legacy-account'
+      ),
+      agent,
+      { models: CODEX_LISTING, origin: 'probe', complete: true },
+      'discovery'
+    )
+  }
 
   const modelCatalog = createAgentModelCatalogService({
     store,

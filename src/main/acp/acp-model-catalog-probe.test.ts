@@ -128,7 +128,7 @@ describe('ACP model catalog probes', () => {
           label: expect.any(String)
         }))
       },
-      { id: 'grok-chat', label: 'Grok Chat', isDefault: false, efforts: [] }
+      { id: 'grok-chat', label: 'Grok Chat', isDefault: false, efforts: [], effortsKnown: false }
     ])
   })
 
