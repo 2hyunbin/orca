@@ -77,7 +77,7 @@ for (const renderer of ['off', 'on'] as const) {
     const producer = testInfo.outputPath('cache-images.cjs')
     writeFileSync(
       producer,
-      `process.stdout.write('\\x1bc'); for(let i=0;i<12;i++) process.stdout.write('\\x1b_Ga=T,f=100,i='+(100+i)+',U=1,c=1,r=1,q=2;${payload}\\x1b\\\\'); process.stdout.write('\\x1b[3;3H\\x1b]1337;File=inline=1;width=100px;height=100px:${payload}\\x07\\x1b[15;1HCACHE_PRESSURE_DONE\\r\\n')`
+      `process.stdout.write('\\x1b[2J'); for(let i=0;i<12;i++) process.stdout.write('\\x1b_Ga=T,f=100,i='+(100+i)+',U=1,c=1,r=1,q=2;${payload}\\x1b\\\\'); process.stdout.write('\\x1b[3;3H\\x1b]1337;File=inline=1;width=100px;height=100px:${payload}\\x07\\x1b[15;1HCACHE_PRESSURE_DONE\\r\\n')`
     )
     const assertImagePixels = async (stage: string) => {
       await expect

@@ -67,6 +67,28 @@ jobs:
           node -e "const s = require('./test-results/image-ready-results.json').stats;
           if (s.expected !== 2 || s.unexpected || s.flaky || s.skipped)
           throw new Error(JSON.stringify(s)); console.log(JSON.stringify(s))"
+      - name: Exercise the published cache settings acceptance flow three times per renderer
+        env:
+          SKIP_BUILD: '1'
+          ORCA_BACKGROUND_LAUNCH: '1'
+          PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/image-ready-cache-results.json
+        run: >-
+          pnpm exec playwright test
+          tests/e2e/terminal-inline-image-cache.spec.ts
+          --config tests/playwright.config.ts
+          --project=electron-headless
+          --project=electron-headful
+          --output=test-results/image-ready-cache
+          --repeat-each=3
+          --workers=1
+          --retries=0
+          --reporter=list,json
+      - name: Require six rendered cache acceptance executions
+        if: always()
+        run: >-
+          node -e "const s = require('./test-results/image-ready-cache-results.json').stats;
+          if (s.expected !== 6 || s.unexpected || s.flaky || s.skipped)
+          throw new Error(JSON.stringify(s)); console.log(JSON.stringify(s))"
       - name: Upload image reliability proof
         uses: actions/upload-artifact@v7
         if: always()
@@ -74,7 +96,9 @@ jobs:
           name: windows-image-ready-proof
           path: |
             test-results/image-ready/**
+            test-results/image-ready-cache/**
             test-results/image-ready-results.json
+            test-results/image-ready-cache-results.json
             test-results/image-ready-runtime-version.txt
           retention-days: 7
           if-no-files-found: error
