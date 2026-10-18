@@ -18191,6 +18191,7 @@
         "capacity": "이 채팅을 실행하는 컴퓨터의 Orca가 요청 한도에 도달했습니다. 해당 컴퓨터에서 Orca를 업데이트한 다음 다시 시도하세요.",
         "outcomeUnknown": "Orca가 무슨 일이 있었는지 확인하지 못했습니다. 채팅을 확인하세요.",
         "sendOutcomeLost": "Orca가 메시지가 에이전트에 전달되었는지 확인하지 못했습니다. 채팅을 확인하고 필요하면 다시 보내세요.",
+        "continuationSuperseded": "This chat has moved on. Check the latest messages before continuing.",
         "questionChanged": "이 질문은 이미 답변되었거나 변경되었습니다.",
         "cancelNotSaved": "이 질문 또는 승인을 취소하지 못했습니다.",
         "historyUnreadable": "Orca가 이 채팅의 저장된 기록을 읽지 못했습니다.",

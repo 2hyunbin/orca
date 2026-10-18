@@ -147,6 +147,8 @@ export const SendParams = z
     /** The composer's model and effort for the turn this send starts; the host records them on the
      *  chat. Sent only when `agent-session.send-options.v1` is advertised. Operation fingerprint only. */
     options: AgentSessionOptions.optional(),
+    // Strict payload: only hosts advertising the bound usage-limit send capability accept this.
+    usageLimitContinuationOfTurnItemId: Identifier('Invalid source turn item id').optional(),
     body: SendBody
   })
   .strict()

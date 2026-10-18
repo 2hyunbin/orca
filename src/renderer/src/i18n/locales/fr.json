@@ -18260,6 +18260,7 @@
         "capacity": "Orca sur l'ordinateur qui exécute ce chat a atteint une limite de requêtes. Mettez à jour Orca sur cet ordinateur, puis réessayez.",
         "outcomeUnknown": "Orca n'a pas pu confirmer ce qui s'est passé. Vérifiez le chat.",
         "sendOutcomeLost": "Orca n'a pas pu confirmer que votre message est parvenu à l'agent. Vérifiez le chat, puis renvoyez-le si nécessaire.",
+        "continuationSuperseded": "This chat has moved on. Check the latest messages before continuing.",
         "questionChanged": "Cette question a déjà reçu une réponse ou a changé.",
         "cancelNotSaved": "Impossible d'annuler cette question ou cette approbation.",
         "historyUnreadable": "Orca n'a pas pu lire l'historique enregistré de ce chat.",
