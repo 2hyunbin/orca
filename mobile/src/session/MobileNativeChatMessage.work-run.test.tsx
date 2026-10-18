@@ -237,7 +237,10 @@ it('loads a shortened grouped thought from its own source between two tool rows'
   )
   expect(textIn(tree.root)).toContain('Read 1 file and ran 1 command')
   const showFull = tree.root.find(
-    (node) => String(node.type) === 'Pressable' && textIn(node).includes('Show full message')
+    (node) =>
+      String(node.type) === 'Pressable' &&
+      node.props.accessibilityRole === 'button' &&
+      textIn(node).includes('Show full message')
   )
   await act(async () => {
     showFull.props.onPress()
