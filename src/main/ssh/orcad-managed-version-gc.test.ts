@@ -8,7 +8,9 @@ const { gcMock, readRecordMock } = vi.hoisted(() => ({
 }))
 
 vi.mock('./orcad-remote-gc', () => ({ gcOldOrcadVersions: gcMock }))
-vi.mock('./orcad-activation-record-store', () => ({ readOrcadActivationRecord: readRecordMock }))
+vi.mock('../managed-server/activation/orcad-activation-record-store', () => ({
+  readOrcadActivationRecord: readRecordMock
+}))
 
 import { provenLiveDaemonVersion, pruneManagedOrcadVersions } from './orcad-managed-version-gc'
 

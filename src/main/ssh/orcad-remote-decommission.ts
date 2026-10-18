@@ -8,15 +8,15 @@
  * fence. Windows runs the same steps: the request is a staged file and exit proof is orcad's own.
  */
 import { randomUUID } from 'node:crypto'
-import type { OrcadActivationRecord } from './orcad-activation-record'
+import type { OrcadActivationRecord } from '../managed-server/activation/orcad-activation-record'
 import {
   readOrcadActivationRecord,
   writeOrcadActivationRecord
-} from './orcad-activation-record-store'
-import { sameOrcadActivationRecord } from './orcad-activation-transaction'
-import { writeOrcadActivationTransaction } from './orcad-activation-transaction-store'
-import { withOrcadActivationLock } from './orcad-activation-lock'
-import { orcadActivationFenceRefusal } from './orcad-activation-fence-hold'
+} from '../managed-server/activation/orcad-activation-record-store'
+import { sameOrcadActivationRecord } from '../managed-server/activation/orcad-activation-transaction'
+import { writeOrcadActivationTransaction } from '../managed-server/activation/orcad-activation-transaction-store'
+import { withOrcadActivationLock } from '../managed-server/activation/orcad-activation-lock'
+import { orcadActivationFenceRefusal } from '../managed-server/activation/orcad-activation-fence-hold'
 import {
   committedOrcadDecommissionRecord,
   createOrcadDecommissionTransaction,

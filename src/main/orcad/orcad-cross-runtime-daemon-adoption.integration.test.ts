@@ -41,7 +41,10 @@ import {
   getOrcaProfileStateDatabaseFile
 } from '../orca-profiles/profile-storage-paths'
 import type { SshConnection } from '../ssh/ssh-connection'
-import { emptyOrcadActivationRecord, orcadGcPinnedDirNames } from '../ssh/orcad-activation-record'
+import {
+  emptyOrcadActivationRecord,
+  orcadGcPinnedDirNames
+} from '../managed-server/activation/orcad-activation-record'
 import { gcOldOrcadVersions } from '../ssh/orcad-remote-gc'
 import { ORCAD_PID_FILENAME, ORCAD_READINESS_FILENAME } from '../ssh/orcad-remote-host-support'
 import { orcadLaunchCommand, parseOrcadReadinessOutput } from '../ssh/orcad-remote-launch'

@@ -11,24 +11,24 @@ import {
   execOrcadRemote,
   withoutAbortSignal,
   type OrcadRemoteExecTarget
-} from './orcad-remote-runtime-control'
-import { isUnconfirmedSshCommandTermination } from './remote-exec-command'
-import { acquireInstallLock, RemoteInstallLockBusyError } from './remote-install-lock'
+} from '../../ssh/orcad-remote-runtime-control'
+import { isUnconfirmedSshCommandTermination } from '../../ssh/remote-exec-command'
+import { acquireInstallLock, RemoteInstallLockBusyError } from '../../ssh/remote-install-lock'
 import {
   orphanInstallLockCommand,
   probeInstallLockExistsCommand
-} from './remote-install-lock-commands'
-import { shellEscape } from './ssh-connection-utils'
+} from '../../ssh/remote-install-lock-commands'
+import { shellEscape } from '../../ssh/ssh-connection-utils'
 import {
   ORCAD_FENCE_OWNER_FILENAME,
   posixOrcadFenceOwnedTest,
   runWithOrcadFence,
   type OrcadFence
 } from './orcad-activation-fence-scope'
-import { orcadRemoteBaseDir, orcadWindowsHomeOpCommand } from './orcad-remote-windows-node'
-import { forgetHeldOrcadFence, rememberHeldOrcadFence } from './orcad-held-fence-tokens'
-import { exitedOwnLockProof } from './orcad-exited-own-lock'
-import { isWindowsRemoteHost } from './ssh-remote-platform'
+import { orcadRemoteBaseDir, orcadWindowsHomeOpCommand } from '../../ssh/orcad-remote-windows-node'
+import { forgetHeldOrcadFence, rememberHeldOrcadFence } from '../../ssh/orcad-held-fence-tokens'
+import { exitedOwnLockProof } from '../../ssh/orcad-exited-own-lock'
+import { isWindowsRemoteHost } from '../../ssh/ssh-remote-platform'
 import {
   orcadActivationFenceLockDir,
   orcadActivationTransactionPath,

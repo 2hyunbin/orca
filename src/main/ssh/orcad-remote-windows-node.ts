@@ -9,7 +9,7 @@
  * `powershell.exe -Command`, which both shells pass through intact. Anything else is refused
  * rather than encoded (docs/reference/windows-edr-posture.md).
  */
-import { currentOrcadFence } from './orcad-activation-fence-scope'
+import { currentOrcadFence } from '../managed-server/activation/orcad-activation-fence-scope'
 import { ORCAD_WINDOWS_FENCE_ARG } from './orcad-windows-host-fence-ops'
 import {
   ORCAD_NODE_RUNTIME_DIR_PREFIX,

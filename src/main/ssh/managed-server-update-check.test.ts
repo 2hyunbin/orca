@@ -5,7 +5,7 @@ import {
   type ManagedServerUpdateDeps
 } from './managed-server-update-check'
 import type { ManagedOrcadAutoUpdateOutcome } from './orcad-managed-auto-update'
-import { ORCAD_ACTIVATION_FENCE_BUSY_CODE } from './orcad-activation-fence-hold'
+import { ORCAD_ACTIVATION_FENCE_BUSY_CODE } from '../managed-server/activation/orcad-activation-fence-hold'
 
 // The retry decision is read under the host's lifecycle lock, so the stub's last call answers it.
 const failedBeforeOf = (autoUpdate: ManagedServerUpdateDeps['autoUpdate']) =>

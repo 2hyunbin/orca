@@ -1,10 +1,10 @@
 import { z } from 'zod'
-import { OrcadManagedStopRequestSchema } from '../../shared/orcad-stop-request'
+import { OrcadManagedStopRequestSchema } from '../../../shared/orcad-stop-request'
 import {
   ORCAD_INSTALL_MODEL,
   remoteInstallDirName,
   remoteInstallVersionDirRegex
-} from './remote-install-model'
+} from '../../ssh/remote-install-model'
 
 export const ORCAD_ACTIVATION_TRANSACTION_SCHEMA_VERSION = 1
 

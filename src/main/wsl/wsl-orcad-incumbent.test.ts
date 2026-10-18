@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { encodePairingOffer } from '../../shared/pairing'
-import { emptyOrcadActivationRecord } from '../ssh/orcad-activation-record'
+import { emptyOrcadActivationRecord } from '../managed-server/activation/orcad-activation-record'
 import type { OrcadHostTransport } from '../ssh/orcad-host-transport'
 import type { OrcadRemoteContext } from '../ssh/orcad-remote-context'
 import type { ServeReadiness } from '../server/serve-readiness'

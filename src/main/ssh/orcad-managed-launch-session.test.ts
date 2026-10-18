@@ -58,11 +58,11 @@ vi.mock('./orcad-remote-context', () => ({
   })
 }))
 vi.mock('./orcad-ssh-host-transport', () => ({ sshOrcadHostTransport: (c: unknown) => c }))
-vi.mock('./orcad-activation-lock', () => ({
+vi.mock('../managed-server/activation/orcad-activation-lock', () => ({
   withOrcadActivationLock: (_slot: unknown, run: (lock: unknown) => Promise<unknown>) =>
     run({ retain: mocks.retain })
 }))
-vi.mock('./orcad-activation-record-store', () => ({
+vi.mock('../managed-server/activation/orcad-activation-record-store', () => ({
   readOrcadActivationRecord: async () => ({ active: mocks.active.current })
 }))
 vi.mock('./orcad-managed-remote-stop', () => ({

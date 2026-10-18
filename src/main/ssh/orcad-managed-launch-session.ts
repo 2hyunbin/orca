@@ -4,8 +4,11 @@
  */
 import { randomUUID } from 'node:crypto'
 import type { OrcadManagedRestartResult } from '../../shared/orcad-managed-runtime'
-import { withOrcadActivationLock, type OrcadActivationLockControl } from './orcad-activation-lock'
-import { readOrcadActivationRecord } from './orcad-activation-record-store'
+import {
+  withOrcadActivationLock,
+  type OrcadActivationLockControl
+} from '../managed-server/activation/orcad-activation-lock'
+import { readOrcadActivationRecord } from '../managed-server/activation/orcad-activation-record-store'
 import {
   orcadLaunchSshSessionProbeCommand,
   parseOrcadLaunchSshSession,

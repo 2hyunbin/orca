@@ -17,7 +17,7 @@ import type {
 } from '../../shared/orcad-managed-runtime'
 import { runTargetLifecycle } from '../ipc/ssh-target-lifecycle-queue'
 import type { ServeReadiness } from '../server/serve-readiness'
-import { recoverInterruptedOrcadActivation } from './orcad-activation-recovery'
+import { recoverInterruptedOrcadActivation } from '../managed-server/activation/orcad-activation-recovery'
 import { probeActiveOrcadReadiness } from './orcad-active-readiness'
 import { materializeOrcadArtifact } from '../orcad/orcad-artifact-materializer'
 import { CURRENT_ORCAD_DAEMON_PROTOCOL } from './orcad-daemon-protocol-crossing'

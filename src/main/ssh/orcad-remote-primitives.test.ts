@@ -24,8 +24,8 @@ import {
 import {
   readOrcadActivationRecord,
   writeOrcadActivationRecord
-} from './orcad-activation-record-store'
-import { emptyOrcadActivationRecord } from './orcad-activation-record'
+} from '../managed-server/activation/orcad-activation-record-store'
+import { emptyOrcadActivationRecord } from '../managed-server/activation/orcad-activation-record'
 import { readRemoteOrcadBuildHash } from './orcad-remote-build-hash'
 import {
   launchOrcadSlotAndAwaitReadiness,

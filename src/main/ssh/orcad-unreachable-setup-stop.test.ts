@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { emptyOrcadActivationRecord } from './orcad-activation-record'
+import { emptyOrcadActivationRecord } from '../managed-server/activation/orcad-activation-record'
 
 const mocks = vi.hoisted(() => {
   const record: { active: string | null } = { active: '1.0.0+a' }
@@ -32,10 +32,10 @@ vi.mock('./orcad-remote-context', () => ({
     userDataDir: '/home/u/.orca'
   })
 }))
-vi.mock('./orcad-activation-lock', () => ({
+vi.mock('../managed-server/activation/orcad-activation-lock', () => ({
   withOrcadActivationLock: async (_options: unknown, run: () => Promise<unknown>) => run()
 }))
-vi.mock('./orcad-activation-record-store', () => ({
+vi.mock('../managed-server/activation/orcad-activation-record-store', () => ({
   readOrcadActivationRecord: async () => ({
     ...emptyOrcadActivationRecord(),
     active: mocks.record.active

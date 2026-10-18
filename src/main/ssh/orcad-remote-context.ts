@@ -1,8 +1,8 @@
 /** Everything a managed-orcad operation needs to know about one host (SSH or WSL) before it acts. */
 import type { NodeRuntimeTarget } from '../../shared/node-runtime-pin'
 import type { SshTarget } from '../../shared/ssh-types'
-import type { OrcadActivationRecord } from './orcad-activation-record'
-import { readOrcadActivationRecord } from './orcad-activation-record-store'
+import type { OrcadActivationRecord } from '../managed-server/activation/orcad-activation-record'
+import { readOrcadActivationRecord } from '../managed-server/activation/orcad-activation-record-store'
 import { resolveOrcadRuntimeTarget } from './orcad-runtime-target'
 import { prepareWindowsOrcadHost } from './orcad-windows-host-preparation'
 import {

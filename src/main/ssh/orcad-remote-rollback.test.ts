@@ -55,9 +55,12 @@ vi.mock('./orcad-rollback-terminal-barrier', async (importOriginal) => ({
 import { execCommand } from './remote-exec-command'
 import { writeAtomicOrcadRemoteRecord } from './orcad-remote-record-file'
 import { rollbackOrcad, type OrcadRollbackOptions } from './orcad-remote-rollback'
-import { emptyOrcadActivationRecord, type OrcadActivationRecord } from './orcad-activation-record'
+import {
+  emptyOrcadActivationRecord,
+  type OrcadActivationRecord
+} from '../managed-server/activation/orcad-activation-record'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
-import { isReadinessRead } from './orcad-activation-host-test-harness'
+import { isReadinessRead } from '../managed-server/activation/orcad-activation-host-test-harness'
 import { isSnapshotCaptureCommand } from './orcad-snapshot-capture-command'
 
 const mockExec = vi.mocked(execCommand)

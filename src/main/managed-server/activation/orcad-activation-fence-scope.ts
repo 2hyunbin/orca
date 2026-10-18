@@ -8,8 +8,8 @@
  * launching, mutating state, or deleting the successor's fence and journal.
  */
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { shellEscape } from './ssh-connection-utils'
-import { isSshCommandExitError } from './remote-exec-command'
+import { shellEscape } from '../../ssh/ssh-connection-utils'
+import { isSshCommandExitError } from '../../ssh/remote-exec-command'
 
 export const ORCAD_FENCE_OWNER_FILENAME = '.orca-fence-owner'
 export const ORCAD_FENCE_LOST_MARKER = '__ORCAD_FENCE_LOST__'

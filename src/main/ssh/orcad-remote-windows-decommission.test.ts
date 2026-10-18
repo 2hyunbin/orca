@@ -30,7 +30,10 @@ import { writeAtomicOrcadRemoteRecord } from './orcad-remote-record-file'
 import { gcOldRemoteInstallVersions } from './remote-install-gc'
 import { decommissionRemoteOrcad } from './orcad-remote-decommission'
 import { gcOldOrcadVersions } from './orcad-remote-gc'
-import { emptyOrcadActivationRecord, withActivatedVersion } from './orcad-activation-record'
+import {
+  emptyOrcadActivationRecord,
+  withActivatedVersion
+} from '../managed-server/activation/orcad-activation-record'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 
 const mockExec = vi.mocked(execCommand)

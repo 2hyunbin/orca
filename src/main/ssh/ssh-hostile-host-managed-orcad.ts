@@ -9,7 +9,7 @@ import { NODE_RUNTIME_ASSETS, pinnedNodeRuntimeAsset } from '../../shared/node-r
 import { ORCAD_MANAGED_REMOTE_PORT } from '../../shared/orcad-managed-runtime'
 import { ORCAD_RUNTIMES_DIRNAME } from '../../shared/orcad-artifacts'
 import type { SshTarget } from '../../shared/ssh-types'
-import { readOrcadActivationRecord } from './orcad-activation-record-store'
+import { readOrcadActivationRecord } from '../managed-server/activation/orcad-activation-record-store'
 import { classifyOrcadHostUnavailable } from '../orcad/orcad-host-unavailable'
 import { managedOrcadSlot } from './orcad-managed-runtime-context'
 import { orcadSlotDir, type OrcadSlotOptions } from './orcad-recovery-slot'

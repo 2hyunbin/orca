@@ -26,7 +26,7 @@ import {
   isOrcadFenceLost,
   OrcadFenceLostError,
   posixOrcadFenceGuard
-} from './orcad-activation-fence-scope'
+} from '../managed-server/activation/orcad-activation-fence-scope'
 import { orcadWindowsHomeOpCommand } from './orcad-remote-windows-node'
 import { ORCAD_WINDOWS_FENCE_ARG } from './orcad-windows-host-fence-ops'
 import { isWindowsRemoteHost, type RemoteHostPlatform } from './ssh-remote-platform'

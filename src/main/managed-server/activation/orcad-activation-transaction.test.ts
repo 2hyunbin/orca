@@ -1,18 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
-import type * as ExecCommandModule from './remote-exec-command'
-import type * as InstallLock from './remote-install-lock'
+import type * as ExecCommandModule from '../../ssh/remote-exec-command'
+import type * as InstallLock from '../../ssh/remote-install-lock'
 
-vi.mock('./remote-exec-command', async (importOriginal) => ({
+vi.mock('../../ssh/remote-exec-command', async (importOriginal) => ({
   ...(await importOriginal<typeof ExecCommandModule>()),
   execCommand: vi.fn().mockResolvedValue('')
 }))
-vi.mock('./remote-install-lock', async (importOriginal) => ({
+vi.mock('../../ssh/remote-install-lock', async (importOriginal) => ({
   ...(await importOriginal<typeof InstallLock>()),
   acquireInstallLock: vi.fn().mockResolvedValue(undefined)
 }))
 
-import { execCommand } from './remote-exec-command'
-import { acquireInstallLock, RemoteInstallLockBusyError } from './remote-install-lock'
+import { execCommand } from '../../ssh/remote-exec-command'
+import { acquireInstallLock, RemoteInstallLockBusyError } from '../../ssh/remote-install-lock'
 import {
   parseOrcadActivationTransaction,
   planOrcadTransactionRecovery,
@@ -35,7 +35,7 @@ import {
 } from './orcad-activation-lock'
 import { FakeOrcadHost, NEW, OLD } from './orcad-activation-host-test-harness'
 import { withRolledBackVersion } from './orcad-activation-record'
-import { getRemoteHostPlatform } from './ssh-remote-platform'
+import { getRemoteHostPlatform } from '../../ssh/ssh-remote-platform'
 
 const T = new Date('2026-02-02T00:00:00.000Z')
 const ID = '7f1c2a7e-6c1b-4a8e-9f0e-0a1b2c3d4e5f'

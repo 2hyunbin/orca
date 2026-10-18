@@ -42,10 +42,15 @@ import { acquireInstallLock } from './remote-install-lock'
 import { writeAtomicOrcadRemoteRecord } from './orcad-remote-record-file'
 import { deployOrcad } from './orcad-remote-deploy'
 import { rollbackOrcad } from './orcad-remote-rollback'
-import { recoverInterruptedOrcadActivation } from './orcad-activation-recovery'
+import { recoverInterruptedOrcadActivation } from '../managed-server/activation/orcad-activation-recovery'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 import type { OrcadHostTransport } from './orcad-host-transport'
-import { BUILD_HASH, FakeOrcadHost, NEW, OLD } from './orcad-activation-host-test-harness'
+import {
+  BUILD_HASH,
+  FakeOrcadHost,
+  NEW,
+  OLD
+} from '../managed-server/activation/orcad-activation-host-test-harness'
 import { isSnapshotCaptureCommand } from './orcad-snapshot-capture-command'
 
 let host = new FakeOrcadHost()

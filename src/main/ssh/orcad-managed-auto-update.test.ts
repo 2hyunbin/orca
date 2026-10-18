@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { emptyOrcadActivationRecord, type OrcadActivationRecord } from './orcad-activation-record'
+import {
+  emptyOrcadActivationRecord,
+  type OrcadActivationRecord
+} from '../managed-server/activation/orcad-activation-record'
 import { OrcadHostUnsupportedError } from '../orcad/orcad-host-unavailable'
 
 const mocks = vi.hoisted(() => {

@@ -53,7 +53,7 @@ vi.mock('./remote-versioned-install', async (importOriginal) => ({
 import { execCommand } from './remote-exec-command'
 import { deployOrcad, type OrcadDeployOptions } from './orcad-remote-deploy'
 import { rollbackOrcad } from './orcad-remote-rollback'
-import { emptyOrcadActivationRecord } from './orcad-activation-record'
+import { emptyOrcadActivationRecord } from '../managed-server/activation/orcad-activation-record'
 import { writeAtomicOrcadRemoteRecord } from './orcad-remote-record-file'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 import { NODE_RUNTIME_PIN } from '../../shared/node-runtime-pin'

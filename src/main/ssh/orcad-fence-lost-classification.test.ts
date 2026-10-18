@@ -9,7 +9,7 @@ import {
   isOrcadFenceLost,
   posixOrcadFenceGuard,
   runWithOrcadFence
-} from './orcad-activation-fence-scope'
+} from '../managed-server/activation/orcad-activation-fence-scope'
 import { isUnconfirmedSshCommandTermination, sshCommandExitError } from './remote-exec-command'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 import type { OrcadHostTransport } from './orcad-host-transport'

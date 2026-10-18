@@ -13,20 +13,20 @@
  * before restoring would let the old build migrate the new build's state. The rescue copy of
  * the newer state, and the journal under the activation fence, make each step undoable.
  */
-import { logOrcadActivationOutcome } from './orcad-activation-outcome-log'
+import { logOrcadActivationOutcome } from '../managed-server/activation/orcad-activation-outcome-log'
 import type { OrcadHostTransport } from './orcad-host-transport'
-import type { OrcadActivationRecord } from './orcad-activation-record'
+import type { OrcadActivationRecord } from '../managed-server/activation/orcad-activation-record'
 import type { OrcadTerminalCensus } from '../../shared/orcad-terminal-census'
-import type { OrcadActivationVerdict } from './orcad-activation-gate'
+import type { OrcadActivationVerdict } from '../managed-server/activation/orcad-activation-gate'
 import type { OrcadDaemonProtocolFacts } from './orcad-daemon-protocol-crossing'
-import { readOrcadActivationRecord } from './orcad-activation-record-store'
-import { sameOrcadActivationRecord } from './orcad-activation-transaction'
+import { readOrcadActivationRecord } from '../managed-server/activation/orcad-activation-record-store'
+import { sameOrcadActivationRecord } from '../managed-server/activation/orcad-activation-transaction'
 import type { RemoteHostPlatform } from './ssh-remote-platform'
 import {
   resolveOrcadActivationReadinessTimeout,
   withOrcadActivationLock
-} from './orcad-activation-lock'
-import { orcadActivationFenceRefusal } from './orcad-activation-fence-hold'
+} from '../managed-server/activation/orcad-activation-lock'
+import { orcadActivationFenceRefusal } from '../managed-server/activation/orcad-activation-fence-hold'
 import { ORCAD_STARTUP_READINESS_TIMEOUT_MS } from '../../shared/orcad-profile-preflight'
 import { rollbackOrcadLocked } from './orcad-rollback-transition'
 

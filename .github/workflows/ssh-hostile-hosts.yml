@@ -13,6 +13,7 @@ on:
       - 'src/main/ssh/remote-*'
       - 'src/main/ssh/*runtime*'
       - 'src/main/ssh/orcad-*'
+      - 'src/main/managed-server/**'
       - 'src/main/orcad/orcad-artifact-materializer.ts'
       - 'src/main/orcad/orcad-host-unavailable.ts'
       - 'src/main/node-runtime/**'

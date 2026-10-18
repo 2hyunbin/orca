@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   emptyOrcadActivationRecord,
   type OrcadActivationRecord
-} from '../ssh/orcad-activation-record'
+} from '../managed-server/activation/orcad-activation-record'
 import type { OrcadSlotOptions } from '../ssh/orcad-recovery-slot'
 import { getRemoteHostPlatform } from '../ssh/ssh-remote-platform'
 
@@ -70,7 +70,7 @@ vi.mock('../ssh/orcad-recovery-slot', () => ({
     buildHash: host.slotBuildHash
   })
 }))
-vi.mock('../ssh/orcad-activation-gate', () => ({
+vi.mock('../managed-server/activation/orcad-activation-gate', () => ({
   evaluateOrcadActivation: (
     readiness: { health?: { buildHash?: string } } | null,
     expected: { buildHash: string }
@@ -79,16 +79,16 @@ vi.mock('../ssh/orcad-activation-gate', () => ({
       ? { decision: 'accept' }
       : { decision: 'reject', reason: 'its build does not match the installed slot.' }
 }))
-vi.mock('../ssh/orcad-activation-record-store', () => ({
+vi.mock('../managed-server/activation/orcad-activation-record-store', () => ({
   readOrcadActivationRecord: async () => host.record,
   writeOrcadActivationRecord: async (_slot: unknown, record: unknown) => {
     host.writes.push(record)
   }
 }))
-vi.mock('../ssh/orcad-activation-transaction-store', () => ({
+vi.mock('../managed-server/activation/orcad-activation-transaction-store', () => ({
   readOrcadActivationTransaction: async () => host.transaction
 }))
-vi.mock('../ssh/orcad-activation-lock', () => ({
+vi.mock('../managed-server/activation/orcad-activation-lock', () => ({
   withOrcadActivationLock: async (
     _slot: unknown,
     run: () => Promise<unknown>,

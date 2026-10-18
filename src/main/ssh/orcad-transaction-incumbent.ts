@@ -1,6 +1,6 @@
 /** The incumbent slot across a journaled activation or rollback: stop it, then put it back. */
-import type { OrcadActivationLockControl } from './orcad-activation-lock'
-import type { OrcadSnapshotVerdict } from './orcad-activation-transaction'
+import type { OrcadActivationLockControl } from '../managed-server/activation/orcad-activation-lock'
+import type { OrcadSnapshotVerdict } from '../managed-server/activation/orcad-activation-transaction'
 import { orcadStopFreedTheHost } from './orcad-remote-process-control'
 import { withoutAbortSignal } from './orcad-remote-runtime-control'
 import {

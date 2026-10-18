@@ -36,11 +36,13 @@ vi.mock('./ssh-target-registry', () => ({
 vi.mock('./orcad-remote-context', () => ({ resolveOrcadRemoteContext: mocks.resolveContext }))
 vi.mock('./orcad-terminal-census-client', () => ({ collectManagedTerminalCensus: mocks.census }))
 vi.mock('./orcad-remote-decommission', () => ({ decommissionRemoteOrcad: mocks.decommission }))
-vi.mock('./orcad-activation-recovery', () => ({ recoverInterruptedOrcadActivation: mocks.recover }))
-vi.mock('./orcad-activation-transaction-store', () => ({
+vi.mock('../managed-server/activation/orcad-activation-recovery', () => ({
+  recoverInterruptedOrcadActivation: mocks.recover
+}))
+vi.mock('../managed-server/activation/orcad-activation-transaction-store', () => ({
   readOrcadActivationTransaction: async () => mocks.state.transaction
 }))
-vi.mock('./orcad-activation-lock', () => ({
+vi.mock('../managed-server/activation/orcad-activation-lock', () => ({
   withStaleOrcadActivationRecoveryLock: async (
     _options: unknown,
     run: (lock: { retain: () => void }) => Promise<unknown>

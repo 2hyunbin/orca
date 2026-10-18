@@ -5,7 +5,7 @@
  * that could not answer is `unverifiable` — never a reason to start a second slot.
  */
 import type { ServeReadiness } from '../server/serve-readiness'
-import type { OrcadActivationExpectation } from './orcad-activation-gate'
+import type { OrcadActivationExpectation } from '../managed-server/activation/orcad-activation-gate'
 import { ORCAD_INSTALL_MODEL } from './remote-install-model'
 import { computeRemoteInstallDir } from './remote-versioned-install'
 import { readRemoteOrcadBuildHash } from './orcad-remote-build-hash'
@@ -26,7 +26,7 @@ import {
   type OrcadStopOutcome
 } from './orcad-remote-process-control'
 import { execOrcadRemote, type OrcadRemoteExecTarget } from './orcad-remote-runtime-control'
-import { orcadActivationTransactionRoot } from './orcad-activation-transaction'
+import { orcadActivationTransactionRoot } from '../managed-server/activation/orcad-activation-transaction'
 import {
   initialOrcadActivationAdmissionCommand,
   parseInitialOrcadActivationAdmission

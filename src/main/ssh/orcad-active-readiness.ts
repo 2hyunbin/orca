@@ -1,5 +1,8 @@
 /** Proving that the orcad an activation record names is the one actually serving. */
-import { evaluateOrcadActivation, type OrcadActivationExpectation } from './orcad-activation-gate'
+import {
+  evaluateOrcadActivation,
+  type OrcadActivationExpectation
+} from '../managed-server/activation/orcad-activation-gate'
 import {
   orcadLivenessProbeCommand,
   parseOrcadLiveness,

@@ -29,7 +29,7 @@ const { initOrcadHeldFenceTokenFile, ORCAD_HELD_FENCE_TOKENS_FILE_NAME } =
 const { tryStealInstallLockCommand } = await import('./remote-install-lock-commands')
 const { serializedStateMutationCommand } = await import('./orcad-state-snapshot')
 const { ORCAD_FENCE_LOST_EXIT, ORCAD_FENCE_LOST_MARKER } =
-  await import('./orcad-activation-fence-scope')
+  await import('../managed-server/activation/orcad-activation-fence-scope')
 const { getRemoteHostPlatform } = await import('./ssh-remote-platform')
 
 const OWNER = '.orca-fence-owner'

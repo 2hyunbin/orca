@@ -6,14 +6,14 @@
  * Every activation runs under the host's activation fence and journal
  * (`orcad-activation-lock.ts`), so an interrupted one is recoverable to exactly one slot.
  */
-import { logOrcadActivationOutcome } from './orcad-activation-outcome-log'
+import { logOrcadActivationOutcome } from '../managed-server/activation/orcad-activation-outcome-log'
 import { join } from 'node:path'
 import type { OrcadHostTransport } from './orcad-host-transport'
 import { ORCAD_INSTALL_MODEL } from './remote-install-model'
 import { computeRemoteInstallDir, readLocalFullVersion } from './remote-versioned-install'
-import { readOrcadActivationRecord } from './orcad-activation-record-store'
-import type { OrcadActivationRecord } from './orcad-activation-record'
-import type { OrcadActivationVerdict } from './orcad-activation-gate'
+import { readOrcadActivationRecord } from '../managed-server/activation/orcad-activation-record-store'
+import type { OrcadActivationRecord } from '../managed-server/activation/orcad-activation-record'
+import type { OrcadActivationVerdict } from '../managed-server/activation/orcad-activation-gate'
 import type { OrcadTerminalCensus } from '../../shared/orcad-terminal-census'
 import type { RemoteHostPlatform } from './ssh-remote-platform'
 import { installOrcadBundle } from './orcad-remote-install'
@@ -28,9 +28,9 @@ import {
   orcadActivationFenceExists,
   resolveOrcadActivationReadinessTimeout,
   withOrcadActivationLock
-} from './orcad-activation-lock'
+} from '../managed-server/activation/orcad-activation-lock'
 import { activateInstalledOrcad } from './orcad-installed-activation'
-import { orcadActivationFenceRefusal } from './orcad-activation-fence-hold'
+import { orcadActivationFenceRefusal } from '../managed-server/activation/orcad-activation-fence-hold'
 
 export type OrcadDeployOptions = {
   conn: OrcadHostTransport

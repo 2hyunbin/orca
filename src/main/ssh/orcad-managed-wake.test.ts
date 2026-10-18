@@ -17,7 +17,7 @@ import { acquireInstallLock, RemoteInstallLockBusyError } from './remote-install
 import { wakeStoppedManagedOrcad } from './orcad-managed-wake'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 import type { OrcadHostTransport } from './orcad-host-transport'
-import { FakeOrcadHost, OLD } from './orcad-activation-host-test-harness'
+import { FakeOrcadHost, OLD } from '../managed-server/activation/orcad-activation-host-test-harness'
 import {
   ORCAD_E2E_IDLE_TIMEOUT_ENV,
   ORCAD_MANAGED_ACTIVATION_ROOT_ENV

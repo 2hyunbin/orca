@@ -49,14 +49,14 @@ import {
   withActivatedVersion,
   withDeactivatedVersionCommitted,
   type OrcadActivationRecord
-} from './orcad-activation-record'
+} from '../managed-server/activation/orcad-activation-record'
 import { ORCAD_ACTIVATION_POLICY_REFUSED_CODE } from './orcad-installed-activation'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
-import { isReadinessRead } from './orcad-activation-host-test-harness'
+import { isReadinessRead } from '../managed-server/activation/orcad-activation-host-test-harness'
 import { isSnapshotCaptureCommand } from './orcad-snapshot-capture-command'
 import { NODE_RUNTIME_PIN } from '../../shared/node-runtime-pin'
-import { serializeOrcadActivationTransaction } from './orcad-activation-transaction'
-import { createOrcadActivationTransaction } from './orcad-activation-transaction-transitions'
+import { serializeOrcadActivationTransaction } from '../managed-server/activation/orcad-activation-transaction'
+import { createOrcadActivationTransaction } from '../managed-server/activation/orcad-activation-transaction-transitions'
 
 const mockExec = vi.mocked(execCommand)
 const NEW_VERSION = '0.2.0+bb0100000000'

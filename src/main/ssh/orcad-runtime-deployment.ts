@@ -22,9 +22,9 @@ import {
   ensureOrcadManagedTunnel,
   startOrcadManagedTunnel
 } from './orcad-managed-tunnel'
-import { recoverInterruptedOrcadActivation } from './orcad-activation-recovery'
+import { recoverInterruptedOrcadActivation } from '../managed-server/activation/orcad-activation-recovery'
 import { wakeAlreadyActiveOrcad } from './orcad-already-active-wake'
-import { readOrcadActivationRecord } from './orcad-activation-record-store'
+import { readOrcadActivationRecord } from '../managed-server/activation/orcad-activation-record-store'
 import { resolveOrcadRemoteContext, type OrcadRemoteContext } from './orcad-remote-context'
 import { deployOrcad } from './orcad-remote-deploy'
 import {

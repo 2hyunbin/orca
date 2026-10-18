@@ -30,8 +30,10 @@ vi.mock('./remote-exec-command', async (importOriginal) => {
   }
 })
 
-const { orcadActivationFenceRefusal } = await import('./orcad-activation-fence-hold')
-const { withOrcadActivationLock } = await import('./orcad-activation-lock')
+const { orcadActivationFenceRefusal } =
+  await import('../managed-server/activation/orcad-activation-fence-hold')
+const { withOrcadActivationLock } =
+  await import('../managed-server/activation/orcad-activation-lock')
 const { initOrcadHeldFenceTokenFile, ORCAD_HELD_FENCE_TOKENS_FILE_NAME } =
   await import('./orcad-held-fence-tokens')
 const { getRemoteHostPlatform } = await import('./ssh-remote-platform')

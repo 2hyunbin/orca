@@ -10,7 +10,7 @@
 import {
   ORCAD_FENCE_OWNER_FILENAME,
   posixOrcadFenceOwnedTest
-} from './orcad-activation-fence-scope'
+} from '../managed-server/activation/orcad-activation-fence-scope'
 import {
   forgetHeldOrcadFence,
   orcadFenceTokensHeldByExitedProcesses

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import { evaluateOrcadActivation } from './orcad-activation-gate'
-import { classifyOrcadHostUnavailable } from '../orcad/orcad-host-unavailable'
-import type { ServeReadiness } from '../server/serve-readiness'
-import type { OrcadHealth, TerminalDaemonHealth } from '../orcad/orcad-health'
+import { classifyOrcadHostUnavailable } from '../../orcad/orcad-host-unavailable'
+import type { ServeReadiness } from '../../server/serve-readiness'
+import type { OrcadHealth, TerminalDaemonHealth } from '../../orcad/orcad-health'
 
 const EXPECTED = { buildHash: 'abc123def4567890', fullVersion: '0.2.0+bb01' }
 

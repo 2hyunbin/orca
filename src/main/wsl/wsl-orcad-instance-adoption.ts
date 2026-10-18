@@ -7,15 +7,15 @@
  * the activation fence. A different version is then handled by the usual update gate.
  */
 import { ORCAD_LOCK_FILE_NAME, parseOrcadInstanceLockRecord } from '../orcad/orcad-instance-lock'
-import type { OrcadActivationRecord } from '../ssh/orcad-activation-record'
+import type { OrcadActivationRecord } from '../managed-server/activation/orcad-activation-record'
 import {
   readOrcadActivationRecord,
   writeOrcadActivationRecord
-} from '../ssh/orcad-activation-record-store'
-import { evaluateOrcadActivation } from '../ssh/orcad-activation-gate'
-import { withOrcadActivationLock } from '../ssh/orcad-activation-lock'
-import { sameOrcadActivationRecord } from '../ssh/orcad-activation-transaction'
-import { readOrcadActivationTransaction } from '../ssh/orcad-activation-transaction-store'
+} from '../managed-server/activation/orcad-activation-record-store'
+import { evaluateOrcadActivation } from '../managed-server/activation/orcad-activation-gate'
+import { withOrcadActivationLock } from '../managed-server/activation/orcad-activation-lock'
+import { sameOrcadActivationRecord } from '../managed-server/activation/orcad-activation-transaction'
+import { readOrcadActivationTransaction } from '../managed-server/activation/orcad-activation-transaction-store'
 import { readRemoteOrcadManagedStopTarget } from '../ssh/orcad-managed-remote-stop'
 import {
   orcadSlotDir,

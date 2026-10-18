@@ -3,7 +3,7 @@
  * unverifiable failure left fenced. Either way the host ends serving exactly the slot its
  * activation record names, or the fence stays for an operator.
  */
-import type { ServeReadiness } from '../server/serve-readiness'
+import type { ServeReadiness } from '../../server/serve-readiness'
 import {
   planOrcadTransactionRecovery,
   type OrcadActivationTransaction
@@ -17,16 +17,16 @@ import {
   orcadActivationFenceExists,
   withStaleOrcadActivationRecoveryLock
 } from './orcad-activation-lock'
-import { RemoteInstallLockBusyError } from './remote-install-lock'
-import { ensureOrcadSlotServing, resolveOrcadSlotIdentity } from './orcad-recovery-slot'
-import { reconcileOrcadDecommission } from './orcad-decommission-recovery'
+import { RemoteInstallLockBusyError } from '../../ssh/remote-install-lock'
+import { ensureOrcadSlotServing, resolveOrcadSlotIdentity } from '../../ssh/orcad-recovery-slot'
+import { reconcileOrcadDecommission } from '../../ssh/orcad-decommission-recovery'
 import {
   recoverOrcadIncumbent,
   type OrcadIncumbentRecoveryOptions
-} from './orcad-incumbent-recovery'
-import type { OrcadManagedRefusal } from '../../shared/orcad-managed-runtime'
-import { resumeInterruptedOrcadCandidate } from './orcad-interrupted-candidate-resume'
-import { errorMessage } from '../../shared/error-message'
+} from '../../ssh/orcad-incumbent-recovery'
+import type { OrcadManagedRefusal } from '../../../shared/orcad-managed-runtime'
+import { resumeInterruptedOrcadCandidate } from '../../ssh/orcad-interrupted-candidate-resume'
+import { errorMessage } from '../../../shared/error-message'
 
 export type OrcadActivationRecoveryResult =
   | { outcome: 'none' }

@@ -6,7 +6,7 @@
  */
 import type { NodeRuntimeTarget } from '../../shared/node-runtime-pin'
 import type { ServeReadiness } from '../server/serve-readiness'
-import { readOrcadActivationRecord } from './orcad-activation-record-store'
+import { readOrcadActivationRecord } from '../managed-server/activation/orcad-activation-record-store'
 import { orcadSlotDir, type OrcadSlotOptions } from './orcad-recovery-slot'
 import { gcOldOrcadVersions } from './orcad-remote-gc'
 import { nodeRuntimeStorePins } from './pinned-runtime-host-target'

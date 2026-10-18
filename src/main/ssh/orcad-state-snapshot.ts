@@ -22,7 +22,7 @@ import {
   posixOrcadFenceGuard,
   posixOrcadFenceOwnedTest,
   type OrcadFence
-} from './orcad-activation-fence-scope'
+} from '../managed-server/activation/orcad-activation-fence-scope'
 import { shellEscape } from './ssh-connection-utils'
 import { isWindowsRemoteHost, joinRemotePath, type RemoteHostPlatform } from './ssh-remote-platform'
 import type { OrcadWindowsHostStateOp } from './orcad-windows-host-state-ops'

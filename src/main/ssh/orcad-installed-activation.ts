@@ -13,11 +13,11 @@ import {
   withActivatedVersion,
   type OrcadActivationRecord,
   type OrcadStateSnapshot
-} from './orcad-activation-record'
+} from '../managed-server/activation/orcad-activation-record'
 import {
   readOrcadActivationRecord,
   writeOrcadActivationRecord
-} from './orcad-activation-record-store'
+} from '../managed-server/activation/orcad-activation-record-store'
 import { launchAndJudgeOrcadSlot } from './orcad-candidate-launch-verdict'
 import { planOrcadUpdate } from './orcad-update-plan'
 import type { OrcadTerminalCensus } from '../../shared/orcad-terminal-census'
@@ -31,15 +31,15 @@ import {
 import { joinRemotePath } from './ssh-remote-platform'
 import { computeLocalOrcadBuildHash } from './orcad-local-build-hash'
 import { preflightInstalledOrcad } from './orcad-remote-preflight'
-import type { OrcadActivationLockControl } from './orcad-activation-lock'
-import type { OrcadActivateTransaction } from './orcad-activation-transaction'
+import type { OrcadActivationLockControl } from '../managed-server/activation/orcad-activation-lock'
+import type { OrcadActivateTransaction } from '../managed-server/activation/orcad-activation-transaction'
 import {
   createOrcadActivationTransaction,
   withOrcadActivationCandidateReady,
   withOrcadActivationIncumbentStopped,
   withOrcadActivationSnapshot
-} from './orcad-activation-transaction-transitions'
-import { writeOrcadActivationTransaction } from './orcad-activation-transaction-store'
+} from '../managed-server/activation/orcad-activation-transaction-transitions'
+import { writeOrcadActivationTransaction } from '../managed-server/activation/orcad-activation-transaction-store'
 import { execOrcadRemoteOr, withoutAbortSignal } from './orcad-remote-runtime-control'
 import { execOrcadStateMutationOr } from './orcad-state-mutation-exec'
 import {

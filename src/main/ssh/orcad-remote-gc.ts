@@ -17,7 +17,10 @@ import type { OrcadHostTransport } from './orcad-host-transport'
 import { execCommand, isUnconfirmedSshCommandTermination } from './remote-exec-command'
 import { ORCAD_INSTALL_MODEL } from './remote-install-model'
 import { gcOldRemoteInstallVersions } from './remote-install-gc'
-import { orcadGcPinnedDirNames, type OrcadActivationRecord } from './orcad-activation-record'
+import {
+  orcadGcPinnedDirNames,
+  type OrcadActivationRecord
+} from '../managed-server/activation/orcad-activation-record'
 import {
   ORCAD_NEVER_LAUNCHED,
   orcadLivenessAnswerBlocksGc,

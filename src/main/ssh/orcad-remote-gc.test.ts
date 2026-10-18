@@ -23,9 +23,9 @@ vi.mock('./remote-install-lock', () => ({
 
 import { execCommand } from './remote-exec-command'
 import { gcOldOrcadVersions } from './orcad-remote-gc'
-import { emptyOrcadActivationRecord } from './orcad-activation-record'
-import { serializeOrcadActivationTransaction } from './orcad-activation-transaction'
-import { createOrcadActivationTransaction } from './orcad-activation-transaction-transitions'
+import { emptyOrcadActivationRecord } from '../managed-server/activation/orcad-activation-record'
+import { serializeOrcadActivationTransaction } from '../managed-server/activation/orcad-activation-transaction'
+import { createOrcadActivationTransaction } from '../managed-server/activation/orcad-activation-transaction-transitions'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 import type { OrcadHostTransport } from './orcad-host-transport'
 

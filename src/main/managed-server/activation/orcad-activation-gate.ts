@@ -12,7 +12,7 @@
  * version is still active; nothing was lost. Activating on a bad verdict is what loses
  * things.
  */
-import type { ServeReadiness } from '../server/serve-readiness'
+import type { ServeReadiness } from '../../server/serve-readiness'
 
 type OrcadActivationRejectCode =
   | 'orcad_activation_no_readiness'

@@ -21,11 +21,15 @@ import { execCommand } from './remote-exec-command'
 import { acquireInstallLock } from './remote-install-lock'
 import { writeAtomicOrcadRemoteRecord } from './orcad-remote-record-file'
 import { decommissionRemoteOrcad } from './orcad-remote-decommission'
-import { recoverInterruptedOrcadActivation } from './orcad-activation-recovery'
-import { parseOrcadActivationRecord } from './orcad-activation-record'
+import { recoverInterruptedOrcadActivation } from '../managed-server/activation/orcad-activation-recovery'
+import { parseOrcadActivationRecord } from '../managed-server/activation/orcad-activation-record'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 import type { OrcadTerminalCensus } from '../../shared/orcad-terminal-census'
-import { FakeOrcadHost, OLD, type CrashMode } from './orcad-activation-host-test-harness'
+import {
+  FakeOrcadHost,
+  OLD,
+  type CrashMode
+} from '../managed-server/activation/orcad-activation-host-test-harness'
 
 let host = new FakeOrcadHost()
 

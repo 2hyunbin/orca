@@ -5,8 +5,8 @@
  * unreadable record must fail loudly in both: treating "I cannot parse this" as "nothing is
  * activated" would deploy over a live install and lose its rollback target.
  */
-import type { OrcadHostTransport } from './orcad-host-transport'
-import { RELAY_REMOTE_DIR } from './remote-frame-protocol'
+import type { OrcadHostTransport } from '../../ssh/orcad-host-transport'
+import { RELAY_REMOTE_DIR } from '../../ssh/remote-frame-protocol'
 import {
   ORCAD_ACTIVATION_FILENAME,
   emptyOrcadActivationRecord,
@@ -15,11 +15,11 @@ import {
   type OrcadActivationReadResult,
   type OrcadActivationRecord
 } from './orcad-activation-record'
-import { joinRemotePath, type RemoteHostPlatform } from './ssh-remote-platform'
+import { joinRemotePath, type RemoteHostPlatform } from '../../ssh/ssh-remote-platform'
 import {
   readBoundedOrcadRemoteRecord,
   writeAtomicOrcadRemoteRecord
-} from './orcad-remote-record-file'
+} from '../../ssh/orcad-remote-record-file'
 
 const ORCAD_ACTIVATION_RECORD_MAX_BYTES = 64 * 1024
 
