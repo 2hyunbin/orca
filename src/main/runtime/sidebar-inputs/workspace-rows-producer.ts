@@ -13,7 +13,6 @@ export type WorkspaceRowsSources = {
   store: RuntimeStore | null
   /** The listing worktree.ps reads, after its hidden-repo and visibility filters. */
   listVisibleWorktrees: () => Promise<ResolvedWorktreeSnapshot>
-  invalidateListing: () => void
   onClientEvent: (
     listener: (event: RuntimeClientEvent) => void,
     options: { consumesTerminalSideEffects: false }
@@ -36,13 +35,12 @@ export class WorkspaceRowsProducer {
       },
       { consumesTerminalSideEffects: false }
     )
+    // A full save may be a folder workspace or lineage write.
     sources.store?.onStateWritten?.((domains) => {
-      if (domains === undefined) {
-        // A full save may be a folder workspace or lineage write; both are read fresh from the store.
-        this.revision.bump()
-      } else if (WORKTREE_METADATA_DOMAINS.some((domain) => domains.includes(domain))) {
-        // The window's own metadata writes announce nothing, and the cached listing merged the old ones.
-        sources.invalidateListing()
+      if (
+        domains === undefined ||
+        WORKTREE_METADATA_DOMAINS.some((domain) => domains.includes(domain))
+      ) {
         this.revision.bump()
       }
     })

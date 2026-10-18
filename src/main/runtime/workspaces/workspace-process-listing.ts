@@ -67,8 +67,10 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
     if (!Number.isInteger(limit) || limit <= 0) {
       throw new Error('invalid_limit')
     }
-    const { worktrees: resolvedWorktrees, platformByRepoId } =
-      await this.listVisibleResolvedWorktreeSnapshot(sourceDefaultsSupported)
+    const { worktrees: resolvedWorktrees, platformByRepoId } = this.visibleResolvedWorktreeSnapshot(
+      await this.listResolvedWorktreeSnapshot(),
+      sourceDefaultsSupported
+    )
     const freshPtyLiveness = await this.refreshPtyWorktreeRecordsFromController(resolvedWorktrees)
     const repoById = new Map((this.store?.getRepos() ?? []).map((repo) => [repo.id, repo]))
     const summaries = buildRuntimeWorktreePsSummaries({
@@ -135,12 +137,12 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
     )
   }
 
-  /** The resolved listing as clients see it: no hidden repo, and imported worktrees only where
-   *  the desktop shows them, through the same visibility gate as worktree.list. */
-  async listVisibleResolvedWorktreeSnapshot(
+  /** A resolved listing as clients see it: no hidden repo, and imported worktrees only where the
+   *  desktop shows them, through the same visibility gate as worktree.list. */
+  protected visibleResolvedWorktreeSnapshot(
+    snapshot: ResolvedWorktreeSnapshot,
     sourceDefaultsSupported = true
-  ): Promise<ResolvedWorktreeSnapshot> {
-    const snapshot = await this.listResolvedWorktreeSnapshot()
+  ): ResolvedWorktreeSnapshot {
     const visibilitySettings = this.store?.getSettings()
     const visibilitySourceMatchersByRepoId = this.buildRuntimeVisibilitySourceMatchersByRepoId(
       snapshot.worktrees,

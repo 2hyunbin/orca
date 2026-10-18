@@ -92,7 +92,7 @@ function setup() {
     ],
     platformByRepoId: new Map([['repo-1', 'linux']])
   }
-  // The real listing cache and visibility filter run; only the scan-and-merge is stubbed.
+  // The real listing cache and visibility filter run; only the scan and merge are stubbed.
   class Probe extends OrcaRuntimeService {
     protected override async computeResolvedWorktrees(): Promise<ResolvedWorktreeSnapshot> {
       return { ...listing, worktrees: [...listing.worktrees] }
@@ -100,6 +100,10 @@ function setup() {
 
     emit(event: RuntimeClientEvent): void {
       this.emitClientEvent(event)
+    }
+
+    cachedListing(): Promise<ResolvedWorktreeSnapshot> {
+      return this.listResolvedWorktreeSnapshot()
     }
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the rows read only the fields picked above.
@@ -147,16 +151,16 @@ describe('WorkspaceRowsProducer', () => {
     expect(at()).toBe(start + 4)
   })
 
-  it('reads a metadata write at once, inside the listing cache’s lifetime', async () => {
-    const { rows, listing, write } = setup()
-    const pinned = async (): Promise<boolean | undefined> =>
-      (await rows.snapshot()).rows['local|repo-1::/r/a']?.isPinned
-    expect(await pinned()).toBe(false)
+  it('reads a metadata write at once and leaves the shared listing cache alone', async () => {
+    const { runtime, rows, listing } = setup()
+    const key = 'local|repo-1::/r/a'
+    const cachedPinned = async (): Promise<boolean | undefined> =>
+      (await runtime.cachedListing()).worktrees[0]?.isPinned
+    expect(await cachedPinned()).toBe(false)
     listing.worktrees[0] = { ...listing.worktrees[0], isPinned: true }
-    write(['settings'])
-    expect(await pinned()).toBe(false)
-    write(['worktreeMeta'])
-    expect(await pinned()).toBe(true)
+    expect((await rows.snapshot()).rows[key]?.isPinned).toBe(true)
+    // worktree.ps and the temporal owner keep reading the listing they cached.
+    expect(await cachedPinned()).toBe(false)
   })
 
   it('reaches the phone feed as the workspaces domain', async () => {

@@ -83,8 +83,7 @@ test('main lists the window’s git and folder workspaces and follows its metada
     })
     .toEqual([true, 'rows', true])
 
-  // Recent order already disagrees on origin/main (sidebar-creation-registry.spec.ts).
-  await expectNoSidebarShadowMismatches(orcaPage, [{ domain: 'sidebar-temporal', key: 'sort' }])
+  await expectNoSidebarShadowMismatches(orcaPage)
 })
 
 test('a disconnected SSH host keeps its rows, and its state reads not connected', async (// oxlint-disable-next-line no-empty-pattern -- This exercise owns its app launch.
