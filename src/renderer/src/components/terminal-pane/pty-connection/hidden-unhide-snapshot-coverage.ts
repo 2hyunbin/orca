@@ -27,13 +27,13 @@ export function consumeSnapshotRequirement(
 ): boolean {
   const unhideSeq = session.hiddenOutputRestoreUnhideSeq
   const freshSnapshotNeeded = session.hiddenOutputRestoreFreshSnapshotNeeded
+  const uncoveredUnhide =
+    typeof unhideSeq === 'number' &&
+    (typeof snapshotSeq !== 'number' || !Number.isFinite(snapshotSeq) || snapshotSeq < unhideSeq)
   session.hiddenOutputRestoreReplayingSnapshot = null
-  session.hiddenOutputRestoreUnhideSeq = null
+  session.hiddenOutputRestoreUnhideSeq = uncoveredUnhide ? unhideSeq : null
   session.hiddenOutputRestoreFreshSnapshotNeeded = false
-  return (
-    freshSnapshotNeeded ||
-    (typeof unhideSeq === 'number' && (typeof snapshotSeq !== 'number' || snapshotSeq < unhideSeq))
-  )
+  return freshSnapshotNeeded || uncoveredUnhide
 }
 
 export function repairUnhandledMarker(
