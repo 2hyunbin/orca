@@ -12,7 +12,6 @@ import { resolve } from 'node:path'
 import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { isWslUncPath } from '../../../shared/wsl-paths'
-import { WSL_MOVE_IN_PROGRESS_MESSAGE } from '../../../shared/wsl-move/wsl-move-in-progress-message'
 import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { onWslMoveJournalChange } from './wsl-move-cutover-journal'
 import { resolveWslMoveFence, type WslMoveFenceState } from './wsl-move-fence'
@@ -22,7 +21,7 @@ export type WslMoveProjectRef = { repoId: string } | { folderWorkspaceId: string
 export class WslMoveProjectFencedError extends Error {
   readonly code = 'wsl_move_in_progress'
   constructor() {
-    super(WSL_MOVE_IN_PROGRESS_MESSAGE)
+    super('This project is moving to its WSL host. Try again when the move finishes.')
     this.name = 'WslMoveProjectFencedError'
   }
 }

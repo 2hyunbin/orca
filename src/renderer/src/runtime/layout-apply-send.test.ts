@@ -3,9 +3,8 @@ import type { LayoutApplyReply } from '../../../shared/workspace-layout/workspac
 
 const mocks = vi.hoisted(() => {
   const sent: { reply: LayoutApplyReply } = { reply: { ok: true, result: {} } }
-  return { sent, toastError: vi.fn() }
+  return { sent }
 })
-vi.mock('sonner', () => ({ toast: { error: mocks.toastError } }))
 vi.mock('@/lib/resolve-owner', () => ({ runtimeEnvironmentIdUnlessTwin: () => null }))
 vi.mock('@/runtime/runtime-rpc-client', () => ({
   callRuntimeRpc: vi.fn(async () => mocks.sent.reply)
@@ -35,24 +34,24 @@ async function send(reply: LayoutApplyReply) {
 }
 
 describe('sendLayoutApply', () => {
-  beforeEach(() => mocks.toastError.mockReset())
+  beforeEach(() => vi.spyOn(console, 'warn').mockImplementation(() => {}))
 
-  it('tells the user why a workspace a WSL move has paused refused the change', async () => {
+  it('refuses a change on a workspace a WSL move has paused, drawing nothing', async () => {
     const handlers = await send({ ok: false, code: 'wsl_move_in_progress' })
 
     expect(handlers.refused).toHaveBeenCalledWith('wsl_move_in_progress')
-    expect(mocks.toastError).toHaveBeenCalledWith(
-      'This project is moving to its WSL host. Try again when the move finishes.',
-      expect.anything()
+    expect(handlers.apply).not.toHaveBeenCalled()
+    expect(console.warn).toHaveBeenCalledWith(
+      '[layout-owner] renamePane refused:',
+      'wsl_move_in_progress'
     )
   })
 
-  it('shows nothing for other refusals and applies as before', async () => {
+  it('handles other refusals and successes as before', async () => {
     const refused = await send({ ok: false, code: 'last_pane' })
     expect(refused.refused).toHaveBeenCalledWith('last_pane')
 
     const applied = await send({ ok: true, result: { tabId: 'tab-1' } })
     expect(applied.apply).toHaveBeenCalledWith({ tabId: 'tab-1' })
-    expect(mocks.toastError).not.toHaveBeenCalled()
   })
 })

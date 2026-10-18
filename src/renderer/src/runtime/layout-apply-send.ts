@@ -1,11 +1,9 @@
 // Store-free so store slices can send; `layout-owner-command` reads the store for other callers.
-import { toast } from 'sonner'
 import { runtimeEnvironmentIdUnlessTwin } from '@/lib/resolve-owner'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import { afterLayoutFrame } from '@/runtime/layout-frame-position'
 import { holdTabPaneTree } from '@/runtime/layout-owner-pane-intents'
 import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-resume'
-import { WSL_MOVE_IN_PROGRESS_MESSAGE } from '../../../shared/wsl-move/wsl-move-in-progress-message'
 import type { TabGroupLayoutNode } from '../../../shared/tab-types'
 import type { TerminalPaneLayoutNode } from '../../../shared/terminal-tab-types'
 import type { PaneSide } from '../../../shared/workspace-layout/terminal-pane-tree'
@@ -161,8 +159,7 @@ const PANE_COMMANDS: ReadonlySet<WindowLayoutCommand['type']> = new Set([
  * frame with main's change, `apply` shows main's result. `asToday` runs instead when main cannot
  * act on it: a paired server holds the tab (#18202), a move's workspaces are in two partitions,
  * main's copy lacks the workspace, tab, pane or group, or the call threw. `refused` on any other
- * refusal; a WSL move's pause also tells the user why. False when a paired server owns the
- * workspace's layout; the caller acts as today.
+ * refusal. False when a paired server owns the workspace's layout; the caller acts as today.
  */
 export function sendLayoutApply(
   state: Parameters<typeof runtimeEnvironmentIdUnlessTwin>[0],
@@ -230,10 +227,6 @@ function handleReply(
     unapplied(handlers)
   } else {
     console.warn(`[layout-owner] ${command.type} refused:`, reply.code)
-    if (reply.code === 'wsl_move_in_progress') {
-      // One toast for a drag's many refused commands.
-      toast.error(WSL_MOVE_IN_PROGRESS_MESSAGE, { id: 'layout-wsl-move-in-progress' })
-    }
     handlers.refused?.(reply.code)
   }
 }
