@@ -91,15 +91,152 @@ for (const settingsPath of ['ui', 'direct'] as const) {
         "process.stdout.write((stage==='TEXT_FLUSH'?physicalWithText:physical)+'\\x1b[15;1HCACHE_DIAGNOSTIC_'+stage+'\\r\\n');"
       ].join('\n')
     )
-    const capture = await orcaPage.evaluateHandle((id) => {
-      const chunks: { data: string; seq?: number; transformed?: boolean }[] = []
-      const unsubscribe = window.api.pty.onData((event) => {
-        if (event.id === id) {
-          chunks.push({ data: event.data, seq: event.seq, transformed: event.transformed })
+    const capture = await orcaPage.evaluateHandle(
+      ({ id, tabId }) => {
+        const pane = window.__paneManagers!.get(tabId)!.getActivePane()!
+        const terminal = pane.terminal
+        type Marker = {
+          line: number
+          id: number
+          isDisposed: boolean
+          dispose(): void
+          onDispose(listener: () => void): { dispose(): void }
         }
-      })
-      return { chunks, unsubscribe }
-    }, ptyId)
+        type Image = {
+          orig?: { width: number; height: number }
+          marker?: Marker
+          tileCount?: number
+          virtual?: boolean
+        }
+        type Storage = { _images: Map<number, Image>; _delImg(id: number): void }
+        type Addon = {
+          _storage?: Storage
+          storageLimit?: number
+          storageUsage?: number
+          onImageAdded?: (listener: () => void) => { dispose(): void }
+        }
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the diagnostic verifies the loaded addon's storage map and deletion method before observing it.
+        const internals = terminal as unknown as {
+          _addonManager: { _addons: { instance: Addon }[] }
+        }
+        const addon = internals._addonManager._addons
+          .map((entry) => entry.instance)
+          .find(
+            (entry) =>
+              typeof entry._storage?._delImg === 'function' && entry._storage._images instanceof Map
+          )
+        const storage = addon?._storage
+        if (!storage) {
+          throw new Error('Image storage unavailable for deletion trace')
+        }
+        const chunks: { data: string; seq?: number; transformed?: boolean }[] = []
+        const events: unknown[] = []
+        const state = () => {
+          const buffer = terminal.buffer.active
+          const store = window.__store!.getState()
+          return {
+            rows: terminal.rows,
+            cols: terminal.cols,
+            viewportY: buffer.viewportY,
+            baseY: buffer.baseY,
+            cursorX: buffer.cursorX,
+            cursorY: buffer.cursorY,
+            length: buffer.length,
+            activeView: store.activeView,
+            activeTabId: store.activeTabId,
+            cacheSetting: store.settings?.terminalInlineImageCacheMb,
+            storageLimit: addon?.storageLimit,
+            storageUsage: addon?.storageUsage,
+            images: [...storage._images.entries()].map(([imageId, image]) => ({
+              imageId,
+              width: image.orig?.width,
+              height: image.orig?.height,
+              tileCount: image.tileCount,
+              virtual: image.virtual,
+              markerId: image.marker?.id,
+              markerLine: image.marker?.line,
+              markerDisposed: image.marker?.isDisposed
+            }))
+          }
+        }
+        const record = (kind: string, detail: unknown = null) => {
+          events.push({
+            kind,
+            detail,
+            time: performance.now(),
+            stack: new Error(kind).stack,
+            state: state()
+          })
+        }
+        const deleteImage = storage._delImg
+        storage._delImg = function (imageId) {
+          record('storage-delete-before', { imageId })
+          deleteImage.call(storage, imageId)
+          record('storage-delete-after', { imageId })
+        }
+        const resize = terminal.resize
+        terminal.resize = function (cols, rows) {
+          record('terminal-resize-before', { cols, rows })
+          resize.call(terminal, cols, rows)
+          record('terminal-resize-after', { cols, rows })
+        }
+        const observedMarkers = new WeakSet<Marker>()
+        const restoreMarkers: (() => void)[] = []
+        const subscriptions = [
+          terminal.onResize((event) => record('on-resize', event)),
+          terminal.onScroll((position) => record('on-scroll', { position })),
+          terminal.onLineFeed(() => record('on-line-feed'))
+        ]
+        const added = addon?.onImageAdded?.(() => {
+          record('on-image-added')
+          for (const [imageId, image] of storage._images) {
+            const marker = image.marker
+            if (!marker || observedMarkers.has(marker)) {
+              continue
+            }
+            observedMarkers.add(marker)
+            const dispose = marker.dispose
+            marker.dispose = function () {
+              record('marker-dispose-before', { imageId, markerId: marker.id })
+              dispose.call(marker)
+              record('marker-dispose-after', { imageId, markerId: marker.id })
+            }
+            restoreMarkers.push(() => {
+              marker.dispose = dispose
+            })
+            subscriptions.push(
+              marker.onDispose(() => record('marker-on-dispose', { imageId, markerId: marker.id }))
+            )
+          }
+        })
+        if (added) {
+          subscriptions.push(added)
+        }
+        const unsubscribe = window.api.pty.onData((event) => {
+          if (event.id === id) {
+            chunks.push({ data: event.data, seq: event.seq, transformed: event.transformed })
+            record('pty-chunk', { length: event.data.length, seq: event.seq })
+          }
+        })
+        record('trace-installed')
+        return {
+          chunks,
+          events,
+          unsubscribe: () => {
+            unsubscribe()
+            for (const subscription of subscriptions) {
+              subscription.dispose()
+            }
+            for (const restore of restoreMarkers) {
+              restore()
+            }
+            storage._delImg = deleteImage
+            terminal.resize = resize
+          }
+        }
+      },
+      { id: ptyId, tabId: identity.tabId }
+    )
     const snapshots: unknown[] = []
     const snapshot = async (stage: string) => {
       const screen = orcaPage.locator('.pane:visible .xterm-screen').first()
@@ -241,7 +378,8 @@ for (const settingsPath of ['ui', 'direct'] as const) {
         }
       }, identity.tabId)
       const chunks = await capture.evaluate((state) => state.chunks.splice(0))
-      const result = { stage, redPixels, metrics, chunks }
+      const events = await capture.evaluate((state) => state.events.splice(0))
+      const result = { stage, redPixels, metrics, chunks, events }
       snapshots.push(result)
       writeFileSync(
         testInfo.outputPath('cache-placement-diagnostic.json'),
