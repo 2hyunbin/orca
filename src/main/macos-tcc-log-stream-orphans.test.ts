@@ -33,7 +33,7 @@ describe('findOrphanedTccLogStreams', () => {
         // A pid recycled between the args and comm sweeps, or an unreadable comm.
         row(14, 1, LEGACY_ARGS, '/usr/bin/yes'),
         row(15, 1, LEGACY_ARGS, '')
-      ])
+      ]).map((match) => match.pid)
     ).toEqual([10])
   })
 })
@@ -48,6 +48,7 @@ describe('reclaimOrphanedTccLogStreams', () => {
     const reclaimed = await reclaimOrphanedTccLogStreams({
       platform: 'darwin',
       sweep: async () => [row(20, 1), row(21, 1), row(22, 99)],
+      readProcess: async (pid) => row(pid, 1),
       kill
     })
     expect(kill.mock.calls).toEqual([
@@ -55,6 +56,25 @@ describe('reclaimOrphanedTccLogStreams', () => {
       [21, 'SIGTERM']
     ])
     expect(reclaimed).toBe(1)
+  })
+
+  it('skips a pid whose identity changed or cannot be re-read before signalling', async () => {
+    const kill = vi.fn()
+    const restarted = { ...row(42, 1), startedAtMs: Date.now() + 60_000 }
+    const current = new Map<number, ProcessIdentityRow | null>([
+      [40, null],
+      [41, row(41, 1, '/usr/bin/log stream --style compact')],
+      [42, restarted],
+      [43, row(43, 777)]
+    ])
+    const reclaimed = await reclaimOrphanedTccLogStreams({
+      platform: 'darwin',
+      sweep: async () => [row(40, 1), row(41, 1), row(42, 1), row(43, 1)],
+      readProcess: async (pid) => current.get(pid) ?? null,
+      kill
+    })
+    expect(kill).not.toHaveBeenCalled()
+    expect(reclaimed).toBe(0)
   })
 
   it('never sweeps off macOS', async () => {

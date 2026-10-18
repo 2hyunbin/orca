@@ -94,7 +94,9 @@ export type TccPromptWatchOptions = {
 // it when our stdin pipe hits EOF, and exits when it exits. fd 3 is needed
 // because async lists in a non-interactive sh get stdin=/dev/null. The trap is
 // armed before the fork; `term` covers a signal that lands before `log_pid` is set.
-const LOG_STREAM_WRAPPER_SCRIPT = `exec 3<&0
+// `set +eu` because an inherited SHELLOPTS=errexit would end the reader on read's EOF status.
+const LOG_STREAM_WRAPPER_SCRIPT = `set +eu
+exec 3<&0
 log_pid=
 term=
 trap 'term=1; [ -n "$log_pid" ] && kill "$log_pid" 2>/dev/null' TERM INT HUP
