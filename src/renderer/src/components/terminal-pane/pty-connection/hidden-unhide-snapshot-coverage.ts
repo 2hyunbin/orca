@@ -8,7 +8,6 @@ export function handleUnhideRestoreBackpressure(
   if (
     event.reason !== 'unhide' ||
     session.hiddenOutputRestoreInFlight === null ||
-    session.hiddenOutputRestorePtyId !== event.id ||
     typeof event.markerSeq !== 'number' ||
     !Number.isFinite(event.markerSeq)
   ) {
@@ -20,6 +19,9 @@ export function handleUnhideRestoreBackpressure(
     session.hiddenOutputRestoreUnhideSeq ?? 0,
     event.markerSeq
   )
+  if (session.hiddenOutputRestorePtyId !== event.id) {
+    session.noteHiddenOutputRestoreFloodBackpressure()
+  }
 }
 
 export function consumeSnapshotRequirement(
