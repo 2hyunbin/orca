@@ -1,9 +1,6 @@
 import { OrcaRuntimeWithResolveTerminalSplitSourceAuthority } from '../launch/terminal-split-source-authority'
-import {
-  type ResolvedWorktree,
-  runtimeWorktreeIdsEqual
-} from '../../runtime-worktree-path-identity'
-import { worktreeIdentityKey } from '../../../../shared/worktree/id'
+import type { ResolvedWorktree } from '../../runtime-worktree-path-identity'
+import { worktreeIdentityKey, worktreeIdsEqual } from '../../../../shared/worktree/id'
 import { teardownRpcDeadline } from '../../worktree-teardown'
 import { WORKTREE_TERMINALS_SLEEPING_ERROR } from '../../worktree-terminals-sleeping-error'
 import type {
@@ -38,7 +35,7 @@ export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntim
     const ptyIds = new Set<string>()
     for (const leaf of this.leaves.values()) {
       if (
-        runtimeWorktreeIdsEqual(leaf.worktreeId, worktreeId) &&
+        worktreeIdsEqual(leaf.worktreeId, worktreeId) &&
         leaf.ptyId &&
         worktreePtyBelongsToHost(leaf.ptyId, this.ptysById.get(leaf.ptyId)?.connectionId, hostFence)
       ) {
@@ -47,7 +44,7 @@ export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntim
     }
     for (const pty of this.ptysById.values()) {
       if (
-        runtimeWorktreeIdsEqual(pty.worktreeId, worktreeId) &&
+        worktreeIdsEqual(pty.worktreeId, worktreeId) &&
         (includeDisconnected || pty.connected) &&
         worktreePtyBelongsToHost(pty.ptyId, pty.connectionId, hostFence)
       ) {
