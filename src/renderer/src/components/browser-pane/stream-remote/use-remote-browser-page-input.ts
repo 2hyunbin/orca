@@ -144,6 +144,15 @@ export function useRemoteBrowserPageInput({
     }
     event.preventDefault()
     image.focus()
+    // Why: a release over the letterbox gutter or outside the pane must still send mouseUp, or
+    // the host page keeps the button held.
+    if (typeof image.setPointerCapture === 'function') {
+      try {
+        image.setPointerCapture(event.pointerId)
+      } catch {
+        // The pointer is already gone; its release will not arrive anywhere to capture.
+      }
+    }
     setPaneNotice(null)
     enqueueRemoteInput(async () => {
       if (!isCurrentRemoteOperationToken(operationToken)) {

@@ -92,12 +92,15 @@ export function RemoteBrowserPageViewport({
       className="@container-size relative min-h-0 flex-1 overflow-hidden bg-background"
     >
       {markup.isActive && markup.baseImage ? (
-        <MarkupOverlay
-          baseImage={markup.baseImage}
-          busy={markup.state === 'composing'}
-          onComplete={(input) => void markup.complete(input)}
-          onCancel={markup.cancel}
-        />
+        // Why the frame's own box: markup draws over the letterboxed page, not the whole pane.
+        <div className="absolute top-0 left-0" style={remoteFrameStyle}>
+          <MarkupOverlay
+            baseImage={markup.baseImage}
+            busy={markup.state === 'composing'}
+            onComplete={(input) => void markup.complete(input)}
+            onCancel={markup.cancel}
+          />
+        </div>
       ) : null}
       {frameUrl ? (
         <img
