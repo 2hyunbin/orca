@@ -18724,7 +18724,11 @@
         "collapse": "收起",
         "expand": "展开",
         "queued": "已排队",
-        "clearAll": "全部清除"
+        "clearAll": "全部清除",
+        "pasteOrDropImages": "粘贴或拖入图片",
+        "saveNeedsContent": "添加文字或图片后才能保存",
+        "saveTooManyImages": "一条消息中的图片过多，无法保存",
+        "saveTooLarge": "此消息过长，无法保存"
       },
       "thought": "已思考",
       "thoughtForDuration": "思考了 {{duration}}",

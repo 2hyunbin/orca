@@ -18759,7 +18759,11 @@
         "collapse": "접기",
         "expand": "펼치기",
         "queued": "대기 중",
-        "clearAll": "모두 지우기"
+        "clearAll": "모두 지우기",
+        "pasteOrDropImages": "이미지를 붙여넣거나 끌어다 놓기",
+        "saveNeedsContent": "저장하려면 텍스트나 이미지를 추가하세요",
+        "saveTooManyImages": "한 메시지에 저장하기에는 이미지가 너무 많습니다",
+        "saveTooLarge": "이 메시지는 너무 길어서 저장할 수 없습니다"
       },
       "thought": "생각함",
       "thoughtForDuration": "{{duration}} 동안 생각함",

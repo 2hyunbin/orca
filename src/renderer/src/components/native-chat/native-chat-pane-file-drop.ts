@@ -1,5 +1,6 @@
 import { hasWorkspaceFileDragType } from '@/lib/workspace-file-drag'
 import { hasNativeFileDragTypes } from '../../../../shared/native-file-drop'
+import { OS_FILE_DROP_OWNER_ATTRIBUTE } from '../../../../shared/native-file-drop-preparation'
 
 /** What a drag hovering the chat pane is carrying.
  *  `workspace`: an in-app file drag, attached by the composer's own handlers.
@@ -8,6 +9,7 @@ export type NativeChatPaneDragKind = 'os' | 'workspace'
 
 export type NativeChatPaneDragEvent = {
   currentTarget: { contains: (node: Node | null) => boolean }
+  target?: EventTarget | null
   dataTransfer: Pick<DataTransfer, 'types'>
   relatedTarget: EventTarget | null
 }
@@ -41,6 +43,15 @@ export function movedWithinDropSurface(event: NativeChatPaneDragEvent): boolean 
   return enteredNode instanceof Node && event.currentTarget.contains(enteredNode)
 }
 
+/** An OS file drop owner inside the pane (a queued card being edited) takes drops over it. */
+function overNestedOwner(event: NativeChatPaneDragEvent): boolean {
+  const owner =
+    event.target instanceof Element
+      ? event.target.closest(`[${OS_FILE_DROP_OWNER_ATTRIBUTE}]`)
+      : null
+  return owner !== null && owner !== event.currentTarget
+}
+
 /** Workspace files keep their provenance-checked lane; OS files use the native owner. */
 export function makeNativeChatPaneFileDropHandlers(host: {
   getClaim: () => NativeChatPaneDropClaim | null
@@ -53,7 +64,7 @@ export function makeNativeChatPaneFileDropHandlers(host: {
 } {
   const showsDropTarget = (event: NativeChatPaneDragEvent): boolean => {
     const kind = nativeChatPaneDragKind(event.dataTransfer)
-    if (kind === null) {
+    if (kind === null || (kind === 'os' && overNestedOwner(event))) {
       return false
     }
     const claim = host.getClaim()
@@ -69,6 +80,8 @@ export function makeNativeChatPaneFileDropHandlers(host: {
     onDragOverCapture(event) {
       if (showsDropTarget(event)) {
         host.setDragActive(true)
+      } else if (overNestedOwner(event)) {
+        host.setDragActive(false)
       }
       if (nativeChatPaneDragKind(event.dataTransfer) === 'workspace') {
         host.getClaim()?.onDragOverCapture(event)

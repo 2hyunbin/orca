@@ -1,14 +1,48 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { useEffect } from 'react'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { NativeChatQueuedMessageEditor } from './NativeChatQueuedMessageEditor'
 import { NativeChatApprovalCard } from './NativeChatApprovalCard'
 import { NativeChatQuestionCard } from './NativeChatQuestionCard'
-import type { QueuedMessageInlineEditor } from './use-structured-agent-session-queued-edit'
+import {
+  useStructuredAgentSessionQueuedEdit,
+  type QueuedMessageInlineEditor
+} from './use-structured-agent-session-queued-edit'
+import { projectQueuedMessageCards } from './structured-agent-session-queued-cards'
+import type { AgentSessionQueuedMessage } from '../../../../shared/agent-session-wire'
+import type { StructuredAgentSessionWrite } from './use-structured-agent-session-mutate'
+import type * as NativeChatAttachmentUpload from './native-chat-attachment-upload'
 
 vi.mock('@/i18n/i18n', () => ({
   translate: (_key: string, fallback: string, values?: Record<string, string>) =>
     fallback.replace(/\{\{(\w+)\}\}/g, (_match, name: string) => values?.[name] ?? '')
+}))
+vi.mock('@/runtime/structured-agent-session-client', () => ({
+  callStructuredAgentSession: async (
+    _target: unknown,
+    _method: string,
+    params: { action: string }
+  ) =>
+    params.action === 'release'
+      ? { status: 'released' }
+      : {
+          status: 'held',
+          fingerprint: 'f'.repeat(64),
+          leaseDurationMs: 120_000,
+          remainingMs: 120_000
+        }
+}))
+vi.mock('../../store', () => ({ useAppStore: { getState: () => ({}) } }))
+vi.mock('@/components/editor/useLocalImageSrc', () => ({ useLocalImageSrc: () => undefined }))
+vi.mock('./native-chat-attachment-upload', async (original) => ({
+  ...(await original<typeof NativeChatAttachmentUpload>()),
+  resolveNativeChatAttachmentOwnerForWorktree: () => ({ kind: 'local' })
+}))
+vi.mock('./native-chat-clipboard-image-save', () => ({
+  ownerAcceptsClipboardImage: () => true,
+  saveNativeChatPastedClipboardImage: async () => ({ status: 'saved', tempPath: '/tmp/new.png' })
 }))
 afterEach(cleanup)
 function editor(): QueuedMessageInlineEditor {
@@ -188,5 +222,97 @@ describe('queued card textarea', () => {
       unmount()
     }
     vi.restoreAllMocks()
+  })
+})
+
+const card: AgentSessionQueuedMessage = {
+  messageId: 'card',
+  position: 1,
+  state: 'waiting',
+  body: {
+    kind: 'message',
+    role: 'user',
+    blocks: [
+      { type: 'text', text: 'see this' },
+      { type: 'image-ref', path: '/host/old.png' }
+    ]
+  }
+}
+const writeSpy = vi.fn(async (..._args: unknown[]) => ({
+  kind: 'done',
+  value: { status: 'updated', messageId: 'card', fingerprint: 'a'.repeat(64) }
+}))
+// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: answers only queuedMessageUpdate, with that method's result.
+const write = writeSpy as StructuredAgentSessionWrite
+
+function EditedCard({ imagesCapable }: { imagesCapable: boolean }): React.JSX.Element | null {
+  const messages = [card]
+  const { editor, begin } = useStructuredAgentSessionQueuedEdit({
+    transport: { target: { kind: 'local' }, sessionId: 's', capable: true, imagesCapable, write },
+    messages,
+    cards: projectQueuedMessageCards(messages, [], {}),
+    submissions: [],
+    composerScopeKey: 'draft',
+    promptOpen: false
+  })
+  useEffect(() => void begin('card'), [begin])
+  const attachTo = {
+    terminalTabId: 'tab',
+    transport: { sessionId: 's', worktreeId: 'wt', runtimeEnvironmentId: null, acceptsImages: true }
+  }
+  return editor ? (
+    <TooltipProvider>
+      <ul>
+        <li>
+          <NativeChatQueuedMessageEditor editor={editor} attachTo={attachTo} images="1 image" />
+        </li>
+      </ul>
+    </TooltipProvider>
+  ) : null
+}
+
+function savedParams(): unknown {
+  return writeSpy.mock.calls.at(-1)?.[2]
+}
+
+describe('queued card image edit', () => {
+  it('removes the kept image, pastes a new one and saves the new set', async () => {
+    writeSpy.mockClear()
+    render(<EditedCard imagesCapable />)
+    const field = await screen.findByRole('textbox', { name: 'Edit message' })
+    await waitFor(() => expect(field.getAttribute('readonly')).toBeNull())
+    expect(screen.queryByText('1 image')).toBeNull()
+    expect(screen.getByText('Paste or drop images')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove attachment' }))
+    const data = new DataTransfer()
+    data.items.add(new File(['png'], 'new.png', { type: 'image/png' }))
+    act(() => {
+      field.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true }))
+    })
+    await waitFor(() => expect(screen.getByRole('button', { name: /View image/ })).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(writeSpy).toHaveBeenCalledOnce())
+    expect(savedParams()).toMatchObject({
+      text: 'see this',
+      images: [{ type: 'image-ref', path: '/tmp/new.png' }]
+    })
+  })
+
+  it('against a host that edits text only, shows the count and saves text alone', async () => {
+    writeSpy.mockClear()
+    render(<EditedCard imagesCapable={false} />)
+    const field = await screen.findByRole('textbox', { name: 'Edit message' })
+    await waitFor(() => expect(field.getAttribute('readonly')).toBeNull())
+    expect(screen.getByText('1 image')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Remove attachment' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Attach file' })).toBeNull()
+    fireEvent.change(field, { target: { value: 'see that' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(writeSpy).toHaveBeenCalledOnce())
+    expect(savedParams()).toEqual({
+      messageId: 'card',
+      expectedBodyFingerprint: expect.any(String),
+      text: 'see that'
+    })
   })
 })

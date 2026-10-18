@@ -19028,7 +19028,11 @@
         "collapse": "Collapse",
         "expand": "Expand",
         "queued": "Queued",
-        "clearAll": "Clear all"
+        "clearAll": "Clear all",
+        "pasteOrDropImages": "Paste or drop images",
+        "saveNeedsContent": "Add text or an image to save",
+        "saveTooManyImages": "Too many images to save in one message",
+        "saveTooLarge": "This message is too long to save"
       },
       "thought": "Thought",
       "thoughtForDuration": "Thought for {{duration}}",

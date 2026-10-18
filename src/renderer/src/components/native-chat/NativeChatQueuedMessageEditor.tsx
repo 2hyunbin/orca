@@ -1,26 +1,39 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react'
-import { Pencil, X } from 'lucide-react'
+import { Pencil, Plus, X } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { translate } from '@/i18n/i18n'
 import { ButtonKeyHint } from '@/components/ButtonKeyHint'
 import { isMacPlatform } from './native-chat-shortcut'
+import { NativeChatImageAttachmentPreview } from './NativeChatImageAttachmentPreview'
 import type { QueuedMessageInlineEditor } from './use-structured-agent-session-queued-edit'
+import {
+  useNativeChatQueuedEditImageIntake,
+  type QueuedEditAttachTarget
+} from './use-native-chat-queued-edit-image-intake'
 
 /** The inline editor that replaces a queued card's row while it is edited. It lives in the card,
  *  not the composer, so it stays usable while a question or approval holds the composer's slot. */
 export function NativeChatQueuedMessageEditor({
   editor,
   sender,
-  images
+  images,
+  attachTo
 }: {
   editor: QueuedMessageInlineEditor
   /** The card's "From <name>" line, kept beside the label. */
   sender?: ReactNode
-  /** The card's images, which saving the text keeps. */
+  /** The card's image count, shown where the host edits text only and so keeps the images. */
   images?: ReactNode
+  /** The chat this card's added files attach to, as its chat box attaches them. */
+  attachTo?: QueuedEditAttachTarget
 }): React.JSX.Element {
   const field = useRef<HTMLTextAreaElement>(null)
+  const intake = useNativeChatQueuedEditImageIntake(editor, attachTo, field)
+  const chips = editor.images?.chips ?? []
+  const reason = editor.images?.reason
+  const saveDisabled = editor.acquiring || editor.saving || !editor.canSave
   useLayoutEffect(() => {
     if (editor.acquiring) {
       return
@@ -52,7 +65,7 @@ export function NativeChatQueuedMessageEditor({
             <div className="min-w-0">{sender}</div>
           </>
         ) : null}
-        <div className="ml-auto flex items-center">{images}</div>
+        <div className="ml-auto flex items-center">{editor.images ? null : images}</div>
         <Button
           type="button"
           variant="ghost"
@@ -66,6 +79,18 @@ export function NativeChatQueuedMessageEditor({
           <X className="size-3.5" />
         </Button>
       </div>
+      {chips.length > 0 ? (
+        <div className="mb-2 flex flex-wrap gap-2 px-1 pt-1.5">
+          {chips.map((chip) => (
+            <NativeChatImageAttachmentPreview
+              key={chip.id}
+              attachment={chip}
+              hostEnvironmentId={intake.hostEnvironmentId}
+              onRemove={(id) => editor.images?.intake.remove(id)}
+            />
+          ))}
+        </div>
+      ) : null}
       <Textarea
         ref={field}
         aria-label={translate('components.native-chat.queuedMessages.editMessage', 'Edit message')}
@@ -74,6 +99,7 @@ export function NativeChatQueuedMessageEditor({
         value={editor.text}
         readOnly={editor.acquiring || editor.saving}
         onChange={(event) => editor.change(event.currentTarget.value)}
+        onPasteCapture={intake.onPasteCapture}
         // Enter or Cmd/Ctrl+Enter saves, Shift+Enter is a newline, Escape cancels; an IME's own
         // Enter and Escape never get here (`ImeTextarea`). Handled keys stay out of the prompt.
         onKeyDown={(event) => {
@@ -96,17 +122,71 @@ export function NativeChatQueuedMessageEditor({
           }
         }}
       />
-      <div className="mt-1.5 flex justify-end">
-        <Button
-          type="button"
-          size="xs"
-          disabled={editor.acquiring || editor.saving || !editor.canSave}
-          onClick={editor.save}
-        >
-          {translate('components.native-chat.queuedMessages.save', 'Save')}
-          <ButtonKeyHint />
-        </Button>
+      <div className="mt-1.5 flex items-center gap-1.5">
+        {intake.editable ? <QueuedEditAttachButton onAttach={intake.attach} /> : null}
+        {reason || intake.editable ? (
+          <span className="min-w-0 truncate text-xs text-muted-foreground">
+            {reason ??
+              translate(
+                'components.native-chat.queuedMessages.pasteOrDropImages',
+                'Paste or drop images'
+              )}
+          </span>
+        ) : null}
+        <QueuedEditSaveButton
+          disabled={saveDisabled}
+          reason={saveDisabled ? reason : undefined}
+          onSave={editor.save}
+        />
       </div>
     </div>
+  )
+}
+
+function QueuedEditAttachButton({ onAttach }: { onAttach: () => void }): React.JSX.Element {
+  const label = translate('components.native-chat.composer.attach', 'Attach file')
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button type="button" variant="ghost" size="icon-xs" aria-label={label} onClick={onAttach}>
+          <Plus className="size-3.5" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="top" sideOffset={4}>
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
+/** A disabled Save says why, as the chat box's Send does, when the person can fix it. */
+function QueuedEditSaveButton({
+  disabled,
+  reason,
+  onSave
+}: {
+  disabled: boolean
+  reason: string | undefined
+  onSave: () => void
+}): React.JSX.Element {
+  const button = (
+    <Button type="button" size="xs" disabled={disabled} aria-label={reason} onClick={onSave}>
+      {translate('components.native-chat.queuedMessages.save', 'Save')}
+      <ButtonKeyHint />
+    </Button>
+  )
+  if (!reason) {
+    return <div className="ml-auto">{button}</div>
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {/* A disabled button gets no pointer events, so the wrapper carries the hover. */}
+        <span className="ml-auto inline-flex">{button}</span>
+      </TooltipTrigger>
+      <TooltipContent side="top" sideOffset={4}>
+        {reason}
+      </TooltipContent>
+    </Tooltip>
   )
 }
