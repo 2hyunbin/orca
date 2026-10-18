@@ -82,6 +82,8 @@ const LEAVE_ALTERNATE_SCREEN_KEEPING_NORMAL_CURSOR = `${SAVE_GROUNDED_CURSOR}\x1
 // UTF-8 and urxvt encodings RESET_MOUSE_REPORTING leaves out; xterm ignores them, other hosts may not.
 const RESET_LEGACY_MOUSE_ENCODINGS = '\x1b[?1005l\x1b[?1015l'
 const RESET_FOCUS_REPORTING = '\x1b[?1004l'
+// Snapshots omit disabled modes; inherited reporting must clear before live modes are replayed.
+export const RESET_SNAPSHOT_MOUSE_AND_FOCUS = `${RESET_MOUSE_REPORTING}${RESET_FOCUS_REPORTING}`
 const RESET_BRACKETED_PASTE = '\x1b[?2004l'
 const RESET_APPLICATION_CURSOR_AND_KEYPAD = '\x1b[?1l\x1b[?66l'
 const SHOW_CURSOR = '\x1b[?25h'
@@ -119,7 +121,7 @@ export const RESET_AFTER_BYTE_GAP = `${ABORT_TRUNCATED_CONTROL_STRING}${RELEASE_
 // resetting is unilateral. `enacs=\E(B\E)0` (screen/tmux/vt100 terminfo)
 // designates G1 once at init and then uses bare SO/SI, so grounding G1 would
 // render a live app's box drawing as letters.
-const REPLAY_BASELINE_TERMINAL_RESET = `${RELEASE_SYNCHRONIZED_OUTPUT}${RESET_GRAPHIC_RENDITION}\x0f\x1b(B\x1b[?6l\x1b[?7h\x1b[?45l\x1b[4l`
+const REPLAY_BASELINE_TERMINAL_RESET = `${RELEASE_SYNCHRONIZED_OUTPUT}${RESET_SNAPSHOT_MOUSE_AND_FOCUS}${RESET_GRAPHIC_RENDITION}\x0f\x1b(B\x1b[?6l\x1b[?7h\x1b[?45l\x1b[4l`
 
 // Buffer-scoped: margins live on the xterm buffer, and `?1049` neither carries
 // them across nor clears them unless it actually swaps.
