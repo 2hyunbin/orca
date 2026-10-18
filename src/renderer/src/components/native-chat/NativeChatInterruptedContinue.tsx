@@ -1,4 +1,4 @@
-import { useCallback, useId, useMemo, useState } from 'react'
+import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -63,6 +63,10 @@ export function useNativeChatInterruptedContinuation(input: {
   pending: readonly Pick<StructuredAgentSessionPendingSend, 'phase'>[]
 }): NativeChatInterruptedContinuation {
   const { target, sessionId, reportComposerError, transport, agent } = input
+  const latestTransport = useRef(transport)
+  useLayoutEffect(() => {
+    latestTransport.current = transport
+  }, [transport])
   const hostLabel = useStructuredAgentSessionHostLabel(target)
   const capability = useStructuredAgentSessionHostCapabilityState(
     target,
@@ -121,6 +125,7 @@ export function useNativeChatInterruptedContinuation(input: {
     reportComposerError(null)
     // Keeping the draft must not keep the previous send's error.
     publishStructuredAgentSessionSends(sessionId, { notice: null })
+    const transport = latestTransport.current
     const admission = transport.send(NATIVE_CHAT_USAGE_LIMIT_CONTINUE_MESSAGE, [], {
       callerKeepsText: true,
       ...(usageCapability === 'supported' ? { usageLimitContinuationOfTurnItemId: turnItemId } : {}),
@@ -135,7 +140,7 @@ export function useNativeChatInterruptedContinuation(input: {
     } else {
       completeNativeChatStructuredUserAction(agent, transport, admission === true)
     }
-  }, [usageLimitTurnItemId, usageCapability, sessionId, reportComposerError, transport, agent])
+  }, [usageLimitTurnItemId, usageCapability, sessionId, reportComposerError, agent])
   const continueNow = useCallback((): void => {
     if (offered === null) {
       return

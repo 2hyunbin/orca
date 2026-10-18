@@ -11,13 +11,19 @@ import type {
   StructuredAgentSessionEventSink,
   StructuredAgentSessionRevisionJournal
 } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
+import type { StructuredAgentSessionTransitionJournal } from '../native-chat/agent-session-wire/structured-agent-session-transition'
 import type { ClaudeContextReportTarget } from './claude-context-facts'
 import { createClaudeJournalTranslator } from './claude-structured-journal-translation'
 import { claudeTurnLifecycleIdentity } from './claude-turn-lifecycle-item'
 
 /** A journal in miniature: the latest revision per row, its creation clock
  *  pinned, and revisions resolved against it as a bound sink would. */
-export function journal() {
+export function journal({ deferred = false } = {}) {
+  const queued: (() => void)[] = []
+  const run = (write: () => void): void => {
+    if (deferred) { queued.push(write) } else { write() }
+  }
+  const flush = (): void => { while (queued.length) { queued.shift()!() } }
   const clock = { now: 0 }
   const appends: { identity: AgentJournalItemIdentity; body: AgentJournalItemBody }[] = []
   const rows = new Map<string, AgentJournalRenderItem>()
@@ -30,11 +36,15 @@ export function journal() {
       revision: (existing?.revision ?? 0) + 1,
       sequence: existing?.sequence ?? rows.size + 1,
       observedAt: existing?.observedAt ?? options?.observedAt ?? clock.now,
-      body
+      ...options, body
     })
   }
   const scans = { count: 0 }
-  const bound: StructuredAgentSessionRevisionJournal = {
+  const bound: StructuredAgentSessionRevisionJournal & StructuredAgentSessionTransitionJournal = {
+    item: (itemId) => rows.get(itemId) ?? null,
+    canonicalItemId: (itemId) => itemId,
+    submissions: () => [],
+    visitItemsWithLinkage: (visit) => { for (const row of rows.values()) { visit(row.itemId, row.sequence, row.body, row) } },
     epoch: 'test',
     visitItems: (visit) => {
       scans.count += 1
@@ -49,14 +59,27 @@ export function journal() {
     resolve,
     options
   ) => {
-    const resolved = resolve(bound)
-    if (resolved) {
-      appendItem(resolved.identity, resolved.body, options)
-    }
+    run(() => {
+      const resolved = resolve(bound)
+      if (resolved) { appendItem(resolved.identity, resolved.body, options) }
+    })
     return { accepted: true }
   }
   const sink: StructuredAgentSessionEventSink = {
-    appendItem,
+    appendItem: (...args) => run(() => appendItem(...args)),
+    journalItems: () => bound,
+    tryAppendTransition: (transition) => {
+      run(() => {
+        for (const step of transition.steps) {
+          if (step.kind === 'item') {
+            const resolved = step.resolve(bound)
+            if (resolved) { appendItem(resolved.identity, resolved.body, step.options) }
+          }
+        }
+        transition.onPublished?.()
+      })
+      return { accepted: true }
+    },
     tryReviseResolvedItem: revise,
     tryReviseResolvedItemAndPublish: revise,
     appendTombstone: () => {},
@@ -65,7 +88,7 @@ export function journal() {
   const turnRow = (turnId: string) =>
     rows.get(agentJournalItemKey(claudeTurnLifecycleIdentity('claude-session', turnId)))
   const items = () => [...rows.values()].sort((left, right) => left.sequence - right.sequence)
-  return { sink, clock, appends, rows, turnRow, items, scans }
+  return { sink, clock, appends, rows, turnRow, items, scans, flush }
 }
 
 export function frame(message: Record<string, unknown>, observedAt: number, startsTurn = false) {
@@ -146,8 +169,8 @@ export const turnIdentity = (turnId: string) =>
   claudeTurnLifecycleIdentity('claude-session', turnId)
 
 /** Every turn the CLI runs opens with an init naming the main model as `modelUsage` keys it. */
-export function setup({ init = 'claude-fable-5-1[1m]' }: { init?: string | null } = {}) {
-  const state = journal()
+export function setup({ init = 'claude-fable-5-1[1m]', deferred = false }: { init?: string | null; deferred?: boolean } = {}) {
+  const state = journal({ deferred })
   const translator = createClaudeJournalTranslator({ sink: state.sink, coalesceMs: 0 })
   const requests: ClaudeContextReportTarget[] = []
   translator.subscribeContextUsageRequests((target) => requests.push(target))

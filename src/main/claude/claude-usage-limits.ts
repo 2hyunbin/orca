@@ -42,7 +42,6 @@ function messageText(message: Record<string, unknown>): string {
 
 export type ClaudeUsageLimitEvidence = {
   cause: 'quota' | 'other' | 'untyped'
-  row: ClaudeUsageLimitRow | null
 }
 
 // Account observations outlive turns because unchanged rejection notifications are throttled.
@@ -57,7 +56,7 @@ export class ClaudeUsageLimits {
     }
   }
 
-  assistant(message: Record<string, unknown>, turn: ClaudeOpenTurn): ClaudeUsageLimitRow | null {
+  assistant(message: Record<string, unknown>, turn?: ClaudeOpenTurn): ClaudeUsageLimitRow | null {
     if (message.type !== 'assistant') {
       return null
     }
@@ -68,13 +67,13 @@ export class ClaudeUsageLimits {
     }
     const refused = message.error === 'rate_limit' || cause === 'quota'
     const root = message.parent_tool_use_id == null
-    const decision = !typed && root ? (turn.usageLimitEvidence?.cause ?? cause) : cause
+    const decision = !typed && root ? (turn?.usageLimitEvidence?.cause ?? cause) : cause
     const row =
       decision !== 'other' && refused
         ? this.row(messageText(message), decision === 'quota')
         : null
-    if (root && (typed || (refused && decision === 'untyped'))) {
-      turn.usageLimitEvidence = { cause, row }
+    if (root && turn?.isOpen && (typed || (refused && decision === 'untyped'))) {
+      turn.usageLimitEvidence = { cause: row ? 'quota' : cause }
     }
     return row
   }
@@ -97,13 +96,7 @@ export class ClaudeUsageLimits {
     if (!limited) {
       return null
     }
-    const prior = evidence?.row
-    const details = [prior?.failure.detail?.text, claudeText(message.result)]
-      .filter((value): value is string => Boolean(value))
-    return (
-      this.row([...new Set(details)].join('\n'), evidence?.cause === 'quota' || prior != null,
-        prior?.failure.usageLimit) ?? prior ?? null
-    )
+    return this.row(claudeText(message.result) ?? '', evidence?.cause === 'quota')
   }
 
   private record(info: Record<string, unknown> | null): void {
@@ -146,10 +139,9 @@ export class ClaudeUsageLimits {
 
   private row(
     providerText: string,
-    typed = false,
-    previousLimit?: AgentSessionUsageLimit
+    typed = false
   ): ClaudeUsageLimitRow | null {
-    const limit = this.limit() ?? previousLimit ?? null
+    const limit = this.limit()
     if (!limit && !typed) {
       return null
     }

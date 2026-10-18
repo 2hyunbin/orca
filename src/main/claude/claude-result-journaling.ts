@@ -5,6 +5,11 @@
 // the open turn and every collaborator this writes through.
 
 import { agentJournalItemKey } from '../../shared/agent-session-journal-item-key'
+import {
+  claudeTerminalFailureIdentity,
+  resolveClaudeTerminalOwner,
+  writeClaudeTerminalFailure
+} from './claude-terminal-failure'
 import type { ClaudeContextFacts } from './claude-context-facts'
 import { claudeCommandResultEnd } from './claude-command-turn'
 import type { ClaudeMessageJournalContext } from './claude-message-journaling'
@@ -58,6 +63,20 @@ export function journalClaudeResult(
   // diagnostic below still runs: a child's failure is reportable even when
   // it ends no turn.
   const settlesTurn = isRootClaudeFrame(message)
+  const owner = settlesTurn ? resolveClaudeTerminalOwner(sink, turn, message) : undefined
+  if (owner === null) {
+    return
+  }
+  if (owner?.identity && !owner.current) {
+    const failureIdentity = claudeTerminalFailureIdentity(agentJournalItemKey(owner.identity))
+    const prior = sink.journalItems?.()?.itemBody(agentJournalItemKey(failureIdentity))
+    const usageLimit = prior?.kind === 'status' && prior.failure?.kind === 'usageLimitReached'
+      ? usageLimits.result(message, claudeResultFailure(message, false) !== null, { cause: 'quota' }) : null
+    if (usageLimit) {
+      writeClaudeTerminalFailure(sink, owner.identity, usageLimit)
+    }
+    return
+  }
   const commandEnd = settlesTurn ? claudeCommandResultEnd(turn, sink, message, observedAt) : null
   if (commandEnd === 'another-input') {
     return
@@ -71,6 +90,11 @@ export function journalClaudeResult(
   // person's cancellation is theirs to decide as the end is written (`turnEndAfterStop`).
   const turnId = settlesTurn ? turn.id : null
   const leftToStop = turnId !== null && sink.journalStopDecidesTurn?.(turnId, observedAt) === true
+  const failure = claudeResultFailure(message, leftToStop)
+  const usageLimit = settlesTurn ? usageLimits.result(message, failure !== null, usageEvidence) : null
+  if (usageLimit && endedTurnIdentity) {
+    writeClaudeTerminalFailure(sink, endedTurnIdentity, usageLimit)
+  }
   if (settlesTurn) {
     prompts.retryPendingCancellations()
     turn.suppressReopenOnFailure(message.is_error === true)
@@ -96,16 +120,7 @@ export function journalClaudeResult(
     sink.publish()
   }
   const kind = claudeProviderFrameKind(message)
-  const failure = claudeResultFailure(message, leftToStop)
-  // A failed root result the limit refused writes the limit's row, not the result's.
-  const usageLimit = settlesTurn ? usageLimits.result(message, failure !== null, usageEvidence) : null
   if (usageLimit && endedTurnIdentity) {
-    sink.appendItem(
-      { provider: 'orca', clientMessageId: `terminal-failure:claude:${agentJournalItemKey(endedTurnIdentity)}` },
-      usageLimit,
-      { turnScope: endedTurnScope }
-    )
-    sink.publish()
     return
   }
   const alreadyShown = authenticationFailures.resultAlreadyShown(message)

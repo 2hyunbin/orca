@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
+import { latestNativeChatUsageLimitCut } from '../../shared/native-chat-usage-limit-cut'
+import { agentJournalSubmissionKey } from '../../shared/agent-session-journal-item-key'
+import { adapterFor, fakeClaude, identityFor, PROVIDER_SESSION_ID, USER_MESSAGE } from './claude-structured-session-test-support'
 import { assistantFrame, frame, setup, userFrame } from './claude-context-usage-test-support'
 
 // Seconds, as Claude sends them; two hours out so no reset passes mid-test.
@@ -149,4 +152,107 @@ describe('a Claude usage limit', () => {
     )
     t.translator.dispose()
   })
+})
+
+const quota = (uuid: string, stamp?: string) => frame({
+  ...refusedFrame(uuid, 1100, LIMIT_TEXT).message,
+  user_message_uuid: stamp, api_error: 'usage_limit_reached'
+}, 1100)
+
+it.each([false, true])('reconciles replay and late detail without touching newer work (provider-opened %s)', (providerOpened) => {
+  const t = setup()
+  if (!providerOpened) { t.handle(userFrame('owner', 1000)) }
+  const refusal = quota('owner', providerOpened ? undefined : 'owner')
+  t.handle(refusal)
+  t.handle(frame({ ...failedResult('owner', 1200, LIMIT_TEXT).message, user_message_uuid: 'owner' }, 1200))
+  const endpoints = t.items().filter((item) => item.body.kind === 'turn')
+  t.handle(refusal)
+  t.handle(frame({ ...failedResult('owner', 1300, LIMIT_TEXT).message, user_message_uuid: 'owner' }, 1300))
+  expect(statusRows(t)).toHaveLength(1)
+  expect(t.items().filter((item) => item.body.kind === 'turn')).toEqual(endpoints)
+  t.handle(userFrame('newer', 2000))
+  t.handle(refusal)
+  t.handle(frame({ ...failedResult('owner', 2200, 'New provider explanation').message, user_message_uuid: 'owner' }, 2200))
+  expect(t.translator.currentTurnId).toBe('newer')
+  expect(t.turnRow('newer')?.body).toMatchObject({ state: 'running' })
+  expect(statusRows(t)).toHaveLength(1)
+  expect(statusRows(t)[0]?.failure?.detail?.text).toContain('New provider explanation')
+  t.translator.dispose()
+})
+
+it.each(['idle', 'exit'] as const)('keeps quota failure through a deferred resultless %s and merges late detail', (ending) => {
+  const t = setup({ deferred: true })
+  t.handle(userFrame('owner', 1000))
+  t.handle(quota('refusal', 'owner'))
+  if (ending === 'idle') {
+    t.handle(frame({ type: 'system', subtype: 'session_state_changed', state: 'idle' }, 1200))
+  } else {
+    t.handle({ type: 'ended', sessionId: 'orca-session', observedAt: 1200 })
+  }
+  t.flush()
+  expect(t.turnRow('owner')?.body).toMatchObject({
+    state: ending === 'idle' ? 'completed' : 'interrupted', outcome: 'failure'
+  })
+  expect(latestNativeChatUsageLimitCut(t.items(), [])).not.toBeNull()
+  const end = t.turnRow('owner')
+  t.handle(frame({ ...failedResult('owner', 1400, 'Later explanation').message, user_message_uuid: 'owner' }, 1400))
+  t.flush()
+  expect(t.turnRow('owner')).toEqual(end)
+  expect(statusRows(t)).toHaveLength(1)
+  expect(statusRows(t)[0]?.failure?.detail?.text).toContain('Later explanation')
+  t.translator.dispose()
+})
+
+it.each(['before', 'after', 'child', 'ordinary', 'success', 'other', 'superseded'] as const)('preserves %s precedence over resultless quota inference', (mode) => {
+  const t = setup({ deferred: true })
+  t.handle(userFrame('owner', 1000))
+  if (mode !== 'ordinary') {
+    t.handle(frame({ ...quota('refusal', 'owner').message,
+      ...(mode === 'child' ? { parent_tool_use_id: 'child-tool' } : {}) }, 1100))
+  }
+  if (mode === 'other') {
+    t.handle(frame({ ...refusedFrame('other', 1150, 'Requires credits').message,
+      api_error: 'model_requires_usage_credits' }, 1150))
+  }
+  const stopAt = mode === 'before' ? 1150 : 1300
+  t.sink.journalStopDecidesTurn = (_turnId, endAt) =>
+    (mode === 'before' || mode === 'after') && endAt >= stopAt
+  if (mode === 'success') {
+    t.handle(frame({ type: 'result', subtype: 'success', is_error: false, result: 'done' }, 1200))
+  } else if (mode === 'superseded') {
+    t.handle(userFrame('newer', 1200))
+  } else {
+    t.handle({ type: 'ended', sessionId: 'orca-session', observedAt: 1200 })
+  }
+  t.flush()
+  const outcome = mode === 'before' ? 'cancellation' : mode === 'after' ? 'failure'
+    : mode === 'success' ? 'success' : mode === 'superseded' ? 'superseded' : undefined
+  const body = t.turnRow('owner')?.body
+  expect(body?.kind === 'turn' ? body.outcome : null).toEqual(outcome)
+  expect(latestNativeChatUsageLimitCut(t.items(), []) !== null).toBe(mode === 'after')
+  t.translator.dispose()
+})
+
+it('retains a newly accepted pre-echo failure after acquisition has consumed its exact waiter', async () => {
+  const t = setup()
+  t.translator.dispose()
+  const claude = fakeClaude({ replayUuid: null })
+  const adapter = adapterFor(claude)
+  await adapter.acquire({ identity: identityFor(), fence: 7, spawnToken: 'quota-test', events: t.sink })
+  const connection = claude.connections[0]!
+  const emit = (message: Record<string, unknown>) => connection.handlers.onMessage?.({
+    parent_tool_use_id: null, ...message, session_id: PROVIDER_SESSION_ID
+  })
+  await adapter.dispatch({ sessionId: 'session-1', clientMessageId: 'first', body: USER_MESSAGE, fence: 7 })
+  emit({ ...connection.sent[0], uuid: 'owner' })
+  emit(quota('refusal', 'owner').message)
+  emit({ ...failedResult('owner', 1200, LIMIT_TEXT).message, user_message_uuid: 'owner' })
+  t.sink.appendItem({ provider: 'orca', clientMessageId: 'new-send' }, USER_MESSAGE, { turnScope: { kind: 'thread' } })
+  await adapter.dispatch({ sessionId: 'session-1', clientMessageId: 'new-send', body: USER_MESSAGE, fence: 7 })
+  const sent = connection.sent.at(-1)!
+  emit({ type: 'result', uuid: 'new-result', user_message_uuid: sent.uuid,
+    subtype: 'error_during_execution', is_error: true, result: 'Fresh request rejected' })
+  expect(t.items().some((item) => item.itemId === agentJournalSubmissionKey('new-send'))).toBe(true)
+  expect(statusRows(t).some((row) => row.text.includes('Fresh request rejected'))).toBe(true)
+  await adapter.closeSession('session-1')
 })

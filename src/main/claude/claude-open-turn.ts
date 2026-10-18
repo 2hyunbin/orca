@@ -21,6 +21,7 @@ import {
 import { writeAgentJournalTurnRow } from '../native-chat/agent-session-timeline/agent-journal-turn-row-revision'
 import type { ClaudeCommandTurn } from './claude-command-turn'
 import { createClaudeTurnOpener, type ClaudeTurnSource } from './claude-turn-opening'
+import { finalizeClaudeTerminalTurn } from './claude-terminal-failure'
 import type { ClaudeUsageLimitEvidence } from './claude-usage-limits'
 import type { ClaudeStartedSend } from './claude-structured-session-state'
 
@@ -94,6 +95,10 @@ export class ClaudeOpenTurn {
   /** When the open turn started, or null when none is open. */
   get startedAt(): number | null {
     return this.current?.startedAt ?? null
+  }
+
+  get isReopenSuppressed(): boolean {
+    return this.reopenSuppressed
   }
 
   get isOpen(): boolean {
@@ -226,10 +231,14 @@ export class ClaudeOpenTurn {
     contextUsage?: AgentSessionContextUsage
   ): void {
     const item = claudeTurnLifecycleItem(turn, end)
+    const write = { lifecycle: item.body, ...(contextUsage ? { contextUsage } : {}) }
+    if (end && finalizeClaudeTerminalTurn(this.deps.sink, item.identity, write, this)) {
+      return
+    }
     writeAgentJournalTurnRow(
       this.deps.sink,
       { identity: item.identity },
-      { lifecycle: item.body, ...(contextUsage ? { contextUsage } : {}) },
+      write,
       { publish: false, options: item.options }
     )
     // Keyed apart, so this never replaces the start's publication while it still waits to run.

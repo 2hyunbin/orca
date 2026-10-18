@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -390,4 +390,26 @@ it('keeps the draft through Continue admission, refusal, uncertainty and recorde
   expect(readNativeChatComposerDraft(scope)).toMatchObject(draft)
   expect(screen.getByText('next.png')).toBeInTheDocument()
   expect(options).toEqual({ model: 'gpt-current', effort: 'high' })
+})
+
+it('keeps the notice view stable while Continue invokes the latest committed transport', () => {
+  const items: AgentJournalRenderItem[] = [
+    { ...cutChat[0]!, body: { kind: 'turn', turnId: 'cut', state: 'completed', outcome: 'failure', startedAt: 1, completedAt: 5 } },
+    { ...cutChat[1]!, body: { kind: 'status', ...agentSessionFailureWords({ kind: 'usageLimitReached' }, { surface: 'row' }) } }
+  ]
+  const first = vi.fn(() => true)
+  const latest = vi.fn(() => true)
+  const transport: NativeChatStructuredComposerTransport = {
+    send: first, dispatchCommand: async () => ({ handled: false, accepted: false, error: null }),
+    optionsSurface, optionSnapshot: [], onError: () => {}, runtime: 'remote', sessionId: 'session-1'
+  }
+  const input = { target: PAIRED, agent: 'codex' as const, sessionId: 'session-1', journalItems: items,
+    submissions: [], isWorking: false, pending: [], reportComposerError: vi.fn(), transport }
+  const { result, rerender } = renderHook((props) => useNativeChatInterruptedContinuation(props), { initialProps: input })
+  const view = result.current.view
+  rerender({ ...input, transport: { ...transport, send: latest } })
+  expect(result.current.view).toBe(view)
+  act(() => view.continueUsageLimit())
+  expect(first).not.toHaveBeenCalled()
+  expect(latest).toHaveBeenCalledOnce()
 })
