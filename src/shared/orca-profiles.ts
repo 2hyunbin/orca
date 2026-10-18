@@ -168,7 +168,6 @@ export type ConnectCurrentOrcaProfileResult =
       auth: OrcaProfileAuthStatus
     }
   | {
-      /** The newest sign-in's browser wait ended with no answer. */
       status: 'timed-out'
       auth: OrcaProfileAuthStatus
     }

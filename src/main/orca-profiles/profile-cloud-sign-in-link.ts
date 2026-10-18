@@ -33,7 +33,6 @@ export function publishOrcaCloudSignInLink(attempt: number, link: string): void 
   setPending({ attempt, link })
 }
 
-/** Clears the link when `attempt` owns it, or unconditionally without one. */
 export function releaseOrcaCloudSignInLink(attempt?: number): void {
   if (attempt === undefined || pending?.attempt === attempt) {
     setPending(null)

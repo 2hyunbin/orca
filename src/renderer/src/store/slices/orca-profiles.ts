@@ -18,7 +18,6 @@ export type OrcaProfilesSlice = OrcaProfilesAuthActions & {
   orcaProfiles: OrcaProfileSummary[]
   activeOrcaProfileId: string | null
   orcaProfileAuthStatus: OrcaProfileAuthStatus | null
-  /** Link of the browser sign-in main is still waiting on; null when none is. */
   orcaProfileSignInLink: string | null
   orcaProfilesMultiProfileUi: boolean
   orcaProfilesLoading: boolean

@@ -11,18 +11,20 @@ export function registerOrcaProfileAuthIpcBridge(unsubs: (() => void)[]): void {
     )
   }
   if (typeof api?.onSignInLinkChanged === 'function') {
-    let changed = false
-    unsubs.push(
-      api.onSignInLinkChanged((link) => {
-        changed = true
-        useAppStore.setState({ orcaProfileSignInLink: link })
-      })
-    )
-    // Why: a sign-in can already be waiting when this window loads; a later event wins.
+    // Why: a sign-in can already be waiting when this window loads; a later event or teardown wins.
+    let ignoreSnapshot = false
+    const unsubscribe = api.onSignInLinkChanged((link) => {
+      ignoreSnapshot = true
+      useAppStore.setState({ orcaProfileSignInLink: link })
+    })
+    unsubs.push(() => {
+      ignoreSnapshot = true
+      unsubscribe()
+    })
     void Promise.resolve()
       .then(() => api.pendingSignInLink())
       .then((link) => {
-        if (!changed) {
+        if (!ignoreSnapshot) {
           useAppStore.setState({ orcaProfileSignInLink: link ?? null })
         }
       })
