@@ -42,6 +42,8 @@ export class SidebarRetentionOwner {
   private identityById = new Map<string, string>()
   private retentionState = createSleepingSweepRetentionState()
   private retention: SidebarRetention | null = null
+  // Until a listing lands no retained id can be host-qualified, so nothing is published.
+  private listed = false
 
   constructor(
     private readonly clock: SidebarClock,
@@ -49,7 +51,11 @@ export class SidebarRetentionOwner {
   ) {}
 
   snapshot(): SidebarTemporalSnapshot {
-    return { revision: this.revision.value, sessionId: this.sessionId, retention: this.retention }
+    return {
+      revision: this.revision.value,
+      sessionId: this.sessionId,
+      retention: this.listed ? this.retention : null
+    }
   }
 
   /** The window mounted its list: retention forgets, as on today's remount. */
@@ -64,10 +70,10 @@ export class SidebarRetentionOwner {
     this.relist()
   }
 
-  /** The catalog was listed again after a worktree or repo change. */
-  noteCatalogListing(worktrees: readonly Worktree[]): void {
+  /** A worktree or repo change: list again, so new rows' hosts are known. */
+  noteCatalogChange(): void {
     if (this.running) {
-      this.applyListing(worktrees)
+      this.relist()
     }
   }
 
@@ -104,7 +110,10 @@ export class SidebarRetentionOwner {
   }
 
   private applyListing(worktrees: readonly Worktree[]): void {
-    this.listingSeq += 1
+    if (!this.listed) {
+      this.listed = true
+      this.revision.bump()
+    }
     this.identityById = new Map(
       worktrees.map((worktree) => [worktree.id, getWorktreeHostIdentity(worktree)])
     )

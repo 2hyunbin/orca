@@ -34,13 +34,25 @@ function harness(worktrees: Worktree[]) {
     worktrees: Worktree[]
     active: Set<string>
     tabsOpen: Set<string>
-    gate: Promise<void> | null
-  } = { showSleeping: false, worktrees, active: new Set(), tabsOpen: new Set(), gate: null }
+    /** When set, the next listing waits for its own release. */
+    holdNextListing: boolean
+    releases: (() => void)[]
+  } = {
+    showSleeping: false,
+    worktrees,
+    active: new Set(),
+    tabsOpen: new Set(),
+    holdNextListing: false,
+    releases: []
+  }
   const owner = new SidebarRetentionOwner(new SidebarClock(), {
     showSleepingWorkspaces: () => world.showSleeping,
     listRows: async () => {
       const rows = world.worktrees
-      await world.gate
+      if (world.holdNextListing) {
+        world.holdNextListing = false
+        await new Promise<void>((resolve) => world.releases.push(resolve))
+      }
       return rows
     },
     retentionCandidates: () => ({
@@ -67,7 +79,7 @@ describe('SidebarRetentionOwner', () => {
 
   it('stays idle until a window begins a session, and after dispose', async () => {
     const { world, owner } = harness([worktree('a')])
-    owner.noteCatalogListing([worktree('a')])
+    owner.noteCatalogChange()
     world.active = new Set(['a'])
     owner.noteActivityChange()
     await flush()
@@ -102,22 +114,26 @@ describe('SidebarRetentionOwner', () => {
     expect(owner.snapshot().retention).toBeNull()
   })
 
-  it('host-qualifies retained ids from the newest listing, never an older slow one', async () => {
-    const { world, owner } = harness([])
-    let release: () => void = () => {}
-    world.gate = new Promise((resolve) => (release = resolve))
-    // The session's first listing is slow, and it read no rows.
-    owner.beginSession('s1')
+  it('publishes nothing until a listing lands, then host-qualifies from the newest one', async () => {
     const remote = worktree('a', { hostId: 'ssh:box' })
-    owner.noteCatalogListing([remote])
+    const { world, owner } = harness([])
+    // The session's own listing is slow and read no rows.
+    world.holdNextListing = true
+    owner.beginSession('s1')
     world.active = new Set(['a'])
     world.tabsOpen = new Set(['a'])
     owner.noteActivityChange()
+    expect(owner.snapshot().retention).toBeNull()
+
+    // A catalog change lists again, and that newer listing lands first.
+    world.worktrees = [remote]
+    owner.noteCatalogChange()
+    await flush()
     world.active = new Set()
     owner.noteActivityChange()
     expect(owner.snapshot().retention?.retainedIds).toEqual([getWorktreeHostIdentity(remote)])
 
-    release()
+    world.releases.forEach((release) => release())
     await flush()
     expect(owner.snapshot().retention?.retainedIds).toEqual([getWorktreeHostIdentity(remote)])
   })

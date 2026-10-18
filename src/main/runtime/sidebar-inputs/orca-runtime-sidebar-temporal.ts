@@ -52,21 +52,10 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     this.clientEvents.on(
       (event) => {
         if (event.type === 'worktreesChanged' || event.type === 'reposChanged') {
-          this.noteSidebarCatalogChange()
+          this.sidebarTemporal.noteCatalogChange()
         }
       },
       { consumesTerminalSideEffects: false }
-    )
-  }
-
-  // Listed after the change lands, as the window re-lists.
-  private noteSidebarCatalogChange(): void {
-    if (!this.sidebarTemporal.running) {
-      return
-    }
-    void this.listSidebarRows().then(
-      (worktrees) => this.sidebarTemporal.noteCatalogListing(worktrees),
-      (error: unknown) => console.warn('[sidebar-retention] could not list rows', error)
     )
   }
 
