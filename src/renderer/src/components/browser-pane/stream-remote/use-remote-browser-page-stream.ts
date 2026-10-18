@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 
 import { decodeBrowserScreencastFrame } from '../../../../../shared/browser-screencast-protocol'
@@ -71,6 +71,7 @@ export function useRemoteBrowserPageStream({
 } {
   // Bumped by Reconnect to re-run the open effect from scratch. See reconnectRemoteStream.
   const [reopenNonce, setReopenNonce] = useState(0)
+  const lastFrameDeviceSizeRef = useRef<string | null>(null)
 
   const rememberRemoteViewportSize = useCallback(
     (next: RemoteBrowserViewportSize): RemoteBrowserViewportSize => {
@@ -231,6 +232,14 @@ export function useRemoteBrowserPageStream({
           }
           const prevUrl = streamFrameUrlRef.current
           streamFrameUrlRef.current = nextUrl
+          // Why: the host can change the viewport it shows on its own (it fits it to the view it
+          // can paint), and the cached CSS size then describes a layout that is gone.
+          const deviceSize = `${frame.metadata.deviceWidth}x${frame.metadata.deviceHeight}`
+          const previousDeviceSize = lastFrameDeviceSizeRef.current
+          lastFrameDeviceSizeRef.current = deviceSize
+          if (previousDeviceSize !== null && previousDeviceSize !== deviceSize) {
+            remoteCssViewportSizeRef.current = null
+          }
           setFrameMetadata(frame.metadata)
           setFrameUrl(nextUrl)
           setPaneBusy(false)
@@ -245,6 +254,7 @@ export function useRemoteBrowserPageStream({
     [
       lifecycle,
       pendingFrameDecodeRef,
+      remoteCssViewportSizeRef,
       setFrameMetadata,
       setFrameUrl,
       setPaneBusy,

@@ -71,6 +71,7 @@ export async function startBrowserScreencast(
     mobile: options.mobile
   }
   let guestViewSize: BrowserScreencastGuestViewSize | null = null
+  let pendingReemulations = 0
   const applyEffectiveViewport = (): boolean => {
     const next = clampScreencastViewportToGuestView(requestedViewport, guestViewSize)
     const changed =
@@ -106,15 +107,15 @@ export async function startBrowserScreencast(
         return false
       }
       const size = readScreencastGuestViewSize(metadata)
-      if (!size || (guestViewSize?.width === size.width && guestViewSize.height === size.height)) {
-        return false
+      if (size && (guestViewSize?.width !== size.width || guestViewSize.height !== size.height)) {
+        guestViewSize = size
+        if (applyEffectiveViewport()) {
+          void reemulate().catch(() => {})
+        }
       }
-      guestViewSize = size
-      if (!applyEffectiveViewport()) {
-        return false
-      }
-      void reemulate().catch(() => {})
-      return true
+      // Why until applied: a queued re-emulation can wait behind a slow snapshot, and every frame
+      // until then is a crop of the old layout that would pass the new size check.
+      return pendingReemulations > 0
     },
     setDialogOpen: (open: boolean) => {
       dialogOpen = open
@@ -126,6 +127,7 @@ export async function startBrowserScreencast(
 
   // Re-applies the emulated viewport and sends a frame at it, queued behind earlier updates.
   const reemulate = (): Promise<void> => {
+    pendingReemulations += 1
     pendingUpdate = pendingUpdate
       .catch(() => {})
       .then(async () => {
@@ -138,6 +140,9 @@ export async function startBrowserScreencast(
         // Why: initialOnly skips every stream that ever emitted a frame, which would
         // leave the old device metrics applied and the new subscriber frameless.
         await snapshotCapture.emitSnapshotFrame(false)
+      })
+      .finally(() => {
+        pendingReemulations -= 1
       })
     return pendingUpdate
   }
