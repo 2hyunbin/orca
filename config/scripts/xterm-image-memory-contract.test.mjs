@@ -106,7 +106,7 @@ describe('xterm image memory contract', () => {
       await writeKitty(terminal, 'a=t,f=32,s=250,v=200,i=2,q=2', payload)
       // Placement bookkeeping only; a real addImage needs a canvas this env lacks.
       storage._kittyIdToStorageId.set(1, 1001)
-      storage._storageIdToKittyId.set(1001, 1)
+      storage._storageIdToKittyId.set(1001, { kittyId: 1, storageIds: new Set([1001]) })
       await writeKitty(terminal, 'a=t,f=32,s=250,v=200,i=3,q=2', payload)
       expect(storage.getImage(1)).toBeDefined()
       expect(storage.getImage(2)).toBeUndefined()
