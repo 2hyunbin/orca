@@ -1,7 +1,8 @@
 import { BrowserWindow } from 'electron'
 import {
   ORCA_PROFILE_AUTH_STATUS_CHANGED_CHANNEL,
-  ORCA_PROFILE_SIGN_IN_LINK_CHANGED_CHANNEL
+  ORCA_PROFILE_SIGN_IN_PROGRESS_CHANGED_CHANNEL,
+  type OrcaCloudSignInProgress
 } from '../../shared/orca-profiles'
 
 function broadcast(channel: string, ...args: unknown[]): void {
@@ -21,6 +22,8 @@ export function broadcastOrcaProfileAuthStatusChanged(): void {
   broadcast(ORCA_PROFILE_AUTH_STATUS_CHANGED_CHANNEL)
 }
 
-export function broadcastOrcaProfileSignInLinkChanged(link: string | null): void {
-  broadcast(ORCA_PROFILE_SIGN_IN_LINK_CHANGED_CHANNEL, link)
+export function broadcastOrcaProfileSignInProgressChanged(
+  progress: OrcaCloudSignInProgress | null
+): void {
+  broadcast(ORCA_PROFILE_SIGN_IN_PROGRESS_CHANGED_CHANNEL, progress)
 }

@@ -7,12 +7,15 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { MobileRelayStatusDetail } from '../../../../shared/mobile-relay-status'
-import type { OrcaProfileAuthStatus } from '../../../../shared/orca-profiles'
+import type {
+  OrcaCloudSignInProgress,
+  OrcaProfileAuthStatus
+} from '../../../../shared/orca-profiles'
 import { MobilePairingConnectionOptions } from './MobilePairingConnectionOptions'
 
 type MobileRelayStoreState = {
   orcaProfileAuthStatus: OrcaProfileAuthStatus | null
-  orcaProfileSignInLink?: string | null
+  orcaProfileSignInProgress?: OrcaCloudSignInProgress | null
   connectCurrentOrcaProfile: () => Promise<null>
   fetchOrcaProfileAuthStatus: () => Promise<OrcaProfileAuthStatus | null>
 }
@@ -109,28 +112,27 @@ describe('MobilePairingConnectionOptions', () => {
     expect(screen.queryByText(/not configured for this build/i)).toBeNull()
 
     await user.click(signIn)
-    expect(onChange).toHaveBeenCalledWith('automatic')
     expect(connect).toHaveBeenCalledOnce()
   })
 
-  it('offers the waiting sign-in link to copy while the browser wait is open', async () => {
+  it('greys out Sign in and offers Copy and Cancel while the browser wait is open', async () => {
     const user = userEvent.setup()
     const link = 'https://login.example/authorize?state=abc'
     const writeClipboardText = vi.fn().mockResolvedValue(undefined)
-    Object.assign(window.api, { ui: { writeClipboardText } })
-    const { rerender } = render(
-      <MobilePairingConnectionOptions value="automatic" onChange={vi.fn()} />
-    )
-    expect(screen.queryByRole('button', { name: 'Copy sign-in link' })).toBeNull()
+    const cancelSignIn = vi.fn().mockResolvedValue(undefined)
+    Object.assign(window.api, { ui: { writeClipboardText }, orcaProfiles: { cancelSignIn } })
+    render(<MobilePairingConnectionOptions value="automatic" onChange={vi.fn()} />)
 
-    publishStoreState({ ...mocks.state, orcaProfileSignInLink: link })
-    rerender(<MobilePairingConnectionOptions value="automatic" onChange={vi.fn()} />)
-    expect(screen.getByText('Waiting for sign-in in your browser')).toBeVisible()
-    // Why: a browser tab closed or never shown must not block another try.
-    expect(screen.getByRole('button', { name: 'Sign in for Relay' })).toBeEnabled()
+    publishStoreState({ ...mocks.state, orcaProfileSignInProgress: { link } })
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Waiting for sign-in in your browser'
+    )
+    expect(screen.getByRole('button', { name: 'Signing in…' })).toBeDisabled()
 
     await user.click(screen.getByRole('button', { name: 'Copy sign-in link' }))
     expect(writeClipboardText).toHaveBeenCalledWith(link)
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(cancelSignIn).toHaveBeenCalledOnce()
   })
 
   it('hides Sign in when LAN is selected', () => {

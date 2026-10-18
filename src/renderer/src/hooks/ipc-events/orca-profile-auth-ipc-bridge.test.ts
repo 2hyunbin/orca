@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { OrcaProfileAuthStatus } from '../../../../shared/orca-profiles'
+import type {
+  OrcaCloudSignInProgress,
+  OrcaProfileAuthStatus
+} from '../../../../shared/orca-profiles'
 import { createTestStore } from '../../store/slices/store-test-helpers'
 
 type TestStore = ReturnType<typeof createTestStore>
@@ -11,7 +14,7 @@ const { storeHolder } = vi.hoisted((): { storeHolder: { current: TestStore | nul
 vi.mock('../../store', () => ({
   useAppStore: {
     getState: () => storeHolder.current?.getState(),
-    setState: (partial: { orcaProfileSignInLink: string | null }) =>
+    setState: (partial: { orcaProfileSignInProgress: OrcaCloudSignInProgress | null }) =>
       storeHolder.current?.setState(partial)
   }
 }))
@@ -87,9 +90,10 @@ describe('orca profile auth IPC bridge', () => {
   })
 })
 
-describe('orca profile sign-in link IPC bridge', () => {
-  let emitLink: (link: string | null) => void
-  const snapshots: ((link: string | null) => void)[] = []
+describe('orca profile sign-in progress IPC bridge', () => {
+  let emitProgress: (progress: OrcaCloudSignInProgress | null) => void
+  const snapshots: ((progress: OrcaCloudSignInProgress | null) => void)[] = []
+  const WAITING = { link: 'https://login.example/authorize?state=a' }
 
   beforeEach(() => {
     snapshots.length = 0
@@ -97,12 +101,14 @@ describe('orca profile sign-in link IPC bridge', () => {
     vi.stubGlobal('window', {
       api: {
         orcaProfiles: {
-          onSignInLinkChanged: (callback: (link: string | null) => void) => {
-            emitLink = callback
+          onSignInProgressChanged: (
+            callback: (progress: OrcaCloudSignInProgress | null) => void
+          ) => {
+            emitProgress = callback
             return () => {}
           },
-          pendingSignInLink: () =>
-            new Promise<string | null>((resolve) => {
+          signInProgress: () =>
+            new Promise<OrcaCloudSignInProgress | null>((resolve) => {
               snapshots.push(resolve)
             })
         }
@@ -110,22 +116,23 @@ describe('orca profile sign-in link IPC bridge', () => {
     })
   })
 
-  const link = (): string | null => storeHolder.current?.getState().orcaProfileSignInLink ?? null
+  const progress = (): OrcaCloudSignInProgress | null =>
+    storeHolder.current?.getState().orcaProfileSignInProgress ?? null
 
-  it('adopts the link of a sign-in already waiting when the window loads', async () => {
+  it('adopts a sign-in already in flight when the window loads', async () => {
     registerOrcaProfileAuthIpcBridge([])
     await vi.waitFor(() => expect(snapshots).toHaveLength(1))
-    snapshots[0]('https://login.example/authorize?state=a')
-    await vi.waitFor(() => expect(link()).toBe('https://login.example/authorize?state=a'))
+    snapshots[0](WAITING)
+    await vi.waitFor(() => expect(progress()).toEqual(WAITING))
   })
 
   it('lets a newer change win over a late snapshot', async () => {
     registerOrcaProfileAuthIpcBridge([])
     await vi.waitFor(() => expect(snapshots).toHaveLength(1))
-    emitLink('https://login.example/authorize?state=new')
-    snapshots[0]('https://login.example/authorize?state=old')
+    emitProgress(null)
+    snapshots[0](WAITING)
     await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(link()).toBe('https://login.example/authorize?state=new')
+    expect(progress()).toBeNull()
   })
 
   it('ignores the snapshot of a registration torn down before it arrived', async () => {
@@ -134,10 +141,10 @@ describe('orca profile sign-in link IPC bridge', () => {
     await vi.waitFor(() => expect(snapshots).toHaveLength(1))
     first.forEach((dispose) => dispose())
     registerOrcaProfileAuthIpcBridge([])
-    emitLink(null)
+    emitProgress(null)
 
-    snapshots[0]('https://login.example/authorize?state=expired')
+    snapshots[0](WAITING)
     await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(link()).toBeNull()
+    expect(progress()).toBeNull()
   })
 })

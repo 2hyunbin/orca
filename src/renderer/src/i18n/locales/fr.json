@@ -18052,11 +18052,13 @@
         "c77189bc0c": "Mettre à jour le filtre",
         "19af906d12": "Enregistrer le filtre"
       },
-      "OrcaSignInWaitNotice": {
+      "OrcaSignInProgress": {
         "waiting": "En attente de la connexion dans votre navigateur",
         "copyLink": "Copier le lien de connexion",
         "copied": "Lien de connexion copié",
-        "copyFailed": "Impossible de copier le lien."
+        "copyFailed": "Impossible de copier le lien.",
+        "signingIn": "Connexion…",
+        "cancel": "Annuler"
       }
     },
     "i18n": {

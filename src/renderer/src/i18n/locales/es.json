@@ -17943,11 +17943,13 @@
         "c77189bc0c": "Update filter",
         "19af906d12": "Save filter"
       },
-      "OrcaSignInWaitNotice": {
+      "OrcaSignInProgress": {
         "waiting": "Esperando el inicio de sesión en tu navegador",
         "copyLink": "Copiar enlace de inicio de sesión",
         "copied": "Enlace de inicio de sesión copiado",
-        "copyFailed": "No se pudo copiar el enlace."
+        "copyFailed": "No se pudo copiar el enlace.",
+        "signingIn": "Iniciando sesión…",
+        "cancel": "Cancelar"
       }
     },
     "i18n": {

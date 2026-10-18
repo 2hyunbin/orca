@@ -18163,11 +18163,13 @@
         "c77189bc0c": "Update filter",
         "19af906d12": "Save filter"
       },
-      "OrcaSignInWaitNotice": {
+      "OrcaSignInProgress": {
         "waiting": "Waiting for sign-in in your browser",
         "copyLink": "Copy sign-in link",
         "copied": "Sign-in link copied",
-        "copyFailed": "Could not copy the link."
+        "copyFailed": "Could not copy the link.",
+        "signingIn": "Signing in…",
+        "cancel": "Cancel"
       }
     },
     "i18n": {

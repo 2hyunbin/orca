@@ -1,16 +1,13 @@
-import { Button } from '../ui/button'
 import { translate } from '../../i18n/i18n'
 import { useAppStore } from '../../store'
-import { CopyOrcaSignInLinkButton, orcaSignInWaitingLabel } from '../OrcaSignInWaitNotice'
+import { OrcaSignInButton, OrcaSignInWaitNotice } from '../OrcaSignInProgress'
 
 export function MobileRelaySignInPanel({
-  reconnectRequired,
-  onSignIn
+  reconnectRequired
 }: {
   reconnectRequired: boolean
-  onSignIn: () => void
 }): React.JSX.Element {
-  const link = useAppStore((state) => state.orcaProfileSignInLink)
+  const browserWaiting = useAppStore((state) => Boolean(state.orcaProfileSignInProgress?.link))
 
   return (
     <div
@@ -24,28 +21,27 @@ export function MobileRelaySignInPanel({
       className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 bg-accent/40 py-2.5 pl-10 pr-3"
       data-testid="anywhere-sign-in-panel"
     >
-      <p className="min-w-0 flex-1 text-xs text-muted-foreground" aria-live="polite">
-        {link
-          ? orcaSignInWaitingLabel()
+      {browserWaiting ? (
+        <OrcaSignInWaitNotice className="min-w-0 flex-1" />
+      ) : (
+        <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+          {translate(
+            'auto.components.settings.MobilePairingConnectionOptions.relaySignInDetail',
+            'Signs this desktop in to Orca and routes the phone through Orca’s servers. LAN does not need an account.'
+          )}
+        </p>
+      )}
+      <OrcaSignInButton size="sm" className="shrink-0">
+        {reconnectRequired
+          ? translate(
+              'auto.components.settings.MobilePairingConnectionOptions.signInAgain',
+              'Sign in again for Relay'
+            )
           : translate(
-              'auto.components.settings.MobilePairingConnectionOptions.relaySignInDetail',
-              'Signs this desktop in to Orca and routes the phone through Orca’s servers. LAN does not need an account.'
+              'auto.components.settings.MobilePairingConnectionOptions.signIn',
+              'Sign in for Relay'
             )}
-      </p>
-      <div className="flex shrink-0 items-center gap-2">
-        {link ? <CopyOrcaSignInLinkButton link={link} /> : null}
-        <Button type="button" size="sm" onClick={onSignIn}>
-          {reconnectRequired
-            ? translate(
-                'auto.components.settings.MobilePairingConnectionOptions.signInAgain',
-                'Sign in again for Relay'
-              )
-            : translate(
-                'auto.components.settings.MobilePairingConnectionOptions.signIn',
-                'Sign in for Relay'
-              )}
-        </Button>
-      </div>
+      </OrcaSignInButton>
     </div>
   )
 }

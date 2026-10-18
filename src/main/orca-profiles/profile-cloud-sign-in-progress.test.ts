@@ -36,7 +36,11 @@ vi.mock('./profile-cloud-client', () => ({
 }))
 
 import { connectCurrentOrcaProfile, signOutCurrentOrcaProfile } from './profile-cloud-service'
-import { getOrcaCloudSignInLink, onOrcaCloudSignInLinkChanged } from './profile-cloud-sign-in-link'
+import {
+  cancelOrcaCloudSignIn,
+  getOrcaCloudSignInProgress,
+  onOrcaCloudSignInProgressChanged
+} from './profile-cloud-sign-in-progress'
 
 type BrowserWait = {
   link: string
@@ -48,12 +52,19 @@ type BrowserWait = {
 function queueBrowserWaits(): BrowserWait[] {
   const waits: BrowserWait[] = []
   beginOrcaCloudPkceFlowMock.mockImplementation(
-    (_config, _profileId, onAuthorizeUrl: (link: string) => void) =>
+    (
+      _config,
+      _profileId,
+      options: { onAuthorizeUrl: (link: string) => void; signal: AbortSignal }
+    ) =>
       new Promise((resolve, reject) => {
         const link = `https://orca-cloud.example/authorize?attempt=${waits.length + 1}`
+        options.signal.addEventListener('abort', () =>
+          reject(new Error('orca_cloud_auth_cancelled'))
+        )
         waits.push({
           link,
-          publish: () => onAuthorizeUrl(link),
+          publish: () => options.onAuthorizeUrl(link),
           answer: (code) =>
             resolve({
               code,
@@ -69,9 +80,9 @@ function queueBrowserWaits(): BrowserWait[] {
   return waits
 }
 
-describe('Orca cloud sign-in browser wait', () => {
+describe('Orca cloud sign-in progress', () => {
   beforeEach(() => {
-    userDataPath = mkdtempSync(join(tmpdir(), 'orca-cloud-sign-in-wait-'))
+    userDataPath = mkdtempSync(join(tmpdir(), 'orca-cloud-sign-in-progress-'))
     beginOrcaCloudPkceFlowMock.mockReset()
     exchangeOrcaCloudAuthCodeMock.mockReset()
     vi.stubEnv('ORCA_CLOUD_API_URL', 'https://orca-cloud.example')
@@ -79,15 +90,15 @@ describe('Orca cloud sign-in browser wait', () => {
   })
 
   afterEach(async () => {
-    // Why: the link lives in module state that outlives a test.
+    // Why: progress lives in module state that outlives a test.
     await signOutCurrentOrcaProfile(userDataPath)
     rmSync(userDataPath, { recursive: true, force: true })
     vi.unstubAllEnvs()
   })
 
-  it('announces the newest link and clears it when its wait times out', async () => {
-    const changes: (string | null)[] = []
-    const unsubscribe = onOrcaCloudSignInLinkChanged((link) => changes.push(link))
+  it('announces the newest wait and ends it when the wait times out', async () => {
+    const changes: unknown[] = []
+    const unsubscribe = onOrcaCloudSignInProgressChanged((progress) => changes.push(progress))
     const waits = queueBrowserWaits()
     const first = connectCurrentOrcaProfile(userDataPath)
     const second = connectCurrentOrcaProfile(userDataPath)
@@ -96,11 +107,11 @@ describe('Orca cloud sign-in browser wait', () => {
 
     waits[0].fail(new Error('orca_cloud_auth_timeout'))
     await expect(first).resolves.toMatchObject({ status: 'cancelled' })
-    expect(getOrcaCloudSignInLink()).toBe(waits[1].link)
+    expect(getOrcaCloudSignInProgress()).toEqual({ link: waits[1].link })
 
     waits[1].fail(new Error('orca_cloud_auth_timeout'))
     await expect(second).resolves.toMatchObject({ status: 'timed-out' })
-    expect(changes).toEqual([waits[1].link, null])
+    expect(changes).toEqual([{ link: null }, { link: null }, { link: waits[1].link }, null])
     unsubscribe()
   })
 
@@ -112,14 +123,14 @@ describe('Orca cloud sign-in browser wait', () => {
 
     waits[1].publish()
     waits[0].publish()
-    expect(getOrcaCloudSignInLink()).toBe(waits[1].link)
+    expect(getOrcaCloudSignInProgress()).toEqual({ link: waits[1].link })
 
     waits[0].fail(new Error('orca_cloud_auth_denied'))
     await expect(older).resolves.toMatchObject({ status: 'cancelled' })
-    expect(getOrcaCloudSignInLink()).toBe(waits[1].link)
+    expect(getOrcaCloudSignInProgress()).toEqual({ link: waits[1].link })
   })
 
-  it('stops offering the link once the browser answers, before the token exchange ends', async () => {
+  it('drops the link once the browser answers but stays in progress until sign-in ends', async () => {
     const waits = queueBrowserWaits()
     let failExchange!: (error: Error) => void
     exchangeOrcaCloudAuthCodeMock.mockReturnValue(
@@ -133,20 +144,33 @@ describe('Orca cloud sign-in browser wait', () => {
 
     waits[0].answer('code')
     await vi.waitFor(() => expect(exchangeOrcaCloudAuthCodeMock).toHaveBeenCalledOnce())
-    expect(getOrcaCloudSignInLink()).toBeNull()
+    expect(getOrcaCloudSignInProgress()).toEqual({ link: null })
 
     failExchange(new Error('exchange_failed'))
     await expect(attempt).resolves.toMatchObject({ status: 'failed' })
+    expect(getOrcaCloudSignInProgress()).toBeNull()
   })
 
-  it('drops the waiting link on sign-out', async () => {
+  it('cancels the browser wait silently', async () => {
+    const waits = queueBrowserWaits()
+    const attempt = connectCurrentOrcaProfile(userDataPath)
+    await vi.waitFor(() => expect(waits).toHaveLength(1))
+    waits[0].publish()
+
+    cancelOrcaCloudSignIn()
+
+    await expect(attempt).resolves.toMatchObject({ status: 'cancelled' })
+    expect(getOrcaCloudSignInProgress()).toBeNull()
+  })
+
+  it('ends the progress on sign-out', async () => {
     const waits = queueBrowserWaits()
     const attempt = connectCurrentOrcaProfile(userDataPath)
     await vi.waitFor(() => expect(waits).toHaveLength(1))
     waits[0].publish()
 
     await signOutCurrentOrcaProfile(userDataPath)
-    expect(getOrcaCloudSignInLink()).toBeNull()
+    expect(getOrcaCloudSignInProgress()).toBeNull()
     waits[0].fail(new Error('orca_cloud_auth_timeout'))
     await expect(attempt).resolves.toMatchObject({ status: 'cancelled' })
   })
