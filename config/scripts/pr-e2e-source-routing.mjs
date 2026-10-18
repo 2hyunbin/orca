@@ -253,10 +253,8 @@ export const PR_E2E_SOURCE_ROUTES = [
         ))
   },
   {
-    // Why a fallback: hand-kept routes missed #30130 and #30120, so the lane skipped. Scoped to the
-    // managed-host transport, server and wire contracts (about 20% of commits, not the 37% that
-    // also counted rpc/, daemon/ and renderer runtime) to keep the 2x17 min lane affordable.
-    id: 'ssh.orcad-remote-fallback',
+    // Why: hand-kept routes missed #30130 and #30120; scoped to managed-host code to bound lane cost.
+    id: 'ssh.orcad-remote-sources',
     specs: [
       'tests/e2e/ssh-orcad-paired-phone-projects.spec.ts',
       'tests/e2e/ssh-orcad-retained-upgrade-state.spec.ts',

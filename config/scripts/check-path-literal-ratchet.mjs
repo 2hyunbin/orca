@@ -1,5 +1,6 @@
 import process from 'node:process'
 import { pathToFileURL } from 'node:url'
+import { parse } from 'jsonc-parser'
 import { listTrackedFiles, readTrackedSources, runEntryRatchet } from './ratchet-baseline.mjs'
 
 // Ratchet on `src/...` path literals in CI config, workflows and e2e code that name nothing. A
@@ -12,6 +13,7 @@ const SOURCE_ROOTS = 'main|renderer|shared|cli|preload|packages|types|wsl-guest'
 const RESOLVED_EXTENSIONS = ['.ts', '.tsx', '.js', '.mjs', '.cjs', '/index.ts']
 // Generated timings; a stale row only skews shard balance and is rewritten by its generator.
 const EXCLUDED_FILES = new Set(['config/scripts/ci-shard-timings.json'])
+const GATE_MANIFEST = 'config/reliability-gates.jsonc'
 // Command strings in manifests and scripts name paths unquoted; in code only quoted literals count.
 const UNQUOTED_ALLOWED = /\.(?:jsonc?|ya?ml|sh|ps1)$/
 // Comments are prose, not references.
@@ -93,8 +95,8 @@ export function extractPathLiterals(rel, text) {
 
 /**
  * A literal resolves when it names a tracked file or a module (without extension, or a folder
- * with `index.ts`). A non-import may also name a folder or a prefix of a tracked file. Only tracked files count, so local leftovers can't
- * change the verdict.
+ * with `index.ts`). A non-import may also name a folder or a prefix of a tracked file. Only
+ * tracked files count, so local leftovers can't change the verdict.
  */
 export function createPathResolver(trackedFiles) {
   const tracked = new Set(trackedFiles)
@@ -114,13 +116,21 @@ export function createPathResolver(trackedFiles) {
   }
   return (literal, isImport = false) =>
     ['', ...RESOLVED_EXTENSIONS].some((extension) => tracked.has(literal + extension)) ||
-    (!isImport && (hasPrefix(literal) || hasPrefix(`${literal.replace(/\/$/, '')}/`)))
+    (!isImport && hasPrefix(literal))
+}
+
+/** A gate's commands and test files; evidence prose and runs record what ran then. */
+export function liveGateReferences(text) {
+  return (parse(text).gates ?? [])
+    .flatMap((gate) => [...(gate.commands ?? []), ...(gate.testFiles ?? [])])
+    .join('\n')
 }
 
 export function collectUnresolvedPathLiterals(root = process.cwd()) {
   const resolves = createPathResolver(listTrackedFiles(root, ['src']))
   const entries = []
-  for (const [rel, text] of readTrackedSources(root, SCAN_ROOTS, isScannedPath)) {
+  for (const [rel, source] of readTrackedSources(root, SCAN_ROOTS, isScannedPath)) {
+    const text = rel === GATE_MANIFEST ? liveGateReferences(source) : source
     for (const { literal, isImport } of extractPathLiterals(rel, text)) {
       if (!resolves(literal, isImport)) {
         entries.push(`${rel} ${literal}`)
