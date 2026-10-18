@@ -18,7 +18,7 @@ import { SMART_TIERS } from './sort-stamps'
 
 /**
  * One workspace this host lists, as the sidebar reads it: catalog, metadata and the host's sort
- * stamps. Activity and PR state are their own domains, so terminal output never changes a row.
+ * stamps. Activity and PR state are their own domains, so plain terminal output never changes a row.
  */
 const WorkspaceRowSchema = z.object({
   id: z.string(),

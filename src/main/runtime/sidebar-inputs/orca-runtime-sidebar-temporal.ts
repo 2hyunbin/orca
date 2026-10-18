@@ -17,6 +17,10 @@ import { SmartSortAgentEntries } from './smart-sort-agent-entries'
 import { buildRuntimeSmartSortSources } from './runtime-smart-sort-sources'
 import type { AgentStatusStoreView } from './workspace-activity-facts-producer'
 import { SortStampsProducer } from './sort-stamps-producer'
+import {
+  isWslMoveProjectBlocked,
+  wslMoveProjectRefForWorkspace
+} from '../../persistence/moving-wsl-projects/wsl-move-scope-guard'
 
 type Runtime = OrcaRuntimeWithWorkspaceReviewFacts
 
@@ -36,6 +40,8 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
   })
   readonly sortStamps = new SortStampsProducer({
     store: () => this.store,
+    isWriteFenced: (worktreeId) =>
+      isWslMoveProjectBlocked(this.store ?? undefined, wslMoveProjectRefForWorkspace(worktreeId)),
     resolveTabWorktreeId: (tabId) => this.tabs.get(tabId)?.worktreeId,
     subscribeToPtyExit: (ptyId, listener) => this.subscribeToPtyExit(ptyId, listener),
     onClientEvent: (listener, options) => this.onClientEvent(listener, options),

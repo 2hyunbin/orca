@@ -1,5 +1,10 @@
 import { resolveAgentStatusWorktreeId } from '../../../shared/agent-status-worktree-attribution'
 import type { AgentStatusIpcPayload } from '../../../shared/agent-status-types'
+import {
+  parseExecutionHostId,
+  toSshExecutionHostId,
+  type ExecutionHostId
+} from '../../../shared/execution-host'
 import type { RuntimeClientEvent } from '../../../shared/runtime-client-events'
 import {
   classifySortStampEvent,
@@ -29,12 +34,23 @@ type StampUpdates = {
 export type SortStampsStore = {
   getWorktreeMeta: (worktreeId: string) => StampedRecord | undefined
   setWorktreeMeta: (worktreeId: string, updates: StampUpdates) => unknown
+  getWorktreeMetaForHost?: (
+    worktreeId: string,
+    hostId: ExecutionHostId
+  ) => StampedRecord | undefined
+  setWorktreeMetaForHost?: (
+    worktreeId: string,
+    hostId: ExecutionHostId,
+    updates: StampUpdates
+  ) => unknown
   getFolderWorkspace?: (folderWorkspaceId: string) => StampedRecord | undefined
   updateFolderWorkspace?: (folderWorkspaceId: string, updates: StampUpdates) => unknown
 }
 
 export type SortStampsSources = {
   store: () => SortStampsStore | null
+  /** A WSL move freezes the project; stamps are background bookkeeping it drops. */
+  isWriteFenced: (worktreeId: string) => boolean
   resolveTabWorktreeId: (tabId: string) => string | undefined
   subscribeToPtyExit: (ptyId: string, listener: () => void) => () => void
   /** Consumes terminal side effects, so the host scans its own bytes for bells and titles. */
@@ -45,7 +61,18 @@ export type SortStampsSources = {
   now: () => number
 }
 
-type TrackedPane = { worktreeId: string; state: AgentPaneState }
+/** A workspace record: its id, and the SSH host whose record it is (null reads by id alone). */
+type WorkspaceRef = { worktreeId: string; sshHostId: ExecutionHostId | null }
+type TrackedPane = WorkspaceRef & { state: AgentPaneState }
+type TitlePane = { ptyId: string; releaseExit: () => void }
+
+function sshHostOfConnection(connectionId: string | null | undefined): ExecutionHostId | null {
+  return connectionId ? toSshExecutionHostId(connectionId) : null
+}
+
+function sameWorkspace(a: WorkspaceRef | undefined, b: WorkspaceRef | null): boolean {
+  return !!a && !!b && a.worktreeId === b.worktreeId && a.sshHostId === b.sshHostId
+}
 
 /**
  * Writes the sort stamps of every workspace this host owns, at the source: hook-store transitions
@@ -54,8 +81,8 @@ type TrackedPane = { worktreeId: string; state: AgentPaneState }
  */
 export class SortStampsProducer {
   private readonly panes = new Map<string, TrackedPane>()
-  /** Title panes seen since their PTY started, by exit subscription: the first title seeds. */
-  private readonly titlePaneExits = new Map<string, () => void>()
+  /** Hookless panes seen since their PTY started: the first title seeds, it is not a transition. */
+  private readonly titlePanes = new Map<string, TitlePane>()
   private agentStore: AgentStatusStoreView | null = null
 
   constructor(private readonly sources: SortStampsSources) {
@@ -89,45 +116,56 @@ export class SortStampsProducer {
   }
 
   /** A terminal started by something other than a person opening it. */
-  noteTerminalStarted(worktreeId: string): void {
-    this.stamp(worktreeId, { kind: 'terminal-started' })
+  noteTerminalStarted(worktreeId: string, hostId: ExecutionHostId | undefined): void {
+    const sshHostId = parseExecutionHostId(hostId)?.kind === 'ssh' ? (hostId ?? null) : null
+    this.stamp({ worktreeId, sshHostId }, { kind: 'terminal-started' })
   }
 
   private observeHookPane(paneKey: string, seed: boolean): void {
-    // The window applies a pane's rows in arrival order, so the newest is the one it holds.
+    const latest = this.latestHookRow(paneKey)
+    if (!latest) {
+      this.move(paneKey, null, 'rest', this.sources.now())
+      return
+    }
+    const worktreeId = resolveAgentStatusWorktreeId(latest, {
+      get: this.sources.resolveTabWorktreeId
+    })
+    const workspace = worktreeId
+      ? { worktreeId, sshHostId: sshHostOfConnection(latest.connectionId) }
+      : null
+    const phase = hookRowAgentPhase(latest)
+    if (seed || latest.restoredUnconfirmed || latest.isReplay) {
+      this.seed(paneKey, workspace, phase, latest.stateStartedAt)
+    } else {
+      this.move(paneKey, workspace, phase, this.sources.now())
+    }
+  }
+
+  // The window applies a pane's rows in arrival order, so the newest is the one it holds.
+  private latestHookRow(paneKey: string): AgentStatusIpcPayload | null {
     let latest: AgentStatusIpcPayload | null = null
     for (const row of this.agentStore?.getStatusSnapshotForPane(paneKey) ?? []) {
       if (!row.providerSessionOnly && (!latest || row.receivedAt > latest.receivedAt)) {
         latest = row
       }
     }
-    if (!latest) {
-      this.move(paneKey, null, 'rest')
-      return
-    }
-    const worktreeId =
-      resolveAgentStatusWorktreeId(latest, { get: this.sources.resolveTabWorktreeId }) ?? null
-    const phase = hookRowAgentPhase(latest)
-    if (seed || latest.restoredUnconfirmed || latest.isReplay) {
-      this.seed(paneKey, worktreeId, { phase, at: latest.stateStartedAt })
-      return
-    }
-    this.move(paneKey, worktreeId, phase)
+    return latest
   }
 
   private noteTerminalSideEffects(batch: TerminalSideEffectBatch): void {
     const { worktreeId, paneKey } = batch
-    // A replay re-sends facts already seen.
-    if (batch.replay || !worktreeId) {
+    if (!worktreeId) {
       return
     }
+    const workspace = { worktreeId, sshHostId: sshHostOfConnection(batch.connectionId) }
     for (const fact of batch.facts) {
       if (fact.kind === 'bell') {
-        this.stamp(worktreeId, { kind: 'bell' })
-      } else if (fact.kind === 'title' && paneKey && !this.hasHookRows(paneKey)) {
-        // A cleared stale working title is a timer's guess, not a finish.
+        this.stamp(workspace, { kind: 'bell' })
+      } else if (fact.kind === 'title' && paneKey && !this.latestHookRow(paneKey)) {
+        // Hook authority is per pane, as in Smart's attention. A cleared stale working title is a
+        // timer's guess, not a finish.
         const phase = fact.staleWorkingTitleClear ? 'rest' : titleAgentPhase(fact.rawTitle)
-        this.observeTitlePane(batch.ptyId, paneKey, worktreeId, phase)
+        this.observeTitlePane(batch.ptyId, paneKey, workspace, phase)
       }
     }
   }
@@ -135,93 +173,125 @@ export class SortStampsProducer {
   private observeTitlePane(
     ptyId: string,
     paneKey: string,
-    worktreeId: string,
+    workspace: WorkspaceRef,
     phase: AgentPhase
   ): void {
-    if (this.titlePaneExits.has(paneKey)) {
-      this.move(paneKey, worktreeId, phase)
+    const known = this.titlePanes.get(paneKey)
+    if (known?.ptyId === ptyId) {
+      this.move(paneKey, workspace, phase, this.sources.now())
       return
     }
-    // The agent leaves with its terminal; a later PTY in this pane starts unseen.
+    // A new PTY in the pane is a new agent; the last one left with its terminal.
+    if (known) {
+      this.endTitlePane(paneKey)
+    }
     let exited = false
-    const release = this.sources.subscribeToPtyExit(ptyId, () => {
+    const releaseExit = this.sources.subscribeToPtyExit(ptyId, () => {
       exited = true
-      this.titlePaneExits.delete(paneKey)
-      this.move(paneKey, null, 'rest')
+      this.endTitlePane(paneKey)
     })
     if (exited) {
       return
     }
-    this.titlePaneExits.set(paneKey, release)
-    this.seed(paneKey, worktreeId, { phase, at: this.sources.now() })
+    this.titlePanes.set(paneKey, { ptyId, releaseExit })
+    this.seed(paneKey, workspace, phase, this.sources.now())
   }
 
-  // Hook authority is per pane, as in Smart's attention: a pane with rows ignores its title.
-  private hasHookRows(paneKey: string): boolean {
-    return (this.agentStore?.getStatusSnapshotForPane(paneKey).length ?? 0) > 0
+  private endTitlePane(paneKey: string): void {
+    this.titlePanes.get(paneKey)?.releaseExit()
+    this.titlePanes.delete(paneKey)
+    this.move(paneKey, null, 'rest', this.sources.now())
   }
 
-  private seed(paneKey: string, worktreeId: string | null, state: AgentPaneState): void {
+  /**
+   * Takes the observed phase as it is and reconciles the tier, without a Recent stamp. A phase the
+   * record already holds keeps its time, so a restart rewrites nothing.
+   */
+  private seed(
+    paneKey: string,
+    workspace: WorkspaceRef | null,
+    phase: AgentPhase,
+    observedAt: number
+  ): void {
     const previous = this.panes.get(paneKey)
-    if (previous && previous.worktreeId !== worktreeId) {
-      this.move(paneKey, null, 'rest')
+    if (previous && !sameWorkspace(previous, workspace)) {
+      this.move(paneKey, null, 'rest', this.sources.now())
     }
-    if (worktreeId && state.phase !== 'rest') {
-      this.panes.set(paneKey, { worktreeId, state })
-    } else {
+    if (!workspace) {
+      return
+    }
+    const stored = this.readStamps(workspace)
+    const state = {
+      phase,
+      at: stored?.smartTier === phase && stored.smartAt !== undefined ? stored.smartAt : observedAt
+    }
+    if (state.phase === 'rest') {
       this.panes.delete(paneKey)
+    } else {
+      this.panes.set(paneKey, { ...workspace, state })
     }
+    this.writeAgentChange(workspace, state.phase, state.phase)
   }
 
   /** One pane observed in `observed`; a pane that left or changed workspace rests where it was. */
-  private move(paneKey: string, worktreeId: string | null, observed: AgentPhase): void {
+  private move(
+    paneKey: string,
+    workspace: WorkspaceRef | null,
+    observed: AgentPhase,
+    at: number
+  ): void {
     const previous = this.panes.get(paneKey)
-    if (previous && previous.worktreeId !== worktreeId) {
+    if (previous && !sameWorkspace(previous, workspace)) {
       this.panes.delete(paneKey)
-      this.writeAgentChange(previous.worktreeId, previous.state.phase, 'rest')
+      this.writeAgentChange(previous, previous.state.phase, 'rest')
     }
-    if (!worktreeId) {
+    if (!workspace) {
       return
     }
-    const before = previous?.worktreeId === worktreeId ? previous.state : REST_PANE
-    const state = nextAgentPaneState(before, observed, this.sources.now())
+    const before = sameWorkspace(previous, workspace) ? previous!.state : REST_PANE
+    const state = nextAgentPaneState(before, observed, at)
     if (state === before) {
       return
     }
     if (state.phase === 'rest') {
       this.panes.delete(paneKey)
     } else {
-      this.panes.set(paneKey, { worktreeId, state })
+      this.panes.set(paneKey, { ...workspace, state })
     }
-    this.writeAgentChange(worktreeId, before.phase, state.phase)
+    this.writeAgentChange(workspace, before.phase, state.phase)
   }
 
-  private writeAgentChange(worktreeId: string, from: AgentPhase, to: AgentPhase): void {
+  private writeAgentChange(workspace: WorkspaceRef, from: AgentPhase, to: AgentPhase): void {
     const panes: AgentPaneState[] = []
     for (const pane of this.panes.values()) {
-      if (pane.worktreeId === worktreeId) {
+      if (sameWorkspace(pane, workspace)) {
         panes.push(pane.state)
       }
     }
-    this.stamp(worktreeId, { kind: 'agent', from, to, panes })
+    this.stamp(workspace, { kind: 'agent', from, to, panes })
   }
 
-  private stamp(worktreeId: string, event: SortStampEvent): void {
-    const current = this.readStamps(worktreeId)
+  private stamp(workspace: WorkspaceRef, event: SortStampEvent): void {
+    if (this.sources.isWriteFenced(workspace.worktreeId)) {
+      return
+    }
+    const current = this.readStamps(workspace)
     const next = current && classifySortStampEvent(current, event, this.sources.now())
     if (next) {
-      this.writeStamps(worktreeId, next)
+      this.writeStamps(workspace, next)
     }
   }
 
   // Only a workspace with a record is stamped; writing would create one for a stale id.
-  private readStamps(worktreeId: string): SortStamps | null {
+  private readStamps({ worktreeId, sshHostId }: WorkspaceRef): SortStamps | null {
     const store = this.sources.store()
     const scope = parseWorkspaceKey(worktreeId)
     const record =
       scope?.type === 'folder'
         ? store?.getFolderWorkspace?.(scope.folderWorkspaceId)
-        : store?.getWorktreeMeta(worktreeId)
+        : sshHostId
+          ? store?.getWorktreeMetaForHost?.(worktreeId, sshHostId)
+          : store?.getWorktreeMeta(worktreeId)
     if (!record) {
       return null
     }
@@ -233,7 +303,7 @@ export class SortStampsProducer {
     }
   }
 
-  private writeStamps(worktreeId: string, stamps: SortStamps): void {
+  private writeStamps({ worktreeId, sshHostId }: WorkspaceRef, stamps: SortStamps): void {
     // Both tier keys are always written, so Rest clears them.
     const updates: StampUpdates = {
       lastActivityAt: stamps.recentAt,
@@ -244,6 +314,8 @@ export class SortStampsProducer {
     const scope = parseWorkspaceKey(worktreeId)
     if (scope?.type === 'folder') {
       store?.updateFolderWorkspace?.(scope.folderWorkspaceId, updates)
+    } else if (sshHostId) {
+      store?.setWorktreeMetaForHost?.(worktreeId, sshHostId, updates)
     } else {
       store?.setWorktreeMeta(worktreeId, updates)
     }

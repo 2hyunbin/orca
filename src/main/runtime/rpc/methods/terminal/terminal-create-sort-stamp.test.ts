@@ -44,7 +44,7 @@ describe('terminal.create sort stamp', () => {
   it('stamps a terminal the CLI starts', async () => {
     const host = makeHost()
     await expect(host.create({})).resolves.toMatchObject({ ok: true })
-    expect(host.noteTerminalStarted).toHaveBeenCalledWith(WT)
+    expect(host.noteTerminalStarted).toHaveBeenCalledWith(WT, undefined)
   })
 
   it('leaves a terminal a person opens in a window or on a phone, and a reattach', async () => {

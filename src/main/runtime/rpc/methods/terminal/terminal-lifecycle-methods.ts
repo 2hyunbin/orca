@@ -91,7 +91,10 @@ export const TERMINAL_LIFECYCLE_METHODS = [
         context.caller?.kind === 'local-cli' &&
         !terminal.isReattach
       ) {
-        runtime.sidebarFacts?.sortStamps.noteTerminalStarted(terminal.worktreeId)
+        runtime.sidebarFacts?.sortStamps.noteTerminalStarted(
+          terminal.worktreeId,
+          terminal.executionHostId
+        )
       }
       return { terminal }
     }
