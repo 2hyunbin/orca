@@ -78,7 +78,10 @@ export function resolveTwinRepoSessionHostId(
       .filter((hostId): hostId is ExecutionHostId => hostId !== null)
   )
   const saved = [
-    ...new Set([LOCAL_EXECUTION_HOST_ID, ...(store.getWorkspaceSessionHostIds?.() ?? [])])
+    ...new Set<ExecutionHostId>([
+      LOCAL_EXECUTION_HOST_ID,
+      ...(store.getWorkspaceSessionHostIds?.() ?? [])
+    ])
   ].filter((hostId) => partitionHoldsWorktree(store.getWorkspaceSession?.(hostId), worktreeId))
   if (saved.length > 0) {
     const savedPrimary = pickPrimaryHostForClaims(saved)

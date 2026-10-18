@@ -2,11 +2,12 @@
 // to. Main's router and the window's save routing are both checked against this one table.
 import { getDefaultWorkspaceSession } from './constants'
 import type { ExecutionHostId } from './execution-host'
+import type { Repo } from './repo-types'
 import type { WorkspaceSessionState } from './workspace-session-state-types'
 
 export const TWIN_WORKTREE_ID = 'repo::/work/orca'
 
-export type TwinRepoRow = { id: string; connectionId?: string; executionHostId?: string }
+export type TwinRepoRow = Pick<Repo, 'id' | 'connectionId' | 'executionHostId'>
 export type TwinCatalogRow = {
   id: string
   repoId: string
@@ -94,31 +95,32 @@ function windowFresh(hosts: ExecutionHostId[]): ExecutionHostId {
   return hosts[0]?.startsWith('runtime:') ? hosts[0] : 'local'
 }
 
-export const TWIN_REPO_HOST_CASES: TwinRepoHostCase[] = PAIRS.flatMap(
-  ([pair, rowA, hostA, rowB, hostB]) => {
-    // Both catalog orders, so a case cannot pass by taking the first row.
-    const orders = [
-      [rowB, rowA],
-      [rowA, rowB]
-    ]
-    const shapes: [string, ExecutionHostId[]][] = [
-      ['contested', [hostA, hostB]],
-      [`${hostA} only`, [hostA]],
-      [`${hostB} only`, [hostB]],
-      ['unknown', []]
-    ]
-    return orders.flatMap((repos, order) =>
-      shapes.flatMap(([shape, hosts]) => {
-        const expected = windowFresh(hosts)
-        const catalog = hosts.map(listedOn)
-        return [
-          { name: `${pair} #${order} ${shape}, fresh`, repos, catalog, saved: [], expected },
-          { name: `${pair} #${order} ${shape}, saved`, repos, catalog, saved: [expected], expected }
-        ]
-      })
-    )
-  }
-).concat([
+const GENERATED_CASES: TwinRepoHostCase[] = PAIRS.flatMap(([pair, rowA, hostA, rowB, hostB]) => {
+  // Both catalog orders, so a case cannot pass by taking the first row.
+  const orders = [
+    [rowB, rowA],
+    [rowA, rowB]
+  ]
+  const holdings: [string, ExecutionHostId[]][] = [
+    ['contested', [hostA, hostB]],
+    [`${hostA} only`, [hostA]],
+    [`${hostB} only`, [hostB]],
+    ['unknown', []]
+  ]
+  return orders.flatMap((repos, order) =>
+    holdings.flatMap(([holding, hosts]) => {
+      const expected = windowFresh(hosts)
+      const catalog = hosts.map(listedOn)
+      return [
+        { name: `${pair} #${order} ${holding}, fresh`, repos, catalog, saved: [], expected },
+        { name: `${pair} #${order} ${holding}, saved`, repos, catalog, saved: [expected], expected }
+      ]
+    })
+  )
+})
+
+export const TWIN_REPO_HOST_CASES: TwinRepoHostCase[] = [
+  ...GENERATED_CASES,
   {
     name: 'local+runtime: a stale local visit stamp yields to a runtime-only catalog',
     repos: [LOCAL_ROW, RUNTIME_ROW],
@@ -134,4 +136,4 @@ export const TWIN_REPO_HOST_CASES: TwinRepoHostCase[] = PAIRS.flatMap(
     saved: ['runtime:env-1'],
     expected: 'runtime:env-1'
   }
-])
+]
