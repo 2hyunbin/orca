@@ -11,7 +11,8 @@ export function persistPaneBinding(
   binding: Parameters<Store['persistPtyBinding']>[0],
   connectionId: string | null | undefined
 ): Promise<boolean> {
-  return ORCA_LAYOUT_OWNER_IS_MAIN && connectionId
-    ? store.persistPtyBinding(binding, toSshExecutionHostId(connectionId))
-    : store.persistPtyBinding(binding)
+  // An absent host, not `undefined`, keeps the shipped call as it was.
+  const host: [] | [string] =
+    ORCA_LAYOUT_OWNER_IS_MAIN && connectionId ? [toSshExecutionHostId(connectionId)] : []
+  return store.persistPtyBinding(binding, ...host)
 }

@@ -70,9 +70,11 @@ export function swapReplacedPaneBinding(
   replaced: ReplacedPaneOwner
 ): () => PersistPtyBindingArgs | null {
   return () => {
-    const bound = store.getWorkspaceSession(
-      ORCA_LAYOUT_OWNER_IS_MAIN ? replaced.pane?.hostId : undefined
-    ).terminalLayoutsByTabId?.[binding.tabId]?.ptyIdsByLeafId?.[binding.leafId]
+    // Switch point: an SSH pane binds in its own partition (persistPaneBinding).
+    const session = ORCA_LAYOUT_OWNER_IS_MAIN
+      ? store.getWorkspaceSession(replaced.pane?.hostId)
+      : store.getWorkspaceSession()
+    const bound = session.terminalLayoutsByTabId?.[binding.tabId]?.ptyIdsByLeafId?.[binding.leafId]
     // Unbound is ok: the renderer's pre-connect clear can withdraw it (split tab).
     return bound === undefined || bound === replaced.ptyId ? binding : null
   }
