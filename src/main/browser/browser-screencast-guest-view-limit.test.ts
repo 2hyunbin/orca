@@ -60,6 +60,7 @@ function emulatedSizes(guest: ReturnType<typeof createGuest>): string[] {
 }
 
 async function startOversizedStream(guest: ReturnType<typeof createGuest>, onFrame = vi.fn()) {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the double implements every WebContents member the stream calls; the other screencast tests pass it the same way.
   return startBrowserScreencast(guest as never, {
     format: 'jpeg',
     quality: 70,
