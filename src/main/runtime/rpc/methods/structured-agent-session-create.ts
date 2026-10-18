@@ -138,10 +138,18 @@ export async function prepareStructuredAgentSessionCreateForWorktree(args: {
     hostLaunchDirectory,
     ...resolvedAttach
   } = resolved
-  // After the fingerprints: what a remembered default seeds is never part of the ledger.
-  const seed = args.options?.model
-    ? resolved.options
-    : await structuredLaunchSeedOnSavedListing(host, args.agent, resolved.options, () =>
+  // The ledger covers explicit overrides, never defaults that settings can change on replay.
+  // Explicit picks replace the saved selection; the permission default is the chat's own.
+  const picked = args.options
+    ? atRest
+      ? { ...resolved.options, ...args.options }
+      : { ...seededPermissionMode(resolved.options), ...args.options }
+    : resolved.options
+  // After the fingerprints: a remembered model the saved listing no longer names moves, with the
+  // effort the create runs under it. A model the create names itself is never moved.
+  const options = args.options?.model
+    ? picked
+    : await structuredLaunchSeedOnSavedListing(host, args.agent, picked, () =>
         args.runtime.resolveStructuredAgentSessionLocalWorkspacePath(args.worktree)
       )
   return {
@@ -149,16 +157,7 @@ export async function prepareStructuredAgentSessionCreateForWorktree(args: {
     ...(hostLaunchDirectory ? { hostLaunchDirectory } : {}),
     attachParams: {
       ...resolvedAttach,
-      ...(seed ? { options: seed } : {}),
-      // The ledger covers explicit overrides, never defaults that settings can change on replay.
-      // Explicit picks replace the saved selection; the permission default is the chat's own.
-      ...(args.options
-        ? {
-            options: atRest
-              ? { ...seed, ...args.options }
-              : { ...seededPermissionMode(seed), ...args.options }
-          }
-        : {}),
+      ...(options ? { options } : {}),
       ...(args.tabId ? { surfaceTabId: args.tabId } : {}),
       provider: resolved.provider,
       agent: resolved.agent,

@@ -28,16 +28,15 @@ export function withUnlistedEffort(
     return snapshot
   }
   // Named as a listed model's effort row names the same level.
-  const listedLevel = catalog.models
+  const listedEfforts = catalog.models
     .flatMap((model) => model.options)
-    .find((option) => option.id === 'effort')
-  const level =
-    listedLevel?.kind.type === 'select'
-      ? listedLevel.kind.choices.find((choice) => choice.value === effort.value)
-      : undefined
+    .filter((option) => option.id === 'effort')
+  const level = listedEfforts
+    .flatMap((option) => (option.kind.type === 'select' ? option.kind.choices : []))
+    .find((choice) => choice.value === effort.value)
   const descriptor: SessionOptionDescriptor = {
     id: 'effort',
-    label: listedLevel?.label ?? 'Reasoning effort',
+    label: listedEfforts[0]?.label ?? 'Reasoning effort',
     category: 'thought_level',
     kind: {
       type: 'select',
