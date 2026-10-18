@@ -89,12 +89,9 @@ export async function retireReplacedPaneBinding(
 ): Promise<boolean> {
   const { hostId, ...pane } = replaced.pane
   return store.retirePtyBinding(
-    {
-      ...pane,
-      ptyId: replaced.ptyId,
-      ...(replaced.incarnationId ? { incarnationId: replaced.incarnationId } : {})
-    },
-    hostId
+    { ...pane, ptyId: replaced.ptyId },
+    hostId,
+    replaced.incarnationId ? { incarnationId: replaced.incarnationId } : undefined
   )
 }
 

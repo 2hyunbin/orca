@@ -93,11 +93,12 @@ export class PtyBindingPersistenceOperations {
 
   /**
    * Clears a stopped process's binding, keeping the pane; fenced on the id, which is dead in any
-   * incarnation, and on `incarnationId` when given (an absence answer covers only that process).
+   * incarnation. `fence.incarnationId` narrows that to one process, for an absence answer.
    */
   async retirePtyBinding(
-    binding: Pick<PersistPtyBindingArgs, 'worktreeId' | 'tabId' | 'leafId' | 'ptyId' | 'incarnationId'>,
-    hostId?: string | null
+    binding: Pick<PersistPtyBindingArgs, 'worktreeId' | 'tabId' | 'leafId' | 'ptyId'>,
+    hostId?: string | null,
+    fence?: { incarnationId: string }
   ): Promise<boolean> {
     const { runtime, sessions } = this[ptyBindingPersistenceOperationsContext]
     const resolved = resolveHostId(hostId)
@@ -125,9 +126,9 @@ export class PtyBindingPersistenceOperations {
         return { value: false, persist: false }
       }
       if (
-        binding.incarnationId !== undefined &&
+        fence &&
         session.terminalPtyIncarnationsByPaneKey?.[makePaneKey(binding.tabId, binding.leafId)] !==
-          binding.incarnationId
+          fence.incarnationId
       ) {
         return { value: false, persist: false }
       }
