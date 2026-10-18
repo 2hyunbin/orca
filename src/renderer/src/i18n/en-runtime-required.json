@@ -2988,7 +2988,15 @@
         "stopRefusedQuoted": "{{agent}} didn't stop: {{detail}}.",
         "theAgent": "The agent",
         "thenSendAgain": "Then send your message again.",
-        "writeFailed": "Orca couldn't hand this message to the agent, so it was not sent."
+        "writeFailed": "Orca couldn't hand this message to the agent, so it was not sent.",
+        "usageLimitReached": "{{agent}} hit its usage limit.",
+        "usageLimitReachedNamed": "{{agent}} hit its {{window}} limit.",
+        "usageLimitResetsAt": "It resets at {{when}}.",
+        "usageLimitSendAfterReset": "Send a message once it resets to continue.",
+        "usageLimitWindowCredits": "extra usage",
+        "usageLimitWindowSession": "session",
+        "usageLimitWindowWeekly": "weekly",
+        "usageLimitWindowWeeklyModel": "weekly model"
       },
       "notices": {
         "compaction": "Context compacted",
