@@ -104,7 +104,8 @@ const ORCAD_MIGRATION_MANIFEST_TOO_LARGE = 'orcad_migration_manifest_too_large'
 
 /** The bare code told users nothing (#30126): name the largest parts and what to trim. */
 export function describeOversizedOrcadMigrationPayload(
-  payload: OrcadMigrationCatalogPayload
+  payload: OrcadMigrationCatalogPayload,
+  limitBytes = MAX_ORCAD_MIGRATION_MANIFEST_BYTES
 ): string {
   const dormant = payload.dormantState
   const parts: [string, unknown][] = [
@@ -133,7 +134,7 @@ export function describeOversizedOrcadMigrationPayload(
     .map(({ words, bytes }) => `${words} (${formatKib(bytes)})`)
   return (
     `This SSH host's saved state is too large to move to its Orca server (limit ` +
-    `${formatKib(MAX_ORCAD_MIGRATION_MANIFEST_BYTES)}). Largest parts: ${largest.join(', ')}. ` +
+    `${formatKib(limitBytes)}). Largest parts: ${largest.join(', ')}. ` +
     `Close tabs you no longer need or remove unused projects for this host, then reconnect. ` +
     `(${ORCAD_MIGRATION_MANIFEST_TOO_LARGE})`
   )

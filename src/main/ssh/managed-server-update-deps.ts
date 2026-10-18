@@ -5,7 +5,7 @@ import { autoUpdateManagedOrcadEnvironment } from './orcad-managed-auto-update'
 import { requireManagedOrcadTargetStore } from './orcad-managed-runtime-context'
 
 // Hosts whose update failed this launch. Session-only: SshTarget is published to peers.
-const triedThisLaunch = new Set<string>()
+const failedThisLaunch = new Set<string>()
 
 export function managedServerUpdateDeps(userDataPath: string): ManagedServerUpdateDeps {
   const registry = requireManagedOrcadTargetStore()
@@ -18,9 +18,9 @@ export function managedServerUpdateDeps(userDataPath: string): ManagedServerUpda
         ? target.managedServerUpdateFailure.reason
         : null,
     // Why only a failure counts: a deferral or skip never tried the update.
-    retryRecordedFailure: (target) => !triedThisLaunch.has(target.id),
+    failedThisLaunch: (target) => failedThisLaunch.has(target.id),
     recordUpdateFailure: (target, reason) => {
-      triedThisLaunch.add(target.id)
+      failedThisLaunch.add(target.id)
       registry.updateTarget(target.id, { managedServerUpdateFailure: { reason, appVersion } })
     },
     clearUpdateFailure: (target) => {

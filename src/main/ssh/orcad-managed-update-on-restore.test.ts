@@ -29,7 +29,7 @@ function deps(
       return outcome
     }),
     recordedUpdateFailure: () => null,
-    retryRecordedFailure: () => false,
+    failedThisLaunch: () => true,
     recordUpdateFailure: vi.fn(),
     clearUpdateFailure: vi.fn(),
     ...overrides
