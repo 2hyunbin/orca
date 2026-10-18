@@ -7,6 +7,10 @@ const LEADING_AGENT_TITLE_DECORATION_RE =
   // eslint-disable-next-line no-control-regex -- intentional unicode status-glyph ranges
   /^(?:[✳✦⏲◇✋▲⠀-⣿◐-◓]+|[.*]\s)\s*/
 
+export function hasLeadingAgentTitleDecoration(title: string): boolean {
+  return LEADING_AGENT_TITLE_DECORATION_RE.test(title)
+}
+
 export function stripLeadingAgentTitleDecorationOrEmpty(title: string): string {
   return title.replace(LEADING_AGENT_TITLE_DECORATION_RE, '').trimStart()
 }

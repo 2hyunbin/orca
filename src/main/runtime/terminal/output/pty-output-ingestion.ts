@@ -297,7 +297,11 @@ export abstract class OrcaRuntimeWithOnPtyData extends OrcaRuntimeWithPreparePty
           ptyRecord.lastExplicitAgentStatus = {
             state: latestAgentStatus.state,
             updatedAt: Date.now(),
-            sessionBoundary: latestAgentStatus.sessionBoundary
+            sessionBoundary: latestAgentStatus.sessionBoundary,
+            ...(latestAgentStatus.state === 'done' &&
+            agentStatusChunk.programStatusPayloads?.has(latestAgentStatus)
+              ? { programAtRest: true }
+              : {})
           }
         }
       }

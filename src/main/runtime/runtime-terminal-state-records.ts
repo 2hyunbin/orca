@@ -83,6 +83,9 @@ export type RuntimePtyWorktreeRecord = RuntimeTerminalTailState & {
     updatedAt: number
     /** A `done` row that marks a new session owning the pane, not the end of a turn. */
     sessionBoundary?: boolean
+    /** OSC 7501 `done`: the program itself says it is at rest awaiting input, which a hook
+     *  `done` (possibly mid-turn) cannot claim. */
+    programAtRest?: boolean
   } | null
   lastAgentStatusStartedAtEpochMs: number | null
   lastAgentStatusRichInvalidatedAtEpochMs: number | null

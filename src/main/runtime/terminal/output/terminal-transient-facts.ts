@@ -73,6 +73,7 @@ export abstract class OrcaRuntimeWithEmitDaemonPtyTransientFact extends OrcaRunt
     }
     this.oscTitleScanTailByPtyId.delete(ptyId)
     this.osc7ScanTailByPtyId.delete(ptyId)
+    // The program still runs, so liveProgramStatusFacetPtyIds keeps owing its exit clear.
     this.agentStatusOscProcessorsByPtyId.delete(ptyId)
     this.disposeHeadlessTerminal(ptyId)
   }

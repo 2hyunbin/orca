@@ -5,6 +5,7 @@ import {
   shouldSuppressCursorNativeTitle
 } from '../../../../shared/agent-detection'
 import { createAgentStatusOscProcessor } from '../../../../shared/agent-status-osc'
+import { createProgramStatusSideEffectScanner } from '../../../../shared/terminal-agent-status-processor'
 import { createBellDetector } from '../../../../shared/terminal-bell-detector'
 import type { PtyDataMeta } from './pty-dispatcher'
 import {
@@ -74,6 +75,7 @@ export function createPtyOutputProcessor({
 }: PtyOutputProcessorOptions) {
   const bellDetector = createBellDetector()
   let processAgentStatusChunk = createAgentStatusOscProcessor()
+  let scanProgramStatus = createProgramStatusSideEffectScanner()
   let partialEscapeTail = ''
   const titleObserver = createPtyOutputTitleObserver({
     onTitleChange,
@@ -214,6 +216,8 @@ export function createPtyOutputProcessor({
     }
     const processed = processAgentStatusChunk(data)
     data = processed.cleanData
+    // Why scanData only for side effects: its titles carry a re-added status glyph xterm must not draw.
+    const programStatus = scanProgramStatus(data)
     if (options.replayingBufferedData && callbacks.onReplayData) {
       const replayMeta = {
         ...(options.clearBeforeReplay === false ? { clearBeforeReplay: false } : {}),
@@ -244,7 +248,13 @@ export function createPtyOutputProcessor({
     } else {
       callbacks.onData?.(data)
     }
-    enqueueSideEffects(data, processed.payloads, suppressAttentionEvents)
+    enqueueSideEffects(
+      programStatus.scanData,
+      programStatus.payloads.length > 0
+        ? [...processed.payloads, ...programStatus.payloads]
+        : processed.payloads,
+      suppressAttentionEvents
+    )
   }
 
   return {
@@ -264,6 +274,7 @@ export function createPtyOutputProcessor({
     resetBellDetector: () => bellDetector.reset(),
     resetAgentStatusCarry: () => {
       processAgentStatusChunk = createAgentStatusOscProcessor()
+      scanProgramStatus = createProgramStatusSideEffectScanner()
     },
     getPendingEscapeTailAnsi: () => partialEscapeTail,
     disposePendingSideEffectGauge: sideEffects.disposeGauge

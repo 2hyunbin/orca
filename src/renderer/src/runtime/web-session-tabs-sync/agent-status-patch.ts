@@ -128,31 +128,35 @@ export function buildMirroredAgentStatusPatch(
     const clientOwnsEntry =
       isFencedClientAgentStatus(entry.paneKey, existing, now) &&
       !hostAgentStatusPiercesClientAuthority(entry)
-    const nextEntry =
-      existing && (clientOwnsEntry || existing.updatedAt > entry.updatedAt)
-        ? {
-            ...normalizeCompatibleAgentStatusEntryForOwner(existing, entry.agentType),
-            ...(clientOwnsEntry && existing.state === 'working' && entry.state === 'working'
-              ? { workingMode: entry.workingMode }
-              : {}),
-            paneKey: entry.paneKey,
-            worktreeId: entry.worktreeId ?? existing.worktreeId,
-            tabId: entry.tabId,
-            providerSession:
-              existing.providerSession ??
-              (hostIdentityPredatesCurrentTurn ? undefined : entry.providerSession),
-            // Why: hook-only content the byte pipeline can never see, and every OSC
-            // write blanks it, so a fenced pane's message line stayed empty forever
-            // (#12906). Host-first unlike providerSession: only the host can mint one.
-            lastAssistantMessage:
-              (hostIdentityPredatesCurrentTurn ? undefined : entry.lastAssistantMessage) ??
-              existing.lastAssistantMessage,
-            lastAssistantMessageIsToolOutput:
-              hostIdentityPredatesCurrentTurn || entry.lastAssistantMessage === undefined
-                ? existing.lastAssistantMessageIsToolOutput
-                : entry.lastAssistantMessageIsToolOutput
-          }
-        : entry
+    let nextEntry = entry
+    if (existing && (clientOwnsEntry || existing.updatedAt > entry.updatedAt)) {
+      // Why host-only facet: client OSC writes have no facet channel, so the host's is current.
+      const { programStatus: _clientFacet, ...ownedEntry } =
+        normalizeCompatibleAgentStatusEntryForOwner(existing, entry.agentType)
+      nextEntry = {
+        ...ownedEntry,
+        ...(clientOwnsEntry && existing.state === 'working' && entry.state === 'working'
+          ? { workingMode: entry.workingMode }
+          : {}),
+        paneKey: entry.paneKey,
+        worktreeId: entry.worktreeId ?? existing.worktreeId,
+        tabId: entry.tabId,
+        providerSession:
+          existing.providerSession ??
+          (hostIdentityPredatesCurrentTurn ? undefined : entry.providerSession),
+        // Why: hook-only content the byte pipeline can never see, and every OSC
+        // write blanks it, so a fenced pane's message line stayed empty forever
+        // (#12906). Host-first unlike providerSession: only the host can mint one.
+        lastAssistantMessage:
+          (hostIdentityPredatesCurrentTurn ? undefined : entry.lastAssistantMessage) ??
+          existing.lastAssistantMessage,
+        lastAssistantMessageIsToolOutput:
+          hostIdentityPredatesCurrentTurn || entry.lastAssistantMessage === undefined
+            ? existing.lastAssistantMessageIsToolOutput
+            : entry.lastAssistantMessageIsToolOutput,
+        ...(entry.programStatus ? { programStatus: entry.programStatus } : {})
+      }
+    }
     nextByPaneKey.set(entry.paneKey, nextEntry)
   }
 
