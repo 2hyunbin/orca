@@ -7,26 +7,30 @@ import { openCodexThread } from './codex-structured-thread-open'
 /** A Codex thread whose turns are `turns`, newest last; revert drops `drop` and every later one. */
 function fixture(turns = ['kept', 'drop'], reverted = false) {
   let history = reverted ? turns.slice(0, turns.indexOf('drop')) : turns
-  const request = vi.fn(async (method: string, params?: unknown): Promise<unknown> => {
-    if (method === 'thread/read') {
-      return { thread: { id: 'thread', historyMode: 'paginated', status: { type: 'idle' } } }
-    }
-    if (method === 'thread/revert') {
-      history = history.slice(0, history.indexOf('drop'))
-      return { thread: { id: 'thread', turns: [] }, turnsBackwardsCursor: 'turn-cursor' }
-    }
-    if (method === 'thread/turns/list') {
-      const { cursor, limit } = params as { cursor: string | null; limit: number }
-      const newest = history.toReversed()
-      const start = cursor === null ? 0 : Number(cursor)
-      const end = start + limit
-      return {
-        data: newest.slice(start, end).map((id) => ({ id })),
-        nextCursor: end < newest.length ? String(end) : null
+  const request = vi.fn(
+    async (
+      method: string,
+      params?: { cursor?: string | null; limit?: number }
+    ): Promise<unknown> => {
+      if (method === 'thread/read') {
+        return { thread: { id: 'thread', historyMode: 'paginated', status: { type: 'idle' } } }
       }
+      if (method === 'thread/revert') {
+        history = history.slice(0, history.indexOf('drop'))
+        return { thread: { id: 'thread', turns: [] }, turnsBackwardsCursor: 'turn-cursor' }
+      }
+      if (method === 'thread/turns/list') {
+        const newest = history.toReversed()
+        const start = Number(params?.cursor ?? 0)
+        const end = start + (params?.limit ?? newest.length)
+        return {
+          data: newest.slice(start, end).map((id) => ({ id })),
+          nextCursor: end < newest.length ? String(end) : null
+        }
+      }
+      throw new Error(`unexpected ${method}`)
     }
-    throw new Error(`unexpected ${method}`)
-  })
+  )
   const session = {
     connection: { request },
     threadId: 'thread',
