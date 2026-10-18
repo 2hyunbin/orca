@@ -18,14 +18,11 @@ vi.mock('node:child_process', () => ({ spawn: spawnMock }))
 vi.mock('../codex-cli/command', () => ({ resolveCliCommand: resolveCliCommandMock }))
 
 import { registerShellHandlers } from './shell'
+import { fingerprintRuntimeSshTarget } from '../ssh/runtime-ssh-target-fingerprint'
 import type { ListRuntimeEnvironments } from './shell-editor-ssh-host'
 
 const link = { sshTargetId: 'ssh-1', sshTargetGeneration: 1, localPort: 41000, remotePort: 6768 }
 const managedServer = { id: 'env-1', orcadDeployment: link }
-const sshAccessServer = {
-  id: 'env-1',
-  sshAccess: { ...link, endpointId: 'tunnel', previousPreferredEndpointId: 'lan' }
-}
 
 function sshTarget(id: string, configHost: string, overrides: Partial<SshTarget> = {}): SshTarget {
   return {
@@ -57,6 +54,15 @@ function spawnedChild(): { once: unknown; off: unknown; unref: unknown } {
 }
 
 describe('Open in VS Code for a workspace on a server Orca reaches through an SSH host', () => {
+  const sshAccessServer = {
+    id: 'env-1',
+    sshAccess: {
+      ...link,
+      endpointId: 'tunnel',
+      previousPreferredEndpointId: 'lan',
+      targetFingerprint: fingerprintRuntimeSshTarget(sshTarget('ssh-1', 'builder'))
+    }
+  }
   const targets = new Map<string, SshTarget>()
 
   beforeEach(() => {
@@ -112,6 +118,14 @@ describe('Open in VS Code for a workspace on a server Orca reaches through an SS
     targets.set('ssh-1', sshTarget('ssh-1', 'builder', overrides))
     await expect(
       openInEditor(() => [managedServer], { connectionId: 'ssh-1', ownerHostId: 'runtime:env-1' })
+    ).resolves.toEqual({ ok: false, reason: 'remote-runtime-unsupported' })
+    expect(spawnMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses SSH access verified against connection settings the host no longer has', async () => {
+    targets.set('ssh-1', sshTarget('ssh-1', 'builder', { host: 'elsewhere.example.com' }))
+    await expect(
+      openInEditor(() => [sshAccessServer], { connectionId: 'ssh-1', ownerHostId: 'runtime:env-1' })
     ).resolves.toEqual({ ok: false, reason: 'remote-runtime-unsupported' })
     expect(spawnMock).not.toHaveBeenCalled()
   })

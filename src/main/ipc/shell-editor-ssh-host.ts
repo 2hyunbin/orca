@@ -8,6 +8,7 @@ import {
   type KnownRuntimeEnvironment
 } from '../../shared/runtime-environments'
 import type { SshTarget } from '../../shared/ssh-types'
+import { fingerprintRuntimeSshTarget } from '../ssh/runtime-ssh-target-fingerprint'
 
 export type ListRuntimeEnvironments = () => readonly Pick<
   KnownRuntimeEnvironment,
@@ -19,7 +20,7 @@ export const listAppRuntimeEnvironments: ListRuntimeEnvironments = () =>
 
 /** Whether `target` is the SSH host that owns the path: that host, or the one its server runs on. */
 export function isEditorSshHostForOwner(
-  target: Pick<SshTarget, 'id' | 'generation' | 'orcadFence'>,
+  target: SshTarget,
   ownerHostId: unknown,
   listRuntimeEnvironments: ListRuntimeEnvironments
 ): boolean {
@@ -46,8 +47,12 @@ export function isEditorSshHostForOwner(
   if (target.generation !== link.sshTargetGeneration) {
     return false
   }
+  if (getOrcadSshDeployment(environment)) {
+    return getManagedOrcadFenceEnvironmentId(target) === environment.id
+  }
+  // Why: editing a host keeps its generation, so SSH access also pins the settings it was verified on.
+  const access = environment.sshAccess
   return (
-    !getOrcadSshDeployment(environment) ||
-    getManagedOrcadFenceEnvironmentId(target) === environment.id
+    !!access?.targetFingerprint && fingerprintRuntimeSshTarget(target) === access.targetFingerprint
   )
 }
