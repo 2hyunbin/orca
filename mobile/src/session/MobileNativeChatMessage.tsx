@@ -21,7 +21,10 @@ import type {
 import { MobileSourceCopyButton } from '../components/MobileSourceCopyButton'
 import { nativeChatMessagePlainText } from './mobile-native-chat-message-plain-text'
 import { deriveNativeChatRowContent } from '../../../src/shared/native-chat-row-content'
-import { MobileNativeChatReasoningRow } from './MobileNativeChatReasoningRow'
+import {
+  MobileNativeChatGroupedThought,
+  MobileNativeChatReasoningRow
+} from './MobileNativeChatReasoningRow'
 import { nativeChatWorkRunEntries } from '../../../src/shared/native-chat-work-run'
 import { nativeChatReasoningDisclosureKey } from '../../../src/shared/native-chat-reasoning-row'
 import { MobileNativeChatTurnStatus } from './MobileNativeChatTurnStatus'
@@ -147,10 +150,9 @@ function MobileNativeChatMessageImpl({
     }
     const thought = (thoughtMessage: NativeChatMessage): React.JSX.Element => (
       // Keyed by the thought, so it stays mounted as calls arrive after it.
-      <MobileNativeChatReasoningRow
+      <MobileNativeChatGroupedThought
         key={`thought:${thoughtMessage.id}`}
         message={thoughtMessage}
-        markdown={deriveNativeChatRowContent(thoughtMessage.blocks).markdown}
         fontScale={fontScale}
         live={activeTurnIsWorking === true}
         expanded={openReasoning?.has(nativeChatReasoningDisclosureKey(thoughtMessage.id)) === true}
