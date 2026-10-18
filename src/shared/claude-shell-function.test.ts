@@ -229,6 +229,12 @@ it('prints no Orca text from the PowerShell function and creates a missing accou
   expect(script).toContain('-not [IO.Path]::IsPathRooted($orcaClaudeHome)')
 })
 
+it('escapes its arguments for the resolved PowerShell binary before splatting them', () => {
+  expect(getPowerShellClaudeShellFunction()).toContain(
+    '$claudeArgs = @(__OrcaEscapeNativeArgs $binary.Source $args)'
+  )
+})
+
 it('trims the PowerShell pointer read as POSIX command substitution does', () => {
   expect(getPowerShellClaudeShellFunction()).toContain(
     '[IO.File]::ReadAllText($env:ORCA_CLAUDE_PROFILE_POINTER).TrimEnd()'

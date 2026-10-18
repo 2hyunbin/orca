@@ -20,25 +20,27 @@ function quotePowerShellMultilineLiteral(value: string): string {
 }
 
 /**
- * PowerShell function that escapes `$args` for a native command, for Orca's agent wrappers to splat.
+ * PowerShell function that escapes arguments for `$Program`, for Orca's agent wrappers to splat.
  *
  * Why at runtime: the escaping depends on the PowerShell reading the line. Legacy argv passing
- * (Windows PowerShell 5.1, pwsh before 7.3) leaves embedded `"` unescaped, so the program drops them;
- * 7.3+ escapes them itself and must get the text untouched. Windows PowerShell also quotes only when
- * whitespace sits outside quotes it counts naively, and never doubles a trailing backslash; when it
- * won't quote, no escaping survives, so that text is left as before.
+ * (Windows PowerShell 5.1, pwsh before 7.3, and 7.3's `Windows` mode for `.cmd`/`.bat`) leaves
+ * embedded `"` unescaped, so the program drops them; otherwise PowerShell escapes them itself and
+ * must get the text untouched. Windows PowerShell also quotes only when whitespace sits outside
+ * quotes it counts naively, and never doubles a trailing backslash; when it won't quote, no escaping
+ * survives, so that text is left as before.
  */
-export function getPowerShellNativeArgsFunction(): string {
-  return `function Global:__OrcaNativeArgs([object[]]$Arguments) {
+export function getPowerShellEscapeNativeArgsFunction(): string {
+  return `function Global:__OrcaEscapeNativeArgs([string]$Program, [object[]]$Arguments) {
     Set-StrictMode -Off
-    if ($PSNativeCommandArgumentPassing -and $PSNativeCommandArgumentPassing -ne 'Legacy') { return $Arguments }
-    $desktop = $PSVersionTable.PSEdition -eq 'Desktop'
+    $mode = $PSNativeCommandArgumentPassing
+    if ($mode -eq 'Standard' -or ($mode -eq 'Windows' -and $Program -notmatch '\\.(bat|cmd)$')) { return $Arguments }
+    $desktop = $PSVersionTable.PSVersion.Major -lt 6
     foreach ($arg in $Arguments) {
         if ($arg -isnot [string] -or $arg -notmatch '["\\\\]') { $arg; continue }
-        $quoted = $arg -match '^(?:[^"]*"[^"]*")*[^"]*\\s'
-        if ($desktop -and -not $quoted -and $arg -match '\\s') { $arg; continue }
+        $willQuote = $arg -match '^(?:[^"]*"[^"]*")*[^"]*\\s'
+        if ($desktop -and -not $willQuote -and $arg -match '\\s') { $arg; continue }
         $escaped = $arg -replace '(\\\\*)"', '$1$1\\"'
-        if ($desktop -and $quoted) { $escaped -replace '(\\\\+)$', '$1$1' } else { $escaped }
+        if ($desktop -and $willQuote) { $escaped -replace '(\\\\+)\\z', '$1$1' } else { $escaped }
     }
 }`
 }

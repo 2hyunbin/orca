@@ -81,7 +81,7 @@ if ($orcaCodexCommand -and
             } catch {
             }
         }
-        $orcaCodexArgs = @(__OrcaNativeArgs $args)
+        $orcaCodexArgs = @(__OrcaEscapeNativeArgs $orcaCodexExecutable.Source $args)
         # Why: a native command inside a function never sees the function's pipeline input on its own.
         if ($MyInvocation.ExpectingInput) {
             $input | & $orcaCodexExecutable.Source @orcaCodexFlags @orcaCodexArgs

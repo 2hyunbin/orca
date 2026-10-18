@@ -17,7 +17,7 @@ import {
   getPowerShellCodexShellLaunchPreflight
 } from '../../shared/codex-shell-function'
 import { resolveFishBinary } from '../../shared/fish-binary-requirement'
-import { getPowerShellNativeArgsFunction } from '../../shared/powershell-native-argument'
+import { getPowerShellEscapeNativeArgsFunction } from '../../shared/powershell-native-argument'
 
 const isWindows = process.platform === 'win32'
 const fishLookup = resolveFishBinary()
@@ -32,6 +32,8 @@ const HELP_WITHOUT_FLAG = 'Usage: codex [OPTIONS] [PROMPT]\n      --no-alt-scree
 const ADDED: string[][] = [
   [],
   ['fix the bug'],
+  // Why: Windows PowerShell and pwsh's .cmd passing drop embedded quotes unless the wrapper escapes them.
+  ['say "hi" to "bob"'],
   ['exec the plan'],
   ['-m', 'gpt-5', '--yolo', 'x'],
   ['resume'],
@@ -161,7 +163,7 @@ function run(
     shell === 'fish'
       ? getFishCodexShellLaunchPreflight()
       : isPowerShell(shell)
-        ? `${getPowerShellNativeArgsFunction()}\n${getPowerShellCodexShellLaunchPreflight()}`
+        ? `${getPowerShellEscapeNativeArgsFunction()}\n${getPowerShellCodexShellLaunchPreflight()}`
         : getPosixCodexShellLaunchPreflight()
   // Why the guard: rows include `login`, which a real codex would run against the host's account.
   const guard = isPowerShell(shell)

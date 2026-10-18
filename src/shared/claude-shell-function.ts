@@ -104,7 +104,7 @@ function Global:claude {
             $env:ORCA_CLAUDE_INJECTED_CONFIG_DIR = $orcaClaudeHome
         }
         $binary = Get-Command claude -CommandType Application,ExternalScript -ErrorAction Stop | Select-Object -First 1
-        $claudeArgs = @(__OrcaNativeArgs $args)
+        $claudeArgs = @(__OrcaEscapeNativeArgs $binary.Source $args)
         if ($MyInvocation.ExpectingInput) { $input | & $binary.Source @claudeArgs } else { & $binary.Source @claudeArgs }
         $global:LASTEXITCODE = $LASTEXITCODE
     } catch { $global:LASTEXITCODE = 1; Write-Error $_ -ErrorAction Continue }
