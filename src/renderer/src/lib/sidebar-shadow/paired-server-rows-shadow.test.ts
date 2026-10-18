@@ -31,6 +31,7 @@ describe('readWindowPairedServerRows', () => {
         isArchived: false,
         isPinned: true,
         isMainWorktree: false,
+        isUnread: false,
         lineage: null,
         workspaceStatus: 'in-progress',
         sortOrder: 0,

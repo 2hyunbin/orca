@@ -47,11 +47,19 @@ const buildServer: PublicKnownRuntimeEnvironment = {
 }
 
 // Stamps on every host's rows, so Recent and Smart order across local, SSH and the paired server.
-const STAMPS: Record<string, SmartStampFields & { lastActivityAt?: number }> = {
+const STAMPS: Record<string, SmartStampFields & { lastActivityAt?: number; isUnread?: boolean }> = {
   Zeta: { smartTier: 'needs-you', smartAt: GOLDEN_NOW - 600_000 },
-  'feat-a': { smartTier: 'done', smartAt: GOLDEN_NOW - 60_000 },
-  'api-y': { smartTier: 'done', smartAt: GOLDEN_NOW - 59_000, lastActivityAt: GOLDEN_NOW - 2_000 },
+  // Done holds only while unread: feat-a and api-y were not read yet.
+  'feat-a': { smartTier: 'done', smartAt: GOLDEN_NOW - 60_000, isUnread: true },
+  'api-y': {
+    smartTier: 'done',
+    smartAt: GOLDEN_NOW - 59_000,
+    lastActivityAt: GOLDEN_NOW - 2_000,
+    isUnread: true
+  },
   'remote-x': { smartTier: 'working', smartAt: GOLDEN_NOW - 30_000 },
+  // Read since it finished, so it ranks as Rest.
+  'feat-b': { smartTier: 'done', smartAt: GOLDEN_NOW - 1_000 },
   'gitlab-mr': { smartTier: 'working', smartAt: GOLDEN_NOW - 900_000 }
 }
 

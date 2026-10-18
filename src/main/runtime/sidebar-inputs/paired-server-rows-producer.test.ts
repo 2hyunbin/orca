@@ -322,6 +322,7 @@ describe('PairedServerRowsProducer', () => {
           creatorProvenance: { kind: 'paired-device', deviceId: 'phone-1' },
           defaultBranch: true,
           cliCreated: true,
+          unread: true,
           worktreeInstanceId: 'i-a',
           parentWorktreeId: 'repo::/p',
           lineageWorktreeInstanceId: 'i-a',
@@ -351,6 +352,7 @@ describe('PairedServerRowsProducer', () => {
       creatorProvenance: { kind: 'paired-device', deviceId: 'phone-1' },
       defaultBranch: true,
       cliCreated: true,
+      isUnread: true,
       instanceId: 'i-a',
       lineage: {
         parentWorktreeId: 'repo::/p',

@@ -39,6 +39,7 @@ type FeedRowFields = Pick<
     Pick<
       WorkspaceRow,
       | 'isMainWorktree'
+      | 'isUnread'
       | 'instanceId'
       | 'lineage'
       | 'workspaceStatus'
@@ -67,7 +68,6 @@ function readFeedRow(
       | 'linkedGitLabMR'
       | 'linkedGitLabIssue'
       | 'linkedItems'
-      | 'isUnread'
     >
   > = {}
 ): SidebarFeedWorkspace {
@@ -93,7 +93,7 @@ function readFeedRow(
     isMainWorktree: row.isMainWorktree ?? false,
     isArchived: row.isArchived,
     isPinned: row.isPinned,
-    isUnread: false,
+    isUnread: row.isUnread ?? false,
     workspaceStatus: row.workspaceStatus,
     sortOrder: row.sortOrder ?? 0,
     ...(row.manualOrder !== undefined ? { manualOrder: row.manualOrder } : {}),
@@ -161,8 +161,7 @@ export function readFeedWorkspaceRow(
         linkedLinearIssue: row.linkedLinearIssue,
         linkedGitLabMR: row.linkedGitLabMR,
         linkedGitLabIssue: row.linkedGitLabIssue,
-        linkedItems: row.linkedItems,
-        isUnread: row.isUnread
+        linkedItems: row.linkedItems
       })
     : null
 }

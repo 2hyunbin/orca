@@ -61,6 +61,7 @@ export function readWindowPairedServerRows(
       isArchived: worktree.isArchived,
       isPinned: worktree.isPinned,
       isMainWorktree: worktree.isMainWorktree,
+      isUnread: worktree.isUnread,
       instanceId: worktree.instanceId,
       lineage: lineage
         ? {
@@ -129,7 +130,7 @@ export const pairedServerRowsShadow = defineSidebarShadowDomain<
     }
   },
   readWindow: (main) => readWindowPairedServerRows(useAppStore.getState(), main.liveHostIds),
-  // Stamps move with every server event, so a fetch either side made a moment apart differs.
+  // Stamps and unread move with every server event, so a fetch either side made a moment apart differs.
   equals: (window, main) =>
     JSON.stringify(withoutStamps(window)) === JSON.stringify(withoutStamps(main))
 })
@@ -140,7 +141,13 @@ function withoutStamps(
   if (!row) {
     return null
   }
-  const { recentAt: _recentAt, smartTier: _smartTier, smartAt: _smartAt, ...rest } = row
+  const {
+    recentAt: _recentAt,
+    smartTier: _smartTier,
+    smartAt: _smartAt,
+    isUnread: _isUnread,
+    ...rest
+  } = row
   return rest
 }
 

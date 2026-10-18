@@ -24,6 +24,7 @@ const PairedServerWorkspaceRowSchema = z
     // `lineage` is the edge the server's own check kept, not its stored record.
     WorkspaceRowSchema.pick({
       isMainWorktree: true,
+      isUnread: true,
       instanceId: true,
       lineage: true,
       workspaceStatus: true,
@@ -79,6 +80,7 @@ const ServerWorktreePsRowSchema = z.object({
   isArchived: z.boolean().catch(false),
   isPinned: z.boolean().catch(false),
   isMainWorktree: z.boolean().catch(false),
+  unread: z.boolean().optional().catch(undefined),
   worktreeInstanceId: z.string().optional().catch(undefined),
   parentWorktreeId: z.string().nullable().optional().catch(undefined),
   lineageWorktreeInstanceId: z.string().optional().catch(undefined),
@@ -109,6 +111,7 @@ export function normalizePairedServerRow(
   const {
     workspaceKind,
     lastActivityAt,
+    unread,
     worktreeInstanceId,
     parentWorktreeId,
     lineageWorktreeInstanceId,
@@ -119,6 +122,7 @@ export function normalizePairedServerRow(
     key: composeWorktreeHostIdentity(hostId, fields.worktreeId),
     kind: workspaceKind === 'folder-workspace' ? 'folder' : 'git',
     ...fields,
+    ...(unread !== undefined ? { isUnread: unread } : {}),
     ...(worktreeInstanceId !== undefined ? { instanceId: worktreeInstanceId } : {}),
     lineage:
       parentWorktreeId && lineageWorktreeInstanceId && parentWorktreeInstanceId
