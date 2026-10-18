@@ -36,7 +36,7 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
 
   constructor(...args: ConstructorParameters<typeof OrcaRuntimeWithWorkspaceReviewFacts>) {
     super(...args)
-    this.workspaceActivityFacts.onChange(() => this.sidebarTemporal.noteActivityChange())
+    this.workspaceActivityFacts.revision.onChange(() => this.sidebarTemporal.noteActivityChange())
     this.store?.onUIChanged?.(() => this.sidebarTemporal.noteViewChange())
     // Every catalog change, from IPC or the runtime, reaches clients through this one bus.
     this.clientEvents.on(
@@ -62,6 +62,10 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
 
   getSidebarTemporalSnapshot(): SidebarTemporalSnapshot {
     return this.sidebarTemporal.snapshot()
+  }
+
+  onSidebarTemporalChange(listener: () => void): () => void {
+    return this.sidebarTemporal.revision.onChange(listener)
   }
 
   beginSidebarListSession(sessionId: string): void {

@@ -625,6 +625,7 @@ import {
 } from './worktree-params'
 import { WorktreeAdoptProvisionedRoot } from './worktree-provisioned-root-params'
 import { RepoIconDataUrlsParams } from '../sidebar-list/repo-icon-data-urls-contract'
+import { SidebarInputsReadParams } from '../sidebar-list/sidebar-inputs-feed-contract'
 import { SkillBundleInstallRequestSchema } from '../skill-bundle-install-contract'
 import { SkillDeleteRequestSchema } from '../skill-delete-contract'
 import {
@@ -1254,6 +1255,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'sidebarInputs.activityFacts': null,
   'sidebarInputs.desktopFacts': null,
   'sidebarInputs.pairedServerRows': null,
+  'sidebarInputs.read': SidebarInputsReadParams,
   'sidebarInputs.repoIcons': RepoIconDataUrlsParams,
   'sidebarInputs.reviewFacts': null,
   'sidebarInputs.temporal': null,
