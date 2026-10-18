@@ -603,9 +603,12 @@ describe('source-bound ordinary Continue', () => {
   it('refuses a stale action and actionable backlog before writing a submission or queue card', async () => {
     const { journal, turnItemId } = await limitedTurn('old')
     await rig.send('ordinary message wins').result
-    const before = journal.snapshot()
+    const before = journal.snapshot().items.map((item) => item.itemId)
+    const requests = journal.submissions().map((entry) => entry.clientMessageId)
     expect(await rig.host.send(CALLER, params(turnItemId))).toMatchObject(superseded)
-    expect(journal.snapshot()).toEqual(before)
+    expect(journal.snapshot().items.map((item) => item.itemId)).toEqual(before)
+    expect(journal.submissions().map((entry) => entry.clientMessageId)).toEqual(requests)
+    expect(journal.queuedMessages.list()).toHaveLength(0)
     await rig.settleRejected(journal.submissions()[0]!.clientMessageId, 'done')
     const current = await limitedTurn('current')
     const release = holdLane(rig.host, SESSION)
