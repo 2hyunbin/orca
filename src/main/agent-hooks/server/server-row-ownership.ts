@@ -104,10 +104,14 @@ export abstract class AgentHookServerRowOwnership extends AgentHookServerListene
     if (!emit || semanticRowsEqual(before, after)) {
       return false
     }
-    const mutation: AgentHookStatusRowMutation = {
+    this.notifyStatusRowMutationListeners({
       before: toMutationIdentity(before),
       after: toMutationIdentity(after)
-    }
+    })
+    return true
+  }
+
+  private notifyStatusRowMutationListeners(mutation: AgentHookStatusRowMutation): void {
     for (const listener of this.statusRowMutationListeners) {
       try {
         listener(mutation)
@@ -115,6 +119,5 @@ export abstract class AgentHookServerRowOwnership extends AgentHookServerListene
         console.error('[agent-hooks] status-row mutation listener threw', error)
       }
     }
-    return true
   }
 }

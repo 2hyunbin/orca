@@ -14,7 +14,6 @@ import { parseAppSshPtyId } from '../../../../../shared/ssh-pty-id'
 import { dispatchTerminalCommandFinishedEvent } from '@/hooks/terminal-command-finished-event'
 import { getExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
 import type { TuiAgent } from '../../../../../shared/tui-agent'
-import { titleAfterConfirmedShell } from '../../../../../shared/terminal-pane-title-reset'
 import { isTuiAgent, TUI_AGENT_CONFIG } from '../../../../../shared/tui-agent-config'
 
 import {
@@ -23,6 +22,7 @@ import {
   type PaneLaunchAgentPaneSlice
 } from './pane-launch-agent-candidate'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
+import { clearStaleAgentTabTitleOnConfirmedShell } from './confirmed-shell-agent-title'
 
 /** Pane agent identity, foreground-agent sampling, and command lifecycle handling. */
 export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
@@ -72,28 +72,8 @@ export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
       isTuiAgent(registeredLaunchAgent)
     )
   }
-  // Why: a plain `codex`/`grok` sets its OSC title and the shell never repaints
-  // it on exit, so a confirmed return-to-shell must clear a title that still
-  // names an agent — otherwise the tab reads "grok" over a bare prompt. Only
-  // reset an agent-named title; user/shell-set titles are left untouched.
-  session.clearStaleAgentTabTitleOnConfirmedShell = (): void => {
-    const state = useAppStore.getState()
-    const currentTitle = state.runtimePaneTitlesByTabId?.[session.deps.tabId]?.[session.pane.id]
-    const tab = (state.tabsByWorktree[session.deps.worktreeId] ?? []).find(
-      (entry) => entry.id === session.deps.tabId
-    )
-    const neutralTitle = titleAfterConfirmedShell(
-      currentTitle ?? tab?.title,
-      session.neutralTerminalTitle()
-    )
-    if (neutralTitle === null) {
-      return
-    }
-    session.deps.setRuntimePaneTitle(session.deps.tabId, session.pane.id, neutralTitle)
-    if (session.manager.getActivePane()?.id === session.pane.id) {
-      session.deps.updateTabTitle(session.deps.tabId, neutralTitle)
-    }
-  }
+  session.clearStaleAgentTabTitleOnConfirmedShell = () =>
+    clearStaleAgentTabTitleOnConfirmedShell(session)
   session.deferredCommandFinishedStatusDrop = null
   session.deferredConfirmedShellReconcile = null
   /** The pane's foreground was proven to be a shell, so its agent exited. Unlike a user dismissal,
