@@ -8,6 +8,7 @@ export function handleUnhideRestoreBackpressure(
   if (
     event.reason !== 'unhide' ||
     session.hiddenOutputRestoreInFlight === null ||
+    session.hiddenOutputRestorePtyId !== event.id ||
     typeof event.markerSeq !== 'number' ||
     !Number.isFinite(event.markerSeq)
   ) {
