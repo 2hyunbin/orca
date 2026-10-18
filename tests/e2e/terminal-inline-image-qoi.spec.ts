@@ -62,7 +62,8 @@ const compactFormats = {
 }
 
 for (const acceleration of ['off', 'on'] as const) {
-  test(`${acceleration}: QOI resizing matches PNG through the PTY`, async ({
+  const rendererTag = acceleration === 'on' ? '@headful ' : ''
+  test(`${rendererTag}${acceleration}: QOI resizing matches PNG through the PTY`, async ({
     orcaPage
   }, testInfo) => {
     await waitForSessionReady(orcaPage)

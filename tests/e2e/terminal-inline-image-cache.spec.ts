@@ -12,7 +12,8 @@ import { readInlineImageResources } from './helpers/terminal-inline-image-proof'
 import { nodeTerminalCommand } from './terminal-node-command'
 
 for (const renderer of ['off', 'on'] as const) {
-  test(`image cache setting resizes live storage and new split panes (${renderer})`, async ({
+  const rendererTag = renderer === 'on' ? '@headful ' : ''
+  test(`${rendererTag}image cache setting resizes live storage and new split panes (${renderer})`, async ({
     orcaPage
   }, testInfo) => {
     test.setTimeout(180_000)

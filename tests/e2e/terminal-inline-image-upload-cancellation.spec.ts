@@ -30,9 +30,10 @@ test.use({
   orcaAppExtraArgs: ['--force-color-profile=srgb']
 })
 for (const acceleration of ['off', 'on'] as const) {
+  const rendererTag = acceleration === 'on' ? '@headful ' : ''
   for (const protocol of ['IIP', 'Kitty'] as const) {
     for (const failure of ['CAN', 'SUB', 'Base64 failure'] as const) {
-      test(`${acceleration}: ${protocol} ${failure} cancels only its upload and recovers`, async ({
+      test(`${rendererTag}${acceleration}: ${protocol} ${failure} cancels only its upload and recovers`, async ({
         orcaPage
       }, testInfo) => {
         await waitForSessionReady(orcaPage)
