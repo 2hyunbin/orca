@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentJournalItemBody } from '../../shared/agent-session-journal-types'
+import { CodexUsageLimits } from './codex-usage-limits'
 import { createCodexJournalTranslator } from './codex-structured-journal-translation'
 
 const RESETS_AT_S = Math.floor(Date.now() / 1000) + 3 * 24 * 3600
@@ -62,4 +63,22 @@ describe('a Codex usage limit', () => {
     ])
     translator.dispose()
   })
+  it('merges null account updates and keeps unnamed exhausted windows in reset calculation', () => {
+    const limits = new CodexUsageLimits()
+    const observe = (rateLimits: Record<string, unknown>) =>
+      limits.observe('notification:account/rateLimits/updated', { rateLimits })
+    const failure = (code = 'usageLimitExceeded') => limits.failure({
+      error: { codexErrorInfo: code, message: CODEX_WORDS }
+    })
+    observe({ limitId: 'codex', primary: { usedPercent: 100, windowDurationMins: 300, resetsAt: RESETS_AT_S } })
+    observe({ limitId: null, primary: { usedPercent: 100, windowDurationMins: 43200, resetsAt: RESETS_AT_S + 3600 } })
+    expect(failure()?.usageLimit).toEqual({ resetsAt: (RESETS_AT_S + 3600) * 1000 })
+    observe({ secondary: { usedPercent: 100, windowDurationMins: 10080 } })
+    expect(failure('rateLimitExceeded')?.usageLimit).toBeUndefined()
+    observe({ secondary: null, planType: 'free', primary: { usedPercent: 100, resetsAt: RESETS_AT_S } })
+    expect(failure()?.usageLimit).toEqual({ resetsAt: RESETS_AT_S * 1000 })
+    observe({ primary: null })
+    expect(failure()?.usageLimit).toBeUndefined()
+  })
+
 })

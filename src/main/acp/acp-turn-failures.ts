@@ -96,19 +96,16 @@ export class AcpTurnFailures {
   ): ProviderTimelineEvent[] {
     const written = this.rows.peek(turn)
     const detail = text === undefined ? undefined : providerDiagnostic(text, 'person')
-    if (
-      written !== undefined &&
-      (written.text !== '' || !detail) &&
-      (!notSignedIn || written.notSignedIn)
-    ) {
-      return []
-    }
     const diagnostic =
-      detail ?? (written?.text ? providerDiagnostic(written.text, 'person') : undefined)
+      (written?.text ? providerDiagnostic(written.text, 'person') : undefined) ?? detail
     const authenticationRequired = notSignedIn || written?.notSignedIn === true
     // A later copy of the reason (the prompt's error answer) names no stop reason of its own.
     const usageLimited =
       !authenticationRequired && (stopReason === 'rate_limit' || written?.usageLimited === true)
+    if (written && written.text === (diagnostic?.text ?? '') &&
+      written.notSignedIn === authenticationRequired && written.usageLimited === usageLimited) {
+      return []
+    }
     this.rows.set(turn, {
       text: diagnostic?.text ?? '',
       notSignedIn: authenticationRequired,

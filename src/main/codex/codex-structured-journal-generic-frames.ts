@@ -158,7 +158,9 @@ export class CodexJournalGenericFrames {
     this.fallbackSequence += 1
     const identity = {
       provider: 'orca' as const,
-      clientMessageId: `provider-frame:codex:${this.deps.acquisitionId ?? 'acquisition'}:${this.fallbackSequence}`
+      clientMessageId: translated.body.failure?.kind === 'usageLimitReached' && frameTurnId
+        ? `terminal-failure:codex:${JSON.stringify([threadId, frameTurnId])}`
+        : `provider-frame:codex:${this.deps.acquisitionId ?? 'acquisition'}:${this.fallbackSequence}`
     }
     const attribution = this.deps.attributionFor(threadId, frameTurnId)
     const admission = this.deps.sink.tryAppendItem

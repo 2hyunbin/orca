@@ -4,6 +4,7 @@
 // Split out of the translator when that file reached its line budget; the translator still owns
 // the open turn and every collaborator this writes through.
 
+import { agentJournalItemKey } from '../../shared/agent-session-journal-item-key'
 import type { ClaudeContextFacts } from './claude-context-facts'
 import { claudeCommandResultEnd } from './claude-command-turn'
 import type { ClaudeMessageJournalContext } from './claude-message-journaling'
@@ -63,6 +64,8 @@ export function journalClaudeResult(
   }
   // Read before the settle below closes it: the result reports that turn's end.
   const endedTurnScope = turn.turnScope
+  const endedTurnIdentity = turn.identity
+  const usageEvidence = turn.usageLimitEvidence
   const endedTurnStartedAt = turn.startedAt
   // Read before the settle below closes the turn: an error end the journal's Stop rule makes a
   // person's cancellation is theirs to decide as the end is written (`turnEndAfterStop`).
@@ -95,9 +98,17 @@ export function journalClaudeResult(
   const kind = claudeProviderFrameKind(message)
   const failure = claudeResultFailure(message, leftToStop)
   // A failed root result the limit refused writes the limit's row, not the result's.
-  const usageLimit = settlesTurn ? usageLimits.result(message, failure !== null) : null
-  const alreadyShown =
-    authenticationFailures.resultAlreadyShown(message) || usageLimit === 'shown'
+  const usageLimit = settlesTurn ? usageLimits.result(message, failure !== null, usageEvidence) : null
+  if (usageLimit && endedTurnIdentity) {
+    sink.appendItem(
+      { provider: 'orca', clientMessageId: `terminal-failure:claude:${agentJournalItemKey(endedTurnIdentity)}` },
+      usageLimit,
+      { turnScope: endedTurnScope }
+    )
+    sink.publish()
+    return
+  }
+  const alreadyShown = authenticationFailures.resultAlreadyShown(message)
   if ((failure || !isSettledClaudeResultKind(kind)) && !alreadyShown) {
     providerFallback.append(
       kind,

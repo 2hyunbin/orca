@@ -3,12 +3,12 @@ import {
   agentSessionFailureWords,
   type AgentSessionFailureRowWords
 } from '../../shared/agent-session-failure-words'
-import { BoundedMap } from '../../shared/bounded-map'
 import {
   usageLimitResetsAt,
   type AgentSessionUsageLimit,
   type AgentSessionUsageLimitWindow
 } from '../../shared/agent-session-usage-limit'
+import type { ClaudeOpenTurn } from './claude-open-turn'
 import { claudeRecord, claudeText } from './claude-structured-item-translation'
 
 const CLAUDE_LIMIT_WINDOWS: Record<string, AgentSessionUsageLimitWindow> = {
@@ -40,20 +40,14 @@ function messageText(message: Record<string, unknown>): string {
     : ''
 }
 
-/**
- * The account's usage limits as Claude reports them: the limit an API-error frame names
- * (`api_error: usage_limit_reached`), else a `rate_limit_event` saying a limit is `rejected` with
- * no paid usage to fall back on. Only those mean the account's own limit: the CLI shares the
- * frame's `error: rate_limit` with throttles and policy refusals that no reset clears. The CLI
- * repeats an unchanged rejection only now and then, so each one stands until a reading allows that
- * limit again or its reset passes.
- */
+export type ClaudeUsageLimitEvidence = {
+  cause: 'quota' | 'other' | 'untyped'
+  row: ClaudeUsageLimitRow | null
+}
+
+// Account observations outlive turns because unchanged rejection notifications are throttled.
 export class ClaudeUsageLimits {
-  /** Each limit refusing requests, by Claude's name for it, with its reset (ms) if it gave one. */
   private readonly rejected = new Map<string, number | null>()
-  private readonly shown = new BoundedMap<string, true>({ maxEntries: 128 })
-  /** The root turn's request was refused with `rate_limit`: its failed result may be the limit. */
-  private turnRefused = false
 
   constructor(private readonly now: () => number = Date.now) {}
 
@@ -63,46 +57,53 @@ export class ClaudeUsageLimits {
     }
   }
 
-  /** The limit's row in place of an API-error frame the limit refused; null for any other frame. */
-  assistant(message: Record<string, unknown>): ClaudeUsageLimitRow | null {
-    if (message.type !== 'assistant' || message.error !== 'rate_limit') {
+  assistant(message: Record<string, unknown>, turn: ClaudeOpenTurn): ClaudeUsageLimitRow | null {
+    if (message.type !== 'assistant') {
       return null
     }
-    const named =
-      message.api_error === 'usage_limit_reached'
-        ? claudeRecord(claudeRecord(message.api_error_params)?.rate_limit_info)
+    const typed = claudeText(message.api_error)
+    const cause = typed === 'usage_limit_reached' ? 'quota' : typed ? 'other' : 'untyped'
+    if (cause === 'quota') {
+      this.record(claudeRecord(claudeRecord(message.api_error_params)?.rate_limit_info))
+    }
+    const refused = message.error === 'rate_limit' || cause === 'quota'
+    const root = message.parent_tool_use_id == null
+    const decision = !typed && root ? (turn.usageLimitEvidence?.cause ?? cause) : cause
+    const row =
+      decision !== 'other' && refused
+        ? this.row(messageText(message), decision === 'quota')
         : null
-    if (named) {
-      this.record(named)
-    }
-    if (message.parent_tool_use_id == null) {
-      this.turnRefused = true
-    }
-    const row = this.row(messageText(message))
-    const key = row ? this.key(message) : null
-    if (key) {
-      this.shown.set(key, true)
+    if (root && (typed || (refused && decision === 'untyped'))) {
+      turn.usageLimitEvidence = { cause, row }
     }
     return row
   }
 
-  /** For a failed root result: the limit's row, or `shown` when its API-error frame already wrote
-   *  it. Null for any other result, which keeps its own row. */
-  result(message: Record<string, unknown>, failed: boolean): ClaudeUsageLimitRow | 'shown' | null {
-    const refused = this.turnRefused
-    this.turnRefused = false
-    const key = this.key(message)
-    if (key !== null && this.shown.delete(key)) {
-      return failed ? 'shown' : null
+  result(
+    message: Record<string, unknown>,
+    failed: boolean,
+    evidence: ClaudeUsageLimitEvidence | null
+  ): ClaudeUsageLimitRow | null {
+    if (!failed || evidence?.cause === 'other') {
+      return null
     }
     const status = message.api_error_status
     const reason = claudeText(message.terminal_reason)
     const limited =
-      failed &&
-      (refused || reason === 'blocking_limit') &&
-      (status == null || status === 429) &&
-      (reason === null || LIMIT_TERMINAL_REASONS.includes(reason))
-    return limited ? this.row(claudeText(message.result) ?? '') : null
+      evidence?.cause === 'quota' ||
+      ((evidence?.cause === 'untyped' || reason === 'blocking_limit') &&
+        (status == null || status === 429) &&
+        (reason === null || LIMIT_TERMINAL_REASONS.includes(reason)))
+    if (!limited) {
+      return null
+    }
+    const prior = evidence?.row
+    const text = claudeText(message.result) ?? ''
+    const detail = prior?.failure.detail?.text ?? ''
+    return (
+      this.row(text.length > detail.length ? text : detail, evidence?.cause === 'quota') ??
+      prior ?? null
+    )
   }
 
   private record(info: Record<string, unknown> | null): void {
@@ -143,9 +144,9 @@ export class ClaudeUsageLimits {
     return { ...(window ? { window } : {}), ...(resetsAt ? { resetsAt } : {}) }
   }
 
-  private row(providerText: string): ClaudeUsageLimitRow | null {
+  private row(providerText: string, typed = false): ClaudeUsageLimitRow | null {
     const limit = this.limit()
-    if (!limit) {
+    if (!limit && !typed) {
       return null
     }
     return {
@@ -153,18 +154,11 @@ export class ClaudeUsageLimits {
       tone: 'warning',
       ...agentSessionFailureWords(
         agentSessionFailureFact('usageLimitReached', {
-          ...(limit.window || limit.resetsAt ? { usageLimit: limit } : {}),
+          ...(limit && (limit.window || limit.resetsAt) ? { usageLimit: limit } : {}),
           detail: providerDiagnostic(providerText, 'person')
         }),
         { agentName: 'Claude', provider: 'claude', surface: 'row' }
       )
     }
-  }
-
-  private key(message: Record<string, unknown>): string | null {
-    const uuid = claudeText(message.user_message_uuid)
-    return uuid
-      ? JSON.stringify([message.session_id, message.parent_tool_use_id ?? null, uuid])
-      : null
   }
 }

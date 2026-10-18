@@ -94,23 +94,31 @@ export function journalClaudeMessage(
   const stamp = ctx.corrections.stampFor(producerRef)
   const outputEnvelope = claudeOutputEnvelope(envelope)
   ctx.threadGoal.observe(message)
-  const body =
-    ctx.authenticationFailures.assistant(message) ??
-    ctx.usageLimits.assistant(message) ??
-    ctx.threadGoal.report(message, claudeMessageIdentity(envelope), observedAt) ??
-    claudeMessageBody(outputEnvelope)
-  const identity =
-    (body && envelope.role === 'assistant'
-      ? ctx.streamedBlocks.reconcile(envelope)?.identity
-      : null) ?? claudeMessageIdentity(envelope)
-  ctx.streamedText.forget(agentJournalItemKey(identity))
-  const thinking = ctx.streamedThinking.finalize(outputEnvelope, observedAt)
   const source: ClaudeTurnSource = {
     sessionId: envelope.sessionId,
     uuid: envelope.uuid,
     assistant: envelope.role === 'assistant'
   }
   const openOutputTurn = (): void => ctx.turn.ensureOpen(message, source, observedAt)
+  // The terminal fact belongs to the actual turn, including frames without a user stamp.
+  if (envelope.role === 'assistant') {
+    openOutputTurn()
+  }
+  const usageLimit = ctx.usageLimits.assistant(message, ctx.turn)
+  const body =
+    ctx.authenticationFailures.assistant(message) ??
+    usageLimit ??
+    ctx.threadGoal.report(message, claudeMessageIdentity(envelope), observedAt) ??
+    claudeMessageBody(outputEnvelope)
+  const terminalIdentity = usageLimit && producerRef === null && ctx.turn.identity
+    ? { provider: 'orca' as const, clientMessageId: `terminal-failure:claude:${agentJournalItemKey(ctx.turn.identity)}` }
+    : null
+  const identity = terminalIdentity ??
+    (body && envelope.role === 'assistant'
+      ? ctx.streamedBlocks.reconcile(envelope)?.identity
+      : null) ?? claudeMessageIdentity(envelope)
+  ctx.streamedText.forget(agentJournalItemKey(identity))
+  const thinking = ctx.streamedThinking.finalize(outputEnvelope, observedAt)
   if (body) {
     // Opening before the append is what brackets a turn around its own first
     // output; a reader that scans back to the turn record and stops would

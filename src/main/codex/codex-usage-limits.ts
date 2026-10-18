@@ -5,7 +5,6 @@ import {
   type AgentSessionUsageLimitWindow
 } from '../../shared/agent-session-usage-limit'
 import {
-  classifyCodexRateLimitWindows,
   type CodexRateLimitWindowsSnapshot
 } from '../rate-limits/codex-rate-limit-window-classification'
 import {
@@ -17,7 +16,7 @@ import {
 const RATE_LIMITS_UPDATED = 'notification:account/rateLimits/updated'
 const USAGE_LIMIT_ERRORS = ['usageLimitExceeded', 'rateLimitExceeded']
 
-type CodexAccountRateLimits = CodexRateLimitWindowsSnapshot & { rateLimitReachedType?: unknown }
+type CodexAccountRateLimits = CodexRateLimitWindowsSnapshot & { rateLimitReachedType?: unknown; planType?: unknown }
 
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? { ...value } : null
@@ -39,7 +38,7 @@ export class CodexUsageLimits {
     }
     const update = record(record(payload)?.rateLimits)
     // Another limit id is one model's own bucket, not the account's session or weekly limit.
-    if (update && (update.limitId === undefined || update.limitId === 'codex')) {
+    if (update && (update.limitId == null || update.limitId === 'codex')) {
       // An update may carry only the fields that changed.
       this.snapshot = {
         ...this.snapshot,
@@ -70,12 +69,18 @@ export class CodexUsageLimits {
   /** Every spent window must reset before a turn can run, so the latest reset is the one; none
    *  when any spent window gave no reset. */
   private limit(): AgentSessionUsageLimit | null {
-    const windows = classifyCodexRateLimitWindows(this.snapshot)
-    const spent = (['session', 'weekly'] as const).flatMap((window) => {
-      const snapshot = windows[window]
-      return snapshot && snapshot.usedPercent >= 100
-        ? [{ window, resetsAt: snapshot.resetsAt }]
-        : []
+    const monthlyPlan = this.snapshot.planType === 'free' || this.snapshot.planType === 'go'
+    const spent = ([['primary', monthlyPlan ? 43200 : 300], ['secondary', 10080]] as const).flatMap(([position, fallback]) => {
+      const raw = this.snapshot[position]
+      if (!raw || typeof raw.usedPercent !== 'number' || !Number.isFinite(raw.usedPercent) || raw.usedPercent < 100) {
+        return []
+      }
+      const duration = raw.windowDurationMins === undefined || raw.windowDurationMins === null
+        ? fallback : raw.windowDurationMins
+      const window = typeof duration === 'number' && Number.isFinite(duration) && duration > 0
+        ? duration >= 43200 ? undefined : duration >= 10080 ? 'weekly' as const : 'session' as const
+        : undefined
+      return [{ window, resetsAt: raw.resetsAt }]
     })
     const reached = this.snapshot.rateLimitReachedType
     const credits = typeof reached === 'string' && reached.endsWith('credits_depleted')

@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { frame, setup, userFrame } from './claude-context-usage-test-support'
+import { describe, expect, it, vi } from 'vitest'
+import { assistantFrame, frame, setup, userFrame } from './claude-context-usage-test-support'
 
 // Seconds, as Claude sends them; two hours out so no reset passes mid-test.
 const RESETS_AT_S = Math.floor(Date.now() / 1000) + 2 * 3600
@@ -62,8 +62,13 @@ describe('a Claude usage limit', () => {
     const t = setup()
     t.handle(userFrame('turn-a', 1_000))
     t.handle(rateLimitEvent('rejected', 1_100))
-    t.handle(refusedFrame('a', 1_200, LIMIT_TEXT))
-    t.handle(failedResult('a', 1_300, LIMIT_TEXT))
+    t.handle(assistantFrame('first', 1_150, 20))
+    t.handle(frame({
+      ...refusedFrame('a', 1_200, LIMIT_TEXT).message,
+      user_message_uuid: undefined,
+      api_error: 'usage_limit_reached'
+    }, 1_200))
+    t.handle(failedResult('a', 1_300, 'Request failed'))
     // The CLI throttles an unchanged rejection: the next turn carries none.
     t.handle(userFrame('turn-b', 2_000))
     t.handle(refusedFrame('b', 2_200, LIMIT_TEXT))
@@ -82,6 +87,48 @@ describe('a Claude usage limit', () => {
     expect(statusRows(t)).toEqual([limitRow, limitRow])
     expect(messageTexts(t)).not.toContain(LIMIT_TEXT)
     t.translator.dispose()
+  })
+
+  it('keeps typed other causes and replacement turns separate from the account snapshot', () => {
+    const t = setup()
+    t.handle(userFrame('limited', 1_000))
+    t.handle(rateLimitEvent('rejected', 1_100))
+    t.handle(refusedFrame('limited', 1_200, LIMIT_TEXT))
+    // No result: a replacement turn must not inherit the previous refusal.
+    t.handle(userFrame('credits', 2_000))
+    t.handle(frame({
+      ...refusedFrame('credits', 2_100, 'This model requires usage credits').message,
+      api_error: 'model_requires_usage_credits'
+    }, 2_100))
+    t.handle(frame({
+      ...failedResult('credits', 2_200, 'This model requires usage credits').message,
+      terminal_reason: 'blocking_limit', api_error_status: 429
+    }, 2_200))
+    expect(statusRows(t).filter((row) => row.failure?.kind === 'usageLimitReached')).toHaveLength(1)
+    expect(statusRows(t).some((row) => row.text.includes('requires usage credits'))).toBe(true)
+    t.translator.dispose()
+  })
+
+  it('keeps an explicit quota cause without metadata and expires snapshot inference', () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(RESETS_AT_S * 1000 - 1000)
+    try {
+      const t = setup()
+      t.handle(userFrame('typed', 1000))
+      t.handle(frame({ ...refusedFrame('typed', 1100, LIMIT_TEXT).message,
+        api_error: 'usage_limit_reached' }, 1100))
+      t.handle(failedResult('typed', 1200, LIMIT_TEXT))
+      t.handle(rateLimitEvent('rejected', 1300))
+      clock.mockReturnValue(RESETS_AT_S * 1000 + 1000)
+      t.handle(userFrame('expired', 2000))
+      t.handle(refusedFrame('expired', 2100, 'Request rejected'))
+      t.handle(failedResult('expired', 2200, 'Request rejected'))
+      const limits = statusRows(t).filter((row) => row.failure?.kind === 'usageLimitReached')
+      expect(limits).toHaveLength(1)
+      expect(limits[0]?.failure?.usageLimit).toBeUndefined()
+      t.translator.dispose()
+    } finally {
+      clock.mockRestore()
+    }
   })
 
   it('leaves a throttle once the limit allows requests again', () => {
