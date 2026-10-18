@@ -4,6 +4,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils'
 import type { HostHeaderRow } from '../../../../../../shared/sidebar-list/host-section-rows'
 import { HostSectionHeaderMenu } from '../../HostSectionHeaderMenu'
+import { stopRepoHeaderMenuEvent } from './header-event-guards'
 import { getHostHeaderDetail } from './host-header-detail'
 
 function formatSectionActivityLabel(count: number, label: string): string {
@@ -121,7 +122,16 @@ export function HostSectionHeader({
             className={cn('size-3.5 transition-transform', row.collapsed && '-rotate-90')}
           />
         </div>
-        <span data-host-header-action="">
+        {/* Why: menu and dialog portals still bubble React events here; keep them from toggling or dragging the row. */}
+        <span
+          data-host-header-action=""
+          onPointerDown={stopRepoHeaderMenuEvent}
+          onMouseDown={stopRepoHeaderMenuEvent}
+          onPointerUp={stopRepoHeaderMenuEvent}
+          onMouseUp={stopRepoHeaderMenuEvent}
+          onClick={stopRepoHeaderMenuEvent}
+          onKeyDown={stopRepoHeaderMenuEvent}
+        >
           <HostSectionHeaderMenu row={row} />
         </span>
       </div>
