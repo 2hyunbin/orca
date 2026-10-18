@@ -134,5 +134,7 @@ test('a CLI split whose tab closes before it mounts answers promptly', async ({
     contentType: 'application/json'
   })
   expect(outcome.ok).toBe(false)
+  // Failed because of the close, not some earlier CLI failure.
+  expect(outcome.ok ? '' : outcome.error).toContain('split_pane_closed')
   expect(elapsedMs).toBeLessThan(6_000)
 })
