@@ -5,6 +5,8 @@ import { DEFAULT_HIDE_SLEEPING_WORKSPACES } from '../../../shared/constants'
 import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { detectAgentStatusFromTitle } from '../../../shared/agent-detection'
 import type { SidebarTemporalSnapshot } from '../../../shared/sidebar-list/sidebar-temporal-snapshot'
+import type { Worktree } from '../../../shared/worktree/types'
+import type { Repo } from '../../../shared/repo-types'
 import { getMigrationUnsupportedPtySnapshot } from '../../agent-hooks/migration-unsupported-pty-state'
 import {
   SidebarTemporalOwner,
@@ -39,28 +41,22 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     // Every catalog change, from IPC or the runtime, reaches clients through this one bus.
     this.clientEvents.on(
       (event) => {
-        if (event.type === 'worktreesChanged') {
-          this.noteSidebarRowsChange()
-        } else if (event.type === 'reposChanged') {
-          this.sidebarTemporal.noteRepoChange()
+        if (event.type === 'worktreesChanged' || event.type === 'reposChanged') {
+          this.noteSidebarCatalogChange(event.type)
         }
       },
       { consumesTerminalSideEffects: false }
     )
   }
 
-  // Whether rows came or went decides if the change settles at once, so count after it lands.
-  // The count can come from a listing cached just before the change; the change then settles late.
-  private noteSidebarRowsChange(): void {
+  // Listed after the change lands, as the window re-lists; only rows, the sort's sources wait.
+  private noteSidebarCatalogChange(type: 'worktreesChanged' | 'reposChanged'): void {
     if (!this.sidebarTemporal.running) {
       return
     }
-    void this.listResolvedWorktreeSnapshot().then(
-      ({ worktrees }) =>
-        this.sidebarTemporal.noteRowsChange(
-          worktrees.filter((worktree) => !worktree.isArchived).length
-        ),
-      (error: unknown) => console.warn('[sidebar-temporal] could not count rows', error)
+    void this.listSidebarRows().then(
+      (worktrees) => this.sidebarTemporal.noteCatalogListing(worktrees, type === 'reposChanged'),
+      (error: unknown) => console.warn('[sidebar-temporal] could not list rows', error)
     )
   }
 
@@ -129,17 +125,25 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     return causes
   }
 
-  private async readSidebarSortSample(): Promise<SidebarSortSample> {
+  // Ranks are host-qualified; a row without a stamped host belongs to its repo's host.
+  private async listSidebarRows(repoById = this.readSidebarRepoMap()): Promise<Worktree[]> {
     const { worktrees } = await this.listResolvedWorktreeSnapshot()
-    const repoMap = new Map((this.store?.getRepos() ?? []).map((repo) => [repo.id, repo]))
+    return worktrees.map((worktree) => {
+      const repo = repoById.get(worktree.repoId)
+      return worktree.hostId || !repo
+        ? worktree
+        : { ...worktree, hostId: getRepoExecutionHostId(repo) }
+    })
+  }
+
+  private readSidebarRepoMap(): Map<string, Repo> {
+    return new Map((this.store?.getRepos() ?? []).map((repo) => [repo.id, repo]))
+  }
+
+  private async readSidebarSortSample(): Promise<SidebarSortSample> {
+    const repoMap = this.readSidebarRepoMap()
     return {
-      // Ranks are host-qualified; a row without a stamped host belongs to its repo's host.
-      worktrees: worktrees.map((worktree) => {
-        const repo = repoMap.get(worktree.repoId)
-        return worktree.hostId || !repo
-          ? worktree
-          : { ...worktree, hostId: getRepoExecutionHostId(repo) }
-      }),
+      worktrees: await this.listSidebarRows(repoMap),
       repoMap,
       sources: buildRuntimeSmartSortSources({
         tabs: this.tabs.values(),
