@@ -2,14 +2,13 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { clientInstances, ssh2Mock } from './__tests__/ssh-connection-test-client'
 import {
-  clientInstances,
   findSystemSshMock,
   getOrcaControlSocketPathMock,
   removeControlSocketPathMock,
   resetSshConnectionMocks,
-  spawnSystemSshCommandMock,
-  ssh2Mock
+  spawnSystemSshCommandMock
 } from './ssh-connection-test-harness'
 import {
   createCallbacks,
@@ -30,7 +29,9 @@ import {
   createOpenSshPublicKeyFixture
 } from './ssh-security-key-identity.test-fixture'
 
-vi.mock('ssh2', async () => (await import('./ssh-connection-test-harness')).createSsh2Module())
+vi.mock('ssh2', async () =>
+  (await import('./__tests__/ssh-connection-test-client')).createSsh2Module()
+)
 vi.mock('./system-transport/system-ssh-binary', async () =>
   (await import('./ssh-connection-test-harness')).createSystemSshBinaryModule()
 )

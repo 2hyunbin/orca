@@ -2,11 +2,14 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { connectAttempts, resetSshConnectionMocks, ssh2Mock } from './ssh-connection-test-harness'
+import { connectAttempts, ssh2Mock } from './__tests__/ssh-connection-test-client'
+import { resetSshConnectionMocks } from './ssh-connection-test-harness'
 import { createCallbacks, createTarget } from './ssh-connection-test-fixtures'
 import { SshConnection } from './ssh-connection'
 
-vi.mock('ssh2', async () => (await import('./ssh-connection-test-harness')).createSsh2Module())
+vi.mock('ssh2', async () =>
+  (await import('./__tests__/ssh-connection-test-client')).createSsh2Module()
+)
 vi.mock('./system-transport/system-ssh-binary', async () =>
   (await import('./ssh-connection-test-harness')).createSystemSshBinaryModule()
 )

@@ -1,15 +1,17 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import {
   advanceToNextSshClient,
-  clientInstances,
-  connectAttempts,
   connectWithFakeTimers,
-  emitSshEvent,
   nextSshClientCreation,
   resetSshConnectionMocks,
-  spawnSystemSshCommandMock,
-  ssh2Mock
+  spawnSystemSshCommandMock
 } from './ssh-connection-test-harness'
+import {
+  clientInstances,
+  connectAttempts,
+  emitSshEvent,
+  ssh2Mock
+} from './__tests__/ssh-connection-test-client'
 import {
   createCallbacks,
   createHangingSystemCommandChannel,
@@ -21,7 +23,9 @@ import { resolveWithSshG } from './config/ssh-g-config-resolution'
 import { CONNECT_TIMEOUT_MS, RECONNECT_BACKOFF_MS } from './ssh-connection-utils'
 import { MIN_SSH_RELAY_GRACE_PERIOD_SECONDS } from '../../shared/ssh-types'
 
-vi.mock('ssh2', async () => (await import('./ssh-connection-test-harness')).createSsh2Module())
+vi.mock('ssh2', async () =>
+  (await import('./__tests__/ssh-connection-test-client')).createSsh2Module()
+)
 vi.mock('./system-transport/system-ssh-binary', async () =>
   (await import('./ssh-connection-test-harness')).createSystemSshBinaryModule()
 )

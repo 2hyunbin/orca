@@ -3,13 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { utils } from 'ssh2'
-import {
-  clientInstances,
-  emitSshEvent,
-  nextSshClientCreation,
-  resetSshConnectionMocks,
-  ssh2Mock
-} from './ssh-connection-test-harness'
+import { clientInstances, emitSshEvent, ssh2Mock } from './__tests__/ssh-connection-test-client'
+import { nextSshClientCreation, resetSshConnectionMocks } from './ssh-connection-test-harness'
 import {
   createCallbacks,
   createTarget,
@@ -18,7 +13,9 @@ import {
 import { SshConnection } from './ssh-connection'
 import { resolveWithSshG } from './config/ssh-g-config-resolution'
 
-vi.mock('ssh2', async () => (await import('./ssh-connection-test-harness')).createSsh2Module())
+vi.mock('ssh2', async () =>
+  (await import('./__tests__/ssh-connection-test-client')).createSsh2Module()
+)
 vi.mock('./system-transport/system-ssh-binary', async () =>
   (await import('./ssh-connection-test-harness')).createSystemSshBinaryModule()
 )

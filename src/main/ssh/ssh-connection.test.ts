@@ -4,14 +4,16 @@ import {
   createSsh2Module,
   emitSshEvent,
   eventHandlers,
-  resetSshConnectionMocks,
   VALID_ED25519_HOST_KEY,
   ssh2Mock
-} from './ssh-connection-test-harness'
+} from './__tests__/ssh-connection-test-client'
+import { resetSshConnectionMocks } from './ssh-connection-test-harness'
 import { createCallbacks, createTarget } from './ssh-connection-test-fixtures'
 import { SshConnection } from './ssh-connection'
 
-vi.mock('ssh2', async () => (await import('./ssh-connection-test-harness')).createSsh2Module())
+vi.mock('ssh2', async () =>
+  (await import('./__tests__/ssh-connection-test-client')).createSsh2Module()
+)
 vi.mock('./system-transport/system-ssh-binary', async () =>
   (await import('./ssh-connection-test-harness')).createSystemSshBinaryModule()
 )

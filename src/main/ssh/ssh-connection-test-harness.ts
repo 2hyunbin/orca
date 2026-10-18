@@ -11,19 +11,6 @@ import type * as SystemSshFileBinaryTransfer from './system-transport/system-ssh
 import type * as SystemSshFileTransfer from './system-transport/system-ssh-file-transfer'
 import type * as SshGConfigResolution from './config/ssh-g-config-resolution'
 import { resetSsh2ClientState, ssh2Mock } from './__tests__/ssh-connection-test-client'
-export {
-  clientInstances,
-  connectAttempts,
-  createSsh2Module,
-  emitSshEvent,
-  eventHandlers,
-  pendingExecCallback,
-  pendingSftpCallback,
-  resetSsh2ClientState,
-  ssh2Mock,
-  VALID_ED25519_HOST_KEY
-} from './__tests__/ssh-connection-test-client'
-export type { MockSshClient, Ssh2ModuleMock } from './__tests__/ssh-connection-test-client'
 
 export type SystemSshBinaryModuleMock = { findSystemSsh: typeof findSystemSshMock }
 
