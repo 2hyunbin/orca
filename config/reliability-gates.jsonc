@@ -4301,16 +4301,16 @@
       "invariant": "One relay host may have at most one assignment attempt or retry timer per recovery path. Sustained director failure must increase the retry window up to five minutes, a bounded Retry-After must be respected during initial setup and drain recovery, shutdown must cancel pending work, and recovery must activate the authoritative assigned origin.",
       "oracle": "Inject duplicate drain events, deterministic randomness, fake time, repeated assignment failures, a 30-second Retry-After during initial setup and drain recovery, broker close, and eventual director recovery. Count every assignment call, require 500 ms then 1,000 ms retry windows, reject duplicate fanout, require no pre-hint retry or post-close work, and prove the recovered cell becomes authoritative.",
       "commands": [
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/relay/relay-session-broker.test.ts src/main/runtime/relay/relay-http-client.test.ts src/main/runtime/relay/relay-auth-coordinator-recovery.test.ts --reporter=dot"
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/mobile-cloud-relay/relay-session-broker.test.ts src/main/runtime/mobile-cloud-relay/relay-http-client.test.ts src/main/runtime/mobile-cloud-relay/relay-auth-coordinator-recovery.test.ts --reporter=dot"
       ],
       "testFiles": [
-        "src/main/runtime/relay/relay-session-broker.test.ts",
-        "src/main/runtime/relay/relay-http-client.test.ts",
-        "src/main/runtime/relay/relay-auth-coordinator-recovery.test.ts"
+        "src/main/runtime/mobile-cloud-relay/relay-session-broker.test.ts",
+        "src/main/runtime/mobile-cloud-relay/relay-http-client.test.ts",
+        "src/main/runtime/mobile-cloud-relay/relay-auth-coordinator-recovery.test.ts"
       ],
       "assertionRefs": [
         {
-          "file": "src/main/runtime/relay/relay-session-broker.test.ts",
+          "file": "src/main/runtime/mobile-cloud-relay/relay-session-broker.test.ts",
           "assertions": [
             "duplicate drain notifications share one exponentially backed-off retry schedule",
             "Retry-After suppresses early assignment requests",
@@ -4319,11 +4319,11 @@
           ]
         },
         {
-          "file": "src/main/runtime/relay/relay-http-client.test.ts",
+          "file": "src/main/runtime/mobile-cloud-relay/relay-http-client.test.ts",
           "assertions": ["assignment overload preserves a bounded Retry-After hint"]
         },
         {
-          "file": "src/main/runtime/relay/relay-auth-coordinator-recovery.test.ts",
+          "file": "src/main/runtime/mobile-cloud-relay/relay-auth-coordinator-recovery.test.ts",
           "assertions": ["initial relay setup does not retry before Retry-After expires"]
         }
       ],
@@ -4332,7 +4332,7 @@
           "date": "2026-07-26",
           "runner": "local",
           "platform": "macos",
-          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/relay/relay-session-broker.test.ts src/main/runtime/relay/relay-http-client.test.ts src/main/runtime/relay/relay-auth-coordinator-recovery.test.ts --reporter=dot",
+          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/mobile-cloud-relay/relay-session-broker.test.ts src/main/runtime/mobile-cloud-relay/relay-http-client.test.ts src/main/runtime/mobile-cloud-relay/relay-auth-coordinator-recovery.test.ts --reporter=dot",
           "result": "passed",
           "durationSeconds": 0.49,
           "summary": "Three focused relay files passed with 25 assertions."
