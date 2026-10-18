@@ -429,6 +429,135 @@ describe('hidden-output restore quiet abandonment (STA-4869)', () => {
         drive.disposable.dispose()
       }
     })
+
+    it.each(['reject', 'unavailable'] as const)(
+      'keeps recovery pending after the first snapshot is %s',
+      async (failure) => {
+        const drive = await connectVisiblePane()
+        vi.useFakeTimers()
+        const getMainBufferSnapshot = vi.mocked(window.api.pty.getMainBufferSnapshot)
+        const first = createDeferred<MainSnapshot | null>()
+        getMainBufferSnapshot.mockReturnValueOnce(first.promise)
+        getMainBufferSnapshot.mockResolvedValue(modelSnapshot('RECOVERED_AFTER_REFUSAL', 512))
+        try {
+          await announceMainDrop(64, 1)
+          await announceMainDrop(64, 1, 'unhide')
+          if (failure === 'reject') {
+            first.reject(new Error('snapshot unavailable'))
+          } else {
+            first.resolve(null)
+          }
+          await flushAsyncTicks(30)
+          expect(getMainBufferSnapshot).toHaveBeenCalledTimes(1)
+          expect(window.api.pty.ackHiddenOutputRestoreApplied).not.toHaveBeenCalled()
+
+          await vi.advanceTimersByTimeAsync(75)
+          await flushAsyncTicks(30)
+          expect(getMainBufferSnapshot).toHaveBeenCalledTimes(2)
+          expect(drive.writtenChunks().join('')).toContain('RECOVERED_AFTER_REFUSAL')
+          expect(window.api.pty.ackHiddenOutputRestoreApplied).toHaveBeenCalledWith(PTY_ID, 1)
+          expect(drive.writtenChunks().join('')).not.toContain(BANNER_FRAGMENT)
+        } finally {
+          drive.disposable.dispose()
+        }
+      }
+    )
+
+    it('ignores a timed-out task without consuming the next restore request', async () => {
+      const drive = await connectVisiblePane()
+      vi.useFakeTimers()
+      const getMainBufferSnapshot = vi.mocked(window.api.pty.getMainBufferSnapshot)
+      const first = createDeferred<MainSnapshot>()
+      const second = createDeferred<MainSnapshot>()
+      getMainBufferSnapshot.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+      try {
+        await announceMainDrop(64, 1)
+        await announceMainDrop(64, 1, 'unhide')
+        const waitingLive = 'LIVE_HELD_FOR_TIMEOUT\r\n'
+        drive.deliver(waitingLive, 64 + waitingLive.length)
+        await vi.advanceTimersByTimeAsync(800)
+        await flushAsyncTicks(30)
+        expect(drive.writtenChunks().join('')).toContain(waitingLive)
+
+        await announceMainDrop(256, 2)
+        await vi.advanceTimersByTimeAsync(2_100)
+        await flushAsyncTicks(30)
+        expect(getMainBufferSnapshot).toHaveBeenCalledTimes(2)
+        first.resolve(modelSnapshot('STALE_TIMED_OUT_CAPTURE', 128))
+        await flushAsyncTicks(30)
+        second.resolve(modelSnapshot('RECOVERED_AFTER_TIMEOUT', 512))
+        await flushAsyncTicks(30)
+        await vi.advanceTimersByTimeAsync(2_100)
+        await flushAsyncTicks(30)
+        expect(getMainBufferSnapshot).toHaveBeenCalledTimes(2)
+        expect(drive.writtenChunks().join('')).not.toContain('STALE_TIMED_OUT_CAPTURE')
+        expect(drive.writtenChunks().join('')).toContain('RECOVERED_AFTER_TIMEOUT')
+        expect(window.api.pty.ackHiddenOutputRestoreApplied).toHaveBeenCalledWith(PTY_ID, 2)
+      } finally {
+        drive.disposable.dispose()
+      }
+    })
+
+    it('does not let the retired PTY task consume an uncovered unhide for its successor', async () => {
+      const drive = await connectVisiblePane()
+      vi.useFakeTimers()
+      const getMainBufferSnapshot = vi.mocked(window.api.pty.getMainBufferSnapshot)
+      const oldPtySnapshot = createDeferred<MainSnapshot>()
+      const newPtySnapshot = createDeferred<MainSnapshot>()
+      getMainBufferSnapshot
+        .mockReturnValueOnce(oldPtySnapshot.promise)
+        .mockReturnValueOnce(newPtySnapshot.promise)
+        .mockResolvedValue(modelSnapshot('SUCCESSOR_NEW_GAP_RECOVERED', 1024))
+      try {
+        await announceMainDrop(64, 1)
+        await announceMainDrop(64, 1, 'unhide')
+        drive.transport.getPtyId.mockReturnValue('successor-pty')
+        drive.setVisible(false)
+        drive.deliver('NEW_PTY_OUTPUT\r\n', 32)
+        drive.setVisible(true)
+        await announceMainDrop(32, 2, 'hidden-drop', 'successor-pty')
+        await announceMainDrop(512, 2, 'unhide', 'successor-pty')
+
+        oldPtySnapshot.resolve(modelSnapshot('RETIRED_PTY_CAPTURE', 2048))
+        await flushAsyncTicks(30)
+        await vi.advanceTimersByTimeAsync(2_100)
+        await flushAsyncTicks(30)
+        expect(getMainBufferSnapshot).toHaveBeenCalledTimes(2)
+        newPtySnapshot.resolve(modelSnapshot('SUCCESSOR_OLD_CAPTURE', 128))
+        await flushAsyncTicks(30)
+        await vi.advanceTimersByTimeAsync(2_100)
+        await flushAsyncTicks(30)
+        expect(getMainBufferSnapshot).toHaveBeenCalledTimes(3)
+        expect(drive.writtenChunks().join('')).not.toContain('RETIRED_PTY_CAPTURE')
+        expect(drive.writtenChunks().join('')).toContain('SUCCESSOR_NEW_GAP_RECOVERED')
+        expect(window.api.pty.ackHiddenOutputRestoreApplied).not.toHaveBeenCalledWith(PTY_ID, 1)
+        expect(window.api.pty.ackHiddenOutputRestoreApplied).toHaveBeenCalledWith(
+          'successor-pty',
+          2
+        )
+      } finally {
+        drive.disposable.dispose()
+      }
+    })
+
+    it('cannot replay or acknowledge an unhide after its pane is disposed', async () => {
+      const drive = await connectVisiblePane()
+      vi.useFakeTimers()
+      const getMainBufferSnapshot = vi.mocked(window.api.pty.getMainBufferSnapshot)
+      const first = createDeferred<MainSnapshot>()
+      getMainBufferSnapshot.mockReturnValueOnce(first.promise)
+      await announceMainDrop(64, 1)
+      await announceMainDrop(64, 1, 'unhide')
+      drive.disposable.dispose()
+      const writesBeforeDisposal = drive.writtenChunks().slice()
+      first.resolve(modelSnapshot('DISPOSED_PANE_CAPTURE', 128))
+      await flushAsyncTicks(30)
+      await vi.advanceTimersByTimeAsync(2_100)
+      await flushAsyncTicks(30)
+      expect(getMainBufferSnapshot).toHaveBeenCalledTimes(1)
+      expect(drive.writtenChunks()).toEqual(writesBeforeDisposal)
+      expect(window.api.pty.ackHiddenOutputRestoreApplied).not.toHaveBeenCalled()
+    })
   })
 
   // ── R3: foreground pending-queue overflow ───────────────────────────────
