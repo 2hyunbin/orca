@@ -355,3 +355,11 @@ describe('planDuplicatePtyPaneRepair', () => {
     expect(plan?.transfers).toEqual([])
   })
 })
+
+describe('planDuplicatePtyPaneRepair on a paused WSL move', () => {
+  it('leaves a frozen workspace’s tree and owners alone, since the write keeps its stored tree', () => {
+    expect(
+      planDuplicatePtyPaneRepair(duplicateSession(), (id) => id === FIXTURE_GIT_WORKTREE_ID)
+    ).toBeNull()
+  })
+})

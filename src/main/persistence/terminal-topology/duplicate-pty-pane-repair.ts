@@ -1,4 +1,4 @@
-import type { ExecutionHostId } from '../../../shared/execution-host'
+import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../shared/execution-host'
 import { isTerminalLeafId, makePaneKey } from '../../../shared/stable-pane-id'
 import {
   normalizeTerminalLayoutPtyOwnership,
@@ -7,6 +7,7 @@ import {
 import type { TerminalLayoutSnapshot } from '../../../shared/terminal-tab-types'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import type { DurableProfileStateMutation } from '../loading-store/store-runtime-state'
+import { isWslMoveWorkspaceSessionFrozen } from '../moving-wsl-projects/wsl-move-scope-guard'
 import { findWorktreeIdForTab } from '../restoring-sessions/pane-identity-migration'
 import { writeRestorable } from './restorable-write'
 import {
@@ -35,18 +36,21 @@ function boundByOtherTab(session: WorkspaceSessionState, tabId: string, ptyId: s
 
 /** The partition with one pane per terminal, and the owner transfers that implies; null when none. */
 export function planDuplicatePtyPaneRepair(
-  session: WorkspaceSessionState
+  session: WorkspaceSessionState,
+  /** A workspace whose stored session must stay as it is (a paused WSL move). */
+  isFrozen: (worktreeId: string) => boolean = () => false
 ): { session: WorkspaceSessionState; transfers: DuplicatePtyPaneTransfer[] } | null {
   let layouts: Record<string, TerminalLayoutSnapshot> | null = null
   const transfers: DuplicatePtyPaneTransfer[] = []
   for (const [tabId, layout] of Object.entries(session.terminalLayoutsByTabId ?? {})) {
     const repaired = normalizeTerminalLayoutPtyOwnership(layout)
-    if (!repaired.changed) {
+    const worktreeId = findWorktreeIdForTab(session, tabId)
+    // The write keeps a frozen workspace's stored tree, so its owners must not move either.
+    if (!repaired.changed || (worktreeId && isFrozen(worktreeId))) {
       continue
     }
     layouts ??= { ...session.terminalLayoutsByTabId }
     layouts[tabId] = repaired.snapshot
-    const worktreeId = findWorktreeIdForTab(session, tabId)
     for (const transfer of resolveTerminalLayoutPtyOwnershipTransfers(layout, repaired.snapshot)) {
       // The window's transfer guards: only pane keys that parse, and no terminal another tab binds.
       if (
@@ -105,7 +109,11 @@ export function repairDuplicatePtyPanesMutation(
       // A paired server's partition is a display copy of that server's own layout.
       .filter((hostId) => !hostId.startsWith('runtime:'))
       .flatMap((hostId: ExecutionHostId) => {
-        const plan = planDuplicatePtyPaneRepair(context.getSession(hostId))
+        const plan = planDuplicatePtyPaneRepair(
+          context.getSession(hostId),
+          (worktreeId) =>
+            hostId === LOCAL_EXECUTION_HOST_ID && isWslMoveWorkspaceSessionFrozen(worktreeId)
+        )
         return plan ? [{ hostId, ...plan }] : []
       })
     if (plans.length === 0) {
