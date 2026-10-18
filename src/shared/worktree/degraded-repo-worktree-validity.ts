@@ -1,8 +1,8 @@
-import type { Repo } from '../../../../shared/repo-types'
-import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
-import type { DetectedWorktreeListResult, Worktree } from '../../../../shared/worktree/types'
-import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
-import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
+import type { Repo } from '../repo-types'
+import type { WorkspaceSessionState } from '../workspace-session-state-types'
+import type { DetectedWorktreeListResult, Worktree } from './types'
+import { parseWorkspaceKey } from '../workspace-scope'
+import { getRepoIdFromWorktreeId } from './id'
 
 type WorktreeValidityCatalog = {
   repos: readonly Pick<Repo, 'id'>[]
