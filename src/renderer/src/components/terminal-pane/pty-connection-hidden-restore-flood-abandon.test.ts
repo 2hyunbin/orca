@@ -584,6 +584,39 @@ describe('hidden-output restore quiet abandonment (STA-4869)', () => {
       }
     })
 
+    it('recovers an unhide-only successor while a retired PTY snapshot is pending', async () => {
+      const drive = await connectVisiblePane()
+      vi.useFakeTimers()
+      const getMainBufferSnapshot = vi.mocked(window.api.pty.getMainBufferSnapshot)
+      const oldPtySnapshot = createDeferred<MainSnapshot>()
+      getMainBufferSnapshot
+        .mockReturnValueOnce(oldPtySnapshot.promise)
+        .mockResolvedValue(modelSnapshot('SUCCESSOR_UNHIDE_RECOVERED', 1024))
+      try {
+        await announceMainDrop(64, 1)
+        drive.transport.getPtyId.mockReturnValue('successor-pty')
+        drive.setVisible(false)
+        drive.deliver('NEW_PTY_OUTPUT\r\n', 32)
+        drive.setVisible(true)
+        await announceMainDrop(512, 2, 'unhide', 'successor-pty')
+
+        oldPtySnapshot.resolve(modelSnapshot('RETIRED_PTY_CAPTURE', 2048))
+        await flushAsyncTicks(30)
+        await vi.advanceTimersByTimeAsync(2_100)
+        await flushAsyncTicks(30)
+        expect(getMainBufferSnapshot).toHaveBeenCalledTimes(2)
+        expect(drive.writtenChunks().join('')).not.toContain('RETIRED_PTY_CAPTURE')
+        expect(drive.writtenChunks().join('')).toContain('SUCCESSOR_UNHIDE_RECOVERED')
+        expect(window.api.pty.ackHiddenOutputRestoreApplied).not.toHaveBeenCalledWith(PTY_ID, 1)
+        expect(window.api.pty.ackHiddenOutputRestoreApplied).toHaveBeenCalledWith(
+          'successor-pty',
+          2
+        )
+      } finally {
+        drive.disposable.dispose()
+      }
+    })
+
     it('cannot replay or acknowledge an unhide after its pane is disposed', async () => {
       const drive = await connectVisiblePane()
       vi.useFakeTimers()
