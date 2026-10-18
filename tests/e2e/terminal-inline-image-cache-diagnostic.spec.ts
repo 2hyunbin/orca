@@ -118,6 +118,10 @@ for (const settingsPath of ['ui', 'direct'] as const) {
         // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the diagnostic verifies the loaded addon's storage map and deletion method before observing it.
         const internals = terminal as unknown as {
           _addonManager: { _addons: { instance: Addon }[] }
+          _core: { write(data: string | Uint8Array, callback?: () => void): void }
+        }
+        if (typeof internals._core?.write !== 'function') {
+          throw new Error('Core terminal write unavailable for trace')
         }
         const addon = internals._addonManager._addons
           .map((entry) => entry.instance)
@@ -168,6 +172,33 @@ for (const settingsPath of ['ui', 'direct'] as const) {
             state: state()
           })
         }
+        const describeWrite = (data: string | Uint8Array) => {
+          const text = typeof data === 'string' ? data : new TextDecoder().decode(data)
+          return {
+            type: typeof data === 'string' ? 'string' : 'bytes',
+            length: data.length,
+            prefix: text.slice(0, 512),
+            suffix: text.slice(-128),
+            containsED2: text.includes('\x1b[2J'),
+            containsED3: text.includes('\x1b[3J'),
+            eraseSequences: text.match(/\[[0-9;?]*J/g)?.slice(0, 16) ?? []
+          }
+        }
+        const write = terminal.write
+        terminal.write = function (data, callback) {
+          record('terminal-write', describeWrite(data))
+          write.call(terminal, data, callback)
+        }
+        const writeln = terminal.writeln
+        terminal.writeln = function (data, callback) {
+          record('terminal-writeln', describeWrite(data))
+          writeln.call(terminal, data, callback)
+        }
+        const coreWrite = internals._core.write
+        internals._core.write = function (data, callback) {
+          record('core-write', describeWrite(data))
+          coreWrite.call(internals._core, data, callback)
+        }
         const deleteImage = storage._delImg
         storage._delImg = function (imageId) {
           record('storage-delete-before', { imageId })
@@ -185,7 +216,11 @@ for (const settingsPath of ['ui', 'direct'] as const) {
         const subscriptions = [
           terminal.onResize((event) => record('on-resize', event)),
           terminal.onScroll((position) => record('on-scroll', { position })),
-          terminal.onLineFeed(() => record('on-line-feed'))
+          terminal.onLineFeed(() => record('on-line-feed')),
+          terminal.parser.registerCsiHandler({ final: 'J' }, (params) => {
+            record('parser-csi-J', { params })
+            return false
+          })
         ]
         const added = addon?.onImageAdded?.(() => {
           record('on-image-added')
@@ -232,6 +267,9 @@ for (const settingsPath of ['ui', 'direct'] as const) {
             }
             storage._delImg = deleteImage
             terminal.resize = resize
+            terminal.write = write
+            terminal.writeln = writeln
+            internals._core.write = coreWrite
           }
         }
       },
