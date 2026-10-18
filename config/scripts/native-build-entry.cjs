@@ -2,7 +2,7 @@
 
 const { existsSync, realpathSync } = require('node:fs')
 const { release } = require('node:os')
-const { dirname, join, relative, isAbsolute } = require('node:path')
+const { join, relative, isAbsolute } = require('node:path')
 
 /**
  * Per-ABI native build entries inside a package dir that other worktrees share.
@@ -90,8 +90,13 @@ function isSharedNativePackage(moduleName, projectDir) {
   }
 }
 
+/** The project's own top-level link, the same path every Orca native script already reads. */
 function resolveNativePackageDir(moduleName, projectDir) {
-  return dirname(require.resolve(`${moduleName}/package.json`, { paths: [projectDir] }))
+  const packageDir = join(projectDir, 'node_modules', ...moduleName.split('/'))
+  if (!existsSync(join(packageDir, 'package.json'))) {
+    throw new Error(`${moduleName} is not installed in ${projectDir}`)
+  }
+  return packageDir
 }
 
 /** The files a node-pty source build must leave in whichever dir the loader reads. */

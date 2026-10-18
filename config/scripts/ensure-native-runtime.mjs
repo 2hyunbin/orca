@@ -18,7 +18,8 @@ import {
   isSharedNativePackage,
   isSourceBuildDir,
   nodePtyBuildArtifactPaths,
-  nodePtyNativeModuleName
+  nodePtyNativeModuleName,
+  resolveNativePackageDir
 } from './native-build-entry.cjs'
 import {
   checkNativeBuildDirLoads,
@@ -371,7 +372,7 @@ function rebuildNodeRuntimeModules(moduleNames) {
     let moduleDir = dirname(require.resolve(`${moduleName}/package.json`))
     if (isSharedNativePackage(moduleName, projectDir)) {
       // Why: other worktrees load this very dir, so build beside it instead of over it.
-      buildSharedNodeRuntimeModule(moduleName, moduleDir)
+      buildSharedNodeRuntimeModule(moduleName, resolveNativePackageDir(moduleName, projectDir))
       continue
     }
     if (moduleName === '@vscode/windows-process-tree') {
