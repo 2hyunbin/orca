@@ -89,15 +89,14 @@ export async function recoverStructuredRewind(
   // Only this rewind moves a chat to a new epoch once it has history (imports run at creation), so
   // a moved epoch is its own replacement, committed before the crash.
   const alreadyReplaced = journal.cursor().epoch !== rewind.expectedEpoch
-  const head = agentSessionProviderHandleChainHead(
-    store.getRecord(sessionId)?.providerHandleChain
-  )?.handle
+  const record = store.getRecord(sessionId)
+  const head = record && agentSessionProviderHandleChainHead(record.providerHandleChain)?.handle
   const cut =
-    alreadyReplaced || !head
+    alreadyReplaced || !record || !head
       ? null
       : structuredRewindCut(journal, {
           itemId: rewind.itemId,
-          provider: store.getRecord(sessionId)!.provider,
+          provider: record.provider,
           nativeId: head.nativeId
         })
   if (!alreadyReplaced && !cut) {
