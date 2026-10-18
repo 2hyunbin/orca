@@ -165,7 +165,7 @@ test.describe('default tabs across a crash before the first terminal start', () 
       runCommands: false
     })
 
-    expect.soft(restored.marked, 'the relaunch remembers the default tabs were applied').toBe(true)
+    expect(restored.marked, 'the relaunch remembers the default tabs were applied').toBe(true)
     for (const title of TITLES) {
       expect(countTitled(after.tabs, title), `tabs titled ${title}`).toBe(0)
     }
@@ -181,9 +181,9 @@ test.describe('default tabs across a crash before the first terminal start', () 
     for (const title of TITLES) {
       expect(countTitled(beforeCrash.tabs, title), `tabs titled ${title} before the crash`).toBe(1)
     }
-    expect.soft(restored.marked, 'the relaunch remembers the default tabs were applied').toBe(true)
+    expect(restored.marked, 'the relaunch remembers the default tabs were applied').toBe(true)
     for (const title of TITLES) {
-      expect(countTitled(after.tabs, title), `tabs titled ${title}`).toBeLessThanOrEqual(1)
+      expect(countTitled(after.tabs, title), `tabs titled ${title}`).toBe(1)
     }
   })
 })
