@@ -319,6 +319,21 @@ describe('layout.apply', () => {
     ).toEqual({ command: { type: 'closeTabs', workspace: WORKTREE, tabIds: ['e1'] } })
   })
 
+  it('accepts a simulator tab open under the window’s id, into its group or a new split', async () => {
+    const apply = eraseRpcMethods(LAYOUT_APPLY_METHODS).find(
+      (method) => method.name === 'layout.apply'
+    )
+    const parse = (command: Record<string, unknown>) => apply?.params?.safeParse({ command })
+    const open = { type: 'openSimulatorTab', workspace: WORKTREE, tabId: 'sim-1', groupId: 'g1' }
+
+    expect(parse({ ...open, afterTabId: 'tab-1', createdAt: 5 })?.success).toBe(true)
+    expect(parse({ ...open, split: { besideGroupId: 'g0', direction: 'right' } })?.success).toBe(
+      true
+    )
+    expect(parse({ ...open, tabId: undefined })?.success).toBe(false)
+    expect(parse({ ...open, index: -1 })?.success).toBe(false)
+  })
+
   it('accepts an editor tab move to the workspace the window resolved, naming its new ids', async () => {
     const apply = eraseRpcMethods(LAYOUT_APPLY_METHODS).find(
       (method) => method.name === 'layout.apply'

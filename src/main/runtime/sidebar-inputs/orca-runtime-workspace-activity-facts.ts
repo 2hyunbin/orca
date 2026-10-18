@@ -4,7 +4,8 @@ import type {
   WorkspaceActivityFactsSnapshot,
   WorkspaceTerminalLiveness
 } from '../../../shared/sidebar-list/workspace-activity-facts'
-import { worktreeIdComparisonKey } from '../../../shared/worktree/id'
+import { worktreeIdentityKey } from '../../../shared/worktree/id'
+import { SidebarClock } from './sidebar-clock'
 import {
   WorkspaceActivityFactsProducer,
   type WorkspaceSurfaceActivity
@@ -19,9 +20,11 @@ type Runtime = OrcaRuntimeWithMigrationCatalog
  * publication follows: exits, verdicts and the inventory sweep.
  */
 export abstract class OrcaRuntimeWithWorkspaceActivityFacts extends OrcaRuntimeWithMigrationCatalog {
+  readonly sidebarClock = new SidebarClock()
   readonly workspaceActivityFacts = new WorkspaceActivityFactsProducer({
     readSurfaces: (worktreeId) => this.readWorkspaceSurfaceActivity(worktreeId),
-    resolveTabWorktreeId: (tabId) => this.tabs.get(tabId)?.worktreeId
+    resolveTabWorktreeId: (tabId) => this.tabs.get(tabId)?.worktreeId,
+    clock: this.sidebarClock
   })
 
   getWorkspaceActivityFacts(): WorkspaceActivityFactsSnapshot {
@@ -123,9 +126,8 @@ export abstract class OrcaRuntimeWithWorkspaceActivityFacts extends OrcaRuntimeW
   // getLivePtyIdsForWorktree's identity rule in one pass. A host that only lost contact keeps its
   // terminals unverifiable, never gone, even while the record still reads connected.
   private readWorkspaceTerminalLiveness(worktreeId: string): WorkspaceTerminalLiveness | null {
-    const key = worktreeIdComparisonKey(worktreeId)
-    const owns = (id: string): boolean =>
-      id === worktreeId || (key !== null && worktreeIdComparisonKey(id) === key)
+    const key = worktreeIdentityKey(worktreeId)
+    const owns = (id: string): boolean => id === worktreeId || worktreeIdentityKey(id) === key
     let unverifiable = false
     for (const surfaces of [this.leaves.values(), this.ptysById.values()]) {
       for (const surface of surfaces) {

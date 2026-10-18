@@ -26,6 +26,8 @@ on:
       - 'config/scripts/orcad-prebuild-*.mjs'
       - 'config/scripts/verify-packaged-orcad-template.cjs'
       - 'config/patches/node-pty*'
+      # The deploy runs over this SSH transport.
+      - 'src/main/ssh/ssh-connection*'
       - '!src/**/*.test.ts'
       - 'src/main/ssh/ssh-hostile-hosts.docker.test.ts'
       - '.github/workflows/ssh-hostile-hosts.yml'

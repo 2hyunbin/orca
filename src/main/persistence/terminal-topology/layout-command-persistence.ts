@@ -8,10 +8,14 @@ import {
 } from '../loading-store/session-host-partitions'
 import type { StoreRuntimeState } from '../loading-store/store-runtime-state'
 import { applyLayout, topologyCommitContext } from './terminal-topology-commit'
+import {
+  repairDuplicatePtyPanesMutation,
+  type DuplicatePtyPaneTransfer
+} from './duplicate-pty-pane-repair'
 
 type LayoutCommandRuntime = Pick<
   StoreRuntimeState,
-  'runDurableMutation' | 'state' | 'dirtyProfileStateDomains'
+  'runDurableMutation' | 'state' | 'dirtyProfileStateDomains' | 'writesFrozen'
 >
 
 const layoutCommandPersistenceContext = Symbol('LayoutCommandPersistence')
@@ -37,6 +41,21 @@ export class LayoutCommandPersistence {
     const resolved = hostIds.length > 0 ? hostIds.map(resolveHostId) : [resolveHostId()]
     return context.runtime.runDurableMutation(
       applyLayout(resolved, command, topologyCommitContext(context))
+    )
+  }
+
+  /**
+   * Layout-owner builds, once a runtime starts: one pane per terminal on disk, written only after
+   * `transfer` moved each dropped pane's owners. Resolves the number of partitions repaired.
+   */
+  repairDuplicatePtyPanes(transfer: (move: DuplicatePtyPaneTransfer) => boolean): Promise<number> {
+    const context = this[layoutCommandPersistenceContext]
+    // An imported or frozen profile neither writes nor moves owners.
+    if (context.runtime.writesFrozen) {
+      return Promise.resolve(0)
+    }
+    return context.runtime.runDurableMutation(
+      repairDuplicatePtyPanesMutation(topologyCommitContext(context), transfer)
     )
   }
 }

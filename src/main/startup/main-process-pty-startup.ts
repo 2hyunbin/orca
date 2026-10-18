@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import { isLocalExecutionHost } from '../../shared/execution-host'
 import { classifyError } from '../telemetry/classify-error'
 import { track } from '../telemetry/client'
 import { getPtyIdForPaneKey } from '../ipc/pty/pane/key-state'
@@ -24,7 +25,6 @@ import { agentHookServer } from '../agent-hooks/server'
 import { createLocalTmuxManagedPtyResolver } from '../agent-hooks/local-tmux-managed-pty'
 import {
   indexPersistedPaneKeyPtyIds,
-  isLocalExecutionHost,
   resolveAgentWorkspaceExecutionHostId,
   retireRestoredStatusesWithDeadTerminals
 } from '../agent-hooks/restored-status-dead-terminal-sweep'

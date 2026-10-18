@@ -45,6 +45,9 @@ export type LegacyRelayTargetBridgeDeps = {
   onTerminalExited: () => void
 }
 
+// Unique across bridges, so a viewer acquired on a replaced bridge releases nothing on its successor.
+let lastAcquisitionId = 0
+
 type EndpointState = {
   endpoint: LegacyRelayEndpoint
   client: LegacyRelayClient | null
@@ -57,7 +60,7 @@ export class LegacyRelayTargetBridge {
   readonly livePaneForKey = (paneKey: string) => findLivePane(this.panes, paneKey)
   /** The process identity the relay listed for a pane, which fences a stop against a recycled id. */
   readonly listedIncarnation = (ptyId: string) => this.panes.get(ptyId)?.listed?.incarnationId
-  private readonly attached = new Map<string, number>()
+  private readonly attached = new Map<string, Set<number>>()
   private readonly waiters = new LegacyRelayWaiters()
   private readonly retry = new LegacyRelayRetry(() => void this.refresh())
   private refreshing: Promise<void> | null = null
@@ -112,13 +115,14 @@ export class LegacyRelayTargetBridge {
       return { status: 'unverifiable' }
     }
     // Why before the request: output that races the reply must reach the pane, not be dropped.
-    this.attached.set(ptyId, (this.attached.get(ptyId) ?? 0) + 1)
+    const acquisitionId = ++lastAcquisitionId
+    this.attached.set(ptyId, (this.attached.get(ptyId) ?? new Set()).add(acquisitionId))
     try {
       const { replay } = await client.attach(pane.relayPtyId, atSnapshot)
       this.attachFailing = false
-      return { status: 'attached', replay }
+      return { status: 'attached', replay, acquisitionId }
     } catch (error) {
-      this.detach(ptyId)
+      this.detach(ptyId, acquisitionId)
       if (PROVEN_EXITED.test(error instanceof Error ? error.message : String(error))) {
         this.retire(ptyId, pane, null)
         return { status: 'exited' }
@@ -132,11 +136,9 @@ export class LegacyRelayTargetBridge {
     }
   }
 
-  detach(ptyId: string): void {
-    const count = (this.attached.get(ptyId) ?? 0) - 1
-    if (count > 0) {
-      this.attached.set(ptyId, count)
-    } else {
+  detach(ptyId: string, acquisitionId: number): void {
+    const viewers = this.attached.get(ptyId)
+    if (viewers?.delete(acquisitionId) && viewers.size === 0) {
       this.attached.delete(ptyId)
     }
   }

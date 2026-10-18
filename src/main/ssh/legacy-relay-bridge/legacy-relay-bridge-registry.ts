@@ -21,6 +21,7 @@ import { listLegacyRelayEndpoints, type LegacyRelayEndpoint } from './legacy-rel
 import { LegacyRelayTargetBridge } from './legacy-relay-target-bridge'
 import { LegacyRelayHiddenOutput } from './legacy-relay-hidden-output'
 import { LegacyRelayPaneStops } from './legacy-relay-pane-stops'
+import { reportDailyRelayActivity, watchDailyRelayActivity } from './legacy-relay-daily-activity'
 import {
   bridgeableLeasesByRelayId,
   isBridgeableLease,
@@ -33,6 +34,7 @@ const START_BUDGET_MS = 20_000
 const CONNECTION_WAIT_MS = 20_000
 
 type TerminalsBucket = EventProps<'ssh_host_server_legacy_relay_bridge'>['terminals']
+type ReportPhase = EventProps<'ssh_host_server_legacy_relay_bridge'>['phase']
 
 export type LegacyRelayBridgeHost = {
   leases: (targetId: string) => SshRemotePtyLease[]
@@ -42,7 +44,7 @@ export type LegacyRelayBridgeHost = {
   onData: (ptyId: string, data: string) => void
   onReplay: (ptyId: string, replay: string) => void
   onExit: (ptyId: string, code: number) => void
-  report: (targetId: string, phase: 'connected' | 'terminal_exited', terminals: number) => void
+  report: (targetId: string, phase: ReportPhase, terminals: number) => void
   /** Absent: relay-era `orca` commands are refused, as before this host served them. */
   remoteCli?: {
     runtime: () => OrcaRuntimeService | null
@@ -69,6 +71,9 @@ export function installLegacyRelayBridge(next: LegacyRelayBridgeHost | null): vo
   heldPanes.clear()
   paneStops.forEach((stops) => stops.dispose())
   paneStops.clear()
+  watchDailyRelayActivity(next, () =>
+    [...bridges].map(([id, bridge]) => [id, bridge.livePaneCount()] as const)
+  )
   host = next
   hiddenOutput = next
     ? new LegacyRelayHiddenOutput({
@@ -145,6 +150,7 @@ function bridgeFor(targetId: string): LegacyRelayTargetBridge | null {
       if (bridges.get(targetId) === bridge) {
         heldPanes.delete(targetId)
         stopsFor(targetId).flush(bridge)
+        reportDailyRelayActivity(targetId, bridge.livePaneCount(), installed.report)
       }
       installed.onPanesChanged(legacyRelayBridgedPanes())
     },
@@ -279,9 +285,7 @@ export async function attachLegacyRelayPane(
       host?.onReplay(ptyId, replay)
     }
   })
-  return replayInStream && result.status === 'attached'
-    ? { status: 'attached', replay: '' }
-    : result
+  return replayInStream && result.status === 'attached' ? { ...result, replay: '' } : result
 }
 
 /** Re-reads a live pane's screen through the same attach a reconnect uses. */
@@ -290,9 +294,10 @@ async function rereadLegacyRelayScreen(
   atSnapshot: (replay: string) => void
 ): Promise<void> {
   const bridge = bridgeForPty(ptyId)
-  if ((await bridge?.attach(ptyId, atSnapshot))?.status === 'attached') {
+  const result = await bridge?.attach(ptyId, atSnapshot)
+  if (result?.status === 'attached') {
     // The attach counted a viewer; this re-read is not one.
-    bridge?.detach(ptyId)
+    bridge?.detach(ptyId, result.acquisitionId)
   }
 }
 
@@ -340,6 +345,6 @@ export async function closeLegacyRelayPane(ptyId: string): Promise<LegacyRelayBr
   return stopsFor(targetId).stop(ptyId, host.connection(targetId) ? bridgeFor(targetId) : null)
 }
 
-export function detachLegacyRelayPane(ptyId: string): void {
-  bridgeForPty(ptyId)?.detach(ptyId)
+export function detachLegacyRelayPane(ptyId: string, acquisitionId: number): void {
+  bridgeForPty(ptyId)?.detach(ptyId, acquisitionId)
 }

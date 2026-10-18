@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { ProducerRevision } from './producer-revision'
 import { toRuntimeExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
 import { describePairedServerHosts } from '../../../shared/paired-server-hosts'
 import type { MobileRelayServerWorktreeRow } from '../../../shared/mobile-relay-hosts-contract'
@@ -15,15 +15,16 @@ import {
   describeRelayHosts,
   relayHostFence
 } from '../mobile-desktop-relay/mobile-relay-host-descriptions'
+import type { ServerWorktreeRows } from '../mobile-desktop-relay/mobile-relay-host-catalog'
+import {
+  SERVER_FETCH_TIMEOUT_MS,
+  SERVER_WORKTREE_LIMIT,
+  WorktreePsReplySchema,
+  stampServerWorktreeRows
+} from '../mobile-desktop-relay/server-worktree-fetch'
 
-// Why the phone's own full-catalog limit: the server's default page is 200 and nothing pages on.
-const SERVER_WORKTREE_LIMIT = 10_000
-// Why well under the phone's 30s request timeout: a hung server must answer with its last rows.
-export const SERVER_FETCH_TIMEOUT_MS = 5_000
 // Owner-approved fallback for changes a server announces no event for (status-only, older servers).
 export const FALLBACK_REFRESH_MS = 30_000
-
-const WorktreePsReplySchema = z.object({ worktrees: z.array(z.looseObject({})) })
 
 type ServerEntry = {
   environmentId: string
@@ -46,10 +47,10 @@ type ServerEntry = {
  * contact, until a fetch answers again. Only removing or re-pairing a server drops them; a fetch
  * that answers replaces them, deletions included.
  */
-export class PairedServerRowsProducer {
+export class PairedServerRowsProducer implements ServerWorktreeRows {
   private readonly servers = new Map<string, ServerEntry>()
   private hosts: MobileDesktopRelayHosts | null = null
-  private revision = 0
+  readonly revision = new ProducerRevision()
 
   constructor(
     private readonly options: {
@@ -82,7 +83,7 @@ export class PairedServerRowsProducer {
       }
       this.servers.clear()
       this.hosts = null
-      this.revision += 1
+      this.revision.bump()
     }
   }
 
@@ -99,7 +100,7 @@ export class PairedServerRowsProducer {
       if (fences.get(environmentId) !== entry.fence) {
         entry.watch?.close()
         this.servers.delete(environmentId)
-        this.revision += 1
+        this.revision.bump()
       }
     }
     // Why the shown hosts: a managed server reached over its SSH host's relay is not in contact here.
@@ -117,7 +118,7 @@ export class PairedServerRowsProducer {
           refreshing: null,
           refreshAgain: false
         })
-        this.revision += 1
+        this.revision.bump()
       }
     }
     for (const entry of this.servers.values()) {
@@ -125,7 +126,7 @@ export class PairedServerRowsProducer {
       if (inContact !== entry.inContact) {
         entry.inContact = inContact
         entry.confirmed = false
-        this.revision += 1
+        this.revision.bump()
       }
       // Why current(): a replaced transport can end the stream without telling it.
       if (inContact && !entry.watch?.current()) {
@@ -173,7 +174,7 @@ export class PairedServerRowsProducer {
       ])
     )
     return {
-      revision: this.revision,
+      revision: this.revision.value,
       servers: [...this.servers.values()].map((entry) => {
         const hostId = toRuntimeExecutionHostId(entry.environmentId)
         return {
@@ -209,7 +210,7 @@ export class PairedServerRowsProducer {
   private unconfirm(entry: ServerEntry): void {
     if (entry.confirmed) {
       entry.confirmed = false
-      this.revision += 1
+      this.revision.bump()
     }
   }
 
@@ -245,18 +246,6 @@ export class PairedServerRowsProducer {
     entry.rows = stampServerWorktreeRows(entry.environmentId, reply.data.worktrees)
     entry.confirmed = entry.inContact
     // Every answer moves the revision: rows carry activity that changes without a catalog event.
-    this.revision += 1
+    this.revision.bump()
   }
-}
-
-/**
- * A server's rows name hosts relative to that server (`local`, its own `ssh:` targets). Like the
- * desktop sidebar, the phone shows every one of them under the server, so all become its host id.
- */
-function stampServerWorktreeRows<Row extends { hostId?: string }>(
-  environmentId: string,
-  rows: readonly Row[]
-): (Row & { hostId: `runtime:${string}` })[] {
-  const hostId = toRuntimeExecutionHostId(environmentId)
-  return rows.map((row) => ({ ...row, hostId }))
 }

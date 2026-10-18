@@ -1,4 +1,4 @@
-import { isRemoteExecutionHostPtyId } from './remote-execution-host-pty'
+import { isRemoteExecutionHostPtyId } from '../../../../shared/remote-execution-host-pty-id'
 
 /**
  * Whether one cadence process inspection for this pane is expensive enough that

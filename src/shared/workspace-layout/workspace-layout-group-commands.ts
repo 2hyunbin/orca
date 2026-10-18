@@ -5,7 +5,7 @@
 
 import type { TabGroupLayoutNode } from '../tab-types'
 import { buildHeadlessTabGroupMove, buildHeadlessTabGroupSplit } from './tab-group-moves'
-import { moveGroupLeafBeside } from './tab-group-layout-tree'
+import { moveGroupLeafBeside, moveGroupLeafBesideBranch } from './tab-group-layout-tree'
 import {
   applied,
   findTab,
@@ -135,7 +135,11 @@ export function setGroupRatios(
 }
 
 type NewGroupOpen = CommandOf<
-  'createTerminalTab' | 'openEditorTab' | 'openBrowserTab' | 'openAgentSessionTab'
+  | 'createTerminalTab'
+  | 'openEditorTab'
+  | 'openBrowserTab'
+  | 'openAgentSessionTab'
+  | 'openSimulatorTab'
 >
 
 /**
@@ -173,20 +177,28 @@ export function openInNewGroup(
   if (workspaces.some((entry) => entry.groups.some((group) => group.id === groupId))) {
     return refuse('group_exists')
   }
-  const besideHeld = workspace.groups.some((group) => group.id === split.besideGroupId)
+  const lastGroupId = split.besideLastGroupId ?? split.besideGroupId
+  const besideHeld = [split.besideGroupId, lastGroupId].every((id) =>
+    workspace.groups.some((group) => group.id === id)
+  )
   // Beside a group main lacks: refused, unless main has no group here at all (the window split off
   // its emptied root), where the new group is the only one.
   if (!besideHeld && workspace.groups.length > 0) {
     return refuse('group_not_found')
   }
   const groupLayout = besideHeld
-    ? moveGroupLeafBeside(
+    ? moveGroupLeafBesideBranch(
         workspace.groupLayout ?? { type: 'leaf', groupId: split.besideGroupId },
         groupId,
         split.besideGroupId,
+        lastGroupId,
         split.direction
       )
     : undefined
+  // Both groups held, but no branch of main's tree holds them both.
+  if (besideHeld && !groupLayout) {
+    return refuse('invalid_params')
+  }
   const opened = open(
     withWorkspace(model, command.workspace, {
       ...workspace,

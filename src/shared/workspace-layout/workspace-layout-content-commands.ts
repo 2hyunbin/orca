@@ -5,7 +5,12 @@ import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../layout-owner-switch'
 import { applied, refuse, workspaceOrEmpty, type Applied } from './workspace-layout-command-steps'
 import type { CommandOf, LayoutContext } from './workspace-layout-command-types'
 import { admitsInitialSurface } from './workspace-layout-initial-surface'
-import type { LayoutContentTab, LayoutTab, WorkspaceLayoutModel } from './workspace-layout-model'
+import type {
+  LayoutContentTab,
+  LayoutEditorFile,
+  LayoutTab,
+  WorkspaceLayoutModel
+} from './workspace-layout-model'
 import { withWorkspace } from './workspace-layout-removal'
 import { placeContentTab, promotePreviewTab } from './workspace-layout-tab-commands'
 
@@ -24,8 +29,9 @@ function contentTab(
 
 /**
  * An open tab for the same file in the target group is returned instead of a second one; a
- * non-preview open pins it. Another group's tab for the file does not count: a file opened in a
- * second split gets its own tab there, as the window does.
+ * non-preview open pins it, and the open's file record replaces the held one. Another group's tab
+ * for the file does not count: a file opened in a second split gets its own tab there, as the
+ * window does.
  */
 export function openEditorTab(
   model: WorkspaceLayoutModel,
@@ -38,7 +44,7 @@ export function openEditorTab(
     tab.entityId === command.fileId && tab.kind === command.contentType
   const drawn = drawnTabOpen(model, key, command.tabId, sameFile, true)
   if (drawn) {
-    return drawn
+    return drawn.ok ? applied(withEditorFile(drawn.model, key, command.file), drawn.result) : drawn
   }
   if (
     command.groupId &&
@@ -64,7 +70,7 @@ export function openEditorTab(
             tabId: existing.id
           })
         : applied(model)
-    const next = pinned.ok ? pinned.model : model
+    const next = withEditorFile(pinned.ok ? pinned.model : model, key, command.file)
     return applied(withEditorView(next, key, existing.id, command.view), { tabId: existing.id })
   }
   const tab = contentTab(context, {
@@ -75,17 +81,25 @@ export function openEditorTab(
     ...(command.preview ? { isPreview: true } : {})
   })
   const placed = placeContentTab(target, key, tab, command, context)
-  let next = placed.model
-  const file = command.file
-  if (file) {
-    const workspace = next.workspaces[key]!
-    const files = (workspace.editorFiles ?? []).filter((entry) => entry.filePath !== file.filePath)
-    next = withWorkspace(next, key, { ...workspace, editorFiles: [...files, file] })
-  }
+  const next = withEditorFile(placed.model, key, command.file)
   return applied(withEditorView(next, key, tab.id, command.view), {
     tabId: tab.id,
     refused: placed.refused
   })
+}
+
+/** The file's record, replacing any held for its path. */
+function withEditorFile(
+  model: WorkspaceLayoutModel,
+  key: string,
+  file: LayoutEditorFile | undefined
+): WorkspaceLayoutModel {
+  if (!file) {
+    return model
+  }
+  const workspace = model.workspaces[key]!
+  const files = (workspace.editorFiles ?? []).filter((entry) => entry.filePath !== file.filePath)
+  return withWorkspace(model, key, { ...workspace, editorFiles: [...files, file] })
 }
 
 function withEditorView(
@@ -218,7 +232,7 @@ export function openAgentSessionTab(
  * first) changes nothing; with `refuseTaken`, an id another tab holds refuses it. Null when the
  * open goes ahead.
  */
-function drawnTabOpen(
+export function drawnTabOpen(
   model: WorkspaceLayoutModel,
   key: string,
   tabId: string | undefined,
@@ -239,7 +253,7 @@ function drawnTabOpen(
 }
 
 /** A workspace with no group takes the sender's, as the window keeps its emptied root group. */
-function withSendersGroup(
+export function withSendersGroup(
   model: WorkspaceLayoutModel,
   key: string,
   groupId: string | undefined

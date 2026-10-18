@@ -1,5 +1,5 @@
 // Store-free so store slices can send; `layout-owner-command` reads the store for other callers.
-import { getExplicitRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
+import { runtimeEnvironmentIdUnlessTwin } from '@/lib/resolve-owner'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import { afterLayoutFrame } from '@/runtime/layout-frame-position'
 import { holdTabPaneTree } from '@/runtime/layout-owner-pane-intents'
@@ -102,6 +102,15 @@ export type WindowLayoutCommand =
     }
   | { type: 'promotePreviewTab'; tabId: string }
   | {
+      type: 'openSimulatorTab'
+      tabId: string
+      groupId: string
+      afterTabId?: string
+      index?: number
+      createdAt: number
+      split?: NewGroupSplit
+    }
+  | {
       type: 'moveTabToWorkspace'
       toWorkspace: string
       tabs: { tabId: string; newTabId: string; newEntityId: string }[]
@@ -120,11 +129,14 @@ export type WindowLayoutCommand =
   | { type: 'wake'; tabId: string; paneKeys: [string] }
   /** Drops the panes' resume records without starting them. */
   | { type: 'wake'; tabId: string; paneKeys: string[]; recordOnly: true }
+  | { type: 'setDefaultTabsApplied' }
+
+type WindowRefusalCode = LayoutRefusalCode | 'wsl_move_in_progress'
 
 export type LayoutApplyHandlers = {
   apply: (result: LayoutCommandResult) => void
   asToday: () => void
-  refused?: (code: LayoutRefusalCode) => void
+  refused?: (code: WindowRefusalCode) => void
   /** Main's copy lacks the target, or the call threw; `asToday` when absent. A pane split or move
    *  passes one: main keeps its pane trees over the window's saves, so that change would not last.
    *  A close keeps `asToday`: a pane main lacks has nothing to keep it. */
@@ -151,14 +163,15 @@ const PANE_COMMANDS: ReadonlySet<WindowLayoutCommand['type']> = new Set([
  * refusal. False when a paired server owns the workspace's layout; the caller acts as today.
  */
 export function sendLayoutApply(
-  state: Parameters<typeof getExplicitRuntimeEnvironmentIdForWorktree>[0],
+  state: Parameters<typeof runtimeEnvironmentIdUnlessTwin>[0],
   worktreeId: string,
   command: WindowLayoutCommand,
   handlers: LayoutApplyHandlers
 ): boolean {
   // Why: the same owner test that mirrors a workspace's tabs from a paired server; a focused
-  // server must not claim a workspace whose row names no owner.
-  if (getExplicitRuntimeEnvironmentIdForWorktree(state, worktreeId)) {
+  // server must not claim a workspace whose row names no owner. A twin stays on main's path: it
+  // edits this window's layout, not either host, as the terminal-create path does.
+  if (runtimeEnvironmentIdUnlessTwin(state, worktreeId)) {
     return false
   }
   const hold =
@@ -238,7 +251,7 @@ export function recordLayoutApply(
   sendLayoutApply(state, worktreeId, command, { apply: keepWindowCopy, asToday: keepWindowCopy })
 }
 
-function mainLacksTarget(code: LayoutRefusalCode): boolean {
+function mainLacksTarget(code: WindowRefusalCode): boolean {
   return (
     code === 'workspace_not_found' ||
     code === 'tab_not_found' ||

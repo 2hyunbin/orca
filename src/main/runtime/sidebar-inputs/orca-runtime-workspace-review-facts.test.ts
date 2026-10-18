@@ -1,10 +1,20 @@
 // Runs on plain Node, as orcad does: facts come from the host's persisted PR cache.
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { OrcaRuntimeService } from '../orca-runtime'
 import type { PRInfo } from '../../../shared/github/pull-request-types'
 import type { RuntimeStore } from '../runtime-store-contract'
 import type { ResolvedWorktreeSnapshot } from '../runtime-resolved-worktree-cache'
 import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
+
+vi.mock('../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
+
+function withSidebarFacts(runtime: OrcaRuntimeService) {
+  const facts = runtime.sidebarFacts
+  if (!facts) {
+    throw new Error('built without the sidebar facts layer')
+  }
+  return facts
+}
 
 const repo = { id: 'repo-1', path: '/r', displayName: 'r', badgeColor: 'blue', addedAt: 1 }
 
@@ -61,14 +71,16 @@ describe('getWorkspaceReviewFacts', () => {
       }
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the read touches only repos and the GitHub cache.
-    const runtime = new Probe(store as RuntimeStore)
+    const runtime = withSidebarFacts(new Probe(store as RuntimeStore))
     await expect(runtime.getWorkspaceReviewFacts()).resolves.toEqual({
       facts: { 'repo-1::/r/a': { provider: 'github', reviewState: 'merged' } }
     })
   })
 
   it('publishes nothing without a store', async () => {
-    await expect(new OrcaRuntimeService().getWorkspaceReviewFacts()).resolves.toEqual({
+    await expect(
+      withSidebarFacts(new OrcaRuntimeService()).getWorkspaceReviewFacts()
+    ).resolves.toEqual({
       facts: {}
     })
   })

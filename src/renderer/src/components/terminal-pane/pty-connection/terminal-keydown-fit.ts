@@ -13,7 +13,7 @@ import { registerTerminalSideEffectFactConsumer } from '../terminal-side-effect-
 
 import { isAgentTaskCompleteTrackingEnabled } from './agent-task-complete-settings'
 import { isAgentProcessInspectionCostly } from '../agent-process-inspection-cost'
-import { isRemoteExecutionHostPtyId } from '../remote-execution-host-pty'
+import { isRemoteExecutionHostPtyId } from '../../../../../shared/remote-execution-host-pty-id'
 import { retireLiveAgentRowOnConfirmedProcessExit } from './confirmed-process-exit-row-retire'
 
 import type { ConnectPanePtySession } from './connect-pane-pty-session'

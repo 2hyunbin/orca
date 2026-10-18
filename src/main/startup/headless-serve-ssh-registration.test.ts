@@ -15,7 +15,11 @@ vi.mock('../ssh/ssh-port-forward', () => mocks.sshPortForward)
 vi.mock('../ssh/ssh-port-scanner', () => mocks.sshPortScanner)
 
 import { resetSshHandlerStateForTests } from '../ipc/ssh'
-import { connectRegisteredSshTarget, listRegisteredSshTargets } from '../ssh/ssh-target-registry'
+import {
+  connectRegisteredSshTarget,
+  listRegisteredSshTargets,
+  SSH_TARGET_MANAGEMENT_UNSERVED_MESSAGE
+} from '../ssh/ssh-target-registry'
 import { createSshIpcHarness } from '../ipc/ssh-ipc-test-harness'
 import type { SshTarget } from '../../shared/ssh-types'
 import { mainProcessState } from './main-process-state'
@@ -42,7 +46,9 @@ describe('SSH registration on a headless `orca serve`', () => {
 
   it('reproduces the unregistered host before bootstrap (#25886, #8489)', async () => {
     expect(listRegisteredSshTargets()).toEqual([])
-    await expect(connectRegisteredSshTarget('ssh-1')).rejects.toThrow('ssh_handlers_not_registered')
+    await expect(connectRegisteredSshTarget('ssh-1')).rejects.toThrow(
+      SSH_TARGET_MANAGEMENT_UNSERVED_MESSAGE
+    )
   })
 
   it('lists and connects persisted SSH targets with no window', async () => {

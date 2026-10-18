@@ -233,6 +233,10 @@ jobs:
           FASTLANE_OPT_OUT_USAGE: '1'
         run: bundle exec fastlane lanes
 
+      - name: Smoke-check CocoaPods
+        if: steps.ruby-scope.outputs.should_run != 'false'
+        run: bundle exec pod --version
+
       - name: Lint
         run: pnpm lint
 

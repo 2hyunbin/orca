@@ -88,7 +88,7 @@ export function useAiVaultSessionRefresh(
   const scanResult = scan?.result ?? null
   const sessions = scanResult?.sessions ?? EMPTY_AI_VAULT_SESSIONS
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [failure, setFailure] = useState<{ scopeKey: string; cause: string } | null>(null)
   const [terminalScopeKey, setTerminalScopeKey] = useState<string | null>(null)
   const requestTokenRef = useRef<string>(undefined!)
   requestTokenRef.current ??= createBrowserUuid()
@@ -105,6 +105,8 @@ export function useAiVaultSessionRefresh(
   const publicationGateRef = useRef<AiVaultSessionPublicationGate>(undefined!)
   publicationGateRef.current ??= new AiVaultSessionPublicationGate()
   const scanScopeKey = `${aiVaultSessionResultCacheKey(executionHostScope, scopePaths)}\n${sessionLimit}`
+  // Kept through rescans so a repeat failure doesn't blink; shown only for the scope that failed.
+  const error = failure?.scopeKey === scanScopeKey ? describeAiVaultScanError(failure.cause) : null
   const scopePathsRef = useRef<readonly string[]>(scopePaths)
   scopePathsRef.current = scopePaths
   const executionHostScopeRef = useRef<ExecutionHostScope>(executionHostScope)
@@ -138,7 +140,7 @@ export function useAiVaultSessionRefresh(
       if (cachedResult) {
         const scanKey = `${baseKey}\n${selectedLimit}`
         lastAppliedScanRef.current = { scopeKey: scanKey, scannedAt: cachedResult.scannedAt }
-        setError(null)
+        setFailure(null)
         setTerminalScopeKey(null)
         publicationGateRef.current.publish(cachedResult, (published) => {
           applyScan(published, selectedLimit, scanKey, (applied) => {
@@ -178,7 +180,6 @@ export function useAiVaultSessionRefresh(
       if (args.background !== true) {
         setLoading(true)
       }
-      setError(null)
       setTerminalScopeKey(null)
       const scanKey = `${baseKey}\n${selectedLimit}`
       const request = {
@@ -207,6 +208,7 @@ export function useAiVaultSessionRefresh(
           setTerminalScopeKey(scanKey)
           return
         }
+        setFailure(null)
         // A cache hit returns the snapshot already on screen; skip the state
         // updates so refocus flips don't force pointless re-renders.
         // Single-host results carry one scanner's stamp minted when that scan
@@ -244,7 +246,7 @@ export function useAiVaultSessionRefresh(
         ) {
           setTerminalScopeKey(scanKey)
           if (!isAiVaultScanCancellation(err)) {
-            setError(describeAiVaultScanError(err instanceof Error ? err.message : String(err)))
+            setFailure({ scopeKey: scanKey, cause: err instanceof Error ? err.message : String(err) })
           }
         }
       } finally {
