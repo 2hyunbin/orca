@@ -20,7 +20,7 @@ import {
   getPowerShellCodexShellLaunchPreflight
 } from '../../shared/codex-shell-function'
 import { fishRequirementViolation, resolveFishBinary } from '../../shared/fish-binary-requirement'
-import { getPowerShellEscapeNativeArgsFunction } from '../../shared/powershell-native-argument'
+import { getPowerShellAgentWrappers } from '../../shared/powershell-agent-wrappers'
 
 const roots: string[] = []
 const zshAvailable = existsSync('/bin/zsh')
@@ -393,8 +393,7 @@ describe('PowerShell Codex shell launch preflight', () => {
         [
           '$ErrorActionPreference = "Stop"',
           '$PSNativeCommandUseErrorActionPreference = $true',
-          getPowerShellEscapeNativeArgsFunction(),
-          getPowerShellCodexShellLaunchPreflight(),
+          getPowerShellAgentWrappers(),
           'codex'
         ].join('\n')
       ],
@@ -565,12 +564,7 @@ describe.skipIf(process.platform === 'win32')('Codex preflight paths containing 
 
       const result = spawnSync(
         'pwsh',
-        [
-          '-NoLogo',
-          '-NoProfile',
-          '-Command',
-          `${getPowerShellEscapeNativeArgsFunction()}\n${getPowerShellCodexShellLaunchPreflight()}\ncodex`
-        ],
+        ['-NoLogo', '-NoProfile', '-Command', `${getPowerShellAgentWrappers()}\ncodex`],
         {
           encoding: 'utf-8',
           env: {

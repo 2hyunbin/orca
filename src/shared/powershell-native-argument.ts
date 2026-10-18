@@ -25,22 +25,23 @@ function quotePowerShellMultilineLiteral(value: string): string {
  * Why at runtime: the escaping depends on the PowerShell reading the line. Legacy argv passing
  * (Windows PowerShell 5.1, pwsh before 7.3, and 7.3's `Windows` mode for `.cmd`/`.bat`) leaves
  * embedded `"` unescaped, so the program drops them; otherwise PowerShell escapes them itself and
- * must get the text untouched. Windows PowerShell also quotes only when whitespace sits outside
- * quotes it counts naively, and never doubles a trailing backslash; when it won't quote, no escaping
- * survives, so that text is left as before.
+ * must get the text untouched.
+ *
+ * Where cmd.exe reads the line, or Windows PowerShell decides quoting by counting `"` naively, the
+ * argument is quoted here with `""` for each quote, as process-host's windows-command-line.ts does:
+ * a `\"` would flip cmd's quote parity and turn a later `&` into an operator.
  */
 export function getPowerShellEscapeNativeArgsFunction(): string {
   return `function Global:__OrcaEscapeNativeArgs([string]$Program, [object[]]$Arguments) {
     Set-StrictMode -Off
     $mode = $PSNativeCommandArgumentPassing
-    if ($mode -eq 'Standard' -or ($mode -eq 'Windows' -and $Program -notmatch '\\.(bat|cmd)$')) { return $Arguments }
-    $desktop = $PSVersionTable.PSVersion.Major -lt 6
+    $cmd = $Program -match '\\.(bat|cmd)$'
+    if ($mode -eq 'Standard' -or ($mode -eq 'Windows' -and -not $cmd)) { return $Arguments }
+    $selfQuote = $cmd -or $PSVersionTable.PSVersion.Major -lt 6
     foreach ($arg in $Arguments) {
         if ($arg -isnot [string] -or $arg -notmatch '["\\\\]') { $arg; continue }
-        $willQuote = $arg -match '^(?:[^"]*"[^"]*")*[^"]*\\s'
-        if ($desktop -and -not $willQuote -and $arg -match '\\s') { $arg; continue }
-        $escaped = $arg -replace '(\\\\*)"', '$1$1\\"'
-        if ($desktop -and $willQuote) { $escaped -replace '(\\\\+)\\z', '$1$1' } else { $escaped }
+        if ($selfQuote) { '"' + (($arg -replace '(\\\\*)"', '$1$1""') -replace '(\\\\+)\\z', '$1$1') + '"' }
+        else { $arg -replace '(\\\\*)"', '$1$1\\"' }
     }
 }`
 }

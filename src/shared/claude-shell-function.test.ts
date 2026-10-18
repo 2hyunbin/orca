@@ -209,7 +209,7 @@ it("leaves the shell's Anthropic auth alone in the PowerShell function", () => {
 
 it('restores PowerShell process env without creating empty variables', () => {
   const script = getPowerShellClaudeShellFunction()
-  expect(script.startsWith('\n$orcaClaudeCommand = Get-Command claude')).toBe(true)
+  expect(script.startsWith('$orcaClaudeCommand = Get-Command claude')).toBe(true)
   expect(script).toContain('finally {')
   // .NET 9+ turns a $null/'' SetEnvironmentVariable into an empty variable, not a removal.
   expect(script).not.toMatch(/SetEnvironmentVariable\([^)]*,\s*(\$null|''|"")\s*,/)

@@ -71,10 +71,8 @@ set -e __orca_claude_type
 `
 }
 
-/** Leading newline: the codex fragment it follows ends without one. */
 export function getPowerShellClaudeShellFunction(): string {
-  return `
-$orcaClaudeCommand = Get-Command claude -ErrorAction SilentlyContinue | Select-Object -First 1
+  return `$orcaClaudeCommand = Get-Command claude -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($env:ORCA_CLAUDE_PROFILE_POINTER -and $orcaClaudeCommand -and
     $orcaClaudeCommand.CommandType -in @("Application", "ExternalScript")) {
 function Global:claude {

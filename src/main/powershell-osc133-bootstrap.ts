@@ -1,8 +1,6 @@
 import { getPowerShellOmpShellWrapper } from './pty/omp-shell-wrapper'
 import { MANAGED_DATA_ACCOUNT_POWERSHELL_RESTORE } from '../shared/managed-data-account-shell'
-import { getPowerShellCodexShellLaunchPreflight } from '../shared/codex-shell-function'
-import { getPowerShellClaudeShellFunction } from '../shared/claude-shell-function'
-import { getPowerShellEscapeNativeArgsFunction } from '../shared/powershell-native-argument'
+import { getPowerShellAgentWrappers } from '../shared/powershell-agent-wrappers'
 export { encodePowerShellCommand } from '../shared/powershell-command-encoding'
 
 /**
@@ -60,8 +58,7 @@ if ($ExecutionContext.SessionState.LanguageMode -eq "FullLanguage" -and
     } catch { Write-Error $_ -ErrorAction Continue }
 
 ${getPowerShellOmpShellWrapper()}
-${getPowerShellEscapeNativeArgsFunction()}
-${getPowerShellCodexShellLaunchPreflight() + getPowerShellClaudeShellFunction()}
+${getPowerShellAgentWrappers()}
 
     $Global:__OrcaOsc133State = @{
         OriginalPrompt = $function:prompt

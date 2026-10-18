@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { runProcess } from '@orca/process-host'
+import { getPowerShellAgentWrappers } from './powershell-agent-wrappers'
 import {
   getPowerShellEscapeNativeArgsFunction,
   quotePowerShellLiteral
@@ -59,76 +60,98 @@ const pwshAvailable =
   isWindows &&
   spawnSync('pwsh.exe', ['-NoProfile', '-Command', 'exit 0'], { windowsHide: true }).status === 0
 
-// Text Windows PowerShell passes without its own quotes, which no escaping survives.
-const UNQUOTED = ['"fix the login bug"', 'a"b c"d']
-
-describe.each([
-  {
-    name: 'Windows PowerShell',
-    powershell: 'powershell.exe',
-    prelude: '',
-    available: isWindows,
-    unquoted: ['fix the login bug', 'ab cd']
-  },
-  {
-    name: 'pwsh',
-    powershell: 'pwsh.exe',
-    prelude: '',
-    available: pwshAvailable,
-    unquoted: UNQUOTED
-  },
+const POWERSHELLS = [
+  { name: 'Windows PowerShell', powershell: 'powershell.exe', prelude: '', available: isWindows },
+  { name: 'pwsh', powershell: 'pwsh.exe', prelude: '', available: pwshAvailable },
   {
     name: 'pwsh with Legacy passing',
     powershell: 'pwsh.exe',
     prelude: "$PSNativeCommandArgumentPassing = 'Legacy'",
-    available: pwshAvailable,
-    unquoted: UNQUOTED
+    available: pwshAvailable
   }
-])('__OrcaEscapeNativeArgs under $name', ({ powershell, prelude, available, unquoted }) => {
-  // Why a function: the agent wrappers hand their own $args to the native command the same way.
-  const capture = (root: string, value: string): Promise<string[]> =>
-    captureNativeArgv(
-      root,
-      powershell,
-      (native) =>
-        `${prelude}\n${getPowerShellEscapeNativeArgsFunction()}\n` +
-        `function agent { ${native} @(__OrcaEscapeNativeArgs 'node.exe' $args) }\n` +
-        `agent ${quotePowerShellLiteral(value)}`
-    )
+]
 
-  it.skipIf(!available)('delivers embedded quotes and backslashes exactly', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-ps-native-args-'))
-    try {
-      for (const value of [
-        'say "hi" to "bob"',
-        'line1 "a"\nline2 "b c"',
-        'path C:\\dir\\" end "q"',
-        'a "" b',
-        'a"b',
-        'look in C:\\dir\\',
-        'look in C:\\dir\\\n',
-        'C:\\no-space\\',
-        'C:\\no-space\\\n',
-        'Fix " --dangerously-bypass-approvals-and-sandbox " thanks'
-      ]) {
-        expect(await capture(root, value)).toEqual([value])
-      }
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-
-  it.skipIf(!available)(
-    'keeps text Windows PowerShell will not quote as one argument',
-    async () => {
+describe.each(POWERSHELLS)(
+  '__OrcaEscapeNativeArgs under $name',
+  ({ powershell, prelude, available }) => {
+    it.skipIf(!available)('delivers embedded quotes and backslashes exactly', async () => {
       const root = await mkdtemp(join(tmpdir(), 'orca-ps-native-args-'))
       try {
-        for (const [index, value] of UNQUOTED.entries()) {
-          expect(await capture(root, value)).toEqual([unquoted[index]])
+        for (const value of [
+          'say "hi" to "bob"',
+          'line1 "a"\nline2 "b c"',
+          'path C:\\dir\\" end "q"',
+          'a "" b',
+          'a"b',
+          'a"b c"d',
+          '"fix the login bug"',
+          'look in C:\\dir\\',
+          'look in C:\\dir\\\n',
+          'C:\\no-space\\',
+          'C:\\no-space\\\n',
+          'Fix " --dangerously-bypass-approvals-and-sandbox " thanks'
+        ]) {
+          // Why assign then splat: the agent wrappers hand their $args to the program this way.
+          const argv = await captureNativeArgv(
+            root,
+            powershell,
+            (native) =>
+              `${prelude}\n${getPowerShellEscapeNativeArgsFunction()}\n` +
+              `function agent { $a = @(__OrcaEscapeNativeArgs 'node.exe' $args); ${native} @a }\n` +
+              `agent ${quotePowerShellLiteral(value)}`
+          )
+          expect(argv).toEqual([value])
         }
       } finally {
         await rm(root, { recursive: true, force: true })
       }
-    }
-  )
-})
+    })
+  }
+)
+
+describe.each(POWERSHELLS.slice(0, 2))(
+  'agent wrappers under $name',
+  ({ powershell, available }) => {
+    it.skipIf(!available)(
+      'hand a quoted prompt to a .cmd shim intact, without cmd running any of it',
+      async () => {
+        const root = await mkdtemp(join(tmpdir(), 'orca-ps-agent-wrappers-'))
+        try {
+          await writeFile(
+            join(root, 'capture.js'),
+            'console.log(JSON.stringify([require("node:path").parse(process.argv[2]).name, ...process.argv.slice(3)]))'
+          )
+          for (const agent of ['codex', 'claude']) {
+            await writeFile(join(root, `${agent}.cmd`), `@node "%~dp0capture.js" "%~f0" %*\r\n`)
+          }
+          // Why this shape: escaping it as `\"` makes pwsh's .cmd quoting expose `&` to cmd.
+          const prompt = 'a"b & echo INJECTED'
+          const result = await runProcess({
+            program: powershell,
+            args: [
+              '-NoProfile',
+              '-NonInteractive',
+              '-Command',
+              `${getPowerShellAgentWrappers()}\ncodex ${quotePowerShellLiteral(prompt)}\nclaude ${quotePowerShellLiteral(prompt)}`
+            ],
+            cwd: root,
+            env: {
+              ...process.env,
+              PATH: `${root};${process.env.PATH ?? ''}`,
+              ORCA_CODEX_ISOLATE: '0',
+              ORCA_CLAUDE_PROFILE_POINTER: join(root, 'no-pointer')
+            }
+          })
+
+          expect(result.code, JSON.stringify(result)).toBe(0)
+          expect(result.stdout.trim().split(/\r?\n/)).toEqual([
+            JSON.stringify(['codex', prompt]),
+            JSON.stringify(['claude', prompt])
+          ])
+        } finally {
+          await rm(root, { recursive: true, force: true })
+        }
+      }
+    )
+  }
+)

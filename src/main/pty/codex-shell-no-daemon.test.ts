@@ -13,11 +13,10 @@ import { spawnSync } from 'node:child_process'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   getFishCodexShellLaunchPreflight,
-  getPosixCodexShellLaunchPreflight,
-  getPowerShellCodexShellLaunchPreflight
+  getPosixCodexShellLaunchPreflight
 } from '../../shared/codex-shell-function'
 import { resolveFishBinary } from '../../shared/fish-binary-requirement'
-import { getPowerShellEscapeNativeArgsFunction } from '../../shared/powershell-native-argument'
+import { getPowerShellAgentWrappers } from '../../shared/powershell-agent-wrappers'
 
 const isWindows = process.platform === 'win32'
 const fishLookup = resolveFishBinary()
@@ -163,7 +162,7 @@ function run(
     shell === 'fish'
       ? getFishCodexShellLaunchPreflight()
       : isPowerShell(shell)
-        ? `${getPowerShellEscapeNativeArgsFunction()}\n${getPowerShellCodexShellLaunchPreflight()}`
+        ? getPowerShellAgentWrappers()
         : getPosixCodexShellLaunchPreflight()
   // Why the guard: rows include `login`, which a real codex would run against the host's account.
   const guard = isPowerShell(shell)
