@@ -81,6 +81,21 @@ function flushStagedStateWithDeadline(store: Store): Promise<ShutdownCheckpointR
   })
 }
 
+/**
+ * Switch point: main keeps its own layout over the window's and takes its view and facts, with the
+ * quit capture's resume records written into main's first.
+ */
+function stagedSessionForMain(
+  store: Store,
+  state: WorkspaceSessionState,
+  hostId: ExecutionHostId | undefined,
+  sleepRecords: readonly SleepingAgentSessionRecord[] = []
+): WorkspaceSessionState {
+  const stored = withQuitSleepRecords(hostId, store.getWorkspaceSession(hostId), sleepRecords)
+  reportWindowSaveDrift(stored, state, hostId, 'shutdown-checkpoint')
+  return windowViewSaveForMain(stored, state, hostId)
+}
+
 export function registerRendererShutdownCheckpointHandler(store: Store): void {
   // Why: beforeunload cannot await, so the sync reply only reports staging.
   // Durability is joined out-of-band by paths that are about to navigate.
@@ -91,21 +106,12 @@ export function registerRendererShutdownCheckpointHandler(store: Store): void {
     try {
       for (const { state, hostId } of args.sessions) {
         if (!isFrozenOrcadSourceSessionPartition(store, hostId)) {
-          // Switch point: main keeps its own layout over the window's and takes its view and facts.
-          if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-            const stored = withQuitSleepRecords(
-              hostId,
-              store.getWorkspaceSession(hostId),
-              args.sleepRecords ?? []
-            )
-            reportWindowSaveDrift(stored, state, hostId, 'shutdown-checkpoint')
-            store.stageWorkspaceSessionBeforeUnload(
-              windowViewSaveForMain(stored, state, hostId),
-              hostId
-            )
-          } else {
-            store.stageWorkspaceSessionBeforeUnload(state, hostId)
-          }
+          store.stageWorkspaceSessionBeforeUnload(
+            ORCA_LAYOUT_OWNER_IS_MAIN
+              ? stagedSessionForMain(store, state, hostId, args.sleepRecords)
+              : state,
+            hostId
+          )
         }
       }
       store.updateUI(args.ui)
