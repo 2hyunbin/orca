@@ -67,9 +67,23 @@ export function createOsc133CommandFinishedScanner(
   onCommandStarted?: (endInChunk: number) => void
 ): Osc133CommandFinishedScanner {
   let carry = ''
+  // OSC 133 markers seen back to back since the last other output, e.g. 'BC'.
+  let adjacentMarkers = ''
+
+  const noteOutput = (): void => {
+    adjacentMarkers = ''
+  }
 
   const handleOsc133 = (payload: string, endInChunk: number): void => {
     const [sequence, exitCode] = payload.split(';')
+    // Why: TUIs such as OMP end each prompt bubble with `B C D;0`, closing their own zone while
+    // they keep running (#10923). Read as the command's exit, that `D` retired a live agent's
+    // status. A shell's `C` follows the typed command line, never its own prompt's `B` directly.
+    const closesAppZone = sequence === 'D' && exitCode === '0' && adjacentMarkers.endsWith('BC')
+    adjacentMarkers = (adjacentMarkers + sequence.slice(0, 1)).slice(-2)
+    if (closesAppZone) {
+      return
+    }
     if (sequence === 'C') {
       onCommandStarted?.(endInChunk)
       return
@@ -89,7 +103,13 @@ export function createOsc133CommandFinishedScanner(
       const start = combined.indexOf(OSC_133_PREFIX)
       if (start === -1) {
         carry = findPrefixCarry(combined)
-        return
+        if (carry.length < combined.length) {
+          noteOutput()
+        }
+        break
+      }
+      if (start > 0) {
+        noteOutput()
       }
 
       const payloadStart = start + OSC_133_PREFIX.length
@@ -100,7 +120,7 @@ export function createOsc133CommandFinishedScanner(
           carry = carry.slice(carry.length - MAX_OSC_CARRY_LENGTH)
         }
         carry = ownRetainedString(carry)
-        return
+        break
       }
 
       const sequenceEnd = terminator.index + terminator.length
@@ -117,6 +137,7 @@ export function createOsc133CommandFinishedScanner(
     scan,
     reset() {
       carry = ''
+      adjacentMarkers = ''
     }
   }
 }
