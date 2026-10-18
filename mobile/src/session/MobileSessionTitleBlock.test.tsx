@@ -46,8 +46,11 @@ vi.mock('react-native', () => {
       Value,
       timing: (_value: unknown, config: { toValue: number }) => ({
         start: (done: (result: { finished: boolean }) => void) => {
-          if (config.toValue === 0) overlay.finish = () => done({ finished: true })
-          else done({ finished: true })
+          if (config.toValue === 0) {
+            overlay.finish = () => done({ finished: true })
+          } else {
+            done({ finished: true })
+          }
         },
         stop: () => {}
       })

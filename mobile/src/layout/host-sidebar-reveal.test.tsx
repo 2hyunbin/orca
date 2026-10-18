@@ -12,6 +12,7 @@ vi.mock('react-native', () => ({
   Text: 'Text',
   ScrollView: 'ScrollView',
   Pressable: 'Pressable',
+  useWindowDimensions: () => ({ width: 1024, height: 768 }),
   Platform: {
     OS: 'web',
     select: (values: Record<string, unknown>) => values.web ?? values.default
@@ -19,7 +20,10 @@ vi.mock('react-native', () => ({
   PanResponder: { create: () => ({ panHandlers: {} }) },
   StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 }
 }))
-vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' }))
+vi.mock('react-native-safe-area-context', () => ({
+  SafeAreaView: 'SafeAreaView',
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 })
+}))
 vi.mock('lucide-react-native', () => ({
   ChevronLeft: 'ChevronLeft',
   Folder: 'Folder',
