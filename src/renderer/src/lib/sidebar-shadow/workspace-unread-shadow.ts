@@ -6,7 +6,9 @@ import { windowUnreadDecisions as windowDecisions } from './window-unread-decisi
 
 // The workspace unread flag: what the window's own rule decided, next to the flag the owning host
 // holds (the records this store lists). Only flags either side moved since the check first saw the
-// workspace are compared, so flags restored at startup are no one's decision.
+// workspace are compared, so flags restored at startup are no one's decision. A clear from any
+// client (a phone opening it, a read on another window) reaches every window, so it resets this
+// window's decision too; only a raise is the host's call.
 
 function storeFlags(state: AppState): Map<string, boolean> {
   const flags = new Map<string, boolean>()
@@ -23,6 +25,7 @@ function storeFlags(state: AppState): Map<string, boolean> {
 }
 
 const firstSeen = new Map<string, boolean>()
+const lastSeen = new Map<string, boolean>()
 
 export const workspaceUnreadShadow = defineSidebarShadowDomain<boolean>({
   name: 'workspace-unread',
@@ -32,6 +35,10 @@ export const workspaceUnreadShadow = defineSidebarShadowDomain<boolean>({
       if (!firstSeen.has(workspaceId)) {
         firstSeen.set(workspaceId, flag)
       }
+      if (lastSeen.get(workspaceId) === true && !flag) {
+        windowDecisions.set(workspaceId, false)
+      }
+      lastSeen.set(workspaceId, flag)
     }
     const values = new Map<string, boolean>()
     for (const [workspaceId, flag] of current) {

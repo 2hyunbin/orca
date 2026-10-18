@@ -75,36 +75,54 @@ describe('createClientWorkspaceViewReporter', () => {
     ])
   })
 
-  it('renews presence once the host’s copy has half the away threshold left', () => {
+  it('refreshes the host’s copy at most every ten seconds of activity', () => {
     const { sent, report } = reporter()
     report.update(STATE, ['local-wt'], [])
-    vi.setSystemTime(Date.now() + 60_000)
+    vi.setSystemTime(Date.now() + 9_000)
     report.renewPresence()
     expect(sent).toHaveLength(1)
 
-    vi.setSystemTime(Date.now() + 30_000)
+    vi.setSystemTime(Date.now() + 1_000)
     report.renewPresence()
     expect(sent).toHaveLength(2)
     expect(sent[1].view.presentForMs).toBe(180_000)
   })
 
-  it('reports an away user’s screen with no presence, and renews when input returns', () => {
+  it('reports an away user’s screen with no presence, and renews as soon as input returns', () => {
     const { sent, report } = reporter()
     presence.remaining = 0
     report.update(STATE, ['local-wt'], [])
     expect(sent[0].view.presentForMs).toBe(0)
+    report.renewPresence()
+    expect(sent).toHaveLength(1)
     presence.remaining = 180_000
     report.renewPresence()
     expect(sent).toHaveLength(2)
   })
 
-  it('never renews where presence is not tracked', () => {
+  it('refreshes where presence is not tracked too, so a reconnected host learns the view', () => {
     const { sent, report } = reporter()
     presence.remaining = null
     report.update(STATE, ['local-wt'], [])
-    vi.setSystemTime(Date.now() + 600_000)
+    vi.setSystemTime(Date.now() + 10_000)
     report.renewPresence()
-    expect(sent).toHaveLength(1)
-    expect(sent[0].view.presentForMs).toBeNull()
+    expect(sent).toHaveLength(2)
+    expect(sent[1].view.presentForMs).toBeNull()
+  })
+
+  it('resends a view whose send failed', async () => {
+    const sent: ClientWorkspaceView[] = []
+    let fail = true
+    const report = createClientWorkspaceViewReporter(async (_target, view) => {
+      sent.push(view)
+      if (fail) {
+        throw new Error('method_not_found')
+      }
+    })
+    report.update(STATE, ['local-wt'], [])
+    await Promise.resolve()
+    fail = false
+    report.renewPresence()
+    expect(sent).toHaveLength(2)
   })
 })

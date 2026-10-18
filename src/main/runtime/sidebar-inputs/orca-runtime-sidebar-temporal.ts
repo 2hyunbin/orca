@@ -6,7 +6,8 @@ import {
   getRepoExecutionHostId,
   isLocalExecutionHost,
   LOCAL_EXECUTION_HOST_ID,
-  parseExecutionHostId
+  parseExecutionHostId,
+  type ExecutionHostId
 } from '../../../shared/execution-host'
 import type { SidebarTemporalSnapshot } from '../../../shared/sidebar-list/sidebar-temporal-snapshot'
 import type { Worktree } from '../../../shared/worktree/types'
@@ -84,15 +85,7 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     await this.sortStamps
       .reconcileStoredTiers({
         isLocalWorkspace: (worktreeId) =>
-          !!store &&
-          isLocalExecutionHost(
-            resolveAgentWorkspaceExecutionHostId(worktreeId, {
-              getRepo: (repoId) => store.getRepo(repoId),
-              getWorktreeMeta: (id) => store.getWorktreeMeta(id),
-              getFolderWorkspace: (id) => store.getFolderWorkspace?.(id),
-              getProjectGroups: () => store.getProjectGroups?.() ?? []
-            })
-          ),
+          !!store && isLocalExecutionHost(this.workspaceHostId(worktreeId)),
         terminalPtyIds: (worktreeId) => {
           const session = store?.getWorkspaceSession?.(LOCAL_EXECUTION_HOST_ID)
           const ptyIds = new Set<string>()
@@ -119,16 +112,29 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
       .catch((error: unknown) => console.warn('[sidebar] sort tier reconcile failed:', error))
   }
 
-  // Folder and SSH records too, by the record lookup the stamps use (a folder has no repo).
-  protected override clearUnreadOnClientOpen(worktree: Worktree, repo: Repo | undefined): void {
-    const hostId = worktree.hostId ?? (repo ? getRepoExecutionHostId(repo) : undefined)
+  /** A phone holding the workspace's session open has it on screen: its flag is read and stays down. */
+  openPhoneSession(worktreeId: string): () => void {
+    const hostId = this.workspaceHostId(worktreeId)
     const workspace = {
-      worktreeId: worktree.id,
+      worktreeId,
       sshHostId: hostId && parseExecutionHostId(hostId)?.kind === 'ssh' ? hostId : null
     }
     if (writeUnreadFlag(this.store, workspace, false)) {
-      this.notifySortStampsChanged(worktree.id)
+      this.notifySortStampsChanged(worktreeId)
     }
+    return this.workspaceViewers.openPhoneSession(worktreeId)
+  }
+
+  private workspaceHostId(worktreeId: string): ExecutionHostId | null {
+    const store = this.store
+    return store
+      ? resolveAgentWorkspaceExecutionHostId(worktreeId, {
+          getRepo: (repoId) => store.getRepo(repoId),
+          getWorktreeMeta: (id) => store.getWorktreeMeta(id),
+          getFolderWorkspace: (id) => store.getFolderWorkspace?.(id),
+          getProjectGroups: () => store.getProjectGroups?.() ?? []
+        })
+      : null
   }
 
   // Metadata only: clients re-list the record, and the cached git scans stay.

@@ -1,15 +1,15 @@
 import type { AppState } from '@/store/types'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import type { ClientWorkspaceView } from '../../../shared/rpc-contract/client-workspace-view-params'
-import { DESKTOP_AWAY_SECONDS } from '../../../shared/desktop-away-threshold'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import { tryRuntimeTargetForWorktreeOwner } from '@/store/slices/worktrees/listing/worktree-owner-target'
 import { onScreenHostId } from '@/store/slices/workspace-attention/workspace-unread-flag'
-import { presenceRemainingMs } from './agent-auto-ack-presence'
+import { presenceRemainingMs, subscribeAutoAckPresenceSignals } from './agent-auto-ack-presence'
 import type { AutoAckTabTarget } from './agent-auto-ack-targets'
 
-// Renewed once the host's copy of presence has half the away threshold left.
-const RENEW_PRESENCE_MS = (DESKTOP_AWAY_SECONDS * 1000) / 2
+// While the user is active, a host's copy of the view is resent this often: its presence trails the
+// window's by at most this, and a host that lost the connection (and so the view) learns it again.
+const REFRESH_MS = 10_000
 
 type HostView = {
   target: RuntimeClientTarget
@@ -17,7 +17,7 @@ type HostView = {
   tabIds: string[]
   signature: string
 }
-type SentView = { target: RuntimeClientTarget; signature: string; presentUntil: number }
+type SentView = { target: RuntimeClientTarget; signature: string; sentAt: number; present: boolean }
 
 export type ClientWorkspaceViewReporter = {
   /** The scan's screen: its workspaces and tabs, empty while the window is hidden or unfocused. */
@@ -50,31 +50,35 @@ export function createClientWorkspaceViewReporter(
   const flush = (): void => {
     const now = Date.now()
     const presentForMs = presenceRemainingMs()
-    const presentUntil = presentForMs === null ? Number.POSITIVE_INFINITY : now + presentForMs
+    const present = presentForMs !== 0
     for (const key of new Set([...sent.keys(), ...views.keys()])) {
       const view = views.get(key)
       const previous = sent.get(key)
       const target = view?.target ?? previous?.target
-      const changed = previous?.signature !== view?.signature
-      // Infinity minus Infinity is NaN, so an untracked presence is never renewed.
-      const renews =
+      const refreshes =
         view !== undefined &&
         previous !== undefined &&
-        presentUntil - previous.presentUntil >= RENEW_PRESENCE_MS
-      if (!target || (!changed && !renews)) {
+        present &&
+        (!previous.present || now - previous.sentAt >= REFRESH_MS)
+      if (!target || (previous?.signature === view?.signature && !refreshes)) {
         continue
       }
-      if (view) {
-        sent.set(key, { target, signature: view.signature, presentUntil })
+      const entry = view && { target, signature: view.signature, sentAt: now, present }
+      if (entry) {
+        sent.set(key, entry)
       } else {
         sent.delete(key)
       }
-      // An older host has no reportView; it keeps no view to be wrong about.
+      // An older host has no reportView. A failed send is forgotten, so the next flush retries it.
       void send(target, {
         workspaceIds: view?.workspaceIds ?? [],
         tabIds: view?.tabIds ?? [],
         presentForMs
-      }).catch(() => {})
+      }).catch(() => {
+        if (entry && sent.get(key) === entry) {
+          sent.delete(key)
+        }
+      })
     }
   }
 
@@ -113,5 +117,18 @@ export function createClientWorkspaceViewReporter(
       flush()
     },
     renewPresence: flush
+  }
+}
+
+/** The scan's presence signals plus blur: a window still visible but behind another app shows nothing. */
+export function subscribeViewReportPresenceSignals(
+  onRescan: () => void,
+  onInput: () => void
+): () => void {
+  const stop = subscribeAutoAckPresenceSignals(onRescan, onInput)
+  window.addEventListener('blur', onRescan)
+  return () => {
+    stop()
+    window.removeEventListener('blur', onRescan)
   }
 }

@@ -109,14 +109,14 @@ export const SIDEBAR_INPUT_METHODS = [
     // What a client window shows, so this host raises no unread flag on it; held until it closes.
     handler: async (params, { runtime, connectionId, signal }) => {
       const viewers = requireSwitchedOn(runtime.sidebarFacts).workspaceViewers
-      if (signal?.aborted) {
+      // A view outlives the call, so it needs a connection whose close drops it.
+      if (connectionId === undefined || signal?.aborted) {
         throw new Error('client_disconnected')
       }
-      const clientKey = connectionId ?? 'local'
-      if (viewers.reportClientView(clientKey, params)) {
+      if (viewers.reportClientView(connectionId, params)) {
         runtime.registerSubscriptionCleanup(
-          `sidebar-view-${clientKey}`,
-          () => viewers.dropClient(clientKey),
+          `sidebar-view-${connectionId}`,
+          () => viewers.dropClient(connectionId),
           connectionId
         )
       }

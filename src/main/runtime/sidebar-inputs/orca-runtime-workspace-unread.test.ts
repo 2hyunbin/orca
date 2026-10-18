@@ -3,10 +3,8 @@ import '../rpc/unused-default-rpc-methods.test-fixture'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../../shared/runtime-session-contracts'
 import { folderWorkspaceKey } from '../../../shared/workspace-scope'
-import type { Worktree } from '../../../shared/worktree/types'
 import { AgentHookServer } from '../../agent-hooks/server'
 import { OrcaRuntimeService } from '../orca-runtime'
-import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
 import type { RuntimeStore } from '../runtime-store-contract'
 import { RpcDispatcher } from '../rpc/dispatcher'
 import type { RpcDispatchStreamingOptions } from '../rpc/dispatcher-stream-options'
@@ -25,46 +23,12 @@ const PHONE: RpcDispatchStreamingOptions = { clientKind: 'mobile', connectionId:
 
 type Flag = { lastActivityAt: number; isUnread: boolean }
 
-function resolved(id: string, repoId: string, hostId?: Worktree['hostId']): ResolvedWorktree {
-  const path = id.slice(id.indexOf('::') + 2)
-  return {
-    id,
-    repoId,
-    path,
-    ...(hostId ? { hostId } : {}),
-    branch: 'feature',
-    head: '',
-    isBare: false,
-    isMainWorktree: false,
-    displayName: 'Feature',
-    comment: '',
-    linkedIssue: null,
-    linkedPR: null,
-    linkedLinearIssue: null,
-    linkedItems: [],
-    isArchived: false,
-    isUnread: false,
-    isPinned: false,
-    sortOrder: 0,
-    lastActivityAt: 0,
-    parentWorktreeId: null,
-    childWorktreeIds: [],
-    lineage: null,
-    git: { path, head: '', branch: 'feature', isBare: false, isMainWorktree: false }
-  }
-}
-
-class HeadlessHost extends OrcaRuntimeService {
-  selected = resolved(WT, 'repo-1')
-  protected override async resolveWorktreeSelector(): Promise<ResolvedWorktree> {
-    return this.selected
-  }
-}
-
 function createHeadlessHost() {
   const meta: Record<string, Flag> = { [WT]: { lastActivityAt: 0, isUnread: false } }
   const sshMeta: Record<string, Flag> = { [SSH_WT]: { lastActivityAt: 0, isUnread: false } }
-  const folders: Record<string, Flag> = { [FOLDER_ID]: { lastActivityAt: 0, isUnread: false } }
+  const folders: Record<string, Flag & { projectGroupId: string }> = {
+    [FOLDER_ID]: { lastActivityAt: 0, isUnread: false, projectGroupId: 'group-1' }
+  }
   const repos = [
     { id: 'repo-1', connectionId: null },
     { id: 'repo-ssh', connectionId: 'build-box' }
@@ -72,6 +36,7 @@ function createHeadlessHost() {
   const store = {
     getRepos: () => repos,
     getRepo: (id: string) => repos.find((repo) => repo.id === id),
+    getProjectGroups: () => [{ id: 'group-1', connectionId: null }],
     getSettings: () => ({}),
     getWorktreeMeta: (id: string) => meta[id],
     getAllWorktreeMeta: () => meta,
@@ -85,7 +50,7 @@ function createHeadlessHost() {
       Object.assign(folders[id], updates)
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the unread path reads only these members.
-  const runtime = new HeadlessHost(store as unknown as RuntimeStore)
+  const runtime = new OrcaRuntimeService(store as unknown as RuntimeStore)
   runtime.syncWindowGraph(HEADLESS_RUNTIME_WINDOW_ID, {
     tabs: [{ tabId: 'tab-1', worktreeId: WT, title: 'Agent', activeLeafId: LEAF, layout: null }],
     leaves: [
@@ -123,15 +88,8 @@ function createHeadlessHost() {
     sshMeta,
     folders,
     finishTurn,
-    // The phone's open: worktree.activate with navigation kept on the caller.
-    openOnPhone: (worktree: ResolvedWorktree) => {
-      runtime.selected = worktree
-      return runtime.activateManagedWorktree(`id:${worktree.id}`, {
-        clientKind: 'mobile',
-        navigation: 'caller'
-      })
-    },
-    holdSessionOnPhone: (worktreeId: string) =>
+    // The phone's session screen holds this stream while the workspace is open on it.
+    openOnPhone: (worktreeId: string) =>
       dispatcher.dispatchStreaming(
         {
           id: `sub-${++requestId}`,
@@ -142,7 +100,7 @@ function createHeadlessHost() {
         () => {},
         PHONE
       ),
-    reportView: (params: unknown, connectionId: string) =>
+    reportView: (params: unknown, connectionId: string | undefined) =>
       dispatcher.dispatch(
         { id: `view-${++requestId}`, authToken: 'tok', method: 'sidebarInputs.reportView', params },
         { clientKind: 'runtime', connectionId }
@@ -159,15 +117,13 @@ afterEach(() => {
 })
 
 describe('workspace unread flag on a headless host', () => {
-  it('flags a finish no one sees, clears it when the phone opens it, and spares an open session', async () => {
+  it('flags a finish no one sees, clears it when the phone opens it, and spares it while open', async () => {
     const host = createHeadlessHost()
     host.finishTurn()
     expect(host.meta[WT].isUnread).toBe(true)
 
-    await host.openOnPhone(resolved(WT, 'repo-1'))
+    await host.openOnPhone(WT)
     expect(host.meta[WT].isUnread).toBe(false)
-
-    await host.holdSessionOnPhone(WT)
     host.finishTurn()
     expect(host.meta[WT].isUnread).toBe(false)
 
@@ -181,13 +137,13 @@ describe('workspace unread flag on a headless host', () => {
     const host = createHeadlessHost()
     host.folders[FOLDER_ID].isUnread = true
     host.sshMeta[SSH_WT].isUnread = true
-    const folder = { ...resolved(FOLDER, 'folder-workspace:group-1'), path: '/tmp/folder' }
-    await host.openOnPhone(folder).catch(() => null)
+    await host.openOnPhone(FOLDER)
     expect(host.folders[FOLDER_ID].isUnread).toBe(false)
-
-    await host.openOnPhone(resolved(SSH_WT, 'repo-ssh', 'ssh:build-box'))
+    await host.openOnPhone(SSH_WT)
     expect(host.sshMeta[SSH_WT].isUnread).toBe(false)
-    // The SSH finish raises the SSH host's record, not a local one of the same id.
+
+    // The SSH finish raises the SSH host's record once the phone has left.
+    host.runtime.cleanupSubscriptionsForConnection('phone-1')
     host.finishTurn(SSH_WT, 'build-box')
     expect(host.sshMeta[SSH_WT].isUnread).toBe(true)
   })
@@ -212,9 +168,12 @@ describe('workspace unread flag on a headless host', () => {
       host.finishTurn()
       expect(host.meta[WT].isUnread).toBe(true)
 
-      // A client that disconnects stops counting.
+      // A client that disconnects stops counting; one with no connection cannot report.
+      expect(await host.reportView(view, undefined)).toMatchObject({ ok: false })
       host.meta[WT].isUnread = false
       await host.reportView({ ...view, presentForMs: null }, 'desktop-1')
+      host.finishTurn()
+      expect(host.meta[WT].isUnread).toBe(false)
       host.runtime.cleanupSubscriptionsForConnection('desktop-1')
       host.finishTurn()
       expect(host.meta[WT].isUnread).toBe(true)
