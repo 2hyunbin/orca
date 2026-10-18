@@ -86,7 +86,7 @@ describe('model catalog prewarm', () => {
     // Fresh: a second prewarm lists nothing; once old, it lists again.
     await service.prewarm()
     expect(codex).toHaveBeenCalledTimes(1)
-    now += AGENT_MODEL_CATALOG_FRESH_MS
+    now += 5 * AGENT_MODEL_CATALOG_FRESH_MS
     await service.prewarm()
     expect(codex).toHaveBeenCalledTimes(2)
     expect(grok).toHaveBeenCalledTimes(2)

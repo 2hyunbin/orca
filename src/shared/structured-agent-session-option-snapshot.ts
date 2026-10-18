@@ -46,7 +46,9 @@ function modelOptionSnapshot(state: StructuredAgentSessionOptionState): SessionO
           ...row,
           options: [
             ...row.options.filter(
-              (option) => !['effort', 'fastMode', 'serviceTier'].includes(option.id)
+              (option) =>
+                !['effort', 'fastMode', 'serviceTier'].includes(option.id) ||
+                (option.id === 'effort' && current.effortsKnown === false)
             ),
             ...discoveredModel(current, true).options
           ]

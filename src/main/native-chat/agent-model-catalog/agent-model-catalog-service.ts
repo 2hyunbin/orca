@@ -16,6 +16,7 @@ import {
   type AgentModelCatalogConfiguredChoice
 } from './agent-model-catalog-entry'
 import type { AgentModelCatalogEntry } from './agent-model-catalog-store'
+import { rememberDiscoveryScope } from './agent-model-catalog-discovery'
 import { AgentModelCatalogListingStoppedError } from './agent-model-catalog-failures'
 
 import type {
@@ -63,8 +64,11 @@ export function createAgentModelCatalogService(
   const recordingDefaults = new Map<string, Promise<void>>()
   const retainedKey = (sessionId: string): string => {
     const record = deps.getRecord(sessionId)
-    return record && deps.drivesRecord(record) && isNativeLocalLocation(record.location)
-      ? record.provider === 'claude' || record.provider === 'codex'
+    return record &&
+      deps.drivesRecord(record) &&
+      (isNativeLocalLocation(record.location) || record.location.wslDistro !== null)
+      ? (record.provider === 'claude' || record.provider === 'codex') &&
+        isNativeLocalLocation(record.location)
         ? (sessionKeys.get(sessionId) ?? '')
         : agentModelCatalogFingerprintForRecord(record)
       : ''
@@ -75,7 +79,7 @@ export function createAgentModelCatalogService(
       record &&
       (record.provider !== params.agent ||
         !deps.drivesRecord(record) ||
-        !isNativeLocalLocation(record.location))
+        (!isNativeLocalLocation(record.location) && record.location.wslDistro === null))
     ) {
       return { origin: 'unknown' }
     }
@@ -84,20 +88,25 @@ export function createAgentModelCatalogService(
     if (!home) {
       return { origin: 'unknown' }
     }
-    const base = agentModelCatalogFingerprint({
-      agent: params.agent,
-      accountHome: home,
-      wslDistro: null
-    })
-    const independent = params.agent === 'claude' || params.agent === 'codex'
+    const native = !record || isNativeLocalLocation(record.location)
+    const base = record
+      ? agentModelCatalogFingerprintForRecord(record)
+      : agentModelCatalogFingerprint({
+          agent: params.agent,
+          accountHome: home,
+          wslDistro: null
+        })
+    const independent = native && (params.agent === 'claude' || params.agent === 'codex')
     const legacyAccount = params.legacy && independent
     const workspacePath = async () =>
-      params.accountDefault && !legacyAccount
-        ? homedir()
-        : params.workspacePath === null
-          ? null
-          : (params.workspacePath ??
-            (record ? await deps.recordWorkspacePath?.(record).catch(() => null) : homedir()))
+      !native
+        ? null
+        : params.accountDefault && !legacyAccount
+          ? homedir()
+          : params.workspacePath === null
+            ? null
+            : (params.workspacePath ??
+              (record ? await deps.recordWorkspacePath?.(record).catch(() => null) : homedir()))
     const cwd = legacyAccount || !independent ? undefined : await workspacePath()
     if (!cwd && !legacyAccount && independent) {
       const legacy = deps.store.get(base)
@@ -127,7 +136,7 @@ export function createAgentModelCatalogService(
             .catch(() => true))
         : false
     }
-    const probe = deps.probes?.[params.agent]
+    const probe = native ? deps.probes?.[params.agent] : undefined
     const resolved = cwd
       ? await probe
           ?.resolve?.(home, cwd, params.accountDefault ? undefined : record?.options)
@@ -143,16 +152,8 @@ export function createAgentModelCatalogService(
           resolved?.identity
         )
       : base
-    if (independent && params.sessionId && !params.accountDefault && !legacyAccount) {
-      if (sessionKeys.size >= 256 && !sessionKeys.has(params.sessionId)) {
-        const oldest = sessionKeys.keys().next().value
-        if (oldest !== undefined) {
-          sessionKeys.delete(oldest)
-        }
-      }
-      if (!params.legacy) {
-        sessionKeys.set(params.sessionId, fingerprint)
-      }
+    if (independent && params.sessionId && !params.accountDefault && !params.legacy) {
+      rememberDiscoveryScope(sessionKeys, params.sessionId, fingerprint)
     }
     await recordingDefaults.get(fingerprint)
     let entry = deps.store.get(fingerprint)
@@ -183,7 +184,7 @@ export function createAgentModelCatalogService(
     }
     if (
       params.savedOnly ||
-      ((params.legacy || (params.agent !== 'claude' && params.agent !== 'codex')) &&
+      ((params.legacy || !independent) &&
         record?.lease?.claimStatus === 'released' &&
         record.lease.deathEvidence)
     ) {
@@ -203,9 +204,7 @@ export function createAgentModelCatalogService(
                       ...(legacyAccount || !cwd ? {} : { cwd }),
                       signal: lifetime.signal
                     })
-            return params.agent === 'claude' || params.agent === 'codex'
-              ? result
-              : { ...result, advisory: true as const }
+            return result
           } finally {
             release()
           }
@@ -229,7 +228,8 @@ export function createAgentModelCatalogService(
       const entry = deps.store.get(retainedKey(sessionId))
       return entry &&
         (!verifiedOnly ||
-          (deps.store.freshForMs(entry) > 0 &&
+          (sessionKeys.get(sessionId) === entry.fingerprint &&
+            deps.store.freshForMs(entry) > 0 &&
             !deps.store.hasActiveFailure(entry.fingerprint) &&
             !deps.store.failure(entry.fingerprint)?.unavailable))
         ? entry

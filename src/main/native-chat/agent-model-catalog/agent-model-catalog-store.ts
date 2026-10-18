@@ -93,7 +93,9 @@ export class AgentModelCatalogStore {
     for (const entry of await persistence.load()) {
       if (!this.entries.has(entry.fingerprint)) {
         this.entries.set(entry.fingerprint, entry)
-        this.dueEntries.add(entry.fingerprint)
+        if (entry.observation) {
+          this.dueEntries.add(entry.fingerprint)
+        }
       }
     }
     this.evictOverCap()
@@ -124,16 +126,18 @@ export class AgentModelCatalogStore {
     return false
   }
 
-  /** Retained observations also age so a session-free probe can expose new models. */
+  /** Session reads never postpone the discovery source's next refresh. */
   isStale(entry: AgentModelCatalogEntry): boolean {
     return (
       this.dueEntries.has(entry.fingerprint) ||
-      this.now() - entry.observation.at >= AGENT_MODEL_CATALOG_FRESH_MS
+      (entry.agent === 'claude' || entry.agent === 'codex'
+        ? !entry.observation || this.now() - entry.observation.at >= AGENT_MODEL_CATALOG_FRESH_MS
+        : !entry.discovered || this.now() - entry.discovered.at >= 10 * 60_000)
     )
   }
 
   freshForMs(entry: AgentModelCatalogEntry): number {
-    return entry.source === 'discovery' && !this.isStale(entry) && entry.observation.complete
+    return entry.source === 'discovery' && !this.isStale(entry) && entry.observation?.complete
       ? Math.max(0, AGENT_MODEL_CATALOG_FRESH_MS - (this.now() - entry.observation.at))
       : 0
   }

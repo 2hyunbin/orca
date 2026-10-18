@@ -121,8 +121,19 @@ it('preserves a running or restored pick in both response orders and accepts lat
   }
 })
 
-it('leaves a truly unpicked launch to the provider', () => {
+it('keeps an unpicked launch and restores discovered efforts after a literal model pick', () => {
   expect(
     selection(inventory(fresh(), { ...catalog, listingNamesConfiguredModel: true }))
   ).toBeUndefined()
+  const unknown = applyStructuredAgentSessionOptions(fresh(), seed, {
+    models: [{ ...row(picked.model), effortsKnown: false }],
+    current: { model: picked.model }
+  })
+  const exact = { ...row(picked.model), efforts }
+  const listed = inventory(unknown, { ...catalog, models: [exact] }, false)
+  expect(
+    structuredAgentSessionOptionSnapshot(listed).find((entry) => entry.id === 'effort')
+  ).toMatchObject({ settable: true, kind: { choices: efforts } })
+  const selected = commitStructuredAgentSessionOption(listed, 'effort', 'high')
+  expect(selection(selected)).toEqual(picked)
 })

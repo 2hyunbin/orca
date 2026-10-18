@@ -4,7 +4,8 @@
 
 import type {
   AgentSessionModelCatalogResult,
-  AgentSessionModelOption
+  AgentSessionModelOption,
+  AgentSessionOptionsResult
 } from '../../../shared/agent-session-wire'
 
 /** A selected-only row is presentation for this chat, never shared discovery. */
@@ -33,4 +34,41 @@ export function structuredAgentSessionOptionModels<TModel extends AgentSessionMo
     )
   }
   return models
+}
+
+/** Session-only projection: child controls describe only the exact selected model. */
+export function structuredAgentSessionCurrentModelOptions(
+  result: AgentSessionOptionsResult,
+  live: AgentSessionOptionsResult | null
+): AgentSessionOptionsResult {
+  const current = result.current
+  result.models = structuredAgentSessionOptionModels(result.models, current.model, (row) => row)
+  // Only the exact current row describes this child's controls; no aliases or sibling rows.
+  const currentRow =
+    live && live.current.model === current.model
+      ? live.models.find((row) => row.id === current.model)
+      : undefined
+  if (currentRow) {
+    result.fastModeSupport = live?.fastModeSupport
+    result.models = result.models.map((row) =>
+      row.id === current.model
+        ? {
+            ...row,
+            ...(currentRow.effortsKnown !== false
+              ? {
+                  efforts: currentRow.efforts,
+                  defaultEffort: currentRow.defaultEffort,
+                  effortsKnown: undefined
+                }
+              : {}),
+            supportsFastMode: currentRow.supportsFastMode,
+            serviceTiers: currentRow.serviceTiers
+          }
+        : row
+    )
+  }
+  if (result.listedModelIds?.length) {
+    result.listedModelIds = result.models.map((row) => row.id)
+  }
+  return result
 }

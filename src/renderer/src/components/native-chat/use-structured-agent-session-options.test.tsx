@@ -262,12 +262,13 @@ describe('useStructuredAgentSessionOptions', () => {
     ['forbidden', "Method 'agentSession.modelCatalog' is not available to mobile clients", true],
     ['forbidden', 'Access denied', false]
   ])('settles only an unsupported catalog surface: %s / %s', async (code, message, fallback) => {
-    answer({ modelCatalog: () => Promise.reject(new FakeRpcCallError(code, message)) })
+    const catalog = Promise.withResolvers<unknown>()
+    answer({ modelCatalog: () => catalog.promise })
     const { result, unmount } = renderOptions(
       { ...PROVISIONAL, launchSeedOptions: SEED },
       mutateWith(async () => null).mutate
     )
-    await tick()
+    await act(async () => catalog.reject(new FakeRpcCallError(code, message)))
     expect(currentValue(result.current.optionSnapshot, 'model')).toBe('gpt-5.5')
     const model = descriptor(result.current.optionSnapshot, 'model')
     expect(model?.settable).toBe(true)

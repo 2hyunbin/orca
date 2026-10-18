@@ -22,8 +22,14 @@ import type { StructuredAgentRegistry } from './structured-agent-registry'
 import type { StructuredAgentSessionLiveOptions } from './structured-agent-session-adapter'
 import { retainedAgentModelCatalogModels } from '../agent-model-catalog/agent-model-catalog-entry'
 import { saveStructuredAgentSessionListing } from './structured-agent-session-start-listing'
-import type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
-import { structuredAgentSessionOptionModels } from './structured-agent-session-option-models'
+import type {
+  StructuredAgentSessionHostDeps,
+  StructuredAgentSessionHostSession
+} from './structured-agent-session-host-types'
+import {
+  structuredAgentSessionCurrentModelOptions,
+  structuredAgentSessionOptionModels
+} from './structured-agent-session-option-models'
 import { structuredAgentSessionLaunchPermission } from './structured-agent-session-launch-permission'
 export {
   recordStructuredAgentSessionOptionIntent,
@@ -165,16 +171,24 @@ export async function readStructuredAgentSessionOptions(
     if (prepared) {
       return { kind: 'prepared' as const, child, prepared }
     }
-    if (!adapter.readOptions) {
+    const readOptions = adapter.readOptions
+    if (!readOptions) {
       throw new Error('structured_agent_session_options_unsupported')
+    }
+    if (agents.definition(session.params.provider)?.handleTransport === 'acp') {
+      return {
+        kind: 'acp' as const,
+        child,
+        read: () => readOptions.call(adapter, { sessionId, fence: child.fence })
+      }
     }
     return {
       kind: 'live' as const,
       child,
-      options: await adapter.readOptions({ sessionId, fence: child.fence })
+      options: await readOptions.call(adapter, { sessionId, fence: child.fence })
     }
   })
-  let live: StructuredAgentSessionLiveOptions | null =
+  const live: StructuredAgentSessionLiveOptions | null =
     started.kind === 'live'
       ? started.options
       : started.kind === 'prepared'
@@ -191,19 +205,46 @@ export async function readStructuredAgentSessionOptions(
   const permissionMode = permissionRecord
     ? await structuredAgentSessionLaunchPermission(context.deps, permissionRecord)
     : null
+  const finish = () =>
+    finishStructuredAgentSessionOptionsRead(
+      context,
+      sessionId,
+      started.child,
+      live,
+      inventory,
+      permissionMode,
+      started.kind === 'acp' ? started.read : undefined
+    )
+  return started.kind === 'acp' ? context.serialize(sessionId, finish) : finish()
+}
+
+async function finishStructuredAgentSessionOptionsRead(
+  context: Parameters<typeof readStructuredAgentSessionOptions>[0],
+  sessionId: string,
+  startedChild: StructuredAgentSessionHostSession['child'] | undefined,
+  reported: StructuredAgentSessionLiveOptions | null,
+  inventory: RestingOptions,
+  permissionMode: Awaited<ReturnType<typeof structuredAgentSessionLaunchPermission>>,
+  readAcp?: () => Promise<StructuredAgentSessionLiveOptions>
+): Promise<AgentSessionOptionsResult> {
+  const { adapter, agents, store } = context.deps
   // Reacquire after the last async read: a close/reopen can replace the whole handle.
   const session = await context.conversation(sessionId)
-  const record = store.getRecord(sessionId)
-  const phase = record?.rewind?.phase
   const agent = session.params.provider
   const capabilities = agents.capabilities(agent)
   const floor = session.journal.context.floor()
   const contextFloor = floor ? { contextFloor: floor } : {}
   const discoveryOnly = agent === 'claude' || agent === 'codex'
+  let live = reported
   // Child identity fences current facts only; discovery survives an exit or replacement.
-  if (session.child !== started.child || (live && providerChildRootExited(session))) {
+  if (session.child !== startedChild || ((live || readAcp) && providerChildRootExited(session))) {
     live = null
+  } else if (readAcp) {
+    // ACP reports current configuration after async inventory reads, in the same ordered step.
+    live = await readAcp()
   }
+  const record = store.getRecord(sessionId)
+  const phase = record?.rewind?.phase
   let options: Omit<AgentSessionOptionsResult, 'rewind'> = inventory
   if (live) {
     const { catalogListing, ...answer } = live
@@ -223,7 +264,7 @@ export async function readStructuredAgentSessionOptions(
       options = { ...answer, listedModelIds: ids }
     }
   }
-  const saved = record?.options
+  const saved = live && readAcp ? undefined : record?.options
   const current = {
     ...options.current,
     ...(saved?.model !== undefined ? { model: saved.model } : {}),
@@ -260,35 +301,7 @@ export async function readStructuredAgentSessionOptions(
       ? { contextUsage: { current: session.journal.contextUsage(), ...contextFloor } }
       : {})
   }
-  result.models = structuredAgentSessionOptionModels(result.models, current.model, (row) => row)
-  // Only the exact current row describes this child's controls; no aliases or sibling rows.
-  const currentRow =
-    live && live.current.model === current.model
-      ? live.models.find((row) => row.id === current.model)
-      : undefined
-  if (discoveryOnly && currentRow) {
-    result.fastModeSupport = live?.fastModeSupport
-    result.models = result.models.map((row) =>
-      row.id === current.model
-        ? {
-            ...row,
-            ...(currentRow.effortsKnown !== false
-              ? {
-                  efforts: currentRow.efforts,
-                  defaultEffort: currentRow.defaultEffort,
-                  effortsKnown: undefined
-                }
-              : {}),
-            supportsFastMode: currentRow.supportsFastMode,
-            serviceTiers: currentRow.serviceTiers
-          }
-        : row
-    )
-  }
-  if (result.listedModelIds?.length) {
-    result.listedModelIds = result.models.map((row) => row.id)
-  }
-  return result
+  return structuredAgentSessionCurrentModelOptions(result, discoveryOnly ? live : null)
 }
 
 /** A goal the host can change, or one only the agent's own `/goal` changes, reported apart. */

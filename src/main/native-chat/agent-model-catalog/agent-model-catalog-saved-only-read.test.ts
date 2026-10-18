@@ -4,7 +4,10 @@ import {
   agentSessionLeaseFixture,
   agentSessionRecordFixture
 } from '../../../shared/agent-session-record.test-fixture'
-import { agentModelCatalogFingerprint } from './agent-model-catalog-fingerprint'
+import {
+  agentModelCatalogFingerprint,
+  agentModelCatalogFingerprintForRecord
+} from './agent-model-catalog-fingerprint'
 import { createAgentModelCatalogService } from './agent-model-catalog-service'
 import {
   AGENT_MODEL_CATALOG_FAILURE_TTL_MS,
@@ -88,7 +91,7 @@ describe('a saved-only catalog read', () => {
     expect(probe).not.toHaveBeenCalled()
 
     store.recordSuccess(FINGERPRINT, 'grok', listing('grok-4.7'), 'discovery')
-    now += AGENT_MODEL_CATALOG_FRESH_MS
+    now += 5 * AGENT_MODEL_CATALOG_FRESH_MS
     expect(await service.read({ agent: 'grok', sessionId: record.sessionId })).toMatchObject({
       origin: 'probe',
       models: [{ id: 'grok-4.7' }]
@@ -97,12 +100,29 @@ describe('a saved-only catalog read', () => {
 
     await service.read({ agent: 'grok' })
     expect(probe).toHaveBeenCalledOnce()
+    record.location = { ...record.location, wslDistro: 'Ubuntu' }
+    record.lease = agentSessionLeaseFixture()
+    const wslKey = agentModelCatalogFingerprintForRecord(record)
+    store.recordSuccess(wslKey, 'grok', listing('grok-wsl'), 'discovery')
+    now += 10 * 60_000
+    for (const savedOnly of [true, false]) {
+      expect(
+        await service.read({
+          agent: 'grok',
+          sessionId: record.sessionId,
+          savedOnly,
+          waitForListing: true
+        })
+      ).toMatchObject({ models: [{ id: 'grok-wsl' }] })
+    }
+    expect(service.peek(record.sessionId)?.fingerprint).toBe(wslKey)
+    expect(probe).toHaveBeenCalledOnce()
   })
 
   it('answers from the saved entry and starts nothing, however old the entry is', async () => {
     const { store, probe, service, advance } = rig()
     store.recordSuccess(FINGERPRINT, 'grok', listing('grok-4.7'), 'discovery')
-    advance(AGENT_MODEL_CATALOG_FRESH_MS)
+    advance(5 * AGENT_MODEL_CATALOG_FRESH_MS)
     const result = await service.read({ agent: 'grok', savedOnly: true })
     expect(result).toMatchObject({ origin: 'probe', models: [{ id: 'grok-4.7' }] })
     expect(result).not.toHaveProperty('listingInProgress')

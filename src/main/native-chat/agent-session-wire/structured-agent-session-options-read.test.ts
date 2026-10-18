@@ -9,12 +9,18 @@ import {
 } from '../agent-model-catalog/agent-model-catalog-store'
 import type { StructuredAgentSessionMutationContext } from './structured-agent-session-host-mutations'
 import { readStructuredAgentSessionOptions } from './structured-agent-session-options-read'
-import { AcpStructuredOptions } from '../../acp/acp-structured-options'
+import { AcpStructuredOptions, writeAcpSessionOption } from '../../acp/acp-structured-options'
+import { acpLaunchSpecFor } from '../../acp/acp-launch-specs'
+import { acpStructuredAgentDefinition } from '../../acp/acp-structured-agent-definitions'
 import { GROK_CONFIG_OPTIONS } from '../../acp/acp-structured-adapter.test-support'
 import { SessionConfigOptionSchema } from '../../acp/generated/acp-protocol.generated'
 import { withLiveCatalogListing } from '../agent-model-catalog/agent-model-catalog-entry'
+import { agentModelCatalogFingerprintForRecord } from '../agent-model-catalog/agent-model-catalog-fingerprint'
 import { StructuredAgentSessionTaskQueue } from './structured-agent-session-task-queue'
-import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-test-support'
+import {
+  NO_STRUCTURED_AGENTS,
+  structuredAgentsDeclaringNothing
+} from './structured-agent-session-adapter-router-test-support'
 
 const SESSION = 'session-1'
 
@@ -82,12 +88,13 @@ describe('options at rest', () => {
   })
 
   it.each(['omp', 'grok', 'opencode'] as const)(
-    '%s keeps an unknown model and learns menus from later options',
+    '%s keeps an unknown model and binds later effort picks to the live model',
     async (provider) => {
       const record = { ...restingRecord(), provider }
       const probe = vi.fn(() => new Promise<AgentModelCatalogSuccess>(() => {}))
+      const store = new AgentModelCatalogStore()
       const modelCatalog = createAgentModelCatalogService({
-        store: new AgentModelCatalogStore(),
+        store,
         getRecord: () => record,
         drivesRecord: () => true,
         recordWorkspacePath: async () => '/repo',
@@ -103,11 +110,15 @@ describe('options at rest', () => {
         journal: { threadGoal: () => null, context: { floor: () => null } }
       }
       const running = { ...resting, child: { fence: 7 } }
+      const spec = acpLaunchSpecFor(provider)
+      if (!spec) {
+        throw new Error('Missing ACP test launch')
+      }
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: options reads touch only these context members.
       const context = {
         deps: {
           adapter: { readOptions: async () => withLiveCatalogListing(reader.read()) },
-          agents: NO_STRUCTURED_AGENTS,
+          agents: structuredAgentsDeclaringNothing([acpStructuredAgentDefinition(spec)]),
           store: { getRecord: () => record },
           modelCatalog
         },
@@ -125,7 +136,8 @@ describe('options at rest', () => {
       record.options = { model: 'later-model', effort: 'off' }
       expect((await read()).current).toEqual({
         model: 'later-model',
-        effort: 'off'
+        effort: 'off',
+        permissionMode: 'ask'
       })
       for (const emptyStart of [false, true]) {
         modelCatalog.recordLiveListing(SESSION, {
@@ -133,20 +145,59 @@ describe('options at rest', () => {
         })
         reader.adoptSession(emptyStart ? {} : { configOptions })
         modelCatalog.recordLiveListing(SESSION, reader.startListing())
-        reader.adoptConfigOptions(
-          configOptions.map((option) =>
-            option.type === 'select' && option.category === 'model'
-              ? { ...option, currentValue: 'grok-4.6' }
+        const liveConfig = configOptions.map((option) =>
+          option.type === 'select' && option.category === 'model'
+            ? { ...option, currentValue: 'grok-4.6' }
+            : option
+        )
+        reader.adoptConfigOptions(liveConfig)
+        record.options = { model: 'grok-4.7', effort: 'off' }
+        live = true
+        const shown = await read()
+        expect(shown.current.model).toBe('grok-4.6')
+        expect(shown.current.confirmed).toEqual(['model', 'effort'])
+        expect(shown.models.find((row) => row.id === 'grok-4.7')?.efforts).toEqual([])
+        const write = reader.write('effort', 'low')
+        if (!write) {
+          throw new Error('Missing advertised effort write')
+        }
+        const setConfigOption = vi.fn(async () => ({
+          configOptions: liveConfig.map((option) =>
+            option.type === 'select' && option.category === 'thought_level'
+              ? { ...option, currentValue: 'low' }
               : option
           )
-        )
+        }))
+        const setModel = vi.fn(async () => ({}))
+        await writeAcpSessionOption({ setConfigOption, setModel }, reader, write, {
+          agent: provider,
+          timeoutMs: 1_000
+        })
+        expect(setConfigOption).toHaveBeenCalledExactlyOnceWith('reasoning_effort', 'low')
+        expect(setModel).not.toHaveBeenCalled()
+        expect(reader.reported()).toEqual({ model: 'grok-4.6', effort: 'low' })
         record.options = { model: 'grok-4.6', effort: 'high' }
-        live = true
-        await read()
         live = false
         const answer = await read()
         expect(answer.models).toEqual(reader.read().models)
       }
+      const switched = reader.startListing()
+      reader.adoptSession({ configOptions })
+      const discovery = reader.startListing()
+      store.recordSuccess(
+        agentModelCatalogFingerprintForRecord(record),
+        provider,
+        { ...discovery, origin: 'probe' },
+        'discovery'
+      )
+      modelCatalog.recordLiveListing(SESSION, switched)
+      expect((await read()).models.find((row) => row.id === 'grok-4.7')?.efforts).toEqual(
+        discovery.models.find((row) => row.id === 'grok-4.7')?.efforts
+      )
+      modelCatalog.recordLiveListing(SESSION, {
+        models: [{ id: 'grok-4.7', label: 'Grok 4.7', isDefault: false, efforts: [] }]
+      })
+      expect((await read()).models.find((row) => row.id === 'grok-4.7')?.efforts).toEqual([])
     }
   )
 })

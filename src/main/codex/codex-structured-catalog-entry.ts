@@ -5,8 +5,8 @@ import type { CodexModelCatalogListing } from './codex-structured-model-catalog'
 export function listingFromEntry(entry: AgentModelCatalogEntry): CodexModelCatalogListing {
   return {
     models: entry.models.map((model) => ({ ...model })),
-    complete: entry.observation.complete,
-    ...(entry.observation.configured ? { configured: entry.observation.configured } : {})
+    complete: entry.observation?.complete === true,
+    ...(entry.observation?.configured ? { configured: entry.observation?.configured } : {})
   }
 }
 

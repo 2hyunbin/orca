@@ -9,6 +9,7 @@ import {
   type AgentModelCatalogEntry,
   type AgentModelCatalogListing
 } from './agent-model-catalog-entry'
+import { discoveryEntry } from './agent-model-catalog-discovery'
 import { isStructuredAgentId } from '../../../shared/agent-session-provider-handle-encoding'
 
 // 3: Codex models carry `serviceTiers`; an older file would offer Fast with no tier to send.
@@ -43,7 +44,7 @@ function parseChoice(value: unknown): AgentSessionOptionChoice | null {
   return { value: choice, label, ...(description ? { description } : {}) }
 }
 
-function parseModel(value: unknown): AgentSessionModelOption | null {
+function parseModel(value: unknown, sparse: boolean): AgentSessionModelOption | null {
   const row = asRecord(value)
   const id = text(row?.id)
   const label = text(row?.label)
@@ -66,7 +67,9 @@ function parseModel(value: unknown): AgentSessionModelOption | null {
     id,
     label,
     ...(resolvedModel ? { resolvedModel } : {}),
-    ...(row.effortsKnown === false ? { effortsKnown: false as const } : {}),
+    ...(row.effortsKnown === false || (sparse && efforts.length === 0)
+      ? { effortsKnown: false as const }
+      : {}),
     ...(description ? { description } : {}),
     isDefault: row.isDefault === true,
     ...(defaultEffort ? { defaultEffort } : {}),
@@ -81,7 +84,7 @@ function parseModel(value: unknown): AgentSessionModelOption | null {
   }
 }
 
-function parseListing(value: unknown): AgentModelCatalogListing | null {
+function parseListing(value: unknown, sparse = false): AgentModelCatalogListing | null {
   const row = asRecord(value)
   if (
     !row ||
@@ -93,7 +96,7 @@ function parseListing(value: unknown): AgentModelCatalogListing | null {
   ) {
     return null
   }
-  const models = row.models.map(parseModel)
+  const models = row.models.map((model) => parseModel(model, sparse))
   if (models.some((model) => model === null)) {
     return null
   }
@@ -128,22 +131,66 @@ function parseConfigured(value: unknown): NonNullable<AgentModelCatalogListing['
   }
 }
 
-function parseEntry(value: unknown): AgentModelCatalogEntry | null {
+function parseEntry(value: unknown, sparse: boolean): AgentModelCatalogEntry | null {
   const row = asRecord(value)
   if (!row || !isStructuredAgentId(row.agent) || typeof row.fingerprint !== 'string') {
     return null
   }
   // Old digests remain legacy identities, never inferred exact launch scopes.
-  const legacyLive = parseListing(row.live)
-  const legacyProbe = parseListing(row.discovered)
+  const independent = row.agent === 'claude' || row.agent === 'codex'
+  const legacyLive = parseListing(row.live, sparse && !independent)
+  const legacyProbe = parseListing(row.discovered, sparse && !independent)
+  const configured = asRecord(row.configured)
+  const model = text(configured?.modelId)
+  if (!independent) {
+    const sameModelIds = Array.isArray(configured?.sameModelIds)
+      ? configured.sameModelIds.filter((id): id is string => typeof id === 'string')
+      : []
+    const effort = text(configured?.effort)
+    const retained = agentModelCatalogEntry(
+      row.agent,
+      row.fingerprint,
+      legacyProbe,
+      legacyLive,
+      model && typeof configured?.at === 'number' && Number.isFinite(configured.at)
+        ? {
+            modelId: model,
+            at: configured.at,
+            ...(sameModelIds.length ? { sameModelIds } : {}),
+            ...(effort ? { effort } : {})
+          }
+        : null
+    )
+    if (retained) {
+      return retained
+    }
+    // Flattened unreleased caches cannot establish either source's menu or default.
+    const fallback = parseListing(row.observation)
+    return fallback
+      ? discoveryEntry(
+          row.agent,
+          row.fingerprint,
+          {
+            ...fallback,
+            complete: false,
+            configured: undefined,
+            models: fallback.models.map(({ defaultEffort: _default, ...row }) => ({
+              ...row,
+              isDefault: false,
+              efforts: [],
+              effortsKnown: false as const
+            }))
+          },
+          'probe-advisory'
+        )
+      : null
+  }
   const legacy =
     legacyProbe && (!legacyLive || legacyProbe.at >= legacyLive.at) ? legacyProbe : legacyLive
   let observation = parseListing(row.observation) ?? legacy
   if (!observation) {
     return null
   }
-  const configured = asRecord(row.configured)
-  const model = text(configured?.modelId)
   if (
     !row.observation &&
     model &&
@@ -165,15 +212,20 @@ function parseEntry(value: unknown): AgentModelCatalogEntry | null {
         ? 'session-advisory'
         : 'probe-advisory'
 
-  return agentModelCatalogEntry(row.agent, row.fingerprint, observation, source)
+  return discoveryEntry(row.agent, row.fingerprint, observation, source)
 }
 
 function persistedEntry(entry: AgentModelCatalogEntry): unknown {
   return {
     agent: entry.agent,
     fingerprint: entry.fingerprint,
-    observation: entry.observation,
-    source: entry.source
+    ...(entry.observation
+      ? { observation: entry.observation, source: entry.source }
+      : {
+          discovered: entry.discovered,
+          live: entry.live,
+          ...(entry.configured ? { configured: entry.configured } : {})
+        })
   }
 }
 
@@ -230,7 +282,7 @@ export function createAgentModelCatalogFilePersistence(
           return []
         }
         return root.entries
-          .map(parseEntry)
+          .map((entry) => parseEntry(entry, root.version === 3))
           .filter((entry): entry is AgentModelCatalogEntry => entry !== null)
       } catch {
         return []

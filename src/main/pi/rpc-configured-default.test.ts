@@ -372,8 +372,8 @@ describe('Pi’s default comes from what a chat with no pick runs', () => {
     const clean = workspace('clean')
     const { sessionId } = await chat(clean, { thinking: 'xhigh' })
     await catalog.read({ agent: 'pi', workspacePath: clean, savedOnly: true })
-    expect(catalog.peek(sessionId)?.observation.configured).toEqual({
-      model: 'openai/gpt-6',
+    expect(catalog.peek(sessionId)?.configured).toEqual({
+      modelId: 'openai/gpt-6',
       effort: 'xhigh',
       at: 1_000
     })
