@@ -111,6 +111,36 @@ test('a restart clears a tier nothing backs, keeps a hook row’s and an SSH hos
               : folder
           )
         : state.folderWorkspaces
+      // The folder workspace's terminal died while Orca was closed: its id is on record, its
+      // session is gone from the daemon.
+      const session =
+        state.workspaceSession && typeof state.workspaceSession === 'object'
+          ? state.workspaceSession
+          : {}
+      const tabsByWorktree =
+        'tabsByWorktree' in session &&
+        session.tabsByWorktree &&
+        typeof session.tabsByWorktree === 'object'
+          ? session.tabsByWorktree
+          : {}
+      state.workspaceSession = {
+        ...session,
+        tabsByWorktree: {
+          ...tabsByWorktree,
+          [goneId]: [
+            {
+              id: 'tab-stamps-gone',
+              ptyId: 'stamps-dead-pty',
+              worktreeId: goneId,
+              title: 'Terminal 1',
+              customTitle: null,
+              color: null,
+              sortOrder: 0,
+              createdAt: Date.now()
+            }
+          ]
+        }
+      }
       state.worktreeMeta = {
         ...existing,
         [sshId]: { ...row, instanceId: 'stamps-remote', hostId: 'ssh:unreachable' }

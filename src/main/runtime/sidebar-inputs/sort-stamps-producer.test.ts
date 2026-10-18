@@ -434,6 +434,14 @@ describe('SortStampsProducer: startup reconcile', () => {
     expect(h.meta.get(WT)).toEqual({ lastActivityAt: 0, smartTier: 'working', smartAt: T0 })
   })
 
+  it('keeps a tier when no terminal is on record: that proves nothing', async () => {
+    const h = createHarness()
+    h.meta.set(WT, { lastActivityAt: 5, smartTier: 'done', smartAt: 4 })
+    h.producer.attachAgentStatusStore(h.server)
+    await h.producer.reconcileStoredTiers(evidence())
+    expect(h.writes).toEqual([])
+  })
+
   it('leaves another host’s tiers alone: a host not reached yet is not one whose agents died', async () => {
     const h = createHarness()
     h.meta.set(WT, { lastActivityAt: 5, smartTier: 'working', smartAt: 4 })

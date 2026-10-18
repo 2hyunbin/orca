@@ -113,8 +113,8 @@ export class SortStampsProducer {
   }
 
   /**
-   * Clears a tier this machine stored that nothing backs after a restart: no hook row, and no
-   * terminal its provider can still find. Runs once hook rows and PTYs have settled. Another
+   * Clears a tier this machine stored that nothing backs after a restart: no hook row, and every
+   * terminal it held proven gone by its provider. Runs once hook rows and PTYs have settled. Another
    * host's tiers stay: a host not reached yet is not one whose agents died.
    */
   async reconcileStoredTiers(evidence: StoredTierEvidence): Promise<void> {
@@ -142,9 +142,11 @@ export class SortStampsProducer {
     )
     await Promise.all(
       candidates.map(async (worktreeId) => {
-        const absent = await Promise.all(evidence.terminalPtyIds(worktreeId).map(isProvenAbsent))
-        // A pane can report while the probes are in flight.
-        if (absent.every(Boolean) && !this.isBacked(worktreeId)) {
+        const ptyIds = evidence.terminalPtyIds(worktreeId)
+        const absent = await Promise.all(ptyIds.map(isProvenAbsent))
+        // No terminal on record proves nothing (a chat republishes later, a client owns the
+        // layout); a pane can also report while the probes are in flight.
+        if (ptyIds.length > 0 && absent.every(Boolean) && !this.isBacked(worktreeId)) {
           this.writeAgentChange({ worktreeId, sshHostId: null }, 'rest', 'rest', this.sources.now())
         }
       })
@@ -269,11 +271,14 @@ export class SortStampsProducer {
       phase,
       at: stored?.smartTier === phase && stored.smartAt !== undefined ? stored.smartAt : observedAt
     }
+    // A pane seeded at rest adds no tier; clearing one nothing backs is the reconcile's call.
     if (state.phase === 'rest') {
-      this.panes.delete(paneKey)
-    } else {
-      this.panes.set(paneKey, { ...workspace, state })
+      if (this.panes.delete(paneKey)) {
+        this.writeAgentChange(workspace, 'rest', 'rest', this.sources.now())
+      }
+      return
     }
+    this.panes.set(paneKey, { ...workspace, state })
     this.writeAgentChange(workspace, state.phase, state.phase, this.sources.now())
   }
 
