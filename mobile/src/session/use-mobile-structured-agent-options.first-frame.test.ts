@@ -138,7 +138,7 @@ describe('the phone picker’s first frame', () => {
       const ready = {
         ...empty,
         complete: true,
-        models: HOST_LIST.origin === 'unknown' ? [] : HOST_LIST.models
+        models: HOST_LIST.models
       }
       await act(async () => {
         catalogs[2]?.({ ...HOST_LIST, choiceCatalog: ready })
