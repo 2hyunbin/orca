@@ -150,7 +150,8 @@ async function commandTurn(clientMessageId: string) {
   return (await journal()).items.find((item) => item.itemId === itemId)
 }
 
-it('answers at handover, then journals its own entry, turn and result (B1, B16)', async () => {
+it('answers at handover before the provider reports holding the command, then journals its result', async () => {
+  Object.assign(state.host.deps.adapter, { heldSends: () => new Set<string>() })
   await attach()
   const events = await subscribe()
   const params = compactParams()

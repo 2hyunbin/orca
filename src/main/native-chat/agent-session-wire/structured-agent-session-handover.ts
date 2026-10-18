@@ -26,7 +26,10 @@ import {
 import type { StructuredAgentSessionDeliveryOrder } from './structured-agent-session-delivery-order'
 import { carriedStoppedHistory } from './structured-agent-session-stopped-history-selection'
 import { withStoppedHistory } from '../../../shared/agent-session-stopped-history'
-import { beginStructuredAgentSessionHandover } from './structured-agent-session-handing-over'
+import {
+  beginStructuredAgentSessionHandover,
+  whileStructuredAgentSessionHandingOver
+} from './structured-agent-session-handing-over'
 
 export type AgentSessionHandoverContext = StructuredAgentSessionCommandHandoverContext & {
   acquireAborts?: Pick<StructuredAgentSessionAcquireAborts, 'begin'>
@@ -65,7 +68,12 @@ export async function beginSubmissionHandover(
     return null
   }
   if (body.command) {
-    await handOverStructuredAgentSessionCommand(ctx, submission, body)
+    await whileStructuredAgentSessionHandingOver(
+      ctx.journal,
+      clientMessageId,
+      async () => handOverStructuredAgentSessionCommand(ctx, submission, body),
+      ctx.workChanged
+    )
     return null
   }
   // The message joins the turn the child it goes to is running, a steer, or opens its own; never a
