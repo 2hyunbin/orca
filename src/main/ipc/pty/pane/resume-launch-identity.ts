@@ -51,6 +51,7 @@ export function seedResumeLaunchIdentity(args: {
   resumeProviderSession: unknown
   worktreeId: unknown
   launchedAt: number
+  resumedTranscriptPath?: string
 }): void {
   const agent = args.launchAgent
   const requested = normalizeAgentProviderSession(args.resumeProviderSession)
