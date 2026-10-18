@@ -1,29 +1,19 @@
-import type { ExecutionHostId } from '../../../shared/execution-host'
-import { parseWorkspaceKey } from '../../../shared/workspace-scope'
-import type { WorkspaceRef } from './sort-stamp-records'
+import {
+  readWorkspaceRecord,
+  writeWorkspaceRecord,
+  type WorkspaceRecordStore,
+  type WorkspaceRef
+} from './sort-stamp-records'
 
 /** At most one write per workspace per minute; cleanup judges idleness in days. */
 export const TERMINAL_USE_THROTTLE_MS = 60_000
 
 type TerminalUseRecord = { lastTerminalUseAt?: number }
-type TerminalUseUpdate = { lastTerminalUseAt: number }
 
-/** The record reads and writes this needs, which the runtime's store satisfies. */
-export type TerminalUseStore = {
-  getWorktreeMeta: (worktreeId: string) => TerminalUseRecord | undefined
-  setWorktreeMeta: (worktreeId: string, updates: TerminalUseUpdate) => unknown
-  getWorktreeMetaForHost?: (
-    worktreeId: string,
-    hostId: ExecutionHostId
-  ) => TerminalUseRecord | undefined
-  setWorktreeMetaForHost?: (
-    worktreeId: string,
-    hostId: ExecutionHostId,
-    updates: TerminalUseUpdate
-  ) => unknown
-  getFolderWorkspace?: (folderWorkspaceId: string) => TerminalUseRecord | undefined
-  updateFolderWorkspace?: (folderWorkspaceId: string, updates: TerminalUseUpdate) => unknown
-}
+export type TerminalUseStore = WorkspaceRecordStore<
+  TerminalUseRecord,
+  { lastTerminalUseAt: number }
+>
 
 export type TerminalUseSources = {
   store: () => TerminalUseStore | null
@@ -51,36 +41,16 @@ export class TerminalUseProducer {
     if (last !== undefined && now - last < TERMINAL_USE_THROTTLE_MS) {
       return
     }
+    // Throttled even when nothing is written, so a fenced or recordless workspace stays cheap.
+    this.writtenAt.set(key, now)
     // A WSL move only takes this machine's projects.
     if (!workspace.sshHostId && this.sources.isWriteFenced(workspace.worktreeId)) {
       return
     }
-    if (this.write(workspace, now)) {
-      this.writtenAt.set(key, now)
-    }
-  }
-
-  // Only a workspace with a record is written; writing would create one for a stale id.
-  private write({ worktreeId, sshHostId }: WorkspaceRef, now: number): boolean {
     const store = this.sources.store()
-    const update = { lastTerminalUseAt: now }
-    const scope = parseWorkspaceKey(worktreeId)
-    if (scope?.type === 'folder') {
-      if (!store?.getFolderWorkspace?.(scope.folderWorkspaceId)) {
-        return false
-      }
-      store.updateFolderWorkspace?.(scope.folderWorkspaceId, update)
-    } else if (sshHostId) {
-      if (!store?.getWorktreeMetaForHost?.(worktreeId, sshHostId)) {
-        return false
-      }
-      store.setWorktreeMetaForHost?.(worktreeId, sshHostId, update)
-    } else {
-      if (!store?.getWorktreeMeta(worktreeId)) {
-        return false
-      }
-      store.setWorktreeMeta(worktreeId, update)
+    // Only a workspace with a record is written; writing would create one for a stale id.
+    if (readWorkspaceRecord(store, workspace)) {
+      writeWorkspaceRecord(store, workspace, { lastTerminalUseAt: now })
     }
-    return true
   }
 }

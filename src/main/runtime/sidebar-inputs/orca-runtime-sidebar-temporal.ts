@@ -1,3 +1,4 @@
+import { isRemoteRuntimePtyId } from '../../../shared/remote-runtime-pty-id'
 import { OrcaRuntimeWithWorkspaceReviewFacts } from './orca-runtime-workspace-review-facts'
 import type { OrcaRuntimeWithMigrationCatalog } from '../orca-runtime-migration-catalog'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
@@ -48,7 +49,8 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
   readonly terminalUse = new TerminalUseProducer({
     store: () => this.store,
     workspaceOfPty: (ptyId) => {
-      const pty = this.ptysById.get(ptyId)
+      // A paired server's terminal is that server's to record.
+      const pty = isRemoteRuntimePtyId(ptyId) ? undefined : this.ptysById.get(ptyId)
       if (!pty?.worktreeId) {
         return null
       }

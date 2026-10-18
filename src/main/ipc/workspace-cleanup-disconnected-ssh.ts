@@ -66,7 +66,7 @@ export function synthesizeDisconnectedSshCleanupCandidates(
   return candidates
 }
 
-// A terminal used on any device counts, even while its host is unreachable.
+// A terminal used on any device counts, even while its host is unreachable. Unlike the live scan, createdAt is not counted here.
 function withTerminalUse(meta: WorktreeMeta): WorktreeMeta {
   const usedAt = meta.lastTerminalUseAt
   return usedAt !== undefined && Number.isFinite(usedAt) && usedAt > meta.lastActivityAt

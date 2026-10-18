@@ -16,7 +16,7 @@ vi.mock('../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS
 const WT = 'repo-1::/tmp/phone-only'
 const DAY_MS = 24 * 60 * 60 * 1000
 
-function createHeadlessRuntime() {
+function createHeadlessRuntime(ptyId = 'pty-1') {
   // Untouched for 45 days: no agent ran, so no Recent stamp moved.
   const meta: Record<string, Partial<WorktreeMeta>> = { [WT]: { lastActivityAt: 1 } }
   const writes: Partial<WorktreeMeta>[] = []
@@ -43,7 +43,7 @@ function createHeadlessRuntime() {
         worktreeId: WT,
         leafId: 'pane:1',
         paneRuntimeId: 1,
-        ptyId: 'pty-1',
+        ptyId,
         paneTitle: null
       }
     ]
@@ -92,6 +92,18 @@ describe('host-written terminal use', () => {
       { lastTerminalUseAt: 1_000 },
       { lastTerminalUseAt: 1_000 + TERMINAL_USE_THROTTLE_MS }
     ])
+  })
+
+  it('app-written launch input never counts', () => {
+    const launch = createHeadlessRuntime()
+    launch.runtime.terminalRunFacts.recordInput('pty-1', 'launch', 'claude\r', 1_000)
+    expect(launch.writes).toEqual([])
+  })
+
+  it("a paired server's terminal is not this host's to record", () => {
+    const mirrored = createHeadlessRuntime('remote:server-pty')
+    mirrored.runtime.terminalRunFacts.recordInput('remote:server-pty', 'driving', 'ls\r', 1_000)
+    expect(mirrored.writes).toEqual([])
   })
 
   it('output never counts as use', () => {
