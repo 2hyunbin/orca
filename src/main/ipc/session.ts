@@ -33,30 +33,33 @@ export function registerSessionHandlers(store: Store, runtime: OrcaRuntimeServic
 
   // Switch point: main keeps its own layout over the window's and takes the window's view and
   // facts; the drift check reports where the save's layout still differs from main's.
-  ipcMain.handle('session:set', (_event, args: WorkspaceSessionState, hostId?: string | null) => {
-    if (isFenced(hostId)) {
-      return
-    }
-    if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
-      store.setWorkspaceSession(args, hostId)
-      return
-    }
+  const sessionForMain = (args: WorkspaceSessionState, hostId: string | null | undefined) => {
     const stored = store.getWorkspaceSession(hostId)
     reportWindowSaveDrift(stored, args, hostId, 'session:set')
-    store.setWorkspaceSession(windowViewSaveForMain(stored, args, hostId), hostId)
+    return windowViewSaveForMain(stored, args, hostId)
+  }
+  const patchForMain = (args: WorkspaceSessionPatch, hostId: string | null | undefined) => {
+    const stored = store.getWorkspaceSession(hostId)
+    reportWindowSaveDrift(stored, { ...stored, ...args }, hostId, 'session:patch')
+    return windowViewPatchForMain(stored, args, hostId)
+  }
+
+  ipcMain.handle('session:set', (_event, args: WorkspaceSessionState, hostId?: string | null) => {
+    if (!isFenced(hostId)) {
+      store.setWorkspaceSession(
+        ORCA_LAYOUT_OWNER_IS_MAIN ? sessionForMain(args, hostId) : args,
+        hostId
+      )
+    }
   })
 
   ipcMain.handle('session:patch', (_event, args: WorkspaceSessionPatch, hostId?: string | null) => {
-    if (isFenced(hostId)) {
-      return
+    if (!isFenced(hostId)) {
+      store.patchWorkspaceSession(
+        ORCA_LAYOUT_OWNER_IS_MAIN ? patchForMain(args, hostId) : args,
+        hostId
+      )
     }
-    if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
-      store.patchWorkspaceSession(args, hostId)
-      return
-    }
-    const stored = store.getWorkspaceSession(hostId)
-    reportWindowSaveDrift(stored, { ...stored, ...args }, hostId, 'session:patch')
-    store.patchWorkspaceSession(windowViewPatchForMain(stored, args, hostId), hostId)
   })
 
   // Why: a renderer save cannot shrink membership main owns, so each close commits it explicitly.
