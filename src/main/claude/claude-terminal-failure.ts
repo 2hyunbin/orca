@@ -82,7 +82,7 @@ function resolveClaudeTerminalOwner(
   if (owner) {
     return parseAgentJournalItemKey(owner.itemId)
   }
-  if (suppressed && latestClosedWork(journal)) {
+  if (suppressed && (frame.type !== 'result' || frame.is_error === true) && latestClosedWork(journal)) {
     return null
   }
   return undefined

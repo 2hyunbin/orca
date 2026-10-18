@@ -6,6 +6,7 @@ import type {
 } from '../../shared/agent-session-journal-types'
 import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import { createClaudeJournalTranslator } from './claude-structured-journal-translation'
+import { journal } from './claude-context-usage-test-support'
 import { ClaudeBackgroundTaskTracker } from './claude-background-task-tracker'
 import { MOVED_TO_BACKGROUND } from './claude-captured-task-frames.test-fixture'
 
@@ -17,11 +18,12 @@ function goalSink(
   journalGoal: AgentJournalThreadGoal | null = null,
   journalRow?: { identity: AgentJournalItemIdentity; body: AgentJournalItemBody }
 ) {
-  const rows: { identity: AgentJournalItemIdentity; body: AgentJournalItemBody }[] = []
+  const state = journal()
+  const rows = state.appends
   let stopped = false
   const backgroundTasks = new ClaudeBackgroundTaskTracker()
   const sink: StructuredAgentSessionEventSink = {
-    appendItem: (identity, body) => rows.push({ identity, body }),
+    ...state.sink,
     appendTombstone: vi.fn(),
     publish: vi.fn(),
     journalStopDecidesTurn: () => stopped,
@@ -46,6 +48,7 @@ function goalSink(
   let at = 1_000
   const frame = (message: Record<string, unknown>, elapsedMs = 1_000) => {
     at += elapsedMs
+    state.clock.now = at
     backgroundTasks.observe(message)
     translator.handle({
       type: 'message',
