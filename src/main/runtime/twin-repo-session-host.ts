@@ -1,5 +1,6 @@
 import {
   getRepoExecutionHostId,
+  LOCAL_EXECUTION_HOST_ID,
   parseExecutionHostId,
   toRuntimeExecutionHostId,
   type ExecutionHostId
@@ -16,7 +17,10 @@ import type { RuntimeStore } from './runtime-store-contract'
 
 export type CachedWorktreeHost = Pick<Worktree, 'id' | 'hostId' | 'runtimeOwnerEnvironmentId'>
 
-type TwinRepoStore = Pick<RuntimeStore, 'getRepos' | 'getWorkspaceSession'>
+type TwinRepoStore = Pick<
+  RuntimeStore,
+  'getRepos' | 'getWorkspaceSession' | 'getWorkspaceSessionHostIds'
+>
 
 const WORKTREE_KEYED_FIELDS = new Set(
   Object.entries(WORKSPACE_SESSION_FIELD_OWNERSHIP)
@@ -46,11 +50,12 @@ function cachedWorktreeHostId(worktree: CachedWorktreeHost): ExecutionHostId | n
 }
 
 /**
- * The session host of a worktree whose repo id is registered on several hosts, chosen the way the
- * window saves it; null when the repo is on one host. Hosts that hold the worktree come first from
- * the partitions its rows were read from (the window honours those before its catalog), then from
- * the cached worktree list; one holder routes to itself, several to the shared primary. With
- * neither known, the primary of all the repo's hosts stands in for the window's catalog.
+ * The session host of a worktree whose repo id is registered on several hosts, decided as the
+ * window's save routing does (`buildHostSessionRouting`); null when the repo is on one host.
+ * 1. The partitions already holding the worktree's rows name it, unless the cached worktree list
+ *    positively places it elsewhere.
+ * 2. Listed on two or more partitions: the shared primary.
+ * 3. Otherwise only a runtime owner names it; an SSH-only, local-only or unknown worktree is local.
  */
 export function resolveTwinRepoSessionHostId(
   store: TwinRepoStore,
@@ -66,17 +71,24 @@ export function resolveTwinRepoSessionHostId(
   if (twins.length < 2) {
     return null
   }
-  const saved = twins.filter((hostId) =>
-    partitionHoldsWorktree(store.getWorkspaceSession?.(hostId), worktreeId)
-  )
-  if (saved.length > 0) {
-    return pickPrimaryHostForClaims(saved)
-  }
-  const listed = new Set(
+  const listed = contestedPartitionHosts(
     (cachedWorktrees ?? [])
       .filter((worktree) => worktree.id === worktreeId)
       .map(cachedWorktreeHostId)
-      .filter((hostId): hostId is ExecutionHostId => hostId !== null && twins.includes(hostId))
+      .filter((hostId): hostId is ExecutionHostId => hostId !== null)
   )
-  return pickPrimaryHostForClaims(listed.size > 0 ? listed : twins)
+  const saved = [
+    ...new Set([LOCAL_EXECUTION_HOST_ID, ...(store.getWorkspaceSessionHostIds?.() ?? [])])
+  ].filter((hostId) => partitionHoldsWorktree(store.getWorkspaceSession?.(hostId), worktreeId))
+  if (saved.length > 0) {
+    const savedPrimary = pickPrimaryHostForClaims(saved)
+    if (listed.length === 0 || listed.includes(savedPrimary)) {
+      return savedPrimary
+    }
+  }
+  if (listed.length > 1) {
+    return pickPrimaryHostForClaims(listed)
+  }
+  const runtimeOwners = listed.filter((hostId) => parseExecutionHostId(hostId)?.kind === 'runtime')
+  return runtimeOwners.length === 1 ? runtimeOwners[0]! : LOCAL_EXECUTION_HOST_ID
 }
