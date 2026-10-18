@@ -289,12 +289,14 @@ export type LayoutApplyOutcome =
 
 /**
  * `layout.apply`'s reply. `host_not_owned`: a paired server owns that workspace's layout.
- * `other_partition`: a move's two workspaces are in different host partitions. `frameSeq`: the
- * layout stream position whose frames hold the command's effect (absent from older hosts).
+ * `other_partition`: a move's two workspaces are in different host partitions.
+ * `wsl_move_in_progress`: a WSL move has paused the workspace (older windows log it as refused).
+ * `frameSeq`: the layout stream position whose frames hold the command's effect (absent from
+ * older hosts).
  */
 export type LayoutApplyReply = (
   | LayoutApplyOutcome
-  | { ok: false; code: 'host_not_owned' | 'other_partition' }
+  | { ok: false; code: 'host_not_owned' | 'other_partition' | 'wsl_move_in_progress' }
 ) & { frameSeq?: number }
 
 export type LayoutContext = {
