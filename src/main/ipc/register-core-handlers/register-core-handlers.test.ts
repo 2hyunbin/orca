@@ -300,7 +300,7 @@ vi.mock('../filesystem', () => ({
   registerFilesystemHandlers: registerFilesystemHandlersMock
 }))
 
-vi.mock('../filesystem-watcher', () => ({
+vi.mock('../filesystem-watcher-handlers', () => ({
   registerFilesystemWatcherHandlers: registerFilesystemWatcherHandlersMock
 }))
 

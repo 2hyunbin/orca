@@ -9,7 +9,7 @@ import {
   createSharedControlTestServer,
   closeSharedControlTestServers
 } from '../../../shared/remote-runtime-shared-control-test-server'
-import { getRuntimeEnvironmentStatus } from './runtime-environment-transport-routing'
+import { getRuntimeEnvironmentStatus } from './runtime-environment-status-probe'
 import {
   getRuntimeEnvironmentStatusOwner,
   resetRuntimeEnvironmentStatusOwners

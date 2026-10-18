@@ -14,10 +14,8 @@ import { getPreferredPairedRuntimeConnection } from '../../../shared/runtime-env
 import { OrcaRuntimeService } from '../../runtime/orca-runtime'
 import { OrcaRuntimeRpcServer } from '../../runtime/runtime-rpc'
 import { makeStore, SESSION_WORKTREE_ID } from '../../runtime/paired-client-navigation-test-harness'
-import {
-  resetSharedControlSupport,
-  subscribeRuntimeEnvironment
-} from './runtime-environment-transport-routing'
+import { resetSharedControlSupport } from './runtime-environment-shared-control-support'
+import { subscribeRuntimeEnvironment } from './runtime-environment-transport-routing'
 
 vi.mock('electron', () => ({ BrowserWindow: { getAllWindows: () => [] } }))
 

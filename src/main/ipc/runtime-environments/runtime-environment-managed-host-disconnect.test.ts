@@ -31,8 +31,8 @@ vi.mock('./runtime-environment-host-service-ops', () => ({
   connectThroughOwningService: vi.fn(async () => {}),
   removeThroughOwningService: vi.fn()
 }))
-vi.mock('./runtime-environment-transport-routing', () => ({
-  callRuntimeEnvironment: vi.fn(),
+vi.mock('./runtime-environment-transport-routing', () => ({ callRuntimeEnvironment: vi.fn() }))
+vi.mock('./runtime-environment-status-probe', () => ({
   getRuntimeEnvironmentStatus: vi.fn(async () => ({ ok: true }))
 }))
 vi.mock('../ssh/ssh-session-teardown', () => ({ disconnectRegisteredSshTarget: hoisted.teardown }))

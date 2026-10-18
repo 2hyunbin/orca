@@ -33,8 +33,8 @@ vi.mock('./runtime-environment-request-connections', async (importOriginal) => (
   ...(await importOriginal<Record<string, unknown>>()),
   closeRemoteRuntimeRequestConnection: mocks.closeRequest
 }))
-vi.mock('./runtime-environment-transport-routing', () => ({
-  callRuntimeEnvironment: vi.fn(),
+vi.mock('./runtime-environment-transport-routing', () => ({ callRuntimeEnvironment: vi.fn() }))
+vi.mock('./runtime-environment-status-probe', () => ({
   getRuntimeEnvironmentStatus: mocks.getStatus
 }))
 vi.mock('../../ssh/ssh-credential-decline', () => ({

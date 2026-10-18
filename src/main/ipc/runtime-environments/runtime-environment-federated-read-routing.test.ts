@@ -32,10 +32,8 @@ vi.mock('./runtime-environment-request-connections', async () => {
   })
 })
 
-import {
-  callRuntimeEnvironment,
-  resetSharedControlSupport
-} from './runtime-environment-transport-routing'
+import { callRuntimeEnvironment } from './runtime-environment-transport-routing'
+import { resetSharedControlSupport } from './runtime-environment-shared-control-support'
 
 describe('federated read RPC transport routing', () => {
   let userDataPath: string

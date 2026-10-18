@@ -7,10 +7,10 @@ import { encodePairingOffer, type PairingOffer } from '../../../shared/pairing'
 import { addEnvironmentFromPairingCode } from '../../../shared/runtime-environment-store'
 import {
   callRuntimeEnvironment,
-  getRuntimeEnvironmentStatus,
-  subscribeRuntimeEnvironment,
-  resetSharedControlSupport
+  subscribeRuntimeEnvironment
 } from './runtime-environment-transport-routing'
+import { getRuntimeEnvironmentStatus } from './runtime-environment-status-probe'
+import { resetSharedControlSupport } from './runtime-environment-shared-control-support'
 
 // Why: prove the wiring, not just the helper — an unreachable endpoint exercises
 // the real WebSocket failure → reject → Tailscale-hint join points the settings

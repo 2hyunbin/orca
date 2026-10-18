@@ -28,7 +28,7 @@ vi.mock('electron', () => ({ ipcMain: { handle: handleMock } }))
 vi.mock('../../../shared/runtime-environment-store', () => ({
   resolveEnvironment: resolveEnvironmentMock
 }))
-vi.mock('./runtime-environment-transport-routing', () => ({
+vi.mock('./runtime-environment-status-probe', () => ({
   getRuntimeEnvironmentStatus: getRuntimeEnvironmentStatusMock
 }))
 vi.mock('../../browser/paired-runtime-browser-client-host-runtime', () => ({

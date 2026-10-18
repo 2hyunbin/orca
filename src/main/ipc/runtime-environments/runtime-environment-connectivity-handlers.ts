@@ -32,10 +32,8 @@ import {
   isRuntimeEnvironmentManuallyDisconnected,
   RUNTIME_MANUALLY_DISCONNECTED_MESSAGE
 } from './runtime-environment-manual-disconnect'
-import {
-  callRuntimeEnvironment,
-  getRuntimeEnvironmentStatus
-} from './runtime-environment-transport-routing'
+import { callRuntimeEnvironment } from './runtime-environment-transport-routing'
+import { getRuntimeEnvironmentStatus } from './runtime-environment-status-probe'
 import { publicRuntimeEnvironmentWithHostKey } from './runtime-environment-host-key'
 import { withWslOrcadAccountEnv } from '../../wsl/wsl-orcad-account-env'
 import { clearSshCredentialDeclinedForEnvironment } from '../../ssh/ssh-credential-decline'

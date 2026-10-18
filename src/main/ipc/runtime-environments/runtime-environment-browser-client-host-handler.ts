@@ -11,7 +11,7 @@ import {
 } from '../../browser/paired-runtime-browser-client-host-runtime'
 import { prepareBrowserClientHostPlacement } from '../../browser/browser-client-host-placement-preparation'
 import { isRuntimeEnvironmentManuallyDisconnected } from './runtime-environment-connectivity-handlers'
-import { getRuntimeEnvironmentStatus } from './runtime-environment-transport-routing'
+import { getRuntimeEnvironmentStatus } from './runtime-environment-status-probe'
 
 export function registerRuntimeEnvironmentBrowserClientHostHandler(options: {
   getUserDataPath: () => string

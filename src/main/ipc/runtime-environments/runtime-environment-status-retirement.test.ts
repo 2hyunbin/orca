@@ -34,7 +34,7 @@ vi.mock('./runtime-environment-request-connections', async () => {
 })
 vi.mock('electron', () => ({ BrowserWindow: { getAllWindows: () => [] } }))
 
-import { getRuntimeEnvironmentStatus } from './runtime-environment-transport-routing'
+import { getRuntimeEnvironmentStatus } from './runtime-environment-status-probe'
 import { resetRuntimeEnvironmentStatusOwners } from './runtime-environment-request-connections'
 
 let directory: string

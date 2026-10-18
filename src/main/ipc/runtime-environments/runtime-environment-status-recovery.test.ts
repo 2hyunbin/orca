@@ -5,10 +5,8 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { addEnvironmentFromPairingCode } from '../../../shared/runtime-environment-store'
 import { pairingCode } from './runtime-environments-ipc-test-harness'
-import {
-  getRuntimeEnvironmentStatus,
-  resetSharedControlSupport
-} from './runtime-environment-transport-routing'
+import { getRuntimeEnvironmentStatus } from './runtime-environment-status-probe'
+import { resetSharedControlSupport } from './runtime-environment-shared-control-support'
 
 const { request, publish } = vi.hoisted(() => ({ request: vi.fn(), publish: vi.fn() }))
 vi.mock('../../../shared/remote-runtime-client', () => ({

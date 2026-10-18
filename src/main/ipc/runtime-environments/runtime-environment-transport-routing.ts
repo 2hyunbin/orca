@@ -20,7 +20,6 @@ import {
   sendRemoteRuntimeRequestAbortable
 } from './runtime-environment-abortable-requests'
 import { runtimeEnvironmentRevisionFailure } from './runtime-environment-revision-guard'
-import { resetSharedControlSupport } from './runtime-environment-shared-control-support'
 import {
   executeSupportRoutedCall,
   shouldUseSharedControlEnvelope,
@@ -30,10 +29,6 @@ import {
 } from './runtime-environment-support-routing'
 
 const DEFAULT_REMOTE_RUNTIME_TIMEOUT_MS = 15_000
-
-export { resetSharedControlSupport }
-
-export { getRuntimeEnvironmentStatus } from './runtime-environment-status-probe'
 
 export async function callRuntimeEnvironment(
   userDataPath: string,
