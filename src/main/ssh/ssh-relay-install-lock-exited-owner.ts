@@ -4,7 +4,7 @@
  */
 import { shellEscape } from './ssh-connection-utils'
 import type { InstallLockOwnerFile } from './ssh-relay-install-lock-commands'
-import { powerShellLiteral } from './ssh-remote-powershell'
+import { quotePowerShellLiteral as powerShellLiteral } from '../../shared/powershell-native-argument'
 import {
   posixStateMutationGroupRecord,
   posixStateMutationPidRecord

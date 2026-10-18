@@ -22,7 +22,7 @@ import type { OrcadHostTransport } from './orcad-host-transport'
 import { execCommand, isUnconfirmedSshCommandTermination } from './ssh-relay-exec-command'
 import { RELAY_REMOTE_DIR } from './relay-protocol'
 import { joinRemotePath, remoteDirname, type RemoteHostPlatform } from './ssh-remote-platform'
-import { powerShellLiteral } from './ssh-remote-powershell'
+import { quotePowerShellLiteral as powerShellLiteral } from '../../shared/powershell-native-argument'
 import { ORCAD_WINDOWS_COMMAND_LINE_UNSAFE_CODE } from '../orcad/orcad-host-unavailable'
 import {
   ORCAD_WINDOWS_HOST_SCRIPT,

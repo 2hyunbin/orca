@@ -9,7 +9,8 @@ import {
   tryStealInstallLockCommand
 } from './ssh-relay-install-lock-commands'
 import { removeRemoteTreeCommand } from './ssh-remote-commands'
-import { powerShellCommand, powerShellLiteral } from './ssh-remote-powershell'
+import { powerShellCommand } from './ssh-remote-powershell'
+import { quotePowerShellLiteral as powerShellLiteral } from '../../shared/powershell-native-argument'
 import {
   getRemoteHostPlatform,
   isWindowsRemoteHost,

@@ -246,6 +246,7 @@ it('pins every foreground and background step to its selected phase', () => {
     ['Enforce deprecated runtime-owner importer ratchet', staticPhase],
     ['Enforce path-literal ratchet', staticPhase],
     ['Enforce worktree-id composer ratchet', staticPhase],
+    ['Enforce e2e typecheck ratchet', staticPhase],
     ['Check Node runtime pin', staticPhase],
     ['Decide whether the orcad terminal smoke runs', staticPhase],
     ['Verify the generated RPC params catalog', staticPhase],

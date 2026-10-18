@@ -1,5 +1,6 @@
 import { shellEscape } from './ssh-connection-utils'
-import { powerShellCommand, powerShellLiteral } from './ssh-remote-powershell'
+import { powerShellCommand } from './ssh-remote-powershell'
+import { quotePowerShellLiteral as powerShellLiteral } from '../../shared/powershell-native-argument'
 import { isWindowsRemoteHost, type RemoteHostPlatform } from './ssh-remote-platform'
 import * as exitedOwnerSteal from './ssh-relay-install-lock-exited-owner'
 

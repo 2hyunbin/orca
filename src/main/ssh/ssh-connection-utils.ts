@@ -1,6 +1,6 @@
 import type { ConnectConfig } from 'ssh2'
 import type { SshTarget, SshConnectionState } from '../../shared/ssh-types'
-import type { SshResolvedConfig } from './ssh-config-parser'
+import type { SshResolvedConfig } from './ssh-g-config-resolution'
 import {
   findEncryptedPrivateKeyPath,
   isUnencryptedPrivateKey,
