@@ -203,6 +203,23 @@ describe('main drops the layout of workspaces the catalog no longer validates', 
 
       expect(storedKeys(store)).toEqual([KEPT, DELETED, 'other-repo::/x'].sort())
     })
+
+    it('keeps every workspace of a repo id another host also registers', () => {
+      writeDataFile({
+        schemaVersion: 1,
+        repos: [
+          makeRepo({ id: REPO, path: '/work/kept' }),
+          makeRepo({ id: REPO, path: '/home/me/kept', connectionId: 'target-1' })
+        ],
+        worktreeMeta: {},
+        workspaceSession: sessionWith(KEPT, DELETED)
+      })
+      const store = createStore()
+
+      dropWorkspacesTheListingInvalidates(store, listing([KEPT]))
+
+      expect(storedKeys(store)).toEqual([KEPT, DELETED].sort())
+    })
   })
 
   // Pending until Core-A: today a window save still carries structure, so it can restore the key.

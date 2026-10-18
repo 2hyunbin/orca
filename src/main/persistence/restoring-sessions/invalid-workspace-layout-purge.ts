@@ -88,7 +88,10 @@ export function dropInvalidWorkspaceLayoutsAtLoad(store: PurgeStore, state: Pers
   })
 }
 
-/** After a listing main serves: drops that repo's workspaces an authoritative scan no longer finds. */
+/**
+ * After a listing main serves: drops that repo's workspaces an authoritative scan no longer finds.
+ * Hidden rows still count as found: hiding a worktree must not close its tabs.
+ */
 export function dropWorkspacesTheListingInvalidates(
   store: PurgeStore,
   result: DetectedWorktreeListResult | { providerAbortStatus: unknown } | null
@@ -102,6 +105,10 @@ export function dropWorkspacesTheListingInvalidates(
     !catalogVersion ||
     isWorktreeCatalogVersionBefore(catalogVersion, getLocalWorktreeCatalogVersion(repoId))
   ) {
+    return
+  }
+  // A repo id registered on two hosts shares its keys; one host's scan cannot speak for the other.
+  if (store.getRepos().filter((repo) => repo.id === repoId).length !== 1) {
     return
   }
   dropInvalidWorkspaces(
