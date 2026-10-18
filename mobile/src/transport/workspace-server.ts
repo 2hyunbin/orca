@@ -57,7 +57,10 @@ function serverConnState(host: MobileRelayHost | undefined): ConnectionState {
   if (host?.relay === 'ready') {
     return 'connected'
   }
-  if (host?.relay === 'unavailable' && (host.health === 'connecting' || host.health === 'available')) {
+  if (
+    host?.relay === 'unavailable' &&
+    (host.health === 'connecting' || host.health === 'available')
+  ) {
     return 'connecting'
   }
   return 'disconnected'

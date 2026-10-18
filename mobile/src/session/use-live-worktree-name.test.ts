@@ -92,7 +92,11 @@ describe('useLiveWorktreeName request volume', () => {
     })
     await mountHarness()
     expect(live).toMatchObject({ name: 'Live name', path: '/srv/project ', hostId: 'ssh:target' })
-    expect(subscribe).toHaveBeenCalledWith('runtime.clientEvents.subscribe', null, expect.any(Function))
+    expect(subscribe).toHaveBeenCalledWith(
+      'runtime.clientEvents.subscribe',
+      null,
+      expect.any(Function)
+    )
     expect(sendRequest).toHaveBeenCalledTimes(1)
 
     await emitEvent({ type: 'ready', subscriptionId: 'runtime-events-1' })
