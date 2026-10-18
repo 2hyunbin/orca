@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest'
 import {
   createPathResolver,
   extractPathLiterals,
-  isScannedPath
+  isScannedPath,
+  stripSlashComments
 } from './check-path-literal-ratchet.mjs'
 
 describe('extractPathLiterals', () => {
@@ -29,6 +30,13 @@ describe('extractPathLiterals', () => {
     expect(extractPathLiterals('.github/workflows/x.yml', "# was 'src/main/a.ts'\n")).toEqual([])
   })
 
+  it('resolves a literal exactly when any occurrence is an import', () => {
+    const text = "import '../../src/main/ssh/ssh-types'\nconst route = 'src/main/ssh/ssh-types'"
+    expect(extractPathLiterals('tests/e2e/a.spec.ts', text)).toEqual([
+      { literal: 'src/main/ssh/ssh-types', isImport: true }
+    ])
+  })
+
   it('reads unquoted command arguments in manifests and workflows', () => {
     const text = '"command": "pnpm test src/main/a.test.ts src/renderer/src/b.test.ts"'
     expect(extractPathLiterals('config/reliability-gates.jsonc', text)).toEqual([
@@ -44,6 +52,23 @@ describe('extractPathLiterals', () => {
     expect(
       extractPathLiterals('config/x.mjs', "'src/lib/downloadTargets.ts' 'mobile/src/a.ts'")
     ).toEqual([])
+  })
+})
+
+describe('stripSlashComments', () => {
+  it('keeps comment markers inside strings and drops real comments', () => {
+    const text = [
+      "const a = 'src/main/**/*.ts'",
+      "const b = 'src/main/removed.ts' // was 'src/main/old.ts'",
+      "/** see 'src/main/doc.ts' */ const url = 'https://x.test/a'"
+    ].join('\n')
+    expect(stripSlashComments(text)).toBe(
+      [
+        "const a = 'src/main/**/*.ts'",
+        "const b = 'src/main/removed.ts' ",
+        "  const url = 'https://x.test/a'"
+      ].join('\n')
+    )
   })
 })
 

@@ -14,10 +14,8 @@ const RESOLVED_EXTENSIONS = ['.ts', '.tsx', '.js', '.mjs', '.cjs', '/index.ts']
 const EXCLUDED_FILES = new Set(['config/scripts/ci-shard-timings.json'])
 // Command strings in manifests and scripts name paths unquoted; in code only quoted literals count.
 const UNQUOTED_ALLOWED = /\.(?:jsonc?|ya?ml|sh|ps1)$/
-// Comments are prose, not references. `//` after `:` or a quote is a URL or string. A `/**/` glob
-// segment is masked first so it doesn't open a block comment; the mask ends the literal there.
+// Comments are prose, not references.
 const SLASH_COMMENTED = /\.(?:m?js|cjs|ts|jsonc)$/
-const SLASH_COMMENT = /\/\*[\s\S]*?\*\/|(?<![:'"`\\])\/\/.*$/gm
 const HASH_COMMENT = /^\s*#.*$/gm
 // Group 1 is a relative import's `./` or `../` chain: imports must resolve exactly, not as a prefix.
 const QUOTED_LITERAL = new RegExp(
@@ -39,18 +37,52 @@ export function isScannedPath(rel) {
 }
 
 /**
+ * Drops line and block comments outside string literals, so a quoted glob such as
+ * `'src/**\/*.ts'` never opens a comment. Regex literals are read as code; at worst one hides a path.
+ */
+export function stripSlashComments(text) {
+  let out = ''
+  let quote = null
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i]
+    if (quote) {
+      out += char
+      if (char === '\\') {
+        out += text[++i] ?? ''
+      } else if (char === quote || (char === '\n' && quote !== '`')) {
+        quote = null
+      }
+    } else if (char === '/' && text[i + 1] === '/') {
+      const end = text.indexOf('\n', i)
+      i = end === -1 ? text.length : end - 1
+    } else if (char === '/' && text[i + 1] === '*') {
+      const end = text.indexOf('*/', i + 2)
+      i = end === -1 ? text.length : end + 1
+      out += ' '
+    } else {
+      if (char === "'" || char === '"' || char === '`') {
+        quote = char
+      }
+      out += char
+    }
+  }
+  return out
+}
+
+/**
  * Every `src/...` literal in one file's code, with a trailing glob or sentence period cut off.
  * Relative imports are marked so they resolve exactly.
  */
 export function extractPathLiterals(rel, text) {
   const pattern = UNQUOTED_ALLOWED.test(rel) ? ANY_LITERAL : QUOTED_LITERAL
   const code = SLASH_COMMENTED.test(rel)
-    ? text.replaceAll('/**/', '/~/').replace(SLASH_COMMENT, ' ')
+    ? stripSlashComments(text)
     : text.replace(HASH_COMMENT, ' ')
   const literals = new Map()
   for (const [, parents, literal] of code.matchAll(pattern)) {
     const key = literal.replace(/\.+$/, '')
-    literals.set(key, (literals.get(key) ?? true) && parents.length > 0)
+    // Any import occurrence makes the literal exact: the strictest reading wins.
+    literals.set(key, (literals.get(key) ?? false) || parents.length > 0)
   }
   return [...literals].map(([literal, isImport]) => ({ literal, isImport }))
 }
