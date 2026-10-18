@@ -77,13 +77,18 @@ function coalesceEvents(
 
 // ── Stat helper for isDirectory ──────────────────────────────────────
 
-async function tryStatIsDirectory(filePath: string): Promise<boolean | undefined> {
+async function statEventPath(
+  filePath: string
+): Promise<{ isDirectory: boolean | undefined; missing: boolean }> {
   try {
     const s = await stat(filePath)
-    return s.isDirectory()
-  } catch {
+    return { isDirectory: s.isDirectory(), missing: false }
+  } catch (error) {
     // Why: stat failure (EPERM, vanished file) → undefined; renderer treats it as a file event, the safe default (§4.4).
-    return undefined
+    return {
+      isDirectory: undefined,
+      missing: error instanceof Error && 'code' in error && error.code === 'ENOENT'
+    }
   }
 }
 
@@ -143,13 +148,14 @@ async function flushBatch(root: WatchedRoot): Promise<void> {
       DIRECTORY_STAT_CONCURRENCY,
       async (evt) => {
         // Why: a deleted path can't be stat'd; leave isDirectory undefined and let the renderer infer from dirCache.
-        const isDirectory =
+        const { isDirectory, missing } =
           root.batch.cancelled || evt.type === 'delete'
-            ? undefined
-            : await tryStatIsDirectory(evt.path)
+            ? { isDirectory: undefined, missing: false }
+            : await statEventPath(evt.path)
 
         return {
-          kind: evt.type,
+          // Why: narrow (shallow) watches report every change as an update, so a vanished file must become a delete here.
+          kind: root.narrow && missing ? 'delete' : evt.type,
           absolutePath: evt.path,
           isDirectory
         }
@@ -229,24 +235,29 @@ export function scheduleLocalBatchFlush(root: WatchedRoot): void {
 export async function createLocalWatcher(
   rootKey: string,
   rootPath: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  narrowFiles?: readonly string[]
 ): Promise<WatchedRoot> {
   const root: WatchedRoot = {
     subscription: null!,
     listeners: new Map(),
     batch: createDebouncedBatch(),
-    rootPath
+    rootPath,
+    ...(narrowFiles ? { narrow: true as const } : {})
   }
 
   try {
     // Why: if the error callback cleaned up before subscribe() resolved, its returned subscription is orphaned and leaks a native handle.
     let errorCleanedUp = false
 
-    const watcherOptions = {
-      ...buildParcelWatcherIgnoreOptions(WATCHER_IGNORE_DIRS),
-      // Why: Parcel probes Watchman first, which prints a shell-level "watchman not recognized" error on Windows; pin the backend to suppress it.
-      ...(process.platform === 'win32' ? { backend: 'windows' as const } : {})
-    }
+    // Why: a narrow root watches only open files' parent directories (non-recursive), so background worktrees skip a full-tree watch.
+    const watcherOptions = narrowFiles
+      ? { mode: 'shallow' as const, include: [...narrowFiles] }
+      : {
+          ...buildParcelWatcherIgnoreOptions(WATCHER_IGNORE_DIRS),
+          // Why: Parcel probes Watchman first, which prints a shell-level "watchman not recognized" error on Windows; pin the backend to suppress it.
+          ...(process.platform === 'win32' ? { backend: 'windows' as const } : {})
+        }
 
     const markWatcherInterrupted = (): void => {
       notifyLocalWatcherInterrupted(root)

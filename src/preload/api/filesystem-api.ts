@@ -4,7 +4,8 @@ import type { SearchOptions, SearchResult } from '../../shared/code-search-types
 import type {
   DirEntry,
   FsChangedPayload,
-  MarkdownDocument
+  MarkdownDocument,
+  WatchWorktreeArgs
 } from '../../shared/filesystem-entry-types'
 import type {
   ImportItemResult,
@@ -209,8 +210,8 @@ export type FilesystemApi = {
     uploadPathsToAgentSessionAttachments: (
       args: AgentSessionAttachmentUploadTarget & { paths: string[] }
     ) => Promise<AgentSessionAttachmentPathUploadResult>
-    watchWorktree: (args: { worktreePath: string; connectionId?: string }) => Promise<void>
-    unwatchWorktree: (args: { worktreePath: string; connectionId?: string }) => Promise<void>
+    watchWorktree: (args: WatchWorktreeArgs) => Promise<void>
+    unwatchWorktree: (args: WatchWorktreeArgs) => Promise<void>
     onFsChanged: (callback: (payload: FsChangedPayload) => void) => () => void
   }
   notebook: {

@@ -10,6 +10,12 @@ import {
 } from './editor-external-watch-targets'
 import { buildEditorExternalWatchEventHandler } from './editor-external-watch-event-reconciliation'
 import { verifyLatchedEditorMoveDestinations } from './editor-external-watch-disk-verification'
+import {
+  getEditorExternalWatchScopeKey,
+  releaseMainProcessWatch,
+  toWatchWorktreeArgs
+} from './editor-external-watch-handoff'
+import { reverifyEditorTabsAfterNarrowWatch } from './editor-external-watch-activation-reverify'
 
 function warnExternalWatchFailure(target: EditorExternalWatchTarget, err: unknown): void {
   console.warn('[filesystem-watch] failed to watch worktree', {
@@ -44,35 +50,50 @@ export function useEditorExternalWatch(): void {
       (target) => !previousKeys.has(getEditorExternalWatchTargetKey(target))
     )
 
+    targetsRef.current = nextTargets
+
+    const pendingWatchByScope = new Map<string, Promise<void>>()
+    for (const target of added) {
+      if (target.runtimeEnvironmentId) {
+        subscribeRuntimeTarget(target, remoteWatchUnsubsRef.current, fsChangedHandlerRef)
+        continue
+      }
+      pendingWatchByScope.set(
+        getEditorExternalWatchScopeKey(target),
+        window.api.fs.watchWorktree(toWatchWorktreeArgs(target)).catch((err) => {
+          // Why: SSH providers can disappear while tabs still reference the worktree; report the failure without an uncaught renderer promise.
+          warnExternalWatchFailure(target, err)
+        })
+      )
+    }
+    const narrowedScopes = new Set<string>()
     for (const target of removed) {
       const key = getEditorExternalWatchTargetKey(target)
       const remoteUnsubscribe = remoteWatchUnsubsRef.current.get(key)
       if (remoteUnsubscribe) {
         remoteUnsubscribe()
         remoteWatchUnsubsRef.current.delete(key)
+        continue
+      }
+      const scopeKey = getEditorExternalWatchScopeKey(target)
+      if (target.narrowFiles) {
+        narrowedScopes.add(scopeKey)
+      }
+      // Why: a recursive↔narrow switch releases the old watch only after its replacement subscribed, so no event falls in between.
+      const replacement = pendingWatchByScope.get(scopeKey)
+      if (replacement) {
+        void replacement.then(() => releaseMainProcessWatch(target, targetsRef.current))
       } else {
-        void window.api.fs.unwatchWorktree({
-          worktreePath: target.worktreePath,
-          connectionId: target.connectionId
-        })
+        releaseMainProcessWatch(target, nextTargets)
       }
     }
     for (const target of added) {
-      if (target.runtimeEnvironmentId) {
-        subscribeRuntimeTarget(target, remoteWatchUnsubsRef.current, fsChangedHandlerRef)
-        continue
+      const scopeKey = getEditorExternalWatchScopeKey(target)
+      const subscribed = pendingWatchByScope.get(scopeKey)
+      if (subscribed && !target.narrowFiles && narrowedScopes.has(scopeKey)) {
+        void subscribed.then(() => reverifyEditorTabsAfterNarrowWatch(target))
       }
-      void window.api.fs
-        .watchWorktree({
-          worktreePath: target.worktreePath,
-          connectionId: target.connectionId
-        })
-        .catch((err) => {
-          // Why: SSH providers can disappear while tabs still reference the worktree; report the failure without an uncaught renderer promise.
-          warnExternalWatchFailure(target, err)
-        })
     }
-    targetsRef.current = nextTargets
     // Why: final unmount cleanup owns teardown so target changes remain differential.
   }, [targetsKey])
 
@@ -101,10 +122,7 @@ export function useEditorExternalWatch(): void {
         if (remoteUnsubscribe) {
           remoteUnsubscribe()
         } else {
-          void window.api.fs.unwatchWorktree({
-            worktreePath: target.worktreePath,
-            connectionId: target.connectionId
-          })
+          void window.api.fs.unwatchWorktree(toWatchWorktreeArgs(target))
         }
       }
       remoteWatchUnsubs.clear()

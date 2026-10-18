@@ -28,3 +28,10 @@ export type FsChangedPayload = {
   worktreePath: string
   events: FsChangeEvent[]
 }
+
+export type WatchWorktreeArgs = {
+  worktreePath: string
+  connectionId?: string
+  /** Worktree-relative open files: watch only their parent directories, non-recursively. Local hosts only. */
+  narrowFiles?: string[]
+}

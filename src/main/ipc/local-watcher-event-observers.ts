@@ -23,12 +23,19 @@ export function observeLocalWatcherEvents(observer: LocalWatcherEventObserver): 
 }
 
 export function notifyLocalWatcherEvents(root: WatchedRoot, events: readonly WatcherEvent[]): void {
+  // Why: observers need full-tree coverage; a narrow root sees only open files.
+  if (root.narrow) {
+    return
+  }
   for (const observer of observers) {
     observer.onEvents(root, events)
   }
 }
 
 export function notifyLocalWatcherInterrupted(root: WatchedRoot): void {
+  if (root.narrow) {
+    return
+  }
   for (const observer of observers) {
     observer.onInterrupted(root)
   }

@@ -23,7 +23,8 @@ export async function installLocalWatcher(
   rootPath: string,
   worktreePath: string,
   cancelToken: LocalWatcherInstallToken,
-  scheduleCapacityRetry: (listeners: Map<number, Electron.WebContents>) => void
+  scheduleCapacityRetry: (listeners: Map<number, Electron.WebContents>) => void,
+  narrowFiles?: readonly string[]
 ): Promise<LocalWatcherInstallResult> {
   let root: WatchedRoot
   try {
@@ -42,6 +43,7 @@ export async function installLocalWatcher(
 
     try {
       // Why: WSL paths use one snapshot subprocess inside the distro so `wsl --shutdown` can kill it; native Windows uses @parcel/watcher.
+      // A narrow WSL request gets the same snapshot watcher: the distro poller has no per-file mode.
       root = isWslPath(worktreePath)
         ? await createWslWatcher(
             rootKey,
@@ -53,7 +55,12 @@ export async function installLocalWatcher(
             },
             cancelToken.abortController.signal
           )
-        : await createLocalWatcher(rootKey, rootPath, cancelToken.abortController.signal)
+        : await createLocalWatcher(
+            rootKey,
+            rootPath,
+            cancelToken.abortController.signal,
+            narrowFiles
+          )
     } catch (error) {
       // Why: setup can fail after its child misses the exit deadline; retain that owner even when the renderer-facing error is swallowed.
       retainLocalWatcherPhysicalFailure(rootKey, error)

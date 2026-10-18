@@ -8,6 +8,10 @@ import {
   type WatcherRemovalDeadline
 } from './watcher-removal-drain'
 import { getLocalWatcherRoot } from './filesystem-watcher-paths'
+import {
+  collectLocalWatcherKeysForBase,
+  parseLocalWatcherKey
+} from './filesystem-watcher-narrow-roots'
 import { watcherLifecycleState } from './filesystem-watcher-lifecycle-state'
 import {
   abandonLocalUnsubscribes,
@@ -22,7 +26,33 @@ export async function closeLocalWatcherForWorktreePath(
   worktreePath: string,
   deadline: WatcherRemovalDeadline = createWatcherRemovalDeadline()
 ): Promise<void> {
-  const { key: rootKey } = getLocalWatcherRoot(worktreePath)
+  const state = watcherLifecycleState
+  // Why: narrow roots hold directory handles inside the worktree too, and Windows locks watched directories.
+  const rootKeys = collectLocalWatcherKeysForBase(getLocalWatcherRoot(worktreePath).key, [
+    state.watchedRoots.keys(),
+    state.inFlightLocalInstalls.keys(),
+    state.pendingLocalInstallPromises.keys(),
+    state.pendingLocalCapacityRetries.keys(),
+    state.pendingTeardowns.keys(),
+    state.pendingLocalUnsubscribesByRoot.keys(),
+    state.failedLocalUnsubscribes.keys()
+  ])
+  const failures: unknown[] = []
+  for (const rootKey of rootKeys) {
+    await closeLocalWatcherRoot(rootKey, worktreePath, deadline).catch((error: unknown) => {
+      failures.push(error)
+    })
+  }
+  if (failures.length > 0) {
+    throw failures[0]
+  }
+}
+
+async function closeLocalWatcherRoot(
+  rootKey: string,
+  worktreePath: string,
+  deadline: WatcherRemovalDeadline
+): Promise<void> {
   const suspended = watcherLifecycleState.suspendedLocalWatcherListeners.get(rootKey) ?? {
     worktreePath,
     listeners: new Map<number, WebContents>()
@@ -120,7 +150,23 @@ export async function closeLocalWatcherForWorktreePath(
 }
 
 export async function restoreLocalWatcherAfterFailedRemoval(worktreePath: string): Promise<void> {
-  const { key: rootKey } = getLocalWatcherRoot(worktreePath)
+  const suspendedByKey = watcherLifecycleState.suspendedLocalWatcherListeners
+  const rootKeys = collectLocalWatcherKeysForBase(getLocalWatcherRoot(worktreePath).key, [
+    suspendedByKey.keys()
+  ])
+  const failures: unknown[] = []
+  for (const rootKey of rootKeys) {
+    await restoreLocalWatcherRoot(rootKey).catch((error: unknown) => {
+      failures.push(error)
+    })
+  }
+  if (failures.length > 0) {
+    throw failures[0]
+  }
+}
+
+async function restoreLocalWatcherRoot(rootKey: string): Promise<void> {
+  const { narrowFiles } = parseLocalWatcherKey(rootKey)
   const suspended = watcherLifecycleState.suspendedLocalWatcherListeners.get(rootKey)
   if (!suspended) {
     return
@@ -136,7 +182,7 @@ export async function restoreLocalWatcherAfterFailedRemoval(worktreePath: string
       continue
     }
     try {
-      await subscribeLocalWatcher(suspended.worktreePath, sender, undefined, signal)
+      await subscribeLocalWatcher(suspended.worktreePath, sender, undefined, signal, narrowFiles)
       if (!isCurrentWatcherSender(sender, signal)) {
         continue
       }
@@ -164,5 +210,10 @@ export async function restoreLocalWatcherAfterFailedRemoval(worktreePath: string
 }
 
 export function forgetLocalWatcherRemovalSnapshot(worktreePath: string): void {
-  watcherLifecycleState.suspendedLocalWatcherListeners.delete(getLocalWatcherRoot(worktreePath).key)
+  const suspendedByKey = watcherLifecycleState.suspendedLocalWatcherListeners
+  for (const rootKey of collectLocalWatcherKeysForBase(getLocalWatcherRoot(worktreePath).key, [
+    suspendedByKey.keys()
+  ])) {
+    suspendedByKey.delete(rootKey)
+  }
 }

@@ -1,20 +1,25 @@
 import type { AppState } from '@/store'
-import type { OpenFile } from '@/store/slices/editor'
 import { findWorktreeById } from '@/store/slices/worktree-helpers'
 import { isVirtualEditorFile } from '@/store/slices/editor/tabs/editor-tab-content-type'
 import { findRepoForHost } from '@/store/slices/repo-host-identity'
 import { isLocalWindowsDesktopClient } from '@/lib/desktop-window-chrome'
-import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { isWindowsAbsolutePathLike } from '../../../shared/cross-platform-path'
-import {
-  isLocalExecutionHost,
-  parseExecutionHostId,
-  toRuntimeExecutionHostId,
-  toSshExecutionHostId,
-  type ExecutionHostId
-} from '../../../shared/execution-host'
+import { isLocalExecutionHost, parseExecutionHostId } from '../../../shared/execution-host'
 import { isGitRepoKind } from '../../../shared/repo-kind'
 import { resolveEditorExternalWatchTargetRows } from './editor-external-watch-target-rows'
+import {
+  addWatchConsumer,
+  getOpenFileWatchConsumer,
+  getSidebarWatchConsumer,
+  type WatchConsumer
+} from './editor-external-watch-consumers'
+import {
+  mergeRelativePaths,
+  scopeEditorExternalWatchTargets,
+  selectRecursiveWatchWorkspaceIds
+} from './editor-external-watch-scope'
+
+export { getOpenFileRuntimeOwner } from './editor-external-watch-consumers'
 
 export type EditorExternalWatchTarget = {
   worktreeId: string
@@ -22,6 +27,8 @@ export type EditorExternalWatchTarget = {
   connectionId: string | undefined
   runtimeEnvironmentId: string | null
   allowLocalWindowsWslAliases?: true
+  /** Set for a background local workspace: watch only these open files' directories, non-recursively. */
+  narrowFiles?: string[]
 }
 
 export type EditorExternalWatchTargetState = Pick<
@@ -39,7 +46,12 @@ export type EditorExternalWatchTargetState = Pick<
   | 'folderWorkspaces'
   | 'projectGroups'
 > &
-  Partial<Pick<AppState, 'activeWorkspaceExecutionHostId' | 'rightSidebarEffectiveTab'>>
+  Partial<
+    Pick<
+      AppState,
+      'activeWorkspaceExecutionHostId' | 'rightSidebarEffectiveTab' | 'lastVisitedAtByWorktreeId'
+    >
+  >
 
 type WatchedTargetsSnapshot = {
   targets: EditorExternalWatchTarget[]
@@ -60,17 +72,12 @@ let cachedGitStatusHugeByWorktree: AppState['gitStatusHugeByWorktree'] | null = 
 let cachedSshConnectionStates: AppState['sshConnectionStates'] | null = null
 let cachedFolderWorkspaces: AppState['folderWorkspaces'] | null = null
 let cachedProjectGroups: AppState['projectGroups'] | null = null
+let cachedLastVisitedAtByWorktreeId: AppState['lastVisitedAtByWorktreeId'] | undefined
 let cachedWatchedTargetsSnapshot: WatchedTargetsSnapshot = { targets: [], targetsKey: '' }
 
 export function getEditorExternalWatchTargetKey(target: EditorExternalWatchTarget): string {
   // Why: include connectionId so a local placeholder watch is replaced by the real SSH watch once an SSH worktree's provider metadata hydrates.
-  return `${target.worktreeId}::${target.worktreePath}::${target.connectionId ?? 'local'}::${target.runtimeEnvironmentId ?? 'client'}::${target.allowLocalWindowsWslAliases === true ? 'wsl-aliases' : 'literal'}`
-}
-
-export function getOpenFileRuntimeOwner(
-  file: Pick<OpenFile, 'runtimeEnvironmentId'>
-): string | null {
-  return file.runtimeEnvironmentId?.trim() || null
+  return `${target.worktreeId}::${target.worktreePath}::${target.connectionId ?? 'local'}::${target.runtimeEnvironmentId ?? 'client'}::${target.allowLocalWindowsWslAliases === true ? 'wsl-aliases' : 'literal'}${target.narrowFiles ? `::narrow:${JSON.stringify(target.narrowFiles)}` : ''}`
 }
 
 export function getLocalWindowsWslAliasOption(
@@ -79,52 +86,6 @@ export function getLocalWindowsWslAliasOption(
   return isLocalWindowsDesktopClient() && target.allowLocalWindowsWslAliases === true
     ? { allowLocalWindowsWslAliases: true }
     : {}
-}
-
-type WatchConsumer = { owner: string | null; hostId: ExecutionHostId | null }
-
-/** The host an open file was opened on; never the current selection, which may name another host's same-id workspace. */
-function getOpenFileWatchConsumer(
-  file: Pick<OpenFile, 'externalSshTargetId' | 'operationProvenance' | 'runtimeEnvironmentId'>
-): WatchConsumer {
-  const owner = getOpenFileRuntimeOwner(file)
-  const capturedHostId = file.operationProvenance?.generation.route.executionHostId
-  return {
-    owner,
-    hostId:
-      capturedHostId ??
-      (file.externalSshTargetId
-        ? toSshExecutionHostId(file.externalSshTargetId)
-        : owner
-          ? toRuntimeExecutionHostId(owner)
-          : null)
-  }
-}
-
-function getSidebarWatchConsumer(
-  state: EditorExternalWatchTargetState,
-  worktreeId: string
-): WatchConsumer {
-  // Why: sidebar watcher must follow the selected worktree's host owner, not the host currently focused in the UI.
-  const owner = getRuntimeEnvironmentIdForWorktree(state, worktreeId)
-  if (owner) {
-    return { owner, hostId: toRuntimeExecutionHostId(owner) }
-  }
-  const selectedHost = parseExecutionHostId(state.activeWorkspaceExecutionHostId)
-  return { owner, hostId: selectedHost && selectedHost.kind !== 'runtime' ? selectedHost.id : null }
-}
-
-function addWatchConsumer(
-  consumersByWorktreeId: Map<string, Map<string, WatchConsumer>>,
-  worktreeId: string,
-  consumer: WatchConsumer
-): void {
-  let consumers = consumersByWorktreeId.get(worktreeId)
-  if (!consumers) {
-    consumers = new Map()
-    consumersByWorktreeId.set(worktreeId, consumers)
-  }
-  consumers.set(`${consumer.owner ?? ''}::${consumer.hostId ?? ''}`, consumer)
 }
 
 function canWatchLocalWindowsWslAliases(args: {
@@ -177,7 +138,8 @@ export function selectEditorExternalWatchTargets(
     cachedGitStatusHugeByWorktree === state.gitStatusHugeByWorktree &&
     cachedSshConnectionStates === state.sshConnectionStates &&
     cachedFolderWorkspaces === state.folderWorkspaces &&
-    cachedProjectGroups === state.projectGroups
+    cachedProjectGroups === state.projectGroups &&
+    cachedLastVisitedAtByWorktreeId === state.lastVisitedAtByWorktreeId
   ) {
     return cachedWatchedTargetsSnapshot
   }
@@ -227,8 +189,9 @@ export function selectEditorExternalWatchTargets(
   }
 
   const targetsByKey = new Map<string, EditorExternalWatchTarget>()
+  const relativePathsByKey = new Map<string, string[] | null>()
   for (const [id, consumers] of consumersByWorktreeId) {
-    for (const { owner, hostId } of consumers.values()) {
+    for (const { owner, hostId, relativePaths } of consumers.values()) {
       const rows = resolveEditorExternalWatchTargetRows(state, id, hostId)
       if (!rows || (rows.connectionId === undefined && rows.folderWorkspace)) {
         continue
@@ -251,12 +214,25 @@ export function selectEditorExternalWatchTargets(
           ? { allowLocalWindowsWslAliases: true as const }
           : {})
       }
-      targetsByKey.set(getEditorExternalWatchTargetKey(target), target)
+      const key = getEditorExternalWatchTargetKey(target)
+      targetsByKey.set(key, target)
+      relativePathsByKey.set(
+        key,
+        relativePathsByKey.has(key)
+          ? mergeRelativePaths(relativePathsByKey.get(key) ?? null, relativePaths)
+          : relativePaths
+      )
     }
   }
+  const scopedTargetsByKey = scopeEditorExternalWatchTargets(
+    targetsByKey,
+    relativePathsByKey,
+    selectRecursiveWatchWorkspaceIds(state.activeWorktreeId, state.lastVisitedAtByWorktreeId),
+    getEditorExternalWatchTargetKey
+  )
 
   // Why: consumers on one host (an unqualified legacy tab and its captured sibling) collapse to one watch.
-  const sortedEntries = Array.from(targetsByKey).sort(([left], [right]) =>
+  const sortedEntries = Array.from(scopedTargetsByKey).sort(([left], [right]) =>
     left.localeCompare(right)
   )
   const nextTargets = sortedEntries.map(([, target]) => target)
@@ -275,6 +251,7 @@ export function selectEditorExternalWatchTargets(
   cachedSshConnectionStates = state.sshConnectionStates
   cachedFolderWorkspaces = state.folderWorkspaces
   cachedProjectGroups = state.projectGroups
+  cachedLastVisitedAtByWorktreeId = state.lastVisitedAtByWorktreeId
 
   if (targetsKey === cachedWatchedTargetsSnapshot.targetsKey) {
     return cachedWatchedTargetsSnapshot

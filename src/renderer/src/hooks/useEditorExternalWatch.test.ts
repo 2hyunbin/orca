@@ -545,6 +545,32 @@ describe('createExternalWatchEventHandler tombstone coalescing', () => {
     dispose()
   })
 
+  it('marks a dirty background tab changed-on-disk from a narrow watch payload', () => {
+    const dirtyFile = { ...fileNotes, isDirty: true }
+    vi.mocked(useAppStore.getState).mockReturnValue({
+      openFiles: [dirtyFile],
+      setExternalMutation
+    } as never)
+    vi.mocked(getOpenFilesForExternalFileChange).mockReturnValue([dirtyFile] as never)
+    const { handleFsChanged, dispose } = createExternalWatchEventHandler((worktreePath) =>
+      worktreePath === '/repo'
+        ? {
+            worktreeId: 'wt-1',
+            worktreePath: '/repo',
+            connectionId: undefined,
+            runtimeEnvironmentId: null,
+            narrowFiles: ['notes.md']
+          }
+        : undefined
+    )
+
+    handleFsChanged(payload([{ kind: 'update', absolutePath: '/repo/notes.md' }]))
+    vi.advanceTimersByTime(200)
+
+    expect(setExternalMutation).toHaveBeenCalledWith('file-notes', 'changed')
+    dispose()
+  })
+
   it('still reloads a clean sibling diff tab when the edit tab for the path is dirty', () => {
     const dirtyFile = {
       ...fileNotes,

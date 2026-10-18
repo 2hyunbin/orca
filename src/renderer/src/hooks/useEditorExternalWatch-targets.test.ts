@@ -67,7 +67,9 @@ describe('getEditorExternalWatchTargets', () => {
     openFiles: args.openFiles ?? [],
     worktreesByRepo: { [args.repo.id]: [args.worktree] },
     repos: [args.repo],
-    activeWorktreeId: args.activeWorktreeId ?? null,
+    // Why: tabs in the active workspace keep the full-tree watch; narrowing has its own tests.
+    activeWorktreeId:
+      args.activeWorktreeId === undefined ? args.worktree.id : args.activeWorktreeId,
     rightSidebarOpen: args.rightSidebarOpen ?? false,
     rightSidebarTab: args.rightSidebarTab ?? 'explorer',
     rightSidebarExplorerView: args.rightSidebarExplorerView ?? 'files',
@@ -206,7 +208,8 @@ describe('getEditorExternalWatchTargets', () => {
     const state = makeState({
       repo,
       worktree,
-      openFiles: [makeOpenFile(workspaceKey)]
+      openFiles: [makeOpenFile(workspaceKey)],
+      activeWorktreeId: workspaceKey
     })
     state.folderWorkspaces = [
       {

@@ -3,6 +3,7 @@ import {
   isWindowsAbsolutePathLike,
   normalizeRuntimePathForComparison
 } from '../../shared/cross-platform-path'
+import { toNarrowLocalWatcherKey } from './filesystem-watcher-narrow-roots'
 
 // ── Path normalization ───────────────────────────────────────────────
 
@@ -17,11 +18,15 @@ function normalizeWatcherRootPath(rootPath: string): string {
   return resolved
 }
 
-export function getLocalWatcherRoot(rootPath: string): { key: string; path: string } {
+export function getLocalWatcherRoot(
+  rootPath: string,
+  narrowFiles?: readonly string[]
+): { key: string; path: string } {
   const normalizedPath = normalizeWatcherRootPath(rootPath)
+  // Why: Windows drive/UNC paths are case-insensitive; cleanup must match the owner even when Git returns a different spelling.
+  const key = normalizeRuntimePathForComparison(normalizedPath)
   return {
-    // Why: Windows drive/UNC paths are case-insensitive; cleanup must match the owner even when Git returns a different spelling.
-    key: normalizeRuntimePathForComparison(normalizedPath),
+    key: narrowFiles ? toNarrowLocalWatcherKey(key, narrowFiles) : key,
     path: normalizedPath
   }
 }
