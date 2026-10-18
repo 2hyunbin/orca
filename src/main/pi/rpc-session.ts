@@ -197,7 +197,7 @@ export class PiRpcSession {
   /** Current choices carry the configuration observed at this process's eligible startup. */
   async readOptions() {
     const options = await readPiRpcSessionOptions(this.connection)
-    return withLiveCatalogListing(options, this.startCatalogListing?.configuredDefault)
+    return withLiveCatalogListing(options)
   }
 
   async close(requested = true): ReturnType<PiRpcConnection['close']> {

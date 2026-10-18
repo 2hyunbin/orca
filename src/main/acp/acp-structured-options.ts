@@ -66,7 +66,6 @@ export class AcpStructuredOptions {
   private commands: AgentSessionSlashCommand[] | undefined
   // A loaded session keeps the model it ran; only a new one resolves the agent's own config.
   private resolvesConfig = false
-  private startConfigured: AgentModelCatalogConfiguredChoice | null | undefined
   private readonly picked = new Set<string>()
 
   /** The session state a new, load or resume response reported. */
@@ -82,7 +81,6 @@ export class AcpStructuredOptions {
     this.configOptions = response.configOptions ?? []
     this.models = response.models ?? null
     this.resolvesConfig = origin === 'new'
-    this.startConfigured = undefined
     this.observeMenu()
   }
 
@@ -189,12 +187,11 @@ export class AcpStructuredOptions {
 
   /** What this session's start hands the host once: its listing, with what it resolved. */
   startListing(): AgentModelCatalogLiveListing {
-    this.startConfigured = this.configuredDefault()
-    return this.readWithCatalogListing().catalogListing
+    return withLiveCatalogListing(this.read(), this.configuredDefault()).catalogListing
   }
 
   readWithCatalogListing() {
-    return withLiveCatalogListing(this.read(), this.startConfigured)
+    return withLiveCatalogListing(this.read())
   }
 
   /** The values the agent reports now, as the record's options would name them. */

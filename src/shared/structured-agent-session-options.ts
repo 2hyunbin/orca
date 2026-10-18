@@ -53,8 +53,8 @@ export type StructuredAgentSessionOptionState = {
   catalog: AgentSessionOptionCatalog | null
   /** Inventory source for loading presentation, independent of current values. */
   catalogSource: 'seed' | 'builtin' | 'host' | 'live' | null
-  /** Exact selected-row effort metadata, cleared when its child or selection changes. */
-  currentEffortModel: AgentSessionModelOption | null
+  /** Exact selected-row controls, cleared when their child or selection changes. */
+  currentModelMetadata: AgentSessionModelOption | null
   record: NativeChatSessionOptionRecord
   /** The permission mode the host or launch last stated; null shows no picker. */
   permissionMode: string | null
@@ -70,7 +70,7 @@ export function createStructuredAgentSessionOptionState(
   return {
     catalog: seedCatalog ?? null,
     catalogSource: seedCatalog ? 'seed' : null,
-    currentEffortModel: null,
+    currentModelMetadata: null,
     record: createNativeChatSessionOptionRecord(agent),
     permissionMode: null,
     pendingId: null
@@ -107,7 +107,7 @@ export function resetStructuredAgentSessionCurrentOptions(
       }
     }
   }
-  return { ...state, record, currentEffortModel: null, pendingId: null }
+  return { ...state, record, currentModelMetadata: null, pendingId: null }
 }
 
 /**
@@ -179,22 +179,37 @@ export function applyStructuredAgentSessionOptions(
     result.current.confirmed ?? []
   )
   const independent = state.record.agent === 'claude' || state.record.agent === 'codex'
-  const currentEffortModel = independent
-    ? (result.models.find((row) => row.id === result.current.model && row.effortsKnown !== false) ??
-      null)
+  const currentRow = independent
+    ? result.models.find((row) => row.id === result.current.model)
+    : null
+  const currentModelMetadata = currentRow
+    ? {
+        ...currentRow,
+        ...(currentRow.effortsKnown === false ? { efforts: [], defaultEffort: undefined } : {}),
+        supportsFastMode:
+          currentRow.supportsFastMode === true && result.fastModeSupport?.supported === true
+      }
     : null
   // Keep current metadata out of retained inventory, even before the separate discovery read lands.
   const inventoryResult = independent
     ? {
         ...result,
         models: result.models.map((row) =>
-          row.id === result.current.model ? { ...row, efforts: [], defaultEffort: undefined } : row
+          row.id === result.current.model
+            ? {
+                ...row,
+                efforts: [],
+                defaultEffort: undefined,
+                supportsFastMode: undefined,
+                serviceTiers: undefined
+              }
+            : row
         )
       }
     : result
   return {
     ...state,
-    currentEffortModel,
+    currentModelMetadata,
     ...((!independent || (state.catalogSource !== 'host' && result.models.length > 0)) &&
     result.listedModelIds?.length !== 0
       ? {
@@ -255,8 +270,8 @@ export function commitStructuredAgentSessionOption(
   }
   return {
     ...state,
-    ...(id === 'model' && state.currentEffortModel?.id !== value
-      ? { currentEffortModel: null }
+    ...(id === 'model' && state.currentModelMetadata?.id !== value
+      ? { currentModelMetadata: null }
       : {}),
     pendingId: null
   }

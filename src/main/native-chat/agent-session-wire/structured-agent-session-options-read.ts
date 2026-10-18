@@ -261,19 +261,26 @@ export async function readStructuredAgentSessionOptions(
       : {})
   }
   result.models = structuredAgentSessionOptionModels(result.models, current.model, (row) => row)
-  // Only the exact current row describes this child's effort menu; no aliases or sibling rows.
+  // Only the exact current row describes this child's controls; no aliases or sibling rows.
   const currentRow =
     live && live.current.model === current.model
-      ? live.models.find((row) => row.id === current.model && row.effortsKnown !== false)
+      ? live.models.find((row) => row.id === current.model)
       : undefined
   if (discoveryOnly && currentRow) {
+    result.fastModeSupport = live?.fastModeSupport
     result.models = result.models.map((row) =>
       row.id === current.model
         ? {
             ...row,
-            efforts: currentRow.efforts,
-            defaultEffort: currentRow.defaultEffort,
-            effortsKnown: undefined
+            ...(currentRow.effortsKnown !== false
+              ? {
+                  efforts: currentRow.efforts,
+                  defaultEffort: currentRow.defaultEffort,
+                  effortsKnown: undefined
+                }
+              : {}),
+            supportsFastMode: currentRow.supportsFastMode,
+            serviceTiers: currentRow.serviceTiers
           }
         : row
     )

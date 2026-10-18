@@ -194,7 +194,7 @@ describe('structured agent session options', () => {
   })
 
   it('offers one speed choice in place of the Fast toggle where the model lists speeds', () => {
-    const state = applyStructuredAgentSessionOptions(
+    let state = applyStructuredAgentSessionOptions(
       createStructuredAgentSessionOptionState('codex'),
       CODEX_SESSION_OPTION_CATALOG,
       {
@@ -214,6 +214,16 @@ describe('structured agent session options', () => {
         fastModeSupport: { supported: true },
         current: { model: 'gpt-6.1-sol', serviceTier: 'ultrafast', confirmed: ['serviceTier'] }
       }
+    )
+    state = applyStructuredAgentSessionModelCatalog(
+      state,
+      CODEX_SESSION_OPTION_CATALOG,
+      {
+        origin: 'probe',
+        fetchedAt: 2,
+        models: [{ id: 'another-model', label: 'Another model', isDefault: true, efforts: [] }]
+      },
+      { newLaunch: false }
     )
     const snapshot = structuredAgentSessionOptionSnapshot(state)
     expect(snapshot.map(({ id }) => id)).toEqual(['model', 'serviceTier'])
@@ -281,15 +291,18 @@ describe('structured agent session options', () => {
     )
     const seed = { model: 'gpt-5.5' }
     expect(viewModel(seeded, seed, {})).toBe('gpt-5.5')
-    // A saved pick the host's list does not name shows the quiet placeholder, never its raw id.
-    expect(
-      structuredAgentSessionOptionSnapshot(
-        structuredAgentSessionOptionView(seeded, { model: 'gpt-next' }, {}, true)
-      )
-    ).toEqual([expect.objectContaining({ id: 'model', settable: false, valueSource: 'unknown' })])
-    // Before the host answers, and on the built-in list, no saved pick is named.
-    expect(viewModel(cold, seed, {})).toBeUndefined()
-    expect(viewModel(settleStructuredAgentSessionBuiltinCatalog(cold), seed, {})).toBeUndefined()
+    // An explicit off-list seed stays selected alongside the installed choices.
+    const offList = structuredAgentSessionOptionSnapshot(
+      structuredAgentSessionOptionView(seeded, { model: 'gpt-next' }, {}, true)
+    )[0]
+    expect(offList).toMatchObject({ id: 'model', settable: true, valueSource: 'dispatched' })
+    expect(offList?.kind).toMatchObject({
+      currentValue: 'gpt-next',
+      choices: [{ value: 'gpt-5.5' }, { value: 'gpt-next' }]
+    })
+    // A cold list cannot replace a known explicit launch selection either.
+    expect(viewModel(cold, seed, {})).toBe('gpt-5.5')
+    expect(viewModel(settleStructuredAgentSessionBuiltinCatalog(cold), seed, {})).toBe('gpt-5.5')
     // Derived only: the record itself never takes the seed.
     expect(seeded.record.model).toBeUndefined()
     const live = applyStructuredAgentSessionOptions(seeded, CODEX_SESSION_OPTION_CATALOG, {

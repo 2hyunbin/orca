@@ -209,17 +209,18 @@ describe('model catalog prewarm', () => {
     })
     const prewarmed = service.prewarm()
     await vi.waitFor(() => expect(started).toHaveLength(2))
+    const admitted = [...started]
 
     service.stop()
     await prewarmed
-    expect(started).toEqual(['codex', 'claude'])
+    expect(started).toEqual(admitted)
     expect(signals.every((signal) => signal.aborted)).toBe(true)
 
     // A read or another prewarm after stop spawns nothing.
-    expect(await service.read({ agent: 'grok' })).toMatchObject({ origin: 'unknown' })
+    expect(await service.read({ agent: 'grok' })).toEqual({ origin: 'unknown' })
     hasChatRecords.mockClear()
     await service.prewarm()
-    expect(started).toEqual(['codex', 'claude'])
+    expect(started).toEqual(admitted)
     // Not even the chat records are read.
     expect(hasChatRecords).not.toHaveBeenCalled()
   })
@@ -246,9 +247,11 @@ describe('model catalog prewarm', () => {
       probes: Object.fromEntries(agents.map((agent) => [agent, probeFor(agent)]))
     })
     const prewarmed = service.prewarm()
-    for (const agent of agents) {
-      await vi.waitFor(() => expect(gates.has(agent)).toBe(true))
-      gates.get(agent)?.()
+    for (let listed = 1; listed <= agents.length; listed++) {
+      await vi.waitFor(() => expect(gates.size).toBeGreaterThanOrEqual(listed))
+      for (const release of gates.values()) {
+        release()
+      }
     }
     await prewarmed
     expect(peak).toBe(2)

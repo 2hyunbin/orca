@@ -1,6 +1,7 @@
 import { isLegacyAgentSessionAccountHome } from '../../../shared/agent-session-account-home'
 import { homedir } from 'node:os'
 import type { AgentSessionModelCatalogResult } from '../../../shared/agent-session-wire'
+import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import { isNativeLocalLocation } from '../../../shared/execution-host'
 import { PrioritySemaphore } from '../../../shared/priority-semaphore'
 import {
@@ -11,7 +12,8 @@ import {
 import {
   agentModelCatalogResultFromEntry,
   agentModelCatalogSessionObservation,
-  retainedAgentModelCatalogModels
+  retainedAgentModelCatalogModels,
+  type AgentModelCatalogConfiguredChoice
 } from './agent-model-catalog-entry'
 import type { AgentModelCatalogEntry } from './agent-model-catalog-store'
 import { AgentModelCatalogListingStoppedError } from './agent-model-catalog-failures'
@@ -26,12 +28,47 @@ export type {
   AgentModelCatalogServiceDeps
 } from './agent-model-catalog-service-contract'
 
+async function recordConfiguredDefault(
+  deps: AgentModelCatalogServiceDeps,
+  record: AgentSessionRecord,
+  fingerprint: string,
+  choice: AgentModelCatalogConfiguredChoice | null
+): Promise<void> {
+  const accountHome = record.accountHome
+  if (!deps.workspaceMayOverrideDefaultModel) {
+    return
+  }
+  const workspacePath = isNativeLocalLocation(record.location)
+    ? await deps.recordWorkspacePath?.(record).catch(() => null)
+    : null
+  if (
+    !workspacePath ||
+    (await deps.workspaceMayOverrideDefaultModel({
+      agent: record.provider,
+      workspacePath,
+      accountHomePath: isLegacyAgentSessionAccountHome(accountHome) ? accountHome.path : null
+    }))
+  ) {
+    return
+  }
+  deps.store.recordConfiguredDefault(fingerprint, choice)
+}
+
 export function createAgentModelCatalogService(
   deps: AgentModelCatalogServiceDeps
 ): AgentModelCatalogService {
   const lifetime = new AbortController()
   const admission = new PrioritySemaphore(2)
   const sessionKeys = new Map<string, string>()
+  const recordingDefaults = new Map<string, Promise<void>>()
+  const retainedKey = (sessionId: string): string => {
+    const record = deps.getRecord(sessionId)
+    return record && deps.drivesRecord(record) && isNativeLocalLocation(record.location)
+      ? record.provider === 'claude' || record.provider === 'codex'
+        ? (sessionKeys.get(sessionId) ?? '')
+        : agentModelCatalogFingerprintForRecord(record)
+      : ''
+  }
   const read = async (params: AgentModelCatalogRead): Promise<AgentSessionModelCatalogResult> => {
     const record = params.sessionId ? deps.getRecord(params.sessionId) : undefined
     if (
@@ -52,7 +89,8 @@ export function createAgentModelCatalogService(
       accountHome: home,
       wslDistro: null
     })
-    const legacyAccount = params.legacy && (params.agent === 'claude' || params.agent === 'codex')
+    const independent = params.agent === 'claude' || params.agent === 'codex'
+    const legacyAccount = params.legacy && independent
     const workspacePath = async () =>
       params.accountDefault && !legacyAccount
         ? homedir()
@@ -60,8 +98,8 @@ export function createAgentModelCatalogService(
           ? null
           : (params.workspacePath ??
             (record ? await deps.recordWorkspacePath?.(record).catch(() => null) : homedir()))
-    const cwd = legacyAccount ? undefined : await workspacePath()
-    if (!cwd && !legacyAccount) {
+    const cwd = legacyAccount || !independent ? undefined : await workspacePath()
+    if (!cwd && !legacyAccount && independent) {
       const legacy = deps.store.get(base)
       if (!legacy) {
         return { origin: 'unknown' }
@@ -78,7 +116,7 @@ export function createAgentModelCatalogService(
       ) {
         return true
       }
-      const directory = legacyAccount ? await workspacePath() : cwd
+      const directory = legacyAccount || !independent ? await workspacePath() : cwd
       return directory && deps.workspaceMayOverrideDefaultModel
         ? !(await deps
             .workspaceMayOverrideDefaultModel({
@@ -95,15 +133,17 @@ export function createAgentModelCatalogService(
           ?.resolve?.(home, cwd, params.accountDefault ? undefined : record?.options)
           .catch(() => null)
       : undefined
-    if (!legacyAccount && probe?.resolve && !resolved) {
+    if (independent && !legacyAccount && probe?.resolve && !resolved) {
       return { origin: 'unknown' }
     }
-    const fingerprint = agentModelCatalogScopeFingerprint(
-      base,
-      legacyAccount ? 'legacy-account' : (cwd ?? ''),
-      resolved?.identity
-    )
-    if (params.sessionId && !params.accountDefault && !legacyAccount) {
+    const fingerprint = independent
+      ? agentModelCatalogScopeFingerprint(
+          base,
+          legacyAccount ? 'legacy-account' : (cwd ?? ''),
+          resolved?.identity
+        )
+      : base
+    if (independent && params.sessionId && !params.accountDefault && !legacyAccount) {
       if (sessionKeys.size >= 256 && !sessionKeys.has(params.sessionId)) {
         const oldest = sessionKeys.keys().next().value
         if (oldest !== undefined) {
@@ -114,6 +154,7 @@ export function createAgentModelCatalogService(
         sessionKeys.set(params.sessionId, fingerprint)
       }
     }
+    await recordingDefaults.get(fingerprint)
     let entry = deps.store.get(fingerprint)
     // Old cache identities remain usable only through the legacy flat display contract.
     const legacy = entry ? null : deps.store.get(base)
@@ -185,7 +226,7 @@ export function createAgentModelCatalogService(
   return {
     read,
     peek: (sessionId, verifiedOnly) => {
-      const entry = deps.store.get(sessionKeys.get(sessionId) ?? '')
+      const entry = deps.store.get(retainedKey(sessionId))
       return entry &&
         (!verifiedOnly ||
           (deps.store.freshForMs(entry) > 0 &&
@@ -204,10 +245,9 @@ export function createAgentModelCatalogService(
       deps.store.expireFailure(agentModelCatalogScopeFingerprint(account, 'legacy-account'))
     },
     retainedLiveModelIds(sessionId, listing) {
-      return retainedAgentModelCatalogModels(
-        deps.store.get(sessionKeys.get(sessionId) ?? ''),
-        listing
-      ).map((model) => model.id)
+      return retainedAgentModelCatalogModels(deps.store.get(retainedKey(sessionId)), listing).map(
+        (model) => model.id
+      )
     },
     recordLiveListing(sessionId, listing) {
       const record = deps.getRecord(sessionId)
@@ -219,17 +259,28 @@ export function createAgentModelCatalogService(
       ) {
         return
       }
-      const fingerprint =
-        sessionKeys.get(sessionId) ?? agentModelCatalogFingerprintForRecord(record)
-      deps.store.recordSuccess(
+      const fingerprint = agentModelCatalogFingerprintForRecord(record)
+      const { configuredDefault, ...listed } = listing
+      const saved = deps.store.recordSuccess(
         fingerprint,
         record.provider,
         agentModelCatalogSessionObservation({
-          ...listing,
+          ...listed,
           models: retainedAgentModelCatalogModels(deps.store.get(fingerprint), listing)
         }),
         'live'
       )
+      if (saved && configuredDefault !== undefined) {
+        const recording = (recordingDefaults.get(fingerprint) ?? Promise.resolve())
+          .then(() => recordConfiguredDefault(deps, record, fingerprint, configuredDefault))
+          .catch(() => {})
+          .then(() => {
+            if (recordingDefaults.get(fingerprint) === recording) {
+              recordingDefaults.delete(fingerprint)
+            }
+          })
+        recordingDefaults.set(fingerprint, recording)
+      }
     },
     async prewarm() {
       if (lifetime.signal.aborted) {

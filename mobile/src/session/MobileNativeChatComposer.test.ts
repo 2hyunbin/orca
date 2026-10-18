@@ -361,7 +361,7 @@ describe('MobileNativeChatComposer', () => {
         id,
         label: id,
         category: id === 'model' ? ('model' as const) : ('thought_level' as const),
-        kind: { type: 'select' as const, choices: [] },
+        kind: { type: 'select' as const, choices: [{ value: 'available', label: 'Available' }] },
         valueSource: 'unknown' as const,
         settable: true
       })),

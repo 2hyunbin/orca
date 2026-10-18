@@ -247,8 +247,18 @@ describe('live Codex option reads', () => {
         await listing.promise
       }
       const apply = vi.fn(() => ({
-        models: [{ id: 'stale', label: 'stale', isDefault: false, efforts: [] }],
-        current: { model: 'stale' }
+        models: [
+          {
+            id: 'stale',
+            label: 'stale',
+            isDefault: false,
+            efforts: [],
+            effortsKnown: false as const,
+            supportsFastMode: true
+          }
+        ],
+        fastModeSupport: { supported: true },
+        current: { model: 'stale', fastMode: true }
       }))
       const prepareReadOptions = vi.fn(async () => {
         if (blocked && stage === 'prepared') {
@@ -286,22 +296,27 @@ describe('live Codex option reads', () => {
         conversation: async () => live
       } as unknown as StructuredAgentSessionMutationContext
 
-      const initial = await readStructuredAgentSessionOptions(context, SESSION, {
-        readsWithoutModel: true,
-        readsCoherentCatalog: true
-      })
+      const read = () =>
+        readStructuredAgentSessionOptions(context, SESSION, {
+          readsWithoutModel: true,
+          readsCoherentCatalog: true
+        })
+      const initial = await read()
       expect(initial.models.map((row) => row.id)).toEqual(['installed', 'stale'])
-      blocked = true
-      const reading = readStructuredAgentSessionOptions(context, SESSION, {
-        readsWithoutModel: true,
-        readsCoherentCatalog: true
+      expect(initial.models.find((row) => row.id === 'stale')).toMatchObject({
+        supportsFastMode: true
       })
+      expect(initial.current.fastMode).toBe(true)
+      blocked = true
+      const reading = read()
       await entered.promise
       await queue.serialize(SESSION, async () => {
         live.child = { fence: 8 }
       })
       listing.resolve()
-      expect((await reading).current).not.toHaveProperty('model')
+      const replaced = await reading
+      expect(replaced.current).not.toHaveProperty('model')
+      expect(replaced.models.every((row) => row.supportsFastMode !== true)).toBe(true)
       expect(apply).toHaveBeenCalledTimes(stage === 'prepared' ? 1 : 2)
     }
   )

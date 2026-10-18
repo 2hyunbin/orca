@@ -61,19 +61,10 @@ export type AgentModelCatalogConfiguredChoice = {
 export function agentModelCatalogSessionObservation(
   listing: AgentModelCatalogLiveListing
 ): AgentModelCatalogSuccess {
-  const configured = listing.configuredDefault
   return {
     models: listing.models,
     origin: 'live-session',
     complete: false,
-    ...(configured
-      ? {
-          configured: {
-            model: configured.modelId,
-            ...(configured.effort ? { effort: configured.effort } : {})
-          }
-        }
-      : {}),
     ...(listing.fastModeSupport ? { fastModeSupport: listing.fastModeSupport } : {})
   }
 }
@@ -206,25 +197,82 @@ export function agentModelCatalogEntryWithSuccess(
   }
   const provenance =
     source === 'live' ? 'session-advisory' : success.advisory ? 'probe-advisory' : 'discovery'
+  const independent = identity.agent === 'claude' || identity.agent === 'codex'
   if (
+    independent &&
     previous &&
     ((previous.source === 'discovery' && provenance !== 'discovery') ||
       (previous.source === 'session-advisory' && provenance === 'probe-advisory'))
   ) {
     return previous
   }
+  const configured =
+    success.configured ?? (!independent ? previous?.observation.configured : undefined)
   return agentModelCatalogEntry(
     identity.agent,
     identity.fingerprint,
     {
-      models: success.models.map((model) => ({ ...model })),
+      models: success.models.map((model) => {
+        const older = !independent ? previous?.models.find((row) => row.id === model.id) : undefined
+        const retainsEffort =
+          source === 'discovery' &&
+          model.efforts.length > 0 &&
+          configured?.model === model.id &&
+          !model.efforts.some((choice) => choice.value === configured.effort) &&
+          older?.efforts.some((choice) => choice.value === configured.effort)
+        return older
+          ? {
+              ...older,
+              ...model,
+              effortsKnown: model.effortsKnown,
+              ...(model.effortsKnown === false || retainsEffort
+                ? {
+                    efforts: older.efforts,
+                    effortsKnown: older.effortsKnown,
+                    defaultEffort: older.defaultEffort
+                  }
+                : {})
+            }
+          : { ...model }
+      }),
       origin: success.origin,
       at,
       complete: success.complete !== false,
-      ...(success.configured ? { configured: success.configured } : {}),
-      ...(success.fastModeSupport ? { fastModeSupport: success.fastModeSupport } : {})
+      ...(configured ? { configured } : {}),
+      ...((success.fastModeSupport ?? (!independent ? previous?.fastModeSupport : undefined))
+        ? { fastModeSupport: success.fastModeSupport ?? previous?.fastModeSupport }
+        : {})
     },
     provenance
+  )
+}
+
+/** A qualified startup changes configuration facts; menu reads leave their clock alone. */
+export function entryWithConfiguredDefault(
+  entry: AgentModelCatalogEntry,
+  choice: AgentModelCatalogConfiguredChoice | null,
+  at: number
+): AgentModelCatalogEntry | null {
+  const previous = entry.observation.configured
+  const effort =
+    choice?.effort === undefined
+      ? previous?.model === choice?.modelId
+        ? previous?.effort
+        : undefined
+      : (choice.effort ?? undefined)
+  const configured = choice ? { model: choice.modelId, ...(effort ? { effort } : {}) } : undefined
+  const { at: _at, ...facts } = previous ?? {}
+  if (JSON.stringify(configured ?? {}) === JSON.stringify(facts)) {
+    return null
+  }
+  return agentModelCatalogEntry(
+    entry.agent,
+    entry.fingerprint,
+    {
+      ...entry.observation,
+      configured: configured ? { ...configured, at } : undefined
+    },
+    entry.source
   )
 }
 

@@ -198,15 +198,21 @@ describe('mobile structured send actions', () => {
     }
   })
 
-  it('takes an effort the replacement it shows offers, and sends on that replacement', async () => {
+  it('sends the retained literal selection until an explicit model and effort pick', async () => {
     agent = 'claude'
     hostSupport = structuredAgentSessionHostSupport([AGENT_SESSION_SEND_OPTIONS_RUNTIME_CAPABILITY])
     const efforts = [
       { value: 'low', label: 'Low' },
       { value: 'high', label: 'High' }
     ]
-    sendRequest.mockImplementation(async (method) =>
-      method === 'agentSession.send'
+    let current = { model: 'claude-gone', effort: 'high' }
+    sendRequest.mockImplementation(async (method, params) => {
+      if (method === 'agentSession.setOption') {
+        const fields = fieldsOf(params)
+        current = { ...current, [String(fields.key)]: String(fields.value) }
+        return ok({ ok: true, value: { options: current } })
+      }
+      return method === 'agentSession.send'
         ? sendResult('accepted')
         : method === 'agentSession.modelCatalog'
           ? ok({
@@ -222,26 +228,38 @@ describe('mobile structured send actions', () => {
                   { id: 'claude-gone', label: 'claude-gone', isDefault: false, efforts: [] }
                 ],
                 listedModelIds: ['opus[1m]'],
-                current: { model: 'claude-gone', effort: 'high' }
+                current
               })
             : ok({})
-    )
+    })
     await mountSession()
     await vi.waitFor(async () => {
       await act(async () => {})
       expect(
         hook!.optionSnapshot.find((descriptor) => descriptor.id === 'model')?.kind
-      ).toMatchObject({ currentValue: 'opus[1m]' })
+      ).toMatchObject({ currentValue: 'claude-gone' })
     })
+    expect(hook!.optionSnapshot.find((entry) => entry.id === 'effort')).toMatchObject({
+      settable: false,
+      kind: { currentValue: 'high', choices: [{ value: 'high', label: 'High' }] }
+    })
+    expect(
+      sendRequest.mock.calls.filter(([method]) => method === 'agentSession.setOption')
+    ).toHaveLength(0)
     await act(async () => {
+      expect(await hook!.sendWithOutcome('literal')).toBe('accepted')
+      await hook!.setStructuredOption('model', 'opus[1m]')
       await hook!.setStructuredOption('effort', 'low')
     })
     const picks = sendRequest.mock.calls.filter(([method]) => method === 'agentSession.setOption')
-    expect(picks.map(([, params]) => fieldsOf(params).value)).toEqual(['low'])
+    expect(picks.map(([, params]) => fieldsOf(params).value)).toEqual(['opus[1m]', 'low'])
     await act(async () => {
-      expect(await hook!.sendWithOutcome('hello')).toBe('accepted')
+      expect(await hook!.sendWithOutcome('picked')).toBe('accepted')
     })
-    expect(fieldsOf(calls()[0]![1]).options).toMatchObject({ model: 'opus[1m]' })
+    expect(calls().map(([, params]) => fieldsOf(params).options)).toEqual([
+      { model: 'claude-gone', effort: 'high' },
+      { model: 'opus[1m]', effort: 'low' }
+    ])
   })
 
   it("sends a command the chat's own agent runs as a message, though Codex's host claims it", async () => {

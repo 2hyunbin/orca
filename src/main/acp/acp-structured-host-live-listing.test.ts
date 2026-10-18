@@ -26,6 +26,10 @@ describe('a live Grok listing', () => {
 
     // Its start was saved once as the chat attached; this read is saved too.
     expect(modelCatalog.recordLiveListing).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(modelCatalog.recordLiveListing).mock.calls[0]![1].configuredDefault).toEqual({
+      modelId: 'grok-4.7',
+      effort: 'high'
+    })
     await host.readOptions(SESSION)
 
     expect(modelCatalog.recordLiveListing).toHaveBeenCalledTimes(2)
@@ -34,7 +38,7 @@ describe('a live Grok listing', () => {
     expect(listing.models.map((model) => model.id)).toEqual(['grok-4.7', 'grok-4.6'])
     // Current rows do not become defaults; startup configuration stays separate.
     expect(listing.models.every((model) => !model.isDefault)).toBe(true)
-    expect(listing.configuredDefault).toEqual({ modelId: 'grok-4.7', effort: 'high' })
+    expect(listing).not.toHaveProperty('configuredDefault')
     const conversation = host.collaboratorsForTests().sessions.get(SESSION)!
     const child = conversation.child!
     const ended = { ...child, cause: 'exit' as const, reason: null, duringStartup: false }

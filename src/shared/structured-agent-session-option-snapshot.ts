@@ -39,14 +39,16 @@ function modelOptionSnapshot(state: StructuredAgentSessionOptionState): SessionO
   }
   const catalog = state.catalogSource === 'seed' ? { ...state.catalog, models: [] } : state.catalog
   const model = resolveEffectiveNativeChatModelId(catalog, catalog.models, state.record)
-  const current = state.currentEffortModel?.id === model ? state.currentEffortModel : null
+  const current = state.currentModelMetadata?.id === model ? state.currentModelMetadata : null
   const models = withTrackedNativeChatModel(catalog, catalog.models, state.record).map((row) =>
     current && row.id === current.id
       ? {
           ...row,
           options: [
-            ...row.options.filter((option) => option.id !== 'effort'),
-            ...discoveredModel(current, false).options.filter((option) => option.id === 'effort')
+            ...row.options.filter(
+              (option) => !['effort', 'fastMode', 'serviceTier'].includes(option.id)
+            ),
+            ...discoveredModel(current, true).options
           ]
         }
       : row

@@ -1,14 +1,10 @@
-import { homedir } from 'node:os'
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentSessionAccountHome } from '../../../shared/agent-session-account-home'
 import {
   agentSessionLeaseFixture,
   agentSessionRecordFixture
 } from '../../../shared/agent-session-record.test-fixture'
-import {
-  agentModelCatalogFingerprint,
-  agentModelCatalogScopeFingerprint
-} from './agent-model-catalog-fingerprint'
+import { agentModelCatalogFingerprint } from './agent-model-catalog-fingerprint'
 import { createAgentModelCatalogService } from './agent-model-catalog-service'
 import {
   AGENT_MODEL_CATALOG_FAILURE_TTL_MS,
@@ -23,14 +19,11 @@ import { agentReadsProjectModelConfig } from './agent-project-model-override'
 // host saved, and no listing, probe or re-check of a held reason starts.
 
 const HOME = { variable: 'GROK_HOME', path: '/homes/grok' } as const
-const FINGERPRINT = agentModelCatalogScopeFingerprint(
-  agentModelCatalogFingerprint({
-    agent: 'grok',
-    accountHome: HOME,
-    wslDistro: null
-  }),
-  homedir()
-)
+const FINGERPRINT = agentModelCatalogFingerprint({
+  agent: 'grok',
+  accountHome: HOME,
+  wslDistro: null
+})
 const SIGNED_OUT = { reason: 'notSignedIn', account: 'system' } as const
 
 function listing(id: string): AgentModelCatalogSuccess {
@@ -83,14 +76,13 @@ describe('a saved-only catalog read', () => {
       store,
       getRecord: (sessionId) => (sessionId === record.sessionId ? record : undefined),
       drivesRecord: () => true,
-      recordWorkspacePath: async () => homedir(),
       resolveAccountHome: async () => HOME,
       probes: { grok: probe }
     })
 
     expect(
       await service.read({ agent: 'grok', sessionId: record.sessionId, waitForListing: true })
-    ).toMatchObject({
+    ).toEqual({
       origin: 'unknown'
     })
     expect(probe).not.toHaveBeenCalled()
@@ -123,9 +115,7 @@ describe('a saved-only catalog read', () => {
 
   it('answers unknown with nothing saved, and starts no listing for it', async () => {
     const { store, probe, service } = rig()
-    expect(await service.read({ agent: 'grok', savedOnly: true })).toMatchObject({
-      origin: 'unknown'
-    })
+    expect(await service.read({ agent: 'grok', savedOnly: true })).toEqual({ origin: 'unknown' })
     expect(store.pendingListing(FINGERPRINT)).toBeNull()
     expect(probe).not.toHaveBeenCalled()
   })
@@ -138,7 +128,7 @@ describe('a saved-only catalog read', () => {
       )
       .catch(() => undefined)
     advance(AGENT_MODEL_CATALOG_FAILURE_TTL_MS)
-    expect(await service.read({ agent: 'grok', savedOnly: true })).toMatchObject({
+    expect(await service.read({ agent: 'grok', savedOnly: true })).toEqual({
       origin: 'unknown',
       unavailable: SIGNED_OUT
     })

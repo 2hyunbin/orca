@@ -1,9 +1,11 @@
 import { expect, it } from 'vitest'
+import type { AgentSessionModelCatalogResult } from './agent-session-wire'
 import { CLAUDE_SESSION_OPTION_CATALOG as seed } from './agent-session-option-catalog-claude-codex'
 import {
   applyStructuredAgentSessionModelCatalog,
   applyStructuredAgentSessionOptions,
   createStructuredAgentSessionOptionState,
+  commitStructuredAgentSessionOption,
   resetStructuredAgentSessionCurrentOptions,
   structuredAgentSessionOptionSnapshot
 } from './structured-agent-session-options'
@@ -19,13 +21,11 @@ const efforts = ['low', 'medium', 'high', 'xhigh', 'max'].map((value) => ({
 }))
 const catalog = { origin: 'probe' as const, fetchedAt: 1, models: [{ ...row('sonnet'), efforts }] }
 const fresh = () => createStructuredAgentSessionOptionState('claude', seed)
-const inventory = (listingNamesConfiguredModel?: boolean) =>
-  applyStructuredAgentSessionModelCatalog(
-    fresh(),
-    seed,
-    { ...catalog, listingNamesConfiguredModel },
-    { newLaunch: true }
-  )
+const inventory = (
+  state = fresh(),
+  listing: AgentSessionModelCatalogResult = catalog,
+  newLaunch = true
+) => applyStructuredAgentSessionModelCatalog(state, seed, listing, { newLaunch })
 const picked = { model: 'opus[1m]', effort: 'high' }
 const selection = (state: ReturnType<typeof fresh>) =>
   structuredAgentSessionSendSelection('claude', structuredAgentSessionOptionSnapshot(state))
@@ -56,30 +56,34 @@ it('preserves a running or restored pick in both response orders and accepts lat
   for (const order of ['options-first', 'catalog-first']) {
     let state = fresh()
     const options = {
-      models: ['sonnet', 'opus[1m]'].map((id) => ({ ...row(id), efforts })),
-      current: { ...picked, confirmed: ['model', 'effort'] }
+      models: ['sonnet', 'opus[1m]'].map((id) => ({ ...row(id), efforts, supportsFastMode: true })),
+      fastModeSupport: { supported: true },
+      current: { ...picked, fastMode: true, confirmed: ['model', 'effort', 'fastMode'] }
     }
+    const fast = (next: typeof state) =>
+      structuredAgentSessionOptionSnapshot(next).find((entry) => entry.id === 'fastMode')
+    const reported = applyStructuredAgentSessionOptions(state, seed, options)
+    expect(fast(resetStructuredAgentSessionCurrentOptions(reported))).toBeUndefined()
     state =
       order === 'options-first'
-        ? applyStructuredAgentSessionModelCatalog(
-            applyStructuredAgentSessionOptions(state, seed, options),
-            seed,
-            catalog,
-            { newLaunch: false }
-          )
+        ? inventory(reported, catalog, false)
         : applyStructuredAgentSessionOptions(inventory(), seed, options)
-    state = applyStructuredAgentSessionModelCatalog(
-      state,
-      seed,
-      {
-        ...catalog,
-        models: [row('new-installed')]
-      },
-      { newLaunch: false }
-    )
+    state = inventory(state, { ...catalog, models: [row('new-installed')] }, false)
     expect(state.catalog?.models.map((entry) => entry.id)).toEqual(['new-installed'])
     const effort = (next: typeof state) =>
       structuredAgentSessionOptionSnapshot(next).find((row) => row.id === 'effort')
+    expect(fast(state)).toMatchObject({
+      settable: true,
+      kind: { type: 'boolean', currentValue: true }
+    })
+    expect(fast(resetStructuredAgentSessionCurrentOptions(state))).toBeUndefined()
+    const pickedOther = commitStructuredAgentSessionOption(
+      { ...state, record: structuredClone(state.record) },
+      'model',
+      'new-installed'
+    )
+    expect(fast(pickedOther)).toBeUndefined()
+    expect(fast(inventory())).toBeUndefined()
     expect(effort(state)).toMatchObject({ settable: true, kind: { choices: efforts } })
     expect(effort(resetStructuredAgentSessionCurrentOptions(state))).toMatchObject({
       settable: false,
@@ -97,19 +101,28 @@ it('preserves a running or restored pick in both response orders and accepts lat
     expect(selection(state)).toEqual(picked)
     for (const effortsKnown of [undefined, false] as const) {
       const currentOnly = applyStructuredAgentSessionOptions(state, seed, {
-        models: [{ ...row('opus[1m]'), effortsKnown }],
+        models: [{ ...row('opus[1m]'), effortsKnown, supportsFastMode: true }],
+        fastModeSupport: { supported: true },
         listedModelIds: [],
-        current: picked
+        current: { ...picked, fastMode: true }
       })
       expect(currentOnly.catalog).toBe(state.catalog)
+      expect(fast(currentOnly)).toMatchObject({ kind: { currentValue: true } })
       expect(effort(currentOnly)).toMatchObject({
         settable: false,
         kind: { currentValue: 'high', choices: [{ value: 'high', label: 'high' }] }
       })
     }
+    expect(
+      fast(
+        applyStructuredAgentSessionOptions(state, seed, { ...options, fastModeSupport: undefined })
+      )
+    ).toBeUndefined()
   }
 })
 
 it('leaves a truly unpicked launch to the provider', () => {
-  expect(selection(inventory(true))).toBeUndefined()
+  expect(
+    selection(inventory(fresh(), { ...catalog, listingNamesConfiguredModel: true }))
+  ).toBeUndefined()
 })

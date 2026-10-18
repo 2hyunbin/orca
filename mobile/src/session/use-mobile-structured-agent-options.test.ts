@@ -626,7 +626,7 @@ describe('useMobileStructuredAgentOptions host catalog', () => {
     await harness.unmount()
   })
 
-  it('keeps a cold Codex picker usable on the built-in list and lands the listing in place', async () => {
+  it('waits for genuine Codex choices and retains an explicit pick during a later refresh', async () => {
     const listed = deferred<AgentSessionModelCatalogResult>()
     const catalog = vi.fn(async (params: unknown): Promise<AgentSessionModelCatalogResult> =>
       typeof params === 'object' && params !== null && 'waitForListing' in params
@@ -638,24 +638,34 @@ describe('useMobileStructuredAgentOptions host catalog', () => {
     const harness = await mountOptions({ ...BASE, client: client.client, mutate })
     await settle()
 
-    const seeded = descriptorFor(harness.current().optionSnapshot, 'model')
-    expect(seeded?.settable).toBe(true)
-    const seedChoices = seeded?.kind.type === 'select' ? seeded.kind.choices : []
-    expect(seedChoices.length).toBeGreaterThan(0)
+    const cold = descriptorFor(harness.current().optionSnapshot, 'model')
+    expect(cold).toMatchObject({ settable: false, kind: { choices: [] } })
+    expect(calls).toHaveLength(0)
+    listed.resolve(HOST_CATALOG)
+    await settle()
+    const refreshing = deferred<AgentSessionModelCatalogResult>()
+    const refresh = optionsClient(
+      () => deferred<AgentSessionOptionsResult>().promise,
+      async (params) =>
+        typeof params === 'object' && params !== null && 'waitForListing' in params
+          ? refreshing.promise
+          : { ...HOST_CATALOG, listingInProgress: true }
+    )
+    await harness.rerender({ client: refresh.client })
+    expect(refresh.methods('agentSession.modelCatalog')).toHaveLength(2)
     await act(async () => {
-      await harness.current().setStructuredOption('model', seedChoices[0]!.value)
+      await harness.current().setStructuredOption('model', 'grok-4')
     })
     expect(calls).toHaveLength(1)
-
-    // A pick made meanwhile does not drop the listing that lands afterwards, and stays picked.
-    listed.resolve(HOST_CATALOG)
+    refreshing.resolve({ origin: 'probe', fetchedAt: 2, models: OPTIONS.models })
     await settle()
     const model = descriptorFor(harness.current().optionSnapshot, 'model')
     expect(model?.kind.type === 'select' && model.kind.choices.map((c) => c.value)).toEqual([
-      'grok-4',
-      seedChoices[0]!.value
+      'gpt-live',
+      'gpt-fast',
+      'grok-4'
     ])
-    expect(currentValueOf(harness.current().optionSnapshot, 'model')).toBe(seedChoices[0]!.value)
+    expect(currentValueOf(harness.current().optionSnapshot, 'model')).toBe('grok-4')
     await harness.unmount()
   })
 

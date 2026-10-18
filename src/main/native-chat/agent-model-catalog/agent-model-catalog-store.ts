@@ -4,6 +4,8 @@ import { startSpan } from '../../observability/tracer'
 import {
   agentModelCatalogEntryWithSuccess,
   agentModelCatalogListingKey,
+  entryWithConfiguredDefault,
+  type AgentModelCatalogConfiguredChoice,
   type AgentModelCatalogEntry,
   type AgentModelCatalogSource,
   type AgentModelCatalogSuccess
@@ -122,12 +124,11 @@ export class AgentModelCatalogStore {
     return false
   }
 
-  /** Only a discovery ages: live saves never postpone the next account-level listing. */
+  /** Retained observations also age so a session-free probe can expose new models. */
   isStale(entry: AgentModelCatalogEntry): boolean {
     return (
       this.dueEntries.has(entry.fingerprint) ||
-      (entry.source !== 'session-advisory' &&
-        this.now() - entry.observation.at >= AGENT_MODEL_CATALOG_FRESH_MS)
+      this.now() - entry.observation.at >= AGENT_MODEL_CATALOG_FRESH_MS
     )
   }
 
@@ -194,6 +195,19 @@ export class AgentModelCatalogStore {
       source,
       this.now()
     )
+  }
+
+  recordConfiguredDefault(
+    fingerprint: string,
+    choice: AgentModelCatalogConfiguredChoice | null
+  ): void {
+    const previous = this.entries.get(fingerprint)
+    const entry = previous && entryWithConfiguredDefault(previous, choice, this.now())
+    if (entry) {
+      this.entries.set(fingerprint, entry)
+      this.persistence?.save([...this.entries.values()])
+      this.listingWaiters.notify(fingerprint)
+    }
   }
 
   private writeSuccess(

@@ -11,10 +11,7 @@ import {
 import { AcpStructuredOptions } from '../acp/acp-structured-options'
 import { GROK_ACP_DIALECT } from '../acp/acp-dialects/grok-dialect'
 import { grokModelCatalogFromState } from '../acp/acp-dialects/grok-model-catalog'
-import {
-  agentModelCatalogFingerprintForRecord,
-  agentModelCatalogScopeFingerprint
-} from '../native-chat/agent-model-catalog/agent-model-catalog-fingerprint'
+import { agentModelCatalogFingerprintForRecord } from '../native-chat/agent-model-catalog/agent-model-catalog-fingerprint'
 import { createAgentModelCatalogService } from '../native-chat/agent-model-catalog/agent-model-catalog-service'
 import { workspaceMayOverrideDefaultModel } from '../native-chat/agent-model-catalog/agent-project-model-override'
 import {
@@ -212,7 +209,7 @@ describe('whole process observations', () => {
     ]
     const catalog = service(store, {}, [record])
     store.recordSuccess(
-      agentModelCatalogScopeFingerprint(agentModelCatalogFingerprintForRecord(record), '/repo'),
+      agentModelCatalogFingerprintForRecord(record),
       'opencode',
       {
         models: listed,
