@@ -396,6 +396,10 @@ jobs:
         if: needs.code_paths.outputs.static_analysis == 'true'
         run: node config/scripts/check-deprecated-runtime-owner-ratchet.mjs
 
+      - name: Enforce path-literal ratchet
+        if: needs.code_paths.outputs.static_analysis == 'true'
+        run: node config/scripts/check-path-literal-ratchet.mjs
+
       - name: Check Node runtime pin
         if: needs.code_paths.outputs.static_analysis == 'true'
         run: node config/scripts/check-node-runtime-pin.mjs
