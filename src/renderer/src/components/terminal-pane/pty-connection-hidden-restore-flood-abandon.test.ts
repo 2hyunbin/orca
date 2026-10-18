@@ -281,7 +281,7 @@ describe('hidden-output restore quiet abandonment (STA-4869)', () => {
           await announceMainDrop(64, quietReveal.hiddenDropEpisode, 'unhide')
         }
         await flushAsyncTicks(40)
-        expect(getMainBufferSnapshot).toHaveBeenCalledTimes(requestsBeforeQuietReveal)
+        expect.soft(getMainBufferSnapshot).toHaveBeenCalledTimes(requestsBeforeQuietReveal)
         expect(drive.writtenChunks().slice(writesBeforeQuietReveal).join('')).not.toContain(
           '\x1b[2J'
         )
