@@ -37,12 +37,15 @@ export const AGENT_SESSION_FAILURE_KINDS = [
   'claudeAccountFolderMissing',
   'claudeAccountSetupFailed',
   'agentCommandNotRunnable',
+  'runtimeNotInstalled',
   'providerExited',
   'restartFailed',
   'providerRejected',
   'attachmentInvalid',
   'attachmentUnreadable',
   'emptyMessage',
+  /** One of the agent's own commands that its chats do not run, sent as a whole message. */
+  'commandUnavailable',
   'queueFull',
   'writeFailed',
   'cancelled',
@@ -164,6 +167,10 @@ export type AgentSessionFailureFact = {
   retry?: AgentSessionProviderRetry
   /** A safe option name from Orca's saved Arguments parser, never an error message. */
   argumentProblem?: AgentSessionArgumentProblem
+  /** Written only where Orca proves the agent never received the message: a Stop's withdrawal is
+   *  then owed as stopped history, and a refused carrier owes its history again. Absent means
+   *  unknown. Host-only; clients read the kind. */
+  neverReachedAgent?: true
   /** On `backgroundTaskNotStopped`: one named task, or every task the Stop reached. */
   backgroundStop?: AgentSessionBackgroundStop
 }
@@ -201,6 +208,7 @@ export function agentSessionFailureFact<TKind extends AgentSessionFailureKind>(
     attachment?: AgentSessionAttachmentProblem
     retry?: AgentSessionProviderRetry
     argumentProblem?: AgentSessionArgumentProblem
+    neverReachedAgent?: true
     backgroundStop?: AgentSessionBackgroundStop
   } = {}
 ): AgentSessionFailureFact & { kind: TKind } {
@@ -216,6 +224,7 @@ export function agentSessionFailureFact<TKind extends AgentSessionFailureKind>(
     ...(extra.attachment ? { attachment: extra.attachment } : {}),
     ...(extra.retry ? { retry: extra.retry } : {}),
     ...(extra.argumentProblem ? { argumentProblem: extra.argumentProblem } : {}),
+    ...(extra.neverReachedAgent ? { neverReachedAgent: true as const } : {}),
     ...(extra.backgroundStop ? { backgroundStop: extra.backgroundStop } : {})
   }
 }
@@ -294,6 +303,7 @@ export function readAgentSessionFailureFact(value: unknown): AgentSessionFailure
     ...(attachment ? { attachment } : {}),
     ...(retry ? { retry } : {}),
     ...(argumentProblem ? { argumentProblem } : {}),
+    ...(value.neverReachedAgent === true ? { neverReachedAgent: true as const } : {}),
     ...(value.backgroundStop === 'task' || value.backgroundStop === 'all'
       ? { backgroundStop: value.backgroundStop }
       : {})

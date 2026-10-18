@@ -12,6 +12,7 @@ import {
   decideHostServer,
   recheckWhenManagedFenceClears,
   publishHostServerDecisionFailure,
+  publishBridgedUnservedHostServer,
   publishManagedServerConnect,
   publishUnservedHostServer
 } from './ssh-host-server-connect'
@@ -25,8 +26,13 @@ import { abandonDecisionTransport } from './ssh-session-teardown'
 import { awaitTargetLifecycle } from './ssh-target-lifecycle-queue'
 import { startLegacyRelayBridge } from '../ssh/legacy-relay-bridge/legacy-relay-bridge-registry'
 import { clearSshCredentialDeclined } from '../ssh/ssh-credential-decline'
+import { createSshUserDisconnectedError, isSshUserDisconnected } from '../ssh/ssh-user-disconnect'
+import {
+  liftSshHostUserDisconnect,
+  resumeRuntimeEnvironmentStatus
+} from './ssh-host-user-disconnect'
 
-/** `automatic`: no user asked for this connect, so a cancelled sign-in stays cancelled. */
+/** `automatic`: no user asked for this connect, so a cancelled sign-in or a Disconnect stays. */
 export async function connectTarget(
   targetId: string,
   options: { automatic?: boolean } = {}
@@ -36,9 +42,24 @@ export async function connectTarget(
     appendFileSync(e2eProbePath, `${JSON.stringify(targetId)}\n`)
     throw new Error('e2e_forbidden_local_ssh_connect')
   }
-  if (!options.automatic) {
-    clearSshCredentialDeclined(targetId)
+  if (options.automatic) {
+    // Why before any publish: the host must keep reading "disconnected", not a failed connect.
+    if (isSshUserDisconnected(targetId)) {
+      const label = getSshTargetRegistryStore()?.getTarget(targetId)?.label ?? targetId
+      throw createSshUserDisconnectedError(label)
+    }
+    return admitConnect(targetId)
   }
+  clearSshCredentialDeclined(targetId)
+  const liftedEnvironments = liftSshHostUserDisconnect(targetId)
+  try {
+    return await admitConnect(targetId)
+  } finally {
+    resumeRuntimeEnvironmentStatus(liftedEnvironments)
+  }
+}
+
+async function admitConnect(targetId: string): Promise<SshConnectionState> {
   // Why: fence callers that entered before a same-turn disconnect/reset but resume after its cleanup.
   const admissionAuthority = getSshProviderAuthority(targetId)
   await awaitTargetLifecycle(targetId)
@@ -127,12 +148,36 @@ async function doConnect(
     }
     // COMPAT(legacy-relay-bridge): panes an older relay still runs are known before the host is.
     await startLegacyRelayBridge(targetId)
-    return publishManagedServerConnect(
+    // A disconnect or shutdown during the bridge wait already published; "connected" would be stale.
+    assertSshConnectsNotFenced()
+    if (!isCurrentConnectAttempt(targetId, authority)) {
+      await abandonDecisionTransport(targetId, owner, authority)
+      throw createCancelledConnectAttemptError()
+    }
+    const published = publishManagedServerConnect(
       targetId,
       server.environmentId,
       server.update,
-      server.serving
+      server.serving,
+      server.linked
     )
+    // Why after publishing: the check costs round trips, and only a macOS host shows a result.
+    void import('./ssh-host-launch-session-note')
+      .then(({ noteEndedLaunchSshSession }) =>
+        noteEndedLaunchSshSession(targetId, server.environmentId)
+      )
+      .catch(() => {})
+    return published
+  }
+  if (server.bridged) {
+    // COMPAT(legacy-relay-bridge): the move waits for relay terminals the bridge keeps serving.
+    await startLegacyRelayBridge(targetId)
+    assertSshConnectsNotFenced()
+    if (!isCurrentConnectAttempt(targetId, authority)) {
+      await abandonDecisionTransport(targetId, owner, authority)
+      throw createCancelledConnectAttemptError()
+    }
+    return publishBridgedUnservedHostServer(target, server)
   }
   // This version has no relay to fall back to: a host its managed server doesn't serve fails here.
   await abandonDecisionTransport(targetId, owner, authority)

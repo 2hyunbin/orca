@@ -81,6 +81,7 @@ export type AgentSessionAttachParams = {
     providerHandle: AgentSessionProviderHandle
     /** Omitted only when the exact committed operation replays an already-imported journal. */
     transcriptPath?: string
+    source?: { providerSessionId: string; workspaceCwd: string }
   }
 }
 
@@ -285,7 +286,10 @@ function adoptedProviderHandleLink(
   observedAt: number
 ): AgentSessionProviderHandleLink {
   return {
-    linkId: `${handle.agent}-${ADOPTED_HANDLE_FENCE}-${handle.nativeId}`.slice(0, 128),
+    // A link id is a bounded slug; Pi's native id is a file path.
+    linkId: `${handle.agent}-${ADOPTED_HANDLE_FENCE}-${handle.nativeId}`
+      .replace(/[^A-Za-z0-9_-]/g, '_')
+      .slice(0, 128),
     handle,
     origin: 'adopted',
     mintedAtFence: ADOPTED_HANDLE_FENCE,

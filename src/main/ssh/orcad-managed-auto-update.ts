@@ -95,7 +95,8 @@ export function autoUpdateManagedOrcadEnvironment(
   args: {
     environmentId: string
     appVersion: string
-    failedBefore: boolean
+    /** Read under the host's lifecycle lock, so overlapping checks see an earlier attempt's result. */
+    failedBefore: () => boolean
     onUpdating: () => void
   }
 ): Promise<ManagedOrcadAutoUpdateOutcome> {
@@ -110,7 +111,7 @@ export function autoUpdateManagedOrcadEnvironment(
       record: context.activationRecord,
       candidateVersion,
       appVersion: args.appVersion,
-      failedBefore: args.failedBefore
+      failedBefore: args.failedBefore()
     })
     if (plan.action === 'skip') {
       return { outcome: 'skipped', reason: plan.reason }

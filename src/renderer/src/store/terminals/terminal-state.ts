@@ -1,8 +1,6 @@
-import type { StoredAgentAttentionUnread } from '@/attention/agent-attention-contract'
 import type { ClosedTerminalTabTombstonesByTabId } from '../../../../shared/closed-terminal-tab-tombstones'
 import type { TerminalLayoutSnapshot, TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
-import type { SetupSplitDirection } from '../../../../shared/worktree/launch-types'
 import type {
   AgentProviderSessionMetadata,
   SleepingAgentLaunchConfig
@@ -13,7 +11,11 @@ import type { SessionOptionValue } from '../../../../shared/native-chat-session-
 import type { AgentStartedTelemetry } from '../../lib/worktree-startup-payload'
 import type { NativeChatLaunchDraft, NativeChatLaunchPrompt } from '@/lib/native-chat-launch-prompt'
 import type { HostSessionSlices } from '@/lib/workspace-session-host-split'
-import type { AutomaticAgentResumeClaim, CodexRestartNotice } from './terminal-contracts'
+import type {
+  AccountRestartAgent,
+  AutomaticAgentResumeClaim,
+  CodexRestartNotice
+} from './terminal-contracts'
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
 import type { TerminalActions } from './terminal-actions'
@@ -26,13 +28,11 @@ export type TerminalState = {
   activeTabIdByWorktree: Record<string, string | null>
   ptyIdsByTabId: Record<string, string[]>
   runtimePaneTitlesByTabId: Record<string, Record<number, string>>
-  unreadTerminalTabs: Record<string, StoredAgentAttentionUnread>
-  unreadTerminalPanes: Record<string, StoredAgentAttentionUnread>
-  unreadAgentCompletionPanes: Record<string, StoredAgentAttentionUnread>
   /** Scoped exit suppression and reference-counted shutdown ownership prevent teardown races. */
   suppressedPtyExitIds: Record<string, true>
   pendingPtyShutdownIds: Record<string, number>
-  pendingCodexPaneRestartIds: Record<string, true>
+  /** Account-switch restarts awaiting execution, keyed by the PTY they replace. */
+  pendingPaneAccountRestarts: Record<string, AccountRestartAgent>
   codexRestartNoticeByPtyId: Record<string, CodexRestartNotice>
   expandedPaneByTabId: Record<string, boolean>
   canExpandPaneByTabId: Record<string, boolean>
@@ -71,14 +71,6 @@ export type TerminalState = {
     }
   >
   pendingInitialCwdByTabId: Record<string, string>
-  pendingSetupSplitByTabId: Record<
-    string,
-    {
-      command: string
-      env?: Record<string, string>
-      direction: SetupSplitDirection
-    }
-  >
   pendingIssueCommandSplitByTabId: Record<
     string,
     {

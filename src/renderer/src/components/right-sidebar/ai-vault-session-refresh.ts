@@ -86,7 +86,7 @@ export function useAiVaultSessionRefresh(
   const scanResult = scan?.result ?? null
   const sessions = scanResult?.sessions ?? EMPTY_AI_VAULT_SESSIONS
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [failure, setFailure] = useState<{ scopeKey: string; cause: string } | null>(null)
   const requestTokenRef = useRef<string>(undefined!)
   requestTokenRef.current ??= createBrowserUuid()
   const refreshIdRef = useRef(0)
@@ -102,6 +102,8 @@ export function useAiVaultSessionRefresh(
   const publicationGateRef = useRef<AiVaultSessionPublicationGate>(undefined!)
   publicationGateRef.current ??= new AiVaultSessionPublicationGate()
   const scanScopeKey = `${aiVaultSessionResultCacheKey(executionHostScope, scopePaths)}\n${sessionLimit}`
+  // Kept through rescans so a repeat failure doesn't blink; shown only for the scope that failed.
+  const error = failure?.scopeKey === scanScopeKey ? describeAiVaultScanError(failure.cause) : null
   const scopePathsRef = useRef<readonly string[]>(scopePaths)
   scopePathsRef.current = scopePaths
   const executionHostScopeRef = useRef<ExecutionHostScope>(executionHostScope)
@@ -135,7 +137,7 @@ export function useAiVaultSessionRefresh(
       if (cachedResult) {
         const scanKey = `${baseKey}\n${selectedLimit}`
         lastAppliedScanRef.current = { scopeKey: scanKey, scannedAt: cachedResult.scannedAt }
-        setError(null)
+        setFailure(null)
         publicationGateRef.current.publish(cachedResult, (published) => {
           applyScan(published, selectedLimit, (applied) => {
             conditionalSnapshotRef.current = published.fingerprint
@@ -152,6 +154,11 @@ export function useAiVaultSessionRefresh(
         pendingRefreshRef.current = true
         pendingForceRef.current ||= args.force === true
         pendingBackgroundRef.current &&= args.background === true
+        if (args.force === true && args.background !== true) {
+          void window.api.aiVault
+            .cancelListSessions({ requestToken: requestTokenRef.current })
+            .catch((error: unknown) => console.warn('Could not cancel Session History scan', error))
+        }
         return
       }
 
@@ -169,7 +176,6 @@ export function useAiVaultSessionRefresh(
       if (args.background !== true) {
         setLoading(true)
       }
-      setError(null)
       const scanKey = `${baseKey}\n${selectedLimit}`
       const request = {
         scopePaths: scopePathsRef.current,
@@ -193,6 +199,7 @@ export function useAiVaultSessionRefresh(
         if (scanKey !== currentScanScopeKey()) {
           return
         }
+        setFailure(null)
         // A cache hit returns the snapshot already on screen; skip the state
         // updates so refocus flips don't force pointless re-renders.
         // Single-host results carry one scanner's stamp minted when that scan
@@ -229,7 +236,7 @@ export function useAiVaultSessionRefresh(
           refreshIdRef.current === refreshId &&
           scanKey === currentScanScopeKey()
         ) {
-          setError(describeAiVaultScanError(err instanceof Error ? err.message : String(err)))
+          setFailure({ scopeKey: scanKey, cause: err instanceof Error ? err.message : String(err) })
         }
       } finally {
         refreshInFlightRef.current = false

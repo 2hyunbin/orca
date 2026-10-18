@@ -19,6 +19,9 @@ import { LegacyRelayRetry, LegacyRelayWaiters } from './legacy-relay-bridge-time
 import {
   ATTACH_WAIT_MS,
   bridgeableLeasesByRelayId,
+  findLivePane,
+  leasedAppPtyIds,
+  type LegacyRelayPty,
   PROVEN_EXITED,
   toBridgedPane,
   type Pane
@@ -42,6 +45,9 @@ export type LegacyRelayTargetBridgeDeps = {
   onTerminalExited: () => void
 }
 
+// Unique across bridges, so a viewer acquired on a replaced bridge releases nothing on its successor.
+let lastAcquisitionId = 0
+
 type EndpointState = {
   endpoint: LegacyRelayEndpoint
   client: LegacyRelayClient | null
@@ -51,7 +57,10 @@ type EndpointState = {
 export class LegacyRelayTargetBridge {
   private readonly endpoints = new Map<string, EndpointState>()
   private readonly panes = new Map<string, Pane>()
-  private readonly attached = new Map<string, number>()
+  readonly livePaneForKey = (paneKey: string) => findLivePane(this.panes, paneKey)
+  /** The process identity the relay listed for a pane, which fences a stop against a recycled id. */
+  readonly listedIncarnation = (ptyId: string) => this.panes.get(ptyId)?.listed?.incarnationId
+  private readonly attached = new Map<string, Set<number>>()
   private readonly waiters = new LegacyRelayWaiters()
   private readonly retry = new LegacyRelayRetry(() => void this.refresh())
   private refreshing: Promise<void> | null = null
@@ -84,7 +93,10 @@ export class LegacyRelayTargetBridge {
     return this.refreshing
   }
 
-  async attach(ptyId: string): Promise<LegacyRelayBridgeAttachResult> {
+  async attach(
+    ptyId: string,
+    atSnapshot?: (replay: string) => void
+  ): Promise<LegacyRelayBridgeAttachResult> {
     await (this.looked ? this.refreshing : this.refresh())
     let pane = this.panes.get(ptyId)
     if (pane?.state === 'unverifiable') {
@@ -95,9 +107,7 @@ export class LegacyRelayTargetBridge {
       pane = this.panes.get(ptyId)
     }
     if (!pane) {
-      const leased = [...bridgeableLeasesByRelayId(this.deps.leases()).keys()].some(
-        (relayPtyId) => toAppSshPtyId(this.deps.targetId, relayPtyId) === ptyId
-      )
+      const leased = leasedAppPtyIds(this.deps.targetId, this.deps.leases()).has(ptyId)
       return leased ? { status: 'unverifiable' } : { status: 'exited' }
     }
     const client = pane.endpoint ? this.endpoints.get(pane.endpoint)?.client : null
@@ -105,13 +115,14 @@ export class LegacyRelayTargetBridge {
       return { status: 'unverifiable' }
     }
     // Why before the request: output that races the reply must reach the pane, not be dropped.
-    this.attached.set(ptyId, (this.attached.get(ptyId) ?? 0) + 1)
+    const acquisitionId = ++lastAcquisitionId
+    this.attached.set(ptyId, (this.attached.get(ptyId) ?? new Set()).add(acquisitionId))
     try {
-      const { replay } = await client.attach(pane.relayPtyId)
+      const { replay } = await client.attach(pane.relayPtyId, atSnapshot)
       this.attachFailing = false
-      return { status: 'attached', replay }
+      return { status: 'attached', replay, acquisitionId }
     } catch (error) {
-      this.detach(ptyId)
+      this.detach(ptyId, acquisitionId)
       if (PROVEN_EXITED.test(error instanceof Error ? error.message : String(error))) {
         this.retire(ptyId, pane, null)
         return { status: 'exited' }
@@ -125,11 +136,9 @@ export class LegacyRelayTargetBridge {
     }
   }
 
-  detach(ptyId: string): void {
-    const count = (this.attached.get(ptyId) ?? 0) - 1
-    if (count > 0) {
-      this.attached.set(ptyId, count)
-    } else {
+  detach(ptyId: string, acquisitionId: number): void {
+    const viewers = this.attached.get(ptyId)
+    if (viewers?.delete(acquisitionId) && viewers.size === 0) {
       this.attached.delete(ptyId)
     }
   }
@@ -186,7 +195,7 @@ export class LegacyRelayTargetBridge {
     if (this.disposed) {
       return
     }
-    const listedBy = new Map<string, string>()
+    const listedBy = new Map<string, LegacyRelayPty & { endpoint: string }>()
     let complete = listing.kind === 'listed' && listing.exhaustive
     for (const endpoint of listing.kind === 'listed' ? listing.endpoints : []) {
       const listed = await this.listEndpoint(endpoint)
@@ -197,16 +206,20 @@ export class LegacyRelayTargetBridge {
         complete = false
         continue
       }
-      for (const relayPtyId of listed) {
-        listedBy.set(relayPtyId, endpoint.endpoint)
+      for (const row of listed) {
+        listedBy.set(row.relayPtyId, { ...row, endpoint: endpoint.endpoint })
       }
     }
     const next = new Map<string, Pane>()
-    for (const [relayPtyId, lease] of leases) {
+    // Why re-read: a lease retired while the relays were asked (an exit) must not come back live.
+    const current = [...bridgeableLeasesByRelayId(this.deps.leases())].filter(([id]) =>
+      leases.has(id)
+    )
+    for (const [relayPtyId, lease] of current) {
       const ptyId = toAppSshPtyId(this.deps.targetId, relayPtyId)
-      const endpoint = listedBy.get(relayPtyId)
-      if (endpoint) {
-        next.set(ptyId, { lease, relayPtyId, endpoint, state: 'live' })
+      const listed = listedBy.get(relayPtyId)
+      if (listed) {
+        next.set(ptyId, { lease, relayPtyId, endpoint: listed.endpoint, state: 'live', listed })
       } else if (complete) {
         // Every relay this target could have left answered, and none holds it.
         const wasLive = this.panes.get(ptyId)?.endpoint
@@ -226,13 +239,9 @@ export class LegacyRelayTargetBridge {
     }
   }
 
-  /** The relay's PTY ids, an empty list for a relay proven gone, or null when it can't be asked. */
-  private async listEndpoint(endpoint: LegacyRelayEndpoint): Promise<string[] | null> {
-    const state = this.endpoints.get(endpoint.endpoint) ?? {
-      endpoint,
-      client: null,
-      claim: null
-    }
+  /** The relay's PTYs, an empty list for a relay proven gone, or null when it can't be asked. */
+  private async listEndpoint(endpoint: LegacyRelayEndpoint): Promise<LegacyRelayPty[] | null> {
+    const state = this.endpoints.get(endpoint.endpoint) ?? { endpoint, client: null, claim: null }
     this.endpoints.set(endpoint.endpoint, state)
     if (!state.client || state.client.closed) {
       state.client = null
@@ -253,7 +262,7 @@ export class LegacyRelayTargetBridge {
       }
     }
     try {
-      return (await state.client.list()).map((row) => row.relayPtyId)
+      return await state.client.list()
     } catch {
       return null
     }
@@ -312,7 +321,8 @@ export class LegacyRelayTargetBridge {
     }
   }
 
-  private liveRoute(ptyId: string): { client: LegacyRelayClient; relayPtyId: string } | null {
+  /** The connection that carries a live pane, or null while its relay can't be asked. */
+  liveRoute(ptyId: string): { client: LegacyRelayClient; relayPtyId: string } | null {
     const pane = this.panes.get(ptyId)
     const client = pane?.endpoint ? this.endpoints.get(pane.endpoint)?.client : null
     return pane?.state === 'live' && client ? { client, relayPtyId: pane.relayPtyId } : null

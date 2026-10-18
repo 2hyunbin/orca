@@ -288,9 +288,10 @@ export function nextSendableQueuedCard<T extends QueueCard & { messageId: string
  *  that sends nothing and every waiting card waits while it shows. */
 export function resumableQueuePause(
   pauses: readonly DerivedQueuePause[],
-  cards: readonly (QueueCard & { messageId: string })[]
+  cards: readonly (QueueCard & { messageId: string })[],
+  editHeld: ReadonlySet<string> = new Set()
 ): DerivedQueuePause | null {
-  if (nextSendableQueuedCard(pauses, cards)) {
+  if (nextSendableQueuedCard(pauses, cards, editHeld)) {
     return null
   }
   for (const card of cards) {

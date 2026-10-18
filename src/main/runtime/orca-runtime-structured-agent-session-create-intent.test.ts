@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { prepareAdoptedTranscript } from '../native-chat/agent-session-wire/structured-agent-session-adopted-import'
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -7,6 +8,9 @@ const applyAgentWorkspaceTrust = vi.hoisted(() => vi.fn(async () => ({})))
 vi.mock('../agent-workspace-trust', () => ({ applyAgentWorkspaceTrust }))
 
 import { OrcaRuntimeService } from './orca-runtime'
+import { setStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
+import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
+import { agentSessionRecordFixture } from '../../shared/agent-session-record.test-fixture'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../shared/constants'
 import { attachFingerprintFields } from '../native-chat/agent-session-wire/structured-agent-session-attach'
 
@@ -15,6 +19,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  setStructuredAgentSessionHost(null)
   vi.unstubAllEnvs()
 })
 
@@ -99,6 +104,42 @@ describe('structured Codex folder trust', () => {
 })
 
 describe('structured agent-session create intent', () => {
+  it('returns the recorded owner before CLI source lookup, new-launch support or account preparation', async () => {
+    const record = agentSessionRecordFixture()
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: early ownership admission only reads the host's record list.
+    setStructuredAgentSessionHost({
+      deps: { store: { listRecords: () => [record] } }
+    } as unknown as StructuredAgentSessionHost)
+    const runtime = new OrcaRuntimeService()
+    const support = vi
+      .spyOn(runtime, 'getStructuredAgentSessionCreateSupport')
+      .mockRejectedValue(new Error('fresh launch is unavailable'))
+    const sourceRows = vi.spyOn(runtime, 'getAgentProviderSessionRows').mockImplementation(() => {
+      throw new Error('source is unavailable')
+    })
+    await expect(
+      runtime.resolveStructuredAgentSessionCreateIntent({
+        envelope: { sessionId: 'new-chat', clientOperationId: 'operation-1' },
+        worktree: 'id:another-workspace',
+        agent: 'claude',
+        resumeFrom: {
+          providerSessionId: 'provider-session-alpha-1',
+          cliSource: { workspaceId: 'another-workspace', paneKey: 'missing-pane' }
+        }
+      })
+    ).rejects.toMatchObject({
+      refusal: {
+        code: 'agent_session_conflict',
+        details: {
+          reason: 'conversationHeldElsewhere',
+          owner: { sessionId: record.sessionId, workspaceId: record.location.workspaceId }
+        }
+      }
+    })
+    expect(support).not.toHaveBeenCalled()
+    expect(sourceRows).not.toHaveBeenCalled()
+  })
+
   it('pins the selected Codex launch home after normal launch preparation', async () => {
     const prepareCodexStructuredLaunch = vi.fn(() => '/accounts/selected/home')
     const runtime = new OrcaRuntimeService(
@@ -311,7 +352,7 @@ describe('structured agent-session create intent', () => {
 
 describe('adopting a conversation recorded outside Orca', () => {
   it('resolves OMP history with the configured launch environment', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-omp-create-intent-'))
+    const root = await mkdtemp(join(await realpath(tmpdir()), 'orca-omp-create-intent-'))
     try {
       const accountHome = join(root, 'account', 'agent')
       const ambientData = join(root, 'ambient-data')
@@ -398,7 +439,8 @@ describe('adopting a conversation recorded outside Orca', () => {
       runtime.resolveStructuredAgentSessionCreateIntent({
         envelope: { sessionId: 'session-1', clientOperationId: 'operation-1' },
         worktree: 'id:workspace-1',
-        agent: 'opencode',
+        // Every registered agent adopts; an unregistered one has no importer.
+        agent: 'hermes',
         resumeFrom: { providerSessionId: 'provider-1' }
       })
     ).rejects.toMatchObject({
@@ -408,5 +450,74 @@ describe('adopting a conversation recorded outside Orca', () => {
       }
     })
     expect(resolveStructuredAgentSessionLocation).not.toHaveBeenCalled()
+  })
+
+  it('adopts the original Pi file into a folder workspace and refuses another folder', async () => {
+    const accountHome = await mkdtemp(join(await realpath(tmpdir()), 'orca-pi-adopt-intent-'))
+    vi.stubEnv('PI_CODING_AGENT_DIR', accountHome)
+    try {
+      const file = join(
+        accountHome,
+        'sessions',
+        '--repos-workspace-1--',
+        '2026-10-12T00-00-00-000Z_0198c2a4-7d1e-7c3a-9a4b-1f2e3d4c5b6a.jsonl'
+      )
+      await mkdir(dirname(file), { recursive: true })
+      await writeFile(
+        file,
+        `${JSON.stringify({ type: 'session', id: '0198c2a4-7d1e-7c3a-9a4b-1f2e3d4c5b6a', cwd: '/repos/workspace-1' })}\n`
+      )
+      const runtime = new OrcaRuntimeService(
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: create intent only reads getSettings from the store.
+        {
+          getSettings: () => ({ agentDefaultEnv: { pi: { PI_CODING_AGENT_DIR: accountHome } } })
+        } as never
+      )
+      vi.spyOn(runtime, 'getStructuredAgentSessionCreateSupport').mockResolvedValue({
+        supported: true
+      })
+      let workspaceDirectory = '/repos/workspace-1'
+      Object.assign(runtime, {
+        resolveStructuredAgentSessionLocation: vi.fn(async () => ({
+          executionHostId: 'local',
+          wslDistro: null,
+          workspaceId: 'workspace-1',
+          workspaceKind: 'folder' as const
+        })),
+        resolveRuntimeFileTarget: vi.fn(async () => ({ worktree: { path: workspaceDirectory } }))
+      })
+
+      const intent = await runtime.resolveStructuredAgentSessionCreateIntent({
+        envelope: { sessionId: 'session-1', clientOperationId: 'operation-1' },
+        worktree: 'id:workspace-1',
+        agent: 'pi',
+        resumeFrom: { providerSessionId: '0198c2a4-7d1e-7c3a-9a4b-1f2e3d4c5b6a' }
+      })
+
+      expect(intent.accountHome).toEqual({ variable: 'PI_CODING_AGENT_DIR', path: accountHome })
+      expect(intent.adopt).toEqual({
+        providerHandle: { transport: 'jsonl-rpc', agent: 'pi', nativeId: file },
+        transcriptPath: file,
+        source: {
+          providerSessionId: '0198c2a4-7d1e-7c3a-9a4b-1f2e3d4c5b6a',
+          workspaceCwd: '/repos/workspace-1'
+        }
+      })
+
+      workspaceDirectory = '/different-folder'
+      const refused = await runtime.resolveStructuredAgentSessionCreateIntent({
+        envelope: { sessionId: 'session-2', clientOperationId: 'operation-2' },
+        worktree: 'id:workspace-1',
+        agent: 'pi',
+        resumeFrom: { providerSessionId: '0198c2a4-7d1e-7c3a-9a4b-1f2e3d4c5b6a' }
+      })
+      expect(await prepareAdoptedTranscript(refused)).toMatchObject({
+        ok: false,
+        refusal: { code: 'agent_session_identity_required' }
+      })
+    } finally {
+      vi.unstubAllEnvs()
+      await rm(accountHome, { recursive: true, force: true })
+    }
   })
 })

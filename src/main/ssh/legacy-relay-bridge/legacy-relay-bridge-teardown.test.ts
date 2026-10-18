@@ -1,8 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import type { LegacyRelayBridgedPane } from '../../../shared/legacy-relay-bridge-contract'
 import { toAppSshPtyId } from '../../../shared/ssh-pty-id'
 import type { SshRemotePtyLease } from '../../../shared/ssh-types'
+import type { SshConnection } from '../ssh-connection'
 import type { LegacyRelayTargetBridgeDeps } from './legacy-relay-target-bridge'
+import type { LegacyRelayBridgeHost } from './legacy-relay-bridge-registry'
 
 const TARGET = 'ssh-box'
 const PTY = toAppSshPtyId(TARGET, 'pty-1')
@@ -32,6 +34,10 @@ vi.mock('./legacy-relay-target-bridge', () => ({
       }))
       this.deps.onPanesChanged()
     }
+    async attach(_ptyId: string, atSnapshot?: (replay: string) => void) {
+      atSnapshot?.('SCREEN')
+      return { status: 'attached' as const, replay: 'SCREEN' }
+    }
     dispose(): void {
       this.listed = []
       this.deps.onPanesChanged()
@@ -56,6 +62,7 @@ const { legacyRelayBridgePtyIdForPane } =
   await import('../../../renderer/src/components/terminal-pane/legacy-relay-bridge-panes')
 
 let leases: SshRemotePtyLease[]
+let report: Mock<LegacyRelayBridgeHost['report']>
 
 function lease(): SshRemotePtyLease {
   return {
@@ -71,6 +78,7 @@ function lease(): SshRemotePtyLease {
 
 beforeEach(async () => {
   leases = [lease()]
+  report = vi.fn()
   registry.installLegacyRelayBridge({
     leases: () => leases,
     retireLease: vi.fn(),
@@ -78,8 +86,9 @@ beforeEach(async () => {
     // Main publishes to the window as legacy-relay-bridge-ipc.ts does.
     onPanesChanged: (panes) => renderer.listeners.forEach((listener) => listener(panes)),
     onData: vi.fn(),
+    onReplay: vi.fn(),
     onExit: vi.fn(),
-    report: vi.fn()
+    report
   })
   await registry.startLegacyRelayBridge(TARGET)
 })
@@ -136,5 +145,47 @@ describe('a hung-up legacy relay bridge (loss of contact is not exit)', () => {
         boundPtyId: null
       })
     ).toBe(PTY)
+  })
+})
+
+describe('attaching a bridged pane', () => {
+  it('sends a reattach screen in output order and only once', async () => {
+    const replays: string[] = []
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the attach only checks a connection exists.
+    const connection = {} as SshConnection
+    registry.installLegacyRelayBridge({
+      leases: () => leases,
+      retireLease: vi.fn(),
+      connection: () => connection,
+      onPanesChanged: vi.fn(),
+      onData: vi.fn(),
+      onReplay: (_ptyId, replay) => replays.push(replay),
+      onExit: vi.fn(),
+      report: vi.fn()
+    })
+    await expect(registry.attachLegacyRelayPane(PTY)).resolves.toEqual({
+      status: 'attached',
+      replay: 'SCREEN'
+    })
+    expect(replays).toEqual([])
+    await expect(registry.attachLegacyRelayPane(PTY, true)).resolves.toEqual({
+      status: 'attached',
+      replay: ''
+    })
+    expect(replays).toEqual(['SCREEN'])
+  })
+})
+
+describe('legacy relay usage telemetry', () => {
+  it('reports a bridging target active once a day, however often it reconnects', async () => {
+    expect(report).toHaveBeenCalledWith(TARGET, 'active', 1)
+    expect(report).toHaveBeenCalledWith(TARGET, 'connected', 1)
+    report.mockClear()
+
+    registry.stopLegacyRelayBridge(TARGET)
+    await registry.startLegacyRelayBridge(TARGET)
+
+    expect(report).toHaveBeenCalledWith(TARGET, 'connected', 1)
+    expect(report).not.toHaveBeenCalledWith(TARGET, 'active', expect.anything())
   })
 })

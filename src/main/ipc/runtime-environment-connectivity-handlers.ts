@@ -6,10 +6,13 @@ import {
   resolveEnvironment
 } from '../../shared/runtime-environment-store'
 import {
-  isWslHostRuntimeEnvironment,
   redactRuntimeEnvironment,
   type PublicKnownRuntimeEnvironment
 } from '../../shared/runtime-environments'
+import {
+  connectThroughOwningService,
+  removeThroughOwningService
+} from './runtime-environment-host-service-ops'
 import { RemoteRuntimeClientError } from '../../shared/remote-runtime-client-error'
 import { RuntimeRpcCallQueueOverloadError } from '../../shared/runtime-rpc-call-queue'
 import type { RuntimeRpcFailure, RuntimeRpcResponse } from '../../shared/runtime-rpc-envelope'
@@ -27,7 +30,6 @@ import {
 import {
   clearRuntimeEnvironmentManualDisconnect,
   isRuntimeEnvironmentManuallyDisconnected,
-  markRuntimeEnvironmentManuallyDisconnected,
   RUNTIME_MANUALLY_DISCONNECTED_MESSAGE
 } from './runtime-environment-manual-disconnect'
 import {
@@ -38,10 +40,14 @@ import { publicRuntimeEnvironmentWithHostKey } from './runtime-environment-host-
 import { withWslOrcadAccountEnv } from '../wsl/wsl-orcad-account-env'
 import { clearSshCredentialDeclinedForEnvironment } from '../ssh/ssh-credential-decline'
 import {
+  disconnectManagedHostOfEnvironmentForUser,
+  disconnectRuntimeEnvironmentForUser,
+  liftSshUserDisconnectForEnvironment
+} from './ssh-host-user-disconnect'
+import {
   observeWslOrcadHostResponse,
   wslOrcadHostSupports
 } from '../wsl/wsl-orcad-host-environments'
-import { getWslHostService } from '../wsl/wsl-host-service-instance'
 import { assertWslHostReachable, isGatedOffWslHost } from '../wsl/wsl-host-gate'
 
 function manuallyDisconnectedResponse(
@@ -127,12 +133,9 @@ export function registerRuntimeEnvironmentConnectivityHandlers({
       }
       // A closed gate leaves persisted WSL hosts untouched on disk.
       assertWslHostReachable(environment)
-      const wsl = isWslHostRuntimeEnvironment(environment) ? getWslHostService() : null
-      if (wsl) {
-        // Also releases the distro's holder and drops the WSL record.
-        return wsl
-          .remove(environment.id)
-          .then(() => ({ removed: redactRuntimeEnvironment(environment) }))
+      const ownedRemoval = removeThroughOwningService(environment)
+      if (ownedRemoval) {
+        return ownedRemoval.then(() => ({ removed: redactRuntimeEnvironment(environment) }))
       }
       const removed = removeEnvironment(getUserDataPath(), args.selector)
       void retireRemovedRuntimeEnvironment(removed.id, invalidateTransport, store)
@@ -142,13 +145,16 @@ export function registerRuntimeEnvironmentConnectivityHandlers({
   )
   ipcMain.handle(
     'runtimeEnvironments:disconnect',
-    (_event, args: { selector: string }): { disconnected: PublicKnownRuntimeEnvironment } => {
+    async (
+      _event,
+      args: { selector: string }
+    ): Promise<{ disconnected: PublicKnownRuntimeEnvironment }> => {
       const environment = resolveEnvironment(getUserDataPath(), args.selector)
-      markRuntimeEnvironmentManuallyDisconnected(environment.id)
-      invalidateTransport(environment.id)
+      const runtimeLayer = { userDataPath: getUserDataPath(), invalidateTransport }
+      disconnectRuntimeEnvironmentForUser(environment.id, runtimeLayer)
       closeLegacySelectorTransport(args.selector, environment.id)
-      // Retain disconnected evidence for renderers that missed the teardown event.
-      getRuntimeEnvironmentStatusOwner(getUserDataPath(), environment.id)
+      // Why: otherwise Settings keeps showing the managed host's SSH connection as live (#30085).
+      await disconnectManagedHostOfEnvironmentForUser(environment, runtimeLayer)
       return { disconnected: redactRuntimeEnvironment(environment) }
     }
   )
@@ -162,10 +168,8 @@ export function registerRuntimeEnvironmentConnectivityHandlers({
       assertWslHostReachable(environment)
       clearRuntimeEnvironmentManualDisconnect(environment.id)
       clearSshCredentialDeclinedForEnvironment(environment)
-      if (isWslHostRuntimeEnvironment(environment)) {
-        // An explicit connect may boot the distro.
-        await getWslHostService()?.connect(environment.id)
-      }
+      await liftSshUserDisconnectForEnvironment(environment)
+      await connectThroughOwningService(environment)
       return getRuntimeEnvironmentStatus(getUserDataPath(), environment.id, args.timeoutMs, {
         reconnect: true
       })

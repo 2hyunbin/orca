@@ -7,6 +7,8 @@ import {
   takeNextEditorFocusRequestToken
 } from '../focus/editor-focus-reveal'
 import { applyOpenFileToState } from './open-file-apply'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
+import { recordReopenedEditorFileInLayoutOwner } from '../tabs/editor-tab-layout-owner'
 
 export function createOpenFileAction(
   set: EditorSet,
@@ -17,10 +19,7 @@ export function createOpenFileAction(
       const editorItemWorktreeId = file.worktreeId
       const editorItemLabel = file.relativePath
       const editorItemContentType: EditorTabContentType =
-        file.mode === 'conflict-review' ||
-        file.mode === 'check-details' ||
-        file.mode === 'chat-visual' ||
-        file.mode === 'diff'
+        file.mode === 'conflict-review' || file.mode === 'check-details' || file.mode === 'diff'
           ? file.mode
           : 'editor'
       const scratch = {
@@ -28,6 +27,7 @@ export function createOpenFileAction(
         editorItemTargetGroupId: options?.targetGroupId,
         editorItemIsPreview: false
       }
+      const before = ORCA_LAYOUT_OWNER_IS_MAIN ? get() : null
       set((s) => applyOpenFileToState(s, file, options, scratch))
       const editorItemViewStateId = openWorkspaceEditorItem(
         get(),
@@ -39,6 +39,14 @@ export function createOpenFileAction(
         scratch.editorItemTargetGroupId,
         options?.selection
       )
+      if (ORCA_LAYOUT_OWNER_IS_MAIN && before) {
+        recordReopenedEditorFileInLayoutOwner(
+          before,
+          get(),
+          editorItemWorktreeId,
+          editorItemViewStateId
+        )
+      }
       if (options?.focusEditor) {
         set({
           pendingEditorFocusRequest: {

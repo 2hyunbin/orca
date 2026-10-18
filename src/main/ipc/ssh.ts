@@ -1,6 +1,7 @@
 import { ipcMain, type BrowserWindow } from 'electron'
 import type { Store } from '../persistence'
 import { SshConnectionStore } from '../ssh/ssh-connection-store'
+import { awaitSignInForCredentialHosts } from './ssh-sign-in-requirement'
 import { SshConnectionManager } from '../ssh/ssh-connection-manager'
 import { SshPortForwardManager } from '../ssh/ssh-port-forward'
 import { quitTeardownStartGate } from '../quit-teardown-start-gate'
@@ -29,6 +30,7 @@ import {
 } from './ssh-connect-attempt-registry'
 import { createSshConnectionCallbacks } from './ssh-connection-state-callbacks'
 import { resetSshCredentialDeclinesForTests } from '../ssh/ssh-credential-decline'
+import { resetSshUserDisconnectsForTests } from '../ssh/ssh-user-disconnect'
 import { registerSshConnectionHandlers } from './ssh-connection-handlers'
 import {
   registerPowerMonitorReconnect,
@@ -55,6 +57,10 @@ import { reconcileManagedOrcadSshTargets } from '../ssh/orcad-retained-source'
 import { installOrcadMigrationScrollbackRetention } from '../ssh/orcad-migration-scrollback-retention-wiring'
 import { getAppEnvironment } from '../../shared/app-environment'
 import { registerLegacyRelayBridgeIpc } from '../ssh/legacy-relay-bridge/legacy-relay-bridge-ipc'
+import {
+  disposeDesktopBrowserBridge,
+  installDesktopBrowserBridge
+} from './desktop-browser-bridge-wiring'
 
 const SSH_IPC_CHANNELS = [
   'ssh:listTargets',
@@ -103,6 +109,8 @@ export function registerSshHandlers(
     connectionManager.setCallbacks(callbacks)
   } else {
     setConnectionManager(new SshConnectionManager(callbacks))
+    // Why only here: a window re-registration must not re-gate a host the user already signed in to.
+    awaitSignInForCredentialHosts(getSshTargetRegistryStore()!)
   }
   setPortForwardManager(portForwardManager ?? new SshPortForwardManager())
   portForwardManager!.setCallbacks({
@@ -129,8 +137,18 @@ export function registerSshHandlers(
   registerLegacyRelayBridgeIpc({
     store,
     getMainWindow: getCurrentMainWindow,
-    connection: (targetId) => connectionManager?.getConnection(targetId) ?? null
+    connection: (targetId) => connectionManager?.getConnection(targetId) ?? null,
+    runtime: () => runtime ?? null
   })
+
+  if (runtime) {
+    installDesktopBrowserBridge({
+      userDataPath: getAppEnvironment().getPath('userData'),
+      runtime,
+      getMainWindow: getCurrentMainWindow,
+      getConnectionManager: () => connectionManager
+    })
+  }
 
   return {
     connectionManager: connectionManager!,
@@ -153,9 +171,11 @@ export async function resetSshHandlerStateForTests(): Promise<void> {
   testConnectionProbes.clear()
   credentialRequestedForTarget.clear()
   resetSshCredentialDeclinesForTests()
+  resetSshUserDisconnectsForTests()
   quitTeardownStartGate.resetForTests()
   resetSshShutdownDrain()
 
+  disposeDesktopBrowserBridge()
   await connectionManager?.disconnectAll()
   disposeOrcadManagedTunnels()
   portForwardManager?.dispose()
