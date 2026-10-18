@@ -3,10 +3,10 @@ import type { StructuredAgentSessionOptionState } from './structured-agent-sessi
 import type { SessionOptionDescriptor } from './native-chat-session-options'
 import {
   buildNativeChatSessionOptionSnapshot,
+  resolveEffectiveNativeChatModelId,
   withTrackedNativeChatModel
 } from './native-chat-session-option-snapshot'
 import { getTrackedSessionOption } from './native-chat-session-option-state'
-import { resolveEffectiveNativeChatModelId } from './native-chat-session-option-snapshot'
 import { structuredAgentSessionPermissionDescriptor } from './structured-agent-session-permission-option'
 
 /** Before the host answers, or an agent with no list reports, the quiet model pill: never
