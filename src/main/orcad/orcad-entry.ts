@@ -267,7 +267,8 @@ async function startOrcadRuntime(
   // Switch point: main's load repair, here too, now that this runtime can move pane owners.
   if (ORCA_LAYOUT_OWNER_IS_MAIN) {
     const { repairDuplicatePtyPanesOnStart } = await import('../runtime/moved-pane-owner-rekey')
-    void repairDuplicatePtyPanesOnStart(profileStore, runtime)
+    // Awaited: it queues behind any in-flight write, and must land before reconcile and RPC.
+    await repairDuplicatePtyPanesOnStart(profileStore, runtime)
   }
 
   // Why here too and not only on the desktop: nothing else republishes `session.tabs` when a

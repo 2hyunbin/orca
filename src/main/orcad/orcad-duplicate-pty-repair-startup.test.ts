@@ -5,13 +5,14 @@ import { afterEach, beforeEach, expect, it, vi, type Mock } from 'vitest'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import type { PersistedState } from '../../shared/persisted-state-types'
 import { agentHookServer } from '../agent-hooks/server'
-import type { Store } from '../persistence/loading-store/store'
 import { ProfileStateSqliteAuthority } from '../persistence/profile-state/profile-state-sqlite-authority'
 import {
   emptyTerminalSessionProfile,
   FIXTURE_GIT_WORKTREE_ID,
   openTopologyStore
 } from '../persistence/terminal-topology/terminal-topology-profile-fixture'
+import { DelayedAuthority } from '../persistence/loading-store/profile-state-delayed-authority-fixture'
+import { Store } from '../persistence/loading-store/store'
 import {
   leafIds,
   WindowSession
@@ -23,11 +24,14 @@ const state = vi.hoisted(() => {
     store: Store | null
     layoutOwnerIsMain: boolean
     rekeyWorkerTerminalResourcePaneKey: Mock<() => number>
+    /** What a startup step saw on disk; set by a test that watches the order. */
+    onStartupStep: ((step: string) => void) | null
   } = {
     root: '',
     store: null,
     layoutOwnerIsMain: true,
-    rekeyWorkerTerminalResourcePaneKey: vi.fn(() => 1)
+    rekeyWorkerTerminalResourcePaneKey: vi.fn(() => 1),
+    onStartupStep: null
   }
   return value
 })
@@ -135,7 +139,9 @@ vi.mock('../runtime/orca-runtime', () => ({
     rehydrateClientHostedBrowserPages() {}
     restoreHostAccountLaunchEnv() {}
     async refreshRestoredOrchestrationAuthority() {}
-    async reconcileLegacyWorkerTerminals() {}
+    async reconcileLegacyWorkerTerminals() {
+      state.onStartupStep?.('reconcile')
+    }
     async installPendingOrcadMigrationShellHistory() {}
     async stopLegacyWorkerTerminalRecovery() {}
     async closeNotificationDismissals() {}
@@ -144,7 +150,9 @@ vi.mock('../runtime/orca-runtime', () => ({
 }))
 vi.mock('../runtime/runtime-rpc', () => ({
   OrcaRuntimeRpcServer: class {
-    async start() {}
+    async start() {
+      state.onStartupStep?.('rpc.start')
+    }
     async stop() {}
     getWebSocketEndpoint() {
       return null
@@ -164,6 +172,7 @@ beforeEach(() => {
 
 afterEach(() => {
   state.layoutOwnerIsMain = true
+  state.onStartupStep = null
   state.rekeyWorkerTerminalResourcePaneKey.mockClear()
   vi.unstubAllEnvs()
   vi.restoreAllMocks()
@@ -257,4 +266,41 @@ it('leaves the stored panes alone when the build keeps the window as layout owne
   expect(transfer).not.toHaveBeenCalled()
   expect(state.rekeyWorkerTerminalResourcePaneKey).not.toHaveBeenCalled()
   expect(storedLeafIds(profileDirectory)).toEqual([KEPT, DUPLICATE])
+})
+
+it('writes the repair before reconcile and RPC even when a profile write is in flight', async () => {
+  state.root = temporaryDirectory('orcad-duplicate-pty-repair-')
+  const profileDirectory = temporaryDirectory('orcad-duplicate-pty-profile-')
+  const inner = new ProfileStateSqliteAuthority(
+    join(profileDirectory, 'profile-state.db'),
+    'topology'
+  )
+  inner.writeSerializedState(Buffer.from(duplicatePtyProfile()))
+  const authority = new DelayedAuthority(inner)
+  const store = new Store({
+    dataFile: join(profileDirectory, 'orca-data.json'),
+    profileStateAuthority: authority
+  })
+  await store.flushPendingOrThrowAsync()
+  state.store = store
+  vi.spyOn(agentHookServer, 'transferPaneAuthority').mockImplementation(() => {})
+  const diskAtStep: Record<string, string[]> = {}
+  state.onStartupStep = (step) => (diskAtStep[step] = storedLeafIds(profileDirectory))
+
+  // An earlier profile write is still in flight; the repair queues behind it.
+  const held = authority.pause()
+  store.updateSettings({ agentStatusHooksEnabled: false })
+  const heldWrite = store.flushPendingOrThrowAsync()
+  await held.started.promise
+  const { startOrcad } = await import('./orcad-entry')
+  const startup = startOrcad({ noPairing: true, json: true })
+  await new Promise((resolve) => setTimeout(resolve, 200))
+  held.finish.resolve()
+  await heldWrite
+  const host = await startup
+  try {
+    expect(diskAtStep).toEqual({ reconcile: [KEPT], 'rpc.start': [KEPT] })
+  } finally {
+    await host.stop()
+  }
 })
