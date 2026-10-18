@@ -42,4 +42,29 @@ describe('getExternalEditorOpenCapability', () => {
       ).toEqual({ allowed: false, reason: 'remote-runtime' })
     }
   )
+
+  it('opens a server reached over SSH access through that SSH host, but not a network-paired one', () => {
+    const link = { sshTargetId: 'box', sshTargetGeneration: 1, localPort: 41000, remotePort: 6768 }
+    const environments = [
+      {
+        id: 'tunnelled',
+        sshAccess: { ...link, endpointId: 'tunnel', previousPreferredEndpointId: 'lan' }
+      },
+      { id: 'paired' }
+    ]
+    expect(
+      getExternalEditorOpenCapability({
+        command: 'code',
+        runtimeEnvironmentId: 'tunnelled',
+        environments
+      })
+    ).toEqual({ allowed: true, remote: true, sshTargetId: 'box' })
+    expect(
+      getExternalEditorOpenCapability({
+        command: 'code',
+        runtimeEnvironmentId: 'paired',
+        environments
+      })
+    ).toEqual({ allowed: false, reason: 'remote-runtime' })
+  })
 })

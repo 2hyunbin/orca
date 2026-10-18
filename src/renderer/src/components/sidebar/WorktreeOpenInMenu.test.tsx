@@ -27,7 +27,8 @@ const {
     settings: {
       activeRuntimeEnvironmentId: null as string | null,
       openInApplications: [] as { id: string; label: string; command: string }[]
-    }
+    },
+    runtimeEnvironments: [] as { id: string; orcadDeployment?: Record<string, unknown> }[]
   },
   openInExternalEditorMock: vi.fn(),
   openInFileManagerMock: vi.fn(),
@@ -44,11 +45,11 @@ vi.mock('sonner', () => ({
 
 vi.mock('@/store', () => {
   const useAppStore = Object.assign(
-    (selector: (state: { settings: typeof mockState.settings }) => unknown) =>
-      selector({ settings: mockState.settings }),
+    (selector: (state: typeof mockState) => unknown) => selector(mockState),
     {
       getState: () => ({
         settings: mockState.settings,
+        runtimeEnvironments: mockState.runtimeEnvironments,
         openSettingsPage: openSettingsPageMock,
         openSettingsTarget: openSettingsTargetMock
       })
@@ -88,6 +89,7 @@ function findByType(node: unknown, type: unknown): ReactElementLike {
 describe('WorktreeOpenInMenu', () => {
   beforeEach(() => {
     mockState.settings = { activeRuntimeEnvironmentId: null, openInApplications: [] }
+    mockState.runtimeEnvironments = []
     toastErrorMock.mockReset()
     openInFileManagerMock.mockReset()
     openInExternalEditorMock.mockReset()
@@ -264,11 +266,13 @@ describe('WorktreeOpenInMenu', () => {
     })
     expect(getOpenInEntryAvailability(entries[1], 'ssh-1')).toEqual({
       disabled: true,
-      metadata: 'Local only'
+      metadata: 'Local only',
+      disabledReason: 'Only VS Code can open folders on an SSH host.'
     })
     expect(getOpenInEntryAvailability(entries[2], 'ssh-1')).toEqual({
       disabled: true,
-      metadata: 'Local only'
+      metadata: 'Local only',
+      disabledReason: 'Only VS Code can open folders on an SSH host.'
     })
     expect(getOpenInEntryAvailability(entries[3], 'ssh-1')).toEqual({
       disabled: true,
@@ -348,19 +352,25 @@ describe('WorktreeOpenInMenu', () => {
     const entry = { id: 'zed', label: 'Zed', target: 'external-editor', command: 'zed' } as const
     expect(getOpenInEntryAvailability(entry, null, 'managed-owner')).toEqual({
       disabled: true,
-      metadata: 'Local only'
+      metadata: 'Local only',
+      disabledReason:
+        'Apps on this computer can open this server’s files only when Orca reaches it over SSH.'
     })
   })
 
   it('marks an unresolved owner local-only and never launches the desktop copy', async () => {
     const editor = { id: 'zed', label: 'Zed', target: 'external-editor', command: 'zed' } as const
     const fileManager = { id: 'file-manager', label: 'Finder', target: 'file-manager' } as const
-    for (const entry of [editor, fileManager]) {
-      expect(getOpenInEntryAvailability(entry, null, null, true)).toEqual({
-        disabled: true,
-        metadata: 'Local only'
-      })
-    }
+    expect(getOpenInEntryAvailability(editor, null, null, true)).toEqual({
+      disabled: true,
+      metadata: 'Local only',
+      disabledReason:
+        'Apps on this computer can open this server’s files only when Orca reaches it over SSH.'
+    })
+    expect(getOpenInEntryAvailability(fileManager, null, null, true)).toEqual({
+      disabled: true,
+      metadata: 'Local only'
+    })
     for (const target of ['external-editor', 'file-manager'] as const) {
       await openWorktreePath({
         target,
@@ -373,5 +383,68 @@ describe('WorktreeOpenInMenu', () => {
     }
     expect(openInExternalEditorMock).not.toHaveBeenCalled()
     expect(openInFileManagerMock).not.toHaveBeenCalled()
+  })
+
+  describe('a workspace on a server Orca reaches through an SSH host', () => {
+    const managedServer = {
+      id: 'managed-owner',
+      orcadDeployment: {
+        sshTargetId: 'ssh-1',
+        sshTargetGeneration: 1,
+        localPort: 41000,
+        remotePort: 6768
+      }
+    }
+    const code = {
+      id: 'code',
+      label: 'VS Code',
+      target: 'external-editor',
+      command: 'code'
+    } as const
+    const zed = { id: 'zed', label: 'Zed', target: 'external-editor', command: 'zed' } as const
+
+    it('enables VS Code over Remote SSH and explains why other apps stay off', () => {
+      expect(
+        getOpenInEntryAvailability(code, null, 'managed-owner', false, [managedServer])
+      ).toEqual({ disabled: false, metadata: 'Remote SSH' })
+      expect(
+        getOpenInEntryAvailability(zed, null, 'managed-owner', false, [managedServer])
+      ).toEqual({
+        disabled: true,
+        metadata: 'Local only',
+        disabledReason: 'Only VS Code can open folders on an SSH host.'
+      })
+    })
+
+    it('sends the SSH host with the server as the owner', async () => {
+      mockState.runtimeEnvironments = [managedServer]
+      await openWorktreePath({
+        target: 'external-editor',
+        worktreePath: '/home/ada/project',
+        connectionId: null,
+        runtimeEnvironmentId: 'managed-owner',
+        command: 'code'
+      })
+
+      expect(openInExternalEditorMock).toHaveBeenCalledWith({
+        path: '/home/ada/project',
+        command: 'code',
+        connectionId: 'ssh-1',
+        ownerHostId: 'runtime:managed-owner'
+      })
+    })
+
+    it('keeps an ephemeral VM server local-only', () => {
+      const vm = {
+        ...managedServer,
+        orcadDeployment: { ...managedServer.orcadDeployment, sshTargetId: 'runtime-ssh-vm-1' }
+      }
+      expect(getOpenInEntryAvailability(code, null, 'managed-owner', false, [vm])).toEqual({
+        disabled: true,
+        metadata: 'Local only',
+        disabledReason:
+          'Apps on this computer can open this server’s files only when Orca reaches it over SSH.'
+      })
+    })
   })
 })

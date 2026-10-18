@@ -59,6 +59,14 @@ import { EXTERNAL_EDITOR_CLI_COMMAND, registerShellHandlers } from './shell'
 import { resolveExternalEditorLaunchSpec } from '../external-editor-launch'
 import type { SshTarget } from '../../shared/ssh-types'
 
+// Why shell:false: hidden launches go through @orca/process-host, which pins it.
+const HIDDEN_EDITOR_LAUNCH_OPTIONS = expect.objectContaining({
+  detached: true,
+  stdio: 'ignore',
+  windowsHide: true,
+  shell: false
+})
+
 function createSpawnedProcess(result: 'spawn' | 'error' = 'spawn'): {
   once: ReturnType<typeof vi.fn>
   off: ReturnType<typeof vi.fn>
@@ -332,11 +340,11 @@ describe('registerShellHandlers', () => {
           detachedGui: false
         }
       )
-      expect(spawnMock).toHaveBeenCalledWith('editor-cli', [normalize(workspacePath)], {
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true
-      })
+      expect(spawnMock).toHaveBeenCalledWith(
+        'editor-cli',
+        [normalize(workspacePath)],
+        HIDDEN_EDITOR_LAUNCH_OPTIONS
+      )
       expect(child.off).toHaveBeenCalledWith('error', expect.any(Function))
       expect(child.off).toHaveBeenCalledWith('spawn', expect.any(Function))
       expect(openPathMock).not.toHaveBeenCalled()
@@ -361,11 +369,11 @@ describe('registerShellHandlers', () => {
           detachedGui: false
         }
       )
-      expect(spawnMock).toHaveBeenCalledWith('editor-cli', [normalize(workspacePath)], {
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true
-      })
+      expect(spawnMock).toHaveBeenCalledWith(
+        'editor-cli',
+        [normalize(workspacePath)],
+        HIDDEN_EDITOR_LAUNCH_OPTIONS
+      )
       expect(child.off).toHaveBeenCalledWith('error', expect.any(Function))
       expect(child.off).toHaveBeenCalledWith('spawn', expect.any(Function))
       expect(openPathMock).not.toHaveBeenCalled()
@@ -551,11 +559,11 @@ describe('registerShellHandlers', () => {
           detachedGui: false
         }
       )
-      expect(spawnMock).toHaveBeenCalledWith('platform-runner', ['platform-arg'], {
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true
-      })
+      expect(spawnMock).toHaveBeenCalledWith(
+        'platform-runner',
+        ['platform-arg'],
+        HIDDEN_EDITOR_LAUNCH_OPTIONS
+      )
       expect(openPathMock).not.toHaveBeenCalled()
     })
 
@@ -572,11 +580,11 @@ describe('registerShellHandlers', () => {
       expect(resolveCliCommandMock).not.toHaveBeenCalled()
       expect(getSpawnArgsForWindowsMock).not.toHaveBeenCalled()
       expect(launchSpec.kind).toBe('shell')
-      expect(spawnMock).toHaveBeenCalledWith(launchSpec.spawnCmd, launchSpec.spawnArgs, {
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true
-      })
+      expect(spawnMock).toHaveBeenCalledWith(
+        launchSpec.spawnCmd,
+        launchSpec.spawnArgs,
+        HIDDEN_EDITOR_LAUNCH_OPTIONS
+      )
     })
 
     it('rejects missing and runtime-owned SSH targets', async () => {

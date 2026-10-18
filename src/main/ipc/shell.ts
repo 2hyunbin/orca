@@ -17,7 +17,11 @@ import {
   resolveVsCodeRemoteSshLaunchSpec
 } from '../external-editor-launch'
 import { resolveVsCodeSshAuthority } from '../ssh/config/vscode-ssh-authority'
-import { toSshExecutionHostId } from '../../shared/execution-host'
+import {
+  isEditorSshHostForOwner,
+  listAppRuntimeEnvironments,
+  type ListRuntimeEnvironments
+} from './shell-editor-ssh-host'
 import {
   isLocallyOwned,
   pathExists,
@@ -51,11 +55,12 @@ async function openInFileManager(
 
 async function openInExternalEditor(
   store: Pick<Store, 'getSshTarget'>,
-  request: ShellOpenExternalEditorRequest
+  request: ShellOpenExternalEditorRequest,
+  listRuntimeEnvironments: ListRuntimeEnvironments
 ): Promise<ShellOpenExternalEditorResult> {
   const connectionId = request.connectionId?.trim()
   if (connectionId) {
-    if (request.ownerHostId !== toSshExecutionHostId(connectionId)) {
+    if (!isEditorSshHostForOwner(connectionId, request.ownerHostId, listRuntimeEnvironments)) {
       return { ok: false, reason: 'remote-runtime-unsupported' }
     }
     const sshTarget = store.getSshTarget(connectionId)
@@ -117,7 +122,10 @@ async function openWithSystemDefault(pathValue: string, ownerHostId: unknown): P
   }
 }
 
-export function registerShellHandlers(store: Pick<Store, 'getSshTarget'>): void {
+export function registerShellHandlers(
+  store: Pick<Store, 'getSshTarget'>,
+  listRuntimeEnvironments: ListRuntimeEnvironments = listAppRuntimeEnvironments
+): void {
   ipcMain.handle(
     'shell:openPath',
     async (_event, path: string, ownerHostId: unknown): Promise<void> => {
@@ -136,7 +144,7 @@ export function registerShellHandlers(store: Pick<Store, 'getSshTarget'>): void 
   ipcMain.handle(
     'shell:openInExternalEditor',
     (_event, request: ShellOpenExternalEditorRequest): Promise<ShellOpenExternalEditorResult> =>
-      openInExternalEditor(store, request)
+      openInExternalEditor(store, request, listRuntimeEnvironments)
   )
 
   ipcMain.handle('shell:openUrl', (_event, rawUrl: string) => {

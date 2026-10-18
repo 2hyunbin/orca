@@ -1,4 +1,5 @@
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
+import { spawnProcess } from '@orca/process-host'
 import { existsSync } from 'node:fs'
 import { posix, win32 } from 'node:path'
 import { parseWslUncPath } from '../shared/wsl-paths'
@@ -251,30 +252,27 @@ export function resolveVsCodeRemoteSshLaunchSpec(
   }
 }
 
-function resolveExternalEditorSpawn(launchSpec: ExternalEditorLaunchSpec): {
-  spawnCmd: string
-  spawnArgs: string[]
-  windowsHide: boolean
-} {
+function startExternalEditorProcess(launchSpec: ExternalEditorLaunchSpec): ChildProcess {
   // Why: only shims flagged during resolution (JetBrains) take the start /B
   // detach; every other launcher keeps the waiting form so its argv survives.
-  if (launchSpec.kind === 'executable') {
-    const spawned = getSpawnArgsForWindows(launchSpec.spawnCmd, launchSpec.spawnArgs, {
-      detachedGui: launchSpec.detachedGui === true
-    })
-    return { ...spawned, windowsHide: launchSpec.hideWindowsConsole }
+  // A batch launcher (code.cmd) becomes an explicit cmd.exe line here, which
+  // also refuses arguments cmd would reparse.
+  const { spawnCmd, spawnArgs } =
+    launchSpec.kind === 'executable'
+      ? getSpawnArgsForWindows(launchSpec.spawnCmd, launchSpec.spawnArgs, {
+          detachedGui: launchSpec.detachedGui === true
+        })
+      : launchSpec
+  if (!launchSpec.hideWindowsConsole) {
+    // Why direct: process-host always hides the console, and a terminal editor on Windows needs one.
+    return spawn(spawnCmd, spawnArgs, { detached: true, stdio: 'ignore', windowsHide: false })
   }
-  return {
-    spawnCmd: launchSpec.spawnCmd,
-    spawnArgs: launchSpec.spawnArgs,
-    windowsHide: launchSpec.hideWindowsConsole
-  }
+  return spawnProcess({ program: spawnCmd, args: spawnArgs, detached: true, stdio: 'ignore' })
 }
 
 export async function launchExternalEditor(launchSpec: ExternalEditorLaunchSpec): Promise<void> {
-  const { spawnCmd, spawnArgs, windowsHide } = resolveExternalEditorSpawn(launchSpec)
   await new Promise<void>((resolvePromise, rejectPromise) => {
-    const child = spawn(spawnCmd, spawnArgs, { detached: true, stdio: 'ignore', windowsHide })
+    const child = startExternalEditorProcess(launchSpec)
     let settled = false
     function cleanup(): void {
       child.off('error', onError)
