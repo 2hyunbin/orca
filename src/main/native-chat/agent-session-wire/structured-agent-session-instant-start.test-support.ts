@@ -2,7 +2,10 @@
 
 import type { StructuredAgentSessionAdapter } from './structured-agent-session-adapter'
 
-export function startsWhenPublished<A extends StructuredAgentSessionAdapter>(
+type InstantStartAdapter = Omit<StructuredAgentSessionAdapter, 'open'> &
+  Partial<Pick<StructuredAgentSessionAdapter, 'open'>>
+
+export function startsWhenPublished<A extends InstantStartAdapter>(
   adapter: A,
   _host: () => unknown
 ): A & StructuredAgentSessionAdapter {
