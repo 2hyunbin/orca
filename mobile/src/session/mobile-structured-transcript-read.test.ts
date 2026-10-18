@@ -192,3 +192,21 @@ it('retries soon again once a reopened stream delivered past its opening frame',
     vi.useRealTimers()
   }
 })
+
+it('keeps doubling the wait when a reopen answers with a snapshot and then ends at once', () => {
+  vi.useFakeTimers()
+  try {
+    const { callbacks } = startStream()
+    callbacks[0]?.({ type: 'end' })
+    vi.advanceTimersByTime(750)
+    expect(callbacks).toHaveLength(2)
+    callbacks[1]?.(snapshotFrame)
+    callbacks[1]?.({ type: 'end' })
+    vi.advanceTimersByTime(1499)
+    expect(callbacks).toHaveLength(2)
+    vi.advanceTimersByTime(1)
+    expect(callbacks).toHaveLength(3)
+  } finally {
+    vi.useRealTimers()
+  }
+})

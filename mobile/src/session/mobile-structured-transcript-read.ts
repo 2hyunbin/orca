@@ -12,8 +12,7 @@ import { isSubscribeEvent } from './mobile-structured-transcript-subscription'
 
 /** Refusals no reopen gets past while this chat stays open: the host lacks or denies the method, or
  *  the chat's history cannot be read. Reconnecting starts a new read either way. */
-function isFinalStreamFailure(frame: object): boolean {
-  const error = 'error' in frame ? frame.error : undefined
+function isFinalStreamFailure(error: unknown): boolean {
   const code =
     typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined
   if (code === 'method_not_found' || code === 'forbidden') {
@@ -27,7 +26,8 @@ function isFinalStreamFailure(frame: object): boolean {
 }
 
 /** A failed piece gets one fresh subscription opening; another failure settles this owner. A stream
- *  the host ends or fails is reopened with backoff, as the desktop's read does. */
+ *  the host ends or fails is reopened with the desktop read's backoff.
+ *  Unlike the desktop, it also stops on method_not_found/forbidden/unsupported and resets backoff only past a reopen's opening frame. */
 export function startMobileStructuredTranscriptRead(args: {
   sessionId: string
   open: (onFrame: (raw: unknown) => void) => () => void
@@ -89,7 +89,7 @@ export function startMobileStructuredTranscriptRead(args: {
       if (typeof raw === 'object' && raw !== null && 'type' in raw && raw.type === 'error') {
         retire()
         args.error(raw)
-        if (isFinalStreamFailure(raw)) {
+        if (isFinalStreamFailure('error' in raw ? raw.error : undefined)) {
           stopped = true
         } else {
           reopenScheduler.schedule()
