@@ -5,12 +5,15 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
   useWindowDimensions
 } from 'react-native'
 import { useReducedMotionEnabled } from '../platform/use-reduced-motion'
+import { useWindowSafeAreaInsets } from '../layout/side-safe-area'
+import { useBackClaim } from '../navigation/use-back-claim'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 
 export type DetailCardAnchor = { x: number; y: number; width: number; height: number }
@@ -43,6 +46,11 @@ export function AnchoredDetailCard({
   // Unknown counts as reduced, so the card never slides before the setting is read.
   const slide = useReducedMotionEnabled() === false
   const window = useWindowDimensions()
+  const insets = useWindowSafeAreaInsets()
+  useBackClaim(() => {
+    onDismiss()
+    return true
+  })
   const [progress] = useState(() => new Animated.Value(0))
   useEffect(() => {
     const animation = Animated.timing(progress, {
@@ -59,8 +67,16 @@ export function AnchoredDetailCard({
     return () => animation.stop()
   }, [open, progress, onClosed])
 
-  const width = Math.min(CARD_WIDTH, window.width - EDGE_INSET * 2)
-  const left = Math.min(Math.max(anchor.x, EDGE_INSET), window.width - EDGE_INSET - width)
+  const width = Math.max(
+    0,
+    Math.min(CARD_WIDTH, window.width - insets.left - insets.right - EDGE_INSET * 2)
+  )
+  const left = Math.min(
+    Math.max(anchor.x, insets.left + EDGE_INSET),
+    window.width - insets.right - EDGE_INSET - width
+  )
+  const top = anchor.y + anchor.height
+  const maxHeight = Math.max(0, window.height - top - insets.bottom - EDGE_INSET)
   return (
     <Modal
       transparent
@@ -81,8 +97,9 @@ export function AnchoredDetailCard({
           styles.card,
           {
             left,
-            top: anchor.y + anchor.height,
+            top,
             width,
+            maxHeight,
             opacity: progress,
             transform: slide
               ? [
@@ -97,15 +114,17 @@ export function AnchoredDetailCard({
           }
         ]}
       >
-        <Text style={styles.title} selectable>
-          {title}
-        </Text>
-        {detail ? (
-          <Text style={styles.detail} selectable>
-            {detail}
+        <ScrollView contentContainerStyle={styles.content} tabIndex={0}>
+          <Text style={styles.title} selectable>
+            {title}
           </Text>
-        ) : null}
-        {footer ? <View style={styles.footer}>{footer}</View> : null}
+          {detail ? (
+            <Text style={styles.detail} selectable>
+              {detail}
+            </Text>
+          ) : null}
+          {footer ? <View style={styles.footer}>{footer}</View> : null}
+        </ScrollView>
       </Animated.View>
     </Modal>
   )
@@ -118,13 +137,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderSubtle,
     borderRadius: radii.row,
-    padding: spacing.md,
     shadowColor: '#000',
     shadowOpacity: 0.35,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
     elevation: 8
   },
+  content: { padding: spacing.md },
   title: {
     color: colors.textPrimary,
     fontSize: typography.bodySize,

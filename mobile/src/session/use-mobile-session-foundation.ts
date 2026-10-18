@@ -46,6 +46,7 @@ export function useMobileSessionFoundation() {
   const {
     name: worktreeName,
     path: worktreePath,
+    hostId: worktreeHostId,
     resolution: worktreeResolution
   } = useLiveWorktreeName({
     client,
@@ -112,6 +113,7 @@ export function useMobileSessionFoundation() {
     forceReconnectHost,
     worktreeName,
     worktreePath,
+    worktreeHostId,
     worktreeResolution,
     isWideLayout,
     activePanel,

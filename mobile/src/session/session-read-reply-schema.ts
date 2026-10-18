@@ -96,12 +96,15 @@ export const sessionWorktreeRecordSchema = z
         displayName: salvagedOptional('displayName', z.string().nullable()),
         repo: salvagedOptional('repo', z.string().nullable()),
         path: salvagedOptional('path', z.string()),
+        hostId: salvagedOptional('hostId', z.string()),
         diffComments: z.unknown().optional()
       })
     )
   })
   .transform(
-    (reply): (WorktreeDisplayNameSource & { path?: string; diffComments?: unknown }) | undefined =>
+    (
+      reply
+    ): (WorktreeDisplayNameSource & { path?: string; hostId?: string; diffComments?: unknown }) | undefined =>
       reply.worktree
   )
 

@@ -1,7 +1,8 @@
-import { useCallback, useRef, useState, type RefObject } from 'react'
-import { Pressable, Text, type View } from 'react-native'
+import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { Pressable, Text, useWindowDimensions, type View } from 'react-native'
 import { AnchoredDetailCard, type DetailCardAnchor } from '../components/AnchoredDetailCard'
 import { StatusDot } from '../components/StatusDot'
+import { useWindowSafeAreaInsets } from '../layout/side-safe-area'
 import type { ConnectionState } from '../transport/types'
 import { styles } from './mobile-session-styles'
 
@@ -32,11 +33,26 @@ export function MobileSessionTitleBlock({
   const blockRef = useRef<View>(null)
   const [anchor, setAnchor] = useState<DetailCardAnchor | null>(null)
   const [open, setOpen] = useState(false)
+  const { width } = useWindowDimensions()
+  const insets = useWindowSafeAreaInsets()
+  const geometry = [width, insets.top, insets.left, insets.right, besideTabs].join(':')
+  const measurement = useRef(0)
   const close = useCallback(() => setOpen(false), [])
   const unmount = useCallback(() => setAnchor(null), [])
+  // A moved header invalidates the card and any opening measurement still in flight.
+  useLayoutEffect(() => {
+    close()
+    return () => {
+      measurement.current += 1
+    }
+  }, [close, geometry])
   const show = () => {
+    const generation = ++measurement.current
     blockRef.current?.measureInWindow((x) => {
       barRef.current?.measureInWindow((_barX, y, _width, height) => {
+        if (generation !== measurement.current) {
+          return
+        }
         setAnchor({ x, y, width: 0, height })
         setOpen(true)
       })
@@ -77,7 +93,7 @@ export function MobileSessionTitleBlock({
             hostName ? (
               <>
                 <StatusDot state={connState} />
-                <Text style={styles.sessionMetaText} numberOfLines={1}>
+                <Text style={styles.sessionMetaText}>
                   {hostName}
                 </Text>
               </>
