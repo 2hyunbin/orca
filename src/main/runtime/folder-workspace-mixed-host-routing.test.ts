@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ExecutionHostId } from '../../shared/execution-host'
+import type { FolderWorkspace } from '../../shared/folder-workspace-types'
+import {
+  FOLDER_HOST_CASES,
+  MIXED_GROUP,
+  MIXED_FOLDER,
+  ROUTING_REPOS
+} from '../../shared/folder-workspace-host-routing.test-fixture'
+import type { ProjectGroup } from '../../shared/project-group-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { localDesktopSession } from '../../shared/workspace-layout/workspace-layout-profile.test-fixture'
 import {
@@ -17,31 +25,19 @@ vi.mock('../../shared/layout-owner-switch', () => ({
   }
 }))
 
-const GROUP = { id: 'group-mixed', parentGroupId: null, connectionId: null }
-// GIT_KEY's repo is local; its group-mate lives on an SSH host, so the folder has no single host.
-const REPOS = [
-  { id: 'repo-1', path: '/Users/dev/orca', projectGroupId: GROUP.id, connectionId: null },
-  { id: 'repo-ssh', path: '/home/dev/api', projectGroupId: GROUP.id, connectionId: 'target-1' }
-]
-const MIXED_FOLDER = {
-  id: 'notes-1',
-  projectGroupId: GROUP.id,
-  folderPath: '/Users/dev/notes',
-  connectionId: null
-}
-
 function runtimeWithMixedFolder(
-  folder: Record<string, unknown> = MIXED_FOLDER,
-  groups: Record<string, unknown>[] = [GROUP]
+  folder: FolderWorkspace = MIXED_FOLDER,
+  groups: readonly ProjectGroup[] = [MIXED_GROUP]
 ) {
+  const repos = ROUTING_REPOS
   const partitions = new Map<ExecutionHostId, WorkspaceSessionState>([
     ['local', localDesktopSession()],
     ['ssh:target-1', emptySession()]
   ])
   const applyLayoutCommand = vi.fn(async () => ({ ok: true, result: {} }))
   const store = {
-    getRepos: () => REPOS,
-    getRepo: (id: string) => REPOS.find((repo) => repo.id === id),
+    getRepos: () => repos,
+    getRepo: (id: string) => repos.find((repo) => repo.id === id),
     getProjectGroups: () => groups,
     getFolderWorkspaces: () => [folder],
     getWorkspaceSessionHostIds: () => [...partitions.keys()],
@@ -77,23 +73,14 @@ describe('a folder whose project group mixes local and SSH repos (layout-owner b
     expect(reply.ok).toBe(true)
     expect(applyLayoutCommand).toHaveBeenCalledWith(RATIOS, ['local'])
   })
+})
 
-  it("follows the project group's host stamp when the folder has none", async () => {
-    const { runtime, applyLayoutCommand } = runtimeWithMixedFolder(MIXED_FOLDER, [
-      { ...GROUP, executionHostId: 'ssh:target-1' }
-    ])
+describe('every folder kind routes where the window saves it (layout-owner build)', () => {
+  // The window's side of each case runs in workspace-session-folder-host-twin.test.ts.
+  it.each(FOLDER_HOST_CASES)('$name', async ({ folder, groups, expected }) => {
+    const { runtime, applyLayoutCommand } = runtimeWithMixedFolder(folder, groups)
     await runtime.applyLayoutCommand(RATIOS)
-    expect(applyLayoutCommand).toHaveBeenCalledWith(RATIOS, ['ssh:target-1'])
-  })
-
-  it('still routes a legacy SSH folder with no stamp to its SSH partition', async () => {
-    const { runtime, applyLayoutCommand } = runtimeWithMixedFolder({
-      ...MIXED_FOLDER,
-      projectGroupId: 'group-ssh',
-      folderPath: '/home/dev/api'
-    })
-    await runtime.applyLayoutCommand(RATIOS)
-    expect(applyLayoutCommand).toHaveBeenCalledWith(RATIOS, ['ssh:target-1'])
+    expect(applyLayoutCommand).toHaveBeenCalledWith(RATIOS, [expected])
   })
 })
 
@@ -110,34 +97,74 @@ describe('the same folder in a window-owned build', () => {
 describe('a workspace the router throws on', () => {
   function streamThrowingOn(key: string) {
     const session = localDesktopSession()
+    const writeListeners = new Set<(hostId: ExecutionHostId | null) => void>()
     const store = {
       getWorkspaceSession: () => session,
       // Two partitions hold the workspace, so the router throws twice in one projection.
       getWorkspaceSessionHostIds: (): ExecutionHostId[] => ['local', 'ssh:target-1'],
-      onWorkspaceSessionWritten: () => () => {}
+      onWorkspaceSessionWritten: (listener: (hostId: ExecutionHostId | null) => void) => {
+        writeListeners.add(listener)
+        return () => writeListeners.delete(listener)
+      }
     }
-    return new WorkspaceLayoutStream({
+    const route = { throws: true }
+    const stream = new WorkspaceLayoutStream({
       store: () => store,
       homeHostId: (candidate) => {
-        if (candidate === key) {
+        if (route.throws && candidate === key) {
           throw new Error('route failed')
         }
         return 'local'
       },
       liveTitle: () => null
     })
+    const write = () => writeListeners.forEach((listener) => listener(null))
+    return { stream, route, write }
   }
+  const flush = () => new Promise<void>((resolve) => queueMicrotask(resolve))
 
   it('is left out, and every other workspace is still published, logged once', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const stream = streamThrowingOn(FOLDER_KEY)
+    const { stream } = streamThrowingOn(FOLDER_KEY)
     expect(stream.subscribe(() => {}).snapshot.map((entry) => entry.key)).toEqual([GIT_KEY])
     expect(warn).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps its last published layout instead of sending a removal', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { stream, route, write } = streamThrowingOn(FOLDER_KEY)
+    route.throws = false
+    const events: string[] = []
+    const first = stream.subscribe((event) => events.push(`${event.type} ${event.key}`))
+    expect(first.snapshot.map((entry) => entry.key)).toEqual([GIT_KEY, FOLDER_KEY])
+    route.throws = true
+    write()
+    await flush()
+    expect(events).toEqual([])
+    const later = stream.subscribe(() => {}).snapshot
+    expect(later.find((entry) => entry.key === FOLDER_KEY)?.layout).toEqual(
+      first.snapshot.find((entry) => entry.key === FOLDER_KEY)?.layout
+    )
+  })
+
+  it('a routing warning never hides a later listener failure', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { stream, route, write } = streamThrowingOn(FOLDER_KEY)
+    stream.subscribe(() => {
+      throw new Error('listener failed')
+    })
+    route.throws = false
+    write()
+    await flush()
+    expect(warn.mock.calls.map((call) => call[0])).toEqual([
+      '[workspace-layout] layout stream routing failed:',
+      '[workspace-layout] layout stream listener failed:'
+    ])
   })
 
   it('still fails the whole projection in a window-owned build', () => {
     mocks.layoutOwnerIsMain = false
     vi.spyOn(console, 'warn').mockImplementation(() => {})
-    expect(streamThrowingOn(FOLDER_KEY).subscribe(() => {}).snapshot).toEqual([])
+    expect(streamThrowingOn(FOLDER_KEY).stream.subscribe(() => {}).snapshot).toEqual([])
   })
 })

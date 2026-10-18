@@ -6,7 +6,7 @@ import {
   type ExecutionHostId
 } from '../../shared/execution-host'
 import type { FolderWorkspace } from '../../shared/folder-workspace-types'
-import { resolveFolderWorkspaceHost } from '../../shared/folder-workspace-execution-host'
+import { getFolderWorkspaceHostId } from '../../shared/folder-workspace-execution-host'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
@@ -16,27 +16,12 @@ import { workspaceSessionListsTerminalTab } from '../../shared/workspace-session
 import type { RuntimeStore } from './runtime-store-contract'
 
 /**
- * Where a layout-owner build routes a folder: the window's save rule (the folder's stamp, then its
- * group's), else the shared host resolver. Never throws: a folder spanning local and SSH repos has
- * no single host, and the window saves it to local, so it routes there. Terminal starts still refuse it.
+ * Where a layout-owner build routes a folder: the rule the window stamps and saves its rows by, so
+ * both sides pick one partition. It reads no repos, so a mixed-host folder never throws here;
+ * terminal starts still refuse it.
  */
-function layoutOwnerFolderHostId(
-  workspace: FolderWorkspace,
-  store: RuntimeStore
-): ExecutionHostId | null {
-  const projectGroups = store.getProjectGroups?.() ?? []
-  const stamp =
-    workspace.executionHostId ??
-    projectGroups.find((group) => group.id === workspace.projectGroupId)?.executionHostId
-  if (stamp != null) {
-    return parseExecutionHostId(stamp)?.id ?? null
-  }
-  // Unstamped, so only local, ssh or ambiguous can come back.
-  const host = resolveFolderWorkspaceHost(
-    { folderWorkspaces: [workspace], projectGroups, repos: store.getRepos() },
-    workspace.id
-  )
-  return getConnectionExecutionHostId(host.kind === 'ssh' ? host.targetId : null)
+function layoutOwnerFolderHostId(workspace: FolderWorkspace, store: RuntimeStore): ExecutionHostId {
+  return getFolderWorkspaceHostId(workspace, store.getProjectGroups?.() ?? [])
 }
 
 type RuntimeWorkspaceSessionDependencies = {
