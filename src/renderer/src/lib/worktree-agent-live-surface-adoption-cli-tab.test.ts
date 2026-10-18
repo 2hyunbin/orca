@@ -50,11 +50,11 @@ vi.mock('../runtime/runtime-layout-client', () => ({
 }))
 
 /** Main: applies the window's layout commands to its own model, publishing when the stream is up. */
-const main = vi.hoisted(() => ({
-  apply: null as ((command: unknown) => unknown) | null
+const main = vi.hoisted((): { apply: ((command: LayoutCommand) => unknown) | null } => ({
+  apply: null
 }))
 vi.mock('@/runtime/runtime-rpc-client', () => ({
-  callRuntimeRpc: async (_target: unknown, method: string, params: { command: unknown }) => {
+  callRuntimeRpc: async (_target: unknown, method: string, params: { command: LayoutCommand }) => {
     if (method !== 'layout.apply' || !main.apply) {
       throw new Error(`unexpected ${method}`)
     }
@@ -100,7 +100,7 @@ describe('a CLI terminal the window never mounted, layout-owner build', () => {
     streamUp = true
     model = loadWorkspaceLayoutWithoutReport('local', cliSession(), nameBasedLoadContext()).layout
     main.apply = (command) => {
-      const applied = applyLayoutCommand(model, command as LayoutCommand, {
+      const applied = applyLayoutCommand(model, command, {
         mintId: () => 'minted-tab',
         mintLeafId: () => leaf(9),
         now: () => 1

@@ -28,6 +28,15 @@ async function createWorktree(page: Page, name: string): Promise<string> {
   }, name)
 }
 
+function createdTabId(reply: unknown): string | undefined {
+  const result = reply && typeof reply === 'object' && 'result' in reply ? reply.result : null
+  const terminal =
+    result && typeof result === 'object' && 'terminal' in result ? result.terminal : null
+  const tabId =
+    terminal && typeof terminal === 'object' && 'tabId' in terminal ? terminal.tabId : null
+  return typeof tabId === 'string' ? tabId : undefined
+}
+
 /** The CLI's create: the runtime's `terminal.create`, in the background as a worker's would be. */
 async function createCliTerminal(page: Page, worktreeId: string): Promise<string> {
   const reply = await page.evaluate(
@@ -44,7 +53,7 @@ async function createCliTerminal(page: Page, worktreeId: string): Promise<string
       }),
     worktreeId
   )
-  const tabId = (reply as { result?: { terminal?: { tabId?: string } } }).result?.terminal?.tabId
+  const tabId = createdTabId(reply)
   if (!tabId) {
     throw new Error(`terminal.create gave no tab: ${JSON.stringify(reply).slice(0, 300)}`)
   }
@@ -53,10 +62,7 @@ async function createCliTerminal(page: Page, worktreeId: string): Promise<string
 
 async function readTabs(page: Page, worktreeId: string): Promise<Tabs> {
   return page.evaluate(async (id) => {
-    const session = (await window.api.session.get()) as {
-      tabsByWorktree?: Record<string, { id: string }[]>
-      unifiedTabs?: Record<string, { entityId: string; contentType: string }[]>
-    }
+    const session = await window.api.session.get()
     return {
       window: (window.__store!.getState().tabsByWorktree[id] ?? []).map((tab) => tab.id),
       storedRows: (session.tabsByWorktree?.[id] ?? []).map((row) => row.id),
