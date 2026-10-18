@@ -102,7 +102,7 @@ describe('sidebar inputs installer', () => {
     })
   })
 
-  it('keeps a notice across a failed read, so the next trigger still reads', () => {
+  it('forgets a failed read, so the next notice or ready reads again', () => {
     const base = installed()
     const read = sidebarInputsChanged(base.state, { generation: 'g1', revision: 4 })
     const noticed = sidebarInputsChanged(read.state, { generation: 'g1', revision: 5 })
@@ -110,8 +110,12 @@ describe('sidebar inputs installer', () => {
       throw new Error('expected a read')
     }
     const failed = sidebarInputsReadFailed(noticed.state, read.request.id)
-    expect(failed).toMatchObject({ inFlight: null, staged: null, noticed: { revision: 5 } })
-    expect(sidebarInputsChanged(failed, { generation: 'g1', revision: 5 }).request).toBeNull()
+    expect(failed).toMatchObject({ inFlight: null, staged: null, noticed: null })
+    expect(
+      sidebarInputsChanged(failed, { generation: 'g1', revision: 5 }).request?.params
+    ).toMatchObject({
+      cursor: 3
+    })
     expect(refreshSidebarInputs(failed).request?.params).toMatchObject({ cursor: 3 })
   })
 

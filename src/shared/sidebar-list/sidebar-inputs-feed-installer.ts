@@ -23,8 +23,8 @@ type StagedBatch = Pick<SidebarInputsReadResult, 'generation' | 'revision' | 'ki
 type FeedPosition = Pick<SidebarInputsChangedEvent, 'generation' | 'revision'>
 
 /**
- * A phone's feed reader for one host connection. One read is in flight at a time; a notice the
- * read may not cover, during paging included, costs one more read once it installs.
+ * A phone's feed reader for one host connection. One read is awaited at a time and a refresh
+ * supersedes it; a notice the read may not cover, during paging included, costs one more read.
  */
 export type SidebarInputsFeedState = {
   installed: InstalledSidebarInputs | null
@@ -100,7 +100,9 @@ export function sidebarInputsReadFailed(
   state: SidebarInputsFeedState,
   requestId: number
 ): SidebarInputsFeedState {
-  return requestId === state.inFlight ? { ...state, inFlight: null, staged: null } : state
+  return requestId === state.inFlight
+    ? { ...state, inFlight: null, staged: null, noticed: null }
+    : state
 }
 
 export function sidebarInputsReplied(

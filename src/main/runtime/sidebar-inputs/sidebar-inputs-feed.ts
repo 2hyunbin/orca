@@ -307,8 +307,10 @@ async function readDomain(domain: SidebarInputsFeedDomain): Promise<Map<string, 
   try {
     const entities = new Map<string, string>()
     for (const [key, value] of Object.entries(await domain.read())) {
-      if (value !== undefined) {
-        entities.set(key, JSON.stringify(value))
+      // What JSON cannot hold (undefined, a function) is absent, as it would be on the wire.
+      const json: string | undefined = JSON.stringify(value)
+      if (json !== undefined) {
+        entities.set(key, json)
       }
     }
     return entities
