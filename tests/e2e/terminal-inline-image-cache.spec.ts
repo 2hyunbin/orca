@@ -77,33 +77,44 @@ for (const renderer of ['off', 'on'] as const) {
     const producer = testInfo.outputPath('cache-images.cjs')
     writeFileSync(
       producer,
-      `for(let i=0;i<12;i++) process.stdout.write('\\x1b]1337;File=inline=1;width=1000px;height=1000px:${payload}\\x07\\r\\n'); console.log('CACHE_PRESSURE_DONE')`
+      `process.stdout.write('\\x1b[2J'); for(let i=0;i<12;i++) process.stdout.write('\\x1b_Ga=T,f=100,i='+(100+i)+',U=1,c=1,r=1,q=2;${payload}\\x1b\\\\'); process.stdout.write('\\x1b[3;3H\\x1b]1337;File=inline=1;width=100px;height=100px:${payload}\\x07\\x1b[15;1HCACHE_PRESSURE_DONE\\r\\n')`
     )
+    const assertImagePixels = async (stage: string) => {
+      await expect
+        .poll(
+          async () => {
+            const screen = orcaPage.locator('.pane:visible .xterm-screen').first()
+            const screenshot = PNG.sync.read(
+              await screen.screenshot({ path: testInfo.outputPath(`terminal-${stage}.png`) })
+            )
+            let redPixels = 0
+            for (let offset = 0; offset < screenshot.data.length; offset += 4) {
+              if (
+                screenshot.data[offset] > 200 &&
+                screenshot.data[offset + 1] < 80 &&
+                screenshot.data[offset + 2] < 80
+              ) {
+                redPixels++
+              }
+            }
+            return redPixels
+          },
+          { message: `Retained image pixels ${stage}` }
+        )
+        .toBeGreaterThan(1000)
+    }
     await selectCache(64)
     await execInTerminal(orcaPage, ptyId, nodeTerminalCommand([producer]))
     await waitForTerminalOutput(orcaPage, 'CACHE_PRESSURE_DONE', 30_000)
     await expect.poll(async () => (await sample()).storageMB).toBeGreaterThan(32)
     const before = await sample()
-    expect(before.images).toBe(12)
+    expect(before.images).toBe(13)
+    await assertImagePixels('before-shrink')
     await selectCache(32)
     await expect.poll(async () => (await sample()).storageMB).toBeLessThanOrEqual(32)
     const shrunk = await sample()
     expect(shrunk.images).toBeLessThan(before.images)
-    const screen = orcaPage.locator('.pane:visible .xterm-screen').first()
-    const screenshot = PNG.sync.read(
-      await screen.screenshot({ path: testInfo.outputPath('terminal-after-shrink.png') })
-    )
-    let redPixels = 0
-    for (let offset = 0; offset < screenshot.data.length; offset += 4) {
-      if (
-        screenshot.data[offset] > 200 &&
-        screenshot.data[offset + 1] < 80 &&
-        screenshot.data[offset + 2] < 80
-      ) {
-        redPixels++
-      }
-    }
-    expect(redPixels).toBeGreaterThan(1000)
+    await assertImagePixels('after-shrink')
     await selectCache(64)
     await execInTerminal(orcaPage, ptyId, nodeTerminalCommand([producer]))
     await waitForTerminalOutput(orcaPage, 'CACHE_PRESSURE_DONE', 30_000)
