@@ -84,8 +84,8 @@ vi.mock('./orcad-managed-tunnel', () => ({
   closeOrcadManagedTunnel: mocks.closeTunnel
 }))
 
-const { createManagedOrcadEnvironment, getManagedOrcadRuntimeStatus } =
-  await import('./orcad-runtime-lifecycle')
+const { createManagedOrcadEnvironment } = await import('./orcad-runtime-deployment')
+const { getManagedOrcadRuntimeStatus } = await import('./orcad-runtime-status')
 
 const VERSION = '0.1.0+abc123'
 const emptyRecord = { active: null, previous: null, activatedAt: null, snapshot: null }

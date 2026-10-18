@@ -10,12 +10,14 @@ import {
   NODE_RUNTIME_PROMOTE_TIMEOUT_MS,
   probeRemoteNodeRuntimeCommand,
   remoteNodeRuntimeDir,
-  remoteNodeRuntimePresentCommand,
+  remoteNodeRuntimePresentCommand
+} from './orcad-remote-node-runtime'
+import {
   REMOTE_NODE_RUNTIME_MISSING,
   REMOTE_NODE_RUNTIME_READY,
   RemoteNodeRuntimeSecurityModifiedError,
   RemoteNodeRuntimeSelfTestError
-} from './orcad-remote-node-runtime'
+} from './orcad-remote-node-runtime-report'
 import {
   windowsNodeRuntimeProbeCommand,
   windowsNodeRuntimePromoteCommand

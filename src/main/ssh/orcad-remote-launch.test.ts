@@ -3,11 +3,13 @@ import { ORCAD_MANAGED_ACTIVATION_ROOT_ENV } from '../../shared/orcad-idle-exit'
 
 import {
   ORCAD_READINESS_FILENAME,
+  OrcadRemoteLaunchUnsupportedError
+} from './orcad-remote-host-support'
+import {
   orcadLaunchCommand,
   orcadLivenessBlocksGc,
   orcadLivenessProvenExited,
   orcadLivenessProbeCommand,
-  OrcadRemoteLaunchUnsupportedError,
   parseOrcadLiveness,
   parseOrcadReadinessOutput
 } from './orcad-remote-launch'

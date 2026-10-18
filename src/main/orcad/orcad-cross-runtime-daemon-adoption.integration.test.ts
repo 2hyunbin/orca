@@ -43,12 +43,8 @@ import {
 import type { SshConnection } from '../ssh/ssh-connection'
 import { emptyOrcadActivationRecord, orcadGcPinnedDirNames } from '../ssh/orcad-activation-record'
 import { gcOldOrcadVersions } from '../ssh/orcad-remote-gc'
-import {
-  ORCAD_PID_FILENAME,
-  ORCAD_READINESS_FILENAME,
-  orcadLaunchCommand,
-  parseOrcadReadinessOutput
-} from '../ssh/orcad-remote-launch'
+import { ORCAD_PID_FILENAME, ORCAD_READINESS_FILENAME } from '../ssh/orcad-remote-host-support'
+import { orcadLaunchCommand, parseOrcadReadinessOutput } from '../ssh/orcad-remote-launch'
 import { parseOrcadStopOutcome, stopOrcadCommand } from '../ssh/orcad-remote-process-control'
 import { RELAY_REMOTE_DIR } from '../ssh/relay-protocol'
 import { getRemoteHostPlatform } from '../ssh/ssh-remote-platform'

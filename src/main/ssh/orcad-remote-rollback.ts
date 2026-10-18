@@ -16,7 +16,7 @@
 import { logOrcadActivationOutcome } from './orcad-activation-outcome-log'
 import type { OrcadHostTransport } from './orcad-host-transport'
 import type { OrcadActivationRecord } from './orcad-activation-record'
-import type { OrcadTerminalCensus } from './orcad-update-plan'
+import type { OrcadTerminalCensus } from '../../shared/orcad-terminal-census'
 import type { OrcadActivationVerdict } from './orcad-activation-gate'
 import type { OrcadDaemonProtocolFacts } from './orcad-daemon-protocol-crossing'
 import { readOrcadActivationRecord } from './orcad-activation-record-store'

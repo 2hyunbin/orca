@@ -3,12 +3,8 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import {
-  ORCAD_PID_FILENAME,
-  ORCAD_READINESS_FILENAME,
-  orcadLaunchCommand,
-  type OrcadLaunchSpec
-} from './orcad-remote-launch'
+import { ORCAD_PID_FILENAME, ORCAD_READINESS_FILENAME } from './orcad-remote-host-support'
+import { orcadLaunchCommand, type OrcadLaunchSpec } from './orcad-remote-launch'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 import { ORCAD_WSL_HOST_ENV } from '../ipc/wsl-guest-windows-drive-path'
 

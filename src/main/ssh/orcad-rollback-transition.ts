@@ -7,7 +7,7 @@ import { withRolledBackVersion } from './orcad-activation-record'
 import { writeOrcadActivationRecord } from './orcad-activation-record-store'
 import { launchAndJudgeOrcadSlot } from './orcad-candidate-launch-verdict'
 import { assessOrcadRollback } from './orcad-update-plan'
-import { ORCAD_LOG_FILENAME } from './orcad-remote-launch'
+import { ORCAD_LOG_FILENAME } from './orcad-remote-host-support'
 import {
   captureOrcadStateSnapshotCommand,
   newestStateMtimeCommand,

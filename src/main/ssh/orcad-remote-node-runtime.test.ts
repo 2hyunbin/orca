@@ -16,13 +16,15 @@ import { ORCAD_NODE_RUNTIME_MARKER_FILENAME } from '../../shared/orcad-artifacts
 import {
   installNodeRuntimeFromHostArchiveCommand,
   nodeRuntimeStoreDir,
-  parseRemoteRuntimeExitReport,
   probeRemoteNodeRuntimeCommand,
   promoteRemoteNodeRuntimeCommand,
-  remoteNodeRuntimeDir,
+  remoteNodeRuntimeDir
+} from './orcad-remote-node-runtime'
+import {
+  parseRemoteRuntimeExitReport,
   REMOTE_NODE_RUNTIME_MISSING,
   REMOTE_NODE_RUNTIME_READY
-} from './orcad-remote-node-runtime'
+} from './orcad-remote-node-runtime-report'
 import { orcadNodeSlotRuntimeCommand } from './orcad-remote-runtime'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 

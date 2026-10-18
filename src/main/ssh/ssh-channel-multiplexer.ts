@@ -1,14 +1,13 @@
 /* eslint-disable max-lines -- Why: the SSH relay protocol state machine keeps
    request, notification, keepalive, and cancellation semantics paired. */
+import { FrameDecoder, type DecodedFrame } from '../../shared/relay-frame-decoder'
 import {
-  FrameDecoder,
   MessageType,
   encodeJsonRpcFrame,
   encodeKeepAliveFrame,
   parseJsonRpcMessage,
   KEEPALIVE_SEND_MS,
   TIMEOUT_MS,
-  type DecodedFrame,
   type JsonRpcMessage,
   type JsonRpcRequest,
   type JsonRpcResponse,

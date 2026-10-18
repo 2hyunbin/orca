@@ -14,9 +14,9 @@ import { runProcess } from '@orca/process-host'
 import {
   ORCAD_LOG_FILENAME,
   ORCAD_PID_FILENAME,
-  ORCAD_READINESS_FILENAME,
-  orcadLaunchCommand
-} from './orcad-remote-launch'
+  ORCAD_READINESS_FILENAME
+} from './orcad-remote-host-support'
+import { orcadLaunchCommand } from './orcad-remote-launch'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 
 // The readiness file carries the pairing offer's device token: under a login umask of 022 it must

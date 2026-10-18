@@ -32,7 +32,7 @@ vi.mock('./orcad-managed-tunnel', () => ({
 }))
 
 const { forgetManagedOrcadEnvironment, stopManagedOrcadEnvironment } =
-  await import('./orcad-runtime-lifecycle')
+  await import('./orcad-runtime-decommission')
 
 let harness: ReturnType<typeof createManagedLifecycleHarness>
 

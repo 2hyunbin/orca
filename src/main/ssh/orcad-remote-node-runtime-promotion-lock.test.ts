@@ -6,10 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { OrcadHostTransport } from './orcad-host-transport'
 import {
   ensureRemoteOrcadNodeRuntime,
-  NODE_RUNTIME_PROMOTE_TIMEOUT_MS,
+  NODE_RUNTIME_PROMOTE_TIMEOUT_MS
+} from './orcad-remote-node-runtime'
+import {
   REMOTE_NODE_RUNTIME_MISSING,
   REMOTE_NODE_RUNTIME_READY
-} from './orcad-remote-node-runtime'
+} from './orcad-remote-node-runtime-report'
 import { RUNTIME_STORE_LOCK_NAME } from './remote-node-runtime-store-lock'
 import { execCommand } from './ssh-relay-exec-command'
 import { getRemoteHostPlatform } from './ssh-remote-platform'

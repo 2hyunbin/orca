@@ -56,12 +56,12 @@ vi.mock('./orcad-activation-transaction-store', () => ({
   readOrcadActivationTransaction: async () => null
 }))
 
+const { getManagedOrcadRuntimeStatus } = await import('./orcad-runtime-status')
 const {
-  getManagedOrcadRuntimeStatus,
   recoverManagedOrcadEnvironment,
   rollbackManagedOrcadEnvironment,
   updateManagedOrcadEnvironment
-} = await import('./orcad-runtime-lifecycle')
+} = await import('./orcad-runtime-maintenance')
 
 const idle = { liveSessions: 0, startedSinceActivation: 0, daemonProtocolVersion: 7 }
 let harness: ReturnType<typeof createManagedLifecycleHarness>

@@ -1,15 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
+import { HEADER_LENGTH, FrameDecoder, type DecodedFrame } from '../../shared/relay-frame-decoder'
 import {
-  HEADER_LENGTH,
   MessageType,
   encodeFrame,
   encodeJsonRpcFrame,
   encodeKeepAliveFrame,
-  FrameDecoder,
   parseJsonRpcMessage,
   parseUnameToRelayPlatform,
-  type JsonRpcRequest,
-  type DecodedFrame
+  type JsonRpcRequest
 } from './relay-protocol'
 
 describe('frame encoding', () => {

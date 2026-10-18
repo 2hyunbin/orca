@@ -6,13 +6,16 @@
  */
 import { shellEscape } from './ssh-connection-utils'
 import { isWindowsRemoteHost, joinRemotePath, type RemoteHostPlatform } from './ssh-remote-platform'
-import { ORCAD_READINESS_FILENAME } from './orcad-remote-launch'
+import {
+  ORCAD_READINESS_FILENAME,
+  ORCAD_PID_FILENAME,
+  posixProcessAliveShellFunction
+} from './orcad-remote-host-support'
 import {
   ORCAD_STOP_REQUEST_FILENAME,
   ORCAD_STOP_REQUESTS_CAPABILITY
 } from '../../shared/orcad-stop-request'
 import { selectOrcadSlotRuntimeCommand } from './orcad-remote-runtime'
-import { ORCAD_PID_FILENAME, posixProcessAliveShellFunction } from './orcad-remote-host-support'
 import { orcadWindowsSlotOpCommand } from './orcad-remote-windows-node'
 
 /**

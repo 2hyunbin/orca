@@ -8,9 +8,8 @@
  */
 import { shellEscape } from './ssh-connection-utils'
 import { isWindowsRemoteHost, joinRemotePath, type RemoteHostPlatform } from './ssh-remote-platform'
+import { ORCAD_READINESS_FILENAME, ORCAD_READINESS_MAX_BYTES } from './orcad-remote-host-support'
 import {
-  ORCAD_READINESS_FILENAME,
-  ORCAD_READINESS_MAX_BYTES,
   parseOrcadReadinessOutput,
   readOrcadReadinessCommand,
   type OrcadReadinessParse

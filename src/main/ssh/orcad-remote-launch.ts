@@ -47,14 +47,6 @@ import {
   readOrcadE2EIdleTimeoutMs
 } from '../../shared/orcad-idle-exit'
 
-export {
-  ORCAD_LOG_FILENAME,
-  ORCAD_PID_FILENAME,
-  ORCAD_READINESS_FILENAME,
-  ORCAD_READINESS_MAX_BYTES,
-  OrcadRemoteLaunchUnsupportedError
-} from './orcad-remote-host-support'
-
 export type OrcadLaunchSpec = {
   remoteInstallDir: string
   nodePath: string

@@ -49,16 +49,6 @@ import {
   windowsNodeRuntimeStageCleanupCommand
 } from './orcad-remote-node-runtime-windows'
 
-export {
-  parseRemoteRuntimeExitReport,
-  REMOTE_NODE_RUNTIME_EXIT_PREFIX,
-  REMOTE_NODE_RUNTIME_MISSING,
-  REMOTE_NODE_RUNTIME_READY,
-  REMOTE_NODE_RUNTIME_SECURITY_MODIFIED,
-  REMOTE_NODE_RUNTIME_SELFTEST_FAILED,
-  RemoteNodeRuntimeSecurityModifiedError,
-  RemoteNodeRuntimeSelfTestError
-} from './orcad-remote-node-runtime-report'
 const VERIFIED_MARKER = REMOTE_NODE_RUNTIME_VERIFIED_MARKER
 /**
  * Any step that reads the whole ~110 MiB executable (probe hash, extract, self-test) takes minutes

@@ -52,7 +52,8 @@ const {
 const { ORCAD_MACHINE_CLAIM_ARBITER_DIRNAME } = await import('./orcad-machine-claim-command')
 const { computeRemoteInstallDir } = await import('./remote-versioned-install')
 const { ORCAD_INSTALL_MODEL } = await import('./remote-install-model')
-const { orcadLivenessProbeCommand, ORCAD_PID_FILENAME } = await import('./orcad-remote-launch')
+const { orcadLivenessProbeCommand } = await import('./orcad-remote-launch')
+const { ORCAD_PID_FILENAME } = await import('./orcad-remote-host-support')
 const { execOrcadRemote } = await import('./orcad-remote-runtime-control')
 const { getRemoteHostPlatform } = await import('./ssh-remote-platform')
 type Probe = OrcadMachineHomeProbe

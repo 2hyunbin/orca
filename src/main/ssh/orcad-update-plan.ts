@@ -25,8 +25,6 @@ import {
   type OrcadDaemonProtocolFacts
 } from './orcad-daemon-protocol-crossing'
 
-export type { OrcadTerminalCensus } from '../../shared/orcad-terminal-census'
-
 export type OrcadUpdateDecision =
   | { action: 'noop'; reason: string }
   | {

@@ -13,8 +13,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { runProcess, spawnProcess } from '@orca/process-host'
 import { ORCAD_WINDOWS_PROCESS_TREE_FILENAME } from '../../shared/orcad-artifacts'
 import { ORCAD_STOP_REQUEST_FILENAME } from '../../shared/orcad-stop-request'
-import { ORCAD_WINDOWS_PROCESS_FILENAME } from './orcad-remote-host-support'
-import { ORCAD_READINESS_FILENAME } from './orcad-remote-launch'
+import {
+  ORCAD_WINDOWS_PROCESS_FILENAME,
+  ORCAD_READINESS_FILENAME
+} from './orcad-remote-host-support'
 import { parseOrcadReadinessWaitOutput } from './orcad-remote-readiness-wait'
 import { readOrcadWindowsEncodedAnswer } from './orcad-remote-windows-node'
 import {

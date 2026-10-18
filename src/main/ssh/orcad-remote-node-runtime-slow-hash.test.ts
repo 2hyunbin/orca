@@ -9,10 +9,12 @@ import type { OrcadHostTransport } from './orcad-host-transport'
 import {
   ensureRemoteOrcadNodeRuntime,
   posixNodeRuntimeExecutable,
-  REMOTE_NODE_RUNTIME_READY,
   remoteNodeRuntimeDir
 } from './orcad-remote-node-runtime'
-import { REMOTE_NODE_RUNTIME_VERIFIED_MARKER } from './orcad-remote-node-runtime-report'
+import {
+  REMOTE_NODE_RUNTIME_READY,
+  REMOTE_NODE_RUNTIME_VERIFIED_MARKER
+} from './orcad-remote-node-runtime-report'
 import { RUNTIME_STORE_LOCK_NAME, withRuntimeStoreLock } from './remote-node-runtime-store-lock'
 import { execCommand } from './ssh-relay-exec-command'
 import { uploadRelayDirectory } from './ssh-relay-install-transfers'

@@ -19,9 +19,10 @@ import {
   writeOrcadActivationRecord
 } from './orcad-activation-record-store'
 import { launchAndJudgeOrcadSlot } from './orcad-candidate-launch-verdict'
-import { planOrcadUpdate, type OrcadTerminalCensus } from './orcad-update-plan'
+import { planOrcadUpdate } from './orcad-update-plan'
+import type { OrcadTerminalCensus } from '../../shared/orcad-terminal-census'
 import { CURRENT_ORCAD_DAEMON_PROTOCOL } from './orcad-daemon-protocol-crossing'
-import { ORCAD_LOG_FILENAME } from './orcad-remote-launch'
+import { ORCAD_LOG_FILENAME } from './orcad-remote-host-support'
 import {
   captureOrcadStateSnapshotCommand,
   orcadSnapshotDirName,

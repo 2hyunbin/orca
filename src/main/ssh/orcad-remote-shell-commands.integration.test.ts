@@ -28,11 +28,10 @@ import {
   orcadLaunchCommand,
   orcadLivenessAnswerBlocksGc,
   orcadLivenessProbeCommand,
-  ORCAD_PID_FILENAME,
-  ORCAD_READINESS_FILENAME,
   parseOrcadLiveness,
   parseOrcadReadinessOutput
 } from './orcad-remote-launch'
+import { ORCAD_PID_FILENAME, ORCAD_READINESS_FILENAME } from './orcad-remote-host-support'
 import {
   orcadStopFreedTheHost,
   parseOrcadStopOutcome,

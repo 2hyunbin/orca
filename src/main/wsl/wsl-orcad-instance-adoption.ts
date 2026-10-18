@@ -22,7 +22,7 @@ import {
   resolveOrcadSlotIdentity,
   type OrcadSlotOptions
 } from '../ssh/orcad-recovery-slot'
-import { ORCAD_PID_FILENAME } from '../ssh/orcad-remote-launch'
+import { ORCAD_PID_FILENAME } from '../ssh/orcad-remote-host-support'
 import {
   parseOrcadReadinessWaitOutput,
   readOrcadReadinessNowCommand

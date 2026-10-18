@@ -14,7 +14,7 @@ import { computeRemoteInstallDir, readLocalFullVersion } from './remote-versione
 import { readOrcadActivationRecord } from './orcad-activation-record-store'
 import type { OrcadActivationRecord } from './orcad-activation-record'
 import type { OrcadActivationVerdict } from './orcad-activation-gate'
-import type { OrcadTerminalCensus } from './orcad-update-plan'
+import type { OrcadTerminalCensus } from '../../shared/orcad-terminal-census'
 import type { RemoteHostPlatform } from './ssh-remote-platform'
 import { installOrcadBundle } from './orcad-remote-install'
 import { getAppEnvironment } from '../../shared/app-environment'
