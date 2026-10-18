@@ -3,6 +3,7 @@ import { closeStartupQueryAuthorityForPty } from '../provider/registry'
 import { createTerminalSessionStateSaveFailureMessage } from '../../../../shared/terminal-session-state-save-failure'
 import { recordCodexPaneAccountForSpawn } from '../host-env/codex-home'
 import { persistAdmittedStablePaneBinding } from '../pane/stable-owner'
+import { persistPaneBinding } from '../pane/pane-binding-partition'
 import { swapReplacedPaneBinding } from '../pane/pane-owner-replacement'
 import {
   pendingByPaneKey,
@@ -25,6 +26,7 @@ export async function persistPtyIpcSpawnCommit(ctx: PtyIpcSpawnState): Promise<P
       owner: ctx.stablePaneOwner,
       result: ctx.result,
       worktreeId: args.worktreeId,
+      connectionId: args.connectionId,
       startupCwd: ctx.cwd
     })
   } catch (error) {
@@ -64,7 +66,7 @@ export async function persistPtyIpcSpawnCommit(ctx: PtyIpcSpawnState): Promise<P
       const input = ctx.replacedPaneOwner
         ? swapReplacedPaneBinding(ctx.deps.store, binding, ctx.replacedPaneOwner)
         : binding
-      const persisted = await ctx.deps.store.persistPtyBinding(input)
+      const persisted = await persistPaneBinding(ctx.deps.store, input, args.connectionId)
       if (persisted === false) {
         throw new Error('terminal_pane_owner_changed')
       }
