@@ -354,7 +354,7 @@ describe('orcad-e2e-routing', () => {
   it('routes the auto-convert spec from its conversion sources and harness', () => {
     expectRouted(
       [
-        'src/main/ssh/orcad-runtime-conversion.ts',
+        'src/main/managed-server/lifecycle/orcad-runtime-conversion.ts',
         'tests/e2e/helpers/orcad-convert-flow.ts',
         'tests/e2e/helpers/orcad-convert-host.ts',
         'tests/e2e/helpers/orcad-template-variant.ts',
@@ -362,9 +362,9 @@ describe('orcad-e2e-routing', () => {
       ],
       ORCAD_AUTO_CONVERT_E2E_SPEC
     )
-    expect(selectPrE2eSpecs(['src/main/ssh/orcad-runtime-conversion.test.ts'])).not.toContain(
-      ORCAD_AUTO_CONVERT_E2E_SPEC
-    )
+    expect(
+      selectPrE2eSpecs(['src/main/managed-server/lifecycle/orcad-runtime-conversion.test.ts'])
+    ).not.toContain(ORCAD_AUTO_CONVERT_E2E_SPEC)
   })
 
   it('routes the idle-exit spec from its idle sources and the shared convert harness', () => {
@@ -372,7 +372,7 @@ describe('orcad-e2e-routing', () => {
       [
         'src/shared/orcad-idle-exit.ts',
         'src/main/managed-server/install/orcad-remote-runtime-control.ts',
-        'src/main/ssh/orcad-managed-serving.ts',
+        'src/main/managed-server/lifecycle/orcad-managed-serving.ts',
         'tests/e2e/helpers/orcad-convert-flow.ts',
         'tests/e2e/helpers/orcad-convert-host.ts'
       ],

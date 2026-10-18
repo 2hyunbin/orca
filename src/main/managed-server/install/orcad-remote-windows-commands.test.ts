@@ -26,7 +26,7 @@ import {
 } from './orcad-remote-record-file'
 import { launchOrcadAndAwaitReadiness } from './orcad-remote-runtime-control'
 import { probeActiveOrcadReadiness } from '../../ssh/orcad-active-readiness'
-import { completeRemoteOrcadManagedStop } from '../../ssh/orcad-managed-remote-stop'
+import { completeRemoteOrcadManagedStop } from '../lifecycle/orcad-managed-remote-stop'
 import {
   installOrcadWindowsHostScript,
   orcadWindowsNodeCommandLine,

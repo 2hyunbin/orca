@@ -10,6 +10,6 @@ src/main/ipc/ssh-host-server-on-connect-wiring.ts
 src/main/ipc/ssh-session-teardown.ts
 src/main/ipc/ssh.ts
 src/main/ssh/orcad-migration-terminal-gate-host-wide.test.ts
-src/main/ssh/orcad-runtime-conversion-wiring.ts
+src/main/managed-server/lifecycle/orcad-runtime-conversion-wiring.ts
 tests/e2e/cross-version-wire/legacy-relay-bridge.unit.test.ts
 tests/e2e/helpers/legacy-relay-docker-host.ts

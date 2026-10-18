@@ -16,7 +16,7 @@ vi.mock('../ssh/orcad-runtime-maintenance', () => ({
   rollbackManagedOrcadEnvironment: mocks.rollback,
   recoverManagedOrcadEnvironment: mocks.recover
 }))
-vi.mock('../ssh/orcad-runtime-decommission', () => ({
+vi.mock('../managed-server/lifecycle/orcad-runtime-decommission', () => ({
   stopManagedOrcadEnvironment: mocks.stop,
   cancelManagedOrcadStop: mocks.cancel
 }))

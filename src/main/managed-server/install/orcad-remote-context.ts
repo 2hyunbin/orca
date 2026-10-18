@@ -3,7 +3,7 @@ import type { NodeRuntimeTarget } from '../../../shared/node-runtime-pin'
 import type { SshTarget } from '../../../shared/ssh-types'
 import type { OrcadActivationRecord } from '../activation/orcad-activation-record'
 import { readOrcadActivationRecord } from '../activation/orcad-activation-record-store'
-import { resolveOrcadRuntimeTarget } from '../../ssh/orcad-runtime-target'
+import { resolveOrcadRuntimeTarget } from '../lifecycle/orcad-runtime-target'
 import { prepareWindowsOrcadHost } from '../../ssh/orcad-windows-host-preparation'
 import {
   isWslOrcadHostTarget,

@@ -14,7 +14,7 @@ vi.mock('../ssh/ssh-channel-multiplexer', () => mocks.sshChannelMultiplexer)
 vi.mock('../ssh/port-forwarding/ssh-port-forward', () => mocks.sshPortForward)
 vi.mock('../ssh/ssh-port-scanner', () => mocks.sshPortScanner)
 const { shutdownTunnelsMock } = vi.hoisted(() => ({ shutdownTunnelsMock: vi.fn() }))
-vi.mock('../ssh/orcad-managed-tunnel', async (importOriginal) => ({
+vi.mock('../managed-server/lifecycle/orcad-managed-tunnel', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   shutdownOrcadManagedTunnels: shutdownTunnelsMock
 }))

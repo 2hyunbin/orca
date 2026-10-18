@@ -17,7 +17,7 @@ vi.mock('../../shared/app-environment', () => ({
 vi.mock('../../shared/runtime-environment-store', () => ({
   listEnvironments: () => mocks.environments.current.map((id) => ({ id }))
 }))
-vi.mock('../ssh/orcad-managed-launch-session', () => ({
+vi.mock('../managed-server/lifecycle/orcad-managed-launch-session', () => ({
   readManagedOrcadLaunchSshSession: mocks.read
 }))
 vi.mock('../ssh/ssh-host-platform-memo', () => ({

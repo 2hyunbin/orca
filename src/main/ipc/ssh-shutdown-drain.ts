@@ -4,7 +4,7 @@ import {
   testConnectionProbes
 } from './ssh-connect-attempt-registry'
 import { connectionManager, portForwardManager } from './ssh-ipc-context'
-import { shutdownOrcadManagedTunnels } from '../ssh/orcad-managed-tunnel'
+import { shutdownOrcadManagedTunnels } from '../managed-server/lifecycle/orcad-managed-tunnel'
 
 // Why one budget for the whole sequence rather than one per phase: an invalidated connect only
 // observes its cancellation at the next checkpoint, and one blocked in the transport handshake can

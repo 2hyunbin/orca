@@ -19,7 +19,7 @@ vi.mock('electron', () => ({ ipcMain: { handle: mocks.handle } }))
 vi.mock('../../shared/runtime-environment-store', () => ({
   listEnvironments: () => [{ id: 'env-1' }]
 }))
-vi.mock('../ssh/orcad-managed-runtime-context', () => ({
+vi.mock('../managed-server/lifecycle/orcad-managed-runtime-context', () => ({
   requireManagedOrcadInfrastructure: () => ({
     claims: {},
     targetStore: { getOrcadMigrationSource: () => ({ getSshTarget: () => mocks.target }) }
@@ -29,10 +29,10 @@ vi.mock('../ssh/orcad-migration-delta-move', () => ({
   runOrcadDeltaMove: mocks.move,
   keepOrcadServerVersion: mocks.keep
 }))
-vi.mock('../ssh/orcad-runtime-conversion-wiring', () => ({
+vi.mock('../managed-server/lifecycle/orcad-runtime-conversion-wiring', () => ({
   orcadMigrationDestinationFor: () => ({})
 }))
-vi.mock('../ssh/orcad-managed-tunnel', () => ({
+vi.mock('../managed-server/lifecycle/orcad-managed-tunnel', () => ({
   ensureOrcadManagedTunnel: vi.fn()
 }))
 vi.mock('./ssh-session-teardown', () => ({

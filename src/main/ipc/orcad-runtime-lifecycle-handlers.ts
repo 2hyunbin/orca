@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
 import type { OrcadManagedRuntimeStatus } from '../../shared/orcad-managed-runtime'
-import { createManagedOrcadEnvironment } from '../ssh/orcad-runtime-deployment'
-import { getManagedOrcadRuntimeStatus } from '../ssh/orcad-runtime-status'
+import { createManagedOrcadEnvironment } from '../managed-server/lifecycle/orcad-runtime-deployment'
+import { getManagedOrcadRuntimeStatus } from '../managed-server/lifecycle/orcad-runtime-status'
 import { registerOrcadSshProvisioningHandlers } from './orcad-ssh-provisioning-handlers'
 
 export function registerOrcadRuntimeLifecycleHandlers(options: {

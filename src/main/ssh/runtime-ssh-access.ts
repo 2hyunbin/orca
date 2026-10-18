@@ -18,12 +18,12 @@ import {
 import { getManagedOrcadFenceEnvironmentId } from '../../shared/managed-orcad-ssh-owner'
 import type { SshTarget } from '../../shared/ssh-types'
 import { runTargetLifecycle } from '../ipc/ssh-target-lifecycle-queue'
-import { requireManagedOrcadInfrastructure } from './orcad-managed-runtime-context'
+import { requireManagedOrcadInfrastructure } from '../managed-server/lifecycle/orcad-managed-runtime-context'
 import {
   closeOrcadManagedTunnel,
   ensureOrcadManagedTunnel,
   startOrcadManagedTunnel
-} from './orcad-managed-tunnel'
+} from '../managed-server/lifecycle/orcad-managed-tunnel'
 import { verifyRuntimeEnvironmentSshTunnel } from './runtime-ssh-access-verification'
 
 type TargetClaims = ReturnType<typeof requireManagedOrcadInfrastructure>['claims']

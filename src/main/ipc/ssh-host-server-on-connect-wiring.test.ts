@@ -25,11 +25,15 @@ vi.mock('../../shared/app-environment', () => ({
 vi.mock('../ssh/ssh-target-registry', () => ({
   getSshTargetRegistryStore: () => mocks.registry.current
 }))
-vi.mock('../ssh/orcad-runtime-deployment', () => ({ createManagedOrcadEnvironment: mocks.deploy }))
-vi.mock('../ssh/orcad-runtime-conversion', () => ({
+vi.mock('../managed-server/lifecycle/orcad-runtime-deployment', () => ({
+  createManagedOrcadEnvironment: mocks.deploy
+}))
+vi.mock('../managed-server/lifecycle/orcad-runtime-conversion', () => ({
   convertSshTargetToManagedOrcad: mocks.convert
 }))
-vi.mock('../ssh/orcad-managed-tunnel', () => ({ ensureOrcadManagedTunnel: mocks.tunnel }))
+vi.mock('../managed-server/lifecycle/orcad-managed-tunnel', () => ({
+  ensureOrcadManagedTunnel: mocks.tunnel
+}))
 vi.mock('../orcad/orcad-artifact-materializer', () => ({ hasOrcadTemplate: () => true }))
 vi.mock('./ssh-renderer-broadcast', () => ({ broadcastSshState: mocks.broadcast }))
 vi.mock('./ssh-ipc-context', () => ({ getCurrentMainWindow: () => null }))

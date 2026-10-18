@@ -30,7 +30,7 @@ import { rendererResolveRemoteCliWorkspace } from '../browser/desktop-browser-br
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { RpcDispatcher } from '../runtime/rpc/dispatcher'
 import { ALL_RPC_METHODS } from '../runtime/rpc/methods'
-import { ensureOrcadManagedTunnel } from '../ssh/orcad-managed-tunnel'
+import { ensureOrcadManagedTunnel } from '../managed-server/lifecycle/orcad-managed-tunnel'
 import { getSshTargetRegistryStore } from '../ssh/ssh-target-registry'
 import type { SshConnectionManager } from '../ssh/ssh-connection-manager'
 import { getRuntimeEnvironmentStatus } from './runtime-environment-status-probe'

@@ -38,10 +38,15 @@ vi.mock('./ssh-target-registry', () => ({
   getSshConnectionManager: () => ({}),
   getSshTargetRegistryStore: () => mocks.state.targetStore
 }))
-vi.mock('./orcad-runtime-deployment', () => ({ createManagedOrcadEnvironment: mocks.deploy }))
-vi.mock('./orcad-managed-tunnel', () => ({ ensureOrcadManagedTunnel: mocks.ensureTunnel }))
+vi.mock('../managed-server/lifecycle/orcad-runtime-deployment', () => ({
+  createManagedOrcadEnvironment: mocks.deploy
+}))
+vi.mock('../managed-server/lifecycle/orcad-managed-tunnel', () => ({
+  ensureOrcadManagedTunnel: mocks.ensureTunnel
+}))
 
-const { convertSshTargetToManagedOrcad } = await import('./orcad-runtime-conversion')
+const { convertSshTargetToManagedOrcad } =
+  await import('../managed-server/lifecycle/orcad-runtime-conversion')
 
 const TARGET: SshTarget = {
   id: 'ssh-prod',

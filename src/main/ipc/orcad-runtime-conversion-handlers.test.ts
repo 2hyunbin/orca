@@ -7,13 +7,13 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('electron', () => ({ ipcMain: { handle: mocks.handle } }))
-vi.mock('../ssh/orcad-runtime-conversion', () => ({
+vi.mock('../managed-server/lifecycle/orcad-runtime-conversion', () => ({
   convertSshTargetToManagedOrcad: mocks.convert
 }))
-vi.mock('../ssh/orcad-managed-migration-status', () => ({
+vi.mock('../managed-server/lifecycle/orcad-managed-migration-status', () => ({
   listPendingManagedOrcadMigrations: mocks.pending
 }))
-vi.mock('../ssh/orcad-runtime-conversion-wiring', () => ({
+vi.mock('../managed-server/lifecycle/orcad-runtime-conversion-wiring', () => ({
   conversionCollaborators: () => ({ marker: 'live-collaborators' })
 }))
 

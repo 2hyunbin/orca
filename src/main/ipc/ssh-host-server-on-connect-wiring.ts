@@ -10,21 +10,21 @@ import { abandonOrcadConversion } from '../ssh/orcad-conversion-abandon'
 import { retainOrcadMigrationSource } from '../ssh/orcad-migration-source-retention'
 import { hasOrcadTemplate } from '../orcad/orcad-artifact-materializer'
 import { managedServerUpdateDeps } from '../ssh/managed-server-update-deps'
-import { ensureOrcadManagedTunnel } from '../ssh/orcad-managed-tunnel'
-import { verifyOrcadManagedServing } from '../ssh/orcad-managed-serving-verify'
-import { convertSshTargetToManagedOrcad } from '../ssh/orcad-runtime-conversion'
+import { ensureOrcadManagedTunnel } from '../managed-server/lifecycle/orcad-managed-tunnel'
+import { verifyOrcadManagedServing } from '../managed-server/lifecycle/orcad-managed-serving-verify'
+import { convertSshTargetToManagedOrcad } from '../managed-server/lifecycle/orcad-runtime-conversion'
 import {
   orcadMigrationDestinationFor,
   orcadServerFolderCatalogFor,
   orcadServerRepositoriesFor
-} from '../ssh/orcad-runtime-conversion-wiring'
-import { createManagedOrcadEnvironment } from '../ssh/orcad-runtime-deployment'
+} from '../managed-server/lifecycle/orcad-runtime-conversion-wiring'
+import { createManagedOrcadEnvironment } from '../managed-server/lifecycle/orcad-runtime-deployment'
 import type { HostServerOnConnectDeps } from '../ssh/ssh-host-server-on-connect'
 import {
   censusSshHostRelaysBeforeSession,
   relayTerminalsOnConnect
 } from '../ssh/legacy-relay/ssh-host-relay-terminals-on-connect'
-import { requireManagedOrcadInfrastructure } from '../ssh/orcad-managed-runtime-context'
+import { requireManagedOrcadInfrastructure } from '../managed-server/lifecycle/orcad-managed-runtime-context'
 import { censusHostRelayTerminalsFor } from '../ssh/legacy-relay/ssh-host-relay-census-for-target'
 import { setSshHostServerStatus } from '../ssh/ssh-host-server-status'
 import { trackSshHostServerEvent } from '../ssh/ssh-host-server-telemetry'

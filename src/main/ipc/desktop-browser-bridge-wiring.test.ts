@@ -10,7 +10,9 @@ vi.mock('electron', () => ({ webContents: { fromId: () => null } }))
 vi.mock('../browser/browser-manager', () => ({ browserManager: {} }))
 vi.mock('../runtime/rpc/methods', () => ({ ALL_RPC_METHODS: [] }))
 vi.mock('./ssh-ipc-context', () => ({ persistedStore: null }))
-vi.mock('../ssh/orcad-managed-tunnel', () => ({ ensureOrcadManagedTunnel: vi.fn() }))
+vi.mock('../managed-server/lifecycle/orcad-managed-tunnel', () => ({
+  ensureOrcadManagedTunnel: vi.fn()
+}))
 vi.mock('../ssh/ssh-target-registry', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   getSshTargetRegistryStore: () => ({ listTargets: () => targets })

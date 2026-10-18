@@ -3,8 +3,8 @@ import {
   cancelManagedOrcadStop,
   forgetManagedOrcadEnvironment,
   stopManagedOrcadEnvironment
-} from '../ssh/orcad-runtime-decommission'
-import { getManagedOrcadRuntimeStatus } from '../ssh/orcad-runtime-status'
+} from '../managed-server/lifecycle/orcad-runtime-decommission'
+import { getManagedOrcadRuntimeStatus } from '../managed-server/lifecycle/orcad-runtime-status'
 import {
   recoverManagedOrcadEnvironment,
   rollbackManagedOrcadEnvironment,
@@ -13,7 +13,7 @@ import {
 import { getOrcadSshDeployment } from '../../shared/runtime-environments'
 import { resolveEnvironment } from '../../shared/runtime-environment-store'
 import type { OrcadManagedRestartResult } from '../../shared/orcad-managed-runtime'
-import { restartManagedOrcadEnvironment } from '../ssh/orcad-managed-launch-session'
+import { restartManagedOrcadEnvironment } from '../managed-server/lifecycle/orcad-managed-launch-session'
 import { clearLaunchSessionNote } from './runtime-environment-managed-tunnel'
 import { forgetLaunchSessionVerdict } from './ssh-host-launch-session-note'
 import type { ManagedServerActions } from '../runtime/managed-server-actions-registry'

@@ -26,7 +26,9 @@ vi.mock('../ssh/ssh-target-registry', () => ({
   setSshTargetMutations: mocks.setMutations
 }))
 vi.mock('./ssh-session-teardown', () => ({ removeRegisteredSshTarget: mocks.remove }))
-vi.mock('../ssh/orcad-managed-tunnel', () => ({ closeOrcadManagedTunnel: mocks.closeTunnel }))
+vi.mock('../managed-server/lifecycle/orcad-managed-tunnel', () => ({
+  closeOrcadManagedTunnel: mocks.closeTunnel
+}))
 vi.mock('./ssh-ipc-context', () => ({
   getCurrentMainWindow: () => null,
   connectionManager: { disconnect: mocks.disconnect }

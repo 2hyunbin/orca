@@ -1,5 +1,5 @@
 import type * as ExecCommandModule from '../../ssh/remote-exec-command'
-import type * as TerminalBarrier from '../../ssh/orcad-rollback-terminal-barrier'
+import type * as TerminalBarrier from '../lifecycle/orcad-rollback-terminal-barrier'
 /**
  * The deploy and rollback drivers end to end against a Windows host whose every host op is answered by a
  * fake: no POSIX command, no `-EncodedCommand` and no PowerShell hop on the orcad path.
@@ -24,7 +24,7 @@ vi.mock('./orcad-remote-record-file', async (importOriginal) => ({
   writeAtomicOrcadRemoteRecord: vi.fn().mockResolvedValue(undefined)
 }))
 // The managed stop's Windows commands are covered by orcad-remote-windows-decommission.test.ts.
-vi.mock('../../ssh/orcad-rollback-terminal-barrier', async (importOriginal) => ({
+vi.mock('../lifecycle/orcad-rollback-terminal-barrier', async (importOriginal) => ({
   ...(await importOriginal<typeof TerminalBarrier>()),
   readOrcadRollbackBarrierTarget: async (_options: unknown, version: string) => ({
     state: 'ready',

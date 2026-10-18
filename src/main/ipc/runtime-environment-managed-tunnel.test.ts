@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type * as ServingModule from '../ssh/orcad-managed-serving'
-import type { ManagedOrcadStartListener } from '../ssh/orcad-managed-serving'
+import type * as ServingModule from '../managed-server/lifecycle/orcad-managed-serving'
+import type { ManagedOrcadStartListener } from '../managed-server/lifecycle/orcad-managed-serving'
 import type { SshTarget } from '../../shared/ssh-types'
 
 const mocks = vi.hoisted(() => {
@@ -38,14 +38,14 @@ vi.mock('../wsl/wsl-host-service-instance', () => ({
     mocks.hasWslService ? { ensureForRuntimeCall: mocks.ensureForRuntimeCall } : null
 }))
 vi.mock('../ssh/managed-server-update-deps', () => ({ managedServerUpdateDeps: () => ({}) }))
-vi.mock('../ssh/orcad-managed-tunnel', () => ({
+vi.mock('../managed-server/lifecycle/orcad-managed-tunnel', () => ({
   ensureOrcadManagedTunnel: mocks.ensureTunnel,
   rebuildOrcadManagedTunnel: mocks.rebuildTunnel
 }))
-vi.mock('../ssh/orcad-managed-serving-verify', () => ({
+vi.mock('../managed-server/lifecycle/orcad-managed-serving-verify', () => ({
   verifyOrcadManagedServing: mocks.verify
 }))
-vi.mock('../ssh/orcad-managed-update-on-restore', () => ({
+vi.mock('../managed-server/lifecycle/orcad-managed-update-on-restore', () => ({
   updateManagedOrcadOnRestore: mocks.restoreUpdate,
   redeployStoppedManagedOrcad: mocks.redeploy
 }))
@@ -56,14 +56,14 @@ vi.mock('./ssh-renderer-broadcast', () => ({ broadcastSshState: vi.fn() }))
 vi.mock('./ssh-host-launch-session-note', () => ({
   forgetLaunchSessionVerdict: mocks.forgetVerdict
 }))
-vi.mock('../ssh/orcad-managed-serving', async (importOriginal) => ({
+vi.mock('../managed-server/lifecycle/orcad-managed-serving', async (importOriginal) => ({
   ...(await importOriginal<typeof ServingModule>()),
   setManagedOrcadStartListener: (listener: ManagedOrcadStartListener | null) => {
     mocks.startListener.current = listener
   }
 }))
 
-import { MANAGED_ORCAD_NOT_ACTIVATED_DETAIL } from '../ssh/orcad-managed-serving'
+import { MANAGED_ORCAD_NOT_ACTIVATED_DETAIL } from '../managed-server/lifecycle/orcad-managed-serving'
 import {
   installManagedOrcadStartStatus,
   resolveManagedRuntimeEnvironment

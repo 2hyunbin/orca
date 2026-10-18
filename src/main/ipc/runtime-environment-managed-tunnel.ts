@@ -10,17 +10,20 @@ import type {
   SshTarget
 } from '../../shared/ssh-types'
 import { managedServerUpdateDeps } from '../ssh/managed-server-update-deps'
-import { ensureOrcadManagedTunnel, rebuildOrcadManagedTunnel } from '../ssh/orcad-managed-tunnel'
-import { verifyOrcadManagedServing } from '../ssh/orcad-managed-serving-verify'
+import {
+  ensureOrcadManagedTunnel,
+  rebuildOrcadManagedTunnel
+} from '../managed-server/lifecycle/orcad-managed-tunnel'
+import { verifyOrcadManagedServing } from '../managed-server/lifecycle/orcad-managed-serving-verify'
 import {
   MANAGED_ORCAD_NOT_ACTIVATED_DETAIL,
   setManagedOrcadStartListener,
   type OrcadManagedServing
-} from '../ssh/orcad-managed-serving'
+} from '../managed-server/lifecycle/orcad-managed-serving'
 import {
   redeployStoppedManagedOrcad,
   updateManagedOrcadOnRestore
-} from '../ssh/orcad-managed-update-on-restore'
+} from '../managed-server/lifecycle/orcad-managed-update-on-restore'
 import { getSshHostServerStatus, setSshHostServerStatus } from '../ssh/ssh-host-server-status'
 import { getSshTargetRegistryStore } from '../ssh/ssh-target-registry'
 import { connectionManager, getCurrentMainWindow } from './ssh-ipc-context'
