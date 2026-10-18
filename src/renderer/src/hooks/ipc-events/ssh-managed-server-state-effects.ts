@@ -255,8 +255,12 @@ function serverCopyOfWorkspace(
     return null
   }
   const path = normalizeRuntimePathForComparison(source.worktreePath)
+  // Why detected too: a checkout the server's visibility settings hide still exists there.
   return (
-    (state.worktreesByRepo[serverRepoId] ?? []).find(
+    [
+      ...(state.worktreesByRepo[serverRepoId] ?? []),
+      ...(state.detectedWorktreesByRepo[serverRepoId]?.worktrees ?? [])
+    ].find(
       (worktree) =>
         worktree.hostId === runtimeHostId &&
         normalizeRuntimePathForComparison(worktree.path) === path
@@ -284,9 +288,19 @@ function rehomeActiveWorkspace(
     linkedRepoIds
   )
   if (serverWorktreeId) {
-    state.setActiveWorktree(serverWorktreeId, runtimeHostId)
+    // Why a transition: it makes the active repo follow the row, which a linked project renames.
+    state.setActiveWorktree(serverWorktreeId, runtimeHostId, {
+      stateTransition: () => ({ patch: {}, activate: true })
+    })
   } else if (state.startupWorktreeRefreshCompleted) {
     // Every server row is in and none is this one; the SSH owner it names is retired.
-    state.setActiveWorktree(null)
+    state.setActiveWorktree(null, undefined, {
+      stateTransition: (current) => ({
+        patch: current.repos.some((repo) => repo.id === current.activeRepoId)
+          ? {}
+          : { activeRepoId: null },
+        activate: true
+      })
+    })
   }
 }
