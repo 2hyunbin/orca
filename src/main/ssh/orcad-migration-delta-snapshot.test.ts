@@ -16,7 +16,7 @@ import { fakeOrcadMigrationDestination } from './orcad-migration-destination-fak
 import { runOrcadDeltaMove } from './orcad-migration-delta-move'
 import { reconcileManagedOrcadSshTargets } from './orcad-retained-source'
 import { SshConnectionStore } from './ssh-connection-store'
-import { runTargetLifecycle } from '../ipc/ssh-target-lifecycle-queue'
+import { runTargetLifecycle } from '../ipc/ssh/ssh-target-lifecycle-queue'
 
 const mocks = vi.hoisted(() => {
   const state: { targetStore: unknown } = { targetStore: null }

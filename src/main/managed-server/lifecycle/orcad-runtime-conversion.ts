@@ -17,7 +17,7 @@ import {
   redactRuntimeEnvironment,
   type KnownRuntimeEnvironment
 } from '../../../shared/runtime-environments'
-import { runTargetLifecycle } from '../../ipc/ssh-target-lifecycle-queue'
+import { runTargetLifecycle } from '../../ipc/ssh/ssh-target-lifecycle-queue'
 import { environmentMatchesManagedOrcadCutover } from './orcad-managed-migration-status'
 import { requireManagedOrcadInfrastructure } from './orcad-managed-runtime-context'
 import { ensureOrcadManagedTunnel } from './orcad-managed-tunnel'

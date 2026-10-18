@@ -4,7 +4,7 @@ import {
   getPreferredPairingOffer,
   type KnownRuntimeEnvironment
 } from '../../../shared/runtime-environments'
-import { disconnectRegisteredSshTarget } from '../../ipc/ssh-session-teardown'
+import { disconnectRegisteredSshTarget } from '../../ipc/ssh/ssh-session-teardown'
 import type { OrcadMigrationDestinationCatalog } from '../../ssh/orcad-migration-cutover-coordinator'
 import {
   abortRemoteOrcadMigrationCatalog,

@@ -9,7 +9,7 @@ const { targets } = vi.hoisted(() => {
 vi.mock('electron', () => ({ webContents: { fromId: () => null } }))
 vi.mock('../browser/browser-manager', () => ({ browserManager: {} }))
 vi.mock('../runtime/rpc/methods', () => ({ ALL_RPC_METHODS: [] }))
-vi.mock('./ssh-ipc-context', () => ({ persistedStore: null }))
+vi.mock('./ssh/ssh-ipc-context', () => ({ persistedStore: null }))
 vi.mock('../managed-server/lifecycle/orcad-managed-tunnel', () => ({
   ensureOrcadManagedTunnel: vi.fn()
 }))
@@ -21,7 +21,7 @@ vi.mock('../../shared/managed-orcad-ssh-owner', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   getManagedOrcadFenceEnvironmentId: (target: SshTarget) => `env-${target.id}`
 }))
-vi.mock('./runtime-environment-connectivity-handlers', () => ({
+vi.mock('./runtime-environments/runtime-environment-connectivity-handlers', () => ({
   isRuntimeEnvironmentManuallyDisconnected: () => false
 }))
 vi.mock('../../shared/runtime-environment-store', async (importOriginal) => ({

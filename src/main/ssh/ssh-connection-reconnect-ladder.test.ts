@@ -121,7 +121,7 @@ describe('SshConnection', () => {
       expect(
         published.filter((e) => e.status === 'reconnecting').map((e) => e.reconnectAttempt)
       ).toEqual([0, 1, 2])
-      // src/main/ipc/ssh.ts gates the relay redeploy on reconnectAttempt === 0 at 'connected'.
+      // src/main/ipc/ssh/ssh.ts gates the relay redeploy on reconnectAttempt === 0 at 'connected'.
       expect(
         published.filter((e) => e.status === 'connected').map((e) => e.reconnectAttempt)
       ).toEqual([0, 0, 0, 0])

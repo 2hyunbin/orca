@@ -18,7 +18,7 @@ import {
   type OrcadManagedDeployResult
 } from '../../../shared/orcad-managed-runtime'
 import { getManagedOrcadFenceEnvironmentId } from '../../../shared/managed-orcad-ssh-owner'
-import { runTargetLifecycle } from '../../ipc/ssh-target-lifecycle-queue'
+import { runTargetLifecycle } from '../../ipc/ssh/ssh-target-lifecycle-queue'
 import { materializeOrcadArtifact } from '../../orcad/orcad-artifact-materializer'
 import {
   closeOrcadManagedTunnel,

@@ -51,7 +51,7 @@ vi.mock('../managed-server/lifecycle/orcad-managed-tunnel', () => ({
 const { convertSshTargetToManagedOrcad } =
   await import('../managed-server/lifecycle/orcad-runtime-conversion')
 const { runOrcadDeltaMove } = await import('./orcad-migration-delta-move')
-const { runTargetLifecycle } = await import('../ipc/ssh-target-lifecycle-queue')
+const { runTargetLifecycle } = await import('../ipc/ssh/ssh-target-lifecycle-queue')
 
 const TARGET: SshTarget = {
   id: 'ssh-shared',

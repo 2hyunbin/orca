@@ -41,7 +41,7 @@ on:
       - 'config/scripts/windows-process-tree-prepared-addon*.mjs'
       - 'config/scripts/windows-process-tree-gyp-rebuild.mjs'
       - 'src/shared/windows-breakaway-launch*.ts'
-      - 'src/main/ipc/ssh-host-server-*.ts'
+      - 'src/main/ipc/ssh/ssh-host-server-*.ts'
       # The deploy runs over this SSH transport.
       - 'src/main/ssh/ssh-connection*'
       - '!src/**/*.test.ts'
