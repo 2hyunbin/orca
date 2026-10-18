@@ -24,6 +24,10 @@ describe('watchBatchFlushDelayMs', () => {
     expect(watchBatchFlushDelayMs(1_090, 1_000)).toBe(WATCH_BATCH_LEADING_MS)
   })
 
+  it('never waits longer than one interval when the clock moves backwards', () => {
+    expect(watchBatchFlushDelayMs(1_000, 3_600_000)).toBe(WATCH_BATCH_INTERVAL_MS)
+  })
+
   it('honours custom windows', () => {
     expect(watchBatchFlushDelayMs(1_000, 950, 5, 200)).toBe(150)
   })

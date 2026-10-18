@@ -175,7 +175,7 @@ describe('WSL watcher stale-refresh reproduction', () => {
       worktreePath: driveRoot,
       events: [{ kind: 'delete', absolutePath: 'C:\\workspace\\repo\\file.ts' }]
     })
-    vi.advanceTimersByTime(100)
+    vi.advanceTimersByTime(200)
     expect(setExternalMutation).toHaveBeenCalledWith(mountedPath, 'deleted')
 
     handleFsChanged({

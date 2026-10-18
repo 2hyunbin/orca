@@ -5,7 +5,9 @@
 // busy worktree waited for the max-wait cap on every batch. Instead the first
 // change after a quiet period flushes after a short coalescing tick, and a
 // sustained stream flushes on a fixed cadence.
-export const WATCH_BATCH_LEADING_MS = 25
+// Why 75: the native watcher sends a burst's first event alone and the rest
+// ~50ms later; a shorter window splits atomic saves (tmp create + rename).
+export const WATCH_BATCH_LEADING_MS = 75
 export const WATCH_BATCH_INTERVAL_MS = 100
 
 /** Delay before flushing a batch armed at `now`; `lastFlushAt` is 0 before the first flush. */
@@ -15,5 +17,6 @@ export function watchBatchFlushDelayMs(
   leadingMs: number = WATCH_BATCH_LEADING_MS,
   intervalMs: number = WATCH_BATCH_INTERVAL_MS
 ): number {
-  return Math.max(leadingMs, lastFlushAt + intervalMs - now)
+  // Why cap at intervalMs: a backwards wall-clock jump must not stall delivery.
+  return Math.min(intervalMs, Math.max(leadingMs, lastFlushAt + intervalMs - now))
 }
