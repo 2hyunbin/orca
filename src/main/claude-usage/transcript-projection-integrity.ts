@@ -43,6 +43,7 @@ export function* iterateClaudeUsageProjectionIntegrity(
     file.physicalFileId ?? null,
     file.ctimeMs ?? null,
     file.hasDeferredClaims,
+    file.projectionVersion ?? null,
     state.parsedBytes,
     state.lineCount,
     state.boundaryDigest,
