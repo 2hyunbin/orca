@@ -103,6 +103,13 @@ export type AgentStatusSlice = {
     metadata?: AgentProviderSessionRecordMetadata
   ) => void
 
+  /** Point a pane's live row at the session its relaunch resumed; false when no such row. */
+  adoptLaunchedAgentProviderSession: (
+    paneKey: string,
+    agentType: string | undefined,
+    providerSession: AgentProviderSessionMetadata
+  ) => boolean
+
   registerAgentLaunchConfig: (
     paneKey: string,
     launchConfig: SleepingAgentLaunchConfig,

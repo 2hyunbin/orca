@@ -14,8 +14,11 @@ import {
   findMovableAgentSessions,
   findQueuedAccountRestartsOnAccount
 } from './agent-account-switch-discovery'
+import { createAgentStatusEventApplicator } from '@/hooks/ipc-events/agent-status-event-applicator'
 import {
+  paneKeyOf,
   ptyId,
+  SEEDED_SESSION_ID,
   seedAgentPanes,
   type SeededAgentPane
 } from './agent-account-switch-panes.test-fixture'
@@ -136,6 +139,38 @@ describe('finding Codex sessions to move', () => {
 
     // A→B left the session on A; B→A finds nothing on B to move.
     expect(await movable('acct-b')).toEqual([])
+  })
+
+  it('finds a restarted session on its new account before the resumed Codex reports a turn', async () => {
+    seedCodexPanes([{ n: 1, home: HOME_A }])
+    useAppStore.setState({ workspaceSessionReady: true })
+    const apply = createAgentStatusEventApplicator({
+      pendingAgentStatusEvents: [],
+      transientClearWatermarkByConnectionId: new Map(),
+      enqueuePendingAgentStatus: vi.fn()
+    })
+
+    // The host's launch seed for `codex resume`, which fires no hook until its first turn.
+    const applied = apply({
+      paneKey: paneKeyOf(1),
+      connectionId: null,
+      state: 'done',
+      prompt: '',
+      agentType: 'codex',
+      receivedAt: 2,
+      stateStartedAt: 2,
+      providerSession: {
+        key: 'session_id',
+        id: SEEDED_SESSION_ID,
+        transcriptPath: rollout(HOME_B)
+      },
+      providerSessionOnly: true
+    })
+
+    expect(applied).toBe('applied')
+    expect(await movable('acct-b')).toEqual([ptyId(1)])
+    expect(await movable('acct-a')).toEqual([])
+    expect(useAppStore.getState().agentStatusByPaneKey[paneKeyOf(1)]?.state).toBe('done')
   })
 
   it('finds a WSL session from its Linux home, only on its own distro', async () => {

@@ -26,9 +26,29 @@ import { settleAttentionRemovedBy } from './workspace-attention/attention-remova
 
 export function createAgentStatusProviderSessionActions(
   runtime: AgentStatusRuntime
-): Pick<AgentStatusSlice, 'recordAgentProviderSession'> {
+): Pick<AgentStatusSlice, 'recordAgentProviderSession' | 'adoptLaunchedAgentProviderSession'> {
   const { get, set, requestFreshness } = runtime
   return {
+    adoptLaunchedAgentProviderSession: (paneKey, agentType, providerSession) => {
+      paneKey = resolveAgentPaneAuthorityKey(paneKey)
+      const existing = get().agentStatusByPaneKey[paneKey]
+      // Why the path counts: an account restart resumes the same id from another account's home.
+      if (
+        !existing ||
+        existing.agentType !== agentType ||
+        (agentProviderSessionsEqual(agentType, existing.providerSession, providerSession) &&
+          existing.providerSession?.transcriptPath === providerSession.transcriptPath)
+      ) {
+        return false
+      }
+      set((s) => ({
+        agentStatusByPaneKey: {
+          ...s.agentStatusByPaneKey,
+          [paneKey]: { ...existing, providerSession }
+        }
+      }))
+      return true
+    },
     recordAgentProviderSession: (
       paneKey: string,
       agent: ResumableTuiAgent,
