@@ -136,7 +136,8 @@ export function queueClaudeTerminalFailure(
   turn: ClaudeOpenTurn,
   frame: Record<string, unknown>,
   body: AgentJournalItemBody | null,
-  fallback: () => void
+  fallback: () => void,
+  completeUnowned?: () => void
 ): void {
   const generation = turn.generation
   const cursorless = !turn.isOpen
@@ -146,7 +147,7 @@ export function queueClaudeTerminalFailure(
     if (unowned) {
       fallback()
       if (cursorless && turn.generation === generation && frame.type === 'result') {
-        turn.suppressReopenOnFailure(frame.is_error === true)
+        completeUnowned?.()
       }
     }
   }

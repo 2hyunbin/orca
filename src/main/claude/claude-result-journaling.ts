@@ -17,7 +17,7 @@ import {
   claudeResultFailure,
   isSettledClaudeResultKind
 } from './claude-structured-provider-fallback'
-import { claudeTurnEndForResult } from './claude-turn-lifecycle-item'
+import { claudeTurnEndForResult, type ClaudeTurnEnd } from './claude-turn-lifecycle-item'
 import { claudeFrameParentRef, isRootClaudeFrame } from './claude-turn-opening'
 import type { ClaudeGoalBackgroundWork } from './claude-background-task-tracker'
 
@@ -61,6 +61,34 @@ export function journalClaudeResult(
   // diagnostic below still runs: a child's failure is reportable even when
   // it ends no turn.
   const settlesTurn = isRootClaudeFrame(message)
+  const endedTurnScope = turn.turnScope
+  const endedTurnIdentity = turn.identity
+  const usageEvidence = turn.usageLimitEvidence
+  const endedTurnStartedAt = turn.startedAt
+  const turnId = settlesTurn ? turn.id : null
+  const leftToStop = turnId !== null && sink.journalStopDecidesTurn?.(turnId, observedAt) === true
+  const complete = (commandEnd?: ClaudeTurnEnd | null): void => {
+    if (settlesTurn) {
+      turn.suppressReopenOnFailure(message.is_error === true)
+      corrections.abandon()
+      context.settle(message, commandEnd ?? claudeTurnEndForResult(message, observedAt, leftToStop))
+      streamedBlocks.clear()
+      streamedText.settle()
+    }
+    const goal = threadGoal.settle(message, {
+      backgroundWork: goalBackgroundWork(),
+      stoppedByPerson: leftToStop,
+      turnStartedAt: endedTurnStartedAt
+    }, observedAt)
+    if (goal) {
+      sink.appendItem(goal.identity, goal.body, { turnScope: endedTurnScope })
+      sink.publish()
+    }
+  }
+  // An owed prompt resolution is independent of which turn owns this result.
+  if (settlesTurn) {
+    prompts.retryPendingCancellations()
+  }
   if (settlesTurn && !turn.ownsTerminal(message)) {
     const failure = claudeResultFailure(message)
     const body = usageLimits.result(message, failure !== null, { cause: 'quota' })
@@ -71,51 +99,19 @@ export function journalClaudeResult(
           { reportsFailure: failure !== null },
           () => ({ turnScope: { kind: 'thread' }, observedAt }))
       }
-    })
+    }, () => complete())
     return
   }
   const commandEnd = settlesTurn ? claudeCommandResultEnd(turn, sink, message, observedAt) : null
   if (commandEnd === 'another-input') {
     return
   }
-  // Read before the settle below closes it: the result reports that turn's end.
-  const endedTurnScope = turn.turnScope
-  const endedTurnIdentity = turn.identity
-  const usageEvidence = turn.usageLimitEvidence
-  const endedTurnStartedAt = turn.startedAt
-  // Read before the settle below closes the turn: an error end the journal's Stop rule makes a
-  // person's cancellation is theirs to decide as the end is written (`turnEndAfterStop`).
-  const turnId = settlesTurn ? turn.id : null
-  const leftToStop = turnId !== null && sink.journalStopDecidesTurn?.(turnId, observedAt) === true
   const failure = claudeResultFailure(message, leftToStop)
   const usageLimit = settlesTurn ? usageLimits.result(message, failure !== null, usageEvidence) : null
   if (usageLimit && endedTurnIdentity) {
     writeClaudeTerminalFailure(sink, endedTurnIdentity, usageLimit)
   }
-  if (settlesTurn) {
-    prompts.retryPendingCancellations()
-    turn.suppressReopenOnFailure(message.is_error === true)
-    corrections.abandon()
-    context.settle(message, commandEnd ?? claudeTurnEndForResult(message, observedAt, leftToStop))
-    // The turn is over. A block still awaiting its final keeps the text the
-    // flush above journaled, but its live state goes: an interrupted turn
-    // would otherwise retain that text for the life of the session.
-    streamedBlocks.clear()
-    streamedText.settle()
-  }
-  const goal = threadGoal.settle(
-    message,
-    {
-      backgroundWork: goalBackgroundWork(),
-      stoppedByPerson: leftToStop,
-      turnStartedAt: endedTurnStartedAt
-    },
-    observedAt
-  )
-  if (goal) {
-    sink.appendItem(goal.identity, goal.body, { turnScope: endedTurnScope })
-    sink.publish()
-  }
+  complete(commandEnd)
   const kind = claudeProviderFrameKind(message)
   if (usageLimit && endedTurnIdentity) {
     return
