@@ -1,7 +1,4 @@
-import {
-  WATCH_BATCH_MAX_WAIT_MS,
-  WATCH_BATCH_TRAILING_MS
-} from '../../../../shared/filesystem-watch-batch-window'
+import { watchBatchFlushDelayMs } from '../../../../shared/filesystem-watch-batch-window'
 import type { FsChangeEvent } from '../../../../shared/filesystem-entry-types'
 import { MAX_BATCHED_WATCHER_EVENTS } from '../../../ipc/filesystem-watcher-event-batch'
 
@@ -16,7 +13,7 @@ export function createFileWatchEventBatcher(
   let events: FsChangeEvent[] = []
   let overflowed = false
   let timer: ReturnType<typeof setTimeout> | null = null
-  let firstEventAt = 0
+  let lastFlushAt = 0
 
   const clearTimer = (): void => {
     if (!timer) {
@@ -30,10 +27,10 @@ export function createFileWatchEventBatcher(
     clearTimer()
     const nextEvents = events.splice(0)
     overflowed = false
-    firstEventAt = 0
     if (nextEvents.length === 0) {
       return
     }
+    lastFlushAt = Date.now()
     emit({ type: 'changed', worktree, events: nextEvents })
   }
 
@@ -63,18 +60,13 @@ export function createFileWatchEventBatcher(
           }
         }
       }
-      const now = Date.now()
-      if (firstEventAt === 0) {
-        firstEventAt = now
-      }
-      if (now - firstEventAt >= WATCH_BATCH_MAX_WAIT_MS) {
-        flush()
+      // Why: never push an armed flush back; resetting on each event starved delivery under continuous writes.
+      if (timer) {
         return
       }
-      clearTimer()
       // Why: remote file-watch events cross the runtime WebSocket before the
       // renderer refreshes the tree. Match local watcher batching here.
-      timer = setTimeout(flush, WATCH_BATCH_TRAILING_MS)
+      timer = setTimeout(flush, watchBatchFlushDelayMs(Date.now(), lastFlushAt))
       if (typeof timer.unref === 'function') {
         timer.unref()
       }
@@ -84,7 +76,6 @@ export function createFileWatchEventBatcher(
       clearTimer()
       events = []
       overflowed = false
-      firstEventAt = 0
     }
   }
 }
