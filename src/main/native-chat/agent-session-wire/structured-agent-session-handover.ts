@@ -74,6 +74,7 @@ export async function beginSubmissionHandover(
   const turnScope = contextStructuredAgentSessionCurrentWork(ctx).turnScope()
   const carried = carriedStoppedHistory(ctx, turnScope, submission, body)
   const release = ctx.deliveryOrder?.activateSend(ctx.sessionId, clientMessageId)
+  // The pending row precedes the adapter's own report of which sends it holds.
   const released = beginStructuredAgentSessionHandover(
     ctx.journal,
     clientMessageId,

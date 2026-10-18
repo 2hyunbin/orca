@@ -59,7 +59,9 @@ export function startLocalAiVaultScanProgress(
 ): LocalAiVaultScanProgressHandle {
   const previous = latest.get(scanKey)
   const fallback =
-    previous?.stage === 'finished' ? previous : (currentScans.get(scanKey)?.fallback ?? null)
+    previous?.stage === 'finished'
+      ? previous
+      : (currentScans.get(scanKey)?.fallback ?? null)
   let current: AiVaultScanProgress = {
     scanId,
     stage: 'finding',

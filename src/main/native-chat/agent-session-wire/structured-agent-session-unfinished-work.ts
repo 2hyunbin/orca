@@ -53,15 +53,13 @@ export function unfinishedStructuredAgentSessionWorkWasInterrupted(
 ): boolean {
   const currentSnapshot = journal.snapshot()
   if (
-    journal
-      .submissions?.()
-      .some(
-        (send) =>
-          heldSends?.has(send.clientMessageId) &&
-          send.fence === exit?.ownerFence &&
-          !isQueuedAgentJournalSubmission(send) &&
-          (send.dispatchState === 'pending' || send.dispatchState === 'unknown')
-      ) ||
+    journal.submissions?.().some(
+      (send) =>
+        heldSends?.has(send.clientMessageId) &&
+        send.fence === exit?.ownerFence &&
+        !isQueuedAgentJournalSubmission(send) &&
+        (send.dispatchState === 'pending' || send.dispatchState === 'unknown')
+    ) ||
     currentSnapshot.items.some(isInProgressStructuredAgentSessionItem)
   ) {
     return true
