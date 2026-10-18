@@ -279,9 +279,7 @@ export async function attachLegacyRelayPane(
       host?.onReplay(ptyId, replay)
     }
   })
-  return replayInStream && result.status === 'attached'
-    ? { status: 'attached', replay: '' }
-    : result
+  return replayInStream && result.status === 'attached' ? { ...result, replay: '' } : result
 }
 
 /** Re-reads a live pane's screen through the same attach a reconnect uses. */
@@ -290,9 +288,10 @@ async function rereadLegacyRelayScreen(
   atSnapshot: (replay: string) => void
 ): Promise<void> {
   const bridge = bridgeForPty(ptyId)
-  if ((await bridge?.attach(ptyId, atSnapshot))?.status === 'attached') {
+  const result = await bridge?.attach(ptyId, atSnapshot)
+  if (result?.status === 'attached') {
     // The attach counted a viewer; this re-read is not one.
-    bridge?.detach(ptyId)
+    bridge?.detach(ptyId, result.acquisitionId)
   }
 }
 
@@ -340,6 +339,6 @@ export async function closeLegacyRelayPane(ptyId: string): Promise<LegacyRelayBr
   return stopsFor(targetId).stop(ptyId, host.connection(targetId) ? bridgeFor(targetId) : null)
 }
 
-export function detachLegacyRelayPane(ptyId: string): void {
-  bridgeForPty(ptyId)?.detach(ptyId)
+export function detachLegacyRelayPane(ptyId: string, acquisitionId: number): void {
+  bridgeForPty(ptyId)?.detach(ptyId, acquisitionId)
 }

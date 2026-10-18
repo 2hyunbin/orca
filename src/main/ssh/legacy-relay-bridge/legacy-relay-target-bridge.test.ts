@@ -187,7 +187,10 @@ describe('one target’s legacy relay bridge', () => {
       { ptyId: PTY, targetId: TARGET, tabId: 'tab-1', leafId: 'leaf-1', state: 'live' }
     ])
     relay.clients[0].emitData('pty-1', 'early')
-    await expect(subject.attach(PTY)).resolves.toEqual({ status: 'attached', replay: 'SCREEN' })
+    await expect(subject.attach(PTY)).resolves.toMatchObject({
+      status: 'attached',
+      replay: 'SCREEN'
+    })
     relay.clients[0].emitData('pty-1', 'late')
     subject.write(PTY, 'ls\r')
     expect(events.data).toEqual(['late'])
@@ -458,6 +461,27 @@ describe('one target’s legacy relay bridge', () => {
     expect(subject.snapshot()).toEqual([])
     expect(subject.liveRoute(PTY)).toBeNull()
     expect(events.exits).toEqual([PTY])
+  })
+
+  it('releases a late attach by its own acquisition, never the successor viewing the same pane', async () => {
+    const replaced = bridge()
+    await replaced.refresh()
+    let answer: (reply: { replay: string }) => void = () => {}
+    relay.clients[0].attach = () => new Promise((resolve) => (answer = resolve))
+    const late = replaced.attach(PTY)
+    await vi.advanceTimersByTimeAsync(0)
+    // A reconnect replaces the bridge, and the remounted pane attaches to the new one.
+    replaced.dispose()
+    const successor = bridge()
+    await successor.refresh()
+    await expect(successor.attach(PTY)).resolves.toMatchObject({ status: 'attached' })
+    answer({ replay: 'SCREEN' })
+    const lateResult = await late
+    expect(lateResult.status).toBe('attached')
+    // The pane that left hands its late viewer back; the registry routes it to the current bridge.
+    successor.detach(PTY, lateResult.status === 'attached' ? lateResult.acquisitionId : -1)
+    relay.clients.at(-1)?.emitData('pty-1', 'still viewed')
+    expect(events.data).toEqual(['still viewed'])
   })
 
   it('hangs up every connection on dispose and leaves the relays to their own grace', async () => {

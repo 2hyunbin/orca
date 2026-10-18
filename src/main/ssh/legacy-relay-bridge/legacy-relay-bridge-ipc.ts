@@ -27,6 +27,7 @@ import {
 const PtyIdSchema = z.string().min(1).max(4096)
 const SizeSchema = z.number().int().positive().max(10_000)
 const PaneArgsSchema = z.object({ ptyId: PtyIdSchema })
+const DetachArgsSchema = z.object({ ptyId: PtyIdSchema, acquisitionId: z.number().int() })
 const AttachArgsSchema = z.object({ ptyId: PtyIdSchema, replayInStream: z.boolean().optional() })
 const WriteArgsSchema = z.object({ ptyId: PtyIdSchema, data: z.string() })
 const PausedArgsSchema = z.object({ ptyId: PtyIdSchema, paused: z.boolean() })
@@ -115,9 +116,9 @@ export function registerLegacyRelayBridgeIpc(args: {
     }
   })
   ipcMain.on(CHANNELS.detach, (_event, payload: unknown) => {
-    const args = PaneArgsSchema.safeParse(payload)
+    const args = DetachArgsSchema.safeParse(payload)
     if (args.success) {
-      detachLegacyRelayPane(args.data.ptyId)
+      detachLegacyRelayPane(args.data.ptyId, args.data.acquisitionId)
     }
   })
 }
