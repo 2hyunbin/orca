@@ -128,7 +128,8 @@ function Harness({
       sendOptions: false,
       conversationStop: false,
       permissionModes: false,
-      itemDetail: false
+      itemDetail: false,
+      phoneAttachments: false
     },
     onSendError: vi.fn()
   })

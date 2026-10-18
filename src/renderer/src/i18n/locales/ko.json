@@ -6448,8 +6448,7 @@
         },
         "MarkdownImageLightbox": {
           "image": "Image",
-          "expand": "Expand image",
-          "close": "Close"
+          "expand": "Expand image"
         },
         "WorktreeDeveloperMenu": {
           "developer": "Developer",
@@ -15680,7 +15679,9 @@
           "1829437fce": "새로운 Markdown"
         },
         "DiagramViewerModal": {
-          "title": "다이어그램",
+          "title": "다이어그램"
+        },
+        "PanZoomImageDialog": {
           "zoomOut": "축소",
           "zoomIn": "확대",
           "fit": "화면에 맞추기",
@@ -18315,7 +18316,6 @@
         "imageSaving": "붙여넣은 이미지를 저장하는 중…",
         "pendingAttachmentLimit": "대기 중인 첨부파일이 너무 많습니다. 더 첨부하기 전에 작성을 완료하세요.",
         "viewAttachment": "이미지 보기",
-        "imagePreview": "전체 크기 이미지 미리보기",
         "imagePreviewUnavailable": "미리보기를 사용할 수 없습니다.",
         "copyImage": "이미지 복사",
         "copyImageFailed": "이미지를 복사할 수 없습니다",

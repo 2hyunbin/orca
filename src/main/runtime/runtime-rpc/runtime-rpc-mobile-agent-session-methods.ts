@@ -1,4 +1,4 @@
-/** The structured agent-session methods a phone may call; spread into the execution-host routes. */
+/** The structured agent-session methods (and chat attachment uploads) a phone may call; spread into the execution-host routes. */
 export const MOBILE_AGENT_SESSION_RPC_METHODS = [
   'agentSession.createSupport',
   'agentSession.create',
@@ -30,6 +30,11 @@ export const MOBILE_AGENT_SESSION_RPC_METHODS = [
   'agentSession.readVisual',
   // One item whole, for "Show full output" and "Show full message".
   'agentSession.item',
+  // A file the phone attaches to a chat, stored on this host; the agent sees only the host path.
+  'agentSessionAttachment.uploadStart',
+  'agentSessionAttachment.uploadAppend',
+  'agentSessionAttachment.uploadCommit',
+  'agentSessionAttachment.uploadAbort',
   // No-ops on a current host; kept until MIN_COMPATIBLE_RUNTIME_CLIENT_VERSION passes the
   // mobile builds that still call them.
   'agentSession.hold',
