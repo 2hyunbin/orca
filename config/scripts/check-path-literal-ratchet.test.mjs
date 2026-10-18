@@ -4,6 +4,7 @@ import {
   createPathResolver,
   extractPathLiterals,
   isScannedPath,
+  liveGateReferences,
   stripSlashComments
 } from './check-path-literal-ratchet.mjs'
 
@@ -120,5 +121,27 @@ describe('createPathResolver', () => {
   it('needs an index module to resolve an import of a folder', () => {
     expect(resolves('src/main/ssh', true)).toBe(false)
     expect(resolves('src/main/ssh')).toBe(true)
+  })
+})
+
+describe('liveGateReferences', () => {
+  it('reads every gate command and test file, never evidence prose or evidence runs', () => {
+    const manifest = `{
+      // a comment
+      "gates": [{
+        "commands": ["vitest run src/main/kept.test.ts"],
+        "testFiles": ["src/main/listed.test.ts"],
+        "evidence": "once ran src/main/prose.test.ts",
+        "evidenceRuns": [{
+          "command": "vitest run src/main/ran-then.test.ts",
+          "currentCommand": "vitest run src/main/kept.test.ts"
+        }]
+      }]
+    }`
+    const literals = extractPathLiterals(
+      'config/reliability-gates.jsonc',
+      liveGateReferences(manifest)
+    ).map(({ literal }) => literal)
+    expect(literals).toEqual(['src/main/kept.test.ts', 'src/main/listed.test.ts'])
   })
 })
