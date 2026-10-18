@@ -270,12 +270,12 @@ class FeedSession {
 
   /** The batch at this revision, pinned for its later pages; a reader at the same place shares it. */
   private batch(
-    shape: string,
+    startsFrom: string,
     from: number | null,
     budget: number,
     changes: () => Iterable<FeedChange>
   ): SidebarInputsReadResult {
-    const key = `${shape}:${this.revision}:${budget}`
+    const key = `${startsFrom}:${this.revision}:${budget}`
     const pinned = this.pins.find(key)
     if (pinned) {
       return pinned[0]
