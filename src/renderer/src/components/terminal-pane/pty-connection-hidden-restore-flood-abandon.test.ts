@@ -459,6 +459,49 @@ describe('hidden-output restore quiet abandonment (STA-4869)', () => {
       }
     })
 
+    it('does not leave a parked repaint after a repeated episode is repaired', async () => {
+      const { markTerminalFollowOutput, markTerminalPinnedViewport } =
+        await import('@/lib/pane-manager/terminal-scroll-intent')
+      const drive = await connectVisiblePane()
+      vi.useFakeTimers()
+      const getMainBufferSnapshot = vi.mocked(window.api.pty.getMainBufferSnapshot)
+      const first = createDeferred<MainSnapshot>()
+      getMainBufferSnapshot.mockReturnValueOnce(first.promise)
+      getMainBufferSnapshot.mockResolvedValue(modelSnapshot('PARKED_EPISODE_RECOVERED', 512))
+      try {
+        await announceMainDrop(64, 1)
+        drive.pane.terminal.buffer.active.baseY = 100
+        drive.pane.terminal.buffer.active.viewportY = 42
+        markTerminalPinnedViewport(drive.pane.terminal)
+        await announceMainDrop(256, 2, 'unhide')
+        await vi.advanceTimersByTimeAsync(2_100)
+        await flushAsyncTicks(20)
+        expect(getMainBufferSnapshot).toHaveBeenCalledTimes(1)
+        await announceMainDrop(256, 2, 'unhide')
+        first.resolve(modelSnapshot('PRE_EPISODE_CAPTURE', 128))
+        await flushAsyncTicks(50)
+        const repairAlreadyPainted = getMainBufferSnapshot.mock.calls.length === 2
+        if (repairAlreadyPainted) {
+          const live = 'LIVE_AFTER_PARKED_REPAIR\r\n'
+          drive.deliver(live, 512 + live.length)
+          await flushAsyncTicks(10)
+        }
+        const writesBeforeFollowing = drive.writtenChunks().length
+        drive.pane.terminal.buffer.active.viewportY = drive.pane.terminal.buffer.active.baseY
+        markTerminalFollowOutput(drive.pane.terminal)
+        await vi.advanceTimersByTimeAsync(2_100)
+        await flushAsyncTicks(50)
+        expect.soft(getMainBufferSnapshot).toHaveBeenCalledTimes(2)
+        if (repairAlreadyPainted) {
+          expect(drive.writtenChunks().slice(writesBeforeFollowing).join('')).not.toContain(
+            '\x1b[2J'
+          )
+        }
+      } finally {
+        drive.disposable.dispose()
+      }
+    })
+
     it('keeps the deferred repaint when pending live bytes overflow before the snapshot drains', async () => {
       const drive = await connectVisiblePane()
       vi.useFakeTimers()
