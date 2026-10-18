@@ -195,7 +195,8 @@ export function windowSaveDivergences(
     ...rawPaths.keys()
   ])
   const result: WindowSaveDivergence[] = []
-  // Ignored, as main's own writes: pane bindings, resume records, default-tab marks, closed-tab records, row owners.
+  // Ignored, as main's own writes: pane bindings, resume records, default-tab marks, closed-tab records, row owners,
+  // clientHostedBrowserPagesByWorkspace and the topology revision.
   for (const workspace of workspaces) {
     const paths = [
       ...diffWorkspaceLayouts(was?.workspaces[workspace], now?.workspaces[workspace]),
