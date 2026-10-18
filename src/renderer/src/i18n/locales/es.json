@@ -581,7 +581,8 @@
             "76deec8f58": "Error al cambiar organización",
             "7d4bc516ee": "Error al cambiar perfil",
             "f518e89aa5": "El proyecto ya existe en ese perfil",
-            "f03ae7f27b": "Error al transferir proyecto"
+            "f03ae7f27b": "Error al transferir proyecto",
+            "signInTimedOut": "Se agotó el tiempo de inicio de sesión"
           }
         },
         "runtime": {
@@ -11621,7 +11622,11 @@
           "localTitle": "LAN",
           "retrying": "Reintentando",
           "relayCell": "celda de relevo",
-          "relaySignInDetail": "Inicia la sesión de este escritorio en Orca y enruta el teléfono a través de los servidores de Orca. LAN no necesita una cuenta."
+          "relaySignInDetail": "Inicia la sesión de este escritorio en Orca y enruta el teléfono a través de los servidores de Orca. LAN no necesita una cuenta.",
+          "signInWaiting": "Esperando el inicio de sesión en tu navegador",
+          "copySignInLink": "Copiar enlace de inicio de sesión",
+          "signInLinkCopied": "Enlace de inicio de sesión copiado",
+          "signInLinkCopyFailed": "No se pudo copiar el enlace."
         },
         "MobilePairingSetupSection": {
           "title": "Vincular un teléfono",

@@ -18,6 +18,8 @@ export type OrcaProfilesSlice = OrcaProfilesAuthActions & {
   orcaProfiles: OrcaProfileSummary[]
   activeOrcaProfileId: string | null
   orcaProfileAuthStatus: OrcaProfileAuthStatus | null
+  /** A Sign in click is still waiting for the browser. */
+  orcaProfileSignInPending: boolean
   orcaProfilesMultiProfileUi: boolean
   orcaProfilesLoading: boolean
   orcaProfileSwitching: boolean
@@ -38,6 +40,7 @@ export const createOrcaProfilesSlice: StateCreator<AppState, [], [], OrcaProfile
   orcaProfiles: [],
   activeOrcaProfileId: null,
   orcaProfileAuthStatus: null,
+  orcaProfileSignInPending: false,
   orcaProfilesMultiProfileUi: false,
   orcaProfilesLoading: false,
   orcaProfileSwitching: false,

@@ -582,7 +582,8 @@
             "76deec8f58": "切换组织失败",
             "7d4bc516ee": "切换配置文件失败",
             "f518e89aa5": "该项目已存在于那个配置文件中",
-            "f03ae7f27b": "转移项目失败"
+            "f03ae7f27b": "转移项目失败",
+            "signInTimedOut": "登录超时"
           }
         },
         "runtime": {
@@ -11626,7 +11627,11 @@
           "localTitle": "局域网",
           "retrying": "重试",
           "relayCell": "中继单元",
-          "relaySignInDetail": "将此桌面登录到 Orca，并通过 Orca 的服务器路由手机。LAN 无需账户。"
+          "relaySignInDetail": "将此桌面登录到 Orca，并通过 Orca 的服务器路由手机。LAN 无需账户。",
+          "signInWaiting": "正在等待在浏览器中登录",
+          "copySignInLink": "复制登录链接",
+          "signInLinkCopied": "已复制登录链接",
+          "signInLinkCopyFailed": "无法复制链接。"
         },
         "MobilePairingSetupSection": {
           "title": "配对手机",

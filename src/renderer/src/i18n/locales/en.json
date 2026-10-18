@@ -762,7 +762,8 @@
             "76deec8f58": "Failed to switch organization",
             "7d4bc516ee": "Failed to switch profile",
             "f518e89aa5": "Project already exists in that profile",
-            "f03ae7f27b": "Failed to transfer project"
+            "f03ae7f27b": "Failed to transfer project",
+            "signInTimedOut": "Sign-in timed out"
           }
         },
         "runtime": {
@@ -11854,7 +11855,11 @@
           "localDescription": "Phone must be on this Wi‑Fi or connected through Tailscale. No account needed.",
           "retrying": "Retrying",
           "relayCell": "Relay cell",
-          "relaySignInDetail": "Signs this desktop in to Orca and routes the phone through Orca’s servers. LAN does not need an account."
+          "relaySignInDetail": "Signs this desktop in to Orca and routes the phone through Orca’s servers. LAN does not need an account.",
+          "signInWaiting": "Waiting for sign-in in your browser",
+          "copySignInLink": "Copy sign-in link",
+          "signInLinkCopied": "Sign-in link copied",
+          "signInLinkCopyFailed": "Could not copy the link."
         },
         "MobilePairingSetupSection": {
           "title": "Pair a phone",

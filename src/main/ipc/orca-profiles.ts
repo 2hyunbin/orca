@@ -40,6 +40,7 @@ import { normalizeExecutionHostId } from '../../shared/execution-host'
 import {
   createCloudLinkedOrcaProfile,
   connectCurrentOrcaProfile,
+  getPendingOrcaCloudSignInLink,
   getCurrentOrcaProfileAuthStatus,
   refreshCurrentOrcaProfileAuth,
   selectCurrentOrcaProfileOrg,
@@ -266,6 +267,10 @@ export function registerOrcaProfileHandlers(
       }
       return result
     }
+  )
+
+  ipcMain.handle('orcaProfiles:pendingSignInLink', (): string | null =>
+    getPendingOrcaCloudSignInLink()
   )
 
   ipcMain.handle(

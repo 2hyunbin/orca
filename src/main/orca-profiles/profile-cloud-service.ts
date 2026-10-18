@@ -39,14 +39,18 @@ export { refreshCurrentOrcaProfileAuth } from './profile-cloud-capability-refres
 
 let nextCloudConnectAttempt = 0
 let linkedCloudConnectAttempt = 0
+// Why: Orca cannot see whether the browser actually showed the page, so the
+// newest waiting sign-in's link stays copyable until that wait ends.
+let pendingSignInLink: { attempt: number; url: string } | null = null
 
 function invalidateOutstandingCloudConnectAttempts(): void {
   nextCloudConnectAttempt += 1
   linkedCloudConnectAttempt = nextCloudConnectAttempt
+  pendingSignInLink = null
 }
 
-function isUserCancelledAuthError(message: string): boolean {
-  return message === 'orca_cloud_auth_timeout' || message === 'orca_cloud_auth_denied'
+export function getPendingOrcaCloudSignInLink(): string | null {
+  return pendingSignInLink?.url ?? null
 }
 
 function activeAuth(
@@ -84,7 +88,11 @@ export async function connectCurrentOrcaProfile(
 
   const attempt = ++nextCloudConnectAttempt
   try {
-    const code = await beginOrcaCloudPkceFlow(configState.config, active.profile.id)
+    const code = await beginOrcaCloudPkceFlow(configState.config, active.profile.id, (url) => {
+      if (attempt > linkedCloudConnectAttempt) {
+        pendingSignInLink = { attempt, url }
+      }
+    })
     if (attempt < linkedCloudConnectAttempt) {
       return {
         status: 'cancelled',
@@ -112,7 +120,13 @@ export async function connectCurrentOrcaProfile(
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    if (isUserCancelledAuthError(message)) {
+    if (message === 'orca_cloud_auth_timeout' && attempt === nextCloudConnectAttempt) {
+      return {
+        status: 'timed-out',
+        auth: getCurrentOrcaProfileAuthStatus(userDataPath)
+      }
+    }
+    if (message === 'orca_cloud_auth_timeout' || message === 'orca_cloud_auth_denied') {
       return {
         status: 'cancelled',
         auth: getCurrentOrcaProfileAuthStatus(userDataPath)
@@ -122,6 +136,10 @@ export async function connectCurrentOrcaProfile(
       status: 'failed',
       auth: getCurrentOrcaProfileAuthStatus(userDataPath),
       error: message
+    }
+  } finally {
+    if (pendingSignInLink?.attempt === attempt) {
+      pendingSignInLink = null
     }
   }
 }

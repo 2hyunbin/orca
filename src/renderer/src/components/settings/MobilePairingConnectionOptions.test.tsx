@@ -12,6 +12,7 @@ import { MobilePairingConnectionOptions } from './MobilePairingConnectionOptions
 
 type MobileRelayStoreState = {
   orcaProfileAuthStatus: OrcaProfileAuthStatus | null
+  orcaProfileSignInPending?: boolean
   connectCurrentOrcaProfile: () => Promise<null>
   fetchOrcaProfileAuthStatus: () => Promise<OrcaProfileAuthStatus | null>
 }
@@ -110,6 +111,29 @@ describe('MobilePairingConnectionOptions', () => {
     await user.click(signIn)
     expect(onChange).toHaveBeenCalledWith('automatic')
     expect(connect).toHaveBeenCalledOnce()
+  })
+
+  it('offers the waiting sign-in link to copy while the browser wait is open', async () => {
+    const user = userEvent.setup()
+    const link = 'https://login.example/authorize?state=abc'
+    const writeClipboardText = vi.fn().mockResolvedValue(undefined)
+    Object.assign(window.api, {
+      orcaProfiles: { pendingSignInLink: vi.fn().mockResolvedValue(link) },
+      ui: { writeClipboardText }
+    })
+    const { rerender } = render(
+      <MobilePairingConnectionOptions value="automatic" onChange={vi.fn()} />
+    )
+    expect(screen.queryByRole('button', { name: 'Copy sign-in link' })).toBeNull()
+
+    publishStoreState({ ...mocks.state, orcaProfileSignInPending: true })
+    rerender(<MobilePairingConnectionOptions value="automatic" onChange={vi.fn()} />)
+    expect(screen.getByText('Waiting for sign-in in your browser')).toBeVisible()
+    // Why: a browser tab closed or never shown must not block another try.
+    expect(screen.getByRole('button', { name: 'Sign in for Relay' })).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: 'Copy sign-in link' }))
+    expect(writeClipboardText).toHaveBeenCalledWith(link)
   })
 
   it('hides Sign in when LAN is selected', () => {

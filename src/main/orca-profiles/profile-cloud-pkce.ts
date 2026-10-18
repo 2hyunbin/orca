@@ -42,7 +42,8 @@ function closeServer(server: Server): void {
 
 export function beginOrcaCloudPkceFlow(
   config: OrcaCloudAuthConfig,
-  localProfileId: string
+  localProfileId: string,
+  onAuthorizeUrl?: (url: string) => void
 ): Promise<OrcaCloudAuthorizationCode> {
   const codeVerifier = createCodeVerifier()
   const nonce = base64Url(randomBytes(32))
@@ -143,6 +144,7 @@ export function beginOrcaCloudPkceFlow(
       authorizeUrl.searchParams.set('code_challenge', createCodeChallenge(codeVerifier))
       authorizeUrl.searchParams.set('code_challenge_method', 'S256')
       authorizeUrl.searchParams.set('local_profile_id', localProfileId)
+      onAuthorizeUrl?.(authorizeUrl.toString())
       void shell.openExternal(authorizeUrl.toString()).catch((error) => {
         rejectFlow(
           error instanceof Error ? error : new Error('orca_cloud_auth_browser_open_failed')

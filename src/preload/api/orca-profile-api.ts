@@ -42,6 +42,8 @@ export type OrcaProfileApi = {
     args: FindOrcaProfileProjectsByPathArgs
   ) => Promise<FindOrcaProfileProjectsByPathResult>
   connectCurrent: () => Promise<ConnectCurrentOrcaProfileResult>
+  /** The browser link of the sign-in still waiting for its callback, if any. */
+  pendingSignInLink: () => Promise<string | null>
   refreshAuth: () => Promise<RefreshCurrentOrcaProfileAuthResult>
   signOutCurrent: () => Promise<SignOutCurrentOrcaProfileResult>
   selectOrg: (args: SelectOrcaProfileOrgArgs) => Promise<SelectOrcaProfileOrgResult>
