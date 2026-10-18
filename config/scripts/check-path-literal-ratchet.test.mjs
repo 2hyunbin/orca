@@ -15,14 +15,16 @@ describe('extractPathLiterals', () => {
       "git diff -- ':(glob)src/shared/windows-*'",
       '// src/main/ipc/pty.ts is prose, not a reference',
       "/** Moved from 'src/main/ipc/worktrees.ts' in #123. */",
-      "const glob = 'src/renderer/**/*.tsx'"
+      "const glob = 'src/renderer/**/*.tsx'",
+      "const deep = 'src/main/**/ssh-connection.ts'"
     ].join('\n')
     expect(extractPathLiterals('config/scripts/route.mjs', text)).toEqual([
       { literal: 'src/main/ssh/ssh-connection.ts', isImport: false },
       { literal: 'src/shared/protocol-version', isImport: true },
       { literal: 'src/main/ssh/relay.ts', isImport: true },
       { literal: 'src/shared/windows-', isImport: false },
-      { literal: 'src/renderer/', isImport: false }
+      { literal: 'src/renderer/', isImport: false },
+      { literal: 'src/main/', isImport: false }
     ])
     expect(extractPathLiterals('.github/workflows/x.yml', "# was 'src/main/a.ts'\n")).toEqual([])
   })

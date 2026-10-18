@@ -14,8 +14,8 @@ const RESOLVED_EXTENSIONS = ['.ts', '.tsx', '.js', '.mjs', '.cjs', '/index.ts']
 const EXCLUDED_FILES = new Set(['config/scripts/ci-shard-timings.json'])
 // Command strings in manifests and scripts name paths unquoted; in code only quoted literals count.
 const UNQUOTED_ALLOWED = /\.(?:jsonc?|ya?ml|sh|ps1)$/
-// Comments are prose, not references. `//` after `:` or a quote is a URL or string, and a `/**/`
-// glob segment is collapsed first so it doesn't open a block comment.
+// Comments are prose, not references. `//` after `:` or a quote is a URL or string. A `/**/` glob
+// segment is masked first so it doesn't open a block comment; the mask ends the literal there.
 const SLASH_COMMENTED = /\.(?:m?js|cjs|ts|jsonc)$/
 const SLASH_COMMENT = /\/\*[\s\S]*?\*\/|(?<![:'"`\\])\/\/.*$/gm
 const HASH_COMMENT = /^\s*#.*$/gm
@@ -45,7 +45,7 @@ export function isScannedPath(rel) {
 export function extractPathLiterals(rel, text) {
   const pattern = UNQUOTED_ALLOWED.test(rel) ? ANY_LITERAL : QUOTED_LITERAL
   const code = SLASH_COMMENTED.test(rel)
-    ? text.replaceAll('/**/', '/').replace(SLASH_COMMENT, ' ')
+    ? text.replaceAll('/**/', '/~/').replace(SLASH_COMMENT, ' ')
     : text.replace(HASH_COMMENT, ' ')
   const literals = new Map()
   for (const [, parents, literal] of code.matchAll(pattern)) {
