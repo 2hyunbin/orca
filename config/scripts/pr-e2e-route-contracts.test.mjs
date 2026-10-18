@@ -121,11 +121,11 @@ describe('pr-e2e-layout-oracle-routing', () => {
   /** One product file per layout writer family; each alone must run the oracle. */
   const LAYOUT_AUTHORITIES = [
     'src/shared/workspace-layout/workspace-layout-pane-commands.ts',
-    'src/shared/workspace-layout/old-client/index.ts',
+    'src/shared/workspace-layout/old-client/old-client-session-tab-rows.ts',
     'src/main/persistence/terminal-topology/terminal-topology-commit.ts',
     'src/main/persistence/restoring-sessions/session-owner-fields.ts',
     'src/main/persistence/loading-store/pty-binding-persistence.ts',
-    'src/main/remote-layout-snapshot/index.ts',
+    'src/main/remote-layout-snapshot/remote-layout-snapshot-recorder.ts',
     'src/main/runtime/terminal/launch/terminal-split-surface.ts',
     'src/main/runtime/terminal/adoption/adopt-terminal-orphans-from-inventory.ts',
     'src/main/runtime/runtime-terminal-orphan-adoption.ts',
