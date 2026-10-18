@@ -33,15 +33,21 @@ vi.mock('./ssh-target-registry', () => ({
   getSshConnectionManager: () => ({ connect: async () => ({}) }),
   getSshTargetRegistryStore: () => mocks.state.store
 }))
-vi.mock('./orcad-remote-context', () => ({ resolveOrcadRemoteContext: mocks.resolveContext }))
+vi.mock('../managed-server/install/orcad-remote-context', () => ({
+  resolveOrcadRemoteContext: mocks.resolveContext
+}))
 vi.mock('./orcad-terminal-census-client', () => ({ collectManagedTerminalCensus: mocks.census }))
 vi.mock('./orcad-remote-deploy', () => ({ deployOrcad: mocks.deploy }))
-vi.mock('./orcad-remote-rollback', () => ({ rollbackOrcad: mocks.rollback }))
+vi.mock('../managed-server/install/orcad-remote-rollback', () => ({
+  rollbackOrcad: mocks.rollback
+}))
 vi.mock('../managed-server/activation/orcad-activation-recovery', () => ({
   recoverInterruptedOrcadActivation: mocks.recover
 }))
 vi.mock('./orcad-active-readiness', () => ({ probeActiveOrcadReadiness: mocks.probe }))
-vi.mock('./orcad-remote-build-hash', () => ({ readRemoteOrcadBuildHash: mocks.buildHash }))
+vi.mock('../managed-server/install/orcad-remote-build-hash', () => ({
+  readRemoteOrcadBuildHash: mocks.buildHash
+}))
 vi.mock('../orcad/orcad-artifact-materializer', () => ({
   materializeOrcadArtifact: async () => '/local/orcad'
 }))

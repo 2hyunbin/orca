@@ -9,14 +9,17 @@
 import { logOrcadActivationOutcome } from '../managed-server/activation/orcad-activation-outcome-log'
 import { join } from 'node:path'
 import type { OrcadHostTransport } from './orcad-host-transport'
-import { ORCAD_INSTALL_MODEL } from './remote-install-model'
-import { computeRemoteInstallDir, readLocalFullVersion } from './remote-versioned-install'
+import { ORCAD_INSTALL_MODEL } from '../managed-server/install/remote-install-model'
+import {
+  computeRemoteInstallDir,
+  readLocalFullVersion
+} from '../managed-server/install/remote-versioned-install'
 import { readOrcadActivationRecord } from '../managed-server/activation/orcad-activation-record-store'
 import type { OrcadActivationRecord } from '../managed-server/activation/orcad-activation-record'
 import type { OrcadActivationVerdict } from '../managed-server/activation/orcad-activation-gate'
 import type { OrcadTerminalCensus } from '../../shared/orcad-terminal-census'
 import type { RemoteHostPlatform } from './ssh-remote-platform'
-import { installOrcadBundle } from './orcad-remote-install'
+import { installOrcadBundle } from '../managed-server/install/orcad-remote-install'
 import { getAppEnvironment } from '../../shared/app-environment'
 import type { NodeRuntimeTarget } from '../../shared/node-runtime-pin'
 import { ORCAD_STARTUP_READINESS_TIMEOUT_MS } from '../../shared/orcad-profile-preflight'

@@ -34,7 +34,7 @@ import {
   ORCAD_STATE_MUTATION_LOCK_DIRNAME,
   ORCAD_STATE_RESTORE_STAGE_DIRNAME
 } from './orcad-state-snapshot-members'
-import { orcadWindowsHostOpCommand } from './orcad-remote-windows-node'
+import { orcadWindowsHostOpCommand } from '../managed-server/install/orcad-remote-windows-node'
 import {
   posixStateMutationGroupRecord,
   posixStateMutationPidRecord

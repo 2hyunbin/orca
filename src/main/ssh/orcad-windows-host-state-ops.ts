@@ -11,7 +11,7 @@
 import { PRIMARY_RUNTIME_METADATA_FILE } from '../../shared/runtime-bootstrap'
 import { ORCAD_LOCK_FILE_NAME } from '../orcad/orcad-instance-lock'
 import { ORCAD_WINDOWS_PROCESS_TREE_FILENAME } from '../../shared/orcad-artifacts'
-import { ORCAD_INSTALL_MODEL } from './remote-install-model'
+import { ORCAD_INSTALL_MODEL } from '../managed-server/install/remote-install-model'
 import {
   ORCAD_FENCE_LOST_EXIT,
   ORCAD_FENCE_LOST_MARKER

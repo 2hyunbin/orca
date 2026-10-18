@@ -33,9 +33,13 @@ vi.mock('./ssh-target-registry', () => ({
   getSshConnectionManager: () => ({ connect: async () => ({}) }),
   getSshTargetRegistryStore: () => mocks.state.store
 }))
-vi.mock('./orcad-remote-context', () => ({ resolveOrcadRemoteContext: mocks.resolveContext }))
+vi.mock('../managed-server/install/orcad-remote-context', () => ({
+  resolveOrcadRemoteContext: mocks.resolveContext
+}))
 vi.mock('./orcad-terminal-census-client', () => ({ collectManagedTerminalCensus: mocks.census }))
-vi.mock('./orcad-remote-decommission', () => ({ decommissionRemoteOrcad: mocks.decommission }))
+vi.mock('../managed-server/install/orcad-remote-decommission', () => ({
+  decommissionRemoteOrcad: mocks.decommission
+}))
 vi.mock('../managed-server/activation/orcad-activation-recovery', () => ({
   recoverInterruptedOrcadActivation: mocks.recover
 }))

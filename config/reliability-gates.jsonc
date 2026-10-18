@@ -18011,8 +18011,8 @@
         "node config/scripts/runtime-file-watcher-resource-probe.mjs",
         "node config/scripts/runtime-file-watcher-fault-harness.mjs",
         "ELECTRON_RUN_AS_NODE=1 pnpm exec electron config/scripts/runtime-file-watcher-fault-harness.mjs",
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/ssh/remote-versioned-install.test.ts config/scripts/package-electron-runtime-contract.test.mjs",
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/ssh/remote-versioned-install.test.ts config/scripts/package-electron-runtime-contract.test.mjs"
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/managed-server/install/remote-versioned-install.test.ts config/scripts/package-electron-runtime-contract.test.mjs",
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/managed-server/install/remote-versioned-install.test.ts config/scripts/package-electron-runtime-contract.test.mjs"
       ],
       "testFiles": [
         "src/main/daemon/daemon-pty-adapter.test.ts",
@@ -18058,7 +18058,7 @@
         "src/shared/promise-settlement-waiters.test.ts",
         "config/scripts/runtime-file-watcher-fault-harness.mjs",
         "config/scripts/runtime-file-watcher-resource-probe.mjs",
-        "src/main/ssh/remote-versioned-install.test.ts",
+        "src/main/managed-server/install/remote-versioned-install.test.ts",
         "config/scripts/package-electron-runtime-contract.test.mjs"
       ],
       "assertionRefs": [
@@ -18380,7 +18380,7 @@
           ]
         },
         {
-          "file": "src/main/ssh/remote-versioned-install.test.ts",
+          "file": "src/main/managed-server/install/remote-versioned-install.test.ts",
           "assertions": [
             "remote completeness requires every model artifact and the install sentinel"
           ]
@@ -18457,7 +18457,7 @@
           "date": "2026-07-13",
           "runner": "local",
           "platform": "macos",
-          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/ssh/remote-versioned-install.test.ts config/scripts/package-electron-runtime-contract.test.mjs",
+          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/managed-server/install/remote-versioned-install.test.ts config/scripts/package-electron-runtime-contract.test.mjs",
           "result": "passed",
           "durationSeconds": 10.01,
           "summary": "Six relay registry, filesystem/Git handler, bundled subprocess, install, and package contract files passed with 226 tests."
@@ -18511,7 +18511,7 @@
           "date": "2026-07-13",
           "runner": "local",
           "platform": "macos",
-          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/ssh/remote-versioned-install.test.ts config/scripts/package-electron-runtime-contract.test.mjs",
+          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/managed-server/install/remote-versioned-install.test.ts config/scripts/package-electron-runtime-contract.test.mjs",
           "result": "passed",
           "durationSeconds": 10.69,
           "summary": "Six relay registry, filesystem/Git handler, bundled subprocess, install, and package contract files passed with 226 tests, including watcher/PTY removal fencing and recursive deletion failure behavior."
@@ -18565,7 +18565,7 @@
           "date": "2026-07-13",
           "runner": "local",
           "platform": "macos",
-          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/ssh/remote-versioned-install.test.ts config/scripts/package-electron-runtime-contract.test.mjs",
+          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/managed-server/install/remote-versioned-install.test.ts config/scripts/package-electron-runtime-contract.test.mjs",
           "result": "passed",
           "durationSeconds": 9.79,
           "summary": "Six relay registry, filesystem/Git handler, bundled subprocess, install, and package contract files passed with 225 tests, including terminal removal notification and recursive deletion fencing."

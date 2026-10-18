@@ -16,7 +16,7 @@ import {
   RemoteNodeRuntimeSelfTestError,
   assertRemoteNodeRuntimePromoted
 } from './orcad-remote-node-runtime-report'
-import { remoteNodeRuntimePresentCommand } from './orcad-remote-node-runtime'
+import { remoteNodeRuntimePresentCommand } from '../managed-server/install/orcad-remote-node-runtime'
 import { isAnsweredHostFailure } from './remote-host-answered-failure'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 import { findSystemSsh } from './system-ssh-binary'

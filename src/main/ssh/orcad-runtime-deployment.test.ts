@@ -45,7 +45,9 @@ vi.mock('./ssh-target-registry', () => ({
   getSshConnectionManager: () => ({ connect: mocks.connect }),
   getSshTargetRegistryStore: () => mocks.state.store
 }))
-vi.mock('./orcad-remote-context', () => ({ resolveOrcadRemoteContext: mocks.resolveContext }))
+vi.mock('../managed-server/install/orcad-remote-context', () => ({
+  resolveOrcadRemoteContext: mocks.resolveContext
+}))
 vi.mock('../managed-server/activation/orcad-activation-recovery', () => ({
   recoverInterruptedOrcadActivation: mocks.recover
 }))
@@ -63,10 +65,10 @@ vi.mock('./orcad-managed-wake', () => ({ wakeStoppedManagedOrcad: mocks.wake }))
 vi.mock('../managed-server/activation/orcad-activation-fence-hold', () => ({
   orcadActivationFenceRefusal: mocks.fenceRefusal
 }))
-vi.mock('./orcad-remote-build-hash', () => ({
+vi.mock('../managed-server/install/orcad-remote-build-hash', () => ({
   readRemoteOrcadBuildHash: async () => 'running-hash'
 }))
-vi.mock('./remote-versioned-install', async (importOriginal) => ({
+vi.mock('../managed-server/install/remote-versioned-install', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   readLocalFullVersion: mocks.localVersion
 }))

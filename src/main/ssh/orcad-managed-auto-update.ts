@@ -20,7 +20,7 @@ import { ORCAD_ACTIVATION_FENCE_BUSY_CODE } from '../managed-server/activation/o
 import { resolveLinkedOrcadContext } from './orcad-managed-runtime-context'
 import { runManagedOrcadUpdate, withManagedOrcadLifecycle } from './orcad-runtime-maintenance'
 import type { OrcadUpdateDeferCode } from './orcad-update-plan'
-import { readLocalFullVersion } from './remote-versioned-install'
+import { readLocalFullVersion } from '../managed-server/install/remote-versioned-install'
 
 export type ManagedOrcadAutoUpdateSkip =
   | 'current'

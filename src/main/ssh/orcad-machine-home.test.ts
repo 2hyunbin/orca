@@ -40,7 +40,7 @@ vi.mock('./remote-exec-command', async (importOriginal) => {
   }
 })
 
-const { resolveOrcadMachineHome } = await import('./orcad-remote-context')
+const { resolveOrcadMachineHome } = await import('../managed-server/install/orcad-remote-context')
 const {
   decideOrcadMachineHome,
   orcadMachineIdentity,
@@ -50,11 +50,12 @@ const {
   ORCAD_MACHINE_HOMES_DIRNAME
 } = await import('./orcad-machine-home')
 const { ORCAD_MACHINE_CLAIM_ARBITER_DIRNAME } = await import('./orcad-machine-claim-command')
-const { computeRemoteInstallDir } = await import('./remote-versioned-install')
-const { ORCAD_INSTALL_MODEL } = await import('./remote-install-model')
-const { orcadLivenessProbeCommand } = await import('./orcad-remote-launch')
-const { ORCAD_PID_FILENAME } = await import('./orcad-remote-host-support')
-const { execOrcadRemote } = await import('./orcad-remote-runtime-control')
+const { computeRemoteInstallDir } =
+  await import('../managed-server/install/remote-versioned-install')
+const { ORCAD_INSTALL_MODEL } = await import('../managed-server/install/remote-install-model')
+const { orcadLivenessProbeCommand } = await import('../managed-server/install/orcad-remote-launch')
+const { ORCAD_PID_FILENAME } = await import('../managed-server/install/orcad-remote-host-support')
+const { execOrcadRemote } = await import('../managed-server/install/orcad-remote-runtime-control')
 const { getRemoteHostPlatform } = await import('./ssh-remote-platform')
 type Probe = OrcadMachineHomeProbe
 type Host = RemoteHostPlatform

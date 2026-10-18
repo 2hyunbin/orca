@@ -11,7 +11,7 @@ import {
   ORCAD_STATE_MUTATION_BUSY,
   ORCAD_STATE_MUTATION_DEADLINE
 } from './orcad-state-snapshot-members'
-import type { OrcadRemoteExecTarget } from './orcad-remote-runtime-control'
+import type { OrcadRemoteExecTarget } from '../managed-server/install/orcad-remote-runtime-control'
 import { execCommand, isUnconfirmedSshCommandTermination } from './remote-exec-command'
 import {
   isOrcadFenceLost,

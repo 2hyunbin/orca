@@ -14,7 +14,7 @@ import {
 } from './orcad-managed-tunnel-identity'
 import { managedOrcadSlot } from './orcad-managed-runtime-context'
 import { wakeStoppedManagedOrcad } from './orcad-managed-wake'
-import { resolveOrcadRemoteContext } from './orcad-remote-context'
+import { resolveOrcadRemoteContext } from '../managed-server/install/orcad-remote-context'
 import type { SshConnection } from './ssh-connection'
 import type { PortForwardEntry, SshPortForwardManager } from './port-forwarding/ssh-port-forward'
 

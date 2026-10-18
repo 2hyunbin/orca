@@ -35,7 +35,9 @@ vi.mock('./orcad-managed-migration-status', () => ({
 vi.mock('../orcad/orcad-artifact-materializer', () => ({
   materializeOrcadArtifact: mocks.materialize
 }))
-vi.mock('./remote-versioned-install', () => ({ readLocalFullVersion: () => '0.1.0+new' }))
+vi.mock('../managed-server/install/remote-versioned-install', () => ({
+  readLocalFullVersion: () => '0.1.0+new'
+}))
 
 import {
   autoUpdateManagedOrcadEnvironment,

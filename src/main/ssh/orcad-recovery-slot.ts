@@ -6,9 +6,9 @@
  */
 import type { ServeReadiness } from '../server/serve-readiness'
 import type { OrcadActivationExpectation } from '../managed-server/activation/orcad-activation-gate'
-import { ORCAD_INSTALL_MODEL } from './remote-install-model'
-import { computeRemoteInstallDir } from './remote-versioned-install'
-import { readRemoteOrcadBuildHash } from './orcad-remote-build-hash'
+import { ORCAD_INSTALL_MODEL } from '../managed-server/install/remote-install-model'
+import { computeRemoteInstallDir } from '../managed-server/install/remote-versioned-install'
+import { readRemoteOrcadBuildHash } from '../managed-server/install/orcad-remote-build-hash'
 import {
   launchOrcadSlotAndAwaitReadiness,
   OrcadActiveReadinessError,
@@ -19,13 +19,16 @@ import {
   orcadLivenessProvenExited,
   parseOrcadLiveness,
   type OrcadLiveness
-} from './orcad-remote-launch'
+} from '../managed-server/install/orcad-remote-launch'
 import {
   parseOrcadStopOutcome,
   stopOrcadCommand,
   type OrcadStopOutcome
-} from './orcad-remote-process-control'
-import { execOrcadRemote, type OrcadRemoteExecTarget } from './orcad-remote-runtime-control'
+} from '../managed-server/install/orcad-remote-process-control'
+import {
+  execOrcadRemote,
+  type OrcadRemoteExecTarget
+} from '../managed-server/install/orcad-remote-runtime-control'
 import { orcadActivationTransactionRoot } from '../managed-server/activation/orcad-activation-transaction'
 import {
   initialOrcadActivationAdmissionCommand,

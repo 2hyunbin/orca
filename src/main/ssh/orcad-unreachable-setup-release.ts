@@ -18,8 +18,8 @@ import {
   writeOrcadActivationRecord
 } from '../managed-server/activation/orcad-activation-record-store'
 import { managedOrcadSlot } from './orcad-managed-runtime-context'
-import { resolveOrcadRemoteContext } from './orcad-remote-context'
-import { orcadStopFreedTheHost } from './orcad-remote-process-control'
+import { resolveOrcadRemoteContext } from '../managed-server/install/orcad-remote-context'
+import { orcadStopFreedTheHost } from '../managed-server/install/orcad-remote-process-control'
 import { orcadSlotDir, stopOrcadSlot } from './orcad-recovery-slot'
 import { sshOrcadHostTransport } from './orcad-ssh-host-transport'
 import { getSshConnectionManager, getSshTargetRegistryStore } from './ssh-target-registry'

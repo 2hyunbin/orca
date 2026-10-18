@@ -8,18 +8,18 @@ import {
   parseOrcadLiveness,
   type OrcadLaunchSpec,
   type OrcadReadinessParse
-} from './orcad-remote-launch'
+} from '../managed-server/install/orcad-remote-launch'
 import {
   execOrcadRemote,
   launchOrcadAndAwaitReadiness,
   type OrcadRemoteExecTarget
-} from './orcad-remote-runtime-control'
+} from '../managed-server/install/orcad-remote-runtime-control'
 import {
   parseOrcadReadinessWaitOutput,
   readOrcadReadinessNowCommand
-} from './orcad-remote-readiness-wait'
+} from '../managed-server/install/orcad-remote-readiness-wait'
 import type { ServeReadiness } from '../server/serve-readiness'
-import { withOrcadLogTail } from './orcad-remote-log-tail'
+import { withOrcadLogTail } from '../managed-server/install/orcad-remote-log-tail'
 
 /** `exited` is proven absence; `unverifiable` means the host could not say, which is not death. */
 export type OrcadReadinessFailureVerdict = 'exited' | 'unverifiable' | 'rejected'

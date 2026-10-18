@@ -13,11 +13,14 @@ import { readOrcadActivationRecord } from '../../managed-server/activation/orcad
 import { classifyOrcadHostUnavailable } from '../../orcad/orcad-host-unavailable'
 import { managedOrcadSlot } from '../orcad-managed-runtime-context'
 import { orcadSlotDir, type OrcadSlotOptions } from '../orcad-recovery-slot'
-import { resolveOrcadRemoteContext } from '../orcad-remote-context'
+import { resolveOrcadRemoteContext } from '../../managed-server/install/orcad-remote-context'
 import { deployOrcad } from '../orcad-remote-deploy'
-import { orcadLivenessProbeCommand, parseOrcadLiveness } from '../orcad-remote-launch'
-import { execOrcadRemote } from '../orcad-remote-runtime-control'
-import { decommissionRemoteOrcad } from '../orcad-remote-decommission'
+import {
+  orcadLivenessProbeCommand,
+  parseOrcadLiveness
+} from '../../managed-server/install/orcad-remote-launch'
+import { execOrcadRemote } from '../../managed-server/install/orcad-remote-runtime-control'
+import { decommissionRemoteOrcad } from '../../managed-server/install/orcad-remote-decommission'
 import { shellEscape } from '../ssh-connection-utils'
 import {
   forbiddenToolActions,

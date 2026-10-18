@@ -23,7 +23,7 @@ vi.mock('./ssh-target-registry', () => ({
   getSshTargetRegistryStore: () => ({ getTarget: () => ({ id: 'ssh-1' }) }),
   getSshConnectionManager: () => ({ connect: async () => ({}) })
 }))
-vi.mock('./orcad-remote-context', () => ({
+vi.mock('../managed-server/install/orcad-remote-context', () => ({
   resolveOrcadRemoteContext: async () => ({
     activationRecord: { ...emptyOrcadActivationRecord(), active: mocks.record.active },
     connection: {},

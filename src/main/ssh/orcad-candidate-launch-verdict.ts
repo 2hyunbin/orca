@@ -3,11 +3,11 @@ import {
   type OrcadActivationVerdict
 } from '../managed-server/activation/orcad-activation-gate'
 import { orcadActivationTransactionRoot } from '../managed-server/activation/orcad-activation-transaction'
-import type { OrcadReadinessParse } from './orcad-remote-launch'
+import type { OrcadReadinessParse } from '../managed-server/install/orcad-remote-launch'
 import {
   launchOrcadAndAwaitReadiness,
   type OrcadRemoteExecTarget
-} from './orcad-remote-runtime-control'
+} from '../managed-server/install/orcad-remote-runtime-control'
 import { isUnconfirmedSshCommandTermination } from './remote-exec-command'
 
 type CandidateLaunchTarget = Parameters<typeof launchOrcadAndAwaitReadiness>[0] &

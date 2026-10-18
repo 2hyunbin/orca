@@ -11,7 +11,7 @@ import type { OrcadActivateTransaction } from '../managed-server/activation/orca
 import { writeOrcadActivationTransaction } from '../managed-server/activation/orcad-activation-transaction-store'
 import { withOrcadActivationCandidateReady } from '../managed-server/activation/orcad-activation-transaction-transitions'
 import { OrcadActiveReadinessError } from './orcad-active-readiness'
-import { orcadLivenessProvenExited } from './orcad-remote-launch'
+import { orcadLivenessProvenExited } from '../managed-server/install/orcad-remote-launch'
 import {
   ORCAD_RECOVERY_CHANGED_STATE_CODE,
   type OrcadManagedRefusal

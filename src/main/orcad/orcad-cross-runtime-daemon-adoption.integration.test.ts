@@ -45,10 +45,19 @@ import {
   emptyOrcadActivationRecord,
   orcadGcPinnedDirNames
 } from '../managed-server/activation/orcad-activation-record'
-import { gcOldOrcadVersions } from '../ssh/orcad-remote-gc'
-import { ORCAD_PID_FILENAME, ORCAD_READINESS_FILENAME } from '../ssh/orcad-remote-host-support'
-import { orcadLaunchCommand, parseOrcadReadinessOutput } from '../ssh/orcad-remote-launch'
-import { parseOrcadStopOutcome, stopOrcadCommand } from '../ssh/orcad-remote-process-control'
+import { gcOldOrcadVersions } from '../managed-server/install/orcad-remote-gc'
+import {
+  ORCAD_PID_FILENAME,
+  ORCAD_READINESS_FILENAME
+} from '../managed-server/install/orcad-remote-host-support'
+import {
+  orcadLaunchCommand,
+  parseOrcadReadinessOutput
+} from '../managed-server/install/orcad-remote-launch'
+import {
+  parseOrcadStopOutcome,
+  stopOrcadCommand
+} from '../managed-server/install/orcad-remote-process-control'
 import { RELAY_REMOTE_DIR } from '../ssh/remote-frame-protocol'
 import { getRemoteHostPlatform } from '../ssh/ssh-remote-platform'
 import {

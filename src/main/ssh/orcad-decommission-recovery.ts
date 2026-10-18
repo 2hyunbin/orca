@@ -7,8 +7,8 @@ import {
   orcadLivenessProbeCommand,
   orcadLivenessProvenExited,
   parseOrcadLiveness
-} from './orcad-remote-launch'
-import { execOrcadRemote } from './orcad-remote-runtime-control'
+} from '../managed-server/install/orcad-remote-launch'
+import { execOrcadRemote } from '../managed-server/install/orcad-remote-runtime-control'
 import {
   ensureOrcadSlotServing,
   orcadSlotDir,

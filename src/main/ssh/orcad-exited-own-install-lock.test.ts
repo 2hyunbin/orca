@@ -29,7 +29,8 @@ vi.mock('./remote-exec-command', async (importOriginal) => {
   }
 })
 
-const { acquireInstallLock, RemoteInstallLockBusyError } = await import('./remote-install-lock')
+const { acquireInstallLock, RemoteInstallLockBusyError } =
+  await import('../managed-server/install/remote-install-lock')
 const { exitedOwnLockProof } = await import('./orcad-exited-own-lock')
 const { initOrcadHeldFenceTokenFile, ORCAD_HELD_FENCE_TOKENS_FILE_NAME } =
   await import('./orcad-held-fence-tokens')

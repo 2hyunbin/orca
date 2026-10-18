@@ -1,4 +1,4 @@
-import type { RemoteInstallTransport } from './remote-install-transport'
+import type { RemoteInstallTransport } from '../managed-server/install/remote-install-transport'
 import { execCommand } from './remote-exec-command'
 import type { RemoteHostPlatform } from './ssh-remote-platform'
 

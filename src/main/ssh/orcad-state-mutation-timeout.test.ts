@@ -6,29 +6,31 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as ExecCommandModule from './remote-exec-command'
-import type * as RecordFile from './orcad-remote-record-file'
-import type * as InstallLock from './remote-install-lock'
-import type * as VersionedInstall from './remote-versioned-install'
+import type * as RecordFile from '../managed-server/install/orcad-remote-record-file'
+import type * as InstallLock from '../managed-server/install/remote-install-lock'
+import type * as VersionedInstall from '../managed-server/install/remote-versioned-install'
 
 vi.mock('./remote-exec-command', async (importOriginal) => ({
   ...(await importOriginal<typeof ExecCommandModule>()),
   execCommand: vi.fn()
 }))
 vi.mock('./ssh-connection-utils', () => ({ shellEscape: (s: string) => `'${s}'` }))
-vi.mock('./remote-install-lock', async (importOriginal) => ({
+vi.mock('../managed-server/install/remote-install-lock', async (importOriginal) => ({
   ...(await importOriginal<typeof InstallLock>()),
   acquireInstallLock: vi.fn()
 }))
-vi.mock('./orcad-remote-record-file', async (importOriginal) => ({
+vi.mock('../managed-server/install/orcad-remote-record-file', async (importOriginal) => ({
   ...(await importOriginal<typeof RecordFile>()),
   writeAtomicOrcadRemoteRecord: vi.fn()
 }))
-vi.mock('./remote-versioned-install', async (importOriginal) => ({
+vi.mock('../managed-server/install/remote-versioned-install', async (importOriginal) => ({
   ...(await importOriginal<typeof VersionedInstall>()),
   readLocalFullVersion: () => '0.2.0+bb01'
 }))
-vi.mock('./orcad-remote-install', () => ({ installOrcadBundle: vi.fn() }))
-vi.mock('./orcad-remote-preflight', () => ({ preflightInstalledOrcad: vi.fn() }))
+vi.mock('../managed-server/install/orcad-remote-install', () => ({ installOrcadBundle: vi.fn() }))
+vi.mock('../managed-server/install/orcad-remote-preflight', () => ({
+  preflightInstalledOrcad: vi.fn()
+}))
 vi.mock('./orcad-local-build-hash', () => ({
   computeLocalOrcadBuildHash: () => 'abc123def4567890'
 }))
@@ -38,10 +40,10 @@ import {
   SSH_EXEC_TIMEOUT_CODE,
   isUnconfirmedSshCommandTermination
 } from './remote-exec-command'
-import { acquireInstallLock } from './remote-install-lock'
-import { writeAtomicOrcadRemoteRecord } from './orcad-remote-record-file'
+import { acquireInstallLock } from '../managed-server/install/remote-install-lock'
+import { writeAtomicOrcadRemoteRecord } from '../managed-server/install/orcad-remote-record-file'
 import { deployOrcad } from './orcad-remote-deploy'
-import { rollbackOrcad } from './orcad-remote-rollback'
+import { rollbackOrcad } from '../managed-server/install/orcad-remote-rollback'
 import { recoverInterruptedOrcadActivation } from '../managed-server/activation/orcad-activation-recovery'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 import type { OrcadHostTransport } from './orcad-host-transport'
@@ -132,8 +134,9 @@ beforeEach(() => {
   vi.mocked(execCommand).mockImplementation(async (_conn, command) => exec(command))
   vi.mocked(acquireInstallLock).mockImplementation(async (_conn, dir, _host, options) => {
     if (!host.acquireFence(options)) {
-      const { RemoteInstallLockBusyError } =
-        await vi.importActual<typeof InstallLock>('./remote-install-lock')
+      const { RemoteInstallLockBusyError } = await vi.importActual<typeof InstallLock>(
+        '../managed-server/install/remote-install-lock'
+      )
       throw new RemoteInstallLockBusyError(dir, 0)
     }
   })

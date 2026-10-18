@@ -10,7 +10,7 @@ import {
   OrcadStdioBridgeDecoder,
   type OrcadStdioBridgeSignal
 } from './orcad-stdio-bridge-stream'
-import type { RemoteCommandChannel } from './remote-install-transport'
+import type { RemoteCommandChannel } from '../managed-server/install/remote-install-transport'
 import type {
   PortForwardStartOptions,
   StartedPortForward

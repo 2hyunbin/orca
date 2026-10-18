@@ -17,7 +17,7 @@ on:
       - 'src/main/managed-server/**'
       - '!src/main/ssh/orcad-*.test.ts'
       - '!src/main/managed-server/**/*.test.ts'
-      - 'src/main/ssh/remote-install-transport.ts'
+      - 'src/main/managed-server/install/remote-install-transport.ts'
       # orcad-entry runs this on every boot of the orcad the lane launches in the distro.
       - 'src/main/orcad/orcad-wsl-*'
       - '!src/main/orcad/orcad-wsl-*.test.ts'

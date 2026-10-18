@@ -12,8 +12,8 @@ import {
   releaseOrcadActivationFence,
   withOrcadActivationLock
 } from '../managed-server/activation/orcad-activation-lock'
-import { orcadLivenessProvenExited } from './orcad-remote-launch'
-import { readBoundedOrcadRemoteRecord } from './orcad-remote-record-file'
+import { orcadLivenessProvenExited } from '../managed-server/install/orcad-remote-launch'
+import { readBoundedOrcadRemoteRecord } from '../managed-server/install/orcad-remote-record-file'
 import { orcadActivationFenceLockDir } from '../managed-server/activation/orcad-activation-transaction'
 import { joinRemotePath } from './ssh-remote-platform'
 

@@ -7,8 +7,8 @@ import {
 import {
   readBoundedOrcadRemoteRecord,
   writeAtomicOrcadRemoteRecord
-} from '../../ssh/orcad-remote-record-file'
-import type { OrcadRemoteExecTarget } from '../../ssh/orcad-remote-runtime-control'
+} from '../install/orcad-remote-record-file'
+import type { OrcadRemoteExecTarget } from '../install/orcad-remote-runtime-control'
 import { currentOrcadFence } from './orcad-activation-fence-scope'
 
 const ORCAD_ACTIVATION_TRANSACTION_MAX_BYTES = 64 * 1024

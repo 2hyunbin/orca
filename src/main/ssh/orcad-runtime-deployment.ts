@@ -25,13 +25,16 @@ import {
 import { recoverInterruptedOrcadActivation } from '../managed-server/activation/orcad-activation-recovery'
 import { wakeAlreadyActiveOrcad } from './orcad-already-active-wake'
 import { readOrcadActivationRecord } from '../managed-server/activation/orcad-activation-record-store'
-import { resolveOrcadRemoteContext, type OrcadRemoteContext } from './orcad-remote-context'
+import {
+  resolveOrcadRemoteContext,
+  type OrcadRemoteContext
+} from '../managed-server/install/orcad-remote-context'
 import { deployOrcad } from './orcad-remote-deploy'
 import {
   adoptRunningOrcadVersion,
   type OrcadRunningAdoption
 } from './orcad-running-version-adoption'
-import { readLocalFullVersion } from './remote-versioned-install'
+import { readLocalFullVersion } from '../managed-server/install/remote-versioned-install'
 import { sshOrcadHostTransport } from './orcad-ssh-host-transport'
 import { ORCAD_ACTIVATION_POLICY_REFUSED_CODE } from './orcad-installed-activation'
 import { pruneManagedOrcadVersions } from './orcad-managed-version-gc'

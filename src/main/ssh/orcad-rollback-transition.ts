@@ -1,13 +1,16 @@
 /** The locked, journaled half of `rollbackOrcad`. */
-import { orcadRemoteBaseDir } from './orcad-remote-windows-node'
+import { orcadRemoteBaseDir } from '../managed-server/install/orcad-remote-windows-node'
 import { randomUUID } from 'node:crypto'
-import type { OrcadRollbackOptions, OrcadRollbackResult } from './orcad-remote-rollback'
+import type {
+  OrcadRollbackOptions,
+  OrcadRollbackResult
+} from '../managed-server/install/orcad-remote-rollback'
 import { isUnconfirmedSshCommandTermination } from './remote-exec-command'
 import { withRolledBackVersion } from '../managed-server/activation/orcad-activation-record'
 import { writeOrcadActivationRecord } from '../managed-server/activation/orcad-activation-record-store'
 import { launchAndJudgeOrcadSlot } from './orcad-candidate-launch-verdict'
 import { assessOrcadRollback } from './orcad-update-plan'
-import { ORCAD_LOG_FILENAME } from './orcad-remote-host-support'
+import { ORCAD_LOG_FILENAME } from '../managed-server/install/orcad-remote-host-support'
 import {
   captureOrcadStateSnapshotCommand,
   newestStateMtimeCommand,
@@ -31,7 +34,10 @@ import {
   withOrcadRollbackRescue
 } from '../managed-server/activation/orcad-activation-transaction-transitions'
 import { writeOrcadActivationTransaction } from '../managed-server/activation/orcad-activation-transaction-store'
-import { execOrcadRemoteOr, withoutAbortSignal } from './orcad-remote-runtime-control'
+import {
+  execOrcadRemoteOr,
+  withoutAbortSignal
+} from '../managed-server/install/orcad-remote-runtime-control'
 import { execOrcadStateMutationOr } from './orcad-state-mutation-exec'
 import {
   orcadSlotDir,
@@ -48,7 +54,7 @@ import {
   rollbackBarrierRefusal,
   stopIncumbentBehindTerminalBarrier
 } from './orcad-rollback-terminal-barrier'
-import { withOrcadLogTail } from './orcad-remote-log-tail'
+import { withOrcadLogTail } from '../managed-server/install/orcad-remote-log-tail'
 import { errorMessage } from '../../shared/error-message'
 
 async function stateWritesSinceActivation(options: OrcadRollbackOptions): Promise<boolean | null> {

@@ -26,7 +26,8 @@ vi.mock('./remote-exec-command', async (importOriginal) => {
 const { exitedOwnLockProof } = await import('./orcad-exited-own-lock')
 const { initOrcadHeldFenceTokenFile, ORCAD_HELD_FENCE_TOKENS_FILE_NAME } =
   await import('./orcad-held-fence-tokens')
-const { tryStealInstallLockCommand } = await import('./remote-install-lock-commands')
+const { tryStealInstallLockCommand } =
+  await import('../managed-server/install/remote-install-lock-commands')
 const { serializedStateMutationCommand } = await import('./orcad-state-snapshot')
 const { ORCAD_FENCE_LOST_EXIT, ORCAD_FENCE_LOST_MARKER } =
   await import('../managed-server/activation/orcad-activation-fence-scope')

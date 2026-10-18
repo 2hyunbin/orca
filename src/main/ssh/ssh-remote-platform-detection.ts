@@ -1,4 +1,4 @@
-import type { RemoteInstallTransport } from './remote-install-transport'
+import type { RemoteInstallTransport } from '../managed-server/install/remote-install-transport'
 import {
   getProcessOutputFields,
   iterateProcessOutputLines

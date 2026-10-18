@@ -17,7 +17,7 @@ import {
   orcadActivationFenceExists,
   withStaleOrcadActivationRecoveryLock
 } from './orcad-activation-lock'
-import { RemoteInstallLockBusyError } from '../../ssh/remote-install-lock'
+import { RemoteInstallLockBusyError } from '../install/remote-install-lock'
 import { ensureOrcadSlotServing, resolveOrcadSlotIdentity } from '../../ssh/orcad-recovery-slot'
 import { reconcileOrcadDecommission } from '../../ssh/orcad-decommission-recovery'
 import {

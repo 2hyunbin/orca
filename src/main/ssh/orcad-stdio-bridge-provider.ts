@@ -16,7 +16,7 @@ import {
 } from './orcad-stdio-bridge'
 import { listenOrcadStdioBridge } from './orcad-stdio-bridge-listener'
 import { sshOrcadHostTransport } from './orcad-ssh-host-transport'
-import type { RemoteCommandChannel } from './remote-install-transport'
+import type { RemoteCommandChannel } from '../managed-server/install/remote-install-transport'
 import type { SshConnection } from './ssh-connection'
 import type {
   PortForwardStartOptions,

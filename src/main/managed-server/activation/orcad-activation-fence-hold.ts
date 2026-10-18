@@ -11,9 +11,9 @@ import {
 } from './orcad-activation-lock'
 import { readOrcadActivationTransaction } from './orcad-activation-transaction-store'
 import { orcadActivationFenceLockDir } from './orcad-activation-transaction'
-import { isRelayInstallLockStale } from '../../ssh/remote-install-lock'
+import { isRelayInstallLockStale } from '../install/remote-install-lock'
 import { findExitedOwnLockToken } from '../../ssh/orcad-exited-own-lock'
-import { orcadRemoteBaseDir } from '../../ssh/orcad-remote-windows-node'
+import { orcadRemoteBaseDir } from '../install/orcad-remote-windows-node'
 
 export const ORCAD_ACTIVATION_FENCE_BUSY_CODE = 'orcad_activation_fence_busy'
 const ORCAD_ACTIVATION_RECOVERY_REQUIRED_CODE = 'orcad_activation_recovery_required'

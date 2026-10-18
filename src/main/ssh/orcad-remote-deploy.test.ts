@@ -1,6 +1,6 @@
 import type * as ExecCommandModule from './remote-exec-command'
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import type * as RecordFile from './orcad-remote-record-file'
+import type * as RecordFile from '../managed-server/install/orcad-remote-record-file'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -11,21 +11,21 @@ vi.mock('./remote-exec-command', async (importOriginal) => ({
   execCommand: vi.fn()
 }))
 vi.mock('./ssh-connection-utils', () => ({ shellEscape: (s: string) => `'${s}'` }))
-vi.mock('./remote-install-lock', () => ({
+vi.mock('../managed-server/install/remote-install-lock', () => ({
   acquireInstallLock: vi.fn().mockResolvedValue(undefined),
   isRelayInstallLockStale: vi.fn().mockResolvedValue(false),
   RemoteInstallLockBusyError: class extends Error {},
   RELAY_INSTALL_LOCK_NAME: '.install-lock'
 }))
-vi.mock('./remote-install-transfers', () => ({
+vi.mock('../managed-server/install/remote-install-transfers', () => ({
   uploadRelayDirectory: vi.fn().mockResolvedValue(undefined),
   writeRelayFile: vi.fn().mockResolvedValue(undefined)
 }))
-vi.mock('./orcad-remote-record-file', async (importOriginal) => ({
+vi.mock('../managed-server/install/orcad-remote-record-file', async (importOriginal) => ({
   ...(await importOriginal<typeof RecordFile>()),
   writeAtomicOrcadRemoteRecord: vi.fn().mockResolvedValue(undefined)
 }))
-vi.mock('./orcad-remote-node-runtime', () => ({
+vi.mock('../managed-server/install/orcad-remote-node-runtime', () => ({
   ensureRemoteOrcadNodeRuntime: vi.fn().mockResolvedValue(undefined)
 }))
 vi.mock('./orcad-local-build-hash', () => ({
@@ -33,17 +33,20 @@ vi.mock('./orcad-local-build-hash', () => ({
 }))
 
 import { execCommand } from './remote-exec-command'
-import { acquireInstallLock, isRelayInstallLockStale } from './remote-install-lock'
-import { uploadRelayDirectory } from './remote-install-transfers'
-import { writeAtomicOrcadRemoteRecord } from './orcad-remote-record-file'
+import {
+  acquireInstallLock,
+  isRelayInstallLockStale
+} from '../managed-server/install/remote-install-lock'
+import { uploadRelayDirectory } from '../managed-server/install/remote-install-transfers'
+import { writeAtomicOrcadRemoteRecord } from '../managed-server/install/orcad-remote-record-file'
 import { deployOrcad, type OrcadDeployOptions } from './orcad-remote-deploy'
-import { installOrcadBundle } from './orcad-remote-install'
-import { ensureRemoteOrcadNodeRuntime } from './orcad-remote-node-runtime'
+import { installOrcadBundle } from '../managed-server/install/orcad-remote-install'
+import { ensureRemoteOrcadNodeRuntime } from '../managed-server/install/orcad-remote-node-runtime'
 import {
   abandonInstall,
   finalizeInstall,
   isRemoteInstallComplete
-} from './remote-versioned-install'
+} from '../managed-server/install/remote-versioned-install'
 import {
   emptyOrcadActivationRecord,
   withActivatedVersion,
@@ -62,7 +65,7 @@ const mockExec = vi.mocked(execCommand)
 const NEW_VERSION = '0.2.0+bb0100000000'
 const OLD_VERSION = '0.1.0+aa01'
 
-vi.mock('./remote-versioned-install', async (importOriginal) => ({
+vi.mock('../managed-server/install/remote-versioned-install', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   readLocalFullVersion: () => '0.2.0+bb0100000000',
   isRemoteInstallComplete: vi.fn().mockResolvedValue(false),

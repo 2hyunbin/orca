@@ -1,18 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
 import type * as ExecCommandModule from '../../ssh/remote-exec-command'
-import type * as InstallLock from '../../ssh/remote-install-lock'
+import type * as InstallLock from '../install/remote-install-lock'
 
 vi.mock('../../ssh/remote-exec-command', async (importOriginal) => ({
   ...(await importOriginal<typeof ExecCommandModule>()),
   execCommand: vi.fn().mockResolvedValue('')
 }))
-vi.mock('../../ssh/remote-install-lock', async (importOriginal) => ({
+vi.mock('../install/remote-install-lock', async (importOriginal) => ({
   ...(await importOriginal<typeof InstallLock>()),
   acquireInstallLock: vi.fn().mockResolvedValue(undefined)
 }))
 
 import { execCommand } from '../../ssh/remote-exec-command'
-import { acquireInstallLock, RemoteInstallLockBusyError } from '../../ssh/remote-install-lock'
+import { acquireInstallLock, RemoteInstallLockBusyError } from '../install/remote-install-lock'
 import {
   parseOrcadActivationTransaction,
   planOrcadTransactionRecovery,

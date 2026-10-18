@@ -1,10 +1,13 @@
 import type { Readable } from 'node:stream'
-import type { RemoteCommandChannel, RemoteInstallTransport } from './remote-install-transport'
+import type {
+  RemoteCommandChannel,
+  RemoteInstallTransport
+} from '../managed-server/install/remote-install-transport'
 import { createSshOperationAbortError, type SshExecOptions } from './ssh-connection-utils'
 import {
   redactRelayInstallMarkerError,
   redactRelayInstallMarkerTokens
-} from './remote-install-marker'
+} from '../managed-server/install/remote-install-marker'
 import type { SystemSshCommandChannel } from './system-ssh-command'
 import { buildPosixStdoutFence } from '../../shared/posix-stdout-fence'
 

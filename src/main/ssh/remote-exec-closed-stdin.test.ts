@@ -1,6 +1,6 @@
 import { Duplex, PassThrough, Readable } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
-import type { RemoteCommandChannel } from './remote-install-transport'
+import type { RemoteCommandChannel } from '../managed-server/install/remote-install-transport'
 import { execCommand } from './remote-exec-command'
 
 function answering(output: string): RemoteCommandChannel {

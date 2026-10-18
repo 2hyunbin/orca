@@ -19,7 +19,7 @@ import { joinRemotePath, type RemoteHostPlatform } from '../../ssh/ssh-remote-pl
 import {
   readBoundedOrcadRemoteRecord,
   writeAtomicOrcadRemoteRecord
-} from '../../ssh/orcad-remote-record-file'
+} from '../install/orcad-remote-record-file'
 
 const ORCAD_ACTIVATION_RECORD_MAX_BYTES = 64 * 1024
 

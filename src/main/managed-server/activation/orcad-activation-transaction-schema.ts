@@ -4,7 +4,7 @@ import {
   ORCAD_INSTALL_MODEL,
   remoteInstallDirName,
   remoteInstallVersionDirRegex
-} from '../../ssh/remote-install-model'
+} from '../install/remote-install-model'
 
 export const ORCAD_ACTIVATION_TRANSACTION_SCHEMA_VERSION = 1
 

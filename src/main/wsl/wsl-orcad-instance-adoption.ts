@@ -22,18 +22,18 @@ import {
   resolveOrcadSlotIdentity,
   type OrcadSlotOptions
 } from '../ssh/orcad-recovery-slot'
-import { ORCAD_PID_FILENAME } from '../ssh/orcad-remote-host-support'
+import { ORCAD_PID_FILENAME } from '../managed-server/install/orcad-remote-host-support'
 import {
   parseOrcadReadinessWaitOutput,
   readOrcadReadinessNowCommand
-} from '../ssh/orcad-remote-readiness-wait'
-import { readBoundedOrcadRemoteRecord } from '../ssh/orcad-remote-record-file'
-import { execOrcadRemote } from '../ssh/orcad-remote-runtime-control'
+} from '../managed-server/install/orcad-remote-readiness-wait'
+import { readBoundedOrcadRemoteRecord } from '../managed-server/install/orcad-remote-record-file'
+import { execOrcadRemote } from '../managed-server/install/orcad-remote-runtime-control'
 import {
   ORCAD_INSTALL_MODEL,
   remoteInstallDirName,
   remoteInstallVersionDirRegex
-} from '../ssh/remote-install-model'
+} from '../managed-server/install/remote-install-model'
 import { shellEscape } from '../ssh/ssh-connection-utils'
 import { joinRemotePath } from '../ssh/ssh-remote-platform'
 

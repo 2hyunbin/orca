@@ -371,7 +371,7 @@ describe('orcad-e2e-routing', () => {
     expectRouted(
       [
         'src/shared/orcad-idle-exit.ts',
-        'src/main/ssh/orcad-remote-runtime-control.ts',
+        'src/main/managed-server/install/orcad-remote-runtime-control.ts',
         'src/main/ssh/orcad-managed-serving.ts',
         'tests/e2e/helpers/orcad-convert-flow.ts',
         'tests/e2e/helpers/orcad-convert-host.ts'

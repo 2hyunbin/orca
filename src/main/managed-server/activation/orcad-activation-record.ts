@@ -10,7 +10,7 @@
  * It lives beside the version dirs (`~/.orca-remote/orcad-active.json`), not inside one,
  * because it has to outlive whichever version GC removes.
  */
-import { remoteInstallDirName, ORCAD_INSTALL_MODEL } from '../../ssh/remote-install-model'
+import { remoteInstallDirName, ORCAD_INSTALL_MODEL } from '../install/remote-install-model'
 
 export const ORCAD_ACTIVATION_FILENAME = 'orcad-active.json'
 export const ORCAD_ACTIVATION_SCHEMA_VERSION = 1
