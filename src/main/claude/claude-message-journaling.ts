@@ -100,8 +100,10 @@ export function journalClaudeMessage(
     assistant: envelope.role === 'assistant'
   }
   const openOutputTurn = (): void => ctx.turn.ensureOpen(message, source, observedAt)
-  // The terminal fact belongs to the actual turn, including frames without a user stamp.
-  if (envelope.role === 'assistant') {
+  const messageBody = claudeMessageBody(outputEnvelope)
+  // A refusal needs its owning turn before the canonical write; empty placeholders open nothing.
+  if (envelope.role === 'assistant' &&
+    (messageBody || typeof message.api_error === 'string' || message.error === 'rate_limit')) {
     openOutputTurn()
   }
   const usageLimit = ctx.usageLimits.assistant(message, ctx.turn)
@@ -109,7 +111,7 @@ export function journalClaudeMessage(
     ctx.authenticationFailures.assistant(message) ??
     usageLimit ??
     ctx.threadGoal.report(message, claudeMessageIdentity(envelope), observedAt) ??
-    claudeMessageBody(outputEnvelope)
+    messageBody
   const terminalIdentity = usageLimit && producerRef === null && ctx.turn.identity
     ? { provider: 'orca' as const, clientMessageId: `terminal-failure:claude:${agentJournalItemKey(ctx.turn.identity)}` }
     : null
