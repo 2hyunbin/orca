@@ -38,7 +38,7 @@ import {
   scheduleLegacyRemoteClipboardFileCleanup
 } from './clipboard-remote-file-copy'
 import { saveClipboardImageBufferInRuntime } from './clipboard-runtime-image-upload'
-import { uploadPastedImageToAgentSessionAttachments } from '../ipc/agent-session-attachment-upload'
+import { uploadPasteToAgentSessionAttachments } from '../ipc/agent-session-attachment-upload'
 import { readWindowsClipboardImageFileAsPng } from './clipboard-windows-image-file'
 import { readClipboardImageSource } from './clipboard-image-source'
 import { readClipboardCopiedFilePaths } from './clipboard-copied-file-paths'
@@ -47,6 +47,7 @@ import { readClipboardNativeImage } from './clipboard-native-image'
 import { publishClipboardText } from './clipboard-text-publisher'
 import { isDashboardPopoutRenderer } from './dashboard-popout-window'
 import { restoreNativeChatPastes, sweepExpiredNativeChatPastes } from './native-chat-paste-files'
+import { savePastedTextAsFile, type SavePastedTextAsFileArgs } from './native-chat-pasted-text-file'
 
 let trustedClipboardRendererWebContentsId: number | null = null
 
@@ -63,7 +64,7 @@ async function saveClipboardImageBufferForTarget(
   const runtimeEnvironmentId = args?.runtimeEnvironmentId?.trim()
   // A structured chat on a paired server keeps its pasted images in that server's store.
   if (runtimeEnvironmentId && args?.agentSessionAttachment) {
-    return uploadPastedImageToAgentSessionAttachments(
+    return uploadPasteToAgentSessionAttachments(
       args.agentSessionAttachment,
       runtimeEnvironmentId,
       app.getPath('userData'),
@@ -97,6 +98,7 @@ export function registerClipboardHandlers(store: Store): void {
   ipcMain.removeHandler('clipboard:writeImage')
   ipcMain.removeHandler('clipboard:writeFile')
   ipcMain.removeHandler('clipboard:saveImageAsTempFile')
+  ipcMain.removeHandler('clipboard:savePastedTextAsFile')
   ipcMain.removeHandler('clipboard:readImageThumbnail')
   ipcMain.removeHandler('clipboard:hasImage')
   ipcMain.removeHandler('clipboard:readFilePaths')
@@ -167,6 +169,10 @@ export function registerClipboardHandlers(store: Store): void {
       return saveClipboardImageBufferForTarget(image.toPNG(), args)
     }
   )
+  ipcMain.handle('clipboard:savePastedTextAsFile', (event, args: SavePastedTextAsFileArgs) => {
+    assertTrustedClipboardSender(event)
+    return savePastedTextAsFile(args)
+  })
   // Why: copy the actual file to the OS clipboard so pasting in Finder/Explorer
   // drops the file itself, not its path as text.
   ipcMain.handle(

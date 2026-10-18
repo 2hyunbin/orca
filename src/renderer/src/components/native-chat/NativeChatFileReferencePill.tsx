@@ -2,6 +2,8 @@ import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react'
 import { basename } from '@/lib/path'
 import { getFileTypeIcon } from '@/lib/file-type-icons'
 import { NativeChatPromptPill } from './NativeChatPromptPill'
+import { isNativeChatPastedTextPath } from './native-chat-image-paste'
+import { nativeChatPastedTextLabel } from './use-native-chat-pasted-text-file'
 
 export function NativeChatFileReferencePill({ node, selected }: NodeViewProps): React.JSX.Element {
   const path = String(node.attrs.path)
@@ -9,7 +11,7 @@ export function NativeChatFileReferencePill({ node, selected }: NodeViewProps): 
     <NodeViewWrapper as="span" className="inline" contentEditable={false}>
       <NativeChatPromptPill
         icon={getFileTypeIcon(path)}
-        label={basename(path)}
+        label={isNativeChatPastedTextPath(path) ? nativeChatPastedTextLabel() : basename(path)}
         selected={selected}
         title={path}
         data-native-chat-file-reference={path}

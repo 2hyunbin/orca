@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { withSupportedCodexCli } from '../codex/codex-cli-installation-error'
 import { codexStructuredLaunchPart } from '../codex/codex-structured-launch-resolution'
 import { claudeStructuredLaunchPart } from '../claude/claude-structured-launch-resolution'
@@ -6,6 +7,7 @@ import { CodexStructuredSessionAdapter } from '../codex/codex-structured-session
 import { CODEX_STRUCTURED_AGENT } from '../codex/codex-structured-agent-definition'
 import { CLAUDE_STRUCTURED_AGENT } from '../claude/claude-structured-agent-definition'
 import { agentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
+import { NATIVE_CHAT_PASTE_FOLDER } from '../../shared/native-chat-paste-folder'
 import { agentSessionAttachmentStoreRoot } from '../native-chat/agent-session-attachments/agent-session-attachment-references'
 import { replayJournal } from '../native-chat/agent-session-journal/journal-open'
 import { createStructuredClaudeRuntimeAdapter } from './structured-claude-runtime-adapter'
@@ -94,6 +96,9 @@ function createClaudeAdapter(
         ...(deps.resolveClaudeCommand ? { resolveCommand: deps.resolveClaudeCommand } : {}),
         resolveAuthPolicy: deps.resolveClaudeAuthPolicy,
         attachmentDirectory: agentSessionAttachmentStoreRoot(deps.stateDirectory),
+        // Why the state directory: on a desktop it is userData, which holds the paste folder; on
+        // a server nothing creates it, and Claude starts fine with a missing --add-dir.
+        pasteDirectory: path.join(deps.stateDirectory, NATIVE_CHAT_PASTE_FOLDER),
         ...(deps.claudeCliFlags ? { cliFlags: deps.claudeCliFlags } : {})
       })
     ),

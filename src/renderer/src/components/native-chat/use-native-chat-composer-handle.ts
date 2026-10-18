@@ -6,9 +6,14 @@ import {
   type UseNativeChatComposerPasteArgs
 } from './use-native-chat-composer-paste'
 import { useNativeChatTypedInsertion } from './use-native-chat-typed-insertion'
+import { useNativeChatPastedTextFile } from './use-native-chat-pasted-text-file'
+import type { NativeChatPendingAttachmentChips } from './native-chat-session-attachment-drop'
 
 type UseNativeChatComposerHandleArgs = Parameters<typeof useNativeChatTypedInsertion>[0] &
-  Omit<UseNativeChatComposerPasteArgs, 'insertTypedText'>
+  Omit<UseNativeChatComposerPasteArgs, 'insertTypedText'> & {
+    /** A structured chat's pending chips, which a long paste saved as a file settles. */
+    pastedTextChips: NativeChatPendingAttachmentChips | null
+  }
 
 /** Typed and pasted insertion for the composer, exposed on the handle the chat
  *  root uses to route keystrokes and pastes into it. Returns the paste handler. */
@@ -16,7 +21,7 @@ export function useNativeChatComposerHandle(
   ref: ForwardedRef<NativeChatComposerHandle>,
   args: UseNativeChatComposerHandleArgs
 ): (event: ClipboardEventLike) => void {
-  const { textareaRef, draft, setDraft, setActiveSuggestion, ...pasteArgs } = args
+  const { textareaRef, draft, setDraft, setActiveSuggestion, pastedTextChips, ...pasteArgs } = args
   const { insertTypedText, appendText, acceptsText, insertPastedText, focus, contains } =
     useNativeChatTypedInsertion({
       textareaRef,
@@ -27,9 +32,16 @@ export function useNativeChatComposerHandle(
       setActiveSuggestion
     })
 
+  const insertPastedTextOrFile = useNativeChatPastedTextFile({
+    chips: pastedTextChips,
+    draft,
+    resolveAttachmentOwner: args.resolveAttachmentOwner,
+    insertTypedText: insertPastedText,
+    setNotice: args.setNotice
+  })
   const { handlePaste: handlePasteEvent, pasteFromClipboard } = useNativeChatComposerPaste({
     ...pasteArgs,
-    insertTypedText: insertPastedText
+    insertTypedText: insertPastedTextOrFile
   })
 
   useImperativeHandle(

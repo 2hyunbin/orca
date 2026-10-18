@@ -16,6 +16,12 @@ export type UiWindowApi = {
     /** A native-chat composer paste, kept where its draft can bring it back. */
     forNativeChatDraft?: boolean
   }) => Promise<string | null>
+  /** A long text paste saved as a file the chat's agent reads: here, or in its paired server's store. */
+  savePastedTextAsFile: (args: {
+    text: string
+    runtimeEnvironmentId?: string | null
+    agentSessionAttachment?: AgentSessionAttachmentClipboardTarget
+  }) => Promise<string>
   clipboardHasImage: () => Promise<boolean | null>
   /** Paths of files a file manager copied; empty when there are none or the host cannot list them. */
   readClipboardFilePaths: () => Promise<string[]>

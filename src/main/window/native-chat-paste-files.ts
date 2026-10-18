@@ -10,7 +10,7 @@ import { NATIVE_CHAT_PASTE_FOLDER } from '../../shared/native-chat-paste-folder'
 // after the host's 24 h id window), so this is a judgment. A draft or outbox entry kept longer meets
 // its image as a placeholder or a failed send, and a sent paste's file lingers until then.
 export const NATIVE_CHAT_PASTE_TTL_MS = 30 * 24 * 60 * 60 * 1000
-const PASTE_FILE_NAME = /^orca-paste-.+\.png$/i
+const PASTE_FILE_NAME = /^orca-paste-.+\.(?:png|txt)$/i
 const MAX_RESTORED_PASTES = 256
 
 type PathApi = typeof path.posix
