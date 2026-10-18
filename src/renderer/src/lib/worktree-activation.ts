@@ -116,7 +116,7 @@ export function activateAndRevealFolderWorkspace(
   const workspaceKey = folderWorkspaceKey(folderWorkspaceId)
   const providesInitialSurface = activationProvidesInitialSurface(opts)
   const seedUserDefaultSurface = activationSeedsUserDefaultSurface(opts)
-  markVisited(state, workspaceKey, previousActive)
+  markVisited(state, workspaceKey, previousActive, opts?.executionHostId)
   if (!state.isNavigatingHistory) {
     state.recordWorktreeVisit(workspaceKey)
   }
@@ -221,7 +221,7 @@ export function activateAndRevealWorktree(
 
   // Why: focus recency for Cmd+J ordering, distinct from recordWorktreeVisit/lastActivityAt; stamp before any later async step could throw. See docs/cmd-j-empty-query-ordering.md.
   if (!isPlainAlreadyActiveTerminal) {
-    markVisited(state, worktreeId, previousActive)
+    markVisited(state, worktreeId, previousActive, opts?.executionHostId ?? null)
   }
 
   // Why: skip re-recording for goBack/goForward history navigation — it moves the index instead of visiting anew (isNavigatingHistory).

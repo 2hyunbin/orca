@@ -7,6 +7,7 @@ import {
   resolveWorkspaceSpaceTreemapZoomWorktreeId,
   sortWorkspaceSpaceRows
 } from './workspace-space-presentation'
+import { withWorkspaceSpaceVisitActivity } from './workspace-space-visit-activity'
 import { getWorkspaceSpaceGitStatusRefreshCandidates } from './workspace-space-git-status-order'
 import {
   getSelectedDeletableWorkspaceRows,
@@ -15,8 +16,6 @@ import {
 } from './workspace-space-delete-selection'
 import type { WorkspaceSpaceWorktree } from '../../../../shared/workspace-space-types'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
-import { getWorkspaceLastActiveAt } from '../../../../shared/workspace-last-active'
-import { getWorktreeVisitTimestamp } from '@/lib/worktree-visit-recency'
 import { useAppStore } from '@/store'
 import { getWorkspaceSpaceProgressLabel } from './workspace-space-format'
 import type { useWorkspaceSpaceManagerBindings } from './use-workspace-space-manager-bindings'
@@ -25,21 +24,6 @@ import type { useWorkspaceSpaceGitRefreshAction } from './use-workspace-space-gi
 
 const GIT_STATUS_REFRESH_CONCURRENCY = 6
 
-function withVisitActivity(
-  rows: readonly WorkspaceSpaceWorktree[],
-  visits: Readonly<Record<string, number>> | undefined
-): readonly WorkspaceSpaceWorktree[] {
-  if (!visits) {
-    return rows
-  }
-  return rows.map((row) => {
-    const lastActivityAt = getWorkspaceLastActiveAt(
-      row.lastActivityAt,
-      getWorktreeVisitTimestamp(visits, { id: row.worktreeId, hostId: row.executionHostId })
-    )
-    return lastActivityAt === row.lastActivityAt ? row : { ...row, lastActivityAt }
-  })
-}
 type WorkspaceSpaceManagerBindings = ReturnType<typeof useWorkspaceSpaceManagerBindings>
 type WorkspaceSpaceDecisionProjection = ReturnType<typeof useWorkspaceSpaceDecisionProjection>
 
@@ -94,7 +78,7 @@ export function useWorkspaceSpaceManagerProjection(args: {
     () =>
       sortWorkspaceSpaceRows(
         filterWorkspaceSpaceRows(
-          withVisitActivity(sourceRows, lastVisitedAtByWorktreeId),
+          withWorkspaceSpaceVisitActivity(sourceRows, lastVisitedAtByWorktreeId),
           query,
           onlyDeletable
         ).filter(
