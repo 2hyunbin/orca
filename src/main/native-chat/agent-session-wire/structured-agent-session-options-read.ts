@@ -241,7 +241,8 @@ export async function readStructuredAgentSessionOptions(
     const { catalogListing, ...answer } = live
     options = answer
     // A child with no listing of its own reads the saved one, as at rest, so a row reads the same.
-    if (!catalogListing && !answer.listedModelIds) {
+    // With no record there is nothing saved to read, and the answer stays the child's own.
+    if (!catalogListing && !answer.listedModelIds && store.getRecord(sessionId)) {
       const { listedModelIds } = await atRest()
       options = listedModelIds ? { ...answer, listedModelIds } : answer
     }
