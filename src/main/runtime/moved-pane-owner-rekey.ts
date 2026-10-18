@@ -1,21 +1,25 @@
 import { agentHookServer } from '../agent-hooks/server'
 import { forgetFailedAgentLaunches } from '../agent-launch/agent-launch-pane-attachment'
 import type { Store } from '../persistence/loading-store/store'
-import { makePaneKey } from '../../shared/stable-pane-id'
+import { makePaneKey, parsePaneKey } from '../../shared/stable-pane-id'
 import type { TerminalLeafMoveRequest } from '../../shared/terminal-leaf-move'
 import type { OrcaRuntimeService } from './orca-runtime'
 
 type PaneOwnerRuntime = Pick<OrcaRuntimeService, 'getExistingOrchestrationDb'> | undefined
 type PaneAddress = { tabId: string; leafId: string }
 
-/** After a committed pane-key change: agent-status and orchestration keys follow the pane. */
+/**
+ * After a committed pane-key change: agent-status and orchestration keys follow the pane. A
+ * failure is logged and the pane keeps that old key; returns false when either step failed.
+ */
 function rekeyPaneOwners(
   runtime: PaneOwnerRuntime,
   worktreeId: string,
   from: PaneAddress,
   to: PaneAddress,
   ptyId: string | null
-): void {
+): boolean {
+  let moved = true
   const fromPaneKey = makePaneKey(from.tabId, from.leafId)
   const toPaneKey = makePaneKey(to.tabId, to.leafId)
   forgetFailedAgentLaunches(worktreeId, { kind: 'pane', ...from })
@@ -25,6 +29,7 @@ function rekeyPaneOwners(
       authorityVerified: true
     })
   } catch (error) {
+    moved = false
     console.warn('[pty] moved pane kept its old agent-status key:', error)
   }
   try {
@@ -33,8 +38,10 @@ function rekeyPaneOwners(
       toPaneKey
     })
   } catch (error) {
+    moved = false
     console.warn('[pty] moved pane kept its old orchestration resource key:', error)
   }
+  return moved
 }
 
 /** After a committed move of a pane into a new tab: agent-status and orchestration keys follow. */
@@ -58,15 +65,21 @@ export async function repairDuplicatePtyPanesOnStart(
   runtime: PaneOwnerRuntime
 ): Promise<void> {
   try {
-    await store.repairDuplicatePtyPanes((move) =>
-      rekeyPaneOwners(
-        runtime,
-        move.worktreeId,
-        { tabId: move.tabId, leafId: move.removedLeafId },
-        { tabId: move.tabId, leafId: move.retainedLeafId },
-        move.ptyId
+    await store.repairDuplicatePtyPanes((move) => {
+      const from = { tabId: move.tabId, leafId: move.removedLeafId }
+      // The window's rule: a status owner that already moved to another tab stays there.
+      const owner = parsePaneKey(
+        agentHookServer.resolvePaneAuthorityOwner(makePaneKey(from.tabId, from.leafId))
       )
-    )
+      if (owner && owner.tabId !== move.tabId) {
+        return false
+      }
+      const to = { tabId: move.tabId, leafId: move.retainedLeafId }
+      if (!rekeyPaneOwners(runtime, move.worktreeId, from, to, move.ptyId)) {
+        throw new Error('pane_owner_transfer_failed')
+      }
+      return true
+    })
   } catch (error) {
     console.warn('[persistence] duplicate-terminal pane repair was not written:', error)
   }

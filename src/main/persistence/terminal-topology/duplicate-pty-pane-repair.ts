@@ -1,5 +1,5 @@
 import type { ExecutionHostId } from '../../../shared/execution-host'
-import { isTerminalLeafId } from '../../../shared/stable-pane-id'
+import { isTerminalLeafId, makePaneKey } from '../../../shared/stable-pane-id'
 import {
   normalizeTerminalLayoutPtyOwnership,
   resolveTerminalLayoutPtyOwnershipTransfers
@@ -9,6 +9,11 @@ import type { WorkspaceSessionState } from '../../../shared/workspace-session-st
 import type { DurableProfileStateMutation } from '../loading-store/store-runtime-state'
 import { findWorktreeIdForTab } from '../restoring-sessions/pane-identity-migration'
 import { writeRestorable } from './restorable-write'
+import {
+  moveRecordKey,
+  rekeyPaneProfileRecords,
+  writeRekeyedProfileRecords
+} from './terminal-leaf-move'
 import { keepFrozen, type TerminalTopologyCommitContext } from './terminal-topology-commit'
 import { assignWorkspaceSessionPartition } from './terminal-topology-membership'
 
@@ -58,18 +63,46 @@ export function planDuplicatePtyPaneRepair(
   return layouts ? { session: { ...session, terminalLayoutsByTabId: layouts }, transfers } : null
 }
 
+/** The dropped pane's sleep record and incarnation follow it, as the window's transfer moves them. */
+function rekeyPaneSessionRecords(
+  session: WorkspaceSessionState,
+  move: DuplicatePtyPaneTransfer
+): WorkspaceSessionState {
+  const from = makePaneKey(move.tabId, move.removedLeafId)
+  const to = makePaneKey(move.tabId, move.retainedLeafId)
+  return {
+    ...session,
+    // Both panes name one terminal, so the kept pane's own incarnation wins.
+    terminalPtyIncarnationsByPaneKey: moveRecordKey(
+      session.terminalPtyIncarnationsByPaneKey,
+      from,
+      to,
+      undefined,
+      true
+    ),
+    sleepingAgentSessionsByPaneKey: moveRecordKey(
+      session.sleepingAgentSessionsByPaneKey,
+      from,
+      to,
+      (record) => ({ ...record, paneKey: to })
+    )
+  }
+}
+
 /**
  * Repairs every non-runtime partition holding a terminal in two panes of one tab. Every transfer
- * runs before the write, so disk never drops a pane key whose agent status has not moved yet.
+ * runs before the write, so disk never drops a pane key whose owners have not moved yet. `transfer`
+ * returns false for a pane whose owner is not this tab's to move (its records stay), and throws
+ * when a move failed, which skips the write so the next start retries.
  */
 export function repairDuplicatePtyPanesMutation(
   context: TerminalTopologyCommitContext,
-  transfer: (move: DuplicatePtyPaneTransfer) => void
+  transfer: (move: DuplicatePtyPaneTransfer) => boolean
 ): () => DurableProfileStateMutation<number> {
   return () => {
     const plans = context
       .hostIds()
-      // A paired server's partition is a display copy; that server repairs its own.
+      // A paired server's partition is a display copy of that server's own layout.
       .filter((hostId) => !hostId.startsWith('runtime:'))
       .flatMap((hostId: ExecutionHostId) => {
         const plan = planDuplicatePtyPaneRepair(context.getSession(hostId))
@@ -78,20 +111,44 @@ export function repairDuplicatePtyPanesMutation(
     if (plans.length === 0) {
       return { value: 0, persist: false }
     }
+    let moved: Set<DuplicatePtyPaneTransfer>
     try {
-      plans.forEach((plan) => plan.transfers.forEach(transfer))
+      moved = new Set(plans.flatMap((plan) => plan.transfers.filter(transfer)))
     } catch (error) {
-      // Disk keeps the duplicate, so the next start retries the whole repair.
       console.warn('[persistence] duplicate-terminal pane repair skipped:', error)
       return { value: 0, persist: false }
     }
-    const restores = plans.map(({ hostId, session }) =>
+    const restores = plans.map(({ hostId, session, transfers }) =>
       writeRestorable(
         () => context.getSession(hostId),
         (value) => context.markDirty(assignWorkspaceSessionPartition(context.state, hostId, value)),
-        keepFrozen(hostId, session, context)
+        keepFrozen(
+          hostId,
+          transfers.filter((move) => moved.has(move)).reduce(rekeyPaneSessionRecords, session),
+          context
+        )
       )
     )
-    return { value: plans.length, rollback: () => restores.forEach((restore) => restore()) }
+    for (const move of moved) {
+      restores.push(
+        ...writeRekeyedProfileRecords(
+          rekeyPaneProfileRecords(
+            context.state,
+            { tabId: move.tabId, leafId: move.removedLeafId },
+            { tabId: move.tabId, leafId: move.retainedLeafId }
+          ),
+          context
+        )
+      )
+    }
+    return {
+      value: plans.length,
+      // Latest write first: a restore only undoes a value no later write replaced.
+      rollback: () => {
+        for (let index = restores.length - 1; index >= 0; index -= 1) {
+          restores[index]?.()
+        }
+      }
+    }
   }
 }

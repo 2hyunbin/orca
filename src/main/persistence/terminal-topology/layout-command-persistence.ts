@@ -48,7 +48,7 @@ export class LayoutCommandPersistence {
    * Layout-owner builds, once a runtime starts: one pane per terminal on disk, written only after
    * `transfer` moved each dropped pane's owners. Resolves the number of partitions repaired.
    */
-  repairDuplicatePtyPanes(transfer: (move: DuplicatePtyPaneTransfer) => void): Promise<number> {
+  repairDuplicatePtyPanes(transfer: (move: DuplicatePtyPaneTransfer) => boolean): Promise<number> {
     const context = this[layoutCommandPersistenceContext]
     // An imported or frozen profile neither writes nor moves owners.
     if (context.runtime.writesFrozen) {

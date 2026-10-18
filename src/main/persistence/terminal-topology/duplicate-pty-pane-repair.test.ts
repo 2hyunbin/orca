@@ -57,20 +57,71 @@ function duplicateSession(): WorkspaceSessionState {
   return window.session
 }
 
-function seededDirectory(): string {
+function seededDirectory(
+  extend: (state: Record<string, unknown>, session: WorkspaceSessionState) => void = () => {}
+): string {
   const directory = mkdtempSync(join(tmpdir(), 'orca-duplicate-pty-repair-'))
   directories.push(directory)
   const inner = new ProfileStateSqliteAuthority(join(directory, 'profile-state.db'), 'topology')
-  inner.writeSerializedState(
-    Buffer.from(
-      JSON.stringify({
-        ...JSON.parse(emptyTerminalSessionProfile()),
-        workspaceSession: duplicateSession()
-      })
-    )
-  )
+  const state = {
+    ...JSON.parse(emptyTerminalSessionProfile()),
+    workspaceSession: duplicateSession()
+  }
+  extend(state, state.workspaceSession)
+  inner.writeSerializedState(Buffer.from(JSON.stringify(state)))
   inner.close()
   return directory
+}
+
+const DROPPED_KEY = `${TAB}:${DUPLICATE}`
+const KEPT_KEY = `${TAB}:${KEPT}`
+
+/** Records the window files under the dropped pane: its sleep record, read marks and SSH lease. */
+function withDroppedPaneRecords(state: Record<string, unknown>, session: WorkspaceSessionState) {
+  session.terminalPtyIncarnationsByPaneKey = { [DROPPED_KEY]: 'inc-1' }
+  session.sleepingAgentSessionsByPaneKey = {
+    [DROPPED_KEY]: {
+      paneKey: DROPPED_KEY,
+      tabId: TAB,
+      worktreeId: FIXTURE_GIT_WORKTREE_ID,
+      agent: 'codex',
+      providerSession: { key: 'session_id', id: 'codex-session-1' },
+      prompt: 'continue',
+      state: 'done',
+      capturedAt: 1,
+      updatedAt: 1,
+      origin: 'quit'
+    }
+  }
+  state.ui = {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture profile always carries a ui object.
+    ...(state.ui as object),
+    acknowledgedAgentsByPaneKey: { [DROPPED_KEY]: 11 },
+    activityClearedAtByPaneKey: { [DROPPED_KEY]: 12 },
+    manuallyUnreadTurnsByPaneKey: { [DROPPED_KEY]: 13 }
+  }
+  state.sshRemotePtyLeases = [
+    {
+      targetId: 'target-1',
+      ptyId: 'pty-1',
+      worktreeId: FIXTURE_GIT_WORKTREE_ID,
+      tabId: TAB,
+      leafId: DUPLICATE,
+      state: 'detached',
+      createdAt: 1,
+      updatedAt: 1
+    }
+  ]
+}
+
+function storedState(directory: string): PersistedState {
+  const reader = new ProfileStateSqliteAuthority(join(directory, 'profile-state.db'), 'topology')
+  try {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the test wrote this profile as PersistedState.
+    return JSON.parse(reader.readSerializedState() ?? '{}') as PersistedState
+  } finally {
+    reader.close()
+  }
 }
 
 async function load(directory: string): Promise<{ store: Store; authority: DelayedAuthority }> {
@@ -93,14 +144,7 @@ async function quit(store: Store): Promise<void> {
 }
 
 function storedLayouts(directory: string): string {
-  const reader = new ProfileStateSqliteAuthority(join(directory, 'profile-state.db'), 'topology')
-  try {
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the test wrote this profile as PersistedState.
-    const state = JSON.parse(reader.readSerializedState() ?? '{}') as PersistedState
-    return JSON.stringify(state.workspaceSession?.terminalLayoutsByTabId ?? null)
-  } finally {
-    reader.close()
-  }
+  return JSON.stringify(storedState(directory).workspaceSession?.terminalLayoutsByTabId ?? null)
 }
 
 function storedLeafIds(directory: string): string[] {
@@ -209,11 +253,89 @@ describe('duplicate-terminal pane repair at load (layout-owner builds)', () => {
 
     const second = await load(directory)
     second.authority.captures.length = 0
-    await expect(second.store.repairDuplicatePtyPanes(() => {})).resolves.toBe(0)
+    await expect(second.store.repairDuplicatePtyPanes(() => true)).resolves.toBe(0)
 
     expect(transfer).not.toHaveBeenCalled()
     expect(workspaceSessionWrites(second.authority)).toBe(0)
     expect(storedLayouts(directory)).toBe(repaired)
+  })
+
+  it('moves the dropped pane’s sleep record, read marks, incarnation and SSH lease to the kept pane', async () => {
+    const directory = seededDirectory(withDroppedPaneRecords)
+    const { store } = await load(directory)
+    vi.spyOn(agentHookServer, 'transferPaneAuthority').mockImplementation(() => {})
+
+    await repairDuplicatePtyPanesOnStart(store, fakeRuntime().runtime)
+    await quit(store)
+
+    const state = storedState(directory)
+    const session = state.workspaceSession
+    expect(Object.keys(session?.sleepingAgentSessionsByPaneKey ?? {})).toEqual([KEPT_KEY])
+    expect(session?.sleepingAgentSessionsByPaneKey?.[KEPT_KEY]?.paneKey).toBe(KEPT_KEY)
+    expect(session?.terminalPtyIncarnationsByPaneKey).toEqual({ [KEPT_KEY]: 'inc-1' })
+    expect(state.ui?.acknowledgedAgentsByPaneKey).toEqual({ [KEPT_KEY]: 11 })
+    expect(state.ui?.activityClearedAtByPaneKey).toEqual({ [KEPT_KEY]: 12 })
+    expect(state.ui?.manuallyUnreadTurnsByPaneKey).toEqual({ [KEPT_KEY]: 13 })
+    expect(state.sshRemotePtyLeases?.map(({ tabId, leafId }) => ({ tabId, leafId }))).toEqual([
+      { tabId: TAB, leafId: KEPT }
+    ])
+  })
+
+  it('keeps the kept pane’s own incarnation over the dropped pane’s', async () => {
+    const directory = seededDirectory((_state, session) => {
+      session.terminalPtyIncarnationsByPaneKey = { [DROPPED_KEY]: 'inc-old', [KEPT_KEY]: 'inc-1' }
+    })
+    const { store } = await load(directory)
+    vi.spyOn(agentHookServer, 'transferPaneAuthority').mockImplementation(() => {})
+
+    await repairDuplicatePtyPanesOnStart(store, fakeRuntime().runtime)
+    await quit(store)
+
+    expect(storedState(directory).workspaceSession?.terminalPtyIncarnationsByPaneKey).toEqual({
+      [KEPT_KEY]: 'inc-1'
+    })
+  })
+
+  it('leaves a status owner that already moved to another tab, and its records, where they are', async () => {
+    const directory = seededDirectory(withDroppedPaneRecords)
+    const { store } = await load(directory)
+    const transfer = vi.spyOn(agentHookServer, 'transferPaneAuthority').mockImplementation(() => {})
+    vi.spyOn(agentHookServer, 'resolvePaneAuthorityOwner').mockImplementation((paneKey) =>
+      paneKey === DROPPED_KEY ? `tab-2:${KEPT}` : paneKey
+    )
+    const { runtime, rekeyWorkerTerminalResourcePaneKey } = fakeRuntime()
+
+    await repairDuplicatePtyPanesOnStart(store, runtime)
+    await quit(store)
+
+    expect(transfer).not.toHaveBeenCalled()
+    expect(rekeyWorkerTerminalResourcePaneKey).not.toHaveBeenCalled()
+    const state = storedState(directory)
+    expect(storedLeafIds(directory)).toEqual([KEPT])
+    expect(Object.keys(state.workspaceSession?.sleepingAgentSessionsByPaneKey ?? {})).toEqual([
+      DROPPED_KEY
+    ])
+    expect(state.ui?.acknowledgedAgentsByPaneKey).toEqual({ [DROPPED_KEY]: 11 })
+  })
+
+  it('writes nothing when a pane owner move fails, so the next start retries', async () => {
+    const directory = seededDirectory()
+    const seeded = storedLayouts(directory)
+    const { store } = await load(directory)
+    vi.spyOn(agentHookServer, 'transferPaneAuthority').mockImplementation(() => {})
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the repair reads only the orchestration DB accessor.
+    const runtime = {
+      getExistingOrchestrationDb: () => ({
+        rekeyWorkerTerminalResourcePaneKey: () => {
+          throw new Error('database is locked')
+        }
+      })
+    } as unknown as OrcaRuntimeService
+
+    await repairDuplicatePtyPanesOnStart(store, runtime)
+    await quit(store)
+
+    expect(storedLayouts(directory)).toBe(seeded)
   })
 })
 
