@@ -170,6 +170,7 @@ const CreateTerminalTabCommand = z.object({
   groupId: z.string().min(1).optional(),
   viewMode: z.enum(['terminal', 'chat']).optional(),
   createdAt: z.number().int().nonnegative().optional(),
+  quickCommandLabel: z.string().trim().min(1).optional(),
   creation: z
     .object({
       defaultTitle: z.string().min(1).optional(),
@@ -281,6 +282,12 @@ const SetBrowserTabProfileCommand = z.object({
 
 const PromotePreviewTabCommand = z.object({ type: z.literal('promotePreviewTab'), ...OnTab })
 
+/** The window applied the workspace's default tabs (or it had none); main records it, once. */
+const SetDefaultTabsAppliedCommand = z.object({
+  type: z.literal('setDefaultTabsApplied'),
+  workspace: OnPane.workspace
+})
+
 /** A simulator tab under the id the window drew it with, which is also its entity. */
 const OpenSimulatorTabCommand = z.object({
   type: z.literal('openSimulatorTab'),
@@ -368,6 +375,7 @@ export const LayoutApplyParams = z.object({
     MoveTabToWorkspaceCommand,
     RenameEditorFilesCommand,
     SleepCommand,
-    WakeCommand
+    WakeCommand,
+    SetDefaultTabsAppliedCommand
   ])
 })
