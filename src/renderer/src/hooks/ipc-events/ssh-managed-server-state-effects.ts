@@ -1,7 +1,14 @@
 /** What a change in an SSH host's server means for the rest of the app. */
 import { toast } from 'sonner'
-import type { SshConnectionState } from '../../../../shared/ssh-types'
+import type {
+  SshConnectionState,
+  SshManagedServerLinkedProject
+} from '../../../../shared/ssh-types'
+import { normalizeRuntimePathForComparison } from '../../../../shared/cross-platform-path'
+import { splitWorktreeId } from '../../../../shared/worktree/id'
+import type { Repo } from '../../../../shared/repo-types'
 import {
+  type ExecutionHostId,
   getRepoExecutionHostId,
   toRuntimeExecutionHostId,
   toSshExecutionHostId
@@ -23,7 +30,7 @@ export function applySshManagedServerTransition(
     // Starts and wakes keep the same owner; only a new server or a failed load needs a refresh.
     const current = catalogLoadByTarget.get(targetId)
     if (current?.environmentId !== next.environmentId) {
-      startManagedServerCatalogLoad(targetId, next.environmentId)
+      startManagedServerCatalogLoad(targetId, next.environmentId, next.linked ?? [])
     } else if (current.pending && previous?.kind !== 'managed') {
       // Why: a reconnect during a doomed read must not be lost; replay it once if that read fails.
       current.reconnectedWhilePending = true
@@ -80,14 +87,19 @@ function remountBridgedTabsOnce(targetId: string, next: ManagedServerStatus): vo
 
 type CatalogLoad = {
   environmentId: string
+  linked: readonly SshManagedServerLinkedProject[]
   pending: boolean
   reconnectedWhilePending: boolean
 }
 
 const catalogLoadByTarget = new Map<string, CatalogLoad>()
 
-function startManagedServerCatalogLoad(targetId: string, environmentId: string): void {
-  const load: CatalogLoad = { environmentId, pending: true, reconnectedWhilePending: false }
+function startManagedServerCatalogLoad(
+  targetId: string,
+  environmentId: string,
+  linked: readonly SshManagedServerLinkedProject[]
+): void {
+  const load: CatalogLoad = { environmentId, linked, pending: true, reconnectedWhilePending: false }
   catalogLoadByTarget.set(targetId, load)
   void loadManagedServerCatalogs(targetId, load).then(
     () => {
@@ -102,7 +114,7 @@ function startManagedServerCatalogLoad(targetId: string, environmentId: string):
       }
       catalogLoadByTarget.delete(targetId)
       if (load.reconnectedWhilePending) {
-        startManagedServerCatalogLoad(targetId, environmentId)
+        startManagedServerCatalogLoad(targetId, environmentId, load.linked)
       }
     }
   )
@@ -155,6 +167,13 @@ async function loadManagedServerCatalogs(targetId: string, load: CatalogLoad): P
   if (!isCurrent()) {
     return
   }
+  // Read before the source rows go: a linked project keeps the server's id, not this desktop's.
+  const linkedRepoIds = linkedServerRepoIds(
+    useAppStore.getState().repos,
+    targetId,
+    environmentId,
+    load.linked
+  )
   useAppStore.setState((state) => {
     // Why: the host's workspaces are the server's now; unmoved, the next prune drops their recency.
     const lastVisitedAtByWorktreeId = rekeyWorktreeVisitHost(
@@ -169,9 +188,9 @@ async function loadManagedServerCatalogs(targetId: string, load: CatalogLoad): P
         : { lastVisitedAtByWorktreeId })
     }
   })
-  rehomeActiveWorkspace(targetId, environmentId)
+  rehomeActiveWorkspace(targetId, environmentId, linkedRepoIds)
   if (!useAppStore.getState().startupWorktreeRefreshCompleted) {
-    rehomeAfterStartupScan(targetId, environmentId, isCurrent)
+    rehomeAfterStartupScan(targetId, environmentId, linkedRepoIds, isCurrent)
   }
 }
 
@@ -179,6 +198,7 @@ async function loadManagedServerCatalogs(targetId: string, load: CatalogLoad): P
 function rehomeAfterStartupScan(
   targetId: string,
   environmentId: string,
+  linkedRepoIds: ReadonlyMap<string, string>,
   isCurrent: () => boolean
 ): void {
   const unsubscribe = useAppStore.subscribe((state) => {
@@ -188,20 +208,85 @@ function rehomeAfterStartupScan(
     }
     if (state.startupWorktreeRefreshCompleted) {
       unsubscribe()
-      rehomeActiveWorkspace(targetId, environmentId)
+      rehomeActiveWorkspace(targetId, environmentId, linkedRepoIds)
     }
   })
 }
 
+/** This desktop's project id → the server's, for each project the move linked at the same path. */
+function linkedServerRepoIds(
+  repos: readonly Repo[],
+  targetId: string,
+  environmentId: string,
+  linked: readonly SshManagedServerLinkedProject[]
+): Map<string, string> {
+  const linkedPaths = new Set(linked.map((entry) => normalizeRuntimePathForComparison(entry.path)))
+  const sshHostId = toSshExecutionHostId(targetId)
+  const runtimeHostId = toRuntimeExecutionHostId(environmentId)
+  const serverIdByPath = new Map(
+    repos
+      .filter((repo) => getRepoExecutionHostId(repo) === runtimeHostId)
+      .map((repo) => [normalizeRuntimePathForComparison(repo.path), repo.id])
+  )
+  const mapping = new Map<string, string>()
+  for (const repo of repos) {
+    const path = normalizeRuntimePathForComparison(repo.path)
+    const serverId = serverIdByPath.get(path)
+    if (getRepoExecutionHostId(repo) === sshHostId && linkedPaths.has(path) && serverId) {
+      mapping.set(repo.id, serverId)
+    }
+  }
+  return mapping
+}
+
+/** The server's copy of a workspace: the same id, or the same checkout in the project it linked to. */
+function serverCopyOfWorkspace(
+  worktreeId: string,
+  runtimeHostId: ExecutionHostId,
+  linkedRepoIds: ReadonlyMap<string, string>
+): string | null {
+  const state = useAppStore.getState()
+  if (state.getKnownWorktreeById(worktreeId, runtimeHostId)) {
+    return worktreeId
+  }
+  const source = splitWorktreeId(worktreeId)
+  const serverRepoId = source && linkedRepoIds.get(source.repoId)
+  if (!source || !serverRepoId) {
+    return null
+  }
+  const path = normalizeRuntimePathForComparison(source.worktreePath)
+  return (
+    (state.worktreesByRepo[serverRepoId] ?? []).find(
+      (worktree) =>
+        worktree.hostId === runtimeHostId &&
+        normalizeRuntimePathForComparison(worktree.path) === path
+    )?.id ?? null
+  )
+}
+
 /** Why: an active workspace left on the SSH host keeps showing panes that dial the stopped relay. */
-function rehomeActiveWorkspace(targetId: string, environmentId: string): void {
+function rehomeActiveWorkspace(
+  targetId: string,
+  environmentId: string,
+  linkedRepoIds: ReadonlyMap<string, string>
+): void {
   const state = useAppStore.getState()
   const runtimeHostId = toRuntimeExecutionHostId(environmentId)
   if (
-    state.activeWorktreeId &&
-    state.activeWorkspaceExecutionHostId === toSshExecutionHostId(targetId) &&
-    state.getKnownWorktreeById(state.activeWorktreeId, runtimeHostId)
+    !state.activeWorktreeId ||
+    state.activeWorkspaceExecutionHostId !== toSshExecutionHostId(targetId)
   ) {
-    state.setActiveWorktree(state.activeWorktreeId, runtimeHostId)
+    return
+  }
+  const serverWorktreeId = serverCopyOfWorkspace(
+    state.activeWorktreeId,
+    runtimeHostId,
+    linkedRepoIds
+  )
+  if (serverWorktreeId) {
+    state.setActiveWorktree(serverWorktreeId, runtimeHostId)
+  } else if (state.startupWorktreeRefreshCompleted) {
+    // Every server row is in and none is this one; the SSH owner it names is retired.
+    state.setActiveWorktree(null)
   }
 }
