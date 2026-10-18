@@ -16,6 +16,7 @@ import { openAgentSessionJournal } from '../agent-session-journal/journal-store-
 import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
 import { journalIdentityFor } from './structured-agent-session-attach'
 import { attachParamsForRecord } from './structured-agent-session-conversation-open'
+import { structuredAgentSessionCompactBody } from './structured-agent-session-command-turn'
 import {
   structuredAgentSessionHostInstance,
   structuredQueuePauses
@@ -626,8 +627,14 @@ describe('what is not kept', () => {
     expect(await rig.submission(id)).toMatchObject({ dispatchState: 'rejected', ...HOST_RESTARTED })
   })
 
-  it("a keep that keeps failing still sends this process's own message; a later step keeps it", async () => {
-    const id = await acceptWhileStarting(sendRequest('never kept'))
+  it('failed cleanup preserves old sends without giving a new message stale command retry advice', async () => {
+    const body = structuredAgentSessionCompactBody()
+    const message = sendRequest('never kept')
+    const commandId = await acceptWhileStarting(
+      { body, envelope: rig.envelope({ body }, 'agentSession.send', hostTestOperationId()) },
+      message
+    )
+    const id = message.envelope.clientOperationId
     const resolve = AgentSessionJournal.prototype.resolveDispatch
     let failing = true
     vi.spyOn(console, 'warn').mockImplementation(() => undefined)
@@ -635,12 +642,26 @@ describe('what is not kept', () => {
       this: AgentSessionJournal,
       ...args: Parameters<AgentSessionJournal['resolveDispatch']>
     ) {
-      if (failing && args[0].clientMessageId === id) {
+      if (failing && [id, commandId].includes(args[0].clientMessageId)) {
         return Promise.reject(new Error('disk busy'))
       }
       return resolve.apply(this, args)
     })
     await quitRestart()
+    const oldCommand = await rig.submission(commandId)
+    rig.failNextStart(new Error('the agent could not start'))
+    const failed = rig.send('ordinary message whose start fails')
+    await failed.result
+    const reason = "Codex couldn't restart. Send your message to try again."
+    await eventually(async () =>
+      expect(await rig.submission(failed.id)).toMatchObject({ dispatchState: 'rejected', reason })
+    )
+    expect((await rig.host.journalSnapshot(SESSION)).items).toContainEqual(
+      expect.objectContaining({ body: expect.objectContaining({ kind: 'status', text: reason }) })
+    )
+    expect(await rig.submission(commandId)).toEqual(oldCommand)
+    expect(oldCommand).toMatchObject({ dispatchState: 'pending', handoverRecorded: true })
+    expect(oldCommand?.handedOverAt).toBeUndefined()
     await rig.send('sent anyway').result
     await eventually(() => expect(dispatchedTexts()).toEqual(['sent anyway']))
     // A Stop withdraws only this process's sends; the earlier one waits for a keep, unsent.

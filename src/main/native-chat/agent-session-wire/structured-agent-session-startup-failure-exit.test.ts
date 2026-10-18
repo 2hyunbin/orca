@@ -150,7 +150,12 @@ describe('a provider that ends before it finished starting', () => {
 
   it('names /compact as the next step when the start that failed was carrying it', async () => {
     const base = startedSession(() => [
-      { clientMessageId: 'compact-1', dispatchState: 'pending' as const }
+      {
+        clientMessageId: 'compact-1',
+        dispatchState: 'pending' as const,
+        handoverRecorded: true,
+        handedOverAt: 1
+      }
     ])
     const session = {
       ...base,

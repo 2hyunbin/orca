@@ -28,6 +28,7 @@ import {
 } from '../../../shared/agent-session-journal-types'
 import type { AgentSessionConversationCommand } from '../../../shared/agent-session-conversation-command'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
+import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
 import type { AgentChildWorkView } from '../../../shared/agent-status-child-work-view'
 import { agentSessionRefusalReference } from '../../../shared/agent-session-wire-refusals'
 import {
@@ -46,6 +47,7 @@ import { structuredAgentSessionCommandTurn } from '../../../shared/structured-ag
 import { refuseQueuedCommand } from './structured-agent-session-queued-command-refusal'
 import {
   contextStructuredAgentSessionCurrentWork,
+  structuredAgentSessionHandsOver,
   type StructuredAgentSessionCurrentWork
 } from './structured-agent-session-current-work'
 
@@ -65,13 +67,14 @@ export function structuredAgentSessionCompactBody(): AgentJournalMessageItem {
 
 type AwaitedSubmission = Pick<
   AgentJournalSubmission,
-  'clientMessageId' | 'dispatchState' | 'acceptedSequence'
+  'clientMessageId' | 'dispatchState' | 'acceptedSequence' | 'handoverRecorded' | 'handedOverAt'
 >
 
 /** Optional `submissions` as the dead-generation journal reads it. */
 export type StructuredAgentSessionAwaitedCommandJournal = {
   submissions?: () => readonly AwaitedSubmission[]
   itemBody: AgentSessionJournal['itemBody']
+  acceptedBeforeOpen: AgentSessionJournal['acceptedBeforeOpen']
 }
 
 /** The command the oldest message still waiting on the provider names: a start that fails now
@@ -83,6 +86,8 @@ export function structuredAgentSessionAwaitedCommand(
   for (const submission of journal.submissions?.() ?? []) {
     if (
       submission.dispatchState === 'pending' &&
+      (!isQueuedAgentJournalSubmission(submission) ||
+        structuredAgentSessionHandsOver(journal, submission)) &&
       (oldest === undefined || (submission.acceptedSequence ?? 0) < (oldest.acceptedSequence ?? 0))
     ) {
       oldest = submission
