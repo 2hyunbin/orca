@@ -28,6 +28,7 @@ function setRows(worktrees: Worktree[]): void {
 
 describe('useSidebarWorktreeSortOrder with the switch on', () => {
   afterEach(() => {
+    persistOrder.mockClear()
     cleanup()
     useAppStore.setState(initialState, true)
   })
