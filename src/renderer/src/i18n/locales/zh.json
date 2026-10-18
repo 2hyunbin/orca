@@ -6448,8 +6448,7 @@
         },
         "MarkdownImageLightbox": {
           "image": "Image",
-          "expand": "Expand image",
-          "close": "Close"
+          "expand": "Expand image"
         },
         "WorktreeDeveloperMenu": {
           "developer": "Developer",
@@ -15680,7 +15679,9 @@
           "1829437fce": "新 Markdown"
         },
         "DiagramViewerModal": {
-          "title": "图表",
+          "title": "图表"
+        },
+        "PanZoomImageDialog": {
           "zoomOut": "缩小",
           "zoomIn": "放大",
           "fit": "适应屏幕",
@@ -18280,7 +18281,6 @@
         "imageSaving": "保存粘贴的图像...",
         "pendingAttachmentLimit": "太多附件正在等待。在附加更多内容之前先完成创作。",
         "viewAttachment": "查看图片",
-        "imagePreview": "全尺寸图像预览",
         "imagePreviewUnavailable": "预览不可用",
         "copyImage": "复制图片",
         "copyImageFailed": "无法复制图片",
