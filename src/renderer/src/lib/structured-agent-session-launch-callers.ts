@@ -1,3 +1,4 @@
+import type { StructuredLaunchSurfaceAddress } from './structured-agent-session-launch-record'
 import { settleStructuredAgentLaunchPrompt } from '@/lib/structured-agent-session-launch-prompt'
 import type {
   StagedStructuredLaunchPrompt,
@@ -27,6 +28,9 @@ export type StructuredAgentLaunchOptions = {
   /** Encoded options this launch asked for (an action's saved model); they start as held picks,
    *  so create sends them over the saved seed. Read only by the starting caller. */
   launchOptions?: Readonly<Record<string, string>>
+  /** Final admission of a source-bound action, immediately before its first create is sent. */
+  beforeCreate?: () => boolean
+  surfaceAddress?: StructuredLaunchSurfaceAddress
 }
 
 export type StructuredLaunchCaller = {
