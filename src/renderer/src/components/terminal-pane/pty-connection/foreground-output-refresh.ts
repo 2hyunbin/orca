@@ -37,8 +37,7 @@ import type { ConnectPanePtySession } from './connect-pane-pty-session'
 export function bindForegroundOutputRefresh(session: ConnectPanePtySession): void {
   // Extends the suppression window; every backpressure signal resets the timer so the deferred repaint fires once, SUPPRESS_MS after the last signal.
   session.noteHiddenOutputRestoreFloodBackpressure = function (): void {
-    session.hiddenOutputRestoreFloodSuppressedUntil =
-      Date.now() + HIDDEN_OUTPUT_RESTORE_FLOOD_SUPPRESS_MS
+    session.extendHiddenOutputRestoreFloodSuppression()
     const ptyId = session.transport.getPtyId()
     if (ptyId === null) {
       return
@@ -73,7 +72,9 @@ export function bindForegroundOutputRefresh(session: ConnectPanePtySession): voi
     ) {
       return
     }
-    session.hiddenOutputRestoreLatestDropEpisode = episode ?? previousDropEpisode
+    if (episode !== null) {
+      session.hiddenOutputRestoreLatestDropEpisode = episode
+    }
     recordTerminalFreezeBreadcrumb('restore-marker', {
       id: redactPtyIdForDiagnostics(session.transport.getPtyId() ?? '')
     })

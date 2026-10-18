@@ -9,6 +9,8 @@ export function handleUnhideRestoreBackpressure(
   if (
     event.reason !== 'unhide' ||
     session.hiddenOutputRestoreInFlight === null ||
+    // An in-flight restore for another PTY can't cover this marker; the quiet repaint is its only recovery.
+    session.hiddenOutputRestorePtyId !== event.id ||
     typeof event.markerSeq !== 'number' ||
     !Number.isFinite(event.markerSeq)
   ) {
@@ -19,12 +21,11 @@ export function handleUnhideRestoreBackpressure(
     return
   }
   if (
-    session.hiddenOutputRestorePtyId === event.id &&
-    (previousDropEpisode === null ||
-      !Number.isFinite(previousDropEpisode) ||
-      previousDropEpisode !== event.hiddenDropEpisode ||
-      session.hiddenOutputRestoreFloodRepaintTimer !== null ||
-      session.cancelHiddenOutputRestoreFloodRepaintPark !== null)
+    previousDropEpisode === null ||
+    !Number.isFinite(previousDropEpisode) ||
+    previousDropEpisode !== event.hiddenDropEpisode ||
+    session.hiddenOutputRestoreFloodRepaintTimer !== null ||
+    session.cancelHiddenOutputRestoreFloodRepaintPark !== null
   ) {
     // Leave recovery to the quiet timer when this snapshot cannot retire the episode.
     session.hiddenOutputRestoreUnhideSeq = null
@@ -36,9 +37,8 @@ export function handleUnhideRestoreBackpressure(
     session.hiddenOutputRestoreUnhideSeq ?? 0,
     event.markerSeq
   )
-  if (session.hiddenOutputRestorePtyId !== event.id) {
-    session.noteHiddenOutputRestoreFloodBackpressure()
-  }
+  // Still backpressure: keep later markers gated, but the covering restore replaces the quiet repaint.
+  session.extendHiddenOutputRestoreFloodSuppression()
 }
 
 export function consumeSnapshotRequirement(
