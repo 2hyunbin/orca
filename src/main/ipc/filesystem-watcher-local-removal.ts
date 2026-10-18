@@ -125,14 +125,18 @@ export async function restoreLocalWatcherAfterFailedRemoval(worktreePath: string
   if (!suspended) {
     return
   }
-  watcherLifecycleState.suspendedLocalWatcherListeners.delete(rootKey)
-  const failures: { sender: WebContents; signal: AbortSignal; error: unknown }[] = []
+  const failures: {
+    sender: WebContents
+    signal: AbortSignal
+    error: unknown
+  }[] = []
   const owners = Array.from(suspended.listeners.values(), (sender) => ({
     sender,
     signal: registerWatcherSenderCleanup(sender)
   }))
   for (const { sender, signal } of owners) {
-    if (!isCurrentWatcherSender(sender, signal)) {
+    // Why: owners stay suspended until their turn, so an unwatch during an earlier owner's re-subscribe still withdraws them.
+    if (!suspended.listeners.delete(sender.id) || !isCurrentWatcherSender(sender, signal)) {
       continue
     }
     try {
@@ -150,6 +154,9 @@ export async function restoreLocalWatcherAfterFailedRemoval(worktreePath: string
       }
       failures.push({ sender, signal, error })
     }
+  }
+  if (watcherLifecycleState.suspendedLocalWatcherListeners.get(rootKey) === suspended) {
+    watcherLifecycleState.suspendedLocalWatcherListeners.delete(rootKey)
   }
   const liveFailures = failures.filter(({ sender, signal }) =>
     isCurrentWatcherSender(sender, signal)
