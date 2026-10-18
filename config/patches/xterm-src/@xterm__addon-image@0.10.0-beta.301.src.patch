@@ -1,5 +1,5 @@
 diff --git a/src/IIPHandler.ts b/src/IIPHandler.ts
-index 559b907416eb38318f439d060d7f89311ed34c7e..d7b2fd78c316bfa267f347c68dc1d8eab8b4e62b 100644
+index 559b907416eb38318f439d060d7f89311ed34c7e..21ce2395298cd9cbaaf94d3a5a08c630692dd025 100644
 --- a/src/IIPHandler.ts
 +++ b/src/IIPHandler.ts
 @@ -13,8 +13,10 @@ import { imageType, UNSUPPORTED_TYPE } from './IIPMetrics';
@@ -88,6 +88,15 @@ index 559b907416eb38318f439d060d7f89311ed34c7e..d7b2fd78c316bfa267f347c68dc1d8ea
        return true;
      }
  
+@@ -155,7 +169,7 @@ export class IIPHandler implements IOscHandler, IResetHandler {
+     let metrics = UNSUPPORTED_TYPE;
+     if (cond = success) {
+       if (cond = !this._dec.end()) {
+-        metrics = imageType(this._dec.data8);
++        metrics = imageType(this._dec.data8, this._opts.pixelLimit);
+         if (cond = metrics.mime !== 'unsupported') {
+           w = metrics.width;
+           h = metrics.height;
 @@ -179,7 +193,15 @@ export class IIPHandler implements IOscHandler, IResetHandler {
  
      let blob: Blob | ImageData;
@@ -156,24 +165,28 @@ index 559b907416eb38318f439d060d7f89311ed34c7e..d7b2fd78c316bfa267f347c68dc1d8ea
      const cw = this._renderer.dimensions?.css.cell.width || CELL_SIZE_DEFAULT.width;
      const ch = this._renderer.dimensions?.css.cell.height || CELL_SIZE_DEFAULT.height;
 diff --git a/src/IIPMetrics.ts b/src/IIPMetrics.ts
-index 217a7fc93d5dca938dd086509027919f2f1c7902..41cd01abdbb0d5ff9d1560083e0bee7528756449 100644
+index 217a7fc93d5dca938dd086509027919f2f1c7902..ea488602d6d9b162322ab6e13c8c9820372195bc 100644
 --- a/src/IIPMetrics.ts
 +++ b/src/IIPMetrics.ts
-@@ -19,6 +19,13 @@ export const UNSUPPORTED_TYPE: IMetrics = {
+@@ -18,7 +18,16 @@ export const UNSUPPORTED_TYPE: IMetrics = {
+   height: 0
  };
  
- export function imageType(d: Uint8Array): IMetrics {
+-export function imageType(d: Uint8Array): IMetrics {
++export function imageType(d: Uint8Array, pixelLimit = Infinity): IMetrics {
 +  // QOI can be smaller than the minimum header probe for the other formats.
 +  if (d.length >= 14 && d[0] === 0x71 && d[1] === 0x6F && d[2] === 0x69 && d[3] === 0x66) {
 +    const width = d[4] << 24 | d[5] << 16 | d[6] << 8 | d[7];
 +    const height = d[8] << 24 | d[9] << 16 | d[10] << 8 | d[11];
-+    return width > 0 && height > 0 && hasCompleteQoiPixels(d, width * height)
-+      ? { mime: 'image/qoi', width, height } : UNSUPPORTED_TYPE;
++    if (width <= 0 || height <= 0) return UNSUPPORTED_TYPE;
++    // Callers reject these dimensions, so skip the O(pixels) stream scan.
++    if (!(width * height < pixelLimit)) return { mime: 'image/qoi', width, height };
++    return hasCompleteQoiPixels(d, width * height) ? { mime: 'image/qoi', width, height } : UNSUPPORTED_TYPE;
 +  }
    if (d.length < 32) {
      return UNSUPPORTED_TYPE;
    }
-@@ -45,14 +52,6 @@ export function imageType(d: Uint8Array): IMetrics {
+@@ -45,14 +54,6 @@ export function imageType(d: Uint8Array): IMetrics {
        height: d[9] << 8 | d[8]
      };
    }
@@ -188,18 +201,17 @@ index 217a7fc93d5dca938dd086509027919f2f1c7902..41cd01abdbb0d5ff9d1560083e0bee75
    // WEBP: RIFF | xxxx | WEBP | VP8x
    if (d32[0] === 0x46464952 && d32[2] === 0x50424557 && (d32[3] & 0xFFFFFF) === 0x385056) {
      switch (d[15]) {
-@@ -114,6 +113,27 @@ export function imageType(d: Uint8Array): IMetrics {
+@@ -114,6 +115,30 @@ export function imageType(d: Uint8Array): IMetrics {
  }
  
  
++// Like qoi.h, a final run may overshoot and bytes after the end marker are ignored.
++// Bad channels/colorspace, missing pixels, extra ops before the marker, or a missing
++// marker make imageType report unsupported, so the payload is dropped without a reply.
 +function hasCompleteQoiPixels(data: Uint8Array, pixels: number): boolean {
 +  if (data.length < 23 || !Number.isSafeInteger(pixels) || pixels <= 0 ||
 +      (data[12] !== 3 && data[12] !== 4) || data[13] > 1) return false;
 +  const end = data.length - 8;
-+  for (let i = end; i < data.length - 1; i++) {
-+    if (data[i] !== 0) return false;
-+  }
-+  if (data[data.length - 1] !== 1) return false;
 +  let offset = 14;
 +  let decoded = 0;
 +  // The WASM decoder accepts incomplete streams, so validate without allocating pixels.
@@ -210,7 +222,11 @@ index 217a7fc93d5dca938dd086509027919f2f1c7902..41cd01abdbb0d5ff9d1560083e0bee75
 +    offset += extra;
 +    decoded += op >= 0xC0 && op < 0xFE ? (op & 0x3F) + 1 : 1;
 +  }
-+  return decoded === pixels && offset === end;
++  if (decoded < pixels) return false;
++  for (let i = offset; i < offset + 7; i++) {
++    if (data[i] !== 0) return false;
++  }
++  return data[offset + 7] === 1;
 +}
 +
  function jpgSize(d: Uint8Array): [number, number] {
@@ -703,7 +719,7 @@ index 04328420c2bae02010bb4c9adb3fd341aed56c0c..8dc120fac57656d2b378e1cc89f4edcf
    layer: ImageLayer;
    zIndex: number;
 diff --git a/src/kitty/KittyGraphicsHandler.ts b/src/kitty/KittyGraphicsHandler.ts
-index de889dfff75d9ecc8ab47a025e6989ffe75bb202..da174ab47510ee5066087631f71eff2b1250b67c 100644
+index de889dfff75d9ecc8ab47a025e6989ffe75bb202..b4f50aa21d5ce3b50c17ad60bedfef33b899486d 100644
 --- a/src/kitty/KittyGraphicsHandler.ts
 +++ b/src/kitty/KittyGraphicsHandler.ts
 @@ -7,6 +7,7 @@ import { IDisposable } from '@xterm/xterm';
@@ -1183,7 +1199,7 @@ index de889dfff75d9ecc8ab47a025e6989ffe75bb202..da174ab47510ee5066087631f71eff2b
      }
  
      if (image.format === KittyFormat.PNG) {
-+      const metrics = imageType(bytes);
++      const metrics = imageType(bytes, this._opts.pixelLimit);
 +      // IHDR dimensions are parsed with signed shifts, so a value >= 0x80000000 comes
 +      // back negative and a bare `>` pixel-limit test passes it; require positive.
 +      if (metrics.mime !== 'image/png' || !(metrics.width > 0) || !(metrics.height > 0) || metrics.width * metrics.height > this._opts.pixelLimit) {
