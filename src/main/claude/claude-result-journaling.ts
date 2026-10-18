@@ -26,6 +26,7 @@ export type ClaudeResultJournalContext = Pick<
   | 'corrections'
   | 'turn'
   | 'authenticationFailures'
+  | 'usageLimits'
   | 'threadGoal'
 > & {
   prompts: ClaudeJournalPrompts
@@ -44,6 +45,7 @@ export function journalClaudeResult(
     prompts,
     context,
     authenticationFailures,
+    usageLimits,
     threadGoal,
     goalBackgroundWork
   }: ClaudeResultJournalContext,
@@ -92,12 +94,15 @@ export function journalClaudeResult(
   }
   const kind = claudeProviderFrameKind(message)
   const failure = claudeResultFailure(message, leftToStop)
-  const alreadyShown = authenticationFailures.resultAlreadyShown(message)
+  // A failed root result the limit refused writes the limit's row, not the result's.
+  const usageLimit = settlesTurn ? usageLimits.result(message, failure !== null) : null
+  const alreadyShown =
+    authenticationFailures.resultAlreadyShown(message) || usageLimit === 'shown'
   if ((failure || !isSettledClaudeResultKind(kind)) && !alreadyShown) {
     providerFallback.append(
       kind,
       message,
-      failure?.text,
+      usageLimit === 'shown' ? null : (usageLimit ?? failure?.text),
       undefined,
       { reportsFailure: failure !== null },
       // A result that settles no turn is a CHILD's result: this

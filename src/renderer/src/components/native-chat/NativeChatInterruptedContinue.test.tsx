@@ -83,7 +83,8 @@ function Harness(props: Props): React.JSX.Element {
     sessionId: 'session-1',
     journalItems: props.journalItems ?? cutChat,
     submissions: props.submissions ?? [],
-    isWorking: props.isWorking ?? false
+    isWorking: props.isWorking ?? false,
+    sendMessage: () => true
   })
   return (
     <TooltipProvider delayDuration={0}>

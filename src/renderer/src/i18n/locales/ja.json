@@ -18158,6 +18158,14 @@
         "providerRetryNumber": "{{attempt}} 回目の再試行です。",
         "providerRetryNumberOf": "{{maxRetries}} 回中 {{attempt}} 回目の再試行です。",
         "providerRetryLastError": "直近のエラー: {{detail}}。",
+        "usageLimitReached": "{{agent}} が使用量の上限に達しました。",
+        "usageLimitReachedNamed": "{{agent}} が{{window}}の上限に達しました。",
+        "usageLimitWindowSession": "セッション",
+        "usageLimitWindowWeekly": "週間",
+        "usageLimitWindowWeeklyModel": "モデル別の週間",
+        "usageLimitWindowCredits": "追加使用量",
+        "usageLimitResetsAt": "{{when}} にリセットされます。",
+        "usageLimitSendAfterReset": "リセット後にメッセージを送信すると続行できます。",
         "previousExitUnverifiable": "以前の {{agent}} を停止できませんでした。",
         "sessionNotRestored": "{{agent}} は以前のセッションを再開できなかったため、このチャットは新しいセッションで続行します。{{agent}} は以前のメッセージを覚えていません。",
         "agentCommandNotSignedIn": "このチャットを実行しているコンピューターで `{{loginCommand}}` を使って {{agent}} にサインインしてください。",
@@ -18761,7 +18769,8 @@
       "interruptedContinue": {
         "continue": "続行",
         "failed": "このチャットを続行できませんでした。もう一度試すか、メッセージを送信してください。",
-        "explanation": "続行すると、Agent はまず最後の手順が完了したかどうかを確認します。"
+        "explanation": "続行すると、Agent はまず最後の手順が完了したかどうかを確認します。",
+        "usageLimitExplanation": "中断したところから続けるよう Agent に依頼します。上限がリセットされてから使ってください。"
       },
       "rewind": {
         "unsupported": "このチャットは以前のメッセージに戻れません。",

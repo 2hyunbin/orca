@@ -18227,6 +18227,14 @@
         "providerRetryNumber": "Nouvelle tentative {{attempt}}.",
         "providerRetryNumberOf": "Nouvelle tentative {{attempt}} sur {{maxRetries}}.",
         "providerRetryLastError": "Dernière erreur : {{detail}}.",
+        "usageLimitReached": "{{agent}} a atteint sa limite d’utilisation.",
+        "usageLimitReachedNamed": "{{agent}} a atteint sa limite {{window}}.",
+        "usageLimitWindowSession": "de session",
+        "usageLimitWindowWeekly": "hebdomadaire",
+        "usageLimitWindowWeeklyModel": "hebdomadaire du modèle",
+        "usageLimitWindowCredits": "d’utilisation supplémentaire",
+        "usageLimitResetsAt": "Elle se réinitialise à {{when}}.",
+        "usageLimitSendAfterReset": "Envoyez un message après sa réinitialisation pour continuer.",
         "previousExitUnverifiable": "Impossible d'arrêter l'exécution précédente de {{agent}}.",
         "sessionNotRestored": "{{agent}} n'a pas pu rouvrir sa session précédente, cette discussion continue donc dans une nouvelle. {{agent}} ne se souvient pas des messages précédents.",
         "agentCommandNotSignedIn": "Connectez-vous à {{agent}} avec `{{loginCommand}}` sur l’ordinateur qui exécute ce chat.",
@@ -18830,7 +18838,8 @@
       "interruptedContinue": {
         "continue": "Continuer",
         "failed": "Impossible de poursuivre cette conversation. Réessayez ou envoyez un message.",
-        "explanation": "Continuez, et l'agent vérifiera d'abord si sa dernière étape s'est terminée."
+        "explanation": "Continuez, et l'agent vérifiera d'abord si sa dernière étape s'est terminée.",
+        "usageLimitExplanation": "Demande à l’agent de reprendre là où il s’était arrêté. À utiliser une fois la limite réinitialisée."
       },
       "rewind": {
         "unsupported": "Ce chat ne peut pas revenir à un message antérieur.",

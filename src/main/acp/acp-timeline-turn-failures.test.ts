@@ -165,7 +165,7 @@ describe('a failed ACP turn says why', () => {
     expect(failures.map((failure) => failure.body.text)).toEqual([REASON])
   })
 
-  it('names a rate-limited turn the provider gave no words for, without inventing a reason', async () => {
+  it('names a usage-limited turn the provider gave no words for', async () => {
     const f = await openAcpFixtureRig()
     const lane = f.lane()
     const prompt = lane.openPrompt('c1', 1000)
@@ -182,7 +182,12 @@ describe('a failed ACP turn says why', () => {
     )
     const failures = statusRows(await f.rig.rows())
     expect(failures.map((failure) => failure.body)).toEqual([
-      { kind: 'status', tone: 'error', text: 'Grok usage limit reached.' }
+      {
+        kind: 'status',
+        tone: 'warning',
+        text: 'The agent hit its usage limit. Send a message once it resets to continue.',
+        failure: { kind: 'usageLimitReached' }
+      }
     ])
     expect((await f.rig.turns())[0]?.outcome).toBe('failure')
   })

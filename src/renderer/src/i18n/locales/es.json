@@ -18118,6 +18118,14 @@
         "providerRetryNumber": "Reintento {{attempt}}.",
         "providerRetryNumberOf": "Reintento {{attempt}} de {{maxRetries}}.",
         "providerRetryLastError": "Último error: {{detail}}.",
+        "usageLimitReached": "{{agent}} alcanzó su límite de uso.",
+        "usageLimitReachedNamed": "{{agent}} alcanzó su límite {{window}}.",
+        "usageLimitWindowSession": "de sesión",
+        "usageLimitWindowWeekly": "semanal",
+        "usageLimitWindowWeeklyModel": "semanal del modelo",
+        "usageLimitWindowCredits": "de uso adicional",
+        "usageLimitResetsAt": "Se restablece a las {{when}}.",
+        "usageLimitSendAfterReset": "Envía un mensaje cuando se restablezca para continuar.",
         "previousExitUnverifiable": "No se pudo detener la ejecución anterior de {{agent}}.",
         "sessionNotRestored": "{{agent}} no pudo reabrir su sesión anterior, así que este chat continúa en una nueva. {{agent}} no recuerda los mensajes anteriores.",
         "agentCommandNotSignedIn": "Inicia sesión en {{agent}} con `{{loginCommand}}` en el equipo donde se ejecuta este chat.",
@@ -18721,7 +18729,8 @@
       "interruptedContinue": {
         "continue": "Continuar",
         "failed": "No se pudo continuar este chat. Inténtalo de nuevo o envía un mensaje.",
-        "explanation": "Continúa y el agente comprobará primero si su último paso terminó."
+        "explanation": "Continúa y el agente comprobará primero si su último paso terminó.",
+        "usageLimitExplanation": "Pide al agente que continúe donde lo dejó. Úsalo cuando se restablezca el límite."
       },
       "rewind": {
         "unsupported": "Este chat no puede volver a un mensaje anterior.",

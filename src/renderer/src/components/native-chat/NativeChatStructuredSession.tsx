@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils'
 import { NATIVE_CHAT_APPEARANCE_ROOT_CLASS } from './native-chat-appearance-style'
 import { useNativeChatStoreAppearanceStyle } from './use-native-chat-store-appearance-style'
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { agentSessionPromptQuestions } from '../../../../shared/agent-session-question-answer'
 import { structuredAgentSessionPaneKey } from '../../../../shared/structured-agent-session-projection'
 import { useStructuredChatLiveSession } from './use-structured-chat-live-session'
@@ -127,14 +127,6 @@ export function NativeChatStructuredSession(
   const hostHeld = hostPermission.sendBlockedReason !== null
   const submits = useStructuredNativeChatSubmitReveal(controller, provisionalLaunch.retry, hostHeld)
   const promptResponse = useStructuredPromptResponseHold(submits.respond)
-  const continuation = useNativeChatInterruptedContinuation({
-    target: props.target,
-    sessionId: props.sessionId,
-    journalItems: controller.journalItems,
-    submissions: controller.submissions,
-    isWorking: controller.isWorking || hostHeld,
-    reportComposerError
-  })
   const needsFailureFacts =
     submits.queuedMessages.cards.some((card) => card.state === 'returned') ||
     controller.submissions.some(
@@ -233,6 +225,19 @@ export function NativeChatStructuredSession(
     onError: reportComposerError,
     onSubmitted: submits.revealLatest,
     sendBlockedReason: hostPermission.sendBlockedReason ?? install.sendBlockedReason
+  })
+  const sendContinuation = useCallback(
+    (text: string) => structuredTransport.send(text, []) !== false,
+    [structuredTransport]
+  )
+  const continuation = useNativeChatInterruptedContinuation({
+    target: props.target,
+    sessionId: props.sessionId,
+    journalItems: controller.journalItems,
+    submissions: controller.submissions,
+    isWorking: controller.isWorking || hostHeld,
+    reportComposerError,
+    sendMessage: sendContinuation
   })
 
   // Said once: on the pane when the failure took it, else in the composer's notices.

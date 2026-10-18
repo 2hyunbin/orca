@@ -18123,6 +18123,14 @@
         "providerRetryNumber": "第 {{attempt}} 次重试。",
         "providerRetryNumberOf": "第 {{attempt}} 次重试，共 {{maxRetries}} 次。",
         "providerRetryLastError": "上次错误：{{detail}}。",
+        "usageLimitReached": "{{agent}} 已达到使用上限。",
+        "usageLimitReachedNamed": "{{agent}} 已达到{{window}}上限。",
+        "usageLimitWindowSession": "会话",
+        "usageLimitWindowWeekly": "每周",
+        "usageLimitWindowWeeklyModel": "模型每周",
+        "usageLimitWindowCredits": "额外用量",
+        "usageLimitResetsAt": "将在 {{when}} 重置。",
+        "usageLimitSendAfterReset": "重置后发送消息即可继续。",
         "previousExitUnverifiable": "无法停止之前的 {{agent}}。",
         "sessionNotRestored": "{{agent}} 无法重新打开之前的会话，因此此聊天将在新会话中继续。{{agent}} 不记得之前的消息。",
         "agentCommandNotSignedIn": "请在运行此聊天的电脑上使用 `{{loginCommand}}` 登录 {{agent}}。",
@@ -18726,7 +18734,8 @@
       "interruptedContinue": {
         "continue": "继续",
         "failed": "无法继续此聊天。请重试，或发送一条消息。",
-        "explanation": "继续后，智能体会先检查其上一步是否已完成。"
+        "explanation": "继续后，智能体会先检查其上一步是否已完成。",
+        "usageLimitExplanation": "让代理从中断处继续。请在上限重置后使用。"
       },
       "rewind": {
         "unsupported": "此聊天无法返回到更早的消息。",

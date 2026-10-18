@@ -18372,6 +18372,14 @@
         "providerRetryNumber": "Retry {{attempt}}.",
         "providerRetryNumberOf": "Retry {{attempt}} of {{maxRetries}}.",
         "providerRetryLastError": "Last error: {{detail}}.",
+        "usageLimitReached": "{{agent}} hit its usage limit.",
+        "usageLimitReachedNamed": "{{agent}} hit its {{window}} limit.",
+        "usageLimitWindowSession": "session",
+        "usageLimitWindowWeekly": "weekly",
+        "usageLimitWindowWeeklyModel": "weekly model",
+        "usageLimitWindowCredits": "extra usage",
+        "usageLimitResetsAt": "It resets at {{when}}.",
+        "usageLimitSendAfterReset": "Send a message once it resets to continue.",
         "previousExitUnverifiable": "Couldn't stop {{agent}} from before.",
         "sessionNotRestored": "{{agent}} couldn't reopen its earlier session, so this chat continues in a new one. {{agent}} doesn't remember the earlier messages.",
         "argumentsUnsupportedOption": "Saved Arguments contain an unsupported option ({{option}}).",
@@ -19010,7 +19018,8 @@
       "interruptedContinue": {
         "continue": "Continue",
         "failed": "Couldn't continue this chat. Try again, or send a message.",
-        "explanation": "Continue, and the agent first checks whether its last step finished."
+        "explanation": "Continue, and the agent first checks whether its last step finished.",
+        "usageLimitExplanation": "Asks the agent to continue where it left off. Use it once the limit resets."
       },
       "claudeSignIn": {
         "signingIn": "Signing in…"

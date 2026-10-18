@@ -11,6 +11,10 @@ import type {
   AgentJournalSubmission
 } from '../../../../shared/agent-session-journal-types'
 import { latestNativeChatOrcaStopCut } from '../../../../shared/native-chat-orca-stop-cut'
+import {
+  latestNativeChatUsageLimitCut,
+  NATIVE_CHAT_USAGE_LIMIT_CONTINUE_MESSAGE
+} from '../../../../shared/native-chat-usage-limit-cut'
 import { AGENT_SESSION_CONTINUE_INTERRUPTED_RUNTIME_CAPABILITY } from '../../../../shared/agent-session-continue-interrupted-capability'
 import type { NativeChatOrcaStopView } from './native-chat-orca-stop-context'
 import { useStructuredAgentSessionHostLabel } from './use-structured-agent-session-host-label'
@@ -43,8 +47,10 @@ export function useNativeChatInterruptedContinuation(input: {
   isWorking: boolean
   /** Stable; a Continue click is the user's newer action, so it clears the composer's error. */
   reportComposerError: (text: null) => void
+  /** Sends as the composer does; false when the chat took nothing. */
+  sendMessage: (text: string) => boolean
 }): NativeChatInterruptedContinuation {
-  const { target, sessionId, reportComposerError } = input
+  const { target, sessionId, reportComposerError, sendMessage } = input
   const hostLabel = useStructuredAgentSessionHostLabel(target)
   const capability = useStructuredAgentSessionHostCapabilityState(
     target,
@@ -58,6 +64,11 @@ export function useNativeChatInterruptedContinuation(input: {
     () => latestNativeChatOrcaStopCut(input.journalItems, input.submissions),
     [input.journalItems, input.submissions]
   )
+  // Any host: Continue past a usage limit is the person's own message, which every host takes.
+  const usageLimitCut = useMemo(
+    () => latestNativeChatUsageLimitCut(input.journalItems, input.submissions),
+    [input.journalItems, input.submissions]
+  )
   // The cut this client already asked to continue: hidden until the journal shows what came of it.
   const [asked, setAsked] = useState<string | null>(null)
   const [failedOn, setFailedOn] = useState<string | null>(null)
@@ -65,6 +76,20 @@ export function useNativeChatInterruptedContinuation(input: {
     capability === 'supported' && cut && !input.isWorking && !resuming && asked !== cut.turnItemId
       ? cut.turnItemId
       : null
+  const usageLimitTurnItemId =
+    usageLimitCut && !input.isWorking && !resuming && asked !== usageLimitCut.turnItemId
+      ? usageLimitCut.turnItemId
+      : null
+  const continueUsageLimit = useCallback((): void => {
+    if (usageLimitTurnItemId === null) {
+      return
+    }
+    setAsked(usageLimitTurnItemId)
+    // A send the chat refused says why in the composer, as any send does; Continue comes back.
+    if (!sendMessage(NATIVE_CHAT_USAGE_LIMIT_CONTINUE_MESSAGE)) {
+      setAsked(null)
+    }
+  }, [usageLimitTurnItemId, sendMessage])
   const continueNow = useCallback((): void => {
     if (offered === null) {
       return
@@ -93,9 +118,19 @@ export function useNativeChatInterruptedContinuation(input: {
       remoteHost,
       continueAvailable,
       offeredTurnItemId: offered,
-      continueNow
+      continueNow,
+      usageLimitTurnItemId,
+      continueUsageLimit
     }),
-    [hostLabel, remoteHost, continueAvailable, offered, continueNow]
+    [
+      hostLabel,
+      remoteHost,
+      continueAvailable,
+      offered,
+      continueNow,
+      usageLimitTurnItemId,
+      continueUsageLimit
+    ]
   )
   const failedHere =
     failedOn !== null && cut?.turnItemId === failedOn
@@ -112,15 +147,20 @@ export function useNativeChatInterruptedContinuation(input: {
 
 /** Continue, on the row that says Orca stopped this reply: the one action that picks it back up. */
 export function NativeChatInterruptedContinueButton({
-  onContinue
+  onContinue,
+  explanation: shownExplanation
 }: {
   onContinue: () => void
+  /** What Continue does here, when it is not picking up a reply Orca's stop cut off. */
+  explanation?: string
 }): React.JSX.Element {
   const explanationId = useId()
-  const explanation = translate(
-    'components.native-chat.interruptedContinue.explanation',
-    'Continue, and the agent first checks whether its last step finished.'
-  )
+  const explanation =
+    shownExplanation ??
+    translate(
+      'components.native-chat.interruptedContinue.explanation',
+      'Continue, and the agent first checks whether its last step finished.'
+    )
   return (
     <>
       <Tooltip>

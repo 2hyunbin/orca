@@ -34,6 +34,7 @@ import { claudeChildToolQueries } from './claude-child-tool-queries'
 import { journalClaudeMessage, type ClaudeMessageJournalContext } from './claude-message-journaling'
 import { journalClaudeResult, type ClaudeResultJournalContext } from './claude-result-journaling'
 import { ClaudeAuthenticationFailures } from './claude-authentication-failures'
+import { ClaudeUsageLimits } from './claude-usage-limits'
 import { ClaudeThreadGoal } from './claude-thread-goal'
 import type { ClaudeGoalBackgroundWork } from './claude-background-task-tracker'
 import type { AgentSessionAccountKind } from '../../shared/agent-session-availability'
@@ -170,6 +171,7 @@ export function createClaudeJournalTranslator(
     corrections,
     turn,
     authenticationFailures: new ClaudeAuthenticationFailures(deps.account),
+    usageLimits: new ClaudeUsageLimits(),
     threadGoal: new ClaudeThreadGoal(() => deps.sink.journalLinkage?.()?.threadGoalSource())
   }
 
@@ -249,6 +251,7 @@ export function createClaudeJournalTranslator(
         journalClaudeResult(resultContext, event.message, event.observedAt ?? Date.now())
       } else if (event.type === 'message') {
         backgroundTasks.observe(event.message, event.observedAt ?? Date.now())
+        messageContext.usageLimits.observe(event.message)
         const kind = claudeProviderFrameKind(event.message)
         if (
           !handleMessage(

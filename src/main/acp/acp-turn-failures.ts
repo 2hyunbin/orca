@@ -61,7 +61,10 @@ export function acpSignInRequiredRefusal(
  *  reason the row still lacks. */
 export class AcpTurnFailures {
   /** The reason each failed turn's row holds; '' for none yet. */
-  private readonly rows = new BoundedMap<string, { text: string; notSignedIn: boolean }>({
+  private readonly rows = new BoundedMap<
+    string,
+    { text: string; notSignedIn: boolean; usageLimited: boolean }
+  >({
     maxEntries: 128
   })
 
@@ -103,22 +106,28 @@ export class AcpTurnFailures {
     const diagnostic =
       detail ?? (written?.text ? providerDiagnostic(written.text, 'person') : undefined)
     const authenticationRequired = notSignedIn || written?.notSignedIn === true
+    // A later copy of the reason (the prompt's error answer) names no stop reason of its own.
+    const usageLimited =
+      !authenticationRequired && (stopReason === 'rate_limit' || written?.usageLimited === true)
     this.rows.set(turn, {
       text: diagnostic?.text ?? '',
-      notSignedIn: authenticationRequired
+      notSignedIn: authenticationRequired,
+      usageLimited
     })
+    const failure = authenticationRequired
+      ? agentSessionFailureFact('notSignedIn', { detail: diagnostic })
+      : usageLimited
+        ? agentSessionFailureFact('usageLimitReached', { detail: diagnostic })
+        : null
     return [
       {
         type: 'item.update',
         item: `turn-failure:${turn}`,
         body: {
           kind: 'status',
-          tone: 'error',
-          ...(authenticationRequired
-            ? agentSessionFailureWords(
-                agentSessionFailureFact('notSignedIn', { detail: diagnostic }),
-                { agentName: this.agentName, surface: 'row' }
-              )
+          tone: usageLimited ? 'warning' : 'error',
+          ...(failure
+            ? agentSessionFailureWords(failure, { agentName: this.agentName, surface: 'row' })
             : {
                 text:
                   diagnostic?.text ??
