@@ -26,6 +26,7 @@ jobs:
     timeout-minutes: 30
     env:
       NODE_OPTIONS: --max-old-space-size=4096
+      ORCA_BACKGROUND_LAUNCH: '1'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -72,6 +73,40 @@ jobs:
           --output=test-results/terminal-images
           --repeat-each=3
           --workers=1
+      - name: Verify image ownership, cancellation, QOI and cache controls
+        env:
+          SKIP_BUILD: '1'
+          ORCA_BACKGROUND_LAUNCH: '1'
+          PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/image-ready-results.json
+        run: >-
+          pnpm exec playwright test
+          tests/e2e/terminal-kitty-physical-ownership.spec.ts
+          tests/e2e/terminal-inline-image-upload-cancellation.spec.ts
+          tests/e2e/terminal-inline-image-qoi.spec.ts
+          tests/e2e/terminal-inline-image-cache.spec.ts
+          --config tests/playwright.config.ts
+          --project=electron-headless
+          --project=electron-headful
+          --output=test-results/image-ready
+          --workers=1
+          --retries=0
+          --reporter=list,json
+      - name: Require all eighteen image reliability cases
+        if: always()
+        run: >-
+          node -e "const s = require('./test-results/image-ready-results.json').stats;
+          if (s.expected !== 18 || s.unexpected || s.flaky || s.skipped)
+          throw new Error(JSON.stringify(s)); console.log(JSON.stringify(s))"
+      - name: Upload image reliability proof
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: windows-image-ready-proof
+          path: |
+            test-results/image-ready/**
+            test-results/image-ready-results.json
+          retention-days: 7
+          if-no-files-found: error
       - name: Upload terminal image proof
         uses: actions/upload-artifact@v7
         if: always()
