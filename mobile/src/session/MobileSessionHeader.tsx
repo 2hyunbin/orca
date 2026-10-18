@@ -1,9 +1,10 @@
-import { View, Text, Pressable } from 'react-native'
+import { useRef } from 'react'
+import { View, Pressable } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { ChevronLeft, Folder, GitBranch, MoreHorizontal, PanelLeftOpen } from 'lucide-react-native'
 import { MobileSessionHeaderIconButton } from './MobileSessionHeaderIconButton'
 import { MobileSessionTabStrip } from './MobileSessionTabStrip'
-import { StatusDot } from '../components/StatusDot'
+import { MobileSessionTitleBlock } from './MobileSessionTitleBlock'
 import { colors } from '../theme/mobile-theme'
 import { styles } from './mobile-session-styles'
 import { useHostSidebarReveal } from '../layout/host-sidebar-reveal'
@@ -18,6 +19,8 @@ export function MobileSessionHeader({ controller }: { controller: MobileSessionC
     connState,
     forceReconnectHost,
     worktreeName,
+    worktreePath,
+    hostName,
     activePanel,
     setShowHeaderMoreActions,
     requestLeaveSession,
@@ -28,6 +31,7 @@ export function MobileSessionHeader({ controller }: { controller: MobileSessionC
     showHeaderMoreButton
   } = controller
   const revealSidebar = useHostSidebarReveal()
+  const topBarRef = useRef<View>(null)
   // Why: a sideways phone is ~390pt tall, so the tabs share the top bar instead of taking a second row.
   const hasTabs = visibleTabs.length > 0
   const tabsInTopBar = useResponsiveLayout().isLandscapePhone && hasTabs
@@ -36,7 +40,7 @@ export function MobileSessionHeader({ controller }: { controller: MobileSessionC
   ) : null
   return (
     <SafeAreaView style={styles.sessionChrome} edges={['top']}>
-      <View style={styles.sessionTopBar}>
+      <View ref={topBarRef} style={styles.sessionTopBar}>
         {revealSidebar ? (
           <Pressable
             style={({ pressed }) => [styles.backButton, pressed && styles.backButtonPressed]}
@@ -58,29 +62,21 @@ export function MobileSessionHeader({ controller }: { controller: MobileSessionC
           <ChevronLeft size={22} color={colors.textSecondary} strokeWidth={2.2} />
         </Pressable>
 
-        <View
-          style={[styles.sessionTitleBlock, tabsInTopBar && styles.sessionTitleBlockBesideTabs]}
-        >
-          <Text style={styles.sessionTitle} numberOfLines={1}>
-            {worktreeName || 'Terminal'}
-          </Text>
-          <Pressable
-            style={styles.sessionMetaRow}
-            disabled={!showConnectionRetry}
-            onPress={() => {
-              if (hostId && forceReconnectHost) {
-                void forceReconnectHost(hostId)
-              }
-            }}
-            accessibilityRole={showConnectionRetry ? 'button' : undefined}
-            accessibilityLabel={showConnectionRetry ? 'Reconnect to desktop' : undefined}
-          >
-            <StatusDot state={connState} />
-            <Text style={styles.sessionMetaText} numberOfLines={1}>
-              {terminalSummary}
-            </Text>
-          </Pressable>
-        </View>
+        <MobileSessionTitleBlock
+          title={worktreeName || 'Terminal'}
+          path={worktreePath}
+          hostName={hostName}
+          connState={connState}
+          besideTabs={tabsInTopBar}
+          barRef={topBarRef}
+          meta={terminalSummary}
+          showConnectionRetry={showConnectionRetry}
+          onRetry={() => {
+            if (hostId && forceReconnectHost) {
+              void forceReconnectHost(hostId)
+            }
+          }}
+        />
         {tabsInTopBar ? tabStrip : null}
         {!isFloatingWorkspaceRoute && (
           <MobileSessionHeaderIconButton

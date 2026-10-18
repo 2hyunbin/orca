@@ -17,6 +17,7 @@ export function useMobileSessionLifecycle(scope: MobileSessionTabReconciliationM
     setCustomKeys,
     setVisibleBuiltInIds,
     setHostEndpoint,
+    setHostName,
     connStateRef,
     terminalRefs,
     initializedHandlesRef,
@@ -38,6 +39,7 @@ export function useMobileSessionLifecycle(scope: MobileSessionTabReconciliationM
       const host = hosts.find((h) => h.id === hostId)
       if (host) {
         setHostEndpoint(host.endpoint)
+        setHostName(host.name)
       }
     })
     return () => {
