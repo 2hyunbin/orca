@@ -14,41 +14,6 @@ const MODEL_ROW = {
 }
 
 describe('codex model catalog probe', () => {
-  it('uses the released account invocation and config overlay without a spawn or config cwd', async () => {
-    const resolveLaunchArgs = vi.fn(() => ['-c', 'model="project"'])
-    const probe = createCodexModelCatalogProbe({
-      resolveCommand: () => './relative-codex',
-      resolveWorkingDirectory: () => '/resolver-cwd',
-      resolveLaunchArgs,
-      runSession: async (invocation, body) => {
-        expect(invocation).not.toHaveProperty('cwd')
-        expect(invocation.command).toBe('./relative-codex')
-        expect(invocation.env).toHaveProperty('CODEX_HOME', '/account')
-        return body({
-          request: async (method, params) => {
-            if (method === 'config/read') {
-              expect(params).toEqual({})
-              return { config: { model: 'configured', model_reasoning_effort: 'high' } }
-            }
-            return {
-              data: [MODEL_ROW, { ...MODEL_ROW, model: 'configured', isDefault: false }],
-              nextCursor: null
-            }
-          },
-          notify: () => {}
-        })
-      }
-    })
-    const result = await (
-      await probe.resolveLegacy!({ variable: 'CODEX_HOME', path: '/account' })
-    ).run()
-    expect(result.models.find((row) => row.isDefault)).toMatchObject({
-      id: 'configured',
-      defaultEffort: 'high'
-    })
-    expect(result).not.toHaveProperty('configured')
-    expect(resolveLaunchArgs).not.toHaveBeenCalled()
-  })
   it.each([`"${process.execPath}"`, ''])(
     'lists with the session executable for Command %j',
     async (command) => {
@@ -70,19 +35,32 @@ describe('codex model catalog probe', () => {
           options
         )
       })
+      let args = ['-c', 'model="configured"']
+      const resolveLaunchArgs = vi.fn(() => args)
+      const configs: unknown[] = []
       const invocations: CodexAppServerInvocation[] = []
       const probe = createCodexModelCatalogProbe({
         resolveEnvironment,
         resolveCommand,
+        resolveLaunchArgs,
         runSession: async (invocation, body) => {
           invocations.push(invocation)
           return body({
-            request: async () => ({ data: [MODEL_ROW], nextCursor: null }),
+            request: async (method, params) => {
+              if (method === 'config/read') {
+                configs.push(params)
+                return { config: { model: 'gpt-live', model_reasoning_effort: 'high' } }
+              }
+              return { data: [MODEL_ROW], nextCursor: null }
+            },
             notify: () => {}
           })
         }
       })
-      const success = await probe({ variable: 'CODEX_HOME', path: '/homes/account-a' })
+      const home = { variable: 'CODEX_HOME', path: '/homes/account-a' }
+      const resolved = await probe.resolve!(home, '/project')
+      args = ['-c', 'model="changed"']
+      const success = await resolved.run()
       expect(success.origin).toBe('probe')
       expect(success.models.map((model) => model.id)).toEqual(['gpt-live'])
       // The session launch resolves the exact same invocation for the same deps.
@@ -100,52 +78,26 @@ describe('codex model catalog probe', () => {
       })
       // A short-lived probe must not start plugin marketplace clones that outlive its teardown.
       expect(invocations[0]!.args.join(' ')).toContain('features.plugins=false')
+      expect(invocations[0]).toMatchObject({
+        cwd: '/project',
+        args: expect.arrayContaining(['-c', 'model="configured"'])
+      })
+      expect(success.configured).toEqual({ model: 'gpt-live', effort: 'high' })
+      const legacy = await (await probe.resolveLegacy!(home)).run()
+      expect(invocations[1]).not.toHaveProperty('cwd')
+      expect(invocations[1]!.env).toEqual(invocations[0]!.env)
+      expect(configs).toEqual([{ cwd: '/project' }, {}])
+      expect(resolveLaunchArgs).toHaveBeenCalledTimes(1)
+      expect(legacy).not.toHaveProperty('configured')
     }
   )
-
-  it('keeps root arguments and project configuration in one immutable discovery invocation', async () => {
-    let args = ['-c', 'model="configured"']
-    const invocations: CodexAppServerInvocation[] = []
-    const resolveEnvironment = vi.fn(async () => ({ PATH: '/bin' }))
-    const probe = createCodexModelCatalogProbe({
-      resolveEnvironment,
-      resolveCommand: () => '/bin/codex',
-      resolveLaunchArgs: () => args,
-      runSession: async (invocation, body) => {
-        invocations.push(invocation)
-        return body({
-          request: async (method, params) => {
-            if (method === 'config/read') {
-              expect(params).toEqual({ cwd: '/project' })
-              return { config: { model: 'configured', model_reasoning_effort: 'high' } }
-            }
-            return { data: [MODEL_ROW], nextCursor: null }
-          },
-          notify: () => {}
-        })
-      }
-    })
-    const resolved = await probe.resolve!({ variable: 'CODEX_HOME', path: '/account' }, '/project')
-    args = ['-c', 'model="changed"']
-    const result = await resolved.run()
-    expect(resolveEnvironment).toHaveBeenCalledTimes(1)
-    expect(invocations[0]).toMatchObject({
-      cwd: '/project',
-      args: expect.arrayContaining(['-c', 'model="configured"'])
-    })
-    expect(result).toMatchObject({
-      configured: { model: 'configured', effort: 'high' },
-      complete: true
-    })
-    expect(result.models[0]).toMatchObject({ id: 'gpt-live', isDefault: true })
-  })
 
   it('keeps the listing when config/read never answers', async () => {
     const server = String.raw`
       const readline = require('node:readline')
       readline.createInterface({ input: process.stdin }).on('line', (line) => {
         const message = JSON.parse(line)
-        if (typeof message.id !== 'number' || message.method === 'config/read') return
+        if (typeof message.id !== 'number' || message.method === 'config/read') { return }
         const result = message.method === 'model/list'
           ? { data: [${JSON.stringify(MODEL_ROW)}], nextCursor: null }
           : {}

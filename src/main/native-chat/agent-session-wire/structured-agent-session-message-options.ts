@@ -66,10 +66,8 @@ export async function writeStructuredAgentSessionOption(
       return { ok: false, refusal: AGENT_SESSION_NOT_ATTACHED }
     }
     const listing =
-      catalog?.choiceCatalog?.authority === 'discovery' &&
-      catalog.choiceCatalog.models.length &&
-      catalog.origin !== 'unknown'
-        ? { models: catalog.models, complete: catalog.choiceCatalog.complete }
+      catalog && catalog.origin !== 'unknown' && catalog.models.length > 0
+        ? { models: catalog.models, complete: !catalog.listingInProgress && !catalog.unavailable }
         : null
     return await performSetOption(
       ctx,

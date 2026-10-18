@@ -40,10 +40,6 @@ function launchPermission(
   const modelCatalog = {
     read,
     peek: vi.fn(() => null),
-    processCatalog: vi.fn(() => null),
-    legacyProcessCatalog: () => null,
-    processListingChanged: () => {},
-    trackProcessListing: () => {},
     retainedLiveModelIds: vi.fn(() => []),
     recordLiveListing: vi.fn(),
     prewarm: vi.fn(async () => undefined),

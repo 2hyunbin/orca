@@ -3,12 +3,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentSessionRecord } from '../../shared/agent-session-record'
-import { structuredAgentSessionSeedCatalog } from '../../shared/structured-agent-session-seed-catalog'
-import {
-  applyStructuredAgentSessionModelCatalog,
-  createStructuredAgentSessionOptionState,
-  structuredAgentSessionOptionSnapshot
-} from '../../shared/structured-agent-session-options'
 import { createAgentModelCatalogService } from '../native-chat/agent-model-catalog/agent-model-catalog-service'
 import { AgentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
 import {
@@ -135,7 +129,6 @@ async function piHost() {
     store,
     getRecord: (sessionId) => records.get(sessionId),
     drivesRecord: () => true,
-    processScope: (sessionId) => (records.has(sessionId) ? `${sessionId}:1` : null),
     resolveAccountHome: async () => PI_HOME,
     recordWorkspacePath: async (row) => row.launchDirectory ?? null,
     agentReadsProjectModelConfig,
@@ -227,23 +220,22 @@ async function piHost() {
 
 describe('Pi process configuration metadata', () => {
   it('omits configured intent for restored, resumed, or forked chats', async () => {
-    const { chat, catalog } = await piHost()
+    const { chat } = await piHost()
     const clean = workspace('clean')
-    await chat(clean)
+    expect((await chat(clean, { saved: { effort: 'low' } })).listing.configuredDefault).toEqual({
+      modelId: 'openai/gpt-6'
+    })
+    expect((await chat(clean, { replacement: true })).listing.configuredDefault).toEqual({
+      modelId: 'openai/gpt-6',
+      effort: 'high'
+    })
     for (const options of [
       { saved: { model: 'openai/gpt-6' } },
       { resumed: true },
       { forked: true }
     ]) {
       expect((await chat(clean, options)).listing).not.toHaveProperty('configuredDefault')
-      expect(
-        (await catalog.read({ agent: 'pi', workspacePath: clean, savedOnly: true })).choiceCatalog
-      ).not.toHaveProperty('configured')
     }
-    await chat(clean, { available: [AVAILABLE[0]!] })
-    expect(
-      (await catalog.read({ agent: 'pi', workspacePath: clean, savedOnly: true })).choiceCatalog
-    ).not.toHaveProperty('configured')
   })
 
   it('retains the whole process effort menu when a coarse text probe arrives later', async () => {
@@ -261,27 +253,12 @@ describe('Pi process configuration metadata', () => {
       }
     })
     const nextComposer = await catalog.read({ agent: 'pi', workspacePath: clean, savedOnly: true })
-    expect(nextComposer.choiceCatalog?.configured).toEqual({
+    expect(catalog.peek(sessionId)?.observation.configured).toEqual({
       model: 'openai/gpt-6',
       effort: 'xhigh'
     })
-    const seed = structuredAgentSessionSeedCatalog('pi')
-    const display = applyStructuredAgentSessionModelCatalog(
-      createStructuredAgentSessionOptionState('pi', seed),
-      seed,
-      nextComposer,
-      { newLaunch: true }
-    )
-    const snapshot = structuredAgentSessionOptionSnapshot(display)
-    expect(snapshot.find((option) => option.id === 'model')?.kind).toMatchObject({
-      currentValue: 'openai/gpt-6'
-    })
-    expect(snapshot.find((option) => option.id === 'effort')?.kind).toMatchObject({
-      currentValue: 'xhigh'
-    })
-    expect(display.record).toEqual({ agent: 'pi', valuesByModel: {} })
     expect(
-      nextComposer.choiceCatalog?.models
+      (nextComposer.origin === 'unknown' ? [] : nextComposer.models)
         .find((row) => row.id === 'openai/gpt-6')
         ?.efforts.map((effort) => effort.value)
     ).toContain('xhigh')
@@ -303,25 +280,5 @@ describe('Pi process configuration metadata', () => {
         ?.models.find((row) => row.id === 'openai/gpt-6')
         ?.efforts.map((effort) => effort.value)
     ).toContain('xhigh')
-    expect(
-      catalog
-        .processCatalog(sessionId)
-        ?.models.find((row) => row.id === 'openai/gpt-6')
-        ?.efforts.map((effort) => effort.value)
-    ).toContain('xhigh')
-  })
-
-  it('reports only configured model intent when a thinking level was saved', async () => {
-    const { chat } = await piHost()
-    expect(
-      (await chat(workspace('clean'), { saved: { effort: 'low' } })).listing.configuredDefault
-    ).toEqual({ modelId: 'openai/gpt-6' })
-  })
-
-  it('reports configuration for a replacement process with no restored selection', async () => {
-    const { chat } = await piHost()
-    expect(
-      (await chat(workspace('clean'), { replacement: true })).listing.configuredDefault
-    ).toEqual({ modelId: 'openai/gpt-6', effort: 'high' })
   })
 })

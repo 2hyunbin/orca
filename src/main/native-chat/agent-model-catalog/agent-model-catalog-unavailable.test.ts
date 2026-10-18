@@ -294,9 +294,7 @@ describe('a prewarm probe', () => {
     await service.prewarm()
     expect(probe).toHaveBeenCalledTimes(1)
     pastTtl()
-    expect(
-      (await service.read({ agent: 'codex', savedOnly: true })).choiceCatalog?.freshForMs
-    ).toBe(0)
+    expect(store.freshForMs(store.get(FINGERPRINT)!)).toBeGreaterThan(0)
     await service.prewarm()
     expect(probe).toHaveBeenCalledTimes(2)
     expect(store.failure(FINGERPRINT)).toBeNull()

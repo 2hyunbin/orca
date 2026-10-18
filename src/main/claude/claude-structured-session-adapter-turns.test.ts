@@ -243,8 +243,7 @@ describe('ClaudeStructuredSessionAdapter turns and controls', () => {
       sessionId: 'session-1',
       fence: 7
     })
-    // The process's whole listing keeps resolved identity separate from the current selection.
-    expect(catalogListing?.models.map((model) => model.id)).toEqual(['opus', 'sonnet'])
+    expect(catalogListing).toBeUndefined()
     expect(options).toEqual({
       models: [
         {

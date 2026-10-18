@@ -11,49 +11,34 @@ afterEach(async () => {
 })
 
 describe('a live Grok listing', () => {
-  it('publishes startup and read snapshots under the indexed owning generation', async () => {
-    let readScope: () => string | null = () => null
-    const scopes: (string | null)[] = []
+  it('publishes whole startup and read snapshots until the child ends', async () => {
     const modelCatalog: AgentModelCatalogService = {
       read: vi.fn(async () => ({ origin: 'unknown' as const })),
       peek: () => null,
-      processCatalog: () => null,
-      legacyProcessCatalog: () => null,
-      processListingChanged: () => {},
-      trackProcessListing: () => {},
       retainedLiveModelIds: vi.fn(() => []),
-      recordLiveListing: vi.fn(() => {
-        scopes.push(readScope())
-      }),
+      recordLiveListing: vi.fn(),
       prewarm: vi.fn(async () => {}),
       stop: vi.fn(),
       providerStarted: vi.fn()
     }
     const { host } = await openHostRig({ modelCatalog })
-    readScope = () => host.modelCatalogProcessScope(SESSION)
     expect(await host.attach(CALLER, attachParams())).toMatchObject({ ok: true })
-    expect(scopes[0]).toContain('generation-')
-    expect(scopes[0]).not.toContain('unverifiable')
 
     // Its start was saved once as the chat attached; this read is saved too.
     expect(modelCatalog.recordLiveListing).toHaveBeenCalledTimes(1)
     await host.readOptions(SESSION)
 
     expect(modelCatalog.recordLiveListing).toHaveBeenCalledTimes(2)
-    expect(scopes[1]).toBe(scopes[0])
     const [sessionId, listing] = vi.mocked(modelCatalog.recordLiveListing).mock.calls[1]!
     expect(sessionId).toBe(SESSION)
     expect(listing.models.map((model) => model.id)).toEqual(['grok-4.7', 'grok-4.6'])
-    // Current rows do not become defaults; the generation keeps its startup configuration.
+    // Current rows do not become defaults; startup configuration stays separate.
     expect(listing.models.every((model) => !model.isDefault)).toBe(true)
     expect(listing.configuredDefault).toEqual({ modelId: 'grok-4.7', effort: 'high' })
     const conversation = host.collaboratorsForTests().sessions.get(SESSION)!
     const child = conversation.child!
     const ended = { ...child, cause: 'exit' as const, reason: null, duringStartup: false }
-    recordProviderChildEnd(conversation, { ...ended, rootGone: false })
-    expect(readScope()).toBe(scopes[0])
     recordProviderChildEnd(conversation, { ...ended, rootGone: true })
-    expect(readScope()).toBeNull()
     await host.readOptions(SESSION)
     expect(modelCatalog.recordLiveListing).toHaveBeenCalledTimes(2)
   })
@@ -62,10 +47,6 @@ describe('a live Grok listing', () => {
     const modelCatalog: AgentModelCatalogService = {
       read: vi.fn(async () => ({ origin: 'unknown' as const })),
       peek: () => null,
-      processCatalog: () => null,
-      legacyProcessCatalog: () => null,
-      processListingChanged: () => {},
-      trackProcessListing: () => {},
       retainedLiveModelIds: vi.fn(() => []),
       recordLiveListing: vi.fn().mockImplementationOnce(() => {
         throw new Error('catalog unavailable')

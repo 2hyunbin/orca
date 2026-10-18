@@ -4,8 +4,10 @@
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native'
 import { Check, ChevronDown, ChevronRight } from 'lucide-react-native'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
+import { mobileSessionOptionSummaryValue } from './mobile-native-chat-session-option-labels'
 import {
   sessionOptionValueMarker,
+  sessionOptionIsCurrentValueOnly,
   type SessionOptionDescriptor,
   type SessionOptionValueMarker,
   type SessionOptionValue
@@ -176,8 +178,19 @@ export function SessionOptionSummaryRow({
   value: string
   disabled: boolean
   divided: boolean
-  onPress: () => void
+  onPress?: () => void
 }): React.JSX.Element {
+  const content = (
+    <>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={styles.summaryValue} numberOfLines={1}>
+        {value}
+      </Text>
+    </>
+  )
+  if (!onPress) {
+    return <View style={[styles.summaryRow, divided && styles.rowDivided]}>{content}</View>
+  }
   return (
     <Pressable
       accessibilityLabel={`${label}, ${value}`}
@@ -192,10 +205,7 @@ export function SessionOptionSummaryRow({
       onPress={onPress}
       disabled={disabled}
     >
-      <Text style={styles.summaryLabel}>{label}</Text>
-      <Text style={styles.summaryValue} numberOfLines={1}>
-        {value}
-      </Text>
+      {content}
       <ChevronRight size={16} color={colors.textMuted} strokeWidth={2.2} />
     </Pressable>
   )
@@ -252,6 +262,16 @@ export function DescriptorRows({
         disabled={locked}
         grouped={grouped}
         onToggle={(next) => onSetOption(next)}
+      />
+    )
+  }
+  if (sessionOptionIsCurrentValueOnly(descriptor)) {
+    return (
+      <SessionOptionSummaryRow
+        label={descriptor.label}
+        value={mobileSessionOptionSummaryValue(descriptor)}
+        disabled={false}
+        divided={false}
       />
     )
   }

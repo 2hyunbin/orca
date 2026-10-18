@@ -162,8 +162,17 @@ export function createClaudeModelCatalogProbe(
         return {
           models,
           origin: 'probe',
-          complete: complete && !Object.hasOwn(effectiveArgs, 'model'),
-          ...(configured ? { configured } : {})
+          complete,
+          ...(configured && !Object.hasOwn(effectiveArgs, 'model')
+            ? {
+                configured: {
+                  ...(configured.model ? { model: configured.model } : {}),
+                  ...(!Object.hasOwn(effectiveArgs, 'effort') && configured.effort
+                    ? { effort: configured.effort }
+                    : {})
+                }
+              }
+            : {})
         }
       }
     }

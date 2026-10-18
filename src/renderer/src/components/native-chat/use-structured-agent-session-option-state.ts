@@ -1,4 +1,3 @@
-import { invalidateStructuredAgentChoiceCatalog } from '../../../../shared/structured-agent-session-choice-catalog'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AgentSessionConversationCommand } from '../../../../shared/agent-session-conversation-command'
 import type { AgentSessionOptionsResult } from '../../../../shared/agent-session-wire'
@@ -10,6 +9,7 @@ import {
   applyStructuredAgentSessionModelCatalog,
   applyStructuredAgentSessionOptions,
   createStructuredAgentSessionOptionState,
+  resetStructuredAgentSessionCurrentOptions,
   type StructuredAgentSessionOptionState
 } from '../../../../shared/structured-agent-session-options'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
@@ -18,7 +18,6 @@ import { AGENT_SESSION_SEND_OPTIONS_RUNTIME_CAPABILITY } from '../../../../share
 import { useStructuredAgentSessionHostCapability } from '@/runtime/structured-agent-session-host-capability'
 import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
 import { readHostModelCatalogSnapshot } from '@/runtime/host-model-catalog-snapshots'
-import { cloneNativeChatSessionOptionRecord } from '../../../../shared/native-chat-session-option-state'
 import {
   createCoalescedPollRunner,
   type CoalescedPollRunner
@@ -129,26 +128,16 @@ export function useStructuredAgentSessionOptionState(args: {
     // and a starting agent is not read: keep them, and the account's list, until a read replaces them.
     const kept =
       sameSession && previous.catalogSource !== 'seed' && previous.catalogSource !== null
-        ? {
-            ...previous,
-            record: cloneNativeChatSessionOptionRecord(previous.record),
-            pendingId: null
-          }
+        ? resetStructuredAgentSessionCurrentOptions(previous)
         : seeded
     // The chat's own, which a restart for a new mode keeps: the picker never blanks between them.
-    const next = sameSession
-      ? { ...invalidateStructuredAgentChoiceCatalog(kept), permissionMode: previous.permissionMode }
-      : kept
+    const next = sameSession ? { ...kept, permissionMode: previous.permissionMode } : kept
     optionMutationGeneration.current += 1
     pendingOptionsRef.current = {}
     optionStateRef.current = next
     activeOptionRecordRef.current = next.record
     setOptionState(next)
   }, [agent, fence, identity])
-
-  useEffect(() => {
-    updateOptionState(invalidateStructuredAgentChoiceCatalog)
-  }, [providerVisible, providerStarting, updateOptionState])
 
   const optionsReadRef = useRef<CoalescedPollRunner | null>(null)
   // Refresh options each turn to confirm which model the provider actually selected, and once

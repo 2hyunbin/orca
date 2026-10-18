@@ -255,9 +255,7 @@ async function newChatFrames(
   const first = applyStructuredAgentSessionModelCatalog(
     createStructuredAgentSessionOptionState(agent, seed),
     seed,
-    (({ choiceCatalog: _choice, ...legacy }) => legacy)(
-      await modelCatalog.read({ agent, waitForListing: true, workspacePath })
-    ),
+    await modelCatalog.read({ agent, waitForListing: true, workspacePath }),
     { newLaunch: true }
   )
   // Read before applying the answer: applying updates the state's option record in place.

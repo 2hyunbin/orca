@@ -50,27 +50,6 @@ describe('ACP session options', () => {
     expect(current).toEqual({ model: 'model-b', effort: 'high', confirmed: ['model', 'effort'] })
   })
 
-  it('retains exact observed menus only within the owning process generation', () => {
-    const options = new AcpStructuredOptions()
-    options.adoptSession({ configOptions })
-    options.adoptConfigOptions(
-      configOptions.map((option) =>
-        option.category === 'model'
-          ? { ...option, currentValue: 'model-a' }
-          : { ...option, options: [] }
-      )
-    )
-    expect(options.read().models.map((model) => model.efforts)).toEqual([
-      [],
-      [
-        { value: 'low', label: 'Low' },
-        { value: 'high', label: 'High' }
-      ]
-    ])
-    options.adoptSession({ configOptions: [configOptions[0]!] })
-    expect(options.read().models.every((model) => model.effortsKnown === false)).toBe(true)
-  })
-
   it('reads each model’s own menu where the agent advertises one', () => {
     const options = new AcpStructuredOptions(GROK_ACP_DIALECT)
     options.adoptSession({

@@ -7,6 +7,7 @@ import { translate } from '@/i18n/i18n'
 import { sortNativeChatSessionOptions } from '../../../../shared/native-chat-session-option-snapshot'
 import {
   sessionOptionDispatchUnconfirmed,
+  sessionOptionHasPickerContent,
   type SessionOptionDescriptor,
   type SessionOptionsSurface,
   type SessionOptionValue
@@ -138,6 +139,7 @@ function SessionOptionPopover(props: {
   focusComposer?: () => void
 }): React.JSX.Element {
   const { model, options, pendingIds } = props
+  const disabled = props.isWorking || ![model, ...options].some(sessionOptionHasPickerContent)
   // Why here: this unmounts with the pill, so a picker that went away comes back closed.
   const [open, setOpen] = useState(false)
   const [seenRequest, setSeenRequest] = useState<NativeChatOptionPickerRequest | null>(null)
@@ -145,7 +147,7 @@ function SessionOptionPopover(props: {
   const [requestedOptionId, setRequestedOptionId] = useState<string | null>(null)
   if (props.request !== seenRequest) {
     setSeenRequest(props.request)
-    if (props.request) {
+    if (props.request && !disabled) {
       setOpen(true)
       setRequestedOptionId(props.request.id === model.id ? null : props.request.id)
     }
@@ -189,7 +191,7 @@ function SessionOptionPopover(props: {
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open && !disabled} onOpenChange={(next) => setOpen(next && !disabled)}>
       <PickerTrigger
         modelLabel={modelLabel}
         optionsLabel={optionsLabel}
@@ -198,7 +200,7 @@ function SessionOptionPopover(props: {
             ? `${modelName}, ${pillAccessibleName(optionsTitle, optionsLabel)}`
             : modelName
         }
-        disabled={props.isWorking}
+        disabled={disabled}
         disabledReason={modelReason ?? optionsReason}
         dispatched={
           sessionOptionDispatchUnconfirmed(model) || options.some(sessionOptionDispatchUnconfirmed)
@@ -206,7 +208,7 @@ function SessionOptionPopover(props: {
         triggerRef={focusReturn.triggerRef}
         // Why: a popover trigger opens on Enter and Space only; a menu also takes ArrowDown.
         onKeyDown={(event) => {
-          if (event.key === 'ArrowDown') {
+          if (event.key === 'ArrowDown' && !disabled) {
             event.preventDefault()
             setOpen(true)
           }

@@ -81,12 +81,12 @@ export function useMobileHostModelCatalogUpgrade(args: {
           : current
       )
     }
-    // A refused or failed read is no list: the built-in one becomes usable, naming nothing.
-    const settleBuiltin = (): void => {
+    // Only an older unsupported surface permits the built-in compatibility choices.
+    const settleBuiltin = (error: unknown): void => {
       if (!stale) {
         updateOptionState((current) =>
           current.record === activeOptionRecordRef.current
-            ? settleStructuredAgentSessionBuiltinCatalog(current)
+            ? settleStructuredAgentSessionBuiltinCatalog(current, error)
             : current
         )
       }
@@ -94,14 +94,14 @@ export function useMobileHostModelCatalogUpgrade(args: {
     void read(false)
       .then((catalog) => {
         if (catalog.listingInProgress === true && !stale) {
-          // Usable on the built-in list while the listing runs; it lands in place.
+          // Keep genuine rows while the listing runs; it lands in place.
           apply(catalog)
           leave = joinHostModelListingWait(
             `${agent}\u0000${sessionId}\u0000${fence}\u0000${worktree ?? ''}\u0000${optionStamp ?? ''}`,
             () => read(true),
             (listed) => {
               if (!listed) {
-                return settleBuiltin()
+                return
               }
               apply(listed)
               if (!stale && listed.origin !== 'unknown') {

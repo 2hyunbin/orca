@@ -1,10 +1,6 @@
 import { isLegacyAgentSessionAccountHome } from '../../../shared/agent-session-account-home'
 import { homedir } from 'node:os'
-import { createAgentModelCatalogProcessObservations } from './agent-model-catalog-process-observations'
-import type {
-  AgentSessionChoiceCatalog,
-  AgentSessionModelCatalogResult
-} from '../../../shared/agent-session-wire'
+import type { AgentSessionModelCatalogResult } from '../../../shared/agent-session-wire'
 import { isNativeLocalLocation } from '../../../shared/execution-host'
 import { PrioritySemaphore } from '../../../shared/priority-semaphore'
 import {
@@ -14,7 +10,6 @@ import {
 } from './agent-model-catalog-fingerprint'
 import {
   agentModelCatalogResultFromEntry,
-  agentModelCatalogUnknownResult,
   agentModelCatalogSessionObservation,
   retainedAgentModelCatalogModels
 } from './agent-model-catalog-entry'
@@ -37,10 +32,7 @@ export function createAgentModelCatalogService(
   const lifetime = new AbortController()
   const admission = new PrioritySemaphore(2)
   const sessionKeys = new Map<string, string>()
-  const processes = createAgentModelCatalogProcessObservations(deps)
   const read = async (params: AgentModelCatalogRead): Promise<AgentSessionModelCatalogResult> => {
-    const unverified = (): AgentSessionModelCatalogResult =>
-      agentModelCatalogUnknownResult(params.sessionId ? processes.read(params.sessionId) : null)
     const record = params.sessionId ? deps.getRecord(params.sessionId) : undefined
     if (
       record &&
@@ -48,25 +40,12 @@ export function createAgentModelCatalogService(
         !deps.drivesRecord(record) ||
         !isNativeLocalLocation(record.location))
     ) {
-      return {
-        origin: 'unknown',
-        choiceCatalog: {
-          authority: 'session',
-          scopeId: params.sessionId ?? '',
-          models: [],
-          complete: false,
-          freshForMs: 0
-        }
-      }
-    }
-    const process = await processes.readFlat(params)
-    if (process) {
-      return process
+      return { origin: 'unknown' }
     }
     const home =
       record?.accountHome ?? (await deps.resolveAccountHome(params.agent).catch(() => null))
     if (!home) {
-      return unverified()
+      return { origin: 'unknown' }
     }
     const base = agentModelCatalogFingerprint({
       agent: params.agent,
@@ -74,48 +53,50 @@ export function createAgentModelCatalogService(
       wslDistro: null
     })
     const legacyAccount = params.legacy && (params.agent === 'claude' || params.agent === 'codex')
-    const cwd =
+    const workspacePath = async () =>
       params.accountDefault && !legacyAccount
         ? homedir()
         : params.workspacePath === null
           ? null
           : (params.workspacePath ??
             (record ? await deps.recordWorkspacePath?.(record).catch(() => null) : homedir()))
+    const cwd = legacyAccount ? undefined : await workspacePath()
     if (!cwd && !legacyAccount) {
       const legacy = deps.store.get(base)
       if (!legacy) {
-        return unverified()
+        return { origin: 'unknown' }
       }
       return {
         ...agentModelCatalogResultFromEntry(legacy, false, false),
-        ...unverified(),
-        origin: legacy.origin,
-        models: legacy.models.map((row) => ({ ...row, isDefault: false })),
-        fetchedAt: legacy.fetchedAt
+        models: legacy.models.map((row) => ({ ...row, isDefault: false }))
       }
     }
-    const namesDefault =
-      params.accountDefault || (params.workspacePath === undefined && !params.inSessionWorkspace)
-        ? true
-        : cwd && deps.workspaceMayOverrideDefaultModel
-          ? !(await deps
-              .workspaceMayOverrideDefaultModel({
-                agent: params.agent,
-                workspacePath: cwd,
-                accountHomePath: isLegacyAgentSessionAccountHome(home) ? home.path : null
-              })
-              .catch(() => true))
-          : false
+    const namesDefault = async (): Promise<boolean> => {
+      if (
+        params.accountDefault ||
+        (params.workspacePath === undefined && !params.inSessionWorkspace)
+      ) {
+        return true
+      }
+      const directory = legacyAccount ? await workspacePath() : cwd
+      return directory && deps.workspaceMayOverrideDefaultModel
+        ? !(await deps
+            .workspaceMayOverrideDefaultModel({
+              agent: params.agent,
+              workspacePath: directory,
+              accountHomePath: isLegacyAgentSessionAccountHome(home) ? home.path : null
+            })
+            .catch(() => true))
+        : false
+    }
     const probe = deps.probes?.[params.agent]
-    const resolved = await (
-      legacyAccount
-        ? probe?.resolveLegacy?.(home)
-        : cwd
-          ? probe?.resolve?.(home, cwd, params.accountDefault ? undefined : record?.options)
-          : undefined
-    )?.catch(() => null)
-    if ((legacyAccount ? probe?.resolveLegacy : probe?.resolve) && !resolved) {
-      return unverified()
+    const resolved = cwd
+      ? await probe
+          ?.resolve?.(home, cwd, params.accountDefault ? undefined : record?.options)
+          .catch(() => null)
+      : undefined
+    if (!legacyAccount && probe?.resolve && !resolved) {
+      return { origin: 'unknown' }
     }
     const fingerprint = agentModelCatalogScopeFingerprint(
       base,
@@ -132,55 +113,20 @@ export function createAgentModelCatalogService(
       if (!params.legacy) {
         sessionKeys.set(params.sessionId, fingerprint)
       }
-      const process = processes.get(params.sessionId)
-      if (
-        record &&
-        process &&
-        record.provider !== 'claude' &&
-        record.provider !== 'codex' &&
-        process.scope === deps.processScope?.(params.sessionId)
-      ) {
-        deps.store.recordSuccess(
-          fingerprint,
-          record.provider,
-          agentModelCatalogSessionObservation(process.listing),
-          'live'
-        )
-      }
     }
     let entry = deps.store.get(fingerprint)
     // Old cache identities remain usable only through the legacy flat display contract.
     const legacy = entry ? null : deps.store.get(base)
-    const answer = (
+    const answer = async (
       listed: AgentModelCatalogEntry | null,
       listingInProgress = false
-    ): AgentSessionModelCatalogResult => {
-      const owned = params.legacy && params.sessionId ? processes.flat(params.sessionId) : null
-      if (owned) {
-        return owned
-      }
+    ): Promise<AgentSessionModelCatalogResult> => {
       const unavailable = deps.store.failure(fingerprint)?.unavailable
-      const process = params.sessionId ? processes.read(params.sessionId) : null
-      const observation = listed?.observation
-      const discovery = params.agent === 'claude' || params.agent === 'codex'
-      const choiceCatalog: AgentSessionChoiceCatalog = process ?? {
-        authority: 'discovery',
-        scopeId: fingerprint,
-        models: observation?.models ?? [],
-        complete:
-          discovery &&
-          listed?.source === 'discovery' &&
-          observation?.complete === true &&
-          !unavailable,
-        freshForMs: discovery && listed && !unavailable ? deps.store.freshForMs(listed) : 0,
-        ...(observation?.configured ? { configured: observation.configured } : {}),
-        ...(observation?.fastModeSupport ? { fastModeSupport: observation.fastModeSupport } : {})
-      }
       const display = listed ?? legacy
       const result = display
         ? agentModelCatalogResultFromEntry(
             display,
-            namesDefault,
+            (listed !== null || params.legacy === true) && (await namesDefault()),
             deps.listingNamesConfiguredModel?.has(params.agent) === true
           )
         : null
@@ -190,32 +136,32 @@ export function createAgentModelCatalogService(
         deps.agentReadsProjectModelConfig?.(params.agent) === false
           ? { defaultHoldsInEveryWorkspace: true as const }
           : {}),
-        choiceCatalog,
         ...(listingInProgress ? { listingInProgress: true as const } : {}),
         ...(unavailable ? { unavailable } : {})
       }
     }
     if (
       params.savedOnly ||
-      (record?.lease?.claimStatus === 'released' && record.lease.deathEvidence)
+      ((params.legacy || (params.agent !== 'claude' && params.agent !== 'codex')) &&
+        record?.lease?.claimStatus === 'released' &&
+        record.lease.deathEvidence)
     ) {
       return answer(entry)
-    }
-    const started = await processes.readFlat(params)
-    if (started) {
-      return started
     }
     if (probe && !lifetime.signal.aborted && deps.store.probeDue(fingerprint)) {
       deps.store.refresh(fingerprint, params.agent, probe, async () => {
         try {
           const release = legacyAccount ? () => {} : await admission.acquire(0, lifetime.signal)
           try {
-            const result = resolved
-              ? await resolved.run(lifetime.signal)
-              : await probe(home, {
-                  ...(legacyAccount || !cwd ? {} : { cwd }),
-                  signal: lifetime.signal
-                })
+            const result =
+              legacyAccount && probe.resolveLegacy
+                ? await (await probe.resolveLegacy(home)).run(lifetime.signal)
+                : resolved
+                  ? await resolved.run(lifetime.signal)
+                  : await probe(home, {
+                      ...(legacyAccount || !cwd ? {} : { cwd }),
+                      signal: lifetime.signal
+                    })
             return params.agent === 'claude' || params.agent === 'codex'
               ? result
               : { ...result, advisory: true as const }
@@ -234,14 +180,10 @@ export function createAgentModelCatalogService(
       await deps.store.pendingListing(fingerprint, entry)
       entry = deps.store.get(fingerprint)
     }
-    return (await processes.readFlat(params)) ?? answer(entry, deps.store.isListing(fingerprint))
+    return answer(entry, deps.store.isListing(fingerprint))
   }
   return {
     read,
-    processCatalog: processes.read,
-    legacyProcessCatalog: processes.flat,
-    processListingChanged: processes.notify,
-    trackProcessListing: processes.track,
     peek: (sessionId, verifiedOnly) => {
       const entry = deps.store.get(sessionKeys.get(sessionId) ?? '')
       return entry &&
@@ -257,7 +199,9 @@ export function createAgentModelCatalogService(
       if (key) {
         deps.store.expireFailure(key)
       }
-      deps.store.expireFailure(agentModelCatalogFingerprintForRecord(record))
+      const account = agentModelCatalogFingerprintForRecord(record)
+      deps.store.expireFailure(account)
+      deps.store.expireFailure(agentModelCatalogScopeFingerprint(account, 'legacy-account'))
     },
     retainedLiveModelIds(sessionId, listing) {
       return retainedAgentModelCatalogModels(
@@ -267,23 +211,25 @@ export function createAgentModelCatalogService(
     },
     recordLiveListing(sessionId, listing) {
       const record = deps.getRecord(sessionId)
-      const scope = deps.processScope?.(sessionId)
-      if (!record || !deps.drivesRecord(record) || record.provider === 'codex') {
+      if (
+        !record ||
+        !deps.drivesRecord(record) ||
+        record.provider === 'claude' ||
+        record.provider === 'codex'
+      ) {
         return
       }
-      processes.record(sessionId, scope, listing)
-      // Claude's no-live route is independent discovery, never a previous process snapshot.
-      const fingerprint = sessionKeys.get(sessionId)
-      if (fingerprint && record.provider !== 'claude') {
-        deps.store.recordSuccess(
-          fingerprint,
-          record.provider,
-          agentModelCatalogSessionObservation(listing),
-          'live'
-        )
-      } else if (record.provider !== 'claude') {
-        void read({ agent: record.provider, sessionId, savedOnly: true }).catch(() => {})
-      }
+      const fingerprint =
+        sessionKeys.get(sessionId) ?? agentModelCatalogFingerprintForRecord(record)
+      deps.store.recordSuccess(
+        fingerprint,
+        record.provider,
+        agentModelCatalogSessionObservation({
+          ...listing,
+          models: retainedAgentModelCatalogModels(deps.store.get(fingerprint), listing)
+        }),
+        'live'
+      )
     },
     async prewarm() {
       if (lifetime.signal.aborted) {
@@ -297,7 +243,6 @@ export function createAgentModelCatalogService(
     },
     stop() {
       lifetime.abort()
-      processes.clear()
       sessionKeys.clear()
     }
   }

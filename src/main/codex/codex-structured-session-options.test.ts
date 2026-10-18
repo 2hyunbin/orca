@@ -13,10 +13,15 @@ import { reportedCodexThreadOptions } from './codex-structured-service-tier'
 import { CodexBackgroundTaskTracker } from './codex-background-task-tracker'
 import type { CodexSession } from './codex-structured-session-state'
 import { startCodexTurn } from './codex-structured-turn-start'
-import { USER_MESSAGE } from './codex-structured-session-adapter-fixture'
+import {
+  USER_MESSAGE,
+  adapterFor,
+  answerWithOpenedTurn,
+  fakeCodex,
+  identityFor
+} from './codex-structured-session-adapter-fixture'
 import { fetchCodexModelCatalogListing } from './codex-structured-model-catalog'
 import { AgentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
-import { createAgentModelCatalogService } from '../native-chat/agent-model-catalog/agent-model-catalog-service'
 
 function optionSession(request: CodexAppServerConnection['request']): CodexSession {
   return {
@@ -43,34 +48,25 @@ function optionSession(request: CodexAppServerConnection['request']): CodexSessi
   }
 }
 
-async function primePicker(session: CodexSession, now?: () => number) {
-  const store = new AgentModelCatalogStore({ now })
-  const catalog = createAgentModelCatalogService({
-    store,
-    getRecord: () => undefined,
-    drivesRecord: () => true,
-    resolveAccountHome: async () => ({ variable: 'CODEX_HOME', path: '/test-account' }),
-    probes: {
-      codex: async () => ({
-        ...(await fetchCodexModelCatalogListing({ connection: session.connection })),
-        origin: 'probe'
-      })
-    }
-  })
-  await catalog.read({
-    agent: 'codex',
-    sessionId: 'session',
-    workspacePath: '/test',
-    waitForListing: true
-  })
+async function primePicker(session: CodexSession) {
+  const store = new AgentModelCatalogStore()
+  const fingerprint = 'test-scope'
+  store.recordSuccess(
+    fingerprint,
+    'codex',
+    {
+      ...(await fetchCodexModelCatalogListing({ connection: session.connection })),
+      origin: 'probe'
+    },
+    'discovery'
+  )
   session.catalogAccess = {
     store,
-    fingerprint: catalog.peek('session')!.fingerprint,
+    fingerprint,
     accountHomePath: '/test-account',
-    read: (verifiedOnly) => catalog.peek('session', verifiedOnly)
+    read: () => store.get(fingerprint)
   }
   await readLiveCodexSessionOptions(session, undefined)
-  return catalog
 }
 
 describe('structured Codex session options', () => {
@@ -396,11 +392,30 @@ describe('structured Codex session options', () => {
     )
     session.options.set('serviceTier', 'priority')
     await primePicker(session)
+    const access = session.catalogAccess!
+    const read = access.read
+    access.read = (verifiedOnly) => (verifiedOnly ? null : (read?.(verifiedOnly) ?? null))
+    const calls = requests.length
+    await startCodexTurn(session, { clientMessageId: 'intent', body: USER_MESSAGE })
+    expect(requests.at(-1)).toMatchObject({
+      method: 'turn/start',
+      params: { serviceTier: 'priority' }
+    })
+    expect(requests).toHaveLength(calls + 1)
+    access.read = read
+    requests.length = 0
 
     await expect(readLiveCodexSessionOptions(session, undefined)).resolves.toMatchObject({
       current: { serviceTier: 'priority' }
     })
     expect(Object.fromEntries(session.options)).toEqual({ serviceTier: 'priority' })
+    session.activeTurnIds = new Set(['running'])
+    expect(
+      await startCodexTurn(session, { clientMessageId: 'steered', body: USER_MESSAGE })
+    ).toMatchObject({ via: 'steer' })
+    expect(session.options.get('serviceTier')).toBe('priority')
+    expect(requests.some((entry) => entry.method === 'turn/start')).toBe(false)
+    session.activeTurnIds.clear()
 
     await startCodexTurn(session, {
       clientMessageId: 'message-standard',
@@ -438,133 +453,6 @@ describe('structured Codex session options', () => {
     expect(requests.find((entry) => entry.method === 'turn/start')?.params).toMatchObject({
       serviceTier: 'priority-saved'
     })
-  })
-
-  it.each([
-    'partial',
-    'stale',
-    'invalidated',
-    'failed',
-    'unavailable',
-    'loaded',
-    'missing-model',
-    'unknown-tiers',
-    'reported-flex'
-  ])('preserves native intent at a new turn with %s exact evidence', async (state) => {
-    const request = vi.fn(async (method: string) =>
-      method === 'model/list'
-        ? {
-            data: [{ model: 'gpt-live', supportedReasoningEfforts: [], serviceTiers: [] }],
-            nextCursor: null
-          }
-        : { turn: { id: 'turn-intent' } }
-    )
-    const session = optionSession(request)
-    let time = Date.now()
-    const catalog = await primePicker(session, () => time)
-    const access = session.catalogAccess!
-    const entry = access.store.get(access.fingerprint)!
-    if (
-      state === 'partial' ||
-      state === 'missing-model' ||
-      state === 'unknown-tiers' ||
-      state === 'unavailable'
-    ) {
-      access.store.recordSuccess(
-        access.fingerprint,
-        'codex',
-        {
-          origin: 'probe',
-          complete: state !== 'partial',
-          models: [
-            {
-              id: state === 'missing-model' ? 'other' : 'gpt-live',
-              label: 'Model',
-              isDefault: true,
-              efforts: [],
-              ...(state === 'unknown-tiers' ? {} : { serviceTiers: [] })
-            }
-          ],
-          ...(state === 'unavailable' ? { unavailable: { reason: 'notSignedIn' as const } } : {})
-        },
-        'discovery'
-      )
-    }
-    if (state === 'invalidated') {
-      access.store.expireAgent('codex')
-    }
-    if (state === 'failed') {
-      access.store.recordFailure(access.fingerprint, 'failure', 'codex')
-    }
-    if (state === 'stale') {
-      time += 120_001
-    }
-    if (state === 'loaded') {
-      const loaded = new AgentModelCatalogStore()
-      await loaded.attachPersistence({
-        load: async () => [entry],
-        save: () => {},
-        flush: async () => {}
-      })
-      const owner = createAgentModelCatalogService({
-        store: loaded,
-        getRecord: () => undefined,
-        drivesRecord: () => true,
-        resolveAccountHome: async () => ({ variable: 'CODEX_HOME', path: '/test-account' })
-      })
-      await owner.read({
-        agent: 'codex',
-        sessionId: 'session',
-        workspacePath: '/test',
-        savedOnly: true
-      })
-      access.read = (verifiedOnly) => owner.peek('session', verifiedOnly)
-    }
-    const tier = state === 'reported-flex' ? 'flex' : 'priority'
-    if (state === 'reported-flex') {
-      session.reportedOptions.serviceTier = tier
-    }
-    session.options.set('serviceTier', tier)
-    const calls = request.mock.calls.length
-    try {
-      await startCodexTurn(session, { clientMessageId: 'intent', body: USER_MESSAGE })
-      expect(request).toHaveBeenLastCalledWith(
-        'turn/start',
-        expect.objectContaining({ serviceTier: tier }),
-        expect.anything()
-      )
-      expect(request.mock.calls.length).toBe(calls + 1)
-      expect((await readLiveCodexSessionOptions(session, undefined)).current.serviceTier).toBe(tier)
-    } finally {
-      catalog.stop()
-    }
-  })
-
-  it('leaves the next new-turn tier intact when a send successfully steers', async () => {
-    const request = vi.fn(async (method: string) =>
-      method === 'model/list'
-        ? {
-            data: [{ model: 'gpt-live', supportedReasoningEfforts: [], serviceTiers: [] }],
-            nextCursor: null
-          }
-        : { turn: { id: 'running' } }
-    )
-    const session = optionSession(request)
-    await primePicker(session)
-    session.activeTurnIds = new Set(['running'])
-    session.options.set('serviceTier', 'priority')
-    expect(
-      await startCodexTurn(session, { clientMessageId: 'steered', body: USER_MESSAGE })
-    ).toMatchObject({ via: 'steer' })
-    expect(session.options.get('serviceTier')).toBe('priority')
-    expect(request.mock.calls.some(([method]) => method === 'turn/start')).toBe(false)
-    session.activeTurnIds.clear()
-    await startCodexTurn(session, { clientMessageId: 'new-turn', body: USER_MESSAGE })
-    expect(request).toHaveBeenLastCalledWith(
-      'turn/start',
-      expect.objectContaining({ serviceTier: 'default' }),
-      expect.anything()
-    )
   })
 
   it('allows explicit Fast off without positive model support', async () => {
@@ -827,4 +715,46 @@ describe('Codex reported tier', () => {
       ).rejects.toThrow('does not offer the ultrafast tier')
     }
   )
+})
+
+describe('Codex option picks before the model list arrives', () => {
+  it('accepts and sends launch-held picks without starting discovery in the user process', async () => {
+    const codex = fakeCodex({
+      'model/list': () => {
+        throw new Error('a user process must not discover models')
+      }
+    })
+    codex.routes['turn/start'] = answerWithOpenedTurn(codex, 'turn-1')
+    const adapter = adapterFor(codex, { codexHome: '/codex/home' }, [], {
+      modelCatalog: new AgentModelCatalogStore()
+    })
+    await adapter.acquire({ identity: identityFor('session-1'), fence: 7, spawnToken: 'spawn-1' })
+    const pick = (key: string, value: string) =>
+      adapter.setOption({ sessionId: 'session-1', key, value, fence: 7 })
+
+    await expect(pick('model', 'gpt-next')).resolves.toMatchObject({ model: 'gpt-next' })
+    await expect(pick('effort', 'low')).resolves.toMatchObject({ model: 'gpt-next', effort: 'low' })
+    await expect(pick('serviceTier', 'priority')).resolves.toEqual({
+      model: 'gpt-next',
+      effort: 'low',
+      serviceTier: 'priority'
+    })
+    expect(adapter.readAcquisitionOptions({ sessionId: 'session-1', fence: 7 })).toEqual({
+      model: 'gpt-next',
+      effort: 'low',
+      serviceTier: 'priority'
+    })
+    await adapter.dispatch({
+      sessionId: 'session-1',
+      clientMessageId: 'first',
+      body: USER_MESSAGE,
+      fence: 7
+    })
+    expect(
+      codex.connections[0].calls.find((call) => call.method === 'turn/start')?.params
+    ).toMatchObject({ model: 'gpt-next', effort: 'low', serviceTier: 'priority' })
+    expect(codex.connections[0].calls.filter((call) => call.method === 'model/list')).toHaveLength(
+      0
+    )
+  })
 })

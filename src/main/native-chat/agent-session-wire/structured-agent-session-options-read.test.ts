@@ -15,7 +15,6 @@ import { SessionConfigOptionSchema } from '../../acp/generated/acp-protocol.gene
 import { withLiveCatalogListing } from '../agent-model-catalog/agent-model-catalog-entry'
 import { StructuredAgentSessionTaskQueue } from './structured-agent-session-task-queue'
 import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-test-support'
-import { CLAUDE_STRUCTURED_AGENT } from '../../claude/claude-structured-agent-definition'
 
 const SESSION = 'session-1'
 
@@ -32,71 +31,6 @@ function restingRecord(): AgentSessionRecord {
 }
 
 describe('options at rest', () => {
-  it.each([false, true])(
-    'uses the current handle after a late permission read (coherent %s)',
-    async (coherent) => {
-      const gate = Promise.withResolvers<void>()
-      const entered = Promise.withResolvers<void>()
-      const row = (id: string) => ({ id, label: id, isDefault: false, efforts: [] })
-      const handle = (fence: number) => ({
-        child: { fence },
-        params: { provider: 'claude' },
-        journal: { threadGoal: () => null, context: { floor: () => null } }
-      })
-      let active = handle(7)
-      const successor = handle(8)
-      const record = { ...restingRecord(), provider: 'claude', permissionMode: 'auto' }
-      const process = {
-        authority: 'session',
-        scopeId: 'successor',
-        models: [row('successor')],
-        complete: true,
-        freshForMs: 1000
-      }
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read uses only the declared lifecycle, catalog and journal fields.
-      const context = {
-        deps: {
-          adapter: {
-            readOptions: async () => ({
-              models: [row('predecessor')],
-              current: { model: 'predecessor' }
-            })
-          },
-          agents: { definition: () => CLAUDE_STRUCTURED_AGENT, capabilities: () => null },
-          store: { getRecord: () => record },
-          modelCatalog: {
-            read: async () => {
-              entered.resolve()
-              await gate.promise
-              return { origin: 'unknown' }
-            },
-            recordLiveListing: () => {},
-            processCatalog: () => (active === successor ? process : null),
-            legacyProcessCatalog: () => ({
-              origin: 'live-session',
-              models: process.models,
-              fetchedAt: 1
-            })
-          }
-        },
-        serialize: (_id: string, task: () => Promise<unknown>) => task(),
-        openConversation: async () => active,
-        conversation: async () => active
-      } as unknown as StructuredAgentSessionMutationContext
-      const reading = readStructuredAgentSessionOptions(context, SESSION, {
-        readsWithoutModel: true,
-        readsCoherentCatalog: coherent
-      })
-      await entered.promise
-      active = successor
-      gate.resolve()
-      const answer = await reading
-      expect(answer.models.map((model) => model.id)).toEqual(['successor'])
-      expect(answer.current.model).toBeUndefined()
-      expect(answer.choiceCatalog?.scopeId).toBe(coherent ? 'successor' : undefined)
-    }
-  )
-
   it('keeps the account model for an older client when the starting child has no folder default', async () => {
     const record = restingRecord()
     const read = vi.fn(async (params: { inSessionWorkspace?: true }) => ({
@@ -122,7 +56,7 @@ describe('options at rest', () => {
         adapter: {},
         agents: NO_STRUCTURED_AGENTS,
         store: { getRecord: () => record },
-        modelCatalog: { read, processCatalog: () => null }
+        modelCatalog: { read }
       },
       serialize: (_sessionId: string, task: () => Promise<unknown>) => task(),
       openConversation: async () => starting,
@@ -157,7 +91,6 @@ describe('options at rest', () => {
         getRecord: () => record,
         drivesRecord: () => true,
         recordWorkspacePath: async () => '/repo',
-        processScope: () => (live ? `${SESSION}:1` : null),
         resolveAccountHome: async () => ({ variable: 'CODEX_HOME', path: '/homes/a' }),
         probes: { codex: probe }
       })
@@ -166,7 +99,7 @@ describe('options at rest', () => {
       const configOptions = SessionConfigOptionSchema.array().parse(GROK_CONFIG_OPTIONS)
       const resting = {
         child: null,
-        params: { provider: 'codex' },
+        params: { provider },
         journal: { threadGoal: () => null, context: { floor: () => null } }
       }
       const running = { ...resting, child: { fence: 7 } }
@@ -302,39 +235,74 @@ describe('live Codex option reads', () => {
     )
   })
 
-  it('does not apply a listing to a replaced child', async () => {
-    const listing = Promise.withResolvers<void>()
-    const queue = new StructuredAgentSessionTaskQueue()
-    const apply = vi.fn(() => ({ models: [], current: { model: 'stale' } }))
-    const prepareReadOptions = vi.fn(async () => {
-      await listing.promise
-      return apply
-    })
-    const live = {
-      child: { fence: 7 },
-      params: { provider: 'codex' },
-      journal: { threadGoal: () => null, context: { floor: () => null } }
-    }
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
-    const context = {
-      deps: {
-        adapter: { prepareReadOptions },
-        agents: NO_STRUCTURED_AGENTS,
-        store: { getRecord: () => restingRecord() }
-      },
-      serialize: (sessionId: string, task: () => Promise<unknown>) =>
-        queue.serialize(sessionId, task),
-      openConversation: async () => live,
-      conversation: async () => live
-    } as unknown as StructuredAgentSessionMutationContext
+  it.each(['prepared', 'inventory'] as const)(
+    'drops replaced-child facts after a late %s read',
+    async (stage) => {
+      const listing = Promise.withResolvers<void>()
+      const queue = new StructuredAgentSessionTaskQueue()
+      let blocked = false
+      const entered = Promise.withResolvers<void>()
+      const wait = async () => {
+        entered.resolve()
+        await listing.promise
+      }
+      const apply = vi.fn(() => ({
+        models: [{ id: 'stale', label: 'stale', isDefault: false, efforts: [] }],
+        current: { model: 'stale' }
+      }))
+      const prepareReadOptions = vi.fn(async () => {
+        if (blocked && stage === 'prepared') {
+          await wait()
+        }
+        return apply
+      })
+      const live = {
+        child: { fence: 7 },
+        params: { provider: 'codex' },
+        journal: { threadGoal: () => null, context: { floor: () => null } }
+      }
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
+      const context = {
+        deps: {
+          adapter: { prepareReadOptions },
+          agents: NO_STRUCTURED_AGENTS,
+          store: { getRecord: () => restingRecord() },
+          modelCatalog: {
+            read: async () => {
+              if (blocked && stage === 'inventory') {
+                await wait()
+              }
+              return {
+                origin: 'probe',
+                fetchedAt: 1,
+                models: [{ id: 'installed', label: 'installed', isDefault: true, efforts: [] }]
+              }
+            }
+          }
+        },
+        serialize: (sessionId: string, task: () => Promise<unknown>) =>
+          queue.serialize(sessionId, task),
+        openConversation: async () => live,
+        conversation: async () => live
+      } as unknown as StructuredAgentSessionMutationContext
 
-    const reading = readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true })
-    await vi.waitFor(() => expect(prepareReadOptions).toHaveBeenCalledOnce())
-    await queue.serialize(SESSION, async () => {
-      live.child = { fence: 8 }
-    })
-    listing.resolve()
-    expect((await reading).current).not.toHaveProperty('model')
-    expect(apply).not.toHaveBeenCalled()
-  })
+      const initial = await readStructuredAgentSessionOptions(context, SESSION, {
+        readsWithoutModel: true,
+        readsCoherentCatalog: true
+      })
+      expect(initial.models.map((row) => row.id)).toEqual(['installed', 'stale'])
+      blocked = true
+      const reading = readStructuredAgentSessionOptions(context, SESSION, {
+        readsWithoutModel: true,
+        readsCoherentCatalog: true
+      })
+      await entered.promise
+      await queue.serialize(SESSION, async () => {
+        live.child = { fence: 8 }
+      })
+      listing.resolve()
+      expect((await reading).current).not.toHaveProperty('model')
+      expect(apply).toHaveBeenCalledTimes(stage === 'prepared' ? 1 : 2)
+    }
+  )
 })

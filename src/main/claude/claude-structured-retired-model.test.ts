@@ -1,18 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import {
-  AgentModelCatalogStore,
-  type AgentModelCatalogLiveListing
-} from '../native-chat/agent-model-catalog/agent-model-catalog-store'
 import { retireClaudeLaunchedModel } from './claude-structured-retired-model'
 import {
   adapterFor,
   claudeFrame,
-  claudeStartupSettled,
   fakeClaude,
   tick,
   identityFor,
-  PROVIDER_SESSION_ID,
-  recordingJournalSink
+  PROVIDER_SESSION_ID
 } from './claude-structured-session-test-support'
 
 const RETIRED = 'claude-retired-1'
@@ -64,62 +58,6 @@ describe("the CLI's word that a launched model does not exist", () => {
   ])('keeps the saved model for %s', (_case, session, message) => {
     expect(retireClaudeLaunchedModel(session, message)).toBeNull()
     expect([...session.restoreSkippedOptions]).toEqual([])
-  })
-})
-
-describe("a child's whole advisory observation", () => {
-  async function listingOfChildLaunchedWith(model: string) {
-    const claude = fakeClaude({
-      initModels: [NATIVE_OPUS, LAUNCHED_ROW],
-      routes: { list_models: () => [NATIVE_OPUS, LAUNCHED_ROW] }
-    })
-    const adapter = adapterFor(claude)
-    await adapter.acquire({
-      identity: identityFor(),
-      fence: 7,
-      spawnToken: 'spawn-9',
-      events: recordingJournalSink(),
-      options: { model }
-    })
-    await claudeStartupSettled(adapter, 'session-1')
-    const { catalogListing } = await adapter.readOptions({ sessionId: 'session-1', fence: 7 })
-    await adapter.closeAll()
-    return catalogListing
-  }
-
-  function savedIds(cached: string[] | null, listing: AgentModelCatalogLiveListing) {
-    const store = new AgentModelCatalogStore()
-    if (cached) {
-      store.recordSuccess(
-        'fp',
-        'claude',
-        {
-          models: cached.map((id) => ({ id, label: id, isDefault: false, efforts: [] })),
-          origin: 'probe'
-        },
-        'discovery'
-      )
-    }
-    store.recordSuccess('fp', 'claude', { ...listing, origin: 'live-session' }, 'live')
-    return store.get('fp')?.models.map((model) => model.id)
-  }
-
-  it('keeps a launch-added row without treating it as membership proof', async () => {
-    const listing = await listingOfChildLaunchedWith(RETIRED)
-    expect(listing?.launchOnlyModelId).toBe(RETIRED)
-    expect(listing?.complete).toBe(false)
-    expect(savedIds(null, listing!)).toEqual(['opus', RETIRED])
-  })
-
-  it('leaves the whole discovery observation intact when a child lists other rows', async () => {
-    const listing = await listingOfChildLaunchedWith(RETIRED)
-    expect(savedIds([RETIRED], listing!)).toEqual([RETIRED])
-  })
-
-  it('marks nothing for a launched native model, which carries its own display name', async () => {
-    const listing = await listingOfChildLaunchedWith('opus')
-    expect(listing?.launchOnlyModelId).toBeUndefined()
-    expect(savedIds(null, listing!)).toEqual(['opus', RETIRED])
   })
 })
 

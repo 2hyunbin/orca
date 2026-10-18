@@ -1,25 +1,9 @@
 import type { AgentSessionUnavailable } from '../../../shared/agent-session-availability'
 import type {
-  AgentSessionChoiceCatalog,
   AgentSessionFastModeSupport,
   AgentSessionModelCatalogResult,
   AgentSessionModelOption
 } from '../../../shared/agent-session-wire'
-
-export function agentModelCatalogUnknownResult(
-  process: AgentSessionChoiceCatalog | null
-): AgentSessionModelCatalogResult {
-  return {
-    origin: 'unknown',
-    choiceCatalog: process ?? {
-      authority: 'discovery',
-      scopeId: '',
-      models: [],
-      complete: false,
-      freshForMs: 0
-    }
-  }
-}
 
 /** `discovery`: an account-level listing that names the configured default and owns freshness.
  *  `live`: what a running session listed — which models exist and their efforts, nothing more. */
@@ -47,14 +31,13 @@ export type AgentModelCatalogListing = {
   origin: 'live-session' | 'probe'
   at: number
   complete: boolean
-  configured?: { model?: string; effort?: string }
+  configured?: { model?: string; effort?: string; at?: number }
 }
 
 /** What a running session listed, as its adapter hands it to the host. Kept here, apart from the
  *  store, so the session wire types don't pull the store's Node-only persistence into clients. */
 export type AgentModelCatalogLiveListing = {
   complete?: boolean
-  listingComplete?: boolean
   models: AgentSessionModelOption[]
   fastModeSupport?: AgentSessionFastModeSupport
   /** A row only this session's launch added (its own `--model`): kept only once the account's

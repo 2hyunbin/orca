@@ -1,4 +1,3 @@
-import { invalidateStructuredAgentChoiceCatalog } from '../../../src/shared/structured-agent-session-choice-catalog'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AgentSessionConversationCommand } from '../../../src/shared/agent-session-conversation-command'
 import { isAgentSessionHandleProvider } from '../../../src/shared/agent-session-provider-handle'
@@ -14,6 +13,7 @@ import {
   commitStructuredAgentSessionOption,
   commitStructuredAgentSessionOptionValues,
   createStructuredAgentSessionOptionState,
+  resetStructuredAgentSessionCurrentOptions,
   structuredAgentSessionOptionPicks,
   type StructuredAgentSessionOptionState
 } from '../../../src/shared/structured-agent-session-options'
@@ -96,12 +96,10 @@ export function useMobileStructuredAgentOptions(args: {
     // A host answer is the account's, not the fence's: keep it rather than fall back to the placeholder.
     const kept =
       sameSession && previous.catalogSource !== 'seed' && previous.catalogSource !== null
-        ? { ...previous, pendingId: null }
+        ? resetStructuredAgentSessionCurrentOptions(previous)
         : seeded
     // The chat's own, which a restart for a new mode keeps: the pill never blanks between them.
-    const next = sameSession
-      ? { ...invalidateStructuredAgentChoiceCatalog(kept), permissionMode: previous.permissionMode }
-      : kept
+    const next = sameSession ? { ...kept, permissionMode: previous.permissionMode } : kept
     optionMutationGeneration.current += 1
     pendingOptionRef.current = null
     optionStateRef.current = next

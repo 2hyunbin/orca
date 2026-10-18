@@ -2,7 +2,6 @@ import type { AgentSessionFastModeState } from '../../shared/agent-session-wire'
 import {
   currentModelId,
   listedModels,
-  isCompleteClaudeModelListing,
   matchListedModel,
   record,
   seedModels,
@@ -12,13 +11,11 @@ import {
 import type { ClaudeSession } from './claude-structured-session-state'
 import { structuredAgentSessionOptionModels } from '../native-chat/agent-session-wire/structured-agent-session-option-models'
 import {
-  claudeCatalogListing,
   claudeFastModeSupport,
   wireClaudeModels,
   type WireClaudeModel
 } from './claude-structured-catalog-listing'
 import type { StructuredAgentSessionLiveOptions } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
-import type { AgentModelCatalogLiveListing } from '../native-chat/agent-model-catalog/agent-model-catalog-entry'
 import { decodeStructuredAgentSessionOptionValue } from '../../shared/structured-agent-session-option-codec'
 
 /**
@@ -28,7 +25,8 @@ import { decodeStructuredAgentSessionOptionValue } from '../../shared/structured
  * rather than showing an effort nothing measured.
  */
 export function readClaudeSettingsEffort(settings: unknown): string | null {
-  return text(record(record(settings)?.effective)?.effortLevel)
+  const applied = record(record(settings)?.applied)
+  return applied ? text(applied.effort) : text(record(record(settings)?.effective)?.effortLevel)
 }
 
 /** `applied` is the CLI's own resolution of env over settings over its listed default; a null
@@ -192,22 +190,6 @@ function decodedFastMode(session: ClaudeSession): boolean | undefined {
   return typeof decoded === 'boolean' ? decoded : undefined
 }
 
-/**
- * Whether the catalog admits the model, matched by alias or resolved id so a pick
- * stored as either one is found. The permissive case lives here rather than at the
- * call site: every caller must treat an unidentified catalog the same way, and one
- * that forgot would refuse every model on a CLI that cannot answer.
- */
-export function claudeCatalogAdmitsModel(models: readonly ListedModel[], modelId: string): boolean {
-  // An empty list identifies no model, so it is not evidence against one — a live
-  // CLI predating `list_models` would otherwise have every model refused under it.
-  // Do not turn this into a refusal.
-  return (
-    models.length === 0 ||
-    models.some((model) => model.id === modelId || model.resolvedModel === modelId)
-  )
-}
-
 /** The built-in models a running child lists when the CLI gives it none; a chat at rest with no
  *  catalog lists the same. */
 export function claudeFallbackModelOptions(): WireClaudeModel[] {
@@ -253,20 +235,6 @@ function observeClaudeSettingsReadback(
   }
 }
 
-/** The account listing with what the start's settings readback resolved, for the host to save
- *  once; empty when the listing names no model. */
-export function claudeResolvedCatalogListing(
-  session: ClaudeSession,
-  catalog: unknown[] | null
-): { catalogListing?: AgentModelCatalogLiveListing } {
-  const listing = claudeCatalogListing(
-    session,
-    listedModels(catalog ? { models: catalog } : null),
-    { withConfiguredDefault: true, complete: isCompleteClaudeModelListing({ models: catalog }) }
-  )
-  return listing ? { catalogListing: listing } : {}
-}
-
 /** The options already held in memory, over `catalog`; asks the CLI nothing. The SDK answers
  *  `list_models` from initialize, so open passes that result without another round trip. */
 export function claudeStructuredSessionOptionsFrom(
@@ -275,9 +243,6 @@ export function claudeStructuredSessionOptionsFrom(
   readMutationSequence = session.optionMutationSequence
 ): StructuredAgentSessionLiveOptions {
   const discovered = listedModels(catalog ? { models: catalog } : null)
-  const catalogListing = claudeCatalogListing(session, discovered, {
-    complete: isCompleteClaudeModelListing({ models: catalog })
-  })
   const listed = discovered.length > 0 ? discovered : seedModels()
   const current = readClaudeCurrentModel(session)
   const model = currentModelId(listed, current.id)
@@ -286,9 +251,9 @@ export function claudeStructuredSessionOptionsFrom(
     resolvedModel: null
   }))
   const effort =
-    session.options.get('effort') ??
+    session.appliedOptions?.effort ??
     session.reportedOptions.effort ??
-    session.appliedOptions?.effort
+    session.options.get('effort')
   let desiredFastMode = decodedFastMode(session)
   if (
     desiredFastMode === true &&
@@ -319,7 +284,11 @@ export function claudeStructuredSessionOptionsFrom(
       : [])
   ]
   return {
-    models: wireClaudeModels(models),
+    models: wireClaudeModels(models).map((row) =>
+      discovered.some((entry) => entry.id === row.id)
+        ? row
+        : { ...row, efforts: [], effortsKnown: false }
+    ),
     ...(support ? { fastModeSupport: support } : {}),
     current: {
       model,
@@ -327,7 +296,6 @@ export function claudeStructuredSessionOptionsFrom(
       ...(fastMode !== undefined ? { fastMode } : {}),
       ...(session.fastModeState ? { fastModeState: session.fastModeState } : {}),
       ...(confirmed.length > 0 ? { confirmed } : {})
-    },
-    ...(catalogListing ? { catalogListing } : {})
+    }
   }
 }

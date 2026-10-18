@@ -1,4 +1,3 @@
-import { ageStructuredAgentChoiceCatalog } from '../../../shared/structured-agent-session-choice-catalog'
 import type { AgentJournalCursor } from '../../../shared/agent-session-journal-types'
 import type {
   AgentSessionStatusEvent,
@@ -118,7 +117,6 @@ export async function callStructuredAgentSession<TResult>(
   ) {
     throw new Error('Rewinding requires a newer Orca server. Update the server and try again.')
   }
-  const requestStartedAt = performance.now()
   const timeoutMs = STRUCTURED_AGENT_SESSION_METHOD_TIMEOUT_MS.get(method)
   const result = await (timeoutMs === undefined && !options.skipCompatibilityCheck
     ? callRuntimeRpc<TResult>(target, method, params)
@@ -126,7 +124,7 @@ export async function callStructuredAgentSession<TResult>(
         ...(timeoutMs === undefined ? {} : { timeoutMs }),
         ...options
       }))
-  return ageStructuredAgentChoiceCatalog(result, performance.now() - requestStartedAt)
+  return result
 }
 
 async function subscribeStructuredAgentSessionMethod<TEvent>(

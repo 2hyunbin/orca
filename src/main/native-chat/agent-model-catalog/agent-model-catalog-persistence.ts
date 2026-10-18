@@ -87,6 +87,7 @@ function parseListing(value: unknown): AgentModelCatalogListing | null {
     !row ||
     (row.origin !== 'live-session' && row.origin !== 'probe') ||
     typeof row.at !== 'number' ||
+    !Number.isFinite(row.at) ||
     !Array.isArray(row.models) ||
     row.models.length === 0
   ) {
@@ -116,11 +117,15 @@ function parseListing(value: unknown): AgentModelCatalogListing | null {
   }
 }
 
-function parseConfigured(value: unknown): { model?: string; effort?: string } {
+function parseConfigured(value: unknown): NonNullable<AgentModelCatalogListing['configured']> {
   const row = asRecord(value)
   const model = text(row?.model)
   const effort = text(row?.effort)
-  return { ...(model ? { model } : {}), ...(effort ? { effort } : {}) }
+  return {
+    ...(model ? { model } : {}),
+    ...(effort ? { effort } : {}),
+    ...(typeof row?.at === 'number' && Number.isFinite(row.at) ? { at: row.at } : {})
+  }
 }
 
 function parseEntry(value: unknown): AgentModelCatalogEntry | null {
@@ -131,18 +136,35 @@ function parseEntry(value: unknown): AgentModelCatalogEntry | null {
   // Old digests remain legacy identities, never inferred exact launch scopes.
   const legacyLive = parseListing(row.live)
   const legacyProbe = parseListing(row.discovered)
-  const observation = parseListing(row.observation) ?? legacyLive ?? legacyProbe
+  const legacy =
+    legacyProbe && (!legacyLive || legacyProbe.at >= legacyLive.at) ? legacyProbe : legacyLive
+  let observation = parseListing(row.observation) ?? legacy
   if (!observation) {
     return null
+  }
+  const configured = asRecord(row.configured)
+  const model = text(configured?.modelId)
+  if (
+    !row.observation &&
+    model &&
+    typeof configured?.at === 'number' &&
+    Number.isFinite(configured.at)
+  ) {
+    const effort = text(configured.effort)
+    observation = {
+      ...observation,
+      configured: { model, ...(effort ? { effort } : {}), at: configured.at }
+    }
   }
   const source =
     row.source === 'discovery' ||
     row.source === 'session-advisory' ||
     row.source === 'probe-advisory'
       ? row.source
-      : legacyLive
+      : legacy === legacyLive
         ? 'session-advisory'
         : 'probe-advisory'
+
   return agentModelCatalogEntry(row.agent, row.fingerprint, observation, source)
 }
 

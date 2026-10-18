@@ -4,6 +4,8 @@ import { BottomDrawer } from '../components/BottomDrawer'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 import {
   sessionOptionDispatchUnconfirmed,
+  sessionOptionHasPickerContent,
+  sessionOptionIsCurrentValueOnly,
   type SessionOptionDescriptor,
   type SessionOptionValue
 } from '../../../src/shared/native-chat-session-options'
@@ -73,7 +75,15 @@ export function MobileNativeChatSessionOptionPickers({
   if (!model && !permission) {
     return null
   }
-  const activeDescriptor = snapshot.find((descriptor) => descriptor.id === presentation?.page)
+  const hasModelContent = [model, ...options].some(
+    (row) => row && sessionOptionHasPickerContent(row)
+  )
+  const canOpen = (descriptor: SessionOptionDescriptor): boolean =>
+    !sessionOptionIsCurrentValueOnly(descriptor) &&
+    (descriptor === model ? hasModelContent : sessionOptionHasPickerContent(descriptor))
+  const activeDescriptor = snapshot.find(
+    (descriptor) => descriptor.id === presentation?.page && canOpen(descriptor)
+  )
   const permissionView = activeDescriptor !== undefined && activeDescriptor === permission
   // The permission mode applies from the next send, so a running turn never locks it.
   const disabled = (!permissionView && isWorking) || pendingId !== null || sendInFlight
@@ -85,6 +95,10 @@ export function MobileNativeChatSessionOptionPickers({
 
   const closePicker = (): void => onNavigate(null)
   const openPicker = (page: string): void => {
+    const descriptor = snapshot.find((row) => row.id === page)
+    if (!descriptor || !canOpen(descriptor)) {
+      return
+    }
     onDrawerOpen(page)
     Keyboard.dismiss()
   }
@@ -139,7 +153,7 @@ export function MobileNativeChatSessionOptionPickers({
         <Pill
           label={pillLabel}
           accessibleName={`Model, ${pillLabel}`}
-          disabled={isWorking || pillsBusy}
+          disabled={isWorking || pillsBusy || !hasModelContent}
           onPress={() => openPicker(model.id)}
         />
       ) : null}
@@ -198,7 +212,11 @@ export function MobileNativeChatSessionOptionPickers({
                     value={mobileSessionOptionSummaryValue(descriptor)}
                     disabled={disabled}
                     divided={index < options.length - 1}
-                    onPress={() => onNavigate(descriptor.id)}
+                    onPress={
+                      sessionOptionIsCurrentValueOnly(descriptor)
+                        ? undefined
+                        : () => onNavigate(descriptor.id)
+                    }
                   />
                 ))}
               </View>

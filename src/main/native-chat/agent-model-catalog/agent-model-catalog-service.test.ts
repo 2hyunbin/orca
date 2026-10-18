@@ -2,7 +2,6 @@ import { homedir } from 'node:os'
 import type { AgentSessionAccountHome } from '../../../shared/agent-session-account-home'
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
-import { joinHostModelListingWait } from '../../../shared/host-model-listing-waits'
 import {
   agentModelCatalogFingerprint,
   agentModelCatalogFingerprintForRecord,
@@ -12,7 +11,6 @@ import { createAgentModelCatalogService } from './agent-model-catalog-service'
 import {
   AGENT_MODEL_CATALOG_FRESH_MS,
   AgentModelCatalogStore,
-  type AgentModelCatalogProbe,
   type AgentModelCatalogSuccess
 } from './agent-model-catalog-store'
 
@@ -55,24 +53,27 @@ const CODEX_HOME = (path: string): { variable: 'CODEX_HOME'; path: string } => (
 })
 
 describe('agent model catalog service', () => {
-  it('coalesces legacy folders outside the modern queue without rebinding exact session reads', async () => {
+  it('delivers cold legacy discovery without delaying its first reply or joining the modern queue', async () => {
+    vi.useFakeTimers()
     const releases: (() => void)[] = []
-    const probe = Object.assign(
-      vi.fn(async () => listing('unused')),
-      {
-        resolve: async (_home: AgentSessionAccountHome, cwd: string) => ({
-          identity: cwd,
-          run: async () => {
-            await new Promise<void>((resolve) => releases.push(resolve))
-            return listing(cwd)
-          }
-        }),
-        resolveLegacy: async () => ({
-          identity: 'account-launch',
-          run: vi.fn(async () => listing('account'))
-        })
-      }
-    )
+    const legacyRun = vi.fn(async () => {
+      await new Promise((done) => setTimeout(done, 1_000))
+      return listing('account')
+    })
+    const resolveLegacy = vi.fn(async () => {
+      await new Promise((done) => setTimeout(done, 18_000))
+      return { identity: 'account-launch', run: legacyRun }
+    })
+    const probe = Object.assign(async () => listing('unused'), {
+      resolve: async (_home: AgentSessionAccountHome, cwd: string) => ({
+        identity: cwd,
+        run: async () => {
+          await new Promise<void>((done) => releases.push(done))
+          return listing(cwd)
+        }
+      }),
+      resolveLegacy
+    })
     const service = createAgentModelCatalogService({
       store: new AgentModelCatalogStore(),
       getRecord: () => record('/pinned'),
@@ -81,176 +82,37 @@ describe('agent model catalog service', () => {
       recordWorkspacePath: async () => '/exact',
       probes: { codex: probe }
     })
-    for (let i = 0; i < 6; i++) {
-      await service.read({ agent: 'codex', sessionId: `s${i}`, workspacePath: `/folder-${i}` })
-    }
-    expect(releases).toHaveLength(2)
-    const answers = await Promise.all(
-      Array.from({ length: 7 }, (_, i) =>
-        service.read({
-          agent: 'codex',
-          sessionId: 's0',
-          workspacePath: i ? `/legacy-${i}` : null,
-          legacy: true,
-          waitForListing: true
-        })
-      )
-    )
-    expect(
-      answers.every((answer) => answer.origin !== 'unknown' && answer.models[0]?.id === 'account')
-    ).toBe(true)
-    expect(answers[0]).toMatchObject({ models: [{ isDefault: false }] })
-    expect(service.peek('s0')).toBeNull()
-    service.stop()
-    for (const release of releases) {
-      release()
-    }
-  })
-
-  it('keeps flat process membership in one generation and joins only actual startup work', async () => {
-    let scope: string | null = 'one',
-      starting = true
-    const pinned = { ...record('/claude'), provider: 'claude' }
-    const probe = vi.fn(async () => listing('new-account'))
-    const service = createAgentModelCatalogService({
-      store: new AgentModelCatalogStore(),
-      getRecord: () => pinned,
-      drivesRecord: () => true,
-      resolveAccountHome: async () => pinned.accountHome,
-      processScope: () => scope,
-      processListingPending: () => starting,
-      probes: { claude: probe }
-    })
-    const read = (waitForListing = false) =>
-      service.read({ agent: 'claude', sessionId: 'session-1', legacy: true, waitForListing })
-    expect(await read()).toEqual({ origin: 'unknown', listingInProgress: true })
-    const pending = read(true)
-    service.recordLiveListing('session-1', { models: listing('opus[1m]').models, complete: true })
-    starting = false
-    service.processListingChanged('session-1')
-    expect(await pending).toMatchObject({ models: [{ id: 'opus[1m]' }] })
-    service.recordLiveListing('session-1', {
-      models: listing('opus[1m]').models,
-      complete: false,
-      listingComplete: true,
-      launchOnlyModelId: 'opus[1m]'
-    })
-    expect(await read()).toMatchObject({ models: [{ id: 'opus[1m]' }] })
-    scope = 'two'
-    service.recordLiveListing('session-1', {
-      models: listing('opus[1m]').models,
-      complete: false,
-      listingComplete: true,
-      launchOnlyModelId: 'opus[1m]'
-    })
-    expect(await read()).toMatchObject({ models: [] })
-    service.recordLiveListing('session-1', { models: [], complete: false })
-    expect(await read()).toEqual({ origin: 'unknown' })
-    expect(probe).not.toHaveBeenCalled()
-    scope = 'three'
-    starting = true
-    const shutdown = read(true)
-    await Promise.resolve()
-    service.stop()
-    expect(await shutdown).toMatchObject({ origin: 'unknown' })
-  })
-  it('selects process authority before the first options read and ends it on positive exit', async () => {
-    let scope: string | null = 'generation-one'
-    const pinned = {
-      ...record('/claude'),
-      provider: 'claude',
-      accountHome: { variable: 'CLAUDE_CONFIG_DIR', path: '/claude' }
-    }
-    const service = createAgentModelCatalogService({
-      store: new AgentModelCatalogStore(),
-      getRecord: () => pinned,
-      drivesRecord: () => true,
-      resolveAccountHome: async () => pinned.accountHome,
-      recordWorkspacePath: async () => '/repo/wt',
-      processScope: () => scope,
-      probes: { claude: async () => listing('opus') }
-    })
-    const read = () =>
-      service.read({ agent: 'claude', sessionId: pinned.sessionId, waitForListing: true })
-    expect((await read()).choiceCatalog).toMatchObject({
-      authority: 'session',
-      models: [],
-      complete: false,
-      freshForMs: 0
-    })
-    service.recordLiveListing(pinned.sessionId, {
-      models: listing('opus[1m]').models,
-      complete: true
-    })
-    expect((await read()).choiceCatalog).toMatchObject({
-      authority: 'session',
-      models: [{ id: 'opus[1m]' }],
-      complete: true
-    })
-    expect(service.peek(pinned.sessionId)?.models[0]?.id).toBe('opus')
-    scope = 'generation-two'
-    expect((await read()).choiceCatalog).toMatchObject({
-      authority: 'session',
-      models: [],
-      complete: false
-    })
-    scope = null
-    expect((await read()).choiceCatalog).toMatchObject({
-      authority: 'discovery',
-      models: [{ id: 'opus' }],
-      complete: true
-    })
-  })
-
-  it('lands the seventh cold scope after its bounded picker wait without exceeding two probes', async () => {
-    vi.useFakeTimers()
-    let active = 0
-    let peak = 0
-    const probe = vi.fn<AgentModelCatalogProbe>(async (_home, options) => {
-      active += 1
-      peak = Math.max(peak, active)
-      if (options?.cwd !== '/scope-6') {
-        await new Promise((resolve) => setTimeout(resolve, 14_000))
-      }
-      active -= 1
-      return listing(options?.cwd ?? '')
-    })
-    const service = createAgentModelCatalogService({
-      store: new AgentModelCatalogStore(),
-      getRecord: () => undefined,
-      drivesRecord: () => true,
-      resolveAccountHome: async () => CODEX_HOME('/account'),
-      probes: { codex: probe }
-    })
-    let leave: (() => void) | undefined
     try {
-      await Promise.all(
-        Array.from({ length: 7 }, (_, index) =>
-          service.read({ agent: 'codex', workspacePath: `/scope-${index}` })
-        )
+      for (let i = 0; i < 6; i++) {
+        await service.read({ agent: 'codex', sessionId: `s${i}`, workspacePath: `/folder-${i}` })
+      }
+      expect(releases).toHaveLength(2)
+      const requests = Array.from({ length: 7 }, (_, i) => ({
+        agent: 'codex',
+        sessionId: 's0',
+        workspacePath: i ? `/legacy-${i}` : null,
+        legacy: true
+      }))
+      for (const request of requests) {
+        expect(await service.read(request)).toEqual({ origin: 'unknown', listingInProgress: true })
+      }
+      const waited = Promise.all(
+        requests.map((request) => service.read({ ...request, waitForListing: true }))
       )
-      const landed = vi.fn()
-      leave = joinHostModelListingWait(
-        'seventh-scope',
-        () => service.read({ agent: 'codex', workspacePath: '/scope-6', waitForListing: true }),
-        landed
-      )
-      await vi.advanceTimersByTimeAsync(30_000)
-      expect(landed).toHaveBeenLastCalledWith(
-        expect.objectContaining({ origin: 'unknown', listingInProgress: true })
-      )
-      await vi.advanceTimersByTimeAsync(12_000)
-      expect(landed).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          origin: 'probe',
-          models: [expect.objectContaining({ id: '/scope-6' })]
-        })
-      )
-      expect(probe).toHaveBeenCalledTimes(7)
-      expect(peak).toBe(2)
+      expect(resolveLegacy).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(19_000)
+      const answers = await waited
+      expect(
+        answers.every((answer) => answer.origin !== 'unknown' && answer.models[0]?.id === 'account')
+      ).toBe(true)
+      expect(answers[0]).toMatchObject({ models: [{ isDefault: false }] })
+      expect(legacyRun).toHaveBeenCalledTimes(1)
+      expect(service.peek('s0')).toBeNull()
     } finally {
-      leave?.()
       service.stop()
+      for (const release of releases) {
+        release()
+      }
       vi.useRealTimers()
     }
   })
@@ -294,8 +156,7 @@ describe('agent model catalog service', () => {
       probes: { codex: probe }
     })
     expect(await service.read({ agent: 'codex', sessionId: 'session-1' })).toMatchObject({
-      origin: 'unknown',
-      choiceCatalog: { authority: 'session', complete: false, freshForMs: 0 }
+      origin: 'unknown'
     })
     expect(probe).not.toHaveBeenCalled()
   })
@@ -310,7 +171,6 @@ describe('agent model catalog service', () => {
       store,
       getRecord: () => undefined,
       drivesRecord: () => true,
-      recordWorkspacePath: async () => '/repo/wt',
       resolveAccountHome: async () => CODEX_HOME('/homes/new'),
       probes: { codex: probe }
     })
@@ -350,7 +210,6 @@ describe('agent model catalog service', () => {
       store,
       getRecord: () => undefined,
       drivesRecord: () => true,
-      recordWorkspacePath: async () => '/repo/wt',
       resolveAccountHome: async () => CODEX_HOME('/homes/selected')
     })
     const result = await service.read({ agent: 'codex' })
@@ -418,7 +277,6 @@ describe('agent model catalog service', () => {
       store,
       getRecord: () => undefined,
       drivesRecord: () => true,
-      recordWorkspacePath: async () => '/repo/wt',
       resolveAccountHome: async () => {
         throw new Error('no store yet')
       },
@@ -447,7 +305,6 @@ describe('agent model catalog service', () => {
         store,
         getRecord: () => undefined,
         drivesRecord: () => true,
-        recordWorkspacePath: async () => '/repo/wt',
         resolveAccountHome: async () => CODEX_HOME('/homes/selected'),
         probes: { codex: probe }
       })
@@ -496,7 +353,6 @@ describe('agent model catalog service', () => {
         store,
         getRecord: () => undefined,
         drivesRecord: () => true,
-        recordWorkspacePath: async () => '/repo/wt',
         resolveAccountHome: async () => CODEX_HOME('/homes/selected')
       })
       expect(await service.read({ agent: 'codex', waitForListing: true })).toMatchObject({
@@ -505,11 +361,15 @@ describe('agent model catalog service', () => {
     })
 
     it('serves an aged entry at once and refreshes it behind the answer', async () => {
+      const pinned = { ...record('/homes/selected'), provider: 'claude' }
       let now = 0
       const store = new AgentModelCatalogStore({ now: () => now })
       store.recordSuccess(
-        selectedHomeFingerprint('/homes/selected'),
-        'codex',
+        agentModelCatalogScopeFingerprint(
+          agentModelCatalogFingerprintForRecord(pinned),
+          '/repo/wt'
+        ),
+        'claude',
         listing('gpt-old'),
         'discovery'
       )
@@ -518,16 +378,20 @@ describe('agent model catalog service', () => {
       const probe = vi.fn(() => refreshed.promise)
       const service = createAgentModelCatalogService({
         store,
-        getRecord: () => undefined,
+        getRecord: () => pinned,
         drivesRecord: () => true,
         recordWorkspacePath: async () => '/repo/wt',
         resolveAccountHome: async () => CODEX_HOME('/homes/selected'),
-        probes: { codex: probe }
+        probes: { claude: probe }
       })
-      const result = await service.read({ agent: 'codex' })
+      const result = await service.read({ agent: 'claude', sessionId: pinned.sessionId })
       expect(result.origin === 'unknown' ? null : result.models[0]!.id).toBe('gpt-old')
       expect(result.listingInProgress).toBe(true)
-      const waiting = service.read({ agent: 'codex', waitForListing: true })
+      const waiting = service.read({
+        agent: 'claude',
+        sessionId: pinned.sessionId,
+        waitForListing: true
+      })
       refreshed.resolve(listing('gpt-new'))
       expect(await waiting).toMatchObject({ models: [{ id: 'gpt-new' }] })
       expect(probe).toHaveBeenCalledTimes(1)
@@ -538,7 +402,7 @@ describe('agent model catalog service', () => {
     function serviceWith(mayOverride: boolean) {
       const store = new AgentModelCatalogStore()
       store.recordSuccess(
-        selectedHomeFingerprint('/homes/selected', null),
+        selectedHomeFingerprint('/homes/selected', '/repo/wt'),
         'codex',
         listing('gpt-user'),
         'discovery'
@@ -548,7 +412,6 @@ describe('agent model catalog service', () => {
         store,
         getRecord: () => undefined,
         drivesRecord: () => true,
-        recordWorkspacePath: async () => '/repo/wt',
         resolveAccountHome: async () => CODEX_HOME('/homes/selected'),
         workspaceMayOverrideDefaultModel
       })
@@ -581,13 +444,13 @@ describe('agent model catalog service', () => {
 
     it('names no default for a workspace it could not place on this machine', async () => {
       const { service, workspaceMayOverrideDefaultModel } = serviceWith(false)
-      expect(defaults(await service.read({ agent: 'codex', workspacePath: null }))).toEqual([false])
+      expect(defaults(await service.read({ agent: 'codex', workspacePath: null }))).toBeNull()
       expect(workspaceMayOverrideDefaultModel).not.toHaveBeenCalled()
     })
 
     it('leaves a read that names no workspace as it was', async () => {
       const { service, workspaceMayOverrideDefaultModel } = serviceWith(true)
-      expect(defaults(await service.read({ agent: 'codex' }))).toEqual([true])
+      expect(defaults(await service.read({ agent: 'codex' }))).toBeNull()
       expect(workspaceMayOverrideDefaultModel).not.toHaveBeenCalled()
     })
   })

@@ -47,9 +47,7 @@ export function structuredClaudeLifecycleEvent(
   event: ClaudeStructuredSessionEvent
 ): StructuredAgentSessionLifecycleEvent | null {
   if (event.type === 'options-reported') {
-    // Startup's tracked readback owns the generation-checked listing save.
-    const { catalogListing: _readback, ...report } = event
-    return report
+    return event
   }
   // Every exit of a child with an identity, expected or not: the host ends that child's record.
   if (

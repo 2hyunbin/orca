@@ -2,26 +2,17 @@ import type { EffortLevel } from '@anthropic-ai/claude-agent-sdk'
 import { ClaudeControlRequestError } from './claude-stream-json-connection'
 import { AgentSessionOptionRejectedError } from '../native-chat/agent-session-wire/structured-agent-session-option-error'
 import {
-  claudeCatalogAdmitsModel,
   claudeModelEffortLevels,
   claudeModelFastModeSupport,
   readClaudeCurrentModel,
   readClaudeListedModels,
-  readClaudeSettingsEffort,
+  readClaudeSettingsApplied,
   readClaudeSettingsFastMode
 } from './claude-structured-session-options'
 import type { ClaudeSession } from './claude-structured-session-state'
 import { decodeStructuredAgentSessionOptionValue } from '../../shared/structured-agent-session-option-codec'
 
 const OPTION_ORDER = ['model', 'effort', 'fastMode'] as const
-
-/**
- * Efforts the settings readback cannot report. `max` applies for the rest of the
- * session and is excluded from the persisted `effortLevel` by contract, so
- * `get_settings` answers with the level underneath it — an absence of evidence
- * that must not be read as the child refusing a level its own catalog offers.
- */
-const UNREPORTED_EFFORTS: ReadonlySet<string> = new Set(['max'])
 
 export function restoredClaudeStructuredSessionOptions(
   options: Readonly<Record<string, string>> | undefined
@@ -120,12 +111,6 @@ export async function setClaudeStructuredOption(
       )
     }
   }
-  // set_model resolves for a model the provider never lists and the session then
-  // fails every turn with zero tokens, so the acceptance proves nothing and only
-  // the catalog does.
-  if (input.key === 'model' && !claudeCatalogAdmitsModel(listed, input.value)) {
-    throw new AgentSessionOptionRejectedError(`claude does not list a model named ${input.value}`)
-  }
   const modelFastModeSupport =
     input.key === 'model' && session.options.get('fastMode') === 'true'
       ? claudeModelFastModeSupport(session, listed, input.value)
@@ -177,13 +162,23 @@ export async function setClaudeStructuredOption(
   // apply_flag_settings answers `success` for an effort it then ignores, so the
   // absence of a throw proves nothing. Ask what the child actually holds.
   const adopted =
-    (input.key === 'effort' && !UNREPORTED_EFFORTS.has(input.value)) || input.key === 'fastMode'
+    input.key === 'effort' || input.key === 'fastMode'
       ? await session.connection
           .getSettings({ timeoutMs })
           .then((settings) =>
             input.key === 'fastMode'
               ? readClaudeSettingsFastMode(settings)
-              : readClaudeSettingsEffort(settings)
+              : (() => {
+                  const applied = readClaudeSettingsApplied(settings)
+                  const target = readClaudeCurrentModel(session).id
+                  const row = listed.find(
+                    (model) => model.id === target || model.resolvedModel === target
+                  )
+                  return applied?.model &&
+                    (applied.model === target || applied.model === row?.resolvedModel)
+                    ? (applied.effort ?? null)
+                    : null
+                })()
           )
           .catch(() => null)
       : null
@@ -206,7 +201,7 @@ export async function setClaudeStructuredOption(
   }
   session.options.set(
     input.key,
-    input.key === 'fastMode' && typeof adopted === 'boolean' ? String(adopted) : input.value
+    typeof adopted === 'string' || typeof adopted === 'boolean' ? String(adopted) : input.value
   )
   // Only a readback that agreed is adoption evidence; one that disagreed or could
   // not be taken records the value but must not also claim the provider vouched for it.

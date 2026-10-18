@@ -16,7 +16,6 @@ import type {
   AgentJournalThreadGoal
 } from '../../../shared/agent-session-journal-types'
 import { decodeStructuredAgentSessionOptionValue } from '../../../shared/structured-agent-session-option-codec'
-import { finishedListingIds } from '../../../shared/structured-agent-session-options'
 import { journalOpenReadRefusal } from '../agent-session-journal/journal-open-failure'
 import type { StructuredAgentDefinition } from './structured-agent-definition'
 import type { StructuredAgentRegistry } from './structured-agent-registry'
@@ -34,7 +33,7 @@ import type { StructuredAgentSessionMutationContext } from './structured-agent-s
 
 type RestingOptions = Pick<
   AgentSessionOptionsResult,
-  'models' | 'listedModelIds' | 'fastModeSupport' | 'current' | 'choiceCatalog' | 'choiceAuthority'
+  'models' | 'listedModelIds' | 'fastModeSupport' | 'current'
 >
 
 /** What the asking client takes: whether it reads an answer that names no model. */
@@ -74,30 +73,35 @@ async function readStructuredAgentSessionOptionsAtRest(
       ?.read({
         agent: record.provider,
         sessionId,
-        savedOnly: true,
+        ...(reader.readsCoherentCatalog ? {} : { savedOnly: true }),
         legacy: !reader.readsCoherentCatalog,
         ...(inSessionWorkspace
           ? { inSessionWorkspace: true as const }
           : { accountDefault: true as const })
       })
       .catch(() => null)) ?? { origin: 'unknown' }
-  const saved = record.options ?? {}
   // The chat's own folder decides its default, as its first frame did.
   const scoped = await readCatalog(true)
   const folderDefault =
     scoped.origin === 'unknown' ? undefined : scoped.models.find((entry) => entry.isDefault)
   // Where the folder names none, a client that needs a model keeps the account default it got before.
   const catalog =
-    saved.model === undefined &&
+    deps.store.getRecord(sessionId)?.options?.model === undefined &&
     !folderDefault &&
     scoped.origin !== 'unknown' &&
     !reader.readsWithoutModel
       ? await readCatalog(false)
       : scoped
+  const saved = deps.store.getRecord(sessionId)?.options ?? {}
   // With no catalog for the account, the list a running child of this agent falls back to.
-  const listed = catalog.origin === 'unknown' ? (rules?.fallbackModels() ?? null) : catalog.models
+  const discoveryOnly = record.provider === 'claude' || record.provider === 'codex'
+  const listed =
+    catalog.origin === 'unknown'
+      ? discoveryOnly
+        ? null
+        : (rules?.fallbackModels() ?? null)
+      : catalog.models
   const models = listed ?? []
-  const listedModelIds = finishedListingIds(catalog)
   const fastMode =
     saved.fastMode === undefined
       ? null
@@ -117,11 +121,11 @@ async function readStructuredAgentSessionOptionsAtRest(
       ? models.find((entry) => entry.id === model)?.defaultEffort
       : undefined)
   return {
-    ...(reader.readsCoherentCatalog && catalog.choiceCatalog
-      ? { choiceCatalog: catalog.choiceCatalog, choiceAuthority: catalog.choiceCatalog.authority }
-      : {}),
-    models: listed ? structuredAgentSessionOptionModels(listed, model, (row) => row) : [],
-    ...(listedModelIds ? { listedModelIds } : {}),
+    models: structuredAgentSessionOptionModels(models, model, (row) => row),
+    listedModelIds:
+      catalog.origin === 'unknown'
+        ? []
+        : structuredAgentSessionOptionModels(models, model, (row) => row).map((row) => row.id),
     ...(catalog.origin !== 'unknown' && catalog.fastModeSupport
       ? { fastModeSupport: catalog.fastModeSupport }
       : {}),
@@ -181,39 +185,7 @@ export async function readStructuredAgentSessionOptions(
             })
           )
         : null
-  const activeSession = await context.conversation(sessionId)
-  if (
-    started.kind !== 'rest' &&
-    (activeSession.child !== started.child || providerChildRootExited(activeSession))
-  ) {
-    live = null
-  }
-  let options: Omit<AgentSessionOptionsResult, 'rewind'>
-  if (live) {
-    const { catalogListing, ...answer } = live
-    options = answer
-    if (!catalogListing) {
-      context.deps.modelCatalog?.recordLiveListing(sessionId, { models: [], complete: false })
-    }
-    if (catalogListing) {
-      // Check prior membership before saving: a launch-added row cannot verify itself.
-      const listedModelIds = context.deps.modelCatalog
-        ? context.deps.modelCatalog.retainedLiveModelIds(sessionId, catalogListing)
-        : retainedAgentModelCatalogModels(undefined, catalogListing).map((model) => model.id)
-      saveStructuredAgentSessionListing(context, sessionId, catalogListing)
-      options = { ...answer, listedModelIds }
-    }
-  } else {
-    options = await readStructuredAgentSessionOptionsAtRest(context.deps, sessionId, reader)
-  }
-  if (live && reader.readsCoherentCatalog) {
-    const process = context.deps.modelCatalog?.processCatalog(sessionId)
-    options = {
-      ...options,
-      choiceAuthority: process ? 'session' : 'discovery',
-      ...(process ? { choiceCatalog: process } : {})
-    }
-  }
+  const inventory = await readStructuredAgentSessionOptionsAtRest(context.deps, sessionId, reader)
   const permissionRecord = store.getRecord(sessionId)
   // What a start launches now, live or at rest: a child never reports it.
   const permissionMode = permissionRecord
@@ -227,6 +199,30 @@ export async function readStructuredAgentSessionOptions(
   const capabilities = agents.capabilities(agent)
   const floor = session.journal.context.floor()
   const contextFloor = floor ? { contextFloor: floor } : {}
+  const discoveryOnly = agent === 'claude' || agent === 'codex'
+  // Child identity fences current facts only; discovery survives an exit or replacement.
+  if (session.child !== started.child || (live && providerChildRootExited(session))) {
+    live = null
+  }
+  let options: Omit<AgentSessionOptionsResult, 'rewind'> = inventory
+  if (live) {
+    const { catalogListing, ...answer } = live
+    options = discoveryOnly
+      ? {
+          ...inventory,
+          ...answer,
+          models: inventory.models,
+          listedModelIds: inventory.listedModelIds
+        }
+      : answer
+    if (!discoveryOnly && catalogListing) {
+      const ids = context.deps.modelCatalog
+        ? context.deps.modelCatalog.retainedLiveModelIds(sessionId, catalogListing)
+        : retainedAgentModelCatalogModels(undefined, catalogListing).map((model) => model.id)
+      saveStructuredAgentSessionListing(context, sessionId, catalogListing)
+      options = { ...answer, listedModelIds: ids }
+    }
+  }
   const saved = record?.options
   const current = {
     ...options.current,
@@ -264,35 +260,26 @@ export async function readStructuredAgentSessionOptions(
       ? { contextUsage: { current: session.journal.contextUsage(), ...contextFloor } }
       : {})
   }
-  const catalog = context.deps.modelCatalog
-  const process = catalog?.processCatalog(sessionId)
-  const changed = session.child !== started.child || providerChildRootExited(session)
-  if (changed || (process && !live)) {
-    const picked = store.getRecord(sessionId)?.options
-    result.current = {
-      ...(picked?.model ? { model: picked.model } : {}),
-      ...(picked?.effort ? { effort: picked.effort } : {}),
-      ...(permissionMode ? { permissionMode } : {})
-    }
-    result.models = []
-    delete result.listedModelIds
-    delete result.fastModeSupport
-    delete result.choiceCatalog
-    delete result.choiceAuthority
+  result.models = structuredAgentSessionOptionModels(result.models, current.model, (row) => row)
+  // Only the exact current row describes this child's effort menu; no aliases or sibling rows.
+  const currentRow =
+    live && live.current.model === current.model
+      ? live.models.find((row) => row.id === current.model && row.effortsKnown !== false)
+      : undefined
+  if (discoveryOnly && currentRow) {
+    result.models = result.models.map((row) =>
+      row.id === current.model
+        ? {
+            ...row,
+            efforts: currentRow.efforts,
+            defaultEffort: currentRow.defaultEffort,
+            effortsKnown: undefined
+          }
+        : row
+    )
   }
-  if (process) {
-    const flat = reader.readsCoherentCatalog ? null : catalog?.legacyProcessCatalog(sessionId)
-    result.models = reader.readsCoherentCatalog
-      ? changed || !live
-        ? process.models
-        : result.models
-      : flat && flat.origin !== 'unknown'
-        ? structuredAgentSessionOptionModels(flat.models, result.current.model, (row) => row)
-        : []
-    if (reader.readsCoherentCatalog) {
-      result.choiceCatalog = process
-      result.choiceAuthority = 'session'
-    }
+  if (result.listedModelIds?.length) {
+    result.listedModelIds = result.models.map((row) => row.id)
   }
   return result
 }

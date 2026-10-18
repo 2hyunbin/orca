@@ -101,7 +101,6 @@ export class StructuredAgentSessionClientDelivery {
 
   publishStatus = (sessionId: string): void => {
     this.statusFeed.publish(sessionId)
-    this.deps().modelCatalog?.processListingChanged(sessionId)
   }
 
   publishConversationName = (sessionId: string): void =>
@@ -147,7 +146,6 @@ export class StructuredAgentSessionClientDelivery {
    *  whatever became of the cleanup's own write. An end is no activity: it renews no idle clock.
    *  `restate`: each chat re-baselines at the fence, as a death of the child's own does. */
   publishGenerationEnded = (sessionId: string, options: { restate?: boolean } = {}): void => {
-    this.deps().modelCatalog?.processListingChanged(sessionId)
     const session = this.sessions.get(sessionId)
     if (!session) {
       return

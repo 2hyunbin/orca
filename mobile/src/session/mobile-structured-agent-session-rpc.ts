@@ -1,4 +1,3 @@
-import { ageStructuredAgentChoiceCatalog } from '../../../src/shared/structured-agent-session-choice-catalog'
 import type {
   AgentSessionMutationResult,
   AgentSessionWireRefusalCode
@@ -88,7 +87,6 @@ export async function callAgentSession<TResult>(
   timeoutMs = STRUCTURED_SEND_TIMEOUT_MS,
   options?: { failWhenDisconnected?: boolean }
 ): Promise<TResult> {
-  const requestStartedAt = performance.now()
   const response = await client.sendRequest(method, params, {
     timeoutMs,
     budgetSpansConnect: true,
@@ -102,10 +100,7 @@ export async function callAgentSession<TResult>(
     )
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this typed RPC caller supplies the method's result contract.
-  return ageStructuredAgentChoiceCatalog(
-    response.result,
-    performance.now() - requestStartedAt
-  ) as TResult
+  return response.result as TResult
 }
 
 export function timeoutForDeadline(deadline: number | undefined): number | null {

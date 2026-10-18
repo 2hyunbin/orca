@@ -227,7 +227,6 @@ export type StructuredAgentSessionStartedEvent = {
   reportedOptions: AgentSessionOptionsResult['current']
   /** What the child listed at startup, saved as its account's catalog even if no view reads it. */
   catalogListing?: AgentModelCatalogLiveListing
-  catalogReadback?: Promise<AgentModelCatalogLiveListing | undefined>
 }
 
 /** What a child that already proved its start reports later, such as an optional read that came

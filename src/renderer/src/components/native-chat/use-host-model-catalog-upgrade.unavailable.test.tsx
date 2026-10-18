@@ -74,18 +74,23 @@ type Answer = { resolve: (value: unknown) => void; reject: (error: unknown) => v
 /** Every catalog read waits for the test to answer it, in order. */
 function catalogReads() {
   const pending: Answer[] = []
-  mocks.call.mockImplementation((_target: unknown, method: string) =>
-    method === 'agentSession.modelCatalog'
-      ? new Promise((resolve, reject) => pending.push({ resolve, reject }))
-      : new Promise(() => {})
+  mocks.call.mockImplementation(
+    (_target: unknown, method: string, params: { sessionId?: string }) =>
+      method === 'agentSession.modelCatalog' && !params.sessionId
+        ? Promise.resolve({ origin: 'unknown' })
+        : method === 'agentSession.modelCatalog'
+          ? new Promise((resolve, reject) => pending.push({ resolve, reject }))
+          : new Promise(() => {})
   )
   return {
     count: () =>
-      mocks.call.mock.calls.filter(([, method]) => method === 'agentSession.modelCatalog').length,
+      mocks.call.mock.calls.filter(
+        ([, method, params]) => method === 'agentSession.modelCatalog' && params.sessionId
+      ).length,
     params: (index: number) =>
-      mocks.call.mock.calls.filter(([, method]) => method === 'agentSession.modelCatalog')[
-        index
-      ]?.[2],
+      mocks.call.mock.calls.filter(
+        ([, method, params]) => method === 'agentSession.modelCatalog' && params.sessionId
+      )[index]?.[2],
     answer: async (index: number, value: unknown) => {
       pending[index]!.resolve(value)
       await act(async () => {})

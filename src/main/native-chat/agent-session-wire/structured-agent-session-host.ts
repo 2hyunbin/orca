@@ -1,4 +1,3 @@
-import { structuredAgentSessionModelCatalogScope as processCatalogScope } from './structured-agent-session-model-catalog-scope'
 import type { AgentSessionRewindParams } from '../../../shared/agent-session-rewind'
 import { rewindStructuredAgentSession } from './structured-agent-session-rewind'
 import { StructuredConversationCommandController } from './structured-conversation-command-controller'
@@ -174,10 +173,6 @@ export class StructuredAgentSessionHost {
   hasSession = (sessionId: string): boolean => this.sessions.has(sessionId)
   hasLoadedProviders = () => [...this.sessions.values()].some(({ child }) => child !== null)
   sessionAgent = (sessionId: string) => this.deps.store.getRecord(sessionId)?.provider ?? null
-  modelCatalogProcessScope = (id: string): string | null =>
-    processCatalogScope(id, this.deps.store.getRecord(id), this.sessions.get(id))
-  modelCatalogListingPending = (id: string): boolean => this.runtimeState.startupAttempts.isOpen(id)
-
   handleAdapterEvent = (event: Parameters<StructuredAgentSessionEventRecovery['handle']>[0]) =>
     this.eventRecovery.handle(event)
 

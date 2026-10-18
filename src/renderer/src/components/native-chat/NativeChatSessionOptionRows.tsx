@@ -4,10 +4,11 @@ import { Switch } from '@/components/ui/switch'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { sortNativeChatSessionOptions } from '../../../../shared/native-chat-session-option-snapshot'
-import type {
-  SessionOptionDescriptor,
-  SessionOptionSelectChoice,
-  SessionOptionValue
+import {
+  sessionOptionIsCurrentValueOnly,
+  type SessionOptionDescriptor,
+  type SessionOptionSelectChoice,
+  type SessionOptionValue
 } from '../../../../shared/native-chat-session-options'
 import {
   nativeChatSessionChoiceLabel,
@@ -36,7 +37,10 @@ function withEarlierRows(
   earlier: readonly SessionOptionDescriptor[],
   current: readonly SessionOptionDescriptor[]
 ): readonly SessionOptionDescriptor[] {
-  const gone = earlier.filter((row) => !current.some((option) => option.id === row.id))
+  const gone = earlier.filter(
+    (row) =>
+      !sessionOptionIsCurrentValueOnly(row) && !current.some((option) => option.id === row.id)
+  )
   return gone.length === 0 ? current : sortNativeChatSessionOptions([...current, ...gone])
 }
 
@@ -125,6 +129,16 @@ function OptionRow(props: {
     )
   }
   const current = descriptor.kind.currentValue
+  if (!gone && sessionOptionIsCurrentValueOnly(descriptor)) {
+    return (
+      <div className="flex min-h-7 items-center justify-between gap-3 px-2">
+        <span className="text-xs text-muted-foreground">{label}</span>
+        <span className="text-xs text-foreground">
+          {nativeChatSessionChoiceLabel(descriptor.kind.choices[0]!, descriptor.id)}
+        </span>
+      </div>
+    )
+  }
   return (
     <div className="flex min-h-7 flex-wrap items-center justify-between gap-x-3 gap-y-1 pl-2">
       <span id={labelId} className="text-xs text-muted-foreground">

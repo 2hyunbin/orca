@@ -76,16 +76,6 @@ export async function settleStructuredAgentSessionProviderStarted(
       return null
     }
     context.runtimeState.startupAttempts.ready(event.sessionId, child)
-    if (event.catalogReadback) {
-      context.deps.modelCatalog?.trackProcessListing(
-        event.sessionId,
-        event.catalogReadback.then((listing) =>
-          listing
-            ? saveStructuredAgentSessionStartReadbackListing(context, event, listing)
-            : undefined
-        )
-      )
-    }
     void context.wakeDelivery(event.sessionId)
     noteStructuredAgentSessionProviderStarted(context.deps, event.sessionId)
     if (event.catalogListing) {

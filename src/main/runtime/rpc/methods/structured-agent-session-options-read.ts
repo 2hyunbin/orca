@@ -3,7 +3,7 @@
 //
 // `agentSession.options` answers at rest from the record and the catalog, and
 // asks the live provider only when one runs. `agentSession.modelCatalog` deliberately does
-// neither — answering from the host store (and what a running child's start already said) is
+// neither — answering from independently discovered host inventory is
 // what lets a picker render while an attach is still running. It is additive: an older host answers
 // `method_not_found` (or `forbidden` through the mobile allowlist gate), and
 // the client keeps its static seed.
@@ -25,6 +25,7 @@ import {
   clientReadsCoherentModelCatalog,
   clientReadsOptionsWithoutModel
 } from './structured-agent-session-policy'
+import { structuredAgentSessionSelectedCatalog } from '../../../native-chat/agent-session-wire/structured-agent-session-option-models'
 import type { AgentSessionModelCatalogResult } from '../../../../shared/agent-session-wire'
 
 export const STRUCTURED_AGENT_SESSION_OPTIONS_READ_METHODS = [
@@ -59,11 +60,7 @@ export const STRUCTURED_AGENT_SESSION_OPTIONS_READ_METHODS = [
           reason: 'clientCapabilityMissing'
         })
       }
-      if (clientReadsCoherentModelCatalog(ctx)) {
-        return result
-      }
-      const { choiceCatalog: _catalog, choiceAuthority: _authority, ...legacy } = result
-      return legacy
+      return result
     }
   }),
   defineMethod({
@@ -107,11 +104,11 @@ export const STRUCTURED_AGENT_SESSION_OPTIONS_READ_METHODS = [
           ? host.deps.adapter.startUnavailable?.(record.sessionId)
           : undefined
       const result = started && !answer.unavailable ? { ...answer, unavailable: started } : answer
-      if (clientReadsCoherentModelCatalog(ctx)) {
-        return result
-      }
-      const { choiceCatalog: _catalog, ...legacy } = result
-      return legacy
+      const selected =
+        params.sessionId === undefined
+          ? undefined
+          : host.deps.store.getRecord(params.sessionId)?.options?.model
+      return structuredAgentSessionSelectedCatalog(result, selected)
     }
   })
 ]

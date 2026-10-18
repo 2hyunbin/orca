@@ -101,8 +101,6 @@ function service(
     getRecord: (sessionId) => records.find((record) => record.sessionId === sessionId),
     drivesRecord: () => true,
     recordWorkspacePath: async (record) => record.launchDirectory ?? null,
-    processScope: (sessionId) =>
-      records.some((record) => record.sessionId === sessionId) ? `${sessionId}:1` : null,
     resolveAccountHome: async (agent) => HOMES[agent]!,
     probes,
     workspaceMayOverrideDefaultModel,
@@ -235,19 +233,5 @@ describe('whole process observations', () => {
       [{ value: 'high', label: 'High' }],
       []
     ])
-  })
-
-  it('keeps a Claude process listing separate from shared discovery', async () => {
-    const store = new AgentModelCatalogStore()
-    const record = { ...grokRecord(), provider: 'claude', accountHome: HOMES.claude! }
-    const catalog = service(store, {}, [record])
-    await catalog.read({ agent: 'claude', sessionId: record.sessionId, savedOnly: true })
-    catalog.recordLiveListing(record.sessionId, {
-      models: [{ id: 'opus', label: 'Opus', isDefault: false, efforts: [] }]
-    })
-    expect(catalog.processCatalog(record.sessionId)?.models.map((model) => model.id)).toEqual([
-      'opus'
-    ])
-    expect(catalog.peek(record.sessionId)).toBeNull()
   })
 })

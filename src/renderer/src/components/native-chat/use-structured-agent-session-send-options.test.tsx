@@ -56,12 +56,12 @@ function sendOptionsFor(
 describe('what each composer send carries', () => {
   it('carries the shown model and effort to a host that takes them, on every send', () => {
     const sendOptions = sendOptionsFor(true, {})
-    expect(sendOptions()).toEqual({ model: 'sonnet', effort: 'high' })
-    expect(sendOptions()).toEqual({ model: 'sonnet', effort: 'high' })
+    expect(sendOptions()).toEqual({ model: 'claude-gone', effort: 'max' })
+    expect(sendOptions()).toEqual({ model: 'claude-gone', effort: 'max' })
   })
 
-  it('carries the default the composer shows when nothing names a model', () => {
-    expect(sendOptionsFor(true, {}, undefined)()).toEqual({ model: 'sonnet', effort: 'high' })
+  it('omits an untouched provisional default when nothing names a model', () => {
+    expect(sendOptionsFor(true, {}, {})()).toBeUndefined()
   })
 
   it('carries a pick still on its way, resolved as the picker shows it', () => {
@@ -69,9 +69,8 @@ describe('what each composer send carries', () => {
       model: 'opus[1m]',
       effort: 'low'
     })
-    // A gone model the pick names moves to the listed default, as the picker shows.
     expect(sendOptionsFor(true, { model: 'claude-retired' })()).toMatchObject({
-      model: 'sonnet'
+      model: 'claude-retired'
     })
   })
 

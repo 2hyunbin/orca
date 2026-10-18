@@ -59,8 +59,7 @@ export function useMobileStructuredOptionSurface(args: {
     () =>
       structuredAgentSessionSendSelection(
         optionStateRef.current.record.agent,
-        structuredAgentSessionShownSnapshot(optionStateRef.current, takesSendOptions),
-        optionStateRef.current.choiceCatalog !== undefined
+        structuredAgentSessionShownSnapshot(optionStateRef.current, takesSendOptions)
       ),
     [optionStateRef, takesSendOptions]
   )

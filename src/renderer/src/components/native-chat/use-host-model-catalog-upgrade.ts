@@ -13,7 +13,7 @@ import {
 } from '../../../../shared/structured-agent-session-options'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
-import { recordHostModelCatalogSnapshot } from '@/runtime/host-model-catalog-snapshots'
+import { preloadHostModelCatalogSnapshots } from '@/runtime/host-model-catalog-snapshots'
 import { structuredAgentSessionHostKey } from '@/runtime/structured-agent-session-host-capability'
 import type { NativeChatSessionOptionRecord } from '../../../../shared/native-chat-session-option-state'
 import {
@@ -30,9 +30,8 @@ import {
  *
  * When the host says its first listing for the account is running, joined bounded
  * reads follow it — one per chat, shared by every later run and remount —
- * so the list updates in place. The picker never waits on it: it stays usable
- * on the built-in list meanwhile, naming no model, and a pick made then stays
- * an intent the session checks.
+ * so the list updates in place. Genuine retained rows and current values remain usable
+ * while an independent discovery is pending.
  * Reports why the host's latest answer says no chat can start (kept until the
  * next answer replaces it; a failed read is unknown). The chat's agent starting
  * or stopping reads again; only while a reason is said, the window gaining
@@ -106,6 +105,10 @@ export function useHostModelCatalogUpgrade(args: {
       return
     }
     let stale = false
+    // Share only sessionless discovery; this chat's answer may include its selected-only row.
+    if (newLaunch) {
+      void preloadHostModelCatalogSnapshots(target, [agent])
+    }
     const params = { agent, sessionId, ...(newLaunch && worktree ? { worktree } : {}) }
     const read = (waitForListing: boolean): Promise<AgentSessionModelCatalogResult> =>
       callStructuredAgentSession<AgentSessionModelCatalogResult>(
@@ -113,7 +116,7 @@ export function useHostModelCatalogUpgrade(args: {
         'agentSession.modelCatalog',
         waitForListing ? { ...params, waitForListing } : params
       )
-    const apply = (catalog: AgentSessionModelCatalogResult | null): void => {
+    const apply = (catalog: AgentSessionModelCatalogResult | null, error?: unknown): void => {
       if (stale) {
         return
       }
@@ -127,10 +130,6 @@ export function useHostModelCatalogUpgrade(args: {
           ? current
           : { key: waitKey, unavailable: next }
       })
-      // A new chat's answer is the account's a new chat pins, so the next chat starts from it.
-      if (catalog && newLaunch) {
-        recordHostModelCatalogSnapshot(target, agent, worktree ?? '', catalog)
-      }
       updateOptionState((current) =>
         current.record !== activeOptionRecordRef.current
           ? current
@@ -138,7 +137,7 @@ export function useHostModelCatalogUpgrade(args: {
             ? applyStructuredAgentSessionModelCatalog(current, optionCatalog, catalog, {
                 newLaunch
               })
-            : settleStructuredAgentSessionBuiltinCatalog(current)
+            : settleStructuredAgentSessionBuiltinCatalog(current, error)
       )
     }
     let leave: (() => void) | null = null
@@ -155,12 +154,6 @@ export function useHostModelCatalogUpgrade(args: {
       )
     }
     if (isHostModelListingWaitInFlight(waitKey)) {
-      // The host already answered that its listing is running: the built-in list stands meanwhile.
-      updateOptionState((current) =>
-        current.record === activeOptionRecordRef.current
-          ? settleStructuredAgentSessionBuiltinCatalog(current)
-          : current
-      )
       waitForListing()
     } else {
       void read(false)
@@ -174,9 +167,9 @@ export function useHostModelCatalogUpgrade(args: {
             waitForListing()
           }
         })
-        .catch(() => {
+        .catch((error: unknown) => {
           if (!stale) {
-            apply(null)
+            apply(null, error)
           }
         })
     }

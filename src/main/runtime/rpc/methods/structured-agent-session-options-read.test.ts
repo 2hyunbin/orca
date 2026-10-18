@@ -39,41 +39,6 @@ describe('agentSession.modelCatalog', () => {
     )
   })
 
-  it.each(['runtime', 'mobile'] as const)(
-    'negotiates the response-only catalog envelope for %s',
-    async (clientKind) => {
-      const choiceCatalog = {
-        authority: 'discovery' as const,
-        scopeId: 'scope',
-        models: [],
-        complete: false,
-        freshForMs: 0
-      }
-      read.mockResolvedValueOnce({ origin: 'unknown', choiceCatalog })
-      const oldClient = { ...STRUCTURED_CLIENT, clientKind }
-      const old = await call('agentSession.modelCatalog', { agent: 'codex' }, oldClient)
-      expect(old).toMatchObject({ ok: true, result: { origin: 'unknown' } })
-      expect(old).not.toMatchObject({ result: { choiceCatalog: expect.anything() } })
-      expect(read).toHaveBeenLastCalledWith({ agent: 'codex', legacy: true })
-      const modern = {
-        ...oldClient,
-        clientCapabilities: [
-          ...oldClient.clientCapabilities,
-          AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY
-        ]
-      }
-      read.mockResolvedValueOnce({ origin: 'unknown', choiceCatalog })
-      expect(await call('agentSession.modelCatalog', { agent: 'codex' }, modern)).toMatchObject({
-        ok: true,
-        result: { choiceCatalog }
-      })
-      expect(read).toHaveBeenLastCalledWith({ agent: 'codex', legacy: false })
-      expect(
-        await call('agentSession.modelCatalog', { agent: 'codex', projection: 'coherent' }, modern)
-      ).toMatchObject({ ok: false })
-    }
-  )
-
   it("reads a floating chat's catalog in the folder it was created in", async () => {
     const fixture = agentSessionRecordFixture()
     record = {
@@ -134,19 +99,31 @@ describe('agentSession.modelCatalog', () => {
     expect(read).toHaveBeenCalledWith({ agent: 'claude', legacy: true })
   })
 
-  it('passes a wait for the listing through to the catalog', async () => {
-    await call(
-      'agentSession.modelCatalog',
-      { agent: 'codex', sessionId: SESSION, waitForListing: true },
-      STRUCTURED_CLIENT
-    )
-    expect(read).toHaveBeenCalledWith({
-      agent: 'codex',
-      sessionId: SESSION,
-      waitForListing: true,
-      legacy: true
-    })
-  })
+  it.each(['runtime', 'mobile'] as const)(
+    'routes a waiting %s reader by negotiated capability',
+    async (clientKind) => {
+      for (const coherent of [false, true]) {
+        await call(
+          'agentSession.modelCatalog',
+          { agent: 'codex', sessionId: SESSION, waitForListing: true },
+          {
+            ...STRUCTURED_CLIENT,
+            clientKind,
+            clientCapabilities: [
+              ...STRUCTURED_CLIENT.clientCapabilities,
+              ...(coherent ? [AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY] : [])
+            ]
+          }
+        )
+        expect(read).toHaveBeenLastCalledWith({
+          agent: 'codex',
+          sessionId: SESSION,
+          waitForListing: true,
+          legacy: !coherent
+        })
+      }
+    }
+  )
 
   it('passes a saved-only read through to the catalog', async () => {
     await call('agentSession.modelCatalog', { agent: 'grok', savedOnly: true }, STRUCTURED_CLIENT)

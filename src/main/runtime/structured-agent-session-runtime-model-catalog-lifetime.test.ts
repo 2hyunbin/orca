@@ -37,10 +37,6 @@ describe('the host catalog lifetime', () => {
     const service = {
       read: vi.fn(async () => ({ origin: 'unknown' as const })),
       peek: () => null,
-      processCatalog: () => null,
-      legacyProcessCatalog: () => null,
-      processListingChanged: vi.fn(),
-      trackProcessListing: vi.fn(),
       retainedLiveModelIds: vi.fn(() => []),
       recordLiveListing: vi.fn(),
       prewarm: vi.fn(async () => {}),
