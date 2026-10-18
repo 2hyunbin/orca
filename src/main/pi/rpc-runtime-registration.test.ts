@@ -57,8 +57,8 @@ const input = (commandSettings: LaunchInput['commandSettings'] = {}): LaunchInpu
 })
 
 describe('Pi launch support before session creation', () => {
-  it.each(['0.84.0', '0.99.0', '1.0.0', '1.0.4\n', 'pi v1.12.3'])(
-    'accepts stable Pi from 0.84.0: %s',
+  it.each(['0.84.0', '0.99.0', '1.0.0', '1.0.4\n', 'pi v1.12.3', '1.1.0-preview.1', '2.0.0'])(
+    'accepts any Pi from 0.84.0, later majors and pre-releases included: %s',
     async (out) => {
       prints(out)
       await expect(supportsLaunch(input())).resolves.toBe(true)
@@ -74,27 +74,22 @@ describe('Pi launch support before session creation', () => {
     }
   )
 
-  it.each([
-    '0.73.1',
-    '0.83.9',
-    '0.84.0-rc.1',
-    '1.0.0-rc.1',
-    '1.1.0-preview.1',
-    '2.0.0',
-    'unknown',
-    ''
-  ])('keeps the terminal chat for an older, prerelease or unknown version: %s', async (out) => {
-    prints(out)
-    await expect(supportsLaunch(input())).resolves.toBe(false)
-  })
+  it.each(['0.73.1', '0.83.9', '0.84.0-rc.1'])(
+    'keeps the terminal chat for a release older than 0.84.0: %s',
+    async (out) => {
+      prints(out)
+      await expect(supportsLaunch(input())).resolves.toBe(false)
+    }
+  )
 
+  // A version it cannot read is no verdict: the chat starts and any real failure reports itself.
   it.each([
     { code: 1, timedOut: false, outputTruncated: false },
     { code: 0, timedOut: true, outputTruncated: false },
     { code: 0, timedOut: false, outputTruncated: true }
-  ])('does not infer support from incomplete or failed output: %j', async (result) => {
+  ])('runs the chat when the version cannot be read: %j', async (result) => {
     prints('1.0.4', result)
-    await expect(supportsLaunch(input())).resolves.toBe(false)
+    await expect(supportsLaunch(input())).resolves.toBe(true)
   })
 
   it('probes the binary the Command setting names, not the stock one', async () => {
