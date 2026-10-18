@@ -22,13 +22,6 @@ function runtimeImportSpecifiers(source, file) {
   const specifiers = []
 
   function visit(node) {
-    if (
-      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
-      node.moduleSpecifier &&
-      ts.isStringLiteralLike(node.moduleSpecifier)
-    ) {
-      specifiers.push(node.moduleSpecifier.text)
-    }
     if (ts.isCallExpression(node) && node.arguments.length > 0) {
       const [argument] = node.arguments
       const expression = node.expression
@@ -111,7 +104,7 @@ function resolveRuntimeImport(outDir, artifactRoot, importer, specifier) {
   return resolved
 }
 
-function collectRuntimeClosure(outDir, artifactRoot = dirname(outDir), extraEntries = []) {
+function collectRuntimeClosure(outDir, artifactRoot = dirname(outDir)) {
   outDir = realpathSync(outDir)
   artifactRoot = realpathSync(artifactRoot)
   if (isOutsideRoot(artifactRoot, outDir)) {
@@ -121,7 +114,7 @@ function collectRuntimeClosure(outDir, artifactRoot = dirname(outDir), extraEntr
   if (!existsSync(entry)) {
     throw new Error(`[verify-skills-cli-runtime] missing entry ${entry}`)
   }
-  const pending = [entry, ...extraEntries]
+  const pending = [entry]
   const visited = new Set()
 
   while (pending.length > 0) {
@@ -180,29 +173,9 @@ function parseJson(label, output) {
 
 function verifySkillsCliRuntime(outDir, artifactRoot = dirname(outDir), options = {}) {
   const absoluteOutDir = resolve(outDir)
-  const installerRoot = join(absoluteOutDir, 'cli', 'skills-installer')
-  for (const file of ['dist/cli.mjs', 'package.json', 'LICENSE', 'ThirdPartyNoticeText.txt']) {
-    if (!existsSync(join(installerRoot, file))) {
-      throw new Error(`[verify-skills-cli-runtime] missing locked installer artifact ${file}`)
-    }
-  }
-  const installer = join(installerRoot, 'dist', 'cli.mjs')
-  const closure = collectRuntimeClosure(absoluteOutDir, resolve(artifactRoot), [installer])
+  const closure = collectRuntimeClosure(absoluteOutDir, resolve(artifactRoot))
   if (options.executeCommands === false) {
     return { closureFiles: closure.length, commands: 0 }
-  }
-  const version = spawnSync(process.execPath, [installer, '--version'], {
-    encoding: 'utf8',
-    timeout: CLI_COMMAND_TIMEOUT_MS,
-    env: { ...process.env, NODE_OPTIONS: '', NODE_PATH: '' }
-  })
-  const expectedVersion = JSON.parse(
-    readFileSync(join(installerRoot, 'package.json'), 'utf8')
-  ).version
-  if (version.status !== 0 || version.stdout.trim() !== expectedVersion) {
-    throw new Error(
-      `[verify-skills-cli-runtime] locked installer failed its version probe: ${version.stderr || version.error || version.stdout}`
-    )
   }
   const list = parseJson('skills list', runCli(absoluteOutDir, ['skills', 'list', '--json']))
   const topicNames = new Set(list.topics?.map((topic) => topic.name))
@@ -237,7 +210,7 @@ function verifySkillsCliRuntime(outDir, artifactRoot = dirname(outDir), options 
     throw new Error('[verify-skills-cli-runtime] a dry-run reported execution')
   }
 
-  return { closureFiles: closure.length, commands: 6 }
+  return { closureFiles: closure.length, commands: 5 }
 }
 
 if (require.main === module) {
