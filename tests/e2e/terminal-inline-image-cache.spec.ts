@@ -4,7 +4,6 @@ import { test, expect } from './helpers/orca-app'
 import { ensureTerminalVisible, waitForSessionReady } from './helpers/store'
 import {
   execInTerminal,
-  sendToTerminal,
   waitForActiveTerminalManager,
   waitForPaneIdentitySnapshot,
   waitForTerminalOutput
@@ -78,14 +77,7 @@ for (const renderer of ['off', 'on'] as const) {
     const producer = testInfo.outputPath('cache-images.cjs')
     writeFileSync(
       producer,
-      [
-        'process.stdin.setRawMode(true); process.stdin.resume(); let burst=0;',
-        'function render() {',
-        `process.stdout.write('\\x1b[2J'); for(let i=0;i<12;i++) process.stdout.write('\\x1b_Ga=T,f=100,i='+(100+i)+',U=1,c=1,r=1,q=2;${payload}\\x1b\\\\'); process.stdout.write('\\x1b[3;3H\\x1b]1337;File=inline=1;width=100px;height=100px:${payload}\\x07\\x1b[15;1HCACHE_PRESSURE_DONE_'+(++burst)+'\\r\\n');`,
-        '}',
-        "process.stdin.on('data', data => { if(data.includes(113)) process.exit(0); if(data.includes(103)) render(); });",
-        'render();'
-      ].join('\n')
+      `process.stdout.write('\\x1bc'); for(let i=0;i<12;i++) process.stdout.write('\\x1b_Ga=T,f=100,i='+(100+i)+',U=1,c=1,r=1,q=2;${payload}\\x1b\\\\'); process.stdout.write('\\x1b[3;3H\\x1b]1337;File=inline=1;width=100px;height=100px:${payload}\\x07\\x1b[15;1HCACHE_PRESSURE_DONE\\r\\n')`
     )
     const assertImagePixels = async (stage: string) => {
       await expect
@@ -113,48 +105,44 @@ for (const renderer of ['off', 'on'] as const) {
     }
     await selectCache(64)
     await execInTerminal(orcaPage, ptyId, nodeTerminalCommand([producer]))
-    try {
-      await waitForTerminalOutput(orcaPage, 'CACHE_PRESSURE_DONE_1', 30_000)
-      await expect.poll(async () => (await sample()).storageMB).toBeGreaterThan(32)
-      const before = await sample()
-      expect(before.images).toBe(13)
-      await assertImagePixels('before-shrink')
-      await selectCache(32)
-      await expect.poll(async () => (await sample()).storageMB).toBeLessThanOrEqual(32)
-      const shrunk = await sample()
-      expect(shrunk.images).toBeLessThan(before.images)
-      await assertImagePixels('after-shrink')
-      await selectCache(64)
-      await sendToTerminal(orcaPage, ptyId, 'g')
-      await waitForTerminalOutput(orcaPage, 'CACHE_PRESSURE_DONE_2', 30_000)
-      await expect.poll(async () => (await sample()).storageMB).toBeGreaterThan(32)
-      const grown = await sample()
-      const splitLimit = await orcaPage.evaluate((tabId) => {
-        const manager = window.__paneManagers!.get(tabId)!
-        const pane = manager.splitPane(manager.getActivePane()!.id, 'vertical')!
-        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: inspect the loaded image addon through xterm's addon registry for this renderer contract.
-        const terminal = pane.terminal as unknown as {
-          _addonManager: { _addons: { instance: { storageLimit?: number } }[] }
-        }
-        return terminal._addonManager._addons.find(
-          (entry) => typeof entry.instance.storageLimit === 'number'
-        )?.instance.storageLimit
-      }, identity.tabId)
-      expect(splitLimit).toBe(64)
-      await orcaPage.evaluate(async () => {
-        await window.__store!.getState().updateSettings({ terminalInlineImages: false })
-      })
-      await expect.poll(async () => (await sample()).addon).toBe(false)
-      await orcaPage.evaluate(async () => {
-        await window.__store!.getState().updateSettings({ terminalInlineImages: true })
-      })
-      await expect.poll(async () => (await sample()).addon).toBe(true)
-      writeFileSync(
-        testInfo.outputPath('cache-samples.json'),
-        JSON.stringify({ renderer, before, shrunk, grown, splitLimit }, null, 2)
-      )
-    } finally {
-      await sendToTerminal(orcaPage, ptyId, 'q')
-    }
+    await waitForTerminalOutput(orcaPage, 'CACHE_PRESSURE_DONE', 30_000)
+    await expect.poll(async () => (await sample()).storageMB).toBeGreaterThan(32)
+    const before = await sample()
+    expect(before.images).toBe(13)
+    await assertImagePixels('before-shrink')
+    await selectCache(32)
+    await expect.poll(async () => (await sample()).storageMB).toBeLessThanOrEqual(32)
+    const shrunk = await sample()
+    expect(shrunk.images).toBeLessThan(before.images)
+    await assertImagePixels('after-shrink')
+    await selectCache(64)
+    await execInTerminal(orcaPage, ptyId, nodeTerminalCommand([producer]))
+    await waitForTerminalOutput(orcaPage, 'CACHE_PRESSURE_DONE', 30_000)
+    await expect.poll(async () => (await sample()).storageMB).toBeGreaterThan(32)
+    const grown = await sample()
+    const splitLimit = await orcaPage.evaluate((tabId) => {
+      const manager = window.__paneManagers!.get(tabId)!
+      const pane = manager.splitPane(manager.getActivePane()!.id, 'vertical')!
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: inspect the loaded image addon through xterm's addon registry for this renderer contract.
+      const terminal = pane.terminal as unknown as {
+        _addonManager: { _addons: { instance: { storageLimit?: number } }[] }
+      }
+      return terminal._addonManager._addons.find(
+        (entry) => typeof entry.instance.storageLimit === 'number'
+      )?.instance.storageLimit
+    }, identity.tabId)
+    expect(splitLimit).toBe(64)
+    await orcaPage.evaluate(async () => {
+      await window.__store!.getState().updateSettings({ terminalInlineImages: false })
+    })
+    await expect.poll(async () => (await sample()).addon).toBe(false)
+    await orcaPage.evaluate(async () => {
+      await window.__store!.getState().updateSettings({ terminalInlineImages: true })
+    })
+    await expect.poll(async () => (await sample()).addon).toBe(true)
+    writeFileSync(
+      testInfo.outputPath('cache-samples.json'),
+      JSON.stringify({ renderer, before, shrunk, grown, splitLimit }, null, 2)
+    )
   })
 }
