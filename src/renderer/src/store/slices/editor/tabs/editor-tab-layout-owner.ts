@@ -3,7 +3,6 @@
 // records the tab under the window's ids, with the window's group, and replaces that group's
 // preview by the same shared rule the window used. Main's copy reaches the window through frames.
 
-import { shallow } from 'zustand/shallow'
 import type { Tab } from '../../../../../../shared/tab-types'
 import type { EditorFileRename } from '../../../../../../shared/workspace-layout/workspace-layout-command-types'
 import type { LayoutEditorFile } from '../../../../../../shared/workspace-layout/workspace-layout-model'
@@ -66,7 +65,8 @@ export function recordReopenedEditorFileInLayoutOwner(
   }
   const was = fileIn(before)
   const file = restorableEditorFile(now)
-  if (was?.mode === 'edit' && shallow(restorableEditorFile(was), file)) {
+  // One builder makes both records, so their key order matches.
+  if (was?.mode === 'edit' && JSON.stringify(restorableEditorFile(was)) === JSON.stringify(file)) {
     return
   }
   recordLayoutApply(after, worktreeId, {
