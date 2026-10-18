@@ -243,6 +243,50 @@ describe('hidden-output restore quiet abandonment (STA-4869)', () => {
   })
 
   describe('unhide markers delivered during a restore', () => {
+    it('keeps the unhide requirement until a repeatedly stale snapshot finally covers it', async () => {
+      const drive = await connectVisiblePane()
+      vi.useFakeTimers()
+      const getMainBufferSnapshot = vi.mocked(window.api.pty.getMainBufferSnapshot)
+      const first = createDeferred<MainSnapshot>()
+      getMainBufferSnapshot
+        .mockReturnValueOnce(first.promise)
+        .mockResolvedValueOnce(modelSnapshot('SECOND_STALE_CAPTURE', 128))
+        .mockResolvedValueOnce(modelSnapshot('THIRD_COVERING_CAPTURE', 512))
+      try {
+        await announceMainDrop(64, 1)
+        await announceMainDrop(256, 1, 'unhide')
+        first.resolve(modelSnapshot('FIRST_STALE_CAPTURE', 128))
+        await flushAsyncTicks(100)
+        expect(getMainBufferSnapshot).toHaveBeenCalledTimes(3)
+        expect(drive.writtenChunks().join('')).toContain('THIRD_COVERING_CAPTURE')
+        expect(drive.writtenChunks().join('')).not.toContain(BANNER_FRAGMENT)
+      } finally {
+        drive.disposable.dispose()
+      }
+    })
+
+    it.each([undefined, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+      'does not treat snapshot sequence %s as covering the pending unhide',
+      async (seq) => {
+        const drive = await connectVisiblePane()
+        vi.useFakeTimers()
+        const getMainBufferSnapshot = vi.mocked(window.api.pty.getMainBufferSnapshot)
+        const first = createDeferred<{ data: string; cols: number; rows: number; seq?: number }>()
+        getMainBufferSnapshot.mockReturnValueOnce(first.promise)
+        getMainBufferSnapshot.mockResolvedValue(modelSnapshot('FINITE_COVERING_CAPTURE', 512))
+        try {
+          await announceMainDrop(64, 1)
+          await announceMainDrop(256, 1, 'unhide')
+          first.resolve({ ...modelSnapshot('UNPROVEN_CAPTURE', 128), seq })
+          await flushAsyncTicks(70)
+          expect(getMainBufferSnapshot).toHaveBeenCalledTimes(2)
+          expect(drive.writtenChunks().join('')).toContain('FINITE_COVERING_CAPTURE')
+        } finally {
+          drive.disposable.dispose()
+        }
+      }
+    )
+
     it('consumes a covered unhide marker received after the response while its replay is parsing', async () => {
       const drive = await connectVisiblePane()
       vi.useFakeTimers()
