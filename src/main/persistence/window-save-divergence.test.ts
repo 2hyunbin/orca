@@ -130,7 +130,7 @@ describe('reportWindowSaveDrift', () => {
     )
   })
 
-  it('counts panes only rebound to their terminals after the layout changes', () => {
+  it('leaves out panes only rebound to their terminals', () => {
     const bound = (ptyId: string): WorkspaceSessionState => {
       const result = session([{ id: 'tab-a' }, { id: 'tab-b' }])
       result.terminalLayoutsByTabId['tab-a'] = {
@@ -147,45 +147,30 @@ describe('reportWindowSaveDrift', () => {
     expect(warn).toHaveBeenCalledWith(
       '[layout-owner] window save changed main layout:',
       'session:set',
-      expect.objectContaining({ paths: ['group group-1 changed: tabOrder', '1 pane(s) rebound'] })
+      expect.objectContaining({ paths: ['group group-1 changed: tabOrder'] })
     )
   })
 
-  it('counts a pane’s first terminal binding as a rebind, not a layout change', () => {
+  // Main writes these itself (spawn, its default-tabs and close commands, D1); a save lagging them asks for nothing.
+  it('stays quiet for records main keeps through its own writes', () => {
+    const key = 'repo-1::/Users/dev/notes'
     const stored = session([{ id: 'tab-a' }])
-    const next = structuredClone(stored)
-    next.terminalLayoutsByTabId['tab-a'] = {
-      ...next.terminalLayoutsByTabId['tab-a']!,
+    const bound = structuredClone(stored)
+    bound.terminalLayoutsByTabId['tab-a'] = {
+      ...bound.terminalLayoutsByTabId['tab-a']!,
       ptyIdsByLeafId: { [leaf(1)]: 'pty-1' }
     }
 
-    save(stored, next)
-
-    expect(warn).toHaveBeenCalledWith(
-      '[layout-owner] window save changed main layout:',
-      'session:set',
-      expect.objectContaining({ paths: ['1 pane(s) rebound'] })
-    )
-  })
-
-  it('reports a default-tab record of a workspace with no tabs', () => {
-    const stored = emptySession()
-    const next = {
+    save(stored, bound)
+    save(emptySession(), {
       ...emptySession(),
-      defaultTerminalTabsAppliedByWorktreeId: { 'repo-1::/Users/dev/notes': true as const }
-    }
+      defaultTerminalTabsAppliedByWorktreeId: { [key]: true },
+      tabsByWorktree: { [key]: [] },
+      closedTerminalTabTombstonesByTabId: { 'tab-x': { worktreeId: key, closedAt: 1 } },
+      unifiedTabs: { [key]: [] }
+    })
 
-    save(stored, next)
-
-    expect(warn).toHaveBeenCalledOnce()
-    expect(warn).toHaveBeenCalledWith(
-      '[layout-owner] window save changed main layout:',
-      'session:set',
-      expect.objectContaining({
-        workspace: 'repo-1::/Users/dev/notes',
-        paths: ['defaultTabsAppliedByWorkspace changed']
-      })
-    )
+    expect(warn).not.toHaveBeenCalled()
   })
 
   it('stays quiet for a save that only names a workspace with nothing in it', () => {
@@ -196,61 +181,6 @@ describe('reportWindowSaveDrift', () => {
     save(next, emptySession())
 
     expect(warn).not.toHaveBeenCalled()
-  })
-
-  it('reports an empty terminal row a save adds or drops: a relaunch reads it there', () => {
-    const key = 'repo-1::/Users/dev/emptied'
-    const emptied = { ...emptySession(), tabsByWorktree: { [key]: [] } }
-
-    save(emptySession(), emptied)
-    save(emptied, emptySession())
-
-    expect(warn).toHaveBeenCalledTimes(2)
-    expect(warn).toHaveBeenCalledWith(
-      '[layout-owner] window save changed main layout:',
-      'session:set',
-      expect.objectContaining({ workspace: key, paths: ['terminal row owner changed'] })
-    )
-  })
-
-  it('reports a closed tab record only when the save adds or drops it, not when a key places it', () => {
-    const key = 'repo-1::/Users/dev/empty'
-    const closed = {
-      closedTerminalTabTombstonesByTabId: { 'tab-x': { worktreeId: key, closedAt: 1 } }
-    }
-    const stored = { ...emptySession(), ...closed }
-    const named = { ...stored, unifiedTabs: { [key]: [] } }
-
-    save(stored, named)
-    expect(warn).not.toHaveBeenCalled()
-
-    save(named, { ...named, closedTerminalTabTombstonesByTabId: {} })
-    save({ ...emptySession(), unifiedTabs: {} }, named)
-    for (const path of ['closed tab tab-x removed', 'closed tab tab-x added']) {
-      expect(warn).toHaveBeenCalledWith(
-        '[layout-owner] window save changed main layout:',
-        'session:set',
-        expect.objectContaining({ workspace: key, paths: [path] })
-      )
-    }
-    expect(warn).toHaveBeenCalledTimes(2)
-  })
-
-  it('reports a closed tab record the save moves into a workspace only it names', () => {
-    const from = 'repo-1::/Users/dev/old'
-    const to = 'repo-1::/Users/dev/new'
-    const closedIn = (key: string) => ({
-      ...emptySession(),
-      closedTerminalTabTombstonesByTabId: { 'tab-x': { worktreeId: key, closedAt: 1 } }
-    })
-
-    save(closedIn(from), { ...closedIn(to), unifiedTabs: { [to]: [] } })
-
-    expect(warn).toHaveBeenCalledWith(
-      '[layout-owner] window save changed main layout:',
-      'session:set',
-      expect.objectContaining({ workspace: to, paths: ['closed tab tab-x added'] })
-    )
   })
 
   it('still reports a workspace with tabs that the save adds or drops', () => {
