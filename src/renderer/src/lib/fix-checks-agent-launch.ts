@@ -28,6 +28,7 @@ import type { TuiAgent } from '../../../shared/tui-agent'
 import type { WorkspaceSource as WorkspaceCreateTelemetrySource } from '../../../shared/workspace-source'
 import type { LaunchSource } from '../../../shared/telemetry-events'
 import { translate } from '@/i18n/i18n'
+import { resolveSourceControlActionSessionOptions } from '../../../shared/source-control-action-launch-preferences'
 
 type StartFixChecksAgentArgs = {
   repoId: string
@@ -183,6 +184,7 @@ export async function startFixChecksAgent(args: StartFixChecksAgentArgs): Promis
       toast.error(agentArgsPlan.error)
       return false
     }
+    const sessionOptions = resolveSourceControlActionSessionOptions(recipe, agent)
     let revealFailed = false
     const result = launchAgentInNewTab({
       requestId: newAgentLaunchRequestId(),
@@ -191,6 +193,7 @@ export async function startFixChecksAgent(args: StartFixChecksAgentArgs): Promis
       groupId: args.groupId ?? targetWorktreeId,
       prompt: commandInput,
       agentArgs: recipe.agentArgs,
+      ...(sessionOptions ? { sessionOptions } : {}),
       promptDelivery: 'submit-after-ready',
       launchPlatform,
       launchSource: args.launchSource,
@@ -237,6 +240,10 @@ export async function startFixChecksAgent(args: StartFixChecksAgentArgs): Promis
   if (agentOverride.kind === 'blocked') {
     return false
   }
+  const sessionOptions =
+    agentOverride.kind === 'agent'
+      ? resolveSourceControlActionSessionOptions(recipe, agentOverride.agent)
+      : undefined
 
   return await launchWorkItemDirect({
     item: { ...args.item, pasteContent: commandInput },
@@ -245,6 +252,7 @@ export async function startFixChecksAgent(args: StartFixChecksAgentArgs): Promis
     telemetrySource: args.telemetrySource,
     promptDelivery: 'submit-after-ready',
     agentArgs: recipe.agentArgs,
+    ...(sessionOptions ? { sessionOptions } : {}),
     ...(agentOverride.kind === 'agent' ? { agentOverride: agentOverride.agent } : {}),
     openModalFallback: args.openModalFallback
   })

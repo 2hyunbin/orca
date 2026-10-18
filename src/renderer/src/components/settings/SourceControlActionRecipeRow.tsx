@@ -5,7 +5,8 @@ import type { CustomAgentId } from '../../../../shared/commit-message-agent-spec
 import { CUSTOM_AGENT_ID, isCustomAgentId } from '../../../../shared/commit-message-agent-spec'
 import {
   SOURCE_CONTROL_ACTION_LABELS,
-  type AiActionId
+  type AiActionId,
+  type SourceControlActionLaunchPreferences
 } from '../../../../shared/source-control-ai-actions'
 import { AgentIcon } from '@/lib/agent-catalog'
 import { SourceControlActionVariableChips } from '../source-control/SourceControlActionVariableChips'
@@ -23,6 +24,8 @@ import {
   getSourceControlAgentArgsPlaceholder
 } from './source-control-action-recipe-options'
 import { translate } from '@/i18n/i18n'
+import { SourceControlActionModelPicker } from './SourceControlActionModelPicker'
+import { getLaunchActionAgentArgsNote } from './source-control-action-model-copy'
 
 const DEFAULT_AGENT_VALUE = '__default_agent__'
 
@@ -36,6 +39,12 @@ type SourceControlActionRecipeRowProps<ActionId extends AiActionId> = {
   hasUnsavedChanges?: boolean
   repoOverrideNote?: React.ReactNode
   onAgentChange: (actionId: ActionId, value: string) => void
+  /** Launch actions only; text actions run headless through CLI arguments. */
+  launchPreferences?: SourceControlActionLaunchPreferences
+  onLaunchPreferencesChange?: (
+    actionId: ActionId,
+    value: SourceControlActionLaunchPreferences | undefined
+  ) => void
   onTemplateChange: (actionId: ActionId, value: string) => void
   onAgentArgsChange: (actionId: ActionId, value: string) => void
   onAppendVariable: (actionId: ActionId, variable: string) => void
@@ -69,12 +78,15 @@ export function SourceControlActionRecipeRow<ActionId extends AiActionId>({
   hasUnsavedChanges,
   repoOverrideNote,
   onAgentChange,
+  launchPreferences,
+  onLaunchPreferencesChange,
   onTemplateChange,
   onAgentArgsChange,
   onAppendVariable,
   onDiscard,
   onSave
 }: SourceControlActionRecipeRowProps<ActionId>): React.JSX.Element {
+  const isLaunchAction = !AI_TEXT_ACTION_ID_SET.has(actionId)
   const templateDirty =
     hasUnsavedChanges ?? JSON.stringify(draftValue) !== JSON.stringify(baseValue)
   const agentArgsPlaceholder = getSourceControlAgentArgsPlaceholder(
@@ -135,6 +147,13 @@ export function SourceControlActionRecipeRow<ActionId extends AiActionId>({
           ) : agentSupportText ? (
             <p className="text-[11px] text-muted-foreground">{agentSupportText}</p>
           ) : null}
+          {isLaunchAction && onLaunchPreferencesChange ? (
+            <SourceControlActionModelPicker
+              agent={selectedAgent}
+              value={launchPreferences}
+              onChange={(value) => onLaunchPreferencesChange(actionId, value)}
+            />
+          ) : null}
         </div>
       </div>
       <div className="mt-3 grid gap-3 sm:grid-cols-[220px_1fr]">
@@ -152,6 +171,9 @@ export function SourceControlActionRecipeRow<ActionId extends AiActionId>({
             onChange={(event) => onAgentArgsChange(actionId, event.target.value)}
             className="h-8 font-mono text-xs"
           />
+          {isLaunchAction ? (
+            <p className="text-[11px] text-muted-foreground">{getLaunchActionAgentArgsNote()}</p>
+          ) : null}
         </div>
         <div className="space-y-2">
           <Label className="text-[11px] text-muted-foreground">

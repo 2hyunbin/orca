@@ -324,6 +324,16 @@
     "followSymlinkedDirectoriesDescription": "Recherchez les dossiers liés dans Quick Open et développez les dossiers liés locaux dans l'Explorateur de fichiers.",
     "accounts": {
       "claudeRemoveFolder": "Orca supprime le dossier Claude de ce compte et sa connexion de cet ordinateur. L'historique de chat partagé avec Système par défaut est conservé. S'il est sélectionné, le prochain Claude que vous démarrez utilise Système par défaut."
+    },
+    "sourceControl": {
+      "actionModel": {
+        "model": "Modèle",
+        "agentDefault": "Par défaut de l'agent",
+        "effort": "Effort",
+        "effortDefault": "Par défaut",
+        "argsTerminalOnly": "Utilisés uniquement quand l'agent s'ouvre dans un terminal ; les chats les ignorent.",
+        "savedModel": "Modèle des Réglages : {{value0}}"
+      }
     }
   },
   "menu": {

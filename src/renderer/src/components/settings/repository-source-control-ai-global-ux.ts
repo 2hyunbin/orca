@@ -7,7 +7,10 @@ import type {
   SourceControlAiSettings
 } from '../../../../shared/source-control-ai-types'
 import type { SourceControlAiRepoUpdate } from '../../../../shared/source-control-ai-recipe-save'
-import type { SourceControlActionId } from '../../../../shared/source-control-ai-actions'
+import type {
+  SourceControlActionId,
+  SourceControlActionLaunchPreferences
+} from '../../../../shared/source-control-ai-actions'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import {
   clearActionTextDraftIfUnchanged,
@@ -19,7 +22,6 @@ import {
   type ActionRecipeTextDraft,
   retainCustomCommandDraft,
   retainDivergentActionTextDrafts,
-  withRepoAiActionAgent,
   withRepoAiActionMode,
   withRepoAiActionRecipeText,
   withRepoAiCustomCommand,
@@ -32,6 +34,10 @@ import {
   readInheritedCommandTemplate
 } from './repository-source-control-ai-labels'
 import { createRepoAiPersistQueue } from './repository-source-control-ai-persist-queue'
+import {
+  withRepoAiActionAgent,
+  withRepoAiActionLaunchPreferences
+} from './repository-source-control-ai-action-agent-draft'
 
 export { normalizeRepoAiDraft as normalizePersistedRepoAi } from './repository-source-control-ai-draft'
 
@@ -217,6 +223,16 @@ export function useRepositorySourceControlAiGlobalUx({
     persist((base) => withRepoAiActionAgent(base, settings, actionId, agentId))
   }
 
+  const updateActionLaunchPreferences = (
+    actionId: SourceControlActionId,
+    value: SourceControlActionLaunchPreferences | undefined
+  ): void => {
+    commitImmediate(
+      withRepoAiActionLaunchPreferences(immediateRepoAiRef.current, settings, actionId, value)
+    )
+    persist((base) => withRepoAiActionLaunchPreferences(base, settings, actionId, value))
+  }
+
   const updateActionTemplate = (actionId: SourceControlActionId, value: string): void => {
     setActionTextDrafts((current) =>
       patchActionTextDraft(current, immediateRepoAiRef.current, actionId, {
@@ -307,6 +323,7 @@ export function useRepositorySourceControlAiGlobalUx({
     updateHostedReviewDefault,
     updateActionMode,
     updateActionAgent,
+    updateActionLaunchPreferences,
     updateActionTemplate,
     updateActionAgentArgs,
     appendVariable,

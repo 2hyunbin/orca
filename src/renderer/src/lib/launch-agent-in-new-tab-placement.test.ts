@@ -143,4 +143,21 @@ describe('launchAgentInNewTab terminal tab activation', () => {
     // Chat UI model preferences belong to structured chats, not a terminal fallback.
     expect(queuedStartups()[0]).not.toHaveProperty('sessionOptions')
   })
+
+  it("runs an action's model and effort over the same flag in its CLI arguments", async () => {
+    const { launchAgentInNewTab } = await import('./launch-agent-in-new-tab')
+
+    launchAgentInNewTab({
+      requestId: 'request-3',
+      agent: 'codex',
+      worktreeId: 'wt-1',
+      agentArgs: '--model old',
+      sessionOptions: { model: 'gpt-5.6-terra', effort: 'high' }
+    })
+
+    const command = queuedStartups()[0]?.command
+    expect(command).toContain("'-m' 'gpt-5.6-terra'")
+    expect(command).toContain("'model_reasoning_effort=high'")
+    expect(command).not.toContain('old')
+  })
 })

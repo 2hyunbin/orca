@@ -14,6 +14,11 @@ import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { sourceControlActionRecipeMatchesTarget } from './source-control-action-recipe-match'
 import { resolveSourceControlAgentSaveTarget } from './source-control-agent-action-dialog-support'
+import { resolveSourceControlActionRecipe } from '../../../../shared/source-control-ai'
+import {
+  resolveSourceControlActionSessionOptions,
+  withSavedSourceControlActionLaunchPreferences
+} from '../../../../shared/source-control-action-launch-preferences'
 
 type RunSourceControlAgentActionStartArgs = {
   selectedAgent: TuiAgent
@@ -37,6 +42,8 @@ type RunSourceControlAgentActionStartArgs = {
     commandInput: string
     /** Omitted when CLI arguments do not apply, so the launch resolves the global setting. */
     agentArgs?: string
+    /** The action's saved model and effort, on either route. */
+    sessionOptions?: Readonly<Record<string, string>>
   }) => boolean | Promise<boolean>
   onSaveAgentDefault?: (
     target: SourceControlAiWriteTarget,
@@ -85,6 +92,9 @@ export async function runSourceControlAgentActionStart({
   // Why: `undefined` is what makes the launch fall back to the global Agents arguments;
   // an empty string would beat that fallback and silently suppress them.
   const launchAgentArgs = agentArgsApply ? agentArgs : undefined
+  // The dialog edits agent, arguments and prompt; the model stays the saved one for that agent.
+  const savedRecipe = resolveSourceControlActionRecipe({ settings, repo, actionId })
+  const sessionOptions = resolveSourceControlActionSessionOptions(savedRecipe, selectedAgent)
   const notifyLaunchAccepted = (): void => {
     if (launchAcceptedNotified) {
       return
@@ -96,7 +106,8 @@ export async function runSourceControlAgentActionStart({
     launched = await onStart({
       agent: selectedAgent,
       commandInput: trimmedCommandInput,
-      agentArgs: launchAgentArgs
+      agentArgs: launchAgentArgs,
+      ...(sessionOptions ? { sessionOptions } : {})
     })
     if (launched) {
       notifyLaunchAccepted()
@@ -109,6 +120,7 @@ export async function runSourceControlAgentActionStart({
       groupId: groupId ?? worktreeId,
       prompt: trimmedCommandInput,
       agentArgs: launchAgentArgs,
+      ...(sessionOptions ? { sessionOptions } : {}),
       promptDelivery,
       launchPlatform,
       launchSource
@@ -149,11 +161,10 @@ export async function runSourceControlAgentActionStart({
   }
 
   const saveTarget = resolveSourceControlAgentSaveTarget(saveTargetValue, repoId)
-  const launchRecipe = {
-    agentId: selectedAgent,
-    commandInputTemplate: commandTemplate,
-    agentArgs
-  }
+  const launchRecipe: SourceControlActionRecipe = withSavedSourceControlActionLaunchPreferences(
+    { agentId: selectedAgent, commandInputTemplate: commandTemplate, agentArgs },
+    savedRecipe
+  )
   const launchRecipeAlreadySaved = Boolean(
     saveTarget &&
     sourceControlActionRecipeMatchesTarget({

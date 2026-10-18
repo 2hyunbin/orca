@@ -231,6 +231,27 @@ describe('the first message owned by create', () => {
     }
   )
 
+  it("starts the chat on an action's model and effort over the saved default", async () => {
+    mocks.settings = {
+      nativeChatSessionOptions: {
+        codex: { model: 'gpt-5.5', valuesByModel: { 'gpt-5.5': { effort: 'low' } } }
+      }
+    }
+    mocks.call.mockImplementation(async () => created())
+    try {
+      const launch = startStructuredAgentLaunch('workspace-1', 'codex', {
+        requestId: newAgentLaunchRequestId(),
+        executionHostId: 'local',
+        prompt: 'opening text',
+        launchOptions: { model: 'gpt-5.6-terra', effort: 'high' }
+      })
+      await launch.launchResult
+      expect(createParams().options).toMatchObject({ model: 'gpt-5.6-terra', effort: 'high' })
+    } finally {
+      mocks.settings = {}
+    }
+  })
+
   it('returns a refused create once after the new draft, with no later send', async () => {
     const create = deferred<unknown>()
     mocks.call.mockReturnValue(create.promise)

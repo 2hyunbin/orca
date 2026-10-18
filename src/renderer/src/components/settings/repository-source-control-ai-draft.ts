@@ -155,22 +155,6 @@ export function withRepoAiActionMode(
   )
 }
 
-export function withRepoAiActionAgent(
-  base: RepoSourceControlAiOverrides,
-  settings: GlobalSettings | null,
-  actionId: SourceControlActionId,
-  agentId: RepoActionRecipe['agentId']
-): RepoSourceControlAiOverrides {
-  const currentRecipe =
-    base.actionOverrides?.[actionId] ?? readCompleteRecipeForDraft(base, settings, actionId)
-  return normalizeRepoAiDraft(
-    setActionOverride(base, actionId, {
-      ...currentRecipe,
-      agentId
-    })
-  )
-}
-
 export function withRepoAiActionRecipeText(
   base: RepoSourceControlAiOverrides,
   settings: GlobalSettings | null,

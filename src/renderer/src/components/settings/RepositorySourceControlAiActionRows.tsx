@@ -9,7 +9,8 @@ import type {
 import {
   SOURCE_CONTROL_ACTION_IDS,
   SOURCE_CONTROL_ACTION_LABELS,
-  type SourceControlActionId
+  type SourceControlActionId,
+  type SourceControlActionLaunchPreferences
 } from '../../../../shared/source-control-ai-actions'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
@@ -40,6 +41,8 @@ import {
 import { hasOwnActionOverride } from './repository-source-control-ai-draft'
 import { getRepositorySourceControlAiActionRecipeSectionId } from './repository-settings-targets'
 import { translate } from '@/i18n/i18n'
+import { SourceControlActionModelPicker } from './SourceControlActionModelPicker'
+import { getLaunchActionAgentArgsNote } from './source-control-action-model-copy'
 
 type RepositorySourceControlAiActionRowsProps = {
   repoId: string
@@ -48,6 +51,10 @@ type RepositorySourceControlAiActionRowsProps = {
   defaultTuiAgent: TuiAgent | 'blank' | null | undefined
   onActionModeChange: (actionId: SourceControlActionId, mode: string) => void
   onActionAgentChange: (actionId: SourceControlActionId, value: string) => void
+  onActionLaunchPreferencesChange: (
+    actionId: SourceControlActionId,
+    value: SourceControlActionLaunchPreferences | undefined
+  ) => void
   onActionTemplateChange: (actionId: SourceControlActionId, value: string) => void
   onActionAgentArgsChange: (actionId: SourceControlActionId, value: string) => void
   onAppendVariable: (actionId: SourceControlActionId, variable: string) => void
@@ -58,6 +65,21 @@ type RepositorySourceControlAiActionRowsProps = {
   onActionSave: (actionId: SourceControlActionId) => void
 }
 
+/** What the launch will run: the repo's own model, else the global one while the agent matches. */
+function readEffectiveLaunchPreferences(
+  override: NonNullable<RepoSourceControlAiOverrides['actionOverrides']>[SourceControlActionId],
+  source: SourceControlAiSettings,
+  actionId: SourceControlActionId
+): SourceControlActionLaunchPreferences | undefined {
+  const global = source.actions?.[actionId]
+  if (override?.launchPreferences) {
+    return override.launchPreferences
+  }
+  return override?.agentId === undefined || override.agentId === global?.agentId
+    ? global?.launchPreferences
+    : undefined
+}
+
 export function RepositorySourceControlAiActionRows({
   repoId,
   repoAi,
@@ -65,6 +87,7 @@ export function RepositorySourceControlAiActionRows({
   defaultTuiAgent,
   onActionModeChange,
   onActionAgentChange,
+  onActionLaunchPreferencesChange,
   onActionTemplateChange,
   onActionAgentArgsChange,
   onAppendVariable,
@@ -103,6 +126,7 @@ export function RepositorySourceControlAiActionRows({
         const agentOptions = getAgentCatalogForAction(actionId, effectiveAgent)
         const agentWarningText = getSourceControlActionAgentWarningText(actionId, effectiveAgent)
         const agentSupportText = getSourceControlActionAgentSupportText(actionId)
+        const isLaunchAction = !SOURCE_CONTROL_TEXT_ACTION_ID_SET.has(actionId)
         const actionDirty = actionDirtyById[actionId]
         const isSavingAction = savingActionIds[actionId] === true
         return (
@@ -212,6 +236,14 @@ export function RepositorySourceControlAiActionRows({
                 ) : agentSupportText ? (
                   <p className="text-[11px] text-muted-foreground">{agentSupportText}</p>
                 ) : null}
+                {isLaunchAction ? (
+                  <SourceControlActionModelPicker
+                    agent={effectiveAgent ?? null}
+                    value={readEffectiveLaunchPreferences(override, source, actionId)}
+                    disabled={!hasOverride}
+                    onChange={(value) => onActionLaunchPreferencesChange(actionId, value)}
+                  />
+                ) : null}
                 <Label className="text-[11px] text-muted-foreground">
                   {translate(
                     'auto.components.settings.RepositorySourceControlAiActionRows.7a3a8e431d',
@@ -226,6 +258,11 @@ export function RepositorySourceControlAiActionRows({
                   spellCheck={false}
                   className="h-8 font-mono text-xs disabled:cursor-not-allowed disabled:bg-muted/40"
                 />
+                {isLaunchAction ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    {getLaunchActionAgentArgsNote()}
+                  </p>
+                ) : null}
               </div>
               <div className="space-y-2">
                 <Label className="text-[11px] text-muted-foreground">

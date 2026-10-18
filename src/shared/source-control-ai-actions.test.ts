@@ -10,6 +10,7 @@ import {
   resolveSourceControlActionCommandTemplate,
   setSourceControlActionAgentDefault
 } from './source-control-ai-actions'
+import { resolveSourceControlActionSessionOptions } from './source-control-action-launch-preferences'
 
 describe('source-control AI launch action defaults', () => {
   it('normalizes safe launch action defaults', () => {
@@ -117,6 +118,50 @@ describe('source-control AI launch action defaults', () => {
       fixChecks: { agentId: 'codex' },
       resolveConflicts: { agentId: 'claude' }
     })
+  })
+
+  it('keeps a saved action model and drops a malformed one', () => {
+    expect(
+      normalizeSourceControlAiActionDefaults({
+        fixChecks: {
+          agentId: 'codex',
+          launchPreferences: { model: ' gpt-5.6-terra ', effort: 'high' }
+        },
+        resolveConflicts: { agentId: 'claude', launchPreferences: { model: '  ', effort: 'high' } },
+        resolveComments: { agentId: 'claude', launchPreferences: 'opus' }
+      })
+    ).toEqual({
+      fixChecks: {
+        agentId: 'codex',
+        launchPreferences: { model: 'gpt-5.6-terra', effort: 'high' }
+      },
+      resolveConflicts: { agentId: 'claude' },
+      resolveComments: { agentId: 'claude' }
+    })
+  })
+
+  it('drops the saved model when the action changes agent', () => {
+    const defaults = {
+      fixChecks: { agentId: 'codex' as const, launchPreferences: { model: 'gpt-5.6-terra' } }
+    }
+
+    expect(setSourceControlActionAgentDefault(defaults, 'fixChecks', 'codex')).toEqual(defaults)
+    expect(setSourceControlActionAgentDefault(defaults, 'fixChecks', 'claude')).toEqual({
+      fixChecks: { agentId: 'claude' }
+    })
+  })
+
+  it('gives the saved model and effort only to the recipe agent', () => {
+    const recipe = {
+      agentId: 'codex' as const,
+      launchPreferences: { model: 'gpt-5.6-terra', effort: 'high' }
+    }
+
+    expect(resolveSourceControlActionSessionOptions(recipe, 'codex')).toEqual({
+      model: 'gpt-5.6-terra',
+      effort: 'high'
+    })
+    expect(resolveSourceControlActionSessionOptions(recipe, 'claude')).toBeUndefined()
   })
 
   it('exposes review-comment resolution as a launch action', () => {

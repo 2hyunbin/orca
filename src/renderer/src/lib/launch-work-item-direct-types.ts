@@ -30,6 +30,8 @@ export type LaunchWorkItemDirectArgs = {
   telemetrySource?: WorkspaceCreateTelemetrySource
   agentOverride?: TuiAgent
   agentArgs?: string | null
+  /** Model and effort for `agentOverride`, on whichever route the launch takes. */
+  sessionOptions?: Readonly<Record<string, string>>
   promptDelivery?: 'draft' | 'submit-after-ready'
   launchPlatform?: NodeJS.Platform
 }

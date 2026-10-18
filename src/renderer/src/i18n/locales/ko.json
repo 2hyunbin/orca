@@ -220,6 +220,16 @@
     "followSymlinkedDirectoriesDescription": "Quick Open에서 연결된 폴더를 검색하고 파일 탐색기에서 로컬 연결 폴더를 펼칩니다.",
     "accounts": {
       "claudeRemoveFolder": "Orca는 이 컴퓨터에서 해당 계정의 Claude 폴더와 로그인 정보를 삭제합니다. 시스템 기본 계정과 공유하는 채팅 기록은 유지됩니다. 삭제한 계정이 선택되어 있었다면, 다음에 시작하는 Claude는 시스템 기본 계정을 사용합니다."
+    },
+    "sourceControl": {
+      "actionModel": {
+        "model": "모델",
+        "agentDefault": "에이전트 기본값",
+        "effort": "추론 수준",
+        "effortDefault": "기본값",
+        "argsTerminalOnly": "에이전트를 터미널에서 열 때만 사용됩니다. 채팅에서는 무시됩니다.",
+        "savedModel": "설정의 모델: {{value0}}"
+      }
     }
   },
   "menu": {

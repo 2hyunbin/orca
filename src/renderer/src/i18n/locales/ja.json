@@ -220,6 +220,16 @@
     "followSymlinkedDirectoriesDescription": "クイックオープンでリンクされたフォルダーを検索し、ファイルエクスプローラーでローカルのリンクされたフォルダーを展開します。",
     "accounts": {
       "claudeRemoveFolder": "Orca はこのアカウントの Claude フォルダーとサインイン情報をこのコンピュータから削除します。システムのデフォルトと共有しているチャット履歴は残ります。このアカウントが選択されている場合、次に起動する Claude はシステムのデフォルトを使用します。"
+    },
+    "sourceControl": {
+      "actionModel": {
+        "model": "モデル",
+        "agentDefault": "エージェントの既定",
+        "effort": "推論レベル",
+        "effortDefault": "既定",
+        "argsTerminalOnly": "エージェントをターミナルで開くときだけ使われます。チャットでは無視されます。",
+        "savedModel": "設定のモデル: {{value0}}"
+      }
     }
   },
   "menu": {

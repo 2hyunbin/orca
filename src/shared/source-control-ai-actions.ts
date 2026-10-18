@@ -19,10 +19,18 @@ export type SourceControlLaunchActionId =
 export type SourceControlActionId = SourceControlTextActionId | SourceControlLaunchActionId
 export type AiActionId = AiTextActionId | SourceControlLaunchActionId
 
+/** Structured so every route applies it: a chat has no command line for `agentArgs` to reach. */
+export type SourceControlActionLaunchPreferences = {
+  model: string
+  effort?: string
+}
+
 export type SourceControlActionRecipe = {
   agentId?: TuiAgent | CustomAgentId | null
   commandInputTemplate?: string
   agentArgs?: string
+  /** Belongs to `agentId`; a launch on any other agent ignores it. */
+  launchPreferences?: SourceControlActionLaunchPreferences
 }
 
 export type SourceControlAiActionDefaults = Partial<Record<AiActionId, SourceControlActionRecipe>>
@@ -123,7 +131,21 @@ export function normalizeSourceControlActionRecipe(
   if (typeof value.agentArgs === 'string') {
     normalized.agentArgs = value.agentArgs
   }
+  const launchPreferences = normalizeSourceControlActionLaunchPreferences(value.launchPreferences)
+  if (launchPreferences) {
+    normalized.launchPreferences = launchPreferences
+  }
   return Object.keys(normalized).length > 0 ? normalized : undefined
+}
+
+export function normalizeSourceControlActionLaunchPreferences(
+  value: unknown
+): SourceControlActionLaunchPreferences | undefined {
+  if (!isRecord(value) || typeof value.model !== 'string' || !value.model.trim()) {
+    return undefined
+  }
+  const effort = typeof value.effort === 'string' ? value.effort.trim() : ''
+  return { model: value.model.trim(), ...(effort ? { effort } : {}) }
 }
 
 export function normalizeSourceControlAiActionDefaults(
@@ -156,7 +178,8 @@ export function readSourceControlActionDefault(
     ...(typeof value?.commandInputTemplate === 'string'
       ? { commandInputTemplate: value.commandInputTemplate.trim() }
       : {}),
-    ...(typeof value?.agentArgs === 'string' ? { agentArgs: value.agentArgs.trim() } : {})
+    ...(typeof value?.agentArgs === 'string' ? { agentArgs: value.agentArgs.trim() } : {}),
+    ...(value?.launchPreferences ? { launchPreferences: value.launchPreferences } : {})
   }
 }
 
@@ -189,7 +212,13 @@ export function setSourceControlActionAgentDefault(
   actionId: AiActionId,
   agentId: TuiAgent | CustomAgentId | null
 ): SourceControlAiActionDefaults {
-  return setSourceControlActionDefault(defaults, actionId, { agentId })
+  const current = defaults?.[actionId]
+  if (current?.agentId === agentId || !current?.launchPreferences) {
+    return setSourceControlActionDefault(defaults, actionId, { agentId })
+  }
+  // A model id names one agent's model, so it does not survive a change of agent.
+  const { launchPreferences: _previousAgentModel, ...rest } = current
+  return { ...defaults, [actionId]: { ...rest, agentId } }
 }
 
 export function renderSourceControlActionCommandTemplate(

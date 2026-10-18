@@ -220,6 +220,16 @@
     "followSymlinkedDirectoriesDescription": "Busca carpetas enlazadas en Apertura rápida y expande las carpetas enlazadas locales en el Explorador de archivos.",
     "accounts": {
       "claudeRemoveFolder": "Orca elimina la carpeta de Claude de esta cuenta y su inicio de sesión de este equipo. El historial de chat compartido con Predeterminado del sistema se conserva. Si está seleccionada, el próximo Claude que inicies usará Predeterminado del sistema."
+    },
+    "sourceControl": {
+      "actionModel": {
+        "model": "Modelo",
+        "agentDefault": "Predeterminado del agente",
+        "effort": "Esfuerzo",
+        "effortDefault": "Predeterminado",
+        "argsTerminalOnly": "Solo se usan cuando el agente se abre en una terminal; los chats los ignoran.",
+        "savedModel": "Modelo de Configuración: {{value0}}"
+      }
     }
   },
   "menu": {

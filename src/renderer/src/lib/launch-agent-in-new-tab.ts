@@ -4,6 +4,7 @@ import { planLaunchAgentStartupPrompt } from '@/lib/launch-agent-startup-prompt-
 import { persistAgentLaunchTabOrder } from '@/lib/launch-agent-tab-order'
 import { tuiAgentToAgentKind } from '@/lib/telemetry'
 import { seedNativeChatLaunchDraftForAgentTab } from '@/lib/agent-launch-prompt-delivery'
+import { seedNativeChatAppliedSessionOptions } from '@/components/native-chat/native-chat-session-option-cache'
 import { pasteAgentLaunchPromptOnceReady } from '@/lib/launch-agent-tab-prompt-paste'
 import {
   launchNewTabPromptThroughHost,
@@ -51,8 +52,10 @@ export type LaunchAgentInNewTabArgs = LaunchAgentInNewTabRequest & {
   groupId?: string
   /** Optional initial prompt; delivery depends on `promptDelivery` and the agent's prompt mode. */
   prompt?: string
-  /** Optional CLI arguments appended to the selected agent command. */
+  /** Optional CLI arguments appended to the selected agent command; a chat has no command line. */
   agentArgs?: string | null
+  /** Model and effort for this launch on either route; they win over the same flag in `agentArgs`. */
+  sessionOptions?: Readonly<Record<string, string>>
   initialCwd?: string | null
   /** How to deliver the prompt: `draft` leaves it editable, `submit-after-ready` sends it once the TUI is ready. */
   promptDelivery?: 'auto-submit' | 'draft' | 'submit-after-ready'
@@ -121,6 +124,7 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
     groupId,
     prompt,
     agentArgs,
+    sessionOptions,
     initialCwd,
     promptDelivery = 'auto-submit',
     launchSource,
@@ -159,7 +163,8 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
     shell: queuedShell,
     isRemote,
     agentArgs: effectiveAgentArgs,
-    agentEnv
+    agentEnv,
+    ...(sessionOptions ? { sessionOptions, sessionOptionsOverrideAgentArgs: true } : {})
   }
   const { startupPlan, pasteDraftAfterLaunch, submitPastedPrompt } = planLaunchAgentStartupPrompt({
     base: startupPlanBase,
@@ -182,6 +187,7 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
     prompt: trimmedPrompt,
     promptDelivery: routePromptDelivery,
     tuiCustomization: { cwd: initialCwd },
+    ...(sessionOptions ? { launchOptions: sessionOptions } : {}),
     onPromptDelivered,
     ...(args.promptKeptByCaller ? { promptKeptByCaller: true as const } : {})
   })
@@ -259,6 +265,7 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
       ...(groupId ? { groupId } : {}),
       prompt: trimmedPrompt,
       ...(agentArgs !== undefined ? { agentArgs } : {}),
+      ...(startupPlan.sessionOptions ? { sessionOptions: startupPlan.sessionOptions } : {}),
       ...(initialCwd?.trim() ? { cwd: initialCwd } : {}),
       // The same source main's window stamps on its own launches.
       launchSource: launchSource ?? 'tab_bar_quick_launch',
@@ -287,6 +294,7 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
       launchConfig: startupPlan.launchConfig,
       launchAgent: agent,
       ...(agentArgs !== undefined ? { agentArgsOverride: agentArgs } : {}),
+      ...(startupPlan.sessionOptions ? { sessionOptions: startupPlan.sessionOptions } : {}),
       ...(startupPlan.startupCommandDelivery
         ? { startupCommandDelivery: startupPlan.startupCommandDelivery }
         : {}),
@@ -300,6 +308,9 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
       }
     }
   })
+  if (startupPlan.sessionOptions) {
+    seedNativeChatAppliedSessionOptions(tab.id, agent, startupPlan.sessionOptions)
+  }
   if (initialCwd?.trim()) {
     // Why: queue before mount so local, WSL, and SSH continuations preserve their subdirectory.
     store.queueTabInitialCwd(tab.id, initialCwd)

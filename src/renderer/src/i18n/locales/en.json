@@ -397,6 +397,16 @@
     "followSymlinkedDirectoriesDescription": "Search linked folders in Quick Open and expand local linked folders in File Explorer.",
     "accounts": {
       "claudeRemoveFolder": "Orca deletes this account's Claude folder and its sign-in from this computer. Chat history shared with System default stays. If it is selected, the next Claude you start uses System default."
+    },
+    "sourceControl": {
+      "actionModel": {
+        "model": "Model",
+        "agentDefault": "Agent default",
+        "effort": "Effort",
+        "effortDefault": "Default",
+        "argsTerminalOnly": "Used only when the agent opens in a terminal; chats ignore them.",
+        "savedModel": "Model from Settings: {{value0}}"
+      }
     }
   },
   "menu": {

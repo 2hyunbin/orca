@@ -96,6 +96,8 @@ export async function launchAgentInExistingWorkspace(args: {
   worktreeId: string
   agent: TuiAgent
   prompt?: AgentLaunchPrompt
+  /** Model and effort the host applies on whichever route it picks. */
+  sessionOptions?: Readonly<Record<string, string>>
   launchSource?: string
   reservation?: MobileAgentLaunchReservation
   placement?: AgentLaunchPlacement
@@ -110,6 +112,7 @@ export async function launchAgentInExistingWorkspace(args: {
     worktreeId: args.worktreeId,
     operationId: (args.mintOperationId ?? structuredSessionOperationId)(),
     ...(args.prompt ? { prompt: args.prompt } : {}),
+    ...(args.sessionOptions ? { sessionOptions: args.sessionOptions } : {}),
     ...(args.launchSource ? { launchSource: args.launchSource } : {}),
     ...(args.placement ? { placement: args.placement } : {}),
     ...(args.reservation

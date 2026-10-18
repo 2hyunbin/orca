@@ -65,7 +65,8 @@ export function completeRepoActionRecipe(
   return {
     agentId: recipe.agentId ?? null,
     commandInputTemplate,
-    ...(agentArgs ? { agentArgs } : {})
+    ...(agentArgs ? { agentArgs } : {}),
+    ...(recipe.launchPreferences ? { launchPreferences: recipe.launchPreferences } : {})
   }
 }
 

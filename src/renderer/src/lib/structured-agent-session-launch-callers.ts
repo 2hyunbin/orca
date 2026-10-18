@@ -24,6 +24,9 @@ export type StructuredAgentLaunchOptions = {
   executionHostId?: ExecutionHostId
   /** The saved selection a paired host reported it will seed; read only by the starting caller. */
   hostSeedOptions?: Readonly<Record<string, string>>
+  /** Encoded options this launch asked for (an action's saved model); they start as held picks,
+   *  so create sends them over the saved seed. Read only by the starting caller. */
+  launchOptions?: Readonly<Record<string, string>>
 }
 
 export type StructuredLaunchCaller = {

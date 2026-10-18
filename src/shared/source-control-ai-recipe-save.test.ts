@@ -76,6 +76,27 @@ describe('source-control AI recipe saves', () => {
     })
   })
 
+  it('keeps the action model when saving a repo recipe', () => {
+    const launchPreferences = { model: 'gpt-5.6-terra', effort: 'high' }
+    const result = saveSourceControlActionRecipe({
+      target: { type: 'repo', repoId: 'repo-1' },
+      settings: settings(),
+      repo: null,
+      actionId: 'fixChecks',
+      recipe: { agentId: 'codex', commandInputTemplate: '{basePrompt}', launchPreferences }
+    })
+
+    expect(result).toMatchObject({
+      update: {
+        sourceControlAi: {
+          actionOverrides: {
+            fixChecks: { agentId: 'codex', commandInputTemplate: '{basePrompt}', launchPreferences }
+          }
+        }
+      }
+    })
+  })
+
   it('clears empty repo source-control AI writes with the JSON boundary sentinel', () => {
     expect(toSourceControlAiRepoUpdate({ prCreationDefaults: { draft: null } })).toEqual({
       sourceControlAi: null

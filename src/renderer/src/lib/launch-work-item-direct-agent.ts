@@ -20,6 +20,7 @@ import { translate } from '@/i18n/i18n'
 export function buildDirectWorkItemAgentStartupPlan(args: {
   agent: TuiAgent | null
   agentArgs?: string | null
+  sessionOptions?: Readonly<Record<string, string>>
   draftContent: string
   promptDelivery: 'draft' | 'submit-after-ready'
   settings:
@@ -50,6 +51,9 @@ export function buildDirectWorkItemAgentStartupPlan(args: {
       ? resolveTuiAgentLaunchArgs(args.agent, args.settings?.agentDefaultArgs)
       : args.agentArgs
   const effectiveAgentEnv = resolveTuiAgentLaunchEnv(args.agent, args.settings?.agentDefaultEnv)
+  const sessionOptionArgs = args.sessionOptions
+    ? { sessionOptions: { ...args.sessionOptions }, sessionOptionsOverrideAgentArgs: true }
+    : {}
   const draftLaunchPlan =
     args.promptDelivery === 'submit-after-ready'
       ? null
@@ -61,7 +65,8 @@ export function buildDirectWorkItemAgentStartupPlan(args: {
           ...(args.shell ? { shell: args.shell } : {}),
           isRemote: args.isRemote,
           agentArgs: effectiveAgentArgs,
-          agentEnv: effectiveAgentEnv
+          agentEnv: effectiveAgentEnv,
+          ...sessionOptionArgs
         })
 
   if (draftLaunchPlan) {
@@ -91,6 +96,7 @@ export function buildDirectWorkItemAgentStartupPlan(args: {
     isRemote: args.isRemote,
     agentArgs: effectiveAgentArgs,
     agentEnv: effectiveAgentEnv,
+    ...sessionOptionArgs,
     allowEmptyPromptLaunch: true
   })
   if (startupPlan && args.promptDelivery === 'draft') {

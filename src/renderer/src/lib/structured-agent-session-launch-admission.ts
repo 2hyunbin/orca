@@ -92,7 +92,7 @@ function notifyHostUnreachable(agent: TuiAgent, executionHostId: ExecutionHostId
 /** What the caller's own terminal launch would have carried beyond the plan's agent and prompt. */
 export type DeclinedStructuredLaunchTerminalOptions = Pick<
   LaunchAgentInNewTabArgs,
-  'agentArgs' | 'launchPlatform' | 'launchSource' | 'initialCwd'
+  'agentArgs' | 'sessionOptions' | 'launchPlatform' | 'launchSource' | 'initialCwd'
 >
 
 /** A caller with no terminal path of its own gets the one a new agent tab would open. */
