@@ -131,6 +131,8 @@ export type GlobalSettings = GlobalSettingsBase & {
    *  canvas layers are only created once a pane actually receives an image, so
    *  idle panes retain parser/decoder setup but no decoded image storage. */
   terminalInlineImages: boolean
+  /** Per-pane decoded inline-image cache (MB) before older images are evicted to a placeholder. */
+  terminalInlineImageCacheMb: number
   terminalCursorStyle: 'bar' | 'block' | 'underline'
   /** One-shot migration guard for moving inherited cursor defaults to block. */
   terminalCursorStyleDefaultedToBlock?: boolean

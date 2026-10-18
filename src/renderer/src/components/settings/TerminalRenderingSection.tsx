@@ -8,7 +8,12 @@ import {
 import { SearchableSetting } from './SearchableSetting'
 import { TerminalContrastSetting } from './TerminalContrastSetting'
 import { translate } from '@/i18n/i18n'
+import {
+  normalizeTerminalInlineImageCacheMb,
+  TERMINAL_INLINE_IMAGE_CACHE_MB_PRESETS
+} from '../../../../shared/terminal-inline-image-cache-policy'
 import { resolveTerminalInlineImagesEnabled } from '../../../../shared/terminal-inline-images-settings'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 
 type TerminalRenderingSectionProps = {
   settings: GlobalSettings
@@ -19,6 +24,24 @@ export function TerminalRenderingSection({
   settings,
   updateSettings
 }: TerminalRenderingSectionProps): React.JSX.Element {
+  const inlineImagesEnabled = resolveTerminalInlineImagesEnabled(settings.terminalInlineImages)
+  const inlineImageCacheMb = normalizeTerminalInlineImageCacheMb(
+    settings.terminalInlineImageCacheMb
+  )
+  // A hand-edited value outside the presets still needs a matching option to display.
+  const inlineImageCacheOptions: number[] = [...TERMINAL_INLINE_IMAGE_CACHE_MB_PRESETS]
+  if (!inlineImageCacheOptions.includes(inlineImageCacheMb)) {
+    inlineImageCacheOptions.push(inlineImageCacheMb)
+    inlineImageCacheOptions.sort((x, y) => x - y)
+  }
+  const cacheTitle = translate(
+    'auto.components.settings.TerminalRenderingSection.0121d245a6',
+    'Inline Image Cache'
+  )
+  const cacheDescription = translate(
+    'auto.components.settings.TerminalRenderingSection.2b7791ac60',
+    'Decoded-image cache per pane. Larger values retain more images and use more memory. Reducing the limit may discard displayed images.'
+  )
   return (
     <section key="rendering" className="space-y-3">
       <SettingsSubsectionHeader
@@ -136,6 +159,49 @@ export function TerminalRenderingSection({
                   settings.terminalInlineImages
                 )
               })
+            }
+          />
+        </SearchableSetting>
+
+        <SearchableSetting
+          title={cacheTitle}
+          description={cacheDescription}
+          keywords={['terminal', 'image', 'images', 'inline', 'cache', 'memory', 'limit']}
+          className="py-2"
+        >
+          <SettingsRow
+            label={cacheTitle}
+            description={cacheDescription}
+            control={
+              <Select
+                value={String(inlineImageCacheMb)}
+                disabled={!inlineImagesEnabled}
+                onValueChange={(value) =>
+                  updateSettings({
+                    terminalInlineImageCacheMb: normalizeTerminalInlineImageCacheMb(Number(value))
+                  })
+                }
+              >
+                <SelectTrigger
+                  size="sm"
+                  className="w-32"
+                  aria-label={translate(
+                    'auto.components.settings.TerminalRenderingSection.a8a3f239c1',
+                    'Inline image cache size'
+                  )}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {inlineImageCacheOptions.map((mb) => (
+                    <SelectItem key={mb} value={String(mb)}>
+                      {translate('auto.components.settings.VoicePane.91980ce124', '{{value0}} MB', {
+                        value0: mb
+                      })}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             }
           />
         </SearchableSetting>

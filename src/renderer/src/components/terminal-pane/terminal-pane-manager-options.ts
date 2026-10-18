@@ -29,6 +29,7 @@ import {
 } from './terminal-pane-lifecycle-primitives'
 import { resolveTerminalLayoutActiveLeafId } from './terminal-layout-leaf-ids'
 import type { TerminalPaneManagerOptionsContext } from './terminal-pane-mount-context'
+import { normalizeTerminalInlineImageCacheMb } from '../../../../shared/terminal-inline-image-cache-policy'
 import { resolveTerminalInlineImagesEnabled } from '../../../../shared/terminal-inline-images-settings'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { layoutOwnerPaneGestures } from './terminal-pane-layout-owner-gestures'
@@ -123,6 +124,8 @@ export function createTerminalPaneManagerOptions(
       ),
     terminalInlineImagesEnabled: () =>
       resolveTerminalInlineImagesEnabled(settingsRef.current?.terminalInlineImages),
+    terminalInlineImageCacheMb: () =>
+      normalizeTerminalInlineImageCacheMb(settingsRef.current?.terminalInlineImageCacheMb),
     terminalOptions: () => {
       const currentSettings = settingsRef.current
       const terminalFontWeights = resolveTerminalFontWeights(

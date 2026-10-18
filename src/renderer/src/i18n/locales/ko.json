@@ -12355,7 +12355,10 @@
         },
         "TerminalRenderingSection": {
           "6d4c55bacc": "인라인 이미지",
-          "fffab5890b": "SIXEL, iTerm2(IIP) 및 Kitty 그래픽 프로토콜을 사용하여 터미널에 이미지를 직접 표시합니다."
+          "fffab5890b": "SIXEL, iTerm2(IIP) 및 Kitty 그래픽 프로토콜을 사용하여 터미널에 이미지를 직접 표시합니다.",
+          "0121d245a6": "인라인 이미지 캐시",
+          "2b7791ac60": "창 분할마다 유지하는 디코딩된 이미지 캐시입니다. 값이 클수록 더 많은 이미지를 유지하고 메모리를 더 사용합니다. 한도를 낮추면 표시 중인 이미지가 삭제될 수 있습니다.",
+          "a8a3f239c1": "인라인 이미지 캐시 크기"
         },
         "CursorAccountsSection": {
           "dashboardLink": "Cursor 대시보드",

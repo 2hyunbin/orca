@@ -171,3 +171,20 @@ describe('terminal default shell', () => {
     expect(normalizeLegacyProfile({ terminalDefaultShell: '   ' }).terminalDefaultShell).toBe('')
   })
 })
+
+describe('loaded inline image cache', () => {
+  it.each([
+    [undefined, 32],
+    [null, 32],
+    ['128', 32],
+    [Number.NaN, 32],
+    [Number.POSITIVE_INFINITY, 32],
+    [-1, 32],
+    [64.9, 64],
+    [4096, 512]
+  ])('normalizes persisted %s to %s', (input, expected) => {
+    expect(
+      normalizeLegacyProfile({ terminalInlineImageCacheMb: input }).terminalInlineImageCacheMb
+    ).toBe(expected)
+  })
+})

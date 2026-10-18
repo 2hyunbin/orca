@@ -122,3 +122,32 @@ describe('updateSettings terminalMinimumContrastRatio', () => {
     )
   })
 })
+
+describe('updateSettings terminalInlineImageCacheMb', () => {
+  it.each([
+    [undefined, 32],
+    [Number.NaN, 32],
+    [Number.POSITIVE_INFINITY, 32],
+    [-1, 32],
+    [64.9, 64],
+    [4096, 512]
+  ])('normalizes %s to %s before saving and notifying', (input, expected) => {
+    const operations = settingsOperations({ terminalInlineImageCacheMb: 128 })
+    expect(
+      updateSettings(operations, { terminalInlineImageCacheMb: input }, { notifyListeners: true })
+        .terminalInlineImageCacheMb
+    ).toBe(expected)
+    expect(operations.notifySettingsChanged).toHaveBeenCalledWith(
+      { terminalInlineImageCacheMb: expected },
+      undefined
+    )
+    expect(operations.scheduleSave).toHaveBeenCalled()
+  })
+  it('preserves the cache when another setting changes', () => {
+    expect(
+      updateSettings(settingsOperations({ terminalInlineImageCacheMb: 128 }), {
+        terminalFontSize: 15
+      }).terminalInlineImageCacheMb
+    ).toBe(128)
+  })
+})

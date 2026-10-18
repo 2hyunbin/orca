@@ -12,6 +12,7 @@ import { assertTerminalQuickCommandsStorable } from '../../../shared/terminal-qu
 import { normalizeTerminalCustomThemes } from '../../../shared/terminal-custom-themes'
 import { normalizeTerminalDefaultShell } from '../../../shared/terminal-default-shell'
 import { normalizeTerminalCursorStyleDefault } from '../../../shared/terminal-cursor-style-settings'
+import { normalizeTerminalInlineImageCacheMb } from '../../../shared/terminal-inline-image-cache-policy'
 import { normalizeDesktopTerminalScrollbackRows } from '../../../shared/terminal-scrollback-policy'
 import { normalizeTerminalMinimumContrastRatio } from '../../../shared/terminal-minimum-contrast-settings'
 import { normalizeTaskProviderSettings } from '../../../shared/task-providers'
@@ -142,6 +143,11 @@ export function updateSettings(
   if ('terminalScrollbackRows' in updates) {
     sanitizedUpdates.terminalScrollbackRows = normalizeDesktopTerminalScrollbackRows(
       updates.terminalScrollbackRows
+    )
+  }
+  if ('terminalInlineImageCacheMb' in updates) {
+    sanitizedUpdates.terminalInlineImageCacheMb = normalizeTerminalInlineImageCacheMb(
+      updates.terminalInlineImageCacheMb
     )
   }
   // Why here: every writer (desktop IPC, web RPC, CLI) crosses this boundary, so xterm can never be

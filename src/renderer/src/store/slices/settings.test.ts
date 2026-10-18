@@ -18,10 +18,7 @@ import {
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() } }))
 vi.mock('@/lib/agent-status', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
-  return {
-    ...actual,
-    detectAgentStatusFromTitle: vi.fn().mockReturnValue(null)
-  }
+  return { ...actual, detectAgentStatusFromTitle: vi.fn().mockReturnValue(null) }
 })
 
 const runtimeEnvironmentCall = vi.fn()
@@ -241,6 +238,14 @@ describe('createSettingsSlice checked persistence', () => {
     } finally {
       consoleError.mockRestore()
     }
+  })
+
+  it('normalizes invalid inline image budgets before renderer IPC', async () => {
+    const store = createTestStore()
+    await store.getState().updateSettingsOrThrow({ terminalInlineImageCacheMb: Number.NaN })
+    expect(settingsSet).toHaveBeenLastCalledWith({ terminalInlineImageCacheMb: 32 })
+    await store.getState().updateSettingsOrThrow({ terminalInlineImageCacheMb: 4096 })
+    expect(settingsSet).toHaveBeenLastCalledWith({ terminalInlineImageCacheMb: 512 })
   })
 
   it('normalizes malformed mobile pairing addresses before renderer IPC', async () => {
@@ -706,9 +711,7 @@ describe('createSettingsSlice runtime switching', () => {
 })
 
 describe('fetchSettings runtime catalog probe', () => {
-  // Why: skill discovery waits for the runtime catalog to settle. If a rejected
-  // settings read skipped the probe, every skill badge would sit on a spinner
-  // for the whole session with no retry affordance.
+  // Skill discovery needs the catalog even when settings reads fail.
   it('still probes the runtime catalog when the settings read fails', async () => {
     settingsGet.mockRejectedValueOnce(new Error('unreadable settings.json'))
     const store = createTestStore()
