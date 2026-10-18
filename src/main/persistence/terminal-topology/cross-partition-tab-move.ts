@@ -29,7 +29,7 @@ export type CrossPartitionTabMove = {
   sessions: { from: WorkspaceSessionState; to: WorkspaceSessionState } | null
 }
 
-function withWorkspace(
+function withLoadedWorkspace(
   model: WorkspaceLayoutModel,
   key: string,
   workspace: WorkspaceLayout | undefined
@@ -69,7 +69,7 @@ export function moveTabAcrossPartitions(
     return { value: { ok: false, code: 'workspace_not_found' }, sessions: null }
   }
   // Both partitions' workspaces, so a new tab id either one holds is refused.
-  const joined = withWorkspace(
+  const joined = withLoadedWorkspace(
     {
       ...loadedFrom.layout,
       workspaces: { ...loadedTo.layout.workspaces, ...loadedFrom.layout.workspaces }
@@ -95,7 +95,7 @@ export function moveTabAcrossPartitions(
       from: written(
         from.session,
         loadedFrom,
-        withWorkspace(
+        withLoadedWorkspace(
           loadedFrom.layout,
           command.workspace,
           moved.model.workspaces[command.workspace]
@@ -104,7 +104,7 @@ export function moveTabAcrossPartitions(
       to: written(
         to.session,
         loadedTo,
-        withWorkspace(
+        withLoadedWorkspace(
           loadedTo.layout,
           command.toWorkspace,
           moved.model.workspaces[command.toWorkspace]
