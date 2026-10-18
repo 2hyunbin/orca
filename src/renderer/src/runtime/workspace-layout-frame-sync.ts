@@ -18,6 +18,7 @@ import {
 import { buildWorkspaceSessionPayload } from '@/lib/workspace-session'
 import {
   framesDrawWorkspace,
+  layoutHoldsBoundPane,
   onWorkspaceStartsDrawing
 } from './workspace-layout-frame-drawn-workspaces'
 import { splitWorkspaceSessionByHost } from '@/lib/workspace-session-host-split'
@@ -325,15 +326,9 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
       stream.close()
     },
     // Only a pane flush draws: the same workspaces it shows.
-    holdsTerminalPane: (worktreeId, { tabId, leafId, ptyId }) =>
+    holdsTerminalPane: (worktreeId, pane) =>
       framesDrawWorkspace(store.getState())(worktreeId) &&
-      (cache[worktreeId]?.tabs.some(
-        (tab) =>
-          tab.entityId === tabId &&
-          (tab.terminal?.panes.some((pane) => pane.leafId === leafId && pane.ptyId === ptyId) ??
-            false)
-      ) ??
-        false),
+      layoutHoldsBoundPane(cache[worktreeId], pane),
     // A closed stream's cache is frozen: main may have closed the tab since.
     terminalTab: (worktreeId, tabId) =>
       streamOpen

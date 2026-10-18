@@ -406,16 +406,20 @@ describe('the window drawn from layout frames', () => {
     const store = createTestStore()
     await bootWindowFromPartitions(store, [{ hostId: 'local', session: emptySession() }])
     const sync = openWorkspaceLayoutFrameSync(store)
-    stream.onFrame!(snapshot(published('local', localDesktopSession())))
+    const layouts = published('local', localDesktopSession())
+    stream.onFrame!(snapshot(layouts))
     sync.start()
     await flushMicrotasks()
     expect(store.getState().tabsByWorktree[GIT_KEY]).toBeUndefined()
     // The first visit gives the workspace its empty root group; no frame arrives after it.
     store.getState().ensureWorktreeRootGroup(GIT_KEY)
     await flushMicrotasks()
-    expect(store.getState().tabsByWorktree[GIT_KEY]?.map((tab) => tab.id)).toEqual(
-      expect.arrayContaining(['tab-shell'])
+    // Exactly main's terminal tabs: the visit adds none of its own.
+    const mainTerminals = layouts[GIT_KEY]!.tabs.flatMap((tab) =>
+      tab.terminal ? [tab.entityId] : []
     )
+    expect(mainTerminals).toContain('tab-shell')
+    expect(store.getState().tabsByWorktree[GIT_KEY]?.map((tab) => tab.id)).toEqual(mainTerminals)
     sync.close()
   })
 

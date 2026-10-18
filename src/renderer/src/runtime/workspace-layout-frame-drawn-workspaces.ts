@@ -1,6 +1,8 @@
-// Which workspaces main's layout frames draw in the window, and when the window starts holding one.
+// Which workspaces main's layout frames draw in the window, when the window starts holding one,
+// and which terminal panes a frame shows.
 
 import type { AppState } from '@/store/types'
+import type { PublishedWorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-published'
 import { pairedServerMirrors } from './paired-server-workspace'
 
 type HeldWorkspacesStore = {
@@ -38,4 +40,19 @@ export function onWorkspaceStartsDrawing(
       onDrawn()
     }
   })
+}
+
+/** Whether a frame shows this terminal in this pane. An unbound pane does not count. */
+export function layoutHoldsBoundPane(
+  layout: PublishedWorkspaceLayout | undefined,
+  { tabId, leafId, ptyId }: { tabId: string; leafId: string; ptyId: string }
+): boolean {
+  return (
+    layout?.tabs.some(
+      (tab) =>
+        tab.entityId === tabId &&
+        (tab.terminal?.panes.some((pane) => pane.leafId === leafId && pane.ptyId === ptyId) ??
+          false)
+    ) ?? false
+  )
 }
