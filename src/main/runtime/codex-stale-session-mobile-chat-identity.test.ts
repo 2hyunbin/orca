@@ -68,7 +68,8 @@ function internalsOf(runtime: OrcaRuntimeService): RuntimeInternals {
   return runtime as unknown as RuntimeInternals
 }
 
-async function runCodexTurn(): Promise<OrcaRuntimeService> {
+/** `launched: false` is Codex typed into a plain shell rather than created with an agent. */
+async function runCodexTurn({ launched = true } = {}): Promise<OrcaRuntimeService> {
   const runtime = new OrcaRuntimeService(null, undefined, {
     ...agentHookRuntimeDeps(server, new AgentStatusObservedPaneIdentities(), () => ({
       agentStatusHooksEnabled: true
@@ -90,7 +91,7 @@ async function runCodexTurn(): Promise<OrcaRuntimeService> {
   await runtime.createTerminal(`id:${WORKTREE_ID}`, {
     tabId: TAB_ID,
     leafId: LEAF_ID,
-    launchAgent: 'codex',
+    ...(launched ? { launchAgent: 'codex' as const } : {}),
     title: 'Terminal'
   })
   const paint = (title: string): void => {
@@ -148,6 +149,16 @@ describe('Codex resume identity on mobile session tabs (STA-7370)', () => {
   it('never revives a spinner from a PTY status the neutral title already disowned', async () => {
     const runtime = await runCodexTurn()
     internalsOf(runtime).ptysById.get(PTY_ID)!.lastAgentStatus = 'working'
+    const now = Date.now()
+    vi.spyOn(Date, 'now').mockReturnValue(now + AGENT_STATUS_STALE_AFTER_MS + 60_000)
+
+    expect(await listedAgentStatus(runtime)).toEqual(PUBLISHED_IDENTITY)
+  })
+
+  // The phone opens chat by agentType when the tab carries no launchAgent; the live foreground
+  // read that restores Codex's idle names the owner, so the stale session needs no agent claim.
+  it('names the agent for a stale session in a pane Codex was typed into', async () => {
+    const runtime = await runCodexTurn({ launched: false })
     const now = Date.now()
     vi.spyOn(Date, 'now').mockReturnValue(now + AGENT_STATUS_STALE_AFTER_MS + 60_000)
 
