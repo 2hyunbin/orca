@@ -124,8 +124,8 @@ export async function openStructuredAgentSessionConversationJournal(
       hold: { cause: 'hostRestarted' }
     })
   } catch (error) {
-    // The row stays queued. The delivery loop's first step tries again before it hands anything
-    // over; if that fails too, the loop fails and rejects every queued send.
+    // The row stays queued, never handed over (`handsOver`); the delivery loop's next step tries
+    // again.
     deps.logger.warn('settling sends an earlier process left queued failed on open', {
       scope: 'open-leftover-sends',
       sessionId,

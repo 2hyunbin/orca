@@ -111,19 +111,25 @@ export async function holdClosedStructuredAgentSessionSends(
 }
 
 /** What an earlier host process left queued and the open could not settle (its write failed):
- *  kept or rejected now, never handed over. A failure throws. A send that woke this came after the
- *  ones it settled, so the reopen mark starts where they did. */
+ *  kept or rejected now. Never throws: a failed write leaves it queued for the next try. A send
+ *  that woke this came after the ones it settled, so the reopen mark starts where they did. */
 export async function holdRestartedStructuredAgentSessionSends(
   logger: StructuredAgentSessionHostDeps['logger'],
   sessionId: string,
   journal: StructuredAgentSessionHostSession['journal'],
   fence: number
 ): Promise<void> {
-  const hostInstance = structuredAgentSessionHostInstance()
   const settled = await holdUnsentSends(journal, {
     fence,
-    hostInstance,
+    hostInstance: structuredAgentSessionHostInstance(),
     hold: { cause: 'hostRestarted' }
+  }).catch((error: unknown) => {
+    logger.warn('settling sends an earlier process left queued failed', {
+      scope: 'loop-leftover-sends',
+      sessionId,
+      error
+    })
+    return null
   })
   if (settled !== null) {
     await markStructuredQueueReopen(sessionId, journal, fence, logger, settled + 1)

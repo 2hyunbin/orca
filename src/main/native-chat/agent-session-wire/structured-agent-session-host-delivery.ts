@@ -161,13 +161,14 @@ export function createStructuredAgentSessionConversationDelivery(input: {
   }
   const wakesQueued = new Set<string>()
   const afterCommit = (sessionId: string, journal: AgentSessionJournal): void => {
-    input.deliveryOrder.reconcile(sessionId, journal.submissions())
+    input.deliveryOrder.reconcile(sessionId, journal)
     const work = hostStructuredAgentSessionCurrentWork({ store: deps.store, sessions }, sessionId)
     if (
       wakesQueued.has(sessionId) ||
       !work ||
       structuredAgentSessionCommandRunning(work) ||
-      !journal.submissions().some(isQueuedAgentJournalSubmission)
+      // A leftover alone wakes nothing: its retry would run on every commit.
+      !journal.submissions().some((submission) => work.handsOver(submission))
     ) {
       return
     }

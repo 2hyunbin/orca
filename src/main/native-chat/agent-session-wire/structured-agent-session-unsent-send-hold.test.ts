@@ -625,6 +625,32 @@ describe('what is not kept', () => {
     await eventually(() => expect(dispatchedTexts()).toEqual(['wakes the loop']))
     expect(await rig.submission(id)).toMatchObject({ dispatchState: 'rejected', ...HOST_RESTARTED })
   })
+
+  it("a keep that keeps failing still sends this process's own message; a later step keeps it", async () => {
+    const id = await acceptWhileStarting(sendRequest('never kept'))
+    const resolve = AgentSessionJournal.prototype.resolveDispatch
+    let failing = true
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    vi.spyOn(AgentSessionJournal.prototype, 'resolveDispatch').mockImplementation(function (
+      this: AgentSessionJournal,
+      ...args: Parameters<AgentSessionJournal['resolveDispatch']>
+    ) {
+      if (failing && args[0].clientMessageId === id) {
+        return Promise.reject(new Error('disk busy'))
+      }
+      return resolve.apply(this, args)
+    })
+    await quitRestart()
+    await rig.send('sent anyway').result
+    await eventually(() => expect(dispatchedTexts()).toEqual(['sent anyway']))
+    // Neither handed over nor rejected: still the earlier process's, waiting for a keep.
+    expect(await rig.submission(id)).toMatchObject({ dispatchState: 'pending' })
+    expect(await rig.drafts()).toEqual([])
+
+    failing = false
+    await rig.send('keeps it').result
+    await eventually(async () => expect(await rig.drafts()).toEqual([{ messageId: id, ...KEPT }]))
+  })
 })
 
 describe('/clear carries a kept card', () => {

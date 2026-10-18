@@ -105,7 +105,7 @@ export function structuredAgentSessionReplacedRuntimeEnded(
 }
 
 /** `StructuredAgentSessionCurrentWork.handsOver`, for a reader that needs no other answer. */
-function structuredAgentSessionHandsOver(
+export function structuredAgentSessionHandsOver(
   journal: Pick<AgentSessionJournal, 'wroteBeforeOpen'>,
   submission: Pick<
     AgentJournalSubmission,
@@ -217,7 +217,7 @@ export class StructuredAgentSessionCurrentWork {
 
   /** Whether this process may hand this send over: accepted here, never by an earlier host process.
    *  Derived from where the row sits, so nothing has to be written first; keeping an earlier
-   *  process's send as a card is the reconciliation pass's bookkeeping (`holdUnsentSends`). */
+   *  process's send as a card is bookkeeping (`holdUnsentSends`) whose failure gates nothing. */
   handsOver(submission: AgentJournalSubmission): boolean {
     return structuredAgentSessionHandsOver(this.journal, submission)
   }

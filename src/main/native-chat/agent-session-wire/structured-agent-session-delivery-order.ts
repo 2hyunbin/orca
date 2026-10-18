@@ -1,5 +1,5 @@
-import type { AgentJournalSubmission } from '../../../shared/agent-session-journal-types'
-import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
+import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
+import { structuredAgentSessionHandsOver } from './structured-agent-session-current-work'
 
 export type StructuredAgentSessionDeliveryPlace = {
   before: Promise<void>
@@ -16,8 +16,14 @@ type Lane = {
 export class StructuredAgentSessionDeliveryOrder {
   private readonly lanes = new Map<string, Lane>()
 
-  reconcile(sessionId: string, submissions: readonly AgentJournalSubmission[]): void {
-    const queued = submissions.filter(isQueuedAgentJournalSubmission)
+  /** Orders only the sends this process may hand over: a leftover never holds a later send. */
+  reconcile(
+    sessionId: string,
+    journal: Pick<AgentSessionJournal, 'submissions' | 'wroteBeforeOpen'> | undefined
+  ): void {
+    const queued = journal
+      ? journal.submissions().filter((entry) => structuredAgentSessionHandsOver(journal, entry))
+      : []
     const lane = this.lanes.get(sessionId)
     const ids = new Set(queued.map((submission) => submission.clientMessageId))
     for (const [id, place] of lane?.sends ?? []) {

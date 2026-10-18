@@ -9,8 +9,8 @@
 // that arrives while a start holds the queue withdraw the queued messages before the handover that
 // would have written them. Stop and the conversation's close are the only other writers of a
 // queued message: a child's exit only ends the child, and this loop reads why. A message an
-// earlier host process left queued is never handed over: the open, or this loop's first step,
-// settles it first (`journal-unsent-send-hold.ts`).
+// earlier host process left queued is never handed over (`handsOver`); the open, or this loop's
+// first step, keeps it as a card (`journal-unsent-send-hold.ts`).
 
 import type { StructuredAgentSessionDeliveryOrder } from './structured-agent-session-delivery-order'
 import type { AgentJournalSubmission } from '../../../shared/agent-session-journal-types'
@@ -127,10 +127,7 @@ export class StructuredAgentSessionDeliveryLoop {
     if (this.disposed) {
       return Promise.resolve()
     }
-    this.deps.deliveryOrder.reconcile(
-      sessionId,
-      this.deps.sessions.get(sessionId)?.journal.submissions() ?? []
-    )
+    this.deps.deliveryOrder.reconcile(sessionId, this.deps.sessions.get(sessionId)?.journal)
     if (this.running.has(sessionId)) {
       return this.runs.get(sessionId) ?? Promise.resolve()
     }
@@ -203,9 +200,8 @@ export class StructuredAgentSessionDeliveryLoop {
     if (!session || this.disposed) {
       return this.stop(sessionId)
     }
-    // The open already did, unless its write failed: a row an earlier handle wrote is never handed
-    // over, whether it outlived a quit or a crash. A failure here throws, so none is: this run then
-    // fails, which rejects every queued send, this process's own too.
+    // The open already did, unless its write failed. Bookkeeping only: a row an earlier handle
+    // wrote is never picked below, so a failure here still hands over this process's own sends.
     await holdRestartedStructuredAgentSessionSends(
       this.deps.logger,
       sessionId,
