@@ -24,7 +24,7 @@ type PurgeStore = {
   removeWorkspaceSessionStateForWorktree(worktreeId: string, hostId?: ExecutionHostId | null): void
 }
 
-const isPairedHost = (hostId: string | null | undefined): boolean =>
+const ownedByPairedHost = (hostId: string | null | undefined): boolean =>
   parseExecutionHostId(hostId)?.kind === 'runtime'
 
 /** The window's hydration rule: floating and every folder key always stay (the window adds them). */
@@ -50,7 +50,7 @@ function dropInvalidWorkspaces(
 ): void {
   for (const hostId of store.getWorkspaceSessionHostIds()) {
     // A paired host's catalog lives on that host; not seeing it here proves nothing.
-    if (isPairedHost(hostId)) {
+    if (ownedByPairedHost(hostId)) {
       continue
     }
     for (const key of invalidWorkspaceKeys(store.getWorkspaceSession(hostId), catalog, inScope)) {
@@ -71,12 +71,12 @@ export function dropInvalidWorkspaceLayoutsAtLoad(store: PurgeStore, state: Pers
     }
   }
   for (const [worktreeId, meta] of Object.entries(state.worktreeMeta)) {
-    if (isPairedHost(meta.hostId)) {
+    if (ownedByPairedHost(meta.hostId)) {
       repoIds.add(getRepoIdFromWorktreeId(worktreeId))
     }
   }
   for (const [hostId, session] of Object.entries(state.workspaceSessionsByHostId ?? {})) {
-    if (session && isPairedHost(hostId)) {
+    if (session && ownedByPairedHost(hostId)) {
       for (const key of collectPersistedWorktreeIdsForSessionHydration(session)) {
         repoIds.add(getRepoIdFromWorktreeId(key))
       }
