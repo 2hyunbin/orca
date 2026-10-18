@@ -36,7 +36,8 @@ const WATCHED_SERVICES = new Set([
   'kTCCServiceSystemPolicyDownloadsFolder'
 ])
 
-const LOG_PREDICATE = 'subsystem == "com.apple.TCC" AND eventMessage CONTAINS "AUTHREQ_PROMPTING"'
+export const LOG_PREDICATE =
+  'subsystem == "com.apple.TCC" AND eventMessage CONTAINS "AUTHREQ_PROMPTING"'
 
 export type TccPromptEvent = {
   /** TCC service the dialog was raised for, e.g. `kTCCServiceSystemPolicyAppData`. */
