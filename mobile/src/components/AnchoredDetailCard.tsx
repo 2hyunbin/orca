@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Animated,
   Easing,
@@ -43,7 +43,7 @@ export function AnchoredDetailCard({
   // Unknown counts as reduced, so the card never slides before the setting is read.
   const slide = useReducedMotionEnabled() === false
   const window = useWindowDimensions()
-  const progress = useRef(new Animated.Value(0)).current
+  const [progress] = useState(() => new Animated.Value(0))
   useEffect(() => {
     const animation = Animated.timing(progress, {
       toValue: open ? 1 : 0,

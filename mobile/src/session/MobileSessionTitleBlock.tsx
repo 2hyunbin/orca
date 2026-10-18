@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, type RefObject } from 'react'
-import { Pressable, Text, View } from 'react-native'
+import { Pressable, Text, type View } from 'react-native'
 import { AnchoredDetailCard, type DetailCardAnchor } from '../components/AnchoredDetailCard'
 import { StatusDot } from '../components/StatusDot'
 import type { ConnectionState } from '../transport/types'

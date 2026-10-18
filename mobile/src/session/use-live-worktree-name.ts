@@ -43,8 +43,8 @@ export function useLiveWorktreeName({
   const [worktreeName, setWorktreeName] = useState<{
     worktreeId: string
     name: string
-    path: string | null
-  }>(() => ({ worktreeId, name: routeNameHint, path: null }))
+    path?: string | null
+  }>(() => ({ worktreeId, name: routeNameHint }))
   // Why: keyed by id so a verdict about the previous route can never survive into the next one.
   const [resolved, setResolved] = useState<{
     worktreeId: string
@@ -59,7 +59,7 @@ export function useLiveWorktreeName({
     setWorktreeName((current) =>
       current.worktreeId === worktreeId && current.name === routeNameHint
         ? current
-        : { worktreeId, name: routeNameHint, path: null }
+        : { worktreeId, name: routeNameHint }
     )
   }, [routeNameHint, worktreeId])
 
@@ -211,7 +211,7 @@ export function useLiveWorktreeName({
   }
   return {
     name: worktreeName.worktreeId === worktreeId ? worktreeName.name : routeNameHint,
-    path: worktreeName.worktreeId === worktreeId ? worktreeName.path : null,
+    path: worktreeName.worktreeId === worktreeId ? (worktreeName.path ?? null) : null,
     resolution: resolved.worktreeId === worktreeId ? resolved.resolution : 'unknown'
   }
 }
