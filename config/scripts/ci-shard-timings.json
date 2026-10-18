@@ -5991,7 +5991,6 @@
       "src/main/updater.quit-and-install.test.ts": 4994,
       "src/main/updater.startup-scheduling.test.ts": 3378,
       "src/main/updater/mac-browser-sidecar-recovery.test.ts": 81,
-      "src/main/updater/rollout-flags.test.ts": 285,
       "src/main/updater/serve-supervisor-install-park.test.ts": 151,
       "src/main/updater/shipit-leftover-recovery.test.ts": 103,
       "src/main/usage-worktree-canonicalizer.test.ts": 32,
