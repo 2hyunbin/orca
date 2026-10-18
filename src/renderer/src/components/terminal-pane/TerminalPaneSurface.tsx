@@ -8,7 +8,7 @@ import { WORKSPACE_FILE_PATH_MIME, WORKSPACE_FILE_PATHS_MIME } from '@/lib/works
 import CloseTerminalDialog from './CloseTerminalDialog'
 import TerminalContextMenu from './TerminalContextMenu'
 import TerminalPaneHeaderOverlay from './TerminalPaneHeaderOverlay'
-import { isPaneOwnerUnverifiedError, TerminalErrorToast } from './TerminalErrorToast'
+import { isPaneOwnerRecoveryError, TerminalErrorToast } from './TerminalErrorToast'
 import { AgentLaunchPaneNoticePortal } from './AgentLaunchPaneNotice'
 import { requestTerminalPaneRecovery } from './terminal-pane-recovery'
 import { TerminalSessionStateSaveFailureDialog } from './TerminalSessionStateSaveFailureDialog'
@@ -202,7 +202,7 @@ export function TerminalPaneSurface({
               onDismiss={dismissTerminalError}
               onRestartDaemon={() => daemonActions.setPending('restart')}
               onRetry={
-                isPaneOwnerUnverifiedError(visibleTerminalError)
+                isPaneOwnerRecoveryError(visibleTerminalError)
                   ? () => {
                       const ptyId = activePane
                         ? (paneTransportsRef.current.get(activePane.id)?.getPtyId() ?? null)

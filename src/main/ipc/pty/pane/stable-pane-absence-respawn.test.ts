@@ -236,4 +236,105 @@ describe('stable pane adoption after the owning host reports the PTY absent', ()
       expect(JSON.stringify(read())).toBe(before)
     })
   })
+
+  // A writer that took the pane mid-attach owns it; the attach yields to it instead of erroring.
+  describe('when another connection takes the pane during the attach', () => {
+    const WINNER: StablePaneOwner = { ...OWNER, ptyId: 'ssh:conn-1@@pty-9' }
+
+    function raceAttach(owners: (StablePaneOwner | null)[], replies: unknown[]) {
+      let call = 0
+      const spawn = vi.fn()
+      for (const reply of replies) {
+        if (reply instanceof Error) {
+          spawn.mockRejectedValueOnce(reply)
+        } else {
+          spawn.mockResolvedValueOnce(reply)
+        }
+      }
+      const onOwnerReresolved = vi.fn()
+      const run = () =>
+        spawnForStablePane({
+          runtime: undefined,
+          provider: { spawn } as unknown as IPtyProvider,
+          spawnOptions: { cols: 80, rows: 24, command: 'codex resume thread' },
+          owner: OWNER,
+          connectionId: 'conn-1',
+          resolveOwner: () => owners[Math.min(call++, owners.length - 1)] ?? null,
+          onOwnerReresolved
+        })
+      return { run, spawn, onOwnerReresolved }
+    }
+
+    it('attaches the winner without launching anything', async () => {
+      const { run, spawn, onOwnerReresolved } = raceAttach(
+        [WINNER],
+        [new SessionNotFoundError(OWNER.ptyId), { id: WINNER.ptyId, isReattach: true }]
+      )
+
+      const result = await run()
+
+      expect(result.owner).toBe(WINNER)
+      expect(onOwnerReresolved).toHaveBeenCalledExactlyOnceWith(WINNER)
+      expect(spawn).toHaveBeenCalledTimes(2)
+      expect(spawn.mock.calls[1]?.[0]).toMatchObject({
+        sessionId: WINNER.ptyId,
+        attachOnly: true,
+        command: undefined
+      })
+    })
+
+    it('re-proves absence for the same id when only its saved binding changed', async () => {
+      const drifted: StablePaneOwner = { ...OWNER, persistedIncarnationId: 'inc-2' }
+      const { run, spawn } = raceAttach(
+        [drifted, drifted, null],
+        [
+          new SessionNotFoundError(OWNER.ptyId),
+          new SessionNotFoundError(OWNER.ptyId),
+          { id: 'ssh:conn-1@@pty-3', isReattach: false }
+        ]
+      )
+
+      const result = await run()
+
+      expect(spawn).toHaveBeenCalledTimes(3)
+      expect(spawn.mock.calls[1]?.[0]).toMatchObject({ sessionId: OWNER.ptyId, attachOnly: true })
+      expect(spawn.mock.calls[2]?.[0]).not.toHaveProperty('sessionId')
+      expect(result.owner).toBeNull()
+    })
+
+    it('reports a second loss instead of chasing the pane', async () => {
+      const { run, spawn } = raceAttach(
+        [WINNER, { ...OWNER, ptyId: 'ssh:conn-1@@pty-10' }],
+        [new SessionNotFoundError(OWNER.ptyId), new SessionNotFoundError(WINNER.ptyId)]
+      )
+
+      await expect(run()).rejects.toThrow('terminal_pane_owner_changed')
+      expect(spawn).toHaveBeenCalledTimes(2)
+    })
+
+    it('keeps a binding a newer process took under the same id', async () => {
+      const { store, read } = sessionStore([LEAF])
+      store.setWorkspaceSession({
+        ...read(),
+        terminalPtyIncarnationsByPaneKey: { [`${OWNER.tabId}:${LEAF}`]: 'inc-new' }
+      })
+      const before = JSON.stringify(read())
+      const spawn = vi.fn().mockRejectedValueOnce(new SessionNotFoundError(OWNER.ptyId))
+
+      await expect(
+        spawnForStablePane({
+          runtime: undefined,
+          store,
+          worktreeId: WORKTREE,
+          provider: { spawn } as unknown as IPtyProvider,
+          spawnOptions: { cols: 80, rows: 24 },
+          owner: { ...OWNER, persistedIncarnationId: 'inc-old' },
+          connectionId: 'conn-1',
+          resolveOwner: () => null
+        })
+      ).rejects.toThrow('terminal_pane_owner_changed')
+      expect(spawn).toHaveBeenCalledTimes(1)
+      expect(JSON.stringify(read())).toBe(before)
+    })
+  })
 })

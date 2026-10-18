@@ -56,7 +56,7 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
           preserveExisting: !ctx.isNewDaemonSession || Boolean(stablePaneOwnerCandidate)
         }) ?? false
     }
-    const sequenceBeforeProviderSpawn = expectedPtyId
+    let sequenceBeforeProviderSpawn = expectedPtyId
       ? (ctx.deps.runtime?.getPtyOutputSequence?.(expectedPtyId) ?? 0)
       : 0
     const assertClientStillConnected = (): void => {
@@ -151,7 +151,10 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
                 args.worktreeId,
                 args.connectionId
               ),
-            onFreshSpawn: ctx.reportPtySpawnCommitted
+            onFreshSpawn: ctx.reportPtySpawnCommitted,
+            onOwnerReresolved: (owner) => {
+              sequenceBeforeProviderSpawn = ctx.deps.runtime?.getPtyOutputSequence?.(owner.ptyId) ?? 0
+            }
           })
       ctx.result = stablePaneSpawn.result
       ctx.stablePaneOwner = stablePaneSpawn.owner

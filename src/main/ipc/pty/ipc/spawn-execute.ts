@@ -40,7 +40,7 @@ export async function executePtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<void> {
           preserveExisting: !ctx.isMintedSessionId || Boolean(stablePaneOwnerCandidate)
         }) ?? false
     }
-    const sequenceBeforeProviderSpawn = expectedPtyId
+    let sequenceBeforeProviderSpawn = expectedPtyId
       ? (ctx.deps.runtime?.getPtyOutputSequence?.(expectedPtyId) ?? 0)
       : 0
     if (!ctx.preAdoptedStablePane && ctx.paneAgentLaunch) {
@@ -56,7 +56,10 @@ export async function executePtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<void> {
           owner: stablePaneOwnerCandidate,
           worktreeId: args.worktreeId,
           connectionId: args.connectionId,
-          resolveOwner
+          resolveOwner,
+          onOwnerReresolved: (owner) => {
+            sequenceBeforeProviderSpawn = ctx.deps.runtime?.getPtyOutputSequence?.(owner.ptyId) ?? 0
+          }
         })
     ctx.result = stablePaneSpawn.result
     ctx.stablePaneOwner = stablePaneSpawn.owner

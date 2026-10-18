@@ -466,6 +466,33 @@ export function registerPtyConnectionSessionLivenessTests(): void {
       expect(window.api.pty.clearPendingPaneSerializer).toHaveBeenCalledWith(expect.any(String), 1)
     })
 
+    // A lost race means another connection owns the pane: ask once more, never relaunch the agent.
+    it('asks the host once more when another connection took the pane, then keeps it', async () => {
+      const { connectPanePty } = await import('./pty-connection')
+      const transport = createMockTransport()
+      transport.connect.mockImplementation(async (opts: { callbacks?: ConnectCallbacks }) => {
+        opts.callbacks?.onError?.('terminal_pane_owner_changed')
+        return undefined
+      })
+      transportFactoryQueue.push(transport)
+      const deps = seedUnverifiableRestoredPane()
+
+      connectPanePty(createPane(2) as never, createManager(2) as never, deps as never)
+      await flushAsyncTicks()
+
+      expect(transport.connect).toHaveBeenCalledTimes(2)
+      expect(transport.connect.mock.calls[1]?.[0]).toMatchObject({ sessionId: 'unverifiable-pty' })
+      expect(deps.onPtyErrorRef.current).toHaveBeenCalledExactlyOnceWith(
+        2,
+        'terminal_pane_owner_changed'
+      )
+      expect(deps.clearExitedPanePtyLayoutBinding).not.toHaveBeenCalled()
+      expect(deps.clearTabPtyId).not.toHaveBeenCalled()
+      expect(mockStoreState.terminalLayoutsByTabId?.['tab-1']?.ptyIdsByLeafId).toEqual({
+        [LEAF_2]: 'unverifiable-pty'
+      })
+    })
+
     describe('terminal input liveness IPC gating (perf)', () => {
       // Why (perf regression guard): listSessions() is a renderer→main→daemon round-trip; terminal input must never trigger it.
       async function connectActivePaneWithInput(): Promise<{

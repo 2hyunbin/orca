@@ -2,7 +2,7 @@ import { toSshExecutionHostId } from '../../../../shared/execution-host'
 import { UNVERIFIED_PROCESS_EXIT_CODE } from '../../../../shared/terminal-exit-cause'
 import type { Store } from '../../../persistence'
 import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
-import { ptyOwnership } from '../provider/ownership-state'
+import { ptyIncarnationById, ptyOwnership } from '../provider/ownership-state'
 import { clearProviderPtyState } from '../provider/state-cleanup'
 import { retireReplacedPaneBinding } from './pane-owner-replacement'
 
@@ -18,9 +18,21 @@ export async function releaseAbsentPaneOwner(
     worktreeId?: string
     connectionId?: string | null
   },
-  owner: { tabId: string; leafId: string; ptyId: string; incarnationId?: string }
+  owner: {
+    tabId: string
+    leafId: string
+    ptyId: string
+    incarnationId?: string
+    runtimeIncarnationId?: string
+    persistedIncarnationId?: string
+  }
 ): Promise<boolean> {
   const { runtime, store, worktreeId, connectionId } = context
+  // A newer incarnation of this id committed after the host's answer; it is not the absent process.
+  const liveIncarnationId = ptyIncarnationById.get(owner.ptyId)
+  if (liveIncarnationId !== undefined && liveIncarnationId !== owner.runtimeIncarnationId) {
+    return false
+  }
   const settleStop = runtime?.intentionalPtyStops?.mark(
     owner.ptyId,
     'replaced',
@@ -41,6 +53,7 @@ export async function releaseAbsentPaneOwner(
   }
   return retireReplacedPaneBinding(store, {
     ptyId: owner.ptyId,
+    ...(owner.persistedIncarnationId ? { incarnationId: owner.persistedIncarnationId } : {}),
     pane: {
       worktreeId,
       tabId: owner.tabId,
