@@ -246,10 +246,7 @@ export function useAiVaultSessionRefresh(
         ) {
           setTerminalScopeKey(scanKey)
           if (!isAiVaultScanCancellation(err)) {
-            setFailure({
-              scopeKey: scanKey,
-              cause: err instanceof Error ? err.message : String(err)
-            })
+            setFailure({ scopeKey: scanKey, cause: err instanceof Error ? err.message : String(err) })
           }
         }
       } finally {
