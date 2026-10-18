@@ -4202,7 +4202,14 @@
             "runtime_unavailable_explanation": "Es posible que el host remoto todavía esté ejecutándose; sólo la conexión en tiempo de ejecución de Orca no está disponible.",
             "contact_note": "Es posible que el host todavía esté ejecutándose; sólo la conexión Orca no está disponible.",
             "last_connected": "Última conexión {{value0}}",
-            "reconnect_attempt": "Intento {{value0}}"
+            "reconnect_attempt": "Intento {{value0}}",
+            "access_revoked": "Access revoked",
+            "access_revoked_summary": "This server revoked access for this computer",
+            "access_revoked_explanation": "Re-pair with a new pairing link from the server to reconnect.",
+            "update_required": "Update required",
+            "update_required_summary": "Orca versions are not compatible",
+            "update_required_explanation": "Update Orca on this computer or on the server, then connect again.",
+            "repair": "Re-pair…"
           },
           "provider": {
             "extra": {

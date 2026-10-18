@@ -4182,7 +4182,14 @@
             "runtime_unavailable_explanation": "远程主机可能仍在运行；仅 Orca 运行时连接不可用。",
             "contact_note": "主机可能仍在运行；仅 Orca 连接不可用。",
             "last_connected": "最后连接 {{value0}}",
-            "reconnect_attempt": "尝试{{value0}}"
+            "reconnect_attempt": "尝试{{value0}}",
+            "access_revoked": "Access revoked",
+            "access_revoked_summary": "This server revoked access for this computer",
+            "access_revoked_explanation": "Re-pair with a new pairing link from the server to reconnect.",
+            "update_required": "Update required",
+            "update_required_summary": "Orca versions are not compatible",
+            "update_required_explanation": "Update Orca on this computer or on the server, then connect again.",
+            "repair": "Re-pair…"
           },
           "NativeChatResumeStatusSegment": {
             "labelOne": "恢复 1 次聊天",

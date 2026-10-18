@@ -4182,7 +4182,14 @@
             "runtime_unavailable_explanation": "원격 호스트가 아직 실행 중일 수 있습니다. Orca 런타임 연결만 사용할 수 없습니다.",
             "contact_note": "호스트가 아직 실행 중일 수 있습니다. Orca 연결만 사용할 수 없습니다.",
             "last_connected": "마지막 연결 {{value0}}",
-            "reconnect_attempt": "{{value0}} 시도"
+            "reconnect_attempt": "{{value0}} 시도",
+            "access_revoked": "Access revoked",
+            "access_revoked_summary": "This server revoked access for this computer",
+            "access_revoked_explanation": "Re-pair with a new pairing link from the server to reconnect.",
+            "update_required": "Update required",
+            "update_required_summary": "Orca versions are not compatible",
+            "update_required_explanation": "Update Orca on this computer or on the server, then connect again.",
+            "repair": "Re-pair…"
           },
           "NativeChatResumeStatusSegment": {
             "labelOne": "재개할 채팅 1개",
