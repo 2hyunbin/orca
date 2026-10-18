@@ -1,5 +1,6 @@
 import {
   ALL_EXECUTION_HOSTS_SCOPE,
+  getSshTargetIdForExecutionHost,
   getWorktreeExecutionHostId,
   normalizeExecutionHostOrder,
   parseExecutionHostId,
@@ -12,7 +13,10 @@ import { getLogicalRepoOrderRankById } from '../project-section-order'
 import type { ProjectGroupingModel } from '../project-section-grouping'
 import type { Repo } from '../repo-types'
 import type { ProjectOrderBy } from '../ui-chrome-types'
-import { isWorkspaceOwnedBySomeoneElse } from '../workspace-creator-visibility'
+import {
+  filterFolderWorkspacesFromOtherDevices,
+  isWorkspaceOwnedBySomeoneElse
+} from '../workspace-creator-visibility'
 import type { WorkspaceRowFilters } from '../workspace-view/workspace-row-filters'
 import { getWorktreeHostIdentity } from '../worktree/host-qualified-identity'
 import { folderWorkspaceToWorktree } from '../folder-workspace-worktree'
@@ -90,25 +94,33 @@ function buildFeedHostOptions(
   repos: readonly Repo[],
   view: SidebarFeedView
 ): HostSectionOption[] {
-  const sshHosts = Object.entries(domains.desktop?.sshHosts ?? {})
-  const servers = [...domains.pairedServerHosts].flatMap(([hostId, { host }]) =>
-    host ? [{ hostId, host }] : []
+  const servers = [...domains.pairedServerHosts].flatMap(([hostId, { host }]) => {
+    const parsed = parseExecutionHostId(hostId)
+    return parsed?.kind === 'runtime' && host ? [{ parsed, host }] : []
+  })
+  const serverLabelByHostId = new Map<ExecutionHostId, string>(
+    servers.map(({ parsed, host }) => [parsed.id, host.label])
   )
-  const serverByHostId = new Map(servers.map((server) => [server.hostId, server.host]))
+  const focused = parseExecutionHostId(view.defaultHostId)
   return buildExecutionHostRegistry({
     repos,
-    settings: null,
+    settings: {
+      activeRuntimeEnvironmentId: focused?.kind === 'runtime' ? focused.environmentId : null
+    },
     sshTargetLabels: new Map(
-      sshHosts.map(([hostId, host]) => [hostId.slice('ssh:'.length), host.label])
+      Object.entries(domains.desktop?.sshHosts ?? {}).flatMap(([hostId, host]) => {
+        const targetId = getSshTargetIdForExecutionHost(hostId)
+        return targetId ? [[targetId, host.label] as const] : []
+      })
     ),
-    runtimeEnvironments: servers.map(({ hostId, host }) => ({
-      id: decodeURIComponent(hostId.slice('runtime:'.length)),
+    runtimeEnvironments: servers.map(({ parsed, host }) => ({
+      id: parsed.environmentId,
       name: host.label
     })),
     hostLabelOverrides: view.hostLabelOverrides
   }).map((host) => {
-    const server = serverByHostId.get(host.id)
-    return server ? { ...host, label: server.label } : host
+    const label = serverLabelByHostId.get(host.id)
+    return label ? { ...host, label } : host
   })
 }
 
@@ -132,7 +144,7 @@ export function buildSidebarFeedRows(
   const repoMap = new Map(repos.map((repo) => [repo.id, repo]))
   const worktreeMap = new Map<string, Worktree>()
   const ancestorById = new Map<string, Worktree>()
-  const worktreeCountByRepo = new Map<string, number>()
+  const worktreesByRepo: Record<string, Worktree[]> = {}
   for (const worktree of allWorktrees) {
     if (!worktreeMap.has(worktree.id)) {
       worktreeMap.set(worktree.id, worktree)
@@ -140,9 +152,14 @@ export function buildSidebarFeedRows(
     if (!worktree.isArchived) {
       ancestorById.set(worktree.id, worktree)
     }
-    worktreeCountByRepo.set(worktree.repoId, (worktreeCountByRepo.get(worktree.repoId) ?? 0) + 1)
+    const repoWorktrees = worktreesByRepo[worktree.repoId]
+    if (repoWorktrees) {
+      repoWorktrees.push(worktree)
+    } else {
+      worktreesByRepo[worktree.repoId] = [worktree]
+    }
   }
-  const lineageById = readFeedLineage(domains.workspaces.values())
+  const lineageById = readFeedLineage(workspaces)
   const retained = new Set(domains.retention?.retainedIds ?? [])
   const factsOf = (worktree: Worktree) => byIdentity.get(getWorktreeHostIdentity(worktree))?.facts
   const pairedDeviceIdsByEnvironment = new Map(
@@ -198,16 +215,18 @@ export function buildSidebarFeedRows(
         visibleHostIdSet.has(getWorktreeExecutionHostId({}, repo, defaultHostId))
       )
     : repos
-  const visibleFolderWorkspaces = filterFolderWorkspacesForVisibleHosts(
+  const hostVisibleFolderWorkspaces = filterFolderWorkspacesForVisibleHosts(
     folderWorkspaces,
     projectGroups,
     visibleHostIdSet,
     defaultHostId
-  ).filter(
-    (folder) =>
-      !view.filters.hideWorkspacesFromOtherDevices ||
-      !isWorkspaceOwnedBySomeoneElse(folder, pairedDeviceIdsByEnvironment)
   )
+  const visibleFolderWorkspaces = view.filters.hideWorkspacesFromOtherDevices
+    ? filterFolderWorkspacesFromOtherDevices(
+        hostVisibleFolderWorkspaces,
+        pairedDeviceIdsByEnvironment
+      )
+    : hostVisibleFolderWorkspaces
   const listed = new Set(workspaces.map((entry) => entry.worktree.id))
   const pendingCreations = [...domains.creations].flatMap(([creationId, creation]) =>
     creation.worktreeId !== undefined && listed.has(creation.worktreeId)
@@ -236,12 +255,7 @@ export function buildSidebarFeedRows(
     placeholderRepoIds: getEmptyProjectPlaceholderRepoIds({
       groupBy,
       repos: visibleRepos,
-      worktreesByRepo: Object.fromEntries(
-        repos.map((repo) => [
-          repo.id,
-          allWorktrees.filter((worktree) => worktree.repoId === repo.id)
-        ])
-      ),
+      worktreesByRepo,
       visibleWorktrees,
       filterRepoIds: view.filters.filterRepoIds
     }),

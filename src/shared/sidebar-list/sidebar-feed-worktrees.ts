@@ -20,45 +20,92 @@ export type SidebarFeedRowFacts = Partial<
   >
 >
 
-/** One feed workspace as the shared builder reads it, keyed by host-qualified id. */
+/** One feed workspace as the shared builder reads it, keyed by its identity. */
 export type SidebarFeedWorkspace = {
   identity: string
   worktree: Worktree
   facts: SidebarFeedRowFacts
   /** Set on a folder row: the builder lists folder workspaces apart from worktrees. */
   folderWorkspace: FolderWorkspace | null
+  lineage: WorkspaceRow['lineage']
 }
 
-function baseWorktree(fields: {
-  id: string
-  hostId: ExecutionHostId | undefined
-  repoId: string
-  path: string
-  branch: string
-  displayName: string
-  isMainWorktree: boolean
-  isPinned: boolean
-  isArchived: boolean
-}): Worktree {
-  const host = parseExecutionHostId(fields.hostId)
-  return {
-    ...fields,
+/** The fields both a host's own rows and a paired server's rows carry for the list. */
+type FeedRowFields = Pick<
+  WorkspaceRow,
+  'repoId' | 'kind' | 'path' | 'branch' | 'displayName' | 'isArchived' | 'isPinned'
+> &
+  Partial<
+    Pick<
+      WorkspaceRow,
+      | 'isMainWorktree'
+      | 'instanceId'
+      | 'lineage'
+      | 'workspaceStatus'
+      | 'sortOrder'
+      | 'manualOrder'
+      | 'createdAt'
+      | 'recentAt'
+      | 'smartTier'
+      | 'smartAt'
+    >
+  > &
+  SidebarFeedRowFacts
+
+function readFeedRow(
+  identity: string,
+  id: string,
+  ownerHostId: ExecutionHostId,
+  row: FeedRowFields,
+  extra: Partial<Worktree> = {}
+): SidebarFeedWorkspace {
+  // The identity's host, not the owner: a local row whose metadata names no host keeps `|id`.
+  const hostId = getExecutionHostIdFromWorktreeHostIdentity(identity)
+  const owner = parseExecutionHostId(ownerHostId)
+  const { defaultBranch, automationCreated, cliCreated, detachedHead, creatorProvenance } = row
+  const worktree: Worktree = {
+    id,
+    ...(hostId ? { hostId } : {}),
+    ...(owner?.kind === 'runtime' ? { runtimeOwnerEnvironmentId: owner.environmentId } : {}),
+    ...(row.instanceId !== undefined ? { instanceId: row.instanceId } : {}),
+    repoId: row.repoId,
+    path: row.path,
+    branch: row.branch,
+    head: '',
+    isBare: false,
+    displayName: row.displayName,
     comment: '',
     linkedIssue: null,
     linkedPR: null,
     linkedLinearIssue: null,
+    isMainWorktree: row.isMainWorktree ?? false,
+    isArchived: row.isArchived,
+    isPinned: row.isPinned,
     isUnread: false,
-    sortOrder: 0,
-    lastActivityAt: 0,
-    head: '',
-    isBare: false,
-    ...(host?.kind === 'runtime' ? { runtimeOwnerEnvironmentId: host.environmentId } : {})
+    workspaceStatus: row.workspaceStatus,
+    sortOrder: row.sortOrder ?? 0,
+    ...(row.manualOrder !== undefined ? { manualOrder: row.manualOrder } : {}),
+    ...(row.createdAt !== undefined ? { createdAt: row.createdAt } : {}),
+    ...(creatorProvenance ? { creatorProvenance } : {}),
+    lastActivityAt: row.recentAt ?? 0,
+    ...(row.smartTier !== undefined ? { smartTier: row.smartTier, smartAt: row.smartAt } : {}),
+    ...extra
+  }
+  return {
+    identity,
+    worktree,
+    facts: { defaultBranch, automationCreated, cliCreated, detachedHead, creatorProvenance },
+    folderWorkspace: row.kind === 'folder' ? folderWorkspaceOf(worktree, ownerHostId) : null,
+    lineage: row.lineage ?? null
   }
 }
 
-function folderWorkspaceOf(row: WorkspaceRow, worktree: Worktree): FolderWorkspace | null {
-  const id = parseWorkspaceKey(row.id)
-  const projectGroupId = projectGroupIdFromRepoId(row.repoId)
+function folderWorkspaceOf(
+  worktree: Worktree,
+  ownerHostId: ExecutionHostId
+): FolderWorkspace | null {
+  const id = parseWorkspaceKey(worktree.id)
+  const projectGroupId = projectGroupIdFromRepoId(worktree.repoId)
   if (id?.type !== 'folder' || !projectGroupId) {
     return null
   }
@@ -67,11 +114,11 @@ function folderWorkspaceOf(row: WorkspaceRow, worktree: Worktree): FolderWorkspa
     projectGroupId,
     name: worktree.displayName,
     folderPath: worktree.path,
-    executionHostId: parseExecutionHostId(row.hostId)?.id ?? null,
-    connectionId: getSshTargetIdForExecutionHost(row.hostId),
+    executionHostId: ownerHostId,
+    connectionId: getSshTargetIdForExecutionHost(ownerHostId),
     ...(worktree.creatorProvenance ? { creatorProvenance: worktree.creatorProvenance } : {}),
     linkedTask: null,
-    linkedItems: row.linkedItems,
+    ...(worktree.linkedItems ? { linkedItems: worktree.linkedItems } : {}),
     comment: worktree.comment,
     isArchived: worktree.isArchived,
     isUnread: worktree.isUnread,
@@ -93,79 +140,40 @@ export function readFeedWorkspaceRow(
   identity: string,
   row: WorkspaceRow
 ): SidebarFeedWorkspace | null {
-  if (!parseExecutionHostId(row.hostId)) {
-    return null
-  }
-  // The identity's host, not the owner: a row whose metadata names no host keeps its `|id` key.
-  const hostId = getExecutionHostIdFromWorktreeHostIdentity(identity)
-  const worktree: Worktree = {
-    ...baseWorktree({ ...row, hostId }),
-    ...(row.instanceId !== undefined ? { instanceId: row.instanceId } : {}),
-    comment: row.comment,
-    linkedIssue: row.linkedIssue,
-    linkedPR: row.linkedPR,
-    linkedLinearIssue: row.linkedLinearIssue,
-    linkedGitLabMR: row.linkedGitLabMR,
-    linkedGitLabIssue: row.linkedGitLabIssue,
-    linkedItems: row.linkedItems,
-    isUnread: row.isUnread,
-    workspaceStatus: row.workspaceStatus,
-    sortOrder: row.sortOrder ?? 0,
-    ...(row.manualOrder !== undefined ? { manualOrder: row.manualOrder } : {}),
-    ...(row.createdAt !== undefined ? { createdAt: row.createdAt } : {}),
-    ...(row.creatorProvenance ? { creatorProvenance: row.creatorProvenance } : {}),
-    lastActivityAt: row.recentAt ?? 0,
-    ...(row.smartTier !== undefined ? { smartTier: row.smartTier, smartAt: row.smartAt } : {})
-  }
-  const { defaultBranch, automationCreated, cliCreated, detachedHead, creatorProvenance } = row
-  return {
-    identity,
-    worktree,
-    facts: { defaultBranch, automationCreated, cliCreated, detachedHead, creatorProvenance },
-    folderWorkspace: row.kind === 'folder' ? folderWorkspaceOf(row, worktree) : null
-  }
+  const owner = parseExecutionHostId(row.hostId)
+  return owner
+    ? readFeedRow(identity, row.id, owner.id, row, {
+        comment: row.comment,
+        linkedIssue: row.linkedIssue,
+        linkedPR: row.linkedPR,
+        linkedLinearIssue: row.linkedLinearIssue,
+        linkedGitLabMR: row.linkedGitLabMR,
+        linkedGitLabIssue: row.linkedGitLabIssue,
+        linkedItems: row.linkedItems,
+        isUnread: row.isUnread
+      })
+    : null
 }
 
 /** A paired server's row, as the server's own list reports it; older desktops send fewer fields. */
 export function readFeedPairedServerRow(
   row: PairedServerWorkspaceRow
 ): SidebarFeedWorkspace | null {
-  const hostId = getExecutionHostIdFromWorktreeHostIdentity(row.key)
-  if (!hostId || parseExecutionHostId(hostId)?.kind !== 'runtime') {
-    return null
-  }
-  const worktree: Worktree = {
-    ...baseWorktree({
-      ...row,
-      id: row.worktreeId,
-      hostId,
-      isMainWorktree: row.isMainWorktree ?? false
-    }),
-    workspaceStatus: row.workspaceStatus,
-    sortOrder: row.sortOrder ?? 0,
-    ...(row.manualOrder !== undefined ? { manualOrder: row.manualOrder } : {}),
-    ...(row.createdAt !== undefined ? { createdAt: row.createdAt } : {}),
-    ...(row.creatorProvenance ? { creatorProvenance: row.creatorProvenance } : {}),
-    lastActivityAt: row.recentAt ?? 0,
-    ...(row.smartTier !== undefined ? { smartTier: row.smartTier, smartAt: row.smartAt } : {})
-  }
-  const { defaultBranch, automationCreated, cliCreated, detachedHead, creatorProvenance } = row
-  return {
-    identity: row.key,
-    worktree,
-    facts: { defaultBranch, automationCreated, cliCreated, detachedHead, creatorProvenance },
-    folderWorkspace: null
-  }
+  const owner = parseExecutionHostId(getExecutionHostIdFromWorktreeHostIdentity(row.key))
+  return owner?.kind === 'runtime' ? readFeedRow(row.key, row.worktreeId, owner.id, row) : null
 }
 
-/** The stored lineage edges on the rows, as the builder's lineage map (keyed by bare id, as the window's). */
-export function readFeedLineage(rows: Iterable<WorkspaceRow>): Record<string, WorktreeLineage> {
+/** The rows' stored lineage edges as the builder's lineage map, keyed by bare id as the window's. */
+export function readFeedLineage(
+  workspaces: readonly SidebarFeedWorkspace[]
+): Record<string, WorktreeLineage> {
   const lineageById: Record<string, WorktreeLineage> = {}
-  for (const row of rows) {
-    if (row.lineage && !(row.id in lineageById)) {
-      lineageById[row.id] = {
-        worktreeId: row.id,
-        ...row.lineage,
+  for (const { worktree, lineage } of workspaces) {
+    if (lineage && !(worktree.id in lineageById)) {
+      // The builder validates only the edge; provenance stays the host's.
+      lineageById[worktree.id] = {
+        worktreeId: worktree.id,
+        ...lineage,
         origin: 'manual',
         capture: { source: 'manual-action', confidence: 'explicit' },
         createdAt: 0

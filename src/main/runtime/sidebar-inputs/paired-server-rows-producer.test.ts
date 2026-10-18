@@ -156,7 +156,9 @@ describe('PairedServerRowsProducer', () => {
           displayName: 'repo::/a',
           isArchived: false,
           isPinned: false,
-          isMainWorktree: false
+          isMainWorktree: false,
+          lineage: null,
+          workspaceStatus: 'in-progress'
         }
       ]
     })
@@ -319,7 +321,11 @@ describe('PairedServerRowsProducer', () => {
           createdAt: 100,
           creatorProvenance: { kind: 'paired-device', deviceId: 'phone-1' },
           defaultBranch: true,
-          cliCreated: true
+          cliCreated: true,
+          worktreeInstanceId: 'i-a',
+          parentWorktreeId: 'repo::/p',
+          lineageWorktreeInstanceId: 'i-a',
+          parentWorktreeInstanceId: 'i-p'
         }),
         row('repo::/b', { smartTier: 'a-tier-from-later', sortOrder: 'x' })
       ])
@@ -344,9 +350,20 @@ describe('PairedServerRowsProducer', () => {
       createdAt: 100,
       creatorProvenance: { kind: 'paired-device', deviceId: 'phone-1' },
       defaultBranch: true,
-      cliCreated: true
+      cliCreated: true,
+      instanceId: 'i-a',
+      lineage: {
+        parentWorktreeId: 'repo::/p',
+        worktreeInstanceId: 'i-a',
+        parentWorktreeInstanceId: 'i-p'
+      }
     })
-    expect(unreadable).toMatchObject({ key: 'runtime:box|repo::/b', isMainWorktree: false })
+    expect(unreadable).toMatchObject({
+      key: 'runtime:box|repo::/b',
+      isMainWorktree: false,
+      lineage: null,
+      workspaceStatus: 'in-progress'
+    })
     expect(unreadable?.smartTier).toBeUndefined()
     expect(unreadable?.sortOrder).toBeUndefined()
   })
@@ -384,7 +401,9 @@ describe('PairedServerRowsProducer', () => {
         displayName: '',
         isArchived: false,
         isPinned: false,
-        isMainWorktree: false
+        isMainWorktree: false,
+        lineage: null,
+        workspaceStatus: 'in-progress'
       }
     ])
     expect(rowsOf(producer, 'runtime:two')?.rows.map((entry) => [entry.key, entry.kind])).toEqual([

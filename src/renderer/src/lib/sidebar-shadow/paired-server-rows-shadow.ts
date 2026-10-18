@@ -19,7 +19,7 @@ import { defineSidebarShadowDomain, type SidebarShadowMainRead } from './sidebar
 
 /** The paired-server rows the window fetched itself, keyed by host-qualified id, for these hosts. */
 export function readWindowPairedServerRows(
-  state: Pick<AppState, 'worktreesByRepo' | 'folderWorkspaces' | 'repos'>,
+  state: Pick<AppState, 'worktreesByRepo' | 'folderWorkspaces' | 'repos' | 'worktreeLineageById'>,
   hostIds: ReadonlySet<string>
 ): Map<string, PairedServerWorkspaceRow> {
   const rows = new Map<string, PairedServerWorkspaceRow>()
@@ -29,6 +29,7 @@ export function readWindowPairedServerRows(
       return
     }
     const key = getWorktreeHostIdentity(worktree)
+    const lineage = kind === 'git' ? state.worktreeLineageById[worktree.id] : undefined
     // The server's reply carries no automation name, so the row leaves it out too.
     const { automationName: _automationName, ...kindFacts } = getWorkspaceRowKindFacts(
       worktree,
@@ -45,6 +46,14 @@ export function readWindowPairedServerRows(
       isArchived: worktree.isArchived,
       isPinned: worktree.isPinned,
       isMainWorktree: worktree.isMainWorktree,
+      instanceId: worktree.instanceId,
+      lineage: lineage
+        ? {
+            parentWorktreeId: lineage.parentWorktreeId,
+            worktreeInstanceId: lineage.worktreeInstanceId,
+            parentWorktreeInstanceId: lineage.parentWorktreeInstanceId
+          }
+        : null,
       workspaceStatus: worktree.workspaceStatus ?? DEFAULT_WORKSPACE_STATUS_ID,
       sortOrder: worktree.sortOrder,
       manualOrder: worktree.manualOrder,

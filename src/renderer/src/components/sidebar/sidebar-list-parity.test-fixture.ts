@@ -20,7 +20,7 @@ import type {
   SidebarFeedView
 } from '../../../../shared/sidebar-list/sidebar-feed-rows'
 import type { SmartStampFields } from '../../../../shared/sidebar-list/sort-stamps'
-import { GOLDEN_NOW } from './sidebar-list-golden-factories.test-fixture'
+import { GOLDEN_NOW, folder, group, lineage } from './sidebar-list-golden-factories.test-fixture'
 import { sidebarWorkspaceRowFilters } from './sidebar-filter-actions'
 import {
   readWindowWorkspaceActivityFacts,
@@ -56,8 +56,9 @@ const STAMPS: Record<string, SmartStampFields & { lastActivityAt?: number }> = {
 }
 
 /**
- * What the parity suite adds to the golden store: stamps, a paired server the desktop knows, an
- * SSH connection, a saved host order and a creation this host runs.
+ * What the parity suite adds to the golden store: stamps, a paired server the desktop knows with
+ * a nested workspace and a folder workspace, an SSH connection, a saved host order and a creation
+ * this host runs.
  */
 export function parityWorldOverrides(base: Partial<AppState>): Partial<AppState> {
   const repoById = new Map((base.repos ?? []).map((repo) => [repo.id, repo]))
@@ -65,15 +66,40 @@ export function parityWorldOverrides(base: Partial<AppState>): Partial<AppState>
   for (const [repoId, worktrees] of Object.entries(base.worktreesByRepo ?? {})) {
     const repo = repoById.get(repoId)
     worktreesByRepo[repoId] = worktrees.map((worktree) => {
-      const stamps = STAMPS[worktree.branch.replace('refs/heads/', '')]
+      const branch = worktree.branch.replace('refs/heads/', '')
+      const stamps = {
+        ...STAMPS[branch],
+        ...(branch === 'Zeta'
+          ? { cliProvenance: { kind: 'created-by-cli' as const, createdAt: 1 } }
+          : {})
+      }
       // Hosts stamped as the window's catalog fetch stamps them.
       const listed = repo ? withRepoHostOwnership(worktree, getRepoExecutionHostId(repo)) : worktree
-      return stamps ? { ...listed, ...stamps } : listed
+      return { ...listed, ...stamps }
     })
   }
   const pending = Object.values(base.pendingWorktreeCreations ?? {})[0]
+  const [serverMain, serverChild] = worktreesByRepo.api ?? []
   return {
     worktreesByRepo,
+    // A server workspace nested under the server's main, and a server folder workspace.
+    worktreeLineageById: {
+      ...base.worktreeLineageById,
+      ...(serverMain && serverChild ? { [serverChild.id]: lineage(serverChild, serverMain) } : {})
+    },
+    projectGroups: [
+      ...(base.projectGroups ?? []),
+      group('pg-server-folders', 'Server folders', {
+        parentPath: '/srv/folders',
+        createdFrom: 'folder-scan',
+        executionHostId: SERVER_HOST_ID,
+        tabOrder: 3
+      })
+    ],
+    folderWorkspaces: [
+      ...(base.folderWorkspaces ?? []),
+      folder('fw-server', 'pg-server-folders', { executionHostId: SERVER_HOST_ID, sortOrder: 3 })
+    ],
     runtimeEnvironments: [buildServer],
     sshConnectionStates: new Map([
       ['gpu-vm', { targetId: 'gpu-vm', status: 'connected', error: null, reconnectAttempt: 0 }]

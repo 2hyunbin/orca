@@ -14,12 +14,13 @@ describe('readWindowPairedServerRows', () => {
           ]
         },
         folderWorkspaces: [makeFolderWorkspace({ executionHostId: 'runtime:box', name: 'Notes' })],
-        repos: []
+        repos: [],
+        worktreeLineageById: {}
       },
       new Set(['runtime:box'])
     )
     expect(Object.fromEntries(rows)).toEqual({
-      'runtime:box|same': expect.objectContaining({
+      'runtime:box|same': {
         key: 'runtime:box|same',
         worktreeId: 'same',
         repoId: 'repo-1',
@@ -29,8 +30,13 @@ describe('readWindowPairedServerRows', () => {
         displayName: 'On the server',
         isArchived: false,
         isPinned: true,
-        workspaceStatus: 'in-progress'
-      }),
+        isMainWorktree: false,
+        lineage: null,
+        workspaceStatus: 'in-progress',
+        sortOrder: 0,
+        defaultBranch: false,
+        recentAt: 0
+      },
       'runtime:box|folder:folder-1': expect.objectContaining({
         kind: 'folder',
         worktreeId: 'folder:folder-1',

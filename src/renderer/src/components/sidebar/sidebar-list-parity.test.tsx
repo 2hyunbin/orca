@@ -5,9 +5,12 @@
  * (feed pages, the shared installer, buildSidebarFeedRows) must draw the same list. The goldens
  * check that list is right; this checks only that the two adapters agree.
  *
- * Not inputs on either side, so never compared: the window's drag previews, search, hover hold
- * and agent-send reveal; its imported-worktrees and new-external-worktrees cards; preflight and
- * paired-server creations; host-header health and detail.
+ * Never compared, as no feed input carries them: the window's drag previews, search, hover hold
+ * and agent-send reveal; its imported-worktrees and new-external-worktrees cards; its create
+ * preflight; host-header health and detail.
+ * Known gaps the phone shows differently, so the fixture leaves them out: a creation a paired
+ * server runs; a paired server's activity under "Hide sleeping" (the window reads its own tabs);
+ * a PR unlinked on a server workspace; an SSH workspace reached through a paired server.
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, renderHook } from '@testing-library/react'
@@ -216,6 +219,14 @@ describe('sidebar list parity: desktop window and feed reader', () => {
     'open folder workspace': [
       parityActiveState('folder:fw-remote', 'ssh:gpu-vm'),
       /^FOLDER folder-workspace:fw-remote .* ACTIVE$/
+    ],
+    'open server folder workspace': [
+      parityActiveState('folder:fw-server', 'runtime:env-1'),
+      /^FOLDER folder-workspace:fw-server group=pg-server-folders .* ACTIVE$/
+    ],
+    'hide CLI-created': [
+      { hideCliCreatedWorkspaces: true },
+      /^ITEM .*runtime:env-1\|api::\/w\/api-y /
     ]
   }
 

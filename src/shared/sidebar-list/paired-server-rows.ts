@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { ExecutionHostId } from '../execution-host'
 import { composeWorktreeHostIdentity } from '../worktree/host-qualified-identity'
 import { openEnum } from '../zod-salvage'
+import { DEFAULT_WORKSPACE_STATUS_ID } from '../workspace-statuses'
 import { SMART_TIERS } from './sort-stamps'
 import { WorkspaceRowSchema } from './workspace-rows'
 
@@ -22,6 +23,8 @@ const PairedServerWorkspaceRowSchema = z
     // What the list sorts, groups and filters by, as the server stamped it; older desktops omit them.
     WorkspaceRowSchema.pick({
       isMainWorktree: true,
+      instanceId: true,
+      lineage: true,
       workspaceStatus: true,
       sortOrder: true,
       manualOrder: true,
@@ -75,7 +78,11 @@ const ServerWorktreePsRowSchema = z.object({
   isArchived: z.boolean().catch(false),
   isPinned: z.boolean().catch(false),
   isMainWorktree: z.boolean().catch(false),
-  workspaceStatus: z.string().optional().catch(undefined),
+  worktreeInstanceId: z.string().optional().catch(undefined),
+  parentWorktreeId: z.string().nullable().optional().catch(undefined),
+  lineageWorktreeInstanceId: z.string().optional().catch(undefined),
+  parentWorktreeInstanceId: z.string().optional().catch(undefined),
+  workspaceStatus: z.string().catch(DEFAULT_WORKSPACE_STATUS_ID),
   sortOrder: z.number().optional().catch(undefined),
   manualOrder: z.number().optional().catch(undefined),
   createdAt: z.number().optional().catch(undefined),
@@ -98,11 +105,28 @@ export function normalizePairedServerRow(
   if (!parsed.success) {
     return null
   }
-  const { workspaceKind, lastActivityAt, ...fields } = parsed.data
+  const {
+    workspaceKind,
+    lastActivityAt,
+    worktreeInstanceId,
+    parentWorktreeId,
+    lineageWorktreeInstanceId,
+    parentWorktreeInstanceId,
+    ...fields
+  } = parsed.data
   return {
     key: composeWorktreeHostIdentity(hostId, fields.worktreeId),
     kind: workspaceKind === 'folder-workspace' ? 'folder' : 'git',
     ...fields,
+    ...(worktreeInstanceId !== undefined ? { instanceId: worktreeInstanceId } : {}),
+    lineage:
+      parentWorktreeId && lineageWorktreeInstanceId && parentWorktreeInstanceId
+        ? {
+            parentWorktreeId,
+            worktreeInstanceId: lineageWorktreeInstanceId,
+            parentWorktreeInstanceId
+          }
+        : null,
     recentAt: lastActivityAt
   }
 }
