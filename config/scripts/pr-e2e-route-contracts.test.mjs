@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
-import { dirname, join, relative, resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import { parse } from 'yaml'
 import {
   classifyE2eJobs,
@@ -12,6 +12,7 @@ import {
   selectGeneralE2eSpecs
 } from './ci-e2e-job-selection.mjs'
 import { classifyPrJobs } from './pr-code-change-scope.mjs'
+import { testImportClosure } from './e2e-test-import-closure.mjs'
 import { isLayoutOracleSource, LAYOUT_ORACLE_E2E_SPECS } from './pr-layout-oracle-route.mjs'
 import {
   hasNativeImeSourceChange,
@@ -180,28 +181,7 @@ describe('pr-e2e-layout-oracle-routing', () => {
   ]
 
   /** Every test file the oracle specs import, transitively: a change there can break the gate. */
-  function oracleHarnessFiles() {
-    const seen = new Set()
-    const pending = [...LAYOUT_ORACLE_E2E_SPECS]
-    while (pending.length > 0) {
-      const file = pending.pop()
-      if (seen.has(file)) {
-        continue
-      }
-      seen.add(file)
-      const source = readFileSync(join(projectDir, file), 'utf8')
-      for (const [, specifier] of source.matchAll(/(?:from|import)\s*\(?\s*'(\.[^']+)'/g)) {
-        const base = relative(projectDir, join(projectDir, dirname(file), specifier))
-        const resolved = [base, `${base}.ts`, `${base}.tsx`].find(
-          (candidate) => /\.tsx?$/.test(candidate) && existsSync(join(projectDir, candidate))
-        )
-        if (resolved?.startsWith('tests/')) {
-          pending.push(resolved)
-        }
-      }
-    }
-    return [...seen]
-  }
+  const oracleHarnessFiles = () => testImportClosure(projectDir, LAYOUT_ORACLE_E2E_SPECS)
 
   describe('workspace layout oracle merge gate', () => {
     it('routes each layout authority and stack writer on its own', () => {

@@ -20,9 +20,12 @@ const NATIVE_IME_PRODUCT_SOURCE =
 const NATIVE_IME_HARNESS =
   /^(?:config\/scripts\/focus-nested-wayland-terminal\.sh$|config\/scripts\/(?:run-terminal-ibus-hangul-e2e|terminal-ime-engagement-receipt)\.mjs$|tests\/e2e\/terminal-ime-(?:boundary-probe|byte-reader|engagement-receipt)\.ts$|tests\/e2e\/terminal-(?:ibus-hangul|hangul-terminating-digit|macos-2set-korean)-native\.spec\.ts$)/
 
-/** Managed-SSH harness helpers; every managed-SSH spec runs in one job, so any route may claim them. */
+/**
+ * Managed-SSH harness helpers; every managed-SSH spec runs in one job, so any route may claim them.
+ * `pr-e2e-managed-ssh-harness-route.test.mjs` fails when a helper only these specs import is missing.
+ */
 const MANAGED_SSH_HARNESS =
-  /^tests\/e2e\/helpers\/(?:orcad-managed-workspace|orcad-convert-(?:flow|host)|orcad-template-variant|orcad-upgrade-profile|docker-ssh-host-target)\.ts$/
+  /^tests\/e2e\/helpers\/(?:orcad-managed-workspace|orcad-convert-(?:flow|host|teardown)|orcad-template-variant|orcad-upgrade-(?:profile|retained-state)|docker-ssh-host-target|reserve-local-port|ssh-remote-only-browser-fixture|windows-host-orcad-processes)\.ts$/
 
 export const PR_E2E_SOURCE_ROUTES = [
   {
