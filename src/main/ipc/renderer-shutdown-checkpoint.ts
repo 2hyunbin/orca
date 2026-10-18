@@ -1,5 +1,11 @@
 import { ipcMain } from 'electron'
-import type { ExecutionHostId } from '../../shared/execution-host'
+import {
+  LOCAL_EXECUTION_HOST_ID,
+  normalizeExecutionHostId,
+  type ExecutionHostId
+} from '../../shared/execution-host'
+import type { SleepingAgentSessionRecord } from '../../shared/agent-session-resume'
+import { applyCommandToSession } from '../persistence/terminal-topology/terminal-pane-admission'
 import type { PersistedUIState } from '../../shared/persisted-ui-state-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import type { Store } from '../persistence'
@@ -11,6 +17,37 @@ import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 type StageBeforeUnloadSyncArgs = {
   sessions: { state: WorkspaceSessionState; hostId?: ExecutionHostId }[]
   ui: Partial<PersistedUIState>
+  /** Layout-owner builds: the resume records the quit capture changed. */
+  sleepRecords?: SleepingAgentSessionRecord[]
+}
+
+/**
+ * The partition with the quit capture's resume records written, each workspace's through the
+ * record-only sleep command a live capture sends: only what the capture changed, so a wake main
+ * recorded after the window last looked stays. Records of panes the partition lacks change nothing.
+ */
+function withQuitSleepRecords(
+  hostId: string | undefined,
+  session: WorkspaceSessionState,
+  records: readonly SleepingAgentSessionRecord[]
+): WorkspaceSessionState {
+  const byWorkspace = Map.groupBy(records, (record) => record.worktreeId)
+  let current = session
+  for (const [workspace, workspaceRecords] of byWorkspace) {
+    const change = applyCommandToSession(
+      normalizeExecutionHostId(hostId) ?? LOCAL_EXECUTION_HOST_ID,
+      current,
+      {
+        type: 'sleep',
+        workspace,
+        paneKeys: workspaceRecords.map((record) => record.paneKey),
+        records: workspaceRecords,
+        recordOnly: true
+      }
+    )
+    current = change.session ?? current
+  }
+  return current
 }
 
 export type ShutdownCheckpointResult = { ok: boolean }
@@ -56,7 +93,11 @@ export function registerRendererShutdownCheckpointHandler(store: Store): void {
         if (!isFrozenOrcadSourceSessionPartition(store, hostId)) {
           // Switch point: main keeps its own layout over the window's and takes its view and facts.
           if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-            const stored = store.getWorkspaceSession(hostId)
+            const stored = withQuitSleepRecords(
+              hostId,
+              store.getWorkspaceSession(hostId),
+              args.sleepRecords ?? []
+            )
             reportWindowSaveDrift(stored, state, hostId, 'shutdown-checkpoint')
             store.stageWorkspaceSessionBeforeUnload(
               windowViewSaveForMain(stored, state, hostId),
