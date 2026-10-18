@@ -413,6 +413,18 @@ describe('hidden-output restore quiet abandonment (STA-4869)', () => {
     it.each([
       { loss: 'a newer episode', markerSeq: 256, episode: 2 },
       { loss: 'a repeatedly reported newer episode', markerSeq: 256, episode: 2, repeat: true },
+      {
+        loss: 'a sequence-less repeat after a sequenced marker',
+        markerSeq: 256,
+        episode: 1,
+        fallback: 'unhide'
+      },
+      {
+        loss: 'a pending cap after a sequenced marker',
+        markerSeq: 256,
+        episode: 1,
+        fallback: 'pending-cap'
+      },
       { loss: 'covered bytes in a newly reported episode', markerSeq: 64, episode: 2 },
       { loss: 'covered bytes without an episode', markerSeq: 64, episode: undefined },
       { loss: 'newer bytes in the same episode', markerSeq: 256, episode: 1 },
@@ -431,6 +443,11 @@ describe('hidden-output restore quiet abandonment (STA-4869)', () => {
         await announceMainDrop(markerSeq, episode, 'unhide')
         if ('repeat' in scenario && scenario.repeat) {
           await announceMainDrop(markerSeq, episode, 'unhide')
+        }
+        if ('fallback' in scenario && scenario.fallback === 'unhide') {
+          await announceMainDrop(undefined, episode, 'unhide')
+        } else if ('fallback' in scenario && scenario.fallback === 'pending-cap') {
+          await announceMainDrop(undefined, undefined, 'pending-cap')
         }
         first.resolve(modelSnapshot('ONLY_OLD_EPISODE_COVERED', 128))
         await flushAsyncTicks(30)
