@@ -230,7 +230,7 @@ export class SortStampsProducer {
     } else {
       this.panes.set(paneKey, { ...workspace, state })
     }
-    this.writeAgentChange(workspace, state.phase, state.phase)
+    this.writeAgentChange(workspace, state.phase, state.phase, this.sources.now())
   }
 
   /** One pane observed in `observed`; a pane that left or changed workspace rests where it was. */
@@ -243,7 +243,7 @@ export class SortStampsProducer {
     const previous = this.panes.get(paneKey)
     if (previous && !sameWorkspace(previous, workspace)) {
       this.panes.delete(paneKey)
-      this.writeAgentChange(previous, previous.state.phase, 'rest')
+      this.writeAgentChange(previous, previous.state.phase, 'rest', at)
     }
     if (!workspace) {
       return
@@ -258,25 +258,31 @@ export class SortStampsProducer {
     } else {
       this.panes.set(paneKey, { ...workspace, state })
     }
-    this.writeAgentChange(workspace, before.phase, state.phase)
+    this.writeAgentChange(workspace, before.phase, state.phase, at)
   }
 
-  private writeAgentChange(workspace: WorkspaceRef, from: AgentPhase, to: AgentPhase): void {
+  private writeAgentChange(
+    workspace: WorkspaceRef,
+    from: AgentPhase,
+    to: AgentPhase,
+    now: number
+  ): void {
     const panes: AgentPaneState[] = []
     for (const pane of this.panes.values()) {
       if (sameWorkspace(pane, workspace)) {
         panes.push(pane.state)
       }
     }
-    this.stamp(workspace, { kind: 'agent', from, to, panes })
+    this.stamp(workspace, { kind: 'agent', from, to, panes }, now)
   }
 
-  private stamp(workspace: WorkspaceRef, event: SortStampEvent): void {
+  // One clock read per event, so a pane's time and its Recent stamp agree.
+  private stamp(workspace: WorkspaceRef, event: SortStampEvent, now = this.sources.now()): void {
     if (this.sources.isWriteFenced(workspace.worktreeId)) {
       return
     }
     const current = this.readStamps(workspace)
-    const next = current && classifySortStampEvent(current, event, this.sources.now())
+    const next = current && classifySortStampEvent(current, event, now)
     if (next) {
       this.writeStamps(workspace, next)
     }
