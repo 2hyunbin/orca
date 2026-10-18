@@ -412,42 +412,52 @@ describe('hidden-output restore quiet abandonment (STA-4869)', () => {
 
     it.each([
       { loss: 'a newer episode', markerSeq: 256, episode: 2 },
+      { loss: 'a repeatedly reported newer episode', markerSeq: 256, episode: 2, repeat: true },
       { loss: 'covered bytes in a newly reported episode', markerSeq: 64, episode: 2 },
       { loss: 'covered bytes without an episode', markerSeq: 64, episode: undefined },
       { loss: 'newer bytes in the same episode', markerSeq: 256, episode: 1 },
       { loss: 'an episode-less marker', markerSeq: 256, episode: undefined },
       { loss: 'a sequence-less marker', markerSeq: undefined, episode: 1 }
-    ])(
-      'still repaints $loss reported while the older snapshot was fetching',
-      async ({ markerSeq, episode }) => {
-        const drive = await connectVisiblePane()
-        vi.useFakeTimers()
-        const getMainBufferSnapshot = vi.mocked(window.api.pty.getMainBufferSnapshot)
-        const first = createDeferred<MainSnapshot>()
-        getMainBufferSnapshot.mockReturnValueOnce(first.promise)
-        getMainBufferSnapshot.mockResolvedValue(modelSnapshot('NEW_EPISODE_RECOVERED', 512))
-        try {
-          await announceMainDrop(64, 1)
+    ])('still repaints $loss reported while the older snapshot was fetching', async (scenario) => {
+      const { markerSeq, episode } = scenario
+      const drive = await connectVisiblePane()
+      vi.useFakeTimers()
+      const getMainBufferSnapshot = vi.mocked(window.api.pty.getMainBufferSnapshot)
+      const first = createDeferred<MainSnapshot>()
+      getMainBufferSnapshot.mockReturnValueOnce(first.promise)
+      getMainBufferSnapshot.mockResolvedValue(modelSnapshot('NEW_EPISODE_RECOVERED', 512))
+      try {
+        await announceMainDrop(64, 1)
+        await announceMainDrop(markerSeq, episode, 'unhide')
+        if ('repeat' in scenario && scenario.repeat) {
           await announceMainDrop(markerSeq, episode, 'unhide')
-          first.resolve(modelSnapshot('ONLY_OLD_EPISODE_COVERED', 128))
-          await flushAsyncTicks(30)
-          expect(window.api.pty.ackHiddenOutputRestoreApplied).toHaveBeenCalledWith(PTY_ID, 1)
-
-          await vi.advanceTimersByTimeAsync(2_100)
-          await flushAsyncTicks(30)
-          expect(getMainBufferSnapshot).toHaveBeenCalledTimes(2)
-          expect(drive.writtenChunks().join('')).toContain('NEW_EPISODE_RECOVERED')
-          if (episode !== undefined) {
-            expect(window.api.pty.ackHiddenOutputRestoreApplied).toHaveBeenCalledWith(
-              PTY_ID,
-              episode
-            )
-          }
-        } finally {
-          drive.disposable.dispose()
         }
+        first.resolve(modelSnapshot('ONLY_OLD_EPISODE_COVERED', 128))
+        await flushAsyncTicks(30)
+        expect(window.api.pty.ackHiddenOutputRestoreApplied).toHaveBeenCalledWith(PTY_ID, 1)
+
+        const repairAlreadyPainted = getMainBufferSnapshot.mock.calls.length === 2
+        const live = 'LIVE_AFTER_COVERING_REPAIR\r\n'
+        if (repairAlreadyPainted) {
+          drive.deliver(live, 512 + live.length)
+          await flushAsyncTicks(10)
+        }
+        const writesBeforeTimer = drive.writtenChunks().length
+
+        await vi.advanceTimersByTimeAsync(2_100)
+        await flushAsyncTicks(30)
+        expect(getMainBufferSnapshot).toHaveBeenCalledTimes(2)
+        if (repairAlreadyPainted) {
+          expect(drive.writtenChunks().slice(writesBeforeTimer).join('')).not.toContain('\x1b[2J')
+        }
+        expect(drive.writtenChunks().join('')).toContain('NEW_EPISODE_RECOVERED')
+        if (episode !== undefined) {
+          expect(window.api.pty.ackHiddenOutputRestoreApplied).toHaveBeenCalledWith(PTY_ID, episode)
+        }
+      } finally {
+        drive.disposable.dispose()
       }
-    )
+    })
 
     it('keeps the deferred repaint when pending live bytes overflow before the snapshot drains', async () => {
       const drive = await connectVisiblePane()
