@@ -1,14 +1,20 @@
 import { describe, expect, it } from 'vitest'
 
-import { toRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
-import { toAppSshPtyId } from '../../../../shared/ssh-pty-id'
+import { toRemoteRuntimePtyId } from './remote-runtime-pty-id'
+import { toAppSshPtyId } from './ssh-pty-id'
 
-import { isRemoteExecutionHostPtyId } from './remote-execution-host-pty'
+import { isRemoteExecutionHostPtyId } from './remote-execution-host-pty-id'
 
 describe('isRemoteExecutionHostPtyId', () => {
   it('accepts paired-runtime ptys with and without an owner environment', () => {
     expect(isRemoteExecutionHostPtyId(toRemoteRuntimePtyId('term_1', 'env-a'))).toBe(true)
     expect(isRemoteExecutionHostPtyId(toRemoteRuntimePtyId('term_1'))).toBe(true)
+  })
+
+  // Why: decoding fails on a malformed owner, but the id still names a remote pty.
+  it('keeps a malformed or newer-format remote id remote', () => {
+    expect(isRemoteExecutionHostPtyId('remote:%E0%A4%A@@term_1')).toBe(true)
+    expect(isRemoteExecutionHostPtyId('remote:v2|env|term_1')).toBe(true)
   })
 
   it('accepts direct-SSH app pty ids', () => {
