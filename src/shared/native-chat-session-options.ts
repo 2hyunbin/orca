@@ -132,9 +132,10 @@ export type SessionOptionsSurface = {
   subscribe(listener: (snapshot: SessionOptionDescriptor[]) => void): () => void
 }
 
-/** A value with no choice to make, such as an effort no list confirms: shown as text, not a control. */
+/** An effort no list confirms, under a model the list lacks: shown as text, not a control. */
 export function isReadOnlySessionOptionValue(descriptor: SessionOptionDescriptor): boolean {
   return (
+    descriptor.id === 'effort' &&
     descriptor.kind.type === 'select' &&
     !descriptor.settable &&
     !descriptor.action &&

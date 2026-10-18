@@ -208,9 +208,9 @@ function pickerEffort(result: Awaited<ReturnType<typeof readAtRest>>, agent = 'c
 }
 
 /** The chat's own effort under a model its list does not name: one value, read-only. */
-const READ_ONLY_EFFORT = (value: string) => ({
+const READ_ONLY_EFFORT = (value: string, label = value) => ({
   settable: false,
-  kind: { type: 'select', currentValue: value, choices: [{ value, label: value }] }
+  kind: { type: 'select', currentValue: value, choices: [{ value, label }] }
 })
 
 describe('Claude effort default at rest', () => {
@@ -269,12 +269,12 @@ describe('Claude effort default at rest', () => {
       result.models.find((entry) => entry.id === unlisted.model)
     expect(row(live)).toEqual(expect.objectContaining({ id: unlisted.model, efforts: [] }))
     expect(row(resting)).toEqual(row(live))
-    // No menu: the chat's own effort shows read-only. The ids that mark the model unlisted come with
-    // the host's answer, which the adapter's own read here does not carry.
+    // No menu: the chat's own effort shows read-only, named as a listed row names it. The host names
+    // the saved listing's ids for a live child that lists none of its own.
     expect(pickerEffortRow({ ...live, listedModelIds: resting.listedModelIds })).toMatchObject(
-      READ_ONLY_EFFORT(unlisted.effort)
+      READ_ONLY_EFFORT(unlisted.effort, 'Medium')
     )
-    expect(pickerEffortRow(resting)).toMatchObject(READ_ONLY_EFFORT(unlisted.effort))
+    expect(pickerEffortRow(resting)).toMatchObject(READ_ONLY_EFFORT(unlisted.effort, 'Medium'))
   })
 
   it('lists an unlisted Codex model at rest exactly as its live child does', async () => {
@@ -316,7 +316,10 @@ describe('Claude effort default at rest', () => {
 
     expect(resting.models).toEqual(live.models)
     expect(live.models.find((entry) => entry.id === 'gpt-unlisted')).toMatchObject({ efforts: [] })
-    expect(pickerEffortRow(resting, 'codex')).toMatchObject(READ_ONLY_EFFORT('high'))
+    // The host names the saved listing's ids for a live child that lists none of its own.
+    for (const answer of [resting, { ...live, listedModelIds: resting.listedModelIds }]) {
+      expect(pickerEffortRow(answer, 'codex')).toMatchObject(READ_ONLY_EFFORT('high', 'High'))
+    }
   })
 
   it("keeps a Claude model's effort at rest with no catalog yet, as a live child with none does", async () => {

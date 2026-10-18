@@ -31,6 +31,7 @@ import {
 } from './structured-agent-session-precommit-refusal'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { structuredAgentSessionClosedBeforeCreate } from './structured-agent-session-close-before-create'
+import { structuredLaunchSeedOnSavedListing } from '../../session-tabs/structured-launch-seed-listing'
 
 export type PreparedStructuredAgentSessionCreate = {
   host: StructuredAgentSessionHost
@@ -86,7 +87,8 @@ export async function prepareStructuredAgentSessionCreateForWorktree(args: {
   firstMessage?: StructuredAgentSessionFirstMessage
   atRest?: boolean
 }): Promise<PreparedStructuredAgentSessionCreate> {
-  const structuredAgentCliSourceEvidence = args.structuredAgentCliSourceEvidence ??
+  const structuredAgentCliSourceEvidence =
+    args.structuredAgentCliSourceEvidence ??
     (args.resumeFrom?.cliSource
       ? captureStructuredAgentCliSource(() => args.runtime.getAgentProviderSessionRows())
       : undefined)
@@ -136,18 +138,25 @@ export async function prepareStructuredAgentSessionCreateForWorktree(args: {
     hostLaunchDirectory,
     ...resolvedAttach
   } = resolved
+  // After the fingerprints: what a remembered default seeds is never part of the ledger.
+  const seed = args.options?.model
+    ? resolved.options
+    : await structuredLaunchSeedOnSavedListing(host, args.agent, resolved.options, () =>
+        args.runtime.resolveStructuredAgentSessionLocalWorkspacePath(args.worktree)
+      )
   return {
     host,
     ...(hostLaunchDirectory ? { hostLaunchDirectory } : {}),
     attachParams: {
       ...resolvedAttach,
+      ...(seed ? { options: seed } : {}),
       // The ledger covers explicit overrides, never defaults that settings can change on replay.
       // Explicit picks replace the saved selection; the permission default is the chat's own.
       ...(args.options
         ? {
             options: atRest
-              ? { ...resolved.options, ...args.options }
-              : { ...seededPermissionMode(resolved.options), ...args.options }
+              ? { ...seed, ...args.options }
+              : { ...seededPermissionMode(seed), ...args.options }
           }
         : {}),
       ...(args.tabId ? { surfaceTabId: args.tabId } : {}),

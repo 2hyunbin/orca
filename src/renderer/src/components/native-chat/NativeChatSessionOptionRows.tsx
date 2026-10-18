@@ -128,10 +128,15 @@ function OptionRow(props: {
   const current = descriptor.kind.currentValue
   const only = descriptor.kind.choices[0]
   if (only && isReadOnlySessionOptionValue(descriptor)) {
+    // A row kept from the previous model names no value under this one, as a switched-off row.
     return (
       <div className="flex min-h-7 items-center justify-between gap-3 px-2 text-xs">
         <span className="text-muted-foreground">{label}</span>
-        <span className="text-foreground">{nativeChatSessionChoiceLabel(only, descriptor.id)}</span>
+        {gone ? null : (
+          <span className="text-foreground">
+            {nativeChatSessionChoiceLabel(only, descriptor.id)}
+          </span>
+        )}
       </div>
     )
   }

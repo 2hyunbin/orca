@@ -102,3 +102,43 @@ describe('the create the seed options land in', () => {
     expect(seeded.envelope.payloadFingerprint).toBe(unseeded.envelope.payloadFingerprint)
   })
 })
+
+describe('a new Claude chat seeded from a remembered model the saved listing no longer names', () => {
+  it("starts on the listing's default, effort moved to the nearest level, as on main", async () => {
+    const levels = ['low', 'high'].map((value) => ({ value, label: value }))
+    const read = vi.fn(async () => ({
+      origin: 'probe' as const,
+      fetchedAt: 1,
+      models: [{ id: 'opus', label: 'Opus', isDefault: true, efforts: levels }]
+    }))
+    const prepared = await prepareStructuredAgentSessionCreateForWorktree({
+      runtime: {
+        resolveStructuredAgentSessionCreateIntent: async () => ({
+          location: { executionHostId: 'local', wslDistro: null, workspaceId: 'repo::wt' },
+          provider: 'claude',
+          agent: 'claude',
+          accountHome: { variable: 'CLAUDE_CONFIG_DIR', path: '/host/.claude' },
+          runtimeKind: 'native',
+          options: { model: 'claude-gone', effort: 'max' }
+        }),
+        resolveStructuredAgentSessionLocalWorkspacePath: async () => '/repo/wt'
+      } as never,
+      ensureHost: async () => ({ deps: { modelCatalog: { read } } }) as never,
+      envelope: {
+        sessionId: 's',
+        clientOperationId: 'op',
+        expectedRuntimeFence: null,
+        payloadFingerprint: ''
+      },
+      worktree: 'id:repo::wt',
+      agent: 'claude',
+      caller: { callerKey: 'client-1' }
+    })
+    expect(prepared.attachParams.options).toEqual({ model: 'opus', effort: 'high' })
+    expect(read).toHaveBeenCalledWith({
+      agent: 'claude',
+      workspacePath: '/repo/wt',
+      savedOnly: true
+    })
+  })
+})

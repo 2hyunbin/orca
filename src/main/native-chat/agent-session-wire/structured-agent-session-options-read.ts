@@ -233,10 +233,18 @@ export async function readStructuredAgentSessionOptions(
             })
           )
         : null
+  let rested: RestingOptions | undefined
+  const atRest = async (): Promise<RestingOptions> =>
+    (rested ??= await readStructuredAgentSessionOptionsAtRest(context.deps, sessionId, reader))
   let options: Omit<AgentSessionOptionsResult, 'rewind'>
   if (live) {
     const { catalogListing, ...answer } = live
     options = answer
+    // A child with no listing of its own reads the saved one, as at rest, so a row reads the same.
+    if (!catalogListing && !answer.listedModelIds) {
+      const { listedModelIds } = await atRest()
+      options = listedModelIds ? { ...answer, listedModelIds } : answer
+    }
     if (catalogListing) {
       // Check prior membership before saving: a launch-added row cannot verify itself.
       const listedModelIds = context.deps.modelCatalog
@@ -246,7 +254,7 @@ export async function readStructuredAgentSessionOptions(
       options = { ...answer, listedModelIds }
     }
   } else {
-    options = await readStructuredAgentSessionOptionsAtRest(context.deps, sessionId, reader)
+    options = await atRest()
   }
   // Re-acquired after the reads above: the handle they saw may have closed and reopened since.
   const session = await context.conversation(sessionId)
@@ -266,10 +274,7 @@ export async function readStructuredAgentSessionOptions(
   const saved = record?.options
   const shownSaved = (key: 'model' | 'effort'): boolean =>
     saved?.[key] !== undefined && !refused.includes(key)
-  const selected =
-    live && (shownSaved('model') || shownSaved('effort'))
-      ? await readStructuredAgentSessionOptionsAtRest(context.deps, sessionId, reader)
-      : options
+  const selected = live && (shownSaved('model') || shownSaved('effort')) ? await atRest() : options
   const current = {
     ...options.current,
     ...(shownSaved('model') ? { model: selected.current.model } : {}),
