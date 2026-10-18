@@ -16,7 +16,6 @@ import {
 import type { PendingNativeChatImage } from './mobile-native-chat-image-attachment'
 import type { MobileComposerStructuredCatalog } from './mobile-native-chat-composer-menu'
 import { useMobileNativeChatComposerMenu } from './use-mobile-native-chat-composer-menu'
-import { mobileNativeChatInputStyles } from './mobile-native-chat-input-styles'
 import { keepHeldPressThroughLongPress } from './held-press-long-press'
 import { mobileNativeChatComposerShowsStop } from './mobile-native-chat-composer-layout'
 import { MobileNativeChatStopButton } from './MobileNativeChatStopButton'
@@ -219,7 +218,6 @@ export function MobileNativeChatComposer({
           />
           <MobileNativeChatComposerField
             ref={fieldRef}
-            style={mobileNativeChatInputStyles.input}
             value={value}
             skillToken={menu.skillToken}
             onChangeText={menu.onFieldChange}
