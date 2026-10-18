@@ -62,7 +62,7 @@ export function titleAgentPhase(title: string): AgentPhase {
       return 'working'
     case 'idle':
       return 'done'
-    default:
+    case null:
       return 'rest'
   }
 }
