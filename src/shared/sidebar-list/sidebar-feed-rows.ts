@@ -10,7 +10,7 @@ import {
 import { buildExecutionHostRegistry } from '../execution-host-registry'
 import type { ProjectGroup } from '../project-group-types'
 import { getLogicalRepoOrderRankById } from '../project-section-order'
-import type { ProjectGroupingModel } from '../project-section-grouping'
+import type { ProjectSectionModel } from '../project-section-grouping'
 import type { Repo } from '../repo-types'
 import type { ProjectOrderBy } from '../ui-chrome-types'
 import {
@@ -69,7 +69,7 @@ export type SidebarFeedView = {
 export type SidebarFeedCatalog = {
   repos: readonly Repo[]
   projectGroups: readonly ProjectGroup[]
-  projectGrouping: ProjectGroupingModel
+  projectGrouping: ProjectSectionModel
 }
 
 export type SidebarFeedRows = {

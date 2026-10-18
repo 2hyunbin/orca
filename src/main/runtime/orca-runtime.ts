@@ -106,6 +106,7 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
             pairedServerRows: requireSwitchedOn(this.pairedServerRows),
             workspaceCreations: requireSwitchedOn(this.workspaceCreations),
             workspaceRows: requireSwitchedOn(this.workspaceRows),
+            repoIcons: requireSwitchedOn(this.repoIconDataUrls),
             store: () => this.store,
             onClientEvent: (listener, options) => this.onClientEvent(listener, options)
           }),
