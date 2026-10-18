@@ -5,7 +5,12 @@ import { test, expect } from './helpers/orca-app'
 import { launchPairedElectronClient } from './helpers/paired-electron-client'
 import { toWebTerminalSurfaceTabId } from '../../src/shared/terminal-surface-id'
 import { quotePosixShell } from '../../src/shared/wsl-login-shell-command'
-import { probeMotion, installWriteProbe, hostSnapshot } from './helpers/mouse-owner-replay-probes'
+import {
+  probeMotion,
+  installWriteProbe,
+  readWriteProbe,
+  hostSnapshot
+} from './helpers/mouse-owner-replay-probes'
 
 test('Linux release 1.4.229: cold restart with a mounted paired client', async ({
   testRepoPath: _testRepoPath
@@ -105,9 +110,7 @@ test('Linux release 1.4.229: cold restart with a mounted paired client', async (
       .toMatchObject({ text: expect.stringContaining('ORCA_LINUX_SHELL>') })
     evidence.afterKill = await probeMotion(client.page, tabId)
     await client.page.screenshot({ path: testInfo.outputPath('linux-after-kill.png') })
-    evidence.writesBeforeRestart = await client.page.evaluate(() =>
-      Reflect.get(window, '__mouseProofWrites').splice(0)
-    )
+    evidence.writesBeforeRestart = await readWriteProbe(client.page, true)
     evidence.restart = JSON.parse(control('restart cold'))
     await expect
       .poll(
@@ -123,9 +126,7 @@ test('Linux release 1.4.229: cold restart with a mounted paired client', async (
       .toBeGreaterThan(0)
     await client.page.waitForTimeout(5000)
     evidence.afterRestart = await probeMotion(client.page, tabId)
-    evidence.writesAfterRestart = await client.page.evaluate(() =>
-      Reflect.get(window, '__mouseProofWrites')
-    )
+    evidence.writesAfterRestart = await readWriteProbe(client.page)
     evidence.hostAfter = JSON.parse(control('capture'))
     const terminals = terminalList.parse(await call('terminal.list', {}))
     evidence.hostFreshSnapshot = await hostSnapshot(

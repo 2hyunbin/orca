@@ -3,7 +3,12 @@ import { execFileSync } from 'node:child_process'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect } from './helpers/orca-app'
-import { probeMotion, installWriteProbe, hostSnapshot } from './helpers/mouse-owner-replay-probes'
+import {
+  probeMotion,
+  installWriteProbe,
+  readWriteProbe,
+  hostSnapshot
+} from './helpers/mouse-owner-replay-probes'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
 import { launchPairedElectronClient } from './helpers/paired-electron-client'
 import { cleanupE2EDaemons } from './helpers/electron-process-shutdown'
@@ -134,10 +139,7 @@ for (const scenario of cases) {
         )
       }
       await client.page.screenshot({ path: testInfo.outputPath('after-kill.png') })
-      observations.writesBeforeRestart = await client.page.evaluate(() => {
-        const writes = Reflect.get(window, '__mouseProofWrites')
-        return writes.splice(0)
-      })
+      observations.writesBeforeRestart = await readWriteProbe(client.page, true)
       await host.restartServeProcess({
         betweenProcesses: boundary.startsWith('cold')
           ? () => cleanupE2EDaemons(host.userDataDir)
@@ -176,9 +178,7 @@ for (const scenario of cases) {
         })
       ).result
       observations.checkpointsAfter = checkpoints(host.userDataDir)
-      observations.writesAfterRestart = await client.page.evaluate(() =>
-        Reflect.get(window, '__mouseProofWrites')
-      )
+      observations.writesAfterRestart = await readWriteProbe(client.page)
       await client.page.screenshot({ path: testInfo.outputPath('after-restart.png') })
       await client.page.reload()
       await expect(client.page.locator('.xterm-screen')).toBeVisible({ timeout: 45_000 })

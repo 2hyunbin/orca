@@ -1,5 +1,14 @@
 import type { Page } from '@stablyai/playwright-test'
 
+type MouseReplayWrite = { data: string | Uint8Array; stack: string | undefined; time: number }
+
+declare global {
+  // oxlint-disable-next-line typescript-eslint/consistent-type-definitions -- declaration merging requires interface
+  interface Window {
+    __mouseProofWrites?: MouseReplayWrite[]
+  }
+}
+
 export async function installWriteProbe(page: Page, tabId: string) {
   await page.evaluate((tabId) => {
     const manager = window.__paneManagers?.get(tabId)
@@ -7,14 +16,24 @@ export async function installWriteProbe(page: Page, tabId: string) {
     if (!pane) {
       throw new Error('No terminal to instrument')
     }
-    const writes: unknown[] = []
-    Reflect.set(window, '__mouseProofWrites', writes)
+    const writes: MouseReplayWrite[] = []
+    window.__mouseProofWrites = writes
     const original = pane.terminal.write.bind(pane.terminal)
     pane.terminal.write = (data, callback) => {
       writes.push({ data, stack: new Error('Mouse replay write probe').stack, time: Date.now() })
       return original(data, callback)
     }
   }, tabId)
+}
+
+export async function readWriteProbe(page: Page, drain = false) {
+  return page.evaluate((drain) => {
+    const writes = window.__mouseProofWrites
+    if (!writes) {
+      throw new Error('Mouse replay write probe is not installed')
+    }
+    return drain ? writes.splice(0) : writes.slice()
+  }, drain)
 }
 
 export async function hostSnapshot(page: Page, environmentId: string, handle: string) {
