@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi, type Mock } from 'vitest'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import type { PersistedState } from '../../shared/persisted-state-types'
 import { agentHookServer } from '../agent-hooks/server'
@@ -17,12 +17,20 @@ import {
   WindowSession
 } from '../persistence/terminal-topology/terminal-topology-window-session-fixture'
 
-const state = vi.hoisted(() => ({
-  root: '',
-  store: null as Store | null,
-  layoutOwnerIsMain: true,
-  rekeyWorkerTerminalResourcePaneKey: vi.fn(() => 1)
-}))
+const state = vi.hoisted(() => {
+  const value: {
+    root: string
+    store: Store | null
+    layoutOwnerIsMain: boolean
+    rekeyWorkerTerminalResourcePaneKey: Mock<() => number>
+  } = {
+    root: '',
+    store: null,
+    layoutOwnerIsMain: true,
+    rekeyWorkerTerminalResourcePaneKey: vi.fn(() => 1)
+  }
+  return value
+})
 
 vi.mock('../../shared/layout-owner-switch', () => ({
   get ORCA_LAYOUT_OWNER_IS_MAIN() {
