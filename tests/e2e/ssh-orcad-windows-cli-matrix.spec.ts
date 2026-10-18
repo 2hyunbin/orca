@@ -6,7 +6,7 @@
  *   terminal survives disconnect/reconnect; `environment rm` refuses a managed server, the stop
  *   decommissions it and cleans the host, and the next connect redeploys; last, a hard orcad restart
  *   reads unverifiable then live, never retired.
- * - `@orcad-cli-convert`: a seeded relay-era profile converts, keeps then retires its source, and the
+ * - `@orcad-cli-convert`: a seeded relay-era profile converts, keeps its source retained, and the
  *   CLI reaches the converted server's projects.
  *
  * Host: `ORCA_E2E_ORCAD_CONVERT_HOST`, a Windows host-cell descriptor. Template:
@@ -19,7 +19,7 @@ import type { ElectronApplication, Page } from '@stablyai/playwright-test'
 import { expect, test } from './helpers/orca-app'
 import { waitForSessionReady } from './helpers/store'
 import { createRestartSession } from './helpers/orca-restart'
-import { convertThenRetire, managedServer, reconnect } from './helpers/orcad-convert-flow'
+import { convertAndRetain, managedServer, reconnect } from './helpers/orcad-convert-flow'
 import { seedRelayEraProfile } from './helpers/orcad-upgrade-profile'
 import { ORCAD_CONVERT_HOST_ENV, startOrcadConvertHost } from './helpers/orcad-convert-host'
 import { orcaCliResult, runCompiledOrcaCli } from './helpers/compiled-orca-cli'
@@ -540,7 +540,7 @@ test('@orcad-cli-managed an empty Windows host deploys, serves CLI terminals thr
   }
 })
 
-test('@orcad-cli-convert a seeded relay-era profile converts its Windows host, keeps then retires its source, and the CLI reaches its projects', async (// oxlint-disable-next-line no-empty-pattern -- This test owns its launches through a restart session.
+test('@orcad-cli-convert a seeded relay-era profile converts its Windows host, keeps its source retained, and the CLI reaches its projects', async (// oxlint-disable-next-line no-empty-pattern -- This test owns its launches through a restart session.
 {}, testInfo) => {
   skipUnlessWindowsHost()
   test.setTimeout(20 * 60_000)
@@ -561,7 +561,7 @@ test('@orcad-cli-convert a seeded relay-era profile converts its Windows host, k
     const upgraded = await session.launch({ onStderr: sshStderr })
     app = upgraded.app
     await waitForSessionReady(upgraded.page)
-    await convertThenRetire(upgraded.page, session.userDataDir, seeded)
+    await convertAndRetain(upgraded.page, session.userDataDir, seeded)
 
     const environmentId = await waitForManaged(upgraded.page, seeded.targetId)
     expect(await environmentIds(session.userDataDir)).toContain(environmentId)
