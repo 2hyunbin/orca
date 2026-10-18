@@ -235,7 +235,7 @@ describe('unprefixed --host aliases', () => {
 
     await expect(
       resolveHostFlagTarget(flags({ host: 'trader-local' }), clientWithTargets([]))
-    ).rejects.toThrow('Unknown SSH target in --host trader-local')
+    ).rejects.toThrow('Unknown host in --host trader-local')
   })
 
   // Why: a paired server and an SSH target are different machines. Picking either would run the
@@ -290,6 +290,83 @@ describe('unprefixed --host aliases', () => {
     await expect(
       resolveHostFlagEnvironmentId(flags({ host: 'awin' }), NO_SELECTION)
     ).rejects.toThrow('Ambiguous Orca server in --host awin')
+  })
+
+  // Why: `orca host list` prints `this machine` as the local row's name, with a space.
+  it('resolves the local row name to --host local', async () => {
+    listEnvironmentsMock.mockReturnValue([environment('env-1', 'gpu')])
+    await expect(
+      resolveHostFlagEnvironmentId(flags({ host: 'This Machine' }), NO_SELECTION)
+    ).resolves.toBe(null)
+    await expect(
+      resolveHostFlagTarget(flags({ host: 'this machine' }), clientWithTargets([]))
+    ).resolves.toEqual({ kind: 'local', id: 'local' })
+  })
+
+  it('refuses the local row name when an SSH target carries it too', async () => {
+    listEnvironmentsMock.mockReturnValue([])
+    await expect(
+      resolveHostFlagTarget(
+        flags({ host: 'this machine' }),
+        clientWithTargets([{ id: 'ssh-1-a', label: 'this machine' }])
+      )
+    ).rejects.toMatchObject({
+      message: expect.stringContaining('Ambiguous --host this machine'),
+      data: {
+        nextSteps: expect.arrayContaining([
+          'Use --host local for this machine.',
+          expect.stringContaining('--host ssh:ssh-1-a')
+        ])
+      }
+    })
+  })
+
+  it('refuses the local row name when a paired server carries it too', async () => {
+    listEnvironmentsMock.mockReturnValue([environment('env-1', 'this machine')])
+    await expect(
+      resolveHostFlagEnvironmentId(flags({ host: 'this machine' }), NO_SELECTION)
+    ).rejects.toThrow('Ambiguous --host this machine')
+  })
+
+  it('resolves an SSH target label that contains spaces', async () => {
+    listEnvironmentsMock.mockReturnValue([])
+    const client = clientWithTargets([{ id: 'ssh-9', label: 'Build Box 2' }])
+    await expect(resolveHostFlagTarget(flags({ host: 'build box 2' }), client)).resolves.toEqual({
+      kind: 'ssh',
+      id: 'ssh:ssh-9',
+      targetId: 'ssh-9'
+    })
+  })
+
+  // Why: cmd.exe does not strip single quotes, so `--host 'gpu'` arrives with them.
+  it('ignores one pair of wrapping quotes around a host name', async () => {
+    listEnvironmentsMock.mockReturnValue([environment('env-1', 'gpu')])
+    listSshTargetsMock.mockResolvedValue([])
+    await expect(
+      resolveHostFlagEnvironmentId(flags({ host: "'gpu'" }), NO_SELECTION)
+    ).resolves.toBe('env-1')
+    expect(parseHostFlag(flags({ host: '"local"' }))).toEqual({ kind: 'local', id: 'local' })
+  })
+
+  // Why: with --environment the command runs on that server, so a bare name is a machine it
+  // reaches; another locally paired server sharing the name is not a choice the caller made.
+  it('leaves an alias to the routed server SSH targets when --environment picks the server', async () => {
+    listEnvironmentsMock.mockReturnValue([
+      environment('env-1', 'openclaw'),
+      environment('env-2', 'omarchy')
+    ])
+    await expect(
+      resolveHostFlagEnvironmentId(flags({ host: 'omarchy' }), {
+        ...NO_SELECTION,
+        environmentSelector: { value: 'openclaw', label: '--environment' }
+      })
+    ).resolves.toBe(null)
+    await expect(
+      resolveHostFlagEnvironmentId(flags({ host: 'openclaw' }), {
+        ...NO_SELECTION,
+        environmentSelector: { value: 'openclaw', label: '--environment' }
+      })
+    ).resolves.toBe('env-1')
   })
 })
 

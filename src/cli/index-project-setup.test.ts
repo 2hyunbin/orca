@@ -45,6 +45,16 @@ import { main } from './index'
 import { okFixture, queueFixtures } from './test-fixtures'
 import { pairRuntimeEnvironment, useWorktreeAwarenessEnvironment } from './index-test-harness'
 
+const ORCA_PROJECT = {
+  id: 'github:stablyai/orca',
+  displayName: 'Orca',
+  badgeColor: '#7c3aed',
+  sourceRepoIds: ['repo-1'],
+  createdAt: 1,
+  updatedAt: 1
+}
+const PROJECT_LIST_FIXTURE = okFixture('req_project_list', { projects: [ORCA_PROJECT] })
+
 describe('orca cli worktree awareness', () => {
   useWorktreeAwarenessEnvironment({
     callMock,
@@ -296,6 +306,102 @@ describe('orca cli worktree awareness', () => {
     expect(logSpy.mock.calls[0]?.[0]).toContain('setup-openclaw')
   })
 
+  // Why: the issue's own repro — the names `orca project list` and `orca host list` print were
+  // rejected, and only the generated ids worked.
+  it('filters project setups by the display name and host name the list commands print', async () => {
+    queueFixtures(
+      callMock,
+      okFixture('req_ssh_targets', {
+        targets: [{ id: 'ssh-1789189705224-tq82n1', label: 'simnode-local' }]
+      }),
+      okFixture('req_project_setups', {
+        setups: [
+          {
+            id: 'setup-simnode',
+            projectId: 'github:younghwan91/scalp-it',
+            hostId: 'ssh:ssh-1789189705224-tq82n1',
+            repoId: 'repo-simnode',
+            path: '/home/young/git/scalp-it',
+            displayName: 'scalp-it',
+            setupState: 'ready',
+            setupMethod: 'legacy-repo',
+            createdAt: 1,
+            updatedAt: 1
+          },
+          {
+            id: 'setup-other',
+            projectId: 'github:stablyai/orca',
+            hostId: 'ssh:ssh-1789189705224-tq82n1',
+            repoId: 'repo-other',
+            path: '/home/young/git/orca',
+            displayName: 'orca',
+            setupState: 'ready',
+            setupMethod: 'legacy-repo',
+            createdAt: 1,
+            updatedAt: 1
+          }
+        ]
+      }),
+      okFixture('req_project_list', {
+        projects: [
+          { ...ORCA_PROJECT, id: 'github:younghwan91/scalp-it', displayName: 'Scalp It' },
+          ORCA_PROJECT
+        ]
+      })
+    )
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await main(
+      ['project', 'setups', '--project', 'scalp it', '--host', 'simnode-local'],
+      '/tmp/repo'
+    )
+
+    const printed = String(logSpy.mock.calls[0]?.[0])
+    expect(printed).toContain('setup-simnode')
+    expect(printed).not.toContain('setup-other')
+  })
+
+  it('refuses a project display name two projects share instead of guessing', async () => {
+    queueFixtures(
+      callMock,
+      okFixture('req_project_setups', { setups: [] }),
+      okFixture('req_project_list', {
+        projects: [ORCA_PROJECT, { ...ORCA_PROJECT, id: 'repo:second-orca' }]
+      })
+    )
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const priorExitCode = process.exitCode
+
+    await main(['project', 'setups', '--project', 'orca', '--json'], '/tmp/repo')
+
+    const printed = [...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')
+    expect(printed).toContain('Ambiguous --project orca')
+    expect(printed).toContain('--project repo:second-orca')
+    expect(process.exitCode).toBe(1)
+    process.exitCode = priorExitCode
+  })
+
+  it('sends the project id when a setup command names the project by display name', async () => {
+    queueFixtures(
+      callMock,
+      okFixture('req_ssh_targets', { targets: [] }),
+      PROJECT_LIST_FIXTURE,
+      okFixture('req_project_setup_create', { result: {} })
+    )
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await main(
+      ['project', 'setup-create', '--project', 'Orca', '--host', 'this machine', '--json'],
+      '/tmp/repo'
+    )
+
+    expect(callMock).toHaveBeenCalledWith(
+      'projectHostSetup.create',
+      expect.objectContaining({ projectId: 'github:stablyai/orca', hostId: 'local' })
+    )
+  })
+
   // Why: `runtime:<id>` is a persisted token — it lands in ProjectHostSetup.hostId and is
   // embedded in generated setup ids. Accepting a name is only safe because it is canonicalized
   // to the id before anything downstream sees it; this pins that.
@@ -303,6 +409,7 @@ describe('orca cli worktree awareness', () => {
     pairRuntimeEnvironment(listEnvironmentsMock, 'env-uuid-1', 'awin')
     queueFixtures(
       callMock,
+      PROJECT_LIST_FIXTURE,
       okFixture('req_project_setup_create', {
         result: {
           project: {
@@ -389,6 +496,7 @@ describe('orca cli worktree awareness', () => {
   it('sets up an existing project folder with a path resolved against the local cli cwd', async () => {
     queueFixtures(
       callMock,
+      PROJECT_LIST_FIXTURE,
       okFixture('req_project_setup', {
         result: {
           project: {
@@ -587,6 +695,7 @@ describe('orca cli worktree awareness', () => {
     pairRuntimeEnvironment(listEnvironmentsMock, 'awin')
     queueFixtures(
       callMock,
+      PROJECT_LIST_FIXTURE,
       okFixture('req_project_setup_clone', {
         result: {
           project: {
@@ -714,6 +823,7 @@ describe('orca cli worktree awareness', () => {
     pairRuntimeEnvironment(listEnvironmentsMock, 'gpu')
     queueFixtures(
       callMock,
+      PROJECT_LIST_FIXTURE,
       okFixture('req_project_setup_create', {
         result: {
           project: {

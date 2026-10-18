@@ -396,6 +396,29 @@ describe('orca cli worktree awareness', () => {
     )
   })
 
+  // Why: a project that matched nothing used to be reported as a host problem.
+  it('reports an unknown project as a project miss, not a host one', async () => {
+    queueFixtures(
+      callMock,
+      okFixture('req_project_setups', { setups: [] }),
+      okFixture('req_projects', { projects: [] })
+    )
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const priorExitCode = process.exitCode
+
+    await main(
+      ['worktree', 'create', '--project', 'nope', '--name', 'feature', '--no-parent', '--json'],
+      '/tmp/repo'
+    )
+
+    const printed = [...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')
+    expect(printed).toContain('No ready setup found for --project nope on any host.')
+    expect(printed).not.toContain('selected host')
+    expect(process.exitCode).toBe(1)
+    process.exitCode = priorExitCode
+  })
+
   // Why: one host is not a choice. Two are, and picking one would create the worktree on a
   // machine the caller never named.
   it('asks which host only when the project is set up on more than one', async () => {
