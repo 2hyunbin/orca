@@ -30,7 +30,7 @@ const RENAME = { type: 'renamePane', tabId: 'tab-1', leafId: 'leaf-1', title: 'P
 
 async function send(reply: LayoutApplyReply | Error) {
   mocks.sent.reply = reply
-  const handlers = { apply: vi.fn(), asToday: vi.fn(), refused: vi.fn(), unapplied: vi.fn() }
+  const handlers = { apply: vi.fn(), asToday: vi.fn(), refused: vi.fn() }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the owner lookup is mocked and never reads the state.
   sendLayoutApply({} as never, 'wt-1', RENAME, handlers)
   await vi.waitFor(() => {
@@ -53,13 +53,17 @@ describe('sendLayoutApply', () => {
   it.each([
     { reply: { ok: false, code: 'other_partition' } as const, code: 'other_partition' },
     { reply: { ok: false, code: 'host_not_owned' } as const, code: 'host_not_owned' },
-    { reply: new Error('disk refused'), code: 'call_failed' }
+    { reply: new Error('disk refused'), code: 'call_failed' },
+    // Main's copy lacking the target is a refusal too: a frame drew what the window shows.
+    { reply: { ok: false, code: 'tab_not_found' } as const, code: 'tab_not_found' },
+    { reply: { ok: false, code: 'pane_not_found' } as const, code: 'pane_not_found' },
+    { reply: { ok: false, code: 'workspace_not_found' } as const, code: 'workspace_not_found' },
+    { reply: { ok: false, code: 'group_not_found' } as const, code: 'group_not_found' }
   ])('logs a $code refusal and draws nothing of its own', async ({ reply, code }) => {
     const handlers = await send(reply)
 
     expect(handlers.refused).toHaveBeenCalledWith(code)
     expect(handlers.asToday).not.toHaveBeenCalled()
-    expect(handlers.unapplied).not.toHaveBeenCalled()
     expect(console.warn).toHaveBeenCalledWith(
       expect.stringContaining(`[layout-owner] renamePane refused`),
       ...(reply instanceof Error ? ['disk refused'] : [code])

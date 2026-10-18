@@ -140,10 +140,6 @@ export type LayoutApplyHandlers = {
   apply: (result: LayoutCommandResult) => void
   asToday: () => void
   refused?: (code: WindowRefusalCode) => void
-  /** Main's copy lacks the target; `asToday` when absent. A pane split or move
-   *  passes one: main keeps its pane trees over the window's saves, so that change would not last.
-   *  A close keeps `asToday`: a pane main lacks has nothing to keep it. */
-  unapplied?: () => void
 }
 
 /** Commands that change one tab's panes: frames wait to redraw that tab until the answer is in. */
@@ -161,10 +157,10 @@ const PANE_COMMANDS: ReadonlySet<WindowLayoutCommand['type']> = new Set([
 /**
  * A layout command in a layout-owner build: main applies it first, then, once the window has the
  * frame with main's change, `apply` shows main's result. `asToday` runs instead only when a paired
- * server may hold the tab (#18202), or main's copy lacks the workspace, tab, pane or group. Any
- * other refusal, and a call that threw, is logged and `refused`: main's frame stays what is drawn,
- * since a window save no longer carries the change. False when a paired server owns the
- * workspace's layout; the caller acts as today.
+ * server may hold the tab (#18202). Any other refusal (main's copy lacking the target too), and a
+ * call that threw, is logged and `refused`: main's frame stays what is drawn, since a window save
+ * no longer carries the change. False when a paired server owns the workspace's layout; the
+ * caller acts as today.
  */
 export function sendLayoutApply(
   state: Parameters<typeof runtimeEnvironmentIdUnlessTwin>[0],
@@ -228,10 +224,6 @@ function handleReply(
     handlers.apply(reply.result)
   } else if (reply.code === 'host_not_owned' && mayBePairedServers(state, worktreeId)) {
     handlers.asToday()
-  } else if (mainLacksTarget(reply.code)) {
-    // Why: main's copy can lag the window's: a tab the window drew before main's create answered.
-    console.warn(`[layout-owner] ${command.type} found no target:`, reply.code)
-    unapplied(handlers)
   } else {
     console.warn(`[layout-owner] ${command.type} refused:`, reply.code)
     handlers.refused?.(reply.code)
@@ -248,14 +240,6 @@ function mayBePairedServers(
   )
 }
 
-function unapplied(handlers: LayoutApplyHandlers): void {
-  if (handlers.unapplied) {
-    handlers.unapplied()
-  } else {
-    handlers.asToday()
-  }
-}
-
 const keepWindowCopy = (): void => {}
 
 /** Records a change the window already made; any answer leaves the window's copy as it is. */
@@ -265,15 +249,6 @@ export function recordLayoutApply(
   command: WindowLayoutCommand
 ): void {
   sendLayoutApply(state, worktreeId, command, { apply: keepWindowCopy, asToday: keepWindowCopy })
-}
-
-function mainLacksTarget(code: WindowRefusalCode): boolean {
-  return (
-    code === 'workspace_not_found' ||
-    code === 'tab_not_found' ||
-    code === 'pane_not_found' ||
-    code === 'group_not_found'
-  )
 }
 
 function errorMessage(error: unknown): unknown {
