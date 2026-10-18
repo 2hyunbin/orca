@@ -333,6 +333,23 @@ describe('a host that just moved to its managed server', () => {
       expect(store.getState().activeWorktreeId).toBe(serverWorktreeId)
     })
 
+    it('keeps the selection while a failed scan leaves the server’s row unknown', async () => {
+      applySshManagedServerTransition('ssh-1', undefined, {
+        kind: 'managed',
+        environmentId: 'env-link-failed-scan',
+        linked
+      })
+      await vi.waitFor(() => expect(store.getState().worktreesByRepo['repo-b']).toEqual([]))
+      // Startup's scan completed, but the server's listing failed and delivered no rows.
+      store.setState({ startupWorktreeRefreshCompleted: true })
+      expect(store.getState().activeWorktreeId).toBe(sourceWorktreeId)
+
+      store.setState({ worktreesByRepo: serverRows('env-link-failed-scan') })
+
+      expect(store.getState().activeWorkspaceExecutionHostId).toBe('runtime:env-link-failed-scan')
+      expect(store.getState().activeWorktreeId).toBe(serverWorktreeId)
+    })
+
     it('selects nothing when the server has no copy to move to', async () => {
       applySshManagedServerTransition('ssh-1', undefined, {
         kind: 'managed',

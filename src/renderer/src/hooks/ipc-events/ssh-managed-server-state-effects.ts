@@ -6,6 +6,7 @@ import type {
 } from '../../../../shared/ssh-types'
 import { normalizeRuntimePathForComparison } from '../../../../shared/cross-platform-path'
 import { splitWorktreeId } from '../../../../shared/worktree/id'
+import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import type { Repo } from '../../../../shared/repo-types'
 import {
   type ExecutionHostId,
@@ -188,27 +189,37 @@ async function loadManagedServerCatalogs(targetId: string, load: CatalogLoad): P
         : { lastVisitedAtByWorktreeId })
     }
   })
-  rehomeActiveWorkspace(targetId, environmentId, linkedRepoIds)
-  if (!useAppStore.getState().startupWorktreeRefreshCompleted) {
-    rehomeAfterStartupScan(targetId, environmentId, linkedRepoIds, isCurrent)
-  }
+  rehomeActiveWorkspaceWhenKnown(targetId, environmentId, linkedRepoIds, isCurrent)
 }
 
-/** Why: on cold start the server's worktree rows arrive with startup's scan, after the attempt above. */
-function rehomeAfterStartupScan(
+/**
+ * Why keep watching: the server's worktree rows arrive with startup's scan on cold start, and a
+ * failed scan leaves them missing until a later one, so a missing row never reads as no copy.
+ */
+function rehomeActiveWorkspaceWhenKnown(
   targetId: string,
   environmentId: string,
   linkedRepoIds: ReadonlyMap<string, string>,
   isCurrent: () => boolean
 ): void {
-  const unsubscribe = useAppStore.subscribe((state) => {
+  if (rehomeActiveWorkspace(targetId, environmentId, linkedRepoIds) !== 'pending') {
+    return
+  }
+  const unsubscribe = useAppStore.subscribe((state, previous) => {
     if (!isCurrent()) {
       unsubscribe()
       return
     }
-    if (state.startupWorktreeRefreshCompleted) {
+    if (
+      state.worktreesByRepo === previous.worktreesByRepo &&
+      state.detectedWorktreesByRepo === previous.detectedWorktreesByRepo &&
+      state.activeWorktreeId === previous.activeWorktreeId &&
+      state.activeWorkspaceExecutionHostId === previous.activeWorkspaceExecutionHostId
+    ) {
+      return
+    }
+    if (rehomeActiveWorkspace(targetId, environmentId, linkedRepoIds) !== 'pending') {
       unsubscribe()
-      rehomeActiveWorkspace(targetId, environmentId, linkedRepoIds)
     }
   })
 }
@@ -239,33 +250,44 @@ function linkedServerRepoIds(
   return mapping
 }
 
-/** The server's copy of a workspace: the same id, or the same checkout in the project it linked to. */
+type ServerCopy = { kind: 'found'; worktreeId: string } | { kind: 'absent' } | { kind: 'pending' }
+
+/**
+ * The server's copy of a workspace: the same id, or the same checkout in the project it linked to.
+ * Only a project the server's catalog lacks is absent; that catalog loaded or this never runs.
+ */
 function serverCopyOfWorkspace(
   worktreeId: string,
   runtimeHostId: ExecutionHostId,
   linkedRepoIds: ReadonlyMap<string, string>
-): string | null {
+): ServerCopy {
   const state = useAppStore.getState()
   if (state.getKnownWorktreeById(worktreeId, runtimeHostId)) {
-    return worktreeId
+    return { kind: 'found', worktreeId }
   }
-  const source = splitWorktreeId(worktreeId)
-  const serverRepoId = source && linkedRepoIds.get(source.repoId)
-  if (!source || !serverRepoId) {
-    return null
+  const source =
+    parseWorkspaceKey(worktreeId)?.type === 'folder' ? null : splitWorktreeId(worktreeId)
+  if (!source) {
+    return { kind: 'absent' }
+  }
+  const serverRepoId = state.repos.some(
+    (repo) => repo.id === source.repoId && getRepoExecutionHostId(repo) === runtimeHostId
+  )
+    ? source.repoId
+    : linkedRepoIds.get(source.repoId)
+  if (!serverRepoId) {
+    return { kind: 'absent' }
   }
   const path = normalizeRuntimePathForComparison(source.worktreePath)
   // Why detected too: a checkout the server's visibility settings hide still exists there.
-  return (
-    [
-      ...(state.worktreesByRepo[serverRepoId] ?? []),
-      ...(state.detectedWorktreesByRepo[serverRepoId]?.worktrees ?? [])
-    ].find(
-      (worktree) =>
-        worktree.hostId === runtimeHostId &&
-        normalizeRuntimePathForComparison(worktree.path) === path
-    )?.id ?? null
+  const row = [
+    ...(state.worktreesByRepo[serverRepoId] ?? []),
+    ...(state.detectedWorktreesByRepo[serverRepoId]?.worktrees ?? [])
+  ].find(
+    (worktree) =>
+      worktree.hostId === runtimeHostId && normalizeRuntimePathForComparison(worktree.path) === path
   )
+  return row ? { kind: 'found', worktreeId: row.id } : { kind: 'pending' }
 }
 
 /** Why: an active workspace left on the SSH host keeps showing panes that dial the stopped relay. */
@@ -273,34 +295,34 @@ function rehomeActiveWorkspace(
   targetId: string,
   environmentId: string,
   linkedRepoIds: ReadonlyMap<string, string>
-): void {
+): 'settled' | 'pending' {
   const state = useAppStore.getState()
   const runtimeHostId = toRuntimeExecutionHostId(environmentId)
   if (
     !state.activeWorktreeId ||
     state.activeWorkspaceExecutionHostId !== toSshExecutionHostId(targetId)
   ) {
-    return
+    return 'settled'
   }
-  const serverWorktreeId = serverCopyOfWorkspace(
-    state.activeWorktreeId,
-    runtimeHostId,
-    linkedRepoIds
-  )
-  if (serverWorktreeId) {
+  const copy = serverCopyOfWorkspace(state.activeWorktreeId, runtimeHostId, linkedRepoIds)
+  if (copy.kind === 'pending') {
+    return 'pending'
+  }
+  if (copy.kind === 'found') {
     // Why a transition: it makes the active repo follow the row, which a linked project renames.
-    state.setActiveWorktree(serverWorktreeId, runtimeHostId, {
+    state.setActiveWorktree(copy.worktreeId, runtimeHostId, {
       stateTransition: () => ({ patch: {}, activate: true })
     })
-  } else if (state.startupWorktreeRefreshCompleted) {
-    // Every server row is in and none is this one; the SSH owner it names is retired.
-    state.setActiveWorktree(null, undefined, {
-      stateTransition: (current) => ({
-        patch: current.repos.some((repo) => repo.id === current.activeRepoId)
-          ? {}
-          : { activeRepoId: null },
-        activate: true
-      })
-    })
+    return 'settled'
   }
+  // The server holds no project for it, so the SSH owner it names is retired.
+  state.setActiveWorktree(null, undefined, {
+    stateTransition: (current) => ({
+      patch: current.repos.some((repo) => repo.id === current.activeRepoId)
+        ? {}
+        : { activeRepoId: null },
+      activate: true
+    })
+  })
+  return 'settled'
 }
