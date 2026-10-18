@@ -458,8 +458,14 @@ describe('notice rows', () => {
     expect(disclosure?.querySelector('pre')).toHaveTextContent('Check the configuration')
   })
   it('retains person-facing usage details without inventing a provider frame', () => {
-    renderStatus({ kind: 'status', text: 'Usage limit reached', tone: 'warning',
-      failure: { kind: 'usageLimitReached', detail: { audience: 'person', text: 'Your allowance resets tomorrow.' } } })
+    renderStatus({
+      kind: 'status', tone: 'warning',
+      ...agentSessionFailureWords(
+        agentSessionFailureFact('usageLimitReached', {
+          detail: { audience: 'person', text: 'Your allowance resets tomorrow.' }
+        }), { surface: 'row' }
+      )
+    })
     const disclosure = screen.getByText('Details').closest('details')
     expect(disclosure?.querySelector('pre')).toHaveTextContent('Your allowance resets tomorrow.')
     expect(screen.queryByText('codex')).not.toBeInTheDocument()

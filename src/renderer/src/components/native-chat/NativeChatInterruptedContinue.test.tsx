@@ -46,6 +46,7 @@ import { clearNativeChatComposerDraftsForTests, readNativeChatComposerDraft, upd
 import { reportStructuredSessionUserInput } from '@/lib/worker-terminal-takeover-report'
 import { emitNativeChatMessageSent } from '@/lib/native-chat-telemetry'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { agentSessionFailureWords } from '../../../../shared/agent-session-failure-words'
 import { agentJournalItemKey } from '../../../../shared/agent-session-journal-item-key'
 import type {
   AgentJournalRenderItem,
@@ -310,7 +311,7 @@ describe('Continue on a reply an Orca stop cut off', () => {
 it('keeps the draft through Continue admission, refusal, uncertainty and recorded-before-journal', async () => {
   const items: AgentJournalRenderItem[] = [
     { ...cutChat[0]!, body: { kind: 'turn', turnId: 'cut', state: 'completed', outcome: 'failure', startedAt: 1, completedAt: 5 } },
-    { ...cutChat[1]!, body: { kind: 'status', text: 'Limit', failure: { kind: 'usageLimitReached' } } }
+    { ...cutChat[1]!, body: { kind: 'status', ...agentSessionFailureWords({ kind: 'usageLimitReached' }, { surface: 'row' }) } }
   ]
   const scope = structuredAgentSessionDraftScopeKey('session-1')
   const draft = { text: 'My unfinished request', images: [{ id: 'attached', path: '/tmp/photo.png' }] }
