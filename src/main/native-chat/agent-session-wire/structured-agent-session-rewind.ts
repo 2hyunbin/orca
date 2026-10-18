@@ -217,6 +217,7 @@ export async function rewindStructuredAgentSession(
     operation,
     run,
     {
+      needsAgent: () => !rewindsByFork,
       beforeAgent: () => rewindRefusalBehindClear(context.sessions.get(sessionId)?.journal, params)
     }
   )

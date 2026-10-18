@@ -39,6 +39,7 @@ let directory: string
 let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
 let sink: StructuredAgentSessionEventSink
+let failAcquire: boolean
 const forkForRewind = vi.fn<NonNullable<StructuredAgentSessionAdapter['forkForRewind']>>(
   async () => ({ ok: true, fork: FORK })
 )
@@ -54,6 +55,7 @@ const attachParams = (fence: number | null) =>
 
 beforeEach(async () => {
   resetHostTestOperationIds()
+  failAcquire = false
   directory = await mkdtemp(join(tmpdir(), 'orca-fork-rewind-'))
   store = await openTestAgentSessionRecordStore(directory)
   const adapter = startsWhenPublished(
@@ -61,6 +63,9 @@ beforeEach(async () => {
       supportsCreate: (_location, agent) => agent === 'claude',
       supportsLocation: () => true,
       acquire: async (input) => {
+        if (failAcquire) {
+          throw new Error('Claude cannot start')
+        }
         sink = input.events!
         return {
           providerChildPhase: 'starting' as const,
@@ -124,7 +129,7 @@ afterEach(async () => {
 })
 
 describe('rewinding a chat whose agent forks', () => {
-  it('saves the fork for the next launch, stops the agent and keeps the rows before the message', async () => {
+  it('saves the fork, keeps the prefix and rewinds again at rest without starting the agent', async () => {
     const epoch = (await host.journalSnapshot(HOST_TEST_SESSION)).cursor.epoch
     const fields = { itemId: key('prompt-2'), expectedEpoch: epoch }
     const envelope = {
@@ -150,5 +155,24 @@ describe('rewinding a chat whose agent forks', () => {
     })
     const snapshot = await host.journalSnapshot(HOST_TEST_SESSION)
     expect(snapshot.items.map((item) => item.itemId)).toEqual([key('prompt-1'), key('answer-1')])
+
+    failAcquire = true
+    const again = { itemId: key('prompt-1'), expectedEpoch: snapshot.cursor.epoch }
+    expect(
+      await host.rewind(caller, {
+        ...again,
+        envelope: {
+          sessionId: HOST_TEST_SESSION,
+          clientOperationId: hostTestOperationId(),
+          expectedRuntimeFence: store.getRecord(HOST_TEST_SESSION)!.lease.runtimeFence,
+          payloadFingerprint: computeAgentSessionPayloadFingerprint({
+            method: 'agentSession.rewind',
+            sessionId: HOST_TEST_SESSION,
+            fields: again
+          })
+        }
+      })
+    ).toMatchObject({ ok: true })
+    expect((await host.journalSnapshot(HOST_TEST_SESSION)).items).toEqual([])
   })
 })
