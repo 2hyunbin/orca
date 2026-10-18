@@ -98,6 +98,7 @@ function createFakeLogStream(): {
   const stdin = new PassThrough()
   const stdout = new PassThrough()
   const killed: string[] = []
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the watcher only touches stdin/stdout/kill and EventEmitter events, all provided here.
   const child = Object.assign(new EventEmitter(), {
     stdin,
     stdout,
