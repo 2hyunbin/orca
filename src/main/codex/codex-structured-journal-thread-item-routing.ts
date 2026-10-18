@@ -18,7 +18,6 @@ import {
 import { CODEX_JOURNAL_ADMITTED } from './codex-structured-journal-contracts'
 import type { CodexStructuredSessionEvent } from './codex-structured-session-adapter'
 import { readRecord } from './codex-item-field-readers'
-import { readCodexTurnId } from './codex-structured-thread-facts'
 
 type ThreadItemEvent = Extract<CodexStructuredSessionEvent, { type: 'notification' }>
 
@@ -63,7 +62,7 @@ export function createCodexThreadItemRouter(input: {
       readRecord(readRecord(event.params).item).type === 'userMessage'
     ) {
       // A user item with no readable exact id may be a receipt this capture missed.
-      input.deps.observations?.lose(readCodexTurnId(event.params))
+      input.deps.observations?.lose()
     }
     return translated.handled
       ? translated.admission

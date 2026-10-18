@@ -19,7 +19,7 @@ import type { CodexPendingJournalPrompt } from './codex-structured-journal-settl
 import type { CodexJournalTranslationAdmission } from './codex-structured-journal-contracts'
 import { CODEX_JOURNAL_ADMITTED } from './codex-structured-journal-contracts'
 import { reviseCodexTurnRow } from './codex-structured-journal-translation-turns'
-import { codexTurnReceiptsSaveable } from './codex-structured-dispatch-observations'
+import { codexReceiptsSaveable } from './codex-structured-dispatch-observations'
 
 const ADMITTED: StructuredAgentSessionSinkAdmission = { accepted: true }
 
@@ -27,9 +27,9 @@ export function appendCodexLifecycleMutations(
   sink: StructuredAgentSessionEventSink,
   settlementId: string,
   mutations: readonly JournalLifecycleIdentityMutationInput[],
-  /** Unsaved observations this end of `turnId` saves ahead of itself, in its transaction; `saved`
-   *  re-reads the fold once it lands. */
-  observed?: { sends: readonly JournalObservedSend[]; saved: () => void; turnId: string }
+  /** Unsaved observations this end saves ahead of itself, in its transaction; `saved` re-reads the
+   *  fold once it lands, and `lose` marks the capture lost when the fold can no longer take one. */
+  observed?: CodexEndObservations
 ): StructuredAgentSessionSinkAdmission {
   const sends = observed?.sends ?? []
   if (mutations.length === 0 && sends.length === 0) {
@@ -67,11 +67,15 @@ export function appendCodexLifecycleMutations(
       ...(observed ? { onPublished: observed.saved } : {})
     })
   } else if (sink.tryAppendLifecycleBatch) {
-    admission = sink.tryAppendLifecycleBatch(settlementId, mutations, { lifecycle: true })
+    admission = sink.tryAppendLifecycleBatch(settlementId, uncertified(mutations), {
+      lifecycle: true
+    })
   } else if (sink.appendLifecycleBatch) {
-    admission = sink.appendLifecycleBatch(settlementId, mutations, { lifecycle: true }) ?? ADMITTED
+    admission =
+      sink.appendLifecycleBatch(settlementId, uncertified(mutations), { lifecycle: true }) ??
+      ADMITTED
   } else {
-    for (const mutation of mutations) {
+    for (const mutation of uncertified(mutations)) {
       if (mutation.kind === 'item') {
         const options = {
           lifecycle: true,
@@ -101,24 +105,43 @@ export function appendCodexLifecycleMutations(
     : (sink.publish({ lifecycle: true }), ADMITTED)
 }
 
-/** An ordinary (non-lifecycle) append, published once admitted. */
-/** A turn's certificate stands only while the fold, where its end executes, still takes every
- *  receipt it covers. */
-function certifiedTurn(
-  journal: Parameters<typeof codexTurnReceiptsSaveable>[0],
-  body: AgentJournalTurnItem,
-  observed: { sends: readonly JournalObservedSend[]; turnId: string } | undefined
-): AgentJournalTurnItem {
-  if (
-    !body.receiptsComplete ||
-    (observed && codexTurnReceiptsSaveable(journal, observed.sends, observed.turnId))
-  ) {
-    return body
-  }
-  const { receiptsComplete: _uncertified, ...uncertified } = body
-  return uncertified
+type CodexEndObservations = {
+  sends: readonly JournalObservedSend[]
+  saved: () => void
+  lose: () => void
 }
 
+/** A turn's certificate stands only while the fold, where its end executes, still takes every
+ *  receipt held; one it can no longer take is a capture loss. */
+function certifiedTurn(
+  journal: Parameters<typeof codexReceiptsSaveable>[0],
+  body: AgentJournalTurnItem,
+  observed: CodexEndObservations | undefined
+): AgentJournalTurnItem {
+  if (!body.receiptsComplete || (observed && codexReceiptsSaveable(journal, observed.sends))) {
+    return body
+  }
+  observed?.lose()
+  return withoutCertificate(body)
+}
+
+function withoutCertificate(body: AgentJournalTurnItem): AgentJournalTurnItem {
+  const { receiptsComplete: _certificate, ...rest } = body
+  return rest
+}
+
+/** Only an end that saves the held receipts with itself may say they are complete. */
+function uncertified(
+  mutations: readonly JournalLifecycleIdentityMutationInput[]
+): readonly JournalLifecycleIdentityMutationInput[] {
+  return mutations.map((mutation) =>
+    mutation.kind === 'item' && mutation.body.kind === 'turn' && mutation.body.receiptsComplete
+      ? { ...mutation, body: withoutCertificate(mutation.body) }
+      : mutation
+  )
+}
+
+/** An ordinary (non-lifecycle) append, published once admitted. */
 export function appendCodexItemAndPublish(
   sink: StructuredAgentSessionEventSink,
   identity: AgentJournalItemIdentity,

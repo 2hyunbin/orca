@@ -434,26 +434,48 @@ describe('what Codex said about a send, saved whatever its own write did', () =>
     }
   )
 
-  it('drops the oldest unsaved receipt past the bound, and its turn certifies nothing', async () => {
+  it('drops the oldest unsaved receipt past the bound, and no later end certifies', async () => {
     observationBound.value = 1
-    const a = await send('first')
+    // Before 0.148, with turn-1 picked for a send whose answer was lost, Codex answers B as turn-2.
+    turns = codexTurnLifecycleFake(
+      THREAD,
+      () => (method, params) => handlers?.onNotification?.(method, params),
+      { legacyStartAnswers: true }
+    )
+    const start = turns.routes['turn/start']
+    turns.routes['turn/start'] = () => {
+      turns.routes['turn/start'] = start
+      start()
+      throw new Error('codex app-server request timed out: turn/start')
+    }
+    await send('first')
     await vi.waitFor(() => expect(answers).toBe(1))
-    turns.start()
     const b = await send('second')
-    await vi.waitFor(() => expect(steers).toBe(1))
-    failJournalWrites((rows) => bareReceipt(rows, a) || bareReceipt(rows, b))
+    await vi.waitFor(() => expect(answers).toBe(2))
+    turns.start()
+    failJournalWrites((rows) => bareReceipt(rows, b))
 
-    // A's receipt is kept once Codex lets A go; B's, while B is still held, overflows it.
-    turns.echo(a)
+    // B's receipt names turn-1; C's answer, while C is held, overflows that unsaved receipt.
     turns.echo(b)
+    const c = await send('third')
+    await vi.waitFor(() => expect(steers).toBe(1))
+    turns.echo(c)
     turns.end('completed')
+    await vi.waitFor(async () => expect((await rawSubmission(c)).dispatchState).toBe('accepted'))
+    expect((await rawSubmission(b)).dispatchState).not.toBe('accepted')
 
-    await vi.waitFor(async () => expect((await rawSubmission(b)).dispatchState).toBe('accepted'))
-    expect((await rawSubmission(a)).dispatchState).toBe('pending')
+    const d = await send('fourth')
+    await vi.waitFor(() => expect(answers).toBe(3))
+    turns.start()
+    turns.echo(d)
+    turns.end('completed')
+    await vi.waitFor(async () => expect((await rawSubmission(d)).dispatchState).toBe('accepted'))
     expect(closes).toBe(0)
     await stopStructuredAgentSessionRuntime()
-    const turn = turnBody(loadTestJournal(root, SESSION)?.state.items.values() ?? [], 'turn-1')
-    expect(turn).toMatchObject({ endedBy: 'provider' })
-    expect(turn).not.toHaveProperty('receiptsComplete')
+    const items = [...(loadTestJournal(root, SESSION)?.state.items.values() ?? [])]
+    for (const turnId of ['turn-1', 'turn-3']) {
+      expect(turnBody(items, turnId)).toMatchObject({ endedBy: 'provider' })
+      expect(turnBody(items, turnId)).not.toHaveProperty('receiptsComplete')
+    }
   })
 })

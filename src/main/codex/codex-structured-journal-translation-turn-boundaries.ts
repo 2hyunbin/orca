@@ -76,7 +76,7 @@ export class CodexJournalTurnBoundaries {
       resetActivity: (threadId: string) => void
       attributionFor: CodexRowAttribution
       commands: CodexJournalCommandTurn
-      observations?: Pick<CodexDispatchObservations, 'certifies' | 'retained' | 'prune'>
+      observations?: Pick<CodexDispatchObservations, 'certifies' | 'retained' | 'prune' | 'lose'>
       now?: () => number
     }
   ) {}
@@ -207,7 +207,7 @@ export class CodexJournalTurnBoundaries {
             ...(namedTurnId !== null &&
             codexTurnOutcome(status) !== null &&
             this.deps.activeTurns.has(event.threadId, turnId) &&
-            this.deps.observations?.certifies(turnId)
+            this.deps.observations?.certifies()
               ? { receiptsComplete: true as const }
               : {}),
             ...this.blockedInput(event.threadId, turnId)
@@ -237,7 +237,7 @@ export class CodexJournalTurnBoundaries {
             observed: {
               sends: this.deps.observations.retained(),
               saved: this.deps.observations.prune,
-              turnId
+              lose: this.deps.observations.lose
             }
           }
         : {})

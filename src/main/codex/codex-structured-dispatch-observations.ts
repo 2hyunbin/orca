@@ -3,8 +3,8 @@
 // Each is saved at once and nonfatally; whatever the fold still lacks rides the turn's terminal
 // append and the host's exit settlement, so a failed save never stops the reply. The fold is the
 // only thing that clears a kept observation. Bounded together with the sends Codex holds: a new
-// send always wins, so overflow drops the oldest kept observation, and the turn it named can no
-// longer certify that its receipts are complete.
+// send always wins, so overflow drops the oldest kept observation. Any loss is this acquisition's,
+// never a turn's: no later end of it certifies that its receipts are complete.
 
 import type {
   AgentJournalItemIdentity,
@@ -30,7 +30,7 @@ type ObservationJournal = Pick<
   'epoch' | 'submission' | 'sendAnswer'
 >
 
-type Kept = JournalObservedSend & { turnId: string | null; receiptSaving?: true }
+type Kept = JournalObservedSend & { receiptSaving?: true }
 
 export type CodexObservationSave = (
   settlement: { sessionId: string; clientMessageId: string } & (
@@ -46,12 +46,12 @@ export type CodexDispatchObservations = {
   saveReceipt: (clientMessageId: string, identity: AgentJournalItemIdentity, armed: boolean) => void
   /** A successful answer naming the turn Codex chose for the send. */
   answer: (clientMessageId: string, turnId: string) => void
-  /** Capture lost something of this turn, or of an unplaceable one. */
-  lose: (turnId: string | null) => void
+  /** Capture lost something: a lost receipt has no turn, so no later end certifies. */
+  lose: () => void
   /** A frame the connection could not deliver. */
   noteFrame: (kind: string) => void
-  /** Whether this generation's capture of the turn's receipts is whole. */
-  certifies: (turnId: string) => boolean
+  /** Whether this acquisition's capture is whole. */
+  certifies: () => boolean
   retained: () => JournalObservedSend[]
   /** Drops what the fold shows saved, or can no longer save. */
   prune: () => void
@@ -67,26 +67,19 @@ export function createCodexDispatchObservations(input: {
   save?: CodexObservationSave
 }): CodexDispatchObservations {
   const kept = new Map<string, Kept>()
-  const lostTurns = new Set<string>()
-  let lostUnplaced = false
+  // Monotonic: a new acquisition gets a new capture.
+  let captureLost = false
   let echoed = false
-  const lose = (turnId: string | null): void => {
-    if (
-      turnId !== null &&
-      (lostTurns.has(turnId) || lostTurns.size < MAX_CODEX_PENDING_DISPATCH_ECHOES)
-    ) {
-      lostTurns.add(turnId)
-    } else {
-      lostUnplaced = true
-    }
+  const lose = (): void => {
+    captureLost = true
   }
-  // A receipt the journal neither holds nor can still take leaves its turn unproven.
+  // A receipt the journal neither holds nor can still take is lost.
   const loseUnsaved = (
     identity: AgentJournalItemIdentity | undefined,
     submission: AgentJournalSubmission | undefined
   ): void => {
     if (identity && submission?.dispatchState !== 'accepted') {
-      lose(codexTurnOf(identity))
+      lose()
     }
   }
   const prune = (): void => {
@@ -116,28 +109,20 @@ export function createCodexDispatchObservations(input: {
   const keep = (
     clientMessageId: string,
     epoch: string,
-    turnId: string | null,
     fields: Pick<JournalObservedSend, 'providerIdentity' | 'answeredTurnItemId'>
   ): void => {
-    const existing = kept.get(clientMessageId)
-    kept.set(clientMessageId, {
-      ...existing,
-      clientMessageId,
-      epoch,
-      turnId: existing?.turnId ?? turnId,
-      ...fields
-    })
+    kept.set(clientMessageId, { ...kept.get(clientMessageId), clientMessageId, epoch, ...fields })
     const held = input.held()
     let over =
       kept.size + [...held].filter((id) => !kept.has(id)).length - MAX_CODEX_PENDING_DISPATCH_ECHOES
-    for (const [clientMessageId, observed] of kept) {
+    for (const clientMessageId of kept.keys()) {
       if (over <= 0) {
         break
       }
       // Never a send Codex still holds: bookkeeping does not evict execution.
       if (!held.has(clientMessageId)) {
         kept.delete(clientMessageId)
-        lose(observed.turnId)
+        lose()
         over -= 1
       }
     }
@@ -154,12 +139,12 @@ export function createCodexDispatchObservations(input: {
         loseUnsaved(identity, submission)
         return
       }
-      // A send another generation was handed is a stale callback: unsaved, so its turn is unproven.
+      // A send another generation was handed is a stale callback: unsaved, so lost here.
       if (submission?.handedOverAt === undefined || submission.fence !== input.fence) {
-        lose(codexTurnOf(identity))
+        lose()
         return
       }
-      keep(clientMessageId, journal.epoch, codexTurnOf(identity), { providerIdentity: identity })
+      keep(clientMessageId, journal.epoch, { providerIdentity: identity })
     },
     saveReceipt: (clientMessageId, identity, armed) => {
       const observed = kept.get(clientMessageId)
@@ -168,8 +153,8 @@ export function createCodexDispatchObservations(input: {
         save({ sessionId: input.sessionId, clientMessageId, providerIdentity: identity })
       } else if (!input.journal()?.submission) {
         // No bound journal to check the send against (an unbound sink, or a test double): its armed
-        // entry admits it, as it always has, and proves nothing about the turn.
-        lose(codexTurnOf(identity))
+        // entry admits it, as it always has, and proves nothing about completeness.
+        lose()
         if (armed) {
           save({ sessionId: input.sessionId, clientMessageId, providerIdentity: identity })
         }
@@ -185,45 +170,36 @@ export function createCodexDispatchObservations(input: {
         return
       }
       const turnItemId = agentJournalItemKey(codexTurnLifecycleIdentity(input.sessionId, turnId))
-      keep(clientMessageId, journal.epoch, turnId, { answeredTurnItemId: turnItemId })
+      keep(clientMessageId, journal.epoch, { answeredTurnItemId: turnItemId })
       save({ sessionId: input.sessionId, clientMessageId, sendAnswered: { turnItemId } })
     },
     lose,
     noteFrame: (kind) => {
       if (CAPTURE_LOSS_FRAMES.has(kind)) {
-        lose(null)
+        lose()
       }
     },
-    certifies: (turnId) => echoed && !lostUnplaced && !lostTurns.has(turnId),
-    retained: () =>
-      [...kept.values()].map(
-        ({ turnId: _turnId, receiptSaving: _saving, ...observed }) => observed
-      ),
+    certifies: () => echoed && !captureLost,
+    retained: () => [...kept.values()].map(({ receiptSaving: _saving, ...observed }) => observed),
     prune,
     clear: () => {
       kept.clear()
-      lostUnplaced = true
+      lose()
     }
   }
 }
 
-/** Whether every receipt `sends` holds for `turnId` is saved, or saves in the batch it rides: read
- *  against the fold where that turn's end executes, so a send rejected since its admission cannot
- *  certify it. */
-export function codexTurnReceiptsSaveable(
+/** Whether every receipt `sends` holds is saved, or saves in the batch it rides: read against the
+ *  fold where a turn's end executes, so a send rejected since its admission cannot certify it. */
+export function codexReceiptsSaveable(
   journal: Pick<ObservationJournal, 'epoch' | 'submission'>,
-  sends: readonly JournalObservedSend[],
-  turnId: string
+  sends: readonly JournalObservedSend[]
 ): boolean {
   return sends.every(({ clientMessageId, epoch, providerIdentity }) => {
-    if (!providerIdentity || codexTurnOf(providerIdentity) !== turnId) {
+    if (!providerIdentity) {
       return true
     }
     const submission = epoch === journal.epoch ? journal.submission?.(clientMessageId) : undefined
     return submission?.dispatchState === 'accepted' || journalDispatchRowApplies(submission)
   })
-}
-
-function codexTurnOf(identity: AgentJournalItemIdentity): string | null {
-  return identity.provider === 'codex' ? identity.turnId : null
 }
