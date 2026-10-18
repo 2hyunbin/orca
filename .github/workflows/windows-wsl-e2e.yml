@@ -35,12 +35,18 @@ jobs:
       - uses: ./.github/actions/install-node-dependencies
         with:
           native-runtime: electron
+          persist-native-cache: 'false'
       - name: Build relay and Electron
         run: |
           pnpm run build:wsl-guest
           if ($LASTEXITCODE -ne 0) { throw 'Relay build failed' }
           pnpm exec electron-vite build --mode e2e
           if ($LASTEXITCODE -ne 0) { throw 'Electron build failed' }
+      - name: Record bundled runtime identity
+        run: |
+          $runtime = Join-Path (Resolve-Path node_modules/node-pty).Path 'build/Release/conpty'
+          New-Item -ItemType Directory -Path test-results -Force | Out-Null
+          Get-ChildItem $runtime | ForEach-Object { $_.VersionInfo.FileVersion; Get-FileHash $_.FullName -Algorithm SHA256 } | Out-File test-results/image-ready-old-runtime-version.txt
       - name: Capture placement controls with bundled runtime
         continue-on-error: true
         env:
