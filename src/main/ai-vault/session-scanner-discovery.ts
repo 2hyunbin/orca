@@ -44,12 +44,9 @@ export async function discoverFiles(args: {
   filePredicate?: (path: string) => boolean
   contentDependencyPath?: (path: string) => string | undefined | Promise<string | undefined>
   directoryPredicate?: (name: string, depth: number) => boolean
-  // A scoped scan walks every file this agent has, not only the newest `limit`.
-  keepScopeFiles?: boolean
   signal?: AbortSignal
 }): Promise<SessionFileDiscovery> {
   const files = new SessionNewestFiles(args.limit)
-  const scopeFiles: FileWithMtime[] | undefined = args.keepScopeFiles ? [] : undefined
   let refusedSidecar = false
   let paths: string[] = []
   let pending: Promise<SessionFileObservation[]> | null = null
@@ -78,18 +75,11 @@ export async function discoverFiles(args: {
       }
       try {
         const modifiedAt = new Date(observation.file.mtimeMs)
-        if (
-          Number.isNaN(modifiedAt.getTime()) ||
-          files.wouldRetain(observation.file.mtimeMs) ||
-          scopeFiles
-        ) {
-          const left = files.add({
+        if (Number.isNaN(modifiedAt.getTime()) || files.wouldRetain(observation.file.mtimeMs)) {
+          files.add({
             ...observation.file,
             modifiedAt: modifiedAt.toISOString()
           })
-          if (left) {
-            scopeFiles?.push(left)
-          }
         }
       } catch (err) {
         recordSessionScanIssue(args.issues, {
@@ -196,7 +186,7 @@ export async function discoverFiles(args: {
   } finally {
     source.close()
   }
-  return { agent: args.agent, rootDir: args.rootDir, files: files.newest(), scopeFiles }
+  return { agent: args.agent, rootDir: args.rootDir, files: files.newest() }
 }
 
 async function observeSessionFile(

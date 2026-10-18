@@ -11,7 +11,6 @@ import { discoverOpenCodeSessions } from './session-scanner-opencode-sqlite-disc
 import { listOpenCode2SqliteSessionsViaWorker } from './session-scanner-opencode-sqlite-worker-spawn'
 import { isOpenCodeV2DatabaseName } from '../../shared/opencode-database-name'
 import type { AiVaultScanOptions, SessionFileDiscovery } from './session-scanner-types'
-import { scopeWalksAgentFiles } from './session-scope-cwd'
 
 export function opencodeDiscoveries(
   options: AiVaultScanOptions,
@@ -28,13 +27,12 @@ export function opencodeDiscoveries(
           dbPaths: dbPaths.filter((path) => !isOpenCodeV2DatabaseName(basename(path))),
           limitPerAgent: limit,
           issues,
-          scopePaths: options.scopePaths,
           signal: options.signal
         })
       ),
       // Current releases share opencode.db with v1; the worker checks for v2 tables.
       paths.then((dbPaths) =>
-        discoverOpenCode2Sessions(storageDir, dbPaths, limit, issues, options)
+        discoverOpenCode2Sessions(storageDir, dbPaths, limit, issues, options.signal)
       )
     ]
   })
@@ -85,24 +83,12 @@ async function discoverOpenCode2Sessions(
   dbPaths: readonly string[],
   limit: number,
   issues: AiVaultScanIssue[],
-  options: AiVaultScanOptions
+  signal?: AbortSignal
 ): Promise<SessionFileDiscovery> {
-  const list = (scopePaths?: readonly string[]) =>
-    listOpenCode2SqliteSessionsViaWorker({
-      dbPaths,
-      limit,
-      issues,
-      scopePaths,
-      signal: options.signal
-    }).then((candidates) => candidates.map((candidate) => candidate.file))
-  const [files, scopeFiles] = await Promise.all([
-    list(),
-    scopeWalksAgentFiles('opencode2', options.scopePaths) ? list(options.scopePaths) : undefined
-  ])
+  const files = await listOpenCode2SqliteSessionsViaWorker({ dbPaths, limit, issues, signal })
   return {
     agent: 'opencode2' as const,
     rootDir: storageDir,
-    files,
-    ...(scopeFiles ? { scopeFiles } : {})
+    files: files.map((candidate) => candidate.file)
   }
 }

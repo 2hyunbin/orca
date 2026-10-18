@@ -9,7 +9,6 @@ import {
 } from './session-scanner-antigravity-paths'
 import { discoverFiles } from './session-scanner-discovery'
 import type { AiVaultScanOptions, SessionFileDiscovery } from './session-scanner-types'
-import { scopeWalksAgentFiles } from './session-scope-cwd'
 
 export function antigravityDiscoveries(
   options: AiVaultScanOptions,
@@ -43,7 +42,6 @@ export function antigravityDiscoveries(
       extensions: ['.jsonl'],
       filePredicate: isAntigravityTranscriptPath,
       directoryPredicate: shouldDescendAntigravityBrainDirectory,
-      keepScopeFiles: scopeWalksAgentFiles('antigravity', options.scopePaths),
       signal: options.signal
     }).then((discovery) => completeAntigravityTranscriptPairs(discovery, issues))
   )

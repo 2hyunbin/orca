@@ -1,5 +1,3 @@
-import { aiVaultScopePathsForWslDistro } from '../../shared/ai-vault-scope-cwd-match'
-import { recordSessionScanIssue } from './session-scan-issues'
 import { existsSync } from 'node:fs'
 import { Worker } from 'node:worker_threads'
 import type { AiVaultScanIssue, AiVaultSession } from '../../shared/ai-vault-types'
@@ -52,11 +50,6 @@ function getSharedClient(): OpenCodeSqliteWorkerClient {
   return sharedClient
 }
 
-type SqliteParseArgs = Omit<Parameters<OpenCodeSqliteWorkerClient['parse']>[0], 'agent'>
-type SqliteCaptureArgs = Omit<Parameters<OpenCodeSqliteWorkerClient['capture']>[0], 'agent'>
-
-type SqliteListArgs = Omit<Parameters<OpenCodeSqliteWorkerClient['list']>[0], 'agent'>
-
 /**
  * List OpenCode SQLite session candidates through the shared worker client.
  * @param args.dbPaths - Absolute paths to opencode.db files to scan.
@@ -64,9 +57,12 @@ type SqliteListArgs = Omit<Parameters<OpenCodeSqliteWorkerClient['list']>[0], 'a
  * @param args.issues - Collected scan issues to append errors to.
  * @returns Synthetic candidates sorted by effective recency.
  */
-export function listOpenCodeSqliteSessionsViaWorker(
-  args: SqliteListArgs
-): Promise<SessionFileCandidate[]> {
+export function listOpenCodeSqliteSessionsViaWorker(args: {
+  dbPaths: readonly string[]
+  limit: number
+  issues: AiVaultScanIssue[]
+  signal?: AbortSignal
+}): Promise<SessionFileCandidate[]> {
   return listForHost(args)
 }
 
@@ -74,15 +70,21 @@ export function listOpenCodeSqliteSessionsViaWorker(
  * List opencode2 session candidates (v2 channel-scoped DB schema) through the
  * shared worker client.
  */
-export function listOpenCode2SqliteSessionsViaWorker(
-  args: SqliteListArgs
-): Promise<SessionFileCandidate[]> {
+export function listOpenCode2SqliteSessionsViaWorker(args: {
+  dbPaths: readonly string[]
+  limit: number
+  issues: AiVaultScanIssue[]
+  signal?: AbortSignal
+}): Promise<SessionFileCandidate[]> {
   return listForHost({ ...args, agent: 'opencode2' })
 }
 
-export function listZcodeSqliteSessionsViaWorker(
-  args: SqliteListArgs
-): Promise<SessionFileCandidate[]> {
+export function listZcodeSqliteSessionsViaWorker(args: {
+  dbPaths: readonly string[]
+  limit: number
+  issues: AiVaultScanIssue[]
+  signal?: AbortSignal
+}): Promise<SessionFileCandidate[]> {
   return listForHost({ ...args, agent: 'zcode' })
 }
 
@@ -93,21 +95,33 @@ export function listZcodeSqliteSessionsViaWorker(
  * @param args.platform - Platform used for resume-command generation.
  * @returns The parsed session, or `null` when it does not exist.
  */
-export function parseOpenCodeSqliteSessionViaWorker(
-  args: SqliteParseArgs
-): Promise<AiVaultSession | null> {
+export function parseOpenCodeSqliteSessionViaWorker(args: {
+  fullFirstUserPrompt?: boolean
+  dbPath: string
+  sessionId: string
+  platform: NodeJS.Platform
+  signal?: AbortSignal
+}): Promise<AiVaultSession | null> {
   return parseForHost(args)
 }
 
-export function parseOpenCode2SqliteSessionViaWorker(
-  args: SqliteParseArgs
-): Promise<AiVaultSession | null> {
+export function parseOpenCode2SqliteSessionViaWorker(args: {
+  fullFirstUserPrompt?: boolean
+  dbPath: string
+  sessionId: string
+  platform: NodeJS.Platform
+  signal?: AbortSignal
+}): Promise<AiVaultSession | null> {
   return parseForHost({ ...args, agent: 'opencode2' })
 }
 
-export function parseZcodeSqliteSessionViaWorker(
-  args: SqliteParseArgs
-): Promise<AiVaultSession | null> {
+export function parseZcodeSqliteSessionViaWorker(args: {
+  fullFirstUserPrompt?: boolean
+  dbPath: string
+  sessionId: string
+  platform: NodeJS.Platform
+  signal?: AbortSignal
+}): Promise<AiVaultSession | null> {
   return parseForHost({ ...args, agent: 'zcode' })
 }
 
@@ -119,21 +133,30 @@ export function parseZcodeSqliteSessionViaWorker(
  * @param args.platform - Platform used for resume-command generation.
  * @returns The session and every message it holds.
  */
-export function captureOpenCodeSqliteSessionViaWorker(
-  args: SqliteCaptureArgs
-): Promise<OpenCodeSqliteCaptureValue> {
+export function captureOpenCodeSqliteSessionViaWorker(args: {
+  dbPath: string
+  sessionId: string
+  platform: NodeJS.Platform
+  signal?: AbortSignal
+}): Promise<OpenCodeSqliteCaptureValue> {
   return captureForHost(args)
 }
 
-export function captureOpenCode2SqliteSessionViaWorker(
-  args: SqliteCaptureArgs
-): Promise<OpenCodeSqliteCaptureValue> {
+export function captureOpenCode2SqliteSessionViaWorker(args: {
+  dbPath: string
+  sessionId: string
+  platform: NodeJS.Platform
+  signal?: AbortSignal
+}): Promise<OpenCodeSqliteCaptureValue> {
   return captureForHost({ ...args, agent: 'opencode2' })
 }
 
-export function captureZcodeSqliteSessionViaWorker(
-  args: SqliteCaptureArgs
-): Promise<OpenCodeSqliteCaptureValue> {
+export function captureZcodeSqliteSessionViaWorker(args: {
+  dbPath: string
+  sessionId: string
+  platform: NodeJS.Platform
+  signal?: AbortSignal
+}): Promise<OpenCodeSqliteCaptureValue> {
   return captureForHost({ ...args, agent: 'zcode' })
 }
 
@@ -141,33 +164,14 @@ async function listForHost(
   args: Parameters<OpenCodeSqliteWorkerClient['list']>[0]
 ): Promise<SessionFileCandidate[]> {
   const agent = args.agent ?? 'opencode'
-  const scoped = Boolean(args.scopePaths?.length)
-  const issues: AiVaultScanIssue[] = []
-  const closeSource =
-    !scoped && args.dbPaths.length > 0 ? openAiVaultScanSource(args.signal, agent) : null
+  const closeSource = args.dbPaths.length > 0 ? openAiVaultScanSource(args.signal, agent) : null
   try {
-    const candidates = await listCandidatesForHost({ ...args, issues })
+    const candidates = await listCandidatesForHost(args)
     // A database counts once it holds this agent's sessions: OpenCode 1 and 2 share one file.
     const dbPaths = candidates.map((c) => splitOpenCodeSqliteCandidate(c.file.path, agent)?.dbPath)
-    if (!scoped) {
-      noteAiVaultScanDatabases(args.signal, agent, new Set(dbPaths.filter(Boolean)).size)
-    }
+    noteAiVaultScanDatabases(args.signal, agent, new Set(dbPaths.filter(Boolean)).size)
     return candidates
   } finally {
-    for (const issue of issues) {
-      if (
-        !args.issues.some(
-          (existing) =>
-            existing.agent === issue.agent &&
-            existing.path === issue.path &&
-            existing.kind === issue.kind &&
-            existing.message === issue.message &&
-            existing.executionHostId === issue.executionHostId
-        )
-      ) {
-        recordSessionScanIssue(args.issues, issue)
-      }
-    }
     closeSource?.()
   }
 }
@@ -195,12 +199,6 @@ async function listCandidatesForHost(
   const candidates = await Promise.all([
     native.length ? getSharedClient().list({ ...args, dbPaths: native }) : Promise.resolve([]),
     ...[...groups.values()].map(async ({ distro, paths }) => {
-      const scopePaths = args.scopePaths?.length
-        ? aiVaultScopePathsForWslDistro(args.scopePaths, distro)
-        : args.scopePaths
-      if (args.scopePaths?.length && scopePaths?.length === 0) {
-        return []
-      }
       const first = paths.values().next().value!
       const issues: AiVaultScanIssue[] = []
       try {
@@ -212,7 +210,6 @@ async function listCandidatesForHost(
               ...args,
               signal,
               dbPaths: [...paths.keys()],
-              scopePaths,
               issues
             })
           },
