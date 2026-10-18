@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useState } from 'react'
+import { useCallback, useId, useMemo, useState } from 'react'
 import { Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -92,11 +92,9 @@ export function useNativeChatInterruptedContinuation(input: {
     unconfirmed: boolean
   } | null>(null)
   const [failedOn, setFailedOn] = useState<string | null>(null)
-  useEffect(() => {
-    if (input.pending.length > 0) {
-      setUsageFailure(null)
-    }
-  }, [input.pending])
+  if (usageFailure !== null && input.pending.length > 0) {
+    setUsageFailure(null)
+  }
   const offered =
     capability === 'supported' && cut && !input.isWorking && !resuming && asked !== cut.turnItemId
       ? cut.turnItemId
