@@ -45,7 +45,7 @@ export function claudeTurnOpenedBySendEcho(
     input.frame.parent_tool_use_id === null
     ? {
         sessionId: envelope.sessionId,
-        inputUuid: envelope.uuid,
+        inputUuid: claudeText(input.frame.user_message_uuid) ?? envelope.uuid,
         turnId: envelope.uuid,
         startedAt: input.observedAt,
         ...(input.requestedAt === undefined ? {} : { requestedAt: input.requestedAt }),

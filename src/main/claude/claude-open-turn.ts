@@ -78,8 +78,10 @@ export class ClaudeOpenTurn {
   ownsTerminal(frame: Record<string, unknown>): boolean {
     const stamp = claudeText(frame.user_message_uuid)
     const input = this.current?.command?.sentUuid ?? this.current?.inputUuid
+    const inputs = frame.user_message_uuids
     return this.current !== null &&
-      (!stamp || !input || stamp === input || (Array.isArray(frame.user_message_uuids) && frame.user_message_uuids.includes(input)))
+      (!stamp || !input || stamp === input || stamp === this.current.turnId ||
+        (Array.isArray(inputs) && (inputs.includes(input) || inputs.includes(this.current.turnId))))
   }
 
   get id(): string | null {
