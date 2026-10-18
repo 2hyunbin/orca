@@ -5,8 +5,8 @@ import { track } from '@/lib/telemetry'
 import { persistWorktreeSortOrderByHost } from '@/lib/worktree-sort-order-persistence'
 import type { Repo } from '../../../../../../shared/repo-types'
 import {
+  NO_LIVE_SMART_SORT_SOURCES,
   rankWorktreesForSort,
-  type SmartSortSources,
   type SortBy
 } from '../../../../../../shared/sidebar-list/smart-sort'
 import type {
@@ -172,13 +172,6 @@ function useTrackSmartToRecentSwitch(sortBy: SortBy): void {
   }, [sortBy])
 }
 
-const NO_LIVE_SOURCES: SmartSortSources = Object.freeze({
-  tabsByWorktree: {},
-  agentStatusByPaneKey: {},
-  runtimePaneTitlesByTabId: {},
-  ptyIdsByTabId: {}
-})
-
 /**
  * Switch on: the order is a pure read of the owning hosts' stamps on the rows, so a re-list is
  * what re-sorts. No settle window, latch, saved Smart order or create grace.
@@ -200,7 +193,7 @@ function useStampSidebarWorktreeSortOrder(args: {
         repoMap,
         // Stamps read no clock and no live sources.
         now: 0,
-        sources: NO_LIVE_SOURCES
+        sources: NO_LIVE_SMART_SORT_SOURCES
       }).sorted.map((worktree) => worktree.id),
     [worktreesByRepo, repoMap, sortBy]
   )
