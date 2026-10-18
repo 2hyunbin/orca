@@ -412,6 +412,8 @@ describe('hidden-output restore quiet abandonment (STA-4869)', () => {
 
     it.each([
       { loss: 'a newer episode', markerSeq: 256, episode: 2 },
+      { loss: 'covered bytes in a newly reported episode', markerSeq: 64, episode: 2 },
+      { loss: 'covered bytes without an episode', markerSeq: 64, episode: undefined },
       { loss: 'newer bytes in the same episode', markerSeq: 256, episode: 1 },
       { loss: 'an episode-less marker', markerSeq: 256, episode: undefined },
       { loss: 'a sequence-less marker', markerSeq: undefined, episode: 1 }
