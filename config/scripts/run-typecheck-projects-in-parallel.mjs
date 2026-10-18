@@ -76,14 +76,14 @@ export const BUN_TYPESCRIPT_VERSION = '7.0.2'
 
 export function parseTypecheckOptions(args) {
   const options = {
-    compiler: 'auto',
+    compiler: 'bun',
     bunConcurrency: 2,
     bunThreads: 4,
     projects: TYPECHECK_PROJECTS
   }
   const selected = []
   for (const argument of args) {
-    if (/^--compiler=(auto|bun|native)$/.test(argument)) {
+    if (/^--compiler=(bun|native)$/.test(argument)) {
       options.compiler = argument.slice('--compiler='.length)
     } else if (argument.startsWith('--bun-concurrency=')) {
       options.bunConcurrency = Number(argument.slice('--bun-concurrency='.length))
@@ -112,31 +112,20 @@ export function parseTypecheckOptions(args) {
 }
 
 /**
- * `auto` prefers the pinned Bun: measured on the node project it uses ~1/3 of tsc's CPU and
- * ~2 GB instead of ~16 GB, and tsc's incremental cache rarely survives an edit to an export.
+ * Bun is the default: on the node project it uses ~1/3 of tsc's CPU and ~2 GB instead of
+ * ~16 GB, and tsc's incremental cache rarely survives an edit to an export.
  */
-export function selectTypecheckCompiler(compiler, { root, projects, resolveBunExecutable }) {
-  if (compiler !== 'auto') {
-    return { compiler, bunExecutable: 'bun' }
-  }
-  const pinned = readPinnedBunVersion(root)
-  const mismatched = projects
-    .map(({ config }) => resolveProjectCompilerInfo(config, root).version)
-    .find((version) => version !== BUN_TYPESCRIPT_VERSION)
-  if (mismatched) {
-    return {
-      compiler: 'native',
-      notice: `Typecheck: using tsc; TypeScript ${mismatched} has no Bun ${pinned} parity check.`
-    }
+export function selectTypecheckCompiler(compiler, { root, resolveBunExecutable }) {
+  if (compiler === 'native') {
+    return { compiler }
   }
   const bunExecutable = resolveBunExecutable(root)
   if (!bunExecutable) {
-    return {
-      compiler: 'native',
-      notice: `Typecheck: using tsc. Install Bun ${pinned} (config/.bun-version) to check with ~1/3 the CPU and ~1/8 the memory.`
-    }
+    throw new Error(
+      `Bun ${readPinnedBunVersion(root)} from devDependencies is missing; run pnpm install, or pass --compiler=native.`
+    )
   }
-  return { compiler: 'bun', bunExecutable }
+  return { compiler, bunExecutable }
 }
 
 export function typecheckBatches(projects, { compiler, bunConcurrency, memoryBytes, parallelism }) {
@@ -237,12 +226,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const options = parseTypecheckOptions(process.argv.slice(2))
   const selection = selectTypecheckCompiler(options.compiler, {
     root: repoRoot,
-    projects: options.projects,
     resolveBunExecutable: (root) => resolvePinnedBunExecutable(root, runProcessSync)
   })
-  if (selection.notice) {
-    console.error(selection.notice)
-  }
   const failures = await runTypecheckProjects({ ...options, ...selection })
   if (failures.length > 0) {
     for (const failure of failures) {

@@ -106,6 +106,7 @@ allowBuilds:
   '@swc/core': false
   '@vscode/windows-process-tree': false
   agent-browser: false
+  bun: true
   cpu-features: true
   electron-winstaller: false
   esbuild: true

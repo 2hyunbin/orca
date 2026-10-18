@@ -133,8 +133,15 @@ describe('workspace package test typecheck', () => {
 })
 
 describe('CI compiler selection', () => {
-  it('lets the runner choose the compiler by default', () => {
-    expect(parseTypecheckOptions([]).compiler).toBe('auto')
+  it('checks with Bun by default', () => {
+    expect(parseTypecheckOptions([]).compiler).toBe('bun')
+  })
+
+  it('pins the Bun devDependency to config/.bun-version', () => {
+    const manifest = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'))
+    expect(manifest.devDependencies.bun).toBe(
+      readFileSync(join(repoRoot, 'config', '.bun-version'), 'utf8').trim()
+    )
   })
 
   it('narrows to the requested projects and rejects unknown ones', () => {
@@ -145,59 +152,27 @@ describe('CI compiler selection', () => {
     expect(() => parseTypecheckOptions(['--project=config/tsconfig.json'])).toThrow()
   })
 
-  it('prefers the pinned Bun and falls back to tsc with a hint when it is missing', () => {
-    const projects = TYPECHECK_PROJECTS
+  it('runs the resolved Bun and refuses to silently fall back when it is missing', () => {
     expect(
-      selectTypecheckCompiler('auto', {
+      selectTypecheckCompiler('bun', {
         root: repoRoot,
-        projects,
-        resolveBunExecutable: () => '/opt/bun/bin/bun'
+        resolveBunExecutable: () => '/repo/node_modules/bun/bin/bun.exe'
       })
-    ).toEqual({ compiler: 'bun', bunExecutable: '/opt/bun/bin/bun' })
-    const fallback = selectTypecheckCompiler('auto', {
-      root: repoRoot,
-      projects,
-      resolveBunExecutable: () => null
-    })
-    expect(fallback.compiler).toBe('native')
-    expect(fallback.notice).toContain('config/.bun-version')
+    ).toEqual({ compiler: 'bun', bunExecutable: '/repo/node_modules/bun/bin/bun.exe' })
+    expect(() =>
+      selectTypecheckCompiler('bun', { root: repoRoot, resolveBunExecutable: () => null })
+    ).toThrow('run pnpm install')
   })
 
-  it('never probes Bun when a compiler is named explicitly', () => {
-    const resolveBunExecutable = () => {
-      throw new Error('probed')
-    }
-    for (const compiler of ['bun', 'native']) {
-      expect(
-        selectTypecheckCompiler(compiler, {
-          root: repoRoot,
-          projects: TYPECHECK_PROJECTS,
-          resolveBunExecutable
-        }).compiler
-      ).toBe(compiler)
-    }
-  })
-
-  it('falls back to tsc when a project compiler has no Bun parity check', () => {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), 'orca-auto-compiler-version-')))
-    try {
-      mkdirSync(join(root, 'config'))
-      writeFileSync(join(root, 'config', '.bun-version'), '1.4.3\n')
-      mkdirSync(join(root, 'node_modules', 'typescript'), { recursive: true })
-      writeFileSync(
-        join(root, 'node_modules', 'typescript', 'package.json'),
-        JSON.stringify({ name: 'typescript', version: '8.0.0', bin: 'compiler.cjs' })
-      )
-      const selection = selectTypecheckCompiler('auto', {
-        root,
-        projects: [{ config: 'config/tsconfig.json', heapGib: 1 }],
-        resolveBunExecutable: () => '/opt/bun/bin/bun'
+  it('never probes Bun when tsc is requested', () => {
+    expect(
+      selectTypecheckCompiler('native', {
+        root: repoRoot,
+        resolveBunExecutable: () => {
+          throw new Error('probed')
+        }
       })
-      expect(selection.compiler).toBe('native')
-      expect(selection.notice).toContain('TypeScript 8.0.0')
-    } finally {
-      rmSync(root, { recursive: true, force: true })
-    }
+    ).toEqual({ compiler: 'native' })
   })
 
   it.each([
