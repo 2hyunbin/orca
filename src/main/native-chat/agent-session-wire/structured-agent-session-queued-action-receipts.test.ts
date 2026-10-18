@@ -559,7 +559,9 @@ describe('an id reused across commands', () => {
 describe('source-bound ordinary Continue', () => {
   async function limitedTurn(id: string) {
     const journal = rig.host.collaboratorsForTests().sessions.get(SESSION)?.journal
-    if (!journal) throw new Error('expected an open journal')
+    if (!journal) {
+      throw new Error('expected an open journal')
+    }
     const identity = { provider: 'orca' as const, clientMessageId: id }
     const turnItemId = agentJournalItemKey(identity)
     await journal.appendItem(identity, {
