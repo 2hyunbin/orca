@@ -560,32 +560,28 @@ describe('cross-version structured agent sessions', () => {
     })
 
     it('hides the row from the old client and annotates it for a capable client', async () => {
-      const oldReply = (
-        await callBuild(
-          current,
-          'aiVault.listSessions',
-          {},
-          {
-            clientKind: 'runtime',
-            clientCapabilities: legacyClientCapabilities()
-          },
-          runtime
-        )
-      )[0]
+      const [oldReply] = await callBuild(
+        current,
+        'aiVault.listSessions',
+        {},
+        {
+          clientKind: 'runtime',
+          clientCapabilities: legacyClientCapabilities()
+        },
+        runtime
+      )
       expect(oldReply).toMatchObject({ ok: true, result: { sessions: [] } })
 
-      const capableReply = (
-        await callBuild(
-          current,
-          'aiVault.listSessions',
-          {},
-          {
-            clientKind: 'runtime',
-            clientCapabilities: [STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY]
-          },
-          runtime
-        )
-      )[0]
+      const [capableReply] = await callBuild(
+        current,
+        'aiVault.listSessions',
+        {},
+        {
+          clientKind: 'runtime',
+          clientCapabilities: [STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY]
+        },
+        runtime
+      )
       expect(capableReply).toMatchObject({
         ok: true,
         result: {
