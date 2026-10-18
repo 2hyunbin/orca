@@ -5,6 +5,7 @@
 // client opts in; with no subscriber it does no work.
 
 import type { ExecutionHostId } from '../../shared/execution-host'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import { loadWorkspaceLayoutWithoutReport } from '../../shared/workspace-layout/workspace-layout-load'
 import { stableJson } from '../../shared/workspace-layout/workspace-layout-load-report'
 import {
@@ -175,12 +176,29 @@ export class WorkspaceLayoutStream {
     for (const [hostId, workspaces] of partitions) {
       for (const [key, workspace] of workspaces) {
         // Only the owning partition's copy is published; a stray copy elsewhere is not shown.
-        if (this.deps.homeHostId(key) === hostId) {
+        if (this.homeOf(key) === hostId) {
           projected.set(key, workspace)
         }
       }
     }
     return projected
+  }
+
+  /**
+   * A workspace the router throws on is left out rather than guessed: `repoId::path` repeats across
+   * hosts, so a default could publish another host's copy. One such workspace never stops the rest.
+   */
+  private homeOf(key: string): ExecutionHostId | null {
+    try {
+      return this.deps.homeHostId(key)
+    } catch (error) {
+      // Switch point: a window-owned build keeps failing the whole projection, as today.
+      if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+        throw error
+      }
+      this.logFailure('routing', error)
+      return null
+    }
   }
 
   /** Every pane's live title, in tab and pane order; null for a pane with none. */
