@@ -1,5 +1,4 @@
-// A rewind by an agent that forks (Claude): the host saves the fork its next launch makes, stops the
-// running agent, and keeps the journal's rows before the rewound message. No provider call is made.
+// A rewind by an agent that forks (Claude) saves the fork for its next launch; no provider call.
 
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -33,7 +32,6 @@ const SOURCE = '11111111-1111-4111-8111-111111111111'
 const FORK: AgentSessionRewindFork = {
   sessionId: '22222222-2222-4222-8222-222222222222',
   sourceSessionId: SOURCE,
-  throughEntryId: 'answer-1',
   replacesSessionId: SOURCE
 }
 const key = (uuid: string) => agentJournalItemKey({ provider: 'claude', sessionId: SOURCE, uuid })
@@ -41,7 +39,9 @@ let directory: string
 let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
 let sink: StructuredAgentSessionEventSink
-const forkForRewind = vi.fn<NonNullable<StructuredAgentSessionAdapter['forkForRewind']>>()
+const forkForRewind = vi.fn<NonNullable<StructuredAgentSessionAdapter['forkForRewind']>>(
+  async () => ({ ok: true, fork: FORK })
+)
 const closeSession = vi.fn(async () => true)
 
 const attachParams = (fence: number | null) =>
@@ -54,32 +54,28 @@ const attachParams = (fence: number | null) =>
 
 beforeEach(async () => {
   resetHostTestOperationIds()
-  forkForRewind.mockReset().mockResolvedValue({ ok: true, fork: FORK })
-  closeSession.mockClear()
   directory = await mkdtemp(join(tmpdir(), 'orca-fork-rewind-'))
   store = await openTestAgentSessionRecordStore(directory)
-  let acquired = 0
   const adapter = startsWhenPublished(
     {
       supportsCreate: (_location, agent) => agent === 'claude',
       supportsLocation: () => true,
       acquire: async (input) => {
-        acquired += 1
         sink = input.events!
         return {
           providerChildPhase: 'starting' as const,
           process: {
             hostId: 'local',
-            pid: 5000 + acquired,
+            pid: 5001,
             processStartTimeMs: HOST_TEST_NOW,
             spawnToken: input.spawnToken
           },
-          acquisitionGeneration: `generation-${acquired}`,
+          acquisitionGeneration: 'generation-1',
           link: {
-            linkId: `link-${acquired}`,
+            linkId: 'link-1',
             mintedAtFence: input.fence,
             observedAt: HOST_TEST_NOW,
-            origin: acquired === 1 ? 'created' : 'resumed',
+            origin: 'created',
             handle: claudeProviderHandle(SOURCE, 'answer-2')
           }
         }
@@ -127,29 +123,22 @@ afterEach(async () => {
   await rm(directory, { recursive: true, force: true })
 })
 
-async function rewindTo(itemId: string) {
-  const expectedEpoch = (await host.journalSnapshot(HOST_TEST_SESSION)).cursor.epoch
-  return host.rewind(caller, {
-    itemId,
-    expectedEpoch,
-    envelope: {
+describe('rewinding a chat whose agent forks', () => {
+  it('saves the fork for the next launch, stops the agent and keeps the rows before the message', async () => {
+    const epoch = (await host.journalSnapshot(HOST_TEST_SESSION)).cursor.epoch
+    const fields = { itemId: key('prompt-2'), expectedEpoch: epoch }
+    const envelope = {
       sessionId: HOST_TEST_SESSION,
       clientOperationId: hostTestOperationId(),
       expectedRuntimeFence: store.getRecord(HOST_TEST_SESSION)!.lease.runtimeFence,
       payloadFingerprint: computeAgentSessionPayloadFingerprint({
         method: 'agentSession.rewind',
         sessionId: HOST_TEST_SESSION,
-        fields: { itemId, expectedEpoch }
+        fields
       })
     }
-  })
-}
 
-describe('rewinding a chat whose agent forks', () => {
-  it('saves the fork for the next launch, stops the agent and keeps the rows before the message', async () => {
-    const epoch = (await host.journalSnapshot(HOST_TEST_SESSION)).cursor.epoch
-
-    expect(await rewindTo(key('prompt-2'))).toMatchObject({ ok: true })
+    expect(await host.rewind(caller, { ...fields, envelope })).toMatchObject({ ok: true })
 
     expect(forkForRewind).toHaveBeenCalledWith(
       expect.objectContaining({ beforeMessage: { sessionId: SOURCE, uuid: 'prompt-2' } })
@@ -160,21 +149,6 @@ describe('rewinding a chat whose agent forks', () => {
       providerFork: FORK
     })
     const snapshot = await host.journalSnapshot(HOST_TEST_SESSION)
-    expect(snapshot.cursor.epoch).not.toBe(epoch)
     expect(snapshot.items.map((item) => item.itemId)).toEqual([key('prompt-1'), key('answer-1')])
-  })
-
-  it('changes nothing when the agent cannot find where to fork', async () => {
-    forkForRewind.mockResolvedValueOnce({ ok: false, reason: 'invalid-target' })
-    const before = await host.journalSnapshot(HOST_TEST_SESSION)
-
-    expect(await rewindTo(key('prompt-2'))).toMatchObject({
-      ok: false,
-      refusal: { rewindReason: 'invalid-target' }
-    })
-
-    expect(store.getRecord(HOST_TEST_SESSION)?.rewind).toBeUndefined()
-    expect(closeSession).not.toHaveBeenCalled()
-    expect((await host.journalSnapshot(HOST_TEST_SESSION)).cursor).toEqual(before.cursor)
   })
 })

@@ -1,7 +1,5 @@
-// A Claude rewind forks the kept conversation at the next launch. These pin that a rewind cut short
-// before it finished still launches its fork, never the conversation it rewound, and that a pending
-// rewind an older build persisted (it saved no fork) never strands the chat: the next attach
-// resumes by session id and settles the rewind as refused.
+// A pending Claude rewind never strands the chat: one cut short still launches its fork, and an older
+// build's (it saved no fork) is settled refused while the chat resumes by session id.
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -166,7 +164,6 @@ describe('a pending Claude rewind', () => {
     await seedPendingRewind('prepared', fork)
     await host.close(HOST_TEST_SESSION, 'evict')
     await host.attach(caller, attachParams(fence()))
-
     expect(claude.connections.at(-1)?.launch.options).toMatchObject({
       sessionId: fork.sessionId,
       resume: PROVIDER_SESSION_ID,

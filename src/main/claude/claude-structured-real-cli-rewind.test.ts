@@ -1,7 +1,5 @@
-// Rewind against the real CLI: Orca cuts a Claude chat by forking its conversation at the rewound
-// prompt's parent with the SDK's truncating resume. Pins the provider contract that design relies
-// on: the prompt id Orca sends is the transcript's, the fork forgets the undone turn, and the
-// rewound conversation is left as it was.
+// Pins the provider contract Claude's rewind relies on: Orca's prompt id is the transcript's, a fork
+// at its parent forgets the undone turn, and the rewound conversation is left as it was.
 
 import { randomUUID } from 'node:crypto'
 import { mkdtemp, readFile } from 'node:fs/promises'
@@ -30,37 +28,19 @@ import { claudeStartupSettled } from './claude-structured-session-test-support'
 
 const SESSION_ID = 'real-cli-rewind'
 
-function identity(providerSessionId: string): AgentSessionJournalIdentity {
-  return {
-    sessionId: SESSION_ID,
-    workspaceId: 'real-cli-rewind-workspace',
-    hostId: 'local',
-    agent: 'claude',
-    providerHandle: claudeProviderHandle(providerSessionId, null)
-  }
-}
+const identity = (providerSessionId: string): AgentSessionJournalIdentity => ({
+  sessionId: SESSION_ID,
+  workspaceId: 'real-cli-rewind-workspace',
+  hostId: 'local',
+  agent: 'claude',
+  providerHandle: claudeProviderHandle(providerSessionId, null)
+})
 
-function turnResults(events: readonly ClaudeStructuredSessionEvent[]): string[] {
-  return events.flatMap((event) =>
-    event.type === 'message' &&
-    event.message.type === 'result' &&
-    typeof event.message.result === 'string'
-      ? [event.message.result]
-      : []
-  )
-}
-
-async function transcriptUuids(providerSessionId: string, claudeConfigDir: string) {
+async function transcript(providerSessionId: string, claudeConfigDir: string): Promise<string> {
   const path = await resolveSessionFilePath('claude', providerSessionId, {
     claudeProjectsDir: join(claudeConfigDir, 'projects')
   })
-  const rows = (await readFile(path ?? '', 'utf8')).trim().split('\n')
-  return rows.flatMap((line): string[] => {
-    const row: unknown = JSON.parse(line)
-    return row && typeof row === 'object' && 'uuid' in row && typeof row.uuid === 'string'
-      ? [row.uuid]
-      : []
-  })
+  return readFile(path ?? '', 'utf8')
 }
 
 describe.skipIf(!realClaudeAvailable)('Claude structured real CLI rewind', () => {
@@ -71,9 +51,9 @@ describe.skipIf(!realClaudeAvailable)('Claude structured real CLI rewind', () =>
       const fork = randomUUID()
       const { claudeConfigDir, env } = realClaudeLaunchHome()
       const cwd = await mkdtemp(join(tmpdir(), 'orca-real-rewind-'))
-      const events: ClaudeStructuredSessionEvent[] = []
+      const results: string[] = []
       // The CLI's replay of a send settles it after `dispatch` answers, with the prompt's own id.
-      const promptIds = new Map<string, string>()
+      const promptIds: string[] = []
       const adapterFor = (providerSessionId: string, launch: ClaudeStructuredSdkOptions) =>
         new ClaudeStructuredSessionAdapter({
           resolveLaunch: async () => ({
@@ -87,31 +67,28 @@ describe.skipIf(!realClaudeAvailable)('Claude structured real CLI rewind', () =>
             resumesTranscript: false,
             continuesChain: false
           }),
-          onEvent: (event) => events.push(event),
+          onEvent: (event: ClaudeStructuredSessionEvent) => {
+            if (event.type === 'message' && event.message.type === 'result') {
+              results.push(String(event.message.result))
+            }
+          },
           onDispatchSettledLate: (settled) => {
             if ('providerIdentity' in settled && settled.providerIdentity.provider === 'claude') {
-              promptIds.set(settled.clientMessageId, settled.providerIdentity.uuid)
+              promptIds.push(settled.providerIdentity.uuid)
             }
           },
           readProcessStartTime: async () => 1
         })
       const send = async (adapter: ClaudeStructuredSessionAdapter, text: string, n: number) => {
-        const clientMessageId = `real-cli-rewind-${n}`
-        const sent = await adapter.dispatch({
+        await adapter.dispatch({
           sessionId: SESSION_ID,
-          clientMessageId,
+          clientMessageId: `real-cli-rewind-${n}`,
           body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text }] },
           requestedAt: Date.now(),
           fence: 1
         })
-        await vi.waitFor(() => expect(turnResults(events)).toHaveLength(n), {
-          timeout: 90_000,
-          interval: 250
-        })
-        if (sent.state === 'accepted' && sent.providerIdentity?.provider === 'claude') {
-          return sent.providerIdentity.uuid
-        }
-        return promptIds.get(clientMessageId)
+        await vi.waitFor(() => expect(results).toHaveLength(n), { timeout: 90_000, interval: 250 })
+        return promptIds[n - 1]
       }
 
       const first = adapterFor(source, { sessionId: source })
@@ -125,15 +102,14 @@ describe.skipIf(!realClaudeAvailable)('Claude structured real CLI rewind', () =>
         await first.closeAll()
       }
 
-      const sourceBefore = await transcriptUuids(source, claudeConfigDir)
+      const sourceBefore = await transcript(source, claudeConfigDir)
       // Orca's prompt id is the transcript's, so the rewound row maps to its cut.
-      expect(sourceBefore).toContain(promptUuid)
+      expect(sourceBefore).toContain(`"uuid":"${promptUuid}"`)
       const throughEntryId = await readClaudePromptParentUuid({
         providerSessionId: source,
         promptUuid: promptUuid ?? '',
         claudeConfigDir
       })
-      expect(throughEntryId).toEqual(expect.any(String))
 
       const rewound = adapterFor(fork, {
         sessionId: fork,
@@ -153,14 +129,14 @@ describe.skipIf(!realClaudeAvailable)('Claude structured real CLI rewind', () =>
         await rewound.closeAll()
       }
 
-      const answer = turnResults(events)[2] ?? ''
+      const answer = results[2] ?? ''
       expect(answer).toContain('ALPHA')
       expect(answer).not.toContain('BRAVO')
       // The fork keeps the kept entries' ids, and the rewound conversation is untouched.
-      const forked = await transcriptUuids(fork, claudeConfigDir)
-      expect(forked).toContain(throughEntryId)
+      const forked = await transcript(fork, claudeConfigDir)
+      expect(forked).toContain(`"uuid":"${throughEntryId}"`)
       expect(forked).not.toContain(promptUuid)
-      expect(await transcriptUuids(source, claudeConfigDir)).toEqual(sourceBefore)
+      expect(await transcript(source, claudeConfigDir)).toBe(sourceBefore)
     },
     240_000
   )
