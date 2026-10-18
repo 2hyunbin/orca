@@ -17,7 +17,6 @@ import type {
   GroupSide,
   LayoutApplyReply,
   LayoutCommandResult,
-  LayoutRefusalCode,
   NewGroupSplit,
   TabTitle
 } from '../../../shared/workspace-layout/workspace-layout-command-types'
@@ -135,7 +134,7 @@ export type WindowLayoutCommand =
   | { type: 'setDefaultTabsApplied' }
 
 /** `call_failed`: the call threw, and a thrown write is rolled back. */
-type WindowRefusalCode = LayoutRefusalCode | 'wsl_move_in_progress' | 'call_failed'
+type WindowRefusalCode = Extract<LayoutApplyReply, { ok: false }>['code'] | 'call_failed'
 
 export type LayoutApplyHandlers = {
   apply: (result: LayoutCommandResult) => void
