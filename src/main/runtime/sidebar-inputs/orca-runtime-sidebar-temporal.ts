@@ -68,6 +68,10 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     return this.sidebarTemporal.snapshot()
   }
 
+  onSidebarTemporalChange(listener: () => void): () => void {
+    return this.sidebarTemporal.revision.onChange(listener)
+  }
+
   beginSidebarListSession(sessionId: string): void {
     this.sidebarTemporal.beginSession(sessionId)
   }

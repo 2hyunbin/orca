@@ -1,3 +1,4 @@
+import { ProducerRevision } from './producer-revision'
 import type { Repo } from '../../../shared/repo-types'
 import type { Worktree } from '../../../shared/worktree/types'
 import { getWorktreeHostIdentity } from '../../../shared/worktree/host-qualified-identity'
@@ -60,7 +61,7 @@ const RETENTION_DEADLINE = 'sleeping-retention'
  * compared against it and never persists ranks. It stays idle until a window begins a session.
  */
 export class SidebarTemporalOwner {
-  private revision = 0
+  readonly revision = new ProducerRevision()
   private sessionId: string | null = null
   private disposed = false
   private settleState = INITIAL_SORT_SETTLE_STATE
@@ -83,7 +84,7 @@ export class SidebarTemporalOwner {
 
   snapshot(): SidebarTemporalSnapshot {
     return {
-      revision: this.revision,
+      revision: this.revision.value,
       sessionId: this.sessionId,
       sortSnapshot: this.sortSnapshot,
       retention: this.retention
@@ -102,7 +103,7 @@ export class SidebarTemporalOwner {
     // Until the new session's first sample lands, a reader must not take the old warm ranks.
     this.sortSnapshot = null
     this.retentionState = createSleepingSweepRetentionState()
-    this.revision += 1
+    this.revision.bump()
     this.retentionPass()
     this.settleNow()
   }
@@ -231,7 +232,7 @@ export class SidebarTemporalOwner {
     this.identityById = new Map(
       sample.worktrees.map((worktree) => [worktree.id, getWorktreeHostIdentity(worktree)])
     )
-    this.revision += 1
+    this.revision.bump()
     this.scheduleCreateGraceBoundary(ranking.sorted, now)
   }
 
@@ -265,7 +266,7 @@ export class SidebarTemporalOwner {
       this.clock.cancel(RETENTION_DEADLINE)
       if (this.retention !== null) {
         this.retention = null
-        this.revision += 1
+        this.revision.bump()
       }
       return
     }
@@ -289,7 +290,7 @@ export class SidebarTemporalOwner {
     const previous = this.retention?.retainedIds
     if (!previous || previous.length !== ids.length || previous.some((id, i) => id !== ids[i])) {
       this.retention = { retainedIds: ids, retentionDecidedAt: now }
-      this.revision += 1
+      this.revision.bump()
     }
   }
 }
