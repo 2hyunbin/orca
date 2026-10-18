@@ -177,7 +177,7 @@ function liveTasks(
 type WorkingCandidateSession = {
   journal: AgentSessionJournal
   /** Only this host generation's own child counts. A restored-for-reading journal has none. */
-  child: Pick<StructuredAgentSessionProviderChild, 'fence' | 'phase'> | null
+  child: Pick<StructuredAgentSessionProviderChild, 'fence' | 'phase' | 'heldSends'> | null
 }
 
 /** The offer one session is owed, taken right before teardown stops its provider child; null when
@@ -212,7 +212,15 @@ export function structuredAgentSessionWorkingAtStop(input: {
   const childWork = input.childWork(sessionId)
   const record = input.getRecord(sessionId)
   // The live generation is this host's own child, read first-hand like the rest, never the lease.
-  const { scope } = new StructuredAgentSessionCurrentWork(session.journal, session.child.fence)
+  const { scope } = new StructuredAgentSessionCurrentWork(
+    session.journal,
+    session.child.fence,
+    0,
+    undefined,
+    undefined,
+    false,
+    session.child.heldSends
+  )
   const status = structuredAgentSessionShownStatus(
     { items: current.items, submissions: handedOver },
     childWork,

@@ -52,7 +52,6 @@ export type PiRpcSessionDeps = {
     fence: number
     outcome: AgentSessionDispatchOutcome
   }) => void
-  onIdle: (input: { sessionId: string }) => void
   logger: StructuredAgentSessionLogger
 }
 
@@ -67,6 +66,8 @@ export class PiRpcSession {
   readonly startup: PiRpcSessionStartup
   initialOptions: Readonly<Record<string, string>> = {}
   openedLink: AgentSessionProviderHandleLink | null = null
+  /** The sends this child holds: each from its handover until its settlement. */
+  readonly heldSends = new Set<string>()
   requestedClose = false
   private publishedExit = false
   private failedCause?: Error
@@ -107,10 +108,7 @@ export class PiRpcSession {
       send: (frame) => this.connection.send(frame),
       request: (command, params, options) => this.connection.request(command, params, options),
       settled: (id, outcome) => this.settle(id, outcome),
-      idle: () => {
-        this.dialogs.cancelAll()
-        deps.onIdle({ sessionId: input.identity.sessionId })
-      },
+      idle: () => this.dialogs.cancelAll(),
       failed: (error) => this.fail(error),
       diagnostic: (error) =>
         deps.logger.warn('Pi context usage could not be read', {
@@ -156,6 +154,20 @@ export class PiRpcSession {
       },
       () => this.failedCause
     )
+  }
+
+  async submit(...args: Parameters<PiRpcTurns['submit']>): ReturnType<PiRpcTurns['submit']> {
+    const [clientMessageId] = args
+    this.heldSends.add(clientMessageId)
+    let outcome: AgentSessionDispatchOutcome | undefined
+    try {
+      outcome = await this.turns.submit(...args)
+      return outcome
+    } finally {
+      if (outcome?.state !== 'admitted') {
+        this.heldSends.delete(clientMessageId)
+      }
+    }
   }
 
   async open(signal: AbortSignal): Promise<StructuredAgentSessionProviderOpenResult> {
@@ -242,11 +254,13 @@ export class PiRpcSession {
     }
     this.publishedExit = true
     this.failedCause ??= error
+    const observedAt = Date.now()
+    this.input.events?.observeExit?.(this.heldSends, observedAt)
     this.dialogs.cancelAll()
     this.turns.end()
     this.lane.finalize()
     this.lane.apply([
-      { type: 'session.ended', verdict: { state: 'interrupted', completedAt: Date.now() } }
+      { type: 'session.ended', verdict: { state: 'interrupted', completedAt: observedAt } }
     ])
     this.lane.flush()
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -273,7 +287,7 @@ export class PiRpcSession {
       sessionId: this.input.identity.sessionId,
       fence: this.input.fence,
       acquisitionGeneration: this.generation,
-      observedAt: Date.now(),
+      observedAt,
       cause: this.requestedClose ? 'requested-close' : 'unexpected-exit',
       reason: cause.message,
       failure: agentSessionFailureFact('providerExited', {
@@ -288,6 +302,7 @@ export class PiRpcSession {
   }
 
   private settle(clientMessageId: string, outcome: AgentSessionDispatchOutcome): void {
+    this.heldSends.delete(clientMessageId)
     this.deps.onSettled({
       sessionId: this.input.identity.sessionId,
       clientMessageId,

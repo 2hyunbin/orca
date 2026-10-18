@@ -111,7 +111,7 @@ export async function acquireAcpStructuredSession(input: {
     },
     {
       clientInfo: { name: 'orca', version: '1' },
-      ...(spec.signInPrompt ? { signInPrompt: spec.signInPrompt } : {}),
+      ...(spec.signIn ? { signIn: spec.signIn } : {}),
       onPermission: (request, context) => {
         if (!isAcpReadySession(session) || !session.turns?.acceptsRequests) {
           // No prompt of Orca's runs (a turn the agent began itself included), or a Stop or steer
@@ -226,6 +226,7 @@ export async function acquireAcpStructuredSession(input: {
   await identity.onSpawned(pid)
   const process = await identity.read(pid)
   const child: AcpStructuredChild = {
+    events,
     sessionId,
     fence: acquire.fence,
     acquisitionGeneration: generation,

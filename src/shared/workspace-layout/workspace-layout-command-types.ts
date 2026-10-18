@@ -4,6 +4,7 @@
 // `startup_agent_conflict` (host support), `file_outside_workspace` (paths) and
 // `terminal_liveness_unavailable` (PTY host).
 
+import type { LiveTerminalAdoption } from './workspace-layout-terminal-adoption'
 import type { SleepingAgentSessionRecord } from '../agent-session-resume'
 import type { AgentType } from '../agent-status-types'
 import type { AiVaultSessionTitle } from '../ai-vault-session-title'
@@ -40,8 +41,12 @@ export type LayoutCommand =
       viewMode?: 'terminal' | 'chat'
       /** When the window drew the tab, so a later save of it matches main's copy. */
       createdAt?: number
+      /** A quick command tab's label, so a later save of it matches main's copy. */
+      quickCommandLabel?: string
       creation?: Partial<LayoutTerminalCreation>
       initial?: InitialSurfaceReason
+      /** A live terminal no pane shows: its pane when main holds one, else this tab, bound to it. */
+      adopt?: LiveTerminalAdoption
       split?: NewGroupSplit
     })
   | (On & {
@@ -205,6 +210,8 @@ export type LayoutCommand =
     })
   /** `recordOnly`: drops the records and starts nothing. */
   | (On & { type: 'wake'; paneKeys?: string[]; recordOnly?: true })
+  /** The workspace's default tabs were applied (or it had none): never apply them again. */
+  | (On & { type: 'setDefaultTabsApplied' })
 
 /**
  * Why a workspace's first surface is asked for: `restore` at relaunch, `activation` when a user
@@ -287,12 +294,14 @@ export type LayoutApplyOutcome =
 
 /**
  * `layout.apply`'s reply. `host_not_owned`: a paired server owns that workspace's layout.
- * `other_partition`: a move's two workspaces are in different host partitions. `frameSeq`: the
- * layout stream position whose frames hold the command's effect (absent from older hosts).
+ * `other_partition`: a move's two workspaces are in different host partitions.
+ * `wsl_move_in_progress`: a WSL move has paused the workspace (older windows log it as refused).
+ * `frameSeq`: the layout stream position whose frames hold the command's effect (absent from
+ * older hosts).
  */
 export type LayoutApplyReply = (
   | LayoutApplyOutcome
-  | { ok: false; code: 'host_not_owned' | 'other_partition' }
+  | { ok: false; code: 'host_not_owned' | 'other_partition' | 'wsl_move_in_progress' }
 ) & { frameSeq?: number }
 
 export type LayoutContext = {

@@ -147,7 +147,7 @@ async function connectCodexAppServer(
   function request(
     method: string,
     params?: Record<string, unknown>,
-    options: { timeoutMs?: number } = {}
+    options: { timeoutMs?: number; onReply?: () => void } = {}
   ): Promise<unknown> {
     if (closing) {
       return Promise.reject(new Error(`codex app-server connection is closed (${method})`))
@@ -167,7 +167,7 @@ async function connectCodexAppServer(
         dispatcher.timeOutPending(id)
         reject(new CodexAppServerTimeoutError(`codex app-server ${method} exceeded ${timeoutMs}ms`))
       }, timeoutMs)
-      dispatcher.addPending(id, { method, resolve, reject, timer })
+      dispatcher.addPending(id, { method, resolve, reject, timer, onReply: options.onReply })
       try {
         sendLine(params === undefined ? { method, id } : { method, id, params })
       } catch (error) {

@@ -2,6 +2,7 @@ import { filterRecord, omitStoredFields, withoutKey } from './stored-record-fiel
 import { canReplacePreviewContentType, partitionPinnedTabOrder } from './tab-order'
 import { getNextTerminalOrdinal } from './terminal-tab-ordinal'
 import { layoutContainsLeafId } from './terminal-pane-tree'
+import { editorTabShowsFile } from './workspace-layout-editor-tab-file'
 import {
   applied,
   boundPtyIds,
@@ -30,6 +31,7 @@ import {
   type WorkspaceLayoutModel
 } from './workspace-layout-model'
 import { admitsInitialSurface } from './workspace-layout-initial-surface'
+import { heldPaneOfTerminal } from './workspace-layout-terminal-adoption'
 import { removeTabFromWorkspace, withWorkspace } from './workspace-layout-removal'
 
 type RefusedClose = NonNullable<LayoutCommandResult['refused']>[number]
@@ -41,6 +43,11 @@ export function createTerminalTab(
 ): Applied {
   if (command.initial && !admitsInitialSurface(model, command.workspace, command.initial)) {
     return applied(model)
+  }
+  const held =
+    command.adopt && heldPaneOfTerminal(model.workspaces[command.workspace], command.adopt)
+  if (held) {
+    return applied(model, held)
   }
   const workspace = workspaceOrEmpty(model, command.workspace)
   const terminals = workspace.tabs.flatMap((tab) => (tab.kind === 'terminal' ? [tab] : []))
@@ -55,6 +62,7 @@ export function createTerminalTab(
     createdAt: command.createdAt ?? context.now(),
     customTitle: command.title ?? null,
     color: command.color ?? null,
+    ...(command.quickCommandLabel ? { quickCommandLabel: command.quickCommandLabel } : {}),
     ...(command.viewMode ? { viewMode: command.viewMode } : {}),
     kind: 'terminal',
     terminal: { defaultTitle: `Terminal ${ordinal}`, ...command.creation },
@@ -62,6 +70,12 @@ export function createTerminalTab(
   }
   const placed = placeNewTab(workspace, command.workspace, tab, command, context)
   const paneKey = paneKeyOf(id, leafId)
+  if (command.adopt) {
+    // Its terminal already runs: the pane binds to it and nothing starts.
+    const leaves = { ...placed.leaves, [leafId]: { ptyId: command.adopt.ptyId } }
+    const adopted = withWorkspace(model, command.workspace, { ...placed, leaves })
+    return applied(adopted, { tabId: id, leafId, paneKey })
+  }
   return applied(
     withWorkspace(model, command.workspace, placed),
     { tabId: id, leafId, paneKey },
@@ -89,7 +103,9 @@ export function closeTab(
   ) {
     next = {
       ...next,
-      editorFiles: next.editorFiles.filter((file) => file.filePath !== tab.entityId)
+      editorFiles: next.editorFiles.filter(
+        (file) => !editorTabShowsFile(tab.entityId, file, next.worktreeId)
+      )
     }
   }
   if (next.editorViews) {

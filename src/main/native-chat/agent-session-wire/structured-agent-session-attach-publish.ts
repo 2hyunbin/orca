@@ -64,11 +64,13 @@ export async function publishAttachedChild(
           generation: acquisitionGeneration,
           fence,
           phase: 'starting' as const,
+          heldSends: () => context.deps.adapter.heldSends?.(sessionId),
+          exitObservation: eventSink.exitObservation,
           ...(startedFor === undefined ? {} : { startedFor }),
           ...(permissionMode === undefined ? {} : { permissionMode })
         }
       : owner === 'kept' && current
-        ? { ...current, fence }
+        ? current
         : null
   if (child) {
     attempt.candidate = { sink: eventSink, child }

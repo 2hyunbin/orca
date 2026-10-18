@@ -17,7 +17,6 @@ import {
   type StructuredAgentSessionAdapter,
   type StructuredAgentSessionSetOptionInput
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
-import { supportsSupervisedProviderChildLocation } from '../provider-process/supervised-provider-child-location'
 import { withObservedProviderExit } from '../native-chat/agent-session-wire/structured-agent-session-failure-text'
 import { acpAgentName } from './acp-structured-agent-definitions'
 import { acquireAcpStructuredSession } from './acp-structured-acquire'
@@ -40,6 +39,7 @@ import { stopAcpChildren, acpChildStopCapabilities } from './acp-structured-chil
 import { acpStartupFailure, isAcpReadySession } from './acp-structured-child'
 import { AcpStructuredChildren } from './acp-structured-child-lifecycle'
 import { AcpConversationCopies } from './acp-conversation-copies'
+import { supportsAcpStructuredLocation } from './acp-structured-location-support'
 
 export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapter {
   private readonly children: AcpStructuredChildren
@@ -58,12 +58,15 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
     this.copies.copy(input)
 
   // The child runs on this runtime's own machine; Windows needs process start-time proof.
-  supportsLocation = (location: AgentSessionExecutionLocation): boolean =>
-    supportsSupervisedProviderChildLocation(location, this.deps.isWindowsProcessStartTimeAvailable)
+  supportsLocation = (location: AgentSessionExecutionLocation): boolean => {
+    const { spec, isWindowsProcessStartTimeAvailable } = this.deps
+    return supportsAcpStructuredLocation(spec, location, isWindowsProcessStartTimeAvailable)
+  }
 
   async acquire(input: StructuredAgentSessionAcquireInput): Promise<AgentSessionAcquisition> {
     const sessionId = input.identity.sessionId
-    const attempt = this.children.starts.begin(input.signal)
+    const gate = this.deps.spec.launchGate?.enter(input.signal)
+    const attempt = this.children.starts.begin(gate?.signal ?? input.signal)
     try {
       if (!(await this.children.stop(sessionId))) {
         throw new AgentSessionAcquisitionExitUnprovenError(
@@ -72,9 +75,10 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
           )
         )
       }
-      return await this.start(input, attempt)
+      return await this.start({ ...input, signal: attempt.signal }, attempt)
     } finally {
       this.children.starts.end(attempt)
+      gate?.leave()
     }
   }
 
@@ -90,7 +94,10 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
         deps: this.deps,
         generation,
         abandoned: () => attempt.signal.aborted,
-        track: (connection) => this.children.starts.track(attempt, connection),
+        track: (connection) => {
+          this.children.starts.track(attempt, connection)
+          this.deps.spec.launchGate?.retain(connection)
+        },
         onExit: (session) => {
           if (session && this.children.sessions.get(sessionId) === session) {
             this.children.finish(session, this.now())
@@ -285,6 +292,9 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
       this.children.sessions.delete(sessionId)
     }
   }
+
+  heldSends = (sessionId: string): ReadonlySet<string> | undefined =>
+    this.children.sessions.get(sessionId)?.turns?.heldSends
 
   stopBackgroundTasks: NonNullable<StructuredAgentSessionAdapter['stopBackgroundTasks']> = (
     input

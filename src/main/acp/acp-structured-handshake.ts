@@ -62,7 +62,7 @@ export async function initializeAcpStructuredSession(
     advertised: (initialized.authMethods ?? []).map((method) => method.id),
     env: launch.env
   })
-  const auth = authMethodId === undefined ? {} : { authMethodId }
+  const setup = { authMethodId, resumePreference: spec.resumePreference }
   const resume = launch.resume
   let started: Awaited<ReturnType<AcpStructuredConnection['start']>> | null = null
   let liveLane: AcpStructuredLane | null = null
@@ -75,7 +75,7 @@ export async function initializeAcpStructuredSession(
         cwd: launch.cwd,
         mcpServers: [],
         sessionId: resume.sessionId,
-        ...auth
+        ...setup
       })
       assertStarting()
       input.lanes.finishLoad()
@@ -94,7 +94,7 @@ export async function initializeAcpStructuredSession(
   if (!started || !liveLane) {
     liveLane?.dispose()
     input.lanes.clear()
-    started = await connection.start({ cwd: launch.cwd, mcpServers: [], ...auth })
+    started = await connection.start({ cwd: launch.cwd, mcpServers: [], ...setup })
     assertStarting()
     liveLane = input.lanes.create(started.sessionId)
   }
@@ -112,7 +112,10 @@ export async function initializeAcpStructuredSession(
     if (configOptions.find((option) => option.id === configId)?.currentValue !== requested) {
       throw new Error('Permission mode could not be confirmed')
     }
-    options.adoptConfigOptions(configOptions)
+    options.adoptSession(
+      { ...started.response, configOptions },
+      started.kind === 'new' ? 'new' : 'loaded'
+    )
   }
   const link: AgentSessionProviderHandleLink = {
     linkId:
