@@ -6443,8 +6443,7 @@
         },
         "MarkdownImageLightbox": {
           "image": "Image",
-          "expand": "Expand image",
-          "close": "Close"
+          "expand": "Expand image"
         },
         "WorktreeDeveloperMenu": {
           "developer": "Developer",
@@ -15675,7 +15674,9 @@
           "1829437fce": "Nuevo Markdown"
         },
         "DiagramViewerModal": {
-          "title": "Diagrama",
+          "title": "Diagrama"
+        },
+        "PanZoomImageDialog": {
           "zoomOut": "Alejar",
           "zoomIn": "Acercar",
           "fit": "Ajustar a la pantalla",
@@ -18280,7 +18281,6 @@
         "imageSaving": "Guardando la imagen pegada…",
         "pendingAttachmentLimit": "Hay demasiados archivos adjuntos en espera. Termina de redactar antes de adjuntar más.",
         "viewAttachment": "Ver imagen",
-        "imagePreview": "Vista previa de la imagen a tamaño completo",
         "workspaceAttachmentMismatch": "Los archivos solo se pueden adjuntar a su espacio de trabajo de origen.",
         "attachmentOwnerChanged": "Este espacio de trabajo cambió de host durante la conexión; vuelve a soltar los archivos.",
         "attachmentUnreadable": "No se pudieron leer los archivos soltados.",
