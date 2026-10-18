@@ -21,6 +21,7 @@ const PairedServerWorkspaceRowSchema = z
   })
   .extend(
     // What the list sorts, groups and filters by, as the server stamped it; older desktops omit them.
+    // `lineage` is the edge the server's own check kept, not its stored record.
     WorkspaceRowSchema.pick({
       isMainWorktree: true,
       instanceId: true,

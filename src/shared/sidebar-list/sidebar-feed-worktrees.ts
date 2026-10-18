@@ -57,7 +57,19 @@ function readFeedRow(
   id: string,
   ownerHostId: ExecutionHostId,
   row: FeedRowFields,
-  extra: Partial<Worktree> = {}
+  extra: Partial<
+    Pick<
+      Worktree,
+      | 'comment'
+      | 'linkedIssue'
+      | 'linkedPR'
+      | 'linkedLinearIssue'
+      | 'linkedGitLabMR'
+      | 'linkedGitLabIssue'
+      | 'linkedItems'
+      | 'isUnread'
+    >
+  > = {}
 ): SidebarFeedWorkspace {
   // The identity's host, not the owner: a local row whose metadata names no host keeps `|id`.
   const hostId = getExecutionHostIdFromWorktreeHostIdentity(identity)

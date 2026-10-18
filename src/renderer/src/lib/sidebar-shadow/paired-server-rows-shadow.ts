@@ -2,6 +2,8 @@ import { useAppStore, type AppState } from '@/store'
 import { getAllWorktreesFromState, getRepoMapFromState } from '@/store/selectors'
 import { DEFAULT_WORKSPACE_STATUS_ID } from '../../../../shared/workspace-statuses'
 import { getWorkspaceRowKindFacts } from '../../../../shared/worktree/workspace-kinds'
+import { projectResolvedWorktreeLineage } from '../../../../shared/resolved-worktree-lineage'
+import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import {
   folderWorkspaceRepoId,
   folderWorkspaceToWorktree
@@ -24,12 +26,25 @@ export function readWindowPairedServerRows(
 ): Map<string, PairedServerWorkspaceRow> {
   const rows = new Map<string, PairedServerWorkspaceRow>()
   const repoById = getRepoMapFromState(state)
+  // The server sends only edges its own check keeps, so the window checks its copy the same way.
+  const checkedLineageByKey = new Map<string, WorktreeLineage | null>()
+  for (const hostId of hostIds) {
+    const hostWorktrees = getAllWorktreesFromState(state).filter(
+      (worktree) => worktree.hostId === hostId
+    )
+    for (const worktree of projectResolvedWorktreeLineage(
+      hostWorktrees,
+      state.worktreeLineageById
+    )) {
+      checkedLineageByKey.set(getWorktreeHostIdentity(worktree), worktree.lineage)
+    }
+  }
   const add = (worktree: Worktree, kind: PairedServerWorkspaceRow['kind']): void => {
     if (!worktree.hostId || !hostIds.has(worktree.hostId)) {
       return
     }
     const key = getWorktreeHostIdentity(worktree)
-    const lineage = kind === 'git' ? state.worktreeLineageById[worktree.id] : undefined
+    const lineage = checkedLineageByKey.get(key)
     // The server's reply carries no automation name, so the row leaves it out too.
     const { automationName: _automationName, ...kindFacts } = getWorkspaceRowKindFacts(
       worktree,
