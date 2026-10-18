@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { dirname, join, relative } from 'node:path'
+import { dirname, join, relative, sep } from 'node:path'
 
 const RELATIVE_IMPORT = /(?:from|import)\s*\(?\s*'(\.[^']+)'/g
 
@@ -15,7 +15,10 @@ export function testImportClosure(projectDir, entries) {
     seen.add(file)
     const source = readFileSync(join(projectDir, file), 'utf8')
     for (const [, specifier] of source.matchAll(RELATIVE_IMPORT)) {
+      // Repo-relative with `/` on every platform, so `tests/` prefixes and route regexes apply.
       const base = relative(projectDir, join(projectDir, dirname(file), specifier))
+        .split(sep)
+        .join('/')
       const resolved = [base, `${base}.ts`, `${base}.tsx`].find(
         (candidate) => /\.tsx?$/.test(candidate) && existsSync(join(projectDir, candidate))
       )
