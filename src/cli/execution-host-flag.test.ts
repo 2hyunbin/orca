@@ -195,6 +195,7 @@ describe('resolveHostFlagEnvironmentId', () => {
 // what gets typed, and only the machine-generated `ssh:ssh-1783599077486-fyasux` was accepted.
 describe('unprefixed --host aliases', () => {
   function clientWithTargets(targets: { id: string; label: string }[]): RuntimeClient {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: SSH target resolution reads only client.call.
     return {
       call: vi.fn(async () => ({ result: { targets } }))
     } as unknown as RuntimeClient
