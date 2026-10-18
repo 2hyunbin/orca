@@ -127,8 +127,11 @@ describe('SidebarRetentionOwner', () => {
 
     // A catalog change lists again, and that newer listing lands first.
     world.worktrees = [remote]
+    const before = owner.snapshot().revision
     owner.noteCatalogChange()
     await flush()
+    // Readers learn that retention is now published.
+    expect(owner.snapshot().revision).toBeGreaterThan(before)
     world.active = new Set()
     owner.noteActivityChange()
     expect(owner.snapshot().retention?.retainedIds).toEqual([getWorktreeHostIdentity(remote)])
