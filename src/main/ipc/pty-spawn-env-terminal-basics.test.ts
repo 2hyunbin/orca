@@ -558,7 +558,8 @@ describe('registerPtyHandlers', () => {
       const selectedHome = vi.fn(() => '/managed/current/home')
       const prepareResume = vi.fn(async () => ({
         outcome: 'resume' as const,
-        codexHomePath: '/managed/origin/home'
+        codexHomePath: '/managed/origin/home',
+        transcriptPath: 'rollout.jsonl'
       }))
       registerPtyHandlers(
         mainWindow as never,
@@ -608,6 +609,7 @@ describe('registerPtyHandlers', () => {
           prepareCodexSessionResume: async () => ({
             outcome: 'resume' as const,
             codexHomePath: '/managed/shared-mirror/home',
+            transcriptPath: 'rollout.jsonl',
             reconcileSharedRuntimeAuth: true
           })
         }
@@ -643,7 +645,8 @@ describe('registerPtyHandlers', () => {
         {
           prepareCodexSessionResume: async () => ({
             outcome: 'resume' as const,
-            codexHomePath: systemHome
+            codexHomePath: systemHome,
+            transcriptPath: 'rollout.jsonl'
           })
         }
       )

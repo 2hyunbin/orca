@@ -1,3 +1,8 @@
+import { join } from 'node:path'
+import {
+  normalizeRuntimePathForComparison,
+  relativePathInsideRoot
+} from '../../shared/cross-platform-path'
 import {
   resolveCodexSessionResumeProvenance,
   type CodexSessionResumePreparation
@@ -38,11 +43,29 @@ export async function prepareCodexSessionResume(args: {
   if (provenance.outcome === 'fresh') {
     return provenance
   }
+  const codexHomePath = await args.resolveVerifiedResumeHome({
+    homePath: provenance.homePath,
+    transcriptPath: provenance.transcriptPath
+  })
   return {
     outcome: 'resume',
-    codexHomePath: await args.resolveVerifiedResumeHome({
-      homePath: provenance.homePath,
-      transcriptPath: provenance.transcriptPath
-    })
+    codexHomePath,
+    transcriptPath: rolloutUnderHome(provenance, codexHomePath)
   }
+}
+
+// Why: every move into another home (account restart, legacy migration) keeps the rollout's
+// sessions-relative path, and Codex appends to the copy in the home it launched with.
+function rolloutUnderHome(source: VerifiedCodexResumeSource, homePath: string): string {
+  if (
+    normalizeRuntimePathForComparison(homePath) ===
+    normalizeRuntimePathForComparison(source.homePath)
+  ) {
+    return source.transcriptPath
+  }
+  const relativePath = relativePathInsideRoot(
+    join(source.homePath, 'sessions'),
+    source.transcriptPath
+  )
+  return relativePath ? join(homePath, 'sessions', relativePath) : source.transcriptPath
 }

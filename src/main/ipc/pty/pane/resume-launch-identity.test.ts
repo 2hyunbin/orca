@@ -21,6 +21,7 @@ function seed(overrides: Partial<Parameters<typeof seedResumeLaunchIdentityFromS
     worktreeId: 'wt-1',
     launchedAt: LAUNCHED_AT,
     resumeArgvDropped: false,
+    resumedTranscriptPath: undefined,
     result: { id: 'pty-1' },
     ...overrides
   })
@@ -40,6 +41,23 @@ describe('seedResumeLaunchIdentityFromSpawn', () => {
       providerSession: { key: 'session_id', id: 'codex-session' },
       launchedAt: 1_000
     })
+  })
+
+  it('records the rollout an account restart moved into the launch home, not the old one', () => {
+    const moved = '/codex-accounts/b/home/sessions/2026/10/18/rollout-x.jsonl'
+    seed({
+      resumeProviderSession: {
+        key: 'session_id',
+        id: 'codex-session',
+        transcriptPath: '/codex-accounts/a/home/sessions/2026/10/18/rollout-x.jsonl'
+      },
+      resumedTranscriptPath: moved
+    })
+    expect(recordLaunchResumeIdentity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerSession: { key: 'session_id', id: 'codex-session', transcriptPath: moved }
+      })
+    )
   })
 
   it.each([

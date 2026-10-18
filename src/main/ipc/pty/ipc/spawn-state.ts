@@ -89,6 +89,8 @@ export type PtyIpcSpawnState = {
   skipCodexHomeEnv: boolean
   stripInheritedOrcaCodexHome: boolean
   codexResumeHomeSelected: boolean
+  /** The rollout a Codex resume launched on, in the home this spawn selected. */
+  codexResumedTranscriptPath: string | undefined
   hadSessionSizeBeforeAttach: boolean
   sessionSizeBeforeAttach: { cols: number; rows: number } | undefined
   initiallyHidden: boolean
@@ -165,6 +167,7 @@ export function createPtyIpcSpawnState(
     skipCodexHomeEnv: false,
     stripInheritedOrcaCodexHome: false,
     codexResumeHomeSelected: false,
+    codexResumedTranscriptPath: undefined,
     hadSessionSizeBeforeAttach: false,
     sessionSizeBeforeAttach: undefined,
     initiallyHidden: false,

@@ -60,6 +60,8 @@ export type PtySpawnHostEnv = {
   env: Record<string, string> | undefined
   selectedCodexHomePath: string | null
   codexResumeHomeSelected: boolean
+  /** The rollout a Codex resume launched on, when this spawn runs in its resume home. */
+  codexResumedTranscriptPath: string | undefined
   skipCodexHomeEnv: boolean
   stripInheritedOrcaCodexHome: boolean
 }
@@ -157,6 +159,9 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
     await ensureCodexStateDbBackfillRecoveryStarted(selectedCodexHomePath)
   }
   args.mark?.('codex_home')
+  const codexResumeHomeSelected = Boolean(
+    codexResumeHome && codexHomePathsEqual(selectedCodexHomePath, codexResumeHome.codexHomePath)
+  )
   const isWsl = shouldSkipCodexHomeEnvForWindowsShell(args.shellOverride, args.cwd)
   const skipCodexHomeEnv = args.isDaemonHostSpawn && isWsl && !selectedCodexHomePath
   const ptySettings = args.isDaemonHostSpawn ? deps.getSettings?.() : undefined
@@ -166,9 +171,10 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
     baseEnv,
     env: baseEnv,
     selectedCodexHomePath,
-    codexResumeHomeSelected: Boolean(
-      codexResumeHome && codexHomePathsEqual(selectedCodexHomePath, codexResumeHome.codexHomePath)
-    ),
+    codexResumeHomeSelected,
+    codexResumedTranscriptPath: codexResumeHomeSelected
+      ? codexResumeHome?.transcriptPath
+      : undefined,
     skipCodexHomeEnv,
     stripInheritedOrcaCodexHome:
       args.isDaemonHostSpawn &&

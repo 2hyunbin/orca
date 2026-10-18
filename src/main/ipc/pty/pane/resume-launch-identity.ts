@@ -19,6 +19,8 @@ export function seedResumeLaunchIdentityFromSpawn(args: {
   launchedAt: Date | undefined
   /** The Codex resume fell back to a fresh session, so the pane does not hold this one. */
   resumeArgvDropped: boolean
+  /** The rollout a Codex resume launched on, when the host moved it into the launch home. */
+  resumedTranscriptPath: string | undefined
   result: PtySpawnResult
 }): void {
   // Why: a reattached process already reported its own identity; an SSH pane's rows belong to
@@ -33,7 +35,12 @@ export function seedResumeLaunchIdentityFromSpawn(args: {
     return
   }
   const agent = args.launchAgent
-  const providerSession = normalizeAgentProviderSession(args.resumeProviderSession)
+  const requested = normalizeAgentProviderSession(args.resumeProviderSession)
+  // Why: an account restart resumes a copy in the new account's home; the old path names the old account.
+  const providerSession =
+    requested && args.resumedTranscriptPath
+      ? { ...requested, transcriptPath: args.resumedTranscriptPath }
+      : requested
   if (!providerSession || !isResumableTuiAgent(agent)) {
     return
   }

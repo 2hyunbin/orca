@@ -1,9 +1,11 @@
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { prepareCodexSessionResume } from './codex-session-resume-preparation'
 
 const SESSION_ID = '019f81b9-19a9-7651-a8d1-352d9420bd11'
 const ORIGIN_HOME = '/managed/origin/home'
-const ORIGIN_ROLLOUT = `${ORIGIN_HOME}/sessions/2026/07/20/rollout-2026-07-20T12-00-00-${SESSION_ID}.jsonl`
+const ROLLOUT_TAIL = `2026/07/20/rollout-2026-07-20T12-00-00-${SESSION_ID}.jsonl`
+const ORIGIN_ROLLOUT = `${ORIGIN_HOME}/sessions/${ROLLOUT_TAIL}`
 
 // Why: these cases assert the resume/fresh outcome, never the legacy rescan's home ranking
 // (#10801) — no ranking input can change a verdict here, so they stay null.
@@ -29,7 +31,7 @@ function prepare(args: {
 }
 
 describe('prepareCodexSessionResume', () => {
-  it('pins the verified origin home the caller resolved', async () => {
+  it('pins the verified origin home the caller resolved, with the rollout moved there', async () => {
     const resolveVerifiedResumeHome = vi.fn(async () => '/managed/migrated/home')
 
     await expect(
@@ -38,7 +40,11 @@ describe('prepareCodexSessionResume', () => {
         trustedCodexHomes: [ORIGIN_HOME],
         resolveVerifiedResumeHome
       })
-    ).resolves.toEqual({ outcome: 'resume', codexHomePath: '/managed/migrated/home' })
+    ).resolves.toEqual({
+      outcome: 'resume',
+      codexHomePath: '/managed/migrated/home',
+      transcriptPath: join('/managed/migrated/home', 'sessions', ROLLOUT_TAIL)
+    })
     expect(resolveVerifiedResumeHome).toHaveBeenCalledWith({
       homePath: ORIGIN_HOME,
       transcriptPath: ORIGIN_ROLLOUT
@@ -108,7 +114,11 @@ describe('prepareCodexSessionResume legacy-rescan ranking forwarding', () => {
           listSessionFiles: listRolloutInEveryHome,
           resolveVerifiedResumeHome: async (source) => source.homePath
         })
-      ).resolves.toEqual({ outcome: 'resume', codexHomePath: accountBHome })
+      ).resolves.toEqual({
+        outcome: 'resume',
+        codexHomePath: accountBHome,
+        transcriptPath: `${accountBHome}/sessions/2026/07/20/rollout-2026-07-20T15-50-19-${SESSION_ID}.jsonl`
+      })
     }
   })
 
@@ -127,7 +137,11 @@ describe('prepareCodexSessionResume legacy-rescan ranking forwarding', () => {
         fileIsRegular: () => true,
         resolveVerifiedResumeHome: async (source) => source.homePath
       })
-    ).resolves.toEqual({ outcome: 'resume', codexHomePath: ORIGIN_HOME })
+    ).resolves.toEqual({
+      outcome: 'resume',
+      codexHomePath: ORIGIN_HOME,
+      transcriptPath: ORIGIN_ROLLOUT
+    })
     expect(getSelectedAccountCodexHome).not.toHaveBeenCalled()
   })
 })

@@ -421,7 +421,8 @@ describe('registerPtyHandlers Codex launch refusal on an unreadable managed home
       const sourceHome = `${TEST_CODEX_HOME}-source`
       const prepareResume = vi.fn<PrepareCodexSessionResume>(async (args) => ({
         outcome: 'resume',
-        codexHomePath: args.useSelectedAccount ? TEST_CODEX_HOME : sourceHome
+        codexHomePath: args.useSelectedAccount ? TEST_CODEX_HOME : sourceHome,
+        transcriptPath: 'rollout.jsonl'
       }))
       register(() => TEST_CODEX_HOME, runtime, prepareResume)
       const controller: RuntimeSpawnController = runtime.setPtyController.mock.calls[0]?.[0]

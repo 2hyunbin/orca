@@ -55,7 +55,11 @@ it('resumes an explicit account restart in the selected home using the bridged t
     target: { runtime: 'host' },
     useSelectedAccount: true
   })
-  expect(result).toMatchObject({ outcome: 'resume', codexHomePath: homes.selected })
+  expect(result).toMatchObject({
+    outcome: 'resume',
+    codexHomePath: homes.selected,
+    transcriptPath: transcriptPath.replace(homes.original, homes.selected)
+  })
 })
 
 it('keeps ordinary automatic restores pinned to their original account', async () => {
@@ -63,7 +67,7 @@ it('keeps ordinary automatic restores pinned to their original account', async (
     providerSession: { key: 'session_id', id: sessionId, transcriptPath },
     target: { runtime: 'host' }
   })
-  expect(result).toMatchObject({ outcome: 'resume', codexHomePath: homes.original })
+  expect(result).toMatchObject({ outcome: 'resume', codexHomePath: homes.original, transcriptPath })
 })
 
 it('materializes a rollout when the account bridge has not caught up', async () => {
@@ -73,10 +77,9 @@ it('materializes a rollout when the account bridge has not caught up', async () 
     target: { runtime: 'host' },
     useSelectedAccount: true
   })
-  expect(result).toMatchObject({ codexHomePath: homes.selected })
-  expect(readFileSync(transcriptPath.replace(homes.original, homes.selected), 'utf8')).toBe(
-    readFileSync(transcriptPath, 'utf8')
-  )
+  const moved = transcriptPath.replace(homes.original, homes.selected)
+  expect(result).toMatchObject({ codexHomePath: homes.selected, transcriptPath: moved })
+  expect(readFileSync(moved, 'utf8')).toBe(readFileSync(transcriptPath, 'utf8'))
 })
 
 it('refuses a conflicting target rollout instead of restarting the old account', async () => {

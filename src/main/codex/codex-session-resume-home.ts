@@ -22,7 +22,13 @@ const CODEX_ROLLOUT_LAYOUT_PATH = new RegExp(`(?:^|/)sessions/${CLAIMED_CODEX_RO
  *  `claimedCodexProvenance` gates the user-facing notice: a path that claimed real
  *  Codex layout is worth reporting, stale cross-agent metadata is not. */
 export type CodexSessionResumePreparation =
-  | { outcome: 'resume'; codexHomePath: string; reconcileSharedRuntimeAuth?: boolean }
+  | {
+      outcome: 'resume'
+      codexHomePath: string
+      /** The rollout the launch resumes: the verified one, moved under `codexHomePath`. */
+      transcriptPath: string
+      reconcileSharedRuntimeAuth?: boolean
+    }
   | { outcome: 'fresh'; claimedCodexProvenance: boolean }
 
 // Why: fold only Win32's extended drive spelling; \\.\ device namespaces and every other \\?\ form

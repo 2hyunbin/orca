@@ -83,7 +83,8 @@ describe('registerPtyHandlers', () => {
           {
             prepareCodexSessionResume: async () => ({
               outcome: 'resume' as const,
-              codexHomePath: systemHome
+              codexHomePath: systemHome,
+              transcriptPath: 'rollout.jsonl'
             })
           }
         )
@@ -145,7 +146,8 @@ describe('registerPtyHandlers', () => {
           {
             prepareCodexSessionResume: async () => ({
               outcome: 'resume' as const,
-              codexHomePath: systemHome
+              codexHomePath: systemHome,
+              transcriptPath: 'rollout.jsonl'
             })
           }
         )

@@ -141,7 +141,8 @@ describe('registerPtyHandlers', () => {
       {
         prepareCodexSessionResume: async () => ({
           outcome: 'resume' as const,
-          codexHomePath: MANAGED_ORIGIN_HOME
+          codexHomePath: MANAGED_ORIGIN_HOME,
+          transcriptPath: 'rollout.jsonl'
         })
       }
     )
@@ -197,7 +198,8 @@ describe('registerPtyHandlers', () => {
       {
         prepareCodexSessionResume: async () => ({
           outcome: 'resume' as const,
-          codexHomePath: MANAGED_ORIGIN_HOME
+          codexHomePath: MANAGED_ORIGIN_HOME,
+          transcriptPath: 'rollout.jsonl'
         })
       }
     )
@@ -249,7 +251,8 @@ describe('registerPtyHandlers', () => {
       {
         prepareCodexSessionResume: async () => ({
           outcome: 'resume' as const,
-          codexHomePath: MANAGED_SHARED_HOME
+          codexHomePath: MANAGED_SHARED_HOME,
+          transcriptPath: 'rollout.jsonl'
         })
       }
     )
@@ -315,7 +318,8 @@ describe('registerPtyHandlers', () => {
       {
         prepareCodexSessionResume: async () => ({
           outcome: 'resume' as const,
-          codexHomePath: MANAGED_ORIGIN_HOME
+          codexHomePath: MANAGED_ORIGIN_HOME,
+          transcriptPath: 'rollout.jsonl'
         })
       }
     )
@@ -384,6 +388,7 @@ describe('registerPtyHandlers', () => {
         prepareCodexSessionResume: async () => ({
           outcome: 'resume' as const,
           codexHomePath: MANAGED_SHARED_HOME,
+          transcriptPath: 'rollout.jsonl',
           reconcileSharedRuntimeAuth: true
         })
       }

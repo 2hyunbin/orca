@@ -61,6 +61,8 @@ export type RuntimePtySpawnState = {
   selectedCodexHomePath: string | null
   codexResumeHomeSelected: boolean
   codexResumeArgvDropped: boolean
+  /** The rollout a Codex resume launched on, in the home this spawn selected. */
+  codexResumedTranscriptPath: string | undefined
   skipCodexHomeEnv: boolean
   stripInheritedOrcaCodexHome: boolean
   spawnOptions: PtySpawnOptions
@@ -177,6 +179,7 @@ export function createRuntimePtySpawnState(
     selectedCodexHomePath: null,
     codexResumeHomeSelected: false,
     codexResumeArgvDropped: false,
+    codexResumedTranscriptPath: undefined,
     skipCodexHomeEnv: false,
     stripInheritedOrcaCodexHome: false,
     spawnOptions: { cols: args.cols, rows: args.rows },
