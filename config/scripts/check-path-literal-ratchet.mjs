@@ -8,7 +8,7 @@ import { listTrackedFiles, readTrackedSources, runEntryRatchet } from './ratchet
 
 const BASELINE_PATH = 'config/path-literal-baseline.txt'
 const SCAN_ROOTS = ['config', '.github', 'tests']
-const SOURCE_ROOTS = 'main|renderer|shared|cli|preload|wsl-guest'
+const SOURCE_ROOTS = 'main|renderer|shared|cli|preload|packages|types|wsl-guest'
 const RESOLVED_EXTENSIONS = ['.ts', '.tsx', '.js', '.mjs', '.cjs', '/index.ts']
 // Generated timings; a stale row only skews shard balance and is rewritten by its generator.
 const EXCLUDED_FILES = new Set(['config/scripts/ci-shard-timings.json'])
