@@ -34,6 +34,7 @@ function createHarness() {
   const writes: string[] = []
   const exits = new Map<string, () => void>()
   const fenced = new Set<string>()
+  const notified: string[] = []
   let listener: (event: RuntimeClientEvent) => void = () => {}
   const store: SortStampsStore = {
     getWorktreeMeta: (id) => meta.get(id),
@@ -67,6 +68,7 @@ function createHarness() {
       listener = next
       return () => {}
     },
+    onStampsWritten: (id) => notified.push(id),
     now: () => Date.now()
   })
   const server = new AgentHookServer()
@@ -79,6 +81,7 @@ function createHarness() {
     writes,
     exits,
     fenced,
+    notified,
     sideEffects: (
       facts: TerminalSideEffectFact[],
       extra: { pane?: string; ptyId?: string; connectionId?: string } = {}
@@ -134,6 +137,8 @@ describe('SortStampsProducer: hook agents', () => {
 
     hook(h.server, 'working')
     expect(h.meta.get(WT)).toEqual({ lastActivityAt: T0, smartTier: 'working', smartAt: T0 })
+    // Each write tells clients to re-list the record.
+    expect(h.notified).toEqual([WT])
 
     const finishedAt = advance(20_000)
     hook(h.server, 'done')

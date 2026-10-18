@@ -50,6 +50,8 @@ export type SortStampsSources = {
     listener: (event: RuntimeClientEvent) => void,
     options: { consumesTerminalSideEffects: true }
   ) => () => void
+  /** A record's stamps changed; clients re-list it. */
+  onStampsWritten: (worktreeId: string) => void
   now: () => number
 }
 
@@ -335,6 +337,7 @@ export class SortStampsProducer {
     const next = current && classifySortStampEvent(current, event, now)
     if (next) {
       writeSortStamps(this.sources.store(), workspace, next)
+      this.sources.onStampsWritten(workspace.worktreeId)
     }
   }
 }

@@ -21,6 +21,9 @@ import { SmartSortAgentEntries } from './smart-sort-agent-entries'
 import { buildRuntimeSmartSortSources } from './runtime-smart-sort-sources'
 import type { AgentStatusStoreView } from './workspace-activity-facts-producer'
 import { SortStampsProducer } from './sort-stamps-producer'
+import { writeMayTouchWorkspaceMetadata } from '../../persistence/loading-store/worktree-identity-metadata'
+import { parseWorkspaceKey } from '../../../shared/workspace-scope'
+import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 import { resolveAgentWorkspaceExecutionHostId } from '../../agent-hooks/restored-status-dead-terminal-sweep'
 import {
   isWslMoveProjectBlocked,
@@ -50,6 +53,7 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     resolveTabWorktreeId: (tabId) => this.tabs.get(tabId)?.worktreeId,
     subscribeToPtyExit: (ptyId, listener) => this.subscribeToPtyExit(ptyId, listener),
     onClientEvent: (listener, options) => this.onClientEvent(listener, options),
+    onStampsWritten: (worktreeId) => this.notifySortStampsChanged(worktreeId),
     now: Date.now
   })
 
@@ -57,6 +61,13 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     super(...args)
     this.workspaceActivityFacts.revision.onChange(() => this.sidebarTemporal.noteActivityChange())
     this.store?.onUIChanged?.(() => this.sidebarTemporal.noteViewChange())
+    // Switch point: window-side stamp writes save metadata with no catalog event.
+    this.store?.onStateWritten?.((domains) => {
+      if (ORCA_SIDEBAR_INPUTS_IS_MAIN && writeMayTouchWorkspaceMetadata(domains)) {
+        this.invalidateResolvedWorktreeCache()
+        this.sidebarTemporal.noteRowsWritten()
+      }
+    })
     // Every catalog change, from IPC or the runtime, reaches clients through this one bus.
     this.clientEvents.on(
       (event) => {
@@ -132,6 +143,16 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
         probePtyLiveness: async (ptyId) => (await provider.probePtyLiveness?.(ptyId)) ?? null
       })
       .catch((error: unknown) => console.warn('[sidebar] sort tier reconcile failed:', error))
+  }
+
+  // Metadata only: clients re-list the record, and the cached git scans stay.
+  private notifySortStampsChanged(worktreeId: string): void {
+    if (parseWorkspaceKey(worktreeId)?.type === 'folder') {
+      this.notifyFolderWorkspaceChanged()
+      return
+    }
+    this.invalidateResolvedWorktreeCache()
+    this.notifyWorktreesChanged(getRepoIdFromWorktreeId(worktreeId), { invalidateGitScans: false })
   }
 
   /** Attaches every sidebar producer that reads the hook server's store. */

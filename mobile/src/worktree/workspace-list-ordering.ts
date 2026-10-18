@@ -6,6 +6,7 @@ import {
 } from '../../../src/shared/workspace-view/workspace-row-sort'
 import { compareCodePoints, compareSidebarText } from '../../../src/shared/sidebar-list/text-order'
 import { getWorktreeRowIdentity } from './worktree-host-row-identity'
+import { compareSmartStamps, recentStamp } from '../../../src/shared/sidebar-list/stamp-order'
 
 function finiteOr(value: number | undefined, fallback: number): number {
   return value !== undefined && Number.isFinite(value) ? value : fallback
@@ -23,6 +24,19 @@ export function sortWorktrees(
   mode: WorkspaceSortBy,
   now = Date.now()
 ): Worktree[] {
+  // A stamping host decides the order; rows from an older one rest by Recent among them.
+  if (worktrees.some((worktree) => worktree.sortedByStamps)) {
+    return [...worktrees].sort(
+      buildWorkspaceRowComparator<Worktree>(mode, {
+        label: (w) => w.displayName,
+        identity: getWorktreeRowIdentity,
+        repoLabel: (w) => w.repo,
+        recentActivity: recentStamp,
+        manualRank: getManualSortRank,
+        compareSmart: compareSmartStamps
+      })
+    )
+  }
   // Why lastOutputAt too: headless serve hosts only stamp lastActivityAt at creation, so live
   // terminal output must still count as recency for mobile-only pairings.
   const recentActivity = (w: Worktree): number =>
