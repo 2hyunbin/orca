@@ -259,6 +259,10 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
     (frame) => {
       cache = applyLayoutFrame(cache, frame)
       if (frame.type === 'snapshot') {
+        // A reopened stream's snapshot redraws every workspace: the window drew alone meanwhile.
+        if (snapshotReceived) {
+          shown = {}
+        }
         snapshotReceived = true
         live = started
       }
@@ -268,7 +272,11 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
       if (status.state === 'lost' || status.state === 'refused') {
         console.warn('[layout-owner] layout stream stopped:', status)
       }
-      if (status.state !== 'connecting' && status.state !== 'live') {
+      if (status.state === 'connecting' && !streamOpen) {
+        // The local stream reopens after a loss; replies wait for its frames again.
+        streamOpen = true
+        beginLayoutFramePositions()
+      } else if (status.state !== 'connecting' && status.state !== 'live') {
         streamOpen = false
         endLayoutFramePositions()
       }
