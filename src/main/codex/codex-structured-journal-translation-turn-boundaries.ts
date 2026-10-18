@@ -287,7 +287,7 @@ export class CodexJournalTurnBoundaries {
     const turnId = readCodexTurnId(event.params)
     if (
       !turnId ||
-      run.status !== 'blocked' ||
+      (run.status !== 'blocked' && run.status !== 'stopped') ||
       run.eventName !== 'userPromptSubmit' ||
       event.threadId !== this.deps.primaryThreadId() ||
       !this.deps.activeTurns.has(event.threadId, turnId)
@@ -295,7 +295,8 @@ export class CodexJournalTurnBoundaries {
       return
     }
     const entries = Array.isArray(run.entries) ? run.entries.map(readRecord) : []
-    const feedback = entries.find((entry) => entry.kind === 'feedback')
+    // Codex drops the input for both a block (feedback entry) and a stop (stop entry).
+    const feedback = entries.find((entry) => entry.kind === 'feedback' || entry.kind === 'stop')
     const reason = typeof feedback?.text === 'string' ? feedback.text : ''
     this.blockedInputs.set(
       blockedInputKey(event.threadId, turnId),
