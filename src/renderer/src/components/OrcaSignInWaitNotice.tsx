@@ -11,13 +11,8 @@ export function orcaSignInWaitingLabel(): string {
   )
 }
 
-async function copyPendingSignInLink(): Promise<void> {
+async function copySignInLink(link: string): Promise<void> {
   try {
-    // Why: the wait can start or end around the click, leaving no link to copy.
-    const link = await window.api.orcaProfiles.pendingSignInLink()
-    if (!link) {
-      throw new Error('No sign-in is waiting for the browser.')
-    }
     await window.api.ui.writeClipboardText(link)
     toast.success(translate('auto.components.OrcaSignInWaitNotice.copied', 'Sign-in link copied'))
   } catch (error) {
@@ -29,23 +24,19 @@ async function copyPendingSignInLink(): Promise<void> {
 }
 
 export function CopyOrcaSignInLinkButton({
+  link,
   size = 'sm'
 }: {
+  link: string
   size?: 'sm' | 'xs'
 }): React.JSX.Element {
   return (
-    <Button
-      type="button"
-      size={size}
-      variant="outline"
-      onClick={() => void copyPendingSignInLink()}
-    >
+    <Button type="button" size={size} variant="outline" onClick={() => void copySignInLink(link)}>
       {translate('auto.components.OrcaSignInWaitNotice.copyLink', 'Copy sign-in link')}
     </Button>
   )
 }
 
-/** Shown beside a Sign in button while its browser sign-in is still waiting. */
 export function OrcaSignInWaitNotice({
   className,
   buttonSize = 'sm'
@@ -53,8 +44,8 @@ export function OrcaSignInWaitNotice({
   className?: string
   buttonSize?: 'sm' | 'xs'
 }): React.JSX.Element | null {
-  const pending = useAppStore((state) => state.orcaProfileSignInPending)
-  if (!pending) {
+  const link = useAppStore((state) => state.orcaProfileSignInLink)
+  if (!link) {
     return null
   }
   return (
@@ -62,7 +53,7 @@ export function OrcaSignInWaitNotice({
       <p role="status" className="text-xs text-muted-foreground">
         {orcaSignInWaitingLabel()}
       </p>
-      <CopyOrcaSignInLinkButton size={buttonSize} />
+      <CopyOrcaSignInLinkButton link={link} size={buttonSize} />
     </div>
   )
 }

@@ -40,7 +40,6 @@ import { normalizeExecutionHostId } from '../../shared/execution-host'
 import {
   createCloudLinkedOrcaProfile,
   connectCurrentOrcaProfile,
-  getPendingOrcaCloudSignInLink,
   getCurrentOrcaProfileAuthStatus,
   refreshCurrentOrcaProfileAuth,
   selectCurrentOrcaProfileOrg,
@@ -48,7 +47,14 @@ import {
 } from '../orca-profiles/profile-cloud-service'
 import { registerOrcaProfileOrgMemberHandlers } from './orca-profile-org-members-handlers'
 import { onOrcaCloudSessionInvalidated } from '../orca-profiles/profile-cloud-session-invalidation'
-import { broadcastOrcaProfileAuthStatusChanged } from './orca-profile-auth-status-broadcast'
+import {
+  broadcastOrcaProfileAuthStatusChanged,
+  broadcastOrcaProfileSignInLinkChanged
+} from './orca-profile-auth-status-broadcast'
+import {
+  getOrcaCloudSignInLink,
+  onOrcaCloudSignInLinkChanged
+} from '../orca-profiles/profile-cloud-sign-in-link'
 import { transferProjectArgsFromUnknown } from './orca-profile-project-transfer-args'
 
 type RegisterOrcaProfileHandlersOptions = {
@@ -169,6 +175,7 @@ export function registerOrcaProfileHandlers(
   // Why not options.onAuthMutation: that hook drives the relay coordinator, which
   // is the caller that just failed the refresh — re-entering it here would be a loop.
   onOrcaCloudSessionInvalidated(broadcastOrcaProfileAuthStatusChanged)
+  onOrcaCloudSignInLinkChanged(broadcastOrcaProfileSignInLinkChanged)
 
   ipcMain.handle(
     'orcaProfiles:createLocal',
@@ -269,9 +276,7 @@ export function registerOrcaProfileHandlers(
     }
   )
 
-  ipcMain.handle('orcaProfiles:pendingSignInLink', (): string | null =>
-    getPendingOrcaCloudSignInLink()
-  )
+  ipcMain.handle('orcaProfiles:pendingSignInLink', (): string | null => getOrcaCloudSignInLink())
 
   ipcMain.handle(
     'orcaProfiles:createCloudLinked',

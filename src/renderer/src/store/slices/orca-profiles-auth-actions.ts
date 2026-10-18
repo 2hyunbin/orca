@@ -78,18 +78,11 @@ export const createOrcaProfilesAuthActions: StateCreator<
 
     connectCurrentOrcaProfile: async () => {
       const attempt = ++nextConnectAttempt
-      set({ orcaProfileSignInPending: true })
-      const settlePending = (): void => {
-        if (attempt === nextConnectAttempt) {
-          set({ orcaProfileSignInPending: false })
-        }
-      }
       try {
         // Why: a pending browser callback must not block retry. Another click
         // starts a second PKCE wait; an older wait is ignored after a newer
         // one has already linked.
         const result = await window.api.orcaProfiles.connectCurrent()
-        settlePending()
         if (attempt < appliedConnectAttempt) {
           return result
         }
@@ -105,7 +98,6 @@ export const createOrcaProfilesAuthActions: StateCreator<
         })
         if (result.status === 'connected') {
           appliedConnectAttempt = attempt
-          set({ orcaProfileSignInPending: false })
           if (!alreadyConnected) {
             toast.success(
               translate('auto.store.slices.orca.profiles.9fcb07a796', 'Profile connected')
@@ -137,7 +129,6 @@ export const createOrcaProfilesAuthActions: StateCreator<
         }
         return result
       } catch (err) {
-        settlePending()
         console.error('Failed to connect Orca profile:', err)
         if (
           attempt >= appliedConnectAttempt &&
@@ -195,7 +186,6 @@ export const createOrcaProfilesAuthActions: StateCreator<
     signOutCurrentOrcaProfile: async () => {
       nextConnectAttempt += 1
       appliedConnectAttempt = nextConnectAttempt
-      set({ orcaProfileSignInPending: false })
       try {
         const result = await window.api.orcaProfiles.signOutCurrent()
         set({

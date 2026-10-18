@@ -33,30 +33,21 @@ import {
 } from './profile-cloud-dev-service'
 import { getOrcaProfileAuthStatusFromProfile } from './profile-cloud-auth-status'
 import { selectCloudOrg } from './profile-cloud-org-selection'
+import {
+  publishOrcaCloudSignInLink,
+  releaseOrcaCloudSignInLink
+} from './profile-cloud-sign-in-link'
 import { clearRelayRegionPreferenceCache } from '../runtime/mobile-cloud-relay/relay-region-preference'
 
 export { refreshCurrentOrcaProfileAuth } from './profile-cloud-capability-refresh'
 
 let nextCloudConnectAttempt = 0
 let linkedCloudConnectAttempt = 0
-// Why: Orca cannot see whether the browser actually showed the page, so the
-// newest waiting sign-in's link stays copyable until that wait ends.
-let pendingSignInLink: { attempt: number; url: string } | null = null
 
 function invalidateOutstandingCloudConnectAttempts(): void {
   nextCloudConnectAttempt += 1
   linkedCloudConnectAttempt = nextCloudConnectAttempt
-  pendingSignInLink = null
-}
-
-export function getPendingOrcaCloudSignInLink(): string | null {
-  return pendingSignInLink?.url ?? null
-}
-
-function releasePendingSignInLink(attempt: number): void {
-  if (pendingSignInLink?.attempt === attempt) {
-    pendingSignInLink = null
-  }
+  releaseOrcaCloudSignInLink()
 }
 
 function activeAuth(
@@ -93,14 +84,15 @@ export async function connectCurrentOrcaProfile(
   }
 
   const attempt = ++nextCloudConnectAttempt
+  releaseOrcaCloudSignInLink()
   try {
-    const code = await beginOrcaCloudPkceFlow(configState.config, active.profile.id, (url) => {
-      if (attempt > linkedCloudConnectAttempt) {
-        pendingSignInLink = { attempt, url }
+    const code = await beginOrcaCloudPkceFlow(configState.config, active.profile.id, (link) => {
+      if (attempt === nextCloudConnectAttempt) {
+        publishOrcaCloudSignInLink(attempt, link)
       }
     })
     // Why: the callback listener closes once the browser answers, so the link is dead.
-    releasePendingSignInLink(attempt)
+    releaseOrcaCloudSignInLink(attempt)
     if (attempt < linkedCloudConnectAttempt) {
       return {
         status: 'cancelled',
@@ -146,7 +138,7 @@ export async function connectCurrentOrcaProfile(
       error: message
     }
   } finally {
-    releasePendingSignInLink(attempt)
+    releaseOrcaCloudSignInLink(attempt)
   }
 }
 

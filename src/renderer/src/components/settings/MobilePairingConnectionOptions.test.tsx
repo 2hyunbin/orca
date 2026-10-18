@@ -12,7 +12,7 @@ import { MobilePairingConnectionOptions } from './MobilePairingConnectionOptions
 
 type MobileRelayStoreState = {
   orcaProfileAuthStatus: OrcaProfileAuthStatus | null
-  orcaProfileSignInPending?: boolean
+  orcaProfileSignInLink?: string | null
   connectCurrentOrcaProfile: () => Promise<null>
   fetchOrcaProfileAuthStatus: () => Promise<OrcaProfileAuthStatus | null>
 }
@@ -117,16 +117,13 @@ describe('MobilePairingConnectionOptions', () => {
     const user = userEvent.setup()
     const link = 'https://login.example/authorize?state=abc'
     const writeClipboardText = vi.fn().mockResolvedValue(undefined)
-    Object.assign(window.api, {
-      orcaProfiles: { pendingSignInLink: vi.fn().mockResolvedValue(link) },
-      ui: { writeClipboardText }
-    })
+    Object.assign(window.api, { ui: { writeClipboardText } })
     const { rerender } = render(
       <MobilePairingConnectionOptions value="automatic" onChange={vi.fn()} />
     )
     expect(screen.queryByRole('button', { name: 'Copy sign-in link' })).toBeNull()
 
-    publishStoreState({ ...mocks.state, orcaProfileSignInPending: true })
+    publishStoreState({ ...mocks.state, orcaProfileSignInLink: link })
     rerender(<MobilePairingConnectionOptions value="automatic" onChange={vi.fn()} />)
     expect(screen.getByText('Waiting for sign-in in your browser')).toBeVisible()
     // Why: a browser tab closed or never shown must not block another try.

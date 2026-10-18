@@ -24,6 +24,7 @@ export function createWebOrcaProfilesApi(): Partial<PreloadApi> {
         }),
       authStatus: webOrcaProfileAuthStatus,
       onAuthStatusChanged: () => noopUnsubscribe,
+      onSignInLinkChanged: () => noopUnsubscribe,
       createLocal: () =>
         Promise.resolve({
           activeProfileId: DEFAULT_LOCAL_ORCA_PROFILE_ID,

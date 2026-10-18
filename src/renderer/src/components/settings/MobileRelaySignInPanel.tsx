@@ -3,7 +3,6 @@ import { translate } from '../../i18n/i18n'
 import { useAppStore } from '../../store'
 import { CopyOrcaSignInLinkButton, orcaSignInWaitingLabel } from '../OrcaSignInWaitNotice'
 
-/** The Relay sub-step that signs this desktop in to Orca. */
 export function MobileRelaySignInPanel({
   reconnectRequired,
   onSignIn
@@ -11,19 +10,13 @@ export function MobileRelaySignInPanel({
   reconnectRequired: boolean
   onSignIn: () => void
 }): React.JSX.Element {
-  const pending = useAppStore((state) => state.orcaProfileSignInPending)
+  const link = useAppStore((state) => state.orcaProfileSignInLink)
 
   return (
     <div
-      // Why: indent under the Relay radio so Sign in reads as a Relay
-      // sub-step, not a requirement for the whole connection section/LAN.
-      // Deliberately role-less: a `group` here would be an invalid owned
-      // element of the radiogroup, and its label would double-announce the
-      // button it wraps. The plain div contributes nothing to the a11y
-      // tree, leaving the CTA reachable by Tab as an ordinary button.
+      // Why role-less: a radiogroup may only own radios; this div is layout under the Relay radio.
       onKeyDown={(event) => {
-        // Why: nested controls live inside the radiogroup for layout; do not
-        // let arrow keys bubble and flip the selected path.
+        // Why: arrow keys on nested controls must not change the selected path.
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
           event.stopPropagation()
         }
@@ -32,7 +25,7 @@ export function MobileRelaySignInPanel({
       data-testid="anywhere-sign-in-panel"
     >
       <p className="min-w-0 flex-1 text-xs text-muted-foreground" aria-live="polite">
-        {pending
+        {link
           ? orcaSignInWaitingLabel()
           : translate(
               'auto.components.settings.MobilePairingConnectionOptions.relaySignInDetail',
@@ -40,7 +33,7 @@ export function MobileRelaySignInPanel({
             )}
       </p>
       <div className="flex shrink-0 items-center gap-2">
-        {pending ? <CopyOrcaSignInLinkButton /> : null}
+        {link ? <CopyOrcaSignInLinkButton link={link} /> : null}
         <Button type="button" size="sm" onClick={onSignIn}>
           {reconnectRequired
             ? translate(

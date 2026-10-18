@@ -1,82 +1,57 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { OrcaProfileAuthStatus } from '../../../../shared/orca-profiles'
-import { createTestStore } from '../../store/slices/store-test-helpers'
 
-const { storeHolder } = vi.hoisted(() => ({
-  storeHolder: { current: null as { getState: () => unknown } | null }
+const mocks = vi.hoisted((): { state: { orcaProfileSignInLink: string | null } } => ({
+  state: { orcaProfileSignInLink: null }
 }))
 
 vi.mock('../../store', () => ({
-  useAppStore: { getState: () => storeHolder.current?.getState() }
-}))
-
-vi.mock('sonner', () => ({
-  toast: { error: vi.fn(), info: vi.fn(), success: vi.fn(), warning: vi.fn() }
+  useAppStore: {
+    getState: () => ({ fetchOrcaProfileAuthStatus: vi.fn() }),
+    setState: (partial: { orcaProfileSignInLink: string | null }) => {
+      Object.assign(mocks.state, partial)
+    }
+  }
 }))
 
 import { registerOrcaProfileAuthIpcBridge } from './orca-profile-auth-ipc-bridge'
 
-const connectedAuthStatus: OrcaProfileAuthStatus = {
-  activeProfileId: 'local-default',
-  configured: true,
-  state: 'connected',
-  persistence: 'encrypted'
-}
-
-const reconnectRequiredAuthStatus: OrcaProfileAuthStatus = {
-  activeProfileId: 'local-default',
-  configured: true,
-  state: 'reconnect-required',
-  persistence: 'encrypted'
-}
-
-describe('orca profile auth IPC bridge', () => {
-  let listener: (() => void) | null = null
-  const unsubscribe = vi.fn()
-  const authStatus = vi.fn()
+describe('registerOrcaProfileAuthIpcBridge sign-in link', () => {
+  let emitLink: (link: string | null) => void
+  let resolveSnapshot: (link: string | null) => void
 
   beforeEach(() => {
-    listener = null
-    unsubscribe.mockClear()
-    authStatus.mockReset()
+    mocks.state.orcaProfileSignInLink = null
     vi.stubGlobal('window', {
       api: {
         orcaProfiles: {
-          authStatus,
-          onAuthStatusChanged: (callback: () => void) => {
-            listener = callback
-            return unsubscribe
-          }
+          onAuthStatusChanged: () => () => {},
+          onSignInLinkChanged: (callback: (link: string | null) => void) => {
+            emitLink = callback
+            return () => {}
+          },
+          pendingSignInLink: () =>
+            new Promise<string | null>((resolve) => {
+              resolveSnapshot = resolve
+            })
         }
       }
     })
   })
 
-  it('re-fetches auth status on the push, flipping connected to reconnect-required', async () => {
-    authStatus.mockResolvedValue(connectedAuthStatus)
-    const store = createTestStore()
-    storeHolder.current = store
-    await store.getState().fetchOrcaProfileAuthStatus()
-    expect(store.getState().orcaProfileAuthStatus).toEqual(connectedAuthStatus)
-
-    const unsubs: (() => void)[] = []
-    registerOrcaProfileAuthIpcBridge(unsubs)
-    authStatus.mockResolvedValue(reconnectRequiredAuthStatus)
-    listener?.()
+  it('adopts the link of a sign-in already waiting when the window loads', async () => {
+    registerOrcaProfileAuthIpcBridge([])
+    resolveSnapshot('https://login.example/authorize?state=a')
     await vi.waitFor(() =>
-      expect(store.getState().orcaProfileAuthStatus).toEqual(reconnectRequiredAuthStatus)
+      expect(mocks.state.orcaProfileSignInLink).toBe('https://login.example/authorize?state=a')
     )
-
-    unsubs.forEach((dispose) => dispose())
-    expect(unsubscribe).toHaveBeenCalledTimes(1)
   })
 
-  it('skips registration when the preload bridge does not expose the event', () => {
-    vi.stubGlobal('window', { api: { orcaProfiles: { authStatus } } })
-    const unsubs: (() => void)[] = []
-
-    registerOrcaProfileAuthIpcBridge(unsubs)
-
-    expect(unsubs).toHaveLength(0)
+  it('does not let a stale snapshot overwrite a newer change', async () => {
+    registerOrcaProfileAuthIpcBridge([])
+    emitLink(null)
+    resolveSnapshot('https://login.example/authorize?state=old')
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(mocks.state.orcaProfileSignInLink).toBeNull()
   })
 })

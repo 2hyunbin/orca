@@ -26,8 +26,7 @@ const localAuth: OrcaProfileAuthStatus = {
 }
 
 const orcaProfilesApi = {
-  connectCurrent: vi.fn(),
-  signOutCurrent: vi.fn()
+  connectCurrent: vi.fn()
 }
 
 function deferredConnect(): (result: ConnectCurrentOrcaProfileResult) => void {
@@ -40,7 +39,7 @@ function deferredConnect(): (result: ConnectCurrentOrcaProfileResult) => void {
   return (result) => finish(result)
 }
 
-describe('orca profile sign-in browser wait', () => {
+describe('orca profile sign-in timeout', () => {
   beforeEach(() => {
     vi.resetAllMocks()
     vi.stubGlobal('window', {
@@ -48,22 +47,19 @@ describe('orca profile sign-in browser wait', () => {
     })
   })
 
-  it('stays pending until the newest wait ends, then reports a timeout', async () => {
+  it('reports a timeout only for the newest wait', async () => {
     const finishFirst = deferredConnect()
     const finishSecond = deferredConnect()
     const store = createTestStore()
 
     const first = store.getState().connectCurrentOrcaProfile()
     const second = store.getState().connectCurrentOrcaProfile()
-    expect(store.getState().orcaProfileSignInPending).toBe(true)
-
     finishFirst({ status: 'cancelled', auth: localAuth })
     await first
-    expect(store.getState().orcaProfileSignInPending).toBe(true)
+    expect(toastErrorMock).not.toHaveBeenCalled()
 
     finishSecond({ status: 'timed-out', auth: localAuth })
     await second
-    expect(store.getState().orcaProfileSignInPending).toBe(false)
     expect(toastErrorMock).toHaveBeenCalledOnce()
     expect(toastErrorMock).toHaveBeenCalledWith('Sign-in timed out')
   })
@@ -74,23 +70,6 @@ describe('orca profile sign-in browser wait', () => {
 
     await store.getState().connectCurrentOrcaProfile()
 
-    expect(store.getState().orcaProfileSignInPending).toBe(false)
     expect(toastErrorMock).not.toHaveBeenCalled()
-  })
-
-  it('clears the wait on sign-out', async () => {
-    deferredConnect()
-    orcaProfilesApi.signOutCurrent.mockResolvedValueOnce({
-      status: 'signed-out',
-      auth: localAuth,
-      activeProfileId: 'local-default',
-      profiles: []
-    })
-    const store = createTestStore()
-
-    void store.getState().connectCurrentOrcaProfile()
-    expect(store.getState().orcaProfileSignInPending).toBe(true)
-    await store.getState().signOutCurrentOrcaProfile()
-    expect(store.getState().orcaProfileSignInPending).toBe(false)
   })
 })

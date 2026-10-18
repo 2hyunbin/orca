@@ -1,14 +1,31 @@
 import { useAppStore } from '../../store'
 
-/** Re-reads auth status when main clears a revoked cloud session behind the renderer's back. */
+/** Keeps auth status and the waiting sign-in link in step with main. */
 export function registerOrcaProfileAuthIpcBridge(unsubs: (() => void)[]): void {
-  const subscribe = window.api.orcaProfiles?.onAuthStatusChanged
-  if (typeof subscribe !== 'function') {
-    return
+  const api = window.api.orcaProfiles
+  if (typeof api?.onAuthStatusChanged === 'function') {
+    unsubs.push(
+      api.onAuthStatusChanged(() => {
+        void useAppStore.getState().fetchOrcaProfileAuthStatus()
+      })
+    )
   }
-  unsubs.push(
-    subscribe(() => {
-      void useAppStore.getState().fetchOrcaProfileAuthStatus()
-    })
-  )
+  if (typeof api?.onSignInLinkChanged === 'function') {
+    let changed = false
+    unsubs.push(
+      api.onSignInLinkChanged((link) => {
+        changed = true
+        useAppStore.setState({ orcaProfileSignInLink: link })
+      })
+    )
+    // Why: a sign-in can already be waiting when this window loads; a later event wins.
+    void api
+      .pendingSignInLink()
+      .then((link) => {
+        if (!changed) {
+          useAppStore.setState({ orcaProfileSignInLink: link })
+        }
+      })
+      .catch(() => {})
+  }
 }
