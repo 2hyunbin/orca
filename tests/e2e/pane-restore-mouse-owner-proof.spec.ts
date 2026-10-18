@@ -58,10 +58,18 @@ for (const scenario of cases) {
     const scratch = mkdtempSync(path.join(os.tmpdir(), 'orca-mouse-owner-'))
     const pidFile = path.join(scratch, 'owner.pid')
     const inputFile = path.join(scratch, 'input.jsonl')
-    const host = await launchHeadlessPairedRuntimeHost({ pinnedServePort: true })
-    const client = await launchPairedElectronClient(host.offer, testInfo, `mouse-owner-${boundary}`)
+    let disposeHost: (() => Promise<void>) | undefined
+    let disposeClient: (() => Promise<void>) | undefined
     const observations: Record<string, unknown> = {}
     try {
+      const host = await launchHeadlessPairedRuntimeHost({ pinnedServePort: true })
+      disposeHost = () => host.dispose()
+      const client = await launchPairedElectronClient(
+        host.offer,
+        testInfo,
+        `mouse-owner-${boundary}`
+      )
+      disposeClient = () => client.dispose()
       const added = await host.client.call<{ repo: { id: string } }>('repo.add', {
         path: testRepoPath,
         kind: 'folder'
@@ -94,7 +102,7 @@ for (const scenario of cases) {
       await installWriteProbe(client.page, tabId)
       const command = `PS1='ORCA_BARE_SHELL> '; ${[
         process.execPath,
-        path.join(process.cwd(), 'tests/e2e/fixtures/mouse-mode-owner.cjs'),
+        path.join(__dirname, 'fixtures', 'mouse-mode-owner.cjs'),
         pidFile,
         inputFile,
         scenario.screen,
@@ -205,14 +213,26 @@ for (const scenario of cases) {
       expect(observations.afterReload).toMatchObject({ mode: 'none', reports: [] })
       await expect(client.page.locator('.xterm.enable-mouse-events:visible')).toHaveCount(0)
     } finally {
-      writeFileSync(testInfo.outputPath('observations.json'), JSON.stringify(observations, null, 2))
-      await testInfo.attach('observations-final', {
-        body: JSON.stringify(observations, null, 2),
-        contentType: 'application/json'
-      })
-      await client.dispose()
-      await host.dispose()
-      rmSync(scratch, { recursive: true, force: true })
+      try {
+        writeFileSync(
+          testInfo.outputPath('observations.json'),
+          JSON.stringify(observations, null, 2)
+        )
+        await testInfo.attach('observations-final', {
+          body: JSON.stringify(observations, null, 2),
+          contentType: 'application/json'
+        })
+      } finally {
+        try {
+          await disposeClient?.()
+        } finally {
+          try {
+            await disposeHost?.()
+          } finally {
+            rmSync(scratch, { recursive: true, force: true })
+          }
+        }
+      }
     }
   })
 }

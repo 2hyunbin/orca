@@ -1,4 +1,5 @@
 import { Terminal } from '@xterm/headless'
+import { buildMouseEncodingRestoreSequence } from '../../../../shared/terminal-mouse-encoding'
 import { describe, expect, it } from 'vitest'
 import {
   buildParityMainBufferSnapshot,
@@ -98,10 +99,12 @@ describe('authoritative snapshot input modes (#18424)', () => {
         renderer,
         buildSnapshotReplayPrologue({ targetAlternateScreen: false, paneOnAlternateScreen: false })
       )
-      await writeToTerminal(
-        renderer,
-        `\x1b[?1003h${encoding === undefined ? '' : `\x1b[?${encoding}h`}`
-      )
+      // Current hosts state the default encoding when tracking is active.
+      const restoreEncoding =
+        encoding === undefined
+          ? '\x1b[?1006l'
+          : buildMouseEncodingRestoreSequence(encoding === 1006 ? 'sgr' : 'sgr-pixels')
+      await writeToTerminal(renderer, `\x1b[?1003h${restoreEncoding}`)
       await writeToTerminal(renderer, '\x1b[?1006$p\x1b[?1016$p')
       expect(renderer.modes.mouseTrackingMode).toBe('any')
       expect(replies).toEqual([
@@ -112,6 +115,33 @@ describe('authoritative snapshot input modes (#18424)', () => {
       renderer.dispose()
     }
   })
+
+  it.each(['folded', 'split'] as const)(
+    '%s preserves the encoding when a live snapshot from an older host omits it',
+    async (layout) => {
+      const renderer = new Terminal({ allowProposedApi: true })
+      const replies: string[] = []
+      renderer.onData((data) => replies.push(data))
+      try {
+        await writeToTerminal(renderer, '\x1b[?1003h\x1b[?1006h\x1b[?1004h')
+        const data = 'LIVE_FRAME\x1b[?1002h\x1b[?1004h'
+        const image = buildFoldedImageReplayWrites(data, false, true)
+        const writes =
+          layout === 'folded'
+            ? [image.preamble, image.payload]
+            : buildMainModelSnapshotReplayWrites({ data }, { paneOnAlternateScreen: false })
+        for (const write of writes) {
+          await writeToTerminal(renderer, write)
+        }
+        await writeToTerminal(renderer, '\x1b[?1006$p')
+        expect(renderer.modes.mouseTrackingMode).toBe('drag')
+        expect(renderer.modes.sendFocusMode).toBe(true)
+        expect(replies).toEqual(['\x1b[?1006;1$y'])
+      } finally {
+        renderer.dispose()
+      }
+    }
+  )
 
   it('keeps reporting when draining a byte gap without an authoritative snapshot', async () => {
     const renderer = new Terminal({ allowProposedApi: true })

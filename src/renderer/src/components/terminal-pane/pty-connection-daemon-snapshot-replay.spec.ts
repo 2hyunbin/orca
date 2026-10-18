@@ -68,6 +68,12 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
     it.each([
       { owner: 'replacement shell', snapshot: 'SHELL>', mode: 'none', focus: false },
       {
+        owner: 'older live agent without encoding metadata',
+        snapshot: '\x1b[?1049hLIVE_TUI\x1b[?1002h\x1b[?1004h',
+        mode: 'drag',
+        focus: true
+      },
+      {
         owner: 'live agent',
         snapshot: '\x1b[?1049hLIVE_TUI\x1b[?1002h\x1b[?1006h\x1b[?1004h',
         mode: 'drag',
@@ -102,6 +108,12 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
           }
           expect(rendered.modes.mouseTrackingMode).toBe(scenario.mode)
           expect(rendered.modes.sendFocusMode).toBe(scenario.focus)
+          if (scenario.focus) {
+            const replies: string[] = []
+            rendered.onData((data) => replies.push(data))
+            await writeHeadlessTerminal(rendered, '\x1b[?1006$p')
+            expect(replies).toEqual(['\x1b[?1006;1$y'])
+          }
         } finally {
           rendered.dispose()
           binding.dispose()
