@@ -96,7 +96,7 @@ export function HostSectionHeader({
         )}
         <HostHeaderHealthIcon health={row.health} />
         {/* Why: badge hugs the label (like repo headers) instead of floating by the hover controls. */}
-        <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
           <span
             className={cn(
               'min-w-0 truncate text-[12px] font-semibold leading-none',
@@ -125,6 +125,7 @@ export function HostSectionHeader({
         {/* Why: menu and dialog portals still bubble React events here; keep them from toggling or dragging the row. */}
         <span
           data-host-header-action=""
+          className="flex shrink-0 items-center"
           onPointerDown={stopRepoHeaderMenuEvent}
           onMouseDown={stopRepoHeaderMenuEvent}
           onPointerUp={stopRepoHeaderMenuEvent}
