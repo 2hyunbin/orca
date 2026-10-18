@@ -8,7 +8,7 @@ import {
 import { parseWorkspaceKey } from '../../../../../../shared/workspace-scope'
 import { getRepoIdFromWorktreeId } from '../../../../../../shared/worktree/id'
 import type { WorktreePurgeTarget } from '../../worktree-purge-target'
-import { getFolderWorkspaceHostId } from '../../../folder-workspaces/folder-workspace-catalog'
+import { getFolderWorkspaceHostId } from '../../../../../../shared/folder-workspace-execution-host'
 import { getProjectGroupHostId } from '../../project-group-owner-routing'
 import {
   collectRemovedHostTwinState,

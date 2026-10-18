@@ -6,7 +6,7 @@ import {
   normalizeRuntimePathForComparison
 } from '../../shared/cross-platform-path'
 import { parsePtySessionId } from '../../shared/pty-session-id-format'
-import { splitWorktreeId, worktreeIdsEqual } from '../../shared/worktree/id'
+import { splitWorktreeId, worktreeIdentityKey, worktreeIdsEqual } from '../../shared/worktree/id'
 import { normalizeLocalBranchName } from './runtime-worktree-selection'
 
 export type ResolvedWorktree = Worktree & {
@@ -28,30 +28,13 @@ export function runtimePathsEqual(left: string, right: string): boolean {
 /** Runtime-side name for the shared workspace-identity comparison; see `worktreeIdsEqual`. */
 export const runtimeWorktreeIdsEqual = worktreeIdsEqual
 
-export function runtimeWorktreeIdentityKey(worktreeId: string): string {
-  // Same suffix rule: this keys PTY refresh, sleep, and mutation-queue state per session.
-  const parsed = splitWorktreeId(worktreeId)
-  return parsed
-    ? `${parsed.repoId}\0${normalizeRuntimePathForComparison(parsed.worktreePath)}`
-    : worktreeId
-}
-
-export function runtimeWorktreeLookupKey(worktreeId: string): string {
-  const parsed = splitWorktreeId(worktreeId)
-  return JSON.stringify(
-    parsed
-      ? ['parsed', parsed.repoId, normalizeRuntimePathForComparison(parsed.worktreePath)]
-      : ['raw', worktreeId]
-  )
-}
-
 export function createIncrementalResolvedWorktreeLookup(
   resolvedWorktrees: ResolvedWorktree[]
 ): (worktreeId: string) => ResolvedWorktree | undefined {
   const worktreeByIdentity = new Map<string, ResolvedWorktree>()
   let indexedCount = 0
   return (worktreeId) => {
-    const lookupKey = runtimeWorktreeLookupKey(worktreeId)
+    const lookupKey = worktreeIdentityKey(worktreeId)
     const indexed = worktreeByIdentity.get(lookupKey)
     if (indexed) {
       return indexed
@@ -59,7 +42,7 @@ export function createIncrementalResolvedWorktreeLookup(
     while (indexedCount < resolvedWorktrees.length) {
       const worktree = resolvedWorktrees[indexedCount]
       indexedCount += 1
-      const key = runtimeWorktreeLookupKey(worktree.id)
+      const key = worktreeIdentityKey(worktree.id)
       // Why: preserve Array.find's first match when normalized identities collide.
       if (!worktreeByIdentity.has(key)) {
         worktreeByIdentity.set(key, worktree)

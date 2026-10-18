@@ -129,11 +129,14 @@ export type WindowLayoutCommand =
   | { type: 'wake'; tabId: string; paneKeys: [string] }
   /** Drops the panes' resume records without starting them. */
   | { type: 'wake'; tabId: string; paneKeys: string[]; recordOnly: true }
+  | { type: 'setDefaultTabsApplied' }
+
+type WindowRefusalCode = LayoutRefusalCode | 'wsl_move_in_progress'
 
 export type LayoutApplyHandlers = {
   apply: (result: LayoutCommandResult) => void
   asToday: () => void
-  refused?: (code: LayoutRefusalCode) => void
+  refused?: (code: WindowRefusalCode) => void
   /** Main's copy lacks the target, or the call threw; `asToday` when absent. A pane split or move
    *  passes one: main keeps its pane trees over the window's saves, so that change would not last.
    *  A close keeps `asToday`: a pane main lacks has nothing to keep it. */
@@ -248,7 +251,7 @@ export function recordLayoutApply(
   sendLayoutApply(state, worktreeId, command, { apply: keepWindowCopy, asToday: keepWindowCopy })
 }
 
-function mainLacksTarget(code: LayoutRefusalCode): boolean {
+function mainLacksTarget(code: WindowRefusalCode): boolean {
   return (
     code === 'workspace_not_found' ||
     code === 'tab_not_found' ||

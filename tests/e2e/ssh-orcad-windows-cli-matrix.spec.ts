@@ -12,7 +12,7 @@
  * Host: `ORCA_E2E_ORCAD_CONVERT_HOST`, a Windows host-cell descriptor. Template:
  * `ORCA_E2E_ORCAD_CONVERT_TEMPLATE`, built for that host's target.
  */
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { ElectronApplication, Page } from '@stablyai/playwright-test'
@@ -38,7 +38,6 @@ import type {
 const HOST = process.env[ORCAD_CONVERT_HOST_ENV]
 const TEMPLATE = process.env.ORCA_E2E_ORCAD_CONVERT_TEMPLATE
 const SCRATCH = path.join(os.tmpdir(), `orca-orcad-cli-matrix-${process.pid}`)
-const FLAGS_FILE = path.join(SCRATCH, 'rollout-flags.json')
 const MANAGED_TIMEOUT_MS = 8 * 60_000
 
 type HostRow = {
@@ -59,13 +58,11 @@ function skipUnlessWindowsHost(): void {
 function resetScratch(): void {
   rmSync(SCRATCH, { recursive: true, force: true })
   mkdirSync(SCRATCH, { recursive: true })
-  writeFileSync(FLAGS_FILE, '{}')
 }
 
 function launchEnv(): Record<string, string> {
   return {
-    ORCA_ORCAD_TEMPLATE_PATH: TEMPLATE!,
-    ORCA_E2E_ROLLOUT_FLAGS_FILE: FLAGS_FILE
+    ORCA_ORCAD_TEMPLATE_PATH: TEMPLATE!
   }
 }
 
@@ -564,7 +561,7 @@ test('@orcad-cli-convert a seeded relay-era profile converts its Windows host, k
     const upgraded = await session.launch({ onStderr: sshStderr })
     app = upgraded.app
     await waitForSessionReady(upgraded.page)
-    await convertThenRetire(upgraded.page, session.userDataDir, seeded, FLAGS_FILE)
+    await convertThenRetire(upgraded.page, session.userDataDir, seeded)
 
     const environmentId = await waitForManaged(upgraded.page, seeded.targetId)
     expect(await environmentIds(session.userDataDir)).toContain(environmentId)
