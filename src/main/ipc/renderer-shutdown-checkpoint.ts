@@ -5,7 +5,7 @@ import type { WorkspaceSessionState } from '../../shared/workspace-session-state
 import type { Store } from '../persistence'
 import { isFrozenOrcadSourceSessionPartition } from '../ssh/orcad-retained-source'
 import { windowViewSaveForMain } from '../persistence/window-save-view'
-import { writeWindowSaveWatchingLayout } from '../persistence/window-save-divergence'
+import { reportWindowSaveDrift } from '../persistence/window-save-divergence'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 
 type StageBeforeUnloadSyncArgs = {
@@ -54,25 +54,16 @@ export function registerRendererShutdownCheckpointHandler(store: Store): void {
     try {
       for (const { state, hostId } of args.sessions) {
         if (!isFrozenOrcadSourceSessionPartition(store, hostId)) {
-          // Switch point: main keeps its own layout over the window's, and reports any layout the
-          // save still changes.
-          const stage = (): void =>
+          // Switch point: main keeps its own layout over the window's and takes its view and facts.
+          if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+            const stored = store.getWorkspaceSession(hostId)
+            reportWindowSaveDrift(stored, state, hostId, 'shutdown-checkpoint')
             store.stageWorkspaceSessionBeforeUnload(
-              ORCA_LAYOUT_OWNER_IS_MAIN
-                ? windowViewSaveForMain(store.getWorkspaceSession(hostId), state, hostId)
-                : state,
+              windowViewSaveForMain(stored, state, hostId),
               hostId
             )
-          if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-            writeWindowSaveWatchingLayout(
-              () => store.getWorkspaceSession(hostId),
-              hostId,
-              stage,
-              'shutdown-checkpoint',
-              state.terminalLayoutsByTabId
-            )
           } else {
-            stage()
+            store.stageWorkspaceSessionBeforeUnload(state, hostId)
           }
         }
       }
