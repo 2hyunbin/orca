@@ -102,7 +102,7 @@ export function journalClaudeResult(
     providerFallback.append(
       kind,
       message,
-      usageLimit === 'shown' ? null : (usageLimit ?? failure?.text),
+      usageLimit ?? failure?.text,
       undefined,
       { reportsFailure: failure !== null },
       // A result that settles no turn is a CHILD's result: this
