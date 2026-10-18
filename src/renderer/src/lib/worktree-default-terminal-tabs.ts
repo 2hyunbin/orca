@@ -3,6 +3,9 @@ import type {
   WorktreeSetupLaunch
 } from '../../../shared/worktree/launch-types'
 import { agentKindToTuiAgent } from '../../../shared/agent-kind'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { useAppStore } from '@/store'
+import { recordLayoutApply } from '@/runtime/layout-apply-send'
 import { seedNativeChatAppliedSessionOptions } from '@/components/native-chat/native-chat-session-option-cache'
 import type {
   InitialTerminalOptions,
@@ -28,6 +31,10 @@ export function applyDefaultTerminalTabs(
     return null
   }
   store.markDefaultTerminalTabsApplied(worktreeId)
+  // Switch point: main records the mark too, so zero templates or a crash before the first spawn keep it.
+  if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    recordLayoutApply(useAppStore.getState(), worktreeId, { type: 'setDefaultTabsApplied' })
+  }
   if (defaultTabs.tabs.length === 0) {
     return null
   }

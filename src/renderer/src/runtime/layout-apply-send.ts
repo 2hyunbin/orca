@@ -129,6 +129,7 @@ export type WindowLayoutCommand =
   | { type: 'wake'; tabId: string; paneKeys: [string] }
   /** Drops the panes' resume records without starting them. */
   | { type: 'wake'; tabId: string; paneKeys: string[]; recordOnly: true }
+  | { type: 'setDefaultTabsApplied' }
 
 export type LayoutApplyHandlers = {
   apply: (result: LayoutCommandResult) => void

@@ -207,6 +207,8 @@ export type LayoutCommand =
     })
   /** `recordOnly`: drops the records and starts nothing. */
   | (On & { type: 'wake'; paneKeys?: string[]; recordOnly?: true })
+  /** The workspace's default tabs were applied (or it had none): never apply them again. */
+  | (On & { type: 'setDefaultTabsApplied' })
 
 /**
  * Why a workspace's first surface is asked for: `restore` at relaunch, `activation` when a user

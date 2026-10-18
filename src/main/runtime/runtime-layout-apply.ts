@@ -24,6 +24,8 @@ export type WindowLayoutCommand = LayoutCommand &
     | { type: 'moveTabToWorkspace' }
     // Editor tabs live in their workspace's routed partition.
     | { type: 'renameEditorFiles' }
+    // So does the workspace's default-tabs mark, which no tab carries.
+    | { type: 'setDefaultTabsApplied' }
   )
 
 /**
