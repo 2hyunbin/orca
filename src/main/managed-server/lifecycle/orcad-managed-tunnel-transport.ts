@@ -23,7 +23,7 @@ import {
 import {
   buildSystemSshPortForwardArgs,
   reserveLocalForwardPort
-} from '../../ssh/system-ssh-forward-process'
+} from '../../ssh/system-transport/system-ssh-forward-process'
 
 type OrcadManagedTunnelTransportDependencies = {
   forwards: SshPortForwardProvider[]

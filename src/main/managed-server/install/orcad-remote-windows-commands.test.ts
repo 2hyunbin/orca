@@ -1,12 +1,12 @@
-import type * as ExecCommandModule from '../../ssh/remote-exec-command'
+import type * as ExecCommandModule from '../../ssh/remote-exec/remote-exec-command'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../../ssh/remote-exec-command', async (importOriginal) => ({
+vi.mock('../../ssh/remote-exec/remote-exec-command', async (importOriginal) => ({
   ...(await importOriginal<typeof ExecCommandModule>()),
   execCommand: vi.fn()
 }))
 
-import { execCommand } from '../../ssh/remote-exec-command'
+import { execCommand } from '../../ssh/remote-exec/remote-exec-command'
 import type { OrcadHostTransport } from '../../ssh/orcad-host-transport'
 import { getRemoteHostPlatform } from '../../ssh/ssh-remote-platform'
 import { orcadLivenessProbeCommand, type OrcadLaunchSpec } from './orcad-remote-launch'

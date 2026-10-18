@@ -9,7 +9,7 @@ const runtime = vi.hoisted(() => {
   return { environments, activate: vi.fn(), getStatusOwner: vi.fn(), invalidate: vi.fn() }
 })
 
-vi.mock('../ssh/ssh-config-host-picker', () => mocks.sshConfigHostPicker)
+vi.mock('../ssh/config/ssh-config-host-picker', () => mocks.sshConfigHostPicker)
 vi.mock('electron', () => mocks.electron)
 vi.mock('../ssh/ssh-connection-store', () => mocks.sshConnectionStore)
 vi.mock('./ssh-host-server-connect', () => mocks.hostServerConnect)

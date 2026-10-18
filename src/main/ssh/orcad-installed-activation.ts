@@ -8,7 +8,7 @@
 import { orcadRemoteBaseDir } from '../managed-server/install/orcad-remote-windows-node'
 import { randomUUID } from 'node:crypto'
 import type { OrcadDeployOptions, OrcadDeployResult } from './orcad-remote-deploy'
-import { isUnconfirmedSshCommandTermination } from './remote-exec-command'
+import { isUnconfirmedSshCommandTermination } from './remote-exec/remote-exec-command'
 import {
   withActivatedVersion,
   type OrcadActivationRecord,

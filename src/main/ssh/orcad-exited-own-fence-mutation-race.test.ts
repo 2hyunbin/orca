@@ -11,10 +11,10 @@ import { hostname, tmpdir, uptime } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { runProcess, spawnProcess } from '@orca/process-host'
-import type * as ExecCommandModule from './remote-exec-command'
+import type * as ExecCommandModule from './remote-exec/remote-exec-command'
 
 // The proof's remote commands run in a real local shell.
-vi.mock('./remote-exec-command', async (importOriginal) => {
+vi.mock('./remote-exec/remote-exec-command', async (importOriginal) => {
   const { runProcess: run } = await import('@orca/process-host')
   return {
     ...(await importOriginal<typeof ExecCommandModule>()),

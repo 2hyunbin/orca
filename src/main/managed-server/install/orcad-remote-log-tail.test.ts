@@ -1,4 +1,4 @@
-import type * as ExecCommandModule from '../../ssh/remote-exec-command'
+import type * as ExecCommandModule from '../../ssh/remote-exec/remote-exec-command'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -15,7 +15,7 @@ import { ORCAD_WINDOWS_HOST_SCRIPT } from '../host-state/orcad-windows-host-scri
 import { getRemoteHostPlatform } from '../../ssh/ssh-remote-platform'
 
 const execCommand = vi.hoisted(() => vi.fn())
-vi.mock('../../ssh/remote-exec-command', async (importOriginal) => ({
+vi.mock('../../ssh/remote-exec/remote-exec-command', async (importOriginal) => ({
   ...(await importOriginal<typeof ExecCommandModule>()),
   execCommand
 }))

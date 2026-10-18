@@ -6349,7 +6349,7 @@
         "pnpm exec vitest run --config config/vitest.config.ts src/shared/browser-client-host-protocol.test.ts src/main/browser/browser-client-host-attach-request.test.ts src/main/browser/browser-client-network-route-registry.test.ts src/main/browser/paired-runtime-browser-client-host-composition.test.ts src/main/browser/paired-runtime-browser-client-host.test.ts src/main/browser/paired-runtime-browser-client-host-reconnect.test.ts src/main/browser/paired-runtime-browser-host-lease.test.ts src/main/browser/paired-runtime-browser-host-lease-reconnect.test.ts src/main/browser/browser-host-lease-reconnect-delay.test.ts src/main/browser/paired-runtime-browser-network-route.test.ts src/main/runtime/browser-host/browser-host-command-ledger.test.ts src/main/runtime/browser-host/browser-host-command-ledger-capacity.test.ts src/main/runtime/browser-host/browser-host-lease-placement-retirement.test.ts src/main/runtime/browser-host/browser-host-lease-registry.test.ts src/main/runtime/runtime-rpc-browser-host-admission.test.ts src/main/runtime/rpc/methods/browser-client-host.test.ts",
         "pnpm exec vitest run --config config/vitest.config.ts src/main/browser/browser-client-network-route-registry.test.ts src/main/browser/paired-runtime-browser-client-host-composition.test.ts src/main/browser/paired-runtime-browser-client-host-registry.test.ts src/main/browser/paired-runtime-browser-client-host-runtime.test.ts src/main/browser/browser-client-page-command-executor.test.ts src/main/browser/browser-session-startup.test.ts src/main/ipc/runtime-environments-subscription-teardown.test.ts",
         "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/browser-host/browser-host-command-ledger.test.ts src/main/runtime/browser-host/browser-host-command-ledger-capacity.test.ts src/main/runtime/browser-host/browser-host-lease-registry.test.ts src/main/runtime/rpc/methods/browser-client-host.test.ts",
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/browser-host/browser-host-lease-registry.test.ts src/main/browser/browser-network-deferred-socket.test.ts src/main/browser/browser-network-execution-route.test.ts src/main/browser/paired-runtime-browser-network-route.test.ts src/main/runtime/rpc/methods/browser-network-tunnel.test.ts src/main/browser/ssh-browser-network-execution-route.test.ts src/main/browser/system-ssh-socks-client-socket.test.ts src/main/ssh/system-ssh-dynamic-forward-process.test.ts src/shared/browser-client-host-protocol.test.ts src/main/ssh/system-ssh-forward-process.test.ts src/main/ssh/system-ssh-operations.test.ts src/main/ssh/port-forwarding/ssh-port-forward.test.ts",
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/browser-host/browser-host-lease-registry.test.ts src/main/browser/browser-network-deferred-socket.test.ts src/main/browser/browser-network-execution-route.test.ts src/main/browser/paired-runtime-browser-network-route.test.ts src/main/runtime/rpc/methods/browser-network-tunnel.test.ts src/main/browser/ssh-browser-network-execution-route.test.ts src/main/browser/system-ssh-socks-client-socket.test.ts src/main/ssh/system-transport/system-ssh-dynamic-forward-process.test.ts src/shared/browser-client-host-protocol.test.ts src/main/ssh/system-transport/system-ssh-forward-process.test.ts src/main/ssh/system-transport/system-ssh-operations.test.ts src/main/ssh/port-forwarding/ssh-port-forward.test.ts",
         "ORCA_RUN_DOCKER_SSH_BROWSER_E2E=1 pnpm exec vitest run --config config/vitest.config.ts tests/e2e/ssh-browser-network-execution-route.docker.unit.test.ts",
         "ORCA_RUN_DOCKER_SSH_BROWSER_E2E=1 node_modules/.bin/vitest run --config config/vitest.config.ts tests/e2e/ssh-browser-network-execution-route.docker.unit.test.ts"
       ],
@@ -6405,7 +6405,7 @@
         "src/main/browser/paired-runtime-browser-network-route.test.ts",
         "src/main/browser/ssh-browser-network-execution-route.test.ts",
         "src/main/browser/system-ssh-socks-client-socket.test.ts",
-        "src/main/ssh/system-ssh-dynamic-forward-process.test.ts",
+        "src/main/ssh/system-transport/system-ssh-dynamic-forward-process.test.ts",
         "src/main/ssh/port-forwarding/ssh-port-forward.test.ts",
         "src/main/browser/remote-browser-socks-server.test.ts",
         "src/main/runtime/runtime-binary-message-router.test.ts",
@@ -6889,7 +6889,7 @@
           ]
         },
         {
-          "file": "src/main/ssh/system-ssh-dynamic-forward-process.test.ts",
+          "file": "src/main/ssh/system-transport/system-ssh-dynamic-forward-process.test.ts",
           "assertions": [
             "system SSH uses BatchMode=yes, disables ControlMaster, and positions one dynamic forward before the destination",
             "authority invalidation cancels an in-progress SSH launch and destroys its active readiness probe immediately"
@@ -18736,13 +18736,13 @@
       "invariant": "For one connected SSH authority, a renderer snapshot may update Forwarded or Detected state only if no newer push for that target and stream arrived after the snapshot began. Active tunnels and persisted intent remain authoritative through scan refresh and reconnect until explicit removal or a real connection-lifecycle transition.",
       "oracle": "Hold empty initial Forwarded and Detected snapshot promises, publish live events, release the snapshots, and require each target and stream to preserve only its own newer push while applying unaffected snapshots. Reject one target's Detected snapshot and require its Forwarded snapshot plus later targets to hydrate independently. Begin another target with partial connected authority and require its snapshots to hydrate after same-watermark authority reconciliation. In headed Electron, hold an authoritative empty Forwarded snapshot across renderer reload, add a forward through the Ports panel, release and confirm the wrapped main handler resumed, then complete a later renderer-to-main listPortForwards round trip as the ordered hydration-continuation barrier. Before checking the Forwarded row, require main inventory, persisted intent, HTTP, remote process identity, and close warnings to prove the tunnel remained authoritative. Then forward two real Docker listeners, refresh detection, force an in-place relay-channel reconnect, perform a full transport reconnect, reject a bound local-port collision, remove one row, and require all signals to agree.",
       "commands": [
-        "pnpm exec vitest run --config config/vitest.config.ts src/renderer/src/hooks/useIpcEvents-agent-status-ssh-authority.test.ts src/main/ssh/port-forwarding/ssh-port-forward.test.ts src/main/ssh/system-ssh-forward-process.test.ts src/main/ipc/ssh.test.ts --reporter=dot",
+        "pnpm exec vitest run --config config/vitest.config.ts src/renderer/src/hooks/useIpcEvents-agent-status-ssh-authority.test.ts src/main/ssh/port-forwarding/ssh-port-forward.test.ts src/main/ssh/system-transport/system-ssh-forward-process.test.ts src/main/ipc/ssh.test.ts --reporter=dot",
         "pnpm exec electron-vite build --mode e2e"
       ],
       "testFiles": [
         "src/renderer/src/hooks/useIpcEvents-agent-status-ssh-authority.test.ts",
         "src/main/ssh/port-forwarding/ssh-port-forward.test.ts",
-        "src/main/ssh/system-ssh-forward-process.test.ts",
+        "src/main/ssh/system-transport/system-ssh-forward-process.test.ts",
         "src/main/ipc/ssh.test.ts"
       ],
       "assertionRefs": [
@@ -18755,7 +18755,7 @@
           "assertions": ["lists forwards filtered by connectionId", "removes a forward by id"]
         },
         {
-          "file": "src/main/ssh/system-ssh-forward-process.test.ts",
+          "file": "src/main/ssh/system-transport/system-ssh-forward-process.test.ts",
           "assertions": [
             "does not spawn ssh when the requested local forward port is already in use",
             "sends SIGTERM then SIGKILL when the process does not exit",
@@ -18775,7 +18775,7 @@
           "date": "2026-07-30",
           "runner": "local",
           "platform": "macos",
-          "command": "pnpm exec vitest run --config config/vitest.config.ts src/renderer/src/hooks/useIpcEvents-agent-status-ssh-authority.test.ts src/main/ssh/port-forwarding/ssh-port-forward.test.ts src/main/ssh/system-ssh-forward-process.test.ts src/main/ipc/ssh.test.ts --reporter=dot",
+          "command": "pnpm exec vitest run --config config/vitest.config.ts src/renderer/src/hooks/useIpcEvents-agent-status-ssh-authority.test.ts src/main/ssh/port-forwarding/ssh-port-forward.test.ts src/main/ssh/system-transport/system-ssh-forward-process.test.ts src/main/ipc/ssh.test.ts --reporter=dot",
           "result": "passed",
           "durationSeconds": 6.77,
           "summary": "Six renderer, main-process, and barrier lifecycle files passed with 215 tests, including deterministic stale-snapshot, rejected-stream, partial-authority, and single-capture isolation plus existing collision, delayed-exit, reconnect, persistence, re-registration, and unrelated-forward contracts."

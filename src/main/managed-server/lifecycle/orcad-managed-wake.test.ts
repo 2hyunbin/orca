@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type * as ExecCommandModule from '../../ssh/remote-exec-command'
+import type * as ExecCommandModule from '../../ssh/remote-exec/remote-exec-command'
 import type * as InstallLock from '../install/remote-install-lock'
 
-vi.mock('../../ssh/remote-exec-command', async (importOriginal) => ({
+vi.mock('../../ssh/remote-exec/remote-exec-command', async (importOriginal) => ({
   ...(await importOriginal<typeof ExecCommandModule>()),
   execCommand: vi.fn()
 }))
@@ -12,7 +12,7 @@ vi.mock('../install/remote-install-lock', async (importOriginal) => ({
   acquireInstallLock: vi.fn()
 }))
 
-import { execCommand } from '../../ssh/remote-exec-command'
+import { execCommand } from '../../ssh/remote-exec/remote-exec-command'
 import { acquireInstallLock, RemoteInstallLockBusyError } from '../install/remote-install-lock'
 import { wakeStoppedManagedOrcad } from './orcad-managed-wake'
 import { getRemoteHostPlatform } from '../../ssh/ssh-remote-platform'

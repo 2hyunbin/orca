@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type * as ExecCommandModule from '../../ssh/remote-exec-command'
+import type * as ExecCommandModule from '../../ssh/remote-exec/remote-exec-command'
 import type * as RecordFile from '../install/orcad-remote-record-file'
 import type * as InstallLock from '../install/remote-install-lock'
 import type * as VersionedInstall from '../install/remote-versioned-install'
@@ -11,7 +11,7 @@ vi.mock('node:crypto', async (importOriginal) => {
   return { ...actual, randomUUID: () => uuid.fixed ?? actual.randomUUID() }
 })
 
-vi.mock('../../ssh/remote-exec-command', async (importOriginal) => ({
+vi.mock('../../ssh/remote-exec/remote-exec-command', async (importOriginal) => ({
   ...(await importOriginal<typeof ExecCommandModule>()),
   execCommand: vi.fn()
 }))
@@ -38,7 +38,7 @@ vi.mock('../../ssh/orcad-local-build-hash', () => ({
   computeLocalOrcadBuildHash: () => 'abc123def4567890'
 }))
 
-import { execCommand } from '../../ssh/remote-exec-command'
+import { execCommand } from '../../ssh/remote-exec/remote-exec-command'
 import { acquireInstallLock } from '../install/remote-install-lock'
 import { writeAtomicOrcadRemoteRecord } from '../install/orcad-remote-record-file'
 import { deployOrcad } from '../../ssh/orcad-remote-deploy'

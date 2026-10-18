@@ -28,7 +28,7 @@ import { resolveOrcadRemoteContext } from '../managed-server/install/orcad-remot
 import { deployOrcad } from '../ssh/orcad-remote-deploy'
 import { ORCAD_PID_FILENAME } from '../managed-server/install/orcad-remote-host-support'
 import { shellEscape } from '../ssh/ssh-connection-utils'
-import { execCommand } from '../ssh/remote-exec-command'
+import { execCommand } from '../ssh/remote-exec/remote-exec-command'
 import { joinRemotePath } from '../ssh/ssh-remote-platform'
 import { readLocalFullVersion } from '../managed-server/install/remote-versioned-install'
 import { createWslDistroHolder, type WslDistroHolder } from './wsl-distro-holder'

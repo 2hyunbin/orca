@@ -10,7 +10,7 @@ import type {
 import {
   listUserSshConfigHostSummaries,
   resolveUserSshConfigHost
-} from '../ssh/ssh-config-host-picker'
+} from '../ssh/config/ssh-config-host-picker'
 import { getManagedOrcadFenceEnvironmentId } from '../../shared/managed-orcad-ssh-owner'
 import { closeOrcadManagedTunnel } from '../managed-server/lifecycle/orcad-managed-tunnel'
 import { rotateSshProviderAuthority } from '../ssh/ssh-provider-authority'

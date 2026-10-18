@@ -19,8 +19,11 @@ import {
 import { pinnedNodeRuntimeAsset, type NodeRuntimeTarget } from '../../../shared/node-runtime-pin'
 import { randomUUID } from 'node:crypto'
 import type { OrcadHostTransport } from '../../ssh/orcad-host-transport'
-import { execCommand, isUnconfirmedSshCommandTermination } from '../../ssh/remote-exec-command'
-import { RELAY_REMOTE_DIR } from '../../ssh/remote-frame-protocol'
+import {
+  execCommand,
+  isUnconfirmedSshCommandTermination
+} from '../../ssh/remote-exec/remote-exec-command'
+import { RELAY_REMOTE_DIR } from '../../ssh/remote-exec/remote-frame-protocol'
 import {
   joinRemotePath,
   remoteDirname,

@@ -6,7 +6,7 @@
 import { redactString } from '../../observability/redactor'
 import { shellEscape } from '../../ssh/ssh-connection-utils'
 import { ORCAD_LOG_FILENAME } from './orcad-remote-host-support'
-import { execCommand } from '../../ssh/remote-exec-command'
+import { execCommand } from '../../ssh/remote-exec/remote-exec-command'
 import {
   isWindowsRemoteHost,
   joinRemotePath,

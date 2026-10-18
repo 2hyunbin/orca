@@ -14,7 +14,7 @@ import {
   ORCAD_RUNTIMES_DIRNAME
 } from '../../../shared/orcad-artifacts'
 import { shellEscape } from '../../ssh/ssh-connection-utils'
-import { RELAY_REMOTE_DIR } from '../../ssh/remote-frame-protocol'
+import { RELAY_REMOTE_DIR } from '../../ssh/remote-exec/remote-frame-protocol'
 import { ORCAD_MACHINE_HOMES_DIRNAME } from '../host-state/orcad-machine-home'
 
 export type OrcadStdioBridgeMode = 'raw' | 'base64'

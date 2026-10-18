@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SshConnection } from '../../ssh/ssh-connection'
 import type { PortForwardStartOptions } from '../../ssh/port-forwarding/ssh-port-forward-provider'
-import type * as ForwardProcess from '../../ssh/system-ssh-forward-process'
+import type * as ForwardProcess from '../../ssh/system-transport/system-ssh-forward-process'
 
 const { reserveLocalForwardPort } = vi.hoisted(() => ({
   reserveLocalForwardPort: vi.fn(async (port: number, _orphanArgs?: readonly string[]) => port)
 }))
-vi.mock('../../ssh/system-ssh-forward-process', async (importOriginal) => ({
+vi.mock('../../ssh/system-transport/system-ssh-forward-process', async (importOriginal) => ({
   ...(await importOriginal<typeof ForwardProcess>()),
   reserveLocalForwardPort
 }))

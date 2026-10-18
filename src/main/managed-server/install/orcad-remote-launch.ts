@@ -25,7 +25,7 @@ import {
   remoteDirname,
   type RemoteHostPlatform
 } from '../../ssh/ssh-remote-platform'
-import { RELAY_REMOTE_DIR } from '../../ssh/remote-frame-protocol'
+import { RELAY_REMOTE_DIR } from '../../ssh/remote-exec/remote-frame-protocol'
 import { ORCAD_WSL_HOST_ENV } from '../../ipc/wsl-guest-windows-drive-path'
 import {
   assertPosixOrcadHost as assertPosixHost,

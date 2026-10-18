@@ -5,7 +5,7 @@ const mocks = await vi.hoisted(async () => {
   return createSshIpcMocks()
 })
 
-vi.mock('../ssh/ssh-config-host-picker', () => mocks.sshConfigHostPicker)
+vi.mock('../ssh/config/ssh-config-host-picker', () => mocks.sshConfigHostPicker)
 vi.mock('electron', () => mocks.electron)
 vi.mock('../ssh/ssh-connection-store', () => mocks.sshConnectionStore)
 vi.mock('../ipc/ssh-host-server-connect', () => mocks.hostServerConnect)

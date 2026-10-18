@@ -5,12 +5,12 @@
  * command shape) runs beside it, as the two restores did on a real host.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type * as ExecCommandModule from '../../ssh/remote-exec-command'
+import type * as ExecCommandModule from '../../ssh/remote-exec/remote-exec-command'
 import type * as RecordFile from '../install/orcad-remote-record-file'
 import type * as InstallLock from '../install/remote-install-lock'
 import type * as VersionedInstall from '../install/remote-versioned-install'
 
-vi.mock('../../ssh/remote-exec-command', async (importOriginal) => ({
+vi.mock('../../ssh/remote-exec/remote-exec-command', async (importOriginal) => ({
   ...(await importOriginal<typeof ExecCommandModule>()),
   execCommand: vi.fn()
 }))
@@ -39,7 +39,7 @@ import {
   execCommand,
   SSH_EXEC_TIMEOUT_CODE,
   isUnconfirmedSshCommandTermination
-} from '../../ssh/remote-exec-command'
+} from '../../ssh/remote-exec/remote-exec-command'
 import { acquireInstallLock } from '../install/remote-install-lock'
 import { writeAtomicOrcadRemoteRecord } from '../install/orcad-remote-record-file'
 import { deployOrcad } from '../../ssh/orcad-remote-deploy'

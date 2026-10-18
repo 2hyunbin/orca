@@ -2,7 +2,7 @@
 import { orcadRemoteBaseDir } from '../install/orcad-remote-windows-node'
 import { randomUUID } from 'node:crypto'
 import type { OrcadRollbackOptions, OrcadRollbackResult } from '../install/orcad-remote-rollback'
-import { isUnconfirmedSshCommandTermination } from '../../ssh/remote-exec-command'
+import { isUnconfirmedSshCommandTermination } from '../../ssh/remote-exec/remote-exec-command'
 import { withRolledBackVersion } from '../activation/orcad-activation-record'
 import { writeOrcadActivationRecord } from '../activation/orcad-activation-record-store'
 import { launchAndJudgeOrcadSlot } from '../../ssh/orcad-candidate-launch-verdict'

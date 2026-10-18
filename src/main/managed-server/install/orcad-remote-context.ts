@@ -23,7 +23,7 @@ import { orcadMachineClaimCommand } from '../host-state/orcad-machine-claim-comm
 import { execOrcadRemote, type OrcadRemoteExecTarget } from './orcad-remote-runtime-control'
 import { readRemoteHomeCommand } from '../../ssh/ssh-remote-commands'
 import { shellEscape } from '../../ssh/ssh-connection-utils'
-import { RELAY_REMOTE_DIR } from '../../ssh/remote-frame-protocol'
+import { RELAY_REMOTE_DIR } from '../../ssh/remote-exec/remote-frame-protocol'
 import {
   isWindowsRemoteHost,
   joinRemotePath,

@@ -33,7 +33,7 @@ vi.mock('./wsl-orcad-instance-adoption', () => ({ adoptUnrecordedWslOrcad: mocks
 vi.mock('../../shared/app-environment', () => ({
   getAppEnvironment: () => ({ getVersion: () => '1.5.0', getPath: () => '/user-data' })
 }))
-vi.mock('../ssh/remote-exec-command', () => ({ execCommand: mocks.exec }))
+vi.mock('../ssh/remote-exec/remote-exec-command', () => ({ execCommand: mocks.exec }))
 vi.mock('../managed-server/install/orcad-remote-context', () => ({
   resolveOrcadRemoteContext: mocks.resolveContext
 }))

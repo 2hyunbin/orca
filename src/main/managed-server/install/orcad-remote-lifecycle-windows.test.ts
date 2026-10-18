@@ -1,4 +1,4 @@
-import type * as ExecCommandModule from '../../ssh/remote-exec-command'
+import type * as ExecCommandModule from '../../ssh/remote-exec/remote-exec-command'
 import type * as TerminalBarrier from '../lifecycle/orcad-rollback-terminal-barrier'
 /**
  * The deploy and rollback drivers end to end against a Windows host whose every host op is answered by a
@@ -7,7 +7,7 @@ import type * as TerminalBarrier from '../lifecycle/orcad-rollback-terminal-barr
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as RecordFile from './orcad-remote-record-file'
 
-vi.mock('../../ssh/remote-exec-command', async (importOriginal) => ({
+vi.mock('../../ssh/remote-exec/remote-exec-command', async (importOriginal) => ({
   ...(await importOriginal<typeof ExecCommandModule>()),
   execCommand: vi.fn()
 }))
@@ -50,7 +50,7 @@ vi.mock('./remote-versioned-install', async (importOriginal) => ({
   abandonInstall: vi.fn().mockResolvedValue(undefined)
 }))
 
-import { execCommand } from '../../ssh/remote-exec-command'
+import { execCommand } from '../../ssh/remote-exec/remote-exec-command'
 import { deployOrcad, type OrcadDeployOptions } from '../../ssh/orcad-remote-deploy'
 import { rollbackOrcad } from './orcad-remote-rollback'
 import { emptyOrcadActivationRecord } from '../activation/orcad-activation-record'

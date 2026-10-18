@@ -288,7 +288,7 @@ describe('ssh-browser-e2e-routing', () => {
       'src/main/browser/browser-network-deferred-socket.ts',
       'src/main/browser/browser-network-execution-route.ts',
       'src/main/browser/system-ssh-socks-client-socket.ts',
-      'src/main/ssh/system-ssh-dynamic-forward-process.ts',
+      'src/main/ssh/system-transport/system-ssh-dynamic-forward-process.ts',
       'tests/e2e/helpers/docker-ssh-host-target.ts',
       'tests/e2e/helpers/docker-ssh-host-image.ts'
     ]) {
