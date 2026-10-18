@@ -17,10 +17,16 @@ import { registerOrcaProfileAuthIpcBridge } from './orca-profile-auth-ipc-bridge
 
 describe('registerOrcaProfileAuthIpcBridge sign-in link', () => {
   let emitLink: (link: string | null) => void
-  let resolveSnapshot: (link: string | null) => void
+  let resolveSnapshot: ((link: string | null) => void) | undefined
+
+  async function snapshotRequested(): Promise<(link: string | null) => void> {
+    await vi.waitFor(() => expect(resolveSnapshot).toBeDefined())
+    return resolveSnapshot ?? (() => {})
+  }
 
   beforeEach(() => {
     mocks.state.orcaProfileSignInLink = null
+    resolveSnapshot = undefined
     vi.stubGlobal('window', {
       api: {
         orcaProfiles: {
@@ -40,7 +46,8 @@ describe('registerOrcaProfileAuthIpcBridge sign-in link', () => {
 
   it('adopts the link of a sign-in already waiting when the window loads', async () => {
     registerOrcaProfileAuthIpcBridge([])
-    resolveSnapshot('https://login.example/authorize?state=a')
+    const resolveCurrent = await snapshotRequested()
+    resolveCurrent('https://login.example/authorize?state=a')
     await vi.waitFor(() =>
       expect(mocks.state.orcaProfileSignInLink).toBe('https://login.example/authorize?state=a')
     )
@@ -48,8 +55,9 @@ describe('registerOrcaProfileAuthIpcBridge sign-in link', () => {
 
   it('does not let a stale snapshot overwrite a newer change', async () => {
     registerOrcaProfileAuthIpcBridge([])
+    const resolveStale = await snapshotRequested()
     emitLink(null)
-    resolveSnapshot('https://login.example/authorize?state=old')
+    resolveStale('https://login.example/authorize?state=old')
     await Promise.resolve()
     await Promise.resolve()
     expect(mocks.state.orcaProfileSignInLink).toBeNull()

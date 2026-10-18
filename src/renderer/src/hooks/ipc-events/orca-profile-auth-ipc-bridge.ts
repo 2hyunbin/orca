@@ -19,11 +19,11 @@ export function registerOrcaProfileAuthIpcBridge(unsubs: (() => void)[]): void {
       })
     )
     // Why: a sign-in can already be waiting when this window loads; a later event wins.
-    void api
-      .pendingSignInLink()
+    void Promise.resolve()
+      .then(() => api.pendingSignInLink())
       .then((link) => {
         if (!changed) {
-          useAppStore.setState({ orcaProfileSignInLink: link })
+          useAppStore.setState({ orcaProfileSignInLink: link ?? null })
         }
       })
       .catch(() => {})
