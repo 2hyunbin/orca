@@ -1,16 +1,10 @@
-import {
-  getRepoExecutionHostId,
-  isRemoteExecutionHostId,
-  type ExecutionHostId
-} from '../../../shared/execution-host'
-import type { Repo } from '../../../shared/repo-types'
+import type { ExecutionHostId } from '../../../shared/execution-host'
 import type {
   SmartStampFields,
   SmartTier,
   SortStamps
 } from '../../../shared/sidebar-list/sort-stamps'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../shared/workspace-scope'
-import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 
 type StampedRecord = { lastActivityAt: number } & SmartStampFields
 type StampUpdates = {
@@ -34,13 +28,8 @@ export type SortStampsStore = {
   ) => unknown
   getFolderWorkspace?: (folderWorkspaceId: string) => StampedRecord | undefined
   updateFolderWorkspace?: (folderWorkspaceId: string, updates: StampUpdates) => unknown
-  getAllWorktreeMeta?: () => Record<string, StampedRecord & { hostId?: string }>
-  getFolderWorkspaces?: () => readonly (StampedRecord & {
-    id: string
-    connectionId?: string | null
-    executionHostId?: string | null
-  })[]
-  getRepo?: (repoId: string) => Pick<Repo, 'connectionId' | 'executionHostId'> | undefined
+  getAllWorktreeMeta?: () => Record<string, StampedRecord>
+  getFolderWorkspaces?: () => readonly (StampedRecord & { id: string })[]
 }
 
 /** A workspace record: its id, and the SSH host whose record it is (null reads by id alone). */
@@ -90,25 +79,16 @@ export function writeSortStamps(
   }
 }
 
-/**
- * Workspaces of this machine whose record holds a tier. Another host's records are left out: a
- * host not reached yet is not one whose agents died.
- */
-export function listThisMachineTieredWorkspaces(store: SortStampsStore | null): string[] {
+/** Every workspace whose record holds a tier. */
+export function listTieredWorkspaces(store: SortStampsStore | null): string[] {
   const ids: string[] = []
   for (const [worktreeId, meta] of Object.entries(store?.getAllWorktreeMeta?.() ?? {})) {
-    const repo = store?.getRepo?.(getRepoIdFromWorktreeId(worktreeId))
-    const hostId = meta.hostId ?? (repo ? getRepoExecutionHostId(repo) : undefined)
-    if (meta.smartTier !== undefined && !isRemoteExecutionHostId(hostId)) {
+    if (meta.smartTier !== undefined) {
       ids.push(worktreeId)
     }
   }
   for (const folder of store?.getFolderWorkspaces?.() ?? []) {
-    if (
-      folder.smartTier !== undefined &&
-      !folder.connectionId &&
-      !isRemoteExecutionHostId(folder.executionHostId)
-    ) {
+    if (folder.smartTier !== undefined) {
       ids.push(folderWorkspaceKey(folder.id))
     }
   }

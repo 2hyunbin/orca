@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentHookServer } from '../../agent-hooks/server'
+import type { AgentStatusStoreView } from './workspace-activity-facts-producer'
 import type { AgentSessionStatusSummary } from '../../../shared/agent-session-wire'
 import { makeStructuredAgentStatusSubject } from '../../../shared/agent-status-subject'
 import type { RuntimeClientEvent } from '../../../shared/runtime-client-events'
@@ -7,8 +8,8 @@ import type { TerminalSideEffectFact } from '../../../shared/terminal-side-effec
 import type { SmartStampFields } from '../../../shared/sidebar-list/sort-stamps'
 import {
   SortStampsProducer,
-  type LiveTitlePane,
-  type SortStampsStore
+  type SortStampsStore,
+  type StoredTierEvidence
 } from './sort-stamps-producer'
 
 vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
@@ -33,7 +34,6 @@ function createHarness() {
   const writes: string[] = []
   const exits = new Map<string, () => void>()
   const fenced = new Set<string>()
-  const liveTitles: LiveTitlePane[] = []
   let listener: (event: RuntimeClientEvent) => void = () => {}
   const store: SortStampsStore = {
     getWorktreeMeta: (id) => meta.get(id),
@@ -62,7 +62,6 @@ function createHarness() {
       exits.set(ptyId, onExit)
       return () => exits.delete(ptyId)
     },
-    liveTitlePanes: () => liveTitles,
     onClientEvent: (next, options) => {
       expect(options.consumesTerminalSideEffects).toBe(true)
       listener = next
@@ -77,7 +76,6 @@ function createHarness() {
     meta,
     sshMeta,
     folders,
-    liveTitles,
     writes,
     exits,
     fenced,
@@ -366,11 +364,21 @@ describe('SortStampsProducer: terminal events', () => {
 })
 
 describe('SortStampsProducer: startup reconcile', () => {
-  it('clears a tier this machine stored when neither a hook row nor a live terminal backs it', () => {
+  function evidence(overrides: Partial<StoredTierEvidence> = {}): StoredTierEvidence {
+    return {
+      isLocalWorkspace: () => true,
+      terminalPtyIds: () => [],
+      probePtyLiveness: async () => false,
+      ...overrides
+    }
+  }
+
+  it('clears a local tier with no hook row and no terminal its provider can find', async () => {
     const h = createHarness()
     h.meta.set(WT, { lastActivityAt: 5, smartTier: 'working', smartAt: 4 })
     h.folders.set(FOLDER_ID, { lastActivityAt: 6, smartTier: 'done', smartAt: 3 })
     h.producer.attachAgentStatusStore(h.server)
+    await h.producer.reconcileStoredTiers(evidence({ terminalPtyIds: () => ['pty-dead'] }))
     expect(h.meta.get(WT)).toEqual({ lastActivityAt: 5, smartTier: undefined, smartAt: undefined })
     expect(h.folders.get(FOLDER_ID)).toEqual({
       lastActivityAt: 6,
@@ -379,17 +387,10 @@ describe('SortStampsProducer: startup reconcile', () => {
     })
   })
 
-  it('keeps a tier a restored hook row or a live hookless terminal backs, with its time', () => {
+  it('keeps a tier a hook row, a live terminal or an unprovable one backs', async () => {
     const h = createHarness()
     h.meta.set(WT, { lastActivityAt: 5, smartTier: 'done', smartAt: 4 })
     h.folders.set(FOLDER_ID, { lastActivityAt: 6, smartTier: 'working', smartAt: 3 })
-    h.liveTitles.push({
-      ptyId: 'pty-t',
-      paneKey: TITLE_PANE,
-      worktreeId: WT,
-      connectionId: null,
-      title: 'Codex'
-    })
     h.server.ingestTerminalStatus({
       paneKey: PANE,
       tabId: 'tab-a',
@@ -397,23 +398,47 @@ describe('SortStampsProducer: startup reconcile', () => {
       payload: { state: 'working', prompt: 'task', agentType: 'codex' }
     })
     h.producer.attachAgentStatusStore(h.server)
-    expect(h.writes).toEqual([])
-    expect(h.meta.get(WT)).toEqual({ lastActivityAt: 5, smartTier: 'done', smartAt: 4 })
-    // The seeded terminal is followed from here: its exit ends the agent.
-    h.exits.get('pty-t')!()
-    expect(h.meta.get(WT)?.smartTier).toBeUndefined()
+    const writes = h.writes.length
+    await h.producer.reconcileStoredTiers(
+      evidence({
+        terminalPtyIds: () => ['pty-live', 'pty-unknown'],
+        probePtyLiveness: async (ptyId) => (ptyId === 'pty-live' ? false : null)
+      })
+    )
+    expect(h.writes).toHaveLength(writes)
+    expect(h.meta.get(WT)?.smartTier).toBe('done')
+    expect(h.folders.get(FOLDER_ID)?.smartTier).toBe('working')
   })
 
-  it('leaves another host’s tiers alone: a host not reached yet is not one whose agents died', () => {
+  it('seeds hook rows hydrated after attach, so they are not taken for new events', async () => {
     const h = createHarness()
-    h.meta.set(WT, { lastActivityAt: 5, smartTier: 'working', smartAt: 4, hostId: SSH_HOST })
-    h.folders.set(FOLDER_ID, {
-      lastActivityAt: 6,
-      smartTier: 'done',
-      smartAt: 3,
-      connectionId: 'box'
+    // Hydration fills the store without a row mutation: the view shows rows the producer never heard of.
+    const source = new AgentHookServer()
+    source.ingestTerminalStatus({
+      paneKey: PANE,
+      tabId: 'tab-a',
+      worktreeId: WT,
+      payload: { state: 'working', prompt: 'task', agentType: 'codex' }
     })
+    let hydrated = false
+    const view: AgentStatusStoreView = {
+      getStatusSnapshot: () => (hydrated ? source.getStatusSnapshot() : []),
+      getStatusSnapshotForPane: (paneKey) =>
+        hydrated ? source.getStatusSnapshotForPane(paneKey) : [],
+      subscribeStatusRowMutations: () => () => {},
+      subscribeStatusFreshness: () => () => {}
+    }
+    h.producer.attachAgentStatusStore(view)
+    hydrated = true
+    await h.producer.reconcileStoredTiers(evidence())
+    expect(h.meta.get(WT)).toEqual({ lastActivityAt: 0, smartTier: 'working', smartAt: T0 })
+  })
+
+  it('leaves another host’s tiers alone: a host not reached yet is not one whose agents died', async () => {
+    const h = createHarness()
+    h.meta.set(WT, { lastActivityAt: 5, smartTier: 'working', smartAt: 4 })
     h.producer.attachAgentStatusStore(h.server)
+    await h.producer.reconcileStoredTiers(evidence({ isLocalWorkspace: () => false }))
     expect(h.writes).toEqual([])
   })
 })

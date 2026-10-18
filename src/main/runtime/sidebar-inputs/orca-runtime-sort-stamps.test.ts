@@ -11,14 +11,14 @@ vi.mock('../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS
 const WT = 'repo-1::/tmp/worktree-a'
 
 function createHeadlessRuntime(
-  stored: Pick<WorktreeMeta, 'lastActivityAt' | 'smartTier' | 'smartAt'> = { lastActivityAt: 0 },
-  paneTitle: string | null = null
+  stored: Pick<WorktreeMeta, 'lastActivityAt' | 'smartTier' | 'smartAt'> = { lastActivityAt: 0 }
 ) {
   const meta: Record<string, Pick<WorktreeMeta, 'lastActivityAt' | 'smartTier' | 'smartAt'>> = {
     [WT]: stored
   }
   const store = {
     getRepos: () => [],
+    getRepo: (id: string) => (id === 'repo-1' ? { id, connectionId: null } : undefined),
     getSettings: () => ({}),
     getWorktreeMeta: (id: string) => meta[id],
     getAllWorktreeMeta: () => meta,
@@ -41,7 +41,7 @@ function createHeadlessRuntime(
         leafId: 'pane:1',
         paneRuntimeId: 1,
         ptyId: 'pty-1',
-        paneTitle
+        paneTitle: null
       }
     ]
   })
@@ -89,17 +89,17 @@ describe('host sort stamps on a headless runtime', () => {
     }
   })
 
-  it('reconciles stored tiers at attach against the terminals it holds', () => {
-    const live = createHeadlessRuntime(
-      { lastActivityAt: 5, smartTier: 'done', smartAt: 4 },
-      'Codex'
-    )
-    live.runtime.onPtyData('pty-1', 'x', 1)
+  it('reconciles stored tiers once the provider can answer for the workspace’s terminals', async () => {
+    const live = createHeadlessRuntime({ lastActivityAt: 5, smartTier: 'done', smartAt: 4 })
     live.runtime.sidebarFacts?.attachSidebarAgentStatusStore(new AgentHookServer())
+    await live.runtime.sidebarFacts?.reconcileSortStampTiers({ probePtyLiveness: async () => true })
     expect(live.meta[WT]).toEqual({ lastActivityAt: 5, smartTier: 'done', smartAt: 4 })
 
     const gone = createHeadlessRuntime({ lastActivityAt: 5, smartTier: 'done', smartAt: 4 })
     gone.runtime.sidebarFacts?.attachSidebarAgentStatusStore(new AgentHookServer())
+    await gone.runtime.sidebarFacts?.reconcileSortStampTiers({
+      probePtyLiveness: async () => false
+    })
     expect(gone.meta[WT]).toEqual({ lastActivityAt: 5, smartTier: undefined, smartAt: undefined })
   })
 })

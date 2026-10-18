@@ -20,7 +20,7 @@ import {
 import type { TerminalSideEffectBatch } from '../../../shared/terminal-side-effect-facts'
 import type { AgentStatusStoreView } from './workspace-activity-facts-producer'
 import {
-  listThisMachineTieredWorkspaces,
+  listTieredWorkspaces,
   readSortStamps,
   writeSortStamps,
   type SortStampsStore,
@@ -29,13 +29,14 @@ import {
 
 export type { SortStampsStore } from './sort-stamp-records'
 
-/** A terminal this host holds at attach, with the title it last showed. */
-export type LiveTitlePane = {
-  ptyId: string
-  paneKey: string
-  worktreeId: string
-  connectionId: string | null
-  title: string
+/** What the startup reconcile asks of the host, once its hook rows and PTYs have settled. */
+export type StoredTierEvidence = {
+  /** This machine's own workspace; unknown provenance is not local authority. */
+  isLocalWorkspace: (worktreeId: string) => boolean
+  /** Every PTY the workspace held: bound now, or persisted in its saved layout. */
+  terminalPtyIds: (worktreeId: string) => readonly string[]
+  /** True live, false absent, null when it cannot prove either. */
+  probePtyLiveness: (ptyId: string) => Promise<boolean | null>
 }
 
 export type SortStampsSources = {
@@ -44,7 +45,6 @@ export type SortStampsSources = {
   isWriteFenced: (worktreeId: string) => boolean
   resolveTabWorktreeId: (tabId: string) => string | undefined
   subscribeToPtyExit: (ptyId: string, listener: () => void) => () => void
-  liveTitlePanes: () => Iterable<LiveTitlePane>
   /** Consumes terminal side effects, so the host scans its own bytes for bells and titles. */
   onClientEvent: (
     listener: (event: RuntimeClientEvent) => void,
@@ -93,16 +93,6 @@ export class SortStampsProducer {
     for (const row of store.getStatusSnapshot()) {
       this.observeHookPane(row.paneKey, true)
     }
-    for (const pane of this.sources.liveTitlePanes()) {
-      if (!this.latestHookRow(pane.paneKey)) {
-        const workspace = {
-          worktreeId: pane.worktreeId,
-          sshHostId: sshHostOfConnection(pane.connectionId)
-        }
-        this.observeTitlePane(pane.ptyId, pane.paneKey, workspace, titleAgentPhase(pane.title))
-      }
-    }
-    this.clearUnbackedTiers()
     const unsubscribe = store.subscribeStatusRowMutations(({ before, after }) => {
       for (const paneKey of new Set([before?.paneKey, after?.paneKey])) {
         if (paneKey) {
@@ -122,19 +112,52 @@ export class SortStampsProducer {
     this.stamp({ worktreeId, sshHostId }, { kind: 'terminal-started' })
   }
 
-  // A tier this machine stored with no hook row and no live terminal behind it ended with the last run.
-  private clearUnbackedTiers(): void {
-    const backed = new Set<string>()
+  /**
+   * Clears a tier this machine stored that nothing backs after a restart: no hook row, and no
+   * terminal its provider can still find. Runs once hook rows and PTYs have settled. Another
+   * host's tiers stay: a host not reached yet is not one whose agents died.
+   */
+  async reconcileStoredTiers(evidence: StoredTierEvidence): Promise<void> {
+    // Hydration fills the store without a row mutation, so its rows are seeded here.
+    for (const row of this.agentStore?.getStatusSnapshot() ?? []) {
+      if (!this.panes.has(row.paneKey)) {
+        this.observeHookPane(row.paneKey, true)
+      }
+    }
+    const probes = new Map<string, Promise<boolean>>()
+    const isProvenAbsent = (ptyId: string): Promise<boolean> => {
+      let probe = probes.get(ptyId)
+      if (!probe) {
+        // A probe that throws is unverifiable, never evidence the terminal died.
+        probe = evidence.probePtyLiveness(ptyId).then(
+          (live) => live === false,
+          () => false
+        )
+        probes.set(ptyId, probe)
+      }
+      return probe
+    }
+    const candidates = listTieredWorkspaces(this.sources.store()).filter(
+      (worktreeId) => evidence.isLocalWorkspace(worktreeId) && !this.isBacked(worktreeId)
+    )
+    await Promise.all(
+      candidates.map(async (worktreeId) => {
+        const absent = await Promise.all(evidence.terminalPtyIds(worktreeId).map(isProvenAbsent))
+        // A pane can report while the probes are in flight.
+        if (absent.every(Boolean) && !this.isBacked(worktreeId)) {
+          this.writeAgentChange({ worktreeId, sshHostId: null }, 'rest', 'rest', this.sources.now())
+        }
+      })
+    )
+  }
+
+  private isBacked(worktreeId: string): boolean {
     for (const pane of this.panes.values()) {
-      if (!pane.sshHostId) {
-        backed.add(pane.worktreeId)
+      if (!pane.sshHostId && pane.worktreeId === worktreeId) {
+        return true
       }
     }
-    for (const worktreeId of listThisMachineTieredWorkspaces(this.sources.store())) {
-      if (!backed.has(worktreeId)) {
-        this.writeAgentChange({ worktreeId, sshHostId: null }, 'rest', 'rest', this.sources.now())
-      }
-    }
+    return false
   }
 
   private observeHookPane(paneKey: string, seed: boolean): void {
