@@ -146,6 +146,7 @@ function modelSnapshot(marker: string, seq: number): MainSnapshot {
 
 type PaneDrive = {
   pane: MockPane
+  transport: MockTransport
   deps: PaneConnectionDeps
   disposable: { dispose: () => void }
   deliver: (data: string, seq: number) => void
@@ -172,6 +173,7 @@ async function connectVisiblePane(): Promise<PaneDrive> {
   expect(captured.current).not.toBeNull()
   return {
     pane,
+    transport,
     deps,
     disposable,
     deliver: (data, seq) => captured.current?.(data, { seq, rawLength: data.length }),
@@ -185,11 +187,12 @@ async function connectVisiblePane(): Promise<PaneDrive> {
 async function announceMainDrop(
   markerSeq: number | undefined,
   hiddenDropEpisode?: number,
-  reason: 'hidden-drop' | 'unhide' | 'pending-cap' = 'hidden-drop'
+  reason: 'hidden-drop' | 'unhide' | 'pending-cap' = 'hidden-drop',
+  ptyId = PTY_ID
 ): Promise<void> {
   const { _dispatchPtyModelRestoreNeededForTest } = await import('./pty-model-restore-channel')
   _dispatchPtyModelRestoreNeededForTest({
-    id: PTY_ID,
+    id: ptyId,
     reason,
     ...(markerSeq !== undefined ? { markerSeq } : {}),
     ...(hiddenDropEpisode !== undefined ? { hiddenDropEpisode } : {})
@@ -240,6 +243,51 @@ describe('hidden-output restore quiet abandonment (STA-4869)', () => {
   })
 
   describe('unhide markers delivered during a restore', () => {
+    it('consumes a covered unhide marker received after the response while its replay is parsing', async () => {
+      const drive = await connectVisiblePane()
+      vi.useFakeTimers()
+      const getMainBufferSnapshot = vi.mocked(window.api.pty.getMainBufferSnapshot)
+      getMainBufferSnapshot.mockResolvedValue(modelSnapshot('REPLAY_PARSING', 128))
+      const pendingParses: (() => void)[] = []
+      const originalWrite = drive.pane.terminal.write.getMockImplementation()
+      drive.pane.terminal.write.mockImplementation((data, callback) => {
+        if ((data === '' || callback?.name === 'runParsedSteps') && callback) {
+          pendingParses.push(callback)
+        }
+      })
+      const finishParsing = async (): Promise<void> => {
+        for (let round = 0; round < 10; round += 1) {
+          while (pendingParses.length > 0) {
+            pendingParses.shift()?.()
+          }
+          await flushAsyncTicks(10)
+        }
+      }
+      try {
+        await announceMainDrop(64, 1)
+        await flushAsyncTicks(20)
+        expect(drive.writtenChunks().join('')).toContain('REPLAY_PARSING')
+        expect(window.api.pty.ackHiddenOutputRestoreApplied).not.toHaveBeenCalled()
+        await announceMainDrop(128, 1, 'unhide')
+        await finishParsing()
+        expect(window.api.pty.ackHiddenOutputRestoreApplied).toHaveBeenCalledWith(PTY_ID, 1)
+        const live = 'LIVE_AFTER_PARSED_REPLAY\r\n'
+        drive.deliver(live, 128 + live.length)
+        await finishParsing()
+        const beforeTimer = drive.writtenChunks().length
+
+        await vi.advanceTimersByTimeAsync(2_100)
+        await finishParsing()
+        expect.soft(getMainBufferSnapshot).toHaveBeenCalledTimes(1)
+        expect(drive.writtenChunks().slice(beforeTimer).join('')).not.toContain('\x1b[2J')
+      } finally {
+        if (originalWrite) {
+          drive.pane.terminal.write.mockImplementation(originalWrite)
+        }
+        drive.disposable.dispose()
+      }
+    })
+
     it('does not clear newer live output for an unhide marker the successful snapshot covered', async () => {
       const drive = await connectVisiblePane()
       vi.useFakeTimers()
