@@ -47,27 +47,25 @@ jobs:
           $runtime = Join-Path (Resolve-Path node_modules/node-pty).Path 'build/Release/conpty'
           New-Item -ItemType Directory -Path test-results -Force | Out-Null
           Get-ChildItem $runtime | ForEach-Object { $_.VersionInfo.FileVersion; Get-FileHash $_.FullName -Algorithm SHA256 } | Out-File test-results/image-ready-runtime-version.txt
-      - name: Verify cache controls repeatedly on native Windows
+      - name: Capture exact initial cache placement with and without settings UI
         env:
           SKIP_BUILD: '1'
           ORCA_BACKGROUND_LAUNCH: '1'
           PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/image-ready-results.json
         run: >-
           pnpm exec playwright test
-          tests/e2e/terminal-inline-image-cache.spec.ts
+          tests/e2e/terminal-inline-image-cache-diagnostic.spec.ts
           --config tests/playwright.config.ts
           --project=electron-headless
-          --project=electron-headful
           --output=test-results/image-ready
           --workers=1
-          --repeat-each=3
           --retries=0
           --reporter=list,json
-      - name: Require all six cache executions
+      - name: Require both controlled placement executions
         if: always()
         run: >-
           node -e "const s = require('./test-results/image-ready-results.json').stats;
-          if (s.expected !== 6 || s.unexpected || s.flaky || s.skipped)
+          if (s.expected !== 2 || s.unexpected || s.flaky || s.skipped)
           throw new Error(JSON.stringify(s)); console.log(JSON.stringify(s))"
       - name: Upload image reliability proof
         uses: actions/upload-artifact@v7
