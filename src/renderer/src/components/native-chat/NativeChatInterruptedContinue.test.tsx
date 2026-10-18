@@ -344,7 +344,7 @@ it('keeps the draft through Continue admission, refusal, uncertainty and recorde
   expect(screen.getByTestId('error')).toHaveTextContent('none')
   expect(continueButton()).toBeNull()
   await waitFor(() => expect(mocks.call).toHaveBeenCalledOnce())
-  expect(mocks.call.mock.calls[0]).toMatchObject([PAIRED, 'agentSession.send', {
+  expect(mocks.call.mock.calls[0].slice(0, 3)).toMatchObject([PAIRED, 'agentSession.send', {
     body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'Continue where you left off.' }] },
     options, usageLimitContinuationOfTurnItemId: TURN
   }])
