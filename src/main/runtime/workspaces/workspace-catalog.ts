@@ -28,6 +28,7 @@ import {
   LOCAL_EXECUTION_HOST_ID
 } from '../../../shared/execution-host'
 import { withUnregisteredRemovalCheckouts } from '../../worktree-removal-listing'
+import { withoutInFlightWorktreeCreates } from '../../worktree-create-in-flight'
 import type { RuntimeWorktreeScanCache } from '../orca-runtime-core'
 import { resolveWorktreeScanCacheTtlMs } from '../runtime-worktree-scan-cache'
 
@@ -148,7 +149,13 @@ export abstract class RuntimeWorkspaceCatalog extends OrcaRuntimeWithReadKittyFi
   ): Promise<RuntimeWorktreeScanResult> {
     const scan = await this.listRepoWorktreesForResolution(repo, projectRuntimeByRepoId)
     return scan.ok && getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID
-      ? { ok: true, worktrees: await withUnregisteredRemovalCheckouts(repo.id, scan.worktrees) }
+      ? {
+          ok: true,
+          worktrees: await withUnregisteredRemovalCheckouts(
+            repo.id,
+            withoutInFlightWorktreeCreates(repo.id, scan.worktrees)
+          )
+        }
       : scan
   }
 
