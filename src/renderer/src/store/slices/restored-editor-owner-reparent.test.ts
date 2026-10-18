@@ -731,7 +731,7 @@ describe('restored editor owner reparent', () => {
       worktreePath: '/repo-b',
       events: [{ kind: 'delete', absolutePath: FILE_PATH }]
     })
-    vi.advanceTimersByTime(100)
+    vi.advanceTimersByTime(200)
     expect(
       useAppStore.getState().openFiles.find((file) => file.id === result.fileId)?.externalMutation
     ).toBe('deleted')
