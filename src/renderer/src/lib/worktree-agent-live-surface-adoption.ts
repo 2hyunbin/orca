@@ -2,6 +2,8 @@ import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
 import { worktreeIdsEqual } from '../../../shared/worktree/id'
 import type { useAppStore } from '@/store'
+import type { WorktreeOperationRouteState } from '@/lib/worktree-operation-route'
+import { adoptLiveTerminalThroughLayoutOwner } from '@/store/terminals/terminal-tab-create-through-layout-owner'
 import { layoutFramesHoldTerminalPane } from '@/runtime/layout-frame-terminal-panes'
 import { resolveTerminalTabPtyOwnership } from './terminal-tab-for-pty-id'
 import type {
@@ -9,16 +11,17 @@ import type {
   LiveTerminalSurfaceOwnerIndex
 } from './worktree-live-terminal-surface-owners'
 
-export type LiveSurfaceAdoptionStore = Pick<
-  ReturnType<typeof useAppStore.getState>,
-  | 'createTab'
-  | 'ptyIdsByTabId'
-  | 'setTabLayout'
-  | 'tabsByWorktree'
-  | 'terminalLayoutsByTabId'
-  | 'updateTabPtyId'
-  | 'replaceTerminalLayoutPanePtyId'
->
+export type LiveSurfaceAdoptionStore = WorktreeOperationRouteState &
+  Pick<
+    ReturnType<typeof useAppStore.getState>,
+    | 'createTab'
+    | 'ptyIdsByTabId'
+    | 'setTabLayout'
+    | 'tabsByWorktree'
+    | 'terminalLayoutsByTabId'
+    | 'updateTabPtyId'
+    | 'replaceTerminalLayoutPanePtyId'
+  >
 
 function layoutContainsLeaf(
   root: LiveSurfaceAdoptionStore['terminalLayoutsByTabId'][string]['root'],
@@ -205,11 +208,26 @@ export async function adoptLiveWorkspacePtySurfaces(
     if (owner.recorded && bindToRecordedSurface(getState(), worktreeId, owner.recorded)) {
       continue
     }
-    getState().createTab(worktreeId, undefined, undefined, {
-      initialPtyId: ptyId,
-      activate: false,
-      recordInteraction: false
-    })
+    const mint = (): void => {
+      getState().createTab(worktreeId, undefined, undefined, {
+        initialPtyId: ptyId,
+        activate: false,
+        recordInteraction: false
+      })
+    }
+    // Switch point: main makes the tab, or names the one it holds (a CLI tab never mounted here).
+    if (
+      ORCA_LAYOUT_OWNER_IS_MAIN &&
+      adoptLiveTerminalThroughLayoutOwner(
+        getState,
+        worktreeId,
+        { ptyId, ...(owner.recorded ? { recordedPaneKey: owner.recorded.paneKey } : {}) },
+        mint
+      )
+    ) {
+      continue
+    }
+    mint()
   }
   return { surfaced, declinedPtyIds }
 }

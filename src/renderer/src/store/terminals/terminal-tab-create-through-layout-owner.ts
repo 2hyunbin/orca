@@ -181,5 +181,48 @@ export function createInitialTerminalThroughLayoutOwner(
   return true
 }
 
+/**
+ * A live terminal the host's census finds no pane for, shown through main: main answers with the
+ * pane it already holds for it (a CLI tab this window never mounted), else makes a tab bound to it.
+ * Main's frame draws either. False when a paired server owns the workspace's layout. `create`
+ * shows it as today: main does not own the workspace (a twin), or the call threw.
+ */
+export function adoptLiveTerminalThroughLayoutOwner(
+  getState: () => Parameters<typeof runtimeEnvironmentIdUnlessTwin>[0],
+  worktreeId: string,
+  terminal: { ptyId: string; recordedPaneKey?: string },
+  create: () => void
+): boolean {
+  if (runtimeEnvironmentIdUnlessTwin(getState(), worktreeId) !== null) {
+    return false
+  }
+  void callRuntimeRpc<LayoutApplyReply>({ kind: 'local' }, 'layout.apply', {
+    command: {
+      type: 'createTerminalTab',
+      workspace: worktreeId,
+      tabId: createBrowserUuid(),
+      leafId: createBrowserUuid(),
+      adopt: terminal
+    }
+  }).then(
+    (reply) => {
+      if (!reply.ok && reply.code === 'host_not_owned') {
+        create()
+      } else if (!reply.ok) {
+        console.warn('[layout-owner] live terminal adoption refused:', reply.code)
+      }
+    },
+    (error: unknown) => {
+      // Why as today: a thrown write is rolled back, so main holds no such tab.
+      console.warn(
+        '[layout-owner] live terminal adoption failed:',
+        error instanceof Error ? error.message : error
+      )
+      create()
+    }
+  )
+  return true
+}
+
 /** The window's own mark on a first terminal: its spawn does not count as workspace activity. */
 const ACTIVATION_ROW_FIELDS = { pendingActivationSpawn: true } as const
