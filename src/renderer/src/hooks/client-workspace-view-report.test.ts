@@ -54,11 +54,11 @@ describe('createClientWorkspaceViewReporter', () => {
     expect(sent).toEqual([
       {
         target: { kind: 'local' },
-        view: { workspaceIds: ['local-wt'], tabIds: ['tab-a'], presentForMs: 180_000 }
+        view: { workspaceIds: ['local-wt'], tabIds: ['tab-a'], presentForMs: 190_000 }
       },
       {
         target: { kind: 'environment', environmentId: 'env-1' },
-        view: { workspaceIds: ['server:wt'], tabIds: ['tab-s'], presentForMs: 180_000 }
+        view: { workspaceIds: ['server:wt'], tabIds: ['tab-s'], presentForMs: 190_000 }
       }
     ])
     report.update(STATE, ['local-wt', 'server:wt', 'unowned'], targets)
@@ -70,7 +70,7 @@ describe('createClientWorkspaceViewReporter', () => {
     expect(sent.slice(2)).toEqual([
       {
         target: { kind: 'environment', environmentId: 'env-1' },
-        view: { workspaceIds: [], tabIds: [], presentForMs: 180_000 }
+        view: { workspaceIds: [], tabIds: [], presentForMs: 190_000 }
       }
     ])
   })
@@ -85,7 +85,7 @@ describe('createClientWorkspaceViewReporter', () => {
     vi.setSystemTime(Date.now() + 1_000)
     report.renewPresence()
     expect(sent).toHaveLength(2)
-    expect(sent[1].view.presentForMs).toBe(180_000)
+    expect(sent[1].view.presentForMs).toBe(190_000)
   })
 
   it('reports an away user’s screen with no presence, and renews as soon as input returns', () => {
@@ -110,7 +110,7 @@ describe('createClientWorkspaceViewReporter', () => {
     expect(sent[1].view.presentForMs).toBeNull()
   })
 
-  it('resends a view whose send failed', async () => {
+  it('retries a failed send, empty or not, no sooner than a refresh', async () => {
     const sent: ClientWorkspaceView[] = []
     let fail = true
     const report = createClientWorkspaceViewReporter(async (_target, view) => {
@@ -121,8 +121,26 @@ describe('createClientWorkspaceViewReporter', () => {
     })
     report.update(STATE, ['local-wt'], [])
     await Promise.resolve()
-    fail = false
+    report.renewPresence()
+    expect(sent).toHaveLength(1)
+    vi.setSystemTime(Date.now() + 10_000)
     report.renewPresence()
     expect(sent).toHaveLength(2)
+
+    fail = false
+    vi.setSystemTime(Date.now() + 10_000)
+    report.renewPresence()
+    await Promise.resolve()
+    expect(sent).toHaveLength(3)
+
+    // The workspace left the screen and the empty view failed: it is resent too.
+    fail = true
+    report.update(STATE, [], [])
+    await Promise.resolve()
+    fail = false
+    vi.setSystemTime(Date.now() + 10_000)
+    report.renewPresence()
+    expect(sent).toHaveLength(5)
+    expect(sent.at(-1)?.workspaceIds).toEqual([])
   })
 })

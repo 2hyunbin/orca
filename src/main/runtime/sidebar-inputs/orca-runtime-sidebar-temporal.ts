@@ -113,7 +113,7 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
   }
 
   /** A phone holding the workspace's session open has it on screen: its flag is read and stays down. */
-  openPhoneSession(worktreeId: string): () => void {
+  readAndHoldPhoneSession(worktreeId: string): () => void {
     const hostId = this.workspaceHostId(worktreeId)
     const workspace = {
       worktreeId,

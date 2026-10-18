@@ -17,7 +17,13 @@ type HostView = {
   tabIds: string[]
   signature: string
 }
-type SentView = { target: RuntimeClientTarget; signature: string; sentAt: number; present: boolean }
+/** `signature` null: the send failed, and is retried once REFRESH_MS has passed. */
+type SentView = {
+  target: RuntimeClientTarget
+  signature: string | null
+  sentAt: number
+  present: boolean
+}
 
 export type ClientWorkspaceViewReporter = {
   /** The scan's screen: its workspaces and tabs, empty while the window is hidden or unfocused. */
@@ -55,12 +61,16 @@ export function createClientWorkspaceViewReporter(
       const view = views.get(key)
       const previous = sent.get(key)
       const target = view?.target ?? previous?.target
+      const failed = previous?.signature === null
+      if (!target || (failed && now - previous.sentAt < REFRESH_MS)) {
+        continue
+      }
       const refreshes =
         view !== undefined &&
         previous !== undefined &&
         present &&
         (!previous.present || now - previous.sentAt >= REFRESH_MS)
-      if (!target || (previous?.signature === view?.signature && !refreshes)) {
+      if (!failed && previous?.signature === view?.signature && !refreshes) {
         continue
       }
       const entry = view && { target, signature: view.signature, sentAt: now, present }
@@ -69,14 +79,16 @@ export function createClientWorkspaceViewReporter(
       } else {
         sent.delete(key)
       }
-      // An older host has no reportView. A failed send is forgotten, so the next flush retries it.
+      // An older host has no reportView; a failed send, empty or not, is retried no sooner than
+      // REFRESH_MS, so input never turns into a stream of doomed calls.
       void send(target, {
         workspaceIds: view?.workspaceIds ?? [],
         tabIds: view?.tabIds ?? [],
-        presentForMs
+        // Held one refresh longer than the window's, so the host never drops a present user first.
+        presentForMs: presentForMs ? presentForMs + REFRESH_MS : presentForMs
       }).catch(() => {
-        if (entry && sent.get(key) === entry) {
-          sent.delete(key)
+        if (sent.get(key) === entry) {
+          sent.set(key, { target, signature: null, sentAt: now, present })
         }
       })
     }
