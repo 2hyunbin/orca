@@ -15,3 +15,12 @@ export function editorTabShowsFile(entityId: string, file: FileOwner, worktreeId
       entityId === ownedEditorFileId(file.filePath, worktreeId, file.runtimeEnvironmentId))
   )
 }
+
+export function editorTabFile<F extends FileOwner>(
+  workspace: { worktreeId: string; editorFiles?: readonly F[] },
+  entityId: string
+): F | undefined {
+  return workspace.editorFiles?.find((file) =>
+    editorTabShowsFile(entityId, file, workspace.worktreeId)
+  )
+}
