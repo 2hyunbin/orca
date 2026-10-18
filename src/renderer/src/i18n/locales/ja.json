@@ -224,10 +224,10 @@
     "sourceControl": {
       "actionModel": {
         "model": "モデル",
-        "agentDefault": "エージェントの既定",
+        "agentDefault": "Agent の既定",
         "effort": "推論レベル",
         "effortDefault": "既定",
-        "argsTerminalOnly": "エージェントをターミナルで開くときだけ使われます。チャットでは無視されます。",
+        "argsTerminalOnly": "Agent をターミナルで開くときだけ使われます。チャットでは無視されます。",
         "savedModel": "設定のモデル: {{value0}}"
       }
     }

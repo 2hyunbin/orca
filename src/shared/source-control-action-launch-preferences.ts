@@ -34,7 +34,10 @@ export function resolveSourceControlActionSessionOptions(
 /** A launch-time recipe keeps the saved model only while it keeps the saved agent. */
 export function withSavedSourceControlActionLaunchPreferences<
   T extends Pick<SourceControlActionRecipe, 'agentId'>
->(recipe: T, saved: Pick<SourceControlActionRecipe, 'agentId' | 'launchPreferences'>): T {
+>(
+  recipe: T,
+  saved: Pick<SourceControlActionRecipe, 'agentId' | 'launchPreferences'>
+): T & Pick<SourceControlActionRecipe, 'launchPreferences'> {
   return saved.launchPreferences && saved.agentId === recipe.agentId
     ? { ...recipe, launchPreferences: saved.launchPreferences }
     : recipe

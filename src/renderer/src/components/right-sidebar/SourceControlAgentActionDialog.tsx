@@ -53,6 +53,8 @@ export type SourceControlAgentActionDialogProps = {
     commandInput: string
     /** Omitted when CLI arguments do not apply to this launch, so it resolves the global setting. */
     agentArgs?: string
+    /** The action's saved model and effort, on either route. */
+    sessionOptions?: Readonly<Record<string, string>>
   }) => boolean | Promise<boolean>
 }
 

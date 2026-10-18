@@ -60,6 +60,7 @@ describe('RepositorySourceControlAiActionRows', () => {
         actionDirtyById,
         onActionModeChange: () => {},
         onActionAgentChange: () => {},
+        onActionLaunchPreferencesChange: () => {},
         onActionTemplateChange: () => {},
         onActionAgentArgsChange: () => {},
         onAppendVariable: () => {},
