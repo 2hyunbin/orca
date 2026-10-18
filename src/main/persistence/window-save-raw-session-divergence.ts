@@ -1,9 +1,7 @@
-// Where a window's save differs from main in ways main's layout model cannot show, read from the
-// sessions themselves: the Loader rebuilds a dropped terminal tab-bar entry from its row, and
-// places closed-tab records into whatever workspace a key names. Each finding is added to `paths`
-// under its workspace.
+// Where a window's save differs from main in a way main's layout model cannot show, read from the
+// sessions themselves: the Loader rebuilds a dropped terminal tab-bar entry from its row. Each
+// finding is added to `paths` under its workspace.
 
-import type { WorkspaceLayoutModel } from '../../shared/workspace-layout/workspace-layout-model'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 
 /** The terminal tabs (by entity id) each workspace's stored tab bar names. */
@@ -45,34 +43,4 @@ export function droppedTabBarEntries(
       }
     }
   }
-}
-
-type PartitionCopy = {
-  model: WorkspaceLayoutModel | null
-  closed: WorkspaceSessionState['closedTerminalTabTombstonesByTabId']
-}
-
-/**
- * Closed-tab records of a workspace only one copy has: the model diff cannot tell a record the
- * Loader just placed there (already stored, unplaced) from one the save added or dropped.
- */
-export function closedTabsOfOneSidedWorkspaces(
-  was: PartitionCopy,
-  now: PartitionCopy,
-  paths: Map<string, string[]>
-): void {
-  const oneSided = (from: PartitionCopy, other: PartitionCopy, change: string) => {
-    for (const [workspace, layout] of Object.entries(from.model?.workspaces ?? {})) {
-      if (other.model?.workspaces[workspace]) {
-        continue
-      }
-      for (const tabId of Object.keys(layout.closedTerminalTabs ?? {})) {
-        if (other.closed?.[tabId]?.worktreeId !== layout.worktreeId) {
-          addPath(paths, workspace, `closed tab ${tabId} ${change}`)
-        }
-      }
-    }
-  }
-  oneSided(now, was, 'added')
-  oneSided(was, now, 'removed')
 }
