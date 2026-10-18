@@ -56,6 +56,14 @@ export abstract class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntime
     createdWorktree?: Worktree
   ): WorktreeTerminalProvisioningHost
 
+  /** A client opened the workspace on its own screen, so its unread flag is read. */
+  protected clearUnreadOnClientOpen(worktree: Worktree, repo: Repo | undefined): void {
+    if (repo && this.store?.getWorktreeMeta(worktree.id)?.isUnread) {
+      this.store.setWorktreeMeta(worktree.id, { isUnread: false })
+      this.notifyWorktreesChanged(repo.id)
+    }
+  }
+
   async activateManagedWorktree(
     worktreeSelector: string,
     opts: {
@@ -75,18 +83,17 @@ export abstract class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntime
     this.assertGraphReady()
     const worktree = await this.resolveWorktreeSelector(worktreeSelector)
     const repo = this.store?.getRepo(worktree.repoId)
-    if (!repo) {
-      throw new Error('repo_not_found')
-    }
     const navigation = resolveRuntimeNavigationTarget({ ...opts, defaultTarget: 'host' })
     const targetsHost = navigationTargetsHost(navigation)
     const targetsClients = navigationTargetsClients(navigation)
 
-    if (!targetsHost && this.store?.getWorktreeMeta(worktree.id)?.isUnread) {
+    if (!targetsHost) {
       // Why: mobile/web session activation intentionally bypasses renderer
       // selection, so the runtime must acknowledge the unread state itself.
-      this.store.setWorktreeMeta(worktree.id, { isUnread: false })
-      this.notifyWorktreesChanged(repo.id)
+      this.clearUnreadOnClientOpen(worktree, repo)
+    }
+    if (!repo) {
+      throw new Error('repo_not_found')
     }
 
     let sleepingAgentWake: 'requested' | 'unsupported-headless' | 'not-applicable' =

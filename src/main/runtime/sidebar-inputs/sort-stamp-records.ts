@@ -6,14 +6,12 @@ import type {
 } from '../../../shared/sidebar-list/sort-stamps'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../shared/workspace-scope'
 
-type StampedRecord = { lastActivityAt: number } & SmartStampFields
-type StampUpdates = {
-  lastActivityAt: number
-  smartTier: SmartTier | undefined
-  smartAt: number | undefined
-}
+type StampedRecord = { lastActivityAt: number; isUnread?: boolean } & SmartStampFields
+type StampUpdates =
+  | { lastActivityAt: number; smartTier: SmartTier | undefined; smartAt: number | undefined }
+  | { isUnread: boolean }
 
-/** The record reads and writes stamping needs, which the runtime's store satisfies. */
+/** The record reads and writes the host's sidebar writers need; the runtime's store satisfies it. */
 export type SortStampsStore = {
   getWorktreeMeta: (worktreeId: string) => StampedRecord | undefined
   setWorktreeMeta: (worktreeId: string, updates: StampUpdates) => unknown
@@ -35,18 +33,53 @@ export type SortStampsStore = {
 /** A workspace record: its id, and the SSH host whose record it is (null reads by id alone). */
 export type WorkspaceRef = { worktreeId: string; sshHostId: ExecutionHostId | null }
 
-// Only a workspace with a record is stamped; writing would create one for a stale id.
-export function readSortStamps(
+// Only a workspace with a record is written; writing would create one for a stale id.
+function readWorkspaceRecord(
   store: SortStampsStore | null,
   { worktreeId, sshHostId }: WorkspaceRef
-): SortStamps | null {
+): StampedRecord | undefined {
   const scope = parseWorkspaceKey(worktreeId)
-  const record =
-    scope?.type === 'folder'
-      ? store?.getFolderWorkspace?.(scope.folderWorkspaceId)
-      : sshHostId
-        ? store?.getWorktreeMetaForHost?.(worktreeId, sshHostId)
-        : store?.getWorktreeMeta(worktreeId)
+  return scope?.type === 'folder'
+    ? store?.getFolderWorkspace?.(scope.folderWorkspaceId)
+    : sshHostId
+      ? store?.getWorktreeMetaForHost?.(worktreeId, sshHostId)
+      : store?.getWorktreeMeta(worktreeId)
+}
+
+function writeWorkspaceRecord(
+  store: SortStampsStore | null,
+  { worktreeId, sshHostId }: WorkspaceRef,
+  updates: StampUpdates
+): void {
+  const scope = parseWorkspaceKey(worktreeId)
+  if (scope?.type === 'folder') {
+    store?.updateFolderWorkspace?.(scope.folderWorkspaceId, updates)
+  } else if (sshHostId) {
+    store?.setWorktreeMetaForHost?.(worktreeId, sshHostId, updates)
+  } else {
+    store?.setWorktreeMeta(worktreeId, updates)
+  }
+}
+
+/** Sets the workspace's unread flag; true when its record held the other value. */
+export function writeUnreadFlag(
+  store: SortStampsStore | null,
+  workspace: WorkspaceRef,
+  isUnread: boolean
+): boolean {
+  const record = readWorkspaceRecord(store, workspace)
+  if (!record || Boolean(record.isUnread) === isUnread) {
+    return false
+  }
+  writeWorkspaceRecord(store, workspace, { isUnread })
+  return true
+}
+
+export function readSortStamps(
+  store: SortStampsStore | null,
+  workspace: WorkspaceRef
+): SortStamps | null {
+  const record = readWorkspaceRecord(store, workspace)
   if (!record) {
     return null
   }
@@ -60,23 +93,15 @@ export function readSortStamps(
 
 export function writeSortStamps(
   store: SortStampsStore | null,
-  { worktreeId, sshHostId }: WorkspaceRef,
+  workspace: WorkspaceRef,
   stamps: SortStamps
 ): void {
   // Both tier keys are always written, so Rest clears them.
-  const updates: StampUpdates = {
+  writeWorkspaceRecord(store, workspace, {
     lastActivityAt: stamps.recentAt,
     smartTier: stamps.smartTier,
     smartAt: stamps.smartAt
-  }
-  const scope = parseWorkspaceKey(worktreeId)
-  if (scope?.type === 'folder') {
-    store?.updateFolderWorkspace?.(scope.folderWorkspaceId, updates)
-  } else if (sshHostId) {
-    store?.setWorktreeMetaForHost?.(worktreeId, sshHostId, updates)
-  } else {
-    store?.setWorktreeMeta(worktreeId, updates)
-  }
+  })
 }
 
 /** Every workspace whose record holds a tier. */

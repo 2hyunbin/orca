@@ -1,0 +1,110 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { AppState } from '@/store/types'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
+import type { ClientWorkspaceView } from '../../../shared/rpc-contract/client-workspace-view-params'
+
+const presence = vi.hoisted((): { remaining: number | null } => ({ remaining: 180_000 }))
+
+vi.mock('./agent-auto-ack-presence', () => ({ presenceRemainingMs: () => presence.remaining }))
+vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: vi.fn() }))
+vi.mock('@/store/slices/workspace-attention/workspace-unread-flag', () => ({
+  onScreenHostId: () => null
+}))
+vi.mock('@/store/slices/worktrees/listing/worktree-owner-target', () => ({
+  // `server:` workspaces belong to a paired server; the rest to this app.
+  tryRuntimeTargetForWorktreeOwner: (_state: unknown, workspaceId: string) =>
+    workspaceId.startsWith('server:')
+      ? { kind: 'environment', environmentId: 'env-1' }
+      : workspaceId === 'unowned'
+        ? null
+        : { kind: 'local' }
+}))
+
+const { createClientWorkspaceViewReporter } = await import('./client-workspace-view-report')
+
+// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: owner lookup is mocked above, so no state is read.
+const STATE = {} as AppState
+
+function reporter() {
+  const sent: { target: RuntimeClientTarget; view: ClientWorkspaceView }[] = []
+  const report = createClientWorkspaceViewReporter(async (target, view) => {
+    sent.push({ target, view })
+  })
+  return { sent, report }
+}
+
+beforeEach(() => {
+  vi.useFakeTimers({ now: 1_000_000, toFake: ['Date'] })
+  presence.remaining = 180_000
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+})
+
+describe('createClientWorkspaceViewReporter', () => {
+  it('sends each owning host only its own workspaces and tabs, and only when they change', () => {
+    const { sent, report } = reporter()
+    const targets = [
+      { tabId: 'tab-a', worktreeId: 'local-wt', surfaceKind: 'terminal' as const },
+      { tabId: 'tab-s', worktreeId: 'server:wt', surfaceKind: 'structured' as const },
+      { tabId: 'tab-x', worktreeId: null, surfaceKind: 'terminal' as const }
+    ]
+    report.update(STATE, ['local-wt', 'server:wt', 'unowned'], targets)
+    expect(sent).toEqual([
+      {
+        target: { kind: 'local' },
+        view: { workspaceIds: ['local-wt'], tabIds: ['tab-a'], presentForMs: 180_000 }
+      },
+      {
+        target: { kind: 'environment', environmentId: 'env-1' },
+        view: { workspaceIds: ['server:wt'], tabIds: ['tab-s'], presentForMs: 180_000 }
+      }
+    ])
+    report.update(STATE, ['local-wt', 'server:wt', 'unowned'], targets)
+    expect(sent).toHaveLength(2)
+
+    // The server's workspace left the screen: it hears an empty view, once.
+    report.update(STATE, ['local-wt'], targets.slice(0, 1))
+    report.update(STATE, ['local-wt'], targets.slice(0, 1))
+    expect(sent.slice(2)).toEqual([
+      {
+        target: { kind: 'environment', environmentId: 'env-1' },
+        view: { workspaceIds: [], tabIds: [], presentForMs: 180_000 }
+      }
+    ])
+  })
+
+  it('renews presence once the host’s copy has half the away threshold left', () => {
+    const { sent, report } = reporter()
+    report.update(STATE, ['local-wt'], [])
+    vi.setSystemTime(Date.now() + 60_000)
+    report.renewPresence()
+    expect(sent).toHaveLength(1)
+
+    vi.setSystemTime(Date.now() + 30_000)
+    report.renewPresence()
+    expect(sent).toHaveLength(2)
+    expect(sent[1].view.presentForMs).toBe(180_000)
+  })
+
+  it('reports an away user’s screen with no presence, and renews when input returns', () => {
+    const { sent, report } = reporter()
+    presence.remaining = 0
+    report.update(STATE, ['local-wt'], [])
+    expect(sent[0].view.presentForMs).toBe(0)
+    presence.remaining = 180_000
+    report.renewPresence()
+    expect(sent).toHaveLength(2)
+  })
+
+  it('never renews where presence is not tracked', () => {
+    const { sent, report } = reporter()
+    presence.remaining = null
+    report.update(STATE, ['local-wt'], [])
+    vi.setSystemTime(Date.now() + 600_000)
+    report.renewPresence()
+    expect(sent).toHaveLength(1)
+    expect(sent[0].view.presentForMs).toBeNull()
+  })
+})

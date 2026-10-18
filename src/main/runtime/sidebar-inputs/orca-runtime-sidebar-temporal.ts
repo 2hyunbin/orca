@@ -5,7 +5,8 @@ import { DEFAULT_HIDE_SLEEPING_WORKSPACES } from '../../../shared/constants'
 import {
   getRepoExecutionHostId,
   isLocalExecutionHost,
-  LOCAL_EXECUTION_HOST_ID
+  LOCAL_EXECUTION_HOST_ID,
+  parseExecutionHostId
 } from '../../../shared/execution-host'
 import type { SidebarTemporalSnapshot } from '../../../shared/sidebar-list/sidebar-temporal-snapshot'
 import type { Worktree } from '../../../shared/worktree/types'
@@ -13,6 +14,8 @@ import type { Repo } from '../../../shared/repo-types'
 import { SidebarRetentionOwner, type SidebarRetentionCandidates } from './sidebar-retention-owner'
 import type { AgentStatusStoreView } from './workspace-activity-facts-producer'
 import { SortStampsProducer } from './sort-stamps-producer'
+import { writeUnreadFlag } from './sort-stamp-records'
+import { WorkspaceViewers } from './workspace-viewers'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 import { resolveAgentWorkspaceExecutionHostId } from '../../agent-hooks/restored-status-dead-terminal-sweep'
@@ -33,6 +36,7 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     listRows: () => this.listSidebarRows(),
     retentionCandidates: () => this.readSidebarRetentionCandidates()
   })
+  readonly workspaceViewers = new WorkspaceViewers(Date.now)
   readonly sortStamps = new SortStampsProducer({
     store: () => this.store,
     isWriteFenced: (worktreeId) =>
@@ -40,6 +44,7 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     resolveTabWorktreeId: (tabId) => this.tabs.get(tabId)?.worktreeId,
     subscribeToPtyExit: (ptyId, listener) => this.subscribeToPtyExit(ptyId, listener),
     onClientEvent: (listener, options) => this.onClientEvent(listener, options),
+    isViewing: (worktreeId, paneKey) => this.workspaceViewers.isViewing(worktreeId, paneKey),
     onStampsWritten: (worktreeId) => this.notifySortStampsChanged(worktreeId),
     now: Date.now
   })
@@ -112,6 +117,18 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
         probePtyLiveness: async (ptyId) => (await provider.probePtyLiveness?.(ptyId)) ?? null
       })
       .catch((error: unknown) => console.warn('[sidebar] sort tier reconcile failed:', error))
+  }
+
+  // Folder and SSH records too, by the record lookup the stamps use (a folder has no repo).
+  protected override clearUnreadOnClientOpen(worktree: Worktree, repo: Repo | undefined): void {
+    const hostId = worktree.hostId ?? (repo ? getRepoExecutionHostId(repo) : undefined)
+    const workspace = {
+      worktreeId: worktree.id,
+      sshHostId: hostId && parseExecutionHostId(hostId)?.kind === 'ssh' ? hostId : null
+    }
+    if (writeUnreadFlag(this.store, workspace, false)) {
+      this.notifySortStampsChanged(worktree.id)
+    }
   }
 
   // Metadata only: clients re-list the record, and the cached git scans stay.
