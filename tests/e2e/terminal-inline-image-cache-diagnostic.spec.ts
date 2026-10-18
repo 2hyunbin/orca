@@ -13,7 +13,8 @@ import { nodeTerminalCommand } from './terminal-node-command'
 // Diagnose pressure-first image placement before lowering the cache.
 for (const settingsPath of ['ui', 'direct'] as const) {
   test(`cache placement diagnostic pressure-first (${settingsPath})`, async ({
-    orcaPage
+    orcaPage,
+    electronApp
   }, testInfo) => {
     test.setTimeout(180_000)
     await waitForSessionReady(orcaPage)
@@ -42,6 +43,113 @@ for (const settingsPath of ['ui', 'direct'] as const) {
     if (!ptyId) {
       throw new Error('Diagnostic terminal has no PTY')
     }
+    const mainTrace = await electronApp.evaluateHandle(({ ipcMain }, id) => {
+      type Handler = (event: unknown, args: unknown) => unknown
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Electron's invoke registry is checked before wrapping the existing snapshot handler, as in the split latency main probe.
+      const handlers = (ipcMain as unknown as { _invokeHandlers?: Map<string, Handler> })
+        ._invokeHandlers
+      const original = handlers?.get('pty:getMainBufferSnapshot')
+      if (!handlers || !original) {
+        throw new Error('Snapshot invoke handler unavailable')
+      }
+      const events: unknown[] = []
+      let operation = 0
+      const record = (kind: string, detail: unknown) => {
+        events.push({ kind, atEpochMs: Date.now(), detail })
+      }
+      const summarize = (value: unknown) => {
+        const read = (key: string): unknown =>
+          value !== null && typeof value === 'object' ? Reflect.get(value, key) : undefined
+        const data = read('data'),
+          frame = read('frameRestoreAnsi'),
+          scrollback = read('scrollbackAnsi')
+        return {
+          isNull: value === null,
+          seq: read('seq'),
+          pendingDeliveryStartSeq: read('pendingDeliveryStartSeq'),
+          source: read('source'),
+          cols: read('cols'),
+          rows: read('rows'),
+          alternateScreen: read('alternateScreen'),
+          carriesNormalBuffer: read('carriesNormalBuffer'),
+          kittyKeyboardFlags: read('kittyKeyboardFlags'),
+          terminalOwner: read('terminalOwner'),
+          dataLength: typeof data === 'string' ? data.length : null,
+          dataPrefix: typeof data === 'string' ? data.slice(0, 256) : null,
+          frameLength: typeof frame === 'string' ? frame.length : null,
+          scrollbackLength: typeof scrollback === 'string' ? scrollback.length : null
+        }
+      }
+      const wrapper: Handler = function (event, args) {
+        if (args === null || typeof args !== 'object' || !('id' in args) || args.id !== id) {
+          return original(event, args)
+        }
+        const request = ++operation
+        record('snapshot-request', { request, args })
+        try {
+          const result = original(event, args)
+          if (result instanceof Promise) {
+            void result.then(
+              (value) => record('snapshot-response', { request, snapshot: summarize(value) }),
+              (error) => record('snapshot-rejected', { request, error: String(error) })
+            )
+          } else {
+            record('snapshot-response', { request, snapshot: summarize(result) })
+          }
+          return result
+        } catch (error) {
+          record('snapshot-threw', { request, error: String(error) })
+          throw error
+        }
+      }
+      handlers.set('pty:getMainBufferSnapshot', wrapper)
+      const ack = (_event: unknown, args: unknown) => {
+        if (args !== null && typeof args === 'object' && 'id' in args && args.id === id) {
+          record('snapshot-ack', args)
+        }
+      }
+      ipcMain.on('pty:hiddenOutputRestoreApplied', ack)
+      record('snapshot-probe-installed', { id })
+      return {
+        events,
+        unsubscribe: () => {
+          if (handlers.get('pty:getMainBufferSnapshot') === wrapper) {
+            handlers.set('pty:getMainBufferSnapshot', original)
+          }
+          ipcMain.removeListener('pty:hiddenOutputRestoreApplied', ack)
+        }
+      }
+    }, ptyId)
+    const deliveryTrace = await orcaPage.evaluateHandle((id) => {
+      const events: unknown[] = []
+      const unsubscribeMarker = window.api.pty.onModelRestoreNeeded((event) => {
+        if (event.id === id) {
+          events.push({ kind: 'restore-marker', atEpochMs: Date.now(), event })
+        }
+      })
+      const unsubscribeData = window.api.pty.onData((event) => {
+        if (event.id === id) {
+          events.push({
+            kind: 'delivery-data',
+            atEpochMs: Date.now(),
+            seq: event.seq,
+            rawLength: event.rawLength,
+            length: event.data.length,
+            transformed: event.transformed,
+            imageHeader: event.data.includes('\x1b_G') || event.data.includes('\x1b]1337;'),
+            prefix: event.data.slice(0, 128)
+          })
+        }
+      })
+      events.push({ kind: 'delivery-probe-installed', atEpochMs: Date.now(), id })
+      return {
+        events,
+        unsubscribe: () => {
+          unsubscribeMarker()
+          unsubscribeData()
+        }
+      }
+    }, ptyId)
     if (settingsPath === 'ui') {
       await orcaPage.evaluate(() => {
         const state = window.__store!.getState()
@@ -168,6 +276,7 @@ for (const settingsPath of ['ui', 'direct'] as const) {
             kind,
             detail,
             time: performance.now(),
+            atEpochMs: Date.now(),
             stack: new Error(kind).stack,
             state: state()
           })
@@ -417,7 +526,25 @@ for (const settingsPath of ['ui', 'direct'] as const) {
       }, identity.tabId)
       const chunks = await capture.evaluate((state) => state.chunks.splice(0))
       const events = await capture.evaluate((state) => state.events.splice(0))
-      const result = { stage, redPixels, metrics, chunks, events }
+      const mainEvents = await mainTrace.evaluate((state) => state.events.splice(0))
+      const deliveryEvents = await deliveryTrace.evaluate((state) => state.events.splice(0))
+      const freezeReport = await orcaPage.evaluate(async () => {
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the existing production freeze report is called only when its installed function is present.
+        const target = window as Window & { __orcaTerminalFreezeReport?: () => Promise<unknown> }
+        return typeof target.__orcaTerminalFreezeReport === 'function'
+          ? target.__orcaTerminalFreezeReport()
+          : null
+      })
+      const result = {
+        stage,
+        redPixels,
+        metrics,
+        chunks,
+        events,
+        mainEvents,
+        deliveryEvents,
+        freezeReport
+      }
       snapshots.push(result)
       writeFileSync(
         testInfo.outputPath('cache-placement-diagnostic.json'),
@@ -456,6 +583,10 @@ for (const settingsPath of ['ui', 'direct'] as const) {
     } finally {
       await capture.evaluate((state) => state.unsubscribe())
       await capture.dispose()
+      await deliveryTrace.evaluate((state) => state.unsubscribe())
+      await deliveryTrace.dispose()
+      await mainTrace.evaluate((state) => state.unsubscribe())
+      await mainTrace.dispose()
     }
   })
 }
