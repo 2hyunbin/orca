@@ -1,11 +1,13 @@
-import type { AgentStatusEntry } from '../../../shared/agent-status-types'
+import type { AgentStatusEntry } from './agent-status-types'
+
+type AnchorStatus = Pick<AgentStatusEntry, 'state' | 'agentType' | 'providerSession' | 'worktreeId'>
 import {
   agentProviderSessionsEqual,
   getAgentResumeArgv,
   isResumableTuiAgent,
   type SleepingAgentSessionRecord
-} from '../../../shared/agent-session-resume'
-import { isPiCompatibleAgentType } from '../../../shared/pi-agent-kind'
+} from './agent-session-resume'
+import { isPiCompatibleAgentType } from './pi-agent-kind'
 
 /**
  * True when `record` is nothing more than this completed pane's own live resume
@@ -16,7 +18,7 @@ import { isPiCompatibleAgentType } from '../../../shared/pi-agent-kind'
  * "does this record match the pane?", not "may this pane be hibernated?".
  */
 export function isLiveResumeAnchorForCompletedAgent(
-  entry: AgentStatusEntry | undefined,
+  entry: AnchorStatus | undefined,
   record: SleepingAgentSessionRecord | undefined,
   worktreeId?: string
 ): record is SleepingAgentSessionRecord {
@@ -41,7 +43,7 @@ export function isLiveResumeAnchorForCompletedAgent(
 // Why: retention call sites (manual-sleep promotion, quit capture) keep the
 // Pi-only meaning they shipped with; only automatic hibernation broadened.
 export function isCompletedPiCompatibleAgentWithLiveRecoveryRecord(
-  entry: AgentStatusEntry | undefined,
+  entry: AnchorStatus | undefined,
   record: SleepingAgentSessionRecord | undefined,
   worktreeId?: string
 ): record is SleepingAgentSessionRecord {
