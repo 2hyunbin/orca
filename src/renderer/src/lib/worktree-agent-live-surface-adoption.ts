@@ -208,13 +208,6 @@ export async function adoptLiveWorkspacePtySurfaces(
     if (owner.recorded && bindToRecordedSurface(getState(), worktreeId, owner.recorded)) {
       continue
     }
-    const mint = (): void => {
-      getState().createTab(worktreeId, undefined, undefined, {
-        initialPtyId: ptyId,
-        activate: false,
-        recordInteraction: false
-      })
-    }
     // Switch point: main makes the tab, or names the one it holds (a CLI tab never mounted here).
     if (
       ORCA_LAYOUT_OWNER_IS_MAIN &&
@@ -222,12 +215,22 @@ export async function adoptLiveWorkspacePtySurfaces(
         getState,
         worktreeId,
         { ptyId, ...(owner.recorded ? { recordedPaneKey: owner.recorded.paneKey } : {}) },
-        mint
+        // As below: the switch-off build keeps today's mint unchanged.
+        () =>
+          getState().createTab(worktreeId, undefined, undefined, {
+            initialPtyId: ptyId,
+            activate: false,
+            recordInteraction: false
+          })
       )
     ) {
       continue
     }
-    mint()
+    getState().createTab(worktreeId, undefined, undefined, {
+      initialPtyId: ptyId,
+      activate: false,
+      recordInteraction: false
+    })
   }
   return { surfaced, declinedPtyIds }
 }
