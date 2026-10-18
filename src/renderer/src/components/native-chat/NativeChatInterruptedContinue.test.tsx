@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -17,7 +17,12 @@ const mocks = vi.hoisted(() => {
   }
 })
 
+vi.mock('@/lib/native-chat-telemetry', () => ({ emitNativeChatMessageSent: vi.fn() }))
+vi.mock('@/lib/worker-terminal-takeover-report', () => ({ reportStructuredSessionUserInput: vi.fn() }))
+
 vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => fallback }))
+vi.mock('@/runtime/runtime-rpc-client', () => ({ ensureRuntimeEnvironmentCompatible: async () => {} }))
+vi.mock('@/lib/structured-agent-session-launch-label', () => ({ structuredAgentLabel: () => 'Codex' }))
 vi.mock('@/runtime/structured-agent-session-client', () => ({
   callStructuredAgentSession: mocks.call
 }))
@@ -34,6 +39,12 @@ vi.mock('./use-structured-agent-session-host-label', () => ({
   useStructuredAgentSessionHostLabel: () => mocks.hostLabel
 }))
 
+import type { NativeChatStructuredComposerTransport } from './native-chat-composer-types'
+import { useStructuredAgentSessionSends } from './use-structured-agent-session-sends'
+import { resetStructuredAgentSessionSendsForTests } from './structured-agent-session-message-sender'
+import { clearNativeChatComposerDraftsForTests, readNativeChatComposerDraft, updateNativeChatComposerDraft, structuredAgentSessionDraftScopeKey } from './native-chat-composer-draft-store'
+import { reportStructuredSessionUserInput } from '@/lib/worker-terminal-takeover-report'
+import { emitNativeChatMessageSent } from '@/lib/native-chat-telemetry'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { agentJournalItemKey } from '../../../../shared/agent-session-journal-item-key'
 import type {
@@ -72,6 +83,8 @@ type Props = {
   submissions?: readonly Pick<AgentJournalSubmission, 'dispatchState'>[]
   isWorking?: boolean
   target?: RuntimeClientTarget
+  transport?: NativeChatStructuredComposerTransport
+  pending?: readonly { phase: 'sending' | 'recorded' }[]
 }
 
 function Harness(props: Props): React.JSX.Element {
@@ -80,11 +93,13 @@ function Harness(props: Props): React.JSX.Element {
   const continuation = useNativeChatInterruptedContinuation({
     reportComposerError: setComposerError,
     target: props.target ?? PAIRED,
+    agent: 'codex',
     sessionId: 'session-1',
     journalItems: props.journalItems ?? cutChat,
     submissions: props.submissions ?? [],
     isWorking: props.isWorking ?? false,
-    send: () => true
+    pending: props.pending ?? [],
+    transport: props.transport ?? { send: () => true, dispatchCommand: async () => ({ handled: false, accepted: false, error: null }), optionSnapshot: [], onError: () => {}, runtime: 'remote', sessionId: 'session-1', runtimeEnvironmentId: 'studio-mac' }
   })
   return (
     <TooltipProvider delayDuration={0}>
@@ -95,6 +110,10 @@ function Harness(props: Props): React.JSX.Element {
       <button type="button" onClick={() => setComposerError(ATTACHMENTS)}>
         compose
       </button>
+      {continuation.view.usageLimitTurnItemId === null ? null : (
+        <NativeChatInterruptedContinueButton onContinue={continuation.view.continueUsageLimit}
+          disabled={continuation.view.usageLimitContinueDisabled} />
+      )}
       {/* As the cut's own row shows it. */}
       {continuation.view.offeredTurnItemId === null ? null : (
         <NativeChatInterruptedContinueButton onContinue={continuation.view.continueNow} />
@@ -115,7 +134,11 @@ beforeEach(() => {
   mocks.call.mockReset()
 })
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  resetStructuredAgentSessionSendsForTests()
+  clearNativeChatComposerDraftsForTests()
+})
 
 describe('Continue on a reply an Orca stop cut off', () => {
   it("asks the chat's own host, paired or local, to continue that cut turn", () => {
@@ -274,4 +297,78 @@ describe('Continue on a reply an Orca stop cut off', () => {
     await waitFor(() => expect(mocks.call).toHaveBeenCalledTimes(2))
     expect(screen.getByTestId('error')).toHaveTextContent('none')
   })
+})
+
+
+it('keeps the draft through Continue admission, refusal, uncertainty and recorded-before-journal', async () => {
+  const items: AgentJournalRenderItem[] = [
+    { ...cutChat[0]!, body: { kind: 'turn', turnId: 'cut', state: 'completed', outcome: 'failure', startedAt: 1, completedAt: 5 } },
+    { ...cutChat[1]!, body: { kind: 'status', text: 'Limit', failure: { kind: 'usageLimitReached' } } }
+  ]
+  const scope = structuredAgentSessionDraftScopeKey('session-1')
+  const draft = { text: 'My unfinished request', images: [{ id: 'attached', path: '/tmp/photo.png' }] }
+  updateNativeChatComposerDraft(scope, draft, 'immediate')
+  const options = { model: 'gpt-current', effort: 'high' }
+  const uploading = { id: 'upload', path: '', pending: true, pendingName: 'next.png' }
+  const reveal = vi.fn()
+  function LiveHarness() {
+    const sends = useStructuredAgentSessionSends({
+      sessionId: 'session-1', target: PAIRED, fence: 1, submissions: [], queuedMessageIds: [],
+      queue: { capability: 'unsupported', enabled: false }, historyLoaded: false, sendOptions: () => options
+    })
+    const transport: NativeChatStructuredComposerTransport = {
+      send: (text, images, request) => sends.send(text, images.map((image) => ({ path: image.path, previewUri: image.path })), request),
+      onSubmitted: reveal, onError: vi.fn(), dispatchCommand: async () => ({ handled: false, accepted: false, error: null }),
+      optionSnapshot: [], runtime: 'remote', sessionId: 'session-1', runtimeEnvironmentId: 'studio-mac'
+    }
+    return <><span>{uploading.pendingName}</span><Harness journalItems={items} transport={transport} pending={sends.pending} /></>
+  }
+  let answer = Promise.withResolvers<unknown>()
+  mocks.call.mockImplementation(() => answer.promise)
+  const { rerender } = render(<LiveHarness />)
+  mocks.capability = 'unknown'
+  rerender(<LiveHarness />)
+  expect(continueButton()).toBeDisabled()
+  mocks.capability = 'supported'
+  rerender(<LiveHarness />)
+  fireEvent.click(screen.getByRole('button', { name: 'compose' }))
+  fireEvent.click(continueButton()!)
+  expect(screen.getByTestId('error')).toHaveTextContent('none')
+  expect(continueButton()).toBeNull()
+  await waitFor(() => expect(mocks.call).toHaveBeenCalledOnce())
+  expect(mocks.call.mock.calls[0]).toMatchObject([PAIRED, 'agentSession.send', {
+    body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'Continue where you left off.' }] },
+    options, usageLimitContinuationOfTurnItemId: TURN
+  }])
+  expect(reveal).toHaveBeenCalledOnce()
+  expect(reportStructuredSessionUserInput).toHaveBeenCalledWith('session-1', 'studio-mac')
+  expect(emitNativeChatMessageSent).toHaveBeenCalledWith({ agent: 'codex', runtime: 'remote' })
+  await act(async () => answer.resolve({ ok: false, refusal: { code: 'agent_session_operation_invalid', details: { reason: 'providerRejected' }, message: 'Refused' } }))
+  await waitFor(() => expect(continueButton()).toBeInTheDocument())
+  expect(screen.getByTestId('error')).toHaveTextContent(FAILED)
+  expect(readNativeChatComposerDraft(scope)).toMatchObject(draft)
+  // An old host gets the exact plain-send control shape, including after an uncertain attempt.
+  mocks.capability = 'unsupported'
+  answer = Promise.withResolvers<unknown>()
+  rerender(<LiveHarness />)
+  fireEvent.click(continueButton()!)
+  await waitFor(() => expect(mocks.call).toHaveBeenCalledTimes(2))
+  expect(mocks.call.mock.calls[1][2]).not.toHaveProperty('usageLimitContinuationOfTurnItemId')
+  await act(async () => answer.reject(new Error('connection lost')))
+  await waitFor(() => expect(screen.getByTestId('error')).toHaveTextContent('Check the chat before trying again.'))
+  expect(screen.getByTestId('error')).not.toHaveTextContent('was not sent')
+  expect(readNativeChatComposerDraft(scope)).toMatchObject(draft)
+  mocks.capability = 'supported'
+  answer = Promise.withResolvers<unknown>()
+  rerender(<LiveHarness />)
+  fireEvent.click(continueButton()!)
+  await waitFor(() => expect(mocks.call).toHaveBeenCalledTimes(3))
+  const id = mocks.call.mock.calls[2][2].envelope.clientOperationId
+  await act(async () => answer.resolve({ ok: true, fence: 1, cursor: { epoch: 'e', sequence: 5 },
+    value: { clientMessageId: id, submission: { clientMessageId: id, dispatchState: 'accepted' } } }))
+  // Accepted before the journal arrives: the recorded sender entry still owns availability.
+  expect(continueButton()).toBeNull()
+  expect(readNativeChatComposerDraft(scope)).toMatchObject(draft)
+  expect(screen.getByText('next.png')).toBeInTheDocument()
+  expect(options).toEqual({ model: 'gpt-current', effort: 'high' })
 })

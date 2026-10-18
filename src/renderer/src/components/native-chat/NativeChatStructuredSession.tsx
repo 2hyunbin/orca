@@ -227,13 +227,13 @@ export function NativeChatStructuredSession(
     sendBlockedReason: hostPermission.sendBlockedReason ?? install.sendBlockedReason
   })
   const continuation = useNativeChatInterruptedContinuation({
+    ...controller,
     target: props.target,
+    agent: props.agent,
     sessionId: props.sessionId,
-    journalItems: controller.journalItems,
-    submissions: controller.submissions,
     isWorking: controller.isWorking || hostHeld,
     reportComposerError,
-    send: structuredTransport.send
+    transport: structuredTransport
   })
 
   // Said once: on the pane when the failure took it, else in the composer's notices.

@@ -3088,6 +3088,9 @@
         "usedManySummary": "Used {{toolCount}} tools",
         "usedOneSummary": "Used 1 tool"
       },
+      "interruptedContinue": {
+        "unconfirmed": "Couldn't confirm whether {{agent}} received Continue. Check the chat before trying again."
+      },
       "writeNotice": {
         "agentRefused": "The agent turned this down.",
         "agentStarting": "The agent is still starting.",

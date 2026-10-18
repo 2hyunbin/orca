@@ -1,8 +1,13 @@
-import { useCallback, useId, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import { Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { translate } from '@/i18n/i18n'
+import { structuredAgentLabel } from '@/lib/structured-agent-session-launch-label'
+import type { AgentType } from '../../../../shared/agent-status-types'
+import { AGENT_SESSION_SEND_USAGE_LIMIT_CONTINUATION_RUNTIME_CAPABILITY } from '../../../../shared/agent-session-create-capabilities'
+import { completeNativeChatStructuredUserAction } from './native-chat-structured-user-action'
+import { getStructuredAgentSessionPendingSends, type StructuredAgentSessionPendingSend } from './structured-agent-session-pending-sends'
 import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
 import { useStructuredAgentSessionHostCapabilityState } from '@/runtime/structured-agent-session-host-capability'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
@@ -41,6 +46,7 @@ export type NativeChatInterruptedContinuation = {
  */
 export function useNativeChatInterruptedContinuation(input: {
   target: RuntimeClientTarget
+  agent: AgentType
   sessionId: string
   journalItems: readonly AgentJournalRenderItem[]
   submissions: readonly Pick<AgentJournalSubmission, 'dispatchState'>[]
@@ -49,13 +55,18 @@ export function useNativeChatInterruptedContinuation(input: {
   /** Stable; a Continue click is the user's newer action, so it clears the composer's error. */
   reportComposerError: (text: null) => void
   /** The composer's send; false when the chat took nothing. */
-  send: NativeChatStructuredComposerTransport['send']
+  transport: NativeChatStructuredComposerTransport
+  pending: readonly Pick<StructuredAgentSessionPendingSend, 'phase'>[]
 }): NativeChatInterruptedContinuation {
-  const { target, sessionId, reportComposerError, send } = input
+  const { target, sessionId, reportComposerError, transport, agent } = input
   const hostLabel = useStructuredAgentSessionHostLabel(target)
   const capability = useStructuredAgentSessionHostCapabilityState(
     target,
     AGENT_SESSION_CONTINUE_INTERRUPTED_RUNTIME_CAPABILITY
+  )
+  const usageCapability = useStructuredAgentSessionHostCapabilityState(
+    target,
+    AGENT_SESSION_SEND_USAGE_LIMIT_CONTINUATION_RUNTIME_CAPABILITY
   )
   // The restart prompt or the launch's own resume is carrying this chat on, or the launch may still
   // decide to; it resumes only this machine's chats.
@@ -72,25 +83,55 @@ export function useNativeChatInterruptedContinuation(input: {
   )
   // The cut this client already asked to continue: hidden until the journal shows what came of it.
   const [asked, setAsked] = useState<string | null>(null)
+  const [usageFailure, setUsageFailure] = useState<{
+    turnItemId: string
+    unconfirmed: boolean
+  } | null>(null)
   const [failedOn, setFailedOn] = useState<string | null>(null)
+  useEffect(() => {
+    if (input.pending.length > 0) {
+      setUsageFailure(null)
+    }
+  }, [input.pending])
   const offered =
     capability === 'supported' && cut && !input.isWorking && !resuming && asked !== cut.turnItemId
       ? cut.turnItemId
       : null
   const usageLimitTurnItemId =
-    usageLimitCut && !input.isWorking && !resuming && asked !== usageLimitCut.turnItemId
+    usageLimitCut &&
+    !input.isWorking &&
+    !resuming &&
+    input.pending.length === 0 &&
+    !transport.sendOut &&
+    transport.sendBlockedReason === undefined
       ? usageLimitCut.turnItemId
       : null
   const continueUsageLimit = useCallback((): void => {
-    if (usageLimitTurnItemId === null) {
+    if (
+      usageLimitTurnItemId === null ||
+      usageCapability === 'unknown' ||
+      getStructuredAgentSessionPendingSends(sessionId).length > 0
+    ) {
       return
     }
-    setAsked(usageLimitTurnItemId)
-    // A send the chat refused says why in the composer, as any send does; Continue comes back.
-    if (send(NATIVE_CHAT_USAGE_LIMIT_CONTINUE_MESSAGE, []) === false) {
-      setAsked(null)
+    const turnItemId = usageLimitTurnItemId
+    setUsageFailure(null)
+    reportComposerError(null)
+    const admission = transport.send(NATIVE_CHAT_USAGE_LIMIT_CONTINUE_MESSAGE, [], {
+      callerKeepsText: true,
+      ...(usageCapability === 'supported' ? { usageLimitContinuationOfTurnItemId: turnItemId } : {}),
+      onSettled: (outcome) => {
+        if (outcome === 'returned' || outcome === 'unconfirmed') {
+          setUsageFailure({ turnItemId, unconfirmed: outcome === 'unconfirmed' })
+        }
+      }
+    })
+    if (admission === false) {
+      setUsageFailure({ turnItemId, unconfirmed: false })
+    } else {
+      completeNativeChatStructuredUserAction(agent, transport, admission === true)
     }
-  }, [usageLimitTurnItemId, send])
+  }, [usageLimitTurnItemId, usageCapability, sessionId, reportComposerError, transport, agent])
   const continueNow = useCallback((): void => {
     if (offered === null) {
       return
@@ -121,6 +162,7 @@ export function useNativeChatInterruptedContinuation(input: {
       offeredTurnItemId: offered,
       continueNow,
       usageLimitTurnItemId,
+      usageLimitContinueDisabled: usageCapability === 'unknown',
       continueUsageLimit
     }),
     [
@@ -130,6 +172,7 @@ export function useNativeChatInterruptedContinuation(input: {
       offered,
       continueNow,
       usageLimitTurnItemId,
+      usageCapability,
       continueUsageLimit
     ]
   )
@@ -140,18 +183,37 @@ export function useNativeChatInterruptedContinuation(input: {
           "Couldn't continue this chat. Try again, or send a message."
         )
       : null
+  const usageFailedHere =
+    usageFailure?.turnItemId === usageLimitCut?.turnItemId && usageFailure
+      ? usageFailure.unconfirmed
+        ? translate(
+            'components.native-chat.interruptedContinue.unconfirmed',
+            "Couldn't confirm whether {{agent}} received Continue. Check the chat before trying again.",
+            { agent: structuredAgentLabel(agent) }
+          )
+        : translate(
+            'components.native-chat.interruptedContinue.failed',
+            "Couldn't continue this chat. Try again, or send a message."
+          )
+      : null
   return {
     view,
-    continueError: failedHere ? { text: failedHere, onDismiss: () => setFailedOn(null) } : null
+    continueError: usageFailedHere
+      ? { text: usageFailedHere, onDismiss: () => setUsageFailure(null) }
+      : failedHere
+        ? { text: failedHere, onDismiss: () => setFailedOn(null) }
+        : null
   }
 }
 
 /** Continue, on the row that says Orca stopped this reply: the one action that picks it back up. */
 export function NativeChatInterruptedContinueButton({
   onContinue,
+  disabled,
   explanation: shownExplanation
 }: {
   onContinue: () => void
+  disabled?: boolean
   /** What Continue does here, when it is not picking up a reply Orca's stop cut off. */
   explanation?: string
 }): React.JSX.Element {
@@ -166,7 +228,13 @@ export function NativeChatInterruptedContinueButton({
     <>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button type="button" size="xs" aria-describedby={explanationId} onClick={onContinue}>
+          <Button
+            type="button"
+            size="xs"
+            aria-describedby={explanationId}
+            onClick={onContinue}
+            disabled={disabled}
+          >
             <Play />
             {translate('components.native-chat.interruptedContinue.continue', 'Continue')}
           </Button>

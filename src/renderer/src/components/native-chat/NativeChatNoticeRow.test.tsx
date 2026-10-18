@@ -457,6 +457,13 @@ describe('notice rows', () => {
     expect(disclosure?.querySelector('summary')).not.toHaveTextContent('Check the configuration')
     expect(disclosure?.querySelector('pre')).toHaveTextContent('Check the configuration')
   })
+  it('retains person-facing usage details without inventing a provider frame', () => {
+    renderStatus({ kind: 'status', text: 'Usage limit reached', tone: 'warning',
+      failure: { kind: 'usageLimitReached', detail: { audience: 'person', text: 'Your allowance resets tomorrow.' } } })
+    const disclosure = screen.getByText('Details').closest('details')
+    expect(disclosure?.querySelector('pre')).toHaveTextContent('Your allowance resets tomorrow.')
+    expect(screen.queryByText('codex')).not.toBeInTheDocument()
+  })
   it('keeps the column layout of command output in monospace', () => {
     const text =
       'Context Usage\n⛁ ⛁ ⛶   gpt-4o · 16.6k/128k tokens (13%)\n      ⛁ Skills: 304 tokens'

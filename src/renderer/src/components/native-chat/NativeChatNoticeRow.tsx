@@ -165,6 +165,8 @@ export function NativeChatNoticeRow({
           sayAgentSessionFailureTranslated
         )
       : block.text
+  const detail = failure?.detail?.audience === 'person' && failure.detail.text.trim() !== text.trim()
+    ? failure.detail.text : undefined
   const tone = named ? 'notice' : look.kind === 'line' ? look.tone : null
   const Icon =
     tone === 'warning'
@@ -192,6 +194,7 @@ export function NativeChatNoticeRow({
         ) : usageLimitContinue ? (
           <NativeChatInterruptedContinueButton
             onContinue={orcaStopView.continueUsageLimit}
+            disabled={orcaStopView.usageLimitContinueDisabled}
             explanation={translate(
               'components.native-chat.interruptedContinue.usageLimitExplanation',
               'Asks the agent to continue where it left off. Use it once the limit resets.'
@@ -210,9 +213,10 @@ export function NativeChatNoticeRow({
           {nativeChatClaudeSignInLabel(claudeSignIn)}
         </Button>
       ) : null}
-      {block.providerFrame ? (
+      {block.providerFrame || detail ? (
         <ProviderFrameRow
           block={block}
+          detail={detail}
           summary={translate('components.native-chat.notices.details', 'Details')}
         />
       ) : null}
