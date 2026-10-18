@@ -1,7 +1,7 @@
 import { terminalImageViewerSupported } from '../../terminal-image-viewer-env'
 import { resolveRuntimeNavigationTarget } from '../../../../shared/runtime-navigation'
 import { getExplicitWorktreeIdSelector } from '../../runtime-worktree-selection'
-import { worktreeIdComparisonKey, worktreeIdsEqual } from '../../../../shared/worktree/id'
+import { worktreeIdentityKey, worktreeIdsEqual } from '../../../../shared/worktree/id'
 import { defineMethod, defineStreamingMethod } from '../core'
 import {
   CreateTerminalTab,
@@ -121,7 +121,7 @@ export const SESSION_TAB_METHODS = [
       }
       const register = (worktreeId: string): void => {
         // Why: clients may unsubscribe using the resolved spelling learned from the snapshot.
-        const cleanupPrefix = `session.tabs:${connectionId ?? 'local'}:${worktreeIdComparisonKey(worktreeId) ?? worktreeId}`
+        const cleanupPrefix = `session.tabs:${connectionId ?? 'local'}:${worktreeIdentityKey(worktreeId)}`
         // Why: shared-control can carry multiple subscribers for one worktree on
         // one socket; include the RPC id so one subscriber cannot evict another.
         subscriptionId = requestId ? `${cleanupPrefix}:${requestId}` : cleanupPrefix
@@ -233,7 +233,7 @@ export const SESSION_TAB_METHODS = [
         getExplicitWorktreeIdSelector(params.worktree) ??
         (await runtime.listMobileSessionTabs(params.worktree, pairedDeviceId)).worktree
       const connection = connectionId ?? 'local'
-      const cleanupPrefix = `session.tabs:${connection}:${worktreeIdComparisonKey(worktreeId) ?? worktreeId}`
+      const cleanupPrefix = `session.tabs:${connection}:${worktreeIdentityKey(worktreeId)}`
       if (params.subscriptionId) {
         runtime.cleanupSubscription(`${cleanupPrefix}:${params.subscriptionId}`)
         return { unsubscribed: true }

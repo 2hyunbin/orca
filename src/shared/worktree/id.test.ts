@@ -6,7 +6,8 @@ import {
   getWorktreePathBasenameFromId,
   splitWorktreeId,
   splitWorktreeIdForFilesystem,
-  worktreeIdComparisonKey
+  worktreeIdentityKey,
+  worktreeIdsEqual
 } from './id'
 
 describe('getRepoMainWorktreeId', () => {
@@ -133,9 +134,9 @@ describe('getWorktreePathBasenameFromId', () => {
  * #16243: the renderer can only address a workspace by `id:<repoId>::<path>`, so the key must fold
  * exactly the path spellings a `path:` selector already folds — and nothing more.
  */
-describe('worktreeIdComparisonKey path-spelling parity for id: selectors (#16243)', () => {
+describe('worktreeIdentityKey path-spelling parity for id: selectors (#16243)', () => {
   const canonical = 'repo-123::/srv/workspaces/plugin'
-  const key = (worktreeId: string): string | null => worktreeIdComparisonKey(worktreeId)
+  const key = (worktreeId: string): string => worktreeIdentityKey(worktreeId)
 
   it('folds the path spellings a `path:` selector already accepts', () => {
     expect(key('repo-123::/srv/workspaces/plugin/')).toBe(key(canonical))
@@ -147,7 +148,7 @@ describe('worktreeIdComparisonKey path-spelling parity for id: selectors (#16243
 
   it('folds no more loosely than `path:` does', () => {
     // A leading `//` is a UNC root, not a doubled separator.
-    expect(key('repo-123://srv/workspaces/plugin')).not.toBe(key(canonical))
+    expect(key('repo-123:://srv/workspaces/plugin')).not.toBe(key(canonical))
     // Dot segments are not canonicalized, so `id:` and `path:` still agree on refusing them.
     expect(key('repo-123::/srv/./workspaces/plugin')).not.toBe(key(canonical))
   })
@@ -165,13 +166,13 @@ describe('worktreeIdComparisonKey path-spelling parity for id: selectors (#16243
 
   it('keeps a UNC or WSL root distinct from a drive-letter location', () => {
     // Different roots naming different filesystems must never collapse into one key.
-    expect(key('repo-123://server/share/game2')).not.toBe(key('repo-123::D:/server/share/game2'))
-    expect(key('repo-123://wsl.localhost/Ubuntu/home/dev/game2')).not.toBe(
+    expect(key('repo-123:://server/share/game2')).not.toBe(key('repo-123::D:/server/share/game2'))
+    expect(key('repo-123:://wsl.localhost/Ubuntu/home/dev/game2')).not.toBe(
       key('repo-123::D:/home/dev/game2')
     )
     // The two UNC aliases Windows exposes for one WSL distro are the same location.
-    expect(key('repo-123://wsl.localhost/Ubuntu/home/dev/game2')).toBe(
-      key('repo-123://wsl$/Ubuntu/home/dev/game2')
+    expect(key('repo-123:://wsl.localhost/Ubuntu/home/dev/game2')).toBe(
+      key('repo-123:://wsl$/Ubuntu/home/dev/game2')
     )
   })
 
@@ -184,9 +185,14 @@ describe('worktreeIdComparisonKey path-spelling parity for id: selectors (#16243
     )
   })
 
-  it('returns null for ids with no repo boundary so callers keep exact matching', () => {
-    expect(key('repo-a')).toBeNull()
-    expect(key('repo-a::')).toBeNull()
-    expect(key('/srv/workspaces/plugin')).toBeNull()
+  it('keys a malformed id as itself, so it only ever matches itself', () => {
+    for (const malformed of ['repo-a', 'repo-a::', '::/srv/a', '/srv/workspaces/plugin']) {
+      expect(key(malformed)).toBe(malformed)
+      expect(worktreeIdsEqual(malformed, malformed)).toBe(true)
+    }
+    // A malformed spelling never collides with a well-formed id's key.
+    expect(key('repo-a::')).not.toBe(key('repo-a::/'))
+    expect(worktreeIdsEqual('repo-a::', 'repo-a::/')).toBe(false)
+    expect(worktreeIdsEqual('::/srv/A/', '::/srv/A')).toBe(false)
   })
 })

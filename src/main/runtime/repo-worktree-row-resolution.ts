@@ -2,7 +2,7 @@ import { preserveFolderUpgradeWorktreePath } from '../folder-upgrade-worktree-pa
 import {
   splitWorktreeId,
   splitWorktreeIdForFilesystem,
-  worktreeIdComparisonKey
+  worktreeIdentityKey
 } from '../../shared/worktree/id'
 import { getRepoExecutionHostId, type ExecutionHostId } from '../../shared/execution-host'
 import {
@@ -230,12 +230,11 @@ export async function resolveScopedWorktreeIdRow(
   )
   // Why (#16243): the scan can spell this id's path differently — the divergence `path:` absorbs.
   // One equivalent row may stand in; two is an ambiguity a scoped lookup must refuse, not guess.
-  const comparisonKey = worktreeIdComparisonKey(worktreeId)
+  const comparisonKey = worktreeIdentityKey(worktreeId)
   const exact = ownerRows.find((worktree) => worktree.id === worktreeId)
-  const equivalent =
-    comparisonKey === null
-      ? []
-      : ownerRows.filter((worktree) => worktreeIdComparisonKey(worktree.id) === comparisonKey)
+  const equivalent = ownerRows.filter(
+    (worktree) => worktreeIdentityKey(worktree.id) === comparisonKey
+  )
   const target = exact ?? (equivalent.length === 1 ? equivalent[0] : null)
   if (!target) {
     return null
