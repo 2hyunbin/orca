@@ -37,6 +37,15 @@ describe('extractPathLiterals', () => {
     ])
   })
 
+  it('reads a relative glob as a prefix, not an import', () => {
+    expect(extractPathLiterals('config/tsconfig.x.json', '"../src/main/ssh/ssh-*.ts"')).toEqual([
+      { literal: 'src/main/ssh/ssh-', isImport: false }
+    ])
+    expect(extractPathLiterals('config/x.mjs', "new URL('../../src/main/acp/generated/')")).toEqual(
+      [{ literal: 'src/main/acp/generated/', isImport: false }]
+    )
+  })
+
   it('reads unquoted command arguments in manifests and workflows', () => {
     const text = '"command": "pnpm test src/main/a.test.ts src/renderer/src/b.test.ts"'
     expect(extractPathLiterals('config/reliability-gates.jsonc', text)).toEqual([
@@ -106,5 +115,10 @@ describe('createPathResolver', () => {
     expect(resolves('src/main/ssh/ssh-connection', true)).toBe(true)
     expect(resolves('src/main/ssh/ssh-types', true)).toBe(false)
     expect(resolves('src/main/ssh/ssh-types')).toBe(true)
+  })
+
+  it('needs an index module to resolve an import of a folder', () => {
+    expect(resolves('src/main/ssh', true)).toBe(false)
+    expect(resolves('src/main/ssh')).toBe(true)
   })
 })

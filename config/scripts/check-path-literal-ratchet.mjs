@@ -17,13 +17,14 @@ const UNQUOTED_ALLOWED = /\.(?:jsonc?|ya?ml|sh|ps1)$/
 // Comments are prose, not references.
 const SLASH_COMMENTED = /\.(?:m?js|cjs|ts|jsonc)$/
 const HASH_COMMENT = /^\s*#.*$/gm
-// Group 1 is a relative import's `./` or `../` chain: imports must resolve exactly, not as a prefix.
+// Group 1 is a relative `./` or `../` chain and group 3 a following glob character: a relative
+// non-glob, non-folder reference is an import and must resolve exactly, not as a prefix.
 const QUOTED_LITERAL = new RegExp(
-  `(?:['"\`]|:\\(glob\\))((?:\\.\\.?\\/)*)(src\\/(?:${SOURCE_ROOTS})\\/[\\w@\\-./]*)`,
+  `(?:['"\`]|:\\(glob\\))((?:\\.\\.?\\/)*)(src\\/(?:${SOURCE_ROOTS})\\/[\\w@\\-./]*)([*{]?)`,
   'g'
 )
 const ANY_LITERAL = new RegExp(
-  `(?:['"\`\\s=]|:\\(glob\\)|^)((?:\\.\\.?\\/)*)(src\\/(?:${SOURCE_ROOTS})\\/[\\w@\\-./]*)`,
+  `(?:['"\`\\s=]|:\\(glob\\)|^)((?:\\.\\.?\\/)*)(src\\/(?:${SOURCE_ROOTS})\\/[\\w@\\-./]*)([*{]?)`,
   'gm'
 )
 
@@ -79,17 +80,20 @@ export function extractPathLiterals(rel, text) {
     ? stripSlashComments(text)
     : text.replace(HASH_COMMENT, ' ')
   const literals = new Map()
-  for (const [, parents, literal] of code.matchAll(pattern)) {
+  for (const [, parents, literal, glob] of code.matchAll(pattern)) {
     const key = literal.replace(/\.+$/, '')
     // Any import occurrence makes the literal exact: the strictest reading wins.
-    literals.set(key, (literals.get(key) ?? false) || parents.length > 0)
+    literals.set(
+      key,
+      (literals.get(key) ?? false) || (parents.length > 0 && !glob && !key.endsWith('/'))
+    )
   }
   return [...literals].map(([literal, isImport]) => ({ literal, isImport }))
 }
 
 /**
- * A literal resolves when it names a tracked file or folder, a module without extension, or (unless
- * it is an import) a prefix of a tracked file. Only tracked files count, so local leftovers can't
+ * A literal resolves when it names a tracked file or a module (without extension, or a folder
+ * with `index.ts`). A non-import may also name a folder or a prefix of a tracked file. Only tracked files count, so local leftovers can't
  * change the verdict.
  */
 export function createPathResolver(trackedFiles) {
@@ -109,9 +113,8 @@ export function createPathResolver(trackedFiles) {
     return low < sorted.length && sorted[low].startsWith(prefix)
   }
   return (literal, isImport = false) =>
-    (!isImport && hasPrefix(literal)) ||
-    hasPrefix(`${literal.replace(/\/$/, '')}/`) ||
-    ['', ...RESOLVED_EXTENSIONS].some((extension) => tracked.has(literal + extension))
+    ['', ...RESOLVED_EXTENSIONS].some((extension) => tracked.has(literal + extension)) ||
+    (!isImport && (hasPrefix(literal) || hasPrefix(`${literal.replace(/\/$/, '')}/`)))
 }
 
 export function collectUnresolvedPathLiterals(root = process.cwd()) {
