@@ -25,7 +25,6 @@ import {
   consumeQueuedMessageInTransaction,
   getQueuedMessage,
   insertQueuedMessage,
-  listQueuedMessages,
   queuedMessagesSettledByOp,
   withdrawQueuedMessages,
   type QueuedMessageHoldReason,
@@ -34,8 +33,8 @@ import {
 import { draftsDeliveredByAppliedEcho } from './queued-message-delivered-echo'
 import { moveQueuedMessages, type QueuedMessagePositionMove } from './queued-message-positions'
 import { pruneQueuedMessages, retainedSubmissionVerdict } from './queued-message-retention'
+import { EffectiveQueuedCardView } from './queued-message-effective-card'
 import {
-  queuedMessageSettlementOwed,
   queuedMessagesAwaitReopenMark,
   settleOwedQueuedMessages,
   settleQueuedMessagesForRow
@@ -54,16 +53,18 @@ export class JournalQueuedMessages {
   readonly editLeases = new QueuedMessageEditLeases(() => this.list())
   /** Bumped on every draft-table write, so publication memos recompute only when they must. */
   private changeRevision = 0
-  private listed: { revision: number; rows: readonly QueuedMessageRow[] } | null = null
+  private readonly view: EffectiveQueuedCardView
 
-  constructor(private readonly deps: JournalQueuedMessagesDeps) {}
+  constructor(private readonly deps: JournalQueuedMessagesDeps) {
+    this.view = new EffectiveQueuedCardView(deps, () => this.changeRevision)
+  }
 
   get sessionId(): string {
     return this.deps.sessionId
   }
 
-  revision(): number {
-    return this.changeRevision
+  revision(): string {
+    return this.view.revision()
   }
 
   /** A journal transaction rolled back: nothing read inside it may stay cached. */
@@ -71,26 +72,22 @@ export class JournalQueuedMessages {
     this.changeRevision++
   }
 
-  /** Cached per revision: the drain re-checks on every journal publish, so an
-   *  unchanged table must cost no SQL read or body parse on token streams. */
+  /** The cards every reader sees (`effectiveQueuedCard`), cached per revision. */
   list(): readonly QueuedMessageRow[] {
-    if (this.listed?.revision !== this.changeRevision) {
-      this.listed = {
-        revision: this.changeRevision,
-        rows: listQueuedMessages(this.deps.database().db, this.deps.sessionId)
-      }
-    }
-    return this.listed.rows
+    return this.view.cards()
   }
 
   get(messageId: string): QueuedMessageRow | null {
-    return getQueuedMessage(this.deps.database().db, this.deps.sessionId, messageId)
+    return this.view.card(messageId)
   }
 
   /** An in-place text edit; a changed card spends every edit lease on its old text. */
   update(input: QueuedMessageTextUpdate): Promise<ReturnType<typeof updateQueuedMessageText>> {
     return this.transact(
-      (db) => updateQueuedMessageText(db, this.deps.sessionId, input),
+      (db) => {
+        this.changeRevision += this.view.store(db, [input.messageId])
+        return updateQueuedMessageText(db, this.deps.sessionId, input)
+      },
       (result) => result.status === 'updated',
       undefined,
       () => this.editLeases.retire(input.messageId)
@@ -147,7 +144,10 @@ export class JournalQueuedMessages {
    *  own UPDATE. */
   hold(input: { messageIds: readonly string[]; reason: QueuedMessageHoldReason }): Promise<void> {
     return this.transact(
-      (db) => holdQueuedMessages(db, { ...input, sessionId: this.deps.sessionId }),
+      (db) => {
+        this.changeRevision += this.view.store(db, input.messageIds)
+        return holdQueuedMessages(db, { ...input, sessionId: this.deps.sessionId })
+      },
       (held) => held > 0
     ).then(() => undefined)
   }
@@ -210,12 +210,14 @@ export class JournalQueuedMessages {
       return Promise.resolve([])
     }
     return this.transact(
-      (db) =>
-        withdrawQueuedMessages(db, {
+      (db) => {
+        this.changeRevision += this.view.store(db, input.messageIds)
+        return withdrawQueuedMessages(db, {
           ...input,
           sessionId: this.deps.sessionId,
           now: this.deps.now()
-        }),
+        })
+      },
       (withdrawn) => withdrawn.length > 0,
       receipt
     )
@@ -229,6 +231,7 @@ export class JournalQueuedMessages {
     if (this.deps.database().db !== db) {
       throw new AgentSessionJournalError('journal_closed', 'withdraw crossed database handles')
     }
+    this.changeRevision += this.view.store(db, input.messageIds)
     this.changeRevision += withdrawQueuedMessages(db, {
       ...input,
       sessionId: this.deps.sessionId,
@@ -280,11 +283,12 @@ export class JournalQueuedMessages {
       // Same handle only: a second connection could not join the transaction.
       throw new AgentSessionJournalError('journal_closed', 'consume crossed database handles')
     }
+    this.changeRevision += this.view.store(db, [input.messageId])
     if (input.yieldsToPause) {
       // Judged again here, by the drain's own rule. Today a Stop cannot land between the drain's
       // pick and this claim (both run on the session's serialized lane, held across the send), so
       // this guards any pause-relevant row written off that lane from overtaking a held card.
-      const cards = listQueuedMessages(db, this.deps.sessionId)
+      const cards = this.view.cardsIn(db)
       const pauses = this.derivePauses(cards)
       const held = this.editLeases.heldIds(cards)
       if (nextSendableQueuedCard(pauses, cards, held)?.messageId !== input.messageId) {
@@ -302,9 +306,10 @@ export class JournalQueuedMessages {
     this.changeRevision++
   }
 
-  /** A skipped live settlement the journal already decided (`queued-message-settlement.ts`). */
+  /** A stored card behind the one readers see: the heal owes its durable copy, which is what keeps
+   *  the card across a rewind (`queued-message-retention.ts`). */
   settlementOwed(): boolean {
-    return queuedMessageSettlementOwed(this.list(), this.deps.state().submissions)
+    return this.view.storedBehind()
   }
 
   /** Waiting drafts a skipped echo hook left unwithdrawn; reads every item, so only the drain

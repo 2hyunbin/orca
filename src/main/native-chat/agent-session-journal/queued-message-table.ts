@@ -15,7 +15,6 @@ import type {
   AgentJournalMessageItem
 } from '../../../shared/agent-session-journal-types'
 import type { QUEUED_MESSAGE_PAUSED_SEND_FAILED } from '../../../shared/agent-session-queued-message-wire'
-import { rejectedDraftSettlement } from './journal-dispatch-settlement'
 import { readStoredQueuedMessageRow } from './queued-message-stored-row'
 
 export type QueuedMessageState = 'waiting' | 'dispatched' | 'returned' | 'withdrawn'
@@ -227,78 +226,6 @@ export function withdrawQueuedMessages(
     })
   }
   return withdrawn
-}
-
-/**
- * dispatched → returned, or back to waiting (`rejectedDraftSettlement`),
- * matched on the draft's CURRENT hand-off (`consumed_as`), so a re-send refused
- * again still settles while a late duplicate of an earlier refusal matches
- * nothing. A withdrawal keeps its position; a command refused in its own turn is spent.
- */
-export function settleRejectedQueuedMessage(
-  db: Database.Database,
-  input: {
-    sessionId: string
-    consumedRef: string
-    reason: string | null
-    rejection: UnreadAgentSessionFailureFact | undefined
-    /** The refused submission's command turn exists, so its own row says why. */
-    commandTurnReported: boolean
-    now: number
-  }
-): boolean {
-  const settlement = rejectedDraftSettlement(input)
-  if (
-    settlement.state === 'returned' &&
-    input.commandTurnReported &&
-    spendRefusedCommandCard(db, input)
-  ) {
-    return true
-  }
-  const changed =
-    settlement.state === 'waiting'
-      ? db
-          .prepare(
-            `UPDATE queued_messages
-             SET state = 'waiting', hold_reason = NULL, consumed_as = NULL,
-                 returned_reason = NULL, returned_rejection = NULL, settled_at = NULL, settled_by_op = NULL
-             WHERE session_id = ? AND state = 'dispatched' AND consumed_as = ?`
-          )
-          .run(input.sessionId, input.consumedRef)
-      : db
-          .prepare(
-            `UPDATE queued_messages
-             SET state = 'returned', returned_reason = ?, returned_rejection = ?, settled_at = ?
-             WHERE session_id = ? AND state = 'dispatched' AND consumed_as = ?`
-          )
-          .run(
-            input.reason,
-            input.rejection ? JSON.stringify(input.rejection) : null,
-            input.now,
-            input.sessionId,
-            input.consumedRef
-          )
-  return Number(changed.changes ?? 0) > 0
-}
-
-/**
- * A command card refused in its own turn is spent, not returned: that turn's row says why, once,
- * and a returned card would hold every card behind it. Refused before any turn (a failed start),
- * it is returned like any card; a restart or a close leaves it waiting under the queue's pause.
- * False when the dispatched card is not a command.
- */
-function spendRefusedCommandCard(
-  db: Database.Database,
-  input: { sessionId: string; consumedRef: string; now: number }
-): boolean {
-  const spent = db
-    .prepare(
-      `UPDATE queued_messages SET state = 'withdrawn', settled_at = ?
-       WHERE session_id = ? AND state = 'dispatched' AND consumed_as = ?
-         AND json_extract(body_json, '$.command') IS NOT NULL`
-    )
-    .run(input.now, input.sessionId, input.consumedRef)
-  return Number(spent.changes ?? 0) > 0
 }
 
 /** Replay receipts: every row a given caller-scoped operation settled. */

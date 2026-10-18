@@ -1,41 +1,28 @@
 // What a journal row does to the drafts, and the re-derivation behind it. The
 // live hook runs inside each append's transaction; it is bookkeeping and may be
-// skipped, so a dispatched draft whose current submission the journal already
-// rejected is owed the settlement it would have applied, which the open-time
-// repair and the drain both apply.
+// skipped, so every reader takes the card the fold already settled
+// (`effectiveQueuedCard`), and the open-time repair and the drain write that
+// card's durable copy.
 
 import type Database from '../../sqlite/sync-database'
 import type { AgentJournalSubmission } from '../../../shared/agent-session-journal-types'
-import {
-  consumedSubmissionWasRejected,
-  journalDispatchRowNewlyRejects
-} from './journal-dispatch-settlement'
+import { journalDispatchRowNewlyRejects } from './journal-dispatch-settlement'
 import type { JournalReducerState } from './journal-reducer'
-import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
-import { structuredAgentSessionCommandTurnIdentity } from '../../../shared/structured-agent-session-command-turn-identity'
 import type { JournalRow } from './journal-row-schema'
 import { draftDeliveredByEcho, draftsDeliveredByAppliedEcho } from './queued-message-delivered-echo'
 import {
+  commandTurnReported,
+  effectiveQueuedCard,
+  rejectedCardTransition,
+  writeEffectiveQueuedCards
+} from './queued-message-effective-card'
+import {
   listQueuedMessages,
-  settleRejectedQueuedMessage,
   withdrawQueuedMessages,
   type QueuedMessageRow
 } from './queued-message-table'
 
 type Submissions = ReadonlyMap<string, AgentJournalSubmission>
-
-/** Some dispatched draft still waits on a settlement the journal already decided. */
-export function queuedMessageSettlementOwed(
-  rows: readonly QueuedMessageRow[],
-  submissions: Submissions
-): boolean {
-  return rows.some(
-    (row) =>
-      row.state === 'dispatched' &&
-      row.consumedAs !== null &&
-      consumedSubmissionWasRejected(submissions.get(row.consumedAs))
-  )
-}
 
 /** A card waits, or is mid-hand-off and may come back to waiting: a chat that stops running
  *  marks it (`AgentSessionJournal.markQueueReopen`). */
@@ -52,34 +39,14 @@ export function queuedMessagesAwaitReopenMark(
   })
 }
 
-/** Applies each owed settlement, and withdraws each waiting draft an applied echo proves
- *  delivered (`draftsDeliveredByAppliedEcho`); returns how many drafts changed. */
+/** Stores each card the fold already settled (`effectiveQueuedCard`), and withdraws each waiting
+ *  draft an applied echo proves delivered (`draftsDeliveredByAppliedEcho`); returns how many
+ *  drafts changed. */
 export function settleOwedQueuedMessages(
   db: Database.Database,
   input: { sessionId: string; state: JournalReducerState; now: number }
 ): number {
-  const { submissions } = input.state
-  let settled = 0
-  for (const row of listQueuedMessages(db, input.sessionId)) {
-    const consumedRef = row.consumedAs
-    const submission = consumedRef === null ? undefined : submissions.get(consumedRef)
-    if (
-      row.state !== 'dispatched' ||
-      consumedRef === null ||
-      !consumedSubmissionWasRejected(submission)
-    ) {
-      continue
-    }
-    const changed = settleRejectedQueuedMessage(db, {
-      sessionId: input.sessionId,
-      consumedRef,
-      reason: submission?.reason ?? null,
-      rejection: submission?.rejection,
-      commandTurnReported: commandTurnReported(input.state, consumedRef),
-      now: input.now
-    })
-    settled += changed ? 1 : 0
-  }
+  let settled = writeEffectiveQueuedCards(db, input, (row) => effectiveQueuedCard(row, input.state))
   const delivered = draftsDeliveredByAppliedEcho(
     input.state,
     listQueuedMessages(db, input.sessionId)
@@ -121,7 +88,11 @@ export function settleQueuedMessagesForRow(
   let changed = 0
   const delivered = draftDeliveredByEcho(input.state, input.drafts, row)
   if (delivered !== null) {
-    // Its first send reached the agent after all; sending it again would repeat it.
+    // Its first send reached the agent after all; sending it again would repeat it. Stored first
+    // as readers see it, so a card still stored as handed off is withdrawn too.
+    changed += writeEffectiveQueuedCards(db, { ...input, messageIds: [delivered] }, (card) =>
+      effectiveQueuedCard(card, input.state)
+    )
     changed += withdrawQueuedMessages(db, {
       sessionId: input.sessionId,
       messageIds: [delivered],
@@ -136,20 +107,14 @@ export function settleQueuedMessagesForRow(
   if (!journalDispatchRowNewlyRejects(submission, row)) {
     return changed
   }
-  const settled = settleRejectedQueuedMessage(db, {
-    sessionId: input.sessionId,
-    consumedRef: row.clientMessageId,
-    reason: row.reason,
-    rejection: row.rejection,
-    commandTurnReported: commandTurnReported(input.state, row.clientMessageId),
-    now: input.now
-  })
-  return changed + (settled ? 1 : 0)
-}
-
-/** The submission's command turn is in the journal: its own row reports the refusal. */
-function commandTurnReported(state: JournalReducerState, clientMessageId: string): boolean {
-  return state.items.has(
-    agentJournalItemKey(structuredAgentSessionCommandTurnIdentity(clientMessageId))
+  // Not folded in yet, so the row's own facts take the view's decision.
+  const reported = commandTurnReported(input.state, row.clientMessageId)
+  return (
+    changed +
+    writeEffectiveQueuedCards(db, input, (card) =>
+      card.state === 'dispatched' && card.consumedAs === row.clientMessageId
+        ? rejectedCardTransition(card, row, reported)
+        : card
+    )
   )
 }

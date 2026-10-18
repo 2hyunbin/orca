@@ -188,6 +188,29 @@ export function registerQueuedMessageDeliveredEchoTests(): void {
         expect(journal.queuedMessages.get('draft-1')?.state).toBe('withdrawn')
       })
 
+      it('the echo withdraws a card the skipped rejection hook left stored as handed off', async () => {
+        const journal = await open()
+        vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+        const settle = JournalQueuedMessages.prototype.onRowInTransaction
+        vi.spyOn(JournalQueuedMessages.prototype, 'onRowInTransaction').mockImplementation(
+          function (this: JournalQueuedMessages, db, row) {
+            if (row.kind === 'dispatch' && row.state === 'rejected') {
+              throw new Error('bookkeeping failed')
+            }
+            return settle.call(this, db, row)
+          }
+        )
+        try {
+          await handOffAndReject(journal, 'did it land?')
+        } finally {
+          vi.restoreAllMocks()
+        }
+        expect(journal.queuedMessages.settlementOwed()).toBe(true)
+        await echo(journal, 'echo-1', 'did it land?')
+        expect(journal.queuedMessages.get('draft-1')?.state).toBe('withdrawn')
+        expect(journal.queuedMessages.settlementOwed()).toBe(false)
+      })
+
       it('an unclaimed echo from before the hand-off proves nothing about it', async () => {
         const journal = await open()
         await echo(journal, 'typed-in-the-agent', 'did it land?')

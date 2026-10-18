@@ -107,7 +107,7 @@ export function registerQueuedMessageBookkeepingFailureTests(): void {
       })
       // The journal's own answer stands: Stop, failed starts and refusals depend on it.
       expect(journal.submission('sub-draft-1')?.dispatchState).toBe('rejected')
-      expect(journal.queuedMessages.get('draft-1')?.state).toBe('dispatched')
+      expect(journal.queuedMessages.get('draft-1')?.state).toBe('returned')
       expect(warn).toHaveBeenCalledWith(
         '[journal-append] row bookkeeping skipped:',
         expect.objectContaining({ kind: 'dispatch' })
