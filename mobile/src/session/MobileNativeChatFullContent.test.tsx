@@ -8,7 +8,9 @@ import { useMobileNativeChatFullMessage } from './MobileNativeChatFullContent'
 import { MobileNativeChatUserMessageFold } from './MobileNativeChatUserMessageFold'
 
 vi.mock('react-native', () => ({
+  Platform: { OS: 'ios' },
   Pressable: 'Pressable',
+  ScrollView: 'ScrollView',
   Text: 'Text',
   View: 'View',
   StyleSheet: { create: (value: unknown) => value, hairlineWidth: 1 }
