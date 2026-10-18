@@ -5,7 +5,11 @@ import { makeStructuredAgentStatusSubject } from '../../../shared/agent-status-s
 import type { RuntimeClientEvent } from '../../../shared/runtime-client-events'
 import type { TerminalSideEffectFact } from '../../../shared/terminal-side-effect-facts'
 import type { SmartStampFields } from '../../../shared/sidebar-list/sort-stamps'
-import { SortStampsProducer, type SortStampsStore } from './sort-stamps-producer'
+import {
+  SortStampsProducer,
+  type LiveTitlePane,
+  type SortStampsStore
+} from './sort-stamps-producer'
 
 vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
 vi.mock('../../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn(() => ({})) }))
@@ -21,12 +25,15 @@ type Stamps = { lastActivityAt: number } & SmartStampFields
 const SSH_HOST = 'ssh:build-box'
 
 function createHarness() {
-  const meta = new Map<string, Stamps>([[WT, { lastActivityAt: 0 }]])
+  const meta = new Map<string, Stamps & { hostId?: string }>([[WT, { lastActivityAt: 0 }]])
   const sshMeta = new Map<string, Stamps>([[WT, { lastActivityAt: 0 }]])
-  const folders = new Map<string, Stamps>([[FOLDER_ID, { lastActivityAt: 0 }]])
+  const folders = new Map<string, Stamps & { connectionId?: string }>([
+    [FOLDER_ID, { lastActivityAt: 0 }]
+  ])
   const writes: string[] = []
   const exits = new Map<string, () => void>()
   const fenced = new Set<string>()
+  const liveTitles: LiveTitlePane[] = []
   let listener: (event: RuntimeClientEvent) => void = () => {}
   const store: SortStampsStore = {
     getWorktreeMeta: (id) => meta.get(id),
@@ -43,7 +50,9 @@ function createHarness() {
     updateFolderWorkspace: (id, updates) => {
       writes.push(`folder:${id}`)
       folders.set(id, { ...folders.get(id), ...updates })
-    }
+    },
+    getAllWorktreeMeta: () => Object.fromEntries(meta),
+    getFolderWorkspaces: () => [...folders].map(([id, folder]) => ({ id, ...folder }))
   }
   const producer = new SortStampsProducer({
     store: () => store,
@@ -53,6 +62,7 @@ function createHarness() {
       exits.set(ptyId, onExit)
       return () => exits.delete(ptyId)
     },
+    liveTitlePanes: () => liveTitles,
     onClientEvent: (next, options) => {
       expect(options.consumesTerminalSideEffects).toBe(true)
       listener = next
@@ -67,6 +77,7 @@ function createHarness() {
     meta,
     sshMeta,
     folders,
+    liveTitles,
     writes,
     exits,
     fenced,
@@ -351,5 +362,58 @@ describe('SortStampsProducer: terminal events', () => {
     h.sideEffects([title('Codex')], { pane: PANE })
     expect(h.writes).toHaveLength(writes)
     expect(h.meta.get(WT)?.smartTier).toBe('working')
+  })
+})
+
+describe('SortStampsProducer: startup reconcile', () => {
+  it('clears a tier this machine stored when neither a hook row nor a live terminal backs it', () => {
+    const h = createHarness()
+    h.meta.set(WT, { lastActivityAt: 5, smartTier: 'working', smartAt: 4 })
+    h.folders.set(FOLDER_ID, { lastActivityAt: 6, smartTier: 'done', smartAt: 3 })
+    h.producer.attachAgentStatusStore(h.server)
+    expect(h.meta.get(WT)).toEqual({ lastActivityAt: 5, smartTier: undefined, smartAt: undefined })
+    expect(h.folders.get(FOLDER_ID)).toEqual({
+      lastActivityAt: 6,
+      smartTier: undefined,
+      smartAt: undefined
+    })
+  })
+
+  it('keeps a tier a restored hook row or a live hookless terminal backs, with its time', () => {
+    const h = createHarness()
+    h.meta.set(WT, { lastActivityAt: 5, smartTier: 'done', smartAt: 4 })
+    h.folders.set(FOLDER_ID, { lastActivityAt: 6, smartTier: 'working', smartAt: 3 })
+    h.liveTitles.push({
+      ptyId: 'pty-t',
+      paneKey: TITLE_PANE,
+      worktreeId: WT,
+      connectionId: null,
+      title: 'Codex'
+    })
+    h.server.ingestTerminalStatus({
+      paneKey: PANE,
+      tabId: 'tab-a',
+      worktreeId: FOLDER,
+      payload: { state: 'working', prompt: 'task', agentType: 'codex' }
+    })
+    h.producer.attachAgentStatusStore(h.server)
+    expect(h.writes).toEqual([])
+    expect(h.meta.get(WT)).toEqual({ lastActivityAt: 5, smartTier: 'done', smartAt: 4 })
+    // The seeded terminal is followed from here: its exit ends the agent.
+    h.exits.get('pty-t')!()
+    expect(h.meta.get(WT)?.smartTier).toBeUndefined()
+  })
+
+  it('leaves another host’s tiers alone: a host not reached yet is not one whose agents died', () => {
+    const h = createHarness()
+    h.meta.set(WT, { lastActivityAt: 5, smartTier: 'working', smartAt: 4, hostId: SSH_HOST })
+    h.folders.set(FOLDER_ID, {
+      lastActivityAt: 6,
+      smartTier: 'done',
+      smartAt: 3,
+      connectionId: 'box'
+    })
+    h.producer.attachAgentStatusStore(h.server)
+    expect(h.writes).toEqual([])
   })
 })

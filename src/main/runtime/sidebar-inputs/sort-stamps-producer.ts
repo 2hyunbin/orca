@@ -15,37 +15,27 @@ import {
   titleAgentPhase,
   type AgentPaneState,
   type AgentPhase,
-  type SmartStampFields,
-  type SmartTier,
-  type SortStampEvent,
-  type SortStamps
+  type SortStampEvent
 } from '../../../shared/sidebar-list/sort-stamps'
 import type { TerminalSideEffectBatch } from '../../../shared/terminal-side-effect-facts'
-import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import type { AgentStatusStoreView } from './workspace-activity-facts-producer'
+import {
+  listThisMachineTieredWorkspaces,
+  readSortStamps,
+  writeSortStamps,
+  type SortStampsStore,
+  type WorkspaceRef
+} from './sort-stamp-records'
 
-type StampedRecord = { lastActivityAt: number } & SmartStampFields
-type StampUpdates = {
-  lastActivityAt: number
-  smartTier: SmartTier | undefined
-  smartAt: number | undefined
-}
+export type { SortStampsStore } from './sort-stamp-records'
 
-/** The record reads and writes stamping needs, which the runtime's store satisfies. */
-export type SortStampsStore = {
-  getWorktreeMeta: (worktreeId: string) => StampedRecord | undefined
-  setWorktreeMeta: (worktreeId: string, updates: StampUpdates) => unknown
-  getWorktreeMetaForHost?: (
-    worktreeId: string,
-    hostId: ExecutionHostId
-  ) => StampedRecord | undefined
-  setWorktreeMetaForHost?: (
-    worktreeId: string,
-    hostId: ExecutionHostId,
-    updates: StampUpdates
-  ) => unknown
-  getFolderWorkspace?: (folderWorkspaceId: string) => StampedRecord | undefined
-  updateFolderWorkspace?: (folderWorkspaceId: string, updates: StampUpdates) => unknown
+/** A terminal this host holds at attach, with the title it last showed. */
+export type LiveTitlePane = {
+  ptyId: string
+  paneKey: string
+  worktreeId: string
+  connectionId: string | null
+  title: string
 }
 
 export type SortStampsSources = {
@@ -54,6 +44,7 @@ export type SortStampsSources = {
   isWriteFenced: (worktreeId: string) => boolean
   resolveTabWorktreeId: (tabId: string) => string | undefined
   subscribeToPtyExit: (ptyId: string, listener: () => void) => () => void
+  liveTitlePanes: () => Iterable<LiveTitlePane>
   /** Consumes terminal side effects, so the host scans its own bytes for bells and titles. */
   onClientEvent: (
     listener: (event: RuntimeClientEvent) => void,
@@ -62,8 +53,6 @@ export type SortStampsSources = {
   now: () => number
 }
 
-/** A workspace record: its id, and the SSH host whose record it is (null reads by id alone). */
-type WorkspaceRef = { worktreeId: string; sshHostId: ExecutionHostId | null }
 type TrackedPane = WorkspaceRef & { state: AgentPaneState }
 type TitlePane = { ptyId: string; releaseExit: () => void }
 
@@ -104,6 +93,16 @@ export class SortStampsProducer {
     for (const row of store.getStatusSnapshot()) {
       this.observeHookPane(row.paneKey, true)
     }
+    for (const pane of this.sources.liveTitlePanes()) {
+      if (!this.latestHookRow(pane.paneKey)) {
+        const workspace = {
+          worktreeId: pane.worktreeId,
+          sshHostId: sshHostOfConnection(pane.connectionId)
+        }
+        this.observeTitlePane(pane.ptyId, pane.paneKey, workspace, titleAgentPhase(pane.title))
+      }
+    }
+    this.clearUnbackedTiers()
     const unsubscribe = store.subscribeStatusRowMutations(({ before, after }) => {
       for (const paneKey of new Set([before?.paneKey, after?.paneKey])) {
         if (paneKey) {
@@ -121,6 +120,21 @@ export class SortStampsProducer {
   noteTerminalStarted(worktreeId: string, hostId: ExecutionHostId | undefined): void {
     const sshHostId = parseExecutionHostId(hostId)?.kind === 'ssh' ? (hostId ?? null) : null
     this.stamp({ worktreeId, sshHostId }, { kind: 'terminal-started' })
+  }
+
+  // A tier this machine stored with no hook row and no live terminal behind it ended with the last run.
+  private clearUnbackedTiers(): void {
+    const backed = new Set<string>()
+    for (const pane of this.panes.values()) {
+      if (!pane.sshHostId) {
+        backed.add(pane.worktreeId)
+      }
+    }
+    for (const worktreeId of listThisMachineTieredWorkspaces(this.sources.store())) {
+      if (!backed.has(worktreeId)) {
+        this.writeAgentChange({ worktreeId, sshHostId: null }, 'rest', 'rest', this.sources.now())
+      }
+    }
   }
 
   private observeHookPane(paneKey: string, seed: boolean): void {
@@ -198,7 +212,9 @@ export class SortStampsProducer {
     this.titlePanes.set(paneKey, { ptyId, releaseExit })
     // An agent idle at its first title has finished no turn, unless the record says it had.
     const seeded =
-      phase === 'done' && this.readStamps(workspace)?.smartTier !== 'done' ? 'rest' : phase
+      phase === 'done' && readSortStamps(this.sources.store(), workspace)?.smartTier !== 'done'
+        ? 'rest'
+        : phase
     this.seed(paneKey, workspace, seeded, this.sources.now())
   }
 
@@ -225,7 +241,7 @@ export class SortStampsProducer {
     if (!workspace) {
       return
     }
-    const stored = this.readStamps(workspace)
+    const stored = readSortStamps(this.sources.store(), workspace)
     const state = {
       phase,
       at: stored?.smartTier === phase && stored.smartAt !== undefined ? stored.smartAt : observedAt
@@ -287,49 +303,10 @@ export class SortStampsProducer {
     if (!workspace.sshHostId && this.sources.isWriteFenced(workspace.worktreeId)) {
       return
     }
-    const current = this.readStamps(workspace)
+    const current = readSortStamps(this.sources.store(), workspace)
     const next = current && classifySortStampEvent(current, event, now)
     if (next) {
-      this.writeStamps(workspace, next)
-    }
-  }
-
-  // Only a workspace with a record is stamped; writing would create one for a stale id.
-  private readStamps({ worktreeId, sshHostId }: WorkspaceRef): SortStamps | null {
-    const store = this.sources.store()
-    const scope = parseWorkspaceKey(worktreeId)
-    const record =
-      scope?.type === 'folder'
-        ? store?.getFolderWorkspace?.(scope.folderWorkspaceId)
-        : sshHostId
-          ? store?.getWorktreeMetaForHost?.(worktreeId, sshHostId)
-          : store?.getWorktreeMeta(worktreeId)
-    if (!record) {
-      return null
-    }
-    return {
-      recentAt: record.lastActivityAt,
-      ...(record.smartTier !== undefined
-        ? { smartTier: record.smartTier, smartAt: record.smartAt }
-        : {})
-    }
-  }
-
-  private writeStamps({ worktreeId, sshHostId }: WorkspaceRef, stamps: SortStamps): void {
-    // Both tier keys are always written, so Rest clears them.
-    const updates: StampUpdates = {
-      lastActivityAt: stamps.recentAt,
-      smartTier: stamps.smartTier,
-      smartAt: stamps.smartAt
-    }
-    const store = this.sources.store()
-    const scope = parseWorkspaceKey(worktreeId)
-    if (scope?.type === 'folder') {
-      store?.updateFolderWorkspace?.(scope.folderWorkspaceId, updates)
-    } else if (sshHostId) {
-      store?.setWorktreeMetaForHost?.(worktreeId, sshHostId, updates)
-    } else {
-      store?.setWorktreeMeta(worktreeId, updates)
+      writeSortStamps(this.sources.store(), workspace, next)
     }
   }
 }

@@ -16,7 +16,7 @@ import {
 import { SmartSortAgentEntries } from './smart-sort-agent-entries'
 import { buildRuntimeSmartSortSources } from './runtime-smart-sort-sources'
 import type { AgentStatusStoreView } from './workspace-activity-facts-producer'
-import { SortStampsProducer } from './sort-stamps-producer'
+import { SortStampsProducer, type LiveTitlePane } from './sort-stamps-producer'
 import {
   isWslMoveProjectBlocked,
   wslMoveProjectRefForWorkspace
@@ -44,6 +44,7 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
       isWslMoveProjectBlocked(this.store ?? undefined, wslMoveProjectRefForWorkspace(worktreeId)),
     resolveTabWorktreeId: (tabId) => this.tabs.get(tabId)?.worktreeId,
     subscribeToPtyExit: (ptyId, listener) => this.subscribeToPtyExit(ptyId, listener),
+    liveTitlePanes: () => this.readLiveTitlePanes(),
     onClientEvent: (listener, options) => this.onClientEvent(listener, options),
     now: Date.now
   })
@@ -150,6 +151,20 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
         ? worktree
         : { ...worktree, hostId: getRepoExecutionHostId(repo) }
     })
+  }
+
+  private *readLiveTitlePanes(): Iterable<LiveTitlePane> {
+    for (const leaf of this.leaves.values()) {
+      if (leaf.ptyId && leaf.connected && leaf.paneTitle) {
+        yield {
+          ptyId: leaf.ptyId,
+          paneKey: this.makeRuntimePaneKey(leaf),
+          worktreeId: leaf.worktreeId,
+          connectionId: this.ptysById.get(leaf.ptyId)?.connectionId ?? null,
+          title: leaf.paneTitle
+        }
+      }
+    }
   }
 
   private readSidebarRepoMap(): Map<string, Repo> {
