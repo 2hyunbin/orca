@@ -328,3 +328,5 @@ test('resumes the visible tab of each side-by-side group and none behind them', 
     }
   )
 })
+
+// CI probe after the host-identity stack (not for merge).

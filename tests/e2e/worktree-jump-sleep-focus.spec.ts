@@ -66,3 +66,5 @@ test('Cmd+J focuses the terminal after waking a sleeping workspace', async ({
   await waitForTerminalOutput(orcaPage, 'WAKE_KEYBOARD_OK')
   await orcaPage.screenshot({ path: testInfo.outputPath('wake-typing.png') })
 })
+
+// CI probe after the host-identity stack (not for merge).

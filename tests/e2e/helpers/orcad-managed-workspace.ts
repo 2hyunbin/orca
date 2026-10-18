@@ -256,3 +256,5 @@ export async function expectTerminalAnswers(
     await echoMarker(page, tabId, 'ANSWER', 10_000)
   }).toPass({ timeout })
 }
+
+// CI probe after the host-identity stack (not for merge).

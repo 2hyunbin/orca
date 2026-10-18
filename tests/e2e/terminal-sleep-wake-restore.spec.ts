@@ -267,3 +267,5 @@ test.describe('Terminal sleep wake restore', () => {
     }
   })
 })
+
+// CI probe after the host-identity stack (not for merge).
