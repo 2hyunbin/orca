@@ -40,6 +40,7 @@
     "check:ts-nocheck-ratchet": "node config/scripts/check-ts-nocheck-ratchet.mjs",
     "check:deprecated-runtime-owner-ratchet": "node config/scripts/check-deprecated-runtime-owner-ratchet.mjs",
     "check:path-literal-ratchet": "node config/scripts/check-path-literal-ratchet.mjs",
+    "check:worktree-id-composer-ratchet": "node config/scripts/check-worktree-id-composer-ratchet.mjs",
     "check:runtime-electron-ratchet": "node config/scripts/check-runtime-electron-ratchet.mjs",
     "check:focus-read-ratchet": "node config/scripts/check-focus-read-ratchet.mjs",
     "check:layout-writer-ratchets": "node config/scripts/check-layout-writer-ratchets.mjs",
