@@ -1,5 +1,3 @@
-import fs from 'node:fs'
-import path from 'node:path'
 import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 import { listTrackedFiles, readTrackedSources, runEntryRatchet } from './ratchet-baseline.mjs'
@@ -17,13 +15,13 @@ const EXCLUDED_FILES = new Set(['config/scripts/ci-shard-timings.json'])
 // Command strings in manifests and scripts name paths unquoted; in code only quoted literals count,
 // so prose in comments is not scanned.
 const UNQUOTED_ALLOWED = /\.(?:jsonc?|ya?ml|sh|ps1)$/
-// Group 1 is a relative import's `../` chain: imports must resolve exactly, not as a prefix.
+// Group 1 is a relative import's `./` or `../` chain: imports must resolve exactly, not as a prefix.
 const QUOTED_LITERAL = new RegExp(
-  `(?:['"\`]|:\\(glob\\))((?:\\.\\.\\/)*)(src\\/(?:${SOURCE_ROOTS})\\/[\\w@\\-./]*)`,
+  `(?:['"\`]|:\\(glob\\))((?:\\.\\.?\\/)*)(src\\/(?:${SOURCE_ROOTS})\\/[\\w@\\-./]*)`,
   'g'
 )
 const ANY_LITERAL = new RegExp(
-  `(?:['"\`\\s=]|:\\(glob\\)|^)((?:\\.\\.\\/)*)(src\\/(?:${SOURCE_ROOTS})\\/[\\w@\\-./]*)`,
+  `(?:['"\`\\s=]|:\\(glob\\)|^)((?:\\.\\.?\\/)*)(src\\/(?:${SOURCE_ROOTS})\\/[\\w@\\-./]*)`,
   'gm'
 )
 
@@ -50,10 +48,14 @@ export function extractPathLiterals(rel, text) {
   return [...literals].map(([literal, isImport]) => ({ literal, isImport }))
 }
 
-/** A literal resolves when it names a file or folder, a module without extension, or (unless it
- * is an import) a prefix of a tracked file. */
-export function createPathResolver(root, trackedFiles) {
-  const sorted = [...trackedFiles].sort()
+/**
+ * A literal resolves when it names a tracked file or folder, a module without extension, or (unless
+ * it is an import) a prefix of a tracked file. Only tracked files count, so local leftovers can't
+ * change the verdict.
+ */
+export function createPathResolver(trackedFiles) {
+  const tracked = new Set(trackedFiles)
+  const sorted = [...tracked].sort()
   const hasPrefix = (prefix) => {
     let low = 0
     let high = sorted.length
@@ -69,12 +71,12 @@ export function createPathResolver(root, trackedFiles) {
   }
   return (literal, isImport = false) =>
     (!isImport && hasPrefix(literal)) ||
-    fs.existsSync(path.join(root, literal)) ||
-    RESOLVED_EXTENSIONS.some((extension) => fs.existsSync(path.join(root, literal + extension)))
+    hasPrefix(`${literal.replace(/\/$/, '')}/`) ||
+    ['', ...RESOLVED_EXTENSIONS].some((extension) => tracked.has(literal + extension))
 }
 
 export function collectUnresolvedPathLiterals(root = process.cwd()) {
-  const resolves = createPathResolver(root, listTrackedFiles(root, ['src']))
+  const resolves = createPathResolver(listTrackedFiles(root, ['src']))
   const entries = []
   for (const [rel, text] of readTrackedSources(root, SCAN_ROOTS, isScannedPath)) {
     for (const { literal, isImport } of extractPathLiterals(rel, text)) {

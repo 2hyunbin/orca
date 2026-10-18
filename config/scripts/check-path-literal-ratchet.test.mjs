@@ -1,7 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 
 import {
   createPathResolver,
@@ -14,12 +11,14 @@ describe('extractPathLiterals', () => {
     const text = [
       "const a = 'src/main/ssh/ssh-connection.ts'",
       "import { b } from '../../src/shared/protocol-version'",
+      "await import('./src/main/ssh/relay.ts')",
       "git diff -- ':(glob)src/shared/windows-*'",
       '// src/main/ipc/pty.ts is prose, not a reference'
     ].join('\n')
     expect(extractPathLiterals('config/scripts/route.mjs', text)).toEqual([
       { literal: 'src/main/ssh/ssh-connection.ts', isImport: false },
       { literal: 'src/shared/protocol-version', isImport: true },
+      { literal: 'src/main/ssh/relay.ts', isImport: true },
       { literal: 'src/shared/windows-', isImport: false }
     ])
   })
@@ -55,11 +54,7 @@ describe('isScannedPath', () => {
 })
 
 describe('createPathResolver', () => {
-  const root = mkdtempSync(join(tmpdir(), 'path-literal-'))
-  mkdirSync(join(root, 'src/main/ssh'), { recursive: true })
-  writeFileSync(join(root, 'src/main/ssh/ssh-connection.ts'), '')
-  writeFileSync(join(root, 'src/main/ssh/ssh-types.test.ts'), '')
-  const resolves = createPathResolver(root, [
+  const resolves = createPathResolver([
     'src/main/ssh/ssh-connection.ts',
     'src/main/ssh/ssh-types.test.ts'
   ])
