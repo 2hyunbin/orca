@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import {
   addWorkspace,
@@ -9,8 +9,7 @@ import {
   GIT_KEY,
   leaf
 } from '../../shared/workspace-layout/workspace-layout-session.test-fixture'
-import { writeWindowSaveWatchingLayout } from './window-save-divergence'
-import { windowViewPatchForMain } from './window-save-view'
+import { reportWindowSaveDrift } from './window-save-divergence'
 
 function session(tabs: { id: string; title?: string }[]): WorkspaceSessionState {
   return addWorkspace(emptySession(), GIT_KEY, [
@@ -24,23 +23,20 @@ function session(tabs: { id: string; title?: string }[]): WorkspaceSessionState 
   ])
 }
 
-/** Runs a save that replaces the stored session with `next`, as the store would. */
+/** Checks a window save of `next` against main's `stored` partition. */
 function save(stored: WorkspaceSessionState, next: WorkspaceSessionState, hostId = 'local') {
-  let current = stored
-  writeWindowSaveWatchingLayout(
-    () => current,
-    hostId,
-    () => {
-      current = next
-    },
-    'session:set'
-  )
-  return current
+  reportWindowSaveDrift(stored, next, hostId, 'session:set')
+  return next
 }
 
-describe('writeWindowSaveWatchingLayout', () => {
+describe('reportWindowSaveDrift', () => {
   const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
   let logDir: string | null = null
+
+  beforeEach(() => {
+    logDir = mkdtempSync(join(tmpdir(), 'orca-divergence-'))
+    vi.stubEnv('ORCA_LAYOUT_SAVE_DIVERGENCE_LOG', join(logDir, 'divergence.jsonl'))
+  })
 
   afterEach(() => {
     warn.mockClear()
@@ -58,10 +54,8 @@ describe('writeWindowSaveWatchingLayout', () => {
     expect(warn).not.toHaveBeenCalled()
   })
 
-  it('reports a tab the save added, dropped, renamed or moved, and still writes it', () => {
-    logDir = mkdtempSync(join(tmpdir(), 'orca-divergence-'))
-    const logPath = join(logDir, 'divergence.jsonl')
-    vi.stubEnv('ORCA_LAYOUT_SAVE_DIVERGENCE_LOG', logPath)
+  it('reports a tab the save added, dropped, renamed or moved', () => {
+    const logPath = join(logDir!, 'divergence.jsonl')
 
     const next = session([{ id: 'tab-b', title: 'renamed' }, { id: 'tab-c' }])
     expect(save(session([{ id: 'tab-a' }, { id: 'tab-b' }]), next)).toBe(next)
@@ -91,7 +85,7 @@ describe('writeWindowSaveWatchingLayout', () => {
     )
   })
 
-  it('still writes the save when its log cannot be written', () => {
+  it('never throws when its log cannot be written', () => {
     vi.stubEnv(
       'ORCA_LAYOUT_SAVE_DIVERGENCE_LOG',
       join(tmpdir(), 'orca-missing-dir', 'x', 'log.jsonl')
@@ -122,30 +116,18 @@ describe('writeWindowSaveWatchingLayout', () => {
     )
   })
 
-  it('writes once when the check cannot read the stored copy, and lets a failed write throw', () => {
-    const write = vi.fn()
-    writeWindowSaveWatchingLayout(
-      () => {
-        throw new Error('unreadable')
-      },
-      'local',
-      write,
-      'session:set'
-    )
-    expect(write).toHaveBeenCalledOnce()
+  it('checks nothing without its log, and never throws when the check fails', () => {
+    vi.stubEnv('ORCA_LAYOUT_SAVE_DIVERGENCE_LOG', '')
+    save(session([{ id: 'tab-a' }]), session([{ id: 'tab-c' }]))
+    expect(warn).not.toHaveBeenCalled()
 
-    const read = vi.fn(() => session([{ id: 'tab-a' }]))
-    expect(() =>
-      writeWindowSaveWatchingLayout(
-        read,
-        'local',
-        () => {
-          throw new Error('disk full')
-        },
-        'session:set'
-      )
-    ).toThrow('disk full')
-    expect(read).toHaveBeenCalledOnce()
+    vi.stubEnv('ORCA_LAYOUT_SAVE_DIVERGENCE_LOG', join(logDir!, 'divergence.jsonl'))
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a malformed stored copy is the case under test.
+    expect(() => save(null as never, session([{ id: 'tab-a' }]))).not.toThrow()
+    expect(warn).toHaveBeenCalledWith(
+      '[layout-owner] save divergence check failed:',
+      expect.anything()
+    )
   })
 
   it('counts panes only rebound to their terminals after the layout changes', () => {
@@ -311,11 +293,11 @@ describe('writeWindowSaveWatchingLayout', () => {
     expect(warn).not.toHaveBeenCalled()
   })
 
-  it('reports a pane tree main keeps over the save’s, and still writes the save', () => {
+  it('reports a save whose pane tree differs from main’s', () => {
     const stored = session([{ id: 'tab-a' }])
-    const incoming = structuredClone(stored)
-    incoming.terminalLayoutsByTabId['tab-a'] = {
-      ...incoming.terminalLayoutsByTabId['tab-a']!,
+    const next = structuredClone(stored)
+    next.terminalLayoutsByTabId['tab-a'] = {
+      ...next.terminalLayoutsByTabId['tab-a']!,
       root: {
         type: 'split',
         direction: 'vertical',
@@ -324,87 +306,17 @@ describe('writeWindowSaveWatchingLayout', () => {
         second: { type: 'leaf', leafId: leaf(2) }
       }
     }
-    let current = stored
-    writeWindowSaveWatchingLayout(
-      () => current,
-      'local',
-      () => {
-        current = { ...current, ...windowViewPatchForMain(current, incoming, 'local') }
-      },
-      'session:set',
-      incoming.terminalLayoutsByTabId
-    )
 
-    expect(current.terminalLayoutsByTabId['tab-a']?.root).toEqual(
-      stored.terminalLayoutsByTabId['tab-a']?.root
-    )
-    expect(warn).toHaveBeenCalledOnce()
-    expect(warn).toHaveBeenCalledWith(
-      '[layout-owner] window save changed main layout:',
-      'session:set',
-      expect.objectContaining({
-        workspace: GIT_KEY,
-        paths: ['pane tree tab-a kept over the save’s']
-      })
-    )
-  })
-
-  it('reports a pane tree main keeps for a tab no workspace places', () => {
-    const stored = session([{ id: 'tab-a' }])
-    const layout = stored.terminalLayoutsByTabId['tab-a']!
-    stored.terminalLayoutsByTabId.orphan = { ...layout, root: { type: 'leaf', leafId: leaf(7) } }
-    const saved = { orphan: { ...layout, root: { type: 'leaf' as const, leafId: leaf(8) } } }
-    writeWindowSaveWatchingLayout(
-      () => stored,
-      'local',
-      () => {},
-      'session:set',
-      saved
-    )
-
-    expect(warn).toHaveBeenCalledWith(
-      '[layout-owner] window save changed main layout:',
-      'session:set',
-      expect.objectContaining({
-        workspace: '(no workspace)',
-        paths: ['pane tree orphan kept over the save’s']
-      })
-    )
-  })
-
-  it('reports a save that sends no pane tree for a tab main keeps one for', () => {
-    const stored = session([{ id: 'tab-a' }])
-    const saved = { 'tab-a': { ...stored.terminalLayoutsByTabId['tab-a']!, root: null } }
-    writeWindowSaveWatchingLayout(
-      () => stored,
-      'local',
-      () => {},
-      'session:set',
-      saved
-    )
+    save(stored, next)
 
     expect(warn).toHaveBeenCalledWith(
       '[layout-owner] window save changed main layout:',
       'session:set',
       expect.objectContaining({
         workspace: GIT_KEY,
-        paths: ['pane tree tab-a kept over the save’s']
+        paths: expect.arrayContaining(['tab tab-a changed: panes'])
       })
     )
-  })
-
-  it('stays quiet for a save whose pane trees match main’s', () => {
-    const stored = session([{ id: 'tab-a' }])
-    const incoming = structuredClone(stored)
-    writeWindowSaveWatchingLayout(
-      () => stored,
-      'local',
-      () => {},
-      'session:set',
-      incoming.terminalLayoutsByTabId
-    )
-
-    expect(warn).not.toHaveBeenCalled()
   })
 
   it('leaves a paired server’s partition alone: its layout is the server’s', () => {

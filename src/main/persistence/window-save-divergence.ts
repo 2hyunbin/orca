@@ -1,6 +1,7 @@
-// A layout-owner build's check that the window's session saves no longer carry layout: every tab
-// change should reach main as a command, so a save that changes main's layout model is a change
-// main learned only from the save. Dark: reports only, never alters or fails the write.
+// A layout-owner build's drift check: every tab change reaches main as a command and main keeps
+// its own layout over a window save, so a save whose layout differs from main's model shows a
+// change main never got as a command. Report-only, and only when its log is set (evidence runs);
+// it never alters, fails or delays the write. Deleted with the old path (phase F).
 
 import { appendFileSync } from 'node:fs'
 import {
@@ -21,9 +22,7 @@ import type { WorkspaceSessionState } from '../../shared/workspace-session-state
 import {
   closedTabsOfOneSidedWorkspaces,
   droppedTabBarEntries,
-  overriddenPaneTrees,
-  terminalTabBarEntries,
-  type SavedPaneTrees
+  terminalTabBarEntries
 } from './window-save-raw-session-divergence'
 
 /** Set by evidence runs: each divergence is appended there as one JSON line. */
@@ -271,53 +270,34 @@ function report(source: string, partition: ExecutionHostId, divergence: WindowSa
 }
 
 /**
- * Runs the window's save `write` and reports what it changed in main's layout model, and which of
- * its `savedPaneTrees` (as the window sent them) main keeps its own tree over. A paired server's
- * partition is skipped: its layout is the server's, mirrored by the window. Nothing here can fail
- * the save: the write's own errors propagate, the check's are only logged.
+ * Reports where the window's `save` (a whole session, or a patch laid over `stored`) differs from
+ * main's layout model of `stored`. A paired server's partition is skipped: its layout is the
+ * server's, mirrored by the window. Nothing here can fail the save: errors are only logged.
  */
-export function writeWindowSaveWatchingLayout(
-  read: () => WorkspaceSessionState | null | undefined,
+export function reportWindowSaveDrift(
+  stored: WorkspaceSessionState,
+  save: WorkspaceSessionState,
   hostId: string | null | undefined,
-  write: () => void,
-  source: string,
-  savedPaneTrees?: SavedPaneTrees
+  source: string
 ): void {
+  if (!process.env[LOG_PATH_ENV]) {
+    return
+  }
   const partition = normalizeExecutionHostId(hostId) ?? LOCAL_EXECUTION_HOST_ID
   if (parseExecutionHostId(partition)?.kind === 'runtime') {
-    write()
-    return
-  }
-  let was: WorkspaceLayoutModel | null | undefined
-  let wasEntries: Map<string, Set<string>> | undefined
-  let wasClosed: WorkspaceSessionState['closedTerminalTabTombstonesByTabId']
-  const rawPaths = new Map<string, string[]>()
-  try {
-    const stored = read()
-    was = layoutModelOf(stored, partition)
-    wasEntries = stored ? terminalTabBarEntries(stored) : new Map()
-    wasClosed = stored?.closedTerminalTabTombstonesByTabId
-    if (savedPaneTrees) {
-      overriddenPaneTrees(stored, was, savedPaneTrees, rawPaths)
-    }
-  } catch (error) {
-    was = undefined
-    console.warn('[layout-owner] save divergence check failed:', error)
-  }
-  write()
-  if (was === undefined || wasEntries === undefined) {
     return
   }
   try {
-    const now = read()
-    const nowModel = layoutModelOf(now, partition)
-    droppedTabBarEntries(wasEntries, now, rawPaths)
+    const was = layoutModelOf(stored, partition)
+    const now = layoutModelOf(save, partition)
+    const rawPaths = new Map<string, string[]>()
+    droppedTabBarEntries(terminalTabBarEntries(stored), save, rawPaths)
     closedTabsOfOneSidedWorkspaces(
-      { model: was, closed: wasClosed },
-      { model: nowModel, closed: now?.closedTerminalTabTombstonesByTabId },
+      { model: was, closed: stored.closedTerminalTabTombstonesByTabId },
+      { model: now, closed: save.closedTerminalTabTombstonesByTabId },
       rawPaths
     )
-    for (const divergence of windowSaveDivergences(was, nowModel, rawPaths)) {
+    for (const divergence of windowSaveDivergences(was, now, rawPaths)) {
       report(source, partition, divergence)
     }
   } catch (error) {

@@ -5,7 +5,7 @@ import { parseTerminalSurfaceCloseTarget } from '../../shared/terminal-surface-c
 import { isFrozenOrcadSourceSessionPartition } from '../ssh/orcad-retained-source'
 import { markAgentLaunchesClosedByUser } from '../agent-launch/agent-launch-pane-attachment'
 import { windowViewPatchForMain, windowViewSaveForMain } from '../persistence/window-save-view'
-import { writeWindowSaveWatchingLayout } from '../persistence/window-save-divergence'
+import { reportWindowSaveDrift } from '../persistence/window-save-divergence'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import type {
   WorkspaceSessionPatch,
@@ -31,55 +31,32 @@ export function registerSessionHandlers(store: Store, runtime: OrcaRuntimeServic
     return store.getWorkspaceSessionHostIds()
   })
 
-  // Switch point: main keeps its own layout over the window's, and reports any layout the save
-  // still changes.
-  const saveFromWindow = (
-    hostId: string | null | undefined,
-    write: () => void,
-    source: string,
-    save: WorkspaceSessionState | WorkspaceSessionPatch
-  ) =>
-    ORCA_LAYOUT_OWNER_IS_MAIN
-      ? writeWindowSaveWatchingLayout(
-          () => store.getWorkspaceSession(hostId),
-          hostId,
-          write,
-          source,
-          save.terminalLayoutsByTabId
-        )
-      : write()
+  // Switch point: main keeps its own layout over the window's and takes the window's view and
+  // facts; the drift check reports where the save's layout still differs from main's.
   ipcMain.handle('session:set', (_event, args: WorkspaceSessionState, hostId?: string | null) => {
-    if (!isFenced(hostId)) {
-      saveFromWindow(
-        hostId,
-        () =>
-          store.setWorkspaceSession(
-            ORCA_LAYOUT_OWNER_IS_MAIN
-              ? windowViewSaveForMain(store.getWorkspaceSession(hostId), args, hostId)
-              : args,
-            hostId
-          ),
-        'session:set',
-        args
-      )
+    if (isFenced(hostId)) {
+      return
     }
+    if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+      store.setWorkspaceSession(args, hostId)
+      return
+    }
+    const stored = store.getWorkspaceSession(hostId)
+    reportWindowSaveDrift(stored, args, hostId, 'session:set')
+    store.setWorkspaceSession(windowViewSaveForMain(stored, args, hostId), hostId)
   })
 
   ipcMain.handle('session:patch', (_event, args: WorkspaceSessionPatch, hostId?: string | null) => {
-    if (!isFenced(hostId)) {
-      saveFromWindow(
-        hostId,
-        () =>
-          store.patchWorkspaceSession(
-            ORCA_LAYOUT_OWNER_IS_MAIN
-              ? windowViewPatchForMain(store.getWorkspaceSession(hostId), args, hostId)
-              : args,
-            hostId
-          ),
-        'session:patch',
-        args
-      )
+    if (isFenced(hostId)) {
+      return
     }
+    if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+      store.patchWorkspaceSession(args, hostId)
+      return
+    }
+    const stored = store.getWorkspaceSession(hostId)
+    reportWindowSaveDrift(stored, { ...stored, ...args }, hostId, 'session:patch')
+    store.patchWorkspaceSession(windowViewPatchForMain(stored, args, hostId), hostId)
   })
 
   // Why: a renderer save cannot shrink membership main owns, so each close commits it explicitly.
