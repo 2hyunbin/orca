@@ -10,7 +10,10 @@ vi.mock('./editor-external-watch-disk-verification', () => ({
   scheduleDebouncedEditorExternalReload: scheduleReload
 }))
 
-import { reverifyEditorTabsAfterNarrowWatch } from './editor-external-watch-activation-reverify'
+import {
+  armEditorTabDiskVerification,
+  reloadCleanEditorTabs
+} from './editor-external-watch-activation-reverify'
 
 const target = {
   worktreeId: 'wt',
@@ -31,35 +34,39 @@ function tab(id: string, extra: Record<string, unknown> = {}): Record<string, un
   }
 }
 
-describe('reverifyEditorTabsAfterNarrowWatch', () => {
+const openFiles = [
+  tab('dirty.ts', { isDirty: true, lastKnownDiskSignature: 'sig' }),
+  tab('clean.ts'),
+  tab('deleted.ts', { externalMutation: 'deleted' }),
+  tab('no-baseline.ts', { isDirty: true }),
+  tab('already-changed.ts', {
+    isDirty: true,
+    lastKnownDiskSignature: 'sig',
+    externalMutation: 'changed'
+  }),
+  tab('other.ts', { worktreeId: 'other', isDirty: true, lastKnownDiskSignature: 'sig' }),
+  tab('runtime.ts', { runtimeEnvironmentId: 'env-1' })
+]
+
+describe('narrow-watch switch-back re-check', () => {
   const setPendingDiskBaselineVerification = vi.fn()
 
   beforeEach(() => {
     vi.clearAllMocks()
+    getState.mockReturnValue({ setPendingDiskBaselineVerification, openFiles })
   })
 
-  it('hands dirty tabs to the conflict scan and reloads clean ones', () => {
-    getState.mockReturnValue({
-      setPendingDiskBaselineVerification,
-      openFiles: [
-        tab('dirty.ts', { isDirty: true, lastKnownDiskSignature: 'sig' }),
-        tab('clean.ts'),
-        tab('deleted.ts', { externalMutation: 'deleted' }),
-        tab('no-baseline.ts', { isDirty: true }),
-        tab('already-changed.ts', {
-          isDirty: true,
-          lastKnownDiskSignature: 'sig',
-          externalMutation: 'changed'
-        }),
-        tab('other.ts', { worktreeId: 'other', isDirty: true, lastKnownDiskSignature: 'sig' }),
-        tab('runtime.ts', { runtimeEnvironmentId: 'env-1' })
-      ]
-    })
-
-    reverifyEditorTabsAfterNarrowWatch(target)
+  it('hands only scan-eligible dirty tabs of the workspace to the conflict scan', () => {
+    armEditorTabDiskVerification(target)
 
     expect(setPendingDiskBaselineVerification).toHaveBeenCalledTimes(1)
     expect(setPendingDiskBaselineVerification).toHaveBeenCalledWith('dirty.ts', true)
+    expect(scheduleReload).not.toHaveBeenCalled()
+  })
+
+  it('reloads clean tabs but leaves tombstoned ones alone', () => {
+    reloadCleanEditorTabs(target)
+
     expect(scheduleReload).toHaveBeenCalledTimes(1)
     expect(scheduleReload).toHaveBeenCalledWith({
       worktreeId: 'wt',
@@ -67,5 +74,6 @@ describe('reverifyEditorTabsAfterNarrowWatch', () => {
       relativePath: 'clean.ts',
       runtimeEnvironmentId: null
     })
+    expect(setPendingDiskBaselineVerification).not.toHaveBeenCalled()
   })
 })

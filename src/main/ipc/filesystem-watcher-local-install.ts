@@ -43,7 +43,6 @@ export async function installLocalWatcher(
 
     try {
       // Why: WSL paths use one snapshot subprocess inside the distro so `wsl --shutdown` can kill it; native Windows uses @parcel/watcher.
-      // A narrow WSL request gets the same snapshot watcher: the distro poller has no per-file mode.
       root = isWslPath(worktreePath)
         ? await createWslWatcher(
             rootKey,
@@ -55,7 +54,7 @@ export async function installLocalWatcher(
             },
             cancelToken.abortController.signal
           )
-        : await createLocalWatcher(
+        : await createLocalWatcherWithRecursiveFallback(
             rootKey,
             rootPath,
             cancelToken.abortController.signal,
@@ -99,4 +98,29 @@ export async function installLocalWatcher(
     registerWatcherSenderCleanup(listener)
   }
   return 'installed'
+}
+
+// Why: a narrowed workspace must never end up unwatched, so an empty set or a failed shallow install watches the whole tree.
+async function createLocalWatcherWithRecursiveFallback(
+  rootKey: string,
+  rootPath: string,
+  signal: AbortSignal,
+  narrowFiles: readonly string[] | undefined
+): Promise<WatchedRoot> {
+  if (!narrowFiles || narrowFiles.length === 0) {
+    return createLocalWatcher(rootKey, rootPath, signal)
+  }
+  try {
+    return await createLocalWatcher(rootKey, rootPath, signal, narrowFiles)
+  } catch (error) {
+    if (
+      signal.aborted ||
+      error instanceof WatcherChildCapacityError ||
+      (isWatcherProcessFailure(error) && error.code === 'process_unavailable')
+    ) {
+      throw error
+    }
+    console.warn(`[filesystem-watcher] narrow watch failed; watching the whole tree: ${rootKey}`)
+    return createLocalWatcher(rootKey, rootPath, signal)
+  }
 }

@@ -12,7 +12,11 @@ import type {
   AgentSessionAttachmentUploadTarget
 } from '../../shared/agent-session-attachments'
 import type { SearchResult } from '../../shared/code-search-types'
-import type { FsChangedPayload, WatchWorktreeArgs } from '../../shared/filesystem-entry-types'
+import type {
+  FsChangedPayload,
+  WatchWorktreeArgs,
+  WatchWorktreeStatus
+} from '../../shared/filesystem-entry-types'
 import type {
   ImportItemResult,
   ResolveDroppedPathsResult,
@@ -219,7 +223,7 @@ export const fsApi = {
     args: AgentSessionAttachmentUploadTarget & { paths: string[] }
   ): Promise<AgentSessionAttachmentPathUploadResult> =>
     ipcRenderer.invoke('fs:uploadPathsToAgentSessionAttachments', args),
-  watchWorktree: (args: WatchWorktreeArgs): Promise<void> =>
+  watchWorktree: (args: WatchWorktreeArgs): Promise<WatchWorktreeStatus> =>
     ipcRenderer.invoke('fs:watchWorktree', args),
   unwatchWorktree: (args: WatchWorktreeArgs): Promise<void> =>
     ipcRenderer.invoke('fs:unwatchWorktree', args),

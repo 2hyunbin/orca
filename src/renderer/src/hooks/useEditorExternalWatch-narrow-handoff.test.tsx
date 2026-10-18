@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
+import type { WatchWorktreeStatus } from '../../../shared/filesystem-entry-types'
 
 type TestWatchTarget = {
   worktreeId: string
@@ -17,10 +18,7 @@ const state = vi.hoisted(() => {
     targets: [],
     targetsKey: ''
   }
-  return {
-    snapshot,
-    reverify: vi.fn()
-  }
+  return { snapshot, arm: vi.fn(), reloadClean: vi.fn() }
 })
 
 vi.mock('@/store', () => ({
@@ -47,7 +45,8 @@ vi.mock('./editor-external-watch-disk-verification', () => ({
   verifyLatchedEditorMoveDestinations: vi.fn()
 }))
 vi.mock('./editor-external-watch-activation-reverify', () => ({
-  reverifyEditorTabsAfterNarrowWatch: state.reverify
+  armEditorTabDiskVerification: state.arm,
+  reloadCleanEditorTabs: state.reloadClean
 }))
 vi.mock('./editor-runtime-file-watch', () => ({ subscribeEditorRuntimeFileWatch: vi.fn() }))
 
@@ -65,10 +64,15 @@ const recursive: TestWatchTarget = {
   runtimeEnvironmentId: null
 }
 const narrow: TestWatchTarget = { ...recursive, narrowFiles: ['src/a.ts'] }
+const recursiveArgs = { worktreePath: '/repo/wt', connectionId: undefined }
+const narrowArgs = { ...recursiveArgs, narrowFiles: ['src/a.ts'] }
 
-function deferred(): { promise: Promise<void>; resolve: () => void } {
-  let resolve!: () => void
-  const promise = new Promise<void>((settle) => {
+function deferred(): {
+  promise: Promise<WatchWorktreeStatus>
+  resolve: (status: WatchWorktreeStatus) => void
+} {
+  let resolve!: (status: WatchWorktreeStatus) => void
+  const promise = new Promise<WatchWorktreeStatus>((settle) => {
     resolve = settle
   })
   return { promise, resolve }
@@ -85,10 +89,19 @@ describe('useEditorExternalWatch recursive/narrow handoff', () => {
     state.snapshot = { targets, targetsKey }
     await act(async () => root.render(createElement(WatchProbe)))
   }
+  const settle = async (
+    pending: ReturnType<typeof deferred>,
+    status: WatchWorktreeStatus
+  ): Promise<void> => {
+    await act(async () => {
+      pending.resolve(status)
+      await pending.promise
+    })
+  }
 
   beforeEach(() => {
     vi.clearAllMocks()
-    watchWorktree = vi.fn().mockResolvedValue(undefined)
+    watchWorktree = vi.fn().mockResolvedValue('installed')
     unwatchWorktree = vi.fn().mockResolvedValue(undefined)
     previousApi = Reflect.get(window, 'api')
     Reflect.set(window, 'api', {
@@ -104,55 +117,59 @@ describe('useEditorExternalWatch recursive/narrow handoff', () => {
     Reflect.set(window, 'api', previousApi)
   })
 
-  it('releases the recursive watch only after the narrow replacement subscribed', async () => {
+  it('releases the recursive watch only after the narrow replacement installed', async () => {
     await render([recursive], 'recursive')
     const narrowSubscribed = deferred()
     watchWorktree.mockReturnValueOnce(narrowSubscribed.promise)
 
     await render([narrow], 'narrow')
-
-    expect(watchWorktree).toHaveBeenLastCalledWith({
-      worktreePath: '/repo/wt',
-      connectionId: undefined,
-      narrowFiles: ['src/a.ts']
-    })
+    expect(watchWorktree).toHaveBeenLastCalledWith(narrowArgs)
     expect(unwatchWorktree).not.toHaveBeenCalled()
 
-    await act(async () => {
-      narrowSubscribed.resolve()
-      await narrowSubscribed.promise
-    })
-
+    await settle(narrowSubscribed, 'installed')
     expect(unwatchWorktree).toHaveBeenCalledTimes(1)
-    expect(unwatchWorktree).toHaveBeenCalledWith({
-      worktreePath: '/repo/wt',
-      connectionId: undefined
-    })
-    expect(state.reverify).not.toHaveBeenCalled()
+    expect(unwatchWorktree).toHaveBeenCalledWith(recursiveArgs)
+    expect(state.arm).not.toHaveBeenCalled()
   })
 
-  it('re-verifies tabs once the recursive watch is back, then drops the narrow watch', async () => {
+  it('arms dirty-tab verification before the full-tree install resolves, then reloads clean tabs', async () => {
     await render([narrow], 'narrow')
     const recursiveSubscribed = deferred()
     watchWorktree.mockReturnValueOnce(recursiveSubscribed.promise)
 
     await render([recursive], 'recursive')
+    // Why: autosave must already be suspended while the crawl runs; the narrow watch still covers the gap.
+    expect(state.arm).toHaveBeenCalledWith(recursive)
+    expect(state.reloadClean).not.toHaveBeenCalled()
     expect(unwatchWorktree).not.toHaveBeenCalled()
-    expect(state.reverify).not.toHaveBeenCalled()
 
-    await act(async () => {
-      recursiveSubscribed.resolve()
-      await recursiveSubscribed.promise
-    })
-
-    expect(unwatchWorktree).toHaveBeenCalledWith({
-      worktreePath: '/repo/wt',
-      connectionId: undefined,
-      narrowFiles: ['src/a.ts']
-    })
-    expect(state.reverify).toHaveBeenCalledTimes(1)
-    expect(state.reverify).toHaveBeenCalledWith(recursive)
+    await settle(recursiveSubscribed, 'installed')
+    expect(unwatchWorktree).toHaveBeenCalledWith(narrowArgs)
+    expect(state.reloadClean).toHaveBeenCalledWith(recursive)
   })
+
+  it.each([
+    ['narrow → recursive', narrow, recursive, recursiveArgs, narrowArgs],
+    ['recursive → narrow', recursive, narrow, narrowArgs, recursiveArgs]
+  ] as const)(
+    'keeps the old watch while the %s replacement is pending or unavailable',
+    async (_label, from, to, toArgs, fromArgs) => {
+      for (const status of ['pending', 'unavailable'] as const) {
+        unwatchWorktree.mockClear()
+        await render([from], `from-${status}`)
+        const replacement = deferred()
+        watchWorktree.mockReturnValueOnce(replacement.promise)
+        await render([to], `to-${status}`)
+        await settle(replacement, status)
+        expect(unwatchWorktree).not.toHaveBeenCalledWith(fromArgs)
+
+        // The held watch goes away together with its replacement.
+        await render([], `none-${status}`)
+        expect(unwatchWorktree).toHaveBeenCalledWith(toArgs)
+        expect(unwatchWorktree).toHaveBeenCalledWith(fromArgs)
+      }
+    }
+  )
 
   it('keeps a watch that was re-requested before its deferred release ran', async () => {
     await render([recursive], 'recursive')
@@ -161,14 +178,7 @@ describe('useEditorExternalWatch recursive/narrow handoff', () => {
     await render([narrow], 'narrow')
     await render([recursive], 'recursive-again')
 
-    await act(async () => {
-      narrowSubscribed.resolve()
-      await narrowSubscribed.promise
-    })
-
-    expect(unwatchWorktree).not.toHaveBeenCalledWith({
-      worktreePath: '/repo/wt',
-      connectionId: undefined
-    })
+    await settle(narrowSubscribed, 'installed')
+    expect(unwatchWorktree).not.toHaveBeenCalledWith(recursiveArgs)
   })
 })

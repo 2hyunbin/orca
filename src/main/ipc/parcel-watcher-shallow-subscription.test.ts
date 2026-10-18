@@ -113,6 +113,43 @@ describe('shallow watcher subscription', () => {
     }
   })
 
+  it('matches a Windows root case-insensitively and reports the included spelling', async () => {
+    const events: string[] = []
+    const subscription = startShallowWatcher(
+      'C:\\repo',
+      ['Notes.md'],
+      (nextEvents) => events.push(...nextEvents.map((event) => event.path)),
+      (error) => {
+        throw error
+      }
+    )
+    try {
+      emit('C:\\repo', 'notes.MD')
+      emit('C:\\repo', 'other.md')
+      expect(events).toEqual([join('C:\\repo', '', 'Notes.md')])
+    } finally {
+      await subscription.unsubscribe()
+    }
+  })
+
+  it('keeps POSIX roots case-sensitive', async () => {
+    const events: string[] = []
+    const subscription = startShallowWatcher(
+      '/repo',
+      ['Notes.md'],
+      (nextEvents) => events.push(...nextEvents.map((event) => event.path)),
+      (error) => {
+        throw error
+      }
+    )
+    try {
+      emit('/repo', 'notes.md')
+      expect(events).toEqual([])
+    } finally {
+      await subscription.unsubscribe()
+    }
+  })
+
   it.skipIf(process.platform === 'win32')(
     'preserves a literal backslash in an included filename',
     async () => {

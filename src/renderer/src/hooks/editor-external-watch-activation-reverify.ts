@@ -1,4 +1,5 @@
 import { useAppStore } from '@/store'
+import type { OpenFile } from '@/store/slices/editor'
 import {
   canAutoSaveOpenFile,
   isExternalReloadableEditorTab
@@ -10,41 +11,46 @@ import {
 } from './editor-external-watch-targets'
 import { scheduleDebouncedEditorExternalReload } from './editor-external-watch-disk-verification'
 
-/**
- * A narrow watch only sees open files' own directories and can miss a
- * replaced directory, so when the workspace regains its full-tree watch every
- * tab is re-checked against disk. Dirty tabs go through the restored-tab
- * conflict scan (autosave stays suspended until it resolves); clean tabs reload.
- */
-export function reverifyEditorTabsAfterNarrowWatch(target: EditorExternalWatchTarget): void {
+function isTargetTab(file: OpenFile, target: EditorExternalWatchTarget): boolean {
+  return (
+    file.worktreeId === target.worktreeId &&
+    getOpenFileRuntimeOwner(file) === target.runtimeEnvironmentId
+  )
+}
+
+// Why: a narrow watch can miss a replaced directory, so dirty tabs re-check through the restored-tab conflict scan, which suspends autosave until it resolves.
+export function armEditorTabDiskVerification(target: EditorExternalWatchTarget): void {
   const state = useAppStore.getState()
   for (const file of state.openFiles) {
-    if (
-      file.worktreeId !== target.worktreeId ||
-      getOpenFileRuntimeOwner(file) !== target.runtimeEnvironmentId
-    ) {
-      continue
-    }
-    if (!file.isDirty) {
-      // Why: a deleted/renamed tombstone is already a disk verdict; reloading would discard it.
-      if (isExternalReloadableEditorTab(file) && !file.externalMutation) {
-        scheduleDebouncedEditorExternalReload({
-          worktreeId: target.worktreeId,
-          worktreePath: target.worktreePath,
-          relativePath: file.relativePath,
-          runtimeEnvironmentId: target.runtimeEnvironmentId,
-          ...getLocalWindowsWslAliasOption(target)
-        })
-      }
-      continue
-    }
     // Why: mirror the scan's eligibility, or a tab it skips would keep autosave suspended forever.
     if (
+      isTargetTab(file, target) &&
+      file.isDirty &&
       file.lastKnownDiskSignature &&
       file.externalMutation !== 'changed' &&
       canAutoSaveOpenFile(file)
     ) {
       state.setPendingDiskBaselineVerification(file.id, true)
+    }
+  }
+}
+
+// Why: same gap for clean tabs; a deleted/renamed tombstone is already a disk verdict, so it is left alone.
+export function reloadCleanEditorTabs(target: EditorExternalWatchTarget): void {
+  for (const file of useAppStore.getState().openFiles) {
+    if (
+      isTargetTab(file, target) &&
+      !file.isDirty &&
+      !file.externalMutation &&
+      isExternalReloadableEditorTab(file)
+    ) {
+      scheduleDebouncedEditorExternalReload({
+        worktreeId: target.worktreeId,
+        worktreePath: target.worktreePath,
+        relativePath: file.relativePath,
+        runtimeEnvironmentId: target.runtimeEnvironmentId,
+        ...getLocalWindowsWslAliasOption(target)
+      })
     }
   }
 }

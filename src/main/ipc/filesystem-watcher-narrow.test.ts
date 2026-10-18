@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FsChangedPayload } from '../../shared/filesystem-entry-types'
-import { WATCH_BATCH_TRAILING_MS } from '../../shared/filesystem-watch-batch-window'
 import { createWatcherSender } from './filesystem-watcher-test-sender'
 
 const { handleMock, statMock, subscribeMock } = vi.hoisted(() => ({
@@ -27,6 +26,7 @@ import {
 } from './filesystem-watcher'
 import { watcherLifecycleState } from './filesystem-watcher-lifecycle-state'
 import { normalizeNarrowWatchFiles, parseLocalWatcherKey } from './filesystem-watcher-narrow-roots'
+import { WatcherChildCapacityError } from './parcel-watcher-child-registry'
 
 type HandlerMap = Record<string, (event: unknown, args: unknown) => unknown>
 type WatcherCallback = (error: Error | null, events: { type: string; path: string }[]) => void
@@ -102,9 +102,7 @@ describe('narrow (non-recursive) local watches', () => {
       { type: 'update', path: '/repo/src/a.ts' },
       { type: 'update', path: '/repo/src/gone.ts' }
     ])
-    await new Promise((resolve) => setTimeout(resolve, WATCH_BATCH_TRAILING_MS + 25))
-
-    expect(sender.send).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(sender.send).toHaveBeenCalledTimes(1))
     const [channel, sentPayload] = sender.send.mock.calls[0]
     const payload: FsChangedPayload = sentPayload
     expect(channel).toBe('fs:changed')
@@ -153,6 +151,64 @@ describe('narrow (non-recursive) local watches', () => {
       [...watcherLifecycleState.watchedRoots.keys()].map((key) => parseLocalWatcherKey(key).baseKey)
     ).toEqual(['/repo-other'])
     await closeAllWatchers()
+  })
+
+  it('reports installed for both recursive and narrow watches', async () => {
+    const sender = createWatcherSender(1)
+    await expect(handlers['fs:watchWorktree']({ sender }, { worktreePath: '/repo' })).resolves.toBe(
+      'installed'
+    )
+    await expect(
+      handlers['fs:watchWorktree']({ sender }, { worktreePath: '/repo', narrowFiles: ['a.ts'] })
+    ).resolves.toBe('installed')
+    await closeAllWatchers()
+  })
+
+  it('falls back to a whole-tree watch under the narrow key when the shallow install fails', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    subscribeMock.mockRejectedValueOnce(new Error('Shallow watcher delivery unavailable'))
+    const sender = createWatcherSender(1)
+    try {
+      await expect(
+        handlers['fs:watchWorktree']({ sender }, { worktreePath: '/repo', narrowFiles: ['a.ts'] })
+      ).resolves.toBe('installed')
+      expect(subscribeMock).toHaveBeenCalledTimes(2)
+      expect(subscribeMock.mock.calls[1][2]).not.toHaveProperty('mode')
+      expect([...watcherLifecycleState.watchedRoots.keys()].map(parseLocalWatcherKey)).toEqual([
+        { baseKey: '/repo', narrowFiles: ['a.ts'] }
+      ])
+    } finally {
+      warn.mockRestore()
+      error.mockRestore()
+      await closeAllWatchers()
+    }
+  })
+
+  it('treats an empty narrow set as a whole-tree watch', async () => {
+    const sender = createWatcherSender(1)
+    await expect(
+      handlers['fs:watchWorktree']({ sender }, { worktreePath: '/repo', narrowFiles: ['../x'] })
+    ).resolves.toBe('installed')
+    expect(subscribeMock.mock.calls[0][2]).not.toHaveProperty('mode')
+    await closeAllWatchers()
+  })
+
+  it.each([
+    ['narrow', ['a.ts']],
+    ['recursive', undefined]
+  ])('reports pending while a %s install waits on watcher capacity', async (_mode, narrowFiles) => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    subscribeMock.mockRejectedValueOnce(new WatcherChildCapacityError())
+    const sender = createWatcherSender(1)
+    try {
+      await expect(
+        handlers['fs:watchWorktree']({ sender }, { worktreePath: '/repo', narrowFiles })
+      ).resolves.toBe('pending')
+    } finally {
+      error.mockRestore()
+      await closeAllWatchers()
+    }
   })
 
   it('ignores narrowFiles for SSH watches, which stay recursive on the relay', async () => {

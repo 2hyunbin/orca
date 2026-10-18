@@ -3,6 +3,7 @@ import { stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Event as ParcelWatcherEvent } from '@parcel/watcher'
 import { watcherDirectoryIdentity } from './watcher-directory-identity'
+import { isWindowsAbsolutePathLike } from '../../shared/cross-platform-path'
 
 export type ShallowWatcherSubscription = {
   unsubscribe: () => Promise<void>
@@ -32,6 +33,10 @@ export function startShallowWatcher(
   onEvents: (events: ParcelWatcherEvent[]) => void,
   onError: (error: Error) => void
 ): ShallowWatcherSubscription {
+  // Why: Windows names are case-insensitive, so a tab's casing may differ from what fs.watch reports.
+  const windowsRoot = isWindowsAbsolutePathLike(rootPath)
+  const foldName = (name: string): string =>
+    windowsRoot ? name.normalize('NFC').toLowerCase() : name.normalize('NFC')
   const pathsByDirectory = new Map<string, Set<string>>()
   for (const relativePath of relativePaths) {
     const parts = relativePath
@@ -45,6 +50,12 @@ export function startShallowWatcher(
     const fileNames = pathsByDirectory.get(parent) ?? new Set<string>()
     fileNames.add(fileName)
     pathsByDirectory.set(parent, fileNames)
+  }
+  const fileNameByFolded = new Map<string, Map<string, string>>()
+  const parentByFolded = new Map<string, string>()
+  for (const [parent, fileNames] of pathsByDirectory) {
+    parentByFolded.set(foldName(parent), parent)
+    fileNameByFolded.set(parent, new Map([...fileNames].map((name) => [foldName(name), name])))
   }
 
   const watchers = new Map<string, FSWatcher>()
@@ -90,24 +101,24 @@ export function startShallowWatcher(
           emitUpdates(parent, fileNames)
           return
         }
-        if (parent === '' && pathsByDirectory.has(name)) {
-          const nestedNames = pathsByDirectory.get(name)
-          if (nestedNames) {
-            // 'rename' is a create/delete of the nested dir itself, so the
-            // existing binding (if any) is stale and must be replaced.
-            watchDirectory(name, nestedNames, eventType === 'rename')
-            emitUpdates(name, nestedNames)
-          }
+        const nestedParent = parent === '' ? parentByFolded.get(foldName(name)) : undefined
+        const nestedNames = nestedParent ? pathsByDirectory.get(nestedParent) : undefined
+        if (nestedParent && nestedNames) {
+          // 'rename' is a create/delete of the nested dir itself, so the
+          // existing binding (if any) is stale and must be replaced.
+          watchDirectory(nestedParent, nestedNames, eventType === 'rename')
+          emitUpdates(nestedParent, nestedNames)
         }
-        if (fileNames.has(name)) {
-          emitUpdates(parent, [name])
+        const watchedName = fileNameByFolded.get(parent)?.get(foldName(name))
+        if (watchedName) {
+          emitUpdates(parent, [watchedName])
         }
       })
       watcher.on('error', reportError)
       watchers.set(parent, watcher)
       return true
     } catch (error) {
-      // Nested metadata directories may not exist until Git creates them.
+      // Nested directories may not exist yet; the rebind sweep binds them once they appear.
       if (parent === '') {
         reportError(error)
       }

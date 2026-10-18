@@ -6,7 +6,10 @@ import { isLocalWindowsDesktopClient } from '@/lib/desktop-window-chrome'
 import { isWindowsAbsolutePathLike } from '../../../shared/cross-platform-path'
 import { isLocalExecutionHost, parseExecutionHostId } from '../../../shared/execution-host'
 import { isGitRepoKind } from '../../../shared/repo-kind'
-import { resolveEditorExternalWatchTargetRows } from './editor-external-watch-target-rows'
+import {
+  editorWatchWorkspaceExists,
+  resolveEditorExternalWatchTargetRows
+} from './editor-external-watch-target-rows'
 import {
   addWatchConsumer,
   getOpenFileWatchConsumer,
@@ -227,7 +230,11 @@ export function selectEditorExternalWatchTargets(
   const scopedTargetsByKey = scopeEditorExternalWatchTargets(
     targetsByKey,
     relativePathsByKey,
-    selectRecursiveWatchWorkspaceIds(state.activeWorktreeId, state.lastVisitedAtByWorktreeId),
+    selectRecursiveWatchWorkspaceIds(
+      state.activeWorktreeId,
+      state.lastVisitedAtByWorktreeId,
+      (id) => editorWatchWorkspaceExists(state, id)
+    ),
     getEditorExternalWatchTargetKey
   )
 

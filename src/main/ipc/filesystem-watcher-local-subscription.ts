@@ -1,4 +1,5 @@
 import type { WebContents } from 'electron'
+import type { WatchWorktreeStatus } from '../../shared/filesystem-entry-types'
 import { beginWatcherInstall } from './watcher-removal-gate'
 import type { LocalWatcherInstallToken } from './filesystem-watcher-lifecycle-state'
 import {
@@ -252,4 +253,20 @@ export function unsubscribeLocalWatcher(
 
     watcherLifecycleState.pendingTeardowns.set(rootKey, teardownTimer)
   }
+}
+
+/** Whether `senderId` now receives events for this root, waits on capacity, or got nothing. */
+export function getLocalWatchStatus(
+  worktreePath: string,
+  senderId: number,
+  narrowFiles?: readonly string[]
+): WatchWorktreeStatus {
+  const { key: rootKey } = getLocalWatcherRoot(worktreePath, narrowFiles)
+  if (watcherLifecycleState.watchedRoots.get(rootKey)?.listeners.has(senderId)) {
+    return 'installed'
+  }
+  const waiting =
+    watcherLifecycleState.pendingLocalCapacityRetries.get(rootKey)?.listeners.has(senderId) ||
+    watcherLifecycleState.inFlightLocalInstalls.get(rootKey)?.listeners.has(senderId)
+  return waiting ? 'pending' : 'unavailable'
 }

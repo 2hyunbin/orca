@@ -1,17 +1,15 @@
 import { getWorktreeIdFromVisitKey } from '@/lib/worktree-visit-recency'
+import { isWslUncPath } from '../../../shared/wsl-paths'
 import type { EditorExternalWatchTarget } from './editor-external-watch-targets'
 
-/**
- * Previously-active workspaces that keep their full-tree watch, so switching
- * back is instant. Every other background workspace with open tabs gets a
- * narrow watch of just those files' directories.
- */
+// Why: recently active workspaces keep the full-tree watch so switching back is instant.
 export const WARM_RECURSIVE_WATCH_WORKSPACE_COUNT = 3
 
-/** The active workspace plus the most recently visited ones (an LRU over focus recency). */
+// Why: an LRU over focus recency; `exists` keeps deleted workspaces from holding warm slots.
 export function selectRecursiveWatchWorkspaceIds(
   activeWorktreeId: string | null,
-  lastVisitedAtByWorktreeId: Readonly<Record<string, number>> | undefined
+  lastVisitedAtByWorktreeId: Readonly<Record<string, number>> | undefined,
+  exists: (workspaceId: string) => boolean
 ): ReadonlySet<string> {
   const ids = new Set<string>()
   if (activeWorktreeId) {
@@ -21,7 +19,7 @@ export function selectRecursiveWatchWorkspaceIds(
   const warm: { id: string; visitedAt: number }[] = []
   for (const [key, visitedAt] of Object.entries(lastVisitedAtByWorktreeId ?? {})) {
     const id = getWorktreeIdFromVisitKey(key)
-    if (id === activeWorktreeId) {
+    if (id === activeWorktreeId || !exists(id)) {
       continue
     }
     const existing = warm.find((entry) => entry.id === id)
@@ -39,10 +37,7 @@ export function selectRecursiveWatchWorkspaceIds(
   return ids
 }
 
-/**
- * Worktree-relative paths a narrow watch can cover, or null when a tab has no
- * file inside the workspace (the caller then keeps the full-tree watch).
- */
+// Why null: a tab outside the workspace can only be covered by the full-tree watch.
 export function toNarrowWatchFiles(relativePaths: Iterable<string>): string[] | null {
   const files = new Set<string>()
   for (const relativePath of relativePaths) {
@@ -60,12 +55,12 @@ export function toNarrowWatchFiles(relativePaths: Iterable<string>): string[] | 
   return files.size > 0 ? [...files].sort() : null
 }
 
-/** Null wins: a consumer that needs the whole tree (the sidebar) keeps the target recursive. */
+// Why null wins: a consumer that needs the whole tree (the sidebar) keeps the target recursive.
 export function mergeRelativePaths(left: string[] | null, right: string[] | null): string[] | null {
   return left && right ? [...left, ...right] : null
 }
 
-/** Only local background workspaces narrow; SSH and runtime hosts have no narrow watch mode yet. */
+// Why: SSH and runtime hosts have no narrow mode, and the WSL poller has no per-file mode either.
 export function scopeEditorExternalWatchTargets(
   targetsByKey: ReadonlyMap<string, EditorExternalWatchTarget>,
   relativePathsByKey: ReadonlyMap<string, string[] | null>,
@@ -79,6 +74,7 @@ export function scopeEditorExternalWatchTargets(
       recursiveWorkspaceIds.has(target.worktreeId) ||
       target.connectionId !== undefined ||
       target.runtimeEnvironmentId !== null ||
+      isWslUncPath(target.worktreePath) ||
       !relativePaths
         ? null
         : toNarrowWatchFiles(relativePaths)

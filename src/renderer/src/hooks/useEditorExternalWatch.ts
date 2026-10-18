@@ -12,10 +12,16 @@ import { buildEditorExternalWatchEventHandler } from './editor-external-watch-ev
 import { verifyLatchedEditorMoveDestinations } from './editor-external-watch-disk-verification'
 import {
   getEditorExternalWatchScopeKey,
-  releaseMainProcessWatch,
-  toWatchWorktreeArgs
+  holdEditorWatchUntilReleased,
+  isWatchInstalled,
+  releaseEditorWatch,
+  toWatchWorktreeArgs,
+  type HeldEditorWatches
 } from './editor-external-watch-handoff'
-import { reverifyEditorTabsAfterNarrowWatch } from './editor-external-watch-activation-reverify'
+import {
+  armEditorTabDiskVerification,
+  reloadCleanEditorTabs
+} from './editor-external-watch-activation-reverify'
 
 function warnExternalWatchFailure(target: EditorExternalWatchTarget, err: unknown): void {
   console.warn('[filesystem-watch] failed to watch worktree', {
@@ -33,6 +39,7 @@ export function useEditorExternalWatch(): void {
   const latestTargetsRef = useRef<EditorExternalWatchTarget[]>(targets)
   latestTargetsRef.current = targets
   const remoteWatchUnsubsRef = useRef(new Map<string, () => void>())
+  const heldWatchesRef = useRef<HeldEditorWatches>(new Map())
   const fsChangedHandlerRef = useRef<
     ((payload: FsChangedPayload, runtimeEnvironmentId?: string | null) => void) | null
   >(null)
@@ -52,19 +59,26 @@ export function useEditorExternalWatch(): void {
 
     targetsRef.current = nextTargets
 
-    const pendingWatchByScope = new Map<string, Promise<void>>()
+    const held = heldWatchesRef.current
+    const pendingWatchByScope = new Map<
+      string,
+      { target: EditorExternalWatchTarget; installed: Promise<boolean> }
+    >()
     for (const target of added) {
       if (target.runtimeEnvironmentId) {
         subscribeRuntimeTarget(target, remoteWatchUnsubsRef.current, fsChangedHandlerRef)
         continue
       }
-      pendingWatchByScope.set(
-        getEditorExternalWatchScopeKey(target),
-        window.api.fs.watchWorktree(toWatchWorktreeArgs(target)).catch((err) => {
-          // Why: SSH providers can disappear while tabs still reference the worktree; report the failure without an uncaught renderer promise.
-          warnExternalWatchFailure(target, err)
-        })
-      )
+      pendingWatchByScope.set(getEditorExternalWatchScopeKey(target), {
+        target,
+        installed: window.api.fs
+          .watchWorktree(toWatchWorktreeArgs(target))
+          .then(isWatchInstalled, (err) => {
+            // Why: SSH providers can disappear while tabs still reference the worktree; report the failure without an uncaught renderer promise.
+            warnExternalWatchFailure(target, err)
+            return false
+          })
+      })
     }
     const narrowedScopes = new Set<string>()
     for (const target of removed) {
@@ -79,19 +93,31 @@ export function useEditorExternalWatch(): void {
       if (target.narrowFiles) {
         narrowedScopes.add(scopeKey)
       }
-      // Why: a recursive↔narrow switch releases the old watch only after its replacement subscribed, so no event falls in between.
       const replacement = pendingWatchByScope.get(scopeKey)
-      if (replacement) {
-        void replacement.then(() => releaseMainProcessWatch(target, targetsRef.current))
-      } else {
-        releaseMainProcessWatch(target, nextTargets)
+      if (!replacement) {
+        releaseEditorWatch(target, nextTargets, held)
+        continue
       }
+      // Why: a recursive↔narrow switch releases the old watch only once its replacement is live, so the workspace is never unwatched.
+      void replacement.installed.then((installed) => {
+        const replacementKey = getEditorExternalWatchTargetKey(replacement.target)
+        const replacementCurrent = targetsRef.current.some(
+          (current) => getEditorExternalWatchTargetKey(current) === replacementKey
+        )
+        if (!installed && replacementCurrent) {
+          holdEditorWatchUntilReleased(target, replacement.target, held)
+        } else {
+          releaseEditorWatch(target, targetsRef.current, held)
+        }
+      })
     }
     for (const target of added) {
       const scopeKey = getEditorExternalWatchScopeKey(target)
-      const subscribed = pendingWatchByScope.get(scopeKey)
-      if (subscribed && !target.narrowFiles && narrowedScopes.has(scopeKey)) {
-        void subscribed.then(() => reverifyEditorTabsAfterNarrowWatch(target))
+      const replacement = pendingWatchByScope.get(scopeKey)
+      if (replacement && !target.narrowFiles && narrowedScopes.has(scopeKey)) {
+        // Why: arm now, not after the full-tree install — autosave must not run during a long crawl.
+        armEditorTabDiskVerification(target)
+        void replacement.installed.then(() => reloadCleanEditorTabs(target))
       }
     }
     // Why: final unmount cleanup owns teardown so target changes remain differential.
@@ -100,6 +126,7 @@ export function useEditorExternalWatch(): void {
   // Why: one stable fs:changed listener prevents target-key changes from opening an event-loss gap.
   useEffect(() => {
     const remoteWatchUnsubs = remoteWatchUnsubsRef.current
+    const heldWatches = heldWatchesRef.current
     const { handleFsChanged, dispose } = buildEditorExternalWatchEventHandler(
       (worktreePath, runtimeEnvironmentId) =>
         targetsRef.current.find(
@@ -125,6 +152,12 @@ export function useEditorExternalWatch(): void {
           void window.api.fs.unwatchWorktree(toWatchWorktreeArgs(target))
         }
       }
+      for (const riders of heldWatches.values()) {
+        for (const target of riders) {
+          void window.api.fs.unwatchWorktree(toWatchWorktreeArgs(target))
+        }
+      }
+      heldWatches.clear()
       remoteWatchUnsubs.clear()
       targetsRef.current = []
       // Why: module-scoped reload timers survive StrictMode's synthetic cleanup; a late reload dispatch is harmless.

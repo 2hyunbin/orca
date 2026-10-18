@@ -547,11 +547,14 @@ describe('createExternalWatchEventHandler tombstone coalescing', () => {
 
   it('marks a dirty background tab changed-on-disk from a narrow watch payload', () => {
     const dirtyFile = { ...fileNotes, isDirty: true }
-    vi.mocked(useAppStore.getState).mockReturnValue({
-      openFiles: [dirtyFile],
-      setExternalMutation
-    } as never)
-    vi.mocked(getOpenFilesForExternalFileChange).mockReturnValue([dirtyFile] as never)
+    vi.mocked(useAppStore.getState).mockReturnValue(
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the handler reads only openFiles and setExternalMutation.
+      { openFiles: [dirtyFile], setExternalMutation } as never
+    )
+    vi.mocked(getOpenFilesForExternalFileChange).mockReturnValue(
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fixture carries every OpenFile field the handler reads.
+      [dirtyFile] as never
+    )
     const { handleFsChanged, dispose } = createExternalWatchEventHandler((worktreePath) =>
       worktreePath === '/repo'
         ? {

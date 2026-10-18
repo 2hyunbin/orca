@@ -5,7 +5,8 @@ import type {
   DirEntry,
   FsChangedPayload,
   MarkdownDocument,
-  WatchWorktreeArgs
+  WatchWorktreeArgs,
+  WatchWorktreeStatus
 } from '../../shared/filesystem-entry-types'
 import type {
   ImportItemResult,
@@ -210,7 +211,7 @@ export type FilesystemApi = {
     uploadPathsToAgentSessionAttachments: (
       args: AgentSessionAttachmentUploadTarget & { paths: string[] }
     ) => Promise<AgentSessionAttachmentPathUploadResult>
-    watchWorktree: (args: WatchWorktreeArgs) => Promise<void>
+    watchWorktree: (args: WatchWorktreeArgs) => Promise<WatchWorktreeStatus>
     unwatchWorktree: (args: WatchWorktreeArgs) => Promise<void>
     onFsChanged: (callback: (payload: FsChangedPayload) => void) => () => void
   }

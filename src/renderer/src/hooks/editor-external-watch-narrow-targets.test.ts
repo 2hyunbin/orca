@@ -65,20 +65,35 @@ function makeState(args: {
 describe('selectRecursiveWatchWorkspaceIds', () => {
   it('keeps the active workspace plus the most recently visited ones and evicts older visits', () => {
     expect(WARM_RECURSIVE_WATCH_WORKSPACE_COUNT).toBe(3)
-    const ids = selectRecursiveWatchWorkspaceIds('active', {
-      active: 100,
-      a: 1,
-      b: 5,
-      c: 4,
-      d: 3,
-      'local|a': 9
-    })
+    const ids = selectRecursiveWatchWorkspaceIds(
+      'active',
+      {
+        active: 100,
+        a: 1,
+        b: 5,
+        c: 4,
+        d: 3,
+        'local|a': 9
+      },
+      () => true
+    )
+    expect([...ids].sort()).toEqual(['a', 'active', 'b', 'c'])
+  })
+
+  it('skips deleted workspaces so they cannot hold warm slots', () => {
+    const ids = selectRecursiveWatchWorkspaceIds(
+      'active',
+      { gone: 9, a: 3, b: 2, c: 1 },
+      (id) => id !== 'gone'
+    )
     expect([...ids].sort()).toEqual(['a', 'active', 'b', 'c'])
   })
 
   it('has only the active workspace when nothing else was visited', () => {
-    expect([...selectRecursiveWatchWorkspaceIds('active', undefined)]).toEqual(['active'])
-    expect([...selectRecursiveWatchWorkspaceIds(null, {})]).toEqual([])
+    expect([...selectRecursiveWatchWorkspaceIds('active', undefined, () => true)]).toEqual([
+      'active'
+    ])
+    expect([...selectRecursiveWatchWorkspaceIds(null, {}, () => true)]).toEqual([])
   })
 })
 
@@ -165,6 +180,20 @@ describe('selectEditorExternalWatchTargets narrowing', () => {
 
     expect(targets).toHaveLength(1)
     expect(targets[0].narrowFiles).toEqual(['a.ts', 'b.ts'])
+  })
+
+  it('keeps WSL background workspaces recursive (the distro poller has no per-file mode)', () => {
+    const r = repo('r')
+    const wslWorktree = worktree('r', 'bg')
+    wslWorktree.path = '\\\\wsl.localhost\\Ubuntu\\home\\me\\repo'
+    const state = makeState({
+      repos: [r],
+      worktrees: [wslWorktree],
+      activeWorktreeId: null,
+      openFiles: [file('bg', 'a.ts')]
+    })
+
+    expect(selectEditorExternalWatchTargets(state).targets[0].narrowFiles).toBeUndefined()
   })
 
   it('keeps SSH background workspaces recursive (the relay has no narrow mode)', () => {

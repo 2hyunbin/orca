@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import type { WatchWorktreeArgs } from '../../shared/filesystem-entry-types'
+import type { WatchWorktreeArgs, WatchWorktreeStatus } from '../../shared/filesystem-entry-types'
 import { isCurrentWatcherSender } from './filesystem-watcher-sender-lifetime'
 import { onSshFilesystemProviderRegistered } from '../providers/ssh-filesystem-dispatch'
 import { watcherLifecycleState } from './filesystem-watcher-lifecycle-state'
@@ -19,6 +19,7 @@ import {
 import { rememberDesiredRemoteWatcher } from './filesystem-watcher-remote-desired'
 import { normalizeNarrowWatchFiles } from './filesystem-watcher-narrow-roots'
 import {
+  getLocalWatchStatus,
   subscribeLocalWatcher,
   unsubscribeLocalWatcher
 } from './filesystem-watcher-local-subscription'
@@ -31,48 +32,57 @@ export function registerFilesystemWatcherHandlers(): void {
     reinstallRemoteWatchersForConnection
   )
 
-  ipcMain.handle('fs:watchWorktree', async (event, args: WatchWorktreeArgs): Promise<void> => {
-    const senderSignal = registerWatcherSenderCleanup(event.sender)
-    // Why: SSH watches stay recursive — the relay has no narrow mode, so `narrowFiles` is ignored there.
-    if (args.connectionId) {
-      // Why: a real new watch reopens the subsystem after closeAllWatchers latched it shut (also resets tests between cases).
-      watcherLifecycleState.remoteWatchersClosed = false
-      const key = getRemoteWatcherKey(args.connectionId, args.worktreePath)
-      // Why: record intent before the install so a provider registering mid-flight (or long after
-      // this attempt gives up) can still re-arm this listener.
-      rememberDesiredRemoteWatcher(args.connectionId, args.worktreePath, event.sender)
-      const result = await installRemoteWatcher(event.sender, args.connectionId, args.worktreePath)
-      if (!isCurrentWatcherSender(event.sender, senderSignal)) {
-        return
-      }
-      if (result === 'capacity') {
-        // Why straight to the dormant backoff: the cap is full until some other root is released,
-        // which a 1 Hz reinstall cannot bring about — it only adds relay load per refused root.
-        scheduleDormantRemoteWatcherRearm(args.connectionId, args.worktreePath)
-        return
-      }
-      if (result === 'unavailable') {
-        if (!watcherLifecycleState.loggedUnavailableRemoteWatchers.has(key)) {
-          watcherLifecycleState.loggedUnavailableRemoteWatchers.add(key)
-          console.warn(
-            `[filesystem-watcher] SSH filesystem provider unavailable; retrying watch for ${args.worktreePath} on connection ${args.connectionId}`
-          )
+  ipcMain.handle(
+    'fs:watchWorktree',
+    async (event, args: WatchWorktreeArgs): Promise<WatchWorktreeStatus> => {
+      const senderSignal = registerWatcherSenderCleanup(event.sender)
+      // Why: SSH watches stay recursive — the relay has no narrow mode, so `narrowFiles` is ignored there.
+      if (args.connectionId) {
+        // Why: a real new watch reopens the subsystem after closeAllWatchers latched it shut (also resets tests between cases).
+        watcherLifecycleState.remoteWatchersClosed = false
+        const key = getRemoteWatcherKey(args.connectionId, args.worktreePath)
+        // Why: record intent before the install so a provider registering mid-flight (or long after
+        // this attempt gives up) can still re-arm this listener.
+        rememberDesiredRemoteWatcher(args.connectionId, args.worktreePath, event.sender)
+        const result = await installRemoteWatcher(
+          event.sender,
+          args.connectionId,
+          args.worktreePath
+        )
+        if (!isCurrentWatcherSender(event.sender, senderSignal)) {
+          return 'unavailable'
         }
-        scheduleRemoteWatcherRetry(event.sender, args.connectionId, args.worktreePath)
-        return
+        if (result === 'capacity') {
+          // Why straight to the dormant backoff: the cap is full until some other root is released,
+          // which a 1 Hz reinstall cannot bring about — it only adds relay load per refused root.
+          scheduleDormantRemoteWatcherRearm(args.connectionId, args.worktreePath)
+          return 'pending'
+        }
+        if (result === 'unavailable') {
+          if (!watcherLifecycleState.loggedUnavailableRemoteWatchers.has(key)) {
+            watcherLifecycleState.loggedUnavailableRemoteWatchers.add(key)
+            console.warn(
+              `[filesystem-watcher] SSH filesystem provider unavailable; retrying watch for ${args.worktreePath} on connection ${args.connectionId}`
+            )
+          }
+          scheduleRemoteWatcherRetry(event.sender, args.connectionId, args.worktreePath)
+          return 'pending'
+        }
+        return result === 'installed' ? 'installed' : 'unavailable'
       }
-      return
+      // Why: reopen the local subsystem for tests and post-shutdown reattachment; stale callers keep the prior generation.
+      watcherLifecycleState.localWatchersClosed = false
+      const narrowFiles = normalizeNarrowWatchFiles(args.narrowFiles)
+      await subscribeLocalWatcher(
+        args.worktreePath,
+        event.sender,
+        undefined,
+        undefined,
+        narrowFiles
+      )
+      return getLocalWatchStatus(args.worktreePath, event.sender.id, narrowFiles)
     }
-    // Why: reopen the local subsystem for tests and post-shutdown reattachment; stale callers keep the prior generation.
-    watcherLifecycleState.localWatchersClosed = false
-    await subscribeLocalWatcher(
-      args.worktreePath,
-      event.sender,
-      undefined,
-      undefined,
-      normalizeNarrowWatchFiles(args.narrowFiles)
-    )
-  })
+  )
 
   ipcMain.handle('fs:unwatchWorktree', (_event, args: WatchWorktreeArgs): void => {
     if (args.connectionId) {

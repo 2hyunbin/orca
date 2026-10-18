@@ -91,3 +91,14 @@ export function resolveEditorExternalWatchTargetRows(
       : undefined
   return { worktree, repo, folderWorkspace, projectGroup, connectionId }
 }
+
+/** Whether a worktree or folder workspace id still names a catalog row. */
+export function editorWatchWorkspaceExists(
+  state: Pick<AppState, 'worktreesByRepo' | 'folderWorkspaces'>,
+  workspaceId: string
+): boolean {
+  const scope = parseWorkspaceKey(workspaceId)
+  return scope?.type === 'folder'
+    ? state.folderWorkspaces.some((workspace) => workspace.id === scope.folderWorkspaceId)
+    : getIndexedWorktreesById(state.worktreesByRepo, workspaceId).length > 0
+}
