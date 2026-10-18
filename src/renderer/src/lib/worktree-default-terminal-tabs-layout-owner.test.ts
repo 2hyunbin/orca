@@ -73,6 +73,28 @@ describe('the default-tabs mark in a layout-owner build', () => {
     expect(sentCommands()).toEqual([{ type: 'setDefaultTabsApplied', workspace: WT }])
   })
 
+  it('records the mark after the default tabs, so main never holds it without their rows', () => {
+    const tabId = applyDefaultTerminalTabs(
+      store.getState(),
+      WT,
+      undefined,
+      undefined,
+      undefined,
+      { runCommands: false, tabs: [{ title: 'one' }, { title: 'two' }] },
+      undefined,
+      undefined
+    )
+
+    expect(tabId).not.toBeNull()
+    expect(sentCommands().map((command) => command.type)).toEqual([
+      'createTerminalTab',
+      'renameTab',
+      'createTerminalTab',
+      'renameTab',
+      'setDefaultTabsApplied'
+    ])
+  })
+
   it('records it once: a workspace already marked sends nothing', () => {
     applyNoTemplates()
     mocks.callRuntimeRpc.mockClear()
