@@ -1,8 +1,10 @@
+import { isRemoteRuntimePtyId } from '../../../shared/remote-runtime-pty-id'
 import { OrcaRuntimeWithWorkspaceReviewFacts } from './orca-runtime-workspace-review-facts'
 import type { OrcaRuntimeWithMigrationCatalog } from '../orca-runtime-migration-catalog'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
 import { DEFAULT_HIDE_SLEEPING_WORKSPACES } from '../../../shared/constants'
 import {
+  getConnectionExecutionHostId,
   getRepoExecutionHostId,
   isLocalExecutionHost,
   LOCAL_EXECUTION_HOST_ID,
@@ -17,6 +19,7 @@ import type { AgentStatusStoreView } from './workspace-activity-facts-producer'
 import { SortStampsProducer } from './sort-stamps-producer'
 import { writeUnreadFlag } from './sort-stamp-records'
 import { WorkspaceViewers } from './workspace-viewers'
+import { TerminalUseProducer } from './terminal-use-producer'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 import { resolveAgentWorkspaceExecutionHostId } from '../../agent-hooks/restored-status-dead-terminal-sweep'
@@ -49,11 +52,29 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     onStampsWritten: (worktreeId) => this.notifySortStampsChanged(worktreeId),
     now: Date.now
   })
+  readonly terminalUse = new TerminalUseProducer({
+    store: () => this.store,
+    workspaceOfPty: (ptyId) => {
+      // A paired server's terminal is that server's to record.
+      const pty = isRemoteRuntimePtyId(ptyId) ? undefined : this.ptysById.get(ptyId)
+      if (!pty?.worktreeId) {
+        return null
+      }
+      const hostId = getConnectionExecutionHostId(pty.connectionId)
+      return {
+        worktreeId: pty.worktreeId,
+        sshHostId: hostId === LOCAL_EXECUTION_HOST_ID ? null : hostId
+      }
+    },
+    isWriteFenced: (worktreeId) =>
+      isWslMoveProjectBlocked(this.store ?? undefined, wslMoveProjectRefForWorkspace(worktreeId))
+  })
 
   constructor(...args: ConstructorParameters<typeof OrcaRuntimeWithWorkspaceReviewFacts>) {
     super(...args)
     this.workspaceActivityFacts.revision.onChange(() => this.sidebarTemporal.noteActivityChange())
     this.store?.onUIChanged?.(() => this.sidebarTemporal.noteViewChange())
+    this.terminalRunFacts.onInput((ptyId, now) => this.terminalUse.noteTerminalUse(ptyId, now))
     // Every catalog change, from IPC or the runtime, reaches clients through this one bus.
     this.clientEvents.on(
       (event) => {

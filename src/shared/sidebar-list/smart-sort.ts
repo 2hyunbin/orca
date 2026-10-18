@@ -215,8 +215,6 @@ export const NO_LIVE_SMART_SORT_SOURCES: SmartSortSources = Object.freeze({
 
 export type WorktreeSortRanking<W extends Worktree> = {
   sorted: W[]
-  /** Smart only, and only once warm. */
-  attentionByWorktree: Map<string, WorktreeAttention> | null
   /** True when this sort found the live signal that latches Smart for the list's lifetime. */
   detectedLiveSmartSignal: boolean
 }
@@ -237,7 +235,7 @@ export function rankWorktreesForSort<W extends Worktree>(args: {
   // Switch point: stamps need no cold phase, latch or attention map.
   if (ORCA_SIDEBAR_INPUTS_IS_MAIN) {
     worktrees.sort(buildStampComparator(sortBy, args.repoMap, labels))
-    return { sorted: worktrees, attentionByWorktree: null, detectedLiveSmartSignal: false }
+    return { sorted: worktrees, detectedLiveSmartSignal: false }
   }
   let detectedLiveSmartSignal = false
 
@@ -254,7 +252,7 @@ export function rankWorktreesForSort<W extends Worktree>(args: {
       detectedLiveSmartSignal = true
     } else {
       worktrees.sort((a, b) => b.sortOrder - a.sortOrder || compareWorktreeSortLabel(a, b, labels))
-      return { sorted: worktrees, attentionByWorktree: null, detectedLiveSmartSignal: false }
+      return { sorted: worktrees, detectedLiveSmartSignal: false }
     }
   }
 
@@ -273,9 +271,5 @@ export function rankWorktreesForSort<W extends Worktree>(args: {
         )
       : new Map<string, WorktreeAttention>()
   worktrees.sort(buildWorktreeComparator(sortBy, args.repoMap, now, attentionByWorktree, labels))
-  return {
-    sorted: worktrees,
-    attentionByWorktree: sortBy === 'smart' ? attentionByWorktree : null,
-    detectedLiveSmartSignal
-  }
+  return { sorted: worktrees, detectedLiveSmartSignal }
 }
