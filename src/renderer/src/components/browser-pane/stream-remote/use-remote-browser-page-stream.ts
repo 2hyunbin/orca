@@ -12,7 +12,6 @@ import type {
 import { useRemoteBrowserStreamActivation } from './use-remote-browser-stream-activation'
 import {
   decodeRemoteBrowserFrameUrl,
-  getRemoteBrowserDeviceScaleFactor,
   readRemoteCssViewportSize,
   type RemoteBrowserPaneNotice,
   type RemoteBrowserRuntimeTarget,
@@ -130,19 +129,9 @@ export function useRemoteBrowserPageStream({
       if (!target || !size) {
         return
       }
-      await callRuntimeRpc(
-        target,
-        'browser.viewport',
-        {
-          worktree: runtimeWorktree,
-          page: pageId,
-          width: size.width,
-          height: size.height,
-          deviceScaleFactor: getRemoteBrowserDeviceScaleFactor(),
-          mobile: false
-        },
-        { timeoutMs: 15_000, suppressFeatureInteraction: true }
-      )
+      // Why no browser.viewport here: the screencast subscription already carries this pane's
+      // size and the host's stream owns the emulation. A second, unowned override re-applied
+      // the full pane size over the host's fitted one, so its frames came back cropped (#30341).
       try {
         // Why: the streamed bitmap can include the host compositor surface, but CDP input wants the guest page's CSS viewport coords.
         const viewport = await callRuntimeRpc(
@@ -155,9 +144,10 @@ export function useRemoteBrowserPageStream({
           },
           { timeoutMs: 15_000, suppressFeatureInteraction: true }
         )
-        remoteCssViewportSizeRef.current = readRemoteCssViewportSize(viewport) ?? size
+        remoteCssViewportSizeRef.current = readRemoteCssViewportSize(viewport)
       } catch {
-        remoteCssViewportSizeRef.current = size
+        // Unknown: pointer mapping falls back to the requested and per-frame sizes.
+        remoteCssViewportSizeRef.current = null
       }
     },
     [readRemoteViewportSize, remoteCssViewportSizeRef, runtimeTarget, runtimeWorktree]
@@ -182,9 +172,13 @@ export function useRemoteBrowserPageStream({
         if (!pageId || !isActiveRef.current) {
           return
         }
-        void syncRemoteViewport(pageId)
-          .then(() => lifecycle.restartForViewport(pageId))
-          .catch(() => {})
+        // Why restart first: the new stream applies the size, and its ready handler re-reads the
+        // page's CSS viewport after that. Reading it now would only see the old emulation.
+        if (lifecycle.restartForViewport(pageId)) {
+          remoteCssViewportSizeRef.current = null
+        } else {
+          void syncRemoteViewport(pageId).catch(() => {})
+        }
       }, 150)
     }
     scheduleSync()
@@ -202,6 +196,7 @@ export function useRemoteBrowserPageStream({
     isActiveRef,
     lifecycle,
     readRemoteViewportSize,
+    remoteCssViewportSizeRef,
     remoteViewportRef,
     remoteViewportTimerRef,
     syncRemoteViewport

@@ -88,7 +88,8 @@ export function RemoteBrowserPageViewport({
     <div
       ref={remoteViewportRef}
       tabIndex={-1}
-      className="relative min-h-0 flex-1 overflow-hidden bg-background"
+      // Why a size container: the frame letterboxes itself in cq units of this pane.
+      className="@container-size relative min-h-0 flex-1 overflow-hidden bg-background"
     >
       {markup.isActive && markup.baseImage ? (
         <MarkupOverlay

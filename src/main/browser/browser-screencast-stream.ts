@@ -6,6 +6,12 @@ import { sendDebuggerCommand } from './browser-screencast-debugger-command'
 import { createBrowserScreencastDeviceMetrics } from './browser-screencast-device-metrics'
 import { createBrowserScreencastFramePacer } from './browser-screencast-frame-pacer'
 import { createBrowserScreencastSnapshotCapture } from './browser-screencast-snapshot-capture'
+import {
+  clampScreencastViewportToGuestView,
+  isEmbedderSizedScreencastGuest,
+  readScreencastGuestViewSize,
+  type BrowserScreencastGuestViewSize
+} from './browser-screencast-guest-view-limit'
 import type {
   BrowserScreencastFrameBudget,
   BrowserScreencastOptions,
@@ -55,6 +61,24 @@ export async function startBrowserScreencast(
   const isClosed = (): boolean => closed
   const isStopping = (): boolean => stopping
 
+  // Why: `options` carries what is emulated; the client's own request is kept apart so the guest
+  // view limit can shrink it and later give the size back when the guest grows.
+  const embedderSizedGuest = isEmbedderSizedScreencastGuest(webContents)
+  let requestedViewport: BrowserScreencastViewport = {
+    viewportWidth: options.viewportWidth,
+    viewportHeight: options.viewportHeight,
+    deviceScaleFactor: options.deviceScaleFactor,
+    mobile: options.mobile
+  }
+  let guestViewSize: BrowserScreencastGuestViewSize | null = null
+  const applyEffectiveViewport = (): boolean => {
+    const next = clampScreencastViewportToGuestView(requestedViewport, guestViewSize)
+    const changed =
+      next.viewportWidth !== options.viewportWidth || next.viewportHeight !== options.viewportHeight
+    Object.assign(options, next)
+    return changed
+  }
+
   const deviceMetrics = createBrowserScreencastDeviceMetrics(webContents, dbg, options)
   const framePacer = createBrowserScreencastFramePacer({ dbg, options, isClosed, isStopping })
   const snapshotCapture = createBrowserScreencastSnapshotCapture({
@@ -77,6 +101,21 @@ export async function startBrowserScreencast(
     scheduleNavigationFrameCapture: snapshotCapture.scheduleNavigationFrameCapture,
     clearNavigationCaptureTimer: snapshotCapture.clearNavigationCaptureTimer,
     bumpSnapshotGeneration: snapshotCapture.bumpGeneration,
+    observeGuestViewSize: (metadata) => {
+      if (!embedderSizedGuest) {
+        return false
+      }
+      const size = readScreencastGuestViewSize(metadata)
+      if (!size || (guestViewSize?.width === size.width && guestViewSize.height === size.height)) {
+        return false
+      }
+      guestViewSize = size
+      if (!applyEffectiveViewport()) {
+        return false
+      }
+      void reemulate().catch(() => {})
+      return true
+    },
     setDialogOpen: (open: boolean) => {
       dialogOpen = open
       // A new dialog is a new answer, and a closed one leaves nothing to answer.
@@ -84,6 +123,24 @@ export async function startBrowserScreencast(
       dialogSettlement = null
     }
   })
+
+  // Re-applies the emulated viewport and sends a frame at it, queued behind earlier updates.
+  const reemulate = (): Promise<void> => {
+    pendingUpdate = pendingUpdate
+      .catch(() => {})
+      .then(async () => {
+        if (closed || stopping) {
+          return
+        }
+        snapshotCapture.bumpGeneration()
+        snapshotCapture.clearNavigationCaptureTimer()
+        framePacer.clearPending(true)
+        // Why: initialOnly skips every stream that ever emitted a frame, which would
+        // leave the old device metrics applied and the new subscriber frameless.
+        await snapshotCapture.emitSnapshotFrame(false)
+      })
+    return pendingUpdate
+  }
 
   const startScreencast = (): Promise<unknown> =>
     sendDebuggerCommand(dbg, 'Page.startScreencast', {
@@ -168,21 +225,11 @@ export async function startBrowserScreencast(
       return settlement
     },
     updateViewport: (viewport: BrowserScreencastViewport) => {
-      pendingUpdate = pendingUpdate
-        .catch(() => {})
-        .then(async () => {
-          if (closed || stopping) {
-            return
-          }
-          Object.assign(options, viewport)
-          snapshotCapture.bumpGeneration()
-          snapshotCapture.clearNavigationCaptureTimer()
-          framePacer.clearPending(true)
-          // Why: initialOnly skips every stream that ever emitted a frame, which would
-          // leave the old device metrics applied and the new subscriber frameless.
-          await snapshotCapture.emitSnapshotFrame(false)
-        })
-      return pendingUpdate
+      if (!closed && !stopping) {
+        requestedViewport = { ...viewport }
+        applyEffectiveViewport()
+      }
+      return reemulate()
     },
     updateFrameBudget: (budget: BrowserScreencastFrameBudget) => {
       pendingUpdate = pendingUpdate

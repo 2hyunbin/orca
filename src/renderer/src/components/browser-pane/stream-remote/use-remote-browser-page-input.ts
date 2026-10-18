@@ -14,6 +14,7 @@ import type {
 import type { BrowserScreencastFrameMetadata } from '../../../../../shared/browser-screencast-protocol'
 import {
   getRemoteBrowserMouseButton,
+  mapRemoteBrowserClientPoint,
   resolveRemoteBrowserCssViewport,
   type PendingRemoteBrowserWheel,
   type RemoteBrowserPaneNotice,
@@ -107,24 +108,20 @@ export function useRemoteBrowserPageInput({
   const getRemoteImagePoint = useCallback(
     (event: { clientX: number; clientY: number }): { x: number; y: number } | null => {
       const image = imageRef.current
-      const viewport = remoteViewportRef.current
-      if (!image || !viewport) {
+      if (!image || !remoteViewportRef.current) {
         return null
       }
-      const rect = viewport.getBoundingClientRect()
-      const { width: viewportWidth, height: viewportHeight } = resolveRemoteBrowserCssViewport({
-        cssViewportSize: remoteCssViewportSizeRef.current,
-        requestedViewportSize: remoteViewportSizeRef.current,
-        frameMetadata,
-        naturalSize: { width: image.naturalWidth, height: image.naturalHeight }
+      return mapRemoteBrowserClientPoint({
+        clientX: event.clientX,
+        clientY: event.clientY,
+        frameRect: image.getBoundingClientRect(),
+        cssViewport: resolveRemoteBrowserCssViewport({
+          cssViewportSize: remoteCssViewportSizeRef.current,
+          requestedViewportSize: remoteViewportSizeRef.current,
+          frameMetadata,
+          naturalSize: { width: image.naturalWidth, height: image.naturalHeight }
+        })
       })
-      if (rect.width <= 0 || rect.height <= 0 || viewportWidth <= 0 || viewportHeight <= 0) {
-        return null
-      }
-      return {
-        x: Math.round(((event.clientX - rect.left) / rect.width) * viewportWidth),
-        y: Math.round(((event.clientY - rect.top) / rect.height) * viewportHeight)
-      }
     },
     [frameMetadata, imageRef, remoteCssViewportSizeRef, remoteViewportRef, remoteViewportSizeRef]
   )
