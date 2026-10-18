@@ -3,6 +3,7 @@
 // another command already used is refused.
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
 import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 import { agentSessionSendBodyFingerprint } from '../../../shared/structured-agent-session-send-mutation'
 import { holdLane } from './structured-agent-session-delivery-hold.test-fixture'
@@ -569,7 +570,8 @@ describe('source-bound ordinary Continue', () => {
       startedAt: NOW, completedAt: NOW
     }, { fence: 1, turnScope: { kind: 'thread' } })
     await journal.appendItem({ provider: 'orca', clientMessageId: `failure-${id}` }, {
-      kind: 'status', text: 'Usage limit reached', failure: { kind: 'usageLimitReached' }
+      kind: 'status',
+      ...agentSessionFailureWords({ kind: 'usageLimitReached' }, { surface: 'row' })
     }, { fence: 1, turnScope: { kind: 'turn', turnItemId } })
     return { journal, turnItemId }
   }
