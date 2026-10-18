@@ -68,6 +68,7 @@ export function buildRuntimeMobileAgentStatus(
       : null
   const ptyTitleClassification = classifyAgentTitle(ptyTitle)
   const nonAgentTitle = ptyTitle !== null && ptyTitleClassification !== 'agent'
+  let identityOnly = false
   if (nonAgentTitle) {
     // Why: non-agent title = shell reclaimed the pane; suppress to clear stuck spinners (#1437), though a live hook signal survives.
     const hasLiveHookSignal =
@@ -83,7 +84,12 @@ export function buildRuntimeMobileAgentStatus(
       // this branch publishes `done`. It only keeps the transcript addressable.
       (!pty?.lastAgentStatus && (hookRow.agentType != null || hookRow.providerSession != null))
     if (!hasLiveHookSignal) {
-      return {}
+      if (!hookRow.providerSession) {
+        return {}
+      }
+      // Why: resume identity outlives the live window, and Codex idles under a neutral title, so
+      // dropping the row here emptied native chat once the hook went stale (STA-7370).
+      identityOnly = true
     }
   }
   // Why: a retained OMP hook stays stable while wrapper foreground reads can report Pi.
@@ -99,7 +105,9 @@ export function buildRuntimeMobileAgentStatus(
     ownerOptions
   )
   // Why: OSC 9999 hook payload carries real state/prompt/agent; without preferring it, hook-only transitions never surfaced (#7970).
-  const liveRow = retained ?? resolveRuntimeHookLiveAgentRow(hookRow.live, pty, nonAgentTitle)
+  const liveRow = identityOnly
+    ? null
+    : (retained ?? resolveRuntimeHookLiveAgentRow(hookRow.live, pty, nonAgentTitle))
   if (liveRow) {
     const liveStatus = normalizeCompatibleAgentStatusEntryForOwner(
       {
@@ -175,8 +183,9 @@ export function buildRuntimeMobileAgentStatus(
   const agentType = ownerAgent ?? undefined
   return {
     agentStatus: {
-      state:
-        pty?.lastAgentStatus === 'working'
+      state: identityOnly
+        ? 'done'
+        : pty?.lastAgentStatus === 'working'
           ? 'working'
           : pty?.lastAgentStatus === 'permission'
             ? 'blocked'
