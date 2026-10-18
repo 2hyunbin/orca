@@ -68,7 +68,6 @@ describe('nativeBuildEntryName', () => {
   it('matches the dir the patched node-pty loader tries first', () => {
     const line = addedPatchLine('node-pty@1.1.0.patch', /var dirs = \[/)
     const firstDir = /\[([^,]+),/.exec(line)[1]
-    // oxlint-disable-next-line typescript/no-implied-eval -- evaluates the loader's own expression.
     const evaluate = new Function('process', `return ${firstDir}`)
     for (const [platform, arch] of [
       ['darwin', 'arm64'],
