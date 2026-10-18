@@ -1,0 +1,66 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
+import { checkNativeBuildDirArtifacts, ensureSharedNativeBuild } from './shared-native-build.mjs'
+
+const roots = []
+
+afterEach(() => {
+  while (roots.length > 0) {
+    rmSync(roots.pop(), { recursive: true, force: true })
+  }
+})
+
+function makePackage() {
+  const root = mkdtempSync(path.join(tmpdir(), 'orca-shared-native-'))
+  roots.push(root)
+  return root
+}
+
+describe('ensureSharedNativeBuild', () => {
+  it('reuses a usable published entry without compiling, even when forced', () => {
+    const packageDir = makePackage()
+    const entryDir = path.join(packageDir, 'build', 'orca-napi-linux-x64')
+    mkdirSync(entryDir, { recursive: true })
+    const checked = []
+    const result = ensureSharedNativeBuild({
+      moduleName: 'node-pty',
+      packageDir,
+      platform: 'linux',
+      arch: 'x64',
+      checkBuildDir: (dir) => {
+        checked.push(dir)
+        return null
+      },
+      // No source in packageDir: any compile attempt would throw.
+      log: () => {}
+    })
+    expect(result).toEqual({ entryDir, built: false })
+    expect(checked).toEqual([entryDir])
+  })
+})
+
+describe('checkNativeBuildDirArtifacts', () => {
+  it('requires spawn-helper on macOS only', () => {
+    const dir = makePackage()
+    writeFileSync(path.join(dir, 'pty.node'), '')
+    expect(checkNativeBuildDirArtifacts('node-pty', dir, { platform: 'linux', arch: 'x64' })).toBe(
+      null
+    )
+    expect(
+      checkNativeBuildDirArtifacts('node-pty', dir, { platform: 'darwin', arch: 'x64' })
+    ).toMatch(/spawn-helper is missing/)
+  })
+
+  it('rejects a Windows addon built for another arch', () => {
+    const dir = makePackage()
+    mkdirSync(path.join(dir, 'conpty'))
+    for (const file of ['conpty.node', 'conpty/conpty.dll', 'conpty/OpenConsole.exe']) {
+      writeFileSync(path.join(dir, file), 'not-a-pe')
+    }
+    expect(
+      checkNativeBuildDirArtifacts('node-pty', dir, { platform: 'win32', arch: 'arm64' })
+    ).toMatch(/not arm64/)
+  })
+})

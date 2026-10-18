@@ -10,6 +10,7 @@ const {
 const { dirname, join, resolve } = require('node:path')
 const { builtinModules, createRequire } = require('node:module')
 const { PE_MACHINE, readPeMachine } = require('./scripts/windows-pe-machine.cjs')
+const { adoptPackagedNativeBuildEntries } = require('./packaged-native-build-entries.cjs')
 
 const projectDir = resolve(__dirname, '..')
 const requireFromProject = createRequire(join(projectDir, 'package.json'))
@@ -658,6 +659,8 @@ function assertPackagedNativeVariantsInstalled(electronPlatformName, electronArc
 
 function prunePackagedRuntimeNodeModules(resourcesDir, electronPlatformName, electronArch) {
   const architecture = normalizeElectronArchitecture(electronArch)
+  // Before the node-pty prune, which judges build/Release.
+  adoptPackagedNativeBuildEntries(resourcesDir, electronPlatformName, architecture)
   prunePackagedNodePty(resourcesDir, electronPlatformName, architecture)
   prunePackagedParcelWatcher(resourcesDir, electronPlatformName, architecture)
   // Why before the filename walk: zod/src is deleted wholesale, so walking it first is wasted work.
