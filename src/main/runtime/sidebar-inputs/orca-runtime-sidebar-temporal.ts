@@ -5,6 +5,7 @@ import { DEFAULT_HIDE_SLEEPING_WORKSPACES } from '../../../shared/constants'
 import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { detectAgentStatusFromTitle } from '../../../shared/agent-detection'
 import type { SidebarTemporalSnapshot } from '../../../shared/sidebar-list/sidebar-temporal-snapshot'
+import type { Worktree } from '../../../shared/worktree/types'
 import { getMigrationUnsupportedPtySnapshot } from '../../agent-hooks/migration-unsupported-pty-state'
 import {
   SidebarTemporalOwner,
@@ -47,16 +48,13 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     )
   }
 
-  // Rows are listed after the change lands, as the window re-lists them; hostId is stamped there.
+  // Listed after the change lands, as the window re-lists; only rows, the sort's sources wait.
   private noteSidebarCatalogChange(type: 'worktreesChanged' | 'reposChanged'): void {
     if (!this.sidebarTemporal.running) {
       return
     }
-    void this.readSidebarSortSample().then(
-      ({ worktrees }) =>
-        type === 'reposChanged'
-          ? this.sidebarTemporal.noteRepoChange(worktrees)
-          : this.sidebarTemporal.noteRowsChange(worktrees),
+    void this.listSidebarRows().then(
+      (worktrees) => this.sidebarTemporal.noteCatalogListing(worktrees, type === 'reposChanged'),
       (error: unknown) => console.warn('[sidebar-temporal] could not list rows', error)
     )
   }
@@ -122,18 +120,22 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     return causes
   }
 
-  private async readSidebarSortSample(): Promise<SidebarSortSample> {
+  // Ranks are host-qualified; a row without a stamped host belongs to its repo's host.
+  private async listSidebarRows(): Promise<Worktree[]> {
     const { worktrees } = await this.listResolvedWorktreeSnapshot()
-    const repoMap = new Map((this.store?.getRepos() ?? []).map((repo) => [repo.id, repo]))
+    const repoById = new Map((this.store?.getRepos() ?? []).map((repo) => [repo.id, repo]))
+    return worktrees.map((worktree) => {
+      const repo = repoById.get(worktree.repoId)
+      return worktree.hostId || !repo
+        ? worktree
+        : { ...worktree, hostId: getRepoExecutionHostId(repo) }
+    })
+  }
+
+  private async readSidebarSortSample(): Promise<SidebarSortSample> {
     return {
-      // Ranks are host-qualified; a row without a stamped host belongs to its repo's host.
-      worktrees: worktrees.map((worktree) => {
-        const repo = repoMap.get(worktree.repoId)
-        return worktree.hostId || !repo
-          ? worktree
-          : { ...worktree, hostId: getRepoExecutionHostId(repo) }
-      }),
-      repoMap,
+      worktrees: await this.listSidebarRows(),
+      repoMap: new Map((this.store?.getRepos() ?? []).map((repo) => [repo.id, repo])),
       sources: buildRuntimeSmartSortSources({
         tabs: this.tabs.values(),
         leaves: this.leaves.values(),

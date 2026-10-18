@@ -102,7 +102,7 @@ describe('main temporal owner against the window, on one fake clock', () => {
     const owner = mainOwner()
     const window = renderWindow()
     owner.beginSession('s1')
-    owner.noteRowsChange(useAppStore.getState().worktreesByRepo[repo.id] ?? [])
+    owner.noteCatalogListing(useAppStore.getState().worktreesByRepo[repo.id] ?? [], false)
     await advance(0)
     expect(mainRanks(owner)).toEqual(window.result.current)
 
@@ -146,7 +146,7 @@ describe('main temporal owner against the window, on one fake clock', () => {
         }
       }))
     )
-    owner.noteRowsChange(useAppStore.getState().worktreesByRepo[repo.id] ?? [])
+    owner.noteCatalogListing(useAppStore.getState().worktreesByRepo[repo.id] ?? [], false)
     await advance(SORT_SETTLE_MS - 1)
     expect(window.result.current).toEqual(['a', 'b'])
     expect(mainRanks(owner)).toEqual(window.result.current)
@@ -166,7 +166,7 @@ describe('main temporal owner against the window, on one fake clock', () => {
     const owner = mainOwner()
     let window = renderWindow()
     owner.beginSession('s1')
-    owner.noteRowsChange(useAppStore.getState().worktreesByRepo[repo.id] ?? [])
+    owner.noteCatalogListing(useAppStore.getState().worktreesByRepo[repo.id] ?? [], false)
     await advance(0)
     expect(window.result.current).toEqual(['a', 'b'])
     expect(mainRanks(owner)).toEqual(window.result.current)
