@@ -7,7 +7,7 @@ import {
   execOrcadStateMutationOr
 } from './orcad-state-mutation-exec'
 import { execOrcadRemoteOr } from './orcad-remote-runtime-control'
-import { isUnconfirmedSshCommandTermination } from './ssh-relay-exec-command'
+import { isUnconfirmedSshCommandTermination } from './remote-exec-command'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 import type { OrcadHostTransport } from './orcad-host-transport'
 

@@ -1,4 +1,4 @@
-import type * as ExecCommandModule from './ssh-relay-exec-command'
+import type * as ExecCommandModule from './remote-exec-command'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -10,11 +10,11 @@ import {
   RUNTIME_STORE_LOCK_OWNER_FILENAME,
   withRuntimeStoreLock
 } from './remote-node-runtime-store-lock'
-import { execCommand } from './ssh-relay-exec-command'
-import { tryCreateInstallLockCommand } from './ssh-relay-install-lock-commands'
+import { execCommand } from './remote-exec-command'
+import { tryCreateInstallLockCommand } from './remote-install-lock-commands'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 
-vi.mock('./ssh-relay-exec-command', async (importOriginal) => ({
+vi.mock('./remote-exec-command', async (importOriginal) => ({
   ...(await importOriginal<typeof ExecCommandModule>()),
   execCommand: vi.fn()
 }))

@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   fence: vi.fn(),
   takeover: vi.fn()
 }))
-vi.mock('./ssh-relay-install-lock', () => ({
+vi.mock('./remote-install-lock', () => ({
   isRelayInstallLockStale: mocks.stale,
   RELAY_INSTALL_LOCK_NAME: '.install-lock'
 }))

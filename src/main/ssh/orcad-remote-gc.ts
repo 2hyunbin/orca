@@ -14,7 +14,7 @@
  * pinned too, and an unreadable journal skips the pass entirely.
  */
 import type { OrcadHostTransport } from './orcad-host-transport'
-import { execCommand, isUnconfirmedSshCommandTermination } from './ssh-relay-exec-command'
+import { execCommand, isUnconfirmedSshCommandTermination } from './remote-exec-command'
 import { ORCAD_INSTALL_MODEL } from './remote-install-model'
 import { gcOldRemoteInstallVersions } from './remote-install-gc'
 import { orcadGcPinnedDirNames, type OrcadActivationRecord } from './orcad-activation-record'
@@ -26,7 +26,7 @@ import {
 import { gcRemoteNodeRuntimeStore } from './remote-node-runtime-store-gc'
 import { readOrcadGcTransactionPins } from './orcad-gc-transaction-pins'
 import { isWindowsRemoteHost, joinRemotePath, type RemoteHostPlatform } from './ssh-remote-platform'
-import { RELAY_REMOTE_DIR } from './relay-protocol'
+import { RELAY_REMOTE_DIR } from './remote-frame-protocol'
 import { orcadWindowsHomeOpCommand } from './orcad-remote-windows-node'
 import { ORCAD_WINDOWS_LIVENESS_MANY_MARKER } from './orcad-windows-host-script'
 

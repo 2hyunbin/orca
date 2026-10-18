@@ -3,9 +3,9 @@ import { copyFileSync, mkdirSync, mkdtempSync, utimesSync, writeFileSync } from 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type * as ExecCommandModule from './ssh-relay-exec-command'
+import type * as ExecCommandModule from './remote-exec-command'
 
-vi.mock('./ssh-relay-exec-command', async (importOriginal) => ({
+vi.mock('./remote-exec-command', async (importOriginal) => ({
   ...(await importOriginal<typeof ExecCommandModule>()),
   execCommand: vi.fn()
 }))
@@ -18,7 +18,7 @@ import {
   windowsRuntimeStoreInventoryCommand,
   windowsSweepStaleRuntimeStagesCommand
 } from './remote-node-runtime-store-windows'
-import { execCommand } from './ssh-relay-exec-command'
+import { execCommand } from './remote-exec-command'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 import { decodeRemotePowerShellScript } from './ssh-remote-powershell'
 import { removeTreeSync } from '../../shared/windows-transient-lock-removal'

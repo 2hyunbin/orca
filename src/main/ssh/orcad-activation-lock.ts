@@ -12,12 +12,12 @@ import {
   withoutAbortSignal,
   type OrcadRemoteExecTarget
 } from './orcad-remote-runtime-control'
-import { isUnconfirmedSshCommandTermination } from './ssh-relay-exec-command'
-import { acquireInstallLock, RemoteInstallLockBusyError } from './ssh-relay-install-lock'
+import { isUnconfirmedSshCommandTermination } from './remote-exec-command'
+import { acquireInstallLock, RemoteInstallLockBusyError } from './remote-install-lock'
 import {
   orphanInstallLockCommand,
   probeInstallLockExistsCommand
-} from './ssh-relay-install-lock-commands'
+} from './remote-install-lock-commands'
 import { shellEscape } from './ssh-connection-utils'
 import {
   ORCAD_FENCE_OWNER_FILENAME,

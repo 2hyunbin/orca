@@ -13,9 +13,9 @@ import { once } from 'node:events'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type * as ExecCommandModule from './ssh-relay-exec-command'
+import type * as ExecCommandModule from './remote-exec-command'
 
-vi.mock('./ssh-relay-exec-command', async (importOriginal) => ({
+vi.mock('./remote-exec-command', async (importOriginal) => ({
   ...(await importOriginal<typeof ExecCommandModule>()),
   execCommand: vi.fn()
 }))
@@ -34,7 +34,7 @@ import {
   runtimeStoreInventoryCommand,
   type RuntimeStoreInventory
 } from './remote-node-runtime-store-inventory'
-import { execCommand } from './ssh-relay-exec-command'
+import { execCommand } from './remote-exec-command'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: all connection access is replaced by execCommand's mock.

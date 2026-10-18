@@ -11,18 +11,18 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type * as ExecCommandModule from './ssh-relay-exec-command'
+import type * as ExecCommandModule from './remote-exec-command'
 
 // Every remote command runs in a real local shell, so the host-side checks are the real ones.
 const shell = vi.hoisted((): { env: NodeJS.ProcessEnv | undefined } => ({ env: undefined }))
-vi.mock('./ssh-relay-exec-command', async (importOriginal) => {
+vi.mock('./remote-exec-command', async (importOriginal) => {
   const { runProcess } = await import('@orca/process-host')
   return {
     ...(await importOriginal<typeof ExecCommandModule>()),
     execCommand: async (_conn: unknown, command: string) => {
       const result = await runProcess({ program: '/bin/sh', args: ['-c', command], env: shell.env })
       if (result.code !== 0) {
-        const { sshCommandExitError } = await import('./ssh-relay-exec-command')
+        const { sshCommandExitError } = await import('./remote-exec-command')
         throw sshCommandExitError(command, result.code ?? 1, result.stdout)
       }
       return result.stdout

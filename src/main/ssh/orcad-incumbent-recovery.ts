@@ -9,7 +9,7 @@
 import { execOrcadStateMutation } from './orcad-state-mutation-exec'
 import { orcadRemoteBaseDir } from './orcad-remote-windows-node'
 import type { ServeReadiness } from '../server/serve-readiness'
-import { RELAY_REMOTE_DIR } from './relay-protocol'
+import { RELAY_REMOTE_DIR } from './remote-frame-protocol'
 import { ORCAD_STATE_SNAPSHOT_DIR } from './orcad-activation-record'
 import type { OrcadSnapshotVerdict } from './orcad-activation-transaction'
 import {

@@ -1,12 +1,12 @@
-import type * as ExecCommandModule from './ssh-relay-exec-command'
+import type * as ExecCommandModule from './remote-exec-command'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('./ssh-relay-exec-command', async (importOriginal) => ({
+vi.mock('./remote-exec-command', async (importOriginal) => ({
   ...(await importOriginal<typeof ExecCommandModule>()),
   execCommand: vi.fn()
 }))
 vi.mock('./ssh-connection-utils', () => ({ shellEscape: (s: string) => `'${s}'` }))
-vi.mock('./ssh-relay-gc-claim', () => ({
+vi.mock('./remote-install-gc-claim', () => ({
   isRelayGcClaimOwned: vi.fn().mockResolvedValue(true),
   releaseRelayGcClaimWithRetry: vi.fn().mockResolvedValue('released'),
   tryAcquireRelayGcClaim: vi.fn().mockResolvedValue('token')
@@ -14,14 +14,14 @@ vi.mock('./ssh-relay-gc-claim', () => ({
 vi.mock('./remote-install-gc-tombstone', () => ({
   cleanupRemoteInstallGcTombstones: vi.fn().mockResolvedValue(undefined)
 }))
-vi.mock('./ssh-relay-install-lock', () => ({
+vi.mock('./remote-install-lock', () => ({
   RELAY_INSTALL_LOCK_NAME: '.install-lock',
   INSTALL_LOCK_STALE_MS: 20 * 60_000,
   INSTALL_LOCK_STALE_SECONDS: 20 * 60,
   isRelayInstallLockStale: vi.fn().mockResolvedValue(false)
 }))
 
-import { execCommand } from './ssh-relay-exec-command'
+import { execCommand } from './remote-exec-command'
 import { gcOldOrcadVersions } from './orcad-remote-gc'
 import { emptyOrcadActivationRecord } from './orcad-activation-record'
 import { serializeOrcadActivationTransaction } from './orcad-activation-transaction'

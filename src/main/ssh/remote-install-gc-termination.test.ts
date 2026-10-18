@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type * as ExecCommandModule from './ssh-relay-exec-command'
+import type * as ExecCommandModule from './remote-exec-command'
 
-vi.mock('./ssh-relay-exec-command', async (importOriginal) => ({
+vi.mock('./remote-exec-command', async (importOriginal) => ({
   ...(await importOriginal<typeof ExecCommandModule>()),
   execCommand: vi.fn()
 }))
@@ -9,7 +9,7 @@ vi.mock('./ssh-relay-exec-command', async (importOriginal) => ({
 import type { SshConnection } from './ssh-connection'
 import { gcOldRemoteInstallVersions } from './remote-install-gc'
 import { ORCAD_INSTALL_MODEL } from './remote-install-model'
-import { execCommand } from './ssh-relay-exec-command'
+import { execCommand } from './remote-exec-command'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: all connection access is replaced by execCommand's mock.

@@ -19,7 +19,7 @@ import { RELAY_INSTALL_LOCK_NAME } from '../../shared/relay-install-lock-name'
 import { ORCAD_ACTIVATION_TRANSACTION_DIRNAME } from './orcad-activation-transaction'
 import { serializedStateMutationCommand } from './orcad-state-snapshot'
 import { ORCAD_FENCE_OWNER_FILENAME } from './orcad-activation-fence-scope'
-import { tryStealInstallLockCommand } from './ssh-relay-install-lock-commands'
+import { tryStealInstallLockCommand } from './remote-install-lock-commands'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 
 const posix = getRemoteHostPlatform('linux-x64')

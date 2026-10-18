@@ -1,15 +1,15 @@
-import type * as ExecCommandModule from './ssh-relay-exec-command'
+import type * as ExecCommandModule from './remote-exec-command'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('./ssh-relay-exec-command', async (importOriginal) => ({
+vi.mock('./remote-exec-command', async (importOriginal) => ({
   ...(await importOriginal<typeof ExecCommandModule>()),
   execCommand: vi.fn()
 }))
-vi.mock('./ssh-relay-install-lock', () => ({
+vi.mock('./remote-install-lock', () => ({
   acquireInstallLock: vi.fn().mockResolvedValue(undefined),
   RELAY_INSTALL_LOCK_NAME: '.install-lock'
 }))
-vi.mock('./ssh-relay-install-transfers', () => ({
+vi.mock('./remote-install-transfers', () => ({
   uploadRelayDirectory: vi.fn(),
   writeRelayFile: vi.fn()
 }))
@@ -18,12 +18,12 @@ vi.mock('./orcad-remote-node-runtime', () => ({
 }))
 
 import type { OrcadHostTransport } from './orcad-host-transport'
-import { execCommand } from './ssh-relay-exec-command'
-import { uploadRelayDirectory, writeRelayFile } from './ssh-relay-install-transfers'
+import { execCommand } from './remote-exec-command'
+import { uploadRelayDirectory, writeRelayFile } from './remote-install-transfers'
 import { installOrcadBundle } from './orcad-remote-install'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 import { decodeRemotePowerShellScript } from './ssh-remote-powershell'
-import { acquireInstallLock } from './ssh-relay-install-lock'
+import { acquireInstallLock } from './remote-install-lock'
 import {
   initOrcadHeldFenceTokenFile,
   ORCAD_HELD_FENCE_TOKENS_FILE_NAME

@@ -16,7 +16,7 @@ import { execOrcadRemote } from './orcad-remote-runtime-control'
 import { readBoundedOrcadRemoteRecord } from './orcad-remote-record-file'
 import { orcadSlotDir, type OrcadSlotOptions } from './orcad-recovery-slot'
 import { isWindowsRemoteHost, joinRemotePath } from './ssh-remote-platform'
-import { isUnconfirmedSshCommandTermination } from './ssh-relay-exec-command'
+import { isUnconfirmedSshCommandTermination } from './remote-exec-command'
 import {
   orcadWindowsNodeCommandLine,
   orcadWindowsSlotOpCommand,

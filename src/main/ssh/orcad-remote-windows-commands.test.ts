@@ -1,12 +1,12 @@
-import type * as ExecCommandModule from './ssh-relay-exec-command'
+import type * as ExecCommandModule from './remote-exec-command'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('./ssh-relay-exec-command', async (importOriginal) => ({
+vi.mock('./remote-exec-command', async (importOriginal) => ({
   ...(await importOriginal<typeof ExecCommandModule>()),
   execCommand: vi.fn()
 }))
 
-import { execCommand } from './ssh-relay-exec-command'
+import { execCommand } from './remote-exec-command'
 import type { OrcadHostTransport } from './orcad-host-transport'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 import { orcadLivenessProbeCommand, type OrcadLaunchSpec } from './orcad-remote-launch'

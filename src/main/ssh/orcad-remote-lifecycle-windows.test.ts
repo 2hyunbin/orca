@@ -1,4 +1,4 @@
-import type * as ExecCommandModule from './ssh-relay-exec-command'
+import type * as ExecCommandModule from './remote-exec-command'
 import type * as TerminalBarrier from './orcad-rollback-terminal-barrier'
 /**
  * The deploy and rollback drivers end to end against a Windows host whose every host op is answered by a
@@ -7,15 +7,15 @@ import type * as TerminalBarrier from './orcad-rollback-terminal-barrier'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as RecordFile from './orcad-remote-record-file'
 
-vi.mock('./ssh-relay-exec-command', async (importOriginal) => ({
+vi.mock('./remote-exec-command', async (importOriginal) => ({
   ...(await importOriginal<typeof ExecCommandModule>()),
   execCommand: vi.fn()
 }))
-vi.mock('./ssh-relay-install-lock', () => ({
+vi.mock('./remote-install-lock', () => ({
   acquireInstallLock: vi.fn().mockResolvedValue(undefined),
   RELAY_INSTALL_LOCK_NAME: '.install-lock'
 }))
-vi.mock('./ssh-relay-install-transfers', () => ({
+vi.mock('./remote-install-transfers', () => ({
   uploadRelayDirectory: vi.fn().mockResolvedValue(undefined),
   writeRelayFile: vi.fn().mockResolvedValue(undefined)
 }))
@@ -50,7 +50,7 @@ vi.mock('./remote-versioned-install', async (importOriginal) => ({
   abandonInstall: vi.fn().mockResolvedValue(undefined)
 }))
 
-import { execCommand } from './ssh-relay-exec-command'
+import { execCommand } from './remote-exec-command'
 import { deployOrcad, type OrcadDeployOptions } from './orcad-remote-deploy'
 import { rollbackOrcad } from './orcad-remote-rollback'
 import { emptyOrcadActivationRecord } from './orcad-activation-record'

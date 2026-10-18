@@ -6,7 +6,7 @@
  * activated" would deploy over a live install and lose its rollback target.
  */
 import type { OrcadHostTransport } from './orcad-host-transport'
-import { RELAY_REMOTE_DIR } from './relay-protocol'
+import { RELAY_REMOTE_DIR } from './remote-frame-protocol'
 import {
   ORCAD_ACTIVATION_FILENAME,
   emptyOrcadActivationRecord,

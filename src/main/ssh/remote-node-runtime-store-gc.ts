@@ -28,8 +28,8 @@ import {
   tryWithRuntimeStoreLock
 } from './remote-node-runtime-store-lock'
 import { shellEscape } from './ssh-connection-utils'
-import { execCommand, isUnconfirmedSshCommandTermination } from './ssh-relay-exec-command'
-import { INSTALL_LOCK_STALE_MS } from './ssh-relay-install-lock'
+import { execCommand, isUnconfirmedSshCommandTermination } from './remote-exec-command'
+import { INSTALL_LOCK_STALE_MS } from './remote-install-lock'
 import {
   moveRemoteTreeCommand,
   removeRemoteTreeCommand,

@@ -29,7 +29,7 @@ import { removeOrcadMigrationJournalsForDestination } from './orcad-migration-cu
 import { decommissionRemoteOrcad } from './orcad-remote-decommission'
 import { withManagedOrcadLifecycle } from './orcad-runtime-maintenance'
 import { collectManagedTerminalCensus } from './orcad-terminal-census-client'
-import { RemoteInstallLockBusyError } from './ssh-relay-install-lock'
+import { RemoteInstallLockBusyError } from './remote-install-lock'
 
 export type ManagedOrcadStopPolicy = {
   isActiveEnvironment: (environmentId: string) => boolean

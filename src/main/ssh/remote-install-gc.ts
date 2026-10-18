@@ -6,10 +6,10 @@
  * until the relay-era upgrade window closes.
  */
 import type { RemoteInstallTransport } from './remote-install-transport'
-import { RELAY_REMOTE_DIR } from './relay-protocol'
-import { execHostCommand } from './ssh-relay-host-exec'
-import { probeInstallLockExistsCommand } from './ssh-relay-install-lock-commands'
-import { isRelayInstallLockStale, RELAY_INSTALL_LOCK_NAME } from './ssh-relay-install-lock'
+import { RELAY_REMOTE_DIR } from './remote-frame-protocol'
+import { execHostCommand } from './remote-host-exec'
+import { probeInstallLockExistsCommand } from './remote-install-lock-commands'
+import { isRelayInstallLockStale, RELAY_INSTALL_LOCK_NAME } from './remote-install-lock'
 import {
   remoteInstallGcPermits,
   remoteInstallVersionDirRegex,
@@ -19,7 +19,7 @@ import {
   isRelayGcClaimOwned,
   releaseRelayGcClaimWithRetry,
   tryAcquireRelayGcClaim
-} from './ssh-relay-gc-claim'
+} from './remote-install-gc-claim'
 import { cleanupRemoteInstallGcTombstones } from './remote-install-gc-tombstone'
 import {
   listRemoteInstallBaseDirsCommand,
@@ -34,7 +34,7 @@ import {
   remoteBasename,
   type RemoteHostPlatform
 } from './ssh-remote-platform'
-import { isUnconfirmedSshCommandTermination } from './ssh-relay-exec-command'
+import { isUnconfirmedSshCommandTermination } from './remote-exec-command'
 
 const DEFAULT_REMOTE_HOST = getRemoteHostPlatform('linux-x64')
 

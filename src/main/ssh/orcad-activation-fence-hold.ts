@@ -11,7 +11,7 @@ import {
 } from './orcad-activation-lock'
 import { readOrcadActivationTransaction } from './orcad-activation-transaction-store'
 import { orcadActivationFenceLockDir } from './orcad-activation-transaction'
-import { isRelayInstallLockStale } from './ssh-relay-install-lock'
+import { isRelayInstallLockStale } from './remote-install-lock'
 import { findExitedOwnLockToken } from './orcad-exited-own-lock'
 import { orcadRemoteBaseDir } from './orcad-remote-windows-node'
 

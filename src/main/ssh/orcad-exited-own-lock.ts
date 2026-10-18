@@ -27,7 +27,7 @@ import {
 } from './orcad-state-snapshot-members'
 import { CMD_EXE_COMMAND_LINE_MAX_CHARS } from '../providers/windows-shell-args'
 import { shellEscape } from './ssh-connection-utils'
-import type { InstallLockExitedOwnerProof } from './ssh-relay-install-lock'
+import type { InstallLockExitedOwnerProof } from './remote-install-lock'
 import { isWindowsRemoteHost, joinRemotePath } from './ssh-remote-platform'
 
 // Keeps the Windows command line short; an older token left out only waits out the stale window.

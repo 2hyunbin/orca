@@ -20,7 +20,7 @@ import {
 } from './orcad-remote-readiness-wait'
 import type { OrcadHostTransport } from './orcad-host-transport'
 import { errorMessage } from '../../shared/error-message'
-import { execCommand, isUnconfirmedSshCommandTermination } from './ssh-relay-exec-command'
+import { execCommand, isUnconfirmedSshCommandTermination } from './remote-exec-command'
 import {
   currentOrcadFence,
   isOrcadFenceLost,

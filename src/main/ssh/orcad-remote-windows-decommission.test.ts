@@ -3,16 +3,16 @@
  * a staged managed request run by the slot's node.exe, and GC screens every candidate in one
  * node.exe instead of one per version dir.
  */
-import type * as ExecCommandModule from './ssh-relay-exec-command'
+import type * as ExecCommandModule from './remote-exec-command'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as RecordFile from './orcad-remote-record-file'
-import type * as InstallLock from './ssh-relay-install-lock'
+import type * as InstallLock from './remote-install-lock'
 
-vi.mock('./ssh-relay-exec-command', async (importOriginal) => ({
+vi.mock('./remote-exec-command', async (importOriginal) => ({
   ...(await importOriginal<typeof ExecCommandModule>()),
   execCommand: vi.fn()
 }))
-vi.mock('./ssh-relay-install-lock', async (importOriginal) => ({
+vi.mock('./remote-install-lock', async (importOriginal) => ({
   ...(await importOriginal<typeof InstallLock>()),
   acquireInstallLock: vi.fn().mockResolvedValue(undefined)
 }))
@@ -25,7 +25,7 @@ vi.mock('./remote-install-gc', async (importOriginal) => ({
   gcOldRemoteInstallVersions: vi.fn().mockResolvedValue(undefined)
 }))
 
-import { execCommand } from './ssh-relay-exec-command'
+import { execCommand } from './remote-exec-command'
 import { writeAtomicOrcadRemoteRecord } from './orcad-remote-record-file'
 import { gcOldRemoteInstallVersions } from './remote-install-gc'
 import { decommissionRemoteOrcad } from './orcad-remote-decommission'

@@ -18,7 +18,7 @@ import {
   lockAgeSecondsCommand,
   tryCreateInstallLockCommand,
   tryStealInstallLockCommand
-} from './ssh-relay-install-lock-commands'
+} from './remote-install-lock-commands'
 import {
   commandWithNodePath,
   listRemoteInstallBaseDirsCommand,
@@ -35,7 +35,7 @@ import {
   readUncappedRelayGcPaths,
   runCappedRelayGcShellCommand,
   SSH_EXEC_OUTPUT_CAP_CHARS
-} from './ssh-relay-gc-listing.test-fixture'
+} from './remote-install-gc-listing.test-fixture'
 
 const posix = getRemoteHostPlatform('linux-x64')
 const nativePosix = getRemoteHostPlatform(

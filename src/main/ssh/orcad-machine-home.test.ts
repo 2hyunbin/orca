@@ -12,7 +12,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type * as ExecCommandModule from './ssh-relay-exec-command'
+import type * as ExecCommandModule from './remote-exec-command'
 import type { OrcadMachineHomeProbe } from './orcad-machine-home'
 import type { OrcadHostTransport } from './orcad-host-transport'
 import type { RemoteHostPlatform } from './ssh-remote-platform'
@@ -21,7 +21,7 @@ import type { RemoteHostPlatform } from './ssh-remote-platform'
 const shell = vi.hoisted((): { env: NodeJS.ProcessEnv | undefined } => ({
   env: undefined
 }))
-vi.mock('./ssh-relay-exec-command', async (importOriginal) => {
+vi.mock('./remote-exec-command', async (importOriginal) => {
   const { runProcess } = await import('@orca/process-host')
   return {
     ...(await importOriginal<typeof ExecCommandModule>()),
@@ -32,7 +32,7 @@ vi.mock('./ssh-relay-exec-command', async (importOriginal) => {
         env: conn.env ?? shell.env
       })
       if (result.code !== 0) {
-        const { sshCommandExitError } = await import('./ssh-relay-exec-command')
+        const { sshCommandExitError } = await import('./remote-exec-command')
         throw sshCommandExitError(command, result.code ?? 1, result.stdout)
       }
       return result.stdout

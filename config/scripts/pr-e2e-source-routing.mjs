@@ -132,7 +132,7 @@ export const PR_E2E_SOURCE_ROUTES = [
           file
         ))
   },
-  // COMPAT(legacy-relay-bridge): revisit 2027-01-15 with src/main/ssh/legacy-relay-bridge/.
+  // COMPAT(legacy-relay-bridge): revisit 2027-01-15 with src/main/ssh/legacy-relay/.
   {
     id: 'ssh.orcad-legacy-relay-bridge',
     specs: ['tests/e2e/ssh-orcad-legacy-relay-bridge.spec.ts'],
@@ -142,7 +142,7 @@ export const PR_E2E_SOURCE_ROUTES = [
         file
       ) ||
       (isProductSource(file) &&
-        /(?:legacy-relay-bridge|orcad-migration-terminal-gate|ssh-host-relay-terminals-on-connect)/.test(
+        /(?:legacy-relay(?:-bridge|\/)|orcad-migration-terminal-gate|ssh-host-relay-terminals-on-connect)/.test(
           file
         ))
   },

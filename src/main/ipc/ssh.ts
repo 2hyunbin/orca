@@ -56,7 +56,7 @@ import { disposeOrcadManagedTunnels } from '../ssh/orcad-managed-tunnel'
 import { reconcileManagedOrcadSshTargets } from '../ssh/orcad-retained-source'
 import { installOrcadMigrationScrollbackRetention } from '../ssh/orcad-migration-scrollback-retention-wiring'
 import { getAppEnvironment } from '../../shared/app-environment'
-import { registerLegacyRelayBridgeIpc } from '../ssh/legacy-relay-bridge/legacy-relay-bridge-ipc'
+import { registerLegacyRelayBridgeIpc } from '../ssh/legacy-relay/legacy-relay-bridge-ipc'
 import {
   disposeDesktopBrowserBridge,
   installDesktopBrowserBridge

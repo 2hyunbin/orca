@@ -1,4 +1,4 @@
-import type * as ExecCommandModule from './ssh-relay-exec-command'
+import type * as ExecCommandModule from './remote-exec-command'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -16,15 +16,15 @@ import {
   REMOTE_NODE_RUNTIME_VERIFIED_MARKER
 } from './orcad-remote-node-runtime-report'
 import { RUNTIME_STORE_LOCK_NAME, withRuntimeStoreLock } from './remote-node-runtime-store-lock'
-import { execCommand } from './ssh-relay-exec-command'
-import { uploadRelayDirectory } from './ssh-relay-install-transfers'
+import { execCommand } from './remote-exec-command'
+import { uploadRelayDirectory } from './remote-install-transfers'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 
-vi.mock('./ssh-relay-exec-command', async (importOriginal) => ({
+vi.mock('./remote-exec-command', async (importOriginal) => ({
   ...(await importOriginal<typeof ExecCommandModule>()),
   execCommand: vi.fn()
 }))
-vi.mock('./ssh-relay-install-transfers', () => ({ uploadRelayDirectory: vi.fn() }))
+vi.mock('./remote-install-transfers', () => ({ uploadRelayDirectory: vi.fn() }))
 
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: every remote call goes through the mocked execCommand, which runs it in a local shell.
 const conn = {} as OrcadHostTransport

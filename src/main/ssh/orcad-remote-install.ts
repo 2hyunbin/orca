@@ -4,17 +4,17 @@ import { orcadAgentBrowserNativeName } from '../../shared/orcad-agent-browser-na
 import type { NodeRuntimeTarget } from '../../shared/node-runtime-pin'
 import { ensureRemoteOrcadNodeRuntime } from './orcad-remote-node-runtime'
 import { recordedRemoteNodeRuntimeProbeCommand } from './orcad-remote-node-runtime-recorded-probe'
-import { execCommand, isUnconfirmedSshCommandTermination } from './ssh-relay-exec-command'
+import { execCommand, isUnconfirmedSshCommandTermination } from './remote-exec-command'
 import { shellEscape } from './ssh-connection-utils'
 import type { OrcadHostTransport } from './orcad-host-transport'
 import { joinRemotePath, type RemoteHostPlatform } from './ssh-remote-platform'
 import { ORCAD_INSTALL_MODEL } from './remote-install-model'
-import { acquireInstallLock } from './ssh-relay-install-lock'
+import { acquireInstallLock } from './remote-install-lock'
 import { ORCAD_FENCE_OWNER_FILENAME } from './orcad-activation-fence-scope'
 import { forgetHeldOrcadFence, rememberHeldOrcadFence } from './orcad-held-fence-tokens'
 import { exitedOwnLockProof } from './orcad-exited-own-lock'
 import { orcadWindowsBaseDir } from './orcad-remote-windows-node'
-import { uploadRelayDirectory, writeRelayFile } from './ssh-relay-install-transfers'
+import { uploadRelayDirectory, writeRelayFile } from './remote-install-transfers'
 import {
   abandonInstall,
   finalizeInstall,

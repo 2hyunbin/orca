@@ -9,7 +9,7 @@ import { orcadInstallDirNames } from './orcad-activation-record'
 import type { OrcadActivationTransaction } from './orcad-activation-transaction'
 import { readOrcadActivationTransaction } from './orcad-activation-transaction-store'
 import { orcadActivationFenceExists } from './orcad-activation-lock'
-import { isUnconfirmedSshCommandTermination } from './ssh-relay-exec-command'
+import { isUnconfirmedSshCommandTermination } from './remote-exec-command'
 import type { OrcadRemoteExecTarget } from './orcad-remote-runtime-control'
 
 export type OrcadGcTransactionPins = { state: 'pinned'; dirNames: string[] } | { state: 'keep-all' }
