@@ -182,6 +182,14 @@ export type SmartSortSources = {
   terminalLayoutsByTabId?: Record<string, TerminalLayoutSnapshot>
 }
 
+/** For stamp-sorted callers: the stamps need no live terminal or agent sources. */
+export const NO_LIVE_SMART_SORT_SOURCES: SmartSortSources = Object.freeze({
+  tabsByWorktree: {},
+  agentStatusByPaneKey: {},
+  runtimePaneTitlesByTabId: {},
+  ptyIdsByTabId: {}
+})
+
 export type WorktreeSortRanking<W extends Worktree> = {
   sorted: W[]
   /** Smart only, and only once warm. */
