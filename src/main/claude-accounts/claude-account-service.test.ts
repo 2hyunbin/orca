@@ -11,6 +11,7 @@ import {
   CLAUDE_ACCOUNT_NEEDS_SIGN_IN_MESSAGE
 } from './claude-account-selection'
 import type { ClaudeCommandConfig, ClaudeCommandOptions } from './claude-command-process'
+import { describeClaudeProfile } from './claude-profile-paths'
 import type { ClaudeAccountSelectionTarget } from './runtime-selection'
 import { ClaudeAccountService } from './service'
 
@@ -184,6 +185,58 @@ describe('ClaudeAccountService', () => {
     })
     expect(f.settings().claudeManagedAccounts).toHaveLength(2)
   })
+
+  it.each([
+    { email: 'new@example.test', organizationUuid: 'new-org', duplicate: false },
+    { email: 'imported@example.test', organizationUuid: 'saved-org', duplicate: true },
+    { email: 'current@example.test', organizationUuid: 'current-org', duplicate: true }
+  ])(
+    'finishes sign-in for $email despite an invalid imported account ID',
+    async ({ email, organizationUuid, duplicate }) => {
+      const imported = account('invalid.id', {
+        email: 'imported@example.test',
+        organizationUuid: 'saved-org',
+        organizationName: 'Saved organization'
+      })
+      const f = fixture([imported, account('a')])
+      vi.spyOn(f.runtimeAuth.router, 'accountHome').mockImplementation((id) => {
+        describeClaudeProfile(f.root, id, { executionHostId: 'local', runtime: 'host' })
+        return f.home(id)
+      })
+      f.signIn('a', 'current@example.test', 'current-org')
+      const rows = f.service.listAccounts().accounts
+      expect(rows).toEqual([
+        expect.objectContaining({
+          id: imported.id,
+          email: imported.email,
+          organizationUuid: imported.organizationUuid,
+          organizationName: imported.organizationName,
+          needsSignIn: true
+        }),
+        expect.objectContaining({
+          id: 'a',
+          email: 'current@example.test',
+          organizationUuid: 'current-org'
+        })
+      ])
+
+      const begun = await f.service.beginSignIn({ runtime: 'host' })
+      f.signIn(begun.accountId, email, organizationUuid)
+      if (duplicate) {
+        await expect(f.service.finishSignIn(begun)).rejects.toThrow('already added')
+        expect(existsSync(f.home(begun.accountId))).toBe(false)
+        expect(f.settings().claudeManagedAccounts).toEqual([imported, account('a')])
+      } else {
+        await expect(f.service.finishSignIn(begun)).resolves.toMatchObject({
+          accounts: expect.arrayContaining([
+            expect.objectContaining({ id: begun.accountId, email, organizationUuid })
+          ])
+        })
+        expect(f.settings().claudeManagedAccounts).toHaveLength(3)
+        expect(existsSync(f.home(begun.accountId))).toBe(true)
+      }
+    }
+  )
 
   it('relabels a saved account signed in again under another login', async () => {
     const f = fixture()
