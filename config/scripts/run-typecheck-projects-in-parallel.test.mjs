@@ -18,6 +18,7 @@ import {
   planTypecheckBatches,
   resolveProjectCompiler,
   parseTypecheckOptions,
+  selectTypecheckCompiler,
   typecheckBatches,
   runTypecheckProjects
 } from './run-typecheck-projects-in-parallel.mjs'
@@ -132,16 +133,82 @@ describe('workspace package test typecheck', () => {
 })
 
 describe('CI compiler selection', () => {
-  it('keeps native incremental checking as the local default', () => {
-    expect(parseTypecheckOptions([]).compiler).toBe('native')
+  it('lets the runner choose the compiler by default', () => {
+    expect(parseTypecheckOptions([]).compiler).toBe('auto')
   })
 
-  it.each(['--compiler=typo', '--bun-concurrency=0', '--bun-threads=NaN', '--bun-concurrency=5'])(
-    'rejects unsafe or unknown options: %s',
-    (argument) => {
-      expect(() => parseTypecheckOptions([argument])).toThrow()
+  it('narrows to the requested projects and rejects unknown ones', () => {
+    expect(parseTypecheckOptions(['--project=config/tsconfig.node.json']).projects).toEqual([
+      TYPECHECK_PROJECTS[0]
+    ])
+    expect(parseTypecheckOptions([]).projects).toEqual(TYPECHECK_PROJECTS)
+    expect(() => parseTypecheckOptions(['--project=config/tsconfig.json'])).toThrow()
+  })
+
+  it('prefers the pinned Bun and falls back to tsc with a hint when it is missing', () => {
+    const projects = TYPECHECK_PROJECTS
+    expect(
+      selectTypecheckCompiler('auto', {
+        root: repoRoot,
+        projects,
+        resolveBunExecutable: () => '/opt/bun/bin/bun'
+      })
+    ).toEqual({ compiler: 'bun', bunExecutable: '/opt/bun/bin/bun' })
+    const fallback = selectTypecheckCompiler('auto', {
+      root: repoRoot,
+      projects,
+      resolveBunExecutable: () => null
+    })
+    expect(fallback.compiler).toBe('native')
+    expect(fallback.notice).toContain('config/.bun-version')
+  })
+
+  it('never probes Bun when a compiler is named explicitly', () => {
+    const resolveBunExecutable = () => {
+      throw new Error('probed')
     }
-  )
+    for (const compiler of ['bun', 'native']) {
+      expect(
+        selectTypecheckCompiler(compiler, {
+          root: repoRoot,
+          projects: TYPECHECK_PROJECTS,
+          resolveBunExecutable
+        }).compiler
+      ).toBe(compiler)
+    }
+  })
+
+  it('falls back to tsc when a project compiler has no Bun parity check', () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'orca-auto-compiler-version-')))
+    try {
+      mkdirSync(join(root, 'config'))
+      writeFileSync(join(root, 'config', '.bun-version'), '1.4.3\n')
+      mkdirSync(join(root, 'node_modules', 'typescript'), { recursive: true })
+      writeFileSync(
+        join(root, 'node_modules', 'typescript', 'package.json'),
+        JSON.stringify({ name: 'typescript', version: '8.0.0', bin: 'compiler.cjs' })
+      )
+      const selection = selectTypecheckCompiler('auto', {
+        root,
+        projects: [{ config: 'config/tsconfig.json', heapGib: 1 }],
+        resolveBunExecutable: () => '/opt/bun/bin/bun'
+      })
+      expect(selection.compiler).toBe('native')
+      expect(selection.notice).toContain('TypeScript 8.0.0')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it.each([
+    '--compiler=typo',
+    '--bun-concurrency=0',
+    '--bun-threads=NaN',
+    '--bun-concurrency=5',
+    '--project'
+  ])('rejects unsafe or unknown options: %s', (argument) => {
+    expect(() => parseTypecheckOptions([argument])).toThrow()
+  })
 
   it('bounds Bun project concurrency and reserves memory for overlapping checks', () => {
     const options = parseTypecheckOptions([
