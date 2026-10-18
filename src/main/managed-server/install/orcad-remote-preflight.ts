@@ -13,7 +13,7 @@ import {
   readOrcadWindowsEncodedAnswer
 } from './orcad-remote-windows-node'
 import { readWindowsOrcadSlotEntry } from './orcad-remote-launch-windows'
-import { ORCAD_WINDOWS_RUNTIME_MARKER } from '../../ssh/orcad-windows-host-script'
+import { ORCAD_WINDOWS_RUNTIME_MARKER } from '../host-state/orcad-windows-host-script'
 import { orcadNodeSlotRuntimeCommand, selectOrcadSlotEntryCommand } from './orcad-remote-runtime'
 import { execCommand } from '../../ssh/remote-exec-command'
 import { shellEscape } from '../../ssh/ssh-connection-utils'

@@ -20,8 +20,8 @@ import {
   serializedStateMutationCommand
 } from './orcad-state-snapshot'
 import { posixProcessGroupCommand } from './orcad-state-mutation-owner-record'
-import { getRemoteHostPlatform } from './ssh-remote-platform'
-import { shellEscape } from './ssh-connection-utils'
+import { getRemoteHostPlatform } from '../../ssh/ssh-remote-platform'
+import { shellEscape } from '../../ssh/ssh-connection-utils'
 
 const posix = getRemoteHostPlatform('linux-x64')
 

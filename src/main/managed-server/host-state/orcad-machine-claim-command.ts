@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto'
-import { shellEscape } from './ssh-connection-utils'
-import { RELAY_REMOTE_DIR } from './remote-frame-protocol'
+import { shellEscape } from '../../ssh/ssh-connection-utils'
+import { RELAY_REMOTE_DIR } from '../../ssh/remote-frame-protocol'
 import {
   ORCAD_MACHINE_CLAIM_FILENAME,
   ORCAD_MACHINE_CLAIM_SCHEMA_VERSION
 } from './orcad-machine-home'
-import { joinRemotePath, type RemoteHostPlatform } from './ssh-remote-platform'
+import { joinRemotePath, type RemoteHostPlatform } from '../../ssh/ssh-remote-platform'
 
 /** Under `~/.orca-remote`: decides the claim when hard links cannot (see the claim command). */
 export const ORCAD_MACHINE_CLAIM_ARBITER_DIRNAME = 'orcad-machine.arbiter'

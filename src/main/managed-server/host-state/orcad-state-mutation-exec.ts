@@ -11,12 +11,9 @@ import {
   ORCAD_STATE_MUTATION_BUSY,
   ORCAD_STATE_MUTATION_DEADLINE
 } from './orcad-state-snapshot-members'
-import type { OrcadRemoteExecTarget } from '../managed-server/install/orcad-remote-runtime-control'
-import { execCommand, isUnconfirmedSshCommandTermination } from './remote-exec-command'
-import {
-  isOrcadFenceLost,
-  OrcadFenceLostError
-} from '../managed-server/activation/orcad-activation-fence-scope'
+import type { OrcadRemoteExecTarget } from '../install/orcad-remote-runtime-control'
+import { execCommand, isUnconfirmedSshCommandTermination } from '../../ssh/remote-exec-command'
+import { isOrcadFenceLost, OrcadFenceLostError } from '../activation/orcad-activation-fence-scope'
 
 // Longer than the host's own deadline, so the host kills the work before the client gives up.
 export const ORCAD_STATE_MUTATION_CLIENT_TIMEOUT_MS =

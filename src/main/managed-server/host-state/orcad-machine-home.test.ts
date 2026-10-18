@@ -12,16 +12,16 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type * as ExecCommandModule from './remote-exec-command'
+import type * as ExecCommandModule from '../../ssh/remote-exec-command'
 import type { OrcadMachineHomeProbe } from './orcad-machine-home'
-import type { OrcadHostTransport } from './orcad-host-transport'
-import type { RemoteHostPlatform } from './ssh-remote-platform'
+import type { OrcadHostTransport } from '../../ssh/orcad-host-transport'
+import type { RemoteHostPlatform } from '../../ssh/ssh-remote-platform'
 
 // Each "machine" is a real local shell whose `uname -n` answers that machine's hostname.
 const shell = vi.hoisted((): { env: NodeJS.ProcessEnv | undefined } => ({
   env: undefined
 }))
-vi.mock('./remote-exec-command', async (importOriginal) => {
+vi.mock('../../ssh/remote-exec-command', async (importOriginal) => {
   const { runProcess } = await import('@orca/process-host')
   return {
     ...(await importOriginal<typeof ExecCommandModule>()),
@@ -32,7 +32,7 @@ vi.mock('./remote-exec-command', async (importOriginal) => {
         env: conn.env ?? shell.env
       })
       if (result.code !== 0) {
-        const { sshCommandExitError } = await import('./remote-exec-command')
+        const { sshCommandExitError } = await import('../../ssh/remote-exec-command')
         throw sshCommandExitError(command, result.code ?? 1, result.stdout)
       }
       return result.stdout
@@ -40,7 +40,7 @@ vi.mock('./remote-exec-command', async (importOriginal) => {
   }
 })
 
-const { resolveOrcadMachineHome } = await import('../managed-server/install/orcad-remote-context')
+const { resolveOrcadMachineHome } = await import('../install/orcad-remote-context')
 const {
   decideOrcadMachineHome,
   orcadMachineIdentity,
@@ -50,13 +50,12 @@ const {
   ORCAD_MACHINE_HOMES_DIRNAME
 } = await import('./orcad-machine-home')
 const { ORCAD_MACHINE_CLAIM_ARBITER_DIRNAME } = await import('./orcad-machine-claim-command')
-const { computeRemoteInstallDir } =
-  await import('../managed-server/install/remote-versioned-install')
-const { ORCAD_INSTALL_MODEL } = await import('../managed-server/install/remote-install-model')
-const { orcadLivenessProbeCommand } = await import('../managed-server/install/orcad-remote-launch')
-const { ORCAD_PID_FILENAME } = await import('../managed-server/install/orcad-remote-host-support')
-const { execOrcadRemote } = await import('../managed-server/install/orcad-remote-runtime-control')
-const { getRemoteHostPlatform } = await import('./ssh-remote-platform')
+const { computeRemoteInstallDir } = await import('../install/remote-versioned-install')
+const { ORCAD_INSTALL_MODEL } = await import('../install/remote-install-model')
+const { orcadLivenessProbeCommand } = await import('../install/orcad-remote-launch')
+const { ORCAD_PID_FILENAME } = await import('../install/orcad-remote-host-support')
+const { execOrcadRemote } = await import('../install/orcad-remote-runtime-control')
+const { getRemoteHostPlatform } = await import('../../ssh/ssh-remote-platform')
 type Probe = OrcadMachineHomeProbe
 type Host = RemoteHostPlatform
 

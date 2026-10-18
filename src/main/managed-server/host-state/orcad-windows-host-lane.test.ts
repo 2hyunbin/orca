@@ -12,30 +12,27 @@ import { afterAll, beforeAll, describe, expect, it, vi, type MockInstance } from
 
 vi.mock('electron', () => ({ app: { getAppPath: () => process.cwd() } }))
 
-import { SshConnection } from './ssh-connection'
+import { SshConnection } from '../../ssh/ssh-connection'
 import {
   connectHostileHost,
   installHostileHostAppEnvironment
-} from './hostile-host-test-support/ssh-hostile-host-test-harness'
-import { resolveOrcadRemoteContext } from '../managed-server/install/orcad-remote-context'
-import { proveWindowsStdioBridge } from './orcad-windows-stdio-bridge-test-cell'
-import { deployOrcad } from './orcad-remote-deploy'
-import {
-  orcadLivenessProbeCommand,
-  parseOrcadLiveness
-} from '../managed-server/install/orcad-remote-launch'
-import { orcadSlotDir, type OrcadSlotOptions } from './orcad-recovery-slot'
-import { decommissionRemoteOrcad } from '../managed-server/install/orcad-remote-decommission'
-import { readOrcadActivationRecord } from '../managed-server/activation/orcad-activation-record-store'
-import { gcOldOrcadVersions } from '../managed-server/install/orcad-remote-gc'
-import { execOrcadRemote } from '../managed-server/install/orcad-remote-runtime-control'
-import { orcadWindowsNodeCommandLine } from '../managed-server/install/orcad-remote-windows-node'
-import { joinRemotePath } from './ssh-remote-platform'
+} from '../../ssh/hostile-host-test-support/ssh-hostile-host-test-harness'
+import { resolveOrcadRemoteContext } from '../install/orcad-remote-context'
+import { proveWindowsStdioBridge } from '../../ssh/orcad-windows-stdio-bridge-test-cell'
+import { deployOrcad } from '../../ssh/orcad-remote-deploy'
+import { orcadLivenessProbeCommand, parseOrcadLiveness } from '../install/orcad-remote-launch'
+import { orcadSlotDir, type OrcadSlotOptions } from '../../ssh/orcad-recovery-slot'
+import { decommissionRemoteOrcad } from '../install/orcad-remote-decommission'
+import { readOrcadActivationRecord } from '../activation/orcad-activation-record-store'
+import { gcOldOrcadVersions } from '../install/orcad-remote-gc'
+import { execOrcadRemote } from '../install/orcad-remote-runtime-control'
+import { orcadWindowsNodeCommandLine } from '../install/orcad-remote-windows-node'
+import { joinRemotePath } from '../../ssh/ssh-remote-platform'
 import {
   isWindowsOrcadCellId,
   readWindowsHostCellDescriptor,
   windowsHostSshTarget
-} from './ssh-windows-host-cells'
+} from '../../ssh/ssh-windows-host-cells'
 
 const RUN = process.env.ORCA_RUN_SSH_WINDOWS_HOST === '1'
 const CELL_TIMEOUT_MS = 20 * 60_000

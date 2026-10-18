@@ -14,7 +14,7 @@ import {
   restoreOrcadStateSnapshotCommand,
   ORCAD_STATE_MUTATION_DEADLINE_SECONDS
 } from './orcad-state-snapshot'
-import { getRemoteHostPlatform } from './ssh-remote-platform'
+import { getRemoteHostPlatform } from '../../ssh/ssh-remote-platform'
 import { ORCAD_SNAPSHOT_EXCLUDED, ORCAD_SNAPSHOT_MEMBERS } from './orcad-state-snapshot-members'
 
 const posix = getRemoteHostPlatform('linux-x64')

@@ -8,14 +8,14 @@
  * built under a partial name and renamed into place, so a half-written snapshot is never
  * `PRESENT`. Symlinks and junctions anywhere in captured state fail closed, as on POSIX.
  */
-import { PRIMARY_RUNTIME_METADATA_FILE } from '../../shared/runtime-bootstrap'
-import { ORCAD_LOCK_FILE_NAME } from '../orcad/orcad-instance-lock'
-import { ORCAD_WINDOWS_PROCESS_TREE_FILENAME } from '../../shared/orcad-artifacts'
-import { ORCAD_INSTALL_MODEL } from '../managed-server/install/remote-install-model'
+import { PRIMARY_RUNTIME_METADATA_FILE } from '../../../shared/runtime-bootstrap'
+import { ORCAD_LOCK_FILE_NAME } from '../../orcad/orcad-instance-lock'
+import { ORCAD_WINDOWS_PROCESS_TREE_FILENAME } from '../../../shared/orcad-artifacts'
+import { ORCAD_INSTALL_MODEL } from '../install/remote-install-model'
 import {
   ORCAD_FENCE_LOST_EXIT,
   ORCAD_FENCE_LOST_MARKER
-} from '../managed-server/activation/orcad-activation-fence-scope'
+} from '../activation/orcad-activation-fence-scope'
 import {
   ORCAD_SNAPSHOT_MEMBERS,
   ORCAD_STATE_MUTATION_BUSY,

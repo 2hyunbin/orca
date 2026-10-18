@@ -6,10 +6,10 @@ import {
   execOrcadStateMutation,
   execOrcadStateMutationOr
 } from './orcad-state-mutation-exec'
-import { execOrcadRemoteOr } from '../managed-server/install/orcad-remote-runtime-control'
-import { isUnconfirmedSshCommandTermination } from './remote-exec-command'
-import { getRemoteHostPlatform } from './ssh-remote-platform'
-import type { OrcadHostTransport } from './orcad-host-transport'
+import { execOrcadRemoteOr } from '../install/orcad-remote-runtime-control'
+import { isUnconfirmedSshCommandTermination } from '../../ssh/remote-exec-command'
+import { getRemoteHostPlatform } from '../../ssh/ssh-remote-platform'
+import type { OrcadHostTransport } from '../../ssh/orcad-host-transport'
 
 /** An ssh2 exec channel whose remote command answers only when the test says so. */
 class SlowChannel extends EventEmitter {

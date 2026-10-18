@@ -6,7 +6,7 @@
  * when an operator accepts it — the slot exposed RPC, and with it stopped nothing on the host
  * can count the terminals it started, so the snapshot may no longer describe them.
  */
-import { execOrcadStateMutation } from './orcad-state-mutation-exec'
+import { execOrcadStateMutation } from '../managed-server/host-state/orcad-state-mutation-exec'
 import { orcadRemoteBaseDir } from '../managed-server/install/orcad-remote-windows-node'
 import type { ServeReadiness } from '../server/serve-readiness'
 import { RELAY_REMOTE_DIR } from './remote-frame-protocol'
@@ -18,7 +18,7 @@ import {
   orcadSnapshotIsUnchanged,
   parseOrcadSnapshotRestore,
   restoreOrcadStateSnapshotCommand
-} from './orcad-state-snapshot'
+} from '../managed-server/host-state/orcad-state-snapshot'
 import { execOrcadRemote } from '../managed-server/install/orcad-remote-runtime-control'
 import {
   ensureOrcadSlotServing,

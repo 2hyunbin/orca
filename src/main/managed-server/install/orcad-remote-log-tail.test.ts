@@ -11,7 +11,7 @@ import {
   parseOrcadLogTail,
   withOrcadLogTail
 } from './orcad-remote-log-tail'
-import { ORCAD_WINDOWS_HOST_SCRIPT } from '../../ssh/orcad-windows-host-script'
+import { ORCAD_WINDOWS_HOST_SCRIPT } from '../host-state/orcad-windows-host-script'
 import { getRemoteHostPlatform } from '../../ssh/ssh-remote-platform'
 
 const execCommand = vi.hoisted(() => vi.fn())

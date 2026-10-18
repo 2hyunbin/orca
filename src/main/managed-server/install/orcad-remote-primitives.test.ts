@@ -9,11 +9,13 @@ vi.mock('../../ssh/remote-exec-command', async (importOriginal) => ({
 }))
 
 vi.mock('../../ssh/ssh-remote-platform-detection', () => ({ detectRemoteHostPlatform: vi.fn() }))
-vi.mock('../../ssh/orcad-windows-host-preparation', () => ({ prepareWindowsOrcadHost: vi.fn() }))
+vi.mock('../host-state/orcad-windows-host-preparation', () => ({
+  prepareWindowsOrcadHost: vi.fn()
+}))
 
 import { execCommand } from '../../ssh/remote-exec-command'
 import { detectRemoteHostPlatform } from '../../ssh/ssh-remote-platform-detection'
-import { prepareWindowsOrcadHost } from '../../ssh/orcad-windows-host-preparation'
+import { prepareWindowsOrcadHost } from '../host-state/orcad-windows-host-preparation'
 import { resolveOrcadRemoteContext } from './orcad-remote-context'
 import { getRemoteHostPlatform } from '../../ssh/ssh-remote-platform'
 import type { OrcadHostTransport } from '../../ssh/orcad-host-transport'

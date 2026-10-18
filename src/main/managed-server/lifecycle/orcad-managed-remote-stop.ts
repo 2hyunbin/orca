@@ -22,7 +22,7 @@ import {
   orcadWindowsSlotOpCommand,
   readOrcadWindowsEncodedAnswer
 } from '../install/orcad-remote-windows-node'
-import { ORCAD_WINDOWS_RUNTIME_MARKER } from '../../ssh/orcad-windows-host-script'
+import { ORCAD_WINDOWS_RUNTIME_MARKER } from '../host-state/orcad-windows-host-script'
 import { ORCAD_LOCK_FILE_NAME, parseOrcadInstanceLockRecord } from '../../orcad/orcad-instance-lock'
 import {
   ORCAD_CANCEL_MANAGED_STOP_FLAG,

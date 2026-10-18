@@ -35,7 +35,7 @@ import {
 } from '../../ssh/ssh-remote-platform'
 import { RELAY_REMOTE_DIR } from '../../ssh/remote-frame-protocol'
 import { orcadWindowsHomeOpCommand } from './orcad-remote-windows-node'
-import { ORCAD_WINDOWS_LIVENESS_MANY_MARKER } from '../../ssh/orcad-windows-host-script'
+import { ORCAD_WINDOWS_LIVENESS_MANY_MARKER } from '../host-state/orcad-windows-host-script'
 
 export type OrcadGcOptions = {
   conn: OrcadHostTransport

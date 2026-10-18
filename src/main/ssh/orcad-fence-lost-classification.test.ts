@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ClientChannel } from 'ssh2'
-import { execOrcadStateMutation } from './orcad-state-mutation-exec'
+import { execOrcadStateMutation } from '../managed-server/host-state/orcad-state-mutation-exec'
 import {
   execOrcadRemote,
   execOrcadRemoteOr

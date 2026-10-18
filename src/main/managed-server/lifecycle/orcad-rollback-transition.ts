@@ -18,7 +18,7 @@ import {
   parseOrcadSnapshotRestore,
   probeOrcadStateSnapshotCommand,
   restoreOrcadStateSnapshotCommand
-} from '../../ssh/orcad-state-snapshot'
+} from '../host-state/orcad-state-snapshot'
 import { joinRemotePath } from '../../ssh/ssh-remote-platform'
 import type { OrcadActivationLockControl } from '../activation/orcad-activation-lock'
 import {
@@ -32,7 +32,7 @@ import {
 } from '../activation/orcad-activation-transaction-transitions'
 import { writeOrcadActivationTransaction } from '../activation/orcad-activation-transaction-store'
 import { execOrcadRemoteOr, withoutAbortSignal } from '../install/orcad-remote-runtime-control'
-import { execOrcadStateMutationOr } from '../../ssh/orcad-state-mutation-exec'
+import { execOrcadStateMutationOr } from '../host-state/orcad-state-mutation-exec'
 import {
   orcadSlotDir,
   resolveOrcadSlotIdentity,

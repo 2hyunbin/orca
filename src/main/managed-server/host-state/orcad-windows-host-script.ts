@@ -20,12 +20,12 @@ import {
   ORCAD_NODE_RUNTIME_WINDOWS_EXECUTABLE,
   ORCAD_RUNTIMES_DIRNAME,
   ORCAD_WINDOWS_PROCESS_TREE_FILENAME
-} from '../../shared/orcad-artifacts'
+} from '../../../shared/orcad-artifacts'
 import {
   ORCAD_STOP_REQUEST_FILENAME,
   ORCAD_STOP_REQUESTS_CAPABILITY
-} from '../../shared/orcad-stop-request'
-import { ORCAD_STDIO_BRIDGE_FUNCTION } from '../managed-server/lifecycle/orcad-stdio-bridge-script'
+} from '../../../shared/orcad-stop-request'
+import { ORCAD_STDIO_BRIDGE_FUNCTION } from '../lifecycle/orcad-stdio-bridge-script'
 import {
   ORCAD_WINDOWS_FENCE_PRELUDE,
   ORCAD_WINDOWS_HOST_FENCE_OPS
@@ -38,7 +38,7 @@ import {
   ORCAD_READINESS_FILENAME,
   ORCAD_READINESS_MAX_BYTES,
   ORCAD_WINDOWS_PROCESS_FILENAME
-} from '../managed-server/install/orcad-remote-host-support'
+} from '../install/orcad-remote-host-support'
 
 export const ORCAD_RECORD_ABSENT_MARKER = '__ORCAD_RECORD_ABSENT__'
 export const ORCAD_RECORD_PRESENT_MARKER = '__ORCAD_RECORD_PRESENT__'

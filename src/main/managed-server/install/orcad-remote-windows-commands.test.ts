@@ -36,7 +36,7 @@ import {
 import {
   ORCAD_WINDOWS_HOST_SCRIPT,
   ORCAD_WINDOWS_HOST_SCRIPT_FILENAME
-} from '../../ssh/orcad-windows-host-script'
+} from '../host-state/orcad-windows-host-script'
 import type { OrcadSlotOptions } from '../../ssh/orcad-recovery-slot'
 import { NODE_RUNTIME_ASSETS } from '../../../shared/node-runtime-pin'
 

@@ -15,7 +15,7 @@ import { runProcess, spawnProcess } from '@orca/process-host'
 import {
   ORCAD_FENCE_LOST_EXIT,
   ORCAD_FENCE_LOST_MARKER
-} from '../managed-server/activation/orcad-activation-fence-scope'
+} from '../activation/orcad-activation-fence-scope'
 import { ORCAD_WINDOWS_HOST_SCRIPT } from './orcad-windows-host-script'
 
 const dirs: string[] = []

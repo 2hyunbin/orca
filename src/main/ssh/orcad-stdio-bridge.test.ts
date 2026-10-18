@@ -19,7 +19,7 @@ import {
   spawnLocalBridgeChannel,
   startEchoServer
 } from '../managed-server/lifecycle/orcad-stdio-bridge-test-channel'
-import { ORCAD_WINDOWS_HOST_SCRIPT } from './orcad-windows-host-script'
+import { ORCAD_WINDOWS_HOST_SCRIPT } from '../managed-server/host-state/orcad-windows-host-script'
 import type { OrcadHostTransport } from './orcad-host-transport'
 import type { RemoteCommandChannel } from '../managed-server/install/remote-install-transport'
 

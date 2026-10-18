@@ -18,7 +18,7 @@ import {
 import {
   ORCAD_RECORD_ABSENT_MARKER as ABSENT_MARKER,
   ORCAD_RECORD_PRESENT_MARKER as PRESENT_MARKER
-} from '../../ssh/orcad-windows-host-script'
+} from '../host-state/orcad-windows-host-script'
 
 /** `present` carries raw bytes; schema checks belong to the caller that owns the format. */
 export type OrcadRemoteRecordRead = { state: 'absent' } | { state: 'present'; raw: string }

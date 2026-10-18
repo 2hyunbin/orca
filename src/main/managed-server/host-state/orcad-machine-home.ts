@@ -11,16 +11,16 @@
  * can see, so a store shared across machines could be collected under another machine's server.
  */
 import { createHash } from 'node:crypto'
-import { shellEscape } from './ssh-connection-utils'
-import { RELAY_REMOTE_DIR } from './remote-frame-protocol'
-import { ORCAD_ACTIVATION_FILENAME } from '../managed-server/activation/orcad-activation-record'
-import { parseDarwinPlatformUuid } from '../persistence/profile-state/profile-state-access-identity'
+import { shellEscape } from '../../ssh/ssh-connection-utils'
+import { RELAY_REMOTE_DIR } from '../../ssh/remote-frame-protocol'
+import { ORCAD_ACTIVATION_FILENAME } from '../activation/orcad-activation-record'
+import { parseDarwinPlatformUuid } from '../../persistence/profile-state/profile-state-access-identity'
 import {
   joinRemotePath,
   normalizeRemoteHome,
   validateRemoteHome,
   type RemoteHostPlatform
-} from './ssh-remote-platform'
+} from '../../ssh/ssh-remote-platform'
 
 /** Under `~/.orca-remote`: names the one machine that owns the login home's orcad state. */
 export const ORCAD_MACHINE_CLAIM_FILENAME = 'orcad-machine.json'

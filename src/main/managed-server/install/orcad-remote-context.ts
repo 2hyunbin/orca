@@ -4,7 +4,7 @@ import type { SshTarget } from '../../../shared/ssh-types'
 import type { OrcadActivationRecord } from '../activation/orcad-activation-record'
 import { readOrcadActivationRecord } from '../activation/orcad-activation-record-store'
 import { resolveOrcadRuntimeTarget } from '../lifecycle/orcad-runtime-target'
-import { prepareWindowsOrcadHost } from '../../ssh/orcad-windows-host-preparation'
+import { prepareWindowsOrcadHost } from '../host-state/orcad-windows-host-preparation'
 import {
   isWslOrcadHostTarget,
   type OrcadHostTarget,
@@ -18,8 +18,8 @@ import {
   orcadMachineOwnershipUnresolvedMessage,
   parseOrcadMachineClaim,
   parseOrcadMachineHomeProbe
-} from '../../ssh/orcad-machine-home'
-import { orcadMachineClaimCommand } from '../../ssh/orcad-machine-claim-command'
+} from '../host-state/orcad-machine-home'
+import { orcadMachineClaimCommand } from '../host-state/orcad-machine-claim-command'
 import { execOrcadRemote, type OrcadRemoteExecTarget } from './orcad-remote-runtime-control'
 import { readRemoteHomeCommand } from '../../ssh/ssh-remote-commands'
 import { shellEscape } from '../../ssh/ssh-connection-utils'
