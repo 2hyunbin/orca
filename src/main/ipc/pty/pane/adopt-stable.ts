@@ -8,11 +8,8 @@ import {
   makePaneSpawnReservationKey,
   paneSpawnReservationsByOwnerKey
 } from './spawn-reservation'
-import {
-  attachStablePaneOwner,
-  resolveStablePaneOwner,
-  stablePaneAdoptionsByOwnerKey
-} from './stable-owner'
+import { resolveStablePaneOwner, stablePaneAdoptionsByOwnerKey } from './stable-owner'
+import { attachStablePaneOwner } from './stable-pane-attach'
 import type { AdoptStablePaneArgs, AdoptStablePaneResult } from '../ipc/spawn-types'
 
 export async function adoptStablePane(

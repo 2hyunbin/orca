@@ -8,7 +8,8 @@ import {
   assertSpawnReplyWasLive,
   reconcileAgentSessionOwnerListings
 } from '../pane/agent-session-owners'
-import { spawnForStablePane, resolveStablePaneOwner } from '../pane/stable-owner'
+import { resolveStablePaneOwner } from '../pane/stable-owner'
+import { spawnForStablePane } from '../pane/stable-pane-attach'
 import { clearProviderPtyState } from '../provider/state-cleanup'
 import { isProviderAgentSessionOwnerLive } from '../provider/liveness'
 import { failPtySpawnExecute } from '../spawn-execute-failure'

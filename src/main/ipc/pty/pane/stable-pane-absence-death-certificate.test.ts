@@ -9,7 +9,7 @@ import { SessionNotFoundError } from '../../../daemon/daemon-errors'
 import type { Store } from '../../../persistence'
 import type { IPtyProvider } from '../../../providers/pty-provider-contract'
 import { OrcaRuntimeService } from '../../../runtime/orca-runtime'
-import { spawnForStablePane } from './stable-owner'
+import { spawnForStablePane } from './stable-pane-attach'
 
 const CONNECTION = 'conn-1'
 const WORKTREE = 'repo-1::/tmp/pane-absence'

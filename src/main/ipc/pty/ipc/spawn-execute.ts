@@ -1,6 +1,7 @@
 import { ensureWslHookRelayForReattach } from '../../../agent-hooks/wsl-hook-relay-reattach'
 import { noteWslDistrosRunning } from '../../../wsl-background-distro-gate'
-import { resolveStablePaneOwner, spawnForStablePane } from '../pane/stable-owner'
+import { resolveStablePaneOwner } from '../pane/stable-owner'
+import { spawnForStablePane } from '../pane/stable-pane-attach'
 import { excludeReplacedPaneOwner } from '../pane/pane-owner-replacement'
 import { assertSpawnReplyWasLive } from '../pane/agent-session-owners'
 import { clearProviderPtyState } from '../provider/state-cleanup'

@@ -11,14 +11,7 @@ import type {
   PtySpawnResult
 } from '../../../providers/pty-provider-contract'
 import { getPtySshConnectionId } from '../provider/registry'
-import {
-  isDaemonEndpointGoneError,
-  SessionNotFoundError,
-  TerminalHostGoneError,
-  TerminalSessionOwnerUnverifiedError
-} from '../../../daemon/daemon-errors'
 import { ptyIncarnationById } from '../provider/ownership-state'
-import { releaseAbsentPaneOwner } from './absent-pane-owner'
 import { spawnCommitBindingOrigin } from '../../../persistence/loading-store/pty-binding-span'
 
 export type StablePaneOwner = {
@@ -219,109 +212,4 @@ export async function persistAdmittedStablePaneBinding(args: {
     throw new Error('terminal_pane_owner_changed')
   }
   return true
-}
-
-type StablePaneAttachAttempt =
-  | { attached: { result: PtySpawnResult; owner: StablePaneOwner } }
-  | { absent: true }
-  | { lostTo: StablePaneOwner | null }
-
-function isSameStablePaneOwner(a: StablePaneOwner, b: StablePaneOwner): boolean {
-  return (
-    a.ptyId === b.ptyId &&
-    a.runtimeIncarnationId === b.runtimeIncarnationId &&
-    a.hasPersistedBinding === b.hasPersistedBinding &&
-    a.persistedIncarnationId === b.persistedIncarnationId
-  )
-}
-
-async function attemptStablePaneAttach(
-  args: StablePaneSpawnContext & { owner: StablePaneOwner }
-): Promise<StablePaneAttachAttempt> {
-  const { owner, provider, spawnOptions } = args
-  let result: PtySpawnResult
-  try {
-    result = await provider.spawn({
-      ...spawnOptions,
-      sessionId: owner.ptyId,
-      attachOnly: true,
-      expectedIncarnationId: owner.runtimeIncarnationId ?? owner.persistedIncarnationId,
-      expectedIncarnationIsAuthoritative: owner.runtimeIncarnationId !== undefined,
-      isNewSession: undefined,
-      command: undefined,
-      commandDelivery: undefined,
-      startupCommandDelivery: undefined,
-      launchAgent: undefined,
-      startupIngress: undefined,
-      agentSessionEnsure: undefined,
-      agentSessionCreateOperationId: undefined,
-      onPtySpawnCommitted: undefined
-    })
-  } catch (error) {
-    if (error instanceof TerminalSessionOwnerUnverifiedError) {
-      throw new Error('terminal_pane_owner_unverified')
-    }
-    // Why: translate before paired-runtime RPC strips the socket error's code and syscall.
-    if (isDaemonEndpointGoneError(error)) {
-      throw new TerminalHostGoneError()
-    }
-    // Why: only the process that owns the PTY answers this, so its absence is an observed exit.
-    if (!(error instanceof SessionNotFoundError)) {
-      throw error
-    }
-    const ownerBeforeRetire = args.resolveOwner?.()
-    if (ownerBeforeRetire && !isSameStablePaneOwner(ownerBeforeRetire, owner)) {
-      return { lostTo: ownerBeforeRetire }
-    }
-    if (!(await releaseAbsentPaneOwner(args, owner))) {
-      return { lostTo: args.resolveOwner?.() ?? null }
-    }
-    const ownerAfterRetire = args.resolveOwner?.()
-    return ownerAfterRetire ? { lostTo: ownerAfterRetire } : { absent: true }
-  }
-  if (
-    result.id !== owner.ptyId ||
-    result.isReattach !== true ||
-    (owner.runtimeIncarnationId !== undefined &&
-      result.incarnationId !== owner.runtimeIncarnationId) ||
-    (result.incarnationId === undefined && owner.incarnationId !== undefined)
-  ) {
-    throw new Error('terminal_pane_owner_changed')
-  }
-  return { attached: { result, owner } }
-}
-
-export async function attachStablePaneOwner(
-  args: StablePaneSpawnContext & { owner: StablePaneOwner }
-): Promise<{ result: PtySpawnResult; owner: StablePaneOwner } | null> {
-  const attempt = await attemptStablePaneAttach(args)
-  if ('lostTo' in attempt) {
-    throw new Error('terminal_pane_owner_changed')
-  }
-  return 'attached' in attempt ? attempt.attached : null
-}
-
-export async function spawnForStablePane(
-  args: StablePaneSpawnContext
-): Promise<{ result: PtySpawnResult; owner: StablePaneOwner | null }> {
-  let owner = args.owner
-  // Why one retry: a writer that took the pane mid-attach owns it, so attach to it (fresh absence
-  // evidence even for the same id). No owner left (closed tab) or a second loss stays an error.
-  for (let attempt = 0; owner; attempt += 1) {
-    const outcome = await attemptStablePaneAttach({ ...args, owner })
-    if ('attached' in outcome) {
-      return outcome.attached
-    }
-    if ('absent' in outcome) {
-      break
-    }
-    if (!outcome.lostTo || attempt > 0) {
-      throw new Error('terminal_pane_owner_changed')
-    }
-    owner = outcome.lostTo
-    args.onOwnerReresolved?.(owner)
-  }
-  const result = await args.provider.spawn(args.spawnOptions)
-  args.onFreshSpawn?.(result)
-  return { result, owner: null }
 }
