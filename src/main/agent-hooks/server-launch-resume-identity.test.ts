@@ -111,6 +111,25 @@ describe('a resume launch seeds the pane identity', () => {
     expect(row).toMatchObject({ state: 'working', providerSession: RESUMED })
   })
 
+  it('takes a relaunch seed that resumes the same session from another home', async () => {
+    const server = await startServer()
+    const first = { ...RESUMED, transcriptPath: '/homes/a/sessions/rollout.jsonl' }
+    const moved = { ...RESUMED, transcriptPath: '/homes/b/sessions/rollout.jsonl' }
+    server.recordLaunchResumeIdentity({
+      paneKey: PANE,
+      agentType: 'codex',
+      providerSession: first,
+      launchedAt: Date.now()
+    })
+    server.recordLaunchResumeIdentity({
+      paneKey: PANE,
+      agentType: 'codex',
+      providerSession: moved,
+      launchedAt: Date.now()
+    })
+    expect(server.getStatusSnapshotForPane(PANE)[0]?.providerSession).toEqual(moved)
+  })
+
   it('keeps the seeded identity when terminal evidence starts the first turn', async () => {
     const server = await startServer()
     server.recordLaunchResumeIdentity({

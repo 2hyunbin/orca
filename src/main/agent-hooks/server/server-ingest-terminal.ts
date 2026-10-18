@@ -35,11 +35,12 @@ export abstract class AgentHookServerIngestTerminal extends AgentHookServerInges
     if (
       previous &&
       (previous.providerSessionOnly === true
-        ? agentProviderSessionsEqual(
+        ? // Why the path counts: an account restart resumes the same id from another account's home.
+          agentProviderSessionsEqual(
             event.agentType,
             previous.providerSession,
             event.providerSession
-          )
+          ) && previous.providerSession?.transcriptPath === event.providerSession.transcriptPath
         : 'receivedAt' in previous &&
           typeof previous.receivedAt === 'number' &&
           previous.receivedAt >= event.launchedAt)
