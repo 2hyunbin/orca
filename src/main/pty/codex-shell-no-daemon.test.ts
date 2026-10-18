@@ -17,6 +17,7 @@ import {
   getPowerShellCodexShellLaunchPreflight
 } from '../../shared/codex-shell-function'
 import { resolveFishBinary } from '../../shared/fish-binary-requirement'
+import { getPowerShellNativeArgsFunction } from '../../shared/powershell-native-argument'
 
 const isWindows = process.platform === 'win32'
 const fishLookup = resolveFishBinary()
@@ -160,7 +161,7 @@ function run(
     shell === 'fish'
       ? getFishCodexShellLaunchPreflight()
       : isPowerShell(shell)
-        ? getPowerShellCodexShellLaunchPreflight()
+        ? `${getPowerShellNativeArgsFunction()}\n${getPowerShellCodexShellLaunchPreflight()}`
         : getPosixCodexShellLaunchPreflight()
   // Why the guard: rows include `login`, which a real codex would run against the host's account.
   const guard = isPowerShell(shell)

@@ -19,6 +19,30 @@ function quotePowerShellMultilineLiteral(value: string): string {
   return `"${escaped}"`
 }
 
+/**
+ * PowerShell function that escapes `$args` for a native command, for Orca's agent wrappers to splat.
+ *
+ * Why at runtime: the escaping depends on the PowerShell reading the line. Legacy argv passing
+ * (Windows PowerShell 5.1, pwsh before 7.3) leaves embedded `"` unescaped, so the program drops them;
+ * 7.3+ escapes them itself and must get the text untouched. Windows PowerShell also quotes only when
+ * whitespace sits outside quotes it counts naively, and never doubles a trailing backslash; when it
+ * won't quote, no escaping survives, so that text is left as before.
+ */
+export function getPowerShellNativeArgsFunction(): string {
+  return `function Global:__OrcaNativeArgs([object[]]$Arguments) {
+    Set-StrictMode -Off
+    if ($PSNativeCommandArgumentPassing -and $PSNativeCommandArgumentPassing -ne 'Legacy') { return $Arguments }
+    $desktop = $PSVersionTable.PSEdition -eq 'Desktop'
+    foreach ($arg in $Arguments) {
+        if ($arg -isnot [string] -or $arg -notmatch '["\\\\]') { $arg; continue }
+        $quoted = $arg -match '^(?:[^"]*"[^"]*")*[^"]*\\s'
+        if ($desktop -and -not $quoted -and $arg -match '\\s') { $arg; continue }
+        $escaped = $arg -replace '(\\\\*)"', '$1$1\\"'
+        if ($desktop -and $quoted) { $escaped -replace '(\\\\+)$', '$1$1' } else { $escaped }
+    }
+}`
+}
+
 export function quotePowerShellNativeArgument(value: string): string {
   // Why: Windows PowerShell 5.1 drops unescaped embedded quotes when it
   // constructs argv for native executables such as wsl.exe.
