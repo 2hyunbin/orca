@@ -6522,6 +6522,7 @@
           "f4a5b6c7d8": "Could not update Linear issue {{value0}}.",
           "a5b6c7d8e9": "Could not sync Linear issue {{value0}}.",
           "b6c7d8e9f0": "Task status sync could not finish.",
+          "f0a1b2c3d4": "Skipped Linear issue {{value0}}: this workspace is on more than one host.",
           "c7d8e9f0a1": "{{value0}} updated",
           "d8e9f0a1b2": "{{value0}} skipped",
           "e9f0a1b2c3": "{{value0}} failed"

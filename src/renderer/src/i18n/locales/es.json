@@ -6301,6 +6301,7 @@
           "f4a5b6c7d8": "No se pudo actualizar el issue {{value0}} de Linear.",
           "a5b6c7d8e9": "No se pudo sincronizar el issue {{value0}} de Linear.",
           "b6c7d8e9f0": "No se pudo completar la sincronización del estado de la tarea.",
+          "f0a1b2c3d4": "Se omitió la incidencia de Linear {{value0}}: este espacio de trabajo está en más de un host.",
           "c7d8e9f0a1": "{{value0}} actualizado",
           "d8e9f0a1b2": "{{value0}} omitido",
           "e9f0a1b2c3": "{{value0}} falló"

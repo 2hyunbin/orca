@@ -6306,6 +6306,7 @@
           "f4a5b6c7d8": "无法更新 Linear 议题 {{value0}}。",
           "a5b6c7d8e9": "无法同步 Linear 议题 {{value0}}。",
           "b6c7d8e9f0": "无法完成任务状态同步。",
+          "f0a1b2c3d4": "已跳过 Linear 问题 {{value0}}：此工作区位于多个主机上。",
           "c7d8e9f0a1": "已更新 {{value0}} 个",
           "d8e9f0a1b2": "已跳过 {{value0}} 个",
           "e9f0a1b2c3": "失败 {{value0}} 个"

@@ -6388,6 +6388,7 @@
           "f4a5b6c7d8": "Impossible de mettre à jour l'issue Linear {{value0}}.",
           "a5b6c7d8e9": "Impossible de synchroniser l'issue Linear {{value0}}.",
           "b6c7d8e9f0": "La synchronisation du statut des tâches n'a pas pu aboutir.",
+          "f0a1b2c3d4": "Ticket Linear {{value0}} ignoré : cet espace de travail se trouve sur plusieurs hôtes.",
           "c7d8e9f0a1": "{{value0}} mis à jour",
           "d8e9f0a1b2": "{{value0}} ignoré",
           "e9f0a1b2c3": "{{value0}} a échoué"
