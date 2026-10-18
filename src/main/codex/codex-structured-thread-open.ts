@@ -59,7 +59,8 @@ export async function openCodexThread(
     /** Config overrides for this thread, on start and resume alike. */
     threadConfig?: Record<string, unknown>
   },
-  timeoutMs: number | undefined
+  /** null: no deadline; the start that opens the thread bounds it. */
+  timeoutMs: number | null | undefined
 ): Promise<CodexOpenedThread> {
   const resumeThreadId = launch.resumeThreadId
   const threadSettings = {

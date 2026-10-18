@@ -498,6 +498,27 @@ describe('openCodexAppServerConnection', () => {
     await vi.advanceTimersByTimeAsync(0)
   })
 
+  it('waits on the handshake with no deadline until the start that opened it ends', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const { child, spawnImpl, written } = stubChild()
+    const start = new AbortController()
+    const opening = rejection(
+      openCodexAppServerConnection(
+        { command: 'codex', args: ['app-server'] },
+        { signal: start.signal },
+        spawnImpl
+      )
+    )
+    await vi.waitFor(() => expect(written.map((frame) => frame.method)).toContain('initialize'))
+    await vi.advanceTimersByTimeAsync(10 * 60_000)
+    expect(child.stdin.writableEnded).toBe(false)
+
+    start.abort(new Error('codex never finished starting'))
+
+    expect((await opening).message).toBe('codex never finished starting')
+    expect(child.stdin.writableEnded).toBe(true)
+  })
+
   it('kills a child that ignores stdin EOF', async () => {
     vi.useFakeTimers()
     const { child, spawnImpl } = stubChild({ exitOnStdinEnd: false })
