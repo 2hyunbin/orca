@@ -14,10 +14,16 @@ const LEGACY_LOG_STREAM_COMMAND = splitCommandLineArgv(
  * Why: older builds left this `log stream` running under launchd whenever Orca died
  * uncleanly, and those orphans outlive every later launch. A live watcher's
  * `log stream` is parented by its wrapper, so only launchd's children (ppid 1) match.
+ * `executable` comes from a later `ps` than argv, so a pid recycled between them fails.
  */
 export function findOrphanedTccLogStreams(rows: readonly ProcessIdentityRow[]): number[] {
   return rows
-    .filter((row) => row.ppid === 1 && row.argv.join(' ') === LEGACY_LOG_STREAM_COMMAND)
+    .filter(
+      (row) =>
+        row.ppid === 1 &&
+        row.executable === '/usr/bin/log' &&
+        row.argv.join(' ') === LEGACY_LOG_STREAM_COMMAND
+    )
     .map((row) => row.pid)
 }
 

@@ -92,13 +92,17 @@ export type TccPromptWatchOptions = {
 // Why: `log stream` never notices its parent dying (it only writes on a rare
 // match), so a crashed or SIGKILLed Orca orphaned it forever. The wrapper kills
 // it when our stdin pipe hits EOF, and exits when it exits. fd 3 is needed
-// because async lists in a non-interactive sh get stdin=/dev/null.
+// because async lists in a non-interactive sh get stdin=/dev/null. The trap is
+// armed before the fork; `term` covers a signal that lands before `log_pid` is set.
 const LOG_STREAM_WRAPPER_SCRIPT = `exec 3<&0
+log_pid=
+term=
+trap 'term=1; [ -n "$log_pid" ] && kill "$log_pid" 2>/dev/null' TERM INT HUP
 /usr/bin/log stream --predicate "$1" --info --style compact </dev/null 3<&- &
 log_pid=$!
+[ -n "$term" ] && kill "$log_pid" 2>/dev/null
 { read -r _ <&3; kill "$log_pid" 2>/dev/null; } &
 reader_pid=$!
-trap 'kill "$log_pid" 2>/dev/null' TERM INT HUP
 wait "$log_pid"
 status=$?
 kill "$reader_pid" 2>/dev/null

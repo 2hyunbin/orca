@@ -9,12 +9,17 @@ import { parsePsArgsLine, type ProcessIdentityRow } from './opencode/opencode-cl
 const LEGACY_ARGS =
   '/usr/bin/log stream --predicate subsystem == "com.apple.TCC" AND eventMessage CONTAINS "AUTHREQ_PROMPTING" --info --style compact'
 
-function row(pid: number, ppid: number, args = LEGACY_ARGS): ProcessIdentityRow {
+function row(
+  pid: number,
+  ppid: number,
+  args = LEGACY_ARGS,
+  executable = '/usr/bin/log'
+): ProcessIdentityRow {
   const parsed = parsePsArgsLine(`${pid} ${ppid} 01:00 ${args}`, Date.now())
   if (!parsed) {
     throw new Error('unparseable fixture')
   }
-  return parsed
+  return { ...parsed, executable }
 }
 
 describe('findOrphanedTccLogStreams', () => {
@@ -24,7 +29,10 @@ describe('findOrphanedTccLogStreams', () => {
         row(10, 1),
         row(11, 4321),
         row(12, 1, '/usr/bin/log stream --predicate subsystem == "com.apple.TCC" --style compact'),
-        row(13, 1, '/usr/bin/log show --last 1m')
+        row(13, 1, '/usr/bin/log show --last 1m'),
+        // A pid recycled between the args and comm sweeps, or an unreadable comm.
+        row(14, 1, LEGACY_ARGS, '/usr/bin/yes'),
+        row(15, 1, LEGACY_ARGS, '')
       ])
     ).toEqual([10])
   })
