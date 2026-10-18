@@ -6,7 +6,6 @@ import {
   INITIAL_SIDEBAR_INPUTS_FEED_STATE,
   refreshSidebarInputs,
   sidebarInputsChanged,
-  sidebarInputsReadFailed,
   sidebarInputsReplied,
   type SidebarInputsFeedRequest,
   type SidebarInputsFeedState,
@@ -15,15 +14,22 @@ import {
 import type { SidebarInputsFeed, SidebarInputsFeedDomain } from './sidebar-inputs-feed'
 
 /** A domain whose entities a test edits; counts its reads and live watchers. */
-export function testDomain(name: string, initial: Record<string, unknown> = {}) {
+export function testDomain(
+  name: string,
+  initial: Record<string, unknown> = {},
+  options: { rereadOnRead?: boolean } = {}
+) {
   let entities: Record<string, unknown> = { ...initial }
   const watchers = new Set<() => void>()
   let reads = 0
   let failing = false
+  let gate: Promise<void> | null = null
   const domain: SidebarInputsFeedDomain = {
     name,
-    read: () => {
+    rereadOnRead: options.rereadOnRead,
+    read: async () => {
       reads += 1
+      await gate
       if (failing) {
         throw new Error('read failed')
       }
@@ -50,6 +56,21 @@ export function testDomain(name: string, initial: Record<string, unknown> = {}) 
     },
     fail(next: boolean) {
       failing = next
+    },
+    /** Edits without announcing, as a source with no change event does. */
+    setQuietly(key: string, value: unknown) {
+      entities = { ...entities, [key]: value }
+    },
+    /** Holds every read until the returned release runs. */
+    hold(): () => void {
+      let release = (): void => {}
+      gate = new Promise((resolve) => {
+        release = () => {
+          gate = null
+          resolve()
+        }
+      })
+      return release
     },
     reads: () => reads,
     watchers: () => watchers.size
@@ -82,15 +103,26 @@ export class TestPhone {
     this.apply(sidebarInputsChanged(this.state, event))
   }
 
-  async answerOne(): Promise<SidebarInputsReadResult> {
+  /** The host answers the pending read now; the phone sees the answer only when `deliver` runs. */
+  async serveOne(): Promise<{ reply: SidebarInputsReadResult; deliver: () => void }> {
     const request = this.pending
     if (!request) {
       throw new Error('no read pending')
     }
     this.pending = null
     const reply = await this.feed.read(request.params)
-    this.replies.push(reply)
-    this.apply(sidebarInputsReplied(this.state, request.id, reply))
+    return {
+      reply,
+      deliver: () => {
+        this.replies.push(reply)
+        this.apply(sidebarInputsReplied(this.state, request.id, reply))
+      }
+    }
+  }
+
+  async answerOne(): Promise<SidebarInputsReadResult> {
+    const { reply, deliver } = await this.serveOne()
+    deliver()
     return reply
   }
 
@@ -100,10 +132,9 @@ export class TestPhone {
     }
   }
 
-  /** The connection closed with whatever was in flight. */
+  /** The connection closed with whatever was in flight; the next ready supersedes it. */
   disconnect(): void {
     this.feed.release(this.connectionId)
-    this.state = sidebarInputsReadFailed(this.state)
     this.pending = null
   }
 

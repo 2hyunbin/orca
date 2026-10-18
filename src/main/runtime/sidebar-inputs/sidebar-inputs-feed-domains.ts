@@ -63,7 +63,7 @@ export function sidebarInputsFeedDomains(
     {
       name: 'activity',
       read: () => facts.getWorkspaceActivityFacts().facts,
-      watch: (changed) => facts.workspaceActivityFacts.onChange(changed)
+      watch: (changed) => facts.workspaceActivityFacts.revision.onChange(changed)
     },
     {
       name: 'temporal',

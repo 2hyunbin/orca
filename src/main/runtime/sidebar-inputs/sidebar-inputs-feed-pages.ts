@@ -17,9 +17,8 @@ const ENTRY_SHELL_BYTES = 4
 // JSON text holds no raw control characters, so a code unit escapes to at most 3 UTF-8 bytes.
 const MAX_ESCAPED_BYTES_PER_CODE_UNIT = 3
 
-export function feedEntity(value: unknown): FeedEntity {
-  const json = JSON.stringify(value) ?? 'null'
-  return { value, json, bytes: Buffer.byteLength(json, 'utf8') }
+export function feedEntityFromJson(json: string): FeedEntity {
+  return { value: JSON.parse(json), json, bytes: Buffer.byteLength(json, 'utf8') }
 }
 
 function jsonBytes(text: string): number {

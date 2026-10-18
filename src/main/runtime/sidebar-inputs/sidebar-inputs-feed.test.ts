@@ -100,13 +100,28 @@ describe('sidebar inputs feed', () => {
     const host = makeHost()
     const phone = new TestPhone(host.feed, 'conn-1')
     phone.refresh()
-    const firstRead = phone.pending
+    const served = await phone.serveOne()
     for (let value = 2; value < 5; value += 1) {
       host.rows.set('a', value)
       await flush()
       phone.notice(host.lastEvent())
     }
-    expect(phone.pending).toBe(firstRead)
+    expect(phone.pending).toBeNull()
+    served.deliver()
+    await phone.settle()
+    expect(phone.replies.map((reply) => reply.kind)).toEqual(['snapshot', 'delta'])
+    expect(phone.view()).toEqual(host.truth())
+  })
+
+  it('needs no second read when the reply already covers a notice', async () => {
+    const host = makeHost()
+    const phone = new TestPhone(host.feed, 'conn-1')
+    phone.refresh()
+    await phone.settle()
+    host.rows.set('a', 2)
+    await flush()
+    phone.refresh()
+    phone.notice(host.lastEvent())
     await phone.settle()
     expect(phone.replies).toHaveLength(2)
     expect(phone.view()).toEqual(host.truth())
@@ -186,7 +201,7 @@ describe('sidebar inputs feed', () => {
     phone.notice(host.lastEvent())
     expect(phone.pending).not.toBeNull()
     phone.disconnect()
-    expect(phone.state).toMatchObject({ installed, staged: null, inFlight: null })
+    expect(phone.state.installed).toBe(installed)
 
     // The last subscriber left: the session's state and watches are gone.
     expect(host.rows.watchers()).toBe(0)
@@ -316,5 +331,60 @@ describe('sidebar inputs feed', () => {
     expect(host.rows.reads()).toBe(0)
     expect(host.rows.watchers()).toBe(0)
     expect(host.events).toEqual([])
+  })
+
+  it('re-reads a quiet source on every read, and joins concurrent reads into one flush', async () => {
+    const quiet = testDomain('quiet', { a: 1 }, { rereadOnRead: true })
+    const feed = new SidebarInputsFeed(
+      () => [quiet.domain],
+      () => {}
+    )
+    feed.acquire('conn-1')
+    await feed.read({ maxBytes: 1 })
+    quiet.setQuietly('a', 2)
+    const release = quiet.hold()
+    const reads = [feed.read({ maxBytes: 1 }), feed.read({ maxBytes: 1 })]
+    release()
+    const [first, second] = await Promise.all(reads)
+    expect(quiet.reads()).toBe(3)
+    expect(first).toMatchObject({ kind: 'snapshot', domains: { quiet: { upserts: { a: 2 } } } })
+    expect(second.revision).toBe(first.revision)
+  })
+
+  it('answers reset to a read whose session ended while it waited', async () => {
+    const host = makeHost()
+    host.feed.acquire('conn-1')
+    const release = host.rows.hold()
+    const read = host.feed.read({ maxBytes: 1 })
+    host.feed.release('conn-1')
+    release()
+    expect((await read).kind).toBe('reset')
+  })
+
+  it('refuses a page token from a session that ended', async () => {
+    const host = makeHost({ a: BIG, b: BIG, c: BIG })
+    host.feed.acquire('conn-1')
+    const first = await host.feed.read({ maxBytes: 1 })
+    host.feed.release('conn-1')
+    host.feed.acquire('conn-2')
+    if (!first.next) {
+      throw new Error('expected a paged snapshot')
+    }
+    expect((await host.feed.read({ pageToken: first.next, maxBytes: 1 })).kind).toBe('reset')
+  })
+
+  it('reads a snapshot past a revision larger than the whole log', async () => {
+    const host = makeHost()
+    const phone = new TestPhone(host.feed, 'conn-1')
+    phone.refresh()
+    await phone.settle()
+    for (let index = 0; index < 30; index += 1) {
+      host.rows.set(`big-${index}`, BIG)
+    }
+    await flush()
+    phone.notice(host.lastEvent())
+    await phone.settle()
+    expect(phone.replies.at(-1)?.kind).toBe('snapshot')
+    expect(phone.view()).toEqual(host.truth())
   })
 })

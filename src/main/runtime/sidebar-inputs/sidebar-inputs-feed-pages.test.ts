@@ -5,7 +5,13 @@ import {
   SIDEBAR_INPUTS_SCHEMA_VERSION,
   SIDEBAR_INPUTS_SEMANTICS_VERSION
 } from '../../../shared/sidebar-list/sidebar-inputs-feed-contract'
-import { feedEntity, paginateFeedChanges, type FeedChange } from './sidebar-inputs-feed-pages'
+import {
+  feedEntityFromJson,
+  paginateFeedChanges,
+  type FeedChange
+} from './sidebar-inputs-feed-pages'
+
+const feedEntity = (value: unknown) => feedEntityFromJson(JSON.stringify(value))
 
 // Worst cases for escaping: quotes, backslashes, 3-byte and 4-byte characters.
 const NASTY = '"\\é中\u{1f600} '

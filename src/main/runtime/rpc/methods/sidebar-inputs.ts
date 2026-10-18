@@ -64,6 +64,10 @@ export const SIDEBAR_INPUT_METHODS = [
           code: 'forbidden'
         })
       }
+      // A connection already closed has run its cleanups; subscribing it now would never release.
+      if (context.signal?.aborted) {
+        throw new Error('client_disconnected')
+      }
       // Subscribed from a connection's first read until it closes.
       if (feed.acquire(connectionId)) {
         context.runtime.registerSubscriptionCleanup(

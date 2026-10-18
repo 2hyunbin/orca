@@ -58,13 +58,14 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
   get sidebarFacts() {
     return sidebarFactsRuntime(this)
   }
-  // Switch point. Idle until relay hosts attach; the fallback refresh runs while a window shows the sidebar.
+  // Switch point. Idle until relay hosts attach; the fallback refresh runs while a window shows the sidebar or a phone reads the feed.
   readonly pairedServerRows = ORCA_SIDEBAR_INPUTS_IS_MAIN
     ? new PairedServerRowsProducer({
         hasDemand: () =>
-          this.authoritativeWindowId !== null &&
-          this.authoritativeWindowId !== HEADLESS_RUNTIME_WINDOW_ID &&
-          this.store?.getUI?.().sidebarOpen !== false,
+          this.sidebarInputsFeed?.subscribed === true ||
+          (this.authoritativeWindowId !== null &&
+            this.authoritativeWindowId !== HEADLESS_RUNTIME_WINDOW_ID &&
+            this.store?.getUI?.().sidebarOpen !== false),
         hostLabelOverrides: () => getHostDisplayLabelOverrides(this.getClientSettings())
       })
     : null

@@ -6,7 +6,8 @@ import {
   type SidebarInputsReadResult
 } from './sidebar-inputs-feed-contract'
 
-/** The inputs a reader has installed whole: every domain's entities at one revision. */
+/** The inputs a reader has installed whole: every domain's entities at one revision. Its consumer
+ *  compares the versions with its own and shows "Reopen to update" outside its range. */
 export type InstalledSidebarInputs = {
   generation: string
   revision: number
@@ -19,9 +20,11 @@ type StagedBatch = Pick<SidebarInputsReadResult, 'generation' | 'revision' | 'ki
   pages: readonly SidebarInputsReadResult['domains'][]
 }
 
+type FeedPosition = Pick<SidebarInputsChangedEvent, 'generation' | 'revision'>
+
 /**
- * A phone's feed reader for one host connection. One read is in flight at a time; a change
- * noticed meanwhile, during paging included, costs one more read after it installs.
+ * A phone's feed reader for one host connection. One read is in flight at a time; a notice the
+ * read may not cover, during paging included, costs one more read once it installs.
  */
 export type SidebarInputsFeedState = {
   installed: InstalledSidebarInputs | null
@@ -29,8 +32,8 @@ export type SidebarInputsFeedState = {
   staged: StagedBatch | null
   /** The read in flight; a reply to any other request is stale and dropped. */
   inFlight: number | null
-  /** Something may have changed since the read in flight began. */
-  again: boolean
+  /** The newest notice that arrived after the read in flight was sent. */
+  noticed: FeedPosition | null
   lastRequestId: number
 }
 
@@ -46,11 +49,18 @@ export const INITIAL_SIDEBAR_INPUTS_FEED_STATE: SidebarInputsFeedState = {
   installed: null,
   staged: null,
   inFlight: null,
-  again: false,
+  noticed: null,
   lastRequestId: 0
 }
 
-function send(state: SidebarInputsFeedState, params: Omit<SidebarInputsReadParams, 'maxBytes'>) {
+function covers(position: FeedPosition | null, notice: FeedPosition): boolean {
+  return position?.generation === notice.generation && position.revision >= notice.revision
+}
+
+function send(
+  state: SidebarInputsFeedState,
+  params: Omit<SidebarInputsReadParams, 'maxBytes'>
+): SidebarInputsFeedStep {
   const id = state.lastRequestId + 1
   return {
     state: { ...state, inFlight: id, lastRequestId: id },
@@ -58,43 +68,39 @@ function send(state: SidebarInputsFeedState, params: Omit<SidebarInputsReadParam
   }
 }
 
-/** A fresh read from what is installed, which covers every change noticed so far. */
+/** A fresh read: the host serves it at its current revision, past every notice so far. */
 function readFromInstalled(state: SidebarInputsFeedState): SidebarInputsFeedStep {
   const { installed } = state
   return send(
-    { ...state, staged: null, again: false },
+    { ...state, staged: null, noticed: null },
     installed ? { generation: installed.generation, cursor: installed.revision } : {}
   )
 }
 
-/** On every stream ready and return to the foreground. */
+/** On every stream ready and return to the foreground; supersedes a read in flight. */
 export function refreshSidebarInputs(state: SidebarInputsFeedState): SidebarInputsFeedStep {
-  return state.inFlight === null
-    ? readFromInstalled(state)
-    : { state: { ...state, again: true }, request: null }
+  return readFromInstalled(state)
 }
 
 /** A change notice; one this reader already has or is fetching is a duplicate or arrived late. */
 export function sidebarInputsChanged(
   state: SidebarInputsFeedState,
-  event: Pick<SidebarInputsChangedEvent, 'generation' | 'revision'>
+  notice: FeedPosition
 ): SidebarInputsFeedStep {
-  const newest = state.staged ?? state.installed
-  if (newest?.generation === event.generation && event.revision <= newest.revision) {
+  if (covers(state.staged ?? state.installed, notice) || covers(state.noticed, notice)) {
     return { state, request: null }
   }
-  return refreshSidebarInputs(state)
+  return state.inFlight === null
+    ? readFromInstalled(state)
+    : { state: { ...state, noticed: notice }, request: null }
 }
 
-/** The read failed or the connection dropped; the next ready, foreground or notice reads again. */
+/** The read failed; the next ready, foreground or notice reads again. */
 export function sidebarInputsReadFailed(
   state: SidebarInputsFeedState,
-  requestId?: number
+  requestId: number
 ): SidebarInputsFeedState {
-  if (requestId !== undefined && requestId !== state.inFlight) {
-    return state
-  }
-  return { ...state, inFlight: null, staged: null, again: false }
+  return requestId === state.inFlight ? { ...state, inFlight: null, staged: null } : state
 }
 
 export function sidebarInputsReplied(
@@ -119,7 +125,7 @@ export function sidebarInputsReplied(
       (installed?.generation === reply.generation && reply.from === installed.revision)
   if (!continues) {
     // Not the batch this reader asked for: only a whole snapshot is safe now.
-    return send({ ...settled, staged: null, again: false }, {})
+    return send({ ...settled, staged: null, noticed: null }, {})
   }
   const batch: StagedBatch = {
     generation: reply.generation,
@@ -131,18 +137,16 @@ export function sidebarInputsReplied(
   if (reply.next !== null) {
     return send({ ...settled, staged: batch }, { pageToken: reply.next })
   }
-  const done = { ...settled, staged: null }
-  if (installed?.generation === batch.generation && batch.revision < installed.revision) {
-    return done.again ? readFromInstalled(done) : { state: done, request: null }
-  }
-  const next = installBatch(installed, batch, reply)
+  // A batch older than what is installed (a late snapshot) installs nothing.
+  const stale = installed?.generation === batch.generation && batch.revision < installed.revision
+  const next = stale ? installed : installBatch(installed, batch, reply)
   if (!next) {
-    return send({ ...done, again: false }, {})
+    return send({ ...settled, staged: null, noticed: null }, {})
   }
-  const installedState = { ...done, installed: next }
-  return installedState.again
-    ? readFromInstalled(installedState)
-    : { state: installedState, request: null }
+  const done = { ...settled, staged: null, installed: next }
+  return done.noticed && !covers(next, done.noticed)
+    ? readFromInstalled(done)
+    : { state: { ...done, noticed: null }, request: null }
 }
 
 /** Applies a whole batch as one step; null when an entity's joined parts are not JSON. */
