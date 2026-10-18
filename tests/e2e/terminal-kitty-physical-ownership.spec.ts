@@ -25,7 +25,10 @@ function placementPayload(blue = false): string {
         '\x1b[12;1HKEEP THIS TEXT\r\nOWNERSHIP_READY\r\n'
 }
 
-test.use({ launchEnv: { ORCA_BACKGROUND_LAUNCH: '1' } })
+test.use({
+  launchEnv: { ORCA_BACKGROUND_LAUNCH: '1' },
+  orcaAppExtraArgs: ['--force-color-profile=srgb']
+})
 
 for (const acceleration of ['off', 'on'] as const) {
   const rendererTag = acceleration === 'on' ? '@headful ' : ''
