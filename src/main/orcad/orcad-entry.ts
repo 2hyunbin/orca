@@ -13,7 +13,6 @@
 import { join } from 'node:path'
 import process from 'node:process'
 import { getAppEnvironment } from '../../shared/app-environment'
-import type { ServeReadiness } from '../server/serve-readiness'
 import { resolveOrcadInstallRoot, resolveUserDataPath } from './orcad-app-paths'
 import { prepareOrcadCliLauncher } from './orcad-cli-launcher'
 import {
@@ -32,7 +31,7 @@ import { ORCAD_USAGE, parseArgs, resolveOrcadWebClientRoot } from './orcad-comma
 import type { OrcadRuntimeCleanup } from './orcad-runtime-lifetime'
 import { installOrcadStopRequestListeners } from './orcad-stop-request-listener'
 import { prepareOrcadManagedStop } from './orcad-managed-stop-admission'
-import type { OrcadManagedStopContext } from '../../shared/orcad-stop-request'
+import type { OrcadHandle, OrcadOptions } from './orcad-start-contract'
 import { beginOrcadIdleExit, bindOrcadIdleShutdown } from './orcad-managed-idle-exit-host'
 import { orcadAutomationsKeepHostBusy, startOrcadAutomations } from './orcad-automations'
 import {
@@ -47,31 +46,6 @@ import { orcadWsPortOptions } from './orcad-ws-port-policy'
 export { parseArgs }
 
 let closeOrcadObservability = (): void => {}
-
-export type OrcadOptions = {
-  port?: number
-  json?: boolean
-  noPairing?: boolean
-  pairingAddress?: string
-  /** Desktop `orca serve` parity: a mobile-scoped offer with a terminal QR. */
-  mobilePairing?: boolean
-  /** Lets the paired runtime client drive this machine's desktop (computer.*). */
-  grantDesktopControl?: boolean
-  /** Desktop `orca serve` parity: print only the ephemeral-VM recipe line. */
-  recipeJson?: boolean
-  projectRoot?: string
-  /** Literal IP to bind. Defaults to loopback; see orcad-bind-address.ts. */
-  bind?: string
-  /** The browser client's directory; the slot carries none, so `orca serve` passes the app's. */
-  webClientRoot?: string
-}
-
-export type OrcadHandle = {
-  readiness: ServeReadiness
-  /** What an instance-bound stop request must name to stop this process. */
-  managedStop: OrcadManagedStopContext
-  stop(): Promise<void>
-}
 
 /**
  * Boot the runtime and serve RPC. Resolves once the transport is listening and the
