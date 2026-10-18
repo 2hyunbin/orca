@@ -159,8 +159,15 @@ describe('StructuredAgentSessionAdapterRouter registry', () => {
       rewindSupport: () => ({ supported: false, reason: 'history-not-paginated' })
     })
     const widening = declaringAdapter({ rewindSupport: () => ({ supported: true }) })
+    const undeclared = {
+      ...CLAUDE_STRUCTURED_AGENT,
+      capabilities: { ...CLAUDE_STRUCTURED_AGENT.capabilities, rewind: false }
+    }
     const router = new StructuredAgentSessionAdapterRouter(
-      claudeAndCodex({ codex: narrowing, claude: widening }),
+      new StructuredAgentRegistry([
+        { definition: undeclared, adapter: widening },
+        { definition: CODEX_STRUCTURED_AGENT, adapter: narrowing }
+      ]),
       async () => {}
     )
     const unsupported = { supported: false, reason: 'unsupported' }
@@ -169,7 +176,7 @@ describe('StructuredAgentSessionAdapterRouter registry', () => {
       supported: false,
       reason: 'history-not-paginated'
     })
-    // Claude declares no rewind; its adapter's answer cannot claim one, at rest or live.
+    // An agent declaring no rewind: its adapter's answer cannot claim one, at rest or live.
     expect(router.rewindSupport('session-1', 'claude')).toEqual(unsupported)
     await router.acquire({ identity: identity('session-1', 'claude'), fence: 1, spawnToken: 's' })
     expect(router.rewindSupport('session-1')).toEqual(unsupported)
@@ -180,7 +187,7 @@ describe('StructuredAgentSessionAdapterRouter registry', () => {
 describe('structured agent definitions', () => {
   it('declares what Claude and Codex structured chats already did', () => {
     expect(CLAUDE_STRUCTURED_AGENT.capabilities).toEqual({
-      rewind: false,
+      rewind: true,
       compact: true,
       threadGoal: false,
       contextUsage: true,

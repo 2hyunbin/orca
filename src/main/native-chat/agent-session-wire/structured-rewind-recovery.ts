@@ -30,8 +30,8 @@ export function persistRewindRecord(
 }
 
 /**
- * Claude rewind is unsupported, so a pending one (an older build's, or an interrupted one) is
- * settled refused rather than proven. Bookkeeping only: the chat is already attached either way.
+ * A Claude rewind from a build before rewinds forked never ran, so it is settled refused rather
+ * than proven. Bookkeeping only: the chat is already attached either way.
  */
 async function settleUnsupportedClaudeRewind(
   { store, logger }: RewindRecoveryDeps,
@@ -82,7 +82,7 @@ export async function recoverStructuredRewind(
     return
   }
   const target = parseAgentJournalItemKey(rewind.providerItemId ?? rewind.itemId)
-  if (target?.provider === 'claude') {
+  if (target?.provider === 'claude' && !rewind.providerFork) {
     await settleUnsupportedClaudeRewind(deps, sessionId, fence, rewind)
     return
   }
@@ -103,8 +103,12 @@ export async function recoverStructuredRewind(
   if (!alreadyReplaced && !cut) {
     throw new Error('agent_session_rewind:invalid-target')
   }
-  if (rewind.phase === 'prepared') {
-    if (!cut) {
+  if (rewind.phase === 'prepared' && rewind.providerFork) {
+    // The fork is the next launch's to make, so nothing outside Orca can have half-happened.
+    rewind = { ...rewind, phase: 'provider-succeeded' }
+    await persistRewindRecord(store, sessionId, fence, rewind)
+  } else if (rewind.phase === 'prepared') {
+    if (!cut || !('beforeTurnId' in cut)) {
       throw new Error('agent_session_rewind:outcome-unknown')
     }
     const read = adapter?.recoverRewind?.({

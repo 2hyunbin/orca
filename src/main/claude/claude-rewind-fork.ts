@@ -1,7 +1,13 @@
 import { createReadStream } from 'node:fs'
 import { join } from 'node:path'
-import type { AgentSessionProviderHandle } from '../../shared/agent-session-provider-handle'
+import { requireLegacyAgentSessionAccountHome } from '../../shared/agent-session-account-home'
+import {
+  agentSessionProviderHandleChainHead,
+  type AgentSessionProviderHandle
+} from '../../shared/agent-session-provider-handle'
 import type { AgentSessionRewindFork } from '../../shared/agent-session-rewind'
+import { getClaudeProfileRouter } from '../claude-accounts/claude-profile-installed-router'
+import type { StructuredAgentSessionAdapter } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { resolveSessionFilePath } from '../native-chat/session-file-resolver'
 import { splitTranscriptStreamLines } from '../native-chat/transcript-stream-lines'
 import { claudeSessionIdForRewind } from './claude-structured-session-id'
@@ -80,4 +86,27 @@ export async function resolveClaudeRewindFork(input: {
     }
   }
   return null
+}
+
+/** The adapter's answer: the fork for a rewind of `record` to before `beforeMessage`, read from any
+ *  Claude home Orca knows, since the chat's account may have changed since that message. */
+export const claudeForkForRewind: NonNullable<
+  StructuredAgentSessionAdapter['forkForRewind']
+> = async ({ record, beforeMessage, rewindOperationId }) => {
+  const head = agentSessionProviderHandleChainHead(record.providerHandleChain)?.handle
+  if (!head) {
+    return { ok: false, reason: 'invalid-target' }
+  }
+  const router = getClaudeProfileRouter()
+  const fork = await resolveClaudeRewindFork({
+    orcaSessionId: record.sessionId,
+    rewindOperationId,
+    head,
+    prompt: beforeMessage,
+    claudeConfigDirs: [
+      requireLegacyAgentSessionAccountHome(record.accountHome).path,
+      ...(router ? [...router.accountHomes(), router.systemDefaultHome()] : [])
+    ]
+  })
+  return fork ? { ok: true, fork } : { ok: false, reason: 'invalid-target' }
 }

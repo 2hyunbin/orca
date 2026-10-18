@@ -84,14 +84,15 @@ export type AgentSessionRewindFork = NonNullable<AgentSessionRewindRecord['provi
 
 /**
  * The fork a rewind still owes the chat's next launch: it applies while the chat's provider
- * session is the one rewound, or the fork itself before the provider has written it.
+ * session is the one rewound, or the fork itself before the provider has written it. A prepared
+ * one counts: recovery always completes it, so a launch before then must not resume the old one.
  */
 export function pendingAgentSessionRewindFork(
   rewind: AgentSessionRewindRecord | undefined,
   headNativeId: string | undefined
 ): AgentSessionRewindFork | null {
   const fork = rewind?.providerFork
-  if (!fork || (rewind.phase !== 'provider-succeeded' && rewind.phase !== 'completed')) {
+  if (!fork || rewind.phase === 'refused') {
     return null
   }
   return headNativeId === fork.replacesSessionId || headNativeId === fork.sessionId ? fork : null

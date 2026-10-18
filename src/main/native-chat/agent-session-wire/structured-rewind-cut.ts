@@ -18,13 +18,20 @@ import type { AgentSessionJournal } from '../agent-session-journal/journal-store
 import type { JournalReplacementItem } from '../agent-session-journal/journal-epoch-replacement'
 
 export type StructuredRewindCut = {
-  /** The provider turn the rewind removes, with every later one. */
-  beforeTurnId: string
-  /** The last provider turn the rewind keeps; null when it keeps none. */
-  keptTurnId: string | null
   /** The rows after any /clear floor the rewound conversation keeps, in journal order. */
   kept: JournalReplacementItem[]
-}
+} & (
+  | {
+      /** The provider turn the rewind removes, with every later one. */
+      beforeTurnId: string
+      /** The last provider turn the rewind keeps; null when it keeps none. */
+      keptTurnId: string | null
+    }
+  | {
+      /** A provider that forks to rewind cuts at the message itself: the prompt it removes. */
+      beforeMessage: { sessionId: string; uuid: string }
+    }
+)
 
 /** The cut at `itemId` for the session's current provider handle; null when it can't be cut there. */
 export function structuredRewindCut(
@@ -39,6 +46,23 @@ export function structuredRewindCut(
   const { providerKey, queued } = submissionKeys(snapshot.submissions)
   const selected = items.find((item) => item.itemId === target.itemId)
   const key = selected ? parseAgentJournalItemKey(providerKey(selected.itemId)) : null
+  if (key?.provider === 'claude' && target.provider === 'claude') {
+    // Any session the chat ran: a message from before an earlier rewind's fork is still cut there.
+    const boundary = items.findIndex((item) => item.itemId === target.itemId)
+    const keptTurns = new Set(items.slice(0, boundary).flatMap((item) => scopedTurn(item) ?? []))
+    const keptRows = items.filter((item, index) => {
+      const turn = scopedTurn(item)
+      // A kept turn's row can land after the cut, as a late provider item does.
+      return (
+        !queued.has(item.itemId) &&
+        (index < boundary || (turn !== undefined && keptTurns.has(turn)))
+      )
+    })
+    return {
+      beforeMessage: { sessionId: key.sessionId, uuid: key.uuid },
+      kept: keptRows.map((item) => keptRow(journal, item, providerKey))
+    }
+  }
   if (
     key?.provider !== 'codex' ||
     target.provider !== 'codex' ||
@@ -69,6 +93,10 @@ export function structuredRewindCut(
     ),
     kept: keptRows.map((item) => keptRow(journal, item, providerKey))
   }
+}
+
+function scopedTurn(item: AgentJournalRenderItem): string | undefined {
+  return item.turnScope?.kind === 'turn' ? item.turnScope.turnItemId : undefined
 }
 
 /** The newest main-thread turn the provider lists among `rows`: from a provider item's own key,
