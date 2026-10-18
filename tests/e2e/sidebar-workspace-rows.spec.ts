@@ -83,8 +83,8 @@ test('main lists the window’s git and folder workspaces and follows its metada
     })
     .toEqual([true, 'rows', true])
 
-  // Recent order disagrees on origin/main already (sidebar-creation-registry.spec.ts); not this domain.
-  await expectNoSidebarShadowMismatches(orcaPage, ['workspace-rows'])
+  // Recent order already disagrees on origin/main (sidebar-creation-registry.spec.ts).
+  await expectNoSidebarShadowMismatches(orcaPage, [{ domain: 'sidebar-temporal', key: 'sort' }])
 })
 
 test('a disconnected SSH host keeps its rows, and its state reads not connected', async (// oxlint-disable-next-line no-empty-pattern -- This exercise owns its app launch.
@@ -105,7 +105,7 @@ test('a disconnected SSH host keeps its rows, and its state reads not connected'
       { repoPath: '/srv/rows-repo', folderPath: '/srv/rows-folders' }
     )
     const hostId = `ssh:${seeded.targetId}`
-    // Its rows are the ones it stored: a pinned workspace beside the repo's main checkout.
+    // Its rows are the ones it stored: here one pinned workspace.
     mutateStoppedProfileState(session.userDataDir, (state) => {
       state.worktreeMeta = {
         ...(state.worktreeMeta && typeof state.worktreeMeta === 'object' ? state.worktreeMeta : {}),

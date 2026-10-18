@@ -14,8 +14,8 @@ export const SIDEBAR_INPUTS_BUILD = existsSync(
  */
 export async function expectNoSidebarShadowMismatches(
   page: Page,
-  /** Only these domains' mismatches count; every domain still has to compare. */
-  domains?: readonly string[]
+  /** Disagreements already filed against another domain; every domain still has to compare. */
+  known: readonly { domain: string; key: string }[] = []
 ): Promise<void> {
   if (!SIDEBAR_INPUTS_BUILD) {
     expect(await page.evaluate(() => window.__sidebarShadow === undefined)).toBe(true)
@@ -29,7 +29,8 @@ export async function expectNoSidebarShadowMismatches(
     .poll(comparisons, { timeout: 15_000, message: 'main never answered a shadow comparison' })
     .toBeGreaterThanOrEqual(Math.max(start, 0) + 2)
   const mismatches = (await page.evaluate(() => window.__sidebarShadow?.mismatches() ?? [])).filter(
-    (mismatch) => !domains || domains.includes(mismatch.domain)
+    (mismatch) =>
+      !known.some(({ domain, key }) => mismatch.domain === domain && mismatch.key === key)
   )
   expect(mismatches, JSON.stringify(mismatches, null, 2)).toEqual([])
 }

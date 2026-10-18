@@ -9,9 +9,6 @@ import { runtimeVisibleFolderWorkspaces } from '../runtime-visible-catalog'
 import { WORKTREE_METADATA_DOMAINS } from '../../persistence/loading-store/worktree-identity-metadata'
 import { ProducerRevision } from './producer-revision'
 
-// Metadata saves name these; folder workspace and lineage writes are full saves (no domains).
-const WORKTREE_META_DOMAINS: readonly string[] = WORKTREE_METADATA_DOMAINS
-
 export type WorkspaceRowsSources = {
   store: RuntimeStore | null
   /** The listing worktree.ps reads, after its hidden-repo and visibility filters. */
@@ -24,8 +21,8 @@ export type WorkspaceRowsSources = {
 }
 
 /**
- * This host's workspace rows, read on demand. The revision moves on catalog changes and metadata
- * writes only; terminal output writes neither, so it never makes one.
+ * This host's workspace rows, read on demand. The revision moves on catalog changes and on saves
+ * that may touch metadata; session saves are tagged apart, so terminal output never moves it.
  */
 export class WorkspaceRowsProducer {
   readonly revision = new ProducerRevision()
@@ -39,13 +36,12 @@ export class WorkspaceRowsProducer {
       },
       { consumesTerminalSideEffects: false }
     )
-    // Session writes name their own domains, so terminal activity never reaches this.
     sources.store?.onStateWritten?.((domains) => {
-      if (
-        domains === undefined ||
-        domains.some((domain) => WORKTREE_META_DOMAINS.includes(domain))
-      ) {
-        // The window applies its own metadata writes and announces none; the listing copied the old ones.
+      if (domains === undefined) {
+        // A full save may be a folder workspace or lineage write; both are read fresh from the store.
+        this.revision.bump()
+      } else if (WORKTREE_METADATA_DOMAINS.some((domain) => domains.includes(domain))) {
+        // The window's own metadata writes announce nothing, and the cached listing merged the old ones.
         sources.invalidateListing()
         this.revision.bump()
       }

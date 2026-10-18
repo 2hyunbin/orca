@@ -59,17 +59,26 @@ function setup() {
   const store: Pick<
     RuntimeStore,
     | 'getRepos'
+    | 'getRepo'
+    | 'getWorktreeMeta'
+    | 'getAllWorktreeMeta'
     | 'getFolderWorkspaces'
     | 'getProjectGroups'
     | 'getSshTargets'
     | 'getAllWorktreeLineage'
+    | 'getSettings'
     | 'onStateWritten'
   > = {
     getRepos: () => [localRepo, sshRepo],
+    getRepo: (id) => [localRepo, sshRepo].find((repo) => repo.id === id),
+    getWorktreeMeta: () => undefined,
+    getAllWorktreeMeta: () => ({}),
     getFolderWorkspaces: () => [],
     getProjectGroups: () => [],
     getSshTargets: () => [],
     getAllWorktreeLineage: () => ({}),
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the visibility filter reads only absent fields as defaults.
+    getSettings: () => ({}) as ReturnType<RuntimeStore['getSettings']>,
     onStateWritten: (listener) => {
       onWrite = listener
       return () => {}
@@ -83,9 +92,10 @@ function setup() {
     ],
     platformByRepoId: new Map([['repo-1', 'linux']])
   }
+  // The real listing cache and visibility filter run; only the scan-and-merge is stubbed.
   class Probe extends OrcaRuntimeService {
-    override async listVisibleResolvedWorktreeSnapshot(): Promise<ResolvedWorktreeSnapshot> {
-      return listing
+    protected override async computeResolvedWorktrees(): Promise<ResolvedWorktreeSnapshot> {
+      return { ...listing, worktrees: [...listing.worktrees] }
     }
 
     emit(event: RuntimeClientEvent): void {
@@ -94,13 +104,11 @@ function setup() {
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the rows read only the fields picked above.
   const runtime = new Probe(store as RuntimeStore)
-  const invalidate = vi.spyOn(runtime, 'invalidateResolvedWorktreeCache')
   return {
     runtime,
     rows: requireSwitchedOn(runtime.workspaceRows),
     listing,
-    write: (domains?: readonly string[]) => onWrite(domains),
-    invalidate
+    write: (domains?: readonly string[]) => onWrite(domains)
   }
 }
 
@@ -124,23 +132,31 @@ describe('WorkspaceRowsProducer', () => {
   })
 
   it('moves on catalog changes and metadata writes, never on session or settings writes', () => {
-    const { runtime, rows, write, invalidate } = setup()
+    const { runtime, rows, write } = setup()
     const at = (): number => rows.revision.value
     const start = at()
     write(['workspaceSession'])
     write(['settings'])
     runtime.emit({ type: 'workspaceViewChanged' })
     expect(at()).toBe(start)
-    expect(invalidate).not.toHaveBeenCalled()
 
     write(['worktreeMeta'])
-    expect(at()).toBe(start + 1)
-    // The merged listing copied the old metadata.
-    expect(invalidate).toHaveBeenCalledTimes(1)
     write(undefined)
     runtime.emit({ type: 'worktreesChanged', repoId: 'repo-1' })
     runtime.emit({ type: 'reposChanged' })
     expect(at()).toBe(start + 4)
+  })
+
+  it('reads a metadata write at once, inside the listing cache’s lifetime', async () => {
+    const { rows, listing, write } = setup()
+    const pinned = async (): Promise<boolean | undefined> =>
+      (await rows.snapshot()).rows['local|repo-1::/r/a']?.isPinned
+    expect(await pinned()).toBe(false)
+    listing.worktrees[0] = { ...listing.worktrees[0], isPinned: true }
+    write(['settings'])
+    expect(await pinned()).toBe(false)
+    write(['worktreeMeta'])
+    expect(await pinned()).toBe(true)
   })
 
   it('reaches the phone feed as the workspaces domain', async () => {
