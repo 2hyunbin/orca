@@ -142,6 +142,16 @@ describe('MacOSNativeProviderClient.permissionStatus', () => {
     expect(sockets[1]!.methods).toEqual(['handshake', 'permissionStatus'])
   })
 
+  it('keeps a provider that served agent work for a fresh read', async () => {
+    const client = await createClient()
+    await client.listApps()
+
+    await client.permissionStatus({ fresh: true })
+
+    expect(spawnMock).toHaveBeenCalledTimes(1)
+    expect(sockets[0]!.methods).not.toContain('terminate')
+  })
+
   it('rereads an incomplete status from a new provider that only served status reads', async () => {
     replies.permissionStatus = { accessibility: 'granted', screenshots: 'not-granted' }
     const client = await createClient()

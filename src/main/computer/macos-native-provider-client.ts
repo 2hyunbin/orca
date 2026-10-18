@@ -74,8 +74,9 @@ export class MacOSNativeProviderClient {
     fresh: boolean
   }): Promise<permissionStatusWire.MacOSProviderPermissionStatus> {
     // Why: a Screen Recording grant may only show in a process started after it. Never recycle a
-    // provider that served agent work: its snapshot cache backs the agent's element indexes.
-    if (options.fresh || (this.statusOnlyProvider && this.screenshotsMissingAtLastRead)) {
+    // provider that served agent work: its snapshot cache backs the agent's element indexes, and
+    // its own view is what the agent's actions get.
+    if (this.statusOnlyProvider && (options.fresh || this.screenshotsMissingAtLastRead)) {
       this.shutdown()
     }
     await this.ensureCapability('permissions', 'status')

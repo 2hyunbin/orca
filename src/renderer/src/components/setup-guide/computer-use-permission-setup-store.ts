@@ -51,6 +51,13 @@ function publish(next: ComputerUsePermissionSetupSnapshot): void {
 export function recordComputerUsePermissionStatus(
   status: ComputerUsePermissionStatusResult | null
 ): void {
+  // Why: a read already in flight started before this status and must not overwrite it.
+  generation += 1
+  inFlight = null
+  publishStatus(status)
+}
+
+function publishStatus(status: ComputerUsePermissionStatusResult | null): void {
   if (watchers > 0) {
     publish({ checked: true, ...getComputerUsePermissionSetupState(status) })
   }
@@ -69,7 +76,7 @@ function refresh(): void {
         inFlight = null
       }
       if (readGeneration === generation) {
-        recordComputerUsePermissionStatus(status)
+        publishStatus(status)
       }
     })
   inFlight = read

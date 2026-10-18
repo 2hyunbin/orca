@@ -158,4 +158,21 @@ describe('computer-use permission setup store', () => {
     await settle()
     expect(getStatus).toHaveBeenCalledTimes(2)
   })
+
+  it('drops an in-flight read that started before another surface recorded a status', async () => {
+    const store = await loadStore()
+    let resolveRead: (value: ComputerUsePermissionStatusResult) => void = () => {}
+    getStatus.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRead = resolve
+      })
+    )
+    releases.push(store.watchComputerUsePermissionSetup())
+
+    store.recordComputerUsePermissionStatus(status('not-granted', 'not-granted'))
+    resolveRead(status('granted', 'granted'))
+    await settle()
+
+    expect(store.readComputerUsePermissionSetup().ready).toBe(false)
+  })
 })
