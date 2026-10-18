@@ -16,6 +16,7 @@ import type {
   AgentSessionJournalIdentity
 } from '../../../shared/agent-session-journal-types'
 import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
+import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
 import type { AgentSessionContextUsage } from '../../../shared/agent-session-context-usage'
 import { latestStructuredAgentContextFacts } from '../../../shared/structured-agent-session-context-usage'
 import {
@@ -86,7 +87,7 @@ export class AgentSessionJournal {
   private readonly mintEpoch: () => string
 
   private state: JournalReducerState
-  private openedThrough: AgentJournalCursor = { epoch: '', sequence: 0 }
+  private queuedAtOpen: ReadonlySet<string> = new Set()
   private reopenUnmarked: AgentJournalCursor | null = null
   private onCommitted: (() => void) | null = null
   private readonly queue: JournalWriteQueue
@@ -157,14 +158,10 @@ export class AgentSessionJournal {
     return this.identity.agent
   }
 
-  /** Whether a row at this sequence was on disk when this handle opened, so an earlier handle
-   *  wrote it. Sequences restart with each epoch, so a row of a later epoch never was. */
-  wroteBeforeOpen(sequence: number | undefined): boolean {
-    return (
-      sequence !== undefined &&
-      this.state.epoch === this.openedThrough.epoch &&
-      sequence <= this.openedThrough.sequence
-    )
+  /** Whether this send was already queued when this handle opened, so an earlier handle accepted
+   *  it. Keyed by id: a history replacement carries a queued send under a new sequence. */
+  acceptedBeforeOpen(clientMessageId: string): boolean {
+    return this.queuedAtOpen.has(clientMessageId)
   }
 
   /** Where the reopen's pause begins when this handle could not write its mark: where the mark
@@ -175,7 +172,11 @@ export class AgentSessionJournal {
 
   async open(): Promise<void> {
     await this.restore()
-    this.openedThrough = this.cursor()
+    this.queuedAtOpen = new Set(
+      this.submissions()
+        .filter(isQueuedAgentJournalSubmission)
+        .map((entry) => entry.clientMessageId)
+    )
   }
 
   /** Refuses every later write and resolves once the admitted ones have landed. Holds no

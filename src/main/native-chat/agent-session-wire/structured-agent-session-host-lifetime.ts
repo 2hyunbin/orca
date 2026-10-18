@@ -9,6 +9,7 @@
 // reentrant, so every public entry point takes it once and calls these.
 
 import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
+import { structuredAgentSessionHandsOver } from './structured-agent-session-current-work'
 import type { AgentJournalSubmission } from '../../../shared/agent-session-journal-types'
 import { holdUnsentSends } from '../agent-session-journal/journal-unsent-send-hold'
 import {
@@ -236,8 +237,14 @@ export function structuredAgentSessionConversationClosable(
 ): boolean {
   return (
     session.child === null &&
-    !session.journal.submissions().some(isQueuedAgentJournalSubmission) &&
-    session.journal.pendingSubmissions().length === 0 &&
+    // A send an earlier handle left queued pins nothing: the next open settles it again.
+    !session.journal
+      .pendingSubmissions()
+      .some(
+        (entry) =>
+          !isQueuedAgentJournalSubmission(entry) ||
+          structuredAgentSessionHandsOver(session.journal, entry)
+      ) &&
     !(atRest && session.journal.queuedMessages.awaitReopenMark())
   )
 }

@@ -643,7 +643,8 @@ describe('what is not kept', () => {
     await quitRestart()
     await rig.send('sent anyway').result
     await eventually(() => expect(dispatchedTexts()).toEqual(['sent anyway']))
-    // Neither handed over nor rejected: still the earlier process's, waiting for a keep.
+    // A Stop withdraws only this process's sends; the earlier one waits for a keep, unsent.
+    expect(await rig.stop()).toMatchObject({ ok: true })
     expect(await rig.submission(id)).toMatchObject({ dispatchState: 'pending' })
     expect(await rig.drafts()).toEqual([])
 

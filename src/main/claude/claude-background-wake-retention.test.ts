@@ -42,7 +42,7 @@ async function wiredSession() {
     stopMarks: { latest: () => null, revision: () => 0 },
     // One generation produced everything here, and every send was accepted by this process.
     itemFence: () => undefined,
-    wroteBeforeOpen: () => false,
+    acceptedBeforeOpen: () => false,
     // The live generation's own turns are never a died turn, so this is never consulted for one.
     runningTurn: () => null,
     snapshot: () => ({

@@ -153,6 +153,7 @@ function expectLifecycleBatchBounds(batches: readonly LifecycleBatch[]): void {
   const appender = new JournalLifecycleBatchAppender({
     state: () => state,
     cursor: () => ({ epoch: state.epoch, sequence: state.lastSequence }),
+    acceptedBeforeOpen: () => false,
     enqueueRows: async () => []
   })
   for (const batch of batches) {

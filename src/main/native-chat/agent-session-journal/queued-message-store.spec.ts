@@ -454,7 +454,7 @@ export function registerQueuedMessageStoreTests(): void {
         journal = await open()
         expect(journal.queuedMessages.get('draft-1')?.state).toBe('dispatched')
         await journal.rejectQueuedSubmissions(0, HOST_RESTARTED, (submission) =>
-          journal.wroteBeforeOpen(submission.acceptedSequence)
+          journal.acceptedBeforeOpen(submission.clientMessageId)
         )
         // Whoever sent it, it waits with no hold of its own, under the reopen's pause.
         expect(journal.queuedMessages.get('draft-1')).toMatchObject({

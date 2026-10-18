@@ -41,7 +41,7 @@ function contextWith(
       runningTurn: () => null,
       itemFence: () => undefined,
       visitItems: () => undefined,
-      wroteBeforeOpen: () => false
+      acceptedBeforeOpen: () => false
     },
     adapter
   }

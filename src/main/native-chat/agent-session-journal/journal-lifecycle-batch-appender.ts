@@ -27,6 +27,7 @@ export class JournalLifecycleBatchAppender {
     private readonly deps: {
       state: () => JournalReducerState
       cursor: () => AgentJournalCursor
+      acceptedBeforeOpen: (clientMessageId: string) => boolean
       enqueueRows: (
         plan: () => readonly ((seq: number, ts: number) => JournalRow)[]
       ) => Promise<JournalRow[]>
@@ -40,7 +41,8 @@ export class JournalLifecycleBatchAppender {
           const rejections = journalQueuedRejectionRowBuilders(
             this.deps.state,
             input.fence,
-            input.rejectsQueued
+            input.rejectsQueued,
+            this.deps.acceptedBeforeOpen
           )
           if (rejections.length > 0 && input.mutations.length === 0) {
             throw new Error('journal_lifecycle_batch_mutation_bound_exceeded')

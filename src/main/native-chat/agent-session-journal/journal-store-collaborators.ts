@@ -121,9 +121,12 @@ export function createJournalStoreCollaborators(host: JournalStoreHost): Journal
     rolledBack: () => queuedMessages.invalidate(),
     streamedTextRevision: (row) => isJournalStreamedTextRevision(host.state(), row)
   })
+  const acceptedBeforeOpen = (clientMessageId: string) =>
+    host.journal().acceptedBeforeOpen(clientMessageId)
   const lifecycleBatchAppender = new JournalLifecycleBatchAppender({
     state: host.state,
     cursor: host.cursor,
+    acceptedBeforeOpen,
     enqueueRows: (plan) => rowWriter.enqueueRows(plan)
   })
   return {
@@ -135,7 +138,7 @@ export function createJournalStoreCollaborators(host: JournalStoreHost): Journal
       writer: rowWriter,
       cards: queuedMessages
     }),
-    stops: new JournalStopAcceptor({ writer: rowWriter, state: host.state }),
+    stops: new JournalStopAcceptor({ writer: rowWriter, state: host.state, acceptedBeforeOpen }),
     // Behind the stored fact: settles drafts whose consumed submission the loaded journal shows
     // refused (a downgrade wrote no hook), then prunes. Bookkeeping, never failing the open.
     restore: () =>

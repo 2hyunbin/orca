@@ -73,7 +73,7 @@ describe('the stop-note refresh frame', () => {
           }
         },
         submissions: () => [],
-        wroteBeforeOpen: () => false
+        acceptedBeforeOpen: () => false
       },
       2
     )

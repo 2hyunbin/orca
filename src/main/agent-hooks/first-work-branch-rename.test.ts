@@ -109,7 +109,7 @@ describe('maybeAutoRenameBranchOnFirstWork', () => {
         lastActivityAt: () => 1,
         cursor: () => ({ epoch: 1, sequence: (sequence += 1) }),
         itemFence: () => undefined,
-        wroteBeforeOpen: () => false,
+        acceptedBeforeOpen: () => false,
         runningTurn: () => null
       } as unknown as AgentSessionJournal
       const pending: Promise<void>[] = []
@@ -213,7 +213,7 @@ describe('maybeAutoRenameBranchOnFirstWork', () => {
         submissions: []
       }),
       itemFence: () => undefined,
-      wroteBeforeOpen: () => false,
+      acceptedBeforeOpen: () => false,
       runningTurn: () => null
     } as unknown as AgentSessionJournal
     const location = {

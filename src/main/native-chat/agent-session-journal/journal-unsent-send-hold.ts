@@ -97,7 +97,7 @@ export async function holdUnsentSends(
         ? isUnansweredHandedOverSubmission(entry)
         : isQueuedAgentJournalSubmission(entry) &&
           (hold.cause === 'hostRestarted'
-            ? journal.wroteBeforeOpen(entry.acceptedSequence)
+            ? journal.acceptedBeforeOpen(entry.clientMessageId)
             : (hold.which?.(entry) ?? true))
     )
     .sort((a, b) => (a.acceptedSequence ?? 0) - (b.acceptedSequence ?? 0))

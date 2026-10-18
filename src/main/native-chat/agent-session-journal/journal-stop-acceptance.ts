@@ -38,6 +38,7 @@ export class JournalStopAcceptor {
     private readonly deps: {
       writer: Pick<JournalRowWriter, 'enqueueRows'>
       state: () => JournalReducerState
+      acceptedBeforeOpen: (clientMessageId: string) => boolean
     }
   ) {}
 
@@ -60,7 +61,12 @@ export class JournalStopAcceptor {
         turnId = input.event.turnId ?? input.liveTurnId()
         const event = { ...input.event, ...(turnId !== null ? { turnId } : {}) }
         return [
-          ...journalQueuedRejectionRowBuilders(state, input.fence, STOP_WITHDRAWAL),
+          ...journalQueuedRejectionRowBuilders(
+            state,
+            input.fence,
+            STOP_WITHDRAWAL,
+            this.deps.acceptedBeforeOpen
+          ),
           journalStopEventRowBuilder(state, event, input.fence)
         ]
       },

@@ -159,6 +159,7 @@ export function registerJournalLifecycleBatchAppenderTests(): void {
         const appender = new JournalLifecycleBatchAppender({
           state: () => state,
           cursor: () => ({ epoch: state.epoch, sequence: state.lastSequence }),
+          acceptedBeforeOpen: () => false,
           enqueueRows: async (plan) => {
             const built = plan().map((build, index) => build(index + 1, 1_000))
             rows.push(...built)

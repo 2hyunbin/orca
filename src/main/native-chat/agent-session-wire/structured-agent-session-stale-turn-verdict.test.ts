@@ -316,7 +316,8 @@ describe('stale session state on a cold acquire', () => {
       stopMarks: { latest: () => null },
       cursor: () => ({ epoch: 'epoch-1', sequence: 8 }),
       submissions: () => [],
-      appendPlannedLifecycleBatch: plannedBatchThrough(appendLifecycleBatch)
+      appendPlannedLifecycleBatch: plannedBatchThrough(appendLifecycleBatch),
+      acceptedBeforeOpen: () => false
     } as unknown as AgentSessionJournal
     return { journal, appendLifecycleBatch }
   }

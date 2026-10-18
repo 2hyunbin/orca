@@ -162,7 +162,7 @@ export function journal(
     appendItem: async () => undefined,
     // Created by the generation the record names: current while its lease is held.
     itemFence: () => undefined,
-    wroteBeforeOpen: () => false
+    acceptedBeforeOpen: () => false
   } as never
 }
 

@@ -104,14 +104,19 @@ export async function rejectJournalQueuedSubmissions(
   return queued.map((entry) => entry.clientMessageId)
 }
 
-/** Rows rejecting every submission still queued, read from `state` when called: for an append
- *  that must carry them with what follows, in one transaction. */
+/** Rows rejecting every submission this handle still has queued, read from `state` when called:
+ *  for an append that must carry them with what follows, in one transaction. A send an earlier
+ *  handle accepted is the restart hold's to settle, never rejected with this handle's cause. */
 export function journalQueuedRejectionRowBuilders(
   state: () => JournalReducerState,
   fence: number,
-  rejection: AgentJournalDispatchRejection
+  rejection: AgentJournalDispatchRejection,
+  acceptedBeforeOpen: (clientMessageId: string) => boolean
 ): ((seq: number, ts: number) => JournalRow)[] {
-  return [...state().submissions.values()].filter(isQueuedAgentJournalSubmission).map((entry) =>
+  const queued = [...state().submissions.values()].filter(
+    (entry) => isQueuedAgentJournalSubmission(entry) && !acceptedBeforeOpen(entry.clientMessageId)
+  )
+  return queued.map((entry) =>
     journalDispatchRowBuilder(state, {
       clientMessageId: entry.clientMessageId,
       state: 'rejected',

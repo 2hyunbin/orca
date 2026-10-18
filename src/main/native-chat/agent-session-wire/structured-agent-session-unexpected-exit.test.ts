@@ -107,7 +107,8 @@ describe('provider-exit settlement', () => {
         lastProviderActivityAt: () => undefined,
         stopMarks: { latest: () => null, personStopDecides: () => false },
         submissions: () => [],
-        appendPlannedLifecycleBatch: plannedBatchThrough(appendLifecycleBatch)
+        appendPlannedLifecycleBatch: plannedBatchThrough(appendLifecycleBatch),
+        acceptedBeforeOpen: () => false
       }
     } as unknown as StructuredAgentSessionHostSession
 
@@ -180,7 +181,8 @@ describe('provider-exit settlement', () => {
         itemFence: () => undefined,
         snapshot: () => ({ items }),
         submissions: () => [],
-        appendPlannedLifecycleBatch: plannedBatchThrough(appendLifecycleBatch)
+        appendPlannedLifecycleBatch: plannedBatchThrough(appendLifecycleBatch),
+        acceptedBeforeOpen: () => false
       }
     } as unknown as StructuredAgentSessionHostSession
     const store = {

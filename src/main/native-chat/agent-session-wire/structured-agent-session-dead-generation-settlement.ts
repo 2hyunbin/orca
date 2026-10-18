@@ -4,6 +4,7 @@ import {
   type SubmissionRejectionFact
 } from '../../../shared/agent-session-failure'
 import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
+import { structuredAgentSessionHandsOver } from './structured-agent-session-current-work'
 import {
   AGENT_JOURNAL_THREAD_SCOPE,
   type AgentJournalItemBody,
@@ -115,7 +116,9 @@ export function planStructuredAgentSessionDeadGeneration(
     // in the words it rejected the message with; this row is for a command, goal or rewind start.
     // A row already written stays: rejected is terminal, so its words are not reworded.
     const recordedByDeliveryLoop =
-      input.journal.submissions?.().some(isQueuedAgentJournalSubmission) ||
+      input.journal
+        .submissions?.()
+        .some((submission) => structuredAgentSessionHandsOver(input.journal, submission)) ||
       hasStructuredAgentSessionStartFailureRow(allItems, startKey)
     if (!recordedByDeliveryLoop) {
       mutations.push(structuredAgentSessionStartFailureRow(startKey, startupFailure))

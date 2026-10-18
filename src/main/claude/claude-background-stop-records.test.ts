@@ -46,7 +46,7 @@ async function droppedFromRoster() {
           runningTurn: () => null,
           itemFence: () => undefined,
           visitItems: () => undefined,
-          wroteBeforeOpen: () => false
+          acceptedBeforeOpen: () => false
         },
         adapter: run.adapter
       },

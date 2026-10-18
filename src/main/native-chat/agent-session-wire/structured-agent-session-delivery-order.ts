@@ -19,7 +19,7 @@ export class StructuredAgentSessionDeliveryOrder {
   /** Orders only the sends this process may hand over: a leftover never holds a later send. */
   reconcile(
     sessionId: string,
-    journal: Pick<AgentSessionJournal, 'submissions' | 'wroteBeforeOpen'> | undefined
+    journal: Pick<AgentSessionJournal, 'submissions' | 'acceptedBeforeOpen'> | undefined
   ): void {
     const queued = journal
       ? journal.submissions().filter((entry) => structuredAgentSessionHandsOver(journal, entry))

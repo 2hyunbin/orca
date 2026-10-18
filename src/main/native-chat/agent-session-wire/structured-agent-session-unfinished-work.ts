@@ -13,6 +13,7 @@ import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-qu
 
 export type DeadGenerationJournal = UnopenedSendJournal & {
   appendPlannedLifecycleBatch: AgentSessionJournal['appendPlannedLifecycleBatch']
+  acceptedBeforeOpen: AgentSessionJournal['acceptedBeforeOpen']
   pendingSubmissions?: AgentSessionJournal['pendingSubmissions']
   itemFence: AgentSessionJournal['itemFence']
 }
