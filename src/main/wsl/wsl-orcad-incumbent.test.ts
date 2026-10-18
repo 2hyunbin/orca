@@ -5,7 +5,7 @@ import type { OrcadHostTransport } from '../ssh/orcad-host-transport'
 import type { OrcadRemoteContext } from '../ssh/orcad-remote-context'
 import type { ServeReadiness } from '../server/serve-readiness'
 import { getRemoteHostPlatform } from '../ssh/ssh-remote-platform'
-import type { StartedPortForward } from '../ssh/ssh-port-forward-provider'
+import type { StartedPortForward } from '../ssh/port-forwarding/ssh-port-forward-provider'
 import { readWslOrcadIncumbent, type WslOrcadIncumbentDependencies } from './wsl-orcad-incumbent'
 import type { WslOrcadHostTarget } from './wsl-orcad-host-target'
 

@@ -22,7 +22,7 @@ import type {
   PortForwardStartOptions,
   SshPortForwardProvider,
   StartedPortForward
-} from './ssh-port-forward-provider'
+} from './port-forwarding/ssh-port-forward-provider'
 
 export type OrcadStdioBridgeDependencies = {
   resolveBridge: (conn: OrcadHostTransport, port: number) => Promise<OrcadStdioBridge>

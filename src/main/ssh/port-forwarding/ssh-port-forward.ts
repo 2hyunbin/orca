@@ -1,7 +1,7 @@
-import type { SshConnection } from './ssh-connection'
+import type { SshConnection } from '../ssh-connection'
 import { Ssh2PortForwardProvider } from './ssh2-port-forward-provider'
 import { SystemSshPortForwardProvider } from './system-ssh-port-forward-provider'
-import type { PortForwardEntry } from '../../shared/ssh-types'
+import type { PortForwardEntry } from '../../../shared/ssh-types'
 import type {
   PortForwardCloseReason,
   SshPortForwardProvider,

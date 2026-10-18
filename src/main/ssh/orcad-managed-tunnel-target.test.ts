@@ -3,7 +3,7 @@ import type { SshTarget } from '../../shared/ssh-types'
 import type { KnownRuntimeEnvironment } from '../../shared/runtime-environments'
 import type { OrcadHostTransport } from './orcad-host-transport'
 import type { SshConnection } from './ssh-connection'
-import type { SshPortForwardManager } from './ssh-port-forward'
+import type { SshPortForwardManager } from './port-forwarding/ssh-port-forward'
 import {
   OrcadManagedIdentityError,
   type OrcadTunnelIdentity

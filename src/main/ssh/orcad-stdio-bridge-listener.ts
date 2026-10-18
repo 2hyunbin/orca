@@ -11,8 +11,11 @@ import {
   type OrcadStdioBridgeSignal
 } from './orcad-stdio-bridge-stream'
 import type { RemoteCommandChannel } from './remote-install-transport'
-import type { PortForwardStartOptions, StartedPortForward } from './ssh-port-forward-provider'
-import { listenForPortForward } from './ssh2-port-forward-provider'
+import type {
+  PortForwardStartOptions,
+  StartedPortForward
+} from './port-forwarding/ssh-port-forward-provider'
+import { listenForPortForward } from './port-forwarding/ssh2-port-forward-provider'
 
 /**
  * Each bridge is one sshd session, and OpenSSH's MaxSessions defaults to 10 per connection. The

@@ -16,7 +16,7 @@ on:
       - 'src/main/orcad/orcad-host-unavailable.ts'
       - 'src/main/node-runtime/**'
       - 'src/main/ssh/ssh-remote-*'
-      - 'src/main/ssh/ssh-hostile-host-*'
+      - 'src/main/ssh/hostile-host-test-support/**'
       - 'src/main/ssh/ssh-windows-host-*'
       - 'src/wsl-guest/**'
       - 'src/packages/process-host/**'

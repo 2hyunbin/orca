@@ -16,7 +16,7 @@ import { managedOrcadSlot } from './orcad-managed-runtime-context'
 import { wakeStoppedManagedOrcad } from './orcad-managed-wake'
 import { resolveOrcadRemoteContext } from './orcad-remote-context'
 import type { SshConnection } from './ssh-connection'
-import type { PortForwardEntry, SshPortForwardManager } from './ssh-port-forward'
+import type { PortForwardEntry, SshPortForwardManager } from './port-forwarding/ssh-port-forward'
 
 export type OrcadManagedTunnelTargeting = {
   resolveRemotePort: (input: OrcadTunnelPortInput) => Promise<number>

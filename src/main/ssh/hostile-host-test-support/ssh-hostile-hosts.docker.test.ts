@@ -2,7 +2,7 @@
 // and against a macOS runner's own loopback sshd, asserting the runtime each host resolves and
 // whether orcad activates there or fails with the classified reason.
 //
-// Run: ORCA_RUN_SSH_HOSTILE_HOSTS=1 pnpm test src/main/ssh/ssh-hostile-hosts.docker.test.ts
+// Run: ORCA_RUN_SSH_HOSTILE_HOSTS=1 pnpm test src/main/ssh/hostile-host-test-support/ssh-hostile-hosts.docker.test.ts
 // Needs an orcad template holding each selected cell's slot. Docker cells
 // need Linux Docker (the no-egress cell dials an internal bridge directly) and
 //   node config/scripts/build-orcad-template.mjs --targets linux-x64-glibc,linux-x64-musl

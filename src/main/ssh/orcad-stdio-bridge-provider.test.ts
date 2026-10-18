@@ -11,7 +11,7 @@ import { OrcadStdioBridgePortForwardProvider } from './orcad-stdio-bridge-provid
 import { spawnLocalBridgeChannel, startEchoServer } from './orcad-stdio-bridge-test-channel'
 import { ORCAD_WINDOWS_HOST_SCRIPT } from './orcad-windows-host-script'
 import type { SshConnection } from './ssh-connection'
-import type { StartedPortForward } from './ssh-port-forward-provider'
+import type { StartedPortForward } from './port-forwarding/ssh-port-forward-provider'
 import type { RemoteCommandChannel } from './remote-install-transport'
 
 let echo: { server: Server; port: number }

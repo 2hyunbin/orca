@@ -3,7 +3,7 @@ import type { Store } from '../persistence'
 import { SshConnectionStore } from '../ssh/ssh-connection-store'
 import { awaitSignInForCredentialHosts } from './ssh-sign-in-requirement'
 import { SshConnectionManager } from '../ssh/ssh-connection-manager'
-import { SshPortForwardManager } from '../ssh/ssh-port-forward'
+import { SshPortForwardManager } from '../ssh/port-forwarding/ssh-port-forward'
 import { quitTeardownStartGate } from '../quit-teardown-start-gate'
 import {
   getSshTargetRegistryStore,

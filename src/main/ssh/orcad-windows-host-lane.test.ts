@@ -16,7 +16,7 @@ import { SshConnection } from './ssh-connection'
 import {
   connectHostileHost,
   installHostileHostAppEnvironment
-} from './ssh-hostile-host-test-harness'
+} from './hostile-host-test-support/ssh-hostile-host-test-harness'
 import { resolveOrcadRemoteContext } from './orcad-remote-context'
 import { proveWindowsStdioBridge } from './orcad-windows-stdio-bridge-test-cell'
 import { deployOrcad } from './orcad-remote-deploy'
