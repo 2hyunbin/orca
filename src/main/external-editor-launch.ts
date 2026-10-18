@@ -253,16 +253,30 @@ export function resolveVsCodeRemoteSshLaunchSpec(
 }
 
 function startExternalEditorProcess(launchSpec: ExternalEditorLaunchSpec): ChildProcess {
-  // Why: only shims flagged during resolution (JetBrains) take the start /B
-  // detach; every other launcher keeps the waiting form so its argv survives.
-  // A batch launcher (code.cmd) becomes an explicit cmd.exe line here, which
-  // also refuses arguments cmd would reparse.
-  const { spawnCmd, spawnArgs } =
-    launchSpec.kind === 'executable'
-      ? getSpawnArgsForWindows(launchSpec.spawnCmd, launchSpec.spawnArgs, {
-          detachedGui: launchSpec.detachedGui === true
-        })
-      : launchSpec
+  if (launchSpec.kind === 'shell') {
+    const { spawnCmd, spawnArgs, hideWindowsConsole } = launchSpec
+    return hideWindowsConsole
+      ? spawnProcess({ program: spawnCmd, args: spawnArgs, detached: true, stdio: 'ignore' })
+      : spawn(spawnCmd, spawnArgs, { detached: true, stdio: 'ignore', windowsHide: false })
+  }
+  if (launchSpec.hideWindowsConsole && !launchSpec.detachedGui) {
+    // Why process-host owns the batch hop: its /s line keeps quoted arguments intact, while a
+    // plain `cmd /c` strips the outer quotes once a spaced code.cmd path meets a spaced argument.
+    return spawnProcess({
+      program: launchSpec.spawnCmd,
+      args: launchSpec.spawnArgs,
+      detached: true,
+      stdio: 'ignore'
+    })
+  }
+  // Why: only shims flagged during resolution (JetBrains) take the start /B detach.
+  const { spawnCmd, spawnArgs } = getSpawnArgsForWindows(
+    launchSpec.spawnCmd,
+    launchSpec.spawnArgs,
+    {
+      detachedGui: launchSpec.detachedGui === true
+    }
+  )
   if (!launchSpec.hideWindowsConsole) {
     // Why direct: process-host always hides the console, and a terminal editor on Windows needs one.
     return spawn(spawnCmd, spawnArgs, { detached: true, stdio: 'ignore', windowsHide: false })

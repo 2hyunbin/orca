@@ -43,27 +43,27 @@ describe('getExternalEditorOpenCapability', () => {
     }
   )
 
-  it('opens a server reached over SSH access through that SSH host, but not a network-paired one', () => {
-    const link = { sshTargetId: 'box', sshTargetGeneration: 1, localPort: 41000, remotePort: 6768 }
-    const environments = [
-      {
-        id: 'tunnelled',
-        sshAccess: { ...link, endpointId: 'tunnel', previousPreferredEndpointId: 'lan' }
-      },
-      { id: 'paired' }
-    ]
+  it('opens a server workspace through the SSH host that holds it, and only that server', () => {
+    const runtimeSshHost = { environmentId: 'managed', sshTargetId: 'box' }
     expect(
       getExternalEditorOpenCapability({
         command: 'code',
-        runtimeEnvironmentId: 'tunnelled',
-        environments
+        runtimeEnvironmentId: 'managed',
+        runtimeSshHost
       })
     ).toEqual({ allowed: true, remote: true, sshTargetId: 'box' })
     expect(
       getExternalEditorOpenCapability({
+        command: 'zed',
+        runtimeEnvironmentId: 'managed',
+        runtimeSshHost
+      })
+    ).toEqual({ allowed: false, reason: 'local-only-editor' })
+    expect(
+      getExternalEditorOpenCapability({
         command: 'code',
-        runtimeEnvironmentId: 'paired',
-        environments
+        runtimeEnvironmentId: 'other',
+        runtimeSshHost
       })
     ).toEqual({ allowed: false, reason: 'remote-runtime' })
   })

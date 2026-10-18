@@ -1,4 +1,5 @@
 import React, { useCallback } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { ExternalLink, FolderOpen } from 'lucide-react'
 import {
   DropdownMenuItem,
@@ -15,10 +16,12 @@ import {
 } from '@/lib/local-path-open-guard'
 import { getLocalFileManagerLabel } from '@/lib/local-file-manager-label'
 import { OpenInApplicationIcon } from '@/lib/open-in-app-catalog'
+import { getExternalEditorOpenCapability } from '@/lib/external-editor-open-capability'
 import {
-  getExternalEditorOpenCapability,
-  type ExternalEditorOpenEnvironment
-} from '@/lib/external-editor-open-capability'
+  getWorkspaceEditorSshHost,
+  type WorkspaceEditorSshHost
+} from '@/lib/workspace-editor-ssh-target'
+import type { WorkspaceOwnerRef } from '@/lib/resolve-owner'
 import { NO_OPEN_IN_APPLICATIONS } from '@/lib/open-in-application-selection'
 import { showOpenFailureToast } from './worktree-open-failure-toast'
 import type { OpenInApplication } from '../../../../shared/ui-chrome-types'
@@ -31,6 +34,8 @@ type WorktreeOpenInMenuItemsProps = {
   connectionId?: string | null
   runtimeEnvironmentId?: string | null
   ownerUnresolved?: boolean
+  /** The workspace the path belongs to; lets a server's workspace open over its SSH host. */
+  workspace?: WorkspaceOwnerRef | null
   disabled?: boolean
   labelPrefix?: string
 }
@@ -62,7 +67,7 @@ export function getOpenInEntryAvailability(
   connectionId?: string | null,
   runtimeEnvironmentId?: string | null,
   ownerUnresolved?: boolean,
-  environments?: readonly ExternalEditorOpenEnvironment[]
+  runtimeSshHost?: WorkspaceEditorSshHost | null
 ): { disabled: boolean; metadata?: string; disabledReason?: string } {
   if (entry.target === 'file-manager') {
     const disabled = isRevealOrEditorOpenBlocked(
@@ -80,7 +85,7 @@ export function getOpenInEntryAvailability(
     command: entry.command,
     runtimeEnvironmentId,
     ownerUnresolved,
-    environments
+    runtimeSshHost
   })
   if (!capability.allowed) {
     return {
@@ -132,6 +137,7 @@ export async function openWorktreePath(args: {
   connectionId?: string | null
   runtimeEnvironmentId?: string | null
   ownerUnresolved?: boolean
+  workspace?: WorkspaceOwnerRef | null
   command?: string
 }): Promise<void> {
   const owner = getLocalPathOpenOwnerForRoute({
@@ -151,7 +157,7 @@ export async function openWorktreePath(args: {
       command: args.command,
       runtimeEnvironmentId: args.runtimeEnvironmentId,
       ownerUnresolved: args.ownerUnresolved,
-      environments: useAppStore.getState().runtimeEnvironments
+      runtimeSshHost: getWorkspaceEditorSshHost(useAppStore.getState(), args.workspace)
     })
     if (capability.allowed) {
       editorConnectionId = capability.sshTargetId ?? editorConnectionId
@@ -187,7 +193,8 @@ function useOpenInWorktreePath({
   worktreePath,
   connectionId,
   runtimeEnvironmentId,
-  ownerUnresolved
+  ownerUnresolved,
+  workspace
 }: WorktreeOpenInMenuItemsProps): (
   target: 'file-manager' | 'external-editor',
   command?: string
@@ -200,10 +207,11 @@ function useOpenInWorktreePath({
         connectionId,
         runtimeEnvironmentId,
         ownerUnresolved,
+        workspace,
         command
       })
     },
-    [connectionId, ownerUnresolved, runtimeEnvironmentId, worktreePath]
+    [connectionId, ownerUnresolved, runtimeEnvironmentId, workspace, worktreePath]
   )
 }
 
@@ -212,6 +220,7 @@ export function WorktreeOpenInMenuItems({
   connectionId,
   runtimeEnvironmentId,
   ownerUnresolved,
+  workspace,
   disabled,
   labelPrefix = ''
 }: WorktreeOpenInMenuItemsProps): React.JSX.Element {
@@ -219,12 +228,13 @@ export function WorktreeOpenInMenuItems({
     worktreePath,
     connectionId,
     runtimeEnvironmentId,
-    ownerUnresolved
+    ownerUnresolved,
+    workspace
   })
   const openInApplications = useAppStore(
     (s) => s.settings?.openInApplications ?? NO_OPEN_IN_APPLICATIONS
   )
-  const runtimeEnvironments = useAppStore((s) => s.runtimeEnvironments)
+  const runtimeSshHost = useAppStore(useShallow((s) => getWorkspaceEditorSshHost(s, workspace)))
   const fileManagerLabel = getLocalFileManagerLabel()
   const entries = getWorktreeOpenInEntries(openInApplications, fileManagerLabel)
 
@@ -236,7 +246,7 @@ export function WorktreeOpenInMenuItems({
           connectionId,
           runtimeEnvironmentId,
           ownerUnresolved,
-          runtimeEnvironments
+          runtimeSshHost
         )
         const item = (
           <DropdownMenuItem
@@ -283,6 +293,7 @@ export function WorktreeOpenInSubMenu({
   connectionId,
   runtimeEnvironmentId,
   ownerUnresolved,
+  workspace,
   disabled
 }: WorktreeOpenInMenuItemsProps): React.JSX.Element {
   return (
@@ -301,6 +312,7 @@ export function WorktreeOpenInSubMenu({
           connectionId={connectionId}
           runtimeEnvironmentId={runtimeEnvironmentId}
           ownerUnresolved={ownerUnresolved}
+          workspace={workspace}
           disabled={disabled}
         />
         <DropdownMenuSeparator />

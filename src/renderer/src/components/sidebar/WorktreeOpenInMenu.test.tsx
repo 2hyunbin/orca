@@ -28,7 +28,7 @@ const {
       activeRuntimeEnvironmentId: null as string | null,
       openInApplications: [] as { id: string; label: string; command: string }[]
     },
-    runtimeEnvironments: [] as { id: string; orcadDeployment?: Record<string, unknown> }[]
+    routeState: {}
   },
   openInExternalEditorMock: vi.fn(),
   openInFileManagerMock: vi.fn(),
@@ -48,8 +48,8 @@ vi.mock('@/store', () => {
     (selector: (state: typeof mockState) => unknown) => selector(mockState),
     {
       getState: () => ({
+        ...mockState.routeState,
         settings: mockState.settings,
-        runtimeEnvironments: mockState.runtimeEnvironments,
         openSettingsPage: openSettingsPageMock,
         openSettingsTarget: openSettingsTargetMock
       })
@@ -89,7 +89,7 @@ function findByType(node: unknown, type: unknown): ReactElementLike {
 describe('WorktreeOpenInMenu', () => {
   beforeEach(() => {
     mockState.settings = { activeRuntimeEnvironmentId: null, openInApplications: [] }
-    mockState.runtimeEnvironments = []
+    mockState.routeState = {}
     toastErrorMock.mockReset()
     openInFileManagerMock.mockReset()
     openInExternalEditorMock.mockReset()
@@ -386,15 +386,7 @@ describe('WorktreeOpenInMenu', () => {
   })
 
   describe('a workspace on a server Orca reaches through an SSH host', () => {
-    const managedServer = {
-      id: 'managed-owner',
-      orcadDeployment: {
-        sshTargetId: 'ssh-1',
-        sshTargetGeneration: 1,
-        localPort: 41000,
-        remotePort: 6768
-      }
-    }
+    const runtimeSshHost = { environmentId: 'managed-owner', sshTargetId: 'ssh-1' }
     const code = {
       id: 'code',
       label: 'VS Code',
@@ -405,24 +397,49 @@ describe('WorktreeOpenInMenu', () => {
 
     it('enables VS Code over Remote SSH and explains why other apps stay off', () => {
       expect(
-        getOpenInEntryAvailability(code, null, 'managed-owner', false, [managedServer])
+        getOpenInEntryAvailability(code, null, 'managed-owner', false, runtimeSshHost)
       ).toEqual({ disabled: false, metadata: 'Remote SSH' })
-      expect(
-        getOpenInEntryAvailability(zed, null, 'managed-owner', false, [managedServer])
-      ).toEqual({
-        disabled: true,
-        metadata: 'Local only',
-        disabledReason: 'Only VS Code can open folders on an SSH host.'
-      })
+      expect(getOpenInEntryAvailability(zed, null, 'managed-owner', false, runtimeSshHost)).toEqual(
+        {
+          disabled: true,
+          metadata: 'Local only',
+          disabledReason: 'Only VS Code can open folders on an SSH host.'
+        }
+      )
     })
 
     it('sends the SSH host with the server as the owner', async () => {
-      mockState.runtimeEnvironments = [managedServer]
+      const worktreeId = 'repo-1::/home/ada/project'
+      mockState.routeState = {
+        runtimeEnvironments: [
+          {
+            id: 'managed-owner',
+            orcadDeployment: {
+              sshTargetId: 'ssh-1',
+              sshTargetGeneration: 1,
+              localPort: 41000,
+              remotePort: 6768
+            }
+          }
+        ],
+        repos: [{ id: 'repo-1', connectionId: null, executionHostId: 'runtime:managed-owner' }],
+        worktreesByRepo: {
+          'repo-1': [
+            {
+              id: worktreeId,
+              repoId: 'repo-1',
+              hostId: 'runtime:managed-owner',
+              runtimeOwnerEnvironmentId: 'managed-owner'
+            }
+          ]
+        }
+      }
       await openWorktreePath({
         target: 'external-editor',
         worktreePath: '/home/ada/project',
         connectionId: null,
         runtimeEnvironmentId: 'managed-owner',
+        workspace: { workspaceId: worktreeId, hostId: 'runtime:managed-owner' },
         command: 'code'
       })
 
@@ -434,12 +451,8 @@ describe('WorktreeOpenInMenu', () => {
       })
     })
 
-    it('keeps an ephemeral VM server local-only', () => {
-      const vm = {
-        ...managedServer,
-        orcadDeployment: { ...managedServer.orcadDeployment, sshTargetId: 'runtime-ssh-vm-1' }
-      }
-      expect(getOpenInEntryAvailability(code, null, 'managed-owner', false, [vm])).toEqual({
+    it('keeps a server workspace with no SSH host local-only, saying why', () => {
+      expect(getOpenInEntryAvailability(code, null, 'managed-owner', false, null)).toEqual({
         disabled: true,
         metadata: 'Local only',
         disabledReason:

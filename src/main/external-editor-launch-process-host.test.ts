@@ -45,12 +45,8 @@ function remoteSpec(
   return spec
 }
 
-const HIDDEN = expect.objectContaining({
-  detached: true,
-  stdio: 'ignore',
-  windowsHide: true,
-  shell: false
-})
+const HIDDEN_FIELDS = { detached: true, stdio: 'ignore', windowsHide: true, shell: false }
+const HIDDEN = expect.objectContaining(HIDDEN_FIELDS)
 
 describe('VS Code Remote-SSH launch through @orca/process-host', () => {
   beforeEach(() => {
@@ -80,22 +76,29 @@ describe('VS Code Remote-SSH launch through @orca/process-host', () => {
     }
   )
 
-  it('starts a Windows code.cmd through cmd.exe without a console window', async () => {
+  // Why spaces on both sides: a plain `cmd /c` strips the outer quotes once a spaced code.cmd
+  // path meets a spaced argument, so the launch dies with "path not found" (seen on Windows 11).
+  it('keeps a spaced code.cmd path and a spaced remote path intact on Windows', async () => {
     setPlatform('win32')
     const codeCmd = 'C:\\Program Files\\Microsoft VS Code\\bin\\code.cmd'
-    await launchExternalEditor(remoteSpec(codeCmd, '/home/ada/project', 'win32'))
+    await launchExternalEditor(remoteSpec(codeCmd, '/home/ada/my project', 'win32'))
     expect(spawnMock).toHaveBeenCalledWith(
-      expect.stringMatching(/cmd\.exe$/i),
-      ['/d', '/c', codeCmd, '--remote', 'ssh-remote+builder', '/home/ada/project'],
-      HIDDEN
+      expect.stringMatching(/cmd(\.exe)?$/i),
+      [`/d /v:off /s /c ""${codeCmd}" "--remote" "ssh-remote+builder" "/home/ada/my project""`],
+      expect.objectContaining({ ...HIDDEN_FIELDS, windowsVerbatimArguments: true })
     )
   })
 
-  it('refuses a remote path cmd.exe would reparse before starting anything', async () => {
+  it('quotes cmd metacharacters in a remote path instead of letting cmd run them', async () => {
     setPlatform('win32')
-    const spec = remoteSpec('C:\\Tools\\code.cmd', '/srv/project&whoami', 'win32')
-    await expect(launchExternalEditor(spec)).rejects.toThrow()
-    expect(spawnMock).not.toHaveBeenCalled()
+    await launchExternalEditor(remoteSpec('C:\\Tools\\code.cmd', '/srv/a&whoami %OS%', 'win32'))
+    expect(spawnMock).toHaveBeenCalledWith(
+      expect.any(String),
+      [
+        String.raw`/d /v:off /s /c ""C:\Tools\code.cmd" "--remote" "ssh-remote+builder" "/srv/a&whoami "^%"OS"^%"""`
+      ],
+      expect.objectContaining({ ...HIDDEN_FIELDS, windowsVerbatimArguments: true })
+    )
   })
 
   it('keeps the console of a Windows terminal editor visible', async () => {

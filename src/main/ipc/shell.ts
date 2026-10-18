@@ -17,6 +17,7 @@ import {
   resolveVsCodeRemoteSshLaunchSpec
 } from '../external-editor-launch'
 import { resolveVsCodeSshAuthority } from '../ssh/config/vscode-ssh-authority'
+import { toSshExecutionHostId } from '../../shared/execution-host'
 import {
   isEditorSshHostForOwner,
   listAppRuntimeEnvironments,
@@ -60,12 +61,14 @@ async function openInExternalEditor(
 ): Promise<ShellOpenExternalEditorResult> {
   const connectionId = request.connectionId?.trim()
   if (connectionId) {
-    if (!isEditorSshHostForOwner(connectionId, request.ownerHostId, listRuntimeEnvironments)) {
-      return { ok: false, reason: 'remote-runtime-unsupported' }
-    }
     const sshTarget = store.getSshTarget(connectionId)
     if (!sshTarget) {
-      return { ok: false, reason: 'ssh-target-not-found' }
+      return request.ownerHostId === toSshExecutionHostId(connectionId)
+        ? { ok: false, reason: 'ssh-target-not-found' }
+        : { ok: false, reason: 'remote-runtime-unsupported' }
+    }
+    if (!isEditorSshHostForOwner(sshTarget, request.ownerHostId, listRuntimeEnvironments)) {
+      return { ok: false, reason: 'remote-runtime-unsupported' }
     }
     if (sshTarget.owner?.type === 'on-demand-runtime') {
       return { ok: false, reason: 'remote-runtime-unsupported' }

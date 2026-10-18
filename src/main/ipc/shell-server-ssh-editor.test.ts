@@ -27,7 +27,7 @@ const sshAccessServer = {
   sshAccess: { ...link, endpointId: 'tunnel', previousPreferredEndpointId: 'lan' }
 }
 
-function sshTarget(id: string, configHost: string): SshTarget {
+function sshTarget(id: string, configHost: string, overrides: Partial<SshTarget> = {}): SshTarget {
   return {
     id,
     label: configHost,
@@ -35,7 +35,10 @@ function sshTarget(id: string, configHost: string): SshTarget {
     port: 22,
     username: 'ada',
     source: 'ssh-config',
-    configHost
+    configHost,
+    generation: 1,
+    orcadFence: { environmentId: 'env-1' },
+    ...overrides
   }
 }
 
@@ -54,12 +57,12 @@ function spawnedChild(): { once: unknown; off: unknown; unref: unknown } {
 }
 
 describe('Open in VS Code for a workspace on a server Orca reaches through an SSH host', () => {
-  const targets = new Map([
-    ['ssh-1', sshTarget('ssh-1', 'builder')],
-    ['ssh-2', sshTarget('ssh-2', 'other')]
-  ])
+  const targets = new Map<string, SshTarget>()
 
   beforeEach(() => {
+    targets.clear()
+    targets.set('ssh-1', sshTarget('ssh-1', 'builder'))
+    targets.set('ssh-2', sshTarget('ssh-2', 'other'))
     handleMock.mockReset()
     spawnMock.mockReset()
     spawnMock.mockImplementation(spawnedChild)
@@ -99,6 +102,17 @@ describe('Open in VS Code for a workspace on a server Orca reaches through an SS
       ok: false,
       reason: 'remote-runtime-unsupported'
     })
+    expect(spawnMock).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['was re-created since the server linked it', { generation: 2 }],
+    ['is fenced to another managed server', { orcadFence: { environmentId: 'env-2' } }]
+  ])('refuses a host whose SSH registration %s', async (_label, overrides) => {
+    targets.set('ssh-1', sshTarget('ssh-1', 'builder', overrides))
+    await expect(
+      openInEditor(() => [managedServer], { connectionId: 'ssh-1', ownerHostId: 'runtime:env-1' })
+    ).resolves.toEqual({ ok: false, reason: 'remote-runtime-unsupported' })
     expect(spawnMock).not.toHaveBeenCalled()
   })
 
