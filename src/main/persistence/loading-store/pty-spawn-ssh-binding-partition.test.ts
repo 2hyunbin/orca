@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest'
 import { admitRuntimeSpawnPane, fixture } from './profile-state-delayed-authority-fixture'
 import { commitRuntimePtySpawn } from '../../ipc/pty/runtime/spawn-commit'
 import { createRuntimePtySpawnState } from '../../ipc/pty/runtime/spawn-state'
-import type { PtyRuntimeControllerDeps } from '../../ipc/pty/runtime/controller-deps'
+import { createPtySpawnCommitDependencies } from './pty-spawn-commit-dependencies-fixture'
 import { OrcaRuntimeService } from '../../runtime/orca-runtime'
 import { persistPtyIpcSpawnCommit } from '../../ipc/pty/ipc/spawn-commit-persist'
 import { createPtyIpcSpawnState } from '../../ipc/pty/ipc/spawn-state'
@@ -94,13 +94,7 @@ it('binds a runtime-started SSH pane in the SSH partition it was admitted to', a
   const incarnationId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
   runtime.onPtySpawned(ptyId, incarnationId)
   runtime.beginPtyRegistration(ptyId, incarnationId)
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: only commit runs; its runtime/store are real and preflight-only dependencies are unreachable.
-  const deps = {
-    runtime,
-    store,
-    options: {},
-    sendPtySpawnedToRenderer: vi.fn()
-  } as PtyRuntimeControllerDeps
+  const deps = createPtySpawnCommitDependencies(runtime, store)
   const ctx = createRuntimePtySpawnState(deps, {
     ...pane,
     connectionId: 'ssh-1',
