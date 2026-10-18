@@ -22,16 +22,14 @@ vi.mock('child_process', () => ({
   spawn: spawnMock
 }))
 
+import { buildSshArgs } from './system-ssh-args'
 import {
-  buildSshArgs,
   downloadFileViaSystemSsh,
-  spawnSystemSsh,
-  spawnSystemSshCommand,
-  uploadDirectoryViaSystemSsh,
   uploadFileViaSystemSsh,
-  writeBufferViaSystemSsh,
-  writeFileViaSystemSsh
-} from './ssh-system-fallback'
+  writeBufferViaSystemSsh
+} from './system-ssh-file-binary-transfer'
+import { spawnSystemSsh, spawnSystemSshCommand } from './system-ssh-command'
+import { uploadDirectoryViaSystemSsh, writeFileViaSystemSsh } from './system-ssh-file-transfer'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 import type { SshTarget } from '../../shared/ssh-types'
 import type { SystemSshResolvedConfig } from './ssh-control-socket'

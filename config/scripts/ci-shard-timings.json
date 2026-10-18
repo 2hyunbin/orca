@@ -5802,7 +5802,7 @@
       "src/main/ssh/ssh-request-outcome-verdict.test.ts": 37,
       "src/main/ssh/ssh-security-key-identity.test.ts": 147,
       "src/main/ssh/ssh-session-limit-error.test.ts": 27,
-      "src/main/ssh/ssh-system-fallback.test.ts": 275,
+      "src/main/ssh/system-ssh-operations.test.ts": 275,
       "src/main/ssh/ssh-system-transport.integration.test.ts": 277,
       "src/main/ssh/ssh-target-id-migration.test.ts": 46,
       "src/main/ssh/ssh-target-orcad-claims.test.ts": 306,

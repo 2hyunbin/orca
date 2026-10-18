@@ -9,7 +9,10 @@
  */
 import { RELAY_REMOTE_DIR } from './relay-protocol'
 import { commandWithNodePath } from './ssh-remote-commands'
-import { powerShellLiteral, powerShellNativeArg } from './ssh-remote-powershell'
+import {
+  quotePowerShellLiteral as powerShellLiteral,
+  quotePowerShellNativeArgument as powerShellNativeArg
+} from '../../shared/powershell-native-argument'
 import { windowsRelayPipePathsForSocketName } from './ssh-relay-endpoints'
 import { RELAY_INSTALL_MODEL, remoteInstallVersionDirRegex } from './remote-install-model'
 import { joinRemotePath, type RemoteHostPlatform } from './ssh-remote-platform'
