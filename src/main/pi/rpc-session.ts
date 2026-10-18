@@ -171,14 +171,12 @@ export class PiRpcSession {
       }
     }
     this.options = await readPiRpcSessionOptions(this.connection)
-    this.startCatalogListing = withLiveCatalogListing(
-      this.options,
-      unpickedSessionConfiguredChoice({
-        resolvesConfig: this.resolvesConfig,
-        picked,
-        ...this.options
-      })
-    ).catalogListing
+    const configured = unpickedSessionConfiguredChoice({
+      resolvesConfig: this.resolvesConfig,
+      picked,
+      ...this.options
+    })
+    this.startCatalogListing = withLiveCatalogListing(this.options, configured).catalogListing
     try {
       this.commands = (await readPiRpcCommands(this.connection)).commands
     } catch (error) {
@@ -198,10 +196,8 @@ export class PiRpcSession {
 
   /** Current choices carry the configuration observed at this process's eligible startup. */
   async readOptions() {
-    return withLiveCatalogListing(
-      await readPiRpcSessionOptions(this.connection),
-      this.startCatalogListing?.configuredDefault
-    )
+    const options = await readPiRpcSessionOptions(this.connection)
+    return withLiveCatalogListing(options, this.startCatalogListing?.configuredDefault)
   }
 
   async close(requested = true): ReturnType<PiRpcConnection['close']> {
