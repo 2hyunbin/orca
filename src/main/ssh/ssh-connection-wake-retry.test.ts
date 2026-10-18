@@ -19,6 +19,7 @@ import { SshConnection } from './ssh-connection'
 import { resolveWithSshG } from './ssh-config-parser'
 import { SshConnectionManager } from './ssh-connection-manager'
 import { RECONNECT_BACKOFF_MS } from './ssh-connection-utils'
+import { recordSshUserDisconnected, resetSshUserDisconnectsForTests } from './ssh-user-disconnect'
 
 vi.mock('ssh2', async () => (await import('./ssh-connection-test-harness')).createSsh2Module())
 vi.mock('./system-ssh-binary', async () =>
@@ -61,6 +62,7 @@ async function spendLadderWhileAsleep(conn: SshConnection): Promise<void> {
 describe('SshConnection retry after wake or network return', () => {
   beforeEach(() => {
     resetSshConnectionMocks()
+    resetSshUserDisconnectsForTests()
     vi.useFakeTimers()
   })
   afterEach(() => {
@@ -199,5 +201,24 @@ describe('SshConnection retry after wake or network return', () => {
     expect(manager.getState(createTarget().id)?.status).toBe('connected')
     expect(manager.retryStalledReconnects()).toEqual([])
     await manager.disconnectAll()
+  })
+
+  it('never redials a host the user disconnected while its teardown is still queued', async () => {
+    const { conn } = recordStatuses()
+    await connectWithFakeTimers(conn)
+    // A drop already waiting on its backoff when the user presses Disconnect.
+    failHandshakes()
+    emitSshEvent('close')
+    expect(conn.getState().status).toBe('reconnecting')
+    recordSshUserDisconnected(createTarget().id)
+    ssh2Mock.connectBehavior = 'ready'
+    const clientsBefore = clientInstances.length
+
+    await vi.advanceTimersByTimeAsync(10 * 60_000)
+    expect(conn.retryAfterNetworkReturn()).toBe(false)
+    await conn.reconnect()
+    expect(clientInstances).toHaveLength(clientsBefore)
+
+    await conn.disconnect()
   })
 })
