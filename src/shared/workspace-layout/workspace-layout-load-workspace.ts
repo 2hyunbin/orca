@@ -66,13 +66,18 @@ function loadPanes(
   session: WorkspaceSessionState,
   row: TerminalTab,
   tab: Omit<LayoutTerminalTab, 'panes'>,
-  args: WorkspaceLoadArgs
+  args: WorkspaceLoadArgs,
+  entry: Tab | undefined
 ): LayoutTerminalTab {
   const stored = session.terminalLayoutsByTabId?.[tab.entityId] ?? legacyLayout(session, row, args)
   // Switch point: main applies the window's load repairs: one pane per terminal, and no lone-pane
   // title that only repeats the tab's name.
   const layout = ORCA_LAYOUT_OWNER_IS_MAIN
-    ? sanitizeTerminalLayoutPaneTitles(normalizeTerminalLayoutPtyOwnership(stored).snapshot, row)
+    ? sanitizeTerminalLayoutPaneTitles(normalizeTerminalLayoutPtyOwnership(stored).snapshot, {
+        ...row,
+        // As the window's row hydration fills it: the tab-bar label when the row has none.
+        quickCommandLabel: row.quickCommandLabel?.trim() || entry?.quickCommandLabel?.trim()
+      })
     : stored
   // Each pane's data is loaded once every tab is placed (loadLeaves).
   args.layouts.set(tab.entityId, layout)
@@ -88,7 +93,7 @@ function loadTabs(args: WorkspaceLoadArgs): { tabs: LayoutTab[]; candidates: Ord
   const candidates: OrderCandidate[] = []
   const tabIds = new Set<string>()
   const addTerminal = (row: TerminalTab, entry: Tab | undefined): void => {
-    const tab = loadPanes(session, row, loadTerminalTab(row, entry), args)
+    const tab = loadPanes(session, row, loadTerminalTab(row, entry), args, entry)
     if (tabIds.has(tab.id)) {
       tab.id = args.context.mintId(`tab:${row.id}`)
     }

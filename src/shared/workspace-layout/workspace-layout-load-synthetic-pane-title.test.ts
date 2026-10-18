@@ -3,6 +3,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../execution-host'
+import type { Tab } from '../tab-types'
 import type { TerminalLayoutSnapshot } from '../terminal-tab-types'
 import type { WorkspaceSessionState } from '../workspace-session-state-types'
 import { loadWorkspaceLayout } from './workspace-layout-load'
@@ -31,8 +32,9 @@ function titledPaneSession(
   paneTitles: TerminalLayoutSnapshot['titlesByLeafId'],
   {
     split = false,
-    hostId = LOCAL_EXECUTION_HOST_ID
-  }: { split?: boolean; hostId?: ExecutionHostId } = {}
+    hostId = LOCAL_EXECUTION_HOST_ID,
+    entry
+  }: { split?: boolean; hostId?: ExecutionHostId; entry?: Partial<Tab> } = {}
 ): WorkspaceSessionState {
   return addWorkspace(
     emptySession(),
@@ -50,6 +52,7 @@ function titledPaneSession(
                 ]
               : [[leaf(1), 'pty-a']],
             row: { title: NAME, customTitle: NAME },
+            ...(entry ? { entry } : {}),
             layout: { titlesByLeafId: paneTitles }
           }
         ]
@@ -89,6 +92,15 @@ describe('Loader: a pane title that only repeats its tab’s name', () => {
 
   it('is dropped when it is a default terminal name', () => {
     const session = titledPaneSession(GIT_KEY, { [leaf(1)]: 'Terminal 3' })
+    expect(paneTitles(LOCAL_EXECUTION_HOST_ID, GIT_KEY, session)).toEqual({})
+  })
+
+  it('is dropped when it repeats a quick command label only the tab bar stores', () => {
+    const session = titledPaneSession(
+      GIT_KEY,
+      { [leaf(1)]: 'npm test' },
+      { entry: { quickCommandLabel: ' npm test ' } }
+    )
     expect(paneTitles(LOCAL_EXECUTION_HOST_ID, GIT_KEY, session)).toEqual({})
   })
 
