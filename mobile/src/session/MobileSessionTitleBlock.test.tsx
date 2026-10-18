@@ -4,12 +4,14 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { describe, expect, it, vi } from 'vitest'
 import { MobileSessionTitleBlock } from './MobileSessionTitleBlock'
 
-const overlay = vi.hoisted((): {
-  width: number
-  height: number
-  back: (() => boolean) | null
-  finish: (() => void) | null
-} => ({ width: 667, height: 375, back: null, finish: null }))
+const overlay = vi.hoisted(
+  (): {
+    width: number
+    height: number
+    back: (() => boolean) | null
+    finish: (() => void) | null
+  } => ({ width: 667, height: 375, back: null, finish: null })
+)
 vi.mock('../layout/side-safe-area', () => ({
   useWindowSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 })
 }))
@@ -19,7 +21,9 @@ vi.mock('../navigation/use-back-claim', async () => {
     useBackClaim: (claim: () => boolean) =>
       useEffect(() => {
         overlay.back = claim
-        return () => { overlay.back = null }
+        return () => {
+          overlay.back = null
+        }
       }, [claim])
   }
 })

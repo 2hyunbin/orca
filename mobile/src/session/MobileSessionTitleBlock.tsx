@@ -59,27 +59,29 @@ export function MobileSessionTitleBlock({
     })
   }
   return (
-    <Pressable
-      ref={blockRef}
-      style={[styles.sessionTitleBlock, besideTabs && styles.sessionTitleBlockBesideTabs]}
-      onPress={open ? close : show}
-      accessibilityRole="button"
-      accessibilityHint="Shows the full workspace name and where it is"
-    >
-      <Text style={styles.sessionTitle} numberOfLines={1}>
-        {title}
-      </Text>
+    <>
       <Pressable
-        style={styles.sessionMetaRow}
-        disabled={!showConnectionRetry}
-        onPress={onRetry}
-        accessibilityRole={showConnectionRetry ? 'button' : undefined}
-        accessibilityLabel={showConnectionRetry ? 'Reconnect to desktop' : undefined}
+        ref={blockRef}
+        style={[styles.sessionTitleBlock, besideTabs && styles.sessionTitleBlockBesideTabs]}
+        onPress={open ? close : show}
+        accessibilityRole="button"
+        accessibilityHint="Shows the full workspace name and where it is"
       >
-        <StatusDot state={connState} />
-        <Text style={styles.sessionMetaText} numberOfLines={1}>
-          {meta}
+        <Text style={styles.sessionTitle} numberOfLines={1}>
+          {title}
         </Text>
+        <Pressable
+          style={styles.sessionMetaRow}
+          disabled={!showConnectionRetry}
+          onPress={onRetry}
+          accessibilityRole={showConnectionRetry ? 'button' : undefined}
+          accessibilityLabel={showConnectionRetry ? 'Reconnect to desktop' : undefined}
+        >
+          <StatusDot state={connState} />
+          <Text style={styles.sessionMetaText} numberOfLines={1}>
+            {meta}
+          </Text>
+        </Pressable>
       </Pressable>
       {anchor ? (
         <AnchoredDetailCard
@@ -93,14 +95,12 @@ export function MobileSessionTitleBlock({
             hostName ? (
               <>
                 <StatusDot state={connState} />
-                <Text style={styles.sessionMetaText}>
-                  {hostName}
-                </Text>
+                <Text style={styles.sessionMetaText}>{hostName}</Text>
               </>
             ) : null
           }
         />
       ) : null}
-    </Pressable>
+    </>
   )
 }

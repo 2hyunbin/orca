@@ -80,18 +80,19 @@ describe('useLiveWorktreeName request volume', () => {
     sendRequest.mockResolvedValue({
       id: 'worktree-show',
       ok: true,
-      result: { worktree: {
-        id: 'repo-1::/worktree', displayName: 'Live name', path: '/srv/project ', hostId: 'ssh:target'
-      } },
+      result: {
+        worktree: {
+          id: 'repo-1::/worktree',
+          displayName: 'Live name',
+          path: '/srv/project ',
+          hostId: 'ssh:target'
+        }
+      },
       _meta: { runtimeId: 'runtime-1' }
     })
     await mountHarness()
     expect(live).toMatchObject({ name: 'Live name', path: '/srv/project ', hostId: 'ssh:target' })
-    expect(subscribe).toHaveBeenCalledWith(
-      'runtime.clientEvents.subscribe',
-      null,
-      expect.any(Function)
-    )
+    expect(subscribe).toHaveBeenCalledWith('runtime.clientEvents.subscribe', null, expect.any(Function))
     expect(sendRequest).toHaveBeenCalledTimes(1)
 
     await emitEvent({ type: 'ready', subscriptionId: 'runtime-events-1' })

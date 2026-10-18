@@ -104,8 +104,9 @@ export const sessionWorktreeRecordSchema = z
   .transform(
     (
       reply
-    ): (WorktreeDisplayNameSource & { path?: string; hostId?: string; diffComments?: unknown }) | undefined =>
-      reply.worktree
+    ):
+      | (WorktreeDisplayNameSource & { path?: string; hostId?: string; diffComments?: unknown })
+      | undefined => reply.worktree
   )
 
 /**

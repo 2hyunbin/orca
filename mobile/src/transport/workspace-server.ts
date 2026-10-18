@@ -35,9 +35,7 @@ export function useWorkspaceServer(args: {
   const hosts = useRelayHosts(routeHost ? client : null)
   const selectedHost = hosts?.find((entry) => entry.hostId === routeHost)
   const state =
-    connState === 'connected' && routeHost && hosts
-      ? serverConnState(selectedHost)
-      : connState
+    connState === 'connected' && routeHost && hosts ? serverConnState(selectedHost) : connState
   // No hostId: the desktop's recorded version and descriptor must not take the server's. The
   // server's own state, so its restart under a connected desktop re-reads what it supports.
   const gates = useHostStatusGates({ hostId: undefined, client: serverClient, connState: state })
@@ -59,10 +57,7 @@ function serverConnState(host: MobileRelayHost | undefined): ConnectionState {
   if (host?.relay === 'ready') {
     return 'connected'
   }
-  if (
-    host?.relay === 'unavailable' &&
-    (host.health === 'connecting' || host.health === 'available')
-  ) {
+  if (host?.relay === 'unavailable' && (host.health === 'connecting' || host.health === 'available')) {
     return 'connecting'
   }
   return 'disconnected'

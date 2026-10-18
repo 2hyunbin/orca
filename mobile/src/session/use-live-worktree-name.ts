@@ -132,7 +132,8 @@ export function useLiveWorktreeName({
             setWorktreeName((current) =>
               current.worktreeId === worktreeId &&
               current.name === liveName &&
-              current.path === path && current.hostId === hostId
+              current.path === path &&
+              current.hostId === hostId
                 ? current
                 : { worktreeId, name: liveName, path, hostId }
             )
