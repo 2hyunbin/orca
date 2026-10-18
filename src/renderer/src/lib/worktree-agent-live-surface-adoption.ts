@@ -204,26 +204,27 @@ export async function adoptLiveWorkspacePtySurfaces(
       }
       continue
     }
+    // Switch point: main shows it unless this window holds its recorded pane; a refusal leaves
+    // it without one, so it is declined rather than counted as shown.
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      const outcome =
+        owner.recorded && bindToRecordedSurface(getState(), worktreeId, owner.recorded)
+          ? 'shown'
+          : await adoptLiveTerminalThroughLayoutOwner(getState, worktreeId, {
+              ptyId,
+              ...(owner.recorded ? { recordedPaneKey: owner.recorded.paneKey } : {})
+            })
+      if (outcome === 'shown') {
+        surfaced = true
+        continue
+      }
+      if (outcome === 'refused') {
+        declinedPtyIds.push(ptyId)
+        continue
+      }
+    }
     surfaced = true
     if (owner.recorded && bindToRecordedSurface(getState(), worktreeId, owner.recorded)) {
-      continue
-    }
-    // Switch point: main makes the tab, or names the one it holds (a CLI tab never mounted here).
-    if (
-      ORCA_LAYOUT_OWNER_IS_MAIN &&
-      adoptLiveTerminalThroughLayoutOwner(
-        getState,
-        worktreeId,
-        { ptyId, ...(owner.recorded ? { recordedPaneKey: owner.recorded.paneKey } : {}) },
-        // As below: the switch-off build keeps today's mint unchanged.
-        () =>
-          getState().createTab(worktreeId, undefined, undefined, {
-            initialPtyId: ptyId,
-            activate: false,
-            recordInteraction: false
-          })
-      )
-    ) {
       continue
     }
     getState().createTab(worktreeId, undefined, undefined, {

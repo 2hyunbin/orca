@@ -202,4 +202,22 @@ describe('a CLI terminal the window never mounted, layout-owner build', () => {
     await flushMicrotasks()
     expect(terminalTabIds(store)).toEqual(['tab-cli'])
   })
+
+  it('main refusing the adoption (a WSL move) leaves the terminal declined, not shown, and makes no tab', async () => {
+    const store = await bootWindow()
+    stream.onFrame!(frameOf(model))
+    await flushMicrotasks()
+    main.apply = () => ({ ok: false, code: 'wsl_move_in_progress' })
+    const createTab = vi.spyOn(store.getState(), 'createTab')
+
+    const adoption = await adoptLiveWorkspacePtySurfaces(
+      store.getState,
+      GIT_KEY,
+      [CLI_PTY],
+      async () => unowned
+    )
+
+    expect(adoption).toEqual({ surfaced: false, declinedPtyIds: [CLI_PTY] })
+    expect(createTab).not.toHaveBeenCalled()
+  })
 })
