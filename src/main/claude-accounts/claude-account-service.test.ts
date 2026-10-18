@@ -37,11 +37,11 @@ function fixture(accounts: ClaudeManagedAccount[] = [account('a'), account('b')]
   roots.push(root)
   const home = (id: string) => join(root, id, 'home')
   // Stands in for Claude finishing `claude auth login` in a folder.
-  const signIn = (id: string, email: string) => {
+  const signIn = (id: string, email: string, organizationUuid?: string) => {
     mkdirSync(home(id), { recursive: true })
     writeFileSync(
       join(home(id), '.claude.json'),
-      JSON.stringify({ oauthAccount: { emailAddress: email } })
+      JSON.stringify({ oauthAccount: { emailAddress: email, organizationUuid } })
     )
   }
   const covered = new Set<string>()
@@ -195,6 +195,36 @@ describe('ClaudeAccountService', () => {
       createdAt: 1
     })
   })
+
+  it.each([
+    { savedEmail: 'old@example.test', currentEmail: 'current@example.test' },
+    { savedEmail: 'same@example.test', currentEmail: 'same@example.test' }
+  ])(
+    'checks the listed identity after a folder changes from $savedEmail',
+    async ({ savedEmail, currentEmail }) => {
+      const f = fixture([account('a', { email: savedEmail, organizationUuid: 'old-org' })])
+      f.signIn('a', currentEmail, 'current-org')
+      expect(f.service.listAccounts().accounts[0]).toMatchObject({
+        email: currentEmail,
+        organizationUuid: 'current-org'
+      })
+
+      const original = await f.service.beginSignIn({ runtime: 'host' })
+      f.signIn(original.accountId, savedEmail, 'old-org')
+      await expect(f.service.finishSignIn(original)).resolves.toMatchObject({
+        accounts: expect.arrayContaining([
+          expect.objectContaining({ id: original.accountId, email: savedEmail })
+        ])
+      })
+
+      const duplicate = await f.service.beginSignIn({ runtime: 'host' })
+      f.signIn(duplicate.accountId, currentEmail, 'current-org')
+      await expect(f.service.finishSignIn(duplicate)).rejects.toThrow('already added')
+      expect(existsSync(join(f.root, duplicate.accountId))).toBe(false)
+      expect(f.service.listAccounts().accounts).toHaveLength(2)
+      expect(existsSync(f.home('a'))).toBe(true)
+    }
+  )
 
   it('signs in with a hidden login straight into the new account folder', async () => {
     const f = fixture()
