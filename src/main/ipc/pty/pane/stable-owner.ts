@@ -20,7 +20,6 @@ import {
 import { ptyIncarnationById } from '../provider/ownership-state'
 import { releaseAbsentPaneOwner } from './absent-pane-owner'
 import { spawnCommitBindingOrigin } from '../../../persistence/loading-store/pty-binding-span'
-import { persistPaneBinding } from './pane-binding-partition'
 
 export type StablePaneOwner = {
   handle?: string
@@ -198,27 +197,22 @@ export async function persistAdmittedStablePaneBinding(args: {
   owner: StablePaneOwner | null
   result: PtySpawnResult
   worktreeId: string | undefined
-  connectionId: string | null | undefined
   startupCwd: string | undefined
 }): Promise<boolean> {
   const expectedBinding = stablePanePersistenceFence(args.owner)
   if (!args.store || !args.owner || !args.worktreeId || !expectedBinding) {
     return false
   }
-  const persisted = await persistPaneBinding(
-    args.store,
-    {
-      worktreeId: args.worktreeId,
-      tabId: args.owner.tabId,
-      leafId: args.owner.leafId,
-      ptyId: args.result.id,
-      ...(args.result.incarnationId ? { incarnationId: args.result.incarnationId } : {}),
-      ...(args.startupCwd ? { startupCwd: args.startupCwd } : {}),
-      expectedBinding,
-      origin: spawnCommitBindingOrigin(args.result)
-    },
-    args.connectionId
-  )
+  const persisted = await args.store.persistPtyBinding({
+    worktreeId: args.worktreeId,
+    tabId: args.owner.tabId,
+    leafId: args.owner.leafId,
+    ptyId: args.result.id,
+    ...(args.result.incarnationId ? { incarnationId: args.result.incarnationId } : {}),
+    ...(args.startupCwd ? { startupCwd: args.startupCwd } : {}),
+    expectedBinding,
+    origin: spawnCommitBindingOrigin(args.result)
+  })
   if (persisted === false) {
     throw new Error('terminal_pane_owner_changed')
   }

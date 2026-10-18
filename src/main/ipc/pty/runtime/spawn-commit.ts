@@ -23,7 +23,6 @@ import { seedResumeLaunchIdentityFromSpawn } from '../pane/resume-launch-identit
 import { seedHeadlessTerminalFromSpawnResult } from '../pane/terminal-spawn-restore'
 import { recordPtySpawnTelemetry } from '../pane/spawn-telemetry'
 import { persistAdmittedStablePaneBinding } from '../pane/stable-owner'
-import { persistPaneBinding } from '../pane/pane-binding-partition'
 import {
   isNativeWindowsLocalPtySpawn,
   markNativeWindowsConptyPty
@@ -67,7 +66,6 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
       owner: ctx.stablePaneOwner,
       result: ctx.result,
       worktreeId: ctx.hostSessionBinding?.worktreeId,
-      connectionId: args.connectionId,
       startupCwd: ctx.cwd
     })
   } catch (error) {
@@ -154,7 +152,7 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
         ...(placement ? { placement } : {}),
         origin: spawnCommitBindingOrigin(ctx.result, expectedSourceBinding)
       }
-      const persisted = await persistPaneBinding(store, binding, args.connectionId)
+      const persisted = await store.persistPtyBinding(binding)
       if (persisted === false) {
         throw new Error('terminal_split_source_not_found')
       }

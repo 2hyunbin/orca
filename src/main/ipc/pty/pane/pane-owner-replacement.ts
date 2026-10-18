@@ -4,7 +4,6 @@ import type { Store } from '../../../persistence'
 import type { PersistPtyBindingArgs } from '../../../persistence/loading-store/pty-binding-persistence'
 import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
 import { resolveStablePaneOwner, type StablePaneOwner } from './stable-owner'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 
 /** The owner a replacing spawn stopped. Its binding stays until the replacement's bind swaps it. */
 export type ReplacedPaneOwner = {
@@ -70,11 +69,10 @@ export function swapReplacedPaneBinding(
   replaced: ReplacedPaneOwner
 ): () => PersistPtyBindingArgs | null {
   return () => {
-    // Switch point: an SSH pane binds in its own partition (persistPaneBinding).
-    const session = ORCA_LAYOUT_OWNER_IS_MAIN
-      ? store.getWorkspaceSession(replaced.pane?.hostId)
-      : store.getWorkspaceSession()
-    const bound = session.terminalLayoutsByTabId?.[binding.tabId]?.ptyIdsByLeafId?.[binding.leafId]
+    const bound =
+      store.getWorkspaceSession().terminalLayoutsByTabId?.[binding.tabId]?.ptyIdsByLeafId?.[
+        binding.leafId
+      ]
     // Unbound is ok: the renderer's pre-connect clear can withdraw it (split tab).
     return bound === undefined || bound === replaced.ptyId ? binding : null
   }
