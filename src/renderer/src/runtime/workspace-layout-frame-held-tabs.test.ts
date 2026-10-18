@@ -11,6 +11,7 @@ import {
   type PublishedWorkspaceLayout
 } from '../../../shared/workspace-layout/workspace-layout-published'
 import type { WorkspaceLayoutChangeFrame } from '../../../shared/workspace-layout/workspace-layout-stream-frames'
+import { makePaneKey } from '../../../shared/stable-pane-id'
 import { GIT_KEY } from '../../../shared/workspace-layout/workspace-layout-session.test-fixture'
 import { bootWindowFromPartitions } from '../app-shell/startup-window-view.test-fixture'
 import { buildWorkspaceSessionPayload } from '../lib/workspace-session'
@@ -19,6 +20,7 @@ import { createTestStore } from '../store/slices/store-test-helpers'
 import { recordOpenedEditorTabInLayoutOwner } from '../store/slices/editor/tabs/editor-tab-layout-owner'
 import { recordOpenedAgentSessionTabInLayoutOwner } from './agent-session-tab-layout-owner'
 import { recordOpenedSimulatorTabInLayoutOwner } from '@/lib/simulator-tab-layout-owner'
+import { withLayoutOwnerTabProps } from '@/components/tab-bar/tab-bar-layout-owner-props'
 import { endLayoutFramePositions } from './layout-frame-position'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
 
@@ -34,6 +36,24 @@ type Call = {
   answer: (r: LayoutApplyReply) => void
   fail: (error: Error) => void
 }
+const effects = vi.hoisted(() => ({
+  graphSync: vi.fn(),
+  mirrorViewMode: vi.fn(),
+  chatToggled: vi.fn()
+}))
+vi.mock('@/runtime/sync-runtime-graph', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  scheduleRuntimeGraphSync: effects.graphSync
+}))
+vi.mock('@/store/slices/tabs/tabs-host-mirroring', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  mirrorTabViewModeToHost: effects.mirrorViewMode
+}))
+vi.mock('@/lib/native-chat-telemetry', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  emitNativeChatToggled: effects.chatToggled
+}))
+
 const rpc = vi.hoisted((): { calls: Call[] } => ({ calls: [] }))
 vi.mock('@/runtime/runtime-rpc-client', () => ({
   callRuntimeRpc: (_target: unknown, _method: string, params: { command: { type: string } }) =>
@@ -90,8 +110,14 @@ async function boot() {
   sync.start()
   await settle()
   /** Main's answer to the window's command, with the frame holding the window's change. */
-  const answer = async (index: number, reply: LayoutApplyReply = okReply): Promise<void> => {
+  const answer = async (
+    index: number,
+    reply: LayoutApplyReply = okReply,
+    /** Main's change the window has not drawn: a change main applies first. */
+    mainChange: (layout: PublishedWorkspaceLayout) => void = () => {}
+  ): Promise<void> => {
     const frame = publishedOf(buildWorkspaceSessionPayload(store.getState()))
+    mainChange(frame)
     seq += 1
     stream.onFrame!({ type: 'workspace', key: GIT_KEY, layout: frame, seq })
     stream.onPosition!(seq)
@@ -144,6 +170,7 @@ function drawTab(
 
 beforeEach(() => {
   rpc.calls = []
+  vi.clearAllMocks()
 })
 afterEach(() => endLayoutFramePositions())
 
@@ -296,6 +323,118 @@ describe('a tab the window drew, closed or moved, with a frame from before main 
     expect(tabBar(store)).not.toContain(tab.id)
     expect(store.getState().tabsByWorktree[GIT_KEY]!.map((row) => row.id)).not.toContain(tab.id)
     expect(store.getState().terminalLayoutsByTabId[tab.id]).toBeUndefined()
+    sync.close()
+  })
+})
+
+describe('a change main applies first, with frames flowing', () => {
+  const callsOf = (type: string) => rpc.calls.filter((call) => call.command.type === type)
+
+  it('pins a preview tab and promotes it once; a frame from before does not undo it', async () => {
+    const { store, sync, before, answer } = await boot()
+    const file = {
+      ...store.getState().openFiles[0]!,
+      id: '/Users/dev/orca/src/peek.ts',
+      filePath: '/Users/dev/orca/src/peek.ts',
+      relativePath: 'src/peek.ts',
+      isPreview: true
+    }
+    store.setState({ openFiles: [...store.getState().openFiles, file] })
+    const tab = drawTab(store, {
+      id: 'editor:peek',
+      entityId: file.id,
+      contentType: 'editor',
+      isPreview: true
+    })
+    recordOpenedEditorTabInLayoutOwner(store.getState(), tab)
+    await answer(0)
+    const entry = () =>
+      store.getState().unifiedTabsByWorktree[GIT_KEY]!.find((item) => item.id === tab.id)!
+
+    withLayoutOwnerTabProps(
+      { togglePinned: (item) => store.getState().pinFile(file.id, item.unifiedTabId) },
+      () => GIT_KEY
+    ).togglePinned({ unifiedTabId: tab.id, isPinned: false })
+    const pin = rpc.calls.length - 1
+    expect(rpc.calls[pin]!.command).toMatchObject({ type: 'setTabProps', isPinned: true })
+    await answer(pin, okReply, (layout) => {
+      layout.tabs.find((item) => item.id === tab.id)!.isPinned = true
+    })
+    expect(callsOf('promotePreviewTab')).toHaveLength(1)
+    expect(entry()).toMatchObject({ isPinned: true })
+    expect(entry().isPreview).toBeFalsy()
+
+    sendStaleFrame(before)
+    await settle()
+    expect(entry().isPreview).toBeFalsy()
+    await answer(rpc.calls.indexOf(callsOf('promotePreviewTab')[0]!))
+    expect(entry()).toMatchObject({ isPinned: true })
+    expect(entry().isPreview).toBeFalsy()
+    expect(callsOf('promotePreviewTab')).toHaveLength(1)
+    sync.close()
+  })
+
+  it('runs a view toggle’s bookkeeping once, after main’s frame shows the toggle', async () => {
+    const { store, sync, answer } = await boot()
+    store.getState().toggleTabViewMode('tab-agent')
+    const toggle = rpc.calls.length - 1
+    expect(rpc.calls[toggle]!.command).toMatchObject({ type: 'setTabProps', viewMode: 'terminal' })
+
+    await answer(toggle, okReply, (layout) => {
+      layout.tabs.find((item) => item.id === 'tab-agent')!.viewMode = 'terminal'
+    })
+    const agent = () =>
+      store.getState().unifiedTabsByWorktree[GIT_KEY]!.find((item) => item.id === 'tab-agent')!
+    expect(agent().viewMode).toBe('terminal')
+    expect(effects.mirrorViewMode).toHaveBeenCalledTimes(1)
+    expect(effects.chatToggled).toHaveBeenCalledTimes(1)
+    expect(effects.chatToggled).toHaveBeenCalledWith(
+      expect.objectContaining({ from: 'chat', to: 'terminal' })
+    )
+
+    // The answered send is settled: the next toggle flips from what is shown, back to chat.
+    store.getState().toggleTabViewMode('tab-agent')
+    expect(rpc.calls.at(-1)!.command).toMatchObject({ type: 'setTabProps', viewMode: 'chat' })
+    sync.close()
+  })
+
+  it('settles a generated title once main’s frame shows it, so the next one is sent', async () => {
+    const { store, sync, answer } = await boot()
+    store.setState({ settings: { ...store.getState().settings!, tabAutoGenerateTitle: true } })
+    const leafId = store.getState().terminalLayoutsByTabId['tab-unbound']!.activeLeafId!
+    const paneKey = makePaneKey('tab-unbound', leafId)
+    store.getState().setGeneratedTabTitleFromAgentPrompt(paneKey, 'Refactor the auth middleware')
+    const renames = () => callsOf('renameTab')
+    expect(renames()).toHaveLength(1)
+    const title = (renames()[0]!.command as { title?: string }).title!
+    // Unanswered: a later prompt for the same tab waits for the first.
+    store.getState().setGeneratedTabTitleFromAgentPrompt(paneKey, 'Fix the flaky login test')
+    expect(renames()).toHaveLength(1)
+
+    await answer(rpc.calls.indexOf(renames()[0]!), okReply, (layout) => {
+      layout.tabs.find((item) => item.id === 'tab-unbound')!.generatedTitle = title
+    })
+    const row = store.getState().tabsByWorktree[GIT_KEY]!.find((item) => item.id === 'tab-unbound')!
+    expect(row.generatedTitle).toBe(title)
+    store.getState().setGeneratedTabTitleFromAgentPrompt(paneKey, 'Fix the flaky login test', {
+      replaceExistingGeneratedTitle: true
+    })
+    expect(renames()).toHaveLength(2)
+    sync.close()
+  })
+
+  it('runs a rename’s graph sync once and shows main’s title', async () => {
+    const { store, sync, answer } = await boot()
+    store.getState().setTabCustomTitle('tab-unbound', 'Build')
+    const rename = rpc.calls.length - 1
+    expect(effects.graphSync).not.toHaveBeenCalled()
+
+    await answer(rename, okReply, (layout) => {
+      layout.tabs.find((item) => item.id === 'tab-unbound')!.customTitle = 'Build'
+    })
+    const row = store.getState().tabsByWorktree[GIT_KEY]!.find((item) => item.id === 'tab-unbound')!
+    expect(row.customTitle).toBe('Build')
+    expect(effects.graphSync).toHaveBeenCalledTimes(1)
     sync.close()
   })
 })

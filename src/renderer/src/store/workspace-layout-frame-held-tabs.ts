@@ -1,3 +1,4 @@
+// Builds frame slices only and never calls set: the store patch applies what it returns.
 // Slices rebuilt from a frame, with each tab the window's own command still holds put back as the
 // store shows it (present, gone, or where the window placed it), and the rest as main has it. A
 // group's order keeps main's for the tabs nothing holds.
