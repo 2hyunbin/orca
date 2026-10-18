@@ -104,6 +104,15 @@ describe('Loader: a pane title that only repeats its tab’s name', () => {
     expect(paneTitles(LOCAL_EXECUTION_HOST_ID, GIT_KEY, session)).toEqual({})
   })
 
+  it('is dropped when it repeats the tab bar label, the live title the window loads', () => {
+    const session = titledPaneSession(
+      GIT_KEY,
+      { [leaf(1)]: 'build watcher' },
+      { entry: { label: 'build watcher' } }
+    )
+    expect(paneTitles(LOCAL_EXECUTION_HOST_ID, GIT_KEY, session)).toEqual({})
+  })
+
   it('keeps a name of its own', () => {
     const session = titledPaneSession(GIT_KEY, { [leaf(1)]: 'server' })
     expect(paneTitles(LOCAL_EXECUTION_HOST_ID, GIT_KEY, session)).toEqual({ [leaf(1)]: 'server' })

@@ -75,7 +75,9 @@ function loadPanes(
   const layout = ORCA_LAYOUT_OWNER_IS_MAIN
     ? sanitizeTerminalLayoutPaneTitles(normalizeTerminalLayoutPtyOwnership(stored).snapshot, {
         ...row,
-        // As the window's row hydration fills it: the tab-bar label when the row has none.
+        // The tab's labels as the window loads them: the tab-bar label is the live title, and
+        // fills a quick command label the row lacks.
+        title: entry?.label ?? row.title,
         quickCommandLabel: row.quickCommandLabel?.trim() || entry?.quickCommandLabel?.trim()
       })
     : stored
