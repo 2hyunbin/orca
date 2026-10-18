@@ -45,6 +45,25 @@ describe('a live terminal no pane shows, through main', () => {
     expect(applied.ok && applied.model.workspaces[WS]!.tabs).toHaveLength(1)
   })
 
+  it('makes a new tab when the recorded pane now shows another terminal', () => {
+    const { context, model, paneKey, leafId } = withCliTab(false)
+    const rebound: WorkspaceLayoutModel = {
+      ...model,
+      workspaces: {
+        [WS]: { ...model.workspaces[WS]!, leaves: { [leafId]: { ptyId: `${WS}@@other0001` } } }
+      }
+    }
+    const applied = applyLayoutCommand(rebound, adopt({ recordedPaneKey: paneKey }), context)
+    if (!applied.ok) {
+      throw new Error(applied.code)
+    }
+    expect(applied.result).toMatchObject({ tabId: 'window-tab' })
+    expect(applied.model.workspaces[WS]!.tabs).toHaveLength(2)
+    expect(applied.model.workspaces[WS]!.leaves?.['00000000-0000-4000-8000-0000000000ff']).toEqual({
+      ptyId: PTY
+    })
+  })
+
   it('otherwise shows it in a new tab bound to it, starting nothing', () => {
     const context = testContext()
     const applied = applyLayoutCommand(build(context, []).model, adopt(), context)

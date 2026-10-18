@@ -7,7 +7,7 @@ import { paneKeyOf, type WorkspaceLayout } from './workspace-layout-model'
 
 export type LiveTerminalAdoption = {
   ptyId: string
-  /** The pane the host last recorded for it: main holds it from before the spawn bound it. */
+  /** The pane the host last recorded for it: main holds it, still unbound, before the spawn binds it. */
   recordedPaneKey?: string
 }
 
@@ -29,7 +29,8 @@ export function heldPaneOfTerminal(
     }
   }
   const recorded = recordedPaneKey ? locatePane(workspace, recordedPaneKey) : null
-  return recorded
+  // A recorded pane bound since to another terminal shows that one, not this.
+  return recorded && !workspace.leaves?.[recorded.leafId]?.ptyId
     ? {
         tabId: recorded.tab.id,
         leafId: recorded.leafId,
