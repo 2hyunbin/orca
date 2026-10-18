@@ -18,7 +18,7 @@
  * has no answer that can be computed. That is why rollback is defined against a
  * pre-activation snapshot rather than against a version comparison.
  */
-import type { OrcadActivationRecord } from './orcad-activation-record'
+import type { OrcadActivationRecord } from '../managed-server/activation/orcad-activation-record'
 import type { OrcadTerminalCensus } from '../../shared/orcad-terminal-census'
 import {
   assessOrcadLiveDaemonCrossing,

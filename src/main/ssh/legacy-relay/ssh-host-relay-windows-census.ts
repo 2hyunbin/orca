@@ -9,8 +9,8 @@
  * convert under it.
  */
 import type { SshConnection } from '../ssh-connection'
-import { RELAY_REMOTE_DIR } from '../remote-frame-protocol'
-import { RELAY_INSTALL_MODEL } from '../remote-install-model'
+import { RELAY_REMOTE_DIR } from '../remote-exec/remote-frame-protocol'
+import { RELAY_INSTALL_MODEL } from '../../managed-server/install/remote-install-model'
 import type { HostRelayEndpointCensus } from './ssh-host-relay-endpoint-census'
 import {
   windowsPipesNotRunHere,
@@ -19,14 +19,17 @@ import {
   windowsRelayInventoryCommand
 } from './ssh-host-relay-windows-inventory'
 import { countRelayPtysOverBridge } from './ssh-relay-endpoint-pty-count'
-import { execCommand } from '../remote-exec-command'
+import { execCommand } from '../remote-exec/remote-exec-command'
 import { relaySocketNameForInstanceId } from './ssh-relay-instance-id'
 import { windowsRelayConnectCommand } from './ssh-relay-windows-launch-command'
 import { listRemoteInstallBaseDirsCommand } from '../ssh-remote-commands'
 import { joinRemotePath, type RemoteHostPlatform } from '../ssh-remote-platform'
 import { isNodeRuntimeTarget } from '../../../shared/node-runtime-pin'
 import { orcadNodeRuntimeExecutable } from '../../../shared/orcad-artifacts'
-import { nodeRuntimeStoreDir, remoteNodeRuntimePresentCommand } from '../orcad-remote-node-runtime'
+import {
+  nodeRuntimeStoreDir,
+  remoteNodeRuntimePresentCommand
+} from '../../managed-server/install/orcad-remote-node-runtime'
 import { REMOTE_NODE_RUNTIME_READY } from '../orcad-remote-node-runtime-report'
 import { resolveRemoteNodePath } from '../ssh-remote-node-resolution'
 

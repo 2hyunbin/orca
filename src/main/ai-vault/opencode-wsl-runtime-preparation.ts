@@ -15,7 +15,7 @@ import {
   nodeRuntimeStoreDir,
   posixNodeRuntimeExecutable,
   probeRemoteNodeRuntimeCommand
-} from '../ssh/orcad-remote-node-runtime'
+} from '../managed-server/install/orcad-remote-node-runtime'
 import { REMOTE_NODE_RUNTIME_READY } from '../ssh/orcad-remote-node-runtime-report'
 import { getRemoteHostPlatform } from '../ssh/ssh-remote-platform'
 import { runWslProcess, type WslSpec } from '../wsl/wsl-runner'

@@ -7,14 +7,17 @@
  * names every relay pipe on the machine, and each instance leaves a credential file (and its pipe
  * marker) in its version directory, which maps a listed pipe back to the instance that serves it.
  */
-import { RELAY_REMOTE_DIR } from '../remote-frame-protocol'
+import { RELAY_REMOTE_DIR } from '../remote-exec/remote-frame-protocol'
 import { commandWithNodePath } from '../ssh-remote-commands'
 import {
   quotePowerShellLiteral as powerShellLiteral,
   quotePowerShellNativeArgument as powerShellNativeArg
 } from '../../../shared/powershell-native-argument'
 import { windowsRelayPipePathsForSocketName } from './ssh-relay-endpoints'
-import { RELAY_INSTALL_MODEL, remoteInstallVersionDirRegex } from '../remote-install-model'
+import {
+  RELAY_INSTALL_MODEL,
+  remoteInstallVersionDirRegex
+} from '../../managed-server/install/remote-install-model'
 import { joinRemotePath, type RemoteHostPlatform } from '../ssh-remote-platform'
 
 /** The instance that serves a pipe: its version directory and the credential its bridge presents. */

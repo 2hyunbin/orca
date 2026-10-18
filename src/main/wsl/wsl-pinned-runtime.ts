@@ -8,7 +8,7 @@ import {
   nodeRuntimeStoreDir,
   posixNodeRuntimeExecutable,
   probeRemoteNodeRuntimeCommand
-} from '../ssh/orcad-remote-node-runtime'
+} from '../managed-server/install/orcad-remote-node-runtime'
 import {
   REMOTE_NODE_RUNTIME_READY,
   assertRemoteNodeRuntimePromoted
