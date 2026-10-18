@@ -1,5 +1,9 @@
-import { AlertTriangle, Loader2, Server, ServerOff, Trash2 } from 'lucide-react'
-import type { PublicKnownRuntimeEnvironment } from '../../../../shared/runtime-environments'
+import { useState } from 'react'
+import { AlertTriangle, Link2, Loader2, Server, ServerOff, Trash2 } from 'lucide-react'
+import {
+  isUserManagedRuntimeEnvironment,
+  type PublicKnownRuntimeEnvironment
+} from '../../../../shared/runtime-environments'
 import type { RemoteServerUpdateEntry } from '@/runtime/remote-server-update-coordinator'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
@@ -25,6 +29,7 @@ import {
   getRemoteServerManualUpdateHelp,
   RemoteServerUpdateStatus
 } from './RemoteServerUpdateStatus'
+import { RuntimeRepairDialog } from './RuntimeRepairDialog'
 
 type RuntimeServerRowProps = {
   environment: PublicKnownRuntimeEnvironment
@@ -87,7 +92,21 @@ export function RuntimeServerRow({
           runtimeStatusEntry.remoteControl ?? runtimeStatusEntry.status?.remoteControl ?? null
       }
     : details
-  const detailsDescription = getHostDetailsDescription(effectiveDetails)
+  const [repairOpen, setRepairOpen] = useState(false)
+  const snapshot = runtimeStatusEntry?.snapshot
+  const accessRevoked =
+    snapshot?.verification === 'blocked' &&
+    !snapshot.retired &&
+    snapshot.blockedReason === 'access-revoked'
+  // Why: managed and cloud-workspace servers are paired by the service that owns them.
+  const repairable = !environment.orcadDeployment && isUserManagedRuntimeEnvironment(environment)
+  const detailsDescription = accessRevoked
+    ? translate(
+        'auto.components.settings.RuntimeEnvironmentsPane.accessRevoked',
+        '{{value0}} no longer accepts this computer. Re-pair it with a new access link.',
+        { value0: environment.name }
+      )
+    : getHostDetailsDescription(effectiveDetails)
   const connectionState =
     details?.status === 'loading' && !runtimeStatusEntry?.status
       ? 'checking'
@@ -119,7 +138,7 @@ export function RuntimeServerRow({
           <span className="text-[11px] text-muted-foreground">
             {getRuntimeServerConnectionLabel(connectionState)}
           </span>
-          {effectiveDetails?.compatibility?.kind === 'blocked' ? (
+          {accessRevoked || effectiveDetails?.compatibility?.kind === 'blocked' ? (
             <AlertTriangle className="size-3.5 shrink-0 text-destructive" />
           ) : effectiveDetails?.status === 'loading' ? (
             <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
@@ -145,7 +164,7 @@ export function RuntimeServerRow({
           <p
             className={cn(
               'mt-0.5 truncate text-xs',
-              effectiveDetails?.compatibility?.kind === 'blocked'
+              accessRevoked || effectiveDetails?.compatibility?.kind === 'blocked'
                 ? 'text-destructive'
                 : 'text-muted-foreground'
             )}
@@ -189,6 +208,18 @@ export function RuntimeServerRow({
             disabled={remoteServerUpdatesRunning}
           >
             {translate('auto.components.settings.RuntimeEnvironmentsPane.updateServer', 'Update')}
+          </Button>
+        ) : null}
+        {accessRevoked && repairable ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            onClick={() => setRepairOpen(true)}
+            disabled={actionBusy}
+          >
+            <Link2 />
+            {translate('auto.components.settings.RuntimeEnvironmentsPane.repair', 'Re-pair…')}
           </Button>
         ) : null}
         {isReachable ? (
@@ -240,6 +271,12 @@ export function RuntimeServerRow({
           {removing ? <Loader2 className="size-3 animate-spin" /> : <Trash2 className="size-3" />}
         </Button>
       </div>
+      <RuntimeRepairDialog
+        open={repairOpen}
+        onOpenChange={setRepairOpen}
+        environmentId={environment.id}
+        name={environment.name}
+      />
     </div>
   )
 }
