@@ -18,7 +18,7 @@ type AvailabilityCopyId = Extract<
   | 'agentNotSignedIn'
   | 'thenSendAgain'
   | 'cliMissing'
-  | 'codexCliTooOld'
+  | 'cliTooOld'
 >
 
 export const AVAILABILITY_PIECES: Record<
@@ -71,6 +71,6 @@ export const AVAILABILITY_PIECES: Record<
     ),
   cliMissing: (values) =>
     translate('components.native-chat.failureWords.cliMissing', COPY.cliMissing, values),
-  codexCliTooOld: (values) =>
-    translate('components.native-chat.failureWords.codexCliTooOld', COPY.codexCliTooOld, values)
+  cliTooOld: (values) =>
+    translate('components.native-chat.failureWords.cliTooOld', COPY.cliTooOld, values)
 }

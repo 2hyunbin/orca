@@ -9,6 +9,7 @@ import { openCodeAcpAccountBinding } from '../opencode/opencode-structured-accou
 import { scrubOpenCodeAcpEnvironment } from '../opencode/opencode-acp-environment'
 import { acpLaunchSpecFor } from './acp-launch-specs'
 import { STRUCTURED_CHILD_ENV_TO_DELETE } from '../runtime/structured-session-child-env'
+import { AgentCliInstallationError } from '../native-chat/agent-cli-installation-error'
 
 const PROFILE = '123e4567-e89b-42d3-a456-426614174000'
 
@@ -70,7 +71,7 @@ function resolver(
     resolveLaunchEnv: () => options.launchEnv ?? {},
     resolveCommand: (command) => `/resolved/${command}`,
     inheritedEnv: options.inheritedEnv ?? {},
-    probeVersion: options.probeVersion ?? (async (_input, supports) => supports('1.18.31'))
+    probeVersion: options.probeVersion ?? (async () => ({ version: '1.18.31' }))
   })
 }
 
@@ -216,30 +217,28 @@ describe('OpenCode ACP launch resolution', () => {
     ).rejects.toThrow(/sessions pin opencode/)
   })
 
-  it('runs an `opencode` that is stable 2.x', async () => {
+  it.each(['2.0.21', '3.0.0', '3.0.0-beta.1'])('runs an `opencode` %s', async (version) => {
     const launch = await resolver(openCodeRecord(UNMANAGED), {
-      probeVersion: async (_input, supports) => supports('2.0.21')
+      probeVersion: async () => ({ version })
     })({ identity })
     expect(launch.args).toEqual(['acp'])
   })
 
-  it('refuses a release outside its lines before spawning it, as a host that cannot run the chat', async () => {
-    const launch = resolver(openCodeRecord(UNMANAGED), {
-      probeVersion: async (_input, supports) => supports('3.0.0')
+  it('runs when the version cannot be read; any real start failure reports itself', async () => {
+    const launch = await resolver(openCodeRecord(UNMANAGED), {
+      probeVersion: async () => ({ version: null })
     })({ identity })
-    await expect(launch).rejects.toMatchObject({
-      refusal: {
-        code: 'structured_agent_session_unsupported',
-        details: { reason: 'hostUnsupported' }
-      }
-    })
+    expect(launch.args).toEqual(['acp'])
   })
 
-  it('refuses when the version cannot be read', async () => {
-    const launch = resolver(openCodeRecord(UNMANAGED), { probeVersion: async () => false })
-    await expect(launch({ identity })).rejects.toMatchObject({
-      refusal: { code: 'structured_agent_session_unsupported' }
-    })
+  it('refuses a too-old release before spawning it, naming OpenCode and both versions', async () => {
+    const launch = resolver(openCodeRecord(UNMANAGED), {
+      probeVersion: async () => ({ version: '1.0.0' })
+    })({ identity })
+    await expect(launch).rejects.toBeInstanceOf(AgentCliInstallationError)
+    await expect(launch).rejects.toThrow(
+      'OpenCode 1.0.0 is too old for chats. Update to 1.18.31 or newer.'
+    )
   })
 
   it('asks the version of exactly the binary, folder and environment it spawns', async () => {
@@ -247,7 +246,7 @@ describe('OpenCode ACP launch resolution', () => {
       NonNullable<Parameters<typeof createAcpStructuredLaunchResolver>[1]['probeVersion']>
     >[0][] = []
     const launch = await resolver(openCodeRecord(UNMANAGED), {
-      probeVersion: async (input, supports) => (asked.push(input), supports('1.18.31'))
+      probeVersion: async (input) => (asked.push(input), { version: '1.18.31' })
     })({ identity })
     expect(asked).toEqual([{ program: launch.command, cwd: launch.cwd, env: launch.env }])
   })

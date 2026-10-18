@@ -1,9 +1,10 @@
 import { agentSessionAccountHome } from '../../shared/agent-session-account-home'
+import { launchableRelease } from '../agent-cli-version-probe'
 import { applyStructuredCodexWorkspaceTrust } from '../agent-workspace-trust-spawn'
 import { ACP_LAUNCH_SPECS, type AcpLaunchSpec } from '../acp/acp-launch-specs'
 import { acpStructuredAgentDefinition } from '../acp/acp-structured-agent-definitions'
 import {
-  acpLaunchVersionSupported,
+  checkAcpLaunchVersion,
   resolveAcpLaunchCommand
 } from '../acp/acp-structured-launch-resolution'
 import { CODEX_STRUCTURED_AGENT } from '../codex/codex-structured-agent-definition'
@@ -37,7 +38,7 @@ function acpMetadata(spec: AcpLaunchSpec): StructuredAgentRuntimeMetadata {
   return {
     definition: acpStructuredAgentDefinition(spec),
     supportsLocation: (location) => supportsAcpStructuredLocation(spec, location),
-    ...(spec.supportsVersion
+    ...(spec.minimumVersions
       ? {
           launchCheck: {
             resolveLaunch: (shellEnv, commandSettings) => {
@@ -48,7 +49,8 @@ function acpMetadata(spec: AcpLaunchSpec): StructuredAgentRuntimeMetadata {
               })
               return { command, env }
             },
-            supportsVersion: (launch) => acpLaunchVersionSupported(spec, launch)
+            supportsVersion: async (launch) =>
+              launchableRelease(await checkAcpLaunchVersion(spec, launch, false))
           }
         }
       : {}),

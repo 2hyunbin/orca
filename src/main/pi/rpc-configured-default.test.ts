@@ -149,7 +149,7 @@ async function piHost() {
       pi: createPiModelCatalogProbe({
         resolveEnvironment: async () => ({ PATH: '/usr/bin' }),
         resolveCommand: () => '/opt/pi/bin/pi',
-        probeVersion: async () => true,
+        probeVersion: async () => ({ version: '0.84.0' }),
         homePath: '/home/user',
         runListing: async () => LISTING
       })

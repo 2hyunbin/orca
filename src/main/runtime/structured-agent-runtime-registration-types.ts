@@ -73,7 +73,7 @@ export type StructuredAgentLaunchCheck = {
     env: Record<string, string>,
     commandSettings: StructuredAgentCommandSettings
   ) => { command: string; env: Record<string, string> }
-  /** Whether that binary is a release this agent runs a structured chat on. */
+  /** False only for a release older than the agent's chats need; a version it cannot read runs. */
   supportsVersion: (launch: {
     command: string
     cwd: string

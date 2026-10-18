@@ -8,12 +8,13 @@ import { acpLaunchSpecFor } from '../acp/acp-launch-specs'
 import { structuredAgentSupportsLaunch } from './structured-agent-launch-support'
 import { createStructuredAgentEnvironmentResolvers } from './structured-agent-shell-environment'
 import type * as LoginShellModule from '../startup/login-shell-environment'
+import type * as VersionProbeModule from '../agent-cli-version-probe'
 import {
   resetLoginShellEnvironmentCacheForTests,
   type ResolveLoginShellEnvironmentOptions as LoginShellOptions
 } from '../startup/login-shell-environment'
 
-const { probeAgentCliVersion, loginShell } = vi.hoisted(() => {
+const { readVersion, loginShell } = vi.hoisted(() => {
   const loginShell: {
     env: NodeJS.ProcessEnv
     spawn: ReturnType<typeof vi.fn<() => Promise<NodeJS.ProcessEnv | null>>>
@@ -22,12 +23,16 @@ const { probeAgentCliVersion, loginShell } = vi.hoisted(() => {
     // Each call is one shell run through the real cache; a test can hold one open.
     spawn: vi.fn(async (): Promise<NodeJS.ProcessEnv | null> => loginShell.env)
   }
-  return { probeAgentCliVersion: vi.fn(), loginShell }
+  return { readVersion: vi.fn<VersionProbeModule.AgentCliVersionReader>(), loginShell }
 })
-vi.mock('../agent-cli-version-probe', async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  probeAgentCliVersion
-}))
+vi.mock('../agent-cli-version-probe', async (importOriginal) => {
+  const real = await importOriginal<typeof VersionProbeModule>()
+  return {
+    ...real,
+    checkAgentCliVersion: (...[input, minimums]: Parameters<typeof real.checkAgentCliVersion>) =>
+      real.checkAgentCliVersion(input, minimums, readVersion)
+  }
+})
 vi.mock('../startup/login-shell-environment', async (importOriginal) => {
   const real = await importOriginal<typeof LoginShellModule>()
   return {
@@ -42,11 +47,11 @@ vi.mock('../startup/login-shell-environment', async (importOriginal) => {
 })
 
 let bin: string
-const asked: { program: string; cwd: string; env: Record<string, string> }[] = []
+const asked: Parameters<VersionProbeModule.AgentCliVersionReader>[0][] = []
 function installedVersion(version: string): void {
-  probeAgentCliVersion.mockImplementation(async (input, supports) => {
+  readVersion.mockImplementation(async (input) => {
     asked.push(input)
-    return supports(version)
+    return { version }
   })
 }
 
@@ -71,7 +76,7 @@ beforeEach(async () => {
   resetLoginShellEnvironmentCacheForTests()
 })
 afterEach(async () => {
-  probeAgentCliVersion.mockReset()
+  readVersion.mockReset()
   runtime.resolveRuntimeFileTarget.mockClear()
   await rm(bin, { recursive: true, force: true })
 })
@@ -79,19 +84,18 @@ afterEach(async () => {
 describe('structuredAgentSupportsLaunch', () => {
   it('asks nothing for an agent whose location alone decides', async () => {
     expect(await structuredAgentSupportsLaunch('grok', 'id:workspace-1', runtime)).toBe(true)
-    expect(probeAgentCliVersion).not.toHaveBeenCalled()
+    expect(readVersion).not.toHaveBeenCalled()
     expect(runtime.resolveRuntimeFileTarget).not.toHaveBeenCalled()
   })
 
-  it('allows stable OpenCode 1.x and 2.x, asking in the workspace with the launch env', async () => {
+  it('allows OpenCode from its minimums, asking in the workspace with the launch env', async () => {
     for (const [version, supported] of [
       ['1.18.31', true],
       ['2.0.14', true],
-      ['2.0.21', true],
+      ['2.1.0-beta.1', true],
+      ['3.0.0', true],
       ['1.18.30', false],
-      ['2.0.13', false],
-      ['2.1.0-beta.1', false],
-      ['3.0.0', false]
+      ['2.0.13', false]
     ] as const) {
       installedVersion(version)
       expect(await structuredAgentSupportsLaunch('opencode', 'id:workspace-1', runtime)).toBe(
@@ -148,8 +152,10 @@ describe('structuredAgentSupportsLaunch', () => {
     expect(asked).toHaveLength(2)
   })
 
-  it('refuses when the version cannot be read', async () => {
-    probeAgentCliVersion.mockResolvedValue(false)
+  it('allows a version it cannot read, and refuses a binary that does not start', async () => {
+    readVersion.mockResolvedValue({ version: null })
+    expect(await structuredAgentSupportsLaunch('opencode', 'id:workspace-1', runtime)).toBe(true)
+    readVersion.mockResolvedValue({ version: null, started: false })
     expect(await structuredAgentSupportsLaunch('opencode', 'id:workspace-1', runtime)).toBe(false)
   })
 

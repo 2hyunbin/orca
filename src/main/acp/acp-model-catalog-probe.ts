@@ -1,5 +1,5 @@
 import { homedir } from 'node:os'
-import { probeAgentCliVersion } from '../agent-cli-version-probe'
+import type { AgentCliVersionReader } from '../agent-cli-version-probe'
 import type {
   AgentModelCatalogProbe,
   AgentModelCatalogSuccess
@@ -13,7 +13,7 @@ import type { AgentSessionModelOption } from '../../shared/agent-session-wire'
 import { createAcpAgentConnection } from './acp-agent-connection'
 import type { AcpLaunchSpec } from './acp-launch-specs'
 import {
-  acpLaunchVersionSupported,
+  checkAcpLaunchVersion,
   resolveAcpLaunchInvocation,
   type AcpLaunchInvocationDeps
 } from './acp-structured-launch-resolution'
@@ -28,7 +28,7 @@ export type AcpModelCatalogConnection = {
 
 export type AcpModelCatalogProbeDeps = AcpLaunchInvocationDeps & {
   /** Test seams; production spawns through the shared supervised runner and ACP connection. */
-  probeVersion?: typeof probeAgentCliVersion
+  probeVersion?: AgentCliVersionReader
   connect?: (launch: ProviderProcessLaunch) => AcpModelCatalogConnection
   runListing?: typeof runAgentModelCatalogListing
 }
@@ -54,11 +54,8 @@ export function createAcpModelCatalogProbe(
       resolveWorkingDirectory: () => cwd
     })
     if (
-      !(await acpLaunchVersionSupported(
-        spec,
-        { command, cwd, env },
-        deps.probeVersion ?? probeAgentCliVersion
-      ))
+      (await checkAcpLaunchVersion(spec, { command, cwd, env }, false, deps.probeVersion))
+        .status === 'tooOld'
     ) {
       throw new Error(`${spec.agent} at ${command} does not run structured chats`)
     }

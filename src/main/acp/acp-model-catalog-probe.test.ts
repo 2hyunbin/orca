@@ -158,7 +158,7 @@ describe('ACP model catalog probes', () => {
       resolveEnvironment: async () => ({ PATH: '/usr/bin', HOME: '/home/user' }),
       dataDirectory: '/orca-data',
       resolveCommand: () => '/opt/opencode/bin/opencode',
-      probeVersion: async () => true,
+      probeVersion: async () => ({ version: '2.0.21' }),
       homePath: '/home/user',
       runListing,
       connect
@@ -184,7 +184,7 @@ describe('ACP model catalog probes', () => {
       resolveEnvironment: async () => ({ PATH: '/usr/bin' }),
       dataDirectory: '/orca-data',
       resolveCommand: () => '/opt/opencode/bin/opencode',
-      probeVersion: async () => false,
+      probeVersion: async () => ({ version: '1.0.0' }),
       runListing
     })
     await expect(probe({ kind: 'opencode', locator: { kind: 'unmanaged' } })).rejects.toThrow(
