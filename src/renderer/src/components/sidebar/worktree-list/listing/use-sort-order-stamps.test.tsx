@@ -11,6 +11,10 @@ vi.mock('../../../../../../shared/sidebar-inputs-switch', () => ({
   ORCA_SIDEBAR_INPUTS_IS_MAIN: true
 }))
 vi.mock('@/lib/sidebar-list-session', () => ({ useSidebarListSession: () => {} }))
+const persistOrder = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/worktree-sort-order-persistence', () => ({
+  persistWorktreeSortOrderByHost: persistOrder
+}))
 
 const initialState = useAppStore.getInitialState()
 const repo = makeRepo()
@@ -32,7 +36,6 @@ describe('useSidebarWorktreeSortOrder with the switch on', () => {
     const a = makeWorktree(`${repo.id}::/a`, 'a', { repoId: repo.id, lastActivityAt: 2 })
     const b = makeWorktree(`${repo.id}::/b`, 'b', { repoId: repo.id, lastActivityAt: 1 })
     useAppStore.setState({ sortBy: 'smart', worktreesByRepo: { [repo.id]: [a, b] } })
-    const updateMeta = vi.spyOn(useAppStore.getState(), 'updateWorktreesMeta')
     const { result } = renderHook(() => useSidebarWorktreeSortOrder({ repoMap, sortBy: 'smart' }))
     expect(result.current).toEqual([a.id, b.id])
 
@@ -49,6 +52,37 @@ describe('useSidebarWorktreeSortOrder with the switch on', () => {
     })
     expect(useAppStore.getState().settledSortEpoch).toBe(initialState.settledSortEpoch)
     expect(result.current).toEqual([b.id, c.id, a.id])
-    expect(updateMeta).not.toHaveBeenCalled()
+    expect(persistOrder).not.toHaveBeenCalled()
+  })
+
+  it('keeps the same order array on an unrelated row write, and re-sorts on a repo rename', () => {
+    const other = { ...makeRepo(), id: 'repo-2', displayName: 'Zed' }
+    const a = makeWorktree(`${repo.id}::/a`, 'a', { repoId: repo.id })
+    const z = makeWorktree(`${other.id}::/z`, 'z', { repoId: other.id })
+    useAppStore.setState({ worktreesByRepo: { [repo.id]: [a], [other.id]: [z] } })
+    const maps = {
+      before: new Map([
+        [repo.id, repo],
+        [other.id, other]
+      ]),
+      after: new Map([
+        [repo.id, repo],
+        [other.id, { ...other, displayName: 'Aardvark' }]
+      ])
+    }
+    const { result, rerender } = renderHook(
+      ({ map }) => useSidebarWorktreeSortOrder({ repoMap: map, sortBy: 'repo' }),
+      { initialProps: { map: maps.before } }
+    )
+    const first = result.current
+    expect(first).toEqual([a.id, z.id])
+    act(() => {
+      useAppStore.setState({
+        worktreesByRepo: { [repo.id]: [{ ...a, isUnread: true }], [other.id]: [z] }
+      })
+    })
+    expect(result.current).toBe(first)
+    rerender({ map: maps.after })
+    expect(result.current).toEqual([z.id, a.id])
   })
 })
