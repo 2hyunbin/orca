@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { AgentSessionOptionRejectedError } from '../native-chat/agent-session-wire/structured-agent-session-option-error'
 import { setClaudeStructuredOption } from './claude-structured-options'
 import type { ClaudeSession } from './claude-structured-session-state'
 
@@ -42,17 +41,14 @@ function sessionWith(catalog: readonly Record<string, unknown>[] | 'unavailable'
 }
 
 describe('Claude model pre-flight against the catalog the CLI listed', () => {
-  it('refuses a model the provider does not list', async () => {
+  it('forwards an exact literal even when discovery does not list it', async () => {
     const { session, calls } = sessionWith([DEFAULT_ROW, SONNET, HAIKU])
 
     await expect(
       setClaudeStructuredOption(session, { key: 'model', value: 'not-a-real-model-xyz' }, undefined)
-    ).rejects.toBeInstanceOf(AgentSessionOptionRejectedError)
-    // Measured on Claude Code 2.1.260: set_model resolves for an unlisted id and
-    // every later turn returns is_error with zero tokens. Nothing undoes the
-    // write, so the refusal has to land before it.
-    expect(calls).toEqual(['list_models'])
-    expect(session.options.has('model')).toBe(false)
+    ).resolves.toEqual({ model: 'not-a-real-model-xyz' })
+    expect(calls).toEqual(['list_models', 'set_model:not-a-real-model-xyz'])
+    expect(session.options.get('model')).toBe('not-a-real-model-xyz')
   })
 
   it('applies a model the provider lists', async () => {

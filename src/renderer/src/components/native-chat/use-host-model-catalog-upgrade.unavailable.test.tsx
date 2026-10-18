@@ -72,17 +72,24 @@ function renderOptions() {
 type Answer = { resolve: (value: unknown) => void; reject: (error: unknown) => void }
 
 /** Every catalog read waits for the test to answer it, in order. */
-function catalogReads() {
+function catalogReads(holdPure = false) {
   const pending: Answer[] = []
+  const pure: Answer[] = []
   mocks.call.mockImplementation(
     (_target: unknown, method: string, params: { sessionId?: string }) =>
       method === 'agentSession.modelCatalog' && !params.sessionId
-        ? Promise.resolve({ origin: 'unknown' })
+        ? holdPure
+          ? new Promise((resolve, reject) => pure.push({ resolve, reject }))
+          : Promise.resolve({ origin: 'unknown' })
         : method === 'agentSession.modelCatalog'
           ? new Promise((resolve, reject) => pending.push({ resolve, reject }))
           : new Promise(() => {})
   )
   return {
+    answerPure: async (index: number, value: unknown) => {
+      pure[index]!.resolve(value)
+      await act(async () => {})
+    },
     count: () =>
       mocks.call.mock.calls.filter(
         ([, method, params]) => method === 'agentSession.modelCatalog' && params.sessionId
@@ -131,7 +138,7 @@ describe("a chat's sign-in verdict", () => {
   afterEach(cleanup)
 
   it('holds the verdict through a re-read and lets only its answer clear it', async () => {
-    const reads = catalogReads()
+    const reads = catalogReads(true)
     const { result } = renderOptions()
     await reads.answer(0, { ...HOST_CATALOG, unavailable: SIGNED_OUT })
     expect(result.current.unavailable).toEqual(SIGNED_OUT)
@@ -144,6 +151,9 @@ describe("a chat's sign-in verdict", () => {
     expect(reads.count()).toBe(3)
     // The notice does not flicker off while the re-read is out.
     expect(result.current.unavailable).toEqual(SIGNED_OUT)
+    await reads.answerPure(0, HOST_CATALOG)
+    expect(result.current.unavailable).toEqual(SIGNED_OUT)
+    expectPickerUsable(result.current.optionSnapshot, 'gpt-hosted')
     await reads.answer(2, HOST_CATALOG)
     expect(result.current.unavailable).toBeNull()
   })

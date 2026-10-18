@@ -13,7 +13,7 @@ import {
 } from '../../../../shared/structured-agent-session-options'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
-import { preloadHostModelCatalogSnapshots } from '@/runtime/host-model-catalog-snapshots'
+import { captureHostModelCatalogSnapshot } from '@/runtime/host-model-catalog-snapshots'
 import { structuredAgentSessionHostKey } from '@/runtime/structured-agent-session-host-capability'
 import type { NativeChatSessionOptionRecord } from '../../../../shared/native-chat-session-option-state'
 import {
@@ -105,9 +105,35 @@ export function useHostModelCatalogUpgrade(args: {
       return
     }
     let stale = false
-    // Share only sessionless discovery; this chat's answer may include its selected-only row.
+    let leaveShared: (() => void) | null = null
+    // Only the pure workspace answer can warm another chat's first frame.
     if (newLaunch) {
-      void preloadHostModelCatalogSnapshots(target, [agent])
+      const snapshot = captureHostModelCatalogSnapshot(target, agent, worktree ?? null)
+      const readShared = (waitForListing: boolean): Promise<AgentSessionModelCatalogResult> =>
+        callStructuredAgentSession<AgentSessionModelCatalogResult>(
+          target,
+          'agentSession.modelCatalog',
+          {
+            agent,
+            ...(worktree ? { worktree } : {}),
+            ...(waitForListing ? { waitForListing } : {})
+          }
+        )
+      const applyShared = (catalog: AgentSessionModelCatalogResult | null): void => {
+        if (!stale && catalog) {
+          snapshot.record(catalog)
+        }
+      }
+      let waitForListing = false
+      leaveShared = joinHostModelListingWait(
+        snapshot.waitKey,
+        () => {
+          const read = readShared(waitForListing)
+          waitForListing = true
+          return read
+        },
+        applyShared
+      )
     }
     const params = { agent, sessionId, ...(newLaunch && worktree ? { worktree } : {}) }
     const read = (waitForListing: boolean): Promise<AgentSessionModelCatalogResult> =>
@@ -176,6 +202,7 @@ export function useHostModelCatalogUpgrade(args: {
     return () => {
       stale = true
       leave?.()
+      leaveShared?.()
     }
   }, [
     activeOptionRecordRef,

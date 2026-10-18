@@ -43,7 +43,11 @@ function sessionWith(
           calls.push('get_settings')
           return reported === null
             ? { applied: {}, effective: {}, sources: {} }
-            : { applied: { effort: reported }, effective: { effortLevel: reported }, sources: {} }
+            : {
+                applied: { model: listed?.model, effort: reported },
+                effective: { effortLevel: reported },
+                sources: {}
+              }
         }
       },
       startup: { state: 'proven' }
@@ -59,15 +63,15 @@ describe('Claude effort reporting', () => {
 
   it.each([
     [
-      'the provider stops reporting it',
-      { applied: { effort: 'high' }, effective: {}, sources: {} }
+      'the effective block omits it',
+      { applied: { effort: 'high' }, effective: {}, sources: {} },
+      'high'
     ],
-    ['the payload carries no effective block', { applied: { effort: 'high' } }],
-    ['the request failed outright', null]
-  ])('reports no effort when %s', (_case, settings) => {
-    // Never defaulted: an effort nothing measured would be worse than a blank
-    // pill, and this is the assertion that goes red if the key is renamed.
-    expect(readClaudeSettingsEffort(settings)).toBeNull()
+    ['the payload carries no effective block', { applied: { effort: 'high' } }, 'high'],
+    ['the provider reports no applied effort', { applied: {}, effective: {}, sources: {} }, null],
+    ['the request failed outright', null, null]
+  ])('uses only measured applied effort when %s', (_case, settings, expected) => {
+    expect(readClaudeSettingsEffort(settings)).toBe(expected)
   })
 
   it('publishes the effort from get_settings, which system/init never carries', async () => {
@@ -111,27 +115,24 @@ describe('Claude effort reporting', () => {
 })
 
 describe('Claude effort readback', () => {
-  it('records an effort the child did not adopt without vouching for it', async () => {
-    const { session, calls } = sessionWith('high')
-
-    // The disagreement stops the confirmation, not the write: no other client
-    // vetoes here, and the pre-flight catalog guard already refuses the levels
-    // the model cannot run.
+  it('corrects an ignored effort to the actual applied value without confirming the request', async () => {
+    const { session, calls } = sessionWith('high', [], { model: 'sonnet', catalog: [] })
     await expect(
       setClaudeStructuredOption(session, { key: 'effort', value: 'bogus-effort-xyz' }, undefined)
-    ).resolves.toEqual({ effort: 'bogus-effort-xyz' })
+    ).resolves.toEqual({ model: 'sonnet', effort: 'high' })
     expect(session.confirmedOptions.has('effort')).toBe(false)
     // The child's own answer is kept rather than discarded with the refusal.
     expect(session.reportedOptions.effort).toBe('high')
-    expect(calls).toEqual(['apply:bogus-effort-xyz', 'get_settings'])
+    expect(calls).toEqual(['list_models', 'apply:bogus-effort-xyz', 'get_settings'])
   })
 
   it('records an effort the child confirms', async () => {
-    const { session } = sessionWith('low')
+    const { session } = sessionWith('low', [], { model: 'sonnet', catalog: [] })
 
     await expect(
       setClaudeStructuredOption(session, { key: 'effort', value: 'low' }, undefined)
-    ).resolves.toEqual({ effort: 'low' })
+    ).resolves.toEqual({ model: 'sonnet', effort: 'low' })
+    expect(session.confirmedOptions.has('effort')).toBe(true)
   })
 
   it('records the request when the readback is unavailable', async () => {
@@ -191,14 +192,13 @@ describe('Claude effort against the model that must run it', () => {
     expect(session.confirmedOptions.has('effort')).toBe(true)
   })
 
-  it('sends `max`, which the readback cannot report, when the model advertises it', async () => {
-    // UNREPORTED_EFFORTS still governs: no get_settings, so no false disagreement.
+  it('reads back an advertised Max request and corrects an ignored value', async () => {
     const { session, calls } = sessionWith('high', [], { model: 'sonnet', catalog: [SONNET] })
 
     await expect(
       setClaudeStructuredOption(session, { key: 'effort', value: 'max' }, undefined)
-    ).resolves.toEqual({ model: 'sonnet', effort: 'max' })
-    expect(calls).toEqual(['list_models', 'apply:max'])
+    ).resolves.toEqual({ model: 'sonnet', effort: 'high' })
+    expect(calls).toEqual(['list_models', 'apply:max', 'get_settings'])
     expect(session.confirmedOptions.has('effort')).toBe(false)
   })
 

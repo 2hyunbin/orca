@@ -122,6 +122,11 @@ export function applyStructuredAgentSessionModelCatalog(
   catalog: AgentSessionModelCatalogResult,
   options: { newLaunch: boolean }
 ): StructuredAgentSessionOptionState {
+  const independent = state.record.agent === 'claude' || state.record.agent === 'codex'
+  // An unmigrated child's whole live configuration supplies its controls.
+  if (!independent && state.catalogSource === 'live') {
+    return state
+  }
   const models =
     catalog.origin === 'unknown'
       ? []

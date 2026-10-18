@@ -428,12 +428,15 @@ describe('what a started child reports', () => {
   it('keeps provider reports out of the saved next-message choice', async () => {
     await restartWith(publishFirst)
     const id = await heldBehindStart('hello')
-    await host.handleAdapterEvent({ ...startedEvent(), reportedOptions: { model: 'reported' } })
+    await host.handleAdapterEvent({
+      ...startedEvent(),
+      reportedOptions: { model: 'reported', effort: 'high' }
+    })
     await eventually(async () => expect((await submission(id))?.dispatchState).toBe('accepted'))
     await host.handleAdapterEvent({
       ...startedEvent(),
       type: 'options-reported',
-      reportedOptions: { model: 'from-settings' }
+      reportedOptions: { model: 'from-settings', effort: 'low' }
     })
     await host.flushStreamedEvents(SESSION)
     expect(store.getRecord(SESSION)?.options).toBeUndefined()
@@ -448,12 +451,15 @@ describe('what a started child reports', () => {
       options: { model: 'picked' },
       now: NOW
     })
-    await host.handleAdapterEvent({ ...startedEvent(), reportedOptions: { model: 'reported' } })
+    await host.handleAdapterEvent({
+      ...startedEvent(),
+      reportedOptions: { model: 'reported', effort: 'high' }
+    })
     await eventually(async () => expect((await submission(id))?.dispatchState).toBe('accepted'))
     await host.handleAdapterEvent({
       ...startedEvent(),
       type: 'options-reported',
-      reportedOptions: { model: 'from-settings' }
+      reportedOptions: { model: 'from-settings', effort: 'low' }
     })
     await host.flushStreamedEvents(SESSION)
     expect(store.getRecord(SESSION)?.options).toEqual({ model: 'picked' })

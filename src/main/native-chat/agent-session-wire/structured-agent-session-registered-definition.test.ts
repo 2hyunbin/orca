@@ -4,6 +4,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
+import type { AgentSessionModelCatalogResult } from '../../../shared/agent-session-wire'
 import { agentSessionRecordFixture } from '../../../shared/agent-session-record.test-fixture'
 import { claudeProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
 import { CLAUDE_STRUCTURED_AGENT } from '../../claude/claude-structured-agent-definition'
@@ -71,7 +72,11 @@ function pick(agents: StructuredAgentRegistry, record: AgentSessionRecord | null
 }
 
 /** At rest, or from a running child that answers `live`. */
-function readAtRest(agents: StructuredAgentRegistry, live?: StructuredAgentSessionLiveOptions) {
+function readAtRest(
+  agents: StructuredAgentRegistry,
+  live?: StructuredAgentSessionLiveOptions,
+  catalog?: AgentSessionModelCatalogResult
+) {
   const resting = {
     child: live ? { fence: 1 } : null,
     params: { provider: RECORD.provider },
@@ -84,6 +89,7 @@ function readAtRest(agents: StructuredAgentRegistry, live?: StructuredAgentSessi
         ? { readOptions: async () => live }
         : new StructuredAgentSessionAdapterRouter(agents, async () => {}),
       agents,
+      modelCatalog: { read: async () => catalog ?? { origin: 'unknown' } },
       store: { getRecord: () => RECORD }
     },
     serialize: (_sessionId: string, task: () => Promise<unknown>) => task(),
@@ -123,7 +129,11 @@ describe('a registered definition', () => {
     const refused = pick(agents, RECORD, 'model')
     await expect(refused.result).resolves.toMatchObject({ ok: false })
 
-    const options = await readAtRest(agents)
+    const options = await readAtRest(agents, undefined, {
+      origin: 'probe',
+      models: NON_DEFAULT.restingOptions.fallbackModels() ?? [],
+      fetchedAt: 1_000
+    })
     expect(options.models.map((model) => model.id)).toEqual(['pilot-model'])
     // No pick for effort: the registered rules read the model's default.
     expect(options.current).toEqual({
@@ -151,7 +161,7 @@ describe('a registered definition', () => {
     })
     expect(refused.persistOptions).not.toHaveBeenCalled()
     const options = await readAtRest(agents)
-    expect(options.models).toEqual([])
+    expect(options.models.map((model) => model.id)).toEqual(['pilot-model'])
     expect(options.current).toEqual({ model: 'pilot-model' })
     expect(options.conversationCommands).toEqual(['clear'])
     expect(options.acceptsImages).toBe(false)

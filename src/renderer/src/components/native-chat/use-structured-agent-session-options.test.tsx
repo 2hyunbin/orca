@@ -34,26 +34,33 @@ const LOCAL_TARGET = { kind: 'local' } as const
 const PAIRED_TARGET = { kind: 'environment', environmentId: 'server-1' } as const
 
 class FakeRpcCallError extends Error {
-  constructor(readonly code: string) {
-    super(code)
+  constructor(
+    readonly code: string,
+    message = code
+  ) {
+    super(message)
   }
 }
 
 type Answers = {
   options?: () => Promise<unknown>
-  modelCatalog?: () => Promise<unknown>
+  modelCatalog?: (params: { sessionId?: string; worktree?: string }) => Promise<unknown>
 }
 
 function answer(answers: Answers): void {
-  mocks.call.mockImplementation((_target: unknown, method: string) => {
-    if (method === 'agentSession.options' && answers.options) {
-      return answers.options()
+  mocks.call.mockImplementation(
+    (_target: unknown, method: string, params: { sessionId?: string }) => {
+      if (method === 'agentSession.options' && answers.options) {
+        return answers.options()
+      }
+      if (method === 'agentSession.modelCatalog' && answers.modelCatalog) {
+        return answers.modelCatalog(params)
+      }
+      return method === 'agentSession.modelCatalog'
+        ? Promise.resolve({ origin: 'unknown' })
+        : new Promise(() => {})
     }
-    if (method === 'agentSession.modelCatalog' && answers.modelCatalog) {
-      return answers.modelCatalog()
-    }
-    return new Promise(() => {})
-  })
+  )
 }
 
 type MutateCall = (...args: unknown[]) => Promise<unknown>
@@ -250,46 +257,50 @@ describe('useStructuredAgentSessionOptions', () => {
     unmount()
   })
 
-  it('treats method_not_found and forbidden as no list: the built-in one, naming nothing', async () => {
-    for (const code of ['method_not_found', 'forbidden']) {
-      answer({ modelCatalog: () => Promise.reject(new FakeRpcCallError(code)) })
-      const { result, unmount } = renderOptions(
-        { ...PROVISIONAL, launchSeedOptions: SEED },
-        mutateWith(async () => null).mutate
-      )
-      await waitFor(() =>
-        expect(descriptor(result.current.optionSnapshot, 'model')?.settable).toBe(true)
-      )
-      expect(modelChoiceCount(result.current.optionSnapshot)).toBeGreaterThan(0)
-      // The built-in label could differ from the host's, so the saved pick is not painted from it.
-      expect(currentValue(result.current.optionSnapshot, 'model')).toBeNull()
-      unmount()
-    }
+  it.each([
+    ['method_not_found', 'method_not_found', true],
+    ['forbidden', "Method 'agentSession.modelCatalog' is not available to mobile clients", true],
+    ['forbidden', 'Access denied', false]
+  ])('settles only an unsupported catalog surface: %s / %s', async (code, message, fallback) => {
+    answer({ modelCatalog: () => Promise.reject(new FakeRpcCallError(code, message)) })
+    const { result, unmount } = renderOptions(
+      { ...PROVISIONAL, launchSeedOptions: SEED },
+      mutateWith(async () => null).mutate
+    )
+    await tick()
+    expect(currentValue(result.current.optionSnapshot, 'model')).toBe('gpt-5.5')
+    const model = descriptor(result.current.optionSnapshot, 'model')
+    expect(model?.settable).toBe(true)
+    expect(
+      model?.kind.type === 'select' &&
+        model.kind.choices.some((choice) => choice.value === 'gpt-5.6-luna')
+    ).toBe(fallback)
+    unmount()
   })
 
-  it('lets the live options result win over a later host catalog answer', async () => {
+  it('refreshes Codex inventory independently of its actual current model', async () => {
     let settleCatalog!: (value: unknown) => void
+    const catalog = new Promise((resolve) => (settleCatalog = resolve))
     answer({
       options: () => Promise.resolve(LIVE_OPTIONS),
-      modelCatalog: () => new Promise((resolve) => (settleCatalog = resolve))
+      modelCatalog: () => catalog
     })
     const { result, unmount } = renderOptions(ATTACHED, mutateWith(async () => null).mutate)
     await waitFor(() =>
       expect(currentValue(result.current.optionSnapshot, 'model')).toBe('gpt-5.5')
     )
-    settleCatalog(HOST_CATALOG)
-    await tick()
+    await act(async () => settleCatalog(HOST_CATALOG))
     const model = descriptor(result.current.optionSnapshot, 'model')
     expect(model?.kind.type === 'select' ? model.kind.currentValue : null).toBe('gpt-5.5')
     expect(
       model?.kind.type === 'select' &&
         model.kind.choices.some((choice) => choice.value === 'gpt-hosted')
-    ).toBe(false)
+    ).toBe(true)
     unmount()
   })
 
   describe('while the launch is provisional', () => {
-    it('renders the launch seed and hands a pick to the launch without any RPC', async () => {
+    it('renders the launch seed and holds a pick without another RPC', async () => {
       answer({ modelCatalog: () => Promise.resolve(SAVED_LIST) })
       mocks.hold.mockReturnValue(new Promise(() => {}))
       const { mutate, calls } = mutateWith(async () => null)
@@ -297,10 +308,11 @@ describe('useStructuredAgentSessionOptions', () => {
         { ...PROVISIONAL, launchSeedOptions: SEED },
         mutate
       )
-      await waitFor(() =>
-        expect(currentValue(result.current.optionSnapshot, 'model')).toBe('gpt-5.5')
-      )
+      await act(async () => {})
+      expect(currentValue(result.current.optionSnapshot, 'model')).toBe('gpt-5.5')
       expect(modelChoiceCount(result.current.optionSnapshot)).toBeGreaterThan(0)
+
+      const initialReads = mocks.call.mock.calls.slice()
 
       let accepted = false
       await act(async () => {
@@ -313,8 +325,14 @@ describe('useStructuredAgentSessionOptions', () => {
       expect(currentValue(result.current.optionSnapshot, 'model')).toBe('gpt-5.6-luna')
       expect(descriptor(result.current.optionSnapshot, 'model')?.valueSource).toBe('dispatched')
       expect(calls).not.toHaveBeenCalled()
+      expect(mocks.call.mock.calls).toEqual(initialReads)
       expect(mocks.call.mock.calls.map(([, method]) => method)).toEqual([
+        'agentSession.modelCatalog',
         'agentSession.modelCatalog'
+      ])
+      expect(mocks.call.mock.calls.map(([, , params]) => params)).toEqual([
+        { agent: 'codex' },
+        { agent: 'codex', sessionId: 'session-1' }
       ])
       expect(mocks.enqueue).not.toHaveBeenCalled()
       unmount()
@@ -401,11 +419,13 @@ describe('useStructuredAgentSessionOptions', () => {
     })
 
     it('keeps the host catalog default through attach instead of blanking it', async () => {
-      // Only the first catalog read answers; the re-read at the new fence never does.
-      let catalogReads = 0
+      // The pure read stays separate; only the pane's first read answers.
+      let paneReads = 0
       answer({
-        modelCatalog: () =>
-          ++catalogReads === 1 ? Promise.resolve(HOST_CATALOG) : new Promise(() => {})
+        modelCatalog: (params) =>
+          !params.sessionId || ++paneReads === 1
+            ? Promise.resolve(HOST_CATALOG)
+            : new Promise(() => {})
       })
       const { result, rerender, unmount } = renderOptions(
         PROVISIONAL,
@@ -415,7 +435,7 @@ describe('useStructuredAgentSessionOptions', () => {
         expect(currentValue(result.current.optionSnapshot, 'model')).toBe('gpt-hosted')
       )
       rerender(ATTACHED)
-      expect(catalogReads).toBe(2)
+      expect(paneReads).toBe(2)
       expect(currentValue(result.current.optionSnapshot, 'model')).toBe('gpt-hosted')
       unmount()
     })

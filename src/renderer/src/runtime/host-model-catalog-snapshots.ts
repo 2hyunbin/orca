@@ -94,6 +94,24 @@ export function recordHostModelCatalogSnapshot(
   )
 }
 
+/** A qualified read keeps the account generation under which it began. */
+export function captureHostModelCatalogSnapshot(
+  target: RuntimeClientTarget,
+  agent: string,
+  worktree: string | null
+) {
+  const hostKey = structuredAgentSessionHostKey(target)
+  const generation = generations.get(hostKey) ?? 0
+  return {
+    waitKey: JSON.stringify([hostKey, agent, worktree, generation]),
+    record: (catalog: AgentSessionModelCatalogResult): void => {
+      if ((generations.get(hostKey) ?? 0) === generation) {
+        recordHostModelCatalogSnapshot(target, agent, worktree, catalog)
+      }
+    }
+  }
+}
+
 /** Drops a host's answers, for every agent or only `agents`: the account they were for may not be
  *  the one a new chat pins now. */
 export function forgetHostModelCatalogSnapshots(
@@ -126,22 +144,17 @@ export async function preloadHostModelCatalogSnapshots(
   agents: readonly string[],
   options: { savedOnly?: true } = {}
 ): Promise<void> {
-  const hostKey = structuredAgentSessionHostKey(target)
-  const generation = generations.get(hostKey) ?? 0
   await Promise.all(
-    agents.map((agent) =>
-      callStructuredAgentSession<AgentSessionModelCatalogResult>(
+    agents.map((agent) => {
+      const snapshot = captureHostModelCatalogSnapshot(target, agent, null)
+      return callStructuredAgentSession<AgentSessionModelCatalogResult>(
         target,
         'agentSession.modelCatalog',
         { agent, ...options }
       )
-        .then((catalog) => {
-          if ((generations.get(hostKey) ?? 0) === generation) {
-            recordHostModelCatalogSnapshot(target, agent, null, catalog)
-          }
-        })
+        .then(snapshot.record)
         .catch(() => undefined)
-    )
+    })
   )
 }
 

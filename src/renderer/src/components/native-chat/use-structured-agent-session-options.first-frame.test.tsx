@@ -122,11 +122,16 @@ function renderNewChat(args: {
 function catalogAnswers(...answers: (() => Promise<unknown>)[]): void {
   let reads = 0
   mocks.call.mockImplementation(
-    (_target: unknown, method: string, params: { sessionId?: string }) => {
+    (
+      _target: unknown,
+      method: string,
+      params: { sessionId?: string; waitForListing?: boolean }
+    ) => {
       if (method !== 'agentSession.modelCatalog') {
         return new Promise(() => {})
       }
-      const answer = answers[params.sessionId ? Math.min(reads++, answers.length - 1) : 0]
+      const index = params.sessionId ? reads++ : params.waitForListing ? 1 : 0
+      const answer = answers[Math.min(index, answers.length - 1)]
       return answer ? answer() : new Promise(() => {})
     }
   )
@@ -179,14 +184,18 @@ describe('a new chat picker’s first frame', () => {
     unmount()
   })
 
-  it('grok: a later chat reads its own scoped default instead of sharing a session answer', async () => {
+  it('grok: the default the host names for a workspace is named on that workspace’s next chat', async () => {
     catalogAnswers(() => Promise.resolve(GROK_LIST))
     const first = renderNewChat({ agent: 'grok' })
     await waitFor(() => expect(first.frames.at(-1)?.label).toBe('Grok Build'))
     first.unmount()
     const next = renderNewChat({ agent: 'grok', sessionId: 'session-2' })
-    expect(next.frames[0]).toEqual(PLACEHOLDER)
-    await waitFor(() => expect(next.frames.at(-1)?.label).toBe('Grok Build'))
+    expect(next.frames[0]).toEqual({
+      model: 'grok-build',
+      label: 'Grok Build',
+      effort: 'high',
+      usable: true
+    })
     next.unmount()
   })
 
