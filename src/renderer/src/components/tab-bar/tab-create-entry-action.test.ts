@@ -27,6 +27,7 @@ describe('openTabEntryWithOperations', () => {
     return {
       createRuntimePath: vi.fn().mockResolvedValue(undefined),
       openWorkspaceBrowserTab: vi.fn().mockResolvedValue(undefined),
+      openHtmlFilePreview: vi.fn(),
       openFile: vi.fn(),
       statRuntimePath: vi.fn().mockResolvedValue({ size: 1, isDirectory: false, mtime: 1 }),
       statUserOpenedPath: vi.fn().mockResolvedValue({ isDirectory: false, escapesWorktree: false }),
@@ -49,6 +50,27 @@ describe('openTabEntryWithOperations', () => {
     localPlatform: 'posix' as const,
     searchEngine: 'google' as const
   }
+
+  it.each([true, false])(
+    'previews HTML file URLs without creating files (local paths: %s)',
+    async (allowAbsolutePaths) => {
+      const operations = makeOperations()
+      await openTabEntryWithOperations({
+        ...baseArgs,
+        allowAbsolutePaths,
+        query: 'file:///repo/docs/report%20%E4%B8%AD.html',
+        operations
+      })
+      expect(operations.openHtmlFilePreview).toHaveBeenCalledWith({
+        filePath: '/repo/docs/report 中.html',
+        worktreeId: 'wt-1',
+        targetGroupId: 'group-1'
+      })
+      expect(operations.createRuntimePath).not.toHaveBeenCalled()
+      expect(operations.statUserOpenedPath).not.toHaveBeenCalled()
+      expect(operations.openWorkspaceBrowserTab).not.toHaveBeenCalled()
+    }
+  )
 
   it('stats existing files before opening and rejects directories', async () => {
     const operations = makeOperations({

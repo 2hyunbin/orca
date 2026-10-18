@@ -48,6 +48,7 @@ export {
   isTabEntryAbsolutePathAllowed
 } from './tab-create-entry-local-path'
 import { statUserOpenedPath } from '@/lib/user-opened-local-path'
+import { openHtmlFilePreview } from '@/lib/open-html-file-preview'
 
 export type TabCreateEntryArgs = {
   classification?: TabEntryActionClassification
@@ -60,6 +61,7 @@ export type TabCreateEntryArgs = {
 export type TabEntryOperations = {
   createRuntimePath: typeof createRuntimePath
   openWorkspaceBrowserTab: typeof openWorkspaceBrowserTab
+  openHtmlFilePreview: typeof openHtmlFilePreview
   openFile: (
     file: Omit<OpenFile, 'id' | 'isDirty'>,
     options?: { preview?: boolean; targetGroupId?: string }
@@ -198,6 +200,15 @@ export async function openTabEntryWithOperations({
     throw new Error(classification.message)
   }
 
+  if (classification.kind === 'html-file-url') {
+    operations.openHtmlFilePreview({
+      filePath: classification.filePath,
+      worktreeId,
+      targetGroupId: groupId
+    })
+    return
+  }
+
   if (isNetworkTabEntry(classification)) {
     await operations.openWorkspaceBrowserTab(
       getNetworkTabRequest(classification, { worktreeId, groupId }, searchUrlOptions)
@@ -258,13 +269,20 @@ export async function openTabEntryWithOperations({
 }
 
 export async function openTabBarEntry(args: TabCreateEntryArgs): Promise<void> {
+  if (args.classification?.kind === 'html-file-url') {
+    openHtmlFilePreview({
+      filePath: args.classification.filePath,
+      worktreeId: args.worktreeId,
+      targetGroupId: args.groupId
+    })
+    return
+  }
   const state = useAppStore.getState()
   const searchUrlOptions = { kagiSessionLink: state.browserKagiSessionLink }
   if (args.classification && isNetworkTabEntry(args.classification)) {
     await openWorkspaceBrowserTab(getNetworkTabRequest(args.classification, args, searchUrlOptions))
     return
   }
-  const searchEngine = state.browserDefaultSearchEngine ?? DEFAULT_SEARCH_ENGINE
   const worktree = state.getKnownWorktreeById(args.worktreeId)
   if (!worktree) {
     throw new Error('No active worktree.')
@@ -281,12 +299,13 @@ export async function openTabBarEntry(args: TabCreateEntryArgs): Promise<void> {
     runtimeContext,
     allowAbsolutePaths,
     localPlatform,
-    searchEngine,
+    searchEngine: state.browserDefaultSearchEngine ?? DEFAULT_SEARCH_ENGINE,
     searchUrlOptions,
     classification: args.classification,
     operations: {
       createRuntimePath,
       openWorkspaceBrowserTab,
+      openHtmlFilePreview,
       openFile: state.openFile,
       statRuntimePath,
       statUserOpenedPath,

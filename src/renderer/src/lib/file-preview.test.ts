@@ -109,7 +109,49 @@ function docPreviewCall(filePath: string, extra: Record<string, unknown> = {}): 
   ]
 }
 
+function mockOpenDocument(filePath: string): void {
+  const docLocation = { kind: 'workspace-doc' as const, worktreeId: 'wt-1', filePath }
+  mocks.browserTabsByWorktree = { 'wt-1': [{ id: 'browser-9', docLocation }] }
+  mocks.browserPagesByWorkspace = {
+    'browser-9': [{ id: 'page-doc', worktreeId: 'wt-1', docLocation }]
+  }
+}
+
 describe('openFileInBrowserTab', () => {
+  it('reuses a document on an inactive page instead of creating a duplicate preview', () => {
+    mocks.connectionId = 'ssh-1'
+    mocks.browserTabsByWorktree = { 'wt-1': [{ id: 'browser-9', docLocation: null }] }
+    mocks.browserPagesByWorkspace = {
+      'browser-9': [
+        { id: 'page-web', worktreeId: 'wt-1' },
+        {
+          id: 'page-doc',
+          worktreeId: 'wt-1',
+          docLocation: {
+            kind: 'workspace-doc',
+            worktreeId: 'wt-1',
+            filePath: '/home/alice/report.html'
+          }
+        }
+      ]
+    }
+
+    openFileInBrowserTab({ filePath: '/home/alice/report.html', worktreeId: 'wt-1' })
+
+    expect(mocks.setActiveBrowserPage).toHaveBeenCalledWith('browser-9', 'page-doc')
+    expect(mocks.createBrowserTab).not.toHaveBeenCalled()
+  })
+  it('keeps a remote document preview in the requested group', () => {
+    mocks.environmentId = 'env-1'
+    openFileInBrowserTab({
+      filePath: '/srv/repo/docs/report.html',
+      worktreeId: 'wt-1',
+      targetGroupId: 'group-2'
+    })
+    expect(mocks.createBrowserTab).toHaveBeenCalledWith(
+      ...docPreviewCall('/srv/repo/docs/report.html', { activate: true, targetGroupId: 'group-2' })
+    )
+  })
   it('opens a local file URL in the Orca browser with the filename as title', () => {
     openFileInBrowserTab({
       filePath: '/tmp/example file.html',
@@ -141,18 +183,7 @@ describe('openFileInBrowserTab', () => {
   // same file, and the reader asked to look at the document, not to open a second copy.
   it('activates the tab a document is already open in', () => {
     mocks.connectionId = 'ssh-1'
-    mocks.browserTabsByWorktree = {
-      'wt-1': [
-        {
-          id: 'browser-9',
-          docLocation: {
-            kind: 'workspace-doc',
-            worktreeId: 'wt-1',
-            filePath: '/home/alice/report.html'
-          }
-        }
-      ]
-    }
+    mockOpenDocument('/home/alice/report.html')
 
     openFileInBrowserTab({ filePath: '/home/alice/report.html', worktreeId: 'wt-1' })
 
@@ -165,18 +196,7 @@ describe('openFileInBrowserTab', () => {
   // with the preview "active" behind it.
   it('brings an already-open document to the front of its group', () => {
     mocks.connectionId = 'ssh-1'
-    mocks.browserTabsByWorktree = {
-      'wt-1': [
-        {
-          id: 'browser-9',
-          docLocation: {
-            kind: 'workspace-doc',
-            worktreeId: 'wt-1',
-            filePath: '/home/alice/report.html'
-          }
-        }
-      ]
-    }
+    mockOpenDocument('/home/alice/report.html')
     mocks.unifiedTabsByWorktree = {
       'wt-1': [
         {
@@ -208,18 +228,7 @@ describe('openFileInBrowserTab', () => {
   // reusing one must not move the reader off what they are working in.
   it('leaves the reader in place when a side preview reuses an open document', () => {
     mocks.connectionId = 'ssh-1'
-    mocks.browserTabsByWorktree = {
-      'wt-1': [
-        {
-          id: 'browser-9',
-          docLocation: {
-            kind: 'workspace-doc',
-            worktreeId: 'wt-1',
-            filePath: '/home/alice/report.html'
-          }
-        }
-      ]
-    }
+    mockOpenDocument('/home/alice/report.html')
     mocks.unifiedTabsByWorktree = {
       'wt-1': [{ id: 'tab-doc', contentType: 'browser', entityId: 'browser-9', groupId: 'group-1' }]
     }
@@ -238,18 +247,7 @@ describe('openFileInBrowserTab', () => {
   // Why: the split is part of the tab create, so reusing an open document must leave no empty group.
   it('creates no split when a side preview reuses an open document', () => {
     mocks.connectionId = 'ssh-1'
-    mocks.browserTabsByWorktree = {
-      'wt-1': [
-        {
-          id: 'browser-9',
-          docLocation: {
-            kind: 'workspace-doc',
-            worktreeId: 'wt-1',
-            filePath: '/home/alice/report.html'
-          }
-        }
-      ]
-    }
+    mockOpenDocument('/home/alice/report.html')
 
     openFilePreviewToSide({
       language: 'html',
@@ -265,14 +263,7 @@ describe('openFileInBrowserTab', () => {
 
   it('opens a second document in its own tab', () => {
     mocks.connectionId = 'ssh-1'
-    mocks.browserTabsByWorktree = {
-      'wt-1': [
-        {
-          id: 'browser-9',
-          docLocation: { kind: 'workspace-doc', worktreeId: 'wt-1', filePath: '/home/alice/a.html' }
-        }
-      ]
-    }
+    mockOpenDocument('/home/alice/a.html')
 
     openFileInBrowserTab({ filePath: '/home/alice/b.html', worktreeId: 'wt-1' })
 
