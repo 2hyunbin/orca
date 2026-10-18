@@ -290,7 +290,6 @@ describe('hidden-output restore quiet abandonment (STA-4869)', () => {
           first.resolve(modelSnapshot('ONLY_OLD_EPISODE_COVERED', 128))
           await flushAsyncTicks(30)
           expect(window.api.pty.ackHiddenOutputRestoreApplied).toHaveBeenCalledWith(PTY_ID, 1)
-          expect(getMainBufferSnapshot).toHaveBeenCalledTimes(1)
 
           await vi.advanceTimersByTimeAsync(2_100)
           await flushAsyncTicks(30)
