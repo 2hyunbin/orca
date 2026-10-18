@@ -239,6 +239,10 @@ export function useRemoteBrowserPageStream({
           lastFrameDeviceSizeRef.current = deviceSize
           if (previousDeviceSize !== null && previousDeviceSize !== deviceSize) {
             remoteCssViewportSizeRef.current = null
+            const pageId = lifecycle.tokens.remotePage
+            if (pageId) {
+              void syncRemoteViewport(pageId).catch(() => {})
+            }
           }
           setFrameMetadata(frame.metadata)
           setFrameUrl(nextUrl)
@@ -256,6 +260,7 @@ export function useRemoteBrowserPageStream({
       pendingFrameDecodeRef,
       remoteCssViewportSizeRef,
       setFrameMetadata,
+      syncRemoteViewport,
       setFrameUrl,
       setPaneBusy,
       streamFrameUrlRef

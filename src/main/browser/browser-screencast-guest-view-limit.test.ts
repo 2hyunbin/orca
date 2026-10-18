@@ -190,6 +190,31 @@ describe('screencast of a guest smaller than the requested viewport (#30341)', (
     await session.done
   })
 
+  it('resumes live frames once the fitted size is emulated, before its snapshot returns', async () => {
+    const guest = createGuest('webview')
+    let screenshots = 0
+    guest.debugger.sendCommand.mockImplementation(async (method: string) => {
+      if (method === 'Page.captureScreenshot') {
+        screenshots += 1
+        if (screenshots > 1) {
+          await new Promise<void>(() => {})
+        }
+      }
+      return {}
+    })
+    const onFrame = vi.fn()
+    const session = await startOversizedStream(guest, onFrame)
+    await vi.waitFor(() => expect(screenshots).toBe(1))
+
+    emitGuestFrame(guest, 1, { width: 1463, height: 849 })
+    await vi.waitFor(() => expect(screenshots).toBe(2))
+    expect(emulatedSizes(guest)).toEqual(['1833x1179', '1463x849'])
+    emitGuestFrame(guest, 2, { width: 1463, height: 849 })
+    await vi.waitFor(() => expect(onFrame).toHaveBeenCalledTimes(1))
+
+    session.stop()
+  })
+
   it('keeps the full request for a window guest, which can grow to it', async () => {
     const guest = createGuest('window')
     const session = await startOversizedStream(guest)
