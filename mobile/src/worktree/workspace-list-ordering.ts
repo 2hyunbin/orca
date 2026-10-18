@@ -17,15 +17,21 @@ function getManualSortRank(worktree: Worktree): number | null {
   return typeof rank === 'number' && Number.isFinite(rank) ? rank : null
 }
 
+export function hostSortsByStamps(worktrees: readonly Worktree[]): boolean {
+  return worktrees.some((worktree) => worktree.sortedByStamps)
+}
+
 const AGENT_ATTENTION_STATUS_ORDER = { permission: 0, working: 1, done: 2, active: 3, inactive: 4 }
 
 export function sortWorktrees(
   worktrees: Worktree[],
   mode: WorkspaceSortBy,
-  now = Date.now()
+  now = Date.now(),
+  // Read from the unfiltered list, so a filter never switches the algorithm.
+  byStamps = hostSortsByStamps(worktrees)
 ): Worktree[] {
   // A stamping host decides the order; rows from an older one rest by Recent among them.
-  if (worktrees.some((worktree) => worktree.sortedByStamps)) {
+  if (byStamps) {
     return [...worktrees].sort(
       buildWorkspaceRowComparator<Worktree>(mode, {
         label: (w) => w.displayName,

@@ -6,7 +6,7 @@ import {
 import type { ResolvedWorktreeSnapshot } from '../runtime-resolved-worktree-cache'
 import type { RuntimeStore } from '../runtime-store-contract'
 import { runtimeVisibleFolderWorkspaces } from '../runtime-visible-catalog'
-import { writeMayTouchWorkspaceMetadata } from '../../persistence/loading-store/worktree-identity-metadata'
+import { WORKTREE_METADATA_DOMAINS } from '../../persistence/loading-store/worktree-identity-metadata'
 import { ProducerRevision } from './producer-revision'
 
 export type WorkspaceRowsSources = {
@@ -35,8 +35,12 @@ export class WorkspaceRowsProducer {
       },
       { consumesTerminalSideEffects: false }
     )
+    // A full save may be a folder workspace or lineage write.
     sources.store?.onStateWritten?.((domains) => {
-      if (writeMayTouchWorkspaceMetadata(domains)) {
+      if (
+        domains === undefined ||
+        WORKTREE_METADATA_DOMAINS.some((domain) => domains.includes(domain))
+      ) {
         this.revision.bump()
       }
     })

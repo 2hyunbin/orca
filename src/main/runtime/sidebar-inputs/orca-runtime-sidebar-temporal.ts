@@ -21,7 +21,7 @@ import { SmartSortAgentEntries } from './smart-sort-agent-entries'
 import { buildRuntimeSmartSortSources } from './runtime-smart-sort-sources'
 import type { AgentStatusStoreView } from './workspace-activity-facts-producer'
 import { SortStampsProducer } from './sort-stamps-producer'
-import { writeMayTouchWorkspaceMetadata } from '../../persistence/loading-store/worktree-identity-metadata'
+import { WORKTREE_METADATA_DOMAINS } from '../../persistence/loading-store/worktree-identity-metadata'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 import { resolveAgentWorkspaceExecutionHostId } from '../../agent-hooks/restored-status-dead-terminal-sweep'
@@ -61,9 +61,13 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     super(...args)
     this.workspaceActivityFacts.revision.onChange(() => this.sidebarTemporal.noteActivityChange())
     this.store?.onUIChanged?.(() => this.sidebarTemporal.noteViewChange())
-    // Switch point: window-side stamp writes save metadata with no catalog event.
+    // Switch point: the window's metadata writes (a rename, a manual order) send no catalog event.
     this.store?.onStateWritten?.((domains) => {
-      if (ORCA_SIDEBAR_INPUTS_IS_MAIN && writeMayTouchWorkspaceMetadata(domains)) {
+      if (
+        ORCA_SIDEBAR_INPUTS_IS_MAIN &&
+        domains &&
+        WORKTREE_METADATA_DOMAINS.some((domain) => domains.includes(domain))
+      ) {
         this.invalidateResolvedWorktreeCache()
         this.sidebarTemporal.noteRowsWritten()
       }

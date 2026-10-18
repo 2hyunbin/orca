@@ -167,7 +167,7 @@ export class SidebarTemporalOwner {
     }
   }
 
-  /** Switch on: saved metadata may carry stamps no catalog event announced. */
+  /** Switch on: a saved metadata write no catalog event announced. */
   noteRowsWritten(): void {
     this.settleNow()
   }

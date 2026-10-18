@@ -45,7 +45,7 @@ describe('useOrderHeldWhileEngaged', () => {
     expect(result.current).toEqual(['b', 'a', 'new'])
   })
 
-  it('holds through a drag that leaves the list, and a mode switch applies at once', () => {
+  it('holds through a press that leaves the list, and a mode switch applies at once', () => {
     const { row } = mountList()
     const outside = document.createElement('div')
     document.body.append(outside)
@@ -61,6 +61,33 @@ describe('useOrderHeldWhileEngaged', () => {
     expect(result.current).toEqual(['b', 'a'])
 
     fire(row, 'pointerover')
+    rerender({ ids: ['a', 'b'], sortBy: 'name' })
+    expect(result.current).toEqual(['a', 'b'])
+  })
+
+  it('holds through a drag in Smart and applies the order when the drag ends over the list', () => {
+    const { row } = mountList()
+    const { result, rerender } = renderHook(
+      ({ ids, sortBy }: { ids: string[]; sortBy: SortBy }) => useOrderHeldWhileEngaged(ids, sortBy),
+      { initialProps: { ids: ['a', 'b'], sortBy: 'smart' } }
+    )
+    fire(row, 'pointerover')
+    fire(row, 'dragstart')
+    rerender({ ids: ['b', 'a'], sortBy: 'smart' })
+    expect(result.current).toEqual(['a', 'b'])
+    fire(row, 'dragend')
+    expect(result.current).toEqual(['b', 'a'])
+  })
+
+  it('never holds Manual or Name: your own drop or rename shows at once', () => {
+    const { row } = mountList()
+    const { result, rerender } = renderHook(
+      ({ ids, sortBy }: { ids: string[]; sortBy: SortBy }) => useOrderHeldWhileEngaged(ids, sortBy),
+      { initialProps: { ids: ['a', 'b'], sortBy: 'manual' } }
+    )
+    fire(row, 'pointerover')
+    rerender({ ids: ['b', 'a'], sortBy: 'manual' })
+    expect(result.current).toEqual(['b', 'a'])
     rerender({ ids: ['a', 'b'], sortBy: 'name' })
     expect(result.current).toEqual(['a', 'b'])
   })

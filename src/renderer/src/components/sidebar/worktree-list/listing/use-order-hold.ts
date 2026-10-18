@@ -42,8 +42,9 @@ const DOCUMENT_HANDLERS: [string, (event: Event) => void][] = [
   ['pointerup', () => update({ pressed: false })],
   ['pointercancel', () => update({ pressed: false })],
   ['dragstart', (event) => update({ drag: inList(event.target) })],
-  ['dragend', () => update({ drag: false })],
-  ['drop', () => update({ drag: false })]
+  // Pointer events pause during a drag, so its end also ends the hover hold.
+  ['dragend', () => update({ drag: false, inside: false })],
+  ['drop', () => update({ drag: false, inside: false })]
 ]
 
 function subscribe(listener: () => void): () => void {
@@ -59,6 +60,7 @@ function subscribe(listener: () => void): () => void {
       for (const [type, handler] of DOCUMENT_HANDLERS) {
         document.removeEventListener(type, handler, true)
       }
+      pointerInside = pressedInside = dragging = false
     }
   }
 }
@@ -67,8 +69,8 @@ const noSubscription = (): (() => void) => () => {}
 const notEngaged = (): boolean => false
 
 /**
- * Desktop only, display only: rows stay put under the pointer and during a drag, so a click never
- * lands on a row that just moved; the new order applies when the pointer leaves or the drag ends.
+ * Desktop only, display only: in Recent and Smart, rows stay put under the pointer and during a
+ * drag, so a click never lands on a row that just moved; the new order applies on leave or drag end.
  */
 export function useOrderHeldWhileEngaged(ids: string[], sortBy: SortBy): string[] {
   // Switch point: the stamp-sorted list moves on events, so it holds; today's list settles itself.
@@ -78,9 +80,10 @@ export function useOrderHeldWhileEngaged(ids: string[], sortBy: SortBy): string[
     notEngaged
   )
   const [shown, setShown] = useState({ ids, sortBy })
-  // A mode switch applies at once, like adds and removals.
+  // Only Recent and Smart move on their own; a mode switch applies at once, like adds and removals.
+  const holds = engaged && (sortBy === 'recent' || sortBy === 'smart')
   const next =
-    engaged && shown.sortBy === sortBy
+    holds && shown.sortBy === sortBy
       ? { ids: mergeHeldOrder(shown.ids, ids), sortBy }
       : { ids, sortBy }
   const changed = next.ids !== shown.ids || next.sortBy !== shown.sortBy

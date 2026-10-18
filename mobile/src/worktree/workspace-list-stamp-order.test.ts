@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { sortWorktrees, type Worktree } from './workspace-list-sections'
+import { hostSortsByStamps } from './workspace-list-ordering'
 
 function worktree(overrides: Partial<Worktree> = {}): Worktree {
   const worktreePath = join('/tmp', 'orca', 'worktrees', 'feature')
@@ -63,6 +64,26 @@ describe('sortWorktrees with host stamps', () => {
       'rest',
       'done',
       'needs-you'
+    ])
+  })
+
+  it('keeps the host’s order when a filter leaves only an older server’s rows', () => {
+    const stamped = worktree({ worktreeId: 'stamped', lastActivityAt: 1, sortedByStamps: true })
+    const quiet = worktree({ worktreeId: 'quiet', displayName: 'A', lastActivityAt: 10 })
+    const busy = worktree({
+      worktreeId: 'busy',
+      displayName: 'B',
+      lastActivityAt: 5,
+      lastOutputAt: 99
+    })
+    const all = [stamped, quiet, busy]
+    const order = (rows: Worktree[]) =>
+      sortWorktrees(rows, 'recent', 0, hostSortsByStamps(all)).map((item) => item.worktreeId)
+    expect(order([quiet, busy])).toEqual(['quiet', 'busy'])
+    // Without the host's answer the old algorithm reads output recency.
+    expect(sortWorktrees([quiet, busy], 'recent', 0).map((item) => item.worktreeId)).toEqual([
+      'busy',
+      'quiet'
     ])
   })
 })

@@ -27,11 +27,6 @@ export const WORKTREE_METADATA_DOMAINS = [
   'worktreeIdentityAliases'
 ] as const
 
-/** A save that may have touched workspace metadata; a full save may be a folder or lineage write. */
-export function writeMayTouchWorkspaceMetadata(domains: readonly string[] | undefined): boolean {
-  return domains === undefined || WORKTREE_METADATA_DOMAINS.some((d) => domains.includes(d))
-}
-
 /** Select one readable row without discarding competing alias candidates. */
 function resolveAliasIdentityKey(state: WorktreeMetaState, alias: string): string | undefined {
   const identityKeys = state.worktreeIdentityAliases?.[alias] ?? []

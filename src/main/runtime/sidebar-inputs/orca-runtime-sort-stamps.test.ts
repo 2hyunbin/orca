@@ -60,6 +60,21 @@ describe('host sort stamps on a headless runtime', () => {
     }
   })
 
+  it('announces a stamp write as a metadata change of the row’s repo', () => {
+    vi.useFakeTimers({ now: 55_000 })
+    try {
+      const { runtime } = createHeadlessRuntime()
+      const events: unknown[] = []
+      runtime.onClientEvent((event) => events.push(event), { consumesTerminalSideEffects: false })
+      runtime.onPtyData('pty-1', '\x07', 1)
+      expect(events).toContainEqual(
+        expect.objectContaining({ type: 'worktreesChanged', repoId: 'repo-1' })
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('stamps a bell the daemon reports for a parked terminal', () => {
     vi.useFakeTimers({ now: 60_000 })
     try {
