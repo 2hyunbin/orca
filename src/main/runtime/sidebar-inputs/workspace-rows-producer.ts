@@ -11,7 +11,7 @@ import { ProducerRevision } from './producer-revision'
 
 export type WorkspaceRowsSources = {
   store: RuntimeStore | null
-  /** The listing worktree.ps reads, after its hidden-repo and visibility filters. */
+  /** A freshly merged listing, never the shared cache, through worktree.ps's visibility filters. */
   listVisibleWorktrees: () => Promise<ResolvedWorktreeSnapshot>
   onClientEvent: (
     listener: (event: RuntimeClientEvent) => void,

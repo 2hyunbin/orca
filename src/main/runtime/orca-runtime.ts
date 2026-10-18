@@ -90,7 +90,8 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
   readonly workspaceRows = ORCA_SIDEBAR_INPUTS_IS_MAIN
     ? new WorkspaceRowsProducer({
         store: this.store,
-        // Merged fresh: the window's metadata writes announce nothing, and the shared listing cache may predate them.
+        // Merged fresh (git scans keep their own cache): the window's metadata writes emit no
+        // client event, so the shared listing may predate them.
         listVisibleWorktrees: async () =>
           this.visibleResolvedWorktreeSnapshot(await this.computeResolvedWorktrees()),
         onClientEvent: (listener, options) => this.onClientEvent(listener, options)

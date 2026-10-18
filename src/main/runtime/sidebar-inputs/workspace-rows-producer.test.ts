@@ -151,7 +151,7 @@ describe('WorkspaceRowsProducer', () => {
     expect(at()).toBe(start + 4)
   })
 
-  it('reads a metadata write at once and leaves the shared listing cache alone', async () => {
+  it('reads past the shared listing cache and leaves it alone', async () => {
     const { runtime, rows, listing } = setup()
     const key = 'local|repo-1::/r/a'
     const cachedPinned = async (): Promise<boolean | undefined> =>
