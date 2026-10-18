@@ -14,8 +14,8 @@ import type { AgentJournalSubmission } from '../../../../shared/agent-session-jo
 import { agentSessionSendBodyFingerprint } from '../../../../shared/structured-agent-session-send-mutation'
 import {
   queuedMessageEditableText,
-  queuedMessageWithEditedText
-} from '../../../../shared/queued-message-text-edit'
+  queuedMessageWithEdit
+} from '../../../../shared/queued-message-edit'
 import { appendNativeChatDraftCache } from './native-chat-draft-cache'
 import { stripSentImagePromptMarkers } from '../../../../shared/native-chat-image-transcript-markers'
 import { queuedEditNotice } from './queued-message-edit-notices'
@@ -206,8 +206,8 @@ export function useStructuredAgentSessionQueuedEdit(args: {
       close()
       return
     }
-    const body = queuedMessageWithEditedText(edit.body, edit.text)
-    if (!body) {
+    const edited = queuedMessageWithEdit(edit.body, { text: edit.text })
+    if (!edited.ok) {
       return
     }
     edit.saving = true
@@ -245,7 +245,7 @@ export function useStructuredAgentSessionQueuedEdit(args: {
     // No answer this pane can read (a lost reply, or one dropped for a moved runtime fence, which
     // a text edit does not depend on): the published card says whether this Save landed.
     const listed = latest.current.messages?.find((entry) => entry.messageId === edit.messageId)
-    const desired = agentSessionSendBodyFingerprint(sessionId, body)
+    const desired = agentSessionSendBodyFingerprint(sessionId, edited.body)
     if (latest.current.messages === null) {
       render(edit)
     } else if (!listed || !onScreen(latest.current.cards, edit.messageId)) {
@@ -272,8 +272,8 @@ export function useStructuredAgentSessionQueuedEdit(args: {
   useEffect(() => {
     const edit = active.current
     if (edit && !edit.saving && messages !== null) {
-      const typed = queuedMessageWithEditedText(edit.body, edit.text)
-      const desired = typed ? agentSessionSendBodyFingerprint(sessionId, typed) : null
+      const typed = queuedMessageWithEdit(edit.body, { text: edit.text })
+      const desired = typed.ok ? agentSessionSendBodyFingerprint(sessionId, typed.body) : null
       const listed = messages.find((entry) => entry.messageId === edit.messageId)
       if (!listed || !onScreen(cards, edit.messageId)) {
         if (desired !== null && sentWith(submissions, edit.messageId, desired)) {
@@ -308,7 +308,7 @@ export function useStructuredAgentSessionQueuedEdit(args: {
           text: shown.text,
           acquiring: shown.acquiring,
           saving: shown.saving,
-          canSave: queuedMessageWithEditedText(shown.body, shown.text) !== null,
+          canSave: queuedMessageWithEdit(shown.body, { text: shown.text }).ok,
           change,
           save: () => void save(),
           cancel: close
