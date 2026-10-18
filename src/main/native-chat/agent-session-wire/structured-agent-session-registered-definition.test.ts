@@ -56,7 +56,8 @@ function fakeAdapter(): StructuredAgentSessionAdapter {
     answerPrompt: vi.fn(),
     setOption: vi.fn(),
     compact: vi.fn(),
-    changeThreadGoal: vi.fn()
+    changeThreadGoal: vi.fn(),
+    forkForRewind: vi.fn()
   }
 }
 
