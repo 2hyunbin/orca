@@ -1,8 +1,9 @@
 import { resolveAgentStatusWorktreeId } from '../../../shared/agent-status-worktree-attribution'
 import type { AgentStatusIpcPayload } from '../../../shared/agent-status-types'
 import {
+  getConnectionExecutionHostId,
+  LOCAL_EXECUTION_HOST_ID,
   parseExecutionHostId,
-  toSshExecutionHostId,
   type ExecutionHostId
 } from '../../../shared/execution-host'
 import type { RuntimeClientEvent } from '../../../shared/runtime-client-events'
@@ -67,7 +68,8 @@ type TrackedPane = WorkspaceRef & { state: AgentPaneState }
 type TitlePane = { ptyId: string; releaseExit: () => void }
 
 function sshHostOfConnection(connectionId: string | null | undefined): ExecutionHostId | null {
-  return connectionId ? toSshExecutionHostId(connectionId) : null
+  const hostId = getConnectionExecutionHostId(connectionId)
+  return hostId === LOCAL_EXECUTION_HOST_ID ? null : hostId
 }
 
 function sameWorkspace(a: WorkspaceRef | undefined, b: WorkspaceRef | null): boolean {
@@ -194,7 +196,10 @@ export class SortStampsProducer {
       return
     }
     this.titlePanes.set(paneKey, { ptyId, releaseExit })
-    this.seed(paneKey, workspace, phase, this.sources.now())
+    // An agent idle at its first title has finished no turn, unless the record says it had.
+    const seeded =
+      phase === 'done' && this.readStamps(workspace)?.smartTier !== 'done' ? 'rest' : phase
+    this.seed(paneKey, workspace, seeded, this.sources.now())
   }
 
   private endTitlePane(paneKey: string): void {
@@ -278,7 +283,8 @@ export class SortStampsProducer {
 
   // One clock read per event, so a pane's time and its Recent stamp agree.
   private stamp(workspace: WorkspaceRef, event: SortStampEvent, now = this.sources.now()): void {
-    if (this.sources.isWriteFenced(workspace.worktreeId)) {
+    // A WSL move only takes this machine's projects.
+    if (!workspace.sshHostId && this.sources.isWriteFenced(workspace.worktreeId)) {
       return
     }
     const current = this.readStamps(workspace)

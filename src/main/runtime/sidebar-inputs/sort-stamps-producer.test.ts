@@ -306,6 +306,19 @@ describe('SortStampsProducer: terminal events', () => {
     })
   })
 
+  it('does not read an agent idle at its first title as Done', () => {
+    const h = createHarness()
+    h.sideEffects([title('Codex')])
+    expect(h.writes).toEqual([])
+    const promptAt = advance(20_000)
+    h.sideEffects([title('⠋ Codex working')])
+    expect(h.meta.get(WT)).toEqual({
+      lastActivityAt: promptAt,
+      smartTier: 'working',
+      smartAt: promptAt
+    })
+  })
+
   it('reads a cleared stale working title as Rest, not a finish', () => {
     const h = createHarness()
     h.sideEffects([title('⠋ Codex working')])
