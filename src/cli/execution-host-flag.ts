@@ -11,7 +11,7 @@ import {
   crossKindNextSteps,
   findEnvironmentByName,
   findSshTargetByName,
-  listSshTargets,
+  fetchSshTargetSummaries,
   LOCAL_HOST_LIST_NAME,
   normalizeTypedName,
   resolveSshHostTargetId,
@@ -26,6 +26,9 @@ export type HostFlagRoutingSelection = {
   // Why: SSH targets live in the running Orca host, not on disk, so enumerating them needs a
   // client. Injected as a thunk so the lookup only happens on the error path we are explaining.
   listSshTargets: () => Promise<SshTargetSummary[]>
+  // Why: unlike the suggestion listing, this throws when the targets cannot be read. A bare name
+  // may only route to a paired server once no SSH target is known to share it.
+  verifySshTargets: () => Promise<SshTargetSummary[]>
   pairingCode: string | null
   // Why: an ambient ORCA_ENVIRONMENT counts as a selection too, so carry the label to
   // name the real source in the conflict message.
@@ -90,11 +93,10 @@ export async function resolveHostFlagEnvironmentId(
   }))
   const wanted = host.kind === 'runtime' ? host.environmentId : host.alias
   const flagSpelling = host.kind === 'runtime' ? `--host ${host.id}` : `--host ${host.alias}`
-  if (host.kind === 'alias') {
-    const routed = resolveRoutedAlias(host.alias, environments, selection)
-    if (routed !== undefined) {
-      return routed
-    }
+  // Why: with --environment or --pairing-code the command already runs on a chosen server, so a
+  // bare name is this machine or an SSH target that server reaches, never a second server.
+  if (host.kind === 'alias' && (selection.environmentSelector || selection.pairingCode)) {
+    return null
   }
   // Why: --environment has always taken a name or an id, and the name is what people and agents
   // actually know. Requiring the raw uuid here made the obvious spelling fail; accept either and
@@ -159,23 +161,6 @@ export async function resolveHostFlagEnvironmentId(
   return environment.id
 }
 
-// Why: with --environment or --pairing-code the command already runs on a chosen server, so a
-// bare name is a machine that server reaches, not another locally paired server sharing it.
-// Undefined means nothing was routed and the alias resolves against the pairing store.
-function resolveRoutedAlias(
-  alias: string,
-  environments: readonly EnvironmentSummary[],
-  selection: HostFlagRoutingSelection
-): string | null | undefined {
-  if (selection.environmentSelector) {
-    const selected = findEnvironmentByName(environments, selection.environmentSelector.value)
-    return selected && findEnvironmentByName(environments, alias)?.id === selected.id
-      ? selected.id
-      : null
-  }
-  return selection.pairingCode ? null : undefined
-}
-
 // Why: a paired server and an SSH target are different machines, and one alias can name both.
 // Picking either would send the command to a machine the caller did not choose — the failure the
 // prefixed spellings exist to prevent — so hand back both flags and let them say which.
@@ -184,7 +169,21 @@ async function assertAliasNamesOneHost(
   environment: EnvironmentSummary,
   selection: HostFlagRoutingSelection
 ): Promise<void> {
-  const sshTargets = await selection.listSshTargets()
+  let sshTargets: SshTargetSummary[]
+  try {
+    sshTargets = await selection.verifySshTargets()
+  } catch {
+    throw new RuntimeClientError(
+      'invalid_argument',
+      `Cannot verify --host ${alias}: it names a paired Orca server, but this machine's SSH targets could not be read to rule out one with the same name.`,
+      {
+        knownEnvironments: [environment],
+        nextSteps: [
+          `Use --host runtime:${environment.id} for the paired Orca server named ${environment.name}.`
+        ]
+      }
+    )
+  }
   // Why: findSshTargetByName collapses a duplicated label to undefined, which reads here as "no
   // SSH target by that name" — so two colliding targets would have looked like no conflict at all
   // and resolved to the server. Duplicates are more ambiguity, not less.
@@ -267,7 +266,8 @@ async function resolveLocalHostListName(
   alias: string,
   client: RuntimeClient
 ): Promise<ParsedExecutionHost> {
-  const sshTargets = await listSshTargets(client)
+  // Strict listing: an unreadable target list cannot rule out a clash.
+  const { targets: sshTargets } = await fetchSshTargetSummaries<SshTargetSummary>(client)
   const clashing = sshTargets.filter(
     (target) => normalizeTypedName(target.label) === LOCAL_HOST_LIST_NAME
   )

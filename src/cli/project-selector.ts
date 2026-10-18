@@ -24,10 +24,15 @@ export async function findProjectSetups(
   if (byId.length > 0) {
     return byId
   }
-  const named = await findProjectsByName(client, projectSelector)
-  if (named === null) {
+  const projects = await listProjectsUnlessUnsupported(client)
+  if (projects === null) {
     return legacyNameMatchedSetups(setups, projectSelector)
   }
+  // Why: an exact id with no setups names that project, not another one whose name equals it.
+  if (projects.some((project) => project.id === projectSelector)) {
+    return []
+  }
+  const named = projects.filter((project) => matchesName(project.displayName, projectSelector))
   assertProjectNameUnambiguous(named, projectSelector)
   const matchedId = named[0]?.id
   return matchedId === undefined
@@ -97,14 +102,10 @@ function legacyNameMatchedSetups(
   )
 }
 
-/** Null when the server has no project.list at all, as opposed to no project by that name. */
-async function findProjectsByName(
-  client: RuntimeClient,
-  selector: string
-): Promise<Project[] | null> {
+/** Null when the server has no project.list at all, as opposed to no matching project. */
+async function listProjectsUnlessUnsupported(client: RuntimeClient): Promise<Project[] | null> {
   try {
-    const result = await client.call<{ projects: Project[] }>('project.list')
-    return result.result.projects.filter((project) => matchesName(project.displayName, selector))
+    return (await client.call<{ projects: Project[] }>('project.list')).result.projects
   } catch (error) {
     // Why: only a version gap justifies the weaker fallback. Swallowing everything reported a
     // network blip or a permission error as "no project by that name", which then surfaced as

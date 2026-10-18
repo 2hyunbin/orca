@@ -32,6 +32,7 @@ import type { RuntimeClient } from './runtime-client'
 const listSshTargetsMock = vi.fn(async () => [] as { id: string; label: string }[])
 const NO_SELECTION = {
   listSshTargets: listSshTargetsMock,
+  verifySshTargets: listSshTargetsMock,
   pairingCode: null,
   environmentSelector: null
 }
@@ -134,6 +135,7 @@ describe('resolveHostFlagEnvironmentId', () => {
     await expect(
       resolveHostFlagEnvironmentId(flags({ host: 'runtime:env-1' }), {
         listSshTargets: listSshTargetsMock,
+        verifySshTargets: listSshTargetsMock,
         pairingCode: 'orca://pair?x',
         environmentSelector: null
       })
@@ -147,6 +149,7 @@ describe('resolveHostFlagEnvironmentId', () => {
     await expect(
       resolveHostFlagEnvironmentId(flags({ host: 'runtime:env-1' }), {
         listSshTargets: listSshTargetsMock,
+        verifySshTargets: listSshTargetsMock,
         pairingCode: null,
         environmentSelector: { value: 'other', label: '--environment' }
       })
@@ -160,6 +163,7 @@ describe('resolveHostFlagEnvironmentId', () => {
     await expect(
       resolveHostFlagEnvironmentId(flags({ host: 'runtime:env-1' }), {
         listSshTargets: listSshTargetsMock,
+        verifySshTargets: listSshTargetsMock,
         pairingCode: null,
         environmentSelector: { value: 'staging', label: 'ORCA_ENVIRONMENT' }
       })
@@ -184,6 +188,7 @@ describe('resolveHostFlagEnvironmentId', () => {
     await expect(
       resolveHostFlagEnvironmentId(flags({ host: 'runtime:env-1' }), {
         listSshTargets: listSshTargetsMock,
+        verifySshTargets: listSshTargetsMock,
         pairingCode: null,
         environmentSelector: { value: 'gpu', label: '--environment' }
       })
@@ -292,6 +297,21 @@ describe('unprefixed --host aliases', () => {
     ).rejects.toThrow('Ambiguous Orca server in --host awin')
   })
 
+  it('refuses to route an alias to a paired server when SSH targets cannot be read', async () => {
+    listEnvironmentsMock.mockReturnValue([environment('env-1', 'awin')])
+    await expect(
+      resolveHostFlagEnvironmentId(flags({ host: 'awin' }), {
+        ...NO_SELECTION,
+        verifySshTargets: async () => {
+          throw new Error('runtime unreachable')
+        }
+      })
+    ).rejects.toMatchObject({
+      message: expect.stringContaining('Cannot verify --host awin'),
+      data: { nextSteps: [expect.stringContaining('--host runtime:env-1')] }
+    })
+  })
+
   // Why: `orca host list` prints `this machine` as the local row's name, with a space.
   it('resolves the local row name to --host local', async () => {
     listEnvironmentsMock.mockReturnValue([environment('env-1', 'gpu')])
@@ -349,7 +369,7 @@ describe('unprefixed --host aliases', () => {
   })
 
   // Why: with --environment the command runs on that server, so a bare name is a machine it
-  // reaches; another locally paired server sharing the name is not a choice the caller made.
+  // reaches; a locally paired server sharing the name, even the routed one, is not a host there.
   it('leaves an alias to the routed server SSH targets when --environment picks the server', async () => {
     listEnvironmentsMock.mockReturnValue([
       environment('env-1', 'openclaw'),
@@ -366,7 +386,7 @@ describe('unprefixed --host aliases', () => {
         ...NO_SELECTION,
         environmentSelector: { value: 'openclaw', label: '--environment' }
       })
-    ).resolves.toBe('env-1')
+    ).resolves.toBe(null)
   })
 })
 

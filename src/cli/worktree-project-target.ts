@@ -118,10 +118,13 @@ export async function resolveProjectCreateTarget(
     throw error
   }
   const ready = result.result.setups.filter((candidate) => candidate.setupState === 'ready')
+  // Match against every setup so an exact id with no ready setup never falls through to a name.
   const candidates =
     projectId === undefined || projectHostSetupId
       ? []
-      : await findProjectSetups(client, ready, projectId)
+      : (await findProjectSetups(client, result.result.setups, projectId)).filter(
+          (candidate) => candidate.setupState === 'ready'
+        )
   const setup = projectHostSetupId
     ? ready.find((candidate) => candidate.id === projectHostSetupId)
     : selectSetupOnHost(candidates, host, projectId)
