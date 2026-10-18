@@ -161,7 +161,11 @@ async function performRuntimeLocalWorktreeCreate<T>(args: RuntimeLocalWorktreeCr
       hostedReviewExecutionContext: args.hostedReviewExecutionContext
     })
   )
-  const releaseInFlightHold = holdInFlightWorktreeCreate(repo.id, candidate.worktreePath)
+  const releaseInFlightHold = await holdInFlightWorktreeCreate(
+    repo.id,
+    candidate.worktreePath,
+    worktreeGitOptions
+  )
   try {
     const git = await createRuntimeLocalGitWorktree({
       request,
