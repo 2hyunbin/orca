@@ -109,13 +109,15 @@ export function writeClaudeTerminalFailure(
     const old = journal.itemBody(agentJournalItemKey(failureIdentity))
     const prior = old?.kind === 'status' ? readAgentSessionFailureFact(old.failure) : undefined
     const next = body.kind === 'status' ? readAgentSessionFailureFact(body.failure) : undefined
+    const previousDetail = prior?.detail?.text
+    const incomingDetail = next?.detail?.text
+    const detail = previousDetail && incomingDetail && !previousDetail.includes(incomingDetail)
+      ? `${previousDetail}\n${incomingDetail}` : previousDetail ?? incomingDetail ?? ''
     const merged = prior?.kind === 'usageLimitReached' && next?.kind === 'usageLimitReached'
       ? { ...body, ...agentSessionFailureWords({
           ...prior, ...next,
           usageLimit: next.usageLimit ?? prior.usageLimit,
-          detail: providerDiagnostic(
-            [...new Set([prior.detail?.text, next.detail?.text].filter(Boolean))].join('\n'), 'person'
-          )
+          detail: providerDiagnostic(detail, 'person')
         }, { agentName: 'Claude', provider: 'claude', surface: 'row' }) }
       : body
     return JSON.stringify(merged) === JSON.stringify(old)

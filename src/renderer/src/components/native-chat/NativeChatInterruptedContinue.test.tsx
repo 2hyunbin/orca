@@ -401,7 +401,7 @@ it('keeps the notice view stable while Continue invokes the latest committed tra
   const latest = vi.fn(() => true)
   const transport: NativeChatStructuredComposerTransport = {
     send: first, dispatchCommand: async () => ({ handled: false, accepted: false, error: null }),
-    optionsSurface, optionSnapshot: [], onError: () => {}, runtime: 'remote', sessionId: 'session-1'
+    optionsSurface, optionSnapshot: [], onError: () => {}, runtime: 'remote', sessionId: 'session-1', runtimeEnvironmentId: 'studio-mac'
   }
   const input = { target: PAIRED, agent: 'codex' as const, sessionId: 'session-1', journalItems: items,
     submissions: [], isWorking: false, pending: [], reportComposerError: vi.fn(), transport }

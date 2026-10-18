@@ -166,9 +166,11 @@ it.each([false, true])('reconciles replay and late detail without touching newer
   t.handle(refusal)
   t.handle(frame({ ...failedResult('owner', 1200, LIMIT_TEXT).message, user_message_uuid: 'owner' }, 1200))
   const endpoints = t.items().filter((item) => item.body.kind === 'turn')
+  const warning = t.items().find((item) => item.body.kind === 'status')
   t.handle(refusal)
   t.handle(frame({ ...failedResult('owner', 1300, LIMIT_TEXT).message, user_message_uuid: 'owner' }, 1300))
   expect(statusRows(t)).toHaveLength(1)
+  expect(t.items().find((item) => item.body.kind === 'status')).toEqual(warning)
   expect(t.items().filter((item) => item.body.kind === 'turn')).toEqual(endpoints)
   t.handle(userFrame('newer', 2000))
   t.handle(refusal)
@@ -187,7 +189,7 @@ it.each(['idle', 'exit'] as const)('keeps quota failure through a deferred resul
   if (ending === 'idle') {
     t.handle(frame({ type: 'system', subtype: 'session_state_changed', state: 'idle' }, 1200))
   } else {
-    t.handle({ type: 'ended', sessionId: 'orca-session', observedAt: 1200 })
+    t.handle({ type: 'ended', sessionId: 'orca-session', reason: 'Provider exited', observedAt: 1200 })
   }
   t.flush()
   expect(t.turnRow('owner')?.body).toMatchObject({
@@ -222,7 +224,7 @@ it.each(['before', 'after', 'child', 'ordinary', 'success', 'other', 'superseded
   } else if (mode === 'superseded') {
     t.handle(userFrame('newer', 1200))
   } else {
-    t.handle({ type: 'ended', sessionId: 'orca-session', observedAt: 1200 })
+    t.handle({ type: 'ended', sessionId: 'orca-session', reason: 'Provider exited', observedAt: 1200 })
   }
   t.flush()
   const outcome = mode === 'before' ? 'cancellation' : mode === 'after' ? 'failure'
