@@ -591,7 +591,7 @@ index 04328420c2bae02010bb4c9adb3fd341aed56c0c..8dc120fac57656d2b378e1cc89f4edcf
    layer: ImageLayer;
    zIndex: number;
 diff --git a/src/kitty/KittyGraphicsHandler.ts b/src/kitty/KittyGraphicsHandler.ts
-index de889dfff75d9ecc8ab47a025e6989ffe75bb202..b69362705ac18c26997d4a07563e3bf512fdf00d 100644
+index de889dfff75d9ecc8ab47a025e6989ffe75bb202..ca3180b4b9884f7c6b72b86d55fbc81bcfeac4ea 100644
 --- a/src/kitty/KittyGraphicsHandler.ts
 +++ b/src/kitty/KittyGraphicsHandler.ts
 @@ -7,6 +7,7 @@ import { IDisposable } from '@xterm/xterm';
@@ -896,14 +896,17 @@ index de889dfff75d9ecc8ab47a025e6989ffe75bb202..b69362705ac18c26997d4a07563e3bf5
  
        let w = bitmap.width;
        let h = bitmap.height;
-@@ -660,6 +695,7 @@ export class KittyGraphicsHandler implements IApcHandler, IResetHandler, IDispos
+@@ -660,8 +695,9 @@ export class KittyGraphicsHandler implements IApcHandler, IResetHandler, IDispos
          }
        }
  
 +      if (generation !== this._generation) throw new Error('image decode canceled');
        const zIndex = cmd.zIndex ?? 0;
-       this._kittyStorage.addImage(image.id, bitmap, true, layer, zIndex);
+-      this._kittyStorage.addImage(image.id, bitmap, true, layer, zIndex);
++      this._kittyStorage.addImage(image.id, bitmap, true, layer, zIndex, cmd.placementId ?? 0);
        bitmap = undefined;  // ownership transferred to storage
+ 
+       // Kitty cursor movement
 @@ -684,6 +720,75 @@ export class KittyGraphicsHandler implements IApcHandler, IResetHandler, IDispos
      }
    }
@@ -1180,10 +1183,10 @@ index 4288dd0a4180eca8f3ae28ec0805f834b2a0a629..d4230cc2b0bb7d247b0429bb4c5f918e
 +  };
 +}
 diff --git a/src/kitty/KittyImageStorage.ts b/src/kitty/KittyImageStorage.ts
-index 1f5c09ec9e2700f8f6dbd8436a1802217dfc99ef..47d64e6fb453344e59022475f186dfed0f38355b 100644
+index 1f5c09ec9e2700f8f6dbd8436a1802217dfc99ef..a65f39b36933788233fd7c52de0feef1567c3e0f 100644
 --- a/src/kitty/KittyImageStorage.ts
 +++ b/src/kitty/KittyImageStorage.ts
-@@ -3,16 +3,32 @@
+@@ -3,16 +3,33 @@
   * @license MIT
   */
  
@@ -1200,6 +1203,7 @@ index 1f5c09ec9e2700f8f6dbd8436a1802217dfc99ef..47d64e6fb453344e59022475f186dfed
 +
 +interface IPhysicalImageOwner {
 +  kittyId: number;
++  placementId: number;
 +  storageIds: Set<number>;
 +}
 +
@@ -1218,7 +1222,7 @@ index 1f5c09ec9e2700f8f6dbd8436a1802217dfc99ef..47d64e6fb453344e59022475f186dfed
  // - mirrors shared-storage evictions into kitty maps
  // - applies protocol-level undisplayed-image eviction policy
  export class KittyImageStorage implements IDisposable {
-@@ -20,32 +36,39 @@ export class KittyImageStorage implements IDisposable {
+@@ -20,32 +37,39 @@ export class KittyImageStorage implements IDisposable {
  
    private _nextImageId = 1;
    private readonly _images: Map<number, IKittyImageData> = new Map();
@@ -1273,7 +1277,7 @@ index 1f5c09ec9e2700f8f6dbd8436a1802217dfc99ef..47d64e6fb453344e59022475f186dfed
    ) {
      this._previousOnImageDeleted = this._storage.onImageDeleted;
      this._wrappedOnImageDeleted = (storageId: number) => {
-@@ -53,6 +76,27 @@ export class KittyImageStorage implements IDisposable {
+@@ -53,13 +77,39 @@ export class KittyImageStorage implements IDisposable {
        this._handleStorageImageDeleted(storageId);
      };
      this._storage.onImageDeleted = this._wrappedOnImageDeleted;
@@ -1301,7 +1305,10 @@ index 1f5c09ec9e2700f8f6dbd8436a1802217dfc99ef..47d64e6fb453344e59022475f186dfed
    }
  
    public reset(): void {
-@@ -60,6 +104,8 @@ export class KittyImageStorage implements IDisposable {
++    // Release owned bitmaps; ids already gone from shared storage are no-ops there.
++    this._deletePhysicalPlacements();
++    for (const kittyId of [...this._virtualPlacements.keys()]) this._deleteVirtualPlacements(kittyId);
+     this._nextImageId = 1;
      this._images.clear();
      this._kittyIdToStorageId.clear();
      this._storageIdToKittyId.clear();
@@ -1310,7 +1317,7 @@ index 1f5c09ec9e2700f8f6dbd8436a1802217dfc99ef..47d64e6fb453344e59022475f186dfed
    }
  
    public dispose(): void {
-@@ -67,22 +113,40 @@ export class KittyImageStorage implements IDisposable {
+@@ -67,22 +117,40 @@ export class KittyImageStorage implements IDisposable {
      if (this._storage.onImageDeleted === this._wrappedOnImageDeleted) {
        this._storage.onImageDeleted = this._previousOnImageDeleted;
      }
@@ -1358,10 +1365,11 @@ index 1f5c09ec9e2700f8f6dbd8436a1802217dfc99ef..47d64e6fb453344e59022475f186dfed
      this._images.set(imageId, {
        ...imageData,
        id: imageId
-@@ -91,43 +155,93 @@ export class KittyImageStorage implements IDisposable {
+@@ -90,44 +158,102 @@ export class KittyImageStorage implements IDisposable {
+     return imageId;
    }
  
-   public addImage(kittyId: number, image: HTMLCanvasElement | ImageBitmap, scrolling: boolean, layer: ImageLayer, zIndex: number): void {
+-  public addImage(kittyId: number, image: HTMLCanvasElement | ImageBitmap, scrolling: boolean, layer: ImageLayer, zIndex: number): void {
 -    // Clean up stale reverse-mapping from a previous placement of the same
 -    // kitty image.  The old shared-storage entry is kept (it may still be
 -    // visible on screen) but its reverse mapping is removed so that eviction
@@ -1370,6 +1378,7 @@ index 1f5c09ec9e2700f8f6dbd8436a1802217dfc99ef..47d64e6fb453344e59022475f186dfed
 -    if (oldStorageId !== undefined) {
 -      this._storageIdToKittyId.delete(oldStorageId);
 -    }
++  public addImage(kittyId: number, image: HTMLCanvasElement | ImageBitmap, scrolling: boolean, layer: ImageLayer, zIndex: number, placementId = 0): void {
 +    const previousStorageId = this._kittyIdToStorageId.get(kittyId);
 +    const owner = previousStorageId === undefined ? undefined : this._storageIdToKittyId.get(previousStorageId);
 +    const storageIds = owner?.storageIds ?? new Set<number>();
@@ -1380,7 +1389,7 @@ index 1f5c09ec9e2700f8f6dbd8436a1802217dfc99ef..47d64e6fb453344e59022475f186dfed
 +    storageIds.add(storageId);
      this._kittyIdToStorageId.set(kittyId, storageId);
 -    this._storageIdToKittyId.set(storageId, kittyId);
-+    this._storageIdToKittyId.set(storageId, { kittyId, storageIds });
++    this._storageIdToKittyId.set(storageId, { kittyId, placementId, storageIds });
    }
  
    public getImage(kittyId: number): IKittyImageData | undefined {
@@ -1435,8 +1444,16 @@ index 1f5c09ec9e2700f8f6dbd8436a1802217dfc99ef..47d64e6fb453344e59022475f186dfed
 +
 +  public deletePlacementsById(kittyId: number, placementId?: number): void {
 +    this._deleteVirtualPlacements(kittyId, placementId);
-+    if (placementId !== undefined) return;
-+    this._deletePhysicalPlacements(kittyId);
++    if (placementId === undefined) {
++      this._deletePhysicalPlacements(kittyId);
++      return;
++    }
++    const latestId = this._kittyIdToStorageId.get(kittyId);
++    const storageIds = latestId === undefined ? undefined : this._storageIdToKittyId.get(latestId)?.storageIds;
++    // The storage deletion callback re-points the latest copy at a survivor.
++    for (const storageId of [...(storageIds ?? [])]) {
++      if (this._storageIdToKittyId.get(storageId)?.placementId === placementId) this._storage.deleteImage(storageId);
++    }
 +  }
 +
 +  public deleteById(kittyId: number, placementId?: number): void {
@@ -1473,7 +1490,7 @@ index 1f5c09ec9e2700f8f6dbd8436a1802217dfc99ef..47d64e6fb453344e59022475f186dfed
    }
  
    public get images(): ReadonlyMap<number, IKittyImageData> {
-@@ -147,9 +261,96 @@ export class KittyImageStorage implements IDisposable {
+@@ -147,9 +273,96 @@ export class KittyImageStorage implements IDisposable {
        if (this._images.size <= KittyImageStorage._maxStoredImages / 2) {
          break;
        }
@@ -1481,9 +1498,9 @@ index 1f5c09ec9e2700f8f6dbd8436a1802217dfc99ef..47d64e6fb453344e59022475f186dfed
 +      if (!this._kittyIdToStorageId.has(kittyId) && !this._virtualPlacements.has(kittyId)) {
          this._images.delete(kittyId);
 +        this._virtualPlacements.delete(kittyId);
-+      }
-+    }
-+  }
+       }
+     }
+   }
 +
 +  // Omitted diacritics inherit only from a consecutive matching placeholder.
 +  private readonly _renderPlaceholderLine = (line: IBufferLine, row: number, cols: number): void => {
@@ -1515,7 +1532,7 @@ index 1f5c09ec9e2700f8f6dbd8436a1802217dfc99ef..47d64e6fb453344e59022475f186dfed
 +          if (!cell.location.column) cell.location.column = 1;
 +          if (!cell.location.highByte) cell.location.highByte = 1;
 +        }
-       }
++      }
 +      previous = cell ?? previous;
 +    }
 +  };
@@ -1567,7 +1584,7 @@ index 1f5c09ec9e2700f8f6dbd8436a1802217dfc99ef..47d64e6fb453344e59022475f186dfed
 +    const tiles = Math.min(count, placement.cols - gridCol);
 +    if (tiles <= 0) {
 +      return;
-     }
++    }
 +    this._renderer.drawCellImage(spec, placement.cols, placement.rows, gridRow, gridCol, tiles, startCol, row);
-   }
++  }
  }

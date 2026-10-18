@@ -180,6 +180,93 @@ describe('main physical placement ownership', () => {
     }
   })
 
+  it('deleting by image and placement id releases only that placement and keeps the source', async () => {
+    const h = createTerminal()
+    try {
+      const kitty = h.handler._kittyStorage
+      kitty.storeImage(7, source())
+      const first = physical(h, 7, 1)
+      await write(h, '\x1b[3;1H')
+      const second = physical(h, 7, 2)
+      await write(h, '\x1b[5;1H')
+      const third = physical(h, 7, 2)
+      kitty.deleteById(7, 2)
+      expect(second.close).toHaveBeenCalledOnce()
+      expect(third.close).toHaveBeenCalledOnce()
+      expect(first.close).not.toHaveBeenCalled()
+      expect(kitty.images.has(7)).toBe(true)
+      expect(render(h)).toEqual([first])
+      kitty.deleteById(7, 1)
+      expect(first.close).toHaveBeenCalledOnce()
+      expect(kitty.images.has(7)).toBe(false)
+    } finally {
+      h.terminal.dispose()
+    }
+  })
+
+  it('d=i with a placement id deletes only that physical placement through the protocol', async () => {
+    const h = createTerminal()
+    try {
+      const kitty = h.handler._kittyStorage
+      kitty.storeImage(7, source())
+      const kept = physical(h, 7, 1)
+      await write(h, '\x1b[3;1H')
+      const removed = physical(h, 7, 2)
+      await write(h, '\x1b_Ga=d,d=i,i=7,p=2,q=2\x1b\\')
+      expect(removed.close).toHaveBeenCalledOnce()
+      expect(kept.close).not.toHaveBeenCalled()
+      expect(render(h)).toEqual([kept])
+      expect(kitty.images.has(7)).toBe(true)
+    } finally {
+      h.terminal.dispose()
+    }
+  })
+
+  it('kitty handler reset closes owned bitmaps once without touching unrelated images', async () => {
+    const h = createTerminal()
+    try {
+      const kitty = h.handler._kittyStorage
+      kitty.storeImage(7, source())
+      const first = physical(h, 7)
+      await write(h, '\x1b[3;1H')
+      const second = physical(h, 7, 3)
+      const unrelated = new TrackedBitmap()
+      h.storage.addImage(unrelated, { scrolling: true, layer: 'top', zIndex: 0, cursorPos: 'iip' })
+      h.handler.reset()
+      expect(first.close).toHaveBeenCalledOnce()
+      expect(second.close).toHaveBeenCalledOnce()
+      expect(unrelated.close).not.toHaveBeenCalled()
+      expect(render(h)).toEqual([unrelated])
+      h.addon.reset()
+      expect(first.close).toHaveBeenCalledOnce()
+      expect(second.close).toHaveBeenCalledOnce()
+    } finally {
+      h.terminal.dispose()
+    }
+  })
+
+  it('source byte pressure evicts every physical copy of the oldest placed image together', async () => {
+    const h = createTerminal()
+    try {
+      const kitty = h.handler._kittyStorage
+      h.addon.storageLimit = 0.5
+      kitty.storeImage(7, source(200_000))
+      const first = physical(h, 7)
+      await write(h, '\x1b[3;1H')
+      const second = physical(h, 7, 2)
+      kitty.storeImage(8, source(200_000))
+      const sibling = physical(h, 8)
+      kitty.storeImage(9, source(200_000))
+      expect(kitty.images.has(7)).toBe(false)
+      expect(first.close).toHaveBeenCalledOnce()
+      expect(second.close).toHaveBeenCalledOnce()
+      expect(sibling.close).not.toHaveBeenCalled()
+      expect(render(h)).toEqual([sibling])
+    } finally {
+      h.terminal.dispose()
+    }
+  })
+
   it('shared storage reset closes every owner once before image IDs are reused', async () => {
     const h = createTerminal()
     try {

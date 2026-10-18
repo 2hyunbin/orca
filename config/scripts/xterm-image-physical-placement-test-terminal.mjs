@@ -41,9 +41,9 @@ export const source = (bytes = 4) => ({
   height: 1,
   format: 32
 })
-export const physical = (h, id) => {
+export const physical = (h, id, placementId) => {
   const bitmap = new TrackedBitmap()
-  h.handler._kittyStorage.addImage(id, bitmap, true, 'top', 0)
+  h.handler._kittyStorage.addImage(id, bitmap, true, 'top', 0, placementId)
   return bitmap
 }
 export const render = (h) => {
