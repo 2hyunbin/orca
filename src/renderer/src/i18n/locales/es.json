@@ -8388,7 +8388,9 @@
           "serverRuntimeUnavailableDescription": "El transporte SSH está conectado, pero el tiempo de ejecución de Orca no respondió. Es posible que el host todavía esté ejecutándose.",
           "serverReconnecting": "Reconectando",
           "accessRevoked": "{{value0}} no longer accepts this computer. Re-pair it with a new access link.",
-          "repair": "Re-pair…"
+          "repair": "Re-pair…",
+          "serverAccessRevoked": "Access revoked",
+          "orcaVersionLastSeen": "Orca v{{value0}} (last seen)"
         },
         "RuntimePairingGeneratedUrlRows": {
           "0495f68959": "Copiar {{value0}}"

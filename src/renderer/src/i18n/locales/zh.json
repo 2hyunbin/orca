@@ -8378,7 +8378,9 @@
           "serverRuntimeUnavailableDescription": "SSH 传输已连接，但 Orca 运行时未应答。主机可能仍在运行。",
           "serverReconnecting": "重新连接",
           "accessRevoked": "{{value0}} no longer accepts this computer. Re-pair it with a new access link.",
-          "repair": "Re-pair…"
+          "repair": "Re-pair…",
+          "serverAccessRevoked": "Access revoked",
+          "orcaVersionLastSeen": "Orca v{{value0}} (last seen)"
         },
         "RuntimePairingGeneratedUrlRows": {
           "0495f68959": "复制 {{value0}}"
