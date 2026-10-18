@@ -78,6 +78,13 @@ const cutChat: AgentJournalRenderItem[] = [
   }
 ]
 
+const optionsSurface: NativeChatStructuredComposerTransport['optionsSurface'] = {
+  getSnapshot: () => [],
+  setOption: async () => ({ snapshot: [] }),
+  invokeAction: async () => ({ snapshot: [] }),
+  subscribe: () => () => {}
+}
+
 type Props = {
   journalItems?: readonly AgentJournalRenderItem[]
   submissions?: readonly Pick<AgentJournalSubmission, 'dispatchState'>[]
@@ -99,7 +106,7 @@ function Harness(props: Props): React.JSX.Element {
     submissions: props.submissions ?? [],
     isWorking: props.isWorking ?? false,
     pending: props.pending ?? [],
-    transport: props.transport ?? { send: () => true, dispatchCommand: async () => ({ handled: false, accepted: false, error: null }), optionSnapshot: [], onError: () => {}, runtime: 'remote', sessionId: 'session-1', runtimeEnvironmentId: 'studio-mac' }
+    transport: props.transport ?? { send: () => true, dispatchCommand: async () => ({ handled: false, accepted: false, error: null }), optionsSurface, optionSnapshot: [], onError: () => {}, runtime: 'remote', sessionId: 'session-1', runtimeEnvironmentId: 'studio-mac' }
   })
   return (
     <TooltipProvider delayDuration={0}>
@@ -319,7 +326,7 @@ it('keeps the draft through Continue admission, refusal, uncertainty and recorde
     const transport: NativeChatStructuredComposerTransport = {
       send: (text, images, request) => sends.send(text, images.map((image) => ({ path: image.path, previewUri: image.path })), request),
       onSubmitted: reveal, onError: vi.fn(), dispatchCommand: async () => ({ handled: false, accepted: false, error: null }),
-      optionSnapshot: [], runtime: 'remote', sessionId: 'session-1', runtimeEnvironmentId: 'studio-mac'
+      optionsSurface, optionSnapshot: [], runtime: 'remote', sessionId: 'session-1', runtimeEnvironmentId: 'studio-mac'
     }
     return <><span>{uploading.pendingName}</span><Harness journalItems={items} transport={transport} pending={sends.pending} /></>
   }
