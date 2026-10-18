@@ -21,6 +21,7 @@ import { useStructuredAgentSessionHostLabel } from './use-structured-agent-sessi
 import { useNativeChatRestartResuming } from '../native-chat-resume-on-restart-store'
 import { useNativeChatLaunchResumePending } from '../native-chat-launch-resume-decision'
 import type { NativeChatComposerNoticeContent } from './native-chat-composer-notice'
+import type { NativeChatStructuredComposerTransport } from './native-chat-composer-types'
 
 type ContinueAnswer = { outcome?: string }
 
@@ -47,10 +48,10 @@ export function useNativeChatInterruptedContinuation(input: {
   isWorking: boolean
   /** Stable; a Continue click is the user's newer action, so it clears the composer's error. */
   reportComposerError: (text: null) => void
-  /** Sends as the composer does; false when the chat took nothing. */
-  sendMessage: (text: string) => boolean
+  /** The composer's send; false when the chat took nothing. */
+  send: NativeChatStructuredComposerTransport['send']
 }): NativeChatInterruptedContinuation {
-  const { target, sessionId, reportComposerError, sendMessage } = input
+  const { target, sessionId, reportComposerError, send } = input
   const hostLabel = useStructuredAgentSessionHostLabel(target)
   const capability = useStructuredAgentSessionHostCapabilityState(
     target,
@@ -86,10 +87,10 @@ export function useNativeChatInterruptedContinuation(input: {
     }
     setAsked(usageLimitTurnItemId)
     // A send the chat refused says why in the composer, as any send does; Continue comes back.
-    if (!sendMessage(NATIVE_CHAT_USAGE_LIMIT_CONTINUE_MESSAGE)) {
+    if (send(NATIVE_CHAT_USAGE_LIMIT_CONTINUE_MESSAGE, []) === false) {
       setAsked(null)
     }
-  }, [usageLimitTurnItemId, sendMessage])
+  }, [usageLimitTurnItemId, send])
   const continueNow = useCallback((): void => {
     if (offered === null) {
       return

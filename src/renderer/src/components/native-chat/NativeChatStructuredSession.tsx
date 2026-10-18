@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils'
 import { NATIVE_CHAT_APPEARANCE_ROOT_CLASS } from './native-chat-appearance-style'
 import { useNativeChatStoreAppearanceStyle } from './use-native-chat-store-appearance-style'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { agentSessionPromptQuestions } from '../../../../shared/agent-session-question-answer'
 import { structuredAgentSessionPaneKey } from '../../../../shared/structured-agent-session-projection'
 import { useStructuredChatLiveSession } from './use-structured-chat-live-session'
@@ -226,10 +226,6 @@ export function NativeChatStructuredSession(
     onSubmitted: submits.revealLatest,
     sendBlockedReason: hostPermission.sendBlockedReason ?? install.sendBlockedReason
   })
-  const sendContinuation = useCallback(
-    (text: string) => structuredTransport.send(text, []) !== false,
-    [structuredTransport]
-  )
   const continuation = useNativeChatInterruptedContinuation({
     target: props.target,
     sessionId: props.sessionId,
@@ -237,7 +233,7 @@ export function NativeChatStructuredSession(
     submissions: controller.submissions,
     isWorking: controller.isWorking || hostHeld,
     reportComposerError,
-    sendMessage: sendContinuation
+    send: structuredTransport.send
   })
 
   // Said once: on the pane when the failure took it, else in the composer's notices.
