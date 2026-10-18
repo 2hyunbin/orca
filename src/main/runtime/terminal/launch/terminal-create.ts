@@ -6,6 +6,7 @@ import { createIdempotentCallback } from '../../orca-runtime-report-pty-spawn-co
 import { recordPtySurface, spawnSurfaceClaimSequence } from '../../pty-recorded-surface-topology'
 import { agentLaunchTokenFor } from '../../../agent-launch/agent-launch-token'
 import { migratedPaneRestoreHint } from '../../migrated-pane-restore-cwd'
+import { resolvePtyFirstSize } from '../../../ipc/pty/pty-first-size'
 
 export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreateDeduplication {
   async createTerminal(
@@ -44,11 +45,11 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
         (session?.tabGroups?.[workspace.id]?.length ?? 0) <= 1
           ? this.singleGroupWorkspaceGridSize
           : undefined
-      // Why 120x40: no window measured the group the tab opens in: none attached (serve, orcad), a
-      // multi-group workspace not shown since launch, or no pane at the default font mounted yet.
-      // #1707's original size.
-      const initialSize = (groupId && this.terminalGroupGridSizes?.[groupId]) ||
-        singleGroupSize || { cols: 120, rows: 40 }
+      const initialSize = resolvePtyFirstSize({
+        pane: opts.initialSize,
+        group: groupId ? this.terminalGroupGridSizes?.[groupId] : undefined,
+        singleGroup: singleGroupSize
+      })
       let preAllocatedHandle =
         launchOpts.preAllocatedHandle ?? this.createPreAllocatedTerminalHandle()
       let { tabId, leafId, paneKey } = dependencies.allocateTerminalPaneIdentity(launchOpts)
