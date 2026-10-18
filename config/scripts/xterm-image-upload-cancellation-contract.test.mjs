@@ -153,6 +153,55 @@ describe('unfinished image upload cancellation', () => {
     }
   })
 
+  it.each([
+    ['an explicit id', 'i=7,'],
+    ['the implicit continuation key', '']
+  ])(
+    'silently drops later chunks of a canceled Kitty upload addressed by %s',
+    async (_name, idKey) => {
+      const h = terminal()
+      const handler = h.addon._handlers.get('kitty')
+      const replies = vi.fn()
+      h.core.onData(replies)
+      try {
+        await write(h, kitty('a=t,f=32,s=2,v=2,i=7,m=1', raw.slice(0, 4)))
+        await write(h, `\x1b_G${idKey}m=1;${raw.slice(4, 8)}\x18`)
+        const allocations = vi.spyOn(handler, '_streamPayload')
+        await write(h, kitty(`${idKey}m=1`, raw.slice(8, 12)))
+        await write(h, kitty(`${idKey}m=0`, raw.slice(12)))
+        expect(allocations).not.toHaveBeenCalled()
+        expect(handler._pendingTransmissions.size).toBe(0)
+        expect(h.kittyStorage.getImage(7)).toBeUndefined()
+        expect(replies).not.toHaveBeenCalled()
+        await write(h, kitty('a=t,f=32,s=2,v=2,i=8', raw))
+        expect(replies).toHaveBeenCalledWith('\x1b_Gi=8;OK\x1b\\')
+        expect(new Uint8Array(await h.kittyStorage.getImage(8).data.arrayBuffer())).toEqual(
+          new Uint8Array(rgba)
+        )
+      } finally {
+        h.core.dispose()
+      }
+    }
+  )
+
+  it('accepts a restarted Kitty upload that reuses a canceled id', async () => {
+    const h = terminal()
+    const replies = vi.fn()
+    h.core.onData(replies)
+    try {
+      await write(h, kitty('a=t,f=32,s=2,v=2,i=7,m=1', raw.slice(0, 4)))
+      await write(h, `\x1b_Gi=7,m=1;${raw.slice(4, 8)}\x18`)
+      await write(h, kitty('a=t,f=32,s=2,v=2,i=7,m=1', raw.slice(0, 8)))
+      await write(h, kitty('m=0', raw.slice(8)))
+      expect(replies).toHaveBeenCalledWith('\x1b_Gi=7;OK\x1b\\')
+      expect(new Uint8Array(await h.kittyStorage.getImage(7).data.arrayBuffer())).toEqual(
+        new Uint8Array(rgba)
+      )
+    } finally {
+      h.core.dispose()
+    }
+  })
+
   it.each(['\x18', '\x1a'])(
     'drops an IIP multipart upload after a FilePart canceled by %j',
     async (cancel) => {
