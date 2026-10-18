@@ -611,7 +611,10 @@ export async function buildMobileWebAppBundle({
     readDesktopVersion(),
     readProtocolWindow(),
     bundleMobileWebApp({ appDir }),
-    readFile(join(projectDir, 'src/shared/styles/scrollbar-sleek.css'), 'utf8')
+    readFile(join(projectDir, 'src/shared/styles/scrollbar-sleek.css'), 'utf8').then((style) =>
+      // The shared desktop stylesheet can be checked out as CRLF on Windows.
+      style.replace(/\r\n/g, '\n')
+    )
   ])
   // Every output is already named by its own bytes, and a name is written inside whatever imports
   // it, so hashedAsset here reproduces the name rather than choosing one.
