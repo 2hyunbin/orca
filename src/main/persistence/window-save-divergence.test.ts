@@ -10,7 +10,7 @@ import {
   leaf
 } from '../../shared/workspace-layout/workspace-layout-session.test-fixture'
 import { writeWindowSaveWatchingLayout } from './window-save-divergence'
-import { windowSaveForMain } from './window-save-pane-trees'
+import { windowViewPatchForMain } from './window-save-view'
 
 function session(tabs: { id: string; title?: string }[]): WorkspaceSessionState {
   return addWorkspace(emptySession(), GIT_KEY, [
@@ -329,7 +329,7 @@ describe('writeWindowSaveWatchingLayout', () => {
       () => current,
       'local',
       () => {
-        current = windowSaveForMain(current, incoming, 'local')
+        current = { ...current, ...windowViewPatchForMain(current, incoming, 'local') }
       },
       'session:set',
       incoming.terminalLayoutsByTabId

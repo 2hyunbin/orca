@@ -56,7 +56,7 @@ export function droppedTabBarEntries(
 
 /**
  * The save's pane trees that differ from main's: main keeps its own for every tab it has one for
- * (windowSaveForMain), so each is reported under the workspace whose tab or row names it.
+ * (windowViewSaveForMain), so each is reported under the workspace whose tab or row names it.
  */
 export function overriddenPaneTrees(
   stored: WorkspaceSessionState | null | undefined,

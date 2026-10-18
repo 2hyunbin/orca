@@ -4,7 +4,7 @@ import type { PersistedUIState } from '../../shared/persisted-ui-state-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import type { Store } from '../persistence'
 import { isFrozenOrcadSourceSessionPartition } from '../ssh/orcad-retained-source'
-import { windowSaveForMain } from '../persistence/window-save-pane-trees'
+import { windowViewSaveForMain } from '../persistence/window-save-view'
 import { writeWindowSaveWatchingLayout } from '../persistence/window-save-divergence'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 
@@ -54,12 +54,12 @@ export function registerRendererShutdownCheckpointHandler(store: Store): void {
     try {
       for (const { state, hostId } of args.sessions) {
         if (!isFrozenOrcadSourceSessionPartition(store, hostId)) {
-          // Switch point: main keeps its own pane trees over the window's, and reports any layout
-          // the save still changes.
+          // Switch point: main keeps its own layout over the window's, and reports any layout the
+          // save still changes.
           const stage = (): void =>
             store.stageWorkspaceSessionBeforeUnload(
               ORCA_LAYOUT_OWNER_IS_MAIN
-                ? windowSaveForMain(store.getWorkspaceSession(hostId), state, hostId)
+                ? windowViewSaveForMain(store.getWorkspaceSession(hostId), state, hostId)
                 : state,
               hostId
             )

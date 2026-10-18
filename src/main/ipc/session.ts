@@ -4,7 +4,7 @@ import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { parseTerminalSurfaceCloseTarget } from '../../shared/terminal-surface-close-target'
 import { isFrozenOrcadSourceSessionPartition } from '../ssh/orcad-retained-source'
 import { markAgentLaunchesClosedByUser } from '../agent-launch/agent-launch-pane-attachment'
-import { windowSaveForMain } from '../persistence/window-save-pane-trees'
+import { windowViewPatchForMain, windowViewSaveForMain } from '../persistence/window-save-view'
 import { writeWindowSaveWatchingLayout } from '../persistence/window-save-divergence'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import type {
@@ -31,8 +31,8 @@ export function registerSessionHandlers(store: Store, runtime: OrcaRuntimeServic
     return store.getWorkspaceSessionHostIds()
   })
 
-  // Switch point: main keeps its own pane trees over the window's, and reports any layout the
-  // save still changes.
+  // Switch point: main keeps its own layout over the window's, and reports any layout the save
+  // still changes.
   const saveFromWindow = (
     hostId: string | null | undefined,
     write: () => void,
@@ -48,19 +48,17 @@ export function registerSessionHandlers(store: Store, runtime: OrcaRuntimeServic
           save.terminalLayoutsByTabId
         )
       : write()
-  const forMain = <T extends WorkspaceSessionState | WorkspaceSessionPatch>(
-    save: T,
-    hostId: string | null | undefined
-  ): T =>
-    ORCA_LAYOUT_OWNER_IS_MAIN
-      ? windowSaveForMain(store.getWorkspaceSession(hostId), save, hostId)
-      : save
-
   ipcMain.handle('session:set', (_event, args: WorkspaceSessionState, hostId?: string | null) => {
     if (!isFenced(hostId)) {
       saveFromWindow(
         hostId,
-        () => store.setWorkspaceSession(forMain(args, hostId), hostId),
+        () =>
+          store.setWorkspaceSession(
+            ORCA_LAYOUT_OWNER_IS_MAIN
+              ? windowViewSaveForMain(store.getWorkspaceSession(hostId), args, hostId)
+              : args,
+            hostId
+          ),
         'session:set',
         args
       )
@@ -71,7 +69,13 @@ export function registerSessionHandlers(store: Store, runtime: OrcaRuntimeServic
     if (!isFenced(hostId)) {
       saveFromWindow(
         hostId,
-        () => store.patchWorkspaceSession(forMain(args, hostId), hostId),
+        () =>
+          store.patchWorkspaceSession(
+            ORCA_LAYOUT_OWNER_IS_MAIN
+              ? windowViewPatchForMain(store.getWorkspaceSession(hostId), args, hostId)
+              : args,
+            hostId
+          ),
         'session:patch',
         args
       )
