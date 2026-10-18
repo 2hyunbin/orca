@@ -2,7 +2,6 @@ import {
   captureStructuredAgentCliSource,
   structuredAgentCliSourcePathFromEvidence
 } from '../../native-chat/structured-agent-cli-source'
-import type { OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce as RestoreStructuredAgentSessionTabsOnceMethods } from './structured-session-tab-restoration'
 import { agentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
 import { OrcaRuntimeWithGetWorktreePs } from '../workspaces/workspace-process-listing'
 import { getStructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-registry'
@@ -34,13 +33,7 @@ import type { AgentSessionAccountHome } from '../../../shared/agent-session-acco
 import type { StructuredAgentId } from '../../../shared/agent-session-provider-handle'
 
 export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport extends OrcaRuntimeWithGetWorktreePs {
-  protected abstract restoreStructuredAgentSessionTabsOnce(
-    ...args: Parameters<
-      RestoreStructuredAgentSessionTabsOnceMethods['restoreStructuredAgentSessionTabsOnce']
-    >
-  ): ReturnType<
-    RestoreStructuredAgentSessionTabsOnceMethods['restoreStructuredAgentSessionTabsOnce']
-  >
+  protected abstract restoreStructuredAgentSessionTabsOnce(): Promise<void>
 
   async getStructuredAgentSessionCreateSupport(
     worktreeSelector: string,

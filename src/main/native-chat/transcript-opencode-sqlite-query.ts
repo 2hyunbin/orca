@@ -304,10 +304,7 @@ function mapMessageRows(
         ? [{ message_id: row.id, time_updated: row.time_updated, data: null }]
         : partList
     )
-    const updated = partList.reduce(
-      (max, row) => (row.time_updated > max ? row.time_updated : max),
-      0
-    )
+    const updated = partList.reduce((max, p) => (p.time_updated > max ? p.time_updated : max), 0)
     for (const message of messages.toReversed()) {
       items.push({
         rowid: row.message_rowid,
