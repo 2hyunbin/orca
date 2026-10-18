@@ -117,10 +117,9 @@ describe('SidebarTemporalOwner', () => {
   it('settles at once when the row count moves or the mode switches', async () => {
     const { world, owner, ranked } = harness({ sortBy: 'name', worktrees: [worktree('b')] })
     owner.beginSession('s1')
-    owner.noteRowsChange(1)
     await flush()
     world.worktrees = [worktree('b'), worktree('a')]
-    owner.noteRowsChange(2)
+    owner.noteRowsChange(world.worktrees)
     await flush()
     expect(ranked()).toEqual(['a', 'b'])
 
@@ -187,7 +186,7 @@ describe('SidebarTemporalOwner', () => {
 
   it('stays idle until a window begins a session, and after dispose', async () => {
     const { world, owner } = harness({ sortBy: 'name', worktrees: [worktree('a')] })
-    owner.noteRowsChange(1)
+    owner.noteRowsChange([worktree('a')])
     owner.noteSortInputChange()
     world.active = new Set(['a'])
     owner.noteActivityChange()
@@ -208,6 +207,34 @@ describe('SidebarTemporalOwner', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
+  it('takes the session catalog as its row baseline, so a later listing waits out the burst', async () => {
+    const { world, owner, ranked } = harness({
+      sortBy: 'recent',
+      worktrees: [worktree('a', { lastActivityAt: 2 }), worktree('b', { lastActivityAt: 1 })]
+    })
+    owner.beginSession('s1')
+    await flush()
+    // A bump with no row count, then a listing with the same rows and fresher activity.
+    owner.noteSortInputChange()
+    world.worktrees = [worktree('a', { lastActivityAt: 2 }), worktree('b', { lastActivityAt: 3 })]
+    owner.noteRowsChange(world.worktrees)
+    await flush()
+    expect(ranked()).toEqual(['a', 'b'])
+    await vi.advanceTimersByTimeAsync(SORT_SETTLE_MS)
+    expect(ranked()).toEqual(['b', 'a'])
+
+    // A listing that changed nothing the sort reads is no bump, so it cannot delay a settle.
+    world.worktrees = [worktree('a', { lastActivityAt: 4 }), worktree('b', { lastActivityAt: 3 })]
+    owner.noteSortInputChange()
+    await vi.advanceTimersByTimeAsync(SORT_SETTLE_MS - 1_000)
+    owner.noteRowsChange([
+      worktree('a', { lastActivityAt: 2 }),
+      worktree('b', { lastActivityAt: 3 })
+    ])
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(ranked()).toEqual(['a', 'b'])
+  })
+
   it('drops a sample a newer settle overtook', async () => {
     const { world, owner, ranked } = harness({ sortBy: 'name', worktrees: [worktree('a')] })
     // The session's first read stalls on the one-row catalog; the row-change read overtakes it.
@@ -218,7 +245,7 @@ describe('SidebarTemporalOwner', () => {
     owner.beginSession('s1')
     world.gate = null
     world.worktrees = [worktree('a'), worktree('b')]
-    owner.noteRowsChange(2)
+    owner.noteRowsChange(world.worktrees)
     await flush()
     expect(ranked()).toEqual(['a', 'b'])
     release()

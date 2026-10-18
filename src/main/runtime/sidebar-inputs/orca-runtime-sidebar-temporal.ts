@@ -39,28 +39,25 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     // Every catalog change, from IPC or the runtime, reaches clients through this one bus.
     this.clientEvents.on(
       (event) => {
-        if (event.type === 'worktreesChanged') {
-          this.noteSidebarRowsChange()
-        } else if (event.type === 'reposChanged') {
-          this.sidebarTemporal.noteRepoChange()
+        if (event.type === 'worktreesChanged' || event.type === 'reposChanged') {
+          this.noteSidebarCatalogChange(event.type)
         }
       },
       { consumesTerminalSideEffects: false }
     )
   }
 
-  // Whether rows came or went decides if the change settles at once, so count after it lands.
-  // The count can come from a listing cached just before the change; the change then settles late.
-  private noteSidebarRowsChange(): void {
+  // Rows are listed after the change lands, as the window re-lists them; hostId is stamped there.
+  private noteSidebarCatalogChange(type: 'worktreesChanged' | 'reposChanged'): void {
     if (!this.sidebarTemporal.running) {
       return
     }
-    void this.listResolvedWorktreeSnapshot().then(
+    void this.readSidebarSortSample().then(
       ({ worktrees }) =>
-        this.sidebarTemporal.noteRowsChange(
-          worktrees.filter((worktree) => !worktree.isArchived).length
-        ),
-      (error: unknown) => console.warn('[sidebar-temporal] could not count rows', error)
+        type === 'reposChanged'
+          ? this.sidebarTemporal.noteRepoChange(worktrees)
+          : this.sidebarTemporal.noteRowsChange(worktrees),
+      (error: unknown) => console.warn('[sidebar-temporal] could not list rows', error)
     )
   }
 

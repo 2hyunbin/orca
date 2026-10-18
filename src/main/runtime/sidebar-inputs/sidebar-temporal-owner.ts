@@ -51,6 +51,27 @@ export type SidebarTemporalInputs = {
 }
 
 const SETTLE_DEADLINE = 'sort-settle'
+
+function countLiveRows(worktrees: readonly Worktree[]): number {
+  return worktrees.filter((worktree) => !worktree.isArchived).length
+}
+
+// The row fields any sort mode reads.
+function sortRowsSignature(worktrees: readonly Worktree[]): string {
+  return JSON.stringify(
+    worktrees.map((w) => [
+      getWorktreeHostIdentity(w),
+      w.repoId,
+      w.isArchived,
+      w.displayName,
+      w.path,
+      w.lastActivityAt,
+      w.createdAt,
+      w.sortOrder,
+      w.manualOrder
+    ])
+  )
+}
 const CREATE_GRACE_DEADLINE = 'create-grace'
 const RETENTION_DEADLINE = 'sleeping-retention'
 
@@ -73,6 +94,10 @@ export class SidebarTemporalOwner {
   private identityById = new Map<string, string>()
   private retentionState = createSleepingSweepRetentionState()
   private retention: SidebarRetention | null = null
+  // The rows the last bump saw, as the window's catalog holds them: an unchanged listing bumps nothing.
+  private rowsSignature: string | null = null
+  // The window's baseline is the catalog it already holds, so a session's first sample sets main's.
+  private seedRowsFromSample = false
 
   constructor(
     private readonly clock: SidebarClock,
@@ -102,6 +127,7 @@ export class SidebarTemporalOwner {
     // Until the new session's first sample lands, a reader must not take the old warm ranks.
     this.sortSnapshot = null
     this.retentionState = createSleepingSweepRetentionState()
+    this.seedRowsFromSample = true
     this.revision += 1
     this.retentionPass()
     this.settleNow()
@@ -121,10 +147,13 @@ export class SidebarTemporalOwner {
     })
   }
 
-  /** Rows changed: Manual and cold Smart follow saved ranks at once, as the window does. */
-  noteRowsChange(liveWorktreeCount: number): void {
+  /** The catalog was listed again: Manual and cold Smart follow saved ranks at once, as the window does. */
+  noteRowsChange(worktrees: readonly Worktree[]): void {
+    if (!this.running || !this.takeRows(worktrees)) {
+      return
+    }
     if (
-      !this.noteSortInputChange(liveWorktreeCount) &&
+      !this.noteSortInputChange(countLiveRows(worktrees)) &&
       ranksFollowPersistedOrder(this.sortBy, this.smartLatched)
     ) {
       this.settleNow()
@@ -132,8 +161,14 @@ export class SidebarTemporalOwner {
   }
 
   /** The window re-sorts at once when a repo changes, since repo labels are a sort key. */
-  noteRepoChange(): void {
-    this.settleNow()
+  noteRepoChange(worktrees: readonly Worktree[]): void {
+    if (!this.running) {
+      return
+    }
+    this.takeRows(worktrees)
+    if (!this.noteSortInputChange(countLiveRows(worktrees))) {
+      this.settleNow()
+    }
   }
 
   /** Activity alone never re-sorts; its sort-relevant causes arrive as their own changes. */
@@ -163,6 +198,16 @@ export class SidebarTemporalOwner {
     for (const key of [SETTLE_DEADLINE, CREATE_GRACE_DEADLINE, RETENTION_DEADLINE]) {
       this.clock.cancel(key)
     }
+  }
+
+  /** True when the rows differ from the ones the last bump saw. */
+  private takeRows(worktrees: readonly Worktree[]): boolean {
+    const signature = sortRowsSignature(worktrees)
+    if (signature === this.rowsSignature) {
+      return false
+    }
+    this.rowsSignature = signature
+    return true
   }
 
   /** False until a window begins a session, and after dispose. */
@@ -227,6 +272,14 @@ export class SidebarTemporalOwner {
       rankedIds: ranking.sorted.map(getWorktreeHostIdentity),
       smartLatched: this.smartLatched,
       cause
+    }
+    if (this.seedRowsFromSample) {
+      this.seedRowsFromSample = false
+      this.rowsSignature = sortRowsSignature(sample.worktrees)
+      this.settleState = {
+        ...this.settleState,
+        liveCountAtLastBump: countLiveRows(sample.worktrees)
+      }
     }
     this.identityById = new Map(
       sample.worktrees.map((worktree) => [worktree.id, getWorktreeHostIdentity(worktree)])
