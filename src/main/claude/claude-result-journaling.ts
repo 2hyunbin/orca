@@ -4,10 +4,8 @@
 // Split out of the translator when that file reached its line budget; the translator still owns
 // the open turn and every collaborator this writes through.
 
-import { agentJournalItemKey } from '../../shared/agent-session-journal-item-key'
 import {
-  claudeTerminalFailureIdentity,
-  resolveClaudeTerminalOwner,
+  queueClaudeTerminalFailure,
   writeClaudeTerminalFailure
 } from './claude-terminal-failure'
 import type { ClaudeContextFacts } from './claude-context-facts'
@@ -63,18 +61,17 @@ export function journalClaudeResult(
   // diagnostic below still runs: a child's failure is reportable even when
   // it ends no turn.
   const settlesTurn = isRootClaudeFrame(message)
-  const owner = settlesTurn ? resolveClaudeTerminalOwner(sink, turn, message) : undefined
-  if (owner === null) {
-    return
-  }
-  if (owner?.identity && !owner.current) {
-    const failureIdentity = claudeTerminalFailureIdentity(agentJournalItemKey(owner.identity))
-    const prior = sink.journalItems?.()?.itemBody(agentJournalItemKey(failureIdentity))
-    const usageLimit = prior?.kind === 'status' && prior.failure?.kind === 'usageLimitReached'
-      ? usageLimits.result(message, claudeResultFailure(message, false) !== null, { cause: 'quota' }) : null
-    if (usageLimit) {
-      writeClaudeTerminalFailure(sink, owner.identity, usageLimit)
-    }
+  if (settlesTurn && !turn.ownsTerminal(message)) {
+    const failure = claudeResultFailure(message)
+    const body = usageLimits.result(message, failure !== null, { cause: 'quota' })
+    queueClaudeTerminalFailure(sink, turn, message, body, () => {
+      const kind = claudeProviderFrameKind(message)
+      if (failure || !isSettledClaudeResultKind(kind)) {
+        providerFallback.append(kind, message, failure?.text, undefined,
+          { reportsFailure: failure !== null },
+          () => ({ turnScope: { kind: 'thread' }, observedAt }))
+      }
+    })
     return
   }
   const commandEnd = settlesTurn ? claudeCommandResultEnd(turn, sink, message, observedAt) : null

@@ -22,7 +22,7 @@ const refusedFrame = (uuid: string, at: number, text: string) =>
     {
       type: 'assistant',
       uuid,
-      user_message_uuid: `ask-${uuid}`,
+      user_message_uuid: `turn-${uuid}`,
       error: 'rate_limit',
       is_api_error_message: true,
       message: { role: 'assistant', content: [{ type: 'text', text }] }
@@ -38,7 +38,7 @@ const failedResult = (uuid: string, at: number, text: string) =>
       is_error: true,
       result: text,
       uuid: `result-${uuid}`,
-      user_message_uuid: `ask-${uuid}`,
+      user_message_uuid: `turn-${uuid}`,
       duration_ms: 10
     },
     at
@@ -65,7 +65,7 @@ describe('a Claude usage limit', () => {
     const t = setup()
     t.handle(userFrame('turn-a', 1_000))
     t.handle(rateLimitEvent('rejected', 1_100))
-    t.handle(frame({ ...assistantFrame('first', 1_150, 20).message, user_message_uuid: 'ask-a' }, 1_150))
+    t.handle(frame({ ...assistantFrame('first', 1_150, 20).message, user_message_uuid: 'turn-a' }, 1_150))
     t.handle(frame({
       ...refusedFrame('a', 1_200, LIMIT_TEXT).message,
       user_message_uuid: undefined,
@@ -98,11 +98,11 @@ describe('a Claude usage limit', () => {
 
   it('keeps typed other causes and replacement turns separate from the account snapshot', () => {
     const t = setup()
-    t.handle(userFrame('limited', 1_000))
+    t.handle(userFrame('turn-limited', 1_000))
     t.handle(rateLimitEvent('rejected', 1_100))
     t.handle(refusedFrame('limited', 1_200, LIMIT_TEXT))
     // No result: a replacement turn must not inherit the previous refusal.
-    t.handle(userFrame('credits', 2_000))
+    t.handle(userFrame('turn-credits', 2_000))
     t.handle(frame({
       ...refusedFrame('credits', 2_100, 'This model requires usage credits').message,
       api_error: 'model_requires_usage_credits'
@@ -120,13 +120,13 @@ describe('a Claude usage limit', () => {
     const clock = vi.spyOn(Date, 'now').mockReturnValue(RESETS_AT_S * 1000 - 1000)
     try {
       const t = setup()
-      t.handle(userFrame('typed', 1000))
+      t.handle(userFrame('turn-typed', 1000))
       t.handle(frame({ ...refusedFrame('typed', 1100, LIMIT_TEXT).message,
         api_error: 'usage_limit_reached' }, 1100))
       t.handle(failedResult('typed', 1200, LIMIT_TEXT))
       t.handle(rateLimitEvent('rejected', 1300))
       clock.mockReturnValue(RESETS_AT_S * 1000 + 1000)
-      t.handle(userFrame('expired', 2000))
+      t.handle(userFrame('turn-expired', 2000))
       t.handle(refusedFrame('expired', 2100, 'Request rejected'))
       t.handle(failedResult('expired', 2200, 'Request rejected'))
       const limits = statusRows(t).filter((row) => row.failure?.kind === 'usageLimitReached')
@@ -160,22 +160,25 @@ const quota = (uuid: string, stamp?: string) => frame({
 }, 1100)
 
 it.each([false, true])('reconciles replay and late detail without touching newer work (provider-opened %s)', (providerOpened) => {
-  const t = setup()
+  const t = setup({ deferred: true })
   if (!providerOpened) { t.handle(userFrame('owner', 1000)) }
   const refusal = quota('owner', providerOpened ? undefined : 'owner')
   t.handle(refusal)
   t.handle(frame({ ...failedResult('owner', 1200, LIMIT_TEXT).message, user_message_uuid: 'owner' }, 1200))
-  const endpoints = t.items().filter((item) => item.body.kind === 'turn')
-  const warning = t.items().find((item) => item.body.kind === 'status')
   t.handle(refusal)
   t.handle(frame({ ...failedResult('owner', 1300, LIMIT_TEXT).message, user_message_uuid: 'owner' }, 1300))
-  expect(statusRows(t)).toHaveLength(1)
-  expect(t.items().find((item) => item.body.kind === 'status')).toEqual(warning)
-  expect(t.items().filter((item) => item.body.kind === 'turn')).toEqual(endpoints)
   t.handle(userFrame('newer', 2000))
-  t.handle(refusal)
-  t.handle(frame({ ...failedResult('owner', 2200, 'New provider explanation').message, user_message_uuid: 'owner' }, 2200))
+  const stampedReplay = frame({ ...refusal.message, user_message_uuid: 'owner' }, 2100)
+  t.handle(stampedReplay)
+  t.handle(frame({ ...failedResult('owner', 2200, LIMIT_TEXT).message, user_message_uuid: 'owner' }, 2200))
+  t.flush()
+  expect(statusRows(t)).toHaveLength(1)
+  expect(t.items().find((item) => item.body.kind === 'status')?.revision).toBe(1)
   expect(t.translator.currentTurnId).toBe('newer')
+  const endpoints = t.items().filter((item) => item.body.kind === 'turn')
+  t.handle(frame({ ...failedResult('owner', 2300, 'New provider explanation').message, user_message_uuid: 'owner' }, 2300))
+  t.flush()
+  expect(t.items().filter((item) => item.body.kind === 'turn')).toEqual(endpoints)
   expect(t.turnRow('newer')?.body).toMatchObject({ state: 'running' })
   expect(statusRows(t)).toHaveLength(1)
   expect(statusRows(t)[0]?.failure?.detail?.text).toContain('New provider explanation')
@@ -214,7 +217,7 @@ it.each(['before', 'after', 'child', 'ordinary', 'success', 'other', 'superseded
   }
   if (mode === 'other') {
     t.handle(frame({ ...refusedFrame('other', 1150, 'Requires credits').message,
-      api_error: 'model_requires_usage_credits' }, 1150))
+      api_error: 'model_requires_usage_credits', user_message_uuid: 'owner' }, 1150))
   }
   const stopAt = mode === 'before' ? 1150 : 1300
   t.sink.journalStopDecidesTurn = (_turnId, endAt) =>

@@ -31,7 +31,7 @@ export function createStructuredAgentSessionResolvedAppend(
     reservedBytes: number,
     resolve: (journal: StructuredAgentSessionRevisionJournal) => ResolvedItem | null,
     options: StructuredAgentSessionItemAppendOptions,
-    input: { publish: boolean; lifecycle?: true; overflow: string }
+    input: { publish: boolean; lifecycle?: true; overflow: string; onPublished?: () => void }
   ) =>
     queue.submit(
       {
@@ -55,6 +55,7 @@ export function createStructuredAgentSessionResolvedAppend(
           )
           if (landed !== null && input.publish) {
             bound.publish()
+            input.onPublished?.()
           }
         }
       },
@@ -77,8 +78,8 @@ export function createStructuredAgentSessionResolvedAppend(
     tryAppendResolvedItemAndPublish: identityOnly(true),
     tryReviseResolvedItem: (reservedBytes, resolve, options) =>
       submit(reservedBytes, resolve, options, { publish: false, overflow: ITEM_OVERFLOW }),
-    tryReviseResolvedItemAndPublish: (reservedBytes, resolve, options) =>
-      submit(reservedBytes + 1, resolve, options, { publish: true, overflow: ITEM_OVERFLOW }),
+    tryReviseResolvedItemAndPublish: (reservedBytes, resolve, options, onPublished) =>
+      submit(reservedBytes + 1, resolve, options, { publish: true, overflow: ITEM_OVERFLOW, onPublished }),
     tryAppendLifecycleTransition: (identitySizeBound, body, resolveIdentity, options) =>
       submit(
         estimateStructuredAgentSessionItemBytes(identitySizeBound, body),

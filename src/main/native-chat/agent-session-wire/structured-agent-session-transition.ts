@@ -10,7 +10,8 @@
 
 import type {
   AgentJournalItemBody,
-  AgentJournalItemIdentity
+  AgentJournalItemIdentity,
+  AgentJournalTurnScope
 } from '../../../shared/agent-session-journal-types'
 import type { JournalLifecycleMutationInput } from '../agent-session-journal/journal-row-builders'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
@@ -38,6 +39,7 @@ export type StructuredAgentSessionTransitionStep =
       resolve: (journal: StructuredAgentSessionTransitionJournal) => {
         identity: AgentJournalItemIdentity
         body: AgentJournalItemBody
+        turnScope?: AgentJournalTurnScope
       } | null
       options: StructuredAgentSessionItemAppendOptions
     }

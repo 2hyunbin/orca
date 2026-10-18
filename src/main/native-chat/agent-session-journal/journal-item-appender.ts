@@ -1,7 +1,8 @@
 import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 import type {
   AgentJournalItemBody,
-  AgentJournalItemIdentity
+  AgentJournalItemIdentity,
+  AgentJournalTurnScope
 } from '../../../shared/agent-session-journal-types'
 import { journalItemRowBuilder } from './journal-row-builders'
 import type { JournalReducerState } from './journal-reducer'
@@ -12,7 +13,11 @@ import type { JournalOperationReceipt } from './journal-row-writer'
 // A module-level Error's lazy stack retains the bundle's startup code and read buffer.
 class NothingResolvedError extends Error {}
 
-export type JournalResolvedItem = { identity: AgentJournalItemIdentity; body: AgentJournalItemBody }
+export type JournalResolvedItem = {
+  identity: AgentJournalItemIdentity
+  body: AgentJournalItemBody
+  turnScope?: AgentJournalTurnScope
+}
 
 export class JournalItemAppender {
   constructor(

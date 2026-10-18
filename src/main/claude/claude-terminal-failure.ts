@@ -11,7 +11,11 @@ import { isRootAgentJournalItem } from '../../shared/agent-session-journal-produ
 import { readAgentSessionFailureFact, providerDiagnostic } from '../../shared/agent-session-failure'
 import { agentSessionFailureWords } from '../../shared/agent-session-failure-words'
 import { latestNativeChatTurnSinceRequest } from '../../shared/native-chat-orca-stop-cut'
-import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
+import type { StructuredAgentSessionTransitionJournal } from '../native-chat/agent-session-wire/structured-agent-session-transition'
+import type {
+  StructuredAgentSessionEventSink,
+  StructuredAgentSessionRevisionJournal
+} from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import {
   agentJournalTurnRowReservedBytes,
   resolveAgentJournalTurnRowWrite,
@@ -25,8 +29,9 @@ export function claudeTerminalFailureIdentity(turnItemId: string): AgentJournalI
   return { provider: 'orca', clientMessageId: `terminal-failure:claude:${turnItemId}` }
 }
 
-function latestClosedWork(sink: StructuredAgentSessionEventSink): AgentJournalRenderItem | null {
-  const journal = sink.journalItems?.()
+function latestClosedWork(
+  journal: StructuredAgentSessionTransitionJournal | null | undefined
+): AgentJournalRenderItem | null {
   if (!journal) {
     return null
   }
@@ -42,12 +47,11 @@ function latestClosedWork(sink: StructuredAgentSessionEventSink): AgentJournalRe
 }
 
 // Historical correlation wins over a newer cursor; unknown accepted work keeps its diagnostic.
-export function resolveClaudeTerminalOwner(
-  sink: StructuredAgentSessionEventSink,
-  turn: ClaudeOpenTurn,
+function resolveClaudeTerminalOwner(
+  journal: StructuredAgentSessionTransitionJournal,
+  suppressed: boolean,
   frame: Record<string, unknown>
-): { identity: AgentJournalItemIdentity | null; current: boolean } | null {
-  const journal = sink.journalItems?.()
+): AgentJournalItemIdentity | null | undefined {
   const sessionId = claudeText(frame.session_id)
   const stamp = claudeText(frame.user_message_uuid)
   const uuid = stamp ?? (frame.type === 'assistant' ? claudeText(frame.uuid) : null)
@@ -76,18 +80,12 @@ export function resolveClaudeTerminalOwner(
     }
   }
   if (owner) {
-    return {
-      identity: parseAgentJournalItemKey(owner.itemId),
-      current: owner.itemId === (turn.identity && agentJournalItemKey(turn.identity))
-    }
+    return parseAgentJournalItemKey(owner.itemId)
   }
-  if (turn.identity) {
-    return { identity: turn.identity, current: true }
-  }
-  if (turn.isReopenSuppressed && latestClosedWork(sink)) {
+  if (suppressed && latestClosedWork(journal)) {
     return null
   }
-  return { identity: null, current: false }
+  return undefined
 }
 
 export function writeClaudeTerminalFailure(
@@ -105,24 +103,82 @@ export function writeClaudeTerminalFailure(
     return
   }
   const reservedBytes = Buffer.byteLength(JSON.stringify({ failureIdentity, body }), 'utf8') + 8192
-  revise.call(sink, reservedBytes, (journal) => {
-    const old = journal.itemBody(agentJournalItemKey(failureIdentity))
-    const prior = old?.kind === 'status' ? readAgentSessionFailureFact(old.failure) : undefined
-    const next = body.kind === 'status' ? readAgentSessionFailureFact(body.failure) : undefined
-    const previousDetail = prior?.detail?.text
-    const incomingDetail = next?.detail?.text
-    const detail = previousDetail && incomingDetail && !previousDetail.includes(incomingDetail)
-      ? `${previousDetail}\n${incomingDetail}` : previousDetail ?? incomingDetail ?? ''
-    const merged = prior?.kind === 'usageLimitReached' && next?.kind === 'usageLimitReached'
-      ? { ...body, ...agentSessionFailureWords({
-          ...prior, ...next,
-          usageLimit: next.usageLimit ?? prior.usageLimit,
-          detail: providerDiagnostic(detail, 'person')
-        }, { agentName: 'Claude', provider: 'claude', surface: 'row' }) }
-      : body
-    return JSON.stringify(merged) === JSON.stringify(old)
-      ? null : { identity: failureIdentity, body: merged }
-  }, options)
+  revise.call(sink, reservedBytes, (journal) => mergeClaudeTerminalFailure(journal, identity, body), options)
+}
+
+function mergeClaudeTerminalFailure(
+  journal: StructuredAgentSessionRevisionJournal,
+  identity: AgentJournalItemIdentity,
+  body: AgentJournalItemBody
+) {
+  const failureIdentity = claudeTerminalFailureIdentity(agentJournalItemKey(identity))
+  const old = journal.itemBody(agentJournalItemKey(failureIdentity))
+  const prior = old?.kind === 'status' ? readAgentSessionFailureFact(old.failure) : undefined
+  const next = body.kind === 'status' ? readAgentSessionFailureFact(body.failure) : undefined
+  const previousDetail = prior?.detail?.text
+  const incomingDetail = next?.detail?.text
+  const detail = previousDetail && incomingDetail && !previousDetail.includes(incomingDetail)
+    ? `${previousDetail}\n${incomingDetail}` : previousDetail ?? incomingDetail ?? ''
+  const merged = prior?.kind === 'usageLimitReached' && next?.kind === 'usageLimitReached'
+    ? { ...body, ...agentSessionFailureWords({
+        ...prior, ...next,
+        usageLimit: next.usageLimit ?? prior.usageLimit,
+        detail: providerDiagnostic(detail, 'person')
+      }, { agentName: 'Claude', provider: 'claude', surface: 'row' }) }
+    : body
+  return JSON.stringify(merged) === JSON.stringify(old)
+    ? null : { identity: failureIdentity, body: merged }
+}
+
+// Cursor-less and positively different work wait for preceding ownership writes, never for a new cursor.
+export function queueClaudeTerminalFailure(
+  sink: StructuredAgentSessionEventSink,
+  turn: ClaudeOpenTurn,
+  frame: Record<string, unknown>,
+  body: AgentJournalItemBody | null,
+  fallback: () => void
+): void {
+  const generation = turn.generation
+  const cursorless = !turn.isOpen
+  const suppressed = turn.isReopenSuppressed
+  let unowned = false
+  const finish = (): void => {
+    if (unowned) {
+      fallback()
+      if (cursorless && turn.generation === generation && frame.type === 'result') {
+        turn.suppressReopenOnFailure(frame.is_error === true)
+      }
+    }
+  }
+  if (!sink.tryAppendTransition) {
+    unowned = true
+    finish()
+    return
+  }
+  sink.tryAppendTransition({
+    lifecycle: true,
+    publish: true,
+    steps: [{
+      kind: 'item',
+      reservedBytes: Buffer.byteLength(JSON.stringify({ frame, body }), 'utf8') + 8192,
+      options: { turnScope: { kind: 'thread' } },
+      resolve: (journal) => {
+        const identity = resolveClaudeTerminalOwner(journal, suppressed, frame)
+        unowned = identity === undefined
+        if (!identity || !body) {
+          return null
+        }
+        const turnItemId = agentJournalItemKey(identity)
+        const prior = journal.itemBody(agentJournalItemKey(claudeTerminalFailureIdentity(turnItemId)))
+        if (frame.type === 'result' && !(prior?.kind === 'status' && prior.failure?.kind === 'usageLimitReached')) {
+          return null
+        }
+        const merged = mergeClaudeTerminalFailure(journal, identity, body)
+        return merged ? { ...merged, turnScope: { kind: 'turn', turnItemId } as const } : null
+      }
+    }],
+    onPublished: finish
+  })
 }
 
 // Every ending reads its own quota fact after preceding assistant writes have landed.
@@ -132,41 +188,34 @@ export function finalizeClaudeTerminalTurn(
   write: AgentJournalTurnRowWrite,
   turn: ClaudeOpenTurn
 ): boolean {
-  if (!sink.tryAppendTransition || !write.lifecycle) {
+  const revise = sink.tryReviseResolvedItemAndPublish
+  if (!revise || !write.lifecycle || write.lifecycle.outcome !== undefined) {
     return false
   }
   const lifecycle = write.lifecycle
   const target = { identity }
   const reservedBytes = agentJournalTurnRowReservedBytes(target, write)
   let failed = false
-  sink.tryAppendTransition({
-    lifecycle: true,
-    publish: true,
-    steps: [{
-      kind: 'item', reservedBytes, options: { turnScope: { kind: 'thread' } },
-      resolve: (journal) => {
-        const itemId = agentJournalItemKey(identity)
-        const row = journal.item(agentJournalItemKey(claudeTerminalFailureIdentity(itemId)))
-        const quota = row?.body.kind === 'status' && isRootAgentJournalItem(row) &&
-          row.turnScope?.kind === 'turn' && row.turnScope.turnItemId === itemId &&
-          readAgentSessionFailureFact(row.body.failure)?.kind === 'usageLimitReached'
-        const stopped = lifecycle.completedAt !== undefined &&
-          sink.journalStopDecidesTurn?.(lifecycle.turnId, lifecycle.completedAt)
-        const outcome = lifecycle.outcome ?? (quota ? (stopped ? 'cancellation' : 'failure') : undefined)
-        failed = outcome === 'failure'
-        return resolveAgentJournalTurnRowWrite(journal, target, {
-          ...write, lifecycle: { ...lifecycle, ...(outcome ? { outcome } : {}) }
-        }, reservedBytes)
-      }
-    }],
-    onPublished: () => {
-      const current = turn.identity
-      if (
-        failed && (!current || agentJournalItemKey(current) === agentJournalItemKey(identity)) &&
-        latestClosedWork(sink)?.itemId === agentJournalItemKey(identity)
-      ) {
-        turn.suppressReopenOnFailure(true)
-      }
+  revise.call(sink, reservedBytes, (journal) => {
+    const itemId = agentJournalItemKey(identity)
+    const row = journal.item(agentJournalItemKey(claudeTerminalFailureIdentity(itemId)))
+    const quota = row?.body.kind === 'status' && isRootAgentJournalItem(row) &&
+      row.turnScope?.kind === 'turn' && row.turnScope.turnItemId === itemId &&
+      readAgentSessionFailureFact(row.body.failure)?.kind === 'usageLimitReached'
+    const stopped = lifecycle.completedAt !== undefined &&
+      sink.journalStopDecidesTurn?.(lifecycle.turnId, lifecycle.completedAt)
+    const outcome = quota ? (stopped ? 'cancellation' : 'failure') : undefined
+    failed = outcome === 'failure'
+    return resolveAgentJournalTurnRowWrite(journal, target, {
+      ...write, lifecycle: { ...lifecycle, ...(outcome ? { outcome } : {}) }
+    }, reservedBytes)
+  }, { turnScope: { kind: 'thread' } }, () => {
+    const current = turn.identity
+    if (
+      failed && (!current || agentJournalItemKey(current) === agentJournalItemKey(identity)) &&
+      latestClosedWork(sink.journalItems?.())?.itemId === agentJournalItemKey(identity)
+    ) {
+      turn.suppressReopenOnFailure(true)
     }
   })
   return true

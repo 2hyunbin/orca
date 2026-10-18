@@ -36,7 +36,7 @@ export function journal({ deferred = false } = {}) {
       revision: (existing?.revision ?? 0) + 1,
       sequence: existing?.sequence ?? rows.size + 1,
       observedAt: existing?.observedAt ?? options?.observedAt ?? clock.now,
-      ...options, body
+      ...options, turnScope: existing?.turnScope ?? options.turnScope, body
     })
   }
   const scans = { count: 0 }
@@ -54,14 +54,16 @@ export function journal({ deferred = false } = {}) {
     },
     itemBody: (itemId) => rows.get(itemId)?.body ?? null
   }
-  const revise: NonNullable<StructuredAgentSessionEventSink['tryReviseResolvedItem']> = (
+  const revise: NonNullable<StructuredAgentSessionEventSink['tryReviseResolvedItemAndPublish']> = (
     _reservedBytes,
     resolve,
-    options
+    options,
+    onPublished
   ) => {
     run(() => {
       const resolved = resolve(bound)
       if (resolved) { appendItem(resolved.identity, resolved.body, options) }
+      onPublished?.()
     })
     return { accepted: true }
   }
@@ -73,7 +75,7 @@ export function journal({ deferred = false } = {}) {
         for (const step of transition.steps) {
           if (step.kind === 'item') {
             const resolved = step.resolve(bound)
-            if (resolved) { appendItem(resolved.identity, resolved.body, step.options) }
+            if (resolved) { appendItem(resolved.identity, resolved.body, { ...step.options, turnScope: resolved.turnScope ?? step.options.turnScope }) }
           }
         }
         transition.onPublished?.()

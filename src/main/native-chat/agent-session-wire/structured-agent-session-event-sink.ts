@@ -69,7 +69,7 @@ export type StructuredAgentSessionIdentityResolver = (
 /** What a revision reads: a keyed read for a row it can name, and the scan for one it cannot. */
 export type StructuredAgentSessionRevisionJournal = Pick<
   AgentSessionJournal,
-  'epoch' | 'visitItems' | 'itemBody'
+  'epoch' | 'visitItems' | 'itemBody' | 'item'
 >
 
 /** Rows already journaled and who produced each, read by a producer that has to agree with them. */
@@ -134,7 +134,8 @@ export type StructuredAgentSessionEventSink = StructuredAgentSessionTransitionSi
   tryReviseResolvedItemAndPublish?(
     reservedBytes: number,
     resolve: StructuredAgentSessionRevisionResolver,
-    options: StructuredAgentSessionRevisionOptions
+    options: StructuredAgentSessionRevisionOptions,
+    onPublished?: () => void
   ): StructuredAgentSessionSinkAdmission
   /** Queues one journal-derived lifecycle append; a null resolution is a no-op. */
   tryAppendLifecycleTransition?(

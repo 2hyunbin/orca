@@ -53,6 +53,8 @@ export class JournalStepWriter {
     const resolved = step.resolve()
     return resolved === null
       ? []
-      : [journalItemRowBuilder(this.deps.state, resolved.identity, resolved.body, step.options)]
+      : [journalItemRowBuilder(this.deps.state, resolved.identity, resolved.body, {
+          ...step.options, ...(resolved.turnScope ? { turnScope: resolved.turnScope } : {})
+        })]
   }
 }

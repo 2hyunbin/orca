@@ -45,6 +45,7 @@ export function claudeTurnOpenedBySendEcho(
     input.frame.parent_tool_use_id === null
     ? {
         sessionId: envelope.sessionId,
+        inputUuid: envelope.uuid,
         turnId: envelope.uuid,
         startedAt: input.observedAt,
         ...(input.requestedAt === undefined ? {} : { requestedAt: input.requestedAt }),
@@ -113,9 +114,11 @@ export function createClaudeTurnOpener(deps: {
     if ((!send && deps.isSuppressed()) || deps.isTurnOpen()) {
       return
     }
+    const inputUuid = claudeText(frame.user_message_uuid)
     deps.open(
       {
         sessionId: source.sessionId,
+        ...(inputUuid ? { inputUuid } : {}),
         turnId: source.uuid,
         startedAt: observedAt,
         ...(send?.requestedAt === undefined ? {} : { requestedAt: send.requestedAt }),
