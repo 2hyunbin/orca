@@ -61,7 +61,10 @@ describe('agentJournalTurnBody', () => {
       completedAt: 8_200,
       durationMs: 7_172,
       contextUsage: { window: { tokens: 100, capturedAt: 8_200 } },
-      providerTurnId: 'provider-t1'
+      providerTurnId: 'provider-t1',
+      endedBy: 'provider',
+      receiptsComplete: true,
+      blockedInput: { reason: 'hook' }
     }
     expect(agentJournalTurnBody(complete)).toEqual({ kind: 'turn', ...complete })
   })

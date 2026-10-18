@@ -289,7 +289,7 @@ export function registerJournalAtomicTerminalSettlementTests(): void {
               settlementId: input.settlementId,
               fence: input.fence,
               recovered: true,
-              resolve: () => mutations
+              resolve: () => ({ mutations, dispatches: [] })
             }
           }
         ])

@@ -173,7 +173,11 @@ export function registerJournalLifecycleBatchAppenderTests(): void {
             : item('saved', 'second')
         ]
         expect(() =>
-          appender.planResolved({ settlementId: 'settlement', fence: 8, resolve: () => mutations })
+          appender.planResolved({
+            settlementId: 'settlement',
+            fence: 8,
+            resolve: () => ({ mutations, dispatches: [] })
+          })
         ).toThrow('journal_resolved_lifecycle_batch_names_item_twice')
         expect(rows).toEqual([])
         expect(state.items.size).toBe(0)
