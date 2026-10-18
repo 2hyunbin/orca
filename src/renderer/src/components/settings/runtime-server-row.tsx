@@ -159,7 +159,8 @@ export function RuntimeServerRow({
           <span className={cn('text-[11px]', statusIndicator.labelClassName)}>
             {statusIndicator.label}
           </span>
-          {accessRevoked || effectiveDetails?.compatibility?.kind === 'blocked' ? (
+          {/* Why: the red "Access revoked" label already carries the warning. */}
+          {!accessRevoked && effectiveDetails?.compatibility?.kind === 'blocked' ? (
             <AlertTriangle className="size-3.5 shrink-0 text-destructive" />
           ) : effectiveDetails?.status === 'loading' ? (
             <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
