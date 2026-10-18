@@ -17,6 +17,8 @@ import {
   agentJournalSubmissionKey
 } from '../../../shared/agent-session-journal-item-key'
 import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-session-mutation-envelope'
+import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
+import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
 import { nativeChatTurnMembership } from '../../../shared/native-chat-turn-membership'
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-record-store-test-harness'
@@ -218,6 +220,55 @@ describe('host rewind', () => {
     expect(await host.rewind(caller, await params(target))).toMatchObject({ ok: true })
     expect((await host.journalSnapshot(HOST_TEST_SESSION)).items).toHaveLength(1)
     expect(rewind).toHaveBeenCalledWith(expect.objectContaining({ beforeTurnId: 'drop' }))
+  })
+
+  it('omits a stopped submission between the kept turn and the rewind target', async () => {
+    expect(await host.attach(caller, hostTestAttachParams(null))).toMatchObject({ ok: true })
+    const kept = { ...LATE, turnId: 'kept' }
+    const target = { ...LATE, turnId: 'target' }
+    sink.appendItem(kept, hostTestMessage('kept'), { turnScope: AGENT_JOURNAL_THREAD_SCOPE })
+    await host.flushStreamedEvents(HOST_TEST_SESSION)
+    const body = hostTestMessage('stopped')
+    const clientOperationId = hostTestOperationId()
+    vi.mocked(adapter.dispatch).mockResolvedValueOnce({
+      state: 'rejected',
+      ...agentSessionFailureWords(agentSessionFailureFact('cancelled'), { surface: 'rejection' })
+    })
+    expect(
+      await host.send(caller, {
+        body,
+        envelope: {
+          sessionId: HOST_TEST_SESSION,
+          clientOperationId,
+          expectedRuntimeFence: store.getRecord(HOST_TEST_SESSION)!.lease.runtimeFence,
+          payloadFingerprint: computeAgentSessionPayloadFingerprint({
+            method: 'agentSession.send',
+            sessionId: HOST_TEST_SESSION,
+            fields: { body }
+          })
+        }
+      })
+    ).toMatchObject({ ok: true })
+    await vi.waitFor(async () =>
+      expect((await host.journalSnapshot(HOST_TEST_SESSION)).submissions).toEqual([
+        expect.objectContaining({ clientMessageId: clientOperationId, dispatchState: 'rejected' })
+      ])
+    )
+    sink.appendItem(target, hostTestMessage('target'), { turnScope: AGENT_JOURNAL_THREAD_SCOPE })
+    await host.flushStreamedEvents(HOST_TEST_SESSION)
+    expect(
+      (await host.journalSnapshot(HOST_TEST_SESSION)).items.map(({ itemId }) => itemId)
+    ).toEqual([
+      agentJournalItemKey(kept),
+      agentJournalSubmissionKey(clientOperationId),
+      agentJournalItemKey(target)
+    ])
+    expect(await host.rewind(caller, await params(agentJournalItemKey(target)))).toMatchObject({
+      ok: true
+    })
+    expect(
+      (await host.journalSnapshot(HOST_TEST_SESSION)).items.map(({ itemId }) => itemId)
+    ).toEqual([agentJournalItemKey(kept)])
   })
 
   it('finishes a durable provider success on reattach without repeating the provider mutation', async () => {
