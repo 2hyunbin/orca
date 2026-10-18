@@ -3,7 +3,6 @@ import {
   MAX_PROVIDER_DIAGNOSTIC_CHARS,
   type SubmissionRejectionFact
 } from '../../../shared/agent-session-failure'
-import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
 import { structuredAgentSessionHandsOver } from './structured-agent-session-current-work'
 import {
   AGENT_JOURNAL_THREAD_SCOPE,
