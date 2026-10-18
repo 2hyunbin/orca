@@ -1,5 +1,5 @@
 diff --git a/src/IIPHandler.ts b/src/IIPHandler.ts
-index 559b907416eb38318f439d060d7f89311ed34c7e..846edb1a804e5771208843e8601dd0d662cf944f 100644
+index 559b907416eb38318f439d060d7f89311ed34c7e..d7b2fd78c316bfa267f347c68dc1d8eab8b4e62b 100644
 --- a/src/IIPHandler.ts
 +++ b/src/IIPHandler.ts
 @@ -13,8 +13,10 @@ import { imageType, UNSUPPORTED_TYPE } from './IIPMetrics';
@@ -105,12 +105,23 @@ index 559b907416eb38318f439d060d7f89311ed34c7e..846edb1a804e5771208843e8601dd0d6
        blob = new ImageData(
          new Uint8ClampedArray(data.buffer, data.byteOffset, data.byteLength),
          this._qoiDec.width,
-@@ -198,8 +220,13 @@ export class IIPHandler implements IOscHandler, IResetHandler {
+@@ -198,8 +220,23 @@ export class IIPHandler implements IOscHandler, IResetHandler {
        blob = new Blob([this._dec.data8], { type: metrics.mime });
      }
      this._dec.release();
+-    return createImageBitmap(blob, { resizeWidth: w, resizeHeight: h })
 +    const generation = this._generation;
-     return createImageBitmap(blob, { resizeWidth: w, resizeHeight: h })
++    // Premultiply QOI pixels before interpolation, matching native image decoding.
++    const bitmap = metrics.mime === 'image/qoi'
++      ? createImageBitmap(blob, { premultiplyAlpha: 'premultiply' }).then(async source => {
++        try {
++          return await createImageBitmap(source, { resizeWidth: w, resizeHeight: h });
++        } finally {
++          source.close();
++        }
++      })
++      : createImageBitmap(blob, { resizeWidth: w, resizeHeight: h });
++    return bitmap
        .then(bm => {
 +        if (generation !== this._generation) {
 +          bm.close();
@@ -119,7 +130,7 @@ index 559b907416eb38318f439d060d7f89311ed34c7e..846edb1a804e5771208843e8601dd0d6
          this._storage.addImage(bm);
          return true;
        })
-@@ -209,6 +236,24 @@ export class IIPHandler implements IOscHandler, IResetHandler {
+@@ -209,6 +246,24 @@ export class IIPHandler implements IOscHandler, IResetHandler {
        });
    }
  
@@ -144,6 +155,67 @@ index 559b907416eb38318f439d060d7f89311ed34c7e..846edb1a804e5771208843e8601dd0d6
    private _resize(w: number, h: number): [number, number] {
      const cw = this._renderer.dimensions?.css.cell.width || CELL_SIZE_DEFAULT.width;
      const ch = this._renderer.dimensions?.css.cell.height || CELL_SIZE_DEFAULT.height;
+diff --git a/src/IIPMetrics.ts b/src/IIPMetrics.ts
+index 217a7fc93d5dca938dd086509027919f2f1c7902..41cd01abdbb0d5ff9d1560083e0bee7528756449 100644
+--- a/src/IIPMetrics.ts
++++ b/src/IIPMetrics.ts
+@@ -19,6 +19,13 @@ export const UNSUPPORTED_TYPE: IMetrics = {
+ };
+ 
+ export function imageType(d: Uint8Array): IMetrics {
++  // QOI can be smaller than the minimum header probe for the other formats.
++  if (d.length >= 14 && d[0] === 0x71 && d[1] === 0x6F && d[2] === 0x69 && d[3] === 0x66) {
++    const width = d[4] << 24 | d[5] << 16 | d[6] << 8 | d[7];
++    const height = d[8] << 24 | d[9] << 16 | d[10] << 8 | d[11];
++    return width > 0 && height > 0 && hasCompleteQoiPixels(d, width * height)
++      ? { mime: 'image/qoi', width, height } : UNSUPPORTED_TYPE;
++  }
+   if (d.length < 32) {
+     return UNSUPPORTED_TYPE;
+   }
+@@ -45,14 +52,6 @@ export function imageType(d: Uint8Array): IMetrics {
+       height: d[9] << 8 | d[8]
+     };
+   }
+-  // QOI: qoif
+-  if (d32[0] === 0x66696F71) {
+-    return {
+-      mime: 'image/qoi',
+-      width:  d[4] << 24 | d[5] << 16 | d[6] << 8 | d[7],
+-      height: d[8] << 24 | d[9] << 16 | d[10] << 8 | d[11]
+-    };
+-  }
+   // WEBP: RIFF | xxxx | WEBP | VP8x
+   if (d32[0] === 0x46464952 && d32[2] === 0x50424557 && (d32[3] & 0xFFFFFF) === 0x385056) {
+     switch (d[15]) {
+@@ -114,6 +113,27 @@ export function imageType(d: Uint8Array): IMetrics {
+ }
+ 
+ 
++function hasCompleteQoiPixels(data: Uint8Array, pixels: number): boolean {
++  if (data.length < 23 || !Number.isSafeInteger(pixels) || pixels <= 0 ||
++      (data[12] !== 3 && data[12] !== 4) || data[13] > 1) return false;
++  const end = data.length - 8;
++  for (let i = end; i < data.length - 1; i++) {
++    if (data[i] !== 0) return false;
++  }
++  if (data[data.length - 1] !== 1) return false;
++  let offset = 14;
++  let decoded = 0;
++  // The WASM decoder accepts incomplete streams, so validate without allocating pixels.
++  while (offset < end && decoded < pixels) {
++    const op = data[offset++];
++    const extra = op === 0xFE ? 3 : op === 0xFF ? 4 : (op & 0xC0) === 0x80 ? 1 : 0;
++    if (offset + extra > end) return false;
++    offset += extra;
++    decoded += op >= 0xC0 && op < 0xFE ? (op & 0x3F) + 1 : 1;
++  }
++  return decoded === pixels && offset === end;
++}
++
+ function jpgSize(d: Uint8Array): [number, number] {
+   const len = d.length;
+   let i = 4;
 diff --git a/src/ImageAddon.ts b/src/ImageAddon.ts
 index 8fd39543118cd420e36c1614c1af370b6c7bbfbb..fcabb492ab1e21853f7c473f8c4d085e1ab12414 100644
 --- a/src/ImageAddon.ts
