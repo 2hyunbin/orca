@@ -17,6 +17,13 @@ import {
   restoreTerminalTestGlobals
 } from './pty-connection-test-environment'
 import { connectMockPanePty } from './pty-connection-test-connect-mock-pane'
+import {
+  clearHiddenRendererPtyDeliveryState,
+  consumeHiddenRendererPtyDropMemory,
+  markHiddenRendererPty,
+  recordHiddenRendererPtyDataDrop,
+  unmarkHiddenRendererPty
+} from '../../../../main/ipc/pty-hidden-delivery-gate'
 
 // STA-4869 — routes R3 (pending-queue overflow, pty-connection.ts:7696) and R4
 // (loop iteration cap, 7702) end in the QUIET abandon, which trades the loss
@@ -243,6 +250,47 @@ describe('hidden-output restore quiet abandonment (STA-4869)', () => {
   })
 
   describe('unhide markers delivered during a restore', () => {
+    it('retires an episode first reported by unhide while an episode-less restore is pending', async () => {
+      const drive = await connectVisiblePane()
+      vi.useFakeTimers()
+      const getMainBufferSnapshot = vi.mocked(window.api.pty.getMainBufferSnapshot)
+      const first = createDeferred<MainSnapshot>()
+      getMainBufferSnapshot.mockReturnValueOnce(first.promise)
+      getMainBufferSnapshot.mockResolvedValue(modelSnapshot('ACKNOWLEDGED_CAPTURE', 128))
+      vi.mocked(window.api.pty.ackHiddenOutputRestoreApplied).mockImplementation(
+        consumeHiddenRendererPtyDropMemory
+      )
+      markHiddenRendererPty(PTY_ID)
+      const { hiddenDropEpisode } = recordHiddenRendererPtyDataDrop(PTY_ID, 64)
+      unmarkHiddenRendererPty(PTY_ID)
+      try {
+        await announceMainDrop(64, undefined, 'pending-cap')
+        await announceMainDrop(64, hiddenDropEpisode, 'unhide')
+        first.resolve(modelSnapshot('FIRST_CAPTURE', 128))
+        await flushAsyncTicks(40)
+        await vi.advanceTimersByTimeAsync(2_100)
+        await flushAsyncTicks(40)
+        const requestsBeforeQuietReveal = getMainBufferSnapshot.mock.calls.length
+        const live = 'LIVE_IMAGE_AFTER_ACK_WINDOW\r\n'
+        drive.deliver(live, 128 + live.length)
+        await flushAsyncTicks(10)
+        const writesBeforeQuietReveal = drive.writtenChunks().length
+        const quietReveal = unmarkHiddenRendererPty(PTY_ID)
+        expect.soft(quietReveal.droppedWhileHidden).toBe(false)
+        if (quietReveal.droppedWhileHidden) {
+          await announceMainDrop(64, quietReveal.hiddenDropEpisode, 'unhide')
+        }
+        await flushAsyncTicks(40)
+        expect(getMainBufferSnapshot).toHaveBeenCalledTimes(requestsBeforeQuietReveal)
+        expect(drive.writtenChunks().slice(writesBeforeQuietReveal).join('')).not.toContain(
+          '\x1b[2J'
+        )
+      } finally {
+        clearHiddenRendererPtyDeliveryState(PTY_ID)
+        drive.disposable.dispose()
+      }
+    })
+
     it('keeps the unhide requirement until a repeatedly stale snapshot finally covers it', async () => {
       const drive = await connectVisiblePane()
       vi.useFakeTimers()
