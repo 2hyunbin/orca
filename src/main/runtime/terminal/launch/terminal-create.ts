@@ -41,15 +41,12 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
         session?.activeGroupIdByWorktree?.[workspace.id]
       // A workspace not shown since launch has no measured group; with at most one group, its tab
       // opens in a lone group, which every workspace sizes alike.
-      const singleGroupSize =
+      const singleGroup =
         (session?.tabGroups?.[workspace.id]?.length ?? 0) <= 1
           ? this.singleGroupWorkspaceGridSize
           : undefined
-      const initialSize = resolvePtyFirstSize({
-        pane: opts.initialSize,
-        group: groupId ? this.terminalGroupGridSizes?.[groupId] : undefined,
-        singleGroup: singleGroupSize
-      })
+      const group = groupId ? this.terminalGroupGridSizes?.[groupId] : undefined
+      const initialSize = resolvePtyFirstSize({ pane: opts.initialSize, group, singleGroup })
       let preAllocatedHandle =
         launchOpts.preAllocatedHandle ?? this.createPreAllocatedTerminalHandle()
       let { tabId, leafId, paneKey } = dependencies.allocateTerminalPaneIdentity(launchOpts)
