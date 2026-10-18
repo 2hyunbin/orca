@@ -155,6 +155,26 @@ export function agentJournalSubmissionKey(clientMessageId: string): string {
   return agentJournalItemKey({ provider: 'orca', clientMessageId })
 }
 
+/** Saved facts take keys no item can: the delimiter never survives a component's encoding. */
+const FACT_KEY_PREFIX = 'fact\u001f'
+const SEND_ANSWERED_KEY_PREFIX = `${FACT_KEY_PREFIX}answered\u001f`
+
+export function isAgentJournalFactKey(key: string): boolean {
+  return key.startsWith(FACT_KEY_PREFIX)
+}
+
+/** Key of the mark saying the provider answered this send into a turn. */
+export function agentJournalSendAnsweredKey(clientMessageId: string): string {
+  return `${SEND_ANSWERED_KEY_PREFIX}${encodePart(clientMessageId)}`
+}
+
+/** The send an answered-turn mark names, or null for any other key. */
+export function readAgentJournalSendAnsweredKey(key: string): string | null {
+  return key.startsWith(SEND_ANSWERED_KEY_PREFIX)
+    ? (decodePart(key.slice(SEND_ANSWERED_KEY_PREFIX.length))?.value ?? null)
+    : null
+}
+
 /**
  * Inverse of {@link agentJournalItemKey}. Clients hold item KEYS, but an upsert
  * needs the identity behind one — answering an approval re-appends the same

@@ -119,7 +119,7 @@ describe('dead structured-session generation settlement', () => {
           kind: 'question',
           resolution: expect.objectContaining({ state: 'cancelled' })
         }),
-        { kind: 'turn', turnId: 'turn-1', state: 'unverifiable', startedAt: 900 }
+        { kind: 'turn', turnId: 'turn-1', state: 'unverifiable', startedAt: 900, endedBy: 'host' }
       ])
     )
     expect(snapshot.items.some((item) => item.body.kind === 'status')).toBe(false)

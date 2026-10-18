@@ -271,6 +271,7 @@ async function installOnJournal(
   let host: StructuredAgentSessionHost | null = null
   const lifecycle = createStructuredAgentSessionLifecycleDelivery({
     handle: (event) => host?.handleAdapterEvent(event),
+    arrived: (event) => host?.noteAdapterEvent(event),
     logger: deps.logger,
     // An agent that publishes an observed exit only after its own close work drains it here.
     drainObservedExits: async () => {

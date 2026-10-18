@@ -1,6 +1,7 @@
 import type { AgentJournalItemIdentity } from '../../shared/agent-session-journal-types'
 import type { AgentSessionAccountKind } from '../../shared/agent-session-availability'
 import type { CodexDispatchRequestOrigin } from './codex-structured-dispatch-echo'
+import type { CodexDispatchObservations } from './codex-structured-dispatch-observations'
 import type { AgentSessionDeltaCoalescerDeps } from '../native-chat/agent-session-wire/agent-session-delta-coalescer'
 import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import type { CodexStructuredSessionEvent } from './codex-structured-session-adapter'
@@ -38,6 +39,11 @@ export type CodexJournalTranslatorDeps = {
   /** Settles a send's identity off the echoed user message, using the very
    *  identity the journal row carries so a replay computes the same key. */
   onUserMessageEcho?: (clientMessageId: string, identity: AgentJournalItemIdentity) => void
+  /** What this child's Codex said about sends, kept until saved. */
+  observations?: Pick<
+    CodexDispatchObservations,
+    'receipt' | 'lose' | 'certifies' | 'retained' | 'prune'
+  >
   primaryThreadId?: () => string | null
   /** Submission origin for one exact client message still awaiting its echo. */
   dispatchRequestOrigin?: (clientMessageId: string) => CodexDispatchRequestOrigin | null

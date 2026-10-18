@@ -28,6 +28,7 @@ import { removeJournalItem, statedOrDerivedTurnScope, upsertJournalItem } from '
 import { journalItemRevisionIsStale } from './journal-item-revision'
 import { observeJournalProviderActivity } from './journal-provider-activity'
 import { isJournalStopOrResumeRow, type JournalRow } from './journal-row-schema'
+import { foldJournalSendAnswered, isJournalFactRow } from './journal-observed-sends'
 import { acceptSubmissionFromProviderItem, applyJournalSubmission } from './journal-submission-fold'
 import { applyJournalDispatchRow } from './journal-dispatch-reducer'
 import { isWriteFailureSubmission } from '../../../shared/structured-agent-session-dispatch-rejection'
@@ -77,6 +78,8 @@ export type JournalReducerState = {
   queuePauseMarks: JournalQueuePauseMarks
   /** Host-only: each handed-over send's stopped-message history, from its latest `pending` row. */
   stoppedHistoryCarried: Map<string, readonly string[]>
+  /** Host-only: client message id → the turn item the provider answered it into (`sendAnswered`). */
+  sendAnswers: Map<string, string>
 }
 
 export function createJournalReducerState(sessionId: string, epoch: string): JournalReducerState {
@@ -100,7 +103,8 @@ export function createJournalReducerState(sessionId: string, epoch: string): Jou
     derivedTurnScope: new JournalDerivedTurnScope(),
     latestAcceptedTurnSequence: 0,
     queuePauseMarks: createJournalQueuePauseMarks(),
-    stoppedHistoryCarried: new Map()
+    stoppedHistoryCarried: new Map(),
+    sendAnswers: new Map()
   }
 }
 
@@ -134,6 +138,10 @@ export function applyJournalRow(
   }
   if (isJournalStopOrResumeRow(row)) {
     foldJournalQueuePauseMark(state.queuePauseMarks, row)
+    return
+  }
+  if (isJournalFactRow(row)) {
+    foldJournalSendAnswered(state.sendAnswers, row)
     return
   }
   if (row.kind === 'tombstone') {

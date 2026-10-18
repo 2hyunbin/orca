@@ -30,6 +30,28 @@ import {
 } from './structured-agent-session-runtime'
 import { createStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import { scriptedCodexTransport } from './scripted-codex-transport.test-fixture'
+import { JournalHostDatabase } from '../native-chat/agent-session-journal/journal-host-database'
+import {
+  closeTestJournalHostDatabase,
+  liveTestJournalRows,
+  loadTestJournal
+} from '../native-chat/agent-session-journal/journal-host-database-test-support'
+import type Database from '../sqlite/sync-database'
+import type { AgentJournalItemBody } from '../../shared/agent-session-journal-types'
+import {
+  agentJournalItemKey,
+  agentJournalSendAnsweredKey
+} from '../../shared/agent-session-journal-item-key'
+import { codexTurnLifecycleIdentity } from '../codex/codex-structured-journal-translation-turns'
+
+// The retained-observation bound, shrunk by the loss case; the held-send bound keeps its own.
+const observationBound = vi.hoisted(() => ({ value: 256 }))
+vi.mock('../codex/codex-structured-dispatch-echo', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  get MAX_CODEX_PENDING_DISPATCH_ECHOES() {
+    return observationBound.value
+  }
+}))
 
 const CALLER = { callerKey: 'codex-held-sends-test' }
 
@@ -38,6 +60,10 @@ let host: StructuredAgentSessionHost
 let fence: number
 let handlers: CodexAppServerConnectionHandlers | undefined
 let answers: number
+let steers: number
+let closes: number
+/** Holds every `turn/steer` answer until it resolves. */
+let steerHold: Promise<void> | null
 let turns: ReturnType<typeof codexTurnLifecycleFake>
 let operations = 0
 const events: AgentSessionSubscribeEvent[] = []
@@ -96,6 +122,10 @@ async function rawSubmission(clientMessageId: string): Promise<AgentJournalSubmi
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-codex-held-sends-'))
   answers = 0
+  steers = 0
+  closes = 0
+  steerHold = null
+  observationBound.value = 256
   events.length = 0
   turns = codexTurnLifecycleFake(
     THREAD,
@@ -118,14 +148,19 @@ beforeEach(async () => {
           return turns.routes['turn/start']()
         }
         if (method === 'turn/steer') {
-          return turns.routes['turn/steer'](params)
+          steers += 1
+          const steered = turns.routes['turn/steer'](params)
+          return steerHold ? steerHold.then(() => steered) : steered
         }
         return {}
       },
       notify: () => {},
       respond: () => {},
       respondWithError: () => {},
-      close: async () => true
+      close: async () => {
+        closes += 1
+        return true
+      }
     }
     return connection
   }
@@ -156,9 +191,52 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await stopStructuredAgentSessionRuntime()
+  closeTestJournalHostDatabase(root)
   await rm(root, { recursive: true, force: true })
 })
+
+/** Fails every journal transaction `fails` picks, by the rows it would commit for the chat. */
+function failJournalWrites(fails: (rows: Record<string, unknown>[]) => boolean): void {
+  const transaction = JournalHostDatabase.prototype.transaction
+  vi.spyOn(JournalHostDatabase.prototype, 'transaction').mockImplementation(function <T>(
+    this: JournalHostDatabase,
+    run: (db: Database.Database) => T,
+    streamed?: boolean
+  ): T {
+    const checked = (db: Database.Database): T => {
+      const before = liveTestJournalRows(db, SESSION).length
+      const result = run(db)
+      const rows = liveTestJournalRows(db, SESSION)
+        .slice(before)
+        .map((row): Record<string, unknown> => JSON.parse(row.rowJson))
+      if (fails(rows)) {
+        throw new Error('journal write failed')
+      }
+      return result
+    }
+    return transaction.bind(this)(checked, streamed)
+  })
+}
+
+/** A receipt saved on its own, with no turn row beside it. */
+function bareReceipt(rows: Record<string, unknown>[], clientMessageId: string): boolean {
+  return (
+    rows.some(
+      (row) =>
+        row.kind === 'dispatch' &&
+        row.state === 'accepted' &&
+        row.clientMessageId === clientMessageId
+    ) && !rows.some((row) => row.kind === 'item' || row.kind === 'lifecycle-batch')
+  )
+}
+
+function turnBody(items: Iterable<{ body: AgentJournalItemBody }>, turnId: string) {
+  return [...items].find((item) => item.body.kind === 'turn' && item.body.turnId === turnId)?.body
+}
+
+const TURN_ITEM_ID = agentJournalItemKey(codexTurnLifecycleIdentity(SESSION, 'turn-1'))
 
 describe('a Codex send whose turn completes without taking it', () => {
   it('allows /compact afterwards without returning or publishing an unconfirmed command', async () => {
@@ -278,5 +356,102 @@ describe('a Codex send whose turn completes without taking it', () => {
       expect((await rawSubmission(taken)).dispatchState).toBe('accepted')
     )
     expect(host.currentWork(SESSION)?.working()).toBe(false)
+  })
+})
+
+describe('what Codex said about a send, saved whatever its own write did', () => {
+  it.each(['dies on its own', 'is closed by quitting Orca'])(
+    'saves a failed receipt with its turn end and a failed answer when Codex %s, by exact id',
+    async (exit) => {
+      const a = await send('the same words')
+      await vi.waitFor(() => expect(answers).toBe(1))
+      turns.start()
+      let releaseSteer = (): void => {}
+      steerHold = new Promise<void>((resolve) => {
+        releaseSteer = resolve
+      })
+      const b = await send('the same words')
+      await vi.waitFor(() => expect(steers).toBe(1))
+      const failed = { receipts: 0, marks: 0 }
+      failJournalWrites((rows) => {
+        if (bareReceipt(rows, b)) {
+          failed.receipts += 1
+          return true
+        }
+        const mark = rows.some((row) => row.itemId === agentJournalSendAnsweredKey(b))
+        if (mark && failed.marks === 0) {
+          failed.marks = 1
+          return true
+        }
+        return false
+      })
+
+      // One stdout read: B's first echo prunes its held entry, and the turn ends after both echoes.
+      const echo = {
+        threadId: THREAD,
+        turnId: 'turn-1',
+        item: { type: 'userMessage', id: 'item-b', clientId: b, content: [] }
+      }
+      handlers?.onNotification?.('item/started', echo)
+      handlers?.onNotification?.('item/completed', echo)
+      turns.end('completed')
+
+      await vi.waitFor(async () => expect((await rawSubmission(b)).dispatchState).toBe('accepted'))
+      expect(failed.receipts).toBeGreaterThan(0)
+      expect(closes).toBe(0)
+      expect(lastPublished(b)).toMatchObject({ dispatchState: 'accepted' })
+      expect(turnBody((await host.journalSnapshot(SESSION)).items, 'turn-1')).toMatchObject({
+        endedBy: 'provider',
+        receiptsComplete: true
+      })
+
+      // B's steer is answered after its turn ended, and that mark's first save fails.
+      releaseSteer()
+      await vi.waitFor(() => expect(failed.marks).toBe(1))
+      if (exit === 'dies on its own') {
+        handlers?.onExit?.(new Error('codex exited'))
+        await vi.waitFor(async () =>
+          expect((await rawSubmission(a)).dispatchState).not.toBe('pending')
+        )
+      }
+      // A quit's close ends the child itself, before Codex's own report of that exit is settled.
+      await stopStructuredAgentSessionRuntime()
+
+      const reopened = loadTestJournal(root, SESSION)?.state
+      expect(reopened?.submissions.get(b)).toMatchObject({
+        dispatchState: 'accepted',
+        providerItemId: expect.stringMatching(/^codex:/)
+      })
+      expect(reopened?.submissions.get(a)?.dispatchState).not.toBe('accepted')
+      expect(reopened?.sendAnswers.get(b)).toBe(TURN_ITEM_ID)
+      expect(turnBody(reopened?.items.values() ?? [], 'turn-1')).toMatchObject({
+        endedBy: 'provider',
+        receiptsComplete: true
+      })
+      expect(answers).toBe(1)
+    }
+  )
+
+  it('drops the oldest unsaved receipt past the bound, and its turn certifies nothing', async () => {
+    observationBound.value = 1
+    const a = await send('first')
+    await vi.waitFor(() => expect(answers).toBe(1))
+    turns.start()
+    const b = await send('second')
+    await vi.waitFor(() => expect(steers).toBe(1))
+    failJournalWrites((rows) => bareReceipt(rows, a) || bareReceipt(rows, b))
+
+    // A's receipt is kept once Codex lets A go; B's, while B is still held, overflows it.
+    turns.echo(a)
+    turns.echo(b)
+    turns.end('completed')
+
+    await vi.waitFor(async () => expect((await rawSubmission(b)).dispatchState).toBe('accepted'))
+    expect((await rawSubmission(a)).dispatchState).toBe('pending')
+    expect(closes).toBe(0)
+    await stopStructuredAgentSessionRuntime()
+    const turn = turnBody(loadTestJournal(root, SESSION)?.state.items.values() ?? [], 'turn-1')
+    expect(turn).toMatchObject({ endedBy: 'provider' })
+    expect(turn).not.toHaveProperty('receiptsComplete')
   })
 })

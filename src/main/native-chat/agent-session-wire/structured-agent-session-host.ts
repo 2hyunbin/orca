@@ -179,6 +179,8 @@ export class StructuredAgentSessionHost {
 
   handleAdapterEvent = (event: Parameters<StructuredAgentSessionEventRecovery['handle']>[0]) =>
     this.eventRecovery.handle(event)
+  noteAdapterEvent = (event: Parameters<StructuredAgentSessionEventRecovery['note']>[0]) =>
+    this.eventRecovery.note(event)
 
   // Inferred, so the attach context's spread keeps `publishStatus` required.
   private lifetimeContext() {

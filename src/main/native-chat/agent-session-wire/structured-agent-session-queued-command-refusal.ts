@@ -45,7 +45,8 @@ export async function refuseQueuedCommand(
           userItemId: agentJournalSubmissionKey(clientMessageId),
           requestedAt: submission.submittedAt,
           startedAt: now,
-          completedAt: now
+          completedAt: now,
+          endedBy: 'host'
         }),
         turnScope: AGENT_JOURNAL_THREAD_SCOPE
       },

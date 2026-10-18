@@ -302,6 +302,8 @@ async function settleUnsentCommand(
       identity: turn.identity,
       body: agentJournalTurnBody({
         ...running,
+        // The provider never took the command: this end is the host's.
+        endedBy: 'host',
         ...(refused
           ? { state: 'completed', outcome: 'failure', completedAt: ctx.now() }
           : { state: 'unverifiable' })

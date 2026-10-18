@@ -134,6 +134,7 @@ export class CodexJournalCommandTurn {
         body: agentJournalTurnBody({
           ...command.running,
           providerTurnId,
+          endedBy: 'provider',
           state: verdict.outcome === 'cancellation' ? 'interrupted' : 'completed',
           outcome: verdict.outcome,
           completedAt: ended.completedAt

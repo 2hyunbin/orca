@@ -1,10 +1,7 @@
 import type { StructuredAgentSessionChildWorkProducer } from '../native-chat/agent-session-wire/structured-agent-session-subagent-rows'
 import type { StructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import type { AgentSessionAccountKind } from '../../shared/agent-session-availability'
-import type {
-  AgentJournalAnsweredTurnIdentity,
-  AgentJournalItemIdentity
-} from '../../shared/agent-session-journal-types'
+import type { AgentJournalAnsweredTurnIdentity } from '../../shared/agent-session-journal-types'
 import { randomUUID } from 'node:crypto'
 import type { AgentJournalDispatchRejection } from '../../shared/agent-session-failure-words'
 import { cancelProcessAcquisition } from '@orca/process-host/cancel-process-acquisition'
@@ -18,6 +15,10 @@ import {
   type CodexTurnOpenWaits
 } from './codex-structured-turn-open-wait'
 import type { CodexDispatchEchoes } from './codex-structured-dispatch-echo'
+import type {
+  CodexDispatchObservations,
+  CodexObservationSave
+} from './codex-structured-dispatch-observations'
 import type { AgentChildWorkEvidence } from '../../shared/agent-status-child-work-evidence'
 import type { CodexBackgroundTaskTracker } from './codex-background-task-tracker'
 import type { CodexJournalTranslator } from './codex-structured-journal-translation'
@@ -103,17 +104,17 @@ export type CodexStructuredSessionAdapterDeps = {
     evidence: AgentChildWorkEvidence[],
     producer?: StructuredAgentSessionChildWorkProducer
   ) => void
-  /** A send admitted earlier: its identity once Codex echoes it, or its rejection when the turn
-   *  Codex answered it into ended without taking it. */
+  /** A send admitted earlier: its identity once Codex echoes it, the turn Codex answered it into,
+   *  or its rejection when that turn ended without taking it. A returned promise settles once the
+   *  write landed or failed. */
   onDispatchSettledLate?: (
-    input: { sessionId: string; clientMessageId: string } & (
-      | { providerIdentity: AgentJournalItemIdentity }
-      | ({
+    input:
+      | Parameters<CodexObservationSave>[0]
+      | ({ sessionId: string; clientMessageId: string } & {
           state: 'rejected'
           answeredInTurn?: AgentJournalAnsweredTurnIdentity
         } & AgentJournalDispatchRejection)
-    )
-  ) => void
+  ) => Promise<unknown> | void
   /** The sends Codex holds (`CodexDispatchEchoes.heldSends`) changed with no journal row. */
   onHeldSendsChanged?: (input: { sessionId: string }) => void
   openConnection?: typeof openCodexAppServerConnection
@@ -161,6 +162,8 @@ export type CodexSession = {
   catalogAccess?: CodexSessionCatalogAccess
   /** Sends whose identity is still to be settled by the provider echo. */
   dispatchEchoes: CodexDispatchEchoes
+  /** What Codex said about sends, kept until the journal shows it saved. */
+  observations?: CodexDispatchObservations
   translator: CodexJournalTranslator | null
   /** Ephemeral roster behind the background-tasks strip; never durable state. */
   backgroundTasks: CodexBackgroundTaskTracker

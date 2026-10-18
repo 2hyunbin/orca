@@ -120,6 +120,10 @@ export function publishCodexTurnLifecycle(input: {
   requestedAt?: number
   completedAt?: number
   durationMs?: number
+  /** An ended turn's provenance, restated by a late revision: `withoutLifecycle` drops it. */
+  endedBy?: AgentJournalTurnLifecycle['endedBy']
+  receiptsComplete?: true
+  blockedInput?: AgentJournalTurnLifecycle['blockedInput']
 }): StructuredAgentSessionSinkAdmission {
   if (input.primaryThreadId !== input.threadId) {
     return ADMITTED
@@ -133,7 +137,10 @@ export function publishCodexTurnLifecycle(input: {
     ...(input.startedAt !== undefined ? { startedAt: input.startedAt } : {}),
     ...(input.requestedAt !== undefined ? { requestedAt: input.requestedAt } : {}),
     ...(input.completedAt !== undefined ? { completedAt: input.completedAt } : {}),
-    ...(input.durationMs !== undefined ? { durationMs: input.durationMs } : {})
+    ...(input.durationMs !== undefined ? { durationMs: input.durationMs } : {}),
+    ...(input.endedBy ? { endedBy: input.endedBy } : {}),
+    ...(input.receiptsComplete ? { receiptsComplete: input.receiptsComplete } : {}),
+    ...(input.blockedInput ? { blockedInput: input.blockedInput } : {})
   })
   // The running row's `ts` is the host's turn-start receipt so clients can anchor a live counter.
   const appendOptions = {

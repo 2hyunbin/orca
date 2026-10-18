@@ -17,10 +17,12 @@ import {
 import type {
   JournalLifecycleBatchInput,
   JournalPlannedLifecycleBatchInput,
+  JournalResolvedLifecycleBatch,
   JournalResolvedLifecycleBatchInput
 } from './journal-store-contracts'
 import type { JournalRow } from './journal-row-schema'
 import { journalQueuedRejectionRowBuilders } from './journal-pending-submission-recovery'
+import { planJournalObservedSends } from './journal-observed-sends'
 
 export class JournalLifecycleBatchAppender {
   constructor(
@@ -65,16 +67,9 @@ export class JournalLifecycleBatchAppender {
   /** `append`, with every row chosen at the batch's own turn in the queue. */
   appendPlanned(input: JournalPlannedLifecycleBatchInput): Promise<AgentJournalCursor> {
     return this.deps
-      .enqueueRows(() => {
-        if (this.wasApplied(input.settlementId)) {
-          return []
-        }
-        const { mutations, dispatches } = input.plan()
-        return [
-          ...dispatches.map((dispatch) => journalDispatchRowBuilder(this.deps.state, dispatch)),
-          ...this.planMutations(input, mutations)
-        ]
-      })
+      .enqueueRows(() =>
+        this.wasApplied(input.settlementId) ? [] : this.plan(input, input.plan())
+      )
       .then((rows) => this.cursorAfter(rows))
   }
 
@@ -83,14 +78,34 @@ export class JournalLifecycleBatchAppender {
     return last ? { epoch: last.epoch, sequence: last.seq } : this.deps.cursor()
   }
 
-  /** The rows a resolved settlement writes, planned at its own turn in the queue: its mutations,
-   *  chosen then, in as many consecutive rows as they need, minus any already applied. */
+  /** The rows a resolved settlement writes, planned at its own turn in the queue: what it resolves
+   *  then (`plan`), its mutations in as many consecutive rows as they need. An applied one resolves
+   *  nothing, so none of its prefix repeats. */
   planResolved(
     input: JournalResolvedLifecycleBatchInput
   ): ((seq: number, ts: number) => JournalRow)[] {
-    const mutations = input.resolve()
-    this.assertDistinctItems(mutations)
-    return this.planMutations(input, mutations)
+    if (this.wasApplied(input.settlementId)) {
+      return []
+    }
+    const resolved = input.resolve()
+    this.assertDistinctItems(resolved.mutations)
+    return this.plan(input, resolved)
+  }
+
+  /** One transaction: observations the fold lacks, then verdicts for sends no receipt here accepts,
+   *  then mutations (`JournalResolvedLifecycleBatch`). */
+  private plan(
+    input: Pick<JournalLifecycleBatchInput, 'settlementId' | 'fence' | 'recovered' | 'ownerFence'>,
+    { mutations, dispatches, observed = [] }: JournalResolvedLifecycleBatch
+  ): ((seq: number, ts: number) => JournalRow)[] {
+    const saved = planJournalObservedSends(this.deps.state, observed, input.fence)
+    return [
+      ...saved.rows,
+      ...dispatches
+        .filter((dispatch) => !saved.accepted.has(dispatch.clientMessageId))
+        .map((dispatch) => journalDispatchRowBuilder(this.deps.state, dispatch)),
+      ...this.planMutations(input, mutations)
+    ]
   }
 
   private planMutations(

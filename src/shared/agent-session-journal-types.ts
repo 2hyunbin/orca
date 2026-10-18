@@ -287,6 +287,13 @@ export type AgentJournalTurnLifecycle = {
   /** On a turn a conversation command opened: the provider turn that carried out the command,
    *  once the provider opened one. Nothing else re-derives it after the command settles. */
   providerTurnId?: string
+  /** On an ended turn: the provider's own end, or one the host inferred. Absent means unknown. */
+  endedBy?: 'provider' | 'host'
+  /** On a provider end: every exact receipt this capture saw for the turn is saved with that end.
+   *  Absent means unknown, never incomplete. */
+  receiptsComplete?: true
+  /** On a provider end: a prompt hook blocked input in this turn, and why. */
+  blockedInput?: { reason: string }
 }
 
 /** Provider thread-goal lifecycle. Open like other persisted vocabularies: a

@@ -12,6 +12,8 @@ import type { StructuredAgentSessionLogger } from '../native-chat/agent-session-
 
 export function createStructuredAgentSessionLifecycleDelivery(input: {
   handle: (event: StructuredAgentSessionLifecycleEvent) => Promise<void> | undefined
+  /** Told of each event as it arrives, before either path below holds it. */
+  arrived?: (event: StructuredAgentSessionLifecycleEvent) => void
   logger: StructuredAgentSessionLogger
   /** Exits the adapter has observed but not yet published. */
   drainObservedExits: () => Promise<void>
@@ -35,6 +37,7 @@ export function createStructuredAgentSessionLifecycleDelivery(input: {
   }
   return {
     deliver: (event) => {
+      input.arrived?.(event)
       if (event.type !== 'ended' || event.cause === 'requested-close') {
         // Called now, so the step is queued on its own session's lane, behind nothing of another's.
         const settling = settle(event)

@@ -16,6 +16,7 @@ import {
 } from './structured-agent-session-provider-started'
 import {
   endExitedStructuredAgentSessionChildUnderSerialize,
+  noteStructuredAgentSessionChildExit,
   settleStructuredAgentSessionChildExit,
   type StructuredAgentSessionChildExit,
   type StructuredAgentSessionChildExitContext,
@@ -133,6 +134,12 @@ export class StructuredAgentSessionEventRecovery {
         )
       )
       .finally(() => this.sinkFailures.delete(sessionId))
+  }
+
+  /** As an event arrives, ahead of any queue: whichever path ends the child saves what its exit
+   *  carried. */
+  note(event: StructuredAgentSessionLifecycleEvent): void {
+    noteStructuredAgentSessionChildExit(this.context.sessions, event)
   }
 
   /** Every child's exit ends its record here, expected or not. An exit is settled and shown;

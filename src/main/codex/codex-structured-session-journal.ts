@@ -1,6 +1,7 @@
 import type { AgentSessionAccountKind } from '../../shared/agent-session-availability'
 import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import type { CodexDispatchEchoes } from './codex-structured-dispatch-echo'
+import type { CodexDispatchObservations } from './codex-structured-dispatch-observations'
 import { createCodexJournalTranslator } from './codex-structured-journal-translation'
 import type { CodexSubagentExecutions } from './codex-subagent-executions'
 import type {
@@ -16,10 +17,12 @@ export function createCodexSessionJournalTranslator(input: {
   deps: CodexStructuredSessionAdapterDeps
   primaryThreadId: () => string | null
   dispatchEchoes: CodexDispatchEchoes
+  observations: CodexDispatchObservations
   subagentExecutions: CodexSubagentExecutions
   prompts: CodexAcquisitionAttempt['window']['prompts']
 }) {
-  const { sink, account, sessionId, acquisitionId, deps, dispatchEchoes, prompts } = input
+  const { sink, account, sessionId, acquisitionId, deps, dispatchEchoes, observations, prompts } =
+    input
   return sink
     ? createCodexJournalTranslator({
         sink,
@@ -33,12 +36,14 @@ export function createCodexSessionJournalTranslator(input: {
         bindPromptItemId: (journalItemId, threadId, promptKey, turnId) =>
           prompts.bindJournalItemId(journalItemId, threadId, promptKey, turnId),
         clearPromptTurn: (threadId, turnId) => prompts.clearTurn(threadId, turnId),
-        onUserMessageEcho: (clientMessageId, providerIdentity) => {
-          // History echoes do not settle a send this session never admitted.
-          if (dispatchEchoes.settle(clientMessageId)) {
-            deps.onDispatchSettledLate?.({ sessionId, clientMessageId, providerIdentity })
-          }
-        }
+        observations,
+        // Codex no longer holds an echoed send, whether or not its receipt saves.
+        onUserMessageEcho: (clientMessageId, providerIdentity) =>
+          observations.saveReceipt(
+            clientMessageId,
+            providerIdentity,
+            dispatchEchoes.settle(clientMessageId)
+          )
       })
     : null
 }

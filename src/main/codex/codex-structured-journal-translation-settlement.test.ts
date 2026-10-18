@@ -159,7 +159,7 @@ function expectLifecycleBatchBounds(batches: readonly LifecycleBatch[]): void {
     const builders = appender.planResolved({
       settlementId: batch.settlementId,
       fence: 7,
-      resolve: () => batch.mutations
+      resolve: () => ({ mutations: batch.mutations, dispatches: [] })
     })
     for (const [index, build] of builders.entries()) {
       const row = build(index + 1, index + 1)
@@ -530,7 +530,8 @@ describe('codex journal translation', () => {
               state: 'completed',
               userItemId: `codex:${THREAD_ID}:${TURN_ID}:0`,
               startedAt: expect.any(Number),
-              completedAt: expect.any(Number)
+              completedAt: expect.any(Number),
+              endedBy: 'provider'
             },
             turnScope: { kind: 'thread' }
           }

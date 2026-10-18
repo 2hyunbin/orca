@@ -17,6 +17,8 @@ import {
 } from './codex-subagent-activity'
 import { CODEX_JOURNAL_ADMITTED } from './codex-structured-journal-contracts'
 import type { CodexStructuredSessionEvent } from './codex-structured-session-adapter'
+import { readRecord } from './codex-item-field-readers'
+import { readCodexTurnId } from './codex-structured-thread-facts'
 
 type ThreadItemEvent = Extract<CodexStructuredSessionEvent, { type: 'notification' }>
 
@@ -24,7 +26,10 @@ type ThreadItemEvent = Extract<CodexStructuredSessionEvent, { type: 'notificatio
 export type CodexThreadItemRouting = CodexJournalTranslationAdmission | null
 
 export function createCodexThreadItemRouter(input: {
-  deps: Pick<CodexJournalTranslatorDeps, 'dispatchRequestOrigin' | 'onUserMessageEcho'>
+  deps: Pick<
+    CodexJournalTranslatorDeps,
+    'dispatchRequestOrigin' | 'onUserMessageEcho' | 'observations' | 'primaryThreadId'
+  >
   items: Pick<CodexJournalItems, 'handle'>
   turnBoundaries: Pick<CodexJournalTurnBoundaries, 'attributeRequest'>
   genericFrames: Pick<CodexJournalGenericFrames, 'appendUnhandled'>
@@ -37,6 +42,8 @@ export function createCodexThreadItemRouter(input: {
     const translated = input.items.handle(event)
     if (translated.handled && translated.dispatchEcho) {
       const { clientMessageId, providerIdentity } = translated.dispatchEcho
+      // Kept before attribution: a refused attribution defers this frame, never its evidence.
+      input.deps.observations?.receipt(clientMessageId, providerIdentity)
       const requestOrigin = input.deps.dispatchRequestOrigin?.(clientMessageId) ?? null
       if (requestOrigin !== null && providerIdentity.provider === 'codex') {
         const attribution = input.turnBoundaries.attributeRequest({
@@ -51,6 +58,12 @@ export function createCodexThreadItemRouter(input: {
         }
       }
       input.deps.onUserMessageEcho?.(clientMessageId, providerIdentity)
+    } else if (
+      event.threadId === input.deps.primaryThreadId?.() &&
+      readRecord(readRecord(event.params).item).type === 'userMessage'
+    ) {
+      // A user item with no readable exact id may be a receipt this capture missed.
+      input.deps.observations?.lose(readCodexTurnId(event.params))
     }
     return translated.handled
       ? translated.admission

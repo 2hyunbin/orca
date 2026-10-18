@@ -191,7 +191,8 @@ describe('running turn lifecycle revisions', () => {
             turnId: 'turn-2',
             state: 'interrupted',
             startedAt: 30,
-            completedAt: 40
+            completedAt: 40,
+            endedBy: 'host'
           },
           turnScope: { kind: 'thread' }
         }
@@ -199,7 +200,13 @@ describe('running turn lifecycle revisions', () => {
     )
     expect(runningTurnLifecycleRevisions(items, { state: 'unverifiable' })).toEqual([
       expect.objectContaining({
-        body: { kind: 'turn', turnId: 'turn-2', state: 'unverifiable', startedAt: 30 }
+        body: {
+          kind: 'turn',
+          turnId: 'turn-2',
+          state: 'unverifiable',
+          startedAt: 30,
+          endedBy: 'host'
+        }
       })
     ])
   })
@@ -244,7 +251,8 @@ describe('running turn lifecycle revisions', () => {
     const unverifiable = runningTurnLifecycleRevisions(items, UNVERIFIABLE_TURN_VERDICT)[0]
     expect(unverifiable?.kind === 'item' ? unverifiable.body : null).toEqual({
       ...kept,
-      state: 'unverifiable'
+      state: 'unverifiable',
+      endedBy: 'host'
     })
   })
 
@@ -277,7 +285,13 @@ describe('running turn lifecycle revisions', () => {
       {
         kind: 'item',
         itemId: agentJournalItemKey(RUNNING_IDENTITY),
-        body: { kind: 'turn', turnId: 'turn-2', state: 'unverifiable', startedAt: 30 },
+        body: {
+          kind: 'turn',
+          turnId: 'turn-2',
+          state: 'unverifiable',
+          startedAt: 30,
+          endedBy: 'host'
+        },
         turnScope: { kind: 'thread' }
       }
     ])
@@ -289,7 +303,7 @@ describe('running turn lifecycle revisions', () => {
       {
         kind: 'item',
         itemId: 'not-an-item-key',
-        body: { kind: 'turn', turnId: 'turn-2', state: 'unverifiable' },
+        body: { kind: 'turn', turnId: 'turn-2', state: 'unverifiable', endedBy: 'host' },
         turnScope: AGENT_JOURNAL_THREAD_SCOPE
       }
     ])
@@ -346,7 +360,13 @@ describe('stale session state on a cold acquire', () => {
         {
           kind: 'item',
           itemId: agentJournalItemKey(RUNNING_IDENTITY),
-          body: { kind: 'turn', turnId: 'turn-2', state: 'unverifiable', startedAt: 30 },
+          body: {
+            kind: 'turn',
+            turnId: 'turn-2',
+            state: 'unverifiable',
+            startedAt: 30,
+            endedBy: 'host'
+          },
           turnScope: { kind: 'thread' }
         }
       ]

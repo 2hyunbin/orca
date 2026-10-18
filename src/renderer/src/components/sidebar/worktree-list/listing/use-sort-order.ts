@@ -4,11 +4,7 @@ import { getAllWorktreesFromState } from '@/store/selectors'
 import { track } from '@/lib/telemetry'
 import { persistWorktreeSortOrderByHost } from '@/lib/worktree-sort-order-persistence'
 import type { Repo } from '../../../../../../shared/repo-types'
-import {
-  NO_LIVE_SMART_SORT_SOURCES,
-  rankWorktreesForSort,
-  type SortBy
-} from '../../../../../../shared/sidebar-list/smart-sort'
+import { rankWorktreesForSort, type SortBy } from '../../../../../../shared/sidebar-list/smart-sort'
 import type {
   SmartClass,
   WorktreeAttention
@@ -53,7 +49,7 @@ function trackSmartClassDistribution(attention: ReadonlyMap<string, WorktreeAtte
 // ── Stable sort order ──────────────────────────────────────────
 // Why sortEpoch (not selection): selection side-effects (clearing isUnread, PR-cache refresh) must not reorder the sidebar under the user.
 // Why useMemo not useEffect: order must be computed synchronously before the worktrees memo reads it.
-function useSettledSidebarWorktreeSortOrder(args: {
+export function useSidebarWorktreeSortOrder(args: {
   repoMap: Map<string, Repo>
   sortBy: SortBy
 }): string[] {
@@ -61,6 +57,8 @@ function useSettledSidebarWorktreeSortOrder(args: {
   // Why settled (not live): the store coalesces bump bursts so rows don't jump (store/settled-sort-epoch.ts).
   const settledSortEpoch = useAppStore((s) => s.settledSortEpoch)
   const sortOrderEpoch = useAppStore((s) => s.sortOrderEpoch)
+  // Switch point: the host's stamps arrive on the rows, so a re-list is what re-sorts.
+  const stampedRows = useAppStore((s) => (ORCA_SIDEBAR_INPUTS_IS_MAIN ? s.worktreesByRepo : null))
 
   // Why a latching ref: a live signal makes Smart authoritative for the session, even after that activity ends.
   const sessionHasHadLiveSmartSignal = useRef(false)
@@ -86,9 +84,9 @@ function useSettledSidebarWorktreeSortOrder(args: {
       attentionByWorktree: ranking.attentionByWorktree,
       detectedLiveSmartSignal: ranking.detectedLiveSmartSignal
     }
-    // settledSortEpoch is an intentional trigger not read in the memo; its change signals a recompute.
+    // settledSortEpoch and stampedRows are triggers not read in the memo; a change signals a recompute.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [settledSortEpoch, persistedRankTrigger, repoMap, sortBy])
+  }, [settledSortEpoch, persistedRankTrigger, stampedRows, repoMap, sortBy])
   // Why: stable ID order prevents rank-only refreshes from echoing an unchanged snapshot.
   const sortedIds = useReusedArrayIdentity(recomputedSort.sortedIds)
 
@@ -143,7 +141,15 @@ function useSettledSidebarWorktreeSortOrder(args: {
     hasTrackedSmartDistributionRef.current = true
   }, [sortBy, recomputedSort.attentionByWorktree, recomputedSort.sortedIds])
 
-  useTrackSmartToRecentSwitch(sortBy)
+  // Why fire on the transition: switching away from Smart is the signal; compare via ref so a round-trip doesn't double-fire.
+  const prevSortByRef = useRef(sortBy)
+  useEffect(() => {
+    const prev = prevSortByRef.current
+    prevSortByRef.current = sortBy
+    if (prev === 'smart' && sortBy === 'recent') {
+      track('smart_to_recent_switch', {})
+    }
+  }, [sortBy])
 
   // Why: only persist during live sessions so cold start reads the persisted order instead of overwriting it.
   useEffect(() => {
@@ -159,51 +165,3 @@ function useSettledSidebarWorktreeSortOrder(args: {
 
   return sortedIds
 }
-
-// Why fire on the transition: switching away from Smart is the signal; compare via ref so a round-trip doesn't double-fire.
-function useTrackSmartToRecentSwitch(sortBy: SortBy): void {
-  const prevSortByRef = useRef(sortBy)
-  useEffect(() => {
-    const prev = prevSortByRef.current
-    prevSortByRef.current = sortBy
-    if (prev === 'smart' && sortBy === 'recent') {
-      track('smart_to_recent_switch', {})
-    }
-  }, [sortBy])
-}
-
-/**
- * Switch on: the order is a pure read of the owning hosts' stamps on the rows, so a re-list is
- * what re-sorts. No settle window, latch, saved Smart order or create grace.
- */
-function useStampSidebarWorktreeSortOrder(args: {
-  repoMap: Map<string, Repo>
-  sortBy: SortBy
-}): string[] {
-  const { repoMap, sortBy } = args
-  const worktreesByRepo = useAppStore((s) => s.worktreesByRepo)
-  const ranked = useMemo(
-    () =>
-      rankWorktreesForSort({
-        worktrees: getAllWorktreesFromState({ worktreesByRepo }).filter(
-          (worktree) => !worktree.isArchived
-        ),
-        sortBy,
-        latched: false,
-        repoMap,
-        // Stamps read no clock and no live sources.
-        now: 0,
-        sources: NO_LIVE_SMART_SORT_SOURCES
-      }).sorted.map((worktree) => worktree.id),
-    [worktreesByRepo, repoMap, sortBy]
-  )
-  const sortedIds = useReusedArrayIdentity(ranked)
-  // Why: main's sleeping retention lives as long as this list.
-  useSidebarListSession(sortBy, sortedIds)
-  useTrackSmartToRecentSwitch(sortBy)
-  return sortedIds
-}
-
-export const useSidebarWorktreeSortOrder = ORCA_SIDEBAR_INPUTS_IS_MAIN
-  ? useStampSidebarWorktreeSortOrder
-  : useSettledSidebarWorktreeSortOrder

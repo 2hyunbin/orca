@@ -199,7 +199,8 @@ describe('captured Codex turns end once, on their own completion', () => {
         state: 'interrupted',
         userItemId: `codex:${readCodexThreadId(frames[0]?.params)}:${turnId}:0`,
         startedAt: receipt(frames, 'turn/started', turnId),
-        completedAt: 250_000
+        completedAt: 250_000,
+        endedBy: 'host'
       }
     ])
   })

@@ -218,7 +218,8 @@ function turnLifecycleRevision(
   ]
 }
 
-/** The verdict replaces the previous end and preserves fields this build does not know. */
+/** The verdict replaces the previous end, as the host's, and preserves fields this build does
+ *  not know. A provider's completeness or hook reason never rides a host end. */
 function settledLifecycle(
   lifecycle: AgentJournalTurnLifecycle,
   verdict: StructuredAgentSessionTurnVerdict
@@ -228,8 +229,11 @@ function settledLifecycle(
     outcome: _outcome,
     completedAt: _completedAt,
     durationMs: _durationMs,
-    ...kept
+    receiptsComplete: _receiptsComplete,
+    blockedInput: _blockedInput,
+    ...rest
   } = lifecycle
+  const kept = { ...rest, endedBy: 'host' as const }
   if (
     verdict.state !== 'interrupted' ||
     verdict.completedAt === undefined ||

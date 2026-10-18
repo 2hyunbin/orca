@@ -377,7 +377,8 @@ describe('codex turn lifecycle rows', () => {
         userItemId: USER_ITEM_ID,
         startedAt: 1_000,
         completedAt: 4_500,
-        durationMs: 3_250
+        durationMs: 3_250,
+        endedBy: 'provider'
       }
     })
   })
@@ -411,7 +412,8 @@ describe('codex turn lifecycle rows', () => {
             ...(outcome ? { outcome } : {}),
             userItemId: USER_ITEM_ID,
             startedAt: 1_000,
-            completedAt: 2_000
+            completedAt: 2_000,
+            endedBy: 'provider'
           }
         }
       ])
@@ -461,7 +463,8 @@ describe('codex turn lifecycle rows', () => {
           turnId: TURN_ID,
           state: 'completed',
           userItemId: USER_ITEM_ID,
-          completedAt: 3_000
+          completedAt: 3_000,
+          endedBy: 'provider'
         }
       }
     ])

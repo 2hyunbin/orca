@@ -160,6 +160,7 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
   }
 
   private handleUnhandledFrame(sessionId: string, kind: string, params: unknown): void {
+    this.sessions.get(sessionId)?.observations?.noteFrame(kind)
     deliverCodexUnhandledFrame(
       sessionId,
       this.sessions.get(sessionId),

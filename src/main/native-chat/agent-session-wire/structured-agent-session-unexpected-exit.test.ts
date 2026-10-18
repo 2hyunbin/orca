@@ -159,7 +159,8 @@ describe('provider-exit settlement', () => {
           turnId: 'turn-1',
           state: 'interrupted',
           startedAt: 1_000,
-          completedAt: 2_000
+          completedAt: 2_000,
+          endedBy: 'host'
         }
       })
     )
@@ -256,7 +257,8 @@ describe('provider-exit settlement', () => {
             turnId: 'turn-2',
             state: 'interrupted',
             startedAt: 30,
-            completedAt: 1_234
+            completedAt: 1_234,
+            endedBy: 'host'
           },
           turnScope: { kind: 'thread' }
         }

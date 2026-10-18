@@ -116,6 +116,9 @@ export type JournalTombstoneRow = JournalRowBase & {
   queueClear?: { operationId: string; messageIds: string[]; lifted?: true }
   /** A rewind retires the removed send's echo claimant as well as its visible item. */
   retireSubmission?: true
+  /** On a fact key (`agentJournalSendAnsweredKey`): not a removal but the turn the provider
+   *  answered that send into, by its lifecycle item key. Older hosts ignore the key. */
+  sendAnswered?: { turnItemId: string }
 }
 
 /** One Stop that took effect. Temporary carrier: a tombstone's extra key, which every host ignores,

@@ -10,7 +10,8 @@ import { whileStructuredAgentSessionHandingOver } from './structured-agent-sessi
 
 /** Settle a provider-proven outcome independently of an in-flight client mutation. `unknown` is
  *  released doubt: the provider let the send go unanswered, so nothing re-sends it. The send reads
- *  held until its row settles; a failed write leaves it unanswered, which clients learn at once. */
+ *  held until its row settles; a failed write leaves it unanswered, which clients learn at once.
+ *  `sendAnswered` saves the turn the provider answered the send into, which settles nothing. */
 export async function settleStructuredAgentSessionLateDispatch(
   context: StructuredAgentSessionMutationContext,
   input: {
@@ -18,6 +19,7 @@ export async function settleStructuredAgentSessionLateDispatch(
     clientMessageId: string
   } & (
     | { providerIdentity: AgentJournalItemIdentity }
+    | { sendAnswered: { turnItemId: string } }
     | ({
         state: 'rejected'
         answeredInTurn?: AgentJournalAnsweredTurnIdentity
@@ -30,6 +32,26 @@ export async function settleStructuredAgentSessionLateDispatch(
     return
   }
   const fence = structuredAgentSessionConversationFence(context.deps.store, input.sessionId)
+  const { journal } = session
+  if ('sendAnswered' in input) {
+    // A planned batch so the fold decides: a mark already saved is not written twice.
+    await journal.appendPlannedLifecycleBatch({
+      settlementId: `send-answered:${input.clientMessageId}`,
+      fence,
+      plan: () => ({
+        mutations: [],
+        dispatches: [],
+        observed: [
+          {
+            clientMessageId: input.clientMessageId,
+            epoch: journal.epoch,
+            answeredTurnItemId: input.sendAnswered.turnItemId
+          }
+        ]
+      })
+    })
+    return
+  }
   const settlement: ResolveDispatchInput =
     'providerIdentity' in input
       ? {
@@ -56,8 +78,8 @@ export async function settleStructuredAgentSessionLateDispatch(
           }
   try {
     // The journal queue drains before close; the host queue would defer this past teardown.
-    await whileStructuredAgentSessionHandingOver(session.journal, input.clientMessageId, () =>
-      session.journal.resolveDispatch(settlement)
+    await whileStructuredAgentSessionHandingOver(journal, input.clientMessageId, () =>
+      journal.resolveDispatch(settlement)
     )
   } catch (error) {
     context.publishWorkChanged(input.sessionId)

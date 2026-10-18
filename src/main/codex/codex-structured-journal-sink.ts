@@ -1,7 +1,8 @@
 import type {
   AgentJournalItemBody,
   AgentJournalItemIdentity,
-  AgentJournalRowAttribution
+  AgentJournalRowAttribution,
+  AgentJournalTurnItem
 } from '../../shared/agent-session-journal-types'
 import type {
   StructuredAgentSessionItemAppendOptions,
@@ -13,19 +14,25 @@ import {
   journalLifecycleItemMutation,
   type JournalLifecycleIdentityMutationInput
 } from '../native-chat/agent-session-journal/journal-row-builders'
+import type { JournalObservedSend } from '../native-chat/agent-session-journal/journal-store-contracts'
 import type { CodexPendingJournalPrompt } from './codex-structured-journal-settlement'
 import type { CodexJournalTranslationAdmission } from './codex-structured-journal-contracts'
 import { CODEX_JOURNAL_ADMITTED } from './codex-structured-journal-contracts'
 import { reviseCodexTurnRow } from './codex-structured-journal-translation-turns'
+import { codexTurnReceiptsSaveable } from './codex-structured-dispatch-observations'
 
 const ADMITTED: StructuredAgentSessionSinkAdmission = { accepted: true }
 
 export function appendCodexLifecycleMutations(
   sink: StructuredAgentSessionEventSink,
   settlementId: string,
-  mutations: readonly JournalLifecycleIdentityMutationInput[]
+  mutations: readonly JournalLifecycleIdentityMutationInput[],
+  /** Unsaved observations this end of `turnId` saves ahead of itself, in its transaction; `saved`
+   *  re-reads the fold once it lands. */
+  observed?: { sends: readonly JournalObservedSend[]; saved: () => void; turnId: string }
 ): StructuredAgentSessionSinkAdmission {
-  if (mutations.length === 0) {
+  const sends = observed?.sends ?? []
+  if (mutations.length === 0 && sends.length === 0) {
     return ADMITTED
   }
   let admission: StructuredAgentSessionSinkAdmission = ADMITTED
@@ -37,13 +44,18 @@ export function appendCodexLifecycleMutations(
           kind: 'settlement',
           settlementId,
           reservedBytes:
-            Buffer.byteLength(JSON.stringify({ settlementId, mutations }), 'utf8') + 512,
+            Buffer.byteLength(JSON.stringify({ settlementId, mutations, sends }), 'utf8') + 512,
+          ...(sends.length > 0 ? { observed: sends } : {}),
           resolve: (journal) =>
             mutations.map((mutation) =>
               mutation.kind === 'item' && mutation.body.kind === 'turn'
                 ? {
                     ...mutation,
-                    body: reviseCodexTurnRow(journal, mutation.identity, mutation.body)
+                    body: reviseCodexTurnRow(
+                      journal,
+                      mutation.identity,
+                      certifiedTurn(journal, mutation.body, observed)
+                    )
                   }
                 : mutation
             )
@@ -51,7 +63,8 @@ export function appendCodexLifecycleMutations(
       ],
       lifecycle: true,
       // Published below, where it coalesces with a publication still queued.
-      publish: false
+      publish: false,
+      ...(observed ? { onPublished: observed.saved } : {})
     })
   } else if (sink.tryAppendLifecycleBatch) {
     admission = sink.tryAppendLifecycleBatch(settlementId, mutations, { lifecycle: true })
@@ -89,6 +102,23 @@ export function appendCodexLifecycleMutations(
 }
 
 /** An ordinary (non-lifecycle) append, published once admitted. */
+/** A turn's certificate stands only while the fold, where its end executes, still takes every
+ *  receipt it covers. */
+function certifiedTurn(
+  journal: Parameters<typeof codexTurnReceiptsSaveable>[0],
+  body: AgentJournalTurnItem,
+  observed: { sends: readonly JournalObservedSend[]; turnId: string } | undefined
+): AgentJournalTurnItem {
+  if (
+    !body.receiptsComplete ||
+    (observed && codexTurnReceiptsSaveable(journal, observed.sends, observed.turnId))
+  ) {
+    return body
+  }
+  const { receiptsComplete: _uncertified, ...uncertified } = body
+  return uncertified
+}
+
 export function appendCodexItemAndPublish(
   sink: StructuredAgentSessionEventSink,
   identity: AgentJournalItemIdentity,
