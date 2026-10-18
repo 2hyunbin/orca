@@ -155,7 +155,8 @@ describe('PairedServerRowsProducer', () => {
           branch: 'main',
           displayName: 'repo::/a',
           isArchived: false,
-          isPinned: false
+          isPinned: false,
+          isMainWorktree: false
         }
       ]
     })
@@ -303,6 +304,53 @@ describe('PairedServerRowsProducer', () => {
     expect(call).toHaveBeenCalledTimes(1)
   })
 
+  it('carries what the list sorts, groups and filters by, dropping a value this build cannot read', async () => {
+    const { hosts, call, watches } = fakeHosts([{ id: 'box', live: true }])
+    call.mockResolvedValueOnce(
+      psReply([
+        row('repo::/a', {
+          isMainWorktree: true,
+          workspaceStatus: 'in-review',
+          sortOrder: 4,
+          manualOrder: 2,
+          lastActivityAt: 900,
+          smartTier: 'done',
+          smartAt: 800,
+          createdAt: 100,
+          creatorProvenance: { kind: 'paired-device', deviceId: 'phone-1' },
+          defaultBranch: true,
+          cliCreated: true
+        }),
+        row('repo::/b', { smartTier: 'a-tier-from-later', sortOrder: 'x' })
+      ])
+    )
+    const producer = new PairedServerRowsProducer({
+      hasDemand: () => true,
+      hostLabelOverrides: () => new Map()
+    })
+    producer.attach(hosts)
+    watches.get('box')?.onChange()
+    await vi.advanceTimersByTimeAsync(0)
+
+    const [newer, unreadable] = rowsOf(producer, 'runtime:box')?.rows ?? []
+    expect(newer).toMatchObject({
+      isMainWorktree: true,
+      workspaceStatus: 'in-review',
+      sortOrder: 4,
+      manualOrder: 2,
+      recentAt: 900,
+      smartTier: 'done',
+      smartAt: 800,
+      createdAt: 100,
+      creatorProvenance: { kind: 'paired-device', deviceId: 'phone-1' },
+      defaultBranch: true,
+      cliCreated: true
+    })
+    expect(unreadable).toMatchObject({ key: 'runtime:box|repo::/b', isMainWorktree: false })
+    expect(unreadable?.smartTier).toBeUndefined()
+    expect(unreadable?.sortOrder).toBeUndefined()
+  })
+
   it("keys rows by host, so two servers' same bare id never collide, and fills older servers' gaps", async () => {
     const { hosts, call, watches } = fakeHosts([
       { id: 'one', live: true },
@@ -335,7 +383,8 @@ describe('PairedServerRowsProducer', () => {
         branch: 'b',
         displayName: '',
         isArchived: false,
-        isPinned: false
+        isPinned: false,
+        isMainWorktree: false
       }
     ])
     expect(rowsOf(producer, 'runtime:two')?.rows.map((entry) => [entry.key, entry.kind])).toEqual([
