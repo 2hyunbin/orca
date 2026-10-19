@@ -19,7 +19,7 @@ import { createLegacyRelayCliServer } from './legacy-relay-cli-server'
 import { listLegacyRelayEndpoints, posixEndpointExited } from './legacy-relay-endpoints'
 import { LegacyRelayTargetBridge } from './legacy-relay-target-bridge'
 import { LegacyRelayHiddenOutput } from './legacy-relay-hidden-output'
-import { LegacyRelayPaneStops } from './legacy-relay-pane-stops'
+import { LegacyRelayPaneStops, type LegacyRelayStopProof } from './legacy-relay-pane-stops'
 import { reportDailyRelayActivity, watchDailyRelayActivity } from './legacy-relay-daily-activity'
 import {
   bridgeableLeasesByRelayId,
@@ -328,10 +328,10 @@ export async function closeLegacyRelayPane(ptyId: string): Promise<LegacyRelayBr
 export async function stopLegacyRelayPaneAndWait(
   ptyId: string,
   deadlineMs: number
-): Promise<boolean> {
+): Promise<LegacyRelayStopProof | null> {
   const targetId = parseAppSshPtyId(ptyId)?.connectionId
   const bridge = targetId && host?.connection(targetId) ? bridgeFor(targetId) : null
-  return targetId && host ? stopsFor(targetId).stopAndWait(ptyId, bridge, deadlineMs) : false
+  return targetId && host ? stopsFor(targetId).stopAndWait(ptyId, bridge, deadlineMs) : null
 }
 
 export function detachLegacyRelayPane(ptyId: string, acquisitionId: number): void {
