@@ -38,9 +38,11 @@ describe('ProviderSegment owner placeholder', () => {
     expect(markup).not.toContain('Refresh failed')
   })
 
-  it('drops the label in compact density, keeping the tooltip', () => {
+  it('shows "--" instead of the label in compact density, keeping the tooltip', () => {
     const markup = renderToStaticMarkup(<ProviderSegment p={placeholder} compact display="used" />)
     expect(markup).not.toContain('Not set up</span>')
+    // Why: an icon alone would read as a healthy chip.
+    expect(markup).toContain('--')
     expect(markup).toContain('title="Not set up on devbox')
   })
 })

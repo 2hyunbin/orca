@@ -1,4 +1,8 @@
-import type { ProviderRateLimits, RateLimitState } from '../../../../shared/rate-limit-types'
+import type {
+  ProviderRateLimits,
+  RateLimitState,
+  UsageRateLimitFailureKind
+} from '../../../../shared/rate-limit-types'
 import { createEmptyRateLimitState } from '../../../../shared/rate-limit-state-factory'
 import { translate } from '@/i18n/i18n'
 import {
@@ -111,16 +115,35 @@ function isSignInSavedHereOnly(local: RateLimitState, key: UsageProviderKey): bo
     : key === 'zcode' && local.zcodePlanApiKeyConfigured === true
 }
 
+// Why an allow-list: a host also says `unavailable` for "set up, but no reading" (agy too old,
+// a ZCode account switch mid-refresh); only these reasons mean the provider is not set up.
+const NOT_SET_UP_FAILURE_KINDS: ReadonlySet<UsageRateLimitFailureKind> = new Set([
+  'missing-credentials',
+  'cli-unavailable'
+])
+// Why: these fetchers name every not-set-up answer, so a reasonless `unavailable` is not one.
+const NOT_SET_UP_NEEDS_REASON: ReadonlySet<UsageProviderKey> = new Set([
+  'minimax',
+  'zcode',
+  'cursor',
+  'antigravity'
+])
+
 /**
  * Whether the host positively reports it has no such provider. Null only means the host has
  * not finished a fetch (or blanked a skipped one), so it never counts.
  */
 function isMissingOnHost(remote: RateLimitState, key: UsageProviderKey): boolean {
+  const provider = remote[key]
+  if (provider?.status !== 'unavailable') {
+    return false
+  }
+  const failureKind = provider.usageMetadata?.failureKind
   return (
-    remote[key]?.status === 'unavailable' &&
+    (failureKind ? NOT_SET_UP_FAILURE_KINDS.has(failureKind) : !NOT_SET_UP_NEEDS_REASON.has(key)) &&
     // Why: the host reports Claude on API-key billing exactly like no Claude login.
     key !== 'claude' &&
-    // Why: a signed-in Cursor or Grok account with no quota is also `unavailable`; its flag is not.
+    // Why: a signed-in Grok account with no quota is also `unavailable`; its flag is not.
     !hasUsageProviderSettingsForProvider(USAGE_PROVIDER_IDS[key], remote)
   )
 }

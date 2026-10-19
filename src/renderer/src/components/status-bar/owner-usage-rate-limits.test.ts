@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import type { ProviderRateLimits, RateLimitState } from '../../../../shared/rate-limit-types'
+import type {
+  ProviderRateLimits,
+  RateLimitState,
+  UsageRateLimitFailureKind
+} from '../../../../shared/rate-limit-types'
 import { createEmptyRateLimitState } from '../../../../shared/rate-limit-state-factory'
 import { isOwnerNotSetUpPlaceholder, resolveOwnerUsageRateLimits } from './owner-usage-rate-limits'
 import {
@@ -215,6 +219,39 @@ describe('resolveOwnerUsageRateLimits', () => {
       expect(isOwnerNotSetUpPlaceholder(resolved.codex!)).toBe(true)
     })
 
+    it('keeps an unavailable host slot whose reason is not "not set up"', () => {
+      const here = createEmptyRateLimitState({
+        antigravity: provider('antigravity', 10),
+        zcode: provider('zcode', 10)
+      })
+      const remote = hostWithout({
+        // agy too old to report usage, and a ZCode account switch mid-refresh (no reason).
+        antigravity: unavailable('antigravity', 'usage-unavailable'),
+        zcode: unavailable('zcode', null)
+      })
+      const resolved = resolveOwnerUsageRateLimits(here, remoteOwner(remote))
+      expect(resolved.antigravity?.usageMetadata?.failureKind).toBe('usage-unavailable')
+      expect(resolved.zcode?.status).toBe('unavailable')
+      expect(isOwnerNotSetUpPlaceholder(resolved.zcode!)).toBe(false)
+    })
+
+    it('accepts a missing CLI, or a reasonless answer from fetchers that never give one', () => {
+      const here = createEmptyRateLimitState({
+        antigravity: provider('antigravity', 10),
+        kimi: provider('kimi', 10)
+      })
+      const remote = hostWithout({
+        antigravity: unavailable('antigravity', 'cli-unavailable'),
+        codex: unavailable('codex', null),
+        kimi: unavailable('kimi', null)
+      })
+      const resolved = resolveOwnerUsageRateLimits(here, remoteOwner(remote))
+      expect(isOwnerNotSetUpPlaceholder(resolved.antigravity!)).toBe(true)
+      expect(isOwnerNotSetUpPlaceholder(resolved.kimi!)).toBe(true)
+      const codex = resolveOwnerUsageRateLimits(local, remoteOwner(remote)).codex
+      expect(isOwnerNotSetUpPlaceholder(codex!)).toBe(true)
+    })
+
     it("keeps the host's own slot, even while it is loading or failing", () => {
       const remote = createEmptyRateLimitState({
         claude: provider('claude', 70),
@@ -257,8 +294,17 @@ describe('resolveOwnerUsageRateLimits', () => {
   })
 })
 
-function unavailable(id: ProviderRateLimits['provider']): ProviderRateLimits {
-  return { ...provider(id, 0), session: null, status: 'unavailable', error: 'not signed in' }
+function unavailable(
+  id: ProviderRateLimits['provider'],
+  failureKind: UsageRateLimitFailureKind | null = 'missing-credentials'
+): ProviderRateLimits {
+  return {
+    ...provider(id, 0),
+    session: null,
+    status: 'unavailable',
+    error: 'not signed in',
+    ...(failureKind ? { usageMetadata: { failureKind } } : {})
+  }
 }
 
 function hasNoNumbers(p: ProviderRateLimits): boolean {

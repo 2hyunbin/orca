@@ -99,6 +99,16 @@ test('a provider set up only on this computer stays visible, greyed, under a ser
       clip: { x: 0, y: 740, width: 480, height: 60 }
     })
 
+    // A narrow bar drops chip labels; the placeholder keeps "--" so it never reads as healthy.
+    await page.setViewportSize({ width: 360, height: 800 })
+    await expect(placeholder).toHaveText('--', { timeout: 10_000 })
+    await page.screenshot({
+      path: outputPathFor('2c-server-owner-compact-status-bar-closeup.png', outputPath),
+      clip: { x: 0, y: 740, width: 360, height: 60 }
+    })
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await expect(placeholder).toHaveText('Not set up')
+
     await page.getByRole('button', { name: 'Usage', exact: true }).click()
     const row = page.getByRole('menuitem').filter({ hasText: `Not set up on ${HOST_NAME}` })
     await expect(row).toBeVisible()

@@ -266,7 +266,8 @@ export function ProviderSegment({
         title={getProviderUsageErrorMessage(p)}
       >
         <ProviderIcon provider={provider} />
-        {!compact && <span className="text-[11px] font-medium">{statusLabel}</span>}
+        {/* Why "--" when compact: an icon alone would read as a healthy chip. */}
+        {compact ? '--' : <span className="text-[11px] font-medium">{statusLabel}</span>}
       </span>
     )
   }
