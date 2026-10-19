@@ -1,5 +1,6 @@
 import { createUuidV4 } from '../../../../shared/uuid-v4'
 import {
+  nativeChatPastedTextLabel,
   nativeChatPastedTextOperations,
   nativeChatPastedTextToken
 } from './native-chat-pasted-text-reference'
@@ -27,7 +28,6 @@ import {
   resolveNativeChatPastedText,
   settleNativeChatPastedText
 } from './native-chat-composer-pasted-text-references'
-import { nativeChatPastedTextLabel } from './native-chat-pasted-text-reference'
 
 /** Pastes this large attach as a file, measured in characters or UTF-8 bytes. */
 export const NATIVE_CHAT_PASTED_TEXT_FILE_THRESHOLD = 32 * 1024

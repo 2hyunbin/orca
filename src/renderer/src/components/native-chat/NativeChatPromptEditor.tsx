@@ -1,11 +1,13 @@
 import { nativeChatPastedTextClipboardText } from './native-chat-composer-pasted-text-references'
 import { NativeChatPastedTextScopeProvider } from './native-chat-pasted-text-state'
-import { readNativeChatComposerDraft } from './native-chat-composer-draft-store'
 import {
   readNativeChatDraftDocument,
   writeNativeChatDraftDocument
 } from './native-chat-draft-cache'
-import { hasUnsavedNativeChatComposerDraftChange } from './native-chat-composer-draft-store'
+import {
+  readNativeChatComposerDraft,
+  hasUnsavedNativeChatComposerDraftChange
+} from './native-chat-composer-draft-store'
 import { closeHistory } from '@tiptap/pm/history'
 import { Slice } from '@tiptap/pm/model'
 import {
