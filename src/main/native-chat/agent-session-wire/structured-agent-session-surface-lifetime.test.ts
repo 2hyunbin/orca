@@ -743,11 +743,12 @@ describe('an unexpected provider exit', () => {
     expect(hostErrors).toContainEqual(expect.objectContaining({ message: 'journal failed' }))
     const history = await host.history({ sessionId: SESSION, direction: 'tail' })
     expect(history.ok && history.page.submissions[0]?.dispatchState).toBe('unknown')
-    // Raw doubt alone is not evidence that the exited child still held the input.
+    // A send whose delivery outcome is unknown IS work in progress, so the reassuring outcome is
+    // written — its failure fact beside it, and never the old bare `Provider exited: <reason>` row.
     const statuses = history.ok
       ? history.page.items.flatMap((item) => (item.body.kind === 'status' ? [item.body.text] : []))
       : []
-    expect(statuses).toEqual([])
+    expect(statuses).toEqual([UNEXPECTED_PROVIDER_EXIT_OUTCOME])
     expect(statuses.some((text) => text.startsWith('Provider exited'))).toBe(false)
 
     dispatch.mockResolvedValueOnce({

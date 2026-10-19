@@ -46,6 +46,7 @@ const NO_FEED: SidebarFeedDomains = {
   creations: new Map(),
   pairedServerHosts: new Map(),
   pairedServerRows: new Map(),
+  repoIcons: new Map(),
   desktop: null,
   retention: null
 }

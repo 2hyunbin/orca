@@ -22,7 +22,6 @@ import type {
 import type {
   AgentJournalAnsweredTurnIdentity,
   AgentJournalItemIdentity,
-  AgentJournalItemBody,
   AgentJournalMessageItem,
   AgentJournalDispatchState,
   AgentJournalTurnItem,
@@ -299,26 +298,20 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   /** How this session narrows its agent's declared rewind; `agent` answers for one with no child
    *  running. The router applies the declaration first, so an adapter's answer never widens it. */
   rewindSupport?(sessionId: string, agent?: string): AgentSessionRewindSupport
+  /** Whether a rewind whose reply was lost took effect, observed without repeating it.
+   *  `keptTurnId` is the last provider turn the rewind keeps, null when it keeps none. */
   recoverRewind?(input: {
     sessionId: string
     fence: number
     signal?: AbortSignal
     beforeTurnId: string
-  }): Promise<
-    | { ok: true; items: { identity: AgentJournalItemIdentity; body: AgentJournalItemBody }[] }
-    | { ok: false; reason: AgentSessionRewindReason }
-  >
+    keptTurnId: string | null
+  }): Promise<{ ok: true } | { ok: false; reason: AgentSessionRewindReason }>
   rewind?(input: {
     sessionId: string
     fence: number
     beforeTurnId: string
-    onPrepared?: (
-      items: { identity: AgentJournalItemIdentity; body: AgentJournalItemBody }[]
-    ) => Promise<void>
-  }): Promise<
-    | { ok: true; items?: { identity: AgentJournalItemIdentity; body: AgentJournalItemBody }[] }
-    | { ok: false; reason: AgentSessionRewindReason }
-  >
+  }): Promise<{ ok: true } | { ok: false; reason: AgentSessionRewindReason }>
   /** Sends a conversation compaction and answers with the provider's receipt of it, as a dispatch
    *  does. The command's turn is the child's journal translator's to end, from the provider's own
    *  frames; a child that ends first leaves it to the host's settlement of that child. */
@@ -369,8 +362,8 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   /** The provider reported taking a send it has neither answered nor ended, as a queued follow-up
    *  or a silent retry does. Derived from the live child; false with none. */
   holdsDispatch?(sessionId: string): boolean
-  /** The sends the live child still holds as its own work, by client message id; undefined with
-   *  no live child, and the host then reads an unanswered send as held. */
+  /** The sends the live child still holds as its own work, by client message id; undefined when
+   *  this adapter cannot say, and the host reads an unanswered send as held. */
   heldSends?(sessionId: string): ReadonlySet<string> | undefined
   /** The adapter's own child for this exact acquisition has a pid and its root exit has not been
    *  seen: first-hand proof of life for lease renewal. Absent or false falls back to a PID probe. */

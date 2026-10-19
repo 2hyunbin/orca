@@ -57,6 +57,8 @@ export type Worktree = {
   lineageDepth?: number
   lineageChildCount?: number
   lineageCollapsed?: boolean
+  /** The collapse key the shared builder gave this row's children; set only on a feed-built list. */
+  lineageGroupKey?: string
   isLastLineageChild?: boolean
   liveTerminalCount: number
   hasAttachedPty: boolean
@@ -90,5 +92,7 @@ export type Section = {
   icon?: 'pin'
   /** Under Project grouping, the repo whose colour and icon the header shows, as on the desktop. */
   repo?: SectionRepo
+  /** The header's own count from a feed-built list, which a collapsed section still shows. */
+  count?: number
   data: Worktree[]
 }

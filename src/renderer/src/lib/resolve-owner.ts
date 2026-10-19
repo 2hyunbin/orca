@@ -4,6 +4,7 @@
  */
 import {
   getRepoSshConnectionId,
+  parseExecutionHostId,
   toRuntimeExecutionHostId,
   toSshExecutionHostId,
   type ExecutionHostId
@@ -177,6 +178,14 @@ function focusFreeRouteState(state: WorktreeOperationRouteState): {
   }
 }
 
+/** Two hosts publish this workspace (or contest it), so no host-routed action may pick one. */
+export function isTwinWorkspace(
+  state: WorktreeOperationRouteState,
+  workspaceId: string | null | undefined
+): boolean {
+  return !!workspaceId && resolveOwner(state, { workspaceId }).kind === 'ambiguous'
+}
+
 /** Transport to the workspace's owner, or `null` when the rows name none or disagree. */
 export function runtimeTargetForWorkspaceOwner(
   state: WorktreeOperationRouteState,
@@ -249,4 +258,47 @@ export function runtimeEnvironmentIdUnlessTwin(
     warnAmbiguousOwnerOnce(workspaceId, refusalAction)
   }
   return null
+}
+
+/**
+ * A server route to `ssh:X` that only a repo row proves: no worktree row names that server. The
+ * row's `ssh:X` and the server's `connectionId: X` are different namespaces, so reads and spawn
+ * may follow it but a host write could land on another machine with the same path.
+ */
+export function isUnprovenServerSshRoute(
+  state: Pick<WorktreeOperationRouteState, 'worktreesByRepo' | 'detectedWorktreesByRepo'>,
+  workspaceId: string,
+  owner: HostAuthority
+): boolean {
+  const { endpoint, at } = owner
+  if (
+    endpoint.kind !== 'environment' ||
+    at === 'local' ||
+    parseWorkspaceKey(workspaceId)?.type === 'folder'
+  ) {
+    return false
+  }
+  return !someWorktreeCopy(
+    state,
+    workspaceId,
+    (row) =>
+      parseExecutionHostId(row.hostId)?.id === at &&
+      row.runtimeOwnerEnvironmentId?.trim() === endpoint.environmentId
+  )
+}
+
+type WorktreeCopy = { hostId?: string; runtimeOwnerEnvironmentId?: string }
+
+/** Whether a listed or detected row with this worktree id satisfies `matches`. */
+export function someWorktreeCopy(
+  state: Pick<WorktreeOperationRouteState, 'worktreesByRepo' | 'detectedWorktreesByRepo'>,
+  worktreeId: string,
+  matches: (row: WorktreeCopy) => boolean
+): boolean {
+  const repoId = getRepoIdFromWorktreeId(worktreeId)
+  const copyMatches = (row: WorktreeCopy & { id: string }) => row.id === worktreeId && matches(row)
+  return Boolean(
+    state.worktreesByRepo?.[repoId]?.some(copyMatches) ||
+    state.detectedWorktreesByRepo?.[repoId]?.worktrees.some(copyMatches)
+  )
 }

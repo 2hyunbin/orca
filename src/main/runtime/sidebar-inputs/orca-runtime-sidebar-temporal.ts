@@ -1,6 +1,6 @@
 import { isRemoteRuntimePtyId } from '../../../shared/remote-runtime-pty-id'
 import { OrcaRuntimeWithWorkspaceReviewFacts } from './orca-runtime-workspace-review-facts'
-import type { OrcaRuntimeWithMigrationCatalog } from '../orca-runtime-migration-catalog'
+import type { OrcaRuntimeWithAgentTransitions } from '../orca-runtime-agent-transitions'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
 import { DEFAULT_HIDE_SLEEPING_WORKSPACES } from '../../../shared/constants'
 import {
@@ -45,7 +45,6 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     store: () => this.store,
     isWriteFenced: (worktreeId) =>
       isWslMoveProjectBlocked(this.store ?? undefined, wslMoveProjectRefForWorkspace(worktreeId)),
-    resolveTabWorktreeId: (tabId) => this.tabs.get(tabId)?.worktreeId,
     subscribeToPtyExit: (ptyId, listener) => this.subscribeToPtyExit(ptyId, listener),
     onClientEvent: (listener, options) => this.onClientEvent(listener, options),
     isViewing: (worktreeId, paneKey) => this.workspaceViewers.isViewing(worktreeId, paneKey),
@@ -168,11 +167,13 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     this.notifyWorktreesChanged(getRepoIdFromWorktreeId(worktreeId), { invalidateGitScans: false })
   }
 
-  /** Attaches every sidebar producer that reads the hook server's store. */
-  attachSidebarAgentStatusStore(store: AgentStatusStoreView): () => void {
+  override attachAgentStatusStore(store: AgentStatusStoreView): () => void {
+    // The sidebar subscribes first, so the statuses present at attach reach it as seeds.
     const detachActivity = this.workspaceActivityFacts.attachAgentStatusStore(store)
-    const detachStamps = this.sortStamps.attachAgentStatusStore(store)
+    const detachStamps = this.sortStamps.attachAgentTransitions(this.agentTransitions)
+    const detachTransitions = super.attachAgentStatusStore(store)
     return () => {
+      detachTransitions()
       detachActivity()
       detachStamps()
       this.sidebarTemporal.dispose()
@@ -211,7 +212,7 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
 
 /** The top sidebar layer, so a switch-off build folds the instanceof away with the switch. */
 export function sidebarFactsRuntime(
-  runtime: OrcaRuntimeWithMigrationCatalog
+  runtime: OrcaRuntimeWithAgentTransitions
 ): OrcaRuntimeWithSidebarTemporal | null {
   return ORCA_SIDEBAR_INPUTS_IS_MAIN && runtime instanceof OrcaRuntimeWithSidebarTemporal
     ? runtime

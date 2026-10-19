@@ -31,8 +31,8 @@ import {
 } from '../mobile-relay-credential-contract'
 import { MobileRelayHostWorktreesParamsSchema } from '../mobile-relay-hosts-contract'
 import { MobileWebBundleChunkParamsSchema } from '../mobile-web-bundle/bundle-rpc-contract'
-import { OrcadMigrationBlobChunkRequestSchema } from '../orcad-migration-blob-transfer'
-import { OrcadMigrationSnapshotChunkRequestSchema } from '../orcad-migration-scrollback'
+import { OrcadMigrationBlobChunkRequestSchema } from '../orcad-migration/orcad-migration-blob-transfer'
+import { OrcadMigrationSnapshotChunkRequestSchema } from '../orcad-migration/orcad-migration-scrollback'
 import { OrcadTerminalCensusParamsSchema } from '../orcad-terminal-census'
 import { pluginConsentRequestSchema } from '../plugins/plugin-consent-request'
 import {
@@ -213,7 +213,7 @@ import {
   ResolveTerminalPath,
   ServerDirectoryBrowse
 } from './files-params'
-import { FileOpen, WorktreeSelector } from './files-target-params'
+import { FileOpen, FileWatch, WorktreeSelector } from './files-target-params'
 import { TerminalArtifactFile, TerminalArtifactFileWrite } from './files-terminal-artifact-params'
 import {
   FolderWorkspaceCreate,
@@ -901,7 +901,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'files.searchPaths': FilePathSearch,
   'files.stat': FileTreePath,
   'files.unwatch': FileUnwatch,
-  'files.watch': WorktreeSelector,
+  'files.watch': FileWatch,
   'files.write': FileWrite,
   'files.writeBase64': FileWriteBase64,
   'files.writeBase64Chunk': FileWriteBase64Chunk,

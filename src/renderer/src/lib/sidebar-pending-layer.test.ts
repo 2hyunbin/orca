@@ -33,6 +33,7 @@ function domains(
     creations: new Map(),
     pairedServerHosts: new Map(),
     pairedServerRows: new Map(serverRows.map((row) => [row.key, row])),
+    repoIcons: new Map(),
     desktop: null,
     retention: null
   }
