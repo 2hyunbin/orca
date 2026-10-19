@@ -22,10 +22,9 @@ describe('ensureWorktreeHasInitialTerminal', () => {
     })
 
     expect(store.createTab).toHaveBeenCalledWith('wt-1', undefined, undefined, {
-      pendingActivationSpawn: true,
-      recordFocus: false
+      pendingActivationSpawn: true
     })
-    expect(store.setActiveTab).toHaveBeenCalledWith('tab-1', { recordFocus: false })
+    expect(store.setActiveTab).toHaveBeenCalledWith('tab-1')
     expect(store.queueTabIssueCommandSplit).toHaveBeenCalledWith('tab-1', {
       command: 'bash /tmp/repo/.git/orca/issue-command-runner.sh',
       env: {

@@ -448,10 +448,9 @@ describe('whose window a new workspace moves', () => {
 })
 
 describe('the structured session factory', () => {
-  // A paired caller's create selects the chat for itself instead (agent-launch-caller-selection).
   it('creates the session for the worktree the launch just made, and activates it', async () => {
     const runtime = runtimeStub()
-    const result = await launch(CREATE_LAUNCH, runtime, {})
+    const result = await launch(CREATE_LAUNCH, runtime)
 
     expect(createStructuredSession).toHaveBeenCalledTimes(1)
     expect(createStructuredSession.mock.calls[0]?.[0]).toMatchObject({
@@ -546,8 +545,7 @@ describe('a create that succeeded but is incomplete', () => {
       refusal: { code: 'structured_agent_session_unsupported', message: 'no structured host' }
     })
 
-    // In-process: a paired caller never hears the host's terminal reveal warning.
-    const result = await launch(CREATE_LAUNCH, runtime, {})
+    const result = await launch(CREATE_LAUNCH, runtime)
 
     expect(result.outcome).toEqual({ kind: 'terminal', handle: 'term_1' })
     expect(result.warning).toBe(

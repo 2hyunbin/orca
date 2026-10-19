@@ -38,7 +38,6 @@ import { gateAndReseedEmptyWorkspace } from './worktree-activation-gated-empty-r
 import { activateOwnedWorktreeNavigation } from './worktree-owned-navigation'
 import { liftSidebarFiltersHidingWorktree } from './worktree-activation-sidebar-filters'
 import { isFloatingWorkspaceId } from '../../../shared/floating-workspace-worktree'
-import { selectWorkspaceCreationTab } from './workspace-creation-tab-selection'
 import { revealFloatingWorkspacePanel } from './floating-workspace-panel-reveal'
 import { markVisited, readPreviousActive } from './worktree-activation-visit'
 
@@ -223,8 +222,6 @@ export function activateAndRevealWorktree(
       environmentId: ownerRuntimeEnvironmentId
     })
   }
-
-  selectWorkspaceCreationTab(useAppStore.getState(), worktreeId, wt.createdWithAgent)
 
   // Why: focus recency for Cmd+J ordering, distinct from recordWorktreeVisit/lastActivityAt; stamp before any later async step could throw. See docs/cmd-j-empty-query-ordering.md.
   if (!isPlainAlreadyActiveTerminal) {

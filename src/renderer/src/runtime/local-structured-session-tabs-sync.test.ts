@@ -5,7 +5,6 @@ import { STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY } from '../../../shared/pro
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
 import type { Tab } from '../../../shared/tab-types'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
-import type { Worktree } from '../../../shared/worktree/types'
 import type { WorktreeRuntimeOwnerState } from '../lib/worktree-runtime-owner-state'
 import { buildPersistedUnifiedTabSessionData } from '../lib/workspace-session-unified-tabs'
 import { buildHydratedTabState } from '../store/slices/tabs-hydration'
@@ -396,26 +395,11 @@ describe('local structured session tab projection', () => {
 
   it('forgets publisher versions when a worktree is removed', () => {
     type OwnerState = WebSessionTabsSyncState & WorktreeRuntimeOwnerState
-    const owner: Worktree = {
+    const owner = {
       id: WORKTREE_ID,
       repoId: 'repo-1',
       hostId: undefined,
-      runtimeOwnerEnvironmentId: undefined,
-      path: 'worktree-1',
-      head: 'abc123',
-      branch: 'refs/heads/feature',
-      isBare: false,
-      isMainWorktree: false,
-      displayName: 'worktree-1',
-      comment: '',
-      linkedIssue: null,
-      linkedPR: null,
-      linkedLinearIssue: null,
-      isArchived: false,
-      isUnread: false,
-      isPinned: false,
-      sortOrder: 0,
-      lastActivityAt: 0
+      runtimeOwnerEnvironmentId: undefined
     }
     let state = {
       ...createSnapshot(),

@@ -22,10 +22,9 @@ describe('ensureWorktreeHasInitialTerminal', () => {
 
     expect(store.createTab).toHaveBeenCalledWith('wt-1', undefined, undefined, {
       pendingStartup: expect.anything(),
-      pendingActivationSpawn: true,
-      recordFocus: false
+      pendingActivationSpawn: true
     })
-    expect(store.setActiveTab).toHaveBeenCalledWith('tab-1', { recordFocus: false })
+    expect(store.setActiveTab).toHaveBeenCalledWith('tab-1')
     expect(createdTabStartups(store)['tab-1']).toEqual({
       command: 'claude "Fix this bug"'
     })
@@ -53,7 +52,6 @@ describe('ensureWorktreeHasInitialTerminal', () => {
     expect(store.createTab).toHaveBeenCalledWith('wt-1', undefined, undefined, {
       pendingStartup: expect.anything(),
       pendingActivationSpawn: true,
-      recordFocus: false,
       launchAgent: 'claude'
     })
     expect(createdTabStartups(store)['tab-1']).toEqual({
@@ -88,7 +86,6 @@ describe('ensureWorktreeHasInitialTerminal', () => {
     expect(store.createTab).toHaveBeenCalledWith('wt-1', undefined, undefined, {
       pendingStartup: expect.anything(),
       pendingActivationSpawn: true,
-      recordFocus: false,
       launchAgent: 'claude',
       ...expectedViewMode
     })
@@ -122,7 +119,6 @@ describe('ensureWorktreeHasInitialTerminal', () => {
       expect(store.createTab).toHaveBeenCalledWith('wt-1', undefined, undefined, {
         pendingStartup: expect.anything(),
         pendingActivationSpawn: true,
-        recordFocus: false,
         launchAgent: 'claude',
         ...expectedViewMode
       })
@@ -151,7 +147,6 @@ describe('ensureWorktreeHasInitialTerminal', () => {
     expect(createTab).toHaveBeenNthCalledWith(1, 'wt-1', undefined, undefined, {
       pendingStartup: expect.anything(),
       pendingActivationSpawn: true,
-      recordFocus: false,
       recordInteraction: false,
       launchAgent: 'claude'
     })
@@ -185,7 +180,6 @@ describe('ensureWorktreeHasInitialTerminal', () => {
       expect(createTab).toHaveBeenNthCalledWith(1, 'wt-1', undefined, undefined, {
         pendingStartup: expect.anything(),
         pendingActivationSpawn: true,
-        recordFocus: false,
         recordInteraction: false,
         launchAgent: 'claude',
         ...expectedViewMode
@@ -214,7 +208,6 @@ describe('ensureWorktreeHasInitialTerminal', () => {
     expect(store.createTab).toHaveBeenCalledWith('wt-1', undefined, undefined, {
       pendingStartup: expect.anything(),
       pendingActivationSpawn: true,
-      recordFocus: false,
       launchAgent: 'claude'
     })
     expect(createdTabStartups(store)['tab-1']).toEqual({
@@ -244,7 +237,6 @@ describe('ensureWorktreeHasInitialTerminal', () => {
     expect(store.createTab).toHaveBeenCalledWith('wt-1', undefined, undefined, {
       pendingStartup: expect.anything(),
       pendingActivationSpawn: true,
-      recordFocus: false,
       launchAgent: 'codex'
     })
     expect(createdTabStartups(store)['tab-1']).toEqual({

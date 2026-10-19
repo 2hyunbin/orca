@@ -9,7 +9,6 @@ import {
 import { buildHydratedTabState } from '../tabs-hydration'
 import { projectWorktreeTabModelReconciliation } from './tabs-reconciliation'
 import { createWorktreeTabModelReconciliationBatch } from './tabs-reconciliation-batch'
-import { selectWorkspaceCreationTabForWorktree } from '@/lib/workspace-creation-tab-selection'
 import type { AppState } from '../../types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 
@@ -77,11 +76,9 @@ export function createTabsSessionActions(
       if (!ORCA_LAYOUT_OWNER_IS_MAIN && Object.keys(reconciliation.patch).length > 0) {
         set(reconciliation.patch)
       }
-      // Why here: a creation tab that arrives after Setup is shown still wins until the viewer picks.
-      const creationTabId = selectWorkspaceCreationTabForWorktree(get(), worktreeId)
       return {
         renderableTabCount: reconciliation.renderableTabCount,
-        activeRenderableTabId: creationTabId ?? reconciliation.activeRenderableTabId
+        activeRenderableTabId: reconciliation.activeRenderableTabId
       }
     },
 

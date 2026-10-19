@@ -58,8 +58,7 @@ export function applyDefaultTerminalTabs(
       pendingActivationSpawn: true,
       recordInteraction: false,
       ...(launchAgent ? { launchAgent } : {}),
-      // Why: an automatic tab is shown, not chosen; only an activated create would record focus.
-      ...(opts?.activateCreatedTabs === false ? { activate: false } : { recordFocus: false }),
+      ...(opts?.activateCreatedTabs === false ? { activate: false } : {}),
       ...(pendingStartup ? { pendingStartup } : {})
     })
     if (index === 0) {
@@ -84,7 +83,7 @@ export function applyDefaultTerminalTabs(
     return null
   }
   if (opts?.activateCreatedTabs !== false) {
-    store.setActiveTab(firstTabId, { recordFocus: false })
+    store.setActiveTab(firstTabId)
   }
   queueSetupAndIssueCommands(
     store,

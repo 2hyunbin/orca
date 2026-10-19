@@ -278,13 +278,12 @@ export function ensureWorktreeHasInitialTerminal(
   const terminalTab = store.createTab(worktreeId, undefined, undefined, {
     pendingActivationSpawn: true,
     ...(launchAgent ? { launchAgent } : {}),
-    // Why: an automatic tab is shown, not chosen; only an activated create would record focus.
-    ...(opts?.activateCreatedTabs === false ? { activate: false } : { recordFocus: false }),
+    ...(opts?.activateCreatedTabs === false ? { activate: false } : {}),
     // Why: the initial pane begins in the requested agent session instead of an idle shell.
     ...(sequencedStartup ? { pendingStartup: sequencedStartup } : {})
   })
   if (opts?.activateCreatedTabs !== false) {
-    store.setActiveTab(terminalTab.id, { recordFocus: false })
+    store.setActiveTab(terminalTab.id)
   }
   if (sequencedStartup && launchAgent) {
     seedNativeChatAppliedSessionOptions(

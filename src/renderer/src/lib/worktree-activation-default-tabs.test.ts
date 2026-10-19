@@ -15,10 +15,9 @@ describe('ensureWorktreeHasInitialTerminal', () => {
     ensureWorktreeHasInitialTerminal(store, 'wt-1')
 
     expect(store.createTab).toHaveBeenCalledWith('wt-1', undefined, undefined, {
-      pendingActivationSpawn: true,
-      recordFocus: false
+      pendingActivationSpawn: true
     })
-    expect(store.setActiveTab).toHaveBeenCalledWith('tab-1', { recordFocus: false })
+    expect(store.setActiveTab).toHaveBeenCalledWith('tab-1')
     expect(createdTabStartups(store)).toEqual({})
   })
 
@@ -41,7 +40,6 @@ describe('ensureWorktreeHasInitialTerminal', () => {
 
     expect(store.createTab).toHaveBeenCalledWith('wt-1', undefined, undefined, {
       pendingActivationSpawn: true,
-      recordFocus: false,
       pendingStartup: expect.anything()
     })
     expect(createdTabStartups(store)['tab-1']).toEqual({
@@ -75,7 +73,6 @@ describe('ensureWorktreeHasInitialTerminal', () => {
     expect(createTab).toHaveBeenNthCalledWith(1, 'wt-1', undefined, undefined, {
       pendingActivationSpawn: true,
       recordInteraction: false,
-      recordFocus: false,
       pendingStartup: expect.anything()
     })
     expect(store.setTabCustomTitle).toHaveBeenCalledWith('tab-1', 'Claude', {
@@ -88,7 +85,7 @@ describe('ensureWorktreeHasInitialTerminal', () => {
     expect(store.setTabColor).toHaveBeenCalledWith('tab-2', '#9ca3af')
     expect(createdTabStartups(store)['tab-1']).toEqual({ command: 'claude' })
     expect(createdTabStartups(store)['tab-2']).toEqual({ command: 'pnpm dev' })
-    expect(store.setActiveTab).toHaveBeenLastCalledWith('tab-1', { recordFocus: false })
+    expect(store.setActiveTab).toHaveBeenLastCalledWith('tab-1')
   })
 
   it('can queue setup and default tabs without activating created tabs', () => {

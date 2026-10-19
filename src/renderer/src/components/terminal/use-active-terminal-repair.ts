@@ -8,7 +8,7 @@ type ActiveTerminalRepairInput = {
   activeTabId: string | null
   activeTabIdByWorktree: Record<string, string | null>
   renderedActiveWorktreeId: string | null
-  setActiveTab: (tabId: string, options?: { recordFocus?: boolean }) => void
+  setActiveTab: (tabId: string) => void
   tabs: TerminalTab[]
 }
 
@@ -34,7 +34,7 @@ export function repairActiveTerminalTab({
   if (!repairedTabId) {
     return false
   }
-  setActiveTab(repairedTabId, { recordFocus: false })
+  setActiveTab(repairedTabId)
   return true
 }
 

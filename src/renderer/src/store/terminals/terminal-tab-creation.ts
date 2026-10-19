@@ -1,6 +1,5 @@
 import { warnIfZCodeCannotOpenSession } from '@/components/terminal-pane/zcode-missing-tui-notice'
 import { clearWorktreeSleepIntent } from '@/lib/worktree-sleep-intent'
-import { selectWorkspaceCreationTabForWorktree } from '@/lib/workspace-creation-tab-selection'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import { isValidHostTerminalTabId } from '../../../../shared/terminal-tab-id'
 import { getNextTerminalOrdinal } from '../../../../shared/workspace-layout/terminal-tab-ordinal'
@@ -214,9 +213,6 @@ export function createTerminalTabCreationActions(
           color: tab.color,
           sortOrder: cleanedGroupOrder.length,
           createdAt: tab.createdAt,
-          ...(shouldActivate && options?.recordFocus !== false
-            ? { lastFocusedAt: tab.createdAt }
-            : {}),
           // Why: omit for non-agent tabs so they keep the implicit 'terminal' view mode.
           ...(options?.viewMode ? { viewMode: options.viewMode } : {})
         }
@@ -295,8 +291,6 @@ export function createTerminalTabCreationActions(
       if (ORCA_LAYOUT_OWNER_IS_MAIN) {
         recordCreatedTerminalTabInLayoutOwner(get(), terminalTabCreateCommand(get(), tab))
       }
-      // Why: a creation agent that arrives after Setup is shown still wins until the viewer picks.
-      selectWorkspaceCreationTabForWorktree(get(), worktreeId)
       if (options?.initialPtyId) {
         // Why: a tab born with a live PTY (CLI/runtime create) wakes the workspace like any other bind.
         clearWorktreeSleepIntent(worktreeId)

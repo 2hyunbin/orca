@@ -35,7 +35,6 @@ export function prepareWebSessionTabsSnapshotGroups(
     existingTabIndex,
     honorSnapshotActiveFocus,
     intentUnifiedTabId,
-    preferredViewerTab,
     reservedEmptyPreviewFallbackTabId
   } = base
   const currentGroups = state.groupsByWorktree[worktreeId] ?? []
@@ -116,8 +115,7 @@ export function prepareWebSessionTabsSnapshotGroups(
       adoptedTabs,
       placementMoves,
       rekeyedTabIds,
-      intentTabId:
-        (honorSnapshotActiveFocus ? intentUnifiedTabId : null) ?? preferredViewerTab?.id ?? null,
+      intentTabId: honorSnapshotActiveFocus ? (intentUnifiedTabId ?? null) : null,
       reservedEmptyGroupFallbackTabId: reservedEmptyPreviewFallbackTabId,
       currentActiveGroupId: state.activeGroupIdByWorktree[worktreeId] ?? null,
       currentLayout: state.layoutByWorktree[worktreeId] ?? null,

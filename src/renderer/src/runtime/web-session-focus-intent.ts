@@ -12,7 +12,6 @@
 import { webSessionIntentOwnerKey, type WebSessionIntentOwner } from './web-session-intent-owner'
 import { toVisibleTabType } from '../../../shared/tab-types'
 import type { AppState } from '../store/types'
-import { toWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
 
 export type WebSessionFocusIntent = {
   hostTabId: string
@@ -40,8 +39,7 @@ type WebSessionVisibleTabState = Pick<
 export function resolveWebSessionVisibleTabId(
   state: WebSessionVisibleTabState,
   worktreeId: string,
-  tabs = state.unifiedTabsByWorktree?.[worktreeId] ?? [],
-  provisionalHandoffHostTabIds?: ReadonlyMap<string, string>
+  tabs = state.unifiedTabsByWorktree?.[worktreeId] ?? []
 ): string | null {
   // Why: the coarse (activeTabType, entityId) address inverts a many-to-one projection and cannot
   // tell editor-family kinds apart; group state is what is actually on screen.
@@ -68,14 +66,11 @@ export function resolveWebSessionVisibleTabId(
       return null
     }
     const previousType = toVisibleTabType(previous.contentType)
-    const hostTabId =
-      previous.contentType === 'terminal' ? provisionalHandoffHostTabIds?.get(previous.id) : null
-    const entityId = hostTabId ? toWebTerminalSurfaceTabId(hostTabId) : previous.entityId
     return (
       tabs.find(
         (tab) =>
           tab.groupId === activeGroup.id &&
-          tab.entityId === entityId &&
+          tab.entityId === previous.entityId &&
           toVisibleTabType(tab.contentType) === previousType
       )?.id ?? null
     )

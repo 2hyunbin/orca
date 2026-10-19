@@ -21,7 +21,6 @@ export type WorktreeActivationStore = Partial<WorktreeRuntimeOwnerState> & {
       pendingActivationSpawn?: boolean
       launchAgent?: TuiAgent
       recordInteraction?: boolean
-      recordFocus?: boolean
       viewMode?: Tab['viewMode']
       activate?: boolean
       pendingStartup?: {
@@ -38,7 +37,7 @@ export type WorktreeActivationStore = Partial<WorktreeRuntimeOwnerState> & {
       }
     }
   ) => { id: string }
-  setActiveTab: (tabId: string, options?: { recordFocus?: boolean }) => void
+  setActiveTab: (tabId: string) => void
   setTabCustomTitle: (
     tabId: string,
     title: string | null,

@@ -1,6 +1,7 @@
 /**
  * A launch from a paired client moves that client's view to the new tab and nobody else's: the view
- * intent belongs to the connection that asked. In-process callers keep today's behaviour.
+ * intent belongs to the connection that asked. In-process callers and worktree-creating launches
+ * keep today's behaviour.
  */
 
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -78,7 +79,7 @@ beforeEach(() => {
     .mockResolvedValue({ ok: true, value: { sessionId: 'sess-1' } })
 })
 
-describe('a paired client launching an agent', () => {
+describe('a paired client launching into an existing workspace', () => {
   it("selects the new terminal as that client's tab only", async () => {
     const runtime = selectionRuntime({ settings: {}, terminalPaneKey: PANE_KEY })
 
@@ -168,25 +169,6 @@ describe('a paired client launching an agent', () => {
     )
   })
 
-  // The bug: a phone's create opened the workspace's first tab (Setup), not the agent it started.
-  it.each([
-    ['chat', STRUCTURED_PREFERENCE, { sessionId: 'sess-1' }],
-    ['terminal', {}, { tabId: TAB_ID, leafId: LEAF_ID }]
-  ] as const)(
-    'selects the %s in a worktree it creates for the caller',
-    async (_s, settings, tab) => {
-      const runtime = selectionRuntime({ settings, startupTerminalPaneKey: PANE_KEY })
-
-      await launch(CREATE_LAUNCH, runtime)
-
-      expect(runtime.selectCreatedMobileSessionTabForClient).toHaveBeenCalledExactlyOnceWith(
-        'wt-new',
-        expect.objectContaining(tab),
-        CALLER
-      )
-    }
-  )
-
   it.each(['focused', 'background'] as const)(
     'keeps a paired %s chat inactive on the host',
     async (presentation) => {
@@ -244,6 +226,15 @@ describe('launches that keep the host-wide behaviour', () => {
       clientKind: 'runtime',
       pairedDeviceId: undefined
     })
+
+    expect(chatActivation()).toBe(true)
+    expect(runtime.selectCreatedMobileSessionTabForClient).not.toHaveBeenCalled()
+  })
+
+  it('a worktree-creating launch from a paired client keeps the create navigation', async () => {
+    const runtime = selectionRuntime({ settings: STRUCTURED_PREFERENCE })
+
+    await launch(CREATE_LAUNCH, runtime)
 
     expect(chatActivation()).toBe(true)
     expect(runtime.selectCreatedMobileSessionTabForClient).not.toHaveBeenCalled()
