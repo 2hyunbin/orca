@@ -669,6 +669,20 @@ describe('incident monitor evaluator', () => {
       expect.objectContaining({ signal: 'cell.production-gce-c1.queued_bytes' })
     )
 
+    // The connections ceiling is never skipped: the collector's configured cap, else the default.
+    const busy = reserveSample()
+    busy.sources['relay-logs']!.signals['cell.production-gce-c1.connections'] = signal(731)
+    expect(evaluateIncidentSample(busy, startedAt).failures).toContainEqual(
+      expect.objectContaining({ signal: 'cell.production-gce-c1.connections', threshold: 500 })
+    )
+    busy.sources['director-admin']!.signals['cell.production-gce-c1.connection_hard_cap'] =
+      signal(1_000)
+    expect(evaluateIncidentSample(busy, startedAt).status).toBe('green')
+    busy.sources['relay-logs']!.signals['cell.production-gce-c1.connections'] = signal(1_000)
+    expect(evaluateIncidentSample(busy, startedAt).failures).toContainEqual(
+      expect.objectContaining({ signal: 'cell.production-gce-c1.connections', threshold: 999 })
+    )
+
     const unready = reserveSample()
     unready.sources['active-probe']!.signals['cell.production-gce-c1.ready'] = signal(0)
     expect(evaluateIncidentSample(unready, startedAt).failures).toContainEqual(
