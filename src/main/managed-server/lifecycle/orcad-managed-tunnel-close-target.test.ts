@@ -14,6 +14,11 @@ import type {
   SshPortForwardProvider
 } from '../../ssh/port-forwarding/ssh-port-forward-provider'
 import { OrcadManagedTunnelManager } from './orcad-managed-tunnel-manager'
+import {
+  PERSISTED_PORT_TARGETING,
+  type OrcadManagedTunnelTargeting
+} from './orcad-managed-tunnel-target'
+import type { OrcadTunnelIdentity } from './orcad-managed-tunnel-identity'
 
 function createEnvironment(): KnownRuntimeEnvironment {
   const paired = createEnvironmentFromPairingOffer({
@@ -40,7 +45,9 @@ function createEnvironment(): KnownRuntimeEnvironment {
 }
 
 /** A real forward manager over a provider whose forwards stay "listening" until closed. */
-function setup() {
+function setup(
+  options: { targeting?: OrcadManagedTunnelTargeting; startGate?: Promise<void> } = {}
+) {
   const target: SshTarget = {
     id: 'ssh-1',
     label: 'Managed server',
@@ -55,22 +62,23 @@ function setup() {
   const listening = new Set<string>()
   const provider: SshPortForwardProvider = {
     canHandle: () => true,
-    start: async (_conn: SshConnection, options: PortForwardStartOptions) => {
-      listening.add(options.id)
+    start: async (_conn: SshConnection, start: PortForwardStartOptions) => {
+      listening.add(start.id)
+      await options.startGate
       const entry = {
-        id: options.id,
-        connectionId: options.connectionId,
-        localPort: options.localPort,
-        remoteHost: options.remoteHost,
-        remotePort: options.remotePort
+        id: start.id,
+        connectionId: start.connectionId,
+        localPort: start.localPort,
+        remoteHost: start.remoteHost,
+        remotePort: start.remotePort
       }
       return {
         entry,
         close: async () => {
-          listening.delete(options.id)
+          listening.delete(start.id)
         },
         dispose: () => {
-          listening.delete(options.id)
+          listening.delete(start.id)
         }
       }
     }
@@ -82,7 +90,8 @@ function setup() {
     getConnectionManager: () => connectionManager,
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the tunnel manager reads only getTarget.
     getTargetStore: () => ({ getTarget: () => target }) as unknown as SshConnectionStore,
-    forwardManager: new SshPortForwardManager({}, [provider])
+    forwardManager: new SshPortForwardManager({}, [provider]),
+    targeting: options.targeting
   })
   return { connect, connection, listening, manager }
 }
@@ -124,5 +133,48 @@ describe('OrcadManagedTunnelManager.closeTarget (the SSH session teardown)', () 
 
     await expect(build).rejects.toThrow('superseded')
     expect(state.listening.size).toBe(0)
+  })
+
+  it('closes a forward whose identity check is still running before it resolves', async () => {
+    let answer: (identity: OrcadTunnelIdentity) => void = () => {}
+    const verifyIdentity = vi.fn(
+      () =>
+        new Promise<OrcadTunnelIdentity>((resolve) => {
+          answer = resolve
+        })
+    )
+    const state = setup({ targeting: { ...PERSISTED_PORT_TARGETING, verifyIdentity } })
+    const build = state.manager.ensure(createEnvironment(), undefined, false)
+    await vi.waitFor(() => expect(verifyIdentity).toHaveBeenCalled())
+    expect(state.listening.size).toBe(1)
+
+    await state.manager.closeTarget('ssh-1')
+
+    expect(state.listening.size).toBe(0)
+    answer({ verdict: 'verified' })
+    await expect(build).rejects.toThrow('superseded')
+    expect(state.listening.size).toBe(0)
+  })
+
+  it('waits out a forward still starting and closes it before it resolves', async () => {
+    let release: () => void = () => {}
+    const startGate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const state = setup({ startGate })
+    const build = state.manager.ensure(createEnvironment(), undefined, false)
+    await vi.waitFor(() => expect(state.listening.size).toBe(1))
+
+    let closed = false
+    const teardown = state.manager.closeTarget('ssh-1').then(() => {
+      closed = true
+    })
+    await Promise.resolve()
+    expect(closed).toBe(false)
+    release()
+    await teardown
+
+    expect(state.listening.size).toBe(0)
+    await expect(build).rejects.toThrow()
   })
 })

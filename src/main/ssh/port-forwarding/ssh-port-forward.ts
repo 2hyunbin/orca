@@ -11,12 +11,16 @@ import type {
 export type { PortForwardEntry }
 export type { PortForwardCloseReason }
 
+/** A start a session teardown must close as soon as it resolves. */
+type StartingPortForward = { connectionId: string; closed: boolean }
+
 type SshPortForwardManagerCallbacks = {
   onForwardClosed?: (entry: PortForwardEntry, reason: PortForwardCloseReason) => void
 }
 
 export class SshPortForwardManager {
   private forwards = new Map<string, StartedPortForward>()
+  private starting = new Map<StartingPortForward, Promise<unknown>>()
   private nextId = 1
   private providers: SshPortForwardProvider[]
   private callbacks: SshPortForwardManagerCallbacks
@@ -70,25 +74,40 @@ export class SshPortForwardManager {
     }
 
     let forward: StartedPortForward | null = null
-    forward = await provider.start(conn, {
-      id,
-      connectionId,
-      localHost: '127.0.0.1',
-      localPort,
-      remoteHost,
-      remotePort,
-      label,
-      onUnexpectedClose: (entry, reason) => {
-        const active = this.forwards.get(id)
-        if (active !== forward) {
-          return
+    const starting: StartingPortForward = { connectionId, closed: false }
+    const settled = (async (): Promise<StartedPortForward> => {
+      const started = await provider.start(conn, {
+        id,
+        connectionId,
+        localHost: '127.0.0.1',
+        localPort,
+        remoteHost,
+        remotePort,
+        label,
+        onUnexpectedClose: (entry, reason) => {
+          const active = this.forwards.get(id)
+          if (active !== forward) {
+            return
+          }
+          this.forwards.delete(id)
+          this.callbacks.onForwardClosed?.(entry, reason)
         }
-        this.forwards.delete(id)
-        this.callbacks.onForwardClosed?.(entry, reason)
+      })
+      // Why checked with the registration: a teardown between the two would miss this forward.
+      if (starting.closed) {
+        await started.close()
+        throw new Error('The SSH session closed while this port forward was starting.')
       }
-    })
-    this.forwards.set(id, forward)
-    return forward.entry
+      forward = started
+      this.forwards.set(id, started)
+      return started
+    })()
+    this.starting.set(starting, settled)
+    try {
+      return (await settled).entry
+    } finally {
+      this.starting.delete(starting)
+    }
   }
 
   async updateForward(
@@ -175,11 +194,19 @@ export class SshPortForwardManager {
     return entries
   }
 
+  /** Also waits out this connection's starts, closing each, so none listens after it resolves. */
   async removeAllForwards(connectionId: string): Promise<void> {
     const toRemove = [...this.forwards.entries()]
       .filter(([, { entry }]) => entry.connectionId === connectionId)
       .map(([id]) => id)
-    await Promise.all(toRemove.map((id) => this.removeForwardAsync(id)))
+    const starts = [...this.starting].filter(([start]) => start.connectionId === connectionId)
+    for (const [start] of starts) {
+      start.closed = true
+    }
+    await Promise.all([
+      ...toRemove.map((id) => this.removeForwardAsync(id)),
+      ...starts.map(([, settled]) => settled.catch(() => undefined))
+    ])
   }
 
   /** Closes this connection's forwards that tunnel through a transport `conn` replaced. */

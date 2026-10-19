@@ -191,7 +191,11 @@ export class OrcadManagedTunnelManager {
     const carried = [...environmentIds].filter(
       (id) => this.buildTargets.get(id) === targetId || this.active.get(id)?.targetId === targetId
     )
-    await Promise.all(carried.map((environmentId) => this.close(environmentId)))
+    // Why both: a build's forward is unrecorded while its identity check runs, or still starting.
+    await Promise.all([
+      ...carried.map((environmentId) => this.close(environmentId)),
+      this.forwards.removeAllForwards(targetId)
+    ])
   }
 
   /** Quit: supersedes every build in flight and waits for each forward process to exit. */
