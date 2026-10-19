@@ -33,7 +33,9 @@ vi.mock('../../store', () => ({
 }))
 
 vi.mock('@/runtime/runtime-terminal-inspection', () => ({
-  sendRuntimePtyInput: (...args: unknown[]) => mocks.sendRuntimePtyInput(...args),
+  sendRuntimePtyInput: (...args: unknown[]) => mocks.sendRuntimePtyInput(...args)
+}))
+vi.mock('@/runtime/runtime-terminal-verified-input', () => ({
   sendRuntimePtyInputVerified: (...args: unknown[]) => mocks.sendRuntimePtyInputVerified(...args)
 }))
 vi.mock('@/runtime/runtime-terminal-verified-input', () => ({
