@@ -73,11 +73,7 @@ export class RuntimeRepositorySettingsController {
     if (isFolderRepo(repo)) {
       throw new Error('Folder mode does not support base refs.')
     }
-    const updated = store.updateRepo(
-      repo.id,
-      { worktreeBaseRef: baseRef },
-      getRepoExecutionHostId(repo)
-    )
+    const updated = store.updateRepo(repo, { worktreeBaseRef: baseRef })
     if (!updated) {
       throw new Error('repo_not_found')
     }
@@ -105,12 +101,7 @@ export class RuntimeRepositorySettingsController {
     }
     const write = (proven: Pick<Repo, 'folderUpgradeGitRootPath'>): Repo | null => {
       assertWslMoveRepoWritable(store, repo)
-      // Why the host: a same-id sibling on another host would take an id-only write.
-      return store.updateRepo(
-        repo.id,
-        { ...sanitizedUpdates, ...proven },
-        getRepoExecutionHostId(repo)
-      )
+      return store.updateRepo(repo, { ...sanitizedUpdates, ...proven })
     }
     const updated =
       sanitizedUpdates.kind === 'git' && isFolderRepo(repo)
