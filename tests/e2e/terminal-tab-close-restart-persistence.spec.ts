@@ -23,7 +23,7 @@ import type {
 } from '../../src/shared/runtime-types'
 
 
-for (const e26Run of [1, 2, 3]) {
+for (const e26Run of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
 test(`durable whole-tab close removes a split tab across restart #${e26Run}`, async (// oxlint-disable-next-line no-empty-pattern -- This lifecycle test owns both Electron launches and intentionally opts out of the default app fixture.
 {}, testInfo) => {
   const repoPath = readFileSync(TEST_REPO_PATH_FILE, 'utf8').trim()
@@ -58,6 +58,10 @@ test(`durable whole-tab close removes a split tab across restart #${e26Run}`, as
         console.log(`[renderer] ${message.text()}`)
       }
     })
+    if (process.env.E26_CPU_THROTTLE) {
+      const cdp = await firstLaunch.page.context().newCDPSession(firstLaunch.page)
+      await cdp.send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.E26_CPU_THROTTLE) })
+    }
     const worktreeId = await attachRepoAndOpenTerminal(firstLaunch.page, repoPath)
     await waitForSessionReady(firstLaunch.page)
     await waitForActiveWorktree(firstLaunch.page)
