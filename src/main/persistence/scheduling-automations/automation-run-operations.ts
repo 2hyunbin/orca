@@ -17,6 +17,8 @@ import {
   compareAutomationRunsNewestFirst,
   paginateAutomationRuns
 } from '../../../shared/automation-run-cursor'
+import type { HostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
+import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import {
   normalizeAutomationPrecheckResult,
   normalizeAutomationRunOutputSnapshot,
@@ -218,16 +220,23 @@ export function updateAutomationRun(
 
 export function snapshotAutomationRunWorkspaceDisplayName(
   operations: AutomationRunOperations,
-  workspaceId: string,
+  target: HostWorktreeTarget,
   displayName: string
 ): number {
   const normalizedDisplayName = normalizeAutomationRunWorkspaceDisplayName(displayName)
   if (!normalizedDisplayName) {
     return 0
   }
+  // A minted folder key names one workspace, which may run off its project's host.
+  const hostScoped = parseWorkspaceKey(target.id)?.type !== 'folder'
   let updatedCount = 0
   operations.state.automationRuns = (operations.state.automationRuns ?? []).map((run) => {
-    if (run.workspaceId !== workspaceId || run.workspaceDisplayName === normalizedDisplayName) {
+    if (
+      run.workspaceId !== target.id ||
+      // A same-id twin's run names its own host; a run from before host context has none.
+      (hostScoped && run.runContext && run.runContext.hostId !== target.hostId) ||
+      run.workspaceDisplayName === normalizedDisplayName
+    ) {
       return run
     }
     updatedCount += 1

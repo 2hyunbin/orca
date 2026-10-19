@@ -3,10 +3,12 @@ import type { PersistedState } from '../../../shared/persisted-state-types'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { sanitizeWorkspaceSessionTerminalRetirements } from '../../runtime/mobile-session-terminal-persistence-retirement'
 import {
+  getRepoExecutionHostId,
   LOCAL_EXECUTION_HOST_ID,
   normalizeExecutionHostId,
   type ExecutionHostId
 } from '../../../shared/execution-host'
+import type { HostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
 import { getDefaultWorkspaceSession } from '../../../shared/constants'
 import { pruneLocalTerminalScrollbackBuffers } from '../../../shared/workspace-session-terminal-buffers'
 import { pruneWorkspaceSessionBrowserHistory } from '../../../shared/workspace-session-browser-history'
@@ -112,12 +114,19 @@ export class SessionHostPartitionOperations {
   }
 
   removeWorkspaceSessionStateForWorktree(
-    worktreeId: string,
-    hostId?: ExecutionHostId | null,
+    target: HostWorktreeTarget,
     options: { advanceTerminalTopologyRevision?: boolean } = {}
   ): void {
-    for (const resolved of workspaceSessionPartitionIdsForHost(hostId)) {
-      removeWorkspaceSessionOwnerInPartition(this, worktreeId, resolved, options)
+    const { repos } = this[sessionHostPartitionOperationsContext].runtime.state
+    const repoId = getRepoIdFromWorktreeId(target.id)
+    // The local spill partition is also a same-id local twin's own; leave it to that twin.
+    const localTwin = repos.some(
+      (repo) => repo.id === repoId && getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID
+    )
+    for (const resolved of workspaceSessionPartitionIdsForHost(target.hostId)) {
+      if (resolved === target.hostId || !localTwin) {
+        removeWorkspaceSessionOwnerInPartition(this, target.id, resolved, options)
+      }
     }
   }
 }

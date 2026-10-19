@@ -1,3 +1,4 @@
+import { hostWorktreeTarget } from '../shared/worktree/host-qualified-identity'
 import {
   closeTestStores,
   testState,
@@ -405,7 +406,6 @@ describe('Store host-partitioned workspace sessions', () => {
 
   it('removes one orphaned worktree with a host-scoped topology fence', async () => {
     const store = await createStore()
-    store.addRepo(makeRepo({ id: 'repo-gone', path: '/repo-gone' }))
     const worktreeId = 'repo-gone::/workspace/stale'
     const session = {
       ...makeHostSession('repo-gone'),
@@ -421,7 +421,9 @@ describe('Store host-partitioned workspace sessions', () => {
     store.setWorkspaceSession(session, 'runtime:env-a')
     store.setWorkspaceSession(session, 'runtime:env-b')
 
-    store.removeWorkspaceSessionStateForWorktree(worktreeId, 'runtime:env-a')
+    store.removeWorkspaceSessionStateForWorktree(
+      hostWorktreeTarget({ id: worktreeId, hostId: 'runtime:env-a' })
+    )
     store.setWorkspaceSession(session, 'runtime:env-a')
     store.flush()
 
@@ -622,6 +624,25 @@ describe('Store host-partitioned workspace sessions', () => {
     expect(store.getWorkspaceSession('local').tabsByWorktree[worktreeId]).toBeUndefined()
   })
 
+  it("keeps a same-id local twin's tabs when a remote host's copy is removed", async () => {
+    const store = await createStore()
+    store.addRepo(makeRepo({ id: 'repo-twin', path: '/repo-twin' }))
+    const worktreeId = 'repo-twin::/workspace/shared'
+    const session = {
+      ...makeHostSession('repo-twin'),
+      tabsByWorktree: { [worktreeId]: [makeTerminalTab({ id: 'twin-tab', worktreeId })] }
+    }
+    store.setWorkspaceSession(session, 'local')
+    store.setWorkspaceSession(session, 'runtime:env-a')
+
+    store.removeWorkspaceSessionStateForWorktree(
+      hostWorktreeTarget({ id: worktreeId, hostId: 'runtime:env-a' })
+    )
+
+    expect(store.getWorkspaceSession('runtime:env-a').tabsByWorktree[worktreeId]).toBeUndefined()
+    expect(store.getWorkspaceSession('local').tabsByWorktree[worktreeId]?.[0]?.id).toBe('twin-tab')
+  })
+
   // Trade-off: the fence is repo-wide, so claiming authority over a partition main never wrote would
   // rebase every sibling worktree of that repo onto an empty copy. A delayed write wins here instead.
   it('does not fence a delayed session write when its host partition was never persisted', async () => {
@@ -634,7 +655,9 @@ describe('Store host-partitioned workspace sessions', () => {
       }
     }
 
-    store.removeWorkspaceSessionStateForWorktree(worktreeId, 'runtime:env-a')
+    store.removeWorkspaceSessionStateForWorktree(
+      hostWorktreeTarget({ id: worktreeId, hostId: 'runtime:env-a' })
+    )
     store.setWorkspaceSession(delayedSession, 'runtime:env-a')
 
     const session = store.getWorkspaceSession('runtime:env-a')
