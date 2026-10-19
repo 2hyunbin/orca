@@ -48,6 +48,9 @@ export async function discardUnpersistedPtySpawn(
   } catch (error) {
     if (!isPtyAlreadyGoneError(error)) {
       console.warn('[pty] failed to clean up PTY after persistence failure:', error)
+      if (!isCurrentPtyExit(result)) {
+        return
+      }
       // Keep ownership: the process may still run, and a later stop needs it to reach it.
       runtime?.markPtyLivenessUnverifiable?.(
         result.id,

@@ -61,4 +61,18 @@ describe('discarding a spawn whose binding failed to save', () => {
     expect(ptyOwnership.get(PTY_ID)).toBe('ssh:conn-1')
     expect(ptyIncarnationById.get(PTY_ID)).toBe('inc-2')
   })
+
+  it('does not mark a same-id replacement unverifiable when the predecessor shutdown fails', async () => {
+    spawned()
+    const runtime = { markPtyLivenessUnverifiable: vi.fn() }
+    const provider = providerWhoseShutdown(async () => {
+      ptyIncarnationById.set(PTY_ID, 'inc-2')
+      throw new Error('shutdown response lost')
+    })
+
+    await discardUnpersistedPtySpawn(provider, result, runtime)
+
+    expect(ptyIncarnationById.get(PTY_ID)).toBe('inc-2')
+    expect(runtime.markPtyLivenessUnverifiable).not.toHaveBeenCalled()
+  })
 })
