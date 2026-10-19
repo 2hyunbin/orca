@@ -14,7 +14,6 @@ vi.mock('@/lib/connection-context', () => ({
   getConnectionIdForFile: (worktreeId: string) =>
     worktreeId === 'global-floating-terminal' ? null : undefined
 }))
-vi.mock('./editor-model-owner', () => ({ getEditorModelOwnerKey: () => '' }))
 
 import { useAppStore } from '@/store'
 import { editorModelRegistry } from '@/lib/editor-model-registry'
@@ -24,6 +23,7 @@ import { recordSelfWrite } from './editor-self-write-registry'
 import { scheduleEditorChangedOnDiskMark } from '@/hooks/editor-external-watch-disk-verification'
 import { collectOverflowEditorExternalReloadTargets } from '@/hooks/editor-external-watch-event-reconciliation'
 import { markFileChangedOnDisk } from './editor-changed-on-disk-mark'
+import { localEditorModelOwnerKey } from './editor-model-owner'
 import { toEditorModelUri } from './editor-model-uri'
 import { isProgrammaticContentSyncInFlight } from './monaco-programmatic-sync'
 import {
@@ -43,7 +43,7 @@ const file: OpenFile = {
   isDirty: true,
   externalMutation: 'changed'
 }
-const modelKey = toEditorModelUri(file.filePath)
+const modelKey = toEditorModelUri(file.filePath, localEditorModelOwnerKey('wt-1'))
 
 const clearEditorDraft = vi.fn()
 const markFileDirty = vi.fn()
@@ -60,7 +60,13 @@ function mockStore(): void {
     setAutosavePausedAfterReloadUndo: vi.fn(),
     editorDrafts: {},
     openFiles,
-    settings: {}
+    settings: {},
+    worktreesByRepo: {
+      repo: [
+        { id: 'wt-1', repoId: 'repo', hostId: 'local' },
+        { id: 'wt-2', repoId: 'repo', hostId: 'local' }
+      ]
+    }
   })
 }
 
@@ -226,6 +232,31 @@ describe('getMountedEditModel', () => {
 
   it('ignores non-edit tabs, whose diff models rotate on reload', () => {
     expect(getMountedEditModel({ ...file, mode: 'diff' }, useAppStore.getState())).toBeNull()
+  })
+})
+
+describe('per-tab models', () => {
+  // Why: the same file open in another workspace has its own tab, and so its own model.
+  const otherWorkspaceTab: OpenFile = { ...file, id: 'file-1-wt-2', worktreeId: 'wt-2' }
+
+  it('a table-view tab never borrows the mounted source model of another tab', () => {
+    // `model` (the wt-1 source tab) is mounted; the wt-2 tab shows a CSV table, no editor of its own.
+    expect(getMountedEditModel(otherWorkspaceTab, useAppStore.getState())).toBeNull()
+  })
+
+  it('a newly opened tab of the same file gets its own model, outside the reload boundary', () => {
+    const otherModel = monaco.editor.createModel(
+      'other workspace text',
+      'plaintext',
+      monaco.Uri.parse(toEditorModelUri(file.filePath, localEditorModelOwnerKey('wt-2')))
+    )
+    vi.spyOn(otherModel, 'isAttachedToEditor').mockReturnValue(true)
+    try {
+      expect(getMountedEditModel(otherWorkspaceTab, useAppStore.getState())?.model).toBe(otherModel)
+      expect(otherModel).not.toBe(model)
+    } finally {
+      otherModel.dispose()
+    }
   })
 })
 

@@ -44,7 +44,7 @@ function findLiveFile(state: AppState, fileId: string): OpenFile | undefined {
 
 type MountedEditModel = { model: editor.ITextModel; modelKey: string }
 
-/** The edit tab's Monaco model, only while a code editor shows it — the only place Cmd+Z reaches. */
+/** This tab's own Monaco model, only while a code editor shows it — the only place Cmd+Z reaches. */
 export function getMountedEditModel(file: OpenFile, state: AppState): MountedEditModel | null {
   const registry = editorModelRegistry.get()
   if (file.mode !== 'edit' || !registry) {
@@ -100,7 +100,7 @@ export async function reloadMountedModelFromDisk(
   state.clearEditorDraft(file.id)
   state.markFileDirty(file.id, false)
   state.setExternalMutation(file.id, null)
-  watchReloadUndoBoundary(model, modelKey)
+  watchReloadUndoBoundary(model, file.id)
   return 'applied'
 }
 
@@ -114,7 +114,7 @@ export function discardDraftAndReloadContent(
   state.clearEditorDraft(file.id)
   state.markFileDirty(file.id, false)
   state.setExternalMutation(file.id, null)
-  state.setAutosavePausedAfterReloadUndo([file.id], false)
+  state.setAutosavePausedAfterReloadUndo(file.id, false)
   reloadContent(file)
 }
 

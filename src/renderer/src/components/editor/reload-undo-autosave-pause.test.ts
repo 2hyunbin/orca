@@ -65,7 +65,7 @@ describe('autosave pause after undoing past a reload', () => {
     // The banner reload: one undoable edit to the agent's text, tab clean.
     replaceModelContentAsUndoStep(model, 'agent text')
     store.getState().markFileDirty(FILE_ID, false)
-    watchReloadUndoBoundary(model, MODEL_KEY)
+    watchReloadUndoBoundary(model, FILE_ID)
   })
 
   afterEach(() => {
@@ -135,17 +135,17 @@ describe('autosave pause after undoing past a reload', () => {
     expect(pausedTabIds()).toEqual([FILE_ID])
   })
 
-  it('pauses every tab that shares the model', async () => {
+  it('pauses only the tab whose model was undone', async () => {
     store.setState((state) => ({
       openFiles: state.openFiles.flatMap((file) => [
         file,
-        { ...file, id: 'same-file-other-workspace' }
+        { ...file, id: 'same-file-other-workspace', worktreeId: 'wt-2' }
       ])
     }))
 
     await model.undo()
 
-    expect(pausedTabIds()).toEqual([FILE_ID, 'same-file-other-workspace'])
+    expect(pausedTabIds()).toEqual([FILE_ID])
   })
 
   it('a disk change after the undo raises the normal conflict', async () => {

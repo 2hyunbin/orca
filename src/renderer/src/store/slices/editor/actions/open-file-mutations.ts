@@ -146,24 +146,16 @@ export function createOpenFileMutations(
         }
       }),
 
-    setAutosavePausedAfterReloadUndo: (fileIds, paused) =>
+    setAutosavePausedAfterReloadUndo: (fileId, paused) =>
       set((s) => {
-        const ids = new Set(fileIds)
-        if (
-          !s.openFiles.some(
-            (f) => ids.has(f.id) && paused !== (f.autosavePausedAfterReloadUndo !== undefined)
-          )
-        ) {
+        const file = s.openFiles.find((f) => f.id === fileId)
+        if (!file || paused === (file.autosavePausedAfterReloadUndo !== undefined)) {
           return s
         }
+        const generation = paused ? nextAutosavePauseGeneration() : undefined
         return {
           openFiles: s.openFiles.map((f) =>
-            ids.has(f.id)
-              ? {
-                  ...f,
-                  autosavePausedAfterReloadUndo: paused ? nextAutosavePauseGeneration() : undefined
-                }
-              : f
+            f.id === fileId ? { ...f, autosavePausedAfterReloadUndo: generation } : f
           )
         }
       }),
