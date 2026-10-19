@@ -4,6 +4,7 @@ import type { IPtyProvider, PtySpawnResult } from '../../../providers/pty-provid
 import {
   isCurrentPtyExit,
   ptyIncarnationById,
+  ptyOwnership,
   setAdoptedPtyOwnership
 } from '../provider/ownership-state'
 import { finishPtyShutdown, isPtyAlreadyGoneError } from '../provider/liveness'
@@ -48,7 +49,11 @@ export async function discardUnpersistedPtySpawn(
   } catch (error) {
     if (!isPtyAlreadyGoneError(error)) {
       console.warn('[pty] failed to clean up PTY after persistence failure:', error)
-      if (!isCurrentPtyExit(result)) {
+      // An exit observed meanwhile, or a same-id replacement, outranks a lost control reply.
+      if (
+        !ptyOwnership.has(result.id) ||
+        ptyIncarnationById.get(result.id) !== result.incarnationId
+      ) {
         return
       }
       // Keep ownership: the process may still run, and a later stop needs it to reach it.

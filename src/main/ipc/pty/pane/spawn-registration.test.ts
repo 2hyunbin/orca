@@ -62,6 +62,21 @@ describe('discarding a spawn whose binding failed to save', () => {
     expect(ptyIncarnationById.get(PTY_ID)).toBe('inc-2')
   })
 
+  it('keeps an exit observed during a shutdown whose reply was lost', async () => {
+    spawned()
+    const runtime = { markPtyLivenessUnverifiable: vi.fn() }
+    const provider = providerWhoseShutdown(async () => {
+      // The provider's exit listener retires the PTY before the RPC rejects.
+      ptyOwnership.delete(PTY_ID)
+      ptyIncarnationById.delete(PTY_ID)
+      throw new Error('shutdown response lost')
+    })
+
+    await discardUnpersistedPtySpawn(provider, result, runtime)
+
+    expect(runtime.markPtyLivenessUnverifiable).not.toHaveBeenCalled()
+  })
+
   it('does not mark a same-id replacement unverifiable when the predecessor shutdown fails', async () => {
     spawned()
     const runtime = { markPtyLivenessUnverifiable: vi.fn() }
