@@ -23,6 +23,14 @@ let active: Electron.WebContents | undefined
 let presenter: BaseWindow | undefined
 let parent: BrowserWindow
 let kind = 'adopted'
+let pageTitle: string | undefined
+
+function trackPageTitle(contents: Electron.WebContents): void {
+  pageTitle = undefined
+  contents.on('page-title-updated', (_event, title) => {
+    pageTitle = title
+  })
+}
 
 function adoptedWindow(contents: Electron.WebContents): BaseWindow | undefined {
   return BaseWindow.getAllWindows().find((window) =>
@@ -58,8 +66,9 @@ async function command(input: {
         webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false }
       })
       await window.loadURL(input.url ?? 'about:blank')
-      prepareNativeBrowserPopup(window, 'https://uncommitted.invalid/')
+      prepareNativeBrowserPopup(window)
       active = window.webContents
+      trackPageTitle(active)
       presenter = window
     } else {
       const sourceView = new WebContentsView({
@@ -79,6 +88,7 @@ async function command(input: {
         'https://uncommitted.invalid/'
       )
       active = contents
+      trackPageTitle(active)
       presenter = adoptedWindow(contents)
     }
   }
@@ -138,6 +148,7 @@ async function command(input: {
       electron: process.versions.electron,
       kind,
       title: presenter?.getTitle(),
+      pageTitle,
       committedUrl: active?.mainFrame.url,
       committedOrigin: active?.mainFrame.origin,
       bar: barState,
@@ -163,15 +174,17 @@ app.whenReady().then(async () => {
           'https://uncommitted.invalid/'
         )
         active = popup.contentWebContents
+        trackPageTitle(active)
         presenter = adoptedWindow(active)
         return active
       }
     }
   })
-  parent.webContents.on('did-create-window', (window, details) => {
+  parent.webContents.on('did-create-window', (window) => {
     active = window.webContents
+    trackPageTitle(active)
     presenter = window
-    prepareNativeBrowserPopup(window, details.url)
+    prepareNativeBrowserPopup(window)
   })
   parent.webContents.on('console-message', (_event, _level, message) => {
     if (!message.startsWith('origin-probe:')) {

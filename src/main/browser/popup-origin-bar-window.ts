@@ -5,8 +5,7 @@ import {
   prepareNativeBrowserPopup
 } from './browser-popup-native-window'
 import { MIN_POPUP_CONTENT_HEIGHT, MIN_POPUP_CONTENT_WIDTH } from './popup-window-minimum-size'
-import { popupCommittedDocumentUrl } from './popup-committed-document-url'
-import { describePopupOrigin } from './popup-origin-description'
+import { describeCommittedPopupOrigin } from './popup-committed-origin'
 export { describePopupOrigin } from './popup-origin-description'
 
 // Why: Electron passes the pre-created popup WebContents through the
@@ -121,7 +120,7 @@ export function openPopupWithOriginBar(
   prepareContent?: (contents: Electron.WebContents) => boolean
 ): PopupOriginBarWindow {
   if (options.nativeWindow) {
-    return prepareNativeBrowserPopup(options.nativeWindow, initialUrl, prepareContent)
+    return prepareNativeBrowserPopup(options.nativeWindow, prepareContent)
   }
   const { width, height } = clampPopupContentSize(options)
   const window = new BaseWindow({
@@ -186,9 +185,8 @@ export function openPopupWithOriginBar(
   ) {
     return closeUnpreparedPopup(window, contentWebContents, originBarWebContents)
   }
-  let currentUrl = popupCommittedDocumentUrl(contentWebContents)
   const renderOrigin = (): void => {
-    const { label, insecure } = describePopupOrigin(currentUrl)
+    const { label, insecure } = describeCommittedPopupOrigin(contentWebContents)
     // Why: origin is the title only until the page supplies one — the bar
     // below stays the trust surface, so the native title bar can show the
     // page title (Chrome popup behavior) instead of doubling the origin.
@@ -210,18 +208,14 @@ export function openPopupWithOriginBar(
     `data:text/html;charset=utf-8,${encodeURIComponent(ORIGIN_BAR_HTML)}`
   )
 
-  const handleDidNavigate = (): void => {
-    currentUrl = popupCommittedDocumentUrl(contentWebContents)
-    renderOrigin()
-  }
-  contentWebContents.on('did-navigate', handleDidNavigate)
+  contentWebContents.on('did-navigate', renderOrigin)
   const handleInPageNavigate = (
     _event: Electron.Event,
     _url: string,
     isMainFrame: boolean
   ): void => {
     if (isMainFrame) {
-      handleDidNavigate()
+      renderOrigin()
     }
   }
   contentWebContents.on('did-navigate-in-page', handleInPageNavigate)
@@ -236,7 +230,6 @@ export function openPopupWithOriginBar(
       return
     }
     // Error documents omit did-navigate; read the committed frame, never the failed target.
-    currentUrl = popupCommittedDocumentUrl(contentWebContents)
     renderOrigin()
   }
   contentWebContents.on('did-fail-load', handleLoadFailure)
@@ -246,7 +239,11 @@ export function openPopupWithOriginBar(
   contentWebContents.on('did-finish-load', renderOrigin)
   const handlePageTitleUpdated = (event: Electron.Event, title: string): void => {
     event.preventDefault()
-    if (!window.isDestroyed() && title && currentUrl !== 'about:blank') {
+    if (
+      !window.isDestroyed() &&
+      title &&
+      describeCommittedPopupOrigin(contentWebContents).label !== 'about:blank'
+    ) {
       window.setTitle(title)
     }
   }
@@ -267,7 +264,7 @@ export function openPopupWithOriginBar(
   window.once('closed', () => {
     if (!contentWebContents.isDestroyed()) {
       contentWebContents.off('destroyed', handleContentDestroyed)
-      contentWebContents.off('did-navigate', handleDidNavigate)
+      contentWebContents.off('did-navigate', renderOrigin)
       contentWebContents.off('did-navigate-in-page', handleInPageNavigate)
       contentWebContents.off('did-fail-load', handleLoadFailure)
       contentWebContents.off('did-finish-load', renderOrigin)

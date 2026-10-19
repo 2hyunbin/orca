@@ -65,7 +65,6 @@ describe('native popup admission', () => {
     const onCreated = vi.fn()
     const response = allowNativeBrowserPopup({
       opener,
-      targetUrl: 'https://example.com/post?code=synthetic',
       options: { show: true, frame: true },
       onCreated
     })
@@ -92,13 +91,12 @@ describe('native popup admission', () => {
     linked.contents.session = opener.contents.session
     scripted.contents.session = opener.contents.session
     const onScripted = vi.fn(() => {
-      prepareNativeBrowserPopup(scripted.browserWindow, 'https://example.com/scripted', () => true)
+      prepareNativeBrowserPopup(scripted.browserWindow, () => true)
       return scripted.browserWindow.webContents
     })
     const admit = (onCreated: () => Electron.WebContents) =>
       allowNativeBrowserPopup({
         opener: opener.browserWindow.webContents,
-        targetUrl: 'https://example.com/scripted',
         options: {},
         onCreated
       })
@@ -108,7 +106,6 @@ describe('native popup admission', () => {
     const onLinked = vi.fn(() => linked.browserWindow.webContents)
     allowNativeBrowserPopup({
       opener: opener.browserWindow.webContents,
-      targetUrl: 'https://example.com/linked',
       options: {},
       onCreated: onLinked
     })
@@ -135,7 +132,6 @@ describe('native popup admission', () => {
     const onCreated = vi.fn(() => first.browserWindow.webContents)
     allowNativeBrowserPopup({
       opener: opener.browserWindow.webContents,
-      targetUrl: 'https://example.com/scripted',
       options: {},
       onCreated
     })
@@ -160,7 +156,6 @@ describe('native popup admission', () => {
     for (const onCreated of [earlier, later]) {
       allowNativeBrowserPopup({
         opener: opener.browserWindow.webContents,
-        targetUrl: 'https://example.com/identical',
         options: { show: false },
         onCreated
       })
@@ -185,7 +180,6 @@ describe('native popup admission', () => {
     for (const onCreated of [onA, onB]) {
       allowNativeBrowserPopup({
         opener: opener.browserWindow.webContents,
-        targetUrl: 'https://example.com/identical',
         options: { show: false },
         onCreated
       })
@@ -209,7 +203,6 @@ describe('native popup admission', () => {
     ] as const) {
       allowNativeBrowserPopup({
         opener,
-        targetUrl: 'https://example.com/identical',
         options: { show: false },
         onCreated
       })
@@ -230,7 +223,6 @@ describe('native popup admission', () => {
       const onCreated = vi.fn(() => unrelated.browserWindow.webContents)
       allowNativeBrowserPopup({
         opener: opener.browserWindow.webContents,
-        targetUrl: 'https://example.com/identical',
         options: { show: false },
         onCreated
       })
@@ -249,7 +241,6 @@ describe('native popup admission', () => {
     const onCreated = vi.fn(() => child.browserWindow.webContents)
     allowNativeBrowserPopup({
       opener: opener.browserWindow.webContents,
-      targetUrl: 'https://example.com/identical',
       options: { show: false },
       onCreated
     })
@@ -280,13 +271,11 @@ describe('native popup admission', () => {
     const options = { show: state !== 'explicit-hidden' }
     const prepare = vi.fn(() =>
       state === 'preparation-rejected'
-        ? prepareNativeBrowserPopup(browserWindow, 'https://example.com/post', () => false)
-            .contentWebContents
+        ? prepareNativeBrowserPopup(browserWindow, () => false).contentWebContents
         : browserWindow.webContents
     )
     const response = allowNativeBrowserPopup({
       opener: opener.browserWindow.webContents,
-      targetUrl: 'https://example.com/post',
       options,
       background: true,
       canPresent: () => {
@@ -327,7 +316,7 @@ describe('native popup admission', () => {
     }
   ])('blocks native navigation and descendants when preparation fails', (prepare) => {
     const { browserWindow, contents, window } = nativeWindow()
-    const popup = prepareNativeBrowserPopup(browserWindow, 'https://example.com/', prepare)
+    const popup = prepareNativeBrowserPopup(browserWindow, prepare)
     for (const event of ['will-navigate', 'will-frame-navigate', 'will-redirect']) {
       const preventDefault = vi.fn()
       contents.emit(event, { preventDefault })
@@ -344,7 +333,7 @@ describe('native popup admission', () => {
   it('initializes only from the committed frame and retains it through failed redirects', () => {
     const { browserWindow, contents, window } = nativeWindow()
     contents.mainFrame.url = 'https://committed.example/private?secret=synthetic'
-    prepareNativeBrowserPopup(browserWindow, 'https://requested.example/auth')
+    prepareNativeBrowserPopup(browserWindow)
     expect(window.setTitle).toHaveBeenLastCalledWith('https://committed.example')
     contents.emit('did-start-navigation', {}, 'https://requested.example/auth')
     contents.emit('will-redirect', {}, 'https://redirect.example/auth')
@@ -369,7 +358,7 @@ describe('native popup admission', () => {
       const { browserWindow, contents, window } = nativeWindow()
       contents.mainFrame.url = 'https://committed.example/'
       contents.mainFrame.origin = 'https://committed.example'
-      prepareNativeBrowserPopup(browserWindow, contents.mainFrame.url)
+      prepareNativeBrowserPopup(browserWindow)
       window.setTitle.mockClear()
 
       for (let index = 0; index < count; index += 1) {
@@ -388,7 +377,7 @@ describe('native popup admission', () => {
     const { browserWindow, contents, window } = nativeWindow()
     contents.mainFrame.url = 'https://committed.example/'
     contents.mainFrame.origin = 'https://committed.example'
-    prepareNativeBrowserPopup(browserWindow, 'https://requested.example/')
+    prepareNativeBrowserPopup(browserWindow)
     contents.emit('did-fail-load', {}, -3, 'ERR_ABORTED', 'https://failed.example/', true)
     expect(window.setTitle).toHaveBeenLastCalledWith('https://committed.example')
     contents.mainFrame.url = 'https://failed.example/'
@@ -399,7 +388,7 @@ describe('native popup admission', () => {
 
   it('protects the title and updates only main-frame origins, including redirects', () => {
     const { browserWindow, contents, window } = nativeWindow()
-    prepareNativeBrowserPopup(browserWindow, 'https://example.com/post?code=synthetic', () => true)
+    prepareNativeBrowserPopup(browserWindow, () => true)
     expect(window.setTitle).toHaveBeenLastCalledWith('about:blank')
     const preventDefault = vi.fn()
     window.emit('page-title-updated', { preventDefault }, 'Spoofed title')

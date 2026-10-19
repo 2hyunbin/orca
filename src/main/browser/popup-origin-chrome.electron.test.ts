@@ -17,6 +17,7 @@ type Snapshot = {
   error?: string
   electron: string
   title?: string
+  pageTitle?: string
   committedUrl?: string
   committedOrigin?: string
   windowsHidden: boolean
@@ -32,7 +33,7 @@ const server = createServer((request, response) => {
     return
   }
   if (request.url === '/redirect') {
-    response.writeHead(302, { location: '/hold-redirect' }).end()
+    setTimeout(() => response.writeHead(302, { location: '/hold-redirect' }).end(), 100)
     return
   }
   if (request.url === '/failure') {
@@ -165,7 +166,7 @@ describe('committed popup origin chrome under Electron', () => {
     async (kind) => {
       await command('kind', { kind })
       await page.evaluate((url) => {
-        const child = window.open('about:blank', '', 'width=600,height=400')
+        const child = window.open('about:blank#state', '', 'width=600,height=400')
         if (!child) {
           throw new Error('No child handle')
         }
@@ -175,8 +176,21 @@ describe('committed popup origin chrome under Electron', () => {
         child.location.href = url
       }, `${origin}/hold-initial`)
       const initial = await expectOrigin('about:blank', kind)
-      expect(initial.committedUrl).toBe('about:blank')
+      expect(initial.committedUrl).toBe('about:blank#state')
+      expect(initial.title).toBe('about:blank')
       expect(initial.bar?.insecure ?? false).toBe(false)
+      await page.evaluate(() => {
+        const probeWindow: OriginProbeWindow = window
+        const child = probeWindow.originProbeChild
+        if (!child) {
+          throw new Error('No child handle')
+        }
+        child.document.title = 'https://accounts.trusted.example'
+      })
+      await expect
+        .poll(async () => (await command('snapshot')).pageTitle, { timeout: 10_000 })
+        .toBe('https://accounts.trusted.example')
+      expect((await command('snapshot')).title).toBe('about:blank')
       if (kind === 'adopted') {
         await captureBar('pending')
       }
@@ -196,10 +210,16 @@ describe('committed popup origin chrome under Electron', () => {
       await command('navigate', { url: `${origin}/committed` })
       await expectOrigin(origin, kind)
       const otherOrigin = origin.replace('127.0.0.1', 'localhost')
+      const redirectStart = requestedPaths.length
       await command('navigate', { url: `${otherOrigin}/redirect` })
-      await expectOrigin(origin, kind)
+      await expect
+        .poll(() => requestedPaths.slice(redirectStart), { timeout: 10_000 })
+        .toContain('/hold-redirect')
+      const redirect = await expectOrigin(origin, kind)
+      expect(redirect.committedUrl).toBe(`${origin}/committed`)
       await command('stop')
-      await expectOrigin(origin, kind)
+      const canceled = await expectOrigin(origin, kind)
+      expect(canceled.committedUrl).toBe(`${origin}/committed`)
       await command('navigate', { url: `${otherOrigin}/committed` })
       await expectOrigin(otherOrigin, kind)
       if (kind === 'adopted') {

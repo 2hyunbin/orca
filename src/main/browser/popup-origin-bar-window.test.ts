@@ -367,22 +367,45 @@ describe('openPopupWithOriginBar', () => {
     expect(lastWindow().setTitle).toHaveBeenLastCalledWith('https://evil.example.net')
   })
 
-  it('keeps opener-written blank content neutral across failed navigation and delayed bar loading', () => {
+  it.each(['about:blank', 'about:blank#state', 'about:blank?state=1'])(
+    'keeps opener-written %s content neutral across failed navigation and delayed bar loading',
+    (url) => {
+      const adopted = createFakeWebContents()
+      adopted.mainFrame.url = url
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The fixture implements the presenter's WebContents surface.
+      openPopupWithOriginBar({ webContents: adopted as never }, 'https://requested.example/auth')
+      const { bar } = lastViews()
+      lastWindow().setTitle.mockClear()
+      adopted.emit('page-title-updated', { preventDefault: vi.fn() }, 'https://requested.example')
+      expect(lastWindow().setTitle).not.toHaveBeenCalled()
+      adopted.emit('did-start-navigation', {}, 'https://requested.example/auth')
+      adopted.emit('will-redirect', {}, 'https://redirect.example/auth')
+      adopted.emit('did-fail-load', {}, -3, 'ERR_ABORTED', 'https://redirect.example/auth', true)
+      adopted.emit('did-finish-load')
+      bar.webContents.emit('did-finish-load')
+      expect(lastWindow().setTitle).toHaveBeenLastCalledWith('about:blank')
+      expect(bar.webContents.executeJavaScript.mock.calls.at(-1)?.[0]).toContain('"about:blank"')
+      expect(bar.webContents.executeJavaScript.mock.calls.flat().join('')).not.toContain(
+        'requested.example'
+      )
+    }
+  )
+
+  it('checks the committed document when a title arrives before its navigation event', () => {
     const adopted = createFakeWebContents()
+    adopted.mainFrame.url = 'https://committed.example/'
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The fixture implements the presenter's WebContents surface.
-    openPopupWithOriginBar({ webContents: adopted as never }, 'https://requested.example/auth')
-    const { bar } = lastViews()
-    adopted.emit('page-title-updated', { preventDefault: vi.fn() }, 'https://requested.example')
-    adopted.emit('did-start-navigation', {}, 'https://requested.example/auth')
-    adopted.emit('will-redirect', {}, 'https://redirect.example/auth')
-    adopted.emit('did-fail-load', {}, -3, 'ERR_ABORTED', 'https://redirect.example/auth', true)
-    adopted.emit('did-finish-load')
-    bar.webContents.emit('did-finish-load')
-    expect(lastWindow().setTitle).toHaveBeenLastCalledWith('about:blank')
-    expect(bar.webContents.executeJavaScript.mock.calls.at(-1)?.[0]).toContain('"about:blank"')
-    expect(bar.webContents.executeJavaScript.mock.calls.flat().join('')).not.toContain(
-      'requested.example'
+    openPopupWithOriginBar({ webContents: adopted as never }, 'https://requested.example/')
+    lastWindow().setTitle.mockClear()
+    adopted.mainFrame.url = 'about:blank#state'
+    adopted.emit(
+      'page-title-updated',
+      { preventDefault: vi.fn() },
+      'https://accounts.trusted.example'
     )
+    expect(lastWindow().setTitle).not.toHaveBeenCalled()
+    lastViews().bar.webContents.emit('did-finish-load')
+    expect(lastWindow().setTitle).toHaveBeenLastCalledWith('about:blank')
   })
 
   it('retains the committed origin through pending redirects and renders the latest commit when the bar loads', () => {
