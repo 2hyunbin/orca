@@ -1,4 +1,5 @@
 /* eslint-disable unicorn/no-useless-spread */
+import { traceE26GraphSync } from './e26-trace'
 import { OrcaRuntimeWithAttachWindow } from './session-graph-promotion'
 import type {
   RuntimeRendererSyncWindowGraph,
@@ -338,19 +339,7 @@ export abstract class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAtta
       }
     }
 
-    for (const leaf of this.leaves.values()) {
-      const prev = previousLeaves.get(this.getLeafKey(leaf.tabId, leaf.leafId))
-      if (!prev || prev.ptyId !== leaf.ptyId || prev.ptyGeneration !== leaf.ptyGeneration) {
-        console.warn(`[e26] graph leaf ${leaf.tabId}/${leaf.leafId} pty ${prev?.ptyId ?? '-'}->${leaf.ptyId} gen ${prev?.ptyGeneration ?? '-'}->${leaf.ptyGeneration} t=${Date.now()}`)
-      }
-    }
-    for (const key of previousLeaves.keys()) {
-      if (!this.leaves.has(key)) {
-        console.warn(`[e26] graph leaf removed ${key} t=${Date.now()}`)
-      }
-    }
-    const e26Tabs = [...this.mobileSessionTabsByWorktree.values()].flatMap((snap) => snap.tabs.filter((t) => t.type === 'terminal').map((t) => `${t.id}:${t.type === 'terminal' ? t.ptyId : ''}`))
-    console.warn(`[e26] graph sync win=${windowId} mobileTerminalTabs=${JSON.stringify(e26Tabs)} t=${Date.now()}`)
+    traceE26GraphSync(previousLeaves, this.leaves, this.mobileSessionTabsByWorktree, windowId)
     // Why: createTerminal waits for the renderer's graph sync to populate the
     // new leaf so it can return a handle. Drain callbacks after leaves update.
     for (const cb of [...this.graphSyncCallbacks]) {

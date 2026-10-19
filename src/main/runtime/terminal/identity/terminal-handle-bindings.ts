@@ -122,7 +122,7 @@ export abstract class OrcaRuntimeWithBindPtyIncarnationHandle extends OrcaRuntim
       this.syntheticTerminalHandles.add(handle)
     }
     const syntheticId = `pty:${pty.ptyId}`
-    console.warn(`[e26] issuePtyHandle new pty record ${handle} for ${pty.ptyId} existing=${existingHandle ?? null} t=${Date.now()} stack=${new Error().stack?.split('\n').slice(2, 7).join(' | ')}`)
+    console.warn(`[e26] issuePtyHandle new pty record ${handle} for ${pty.ptyId} existing=${existingHandle ?? null} t=${Date.now()} stack=${new Error('e26').stack?.split('\n').slice(2, 7).join(' | ')}`)
     this.handles.set(handle, {
       handle,
       runtimeId: this.runtimeId,
@@ -161,7 +161,7 @@ export abstract class OrcaRuntimeWithBindPtyIncarnationHandle extends OrcaRuntim
     if (!handle) {
       return
     }
-    console.warn(`[e26] invalidateLeafHandle ${leafKey} ${handle} record=${JSON.stringify(this.handles.get(handle) ?? null)} t=${Date.now()} stack=${new Error().stack?.split('\n').slice(2, 6).join(' | ')}`)
+    console.warn(`[e26] invalidateLeafHandle ${leafKey} ${handle} record=${JSON.stringify(this.handles.get(handle) ?? null)} t=${Date.now()} stack=${new Error('e26').stack?.split('\n').slice(2, 6).join(' | ')}`)
     const record = this.handles.get(handle)
     if (record?.ptyId && this.handleByPtyIncarnation.get(record.ptyId)?.handle === handle) {
       this.handleByPtyIncarnation.delete(record.ptyId)
