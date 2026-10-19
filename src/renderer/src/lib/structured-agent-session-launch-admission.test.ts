@@ -2,14 +2,16 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({
-  createSupport: vi.fn(),
-  toastInfo: vi.fn(),
-  toastError: vi.fn(),
-  launchAgentInNewTab: vi.fn(),
-  hostPermission: vi.fn(),
-  detected: null as string[] | null
-}))
+const mocks = vi.hoisted(() => {
+  const detection: { detected: string[] | null } = { detected: null }
+  return Object.assign(detection, {
+    createSupport: vi.fn(),
+    toastInfo: vi.fn(),
+    toastError: vi.fn(),
+    launchAgentInNewTab: vi.fn(),
+    hostPermission: vi.fn()
+  })
+})
 
 vi.mock('@/lib/agent-detection-target-inventory', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),

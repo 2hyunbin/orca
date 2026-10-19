@@ -4,15 +4,18 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { getDefaultSettings } from '../../shared/constants'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 
-const mocks = vi.hoisted(() => ({
-  refreshed: new Set<() => void>(),
-  releasesChanged: new Set<() => void>(),
-  observe: vi.fn(),
-  recapture: vi.fn(async () => {}),
+const mocks = vi.hoisted(() => {
   // What each agent's launch resolver finds; a throw is an unrunnable Command setting.
-  programs: {} as Record<string, () => { command: string; env: Record<string, string> }>,
-  installable: true
-}))
+  const programs: Record<string, () => { command: string; env: Record<string, string> }> = {}
+  return {
+    refreshed: new Set<() => void>(),
+    releasesChanged: new Set<() => void>(),
+    observe: vi.fn(),
+    recapture: vi.fn(async () => {}),
+    programs,
+    installable: true
+  }
+})
 vi.mock('../preflight/workspace-agent-detection', () => ({
   onAgentsRefreshedOnHost: (listener: () => void) => mocks.refreshed.add(listener)
 }))
