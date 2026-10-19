@@ -22,7 +22,7 @@ function renderedOrder(page: Page): Promise<string[]> {
   )
 }
 
-/** `sinceInput`: ms since the first pointerup or click after the log started. */
+/** `sinceInput`: ms since the first pointerup, click or drop after the log started. */
 type Frame = { ids: string[]; shows: boolean; sinceInput: number | null }
 
 type FrameLog = { stop: () => Promise<Frame[]> }
@@ -37,9 +37,11 @@ async function startFrameLog(page: Page, text = ''): Promise<FrameLog> {
       const onInput = (): void => {
         inputAt ??= performance.now()
       }
-      window.addEventListener('pointerup', onInput, true)
-      window.addEventListener('mouseup', onInput, true)
-      window.addEventListener('click', onInput, true)
+      // Why drop: a native drag ends in drop, with no mouseup on Linux.
+      const events = ['pointerup', 'mouseup', 'click', 'drop']
+      for (const type of events) {
+        window.addEventListener(type, onInput, true)
+      }
       const sample = (): void => {
         if (!running) {
           return
@@ -57,9 +59,9 @@ async function startFrameLog(page: Page, text = ''): Promise<FrameLog> {
       requestAnimationFrame(sample)
       return () => {
         running = false
-        window.removeEventListener('pointerup', onInput, true)
-        window.removeEventListener('mouseup', onInput, true)
-        window.removeEventListener('click', onInput, true)
+        for (const type of events) {
+          window.removeEventListener(type, onInput, true)
+        }
         return frames
       }
     },
@@ -234,17 +236,24 @@ test('the sidebar lists main’s inputs and keeps drag, create, open and collaps
       )
       .toBe(true)
     await scroller.evaluate((element) => element.scrollTo({ top: element.scrollHeight }))
-    const lastFullyShown = (): Promise<string> =>
+    // The list's last row, once painted at the bottom: rows render after the scroll, so until
+    // then the last mounted row sits mid-viewport, within overscan of the top.
+    const lastRowAtBottom = (): Promise<string> =>
       scroller.evaluate((element, selector) => {
         const box = element.getBoundingClientRect()
-        const shown = [...element.querySelectorAll<HTMLElement>(selector)].filter((row) => {
-          const rect = row.getBoundingClientRect()
-          return rect.top >= box.top && rect.bottom <= box.bottom + 1
-        })
-        return shown.at(-1)?.dataset.worktreeId ?? ''
+        const last = [...element.querySelectorAll<HTMLElement>(selector)]
+          .map((row) => ({ row, rect: row.getBoundingClientRect() }))
+          .sort((left, right) => left.rect.top - right.rect.top)
+          .at(-1)
+        if (!last || last.rect.top < box.top || last.rect.bottom > box.bottom + 1) {
+          return ''
+        }
+        return box.bottom - last.rect.bottom < last.rect.height
+          ? (last.row.dataset.worktreeId ?? '')
+          : ''
       }, ROWS)
-    await expect.poll(lastFullyShown).not.toBe('')
-    const bottomId = await lastFullyShown()
+    await expect.poll(lastRowAtBottom).not.toBe('')
+    const bottomId = await lastRowAtBottom()
     const bottomRow = orcaPage.locator(`${ROWS}[data-worktree-id=${JSON.stringify(bottomId)}]`)
     await expect(bottomRow).toBeInViewport()
     await scroller.evaluate((element) => element.scrollTo({ top: 0 }))
