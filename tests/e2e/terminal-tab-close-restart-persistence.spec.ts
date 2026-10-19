@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import type { ElectronApplication } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect, forwardElectronProcessLogs } from './helpers/orca-app'
+import { forwardRendererConsole } from './helpers/renderer-console-forwarding'
 import { TEST_REPO_PATH_FILE } from './global-setup'
 import { waitForActiveTerminalManager, waitForPaneCount } from './helpers/terminal'
 import {
@@ -23,7 +24,8 @@ import type {
 
 test.describe.configure({ mode: 'serial' })
 
-test('durable whole-tab close removes a split tab across restart', async (// oxlint-disable-next-line no-empty-pattern -- This lifecycle test owns both Electron launches and intentionally opts out of the default app fixture.
+for (const e26Run of [1, 2, 3]) {
+test(`durable whole-tab close removes a split tab across restart #${e26Run}`, async (// oxlint-disable-next-line no-empty-pattern -- This lifecycle test owns both Electron launches and intentionally opts out of the default app fixture.
 {}, testInfo) => {
   const repoPath = readFileSync(TEST_REPO_PATH_FILE, 'utf8').trim()
   if (!repoPath || !existsSync(repoPath)) {
@@ -38,6 +40,25 @@ test('durable whole-tab close removes a split tab across restart', async (// oxl
   try {
     const firstLaunch = await session.launch()
     firstApp = firstLaunch.app
+    forwardElectronProcessLogs(firstApp, testInfo)
+    firstApp.process().stderr?.on('data', (chunk: Buffer) => {
+      for (const line of chunk.toString().split('\n')) {
+        if (line.includes('[e26]') || /error|warn|layout/i.test(line)) {
+          console.log(`[main] ${line}`)
+        }
+      }
+    })
+    firstApp.process().stdout?.on('data', (chunk: Buffer) => {
+      for (const line of chunk.toString().split('\n')) {
+        console.log(`[main-out] ${line}`)
+      }
+    })
+    forwardRendererConsole(firstLaunch.page, testInfo)
+    firstLaunch.page.on('console', (message) => {
+      if (message.text().includes('[e26]') || message.type() === 'warning' || message.type() === 'error') {
+        console.log(`[renderer] ${message.text()}`)
+      }
+    })
     const worktreeId = await attachRepoAndOpenTerminal(firstLaunch.page, repoPath)
     await waitForSessionReady(firstLaunch.page)
     await waitForActiveWorktree(firstLaunch.page)
@@ -100,9 +121,11 @@ test('durable whole-tab close removes a split tab across restart', async (// oxl
       terminal: activeHandle,
       direction: 'vertical'
     })
+    console.log(`[e26] spec split result ${JSON.stringify(split.result.split)} t=${Date.now()}`)
     expect(split.result.split.tabId).toBe(closedTabId)
     await waitForPaneCount(firstLaunch.page, 2, 30_000)
 
+    console.log(`[e26] spec closing t=${Date.now()}`)
     const close = await client.call<{ close: RuntimeTerminalClose }>('terminal.closeTab', {
       terminal: split.result.split.handle
     })
@@ -183,3 +206,4 @@ test('durable whole-tab close removes a split tab across restart', async (// oxl
     await session.dispose()
   }
 })
+}

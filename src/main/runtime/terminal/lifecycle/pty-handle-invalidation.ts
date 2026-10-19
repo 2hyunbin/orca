@@ -141,6 +141,7 @@ export abstract class OrcaRuntimeWithInvalidateAllHandlesForPty extends OrcaRunt
     incarnationId?: PtyIncarnationId,
     options: { awaitsRegistration?: boolean } = {}
   ): void {
+    console.warn(`[e26] onPtySpawned ${ptyId} inc=${incarnationId ?? '-'} t=${Date.now()}`)
     this.invalidatePtyControllerInventoryForLifecycle(ptyId)
     const existingPty = this.ptysById.get(ptyId)
     if (

@@ -133,10 +133,13 @@ export abstract class OrcaRuntimeWithWaitForMobileTerminalSurface extends OrcaRu
       live.record.worktreeId !== authority.worktreeId ||
       live.pty.incarnationId !== authority.incarnationId
     ) {
+      console.warn(`[e26] authority: live mismatch ${JSON.stringify({ authority, live: live ? { ptyId: live.pty.ptyId, wt: live.pty.worktreeId, inc: live.pty.incarnationId, rwt: live.record.worktreeId } : null })} t=${Date.now()}`)
       return null
     }
     const surface = this.findMobileTerminalSurfaceForPty(authority.worktreeId, authority.ptyId)
     if (!surface) {
+      const snap = this.mobileSessionTabsByWorktree.get(authority.worktreeId)
+      console.warn(`[e26] authority: no surface for ${authority.ptyId}; snapshot=${JSON.stringify(snap?.tabs.map((t) => ({ id: t.id, type: t.type, ptyId: t.type === 'terminal' ? t.ptyId : undefined, parentPty: t.type === 'terminal' ? t.parentLayout?.ptyIdsByLeafId : undefined })) ?? null)} t=${Date.now()}`)
       return null
     }
     const [hostId] = this.getWorkspaceSessionHostIdsForTab(
@@ -153,6 +156,7 @@ export abstract class OrcaRuntimeWithWaitForMobileTerminalSurface extends OrcaRu
         )
       : undefined
     if (persistedTab && !worktreeIdsEqual(persistedTab.worktreeId, authority.worktreeId)) {
+      console.warn('[e26] authority: persisted tab worktree mismatch')
       return null
     }
     const paneKey = makePaneKey(surface.tab.parentTabId, surface.tab.leafId)
@@ -165,6 +169,7 @@ export abstract class OrcaRuntimeWithWaitForMobileTerminalSurface extends OrcaRu
       (persistedPtyId && persistedPtyId !== authority.ptyId) ||
       (persistedIncarnationId && persistedIncarnationId !== authority.incarnationId)
     ) {
+      console.warn(`[e26] authority: persisted mismatch ${JSON.stringify({ persistedPtyId, persistedIncarnationId, authority })} t=${Date.now()}`)
       return null
     }
     if (
@@ -175,6 +180,7 @@ export abstract class OrcaRuntimeWithWaitForMobileTerminalSurface extends OrcaRu
         authority.ptyId
       )
     ) {
+      console.warn(`[e26] authority: split source authority null ${JSON.stringify({ tab: surface.tab.parentTabId, leaf: surface.tab.leafId, authority })} t=${Date.now()}`)
       return null
     }
     return { pty: live.pty, surface }

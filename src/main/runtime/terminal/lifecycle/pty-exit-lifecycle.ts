@@ -48,6 +48,7 @@ export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDi
       providerExitObserved?: boolean
     } = {}
   ): void | Promise<void> {
+    console.warn(`[e26] onPtyExit ${ptyId} code=${exitCode} inc=${exitIncarnationId ?? '-'} t=${Date.now()}`)
     const pty = this.ptysById.get(ptyId)
     if (exitIncarnationId && pty?.incarnationId && exitIncarnationId !== pty.incarnationId) {
       return
