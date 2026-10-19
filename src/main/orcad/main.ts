@@ -24,6 +24,7 @@ import {
 } from '../../shared/windows-breakaway-launch'
 import { runWindowsBreakawayLaunchIfRequested } from '../../shared/windows-breakaway-launcher'
 import { parseArgs } from './orcad-command-arguments'
+import { ORCAD_STATE_SNAPSHOT_FLAG } from '../managed-server/host-state/orcad-state-snapshot-members'
 
 // Why exit before the preflight: reaching this line means the whole module graph resolved
 // under plain Node, which is all the build guard needs to prove. Probing natives or
@@ -56,6 +57,12 @@ if (process.argv[2] === '--orcad-structured-provider-load-check') {
   void import('./orcad-managed-stop-command').then(({ runOrcadManagedStopCommandAndExit }) =>
     runOrcadManagedStopCommandAndExit(process.argv.slice(2))
   )
+} else if (process.argv[2] === ORCAD_STATE_SNAPSHOT_FLAG) {
+  void import('./orcad-state-snapshot-host-op')
+    .then(({ runOrcadStateSnapshotOpAndExit }) =>
+      runOrcadStateSnapshotOpAndExit(process.argv.slice(3))
+    )
+    .catch(failStartup)
 } else {
   startOrcadProcess()
 }

@@ -88,7 +88,9 @@ describe.skipIf(process.platform === 'win32')(
     })
 
     it('captures a snapshot through a gateway that truncates the plain command and merges stderr', async () => {
-      const base = mkdtempSync(join(tmpdir(), 'orcad-gateway-capture-'))
+      const tmp = mkdtempSync(join(tmpdir(), 'orcad-gateway-capture-'))
+      // A deep home, so the plain command is past the compression threshold.
+      const base = join(tmp, 'h'.repeat(200))
       try {
         const root = join(base, '.orca')
         mkdirSync(join(root, 'profiles'), { recursive: true })
@@ -100,7 +102,7 @@ describe.skipIf(process.platform === 'win32')(
           snapshot,
           join(base, '.orca-remote')
         )
-        // The command embeds the temp path ~40 times, so its size varies by OS; pick a cut the
+        // The command embeds the home path many times, so its size varies by OS; pick a cut the
         // plain form always exceeds and the compressed form always fits.
         const plainBytes = Buffer.byteLength(
           wrapRemoteCommandForPosixShell(command, { compress: false })
@@ -120,7 +122,7 @@ describe.skipIf(process.platform === 'win32')(
         expect(parseOrcadSnapshotCapture(output)).toBe('captured')
         expect(existsSync(join(snapshot, 'state.tar'))).toBe(true)
       } finally {
-        rmSync(base, { recursive: true, force: true })
+        rmSync(tmp, { recursive: true, force: true })
       }
     })
   }

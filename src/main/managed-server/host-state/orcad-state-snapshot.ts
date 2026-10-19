@@ -30,8 +30,8 @@ import {
   type RemoteHostPlatform
 } from '../../ssh/ssh-remote-platform'
 import type { OrcadWindowsHostStateOp } from './orcad-windows-host-state-ops'
-import { pruneOrcadSnapshotsScript } from './orcad-state-snapshot-space'
 import {
+  ORCAD_SNAPSHOT_ARCHIVE_FILENAME,
   ORCAD_SNAPSHOT_FAILURE,
   ORCAD_SNAPSHOT_MEMBERS,
   ORCAD_STATE_MUTATION_BUSY,
@@ -59,7 +59,7 @@ function assertPlainMemberName(member: string): string {
 }
 
 /** The Windows host-script op, or null on POSIX; `baseDir` is `~/.orca-remote`. */
-function windowsStateCommand(
+export function windowsStateCommand(
   host: RemoteHostPlatform,
   baseDir: string,
   op: OrcadWindowsHostStateOp,
@@ -131,7 +131,9 @@ export function serializedStateMutationCommand(
     `elif command -v perl >/dev/null 2>&1; then ORCA_STATE_MUTATION_GROUP=1 perl -e ${quotePosixShell('setpgrp(0, 0); exec { $ARGV[0] } @ARGV or exit 127')} "$@";`,
     'else "$@"; fi; };',
     // Why timeout inside the group: KILL then reaches tar and rm, not only the shell.
-    `if command -v timeout >/dev/null 2>&1; then orca_state_group timeout -s KILL ${ORCAD_STATE_MUTATION_DEADLINE_SECONDS} ${run}; else orca_state_group ${run}; fi;`,
+    // The deadline is a word list, so the script is sent once, not once per branch.
+    `orca_deadline=; command -v timeout >/dev/null 2>&1 && orca_deadline="timeout -s KILL ${ORCAD_STATE_MUTATION_DEADLINE_SECONDS}";`,
+    `orca_state_group $orca_deadline ${run};`,
     `status=$?; ${owned ? `[ "$status" -eq ${ORCAD_FENCE_LOST_EXIT} ] && exit ${ORCAD_FENCE_LOST_EXIT}; ` : ''}if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then echo ${ORCAD_STATE_MUTATION_DEADLINE}; fi`
   ].join(' ')
 }
@@ -164,8 +166,7 @@ export function captureOrcadStateSnapshotCommand(
   host: RemoteHostPlatform,
   userDataDir: string,
   snapshotDir: string,
-  baseDir: string,
-  prune?: { snapshotsRoot: string; keep: readonly string[] }
+  baseDir: string
 ): string {
   const windows = windowsStateCommand(host, baseDir, 'snapshot-capture', [userDataDir, snapshotDir])
   if (windows) {
@@ -173,7 +174,9 @@ export function captureOrcadStateSnapshotCommand(
   }
   const root = quotePosixShell(userDataDir)
   const dir = quotePosixShell(snapshotDir)
-  const archive = quotePosixShell(joinRemotePath(host, snapshotDir, 'state.tar'))
+  const archive = quotePosixShell(
+    joinRemotePath(host, snapshotDir, ORCAD_SNAPSHOT_ARCHIVE_FILENAME)
+  )
   const memberTests = ORCAD_SNAPSHOT_MEMBERS.map(
     // Why the accumulated name is NOT quoted: `$members` is re-split by the shell before it
     // reaches tar, so a quoted name arrives as a literal `'profiles'` that tar cannot stat.
@@ -193,7 +196,6 @@ export function captureOrcadStateSnapshotCommand(
     baseDir,
     [
       `snapshot_fail() { printf '${ORCAD_SNAPSHOT_FAILURE} %s\\n' "$(printf %s "$1" | tr '\\n' ' ' | cut -c 1-400)"; echo FAILED; exit 0; };`,
-      prune ? pruneOrcadSnapshotsScript(prune.snapshotsRoot, prune.keep) : '',
       `members=;`,
       memberTests,
       // Umask first so the snapshot dir, not just the archive, is owner-only.
@@ -237,7 +239,9 @@ export function probeOrcadStateSnapshotCommand(
   if (windows) {
     return windows
   }
-  const archive = quotePosixShell(joinRemotePath(host, snapshotDir, 'state.tar'))
+  const archive = quotePosixShell(
+    joinRemotePath(host, snapshotDir, ORCAD_SNAPSHOT_ARCHIVE_FILENAME)
+  )
   return `test -f ${archive} && echo PRESENT || echo ABSENT`
 }
 
@@ -275,7 +279,9 @@ export function restoreOrcadStateSnapshotCommand(
     return windows
   }
   const root = quotePosixShell(userDataDir)
-  const archive = quotePosixShell(joinRemotePath(host, snapshotDir, 'state.tar'))
+  const archive = quotePosixShell(
+    joinRemotePath(host, snapshotDir, ORCAD_SNAPSHOT_ARCHIVE_FILENAME)
+  )
   const stage = quotePosixShell(
     joinRemotePath(host, userDataDir, ORCAD_STATE_RESTORE_STAGE_DIRNAME)
   )
@@ -349,7 +355,9 @@ export function compareOrcadStateSnapshotCommand(
   }
   const root = quotePosixShell(userDataDir)
   const dir = quotePosixShell(snapshotDir)
-  const archive = quotePosixShell(joinRemotePath(host, snapshotDir, 'state.tar'))
+  const archive = quotePosixShell(
+    joinRemotePath(host, snapshotDir, ORCAD_SNAPSHOT_ARCHIVE_FILENAME)
+  )
   const comparisons = ORCAD_SNAPSHOT_MEMBERS.map((member) => {
     const name = quotePosixShell(member)
     return [

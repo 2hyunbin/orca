@@ -9,26 +9,18 @@
  */
 import { quotePosixShell } from '../../../shared/shell-argument-quoting'
 import { isWindowsRemoteHost, type RemoteHostPlatform } from '../../ssh/ssh-remote-platform'
-import { ORCAD_SNAPSHOT_FAILURE, ORCAD_SNAPSHOT_MEMBERS } from './orcad-state-snapshot-members'
+import {
+  ORCAD_SNAPSHOT_CAPTURE_PREFIX as CAPTURE_PREFIX,
+  ORCAD_SNAPSHOT_FAILURE,
+  ORCAD_SNAPSHOT_MEMBERS
+} from './orcad-state-snapshot-members'
 import { dfAvailableKb, formatKb } from './remote-filesystem-space'
 
 const SPACE_MARKER = 'SNAPSHOT_SPACE'
-const CAPTURE_PREFIX = 'pre-'
 // tar's headers and 10 KB records, plus room for the state to grow before the server stops.
 const SPACE_FACTOR = 1.05
 const SPACE_SLACK_KB = 1024
 const SPACE_SCAN_DEADLINE_SECONDS = 12
-
-/**
- * Removes every `pre-*` capture under `snapshotsRoot` except `keep`. Never a rollback rescue:
- * that holds the newer build's state, which nothing else does.
- */
-export function pruneOrcadSnapshotsScript(snapshotsRoot: string, keep: readonly string[]): string {
-  return [
-    `for old in ${quotePosixShell(snapshotsRoot)}/${CAPTURE_PREFIX}*; do [ -d "$old" ] || continue;`,
-    `case "\${old##*/}" in (${prunePatterns(keep)}) ;; (*) rm -rf "$old";; esac; done;`
-  ].join(' ')
-}
 
 function prunePatterns(keep: readonly string[]): string {
   // Quoted, so `+` and `.` in a version match only themselves; `''` keeps nothing. Callers wrap

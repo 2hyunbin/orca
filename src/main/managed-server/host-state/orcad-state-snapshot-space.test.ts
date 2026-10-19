@@ -7,6 +7,7 @@ import {
   rmSync,
   writeFileSync
 } from 'node:fs'
+import { captureOrcadStateSnapshotWithSlotCommand } from './orcad-slot-state-snapshot-command'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -68,22 +69,38 @@ describe.skipIf(process.platform === 'win32')('snapshot room on a real shell (#3
     expect(existsSync(snapshot)).toBe(false)
   })
 
-  it('prunes earlier captures but keeps the named ones and every rollback rescue', async () => {
+  it("runs the activation capture on the candidate slot's Node, inside the lock", async () => {
+    const slot = join(remoteBase, 'orcad-0.2.0+cc03')
+    const sha = 'a'.repeat(64)
+    const node = join(remoteBase, 'runtimes', `node-${sha}`, 'bin', 'node')
+    mkdirSync(slot, { recursive: true })
+    mkdirSync(join(node, '..'), { recursive: true })
+    writeFileSync(join(slot, '.runtime-node'), sha)
+    writeFileSync(join(slot, 'orcad-server.js'), '')
+    // Stands in for the slot's Node: echoes what the bundle is asked to do.
+    writeFileSync(node, '#!/bin/sh\nshift\necho "ARGV $*"\necho CAPTURED\n')
+    chmodSync(node, 0o755)
     const snapshot = join(snapshots, 'pre-0.2.0+cc03-4')
-    const output = await sh(
-      captureOrcadStateSnapshotCommand(posix, root, snapshot, remoteBase, {
-        snapshotsRoot: snapshots,
-        keep: ['pre-0.1.0+bb02-2', 'pre-0.2.0+cc03-4']
-      })
+    const command = captureOrcadStateSnapshotWithSlotCommand(
+      posix,
+      root,
+      snapshot,
+      remoteBase,
+      slot,
+      ['pre-0.1.0+bb02-2']
     )
 
+    const output = await sh(command)
     expect(parseOrcadSnapshotCapture(output)).toBe('captured')
-    expect(readdirSync(snapshots).sort()).toEqual([
-      'pre-0.1.0+bb02-2',
-      'pre-0.2.0+cc03-4',
-      'rollback-rescue-0.1.0+bb02-3'
-    ])
-    expect(existsSync(join(snapshot, 'state.tar'))).toBe(true)
+    expect(output).toContain(
+      `ARGV --orcad-state-snapshot capture ${root} ${snapshot} pre-0.1.0+bb02-2`
+    )
+    expect(existsSync(join(remoteBase, 'orcad-state-mutation.lock'))).toBe(false)
+
+    rmSync(join(slot, '.runtime-node'))
+    const missing = await sh(command)
+    expect(parseOrcadSnapshotCapture(missing)).toBe('failed')
+    expect(orcadSnapshotFailureReason(missing)).toMatch(/no runnable Node runtime/u)
   })
 
   it('counts what a prune would reclaim as room, and refuses when even that is short', async () => {

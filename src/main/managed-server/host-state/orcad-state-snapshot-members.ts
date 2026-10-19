@@ -40,3 +40,12 @@ export const ORCAD_WINDOWS_SNAPSHOT_STATE_DIRNAME = 'state'
 
 /** Prefixes the line a failed POSIX capture prints, ahead of `FAILED`, saying why. */
 export const ORCAD_SNAPSHOT_FAILURE = 'SNAPSHOT_FAILURE'
+
+/** The POSIX snapshot archive in a snapshot dir; older clients restore it with `tar -x`. */
+export const ORCAD_SNAPSHOT_ARCHIVE_FILENAME = 'state.tar'
+
+/** `orcad --orcad-state-snapshot <op> ...`: a state op run by a slot's own Node bundle. */
+export const ORCAD_STATE_SNAPSHOT_FLAG = '--orcad-state-snapshot'
+
+/** Snapshot dirs a capture may prune; never a rollback rescue. */
+export const ORCAD_SNAPSHOT_CAPTURE_PREFIX = 'pre-'

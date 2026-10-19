@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs'
+import { captureOrcadStateSnapshotWithSlotCommand } from './host-state/orcad-slot-state-snapshot-command'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { buildPosixStdoutFence } from '../../shared/posix-stdout-fence'
@@ -94,16 +95,14 @@ import { orcadPosixStdioBridgeCommand } from './lifecycle/orcad-stdio-bridge-scr
 // fence-guarded command, wrapped uncompressed as a host without gzip/base64 receives it.
 const POSIX_HOST_OP_BYTE_BUDGET = 6 * 1024
 
-// Ops already past the budget, at their measured size. Ceilings may only shrink. The snapshot
-// capture/restore/clear ops leave when they move onto the Node host script (R4-10b, decision D-J);
-// install-lock steal and anything else that runs before a verified Node must shrink in shell.
+// Ops already past the budget, at their measured size. Ceilings may only shrink. The shell
+// capture (rollback rescue only; activation runs the candidate's Node) and restore leave as they
+// move onto the slot's Node bundle (R4-10b, decision D-J); install-lock steal and anything else
+// that runs before a verified Node must shrink in shell.
 const OVER_BUDGET_CEILINGS: Readonly<Record<string, number>> = {
-  // #30618 added old-snapshot pruning and failure cleanup to the capture; R4-10b moves it to Node.
-  captureOrcadStateSnapshotCommand: 17_407,
-  restoreOrcadStateSnapshotCommand: 20_805,
-  clearOrcadStateSnapshotMembersCommand: 9_175,
+  captureOrcadStateSnapshotCommand: 9_439,
+  restoreOrcadStateSnapshotCommand: 11_136,
   tryStealInstallLockCommand: 9_022,
-  serializedStateMutationCommand: 6_529,
   orcadLaunchCommand: 8_181,
   'orcadLaunchCommand (WSL setsid)': 6_498,
   probeRemoteInstallCompleteCommand: 12_189
@@ -161,6 +160,11 @@ const BUILDERS: Readonly<Record<string, (c: HostCase) => string>> = {
   serializedStateMutationCommand: () => serializedStateMutationCommand(baseDir, ':', 20, fence),
   captureOrcadStateSnapshotCommand: ({ host }) =>
     captureOrcadStateSnapshotCommand(host, userDataDir, snapshotDir, baseDir),
+  // As activation runs it: keeping the recorded snapshot beside this run's.
+  captureOrcadStateSnapshotWithSlotCommand: ({ host }) =>
+    captureOrcadStateSnapshotWithSlotCommand(host, userDataDir, snapshotDir, baseDir, slotDir, [
+      'pre-1.4.298-rc.3-1750000000000'
+    ]),
   probeOrcadStateSnapshotCommand: ({ host }) =>
     probeOrcadStateSnapshotCommand(host, snapshotDir, baseDir),
   restoreOrcadStateSnapshotCommand: ({ host }) =>
@@ -278,6 +282,7 @@ const BUILDERS: Readonly<Record<string, (c: HostCase) => string>> = {
 // Exported builders that never produce a POSIX host op, and why.
 const NOT_POSIX_HOST_OPS: Readonly<Record<string, string>> = {
   powerShellCommand: 'builds the Windows PowerShell exec line',
+  windowsStateCommand: 'the Windows host-script state op; null on POSIX',
   spawnProxyCommand: 'spawns a local ProxyCommand process',
   buildSshLoginShellCommand: 'wraps a caller-built op in the login shell',
   isSnapshotCaptureCommand: 'a predicate over a command, not a builder',

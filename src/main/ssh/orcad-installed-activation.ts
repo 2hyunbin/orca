@@ -5,6 +5,7 @@
  * the host for `recoverInterruptedOrcadActivation` to finish or undo it. A run that ends with
  * the host provably back on one slot drops the fence; one that cannot prove it keeps it.
  */
+import { captureOrcadStateSnapshotWithSlotCommand } from '../managed-server/host-state/orcad-slot-state-snapshot-command'
 import { orcadRemoteBaseDir } from '../managed-server/install/orcad-remote-windows-node'
 import { randomUUID } from 'node:crypto'
 import type { OrcadDeployOptions, OrcadDeployResult } from './orcad-remote-deploy'
@@ -26,11 +27,9 @@ import { ORCAD_LOG_FILENAME } from '../managed-server/install/orcad-remote-host-
 import { orcadSnapshotFailureReason } from '../managed-server/host-state/orcad-state-snapshot-space'
 import {
   ORCAD_SNAPSHOT_SPACE_INSUFFICIENT_CODE,
-  orcadSnapshotRoomRefusal,
-  orcadSnapshotsRoot
+  orcadSnapshotRoomRefusal
 } from './orcad-snapshot-room'
 import {
-  captureOrcadStateSnapshotCommand,
   orcadSnapshotDirName,
   parseOrcadSnapshotCapture
 } from '../managed-server/host-state/orcad-state-snapshot'
@@ -223,15 +222,13 @@ export async function activateInstalledOrcad(
   const snapshotDir = orcadSnapshotPath(options, transaction.snapshot.dirName)
   const captureOutput = await execOrcadStateMutationOr(
     options,
-    captureOrcadStateSnapshotCommand(
+    captureOrcadStateSnapshotWithSlotCommand(
       options.host,
       options.userDataDir,
       snapshotDir,
       orcadRemoteBaseDir(options.host, options.remoteHome),
-      {
-        snapshotsRoot: orcadSnapshotsRoot(options),
-        keep: [transaction.snapshot.dirName, ...(record.snapshot ? [record.snapshot.dirName] : [])]
-      }
+      remoteDir,
+      record.snapshot ? [record.snapshot.dirName] : []
     ),
     'FAILED'
   )

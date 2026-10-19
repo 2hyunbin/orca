@@ -77,7 +77,10 @@ describe('the host-side guard around every state mutation', () => {
     ['clear', () => clearOrcadStateSnapshotMembersCommand(posix, ROOT, BASE)]
   ])('%s runs under the host lock and a host-enforced deadline', (_label, build) => {
     const command = build()
-    expect(command).toContain(`timeout -s KILL ${ORCAD_STATE_MUTATION_DEADLINE_SECONDS} sh -c`)
+    expect(command).toContain(
+      `orca_deadline="timeout -s KILL ${ORCAD_STATE_MUTATION_DEADLINE_SECONDS}"`
+    )
+    expect(command).toContain('orca_state_group $orca_deadline sh -c')
     expect(innerScript(command)).toContain(`lock='${BASE}/orcad-state-mutation.lock'`)
     expect(command).toContain('echo STATE_MUTATION_DEADLINE')
   })

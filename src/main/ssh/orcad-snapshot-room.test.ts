@@ -142,11 +142,10 @@ describe('an update on a host without room for its snapshot (#30491)', () => {
     expect(commands.find((command) => command.includes('SNAPSHOT_SPACE'))).toContain(
       `('${recorded}')`
     )
-    expect(commands.find(isSnapshotCaptureCommand)).toMatch(
-      new RegExp(
-        `\\('pre-${NEW.replace('+', '\\+')}-\\d+'\\|'${recorded.replace('+', '\\+')}'\\)`,
-        'u'
-      )
+    // The capture keeps this run's snapshot and the recorded one, and prunes the rest.
+    const capture = commands.find(isSnapshotCaptureCommand) ?? ''
+    expect(capture.slice(capture.indexOf('--orcad-state-snapshot capture'))).toMatch(
+      new RegExp(`pre-${NEW.replace('+', '\\+')}-\\d+\\W+${recorded.replace('+', '\\+')}\\W`, 'u')
     )
   })
 
