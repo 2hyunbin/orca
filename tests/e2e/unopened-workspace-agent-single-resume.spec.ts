@@ -55,6 +55,7 @@ test.afterAll(() => rmSync(scratch, { recursive: true, force: true }))
 
 // oxlint-disable-next-line no-empty-pattern -- Owns both app launches; Playwright needs the fixtures argument.
 test('a sleeping agent in a never-opened workspace resumes once, in its own pane', async ({}, testInfo) => {
+  test.skip(process.platform === 'win32', 'Uses POSIX SIGKILL and a shell-script agent')
   test.setTimeout(400_000)
   const repoPath = readFileSync(TEST_REPO_PATH_FILE, 'utf-8').trim()
   const dir = testInfo.outputPath()
