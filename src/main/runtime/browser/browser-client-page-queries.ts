@@ -65,7 +65,8 @@ export class BrowserClientPageQueries {
   }
 
   async browserTabCurrent(params: { worktree?: string }): Promise<BrowserTabShowResult> {
-    const listed = await this.browserTabList(params)
+    // Why only within a workspace: unscoped automation never routes to a client page either.
+    const listed = params.worktree ? await this.browserTabList(params) : { tabs: [] }
     const clientTab = listed.tabs.find(
       (candidate) =>
         candidate.active &&

@@ -189,6 +189,8 @@ it('lists, shows and switches desktop-hosted tabs with no engine', async () => {
   await expect(commands.browserTabCurrent({ worktree: 'id:wt-1' })).resolves.toMatchObject({
     tab: { browserPageId: first.browserPageId }
   })
+  // Unscoped automation never routes to a client page, so neither does an unscoped current.
+  await expect(commands.browserTabCurrent({})).rejects.toMatchObject({ code: 'browser_no_tab' })
   await expect(commands.browserTabShow({ page: second.browserPageId })).resolves.toMatchObject({
     tab: { url: 'https://example.org/b' }
   })
