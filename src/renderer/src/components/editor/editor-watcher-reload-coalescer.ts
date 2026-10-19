@@ -10,22 +10,40 @@ export type EditorWatcherReloadCoalescer = {
   dispose: () => void
 }
 
-type InFlightRead = { token: object; startedAt: number; replacedStale: boolean }
+type InFlightRead = {
+  token: object
+  startedAt: number
+  replacedStale: boolean
+  watchdog: ReturnType<typeof setTimeout> | null
+}
 
 export function createEditorWatcherReloadCoalescer(): EditorWatcherReloadCoalescer {
   const inFlight = new Map<string, InFlightRead>()
   const pending = new Map<string, () => Promise<void>>()
   let disposed = false
 
+  const clearWatchdog = (read: InFlightRead): void => {
+    if (read.watchdog) {
+      clearTimeout(read.watchdog)
+      read.watchdog = null
+    }
+  }
+
   const start = (key: string, load: () => Promise<void>, replacedStale: boolean): void => {
+    const previous = inFlight.get(key)
+    if (previous) {
+      clearWatchdog(previous)
+    }
     const token = {}
-    inFlight.set(key, { token, startedAt: Date.now(), replacedStale })
+    inFlight.set(key, { token, startedAt: Date.now(), replacedStale, watchdog: null })
     void load()
       .catch(() => {})
       .finally(() => {
-        if (inFlight.get(key)?.token !== token) {
+        const current = inFlight.get(key)
+        if (current?.token !== token) {
           return
         }
+        clearWatchdog(current)
         inFlight.delete(key)
         const next = pending.get(key)
         pending.delete(key)
@@ -35,26 +53,48 @@ export function createEditorWatcherReloadCoalescer(): EditorWatcherReloadCoalesc
       })
   }
 
+  const replaceStale = (key: string): void => {
+    const next = pending.get(key)
+    pending.delete(key)
+    if (next && !disposed) {
+      start(key, next, true)
+    }
+  }
+
   return {
     run(key, load) {
       if (disposed) {
         return
       }
       const current = inFlight.get(key)
-      // Why: replace a stale read once; a read that is merely slow must be allowed to land.
-      if (
-        current &&
-        (current.replacedStale || Date.now() - current.startedAt < STALE_WATCHER_READ_MS)
-      ) {
-        pending.set(key, load)
+      if (!current) {
+        start(key, load, false)
         return
       }
-      pending.delete(key)
-      start(key, load, current !== undefined)
+      pending.set(key, load)
+      // Why: replace a stale read once; a read that is merely slow must be allowed to land.
+      if (current.replacedStale) {
+        return
+      }
+      const remaining = current.startedAt + STALE_WATCHER_READ_MS - Date.now()
+      if (remaining <= 0) {
+        replaceStale(key)
+        return
+      }
+      // Why: writes may stop while the read hangs; the queued reload must not wait for another event.
+      current.watchdog ??= setTimeout(() => {
+        current.watchdog = null
+        if (inFlight.get(key) === current) {
+          replaceStale(key)
+        }
+      }, remaining)
     },
     dispose() {
       disposed = true
       pending.clear()
+      for (const read of inFlight.values()) {
+        clearWatchdog(read)
+      }
     }
   }
 }

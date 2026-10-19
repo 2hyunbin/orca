@@ -316,6 +316,40 @@ describe('combined diff discarded-result analysis budget', () => {
     expect(shown).toBeGreaterThanOrEqual(3)
   })
 
+  it('never commits a load over a section the user started editing', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const loads: ReturnType<typeof deferredResult>[] = []
+    mocks.fetch.mockImplementation(() => {
+      const load = deferredResult()
+      loads.push(load)
+      return load.promise
+    })
+    const hook = await startViewer()
+    await settle(loads[0]!, textResult('base', 'v1'))
+    hook.result.current.registry.renderedIndicesRef.current.add(0)
+    hook.result.current.retry.requestSectionReload(0)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300)
+    })
+    await flushLoads()
+    // A write lands mid-flight, so this load is discarded once.
+    hook.result.current.retry.requestSectionReload(0)
+    await settle(loads[1]!, textResult('base', 'v2'))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300)
+    })
+    await flushLoads()
+    // Another write lands, then the user types before the load settles.
+    hook.result.current.retry.requestSectionReload(0)
+    act(() => {
+      hook.result.current.setSections((prev) =>
+        prev.map((section) => ({ ...section, dirty: true, modifiedContent: 'typed' }))
+      )
+    })
+    await settle(loads[2]!, textResult('base', 'v3'))
+    expect(hook.result.current.sections[0]).toMatchObject({ dirty: true, modifiedContent: 'typed' })
+  })
+
   it('keeps synchronous token-reload reentry into a replacement generation', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const body = 'reentrant obsolete\n'.padEnd(65_536, 'x')

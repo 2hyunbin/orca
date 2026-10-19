@@ -126,6 +126,11 @@ export function useCombinedDiffSectionLoader({
       // Why: under sustained writes every load is invalidated mid-flight; after one discard, commit
       // this newer result and refetch once more rather than never showing anything new.
       supersededLoadIndicesRef.current.delete(index)
+      // Why: a section the user started editing keeps its draft; never commit disk content over it.
+      if (sectionsRef.current[index]?.dirty) {
+        loadedIndicesRef.current.add(index)
+        return
+      }
       if (invalidatedMidFlight) {
         queueMicrotask(() => requestSectionReloadRef.current(index))
       }
@@ -162,7 +167,7 @@ export function useCombinedDiffSectionLoader({
       }
       setSections((prev) => {
         return prev.map((s, i) =>
-          i === index
+          i === index && !s.dirty
             ? {
                 ...s,
                 diffResult: storedResult,

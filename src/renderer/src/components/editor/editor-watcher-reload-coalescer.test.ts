@@ -34,4 +34,25 @@ describe('createEditorWatcherReloadCoalescer', () => {
     // Changes never paused, yet the slow read must still land at least once.
     expect(applied).toBeGreaterThan(0)
   })
+
+  it('replaces a hung read with the queued reload even after changes stop', async () => {
+    const coalescer = createEditorWatcherReloadCoalescer()
+    const load = vi.fn(() => new Promise<void>(() => {}))
+    coalescer.run('content:a', load)
+    await vi.advanceTimersByTimeAsync(1_000)
+    coalescer.run('content:a', load)
+    // No further watcher events arrive; the queued reload must still start.
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(load).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops the watchdog when the coalescer is disposed', async () => {
+    const coalescer = createEditorWatcherReloadCoalescer()
+    const load = vi.fn(() => new Promise<void>(() => {}))
+    coalescer.run('content:a', load)
+    coalescer.run('content:a', load)
+    coalescer.dispose()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(load).toHaveBeenCalledTimes(1)
+  })
 })
