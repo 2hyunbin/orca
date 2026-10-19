@@ -216,6 +216,51 @@ describe('CdpWsProxy under a host command', () => {
     client.close()
   })
 
+  it('still refuses a deferred press after the revoked command let go of the page', async () => {
+    mock.webContents.getType.mockReturnValue('webview')
+    let grantFocus = (): void => {}
+    guardFocus = () => new Promise((resolve) => (grantFocus = () => resolve(() => {})))
+    const page = holdPage()
+    const client = await connect(endpoint)
+
+    const reply = sendAndReceive(client, { id: 13, method: MOUSE, params: pressed })
+    await vi.waitFor(() =>
+      expect(getSendCommandMethods(mock)).toContain('Emulation.setFocusEmulationEnabled')
+    )
+    page.revoke()
+    await page.release()
+    grantFocus()
+
+    await expect(reply).resolves.toMatchObject({ id: 13, error: { message: REVOKED } })
+    expect(mouseEvents(mock)).toEqual([])
+    client.close()
+  })
+
+  it('lets go of a button whose own release failed to land', async () => {
+    const page = holdPage()
+    const client = await connect(endpoint)
+    const send = mock.webContents.debugger.sendCommand.getMockImplementation()
+    mock.webContents.debugger.sendCommand.mockImplementationOnce(async () => ({}))
+    mock.webContents.debugger.sendCommand.mockImplementationOnce(async () => {
+      throw new Error('target closed')
+    })
+
+    await sendAndReceive(client, { id: 14, method: MOUSE, params: pressed })
+    const failed = await sendAndReceive(client, { id: 15, method: MOUSE, params: released })
+    if (send) {
+      mock.webContents.debugger.sendCommand.mockImplementation(send)
+    }
+    page.revoke()
+    await page.release()
+
+    expect(failed.error).toBeDefined()
+    expect(mock.webContents.debugger.sendCommand).toHaveBeenCalledWith(
+      MOUSE,
+      expect.objectContaining({ type: 'mouseReleased', x: -1, y: -1 })
+    )
+    client.close()
+  })
+
   it('forwards commands again once the host command ends', async () => {
     await runWithRemoteCliPageAdmission(
       PAGE_ID,

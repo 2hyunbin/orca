@@ -168,6 +168,10 @@ export abstract class AgentBrowserBridgeLifecycle extends AgentBrowserBridgeRawP
 
     this.sessions.delete(sessionName)
     this.pendingSessionCreation.delete(sessionName)
+    // Why: a retired session's page stays open, so the fresh one must keep its interception.
+    if (options.keepQueuedCommands && session.activeInterceptPatterns.length > 0) {
+      this.pendingInterceptRestore.set(sessionName, [...session.activeInterceptPatterns])
+    }
 
     // Why: queued commands would hang forever if we just delete the queue — drain and reject them.
     if (!options.keepQueuedCommands) {

@@ -4,6 +4,7 @@
  * edit commands) consults it, so no queued or deferred step of a running command outlives the
  * revocation.
  */
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { runOutsideRemoteCliBrowserScope } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
 
 /** The CDP input event that lets go of something a command pressed. */
@@ -16,6 +17,8 @@ type Admission = {
 }
 
 const admissions = new Map<number, Admission>()
+/** The admission a proxy message arrived under; its deferred steps keep it after the hold ends. */
+const messageAdmission = new AsyncLocalStorage<() => void>()
 
 /**
  * Runs a host's command holding the page. If the host is revoked mid-press, the command's own
@@ -47,6 +50,13 @@ export function assertRemoteCliPageAdmitted(webContentsId: number | undefined): 
   if (webContentsId !== undefined) {
     admissions.get(webContentsId)?.admit()
   }
+  messageAdmission.getStore()?.()
+}
+
+/** Runs a proxy message's handling, deferred steps included, under the page's current hold. */
+export function runUnderRemoteCliPageAdmission<T>(webContentsId: number, handle: () => T): T {
+  const admission = admissions.get(webContentsId)
+  return admission ? messageAdmission.run(admission.admit, handle) : handle()
 }
 
 /** Records input that reached a page a host's command holds, so a revocation can release it. */

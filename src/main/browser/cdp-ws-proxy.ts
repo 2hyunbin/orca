@@ -12,7 +12,10 @@ import type { CapturePaintHold } from './cdp-screenshot'
 import type { AgentInputFocusGuard } from './agent-input-focus-guard'
 import { CdpPageInputCommands } from './cdp-page-input-commands'
 import { isTrustedCdpLoopbackRequest } from './cdp-loopback-request-guard'
-import { assertRemoteCliPageAdmitted } from './remote-cli-page-admission'
+import {
+  assertRemoteCliPageAdmitted,
+  runUnderRemoteCliPageAdmission
+} from './remote-cli-page-admission'
 
 export class CdpWsProxy {
   private httpServer: Server | null = null
@@ -97,7 +100,9 @@ export class CdpWsProxy {
         this.closeClient()
         this.client = ws
         const onMessage = (data: WebSocket.RawData): void => {
-          this.handleClientMessage(ws, data.toString())
+          runUnderRemoteCliPageAdmission(this.webContents.id, () =>
+            this.handleClientMessage(ws, data.toString())
+          )
         }
         const onClose = (): void => {
           detach()

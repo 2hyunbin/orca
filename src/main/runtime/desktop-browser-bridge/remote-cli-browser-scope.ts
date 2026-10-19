@@ -70,6 +70,11 @@ export function captureRemoteCliBrowserScope(): {
   }
 }
 
+/** The signal that fires when the host behind the current command is revoked, if any. */
+export function captureRemoteCliBrowserRevokedSignal(): AbortSignal | undefined {
+  return scope.getStore()?.revoked
+}
+
 /** Runs `work` in no host's scope, so long-lived resources it creates never inherit one. */
 export function runOutsideRemoteCliBrowserScope<T>(work: () => T): T {
   return scope.exit(work)

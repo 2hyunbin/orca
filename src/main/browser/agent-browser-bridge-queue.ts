@@ -11,6 +11,7 @@ import { AGENT_BROWSER_CLEANUP_TIMEOUT_MS } from './agent-browser-bridge-types'
 import { releaseHeldPageInput } from './guest-direct-key-input'
 import {
   captureRemoteCliBrowserRevocation,
+  captureRemoteCliBrowserRevokedSignal,
   captureRemoteCliBrowserScope,
   runOutsideRemoteCliBrowserScope
 } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
@@ -136,19 +137,27 @@ export abstract class AgentBrowserBridgeQueue extends AgentBrowserBridgeShutdown
     gate: () => void,
     execute: () => Promise<T>
   ): Promise<T> {
+    // Why: the helper's daemon outlives its killed client and keeps retrying; retire it while the
+    // page is still held, or its next step lands once the hold is gone. Retiring on the signal also
+    // frees the page's queue now instead of at the helper's exec timeout.
+    let retiring: Promise<void> | null = null
+    const retire = (): Promise<void> =>
+      (retiring ??= runOutsideRemoteCliBrowserScope(() =>
+        this.destroySession(sessionName, {
+          closeTimeoutMs: AGENT_BROWSER_CLEANUP_TIMEOUT_MS,
+          keepQueuedCommands: true
+        })
+      ))
+    const signal = captureRemoteCliBrowserRevokedSignal()
+    const onRevoked = (): void => void retire()
+    signal?.addEventListener('abort', onRevoked, { once: true })
     const held = async (): Promise<T> => {
       try {
         return await execute()
       } finally {
-        if (isAdmissionRevoked(gate)) {
-          // Why: the helper's daemon outlives its killed client and keeps retrying; retire it while
-          // the page is still held, or its next step lands once the hold is gone.
-          await runOutsideRemoteCliBrowserScope(() =>
-            this.destroySession(sessionName, {
-              closeTimeoutMs: AGENT_BROWSER_CLEANUP_TIMEOUT_MS,
-              keepQueuedCommands: true
-            })
-          )
+        signal?.removeEventListener('abort', onRevoked)
+        if (retiring || isAdmissionRevoked(gate)) {
+          await retire()
         }
       }
     }

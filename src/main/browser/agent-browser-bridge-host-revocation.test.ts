@@ -144,6 +144,8 @@ describe('AgentBrowserBridge under a host revocation', () => {
     revoked.abort()
     // The helper's next CDP step reaches the page's proxy and is refused there.
     expect(() => assertRemoteCliPageAdmitted(100)).toThrow('stopped sharing')
+    // Retired on the revocation itself, not when the helper's client times out.
+    await vi.waitFor(() => expect(proxy.stop).toHaveBeenCalled())
     helperCallbacks[0]!(
       null,
       JSON.stringify({ success: false, error: 'The Orca desktop stopped sharing its browser' }),
