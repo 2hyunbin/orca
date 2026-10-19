@@ -7,6 +7,7 @@
 // error, and an error the agent recovered from folds behind the answer after it.
 
 import { AGENT_SESSION_COMPACTION_SKIPPED_PRESENTATION } from './agent-session-compaction'
+import { AGENT_SESSION_HOOK_OUTCOME_PRESENTATION } from './agent-session-hook-outcome'
 import { AGENT_SESSION_ORCA_STOP_PRESENTATION } from './agent-session-orca-stop'
 import { nativeChatRowRendersContent } from './native-chat-row-content'
 import { isStoppedBeforeStartBlock } from './native-chat-stopped-before-start'
@@ -37,8 +38,8 @@ export type NativeChatTurnFoldRow = {
   /** Whether a system row reports a failure. It competes with prose to be the
    *  turn's answer, so a turn that failed shows the error as its end. */
   reportsFailure: boolean
-  /** Whether the row explains what became of the turn: a compaction's result, or
-   *  that the response was interrupted. It never folds: hiding it would leave the
+  /** Whether the row explains what became of the turn: a compaction's result, that
+   *  the response was interrupted, or that a hook blocked the message. It never folds: hiding it would leave the
    *  turn's status as the only trace of it. */
   explainsTurn: boolean
 }
@@ -74,7 +75,8 @@ export function nativeChatTurnFoldRow(
         block.type === 'text' &&
         (block.presentation === 'compaction' ||
           block.presentation === AGENT_SESSION_COMPACTION_SKIPPED_PRESENTATION ||
-          block.presentation === AGENT_SESSION_ORCA_STOP_PRESENTATION)
+          block.presentation === AGENT_SESSION_ORCA_STOP_PRESENTATION ||
+          block.presentation === AGENT_SESSION_HOOK_OUTCOME_PRESENTATION)
     )
   }
 }

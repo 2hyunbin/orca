@@ -5,7 +5,8 @@ import {
   type AcpCompaction,
   type AcpCompactionFrame
 } from './acp-compaction-turn'
-import type { AcpDialect } from './acp-dialects/acp-dialect'
+import type { AcpDialect, AcpHookBlock } from './acp-dialects/acp-dialect'
+import { hookOutcomeRowBody } from '../../shared/agent-session-hook-outcome'
 import type { SessionUpdate } from './generated/acp-protocol.generated'
 
 export type AcpPromptTurn = {
@@ -16,6 +17,16 @@ export type AcpPromptTurn = {
   durationMs?: number
   /** A `/compact` running as the turn the host opened for it. */
   compaction?: AcpCompaction
+}
+
+/** How a turn ended, as the agent reported it. */
+export type AcpTurnEnding = {
+  stopReason: string
+  at: number
+  durationMs?: number
+  failureDetail?: string
+  notSignedIn?: boolean
+  hookBlock?: AcpHookBlock
 }
 
 /** An injected identity is known before any provider output arrives. */
@@ -74,10 +85,7 @@ export class AcpPromptTurns {
   }
 
   /** The running compaction's result row and end, when `turn` is its turn. */
-  endCompaction(
-    turn: string,
-    ending: { stopReason: string; at: number; failureDetail?: string; notSignedIn?: boolean }
-  ): ProviderTimelineEvent[] | undefined {
+  endCompaction(turn: string, ending: AcpTurnEnding): ProviderTimelineEvent[] | undefined {
     const prompt = this.compacting(turn)
     if (!prompt?.compaction) {
       return undefined
@@ -122,6 +130,20 @@ export class AcpPromptTurns {
       }
     ]
   }
+}
+
+/** A hook-denied turn completed rather than stopped: its row, under one identity however often
+ *  the agent reports the end, then the end. */
+export function acpTurnEndEvents(
+  thread: string,
+  turn: string,
+  { stopReason, at, durationMs, hookBlock }: AcpTurnEnding
+): ProviderTimelineEvent[] {
+  const end = acpTurnEnd(turn, hookBlock ? 'end_turn' : stopReason, at, durationMs)
+  const body = hookBlock && hookOutcomeRowBody('blocked', [hookBlock.reason ?? ''])
+  return body
+    ? [{ type: 'item.update', item: `hook-block:${turn}`, body, join: { thread, turn } }, end]
+    : [end]
 }
 
 export function acpTurnEnd(

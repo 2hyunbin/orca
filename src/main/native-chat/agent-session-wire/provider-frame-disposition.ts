@@ -1,6 +1,7 @@
 import type { CodexAppServerNotificationMethod } from '../../codex/codex-app-server-notification-schema'
 import { CODEX_SUBAGENT_ITEM_TYPE } from '../../codex/codex-subagent-activity'
 import { isProviderRecord } from '../../provider-process/provider-json-record'
+import type { AgentSessionHookOutcome } from '../../../shared/agent-session-hook-outcome'
 import type { ClaudeStreamJsonFrameKind } from './claude-stream-json-frame-schema'
 
 export type ProviderFrameClassification =
@@ -192,6 +193,14 @@ const CODEX_NOTIFICATION_CLASSIFICATIONS: Readonly<Record<string, ProviderFrameC
 const CLAUDE_FRAME_CLASSIFICATIONS: Readonly<Record<string, ProviderFrameClassification>> =
   PROVIDER_FRAME_CLASSIFICATIONS.claude
 
+/** A Codex prompt hook that refused the message. Other hooks' blocks reach the model as their
+ *  tool's result, so they write no row of their own. */
+export function codexPromptHookOutcome(payload: unknown): AgentSessionHookOutcome | null {
+  const run = isProviderRecord(payload) && isProviderRecord(payload.run) ? payload.run : null
+  const status = run?.eventName === 'userPromptSubmit' ? run.status : null
+  return status === 'blocked' || status === 'stopped' ? status : null
+}
+
 /** Each provider's own table, by provider id: an unlisted provider has none, so every frame it
  *  sends that no rule above claims stays a visible row.
  *
@@ -215,7 +224,9 @@ const PROVIDER_FRAME_CATALOGS: ReadonlyMap<
       const method = notificationKind(kind)
       if (method === 'hook/completed') {
         const run = isProviderRecord(payload) && isProviderRecord(payload.run) ? payload.run : null
-        return run?.status === 'failed' ? 'error-surface' : 'suppressed-benign'
+        return run?.status === 'failed' || codexPromptHookOutcome(payload)
+          ? 'error-surface'
+          : 'suppressed-benign'
       }
       return CODEX_NOTIFICATION_CLASSIFICATIONS[method]
     }

@@ -51,13 +51,21 @@ export type AcpDialectNotification =
       replay?: boolean
       at?: number
       started?: boolean
-      end?: { stopReason: string; durationMs?: number; failureDetail?: string }
+      end?: {
+        stopReason: string
+        durationMs?: number
+        failureDetail?: string
+        hookBlock?: AcpHookBlock
+      }
       /** The provider's own words for why `turn` failed, sent apart from its end. */
       failureDetail?: string
       usage?: AgentSessionContextUsage
       backgroundTasks?: AcpBackgroundTaskUpdate[]
       subagents?: AcpSubagentUpdate[]
     }
+
+/** A prompt hook refused the message: the turn ended, but the user did not stop it. */
+export type AcpHookBlock = { reason?: string }
 
 /** How a `/compact` the agent ended normally went, read from its reply; absent compacted. */
 export type AcpCompactionReply = { outcome: 'skipped' | 'failed'; detail: string }
@@ -102,6 +110,8 @@ export type AcpDialect = {
   /** The provider's words in a `session/prompt` error answer, when its message is generic. */
   promptErrorDetail?(error: AcpAgentError): string | undefined
   authenticationRequired?(error: AcpAgentError): boolean
+  /** A hook's refusal, read from the `_meta` of the prompt's answer or of the turn's end. */
+  hookBlock?(meta: unknown): AcpHookBlock | undefined
   /** The row for a failed turn the provider gave no words for. */
   failedTurnText?(stopReason: string): string
   /** An agent that ends a `/compact` it did not do as a normal turn says so in its reply. */

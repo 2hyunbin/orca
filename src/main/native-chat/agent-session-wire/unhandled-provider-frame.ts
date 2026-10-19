@@ -8,7 +8,8 @@ import {
 } from '../agent-session-journal/journal-payload-bounds'
 import { codexGoalRowText, codexThreadGoalState } from '../../codex/codex-goal-journal-rows'
 import { isProviderRecord } from '../../provider-process/provider-json-record'
-import { classifyProviderFrame } from './provider-frame-disposition'
+import { classifyProviderFrame, codexPromptHookOutcome } from './provider-frame-disposition'
+import { hookOutcomeRowBody } from '../../../shared/agent-session-hook-outcome'
 
 export type UnhandledProviderFrameJournalItem = {
   body: AgentJournalPlainStatusItem
@@ -79,6 +80,18 @@ export function readableProviderFrameText(payload: unknown): string | null {
 
 function hookText(value: unknown): string | null {
   return typeof value === 'string' ? value.trim() || null : null
+}
+
+/** A blocked or stopped Codex prompt hook: every entry but its context, in Codex's order. */
+function codexHookOutcomeRow(payload: unknown): AgentJournalPlainStatusItem | null {
+  const outcome = codexPromptHookOutcome(payload)
+  const run = isProviderRecord(payload) && isProviderRecord(payload.run) ? payload.run : null
+  const entries: unknown[] = Array.isArray(run?.entries) ? run.entries : []
+  const details = entries.flatMap((entry) => {
+    const text = isProviderRecord(entry) && entry.kind !== 'context' ? hookText(entry.text) : null
+    return text ? [text] : []
+  })
+  return outcome ? hookOutcomeRowBody(outcome, details) : null
 }
 
 function hookFailureFrameText(
@@ -153,9 +166,12 @@ export function unhandledProviderFrameJournalItem(
           ? 'warning'
           : undefined
       : undefined
-  const tone = noticeTone ?? (classification === 'error-surface' ? 'error' : undefined)
-  let message = readableProviderFrameText(payload)
-  if (classification === 'error-surface') {
+  const hookOutcome =
+    provider === 'codex' && method === 'hook/completed' ? codexHookOutcomeRow(payload) : null
+  const tone =
+    hookOutcome?.tone ?? noticeTone ?? (classification === 'error-surface' ? 'error' : undefined)
+  let message = hookOutcome?.text ?? readableProviderFrameText(payload)
+  if (classification === 'error-surface' && !hookOutcome) {
     message = hookFailureFrameText(provider, kind, payload, message) ?? message
   }
   if (
@@ -189,6 +205,7 @@ export function unhandledProviderFrameJournalItem(
         ? 'Context compacted'
         : (goalDisplay?.text ?? display?.text ?? `${provider} · ${kind}`),
       ...(compaction ? { presentation: 'compaction' } : {}),
+      ...(hookOutcome ? { presentation: hookOutcome.presentation } : {}),
       ...(tone ? { tone } : {}),
       providerFrame: { provider, kind, payload: bounded },
       ...(threadGoal
