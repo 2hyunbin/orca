@@ -153,12 +153,17 @@ export function takeDueWebSessionCloseReplays(
     }
     const intentKey = pairedTerminalTabCloseIntentKey(intent)
     const key = attemptKey(environmentId, intentKey)
+    // Why: after a reload a snapshot can land before the environment list publishes revisions.
+    // Unknown is not a mismatch: keep hiding the tab (under the key the snapshot apply reads now)
+    // and send nothing until the pairing can be checked.
+    const expired = now - intent.closedAt > PAIRED_TERMINAL_TAB_CLOSE_INTENT_MAX_AGE_MS
+    if (!expired && currentRevision === undefined && intent.pairingRevision !== undefined) {
+      hideHeldClose({ environmentId }, intent.worktreeId, intent.hostTabIds)
+      continue
+    }
     // Why: the close was the old pairing's, so a replacement host must never receive it; and past
     // the age bound the tab is one this client can no longer explain hiding.
-    if (
-      intent.pairingRevision !== currentRevision ||
-      now - intent.closedAt > PAIRED_TERMINAL_TAB_CLOSE_INTENT_MAX_AGE_MS
-    ) {
+    if (expired || intent.pairingRevision !== currentRevision) {
       dropped.push(intentKey)
       continue
     }

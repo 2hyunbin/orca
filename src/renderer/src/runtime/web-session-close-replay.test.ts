@@ -136,6 +136,19 @@ describe('web session close replay', () => {
     )
   })
 
+  it('keeps, hides and holds back a close while the pairing is not yet known', () => {
+    holdWebSessionCloseForReplay(STORE, OWNER, WT, ['host-tab-1'])
+    replaceRuntimeEnvironmentRevisions([])
+    resetWebSessionTabsSyncTestState()
+
+    expect(takeDueWebSessionCloseReplays(STORE, ENV, WT, PRESENT)).toEqual([])
+    expect(heldHostTabIds()).toEqual([['host-tab-1']])
+    expect(isWebSessionCloseIntentPending({ environmentId: ENV }, WT, 'host-tab-1', NOW)).toBe(true)
+
+    replaceRuntimeEnvironmentRevisions([{ id: ENV, createdAt: 0, pairingRevision: 1 }])
+    expect(takeDueWebSessionCloseReplays(STORE, ENV, WT, PRESENT)).toHaveLength(1)
+  })
+
   it('keeps a held close through a snapshot that cannot state the worktree contents', () => {
     holdWebSessionCloseForReplay(STORE, OWNER, WT, ['host-tab-1'])
 

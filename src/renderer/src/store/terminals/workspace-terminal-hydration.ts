@@ -179,6 +179,8 @@ export function createWorkspaceTerminalHydrationActions(
           closedTerminalTabTombstonesByTabId:
             session.closedTerminalTabTombstonesByTabId ?? s.closedTerminalTabTombstonesByTabId,
           // Why keep the store's when absent: as above, a pull merge's session carries no intents.
+          // Replaced wholesale, not through the replay's reveal path: only the startup read carries
+          // them, before any snapshot can have hidden a tab.
           pairedTerminalTabCloseIntentsByEnvironment:
             session.pairedTerminalTabCloseIntentsByEnvironment ??
             s.pairedTerminalTabCloseIntentsByEnvironment,

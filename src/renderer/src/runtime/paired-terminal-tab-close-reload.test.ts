@@ -9,14 +9,12 @@ import {
   createSessionWriteSubscriber,
   type WorkspaceSessionWrite
 } from '@/lib/session-write-subscriber'
-import {
-  holdWebSessionCloseForReplay,
-  resetWebSessionCloseReplaysForTests
-} from './web-session-close-replay'
-import { appPairedTerminalTabCloseIntentStore } from './paired-terminal-tab-close-intent-store'
+import { closeWebRuntimeSessionTab } from './web-runtime-session-tab-lifecycle'
+import { resetWebSessionCloseReplaysForTests } from './web-session-close-replay'
 import { recordReceivedWebSessionTabsSnapshot } from './web-session-tabs-sync/tracking'
 import { applyWebSessionTabsSnapshot } from './web-session-tabs-sync/snapshot-api'
 import { replaceRuntimeEnvironmentRevisions } from './runtime-environment-revision'
+import { stubRuntimeEnvironmentBridge } from './runtime-environment-bridge-fixture'
 import {
   ENV,
   HOST_SURFACE_ID,
@@ -28,15 +26,11 @@ import {
   resetWebSessionTabsSyncTestState
 } from './web-session-tabs-sync-test-harness'
 
-const { replayWebSessionTabCloses } = vi.hoisted(() => ({
-  replayWebSessionTabCloses: vi.fn(async () => {})
-}))
-
 vi.mock('@/hooks/agent-hook-completion-notifications', () => ({
   observeAgentHookCompletionForNotification: vi.fn()
 }))
-vi.mock('./web-runtime-session-tab-lifecycle', () => ({ replayWebSessionTabCloses }))
 
+const LOCAL_TAB_ID = toWebTerminalSurfaceTabId('host-tab-1')
 const SURFACE = {
   type: 'terminal' as const,
   id: HOST_SURFACE_ID,
@@ -47,51 +41,75 @@ const SURFACE = {
   terminal: 'term_host',
   isActive: true
 }
+const PAIRED = [{ id: ENV, createdAt: 0, pairingRevision: 1 }]
 
 let initialState: AppState
+let runtimeCall: ReturnType<typeof vi.fn>
+
+function closeCalls(): unknown[] {
+  return runtimeCall.mock.calls.flatMap(([request]: unknown[]) =>
+    typeof request === 'object' &&
+    request !== null &&
+    'method' in request &&
+    request.method === 'session.tabs.close'
+      ? [request]
+      : []
+  )
+}
+
+function shownTabIds(): string[] {
+  const snapshot = makeSnapshot([SURFACE])
+  recordReceivedWebSessionTabsSnapshot(ENV, snapshot)
+  const patch = applyWebSessionTabsSnapshot(makeState(), snapshot, ENV, NOW)
+  return (patch.tabsByWorktree?.[WT] ?? []).map((tab) => tab.id)
+}
 
 beforeEach(() => {
   initialState = useAppStore.getState()
   vi.useFakeTimers({ now: NOW })
   resetWebSessionTabsSyncTestState()
-  replaceRuntimeEnvironmentRevisions([{ id: ENV, createdAt: 0, pairingRevision: 1 }])
+  replaceRuntimeEnvironmentRevisions(PAIRED)
+  runtimeCall = vi.fn().mockResolvedValue({ id: 'ok', ok: true, result: { closed: true } })
+  stubRuntimeEnvironmentBridge({ call: runtimeCall })
 })
 afterEach(() => {
   vi.useRealTimers()
+  vi.unstubAllGlobals()
   useAppStore.setState(initialState, true)
   resetWebSessionCloseReplaysForTests()
   replaceRuntimeEnvironmentRevisions([])
-  replayWebSessionTabCloses.mockClear()
 })
 
-function persistHeldClose(): unknown {
-  const persist = vi.fn<(payload: WorkspaceSessionWrite) => void>()
-  const cleanup = createSessionWriteSubscriber({ store: useAppStore, persist })
-  useAppStore.setState({ workspaceSessionReady: true, hydrationSucceeded: true })
-  vi.advanceTimersByTime(200)
-  persist.mockClear()
-
-  holdWebSessionCloseForReplay(
-    appPairedTerminalTabCloseIntentStore,
-    { environmentId: ENV, pairingRevision: 1 },
-    WT,
-    ['host-tab-1']
-  )
-  vi.advanceTimersByTime(200)
-  cleanup()
-  expect(persist).toHaveBeenCalledOnce()
-  return JSON.parse(
-    JSON.stringify({ ...getDefaultWorkspaceSession(), ...persist.mock.calls[0][0].patch })
-  )
-}
-
 describe('a held paired-host close across a reload', () => {
-  it('still hides the tab and is replayed on the first snapshot that lists it', async () => {
-    const saved = persistHeldClose()
+  it('still hides the tab after the reload and sends the close once the pairing is known', async () => {
+    const persist = vi.fn<(payload: WorkspaceSessionWrite) => void>()
+    const cleanup = createSessionWriteSubscriber({ store: useAppStore, persist })
+    useAppStore.setState({ workspaceSessionReady: true, hydrationSucceeded: true })
+    vi.advanceTimersByTime(200)
+    persist.mockClear()
+    // The user's close never reaches the host.
+    runtimeCall.mockRejectedValueOnce(new Error('socket hang up'))
+    await expect(
+      closeWebRuntimeSessionTab({
+        worktreeId: WT,
+        tabId: LOCAL_TAB_ID,
+        environmentId: ENV,
+        reason: 'user'
+      })
+    ).resolves.toBe('failed')
+    vi.advanceTimersByTime(200)
+    cleanup()
+    const saved = JSON.parse(
+      JSON.stringify(
+        Object.assign(getDefaultWorkspaceSession(), ...persist.mock.calls.map(([w]) => w.patch))
+      )
+    )
 
-    // The reload: every in-memory close record is gone, and the store starts from the saved session.
+    // The reload: every in-memory record is gone, the store starts from the saved session, and
+    // the environment list has not published its pairings yet.
     resetWebSessionTabsSyncTestState()
     resetWebSessionCloseReplaysForTests()
+    replaceRuntimeEnvironmentRevisions([])
     useAppStore.setState(initialState, true)
     const parsed = parseWorkspaceSession(saved)
     expect(parsed.ok).toBe(true)
@@ -99,21 +117,18 @@ describe('a held paired-host close across a reload', () => {
       return
     }
     useAppStore.getState().hydrateWorkspaceSession(parsed.value)
+    const closesBeforeReload = closeCalls().length
 
-    const snapshot = makeSnapshot([SURFACE])
-    recordReceivedWebSessionTabsSnapshot(ENV, snapshot)
-    const patch = applyWebSessionTabsSnapshot(makeState(), snapshot, ENV, NOW)
+    expect(shownTabIds()).not.toContain(LOCAL_TAB_ID)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(closeCalls()).toHaveLength(closesBeforeReload)
 
-    expect((patch.tabsByWorktree?.[WT] ?? []).map((tab) => tab.id)).not.toContain(
-      toWebTerminalSurfaceTabId('host-tab-1')
-    )
-    await vi.waitFor(() => expect(replayWebSessionTabCloses).toHaveBeenCalledOnce())
-    expect(replayWebSessionTabCloses).toHaveBeenCalledWith(ENV, [
-      expect.objectContaining({
-        owner: { environmentId: ENV, pairingRevision: 1 },
-        worktreeId: WT,
-        hostTabIds: ['host-tab-1']
-      })
-    ])
+    replaceRuntimeEnvironmentRevisions(PAIRED)
+    expect(shownTabIds()).not.toContain(LOCAL_TAB_ID)
+    await vi.waitFor(() => expect(closeCalls()).toHaveLength(closesBeforeReload + 1))
+    expect(closeCalls().at(-1)).toMatchObject({
+      params: { tabId: 'host-tab-1', reason: 'user' },
+      expectedEnvironmentPairingRevision: 1
+    })
   })
 })
