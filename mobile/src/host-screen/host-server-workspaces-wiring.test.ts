@@ -135,6 +135,7 @@ async function mountScreen(first: RpcClient, hostCapabilities: string[]): Promis
       fetchRepoMetadata: async () => {},
       hostCapabilities,
       hostId: 'host-1',
+      sidebarFeed: null,
       state,
       syncViewSettingsFromDesktop: async () => {}
     })

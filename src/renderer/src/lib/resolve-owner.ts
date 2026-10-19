@@ -4,6 +4,7 @@
  */
 import {
   getRepoSshConnectionId,
+  parseExecutionHostId,
   toRuntimeExecutionHostId,
   toSshExecutionHostId,
   type ExecutionHostId
@@ -78,6 +79,18 @@ function isFolderTwin(state: WorktreeOperationRouteState, folderWorkspaceId: str
   )
 }
 
+/** The host the caller or the active workspace selection names for this workspace, if any. */
+export function namedHostForOwnerRef(
+  state: Pick<WorktreeOperationRouteState, 'activeWorktreeId' | 'activeWorkspaceExecutionHostId'>,
+  ref: WorkspaceOwnerRef
+): ExecutionHostId | null {
+  return (
+    ref.hostId ??
+    (state.activeWorktreeId === ref.workspaceId ? state.activeWorkspaceExecutionHostId : null) ??
+    null
+  )
+}
+
 function resolveRoute(
   state: WorktreeOperationRouteState,
   ref: WorkspaceOwnerRef
@@ -85,9 +98,7 @@ function resolveRoute(
   if (getFloatingWorkspaceOperationRoute(ref.workspaceId)) {
     return { kind: 'resolved', owner: SELF_LOCAL_AUTHORITY }
   }
-  const hostId =
-    ref.hostId ??
-    (state.activeWorktreeId === ref.workspaceId ? state.activeWorkspaceExecutionHostId : null)
+  const hostId = namedHostForOwnerRef(state, ref)
   const scope = parseWorkspaceKey(ref.workspaceId)
   // Why: with no host named, nothing can pick a twin; refusing beats landing on the wrong machine.
   if (!hostId && scope?.type === 'folder' && isFolderTwin(state, scope.folderWorkspaceId)) {
@@ -239,4 +250,33 @@ export function runtimeEnvironmentIdUnlessTwin(
     warnAmbiguousOwnerOnce(workspaceId, refusalAction)
   }
   return null
+}
+
+/**
+ * A server route to `ssh:X` that only a repo row proves: no worktree row names that server. The
+ * row's `ssh:X` and the server's `connectionId: X` are different namespaces, so reads and spawn
+ * may follow it but a host write could land on another machine with the same path.
+ */
+export function isUnprovenServerSshRoute(
+  state: Pick<WorktreeOperationRouteState, 'worktreesByRepo' | 'detectedWorktreesByRepo'>,
+  workspaceId: string,
+  owner: HostAuthority
+): boolean {
+  const { endpoint, at } = owner
+  if (
+    endpoint.kind !== 'environment' ||
+    at === 'local' ||
+    parseWorkspaceKey(workspaceId)?.type === 'folder'
+  ) {
+    return false
+  }
+  const repoId = getRepoIdFromWorktreeId(workspaceId)
+  const namesServer = (row: { id: string; hostId?: string; runtimeOwnerEnvironmentId?: string }) =>
+    row.id === workspaceId &&
+    parseExecutionHostId(row.hostId)?.id === at &&
+    row.runtimeOwnerEnvironmentId?.trim() === endpoint.environmentId
+  return !(
+    state.worktreesByRepo?.[repoId]?.some(namesServer) ||
+    state.detectedWorktreesByRepo?.[repoId]?.worktrees.some(namesServer)
+  )
 }

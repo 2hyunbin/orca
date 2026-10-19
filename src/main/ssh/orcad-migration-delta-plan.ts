@@ -10,9 +10,9 @@ import type { OrcadDeltaMovePreview, OrcadDeltaMoveRow } from '../../shared/orca
 import type {
   OrcadMigrationCatalogPayload,
   OrcadMigrationManifest
-} from '../../shared/orcad-migration-manifest'
-import { isRetainedOrcadMigrationSourceCutover } from '../../shared/orcad-migration-source-cutover'
-import type { OrcadMigrationSourceCutover } from '../../shared/orcad-migration-source-cutover'
+} from '../../shared/orcad-migration/orcad-migration-manifest'
+import { isRetainedOrcadMigrationSourceCutover } from '../../shared/orcad-migration/orcad-migration-source-cutover'
+import type { OrcadMigrationSourceCutover } from '../../shared/orcad-migration/orcad-migration-source-cutover'
 import type { SshTarget } from '../../shared/ssh-types'
 import type { Store } from '../persistence'
 import { collectOrcadMigrationSourceCatalog } from '../persistence/migrating-orcad-catalog/orcad-source-catalog'
@@ -23,8 +23,8 @@ import {
   type OrcadMigrationCatalogIds
 } from './orcad-migration-manifest-export'
 import type { OrcadMigrationSnapshotSource } from './orcad-migration-snapshot-coordinator'
-import { collectUntransferredDependentBlockers } from './ssh-target-orcad-dependents'
-import type { OrcadMigrationPreflightStore } from './ssh-target-orcad-preflight'
+import { collectUntransferredDependentBlockers } from './targets/ssh-target-orcad-dependents'
+import type { OrcadMigrationPreflightStore } from './targets/ssh-target-orcad-preflight'
 
 export type OrcadDeltaSourceStore = OrcadMigrationPreflightStore & OrcadMigrationSnapshotSource
 

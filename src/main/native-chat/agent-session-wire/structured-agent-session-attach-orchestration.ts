@@ -247,15 +247,14 @@ async function runAttachUnderAbort(
         )
         attempt.candidate = {
           sink: eventSink,
-          child: (owner === 'kept' && current) || {
+          child: {
             generation: acquisitionGeneration ?? current?.generation ?? null,
             fence,
             // An acquire reports its phase; a re-attach keeps what its child already proved.
             phase: owner === 'acquired' ? providerChildPhase : (current?.phase ?? 'ready'),
             ...(startedFor === undefined ? {} : { startedFor }),
             ...(permissionMode === undefined ? {} : { permissionMode }),
-            heldSends: () => context.deps.adapter.heldSends?.(sessionId),
-            exitObservation: eventSink.exitObservation
+            heldSends: () => context.deps.adapter.heldSends?.(sessionId)
           }
         }
         // Only a proven child has the protocol session recovery asks; a starting one recovers in

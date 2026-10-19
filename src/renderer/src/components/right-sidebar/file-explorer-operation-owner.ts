@@ -9,7 +9,6 @@ import {
 } from '../../../../shared/execution-host'
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { translate } from '@/i18n/i18n'
-import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { runtimeEnvironmentIdForWorkspaceOwner } from '@/lib/resolve-owner'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import type { FileExplorerOperationOwner } from './file-explorer-types'
@@ -90,10 +89,7 @@ export function getFileExplorerOperationOwnerFromState(
   }
   // Why: inferred SSH ownership outranks a projected runtime owner, but an explicit
   // workspace runtime still owns its files.
-  const runtimeEnvironmentId =
-    connectionId && explicitRuntimeEnvironmentId === null
-      ? null
-      : getRuntimeEnvironmentIdForWorktree(state, worktreeId)?.trim()
+  const runtimeEnvironmentId = explicitRuntimeEnvironmentId?.trim()
   if (runtimeEnvironmentId) {
     return {
       kind: 'runtime',

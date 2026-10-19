@@ -8,6 +8,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../shared/repo-types'
 import { OrcaRuntimeService } from './orca-runtime'
+import { findRepoRowForHostScopedWrite } from '../persistence/tracking-repos/repo-update-operations'
+import type { ExecutionHostId } from '../../shared/execution-host'
 
 export function registerRuntimeRemoveProjectHostScopeTests(): void {
   function makeRepos(): Repo[] {
@@ -43,6 +45,7 @@ export function registerRuntimeRemoveProjectHostScopeTests(): void {
         }
       }
     })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the store stub covers every read and write repo.rm and repo.update drive.
     const runtime = new OrcaRuntimeService({
       getRepos: () => [...repos],
       getRepo: (id: string) => repos.find((repo) => repo.id === id) ?? null,
@@ -51,6 +54,11 @@ export function registerRuntimeRemoveProjectHostScopeTests(): void {
       setWorktreeMeta: vi.fn(),
       removeWorktreeMeta: vi.fn(),
       getGitHubCache: () => null,
+      // Same row lookup the real store's host-scoped write uses.
+      updateRepo: (id: string, updates: Partial<Repo>, hostId?: ExecutionHostId) => {
+        const row = findRepoRowForHostScopedWrite(repos, id, hostId)
+        return row ? Object.assign(row, updates) : null
+      },
       removeProjectForHost
     } as never)
     return { runtime, repos, removeProjectForHost }
@@ -79,6 +87,24 @@ export function registerRuntimeRemoveProjectHostScopeTests(): void {
       await expect(runtime.removeProject('dup')).rejects.toThrow('selector_ambiguous')
       expect(removeProjectForHost).not.toHaveBeenCalled()
       expect(repos).toHaveLength(2)
+    })
+  })
+
+  describe('repo.update with the same repo id on two execution hosts', () => {
+    it('writes the SSH row a path selector picked, not its local sibling', async () => {
+      const { runtime, repos } = createRuntime()
+
+      await runtime.updateRepo('path:/remote/dup', { displayName: 'Renamed Remote' })
+
+      expect(repos.map((repo) => repo.displayName)).toEqual(['Dup Local', 'Renamed Remote'])
+    })
+
+    it('sets the base ref on the SSH row a path selector picked', async () => {
+      const { runtime, repos } = createRuntime()
+
+      await runtime.setRepoBaseRef('path:/remote/dup', 'origin/dev')
+
+      expect(repos.map((repo) => repo.worktreeBaseRef)).toEqual([undefined, 'origin/dev'])
     })
   })
 }
