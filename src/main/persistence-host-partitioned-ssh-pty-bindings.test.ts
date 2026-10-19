@@ -155,7 +155,7 @@ describe('Store SSH remote PTY bindings across host partitions', () => {
     store.setWorkspaceSession(makeBoundHostSession(ptyId), 'local')
     store.setWorkspaceSession(makeBoundHostSession(ptyId), 'ssh:ssh-1')
 
-    store.markSshRemotePtyLease('ssh-1', ptyId, PtyExitProof.from('exit-observed'))
+    store.markSshRemotePtyLease('ssh-1', ptyId, PtyExitProof.from('exit-observed', undefined))
 
     for (const hostId of ['local', 'ssh:ssh-1']) {
       const session = store.getWorkspaceSession(hostId)

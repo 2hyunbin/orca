@@ -6,7 +6,7 @@ import { translate } from '@/i18n/i18n'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { ResumeInNewCliTooltipText } from './ai-vault-session-cli-fork-copy'
 
-/** "Resume in New Native Chat" / "Resume in New CLI", shared by the session-history row menus and
+/** "Switch to Chat" / "Switch to Terminal", shared by the session-history row menus and
  *  the tab menu so both offer the same move under the same words. */
 export function AiVaultSessionSurfaceSwitchMenuItems({
   menuKind,
@@ -35,7 +35,7 @@ export function AiVaultSessionSurfaceSwitchMenuItems({
           <MessagesSquare className="size-3.5" />
           {translate(
             'auto.components.right.sidebar.AiVaultSessionRow.resumeInNewNativeChat',
-            'Resume in New Native Chat'
+            'Switch to Chat'
           )}
         </Item>
       ) : null}
@@ -50,7 +50,7 @@ export function AiVaultSessionSurfaceSwitchMenuItems({
               )}
               {translate(
                 'auto.components.right.sidebar.AiVaultSessionRow.resumeInNewCli',
-                'Resume in New CLI'
+                'Switch to Terminal'
               )}
             </Item>
           </TooltipTrigger>

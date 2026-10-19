@@ -106,19 +106,23 @@ async function stopRendererOwnedPtyProcess(
     return
   }
   const shutdownProvider = provider ?? getProviderForPty(args.id)
+  const stoppingIncarnationId = ptyIncarnationById.get(args.id)
   let proof: PtyExitProof
   try {
     const providerExitObserved = await shutdownProviderAndDetectExit(shutdownProvider, args.id, {
       immediate: true,
       keepHistory: args.keepHistory ?? false
     })
-    proof = PtyExitProof.from(providerExitObserved ? 'exit-observed' : 'shutdown-acknowledged')
+    proof = PtyExitProof.from(
+      providerExitObserved ? 'exit-observed' : 'shutdown-acknowledged',
+      stoppingIncarnationId
+    )
   } catch (err) {
     if (!isPtyAlreadyGoneError(err)) {
       // Why: a failed shutdown can leave the local daemon's process alive; keep ownership so a retry can reach it.
       throw err
     }
-    proof = PtyExitProof.from('absent')
+    proof = PtyExitProof.from('absent', stoppingIncarnationId)
   }
   // Why: some shutdown paths do not emit onExit through the provider listener.
   // Explicit cleanup is idempotent and covers already-dead PTYs.
