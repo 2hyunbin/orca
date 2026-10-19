@@ -3,6 +3,7 @@ import type {
   TerminalPaneAdmission,
   TerminalPaneAdmissionOutcome
 } from '../persistence/terminal-topology/terminal-pane-admission'
+import type { LayoutRefusalCode } from '../../shared/workspace-layout/workspace-layout-command-types'
 import type { RuntimePtyController } from './runtime-pty-controller-contract'
 import type { RuntimeStore } from './runtime-store-contract'
 
@@ -66,17 +67,27 @@ export async function withdrawRuntimePane(
   await withdrawAdmittedPane(store, admissionFor(args), hostIdOf(args))
 }
 
-/** Never the user's close: main stops no launch for it, unlike a window's closePane. */
-async function withdrawAdmittedPane(
+/**
+ * Never the user's close: main stops no launch for it, unlike a window's closePane. `unboundOnly`
+ * keeps a pane whose terminal bound first ('bound').
+ */
+export async function withdrawAdmittedPane(
   store: RuntimeStore | null | undefined,
   admission: TerminalPaneAdmission,
-  hostId: string | undefined
-): Promise<void> {
+  hostId: string | undefined,
+  unboundOnly = false
+): Promise<LayoutRefusalCode | 'bound' | null | undefined> {
   const leafId = admission.type === 'createTerminalTab' ? admission.leafId : admission.newLeafId
-  await store?.withdrawTerminalPane?.(
-    { type: 'closePane', workspace: admission.workspace, tabId: admission.tabId, leafId },
-    hostId
-  )
+  const pane = {
+    type: 'closePane' as const,
+    workspace: admission.workspace,
+    tabId: admission.tabId,
+    leafId
+  }
+  // The shipped take-back keeps its two-argument call.
+  return unboundOnly
+    ? store?.withdrawTerminalPane?.(pane, hostId, true)
+    : store?.withdrawTerminalPane?.(pane, hostId)
 }
 
 /** Writes a pane the runtime asks for into main's copy; what fills it is the caller's. */

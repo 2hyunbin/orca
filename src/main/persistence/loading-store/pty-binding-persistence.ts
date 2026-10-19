@@ -11,6 +11,7 @@ import type { PtyBindingSourceExpectation } from './store'
 
 import type { StoreRuntimeState } from './store-runtime-state'
 import type { SessionHostPartitionOperations } from './session-host-partitions'
+import { withdrawUnboundPane } from '../terminal-topology/unbound-pane-withdraw'
 import { resolveHostId } from './session-host-partitions'
 import { evaluatePtyBindingFastLane } from './pty-binding-fast-lane'
 import { ptyBindingIsRefused } from './pty-binding-refusals'
@@ -244,12 +245,18 @@ export class PtyBindingPersistenceOperations {
     )
   }
 
+  /** `unboundOnly`: serialized with bindings, a pane whose terminal bound first stays ('bound'). */
   withdrawTerminalPane(
     pane: CommandOf<'closePane'>,
-    hostId?: string | null
-  ): Promise<LayoutRefusalCode | null> {
+    hostId?: string | null,
+    unboundOnly = false
+  ): Promise<LayoutRefusalCode | 'bound' | null> {
     return this[ptyBindingPersistenceOperationsContext].runtime.runDurableMutation(
-      withdrawPane(resolveHostId(hostId), pane, this.topology())
+      (unboundOnly ? withdrawUnboundPane : withdrawPane)(
+        resolveHostId(hostId),
+        pane,
+        this.topology()
+      )
     )
   }
 

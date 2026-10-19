@@ -6,11 +6,15 @@ import type { RuntimeTerminalSplit } from '../../../../shared/runtime-types'
 import { randomUUID } from 'node:crypto'
 import { parseExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { admitRuntimePane } from '../../runtime-pane-admission'
+import { admitRuntimePane, withdrawAdmittedPane } from '../../runtime-pane-admission'
 import type { RuntimeStore } from '../../runtime-store-contract'
-import type { CommandOf } from '../../../../shared/workspace-layout/workspace-layout-command-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { collectLeafIds } from '../../../../shared/terminal-pane-layout-tree'
+import { makePaneKey } from '../../../../shared/stable-pane-id'
+import { isPaneSpawnInFlight } from '../../../ipc/pty/pane/spawn-reservation'
+import { SPLIT_PANE_WAIT_TIMEOUT_MESSAGE } from './terminal-split-wait-timeout'
+
+const SPLIT_PANE_START_TIMEOUT_MS = 10_000
 
 export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopExplicitlyClosedTabPtys {
   protected abstract splitPtyBackedTerminal(
@@ -83,20 +87,43 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
           () => this.getWorkspaceSessionHostIdsForTab(leaf.worktreeId, leaf.tabId),
           leaf.tabId,
           newLeafId,
-          this.waitForLeafInTab(leaf.tabId, newLeafId)
+          this.waitForLeafInTab(leaf.tabId, newLeafId, SPLIT_PANE_START_TIMEOUT_MS)
         ).catch(async (error: unknown) => {
-          if (outcome !== 'admitted' || !isSplitWaitTimeout(error)) {
+          if (
+            outcome !== 'admitted' ||
+            !(error instanceof Error) ||
+            error.message !== SPLIT_PANE_WAIT_TIMEOUT_MESSAGE ||
+            // A start under way (a slow SSH host) keeps its pane: its binding or failure settles it.
+            isPaneSpawnInFlight(leaf.worktreeId, makePaneKey(leaf.tabId, newLeafId))
+          ) {
             throw error
           }
-          await takeBackUnstartedSplitPane(this.store, hostId, {
-            type: 'closePane',
-            workspace: leaf.worktreeId,
-            tabId: leaf.tabId,
-            leafId: newLeafId
+          const taken = await withdrawAdmittedPane(
+            this.store,
+            {
+              type: 'splitPane',
+              workspace: leaf.worktreeId,
+              tabId: leaf.tabId,
+              leafId: leaf.leafId,
+              direction,
+              newLeafId
+            },
+            hostId,
+            true
+          ).catch((withdrawError: unknown) => {
+            console.warn('[layout] an unstarted split pane stayed in main:', withdrawError)
+            return 'threw' as const
           })
+          if (taken === 'bound') {
+            // Bound just before the take-back: the window's late report brings its handle.
+            return this.waitForLeafInTab(leaf.tabId, newLeafId, SPLIT_PANE_START_TIMEOUT_MS)
+          }
+          if (taken !== null) {
+            throw error
+          }
           this.notifier?.closeTerminalPane?.(leaf.tabId, newLeafId)
           throw new Error(
-            "split_pane_not_started: the new pane's terminal did not start within 10 s, so the pane was closed"
+            `split_pane_not_started: the new pane's terminal did not start within ${SPLIT_PANE_START_TIMEOUT_MS / 1000} s, so the pane was closed${opts.command ? ' and its command was not run' : ''}`
           )
         })
         return {
@@ -155,22 +182,4 @@ function settledByPaneClose(
     check()
   })
   return Promise.race([waiting, closed]).finally(() => stopWatching?.())
-}
-
-// waitForLeafInTab's timeout (terminal-split-source-authority.ts), shared with the shipped path.
-function isSplitWaitTimeout(error: unknown): boolean {
-  return error instanceof Error && error.message === 'Timed out waiting for split pane handle'
-}
-
-/** Never the user's close: no launch stops and nothing joins the reopen-closed list. */
-async function takeBackUnstartedSplitPane(
-  store: RuntimeStore | null | undefined,
-  hostId: ExecutionHostId,
-  pane: CommandOf<'closePane'>
-): Promise<void> {
-  try {
-    await store?.withdrawTerminalPane?.(pane, hostId)
-  } catch (error) {
-    console.warn('[layout] an unstarted split pane stayed in main:', error)
-  }
 }

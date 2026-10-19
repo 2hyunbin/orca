@@ -8,6 +8,11 @@ import {
 } from '../../orca-runtime-test-fixtures.spec'
 import { createMobileCreateTestNotifier } from '../../orca-runtime-test-scenario-builders.spec'
 import { collectLayoutLeafIdsInOrder } from '../../../../shared/workspace-layout/terminal-pane-tree'
+import {
+  clearPaneSpawnReservation,
+  makePaneSpawnReservationKey,
+  reservePaneSpawn
+} from '../../../ipc/pty/pane/spawn-reservation'
 
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
 
@@ -122,27 +127,61 @@ describe('a split of a pane the window draws, in a layout-owner build', () => {
     }
   })
 
-  it('answers with the pane when its terminal starts as the wait runs out', async () => {
-    const { runtime, handle, splitTerminal, leafIds, notifier } = setup()
+  it('keeps a pane whose terminal bound before the wait ran out, though the window reported it late', async () => {
+    const { runtime, runtimeStore, handle, splitTerminal, leafIds, notifier } = setup()
 
     vi.useFakeTimers()
     try {
+      const startedAt = Date.now()
       const split = runtime.splitTerminal(handle, { direction: 'vertical' })
       await vi.waitFor(() => expect(splitTerminal).toHaveBeenCalledTimes(1))
       const newLeafId = splitTerminal.mock.calls[0]![2]!.newLeafId!
-      await vi.advanceTimersByTimeAsync(9_000)
-      // The window reports the started terminal just before the wait runs out.
+      await vi.advanceTimersByTimeAsync(9_900 - (Date.now() - startedAt))
+      // Main binds the started terminal at 9.9 s; the busy window's report lands after 10 s.
+      await runtimeStore.persistPtyBinding({
+        worktreeId: TEST_WORKTREE_ID,
+        tabId: TAB_ID,
+        leafId: newLeafId,
+        ptyId: 'pty-1'
+      })
+      await vi.advanceTimersByTimeAsync(600)
       internalsOf(runtime).recordPtyWorktree('pty-1', TEST_WORKTREE_ID, {
         connected: true,
         tabId: TAB_ID,
         paneKey: makePaneKey(TAB_ID, newLeafId)
       })
       runtime.syncWindowGraph(1, graphWithSplit(newLeafId))
-      await vi.advanceTimersByTimeAsync(5_000)
+      await vi.advanceTimersByTimeAsync(0)
       await expect(split).resolves.toMatchObject({ tabId: TAB_ID, leafId: newLeafId })
       expect(leafIds()).toEqual([HEADLESS_LEAF_ID, newLeafId])
       expect(notifier.closeTerminalPane).not.toHaveBeenCalled()
     } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps the pane of a start still under way when the wait runs out, with the plain timeout', async () => {
+    const { runtime, handle, splitTerminal, leafIds, notifier } = setup()
+
+    vi.useFakeTimers()
+    const split = runtime.splitTerminal(handle, { direction: 'vertical' })
+    const rejected = expect(split).rejects.toThrow(/^Timed out waiting for split pane handle$/)
+    await vi.waitFor(() => expect(splitTerminal).toHaveBeenCalledTimes(1))
+    const newLeafId = splitTerminal.mock.calls[0]![2]!.newLeafId!
+    // A slow (SSH-style) start of the pane's terminal is under way and has not bound yet.
+    const reservationKey = makePaneSpawnReservationKey(
+      TEST_WORKTREE_ID,
+      null,
+      makePaneKey(TAB_ID, newLeafId)
+    )!
+    const reservation = reservePaneSpawn(reservationKey)
+    try {
+      await vi.advanceTimersByTimeAsync(11_000)
+      await rejected
+      expect(leafIds()).toEqual([HEADLESS_LEAF_ID, newLeafId])
+      expect(notifier.closeTerminalPane).not.toHaveBeenCalled()
+    } finally {
+      clearPaneSpawnReservation(reservationKey, reservation)
       vi.useRealTimers()
     }
   })

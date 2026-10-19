@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import type { Page } from '@stablyai/playwright-test'
@@ -168,25 +168,15 @@ test('a CLI split whose terminal does not start within 10 s leaves no pane', asy
       { once: true, capture: true }
     )
   })
-  const marker = `ORCA_SPLIT_TAKEN_BACK_${Date.now()}`
-  const outcome = await runCliSplit(
-    userDataDir,
-    source,
-    `echo ${marker.slice(0, 6)}''${marker.slice(6)}`
-  )
+  // A file the command writes: a terminal that ran it and was then killed still leaves it.
+  const marker = testInfo.outputPath(`split-ran-${Date.now()}`)
+  mkdirSync(path.dirname(marker), { recursive: true })
+  const outcome = await runCliSplit(userDataDir, source, `touch '${marker}'`)
   // Past the stall: the window has handled the split and main's take-back.
   await new Promise((resolve) => setTimeout(resolve, 5_000))
   const tabTerminals = await client
     .call<RuntimeTerminalListResult>('terminal.list', { worktree: `id:${worktreeId}`, limit: 200 })
     .then((listed) => listed.result.terminals.filter((t) => t.tabId === tabId))
-  const tails: string[] = []
-  for (const terminal of tabTerminals) {
-    const read = await client.call<{ terminal: { tail: string[] } }>('terminal.read', {
-      terminal: terminal.handle,
-      limit: 200
-    })
-    tails.push(read.result.terminal.tail.join('\n'))
-  }
   const windowLeafIds = await orcaPage.evaluate((id) => {
     const collect = (node: unknown): string[] => {
       if (typeof node !== 'object' || node === null) {
@@ -207,8 +197,10 @@ test('a CLI split whose terminal does not start within 10 s leaves no pane', asy
     body: JSON.stringify(report, null, 2),
     contentType: 'application/json'
   })
-  expect(outcome.ok ? '' : outcome.error).toContain('split_pane_not_started')
+  expect(outcome.ok ? '' : outcome.error).toContain(
+    "split_pane_not_started: the new pane's terminal did not start within 10 s, so the pane was closed and its command was not run"
+  )
   expect(tabTerminals).toHaveLength(1)
   expect(windowLeafIds).toEqual([tabTerminals[0]!.leafId])
-  expect(tails.some((tail) => tail.includes(marker))).toBe(false)
+  expect(existsSync(marker)).toBe(false)
 })
