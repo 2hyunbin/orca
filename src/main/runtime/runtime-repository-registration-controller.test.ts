@@ -180,6 +180,20 @@ describe('RuntimeRepositoryRegistrationController.add stores the checkout git li
     )
   })
 
+  it.skipIf(process.platform === 'win32')(
+    'keeps a literal backslash in a POSIX checkout name',
+    async () => {
+      const repoPath = join(root, 'repo\\name')
+      await mkdir(repoPath)
+      gitInit(repoPath)
+      const { controller } = createController()
+
+      const added = await controller.add(repoPath, 'git')
+
+      expect(added.path).toBe(repoPath)
+    }
+  )
+
   it('keeps the typed path for a folder workspace reached through an alias', async () => {
     const folderPath = join(root, 'notes')
     await mkdir(folderPath)
