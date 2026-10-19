@@ -653,6 +653,42 @@ describe('createExternalWatchEventHandler tombstone coalescing', () => {
     dispose()
   })
 
+  it('does not let a later write join an echo-verification read that started before it', async () => {
+    const dirtyFile = {
+      ...fileNotes,
+      isDirty: true
+    }
+    vi.mocked(useAppStore.getState).mockReturnValue({
+      openFiles: [dirtyFile],
+      setExternalMutation
+    } as never)
+    vi.mocked(getOpenFilesForExternalFileChange).mockReturnValue([dirtyFile] as never)
+    let resolveEchoRead: (value: { content: string; isBinary: boolean }) => void = () => {}
+    const readFile = vi
+      .fn()
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveEchoRead = resolve
+        })
+      )
+      .mockResolvedValue({ content: 'agent content', isBinary: false })
+    vi.stubGlobal('window', { api: { fs: { readFile } } })
+    const { handleFsChanged, dispose } = createExternalWatchEventHandler(findTarget)
+
+    recordSelfWrite('/repo/notes.md', 'orca save')
+    handleFsChanged(payload([{ kind: 'update', absolutePath: '/repo/notes.md' }]))
+    await vi.advanceTimersByTimeAsync(50)
+    // An agent writes while the slow echo read is still in flight.
+    handleFsChanged(payload([{ kind: 'update', absolutePath: '/repo/notes.md' }]))
+    await vi.advanceTimersByTimeAsync(50)
+    resolveEchoRead({ content: 'orca save', isBinary: false })
+    await vi.advanceTimersByTimeAsync(100)
+
+    expect(readFile).toHaveBeenCalledTimes(2)
+    expect(setExternalMutation).toHaveBeenCalledWith('file-notes', 'changed')
+    dispose()
+  })
+
   it('marks a lone dirty unstaged-diff tab changed-on-disk', () => {
     const dirtyDiffTab = {
       id: 'diff-notes',

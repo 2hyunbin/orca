@@ -50,9 +50,37 @@ export function scheduleDebouncedEditorExternalReload(
   }, EXTERNAL_RELOAD_DEBOUNCE_MS)
 }
 
-const inFlightEchoVerificationReads = new Map<string, ReturnType<typeof readRuntimeFileContent>>()
+type EchoVerificationRead = ReturnType<typeof readRuntimeFileContent>
+type EchoVerificationSlot = {
+  current: EchoVerificationRead
+  /** Payloads in the task that issued `current` were emitted before the read reached disk. */
+  joinable: boolean
+  next: EchoVerificationRead | null
+}
+const echoVerificationReads = new Map<string, EchoVerificationSlot>()
+
+function beginEchoVerificationRead(
+  key: string,
+  read: () => EchoVerificationRead
+): EchoVerificationRead {
+  const current = read()
+  const slot: EchoVerificationSlot = { current, joinable: true, next: null }
+  echoVerificationReads.set(key, slot)
+  queueMicrotask(() => {
+    slot.joinable = false
+  })
+  const release = (): void => {
+    if (echoVerificationReads.get(key) === slot && !slot.next) {
+      echoVerificationReads.delete(key)
+    }
+  }
+  current.then(release, release)
+  return current
+}
 
 // Why: one save echo can arrive as a burst of payloads; share the in-flight full-file read so concurrent payloads for the same file don't stack duplicate reads.
+// A payload from a later task may describe a write the in-flight read already missed, so it never
+// joins that read; it shares exactly one fresh read issued once the current one settles.
 function readFileForEchoVerification(args: {
   runtimeEnvironmentId: string | null | undefined
   filePath: string
@@ -60,16 +88,15 @@ function readFileForEchoVerification(args: {
   worktreeId: string | null | undefined
   connectionId: string | undefined
   expectedExternalSshTargetId?: string
-}): ReturnType<typeof readRuntimeFileContent> {
+}): EchoVerificationRead {
   const key = [
     args.runtimeEnvironmentId ?? '',
     args.connectionId ?? '',
     args.expectedExternalSshTargetId ?? '',
     args.filePath
   ].join('::')
-  let pending = inFlightEchoVerificationReads.get(key)
-  if (!pending) {
-    pending = readRuntimeFileContent({
+  const read = (): EchoVerificationRead =>
+    readRuntimeFileContent({
       target: runtimeTargetForOwnerEnvironment(args.runtimeEnvironmentId ?? null),
       filePath: args.filePath,
       relativePath: args.relativePath,
@@ -77,15 +104,18 @@ function readFileForEchoVerification(args: {
       connectionId: args.connectionId,
       expectedExternalSshTargetId: args.expectedExternalSshTargetId
     })
-    inFlightEchoVerificationReads.set(key, pending)
-    const release = (): void => {
-      if (inFlightEchoVerificationReads.get(key) === pending) {
-        inFlightEchoVerificationReads.delete(key)
-      }
-    }
-    pending.then(release, release)
+  const slot = echoVerificationReads.get(key)
+  if (!slot) {
+    return beginEchoVerificationRead(key, read)
   }
-  return pending
+  if (slot.joinable) {
+    return slot.current
+  }
+  slot.next ??= slot.current.then(
+    () => beginEchoVerificationRead(key, read),
+    () => beginEchoVerificationRead(key, read)
+  )
+  return slot.next
 }
 
 function markTabsChangedOnDisk(fileIds: string[], connectionId: string | undefined): void {
