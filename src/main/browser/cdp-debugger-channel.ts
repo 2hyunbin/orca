@@ -96,7 +96,7 @@ export class CdpDebuggerChannel {
   ): Promise<unknown> {
     // Why: the proxy's queued input outlives the message's admission; a revoked host's must not land.
     try {
-      assertRemoteCliPageAdmitted(this.webContents.id)
+      assertRemoteCliPageAdmitted(this.webContents.id, method, params)
     } catch (error) {
       return Promise.reject(error)
     }

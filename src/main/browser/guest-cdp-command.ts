@@ -1,6 +1,7 @@
 import type { WebContents } from 'electron'
 import { BrowserError } from './browser-error'
 import { assertRemoteCliBrowserAccess } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
+import { isInputReleaseCommand } from './remote-cli-page-admission'
 
 // Why: Chromium resizes the page's view for these without checking the view still exists
 // (WebContentsImpl::SetDeviceEmulationSize). A crashed renderer takes its view with it until the
@@ -28,7 +29,9 @@ export function sendGuestCdpCommand(
 ): Promise<unknown> {
   try {
     // Why: only a host's own command runs in its scope; desktop-owned sends are never refused here.
-    assertRemoteCliBrowserAccess(guest.id)
+    if (!isInputReleaseCommand(method, params)) {
+      assertRemoteCliBrowserAccess(guest.id)
+    }
   } catch (error) {
     return Promise.reject(error)
   }

@@ -39,7 +39,10 @@ const { CdpWsProxyMock } = vi.hoisted(() => {
 vi.mock('./cdp-ws-proxy', () => ({ CdpWsProxy: CdpWsProxyMock }))
 
 import { AgentBrowserBridge } from './agent-browser-bridge'
-import { runInRemoteCliBrowserScope } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
+import {
+  captureRemoteCliBrowserScope,
+  runInRemoteCliBrowserScope
+} from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
 import { assertRemoteCliPageAdmitted } from './remote-cli-page-admission'
 import {
   createFakeAgentBrowserChild,
@@ -205,5 +208,56 @@ describe('AgentBrowserBridge under a host revocation', () => {
     expect(wc.debugger.sendCommand).not.toHaveBeenCalledWith('Runtime.evaluate', expect.anything())
     expect(dispatchedMouseEvents(wc)).toHaveLength(0)
     expect(release).toHaveBeenCalled()
+  })
+
+  it('still releases a press that reached the page before the host was revoked', async () => {
+    const wc = mockWebContents(100)
+    const revoked = new AbortController()
+    wc.debugger.sendCommand.mockImplementation(
+      async (method: string, params?: { type?: string }) => {
+        if (method === 'Runtime.evaluate') {
+          return { result: { value: { x: 10, y: 20, adjusted: false, handled: false } } }
+        }
+        if (params?.type === 'mousePressed') {
+          revoked.abort()
+        }
+        return {}
+      }
+    )
+    webContentsFromIdMock.mockReturnValue(wc)
+
+    await runInRemoteCliBrowserScope(
+      WORKSPACE,
+      () => bridge.mouseClick(10, 20, 'left', undefined, 'tab-1', 18),
+      revoked.signal
+    ).catch(() => {})
+
+    expect(dispatchedMouseEvents(wc)).toEqual([
+      ['Input.dispatchMouseEvent', expect.objectContaining({ type: 'mousePressed' })],
+      ['Input.dispatchMouseEvent', expect.objectContaining({ type: 'mouseReleased' })]
+    ])
+  })
+
+  it("starts the page's CDP proxy outside the host's scope, so it outlives that host's request", async () => {
+    let startedInHostScope: boolean | undefined
+    CdpWsProxyMock.mockImplementationOnce(function (this: Record<string, unknown>) {
+      this.start = vi.fn(async () => {
+        startedInHostScope = captureRemoteCliBrowserScope().bridged
+        return 'ws://127.0.0.1:9222'
+      })
+      this.stop = vi.fn(async () => {})
+      this.getPort = vi.fn(() => 9222)
+      CdpWsProxyMock.instances.push(this)
+    })
+    execFileMock.mockImplementation(
+      (_bin: string, _args: string[], _opts: unknown, cb: ExecFileCallback) => {
+        cb(null, JSON.stringify({ success: true, data: null }), '')
+        return createFakeAgentBrowserChild({ stdin: { on: vi.fn(), end: vi.fn() } })
+      }
+    )
+
+    await runInRemoteCliBrowserScope(WORKSPACE, () => bridge.click('@e1', undefined, 'tab-1'))
+
+    expect(startedInHostScope).toBe(false)
   })
 })

@@ -70,6 +70,11 @@ export function captureRemoteCliBrowserScope(): {
   }
 }
 
+/** Runs `work` in no host's scope, so long-lived resources it creates never inherit one. */
+export function runOutsideRemoteCliBrowserScope<T>(work: () => T): T {
+  return scope.exit(work)
+}
+
 /** Throws inside a bridged command once it was revoked or `webContentsId` stopped being admitted. */
 export function assertRemoteCliBrowserAccess(webContentsId?: number): void {
   captureRemoteCliBrowserRevocation()(webContentsId)

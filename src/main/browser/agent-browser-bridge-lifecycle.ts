@@ -4,6 +4,7 @@ import { ORCA_TAB_SESSION_PREFIX } from './agent-browser-orphan-sweep'
 import { AgentBrowserBridgeRawProcess } from './agent-browser-bridge-raw-process'
 import type { AgentBrowserCleanupOptions } from './agent-browser-bridge-types'
 import { AGENT_BROWSER_CLEANUP_TIMEOUT_MS } from './agent-browser-bridge-types'
+import { runOutsideRemoteCliBrowserScope } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
 
 export abstract class AgentBrowserBridgeLifecycle extends AgentBrowserBridgeRawProcess {
   async onTabClosed(webContentsId: number): Promise<void> {
@@ -126,7 +127,9 @@ export abstract class AgentBrowserBridgeLifecycle extends AgentBrowserBridgeRawP
       })
     }
 
-    const promise = createSession()
+    // Why: the proxy's sockets keep the async scope they were created in; a host's would refuse
+    // every later command on this page, the desktop's included, after that host's request ended.
+    const promise = runOutsideRemoteCliBrowserScope(createSession)
     this.pendingSessionCreation.set(sessionName, promise)
     try {
       await promise

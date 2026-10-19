@@ -81,6 +81,30 @@ describe('CdpWsProxy under a host command', () => {
     client.close()
   })
 
+  it('still delivers a release after the revocation, so no button stays held on the page', async () => {
+    let finish = (): void => {}
+    const held = runWithRemoteCliPageAdmission(
+      PAGE_ID,
+      () => {
+        throw new Error(REVOKED)
+      },
+      () => new Promise<void>((resolve) => (finish = resolve))
+    )
+    const client = await connect(endpoint)
+
+    const response = await sendAndReceive(client, {
+      id: 5,
+      method: 'Input.dispatchMouseEvent',
+      params: { type: 'mouseReleased', x: 1, y: 1, button: 'left', clickCount: 1 }
+    })
+
+    expect(response.error).toBeUndefined()
+    expect(mouseEvents(mock)).toEqual(['mouseReleased'])
+    finish()
+    await held
+    client.close()
+  })
+
   it('drops a press it accepted before the revocation but had not delivered yet', async () => {
     mock.webContents.getType.mockReturnValue('webview')
     let grantFocus = (): void => {}

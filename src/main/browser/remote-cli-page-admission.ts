@@ -22,8 +22,27 @@ export async function runWithRemoteCliPageAdmission<T>(
 }
 
 /** Throws while a revoked host's command still holds this page; a no-op otherwise. */
-export function assertRemoteCliPageAdmitted(webContentsId: number | undefined): void {
-  if (webContentsId !== undefined) {
+export function assertRemoteCliPageAdmitted(
+  webContentsId: number | undefined,
+  method?: string,
+  params?: Record<string, unknown>
+): void {
+  if (webContentsId !== undefined && !isInputReleaseCommand(method, params)) {
     admissions.get(webContentsId)?.()
+  }
+}
+
+/** Ends input a command already began; refusing it would leave a button or key held on the page. */
+export function isInputReleaseCommand(method?: string, params?: Record<string, unknown>): boolean {
+  const type = params?.type
+  switch (method) {
+    case 'Input.dispatchMouseEvent':
+      return type === 'mouseReleased'
+    case 'Input.dispatchKeyEvent':
+      return type === 'keyUp'
+    case 'Input.dispatchTouchEvent':
+      return type === 'touchEnd' || type === 'touchCancel'
+    default:
+      return false
   }
 }
