@@ -7,6 +7,7 @@ import { DaemonPtyAdapter } from './daemon-pty-adapter'
 import { DaemonPtyRouter } from './daemon-pty-router'
 import { TerminalSessionOwnerUnverifiedError } from './daemon-errors'
 import { createMockSubprocess, startDaemonAdapterHarness } from './daemon-pty-adapter-test-harness'
+import { getDaemonSocketPath } from './daemon-spawner'
 
 const cleanups: (() => Promise<void> | void)[] = []
 
@@ -19,7 +20,8 @@ afterEach(async () => {
 /** An older daemon endpoint that accepts connections and never answers, like a wedged daemon. */
 async function startUnansweringDaemon(): Promise<{ socketPath: string; tokenPath: string }> {
   const dir = mkdtempSync(join(tmpdir(), 'unanswering-daemon-'))
-  const socketPath = join(dir, 'daemon.sock')
+  // Why: Windows needs a named pipe, which the spawner's path helper builds per platform.
+  const socketPath = getDaemonSocketPath(dir, 47)
   const tokenPath = join(dir, 'daemon.token')
   writeFileSync(tokenPath, 'token')
   const sockets = new Set<Socket>()
