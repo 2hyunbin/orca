@@ -62,6 +62,14 @@ const DATABASE_PATH_CONFIRM = [
   'COMMIT'
 ]
 
+async function until(check: () => Promise<boolean>, timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (!(await check())) {
+    if (Date.now() > deadline) throw new Error('condition not reached')
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+}
+
 describe('the memory phone path', () => {
   const cleanup: Array<() => Promise<void> | void> = []
 
@@ -426,8 +434,14 @@ describe('the memory phone path', () => {
         ).rejects.toThrow('cell_in_reserve_mode')
         // The splice still runs, and closing it releases nothing it never took.
         expect(spliced.phone.socket.readyState).toBe(spliced.phone.socket.OPEN)
+        // Let a flip back finish leasing its control (and fold its relay_cells write) first.
+        await until(async () => reserve.relay.sessions.reregistrationPending() === 0)
+        await new Promise((resolve) => setTimeout(resolve, 250))
+        reserve.database.statements.length = 0
         spliced.phone.socket.close()
         await spliced.phone.closed
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        expect(reserve.phoneStatements()).toEqual([])
         expect((await leases()).filter((kind) => kind !== 'control')).toEqual([])
       })
     }
