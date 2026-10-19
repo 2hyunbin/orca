@@ -1,214 +1,149 @@
-// A prompt hook that blocked the message, for every agent that reports one: captured frames through
-// the agent's real translator, the on-disk journal, a reopen, the projection and the fold. Each shows
-// one warning row that stays on screen and explains nothing else away; the send's receipt is as before.
+// Captured prompt-hook blocks through each agent's translator, the journal, a reopen and the fold:
+// one warning row stays on screen, nothing else explains the turn, and the send on record stays.
 
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { readFile } from 'node:fs/promises'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { AgentJournalRenderItem } from '../../../shared/agent-session-journal-types'
 import {
-  codexProviderHandle,
-  claudeProviderHandle
+  claudeProviderHandle,
+  codexProviderHandle
 } from '../../../shared/agent-session-provider-handle-encoding'
 import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
 import { withNativeChatCutTurnNotices } from '../../../shared/native-chat-cut-turn-notice'
 import { nativeChatRowTurnKeys } from '../../../shared/native-chat-turn-grouping'
 import { nativeChatTurnFold, nativeChatTurnFoldRow } from '../../../shared/native-chat-turn-fold'
 import { projectStructuredItemsToNativeChat } from '../../../shared/structured-agent-session-projection'
-import { openAcpFixtureRig, readAcpFixture } from '../../acp/acp-timeline-fixture.test-support'
+import { GROK_ACP_DIALECT } from '../../acp/acp-dialects/grok-dialect'
+import { readAcpFixture } from '../../acp/acp-timeline-fixture.test-support'
+import { AcpTimelineTranslator } from '../../acp/acp-timeline-translator'
 import { PromptResponseSchema } from '../../acp/generated/acp-protocol.generated'
 import { createClaudeJournalTranslator } from '../../claude/claude-structured-journal-translation'
 import { createCodexJournalTranslator } from '../../codex/codex-structured-journal-translation'
-import { closeProviderTimelineRigs } from '../agent-session-timeline/provider-timeline-assembler-test-support'
-import type { ProviderTimelineEvent } from '../agent-session-timeline/provider-timeline-event'
 import {
-  closeTestJournalHostDatabase,
-  createTrackedJournalOpener
-} from '../agent-session-journal/journal-host-database-test-support'
-import { createDeferredStructuredAgentSessionEventSink } from './structured-agent-session-event-sink'
-import { testEventSinkLogging } from './structured-agent-session-logger-test-support'
+  closeProviderTimelineRigs,
+  openProviderTimelineRig,
+  type ProviderTimelineRig
+} from '../agent-session-timeline/provider-timeline-assembler-test-support'
+import type { ProviderTimelineEvent } from '../agent-session-timeline/provider-timeline-event'
 
-const BLOCKED = 'Blocked by hook: Deploys are frozen'
-const journals = createTrackedJournalOpener()
-const cleanups: (() => Promise<void>)[] = []
+const row = (text: string) =>
+  expect.objectContaining({ tone: 'warning', presentation: 'hook-outcome', text })
+const DEPLOYS_FROZEN = row('Blocked by hook: Deploys are frozen')
+const CODEX_CHAT = { agent: 'codex' as const, providerHandle: codexProviderHandle('t') }
+const CLAUDE_CHAT = { agent: 'claude' as const, providerHandle: claudeProviderHandle('p', 'l') }
+const QA_POLICY = 'QA policy: BLOCKME prompts are not allowed'
+const SEND = { clientMessageId: 'cm-1', payloadFingerprint: 'fp', fence: 1 }
+const GO = [{ type: 'text' as const, text: 'go' }]
+type Captured = { method: string; params: Record<string, unknown>; frame: Record<string, unknown> }
 
-afterEach(async () => {
-  for (const cleanup of cleanups.splice(0)) {
-    await cleanup()
-  }
-  await journals.closeAll()
-  await closeProviderTimelineRigs()
-})
+afterEach(closeProviderTimelineRigs)
 
-async function captured<T>(url: URL, scenario: string): Promise<T[]> {
+async function captured<T>(agent: 'codex' | 'claude', scenario: string): Promise<T[]> {
+  const url = new URL(`../../${agent}/__fixtures__/${agent}-hook-outcomes.jsonl`, import.meta.url)
   const lines = (await readFile(url, 'utf8')).trim().split('\n')
   return lines.map((line) => JSON.parse(line)).filter((line) => line.case === scenario)
 }
 
-/** A chat the user sent `cm-1` in, written by a lane and read back as a fresh process would. */
-async function chat(agent: 'codex' | 'claude') {
-  const root = await mkdtemp(join(tmpdir(), 'orca-hook-outcome-'))
-  const options = {
-    identity: {
-      sessionId: 'session-1',
-      workspaceId: 'workspace-1',
-      hostId: 'local',
-      agent,
-      providerHandle:
-        agent === 'codex'
-          ? codexProviderHandle('thread-1')
-          : claudeProviderHandle('provider-1', 'leaf-1')
-    },
-    stateDirectory: root,
-    now: () => 1_000
-  }
-  const journal = await journals.open(options)
-  const deferred = createDeferredStructuredAgentSessionEventSink(testEventSinkLogging())
-  deferred.bind({ journal, fence: 1, publish: () => {} })
-  cleanups.push(async () => {
-    deferred.close()
-    await rm(root, { recursive: true, force: true })
-  })
-  const send = (clientMessageId: string) =>
-    journal.appendItem(
-      { provider: 'orca', clientMessageId },
-      { kind: 'message', role: 'user', blocks: [{ type: 'text', text: clientMessageId }] },
-      { fence: 1, turnScope: { kind: 'thread' } }
-    )
-  await send('cm-1')
-  return {
-    sink: deferred.sink,
-    send,
-    drained: () => deferred.drained(),
-    reopen: async () => {
-      await deferred.drained()
-      const before = journal.snapshot()
-      await journal.close()
-      closeTestJournalHostDatabase(root)
-      return { before, after: (await journals.open(options)).snapshot() }
-    }
-  }
-}
-
-/** What a settled chat draws: every row after the fold, each turn closed. */
-function settledView(items: readonly AgentJournalRenderItem[]) {
-  const read = withNativeChatCutTurnNotices(items, { agentName: 'Agent' })
-  expect(read).toBe(items)
-  const messages = projectStructuredItemsToNativeChat(read)
+/** The system rows a settled chat draws, every turn folded. */
+function settledRows(items: readonly AgentJournalRenderItem[]) {
+  expect(withNativeChatCutTurnNotices(items, { agentName: 'Agent' })).toBe(items)
+  const messages = projectStructuredItemsToNativeChat(items)
   const turnKeys = nativeChatRowTurnKeys(messages)
   const { foldedRows } = nativeChatTurnFold({
     rows: messages.map((message, index) => nativeChatTurnFoldRow(message, turnKeys[index], false)),
     settledTurnKeys: new Set(turnKeys.flatMap((key) => (key ? [key] : []))),
     expandedTurnKeys: new Set()
   })
-  const visible = messages.filter((_, index) => !foldedRows.has(index))
-  return visible.flatMap((message) => (message.role === 'system' ? message.blocks : []))
+  return messages.flatMap((message, index) =>
+    message.role === 'system' && !foldedRows.has(index) ? message.blocks : []
+  )
 }
 
-const HOOK_ROW = expect.objectContaining({
-  tone: 'warning',
-  presentation: 'hook-outcome',
-  text: BLOCKED
-})
+/** A chat whose send is on record, written by `write`, then read back by a fresh journal. */
+async function blockedChat(
+  identity: Parameters<typeof openProviderTimelineRig>[1],
+  write: (rig: ProviderTimelineRig) => void
+) {
+  const rig = await openProviderTimelineRig({}, identity)
+  await rig.journal.appendSubmission({
+    ...SEND,
+    body: { kind: 'message', role: 'user', blocks: GO }
+  })
+  const sent = rig.journal.snapshot().submissions
+  write(rig)
+  const { items, submissions } = (await rig.reopenJournal()).snapshot()
+  expect(submissions).toEqual(sent)
+  return items
+}
 
 describe('a prompt hook that blocked the message', () => {
   // A blocked tool call reaches the model as the tool's result, and writes no row of its own.
   it.each([
-    ['blocked-prompt', [HOOK_ROW]],
-    ['blocked-steer', [HOOK_ROW]],
+    ['blocked-prompt', [DEPLOYS_FROZEN]],
+    ['blocked-steer', [DEPLOYS_FROZEN]],
     ['blocked-tool', []]
-  ])('Codex %s', async (name, rows) => {
-    const frames = await captured<{ method: string; params: Record<string, unknown> }>(
-      new URL('../../codex/__fixtures__/codex-hook-outcomes.jsonl', import.meta.url),
-      name
-    )
-    const lane = await chat('codex')
-    const bound: string[][] = []
-    const translator = createCodexJournalTranslator({
-      sink: lane.sink,
-      sessionId: 'session-1',
-      primaryThreadId: () => 'thread-1',
-      bindPromptItemId: (...args) => bound.push(args),
-      schedule: (run) => (run(), () => {})
-    })
-    frames.forEach(({ method, params }, index) =>
-      translator.handle({
-        type: 'notification',
-        sessionId: 'session-1',
-        threadId: 'thread-1',
-        method,
-        params: { ...params, threadId: 'thread-1' },
-        observedAt: 2_000 + index
-      })
-    )
-    const { before, after } = await lane.reopen()
-    expect(after.items).toEqual(before.items)
-    expect(settledView(after.items)).toEqual(rows)
-    // Receipt as on main for these frames: nothing bound, no submission touched.
-    expect(bound).toEqual([])
-    expect(after.submissions).toEqual([])
-  })
-
-  it.each(['blocked-prompt', 'blocked-queued-prompt'])('Claude %s', async (name) => {
-    const frames = await captured<{ frame: Record<string, unknown> }>(
-      new URL('../../claude/__fixtures__/claude-hook-outcomes.jsonl', import.meta.url),
-      name
-    )
-    const lane = await chat('claude')
-    const translator = createClaudeJournalTranslator({ sink: lane.sink, fallbackIdPrefix: '1' })
-    for (const { frame } of frames) {
-      if (frame.subtype === 'informational' && name === 'blocked-queued-prompt') {
-        await lane.drained()
-        await lane.send('cm-2')
+  ])('Codex %s', async (scenario, rows) => {
+    const frames = await captured<Captured>('codex', scenario)
+    const items = await blockedChat(CODEX_CHAT, (rig) => {
+      const sink = rig.eventSink
+      const lane = createCodexJournalTranslator({ sink, schedule: (run) => (run(), () => {}) })
+      for (const { method, params } of frames) {
+        const frame = { method, params: { ...params, threadId: 't' } }
+        lane.handle({ type: 'notification', sessionId: 's', threadId: 't', ...frame })
       }
-      translator.handle({ type: 'message', sessionId: 'orca-session', message: frame })
-      await lane.drained()
-    }
-    const { after } = await lane.reopen()
-    expect(settledView(after.items)).toEqual([HOOK_ROW])
-    expect(after.submissions).toEqual([])
+    })
+    expect(settledRows(items)).toEqual(rows)
   })
 
   it.each([
-    ['the answer alone', ['answer']],
-    ['its end, then the answer', ['end', 'answer']],
-    ['the answer, then a late end', ['answer', 'end']]
-  ])('Grok, %s: a completed turn, accepted once', async (_, order) => {
-    // Source-derived: no Grok sign-in works under a throwaway home, so these frames follow the
-    // shape Grok's own source writes for a hook-denied prompt.
-    const [prompt, , end, answer] = await readAcpFixture('grok-hook-denied.source-derived')
-    expect(prompt?.message.method).toBe('session/prompt')
-    const fixture = await openAcpFixtureRig()
-    const lane = fixture.lane()
+    ['2.1.302, with its structured outcome', false],
+    ['older, with only its sentence', true]
+  ])('Claude %s', async (_, sentenceOnly) => {
+    const frames = await captured<Captured>('claude', 'blocked-prompt')
+    const items = await blockedChat(CLAUDE_CHAT, (rig) => {
+      const lane = createClaudeJournalTranslator({ sink: rig.eventSink, fallbackIdPrefix: '1' })
+      for (const { frame } of frames) {
+        const { prompt_submit_outcome: outcome, ...older } = frame
+        const message = sentenceOnly ? older : { ...older, prompt_submit_outcome: outcome }
+        lane.handle({ type: 'message', sessionId: 's', message })
+      }
+    })
+    expect(settledRows(items)).toEqual([DEPLOYS_FROZEN])
+  })
+
+  it.each([
+    ['its end alone', ['end']],
+    ['its answer alone', ['answer']],
+    ['its end, then its answer', ['end', 'answer']],
+    ['its answer, then its end', ['answer', 'end']]
+  ])('Grok, %s', async (_, order) => {
+    const frames = await readAcpFixture('grok-hook-denied')
+    const isEnd = (frame: unknown) => JSON.stringify(frame).includes('"turn_completed"')
+    const answer = frames.find((frame) => frame.message.result !== undefined)
+    const notices = frames.filter((frame) => frame.message.id === undefined && !isEnd(frame))
+    const steps = order.flatMap((step) => (step === 'answer' ? [answer!] : frames.filter(isEnd)))
     const events: ProviderTimelineEvent[] = []
-    const apply = (next: ProviderTimelineEvent[]) => {
-      events.push(...next)
-      fixture.apply(next)
-    }
-    apply(lane.openPrompt('p1:3', 1_000).events)
-    for (const [index, step] of order.entries()) {
-      apply(
-        step === 'answer'
-          ? lane.promptResult('p1:3', PromptResponseSchema.parse(answer?.message.result), 1_001)
-          : lane.notification(end!.message.method!, end!.message.params, 1_001 + index)
-      )
-    }
+    const items = await blockedChat({}, (rig) => {
+      const lane = new AcpTimelineTranslator({ sessionId: 'session-1', dialect: GROK_ACP_DIALECT })
+      const apply = (next: ProviderTimelineEvent[]) => {
+        events.push(...next)
+        next.forEach((event) => expect(rig.assembler.apply(event).admission.accepted).toBe(true))
+      }
+      apply(lane.openPrompt('p1:3', 1_000).events)
+      for (const { message } of [...notices, ...steps]) {
+        apply(
+          message.result === undefined
+            ? lane.notification(message.method ?? '', message.params, 2_000)
+            : lane.promptResult('p1:3', PromptResponseSchema.parse(message.result), 2_000)
+        )
+      }
+    })
     const accepted = events.filter((event) => event.type === 'input.accepted')
     expect(accepted).toEqual([expect.objectContaining({ clientMessageId: 'p1:3' })])
-    expect(events.indexOf(accepted[0]!)).toBeLessThan(
-      events.findIndex((event) => event.type === 'turn.end')
-    )
-    const items = (await fixture.rig.reopenJournal()).snapshot().items
+    const ended = events.findIndex((event) => event.type === 'turn.end')
+    expect(events.indexOf(accepted[0]!)).toBeLessThan(ended)
     const turns = items.flatMap((item) => readAgentJournalTurn(item.body) ?? [])
     expect(turns).toEqual([expect.objectContaining({ state: 'completed', outcome: 'success' })])
-    // The rig's journal holds only what the lane wrote; the user's bubble is the host's own row.
-    const user = { itemId: 'user', revision: 1, sequence: 0, observedAt: 0 }
-    const bubble = {
-      kind: 'message' as const,
-      role: 'user' as const,
-      blocks: [{ type: 'text' as const, text: 'go' }]
-    }
-    expect(settledView([{ ...user, body: bubble }, ...items])).toEqual([HOOK_ROW])
+    expect(settledRows(items)).toEqual([row(`Blocked by hook: ${QA_POLICY}`)])
   })
 })
