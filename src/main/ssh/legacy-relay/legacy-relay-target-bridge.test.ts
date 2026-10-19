@@ -128,31 +128,28 @@ function paneStops(): LegacyRelayPaneStops {
   return new LegacyRelayPaneStops(TARGET, () => ({
     leases: () => leases.filter((row) => row.state !== 'terminated'),
     recordStop: (_target, relayPtyId, pendingKill) => {
-      leases = leases.map((row) => {
-        if (row.ptyId !== relayPtyId) {
-          return row
-        }
-        const { pendingKill: _dropped, ...rest } = row
-        return pendingKill ? { ...rest, pendingKill } : rest
-      })
-    }
+      leases = leases.map((row) => (row.ptyId === relayPtyId ? { ...row, pendingKill } : row))
+    },
+    retireLease: (_target, relayPtyId) => retire(relayPtyId)
   }))
+}
+
+/** As the store's retire records: terminated, and any stop it carried delivered. */
+function retire(relayPtyId: string): void {
+  leases = leases.map((row) => {
+    if (row.ptyId !== relayPtyId) {
+      return row
+    }
+    const { pendingKill: _delivered, ...rest } = row
+    return { ...rest, state: 'terminated' }
+  })
 }
 
 function bridge(overrides: Partial<LegacyRelayTargetBridgeDeps> = {}): LegacyRelayTargetBridge {
   const subject: LegacyRelayTargetBridge = new LegacyRelayTargetBridge({
     targetId: TARGET,
     leases: () => leases.filter((row) => row.state !== 'terminated'),
-    retireLease: (relayPtyId) => {
-      leases = leases.map((row) => {
-        if (row.ptyId !== relayPtyId) {
-          return row
-        }
-        // The exit delivered the stop, as the store's retire records.
-        const { pendingKill: _delivered, ...rest } = row
-        return { ...rest, state: 'terminated' }
-      })
-    },
+    retireLease: retire,
     listEndpoints: async () => listing,
     openClient: async () => {
       if (relay.openError) {
@@ -431,6 +428,9 @@ describe('one target’s legacy relay bridge', () => {
     await vi.advanceTimersByTimeAsync(10_000)
     expect(relay.shutdowns).toEqual([])
     expect(stops.size).toBe(0)
+    // The closed tab's lease ends, so the stranger is never served under it.
+    expect(leases[0].state).toBe('terminated')
+    expect(subject.snapshot()).toEqual([])
   })
 
   it('sends a close recorded while disconnected once the next bridge lists the pane', async () => {
@@ -473,7 +473,7 @@ describe('one target’s legacy relay bridge', () => {
     expect(relay.shutdowns).toEqual(['pty-1#inc-1'])
   })
 
-  it('drops a restored stop whose relay id now names another process', async () => {
+  it('drops a restored stop whose relay id now names another process, never serving it', async () => {
     relay.incarnations.set('pty-1', 'inc-1')
     const subject = bridge()
     await subject.refresh()
@@ -484,16 +484,21 @@ describe('one target’s legacy relay bridge', () => {
     stops = paneStops()
     relay.incarnations.set('pty-1', 'inc-2')
     relay.openError = null
-    await bridge().refresh()
+    const next = bridge()
+    await next.refresh()
+    await vi.advanceTimersByTimeAsync(10_000)
     expect(relay.shutdowns).toEqual([])
+    expect(leases[0]).toMatchObject({ state: 'terminated' })
     expect(leases[0].pendingKill).toBeUndefined()
+    expect(next.snapshot()).toEqual([])
   })
 
   it('never replays a blind close for a legacy id that could name another shell', async () => {
     await stops.stop(PTY, null)
     await bridge().refresh()
     expect(relay.shutdowns).toEqual([])
-    expect(leases[0].state).toBe('detached')
+    // The tab closed, so its lease ends as any closed tab's does.
+    expect(leases[0].state).toBe('terminated')
   })
 
   it('never replays a fenced legacy stop to a relay that no longer reports the incarnation', async () => {

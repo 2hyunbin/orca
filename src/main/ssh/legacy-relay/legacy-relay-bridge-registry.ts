@@ -42,8 +42,8 @@ export type LegacyRelayBridgeHost = {
   leases: (targetId: string) => SshRemotePtyLease[]
   /** The relay proved the exit; any stop still recorded for it was delivered. */
   retireLease: (targetId: string, relayPtyId: string) => void
-  /** Persists a closed tab's stop on its lease, so a restart still sends it; null clears it. */
-  recordStop: (targetId: string, relayPtyId: string, pendingKill: SshPendingPtyKill | null) => void
+  /** Persists a closed tab's stop on its lease, so a restart still sends it. */
+  recordStop: (targetId: string, relayPtyId: string, pendingKill: SshPendingPtyKill) => void
   connection: (targetId: string) => SshConnection | null
   onPanesChanged: (panes: LegacyRelayBridgedPane[]) => void
   onData: (ptyId: string, data: string) => void

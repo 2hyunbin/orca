@@ -38,15 +38,17 @@ export class LegacyRelayPaneStops {
 
   constructor(
     private readonly targetId: string,
-    private readonly host: () => Pick<LegacyRelayBridgeHost, 'leases' | 'recordStop'> | null
+    private readonly host: () => Pick<
+      LegacyRelayBridgeHost,
+      'leases' | 'recordStop' | 'retireLease'
+    > | null
   ) {}
 
   private leases(): SshRemotePtyLease[] {
     return this.host()?.leases(this.targetId) ?? []
   }
 
-  /** Writes the lease's stop record; null clears it. */
-  private persist(relayPtyId: string, pendingKill: SshPendingPtyKill | null): void {
+  private persist(relayPtyId: string, pendingKill: SshPendingPtyKill): void {
     this.host()?.recordStop(this.targetId, relayPtyId, pendingKill)
   }
 
@@ -143,12 +145,15 @@ export class LegacyRelayPaneStops {
     }
   }
 
-  /** The stop can no longer reach the tab's process: that id now names another one. */
-  private forget(ptyId: string): void {
+  /**
+   * The stop can't be proven to reach the tab's process, so it is never sent. The lease ends as any
+   * closed tab's does, so a process that took the id is never served under the closed tab.
+   */
+  private abandon(ptyId: string): void {
     this.closing.delete(ptyId)
     const relayPtyId = parseAppSshPtyId(ptyId)?.relayPtyId
-    if (relayPtyId && this.persisted(this.leases()).has(ptyId)) {
-      this.persist(relayPtyId, null)
+    if (relayPtyId) {
+      this.host()?.retireLease(this.targetId, relayPtyId)
     }
   }
 
@@ -167,7 +172,7 @@ export class LegacyRelayPaneStops {
       ? listed === pending.incarnationId || (listed === undefined && sameProcess)
       : sameProcess
     if (!proven) {
-      this.forget(ptyId)
+      this.abandon(ptyId)
       return false
     }
     try {
@@ -176,7 +181,7 @@ export class LegacyRelayPaneStops {
     } catch (error) {
       // The relay's own fence refused it: that id now runs another process.
       if (/incarnation mismatch/i.test(error instanceof Error ? error.message : String(error))) {
-        this.forget(ptyId)
+        this.abandon(ptyId)
       }
       return false
     }
