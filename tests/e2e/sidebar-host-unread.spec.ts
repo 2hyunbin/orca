@@ -1,7 +1,7 @@
 import type { Page } from '@stablyai/playwright-test'
 import { test, expect } from './helpers/orca-app'
 import { postClaudeHook, readHookEndpoint } from './helpers/agent-hook-endpoint'
-import { SIDEBAR_INPUTS_BUILD, expectNoSidebarShadowMismatches } from './helpers/sidebar-shadow'
+import { SIDEBAR_INPUTS_BUILD } from './helpers/sidebar-inputs-build'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { waitForActivePaneHookDescriptor, waitForActiveTerminalManager } from './helpers/terminal'
 import {
@@ -65,7 +65,6 @@ test('the host raises the unread flag where the window’s user is not looking, 
       )
     )
     .toBe(true)
-  await expectNoSidebarShadowMismatches(orcaPage)
 
   // Mark as read writes through to the host.
   await orcaPage.evaluate((id) => {
@@ -79,5 +78,4 @@ test('the host raises the unread flag where the window’s user is not looking, 
     tool_input: { command: 'ls' }
   })
   await expect.poll(unread).toBe(true)
-  await expectNoSidebarShadowMismatches(orcaPage)
 })

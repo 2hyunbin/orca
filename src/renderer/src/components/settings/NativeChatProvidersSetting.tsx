@@ -25,6 +25,13 @@ import { ManagedRuntimeInstallRow } from '../managed-runtime/ManagedRuntimeInsta
 import { SearchableSetting } from './SearchableSetting'
 import { SettingsSubsectionHeader, SettingsSwitch } from './SettingsFormControls'
 import { getChatProvidersSearchEntry } from './chat-providers-search'
+import { antigravityChatSignInRunning } from '@/runtime/antigravity-chat-sign-in-status'
+import { useAntigravityChatSignIn } from './AntigravityChatSignInRow'
+import {
+  AntigravityProviderSignInArea,
+  antigravityProviderSignInShown
+} from './AntigravityProviderSignInArea'
+import { getHostRuntimeLabel, getRuntimeSentenceLabel } from './accounts-pane-runtime'
 
 const enqueueProviderUpdate = createAgentSettingsUpdateQueue()
 
@@ -98,6 +105,12 @@ function ProviderDetail(props: {
   enabledInAgents: boolean
 }): React.JSX.Element {
   const runtime = useManagedRuntimeInstall(CHAT_HOST, props.agent, props.enabledInAgents)
+  // Install and Remove wait for a running sign-in, which runs the installed server.
+  const signIn = useAntigravityChatSignIn(
+    props.agent === 'antigravity' && props.enabledInAgents && runtime.kind === 'active'
+      ? CHAT_HOST
+      : null
+  )
   const summary = (line: React.ReactNode): React.JSX.Element => (
     <div className="min-w-0 flex-1">
       <div className="text-sm font-medium leading-none">{props.label}</div>
@@ -114,14 +127,33 @@ function ProviderDetail(props: {
     )
   }
   return (
-    <ManagedRuntimeInstallRow observation={runtime} agentLabel={props.label}>
-      {(line, button) => (
+    <ManagedRuntimeInstallRow
+      observation={runtime}
+      agentLabel={props.label}
+      signInRunning={antigravityChatSignInRunning(signIn.flow)}
+    >
+      {(line, actions) => (
         <>
           {summary(line)}
-          {button}
+          {actions}
         </>
       )}
     </ManagedRuntimeInstallRow>
+  )
+}
+
+/** Antigravity chats sign in on this computer, directly below the program they run. */
+function AntigravityChatProviderSignIn(): React.JSX.Element | null {
+  const runtime = useManagedRuntimeInstall(CHAT_HOST, 'antigravity', true)
+  if (runtime.kind !== 'active' || !antigravityProviderSignInShown(runtime)) {
+    return null
+  }
+  return (
+    <AntigravityProviderSignInArea
+      owner={CHAT_HOST}
+      label={getRuntimeSentenceLabel({ runtime: 'host', label: getHostRuntimeLabel() })}
+      install={runtime}
+    />
   )
 }
 
@@ -159,34 +191,41 @@ export function NativeChatProvidersSetting({
               const enabledInAgents = isTuiAgentEnabled(agent, settings.disabledTuiAgents)
               const on = isNativeChatProviderDisplayedOn(settings, agent, detectedIds)
               return (
-                <div key={agent} className="flex items-center gap-3 py-3">
-                  <div className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border/50 bg-background/50">
-                    <AgentIcon agent={agent} size={16} />
+                <div key={agent} className="space-y-3 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border/50 bg-background/50">
+                      <AgentIcon agent={agent} size={16} />
+                    </div>
+                    <ProviderDetail
+                      agent={agent}
+                      label={label}
+                      installed={detectedIds}
+                      enabledInAgents={enabledInAgents}
+                    />
+                    <SettingsSwitch
+                      checked={on}
+                      disabled={!enabledInAgents}
+                      ariaLabel={translate(
+                        'settings.chat.providers.toggleLabel',
+                        'Open {{value0}} as a chat',
+                        { value0: label }
+                      )}
+                      onChange={() => {
+                        const next = !on
+                        return enqueueProviderUpdate({
+                          getSettings: () => useAppStore.getState().settings,
+                          fallbackSettings: settings,
+                          updateSettings,
+                          buildUpdate: (latest) =>
+                            buildNativeChatProviderUpdate(latest, agent, next)
+                        })
+                      }}
+                    />
                   </div>
-                  <ProviderDetail
-                    agent={agent}
-                    label={label}
-                    installed={detectedIds}
-                    enabledInAgents={enabledInAgents}
-                  />
-                  <SettingsSwitch
-                    checked={on}
-                    disabled={!enabledInAgents}
-                    ariaLabel={translate(
-                      'settings.chat.providers.toggleLabel',
-                      'Open {{value0}} as a chat',
-                      { value0: label }
-                    )}
-                    onChange={() => {
-                      const next = !on
-                      return enqueueProviderUpdate({
-                        getSettings: () => useAppStore.getState().settings,
-                        fallbackSettings: settings,
-                        updateSettings,
-                        buildUpdate: (latest) => buildNativeChatProviderUpdate(latest, agent, next)
-                      })
-                    }}
-                  />
+                  {/* Chats sign in on the host they run on, under the program that serves them. */}
+                  {agent === 'antigravity' && enabledInAgents ? (
+                    <AntigravityChatProviderSignIn />
+                  ) : null}
                 </div>
               )
             })}

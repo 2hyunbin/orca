@@ -16,13 +16,13 @@ import { listOrcadMigrationSourceCutovers } from '../../ssh/orcad-migration-cuto
 import type { OrcadManagedConversionArgs } from './orcad-runtime-conversion'
 import { fakeOrcadMigrationDestination } from '../../ssh/orcad-migration-destination-fake'
 import { reconcileManagedOrcadSshTargets, visibleRepos } from '../../ssh/orcad-retained-source'
-import { SshConnectionStore } from '../../ssh/ssh-connection-store'
+import { SshConnectionStore } from '../../ssh/connection/ssh-connection-store'
 
 const mocks = vi.hoisted(() => {
   const state: { targetStore: unknown } = { targetStore: null }
   return { state, deploy: vi.fn(), ensureTunnel: vi.fn() }
 })
-vi.mock('../../ssh/ssh-target-registry', () => ({
+vi.mock('../../ssh/targets/ssh-target-registry', () => ({
   getSshConnectionManager: () => ({}),
   getSshTargetRegistryStore: () => mocks.state.targetStore
 }))

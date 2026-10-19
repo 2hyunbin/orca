@@ -12,7 +12,7 @@ import type { Automation } from '../../shared/automations-types'
 import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-path'
 import { isRepoOnCatalogHost } from '../../shared/execution-host'
-import type { OrcadMigrationSourceCutover } from '../../shared/orcad-migration-source-cutover'
+import type { OrcadMigrationSourceCutover } from '../../shared/orcad-migration/orcad-migration-source-cutover'
 import type { Repo } from '../../shared/repo-types'
 import type { SshManagedServerLinkedProject } from '../../shared/ssh-types'
 import { parseWorkspaceKey } from '../../shared/workspace-scope'
@@ -32,7 +32,7 @@ import {
   folderWorkspacesHeldByServer,
   type OrcadServerFolderCatalog
 } from './orcad-server-folder-workspaces'
-import type { SshTargetOrcadClaims } from './ssh-target-orcad-claims'
+import type { SshTargetOrcadClaims } from './targets/ssh-target-orcad-claims'
 
 export type OrcadServerRepository = Pick<Repo, 'id' | 'path'> & {
   connectionId?: string | null
