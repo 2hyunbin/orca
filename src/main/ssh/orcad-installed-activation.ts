@@ -173,6 +173,12 @@ export async function activateInstalledOrcad(
     }
   }
 
+  // Before the recount: a slow scan must not outdate the census that admits the stop.
+  const roomless = await orcadSnapshotRoomRefusal(options, record, fullVersion)
+  if (roomless) {
+    return notActivated(ORCAD_SNAPSHOT_SPACE_INSUFFICIENT_CODE, roomless)
+  }
+
   // Last check before anything stops: the census above may predate a long upload.
   if (incumbent && options.recountCensus && countedLockedRecord(options, record)) {
     const recount = planOrcadUpdate({
@@ -185,11 +191,6 @@ export async function activateInstalledOrcad(
     if (recount.action === 'defer') {
       return notActivated(recount.code, recount.reason)
     }
-  }
-
-  const roomless = await orcadSnapshotRoomRefusal(options, record, fullVersion)
-  if (roomless) {
-    return notActivated(ORCAD_SNAPSHOT_SPACE_INSUFFICIENT_CODE, roomless)
   }
 
   const startedAt = now()

@@ -17,6 +17,7 @@ const CAPTURE_PREFIX = 'pre-'
 // tar's headers and 10 KB records, plus room for the state to grow before the server stops.
 const SPACE_FACTOR = 1.05
 const SPACE_SLACK_KB = 1024
+const SPACE_SCAN_DEADLINE_SECONDS = 12
 
 /**
  * Removes every `pre-*` capture under `snapshotsRoot` except `keep`. Never a rollback rescue:
@@ -37,7 +38,8 @@ function prunePatterns(keep: readonly string[]): string {
 
 /**
  * Prints the KB the members occupy, the KB a prune would reclaim, and the `df -Pk` line for
- * `baseDir`. Read-only, so it can run before anything stops. Null on Windows (not measured).
+ * `baseDir`; `UNMEASURED` when a scan overran its deadline. Read-only, so it can run before
+ * anything stops. Null on Windows (not measured).
  */
 export function orcadSnapshotSpaceCommand(
   host: RemoteHostPlatform,
@@ -53,10 +55,15 @@ export function orcadSnapshotSpaceCommand(
   const members = ORCAD_SNAPSHOT_MEMBERS.map((member) => `${root}/${quotePosixShell(member)}`)
   const sum = `awk '{ total += $1 } END { print total + 0 }'`
   return [
-    `need=$(du -sk ${members.join(' ')} 2>/dev/null | ${sum});`,
-    `reclaim=$(for old in ${quotePosixShell(snapshotsRoot)}/${CAPTURE_PREFIX}*; do [ -d "$old" ] || continue;`,
-    `case "\${old##*/}" in (${prunePatterns(keep)}) ;; (*) du -sk "$old" 2>/dev/null;; esac; done | ${sum});`,
-    `echo "${SPACE_MARKER} $need $reclaim $(df -Pk ${quotePosixShell(baseDir)} 2>/dev/null | tail -n 1)"`
+    // Both scans together stay inside the transport's 30 s exec timeout; 124+ is timeout's kill.
+    `deadline=; if command -v timeout >/dev/null 2>&1; then deadline="timeout ${SPACE_SCAN_DEADLINE_SECONDS}"; fi;`,
+    `set --; for old in ${quotePosixShell(snapshotsRoot)}/${CAPTURE_PREFIX}*; do [ -d "$old" ] || continue;`,
+    `case "\${old##*/}" in (${prunePatterns(keep)}) ;; (*) set -- "$@" "$old";; esac; done;`,
+    `need=$($deadline du -sk ${members.join(' ')} 2>/dev/null); need_status=$?;`,
+    'reclaim=; reclaim_status=0; if [ $# -gt 0 ]; then reclaim=$($deadline du -sk "$@" 2>/dev/null); reclaim_status=$?; fi;',
+    `if [ "$need_status" -ge 124 ] || [ "$reclaim_status" -ge 124 ]; then echo "${SPACE_MARKER} UNMEASURED"; else`,
+    `echo "${SPACE_MARKER} $(printf '%s\\n' "$need" | ${sum}) $(printf '%s\\n' "$reclaim" | ${sum})`,
+    `$(df -Pk ${quotePosixShell(baseDir)} 2>/dev/null | tail -n 1)"; fi`
   ].join(' ')
 }
 

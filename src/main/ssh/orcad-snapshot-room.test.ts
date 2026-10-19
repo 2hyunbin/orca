@@ -57,7 +57,7 @@ function answerRoom(neededKb: number, reclaimKb: number, availableKb: number): v
   )
 }
 
-const deploy = () =>
+const deploy = (extra: Partial<Parameters<typeof deployOrcad>[0]> = {}) =>
   deployOrcad({
     conn: Object.create(null),
     host: getRemoteHostPlatform('linux-x64'),
@@ -71,7 +71,8 @@ const deploy = () =>
     now: () => new Date('2026-02-02T00:00:00.000Z'),
     localOrcadDir: '/local/out/orcad',
     target: 'linux-x64-glibc217',
-    census: { liveSessions: 0, startedSinceActivation: 0, daemonProtocolVersion: 3 }
+    census: { liveSessions: 0, startedSinceActivation: 0, daemonProtocolVersion: 3 },
+    ...extra
   })
 
 beforeEach(() => {
@@ -146,6 +147,32 @@ describe('an update on a host without room for its snapshot (#30491)', () => {
         'u'
       )
     )
+  })
+
+  it('measures room before the last terminal recount, so the scan cannot outdate it', async () => {
+    answerRoom(400_000, 0, 10_000_000)
+    const probedBeforeRecount: boolean[] = []
+    const recountCensus = vi.fn(async () => {
+      probedBeforeRecount.push(
+        vi.mocked(execCommand).mock.calls.some(([, command]) => command.includes('SNAPSHOT_SPACE'))
+      )
+      return { liveSessions: 0, startedSinceActivation: 0, daemonProtocolVersion: 3 }
+    })
+
+    expect(await deploy({ recountCensus })).toMatchObject({ outcome: 'installed-and-activated' })
+    expect(probedBeforeRecount).toEqual([true])
+  })
+
+  it('goes ahead when the room probe loses its channel, leaving the capture to decide', async () => {
+    vi.mocked(execCommand).mockImplementation(async (_conn, command) => {
+      if (command.includes('SNAPSHOT_SPACE')) {
+        throw Object.assign(new Error('lost'), { sshChannelCloseConfirmed: false })
+      }
+      return host.exec(command)
+    })
+
+    expect(await deploy()).toMatchObject({ outcome: 'installed-and-activated' })
+    expect(host.activeVersion()).toBe(NEW)
   })
 
   it('updates when pruning earlier snapshots makes the room', async () => {

@@ -125,6 +125,21 @@ describe.skipIf(process.platform === 'win32')('snapshot room on a real shell (#3
     )
   })
 
+  it('answers UNMEASURED, which reads as unknown, when a scan overruns its deadline', async () => {
+    const bin = join(base, 'bin')
+    mkdirSync(bin)
+    writeFileSync(join(bin, 'timeout'), '#!/bin/sh\nexit 124\n')
+    chmodSync(join(bin, 'timeout'), 0o755)
+
+    const output = await sh(
+      orcadSnapshotSpaceCommand(posix, root, snapshots, remoteBase, []) ?? '',
+      bin
+    )
+
+    expect(output.trim()).toBe('SNAPSHOT_SPACE UNMEASURED')
+    expect(parseOrcadSnapshotSpace(output)).toBeNull()
+  })
+
   it('reads no room answer from a host that printed none', () => {
     expect(parseOrcadSnapshotSpace('')).toBeNull()
     expect(orcadSnapshotShortfallKb(null)).toBeNull()

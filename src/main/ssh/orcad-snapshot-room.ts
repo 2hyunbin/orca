@@ -12,6 +12,7 @@ import {
   parseOrcadSnapshotSpace
 } from '../managed-server/host-state/orcad-state-snapshot-space'
 import { joinRemotePath } from './ssh-remote-platform'
+import { isUnconfirmedSshCommandTermination } from './remote-exec/remote-exec-command'
 import type { OrcadSlotOptions } from './orcad-recovery-slot'
 
 export const ORCAD_SNAPSHOT_SPACE_INSUFFICIENT_CODE = 'orcad_snapshot_space_insufficient'
@@ -41,7 +42,7 @@ export async function orcadSnapshotRoomRefusal(
   if (!command) {
     return null
   }
-  const space = parseOrcadSnapshotSpace(await execOrcadRemoteOr(options, command))
+  const space = parseOrcadSnapshotSpace(await measureRoom(options, command))
   const shortfall = orcadSnapshotShortfallKb(space)
   return space && shortfall !== null
     ? orcadSnapshotShortfallMessage(space, shortfall, {
@@ -51,4 +52,16 @@ export async function orcadSnapshotRoomRefusal(
         active: record.active
       })
     : null
+}
+
+async function measureRoom(options: OrcadSlotOptions, command: string): Promise<string> {
+  try {
+    return await execOrcadRemoteOr(options, command)
+  } catch (error) {
+    // A read-only probe that lost its channel only leaves the room unknown; the capture decides.
+    if (isUnconfirmedSshCommandTermination(error) && !options.signal?.aborted) {
+      return ''
+    }
+    throw error
+  }
 }
