@@ -100,6 +100,8 @@ export function createWorktreeEventRuntime(
     // Why: capture active-ness before migration moves the pointer; re-key maps before the diff so a rename isn't a deletion.
     const renamedWasActive =
       renamed != null && useAppStore.getState().activeWorktreeId === renamed.oldWorktreeId
+    // Why: re-activating by id alone clears the selected host, which makes a same-id twin ambiguous.
+    const renamedActiveHostId = useAppStore.getState().activeWorkspaceExecutionHostId ?? undefined
     if (renamed) {
       // Shield both ids from the deletion diff across the rename's event burst — the worktree list lags the on-disk move.
       const expiry = Date.now() + WORKTREE_RENAME_PURGE_GRACE_MS
@@ -143,7 +145,7 @@ export function createWorktreeEventRuntime(
     }
     // Why: an id change unmounts the active pane; re-activate so the tab reconciles, else it vanishes until re-select.
     if (renamedWasActive && renamed) {
-      useAppStore.getState().setActiveWorktree(renamed.newWorktreeId)
+      useAppStore.getState().setActiveWorktree(renamed.newWorktreeId, renamedActiveHostId)
     }
     // Sweep expired rename-grace entries before any early return, else forced-local
     // (or non-authoritative) events let the map grow for the session.

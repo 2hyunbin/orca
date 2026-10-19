@@ -197,6 +197,7 @@ describe('remote worktree event lineage refresh', () => {
     const deleted = makeWorktree({ id: 'repo-delete::/gone', repoId: 'repo-delete' })
     store.setState({
       activeWorktreeId: 'repo-rename::/old',
+      activeWorkspaceExecutionHostId: 'runtime:env-1',
       worktreesByRepo: { 'repo-delete': [deleted] },
       fetchWorktrees: vi.fn().mockImplementation(async (repoId: string) => {
         if (repoId === 'repo-delete') {
@@ -218,7 +219,11 @@ describe('remote worktree event lineage refresh', () => {
     queue.enqueue({ repoId: 'repo-delete', executionHostId: 'runtime:env-1' })
     await flushPromises()
     expect(store.getState().fetchWorktreeLineage).toHaveBeenCalledTimes(2)
-    expect(store.getState().setActiveWorktree).toHaveBeenCalledWith('repo-rename::/new')
+    // The selected host survives, so a same-id twin on another host stays unambiguous.
+    expect(store.getState().setActiveWorktree).toHaveBeenCalledWith(
+      'repo-rename::/new',
+      'runtime:env-1'
+    )
     expect(store.getState().purgeWorktreeTerminalState).toHaveBeenCalledWith([
       hostWorktreeTarget({ id: deleted.id, hostId: 'runtime:env-1' })
     ])

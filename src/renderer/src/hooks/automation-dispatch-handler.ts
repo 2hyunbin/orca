@@ -41,6 +41,8 @@ export async function handleAutomationDispatchRequest({
   const focusBeforeDispatch = {
     activeView: state.activeView,
     activeWorktreeId: state.activeWorktreeId,
+    // Why: restoring by id alone clears the selected copy and leaves a same-id twin ambiguous.
+    activeWorkspaceExecutionHostId: state.activeWorkspaceExecutionHostId ?? undefined,
     activeTabId: state.activeTabId,
     activeTabType: state.activeTabType
   }
@@ -220,7 +222,10 @@ export async function handleAutomationDispatchRequest({
       currentState.activeWorktreeId === worktree.id
     ) {
       currentState.setActiveView(focusBeforeDispatch.activeView)
-      currentState.setActiveWorktree(focusBeforeDispatch.activeWorktreeId)
+      currentState.setActiveWorktree(
+        focusBeforeDispatch.activeWorktreeId,
+        focusBeforeDispatch.activeWorkspaceExecutionHostId
+      )
       if (focusBeforeDispatch.activeTabId) {
         currentState.setActiveTab(focusBeforeDispatch.activeTabId)
       }

@@ -118,6 +118,7 @@ export async function sleepWorktreesReportingFailures(
   }
   const {
     activeWorktreeId,
+    activeWorkspaceExecutionHostId,
     setActiveWorktree,
     shutdownWorktreeBrowsers,
     shutdownWorktreeTerminals
@@ -203,7 +204,8 @@ export async function sleepWorktreesReportingFailures(
       clearWorktreeSleepIntent(worktreeId)
     }
     if (sleptActiveWorktreeId && failedWorktreeIds.has(sleptActiveWorktreeId)) {
-      setActiveWorktree(sleptActiveWorktreeId)
+      // Why the host: an id alone clears the selected copy and leaves a same-id twin ambiguous.
+      setActiveWorktree(sleptActiveWorktreeId, activeWorkspaceExecutionHostId ?? undefined)
     }
   }
   return {
