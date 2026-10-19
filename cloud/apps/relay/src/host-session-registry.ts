@@ -451,7 +451,9 @@ export class HostSessionRegistry {
     this.seatLog = new CellSeatLog(undefined, now)
     this.postProofCloses = new PostProofCloseLog(observer)
     this.phoneAccepts = new PhoneAcceptLog(config.cellId)
-    this.memoryConfirmations = new MemoryResumeConfirmations(store, now)
+    this.memoryConfirmations = new MemoryResumeConfirmations(store, now, (error) =>
+      this.phoneAccepts.renewalFailed(isRelayDatabaseTransientError(error) ? 'database_transient' : 'error')
+    )
   }
 
   // Reserve mode is only ever a cell's, and only while its applied switch says so.

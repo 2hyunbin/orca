@@ -11,6 +11,7 @@ type PhoneAcceptAnomaly =
   | { event: 'orca_relay_client_accept_db_error'; cause: PhoneAcceptDatabaseCause }
   | { event: 'orca_relay_client_miss_row_names_here'; relayHostIdDigest: string }
   | { event: 'orca_relay_client_miss_read_error'; cause: PhoneAcceptDatabaseCause }
+  | { event: 'orca_relay_resume_renewal_failed'; cause: PhoneAcceptDatabaseCause }
 
 export class PhoneAcceptLog {
   private readonly window: AssignmentRejectionLogWindow<PhoneAcceptAnomaly>
@@ -43,6 +44,11 @@ export class PhoneAcceptLog {
   // The no-seat assignment read failed; the phone was closed 4409 to re-resolve.
   missReadError(cause: PhoneAcceptDatabaseCause): void {
     this.record({ event: 'orca_relay_client_miss_read_error', cause })
+  }
+
+  // A due renewal write failed; the confirm still answered the stored expiry.
+  renewalFailed(cause: PhoneAcceptDatabaseCause): void {
+    this.record({ event: 'orca_relay_resume_renewal_failed', cause })
   }
 
   private record(anomaly: PhoneAcceptAnomaly): void {

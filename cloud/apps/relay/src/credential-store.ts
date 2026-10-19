@@ -587,13 +587,16 @@ export class RelayCredentialStore {
   // Step 6's confirm for a basis the cell holds in memory: one fresh device read, and a renewal
   // write at most once a day per device. A current-version confirm always answers renewed:true
   // with the expiry the database now holds, so a phone keeps scheduling its renewals.
-  async confirmMemoryResume(input: RelayIdentity & {
-    reqId: string
-    basisConnId: string
-    relayDeviceId: string
-    acceptedCredentialVersion: number
-    acceptedAs: 'current' | 'grace'
-  }): Promise<DeviceResumeConfirmed> {
+  async confirmMemoryResume(
+    input: RelayIdentity & {
+      reqId: string
+      basisConnId: string
+      relayDeviceId: string
+      acceptedCredentialVersion: number
+      acceptedAs: 'current' | 'grace'
+    },
+    options: { onRenewalFailure?: (error: unknown) => void } = {}
+  ): Promise<DeviceResumeConfirmed> {
     const now = this.now()
     const devices = await this.database.query(
       `SELECT * FROM relay_devices
@@ -608,7 +611,12 @@ export class RelayCredentialStore {
     let resumeExpiresAt = number(device, 'current_expires_at')
     const renewalDue = resumeExpiresAt < now + RELAY_PROTOCOL_LIMITS.resumeTtlMs - RESUME_RENEWAL_INTERVAL_MS
     if (renewed && renewalDue) {
-      resumeExpiresAt = await this.renewResume(input, device, now).catch(() => resumeExpiresAt)
+      // A failing renewal still answers the expiry the database holds, but must stay visible:
+      // left failing, phones age toward re-pairing.
+      resumeExpiresAt = await this.renewResume(input, device, now).catch((error: unknown) => {
+        options.onRenewalFailure?.(error)
+        return resumeExpiresAt
+      })
     }
     // Off the answer's critical outcome: an audit row the database refuses is not a failed confirm.
     await this.auditWith(this.database, {
