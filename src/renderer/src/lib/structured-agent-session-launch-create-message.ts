@@ -3,6 +3,7 @@ import {
   structuredLaunchRequestedOptions
 } from '../../../shared/native-chat-session-option-defaults'
 import { structuredAgentSessionCreateFingerprint } from '../../../shared/structured-agent-session-mutation'
+import type { StructuredAgentSessionCreateParams } from '../../../shared/structured-agent-session-create'
 import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from '../../../shared/agent-chat-permission-mode'
 import type { StructuredLaunchState } from './structured-agent-session-launch-registry'
 import { notifyStructuredLaunchListeners } from './structured-agent-session-launch-registry'
@@ -37,7 +38,7 @@ export function prepareStructuredLaunchCreateMessage(
     omitStructuredLaunchPermissionMode(state)
   }
   // A permission mode alone overlays the host's remembered model selection.
-  const optionsMode =
+  const optionsMode: StructuredAgentSessionCreateParams['optionsMode'] =
     hostTakesExplicitOptions && state.selection.explicit?.model !== undefined
       ? 'replace-model-selection'
       : undefined
