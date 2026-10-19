@@ -77,7 +77,8 @@ export abstract class OrcaRuntimeWithAgentTransitions extends OrcaRuntimeWithMig
     // The listing is a cache a catalog change empties; the persisted record names it meanwhile.
     const listed = this.resolvedWorktrees.peek()?.worktrees.find((item) => item.id === id)
     const meta = listed ? undefined : store?.getWorktreeMeta(id)
-    const repo = listed || meta ? store?.getRepo(getRepoIdFromWorktreeId(id)) : undefined
+    const repoId = listed?.repoId ?? (meta ? getRepoIdFromWorktreeId(id) : undefined)
+    const repo = repoId ? store?.getRepo(repoId) : undefined
     return {
       repoLabel: repo?.displayName,
       worktreeLabel: listed?.displayName || listed?.branch || meta?.displayName || fallback

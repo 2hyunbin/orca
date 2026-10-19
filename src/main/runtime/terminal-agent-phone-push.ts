@@ -133,7 +133,8 @@ export class TerminalAgentPhonePush {
     const row = this.deps.readHookRow(paneKey)
     if (row?.turnCompletedAt !== undefined) {
       this.finishedTurnByPane.set(paneKey, row.turnCompletedAt)
-    } else if (row?.state === 'working') {
+    }
+    if (row?.state === 'working') {
       this.workingSeen.add(paneKey)
     }
   }
