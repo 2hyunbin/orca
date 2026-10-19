@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -50,8 +51,14 @@ const ACTIVITY_LEASE_READERS: Record<string, string> = {
   'assignment-store.ts:assignmentStrandedOnUnservedCell': 'step-5-stranded-release'
 }
 
-// A read is FROM or JOIN on the table; `DELETE FROM` alone only writes.
-const LEASE_READ = /(?<!DELETE\s+)\b(?:FROM|JOIN)\s+relay_assignment_activity_leases\b/
+// A read is FROM, JOIN or USING on the table; `DELETE FROM` alone only writes. Not caught: a
+// second read inside an already listed function, and counters derived from leases elsewhere.
+const LEASE_TABLE = 'relay_assignment_activity_leases'
+// Bare table-name values that never reach SQL.
+const BARE_TABLE_NAME_USES: Record<string, string> = {
+  'database.ts:POSTGRES_TRANSACTION_PHASES': 'labels a failed statement by the table it names'
+}
+const LEASE_READ = /(?<!DELETE\s+)\b(?:FROM|JOIN|USING)\s+relay_assignment_activity_leases\b/
 
 const CELLS: RelayCellConfig[] = [
   { id: 'cell-a', url: 'https://relay-a.example.com', capacityRequests: 10 },
@@ -67,7 +74,9 @@ describe('activity-lease reader census', () => {
   })
 
   it('classifies every reader of the activity-lease table', () => {
-    const readers = activityLeaseReaders()
+    const { readers, bareTableNames } = activityLeaseReaders()
+    // A bare name could reach `FROM ${table}`, which the scan cannot see: write the table into the SQL.
+    expect(bareTableNames.filter((use) => !(use in BARE_TABLE_NAME_USES))).toEqual([])
     expect(readers.filter((name) => !(name in ACTIVITY_LEASE_READERS))).toEqual([])
     expect(Object.keys(ACTIVITY_LEASE_READERS).filter((name) => !readers.includes(name))).toEqual([])
   })
@@ -131,29 +140,32 @@ describe('activity-lease reader census', () => {
   })
 })
 
-function activityLeaseReaders(): string[] {
+function activityLeaseReaders(): { readers: string[]; bareTableNames: string[] } {
   const directory = fileURLToPath(new URL('.', import.meta.url))
   const readers = new Set<string>()
-  for (const file of readdirSync(directory)) {
-    if (!file.endsWith('.ts') || file.includes('.test.')) continue
-    const text = readFileSync(`${directory}${file}`, 'utf8')
-    if (!text.includes('relay_assignment_activity_leases')) continue
+  const bareTableNames: string[] = []
+  const files = readdirSync(directory, { recursive: true, encoding: 'utf8' }).filter(
+    (file) => file.endsWith('.ts') && !file.includes('.test.') && !file.split(/[\\/]/).includes('test-fixtures')
+  )
+  for (const file of files) {
+    const text = readFileSync(join(directory, file), 'utf8')
+    if (!text.includes(LEASE_TABLE)) continue
     const source = ts.createSourceFile(file, text, ts.ScriptTarget.ES2022, true)
     const visit = (node: ts.Node): void => {
-      if (
-        (ts.isNoSubstitutionTemplateLiteral(node) ||
-          ts.isTemplateExpression(node) ||
-          ts.isStringLiteral(node)) &&
-        LEASE_READ.test(node.getText())
-      ) {
-        readers.add(`${file}:${enclosingName(node)}`)
-        return
+      if (ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateExpression(node) || ts.isStringLiteral(node)) {
+        if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && node.text.trim() === LEASE_TABLE) {
+          bareTableNames.push(`${file}:${enclosingName(node)}`)
+        }
+        if (LEASE_READ.test(node.getText())) {
+          readers.add(`${file}:${enclosingName(node)}`)
+          return
+        }
       }
       ts.forEachChild(node, visit)
     }
     visit(source)
   }
-  return [...readers].sort()
+  return { readers: [...readers].sort(), bareTableNames }
 }
 
 function enclosingName(node: ts.Node): string {
