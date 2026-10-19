@@ -1,7 +1,7 @@
 import { absolutePathToFileUri } from '@/components/editor/markdown-internal-links'
 import { getConnectionIdForFile } from '@/lib/connection-context'
 import { basename } from '@/lib/path'
-import { resolveOwner } from '@/lib/resolve-owner'
+import { isTwinWorkspace } from '@/lib/resolve-owner'
 import { runtimeEnvironmentIdWithLegacyFallbackUnlessTwin } from '@/lib/worktree-runtime-owner'
 import { useAppStore } from '@/store'
 
@@ -30,7 +30,7 @@ export function getWorkspaceFileBrowserOpenTarget(params: {
 }): WorkspaceFileBrowserOpenTarget {
   const state = useAppStore.getState()
   // Why: a twin reads as "no server", which must not let a file:// URL open this machine's copy.
-  if (resolveOwner(state, { workspaceId: params.worktreeId }).kind === 'ambiguous') {
+  if (isTwinWorkspace(state, params.worktreeId)) {
     return {
       status: 'unsupported',
       reason: 'remote-worktree',

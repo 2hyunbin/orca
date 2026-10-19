@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { getConnectionIdForFileFromState } from '@/lib/connection-owner-resolution'
 import { runtimeEnvironmentIdWithLegacyFallbackUnlessTwin } from '@/lib/worktree-runtime-owner'
-import { resolveOwner } from '@/lib/resolve-owner'
+import { isTwinWorkspace } from '@/lib/resolve-owner'
 import { detectLanguage } from '@/lib/language-detect'
 import {
   buildWorkspaceFileContextForFile,
@@ -81,7 +81,7 @@ export function openDocPreviewExternally(document: DocPreviewDocument): void {
     runtimeEnvironmentId === null &&
     worktreeRoot !== null &&
     // Why: a twin reads as "no server", which is not proof this machine holds the file.
-    resolveOwner(state, { workspaceId: document.worktreeId }).kind !== 'ambiguous'
+    !isTwinWorkspace(state, document.worktreeId)
   if (ownedByThisMachine && canClientOsOpenWorkspaceFile(fileContext)) {
     void window.api.shell.openFilePath(document.filePath, LOCAL_EXECUTION_HOST_ID)
     return
