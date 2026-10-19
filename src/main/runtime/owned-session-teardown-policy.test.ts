@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { RuntimeClientEvent } from '../../shared/runtime-client-events'
 import type { RuntimeNotifier } from './runtime-notifier-contract'
+import type { AgentBrowserBridge } from '../browser/agent-browser-bridge'
+import { browserManager } from '../browser/browser-manager'
 import { OWNED_SESSION_KINDS, OWNED_SESSION_TEARDOWN } from './owned-session-teardown-policy'
 import {
   getRuntimeBrowserPageRegistry,
@@ -71,7 +73,11 @@ describe('owned-session teardown policy', () => {
 
     await runtime.sleepManagedWorktree(`id:${TEST_WORKTREE_ID}`)
 
-    expect(sleepPhases()).toContain('started')
+    // Settled: the host now refuses an automatic spawn into the slept worktree.
+    expect(sleepPhases()[0]).toBe('started')
+    await expect(
+      runtime.acquireWorktreeTerminalSpawn(TEST_WORKTREE_ID, { refuseSleptWorktree: true })
+    ).rejects.toThrow()
   })
 
   it('leaves the sleep to an attached renderer', async () => {
@@ -84,6 +90,23 @@ describe('owned-session teardown policy', () => {
 
     expect(sleepWorktree).toHaveBeenCalledWith(TEST_WORKTREE_ID)
     expect(sleepPhases()).toEqual([])
+  })
+
+  it("project removal finds a headless page's workspace through the browser manager", async () => {
+    const { runtime, runtimeStore } = makeRuntime()
+    const [repo] = runtimeStore.getRepos()
+    vi.spyOn(runtimeStore, 'getRepos').mockReturnValue([])
+    vi.spyOn(getRuntimeBrowserPageRegistry(runtime), 'listPages').mockReturnValue([])
+    vi.spyOn(browserManager, 'getWorktreeIdForTab').mockReturnValue(TEST_WORKTREE_ID)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: release reads only tabList.
+    runtime.setAgentBrowserBridge({
+      tabList: () => ({ tabs: [{ browserPageId: 'headless-1' }] })
+    } as unknown as AgentBrowserBridge)
+    const release = vi.spyOn(runtime, 'releaseRemovedWorktreeHostSessions')
+
+    await runtime.stopTerminalsForProject(repo, { closeStructuredSessions: true })
+
+    expect(release).toHaveBeenCalledWith(TEST_WORKTREE_ID, 'project-removal')
   })
 
   it.each([
