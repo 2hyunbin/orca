@@ -65,14 +65,15 @@ export function projectJournalBatch(input: {
       continue
     }
     // A card's row naming its hand-off can change how that send reads (`foldQueuedHandOffInDoubt`).
+    const attempt =
+      row.kind === 'queue' && row.change.op === 'queued' ? row.change.attempt : undefined
     const clientMessageId =
       row.kind === 'submission' || row.kind === 'dispatch'
         ? row.clientMessageId
-        : row.kind === 'queue' && row.change.op === 'queued'
-          ? input.snapshot.submissions.find(
-              (submission) => submission.clientMessageId === row.change.attempt
-            )?.clientMessageId
-          : undefined
+        : attempt === undefined
+          ? undefined
+          : input.snapshot.submissions.find((submission) => submission.clientMessageId === attempt)
+              ?.clientMessageId
     if (clientMessageId !== undefined) {
       touchedClientMessageIds.add(clientMessageId)
       touchedItemIds.add(agentJournalSubmissionKey(clientMessageId))
