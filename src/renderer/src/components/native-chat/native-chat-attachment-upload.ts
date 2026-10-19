@@ -26,8 +26,6 @@ import type {
 } from '../../../../shared/agent-session-attachments'
 import type { AppState } from '@/store/types'
 import { NATIVE_FILE_DROP_MAX_PATHS } from '../../../../shared/native-file-drop'
-import type { AgentType } from '../../../../shared/agent-status-types'
-import { structuredAgentLabel } from '@/lib/structured-agent-session-launch-label'
 import { findTerminalTabWorktreeId } from './native-chat-file-link'
 
 /** A structured chat on a paired server: files upload into that server's attachment store, which
@@ -157,24 +155,6 @@ export function nativeChatWorktreeNotReadyNotice(): string {
     'components.native-chat.composer.worktreeNotReady',
     'Worktree not ready — try again in a moment.'
   )
-}
-
-export function nativeChatSessionAttachmentNotReadyNotice(
-  agent: AgentType,
-  starting: boolean
-): string {
-  const label = structuredAgentLabel(agent)
-  return starting
-    ? translate(
-        'components.native-chat.composer.sessionAttachmentsStarting',
-        '{{agent}} chat is still opening. Wait for it to open, then attach the files again.',
-        { agent: label }
-      )
-    : translate(
-        'components.native-chat.composer.sessionAttachmentsFailed',
-        '{{agent}} chat could not open. Use Retry in the chat, then attach the files again.',
-        { agent: label }
-      )
 }
 
 export function nativeChatAttachmentOwnerChangedNotice(): string {

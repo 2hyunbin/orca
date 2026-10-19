@@ -194,33 +194,6 @@ describe('a structured chat launch on a paired server', () => {
     launch?.cancel()
   })
 
-  // An older server ignores the chat's mode and would run Claude with its own bypass flag.
-  it.each(['refused', 'unverified'] as const)(
-    'starts nothing on a server whose permission verdict is %s, and says so once',
-    async (kind) => {
-      mocks.createSupport.mockResolvedValue({ supported: true })
-      mocks.hostPermission.mockResolvedValue(
-        kind === 'refused' ? { kind, hostMode: 'full-access' } : { kind }
-      )
-
-      const launch = beginStructuredAgentSessionProvisionalLaunch({
-        plan: pairedPlan(),
-        hooks: {},
-        onHostDeclined: vi.fn()
-      })
-      const settlement = await launch?.settlement
-
-      expect(mocks.hostPermission).toHaveBeenCalledWith(
-        { kind: 'environment', environmentId: 'server-1' },
-        'claude'
-      )
-      expect(settlement).toEqual(expect.objectContaining({ kind: 'failed', notified: true }))
-      expect(mocks.toastError).toHaveBeenCalledTimes(1)
-      expect(mocks.launchAgentInNewTab).not.toHaveBeenCalled()
-      expectNoChatCommitted()
-    }
-  )
-
   it('opens the chat on the server that admitted it', async () => {
     mocks.createSupport.mockResolvedValue({ supported: true })
 

@@ -71,7 +71,9 @@ async function requireHostCreateSupport(
     abandonStructuredAgentSessionLaunchIntent(intent)
     throw new StructuredAgentSessionCreateRefusalError(
       'structured_agent_session_unsupported',
-      'structured_agent_session_unsupported'
+      'structured_agent_session_unsupported',
+      undefined,
+      support.kind === 'declined' ? support.reason : undefined
     )
   }
   return support.seedOptions
@@ -82,7 +84,10 @@ async function requireHostCreateSupport(
 const STRUCTURED_LAUNCH_HOST_PERMISSION_REFUSAL = 'structured_agent_session_host_permission'
 
 async function requireHostPermission(intent: StructuredAgentSessionLaunchIntent): Promise<void> {
-  const permission = await readStructuredChatHostPermissionVerdict(intent.target, intent.agent)
+  const permission =
+    intent.target.kind === 'local'
+      ? { kind: 'allowed' as const }
+      : await readStructuredChatHostPermissionVerdict(intent.target, intent.agent)
   if (permission.kind === 'allowed') {
     return
   }
@@ -128,11 +133,9 @@ export async function launchStructuredAgentSession(
       intent.createPrepared = true
     }
   }
-  if (isCancelled()) {
-    throw new Error('structured session launch cancelled before create')
-  }
   let result: AgentSessionMutationResult<AgentSessionAttachResult>
-  if (intent.beforeCreate?.() === false) {
+  // Nothing is created for a chat closed while its host was asked, or whose source retired.
+  if (isCancelled() || intent.beforeCreate?.() === false) {
     abandonStructuredAgentSessionLaunchIntent(intent)
     throw new StructuredAgentSessionCreateAbandonedError(
       'Conversation source retired before create.'

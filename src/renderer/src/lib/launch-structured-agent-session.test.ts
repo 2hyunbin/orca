@@ -61,7 +61,11 @@ describe('structured agent session launch', () => {
   // The chat opens before its host answers, so the create is the last thing that can say no.
   it('issues no create to a host held for its access, or after its chat closed', async () => {
     vi.mocked(callStructuredAgentSession).mockResolvedValue({ supported: true })
-    const held = createStructuredAgentSessionLaunchIntent('workspace-1', 'claude')
+    const held = createStructuredAgentSessionLaunchIntent(
+      'workspace-1',
+      'claude',
+      'runtime:server-1'
+    )
     hostPermission.mockResolvedValueOnce({ kind: 'refused', hostMode: null })
     await expect(launchStructuredAgentSession(held)).rejects.toMatchObject({
       code: 'structured_agent_session_host_permission'
@@ -69,7 +73,7 @@ describe('structured agent session launch', () => {
     const closed = createStructuredAgentSessionLaunchIntent('workspace-1', 'claude')
     await expect(
       launchStructuredAgentSession(closed, undefined, false, () => true)
-    ).rejects.toThrow('cancelled before create')
+    ).rejects.toThrow('retired before create')
     expect(vi.mocked(callStructuredAgentSession).mock.calls.map(([, method]) => method)).toEqual([
       'agentSession.createSupport',
       'agentSession.createSupport'
@@ -379,30 +383,27 @@ describe('structured agent session launch', () => {
     }
   })
 
-  it.each([undefined, { model: 'sonnet' }])(
-    "reports the paired host's seed answer, including a seedless older host (%s)",
-    async (seedOptions) => {
-      vi.mocked(callStructuredAgentSession).mockImplementation(async (_target, method) =>
-        method === 'agentSession.createSupport'
-          ? { supported: true, seedOptions }
-          : { ok: true, replayed: false, value: { sessionId: 'claude_1', fence: 1 } }
-      )
-      const paired = vi.fn()
-      const local = vi.fn()
+  it("reports a paired server's current seed from the create probe, and no local one", async () => {
+    vi.mocked(callStructuredAgentSession).mockImplementation(async (_target, method) =>
+      method === 'agentSession.createSupport'
+        ? { supported: true, seedOptions: { model: 'sonnet' } }
+        : { ok: true, replayed: false, value: { sessionId: 'claude_1', fence: 1 } }
+    )
+    const paired = vi.fn()
+    const local = vi.fn()
 
-      await launchStructuredAgentSession(
-        createStructuredAgentSessionLaunchIntent('workspace-1', 'claude', 'runtime:server-1'),
-        paired
-      )
-      await launchStructuredAgentSession(
-        createStructuredAgentSessionLaunchIntent('workspace-1', 'claude', 'local'),
-        local
-      )
+    await launchStructuredAgentSession(
+      createStructuredAgentSessionLaunchIntent('workspace-1', 'claude', 'runtime:server-1'),
+      paired
+    )
+    await launchStructuredAgentSession(
+      createStructuredAgentSessionLaunchIntent('workspace-1', 'claude', 'local'),
+      local
+    )
 
-      expect(paired).toHaveBeenCalledWith(seedOptions)
-      expect(local).not.toHaveBeenCalled()
-    }
-  )
+    expect(paired).toHaveBeenCalledWith({ model: 'sonnet' })
+    expect(local).not.toHaveBeenCalled()
+  })
 
   it("seeds a paired chat with the server's reported selection, kept through a retry", () => {
     const intent = createStructuredAgentSessionLaunchIntent(

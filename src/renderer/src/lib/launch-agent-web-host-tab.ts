@@ -31,6 +31,8 @@ export function launchAgentInWebHostTab(args: {
   submitPastedPrompt: boolean
   agentArgs?: string | null
   viewMode?: Tab['viewMode']
+  /** False opens the host's tab without selecting it. */
+  activate?: boolean
   onPromptDelivered?: () => void
 }): Promise<{ delivered: boolean; failureNotified: boolean }> {
   const {
@@ -56,7 +58,7 @@ export function launchAgentInWebHostTab(args: {
     worktreeId,
     environmentId,
     targetGroupId: groupId,
-    activate: true,
+    activate: args.activate !== false,
     ...(cwd?.trim() ? { cwd } : {}),
     ...(viewMode ? { viewMode } : {}),
     agentSessionKind: 'fresh',

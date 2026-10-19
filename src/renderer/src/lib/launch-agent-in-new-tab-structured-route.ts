@@ -28,7 +28,10 @@ export function launchStructuredAgentFromNewTab(args: {
   focusIntent?: NativeChatComposerFocusIntent
   beforeSurfaceOpen?: LaunchAgentInNewTabArgs['beforeSurfaceOpen']
   onHostDeclined?: () => StructuredLaunchTerminal
-  openTerminal: (terminalPlan: AgentSessionLaunchPlan) => {
+  openTerminal: (
+    terminalPlan: AgentSessionLaunchPlan,
+    activate?: false
+  ) => {
     promptDeliveryResult?: Promise<StructuredPromptDeliveryResult>
   } | null
 }): StructuredFromNewTab | null {
@@ -42,7 +45,7 @@ export function launchStructuredAgentFromNewTab(args: {
     ...(args.focusIntent ? { focusIntent: args.focusIntent } : {}),
     target: { worktreeId: args.worktreeId },
     ...(args.groupId ? { targetGroupId: args.groupId } : {}),
-    onHostDeclined: () => {
+    onHostDeclined: (_target, activate) => {
       if (args.onHostDeclined) {
         return args.onHostDeclined()
       }
@@ -52,7 +55,8 @@ export function launchStructuredAgentFromNewTab(args: {
           requestId: plan.requestId,
           agent: plan.agent,
           worktreeId: args.worktreeId
-        })
+        }),
+        activate
       )
       return {
         opened: terminal !== null,
@@ -64,7 +68,9 @@ export function launchStructuredAgentFromNewTab(args: {
   })
   return (
     launch && {
-      surface: { kind: 'host-published' },
+      surface: launch.tab
+        ? { kind: 'local-chat', tabId: launch.tab.id }
+        : { kind: 'host-published' },
       pasteDraftAfterLaunch: false,
       structuredSettlement: launch.settlement,
       ...(launch.promptDeliveryResult ? { promptDeliveryResult: launch.promptDeliveryResult } : {})

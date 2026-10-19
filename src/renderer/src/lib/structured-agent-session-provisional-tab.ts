@@ -1,41 +1,35 @@
-import type { Tab } from '../../../shared/tab-types'
 import type {
   AgentSessionLaunchPlan,
   AgentSessionLaunchTarget
 } from '@/lib/agent-session-launch-plan'
 import type {
   StructuredAgentLaunchHandle,
-  StructuredAgentLaunchHooks,
-  StructuredAgentLaunchSettlement
+  StructuredAgentLaunchHooks
 } from '@/lib/structured-agent-launch-settlement'
 import { useAppStore } from '@/store'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import {
   beginHostAdmittedStructuredLaunch,
-  openDeclinedStructuredLaunchTerminal,
-  type DeclinedStructuredLaunchTerminalOptions,
-  type HostAdmittedStructuredLaunch,
-  type StructuredLaunchTerminal
+  type HostAdmittedStructuredLaunch
 } from '@/lib/structured-agent-session-launch-admission'
 import {
   resolveStructuredAgentSessionOwner,
-  structuredAgentSessionFocusOwner,
   structuredAgentSessionTargetForHost
 } from '@/runtime/structured-agent-session-owner'
-import { clearWebSessionFocusIntentIfMatches } from '@/runtime/web-session-focus-intent'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
-import type { NativeChatComposerFocusIntent } from '@/components/native-chat/use-native-chat-composer-reveal-focus'
-import { structuredAgentSessionDraftScopeKey } from '@/components/native-chat/native-chat-composer-draft-store'
-import { nativeChatComposerHasUserContent } from '@/components/native-chat/native-chat-pending-attachment-cache'
-import { StructuredAgentSessionCreateRefusalError } from '@/lib/structured-agent-session-launch-errors'
+import {
+  adoptActionLaunch,
+  openDeclinedTerminal,
+  opensAtAction,
+  type LocalProvisionalLaunch,
+  type ProvisionalLaunchArgs
+} from './structured-agent-session-action-launch'
 import { holdEmptyWorkspaceDefaultSurfaceForLaunch } from './empty-workspace-default-surface-claims'
 import {
   captureStructuredLaunchSurfaceAddress,
   openStructuredAgentSessionProvisionalTab
 } from './structured-agent-session-launch-surface'
 export { openStructuredAgentSessionProvisionalTab } from './structured-agent-session-launch-surface'
-
-type LocalProvisionalLaunch = StructuredAgentLaunchHandle & { tab: Tab }
 
 /** A chat's tab opens once its host admits it; a launch with no host to ask takes the direct path. */
 export type StructuredAgentSessionProvisionalLaunch =
@@ -60,119 +54,9 @@ export function structuredLaunchOwner(
   return executionHostId && hostTarget ? { executionHostId, target: hostTarget } : null
 }
 
-type ProvisionalLaunchArgs = {
-  plan: AgentSessionLaunchPlan
-  hooks: StructuredAgentLaunchHooks
-  focusIntent?: NativeChatComposerFocusIntent
-  target?: AgentSessionLaunchTarget
-  targetGroupId?: string
-  /** The tab the chat opens right after, in that tab's group. */
-  afterTabId?: string
-  activate?: boolean
-  /** Identity-only resumes publish on commit; unknown outcomes keep their recovery tab. */
-  deferPublication?: true
-  /** Lets workspace flows reveal before the chat's tab is owned: before its host is asked, when no
-   *  session id exists yet. */
-  beforeOpen?: (sessionId?: string) => boolean | void
-  /** The terminal the host's "no" opens; a caller without one gets a new agent tab's. */
-  onHostDeclined?: (
-    target: RuntimeClientTarget
-  ) => Promise<StructuredLaunchTerminal> | StructuredLaunchTerminal
-  /** What that default terminal carries from the caller, e.g. a recipe's saved CLI arguments. */
-  declinedTerminal?: DeclinedStructuredLaunchTerminalOptions
-}
-
-type LaunchOwner = { executionHostId: ExecutionHostId; target: RuntimeClientTarget }
-type LocalLaunchResult = ReturnType<typeof beginLocalProvisionalLaunch>
-
 /** Only a launch that takes the user to its chat may ask host publication to select it. */
 function launchHooks(args: ProvisionalLaunchArgs): StructuredAgentLaunchHooks {
-  return { ...args.hooks, activate: args.activate !== false }
-}
-
-function openDeclinedTerminal(
-  args: ProvisionalLaunchArgs,
-  worktreeId: string,
-  target: RuntimeClientTarget
-): Promise<StructuredLaunchTerminal> | StructuredLaunchTerminal {
-  if (args.onHostDeclined) {
-    return args.onHostDeclined(target)
-  }
-  return openDeclinedStructuredLaunchTerminal({
-    plan: args.plan,
-    worktreeId,
-    ...(args.targetGroupId ? { targetGroupId: args.targetGroupId } : {}),
-    ...(args.declinedTerminal ? { terminal: args.declinedTerminal } : {})
-  })
-}
-
-/** A New Chat the user just asked for opens its chat now, so the next key has a composer; its own
- *  launch asks the host. A prompt to deliver keeps asking first: a "no" hands it to a terminal. */
-function opensAtAction(args: ProvisionalLaunchArgs): boolean {
-  const { plan } = args
-  return (
-    args.focusIntent !== undefined &&
-    args.activate !== false &&
-    !plan.resumeFrom &&
-    (!plan.prompt?.trim() || plan.promptDelivery === 'draft')
-  )
-}
-
-/** A definite "no" to a chat nobody typed in yet opens its terminal in the chat's place, where
- *  asking first used to land. A chat with typing keeps it. */
-async function openTerminalForDeclinedChat(
-  args: ProvisionalLaunchArgs,
-  worktreeId: string,
-  owner: LaunchOwner,
-  tab: Tab,
-  settlement: StructuredAgentLaunchSettlement
-): Promise<StructuredAgentLaunchSettlement> {
-  const scopeKey = structuredAgentSessionDraftScopeKey(tab.entityId)
-  if (
-    settlement.kind !== 'failed' ||
-    !(settlement.error instanceof StructuredAgentSessionCreateRefusalError) ||
-    settlement.error.code !== 'structured_agent_session_unsupported' ||
-    nativeChatComposerHasUserContent(scopeKey)
-  ) {
-    return settlement
-  }
-  const terminal = await openDeclinedTerminal(args, worktreeId, owner.target)
-  if (!terminal.opened || nativeChatComposerHasUserContent(scopeKey)) {
-    return settlement
-  }
-  useAppStore.getState().closeUnifiedTab(tab.id)
-  return { kind: 'terminal' }
-}
-
-function beginActionLaunch(
-  args: ProvisionalLaunchArgs,
-  worktreeId: string,
-  owner: LaunchOwner,
-  open: (launch: LocalLaunchResult) => LocalLaunchResult
-): LocalLaunchResult {
-  const launch = open(
-    beginLocalProvisionalLaunch({
-      ...args,
-      target: { ...args.target, worktreeId, executionHostId: owner.executionHostId },
-      beforeOpen: undefined
-    })
-  )
-  const tab = launch?.tab
-  if (!launch || !tab) {
-    return launch
-  }
-  // The chat is already the visible tab; its host's copy arriving later must not pull focus back.
-  clearWebSessionFocusIntentIfMatches(
-    structuredAgentSessionFocusOwner(owner.target),
-    worktreeId,
-    `agent-session:${launch.sessionId}`
-  )
-  return {
-    ...launch,
-    settlement: launch.settlement.then((settlement) =>
-      openTerminalForDeclinedChat(args, worktreeId, owner, tab, settlement)
-    )
-  }
+  return args.activate === false ? { ...args.hooks, activate: false } : args.hooks
 }
 
 /** Binds the launch to a chat tab: at once for a New Chat the user asked for, otherwise once its
@@ -215,7 +99,17 @@ export function beginStructuredAgentSessionProvisionalLaunch(
       return open(beginLocalProvisionalLaunch(args))
     }
     if (opensAtAction(args)) {
-      return beginActionLaunch(args, worktreeId, owner, open)
+      const launch = open(
+        beginLocalProvisionalLaunch({
+          ...args,
+          target: { ...args.target, worktreeId, executionHostId: owner.executionHostId },
+          beforeOpen: undefined
+        })
+      )
+      if (!launch || launch.tab === null) {
+        return launch
+      }
+      return adoptActionLaunch(args, worktreeId, owner, { ...launch, tab: launch.tab })
     }
     if (args.deferPublication && !args.target?.surfaceAddress) {
       args = {

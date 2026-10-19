@@ -45,7 +45,7 @@ function nativeChatLaunchNotice({
         )
   const cause =
     lifecycle === 'failed' && failure
-      ? (failure.authStartupMessage ??
+      ? (failure.causeText ??
         agentSessionWriteNoticeText(
           agentSessionRefusalCauseParts(failure, agentLabel ? { agentName: agentLabel } : {})
         ))

@@ -89,9 +89,10 @@ export type LaunchAgentInNewTabArgs = LaunchAgentInNewTabRequest & {
   onStructuredHostDeclined?: () => StructuredLaunchTerminal
 }
 
-/** `host-published`: the surface opens once its host answers, a structured chat's included. */
+/** `host-published`: the surface opens once its host answers; `local-chat` opened before it did. */
 export type AgentLaunchSurface =
   | { kind: 'local-terminal'; tabId: string }
+  | { kind: 'local-chat'; tabId: string }
   | { kind: 'host-published' }
 
 export type LaunchAgentInNewTabResult = {
@@ -119,7 +120,7 @@ export function shouldQueueTerminalFocusAfterMenuClose(
  *
  * Returns `null` when no startup plan can be built (e.g. a whitespace-only prompt).
  */
-function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgentInNewTabResult {
+export function launchAgentInNewTab(args: LaunchAgentInNewTabArgs): LaunchAgentInNewTabResult {
   const {
     agent,
     worktreeId,
@@ -193,7 +194,7 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
     ...(args.promptKeptByCaller ? { promptKeptByCaller: true as const } : {})
   })
   if ('awaited' in route) {
-    return launchOnceHostAnswered(route, args, startupPlan, launchAgentInNewTabInternal)
+    return launchOnceHostAnswered(route, args, startupPlan, launchAgentInNewTab)
   }
   const { plan } = route
   if (plan?.route === 'structured-native-chat') {
@@ -205,12 +206,13 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
       ...(beforeSurfaceOpen ? { beforeSurfaceOpen } : {}),
       ...(args.onStructuredHostDeclined ? { onHostDeclined: args.onStructuredHostDeclined } : {}),
       // The host's "no" opens this same launch as a terminal, with the caller's arguments.
-      openTerminal: (terminalPlan) =>
-        launchAgentInNewTabInternal({
+      openTerminal: (terminalPlan, terminalActivate) =>
+        launchAgentInNewTab({
           ...args,
           beforeSurfaceOpen: undefined,
           requestId: undefined,
-          agentSessionLaunchPlan: terminalPlan
+          agentSessionLaunchPlan: terminalPlan,
+          ...(terminalActivate === false ? { activate: false } : {})
         })
     })
     if (!structured) {
@@ -241,6 +243,7 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
       // Why: omission means terminal locally, but would let a paired host apply
       // its own default; send the client's resolved terminal choice explicitly.
       viewMode: 'terminal',
+      ...(activate === false ? { activate } : {}),
       onPromptDelivered
     })
     return {
@@ -341,8 +344,10 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
   }
 
   // Why: without setActiveTabType('terminal') an activated launch can stay hidden behind an editor.
-  // Scoped to the launch's worktree so a floating or background launch leaves the main window's tab alone.
-  store.setActiveTabType('terminal', worktreeId)
+  // Scoped to the launch's worktree so a floating launch leaves the main window's tab alone.
+  if (activate !== false) {
+    store.setActiveTabType('terminal', worktreeId)
+  }
 
   // Why: persist tab-bar order so reconcileTabOrder doesn't fall back to terminals-first and jump the new tab to index 0.
   persistAgentLaunchTabOrder(worktreeId, tab.id)
@@ -353,8 +358,4 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
     pasteDraftAfterLaunch: pasteDraftAfterLaunch !== null,
     ...(promptDeliveryResult ? { promptDeliveryResult } : {})
   }
-}
-
-export function launchAgentInNewTab(args: LaunchAgentInNewTabArgs): LaunchAgentInNewTabResult {
-  return launchAgentInNewTabInternal(args)
 }

@@ -97,47 +97,44 @@ describe('a provisional structured chat tab', () => {
   })
 
   it.each([
-    ['nobody typed: its terminal opens in its place', '', false, { kind: 'terminal' }],
-    ['typed in: the chat keeps it', 'half a thought', false, { kind: 'failed' }],
-    ['pasting an image: the chat keeps it', '', true, { kind: 'failed' }]
-  ])('a New Chat its host refuses, %s', async (_name, typed, pasting, settled) => {
-    const onHostDeclined = vi.fn(() => ({ opened: true }))
-    const launch = beginStructuredAgentSessionProvisionalLaunch({
-      plan: planSettlingAs(declined()),
-      hooks: {},
-      focusIntent: { request: mocks.requestFocus, cancel: mocks.cancelFocus },
-      onHostDeclined
-    })
-    mocks.draftText.value = typed
-    if (pasting) {
-      addNativeChatPendingAttachment('agent-session:claude_1', {
-        id: 'paste-1', path: '', pending: true
+    ['nobody typed: its terminal opens in its place', '', false, undefined, 'front'],
+    [
+      'typed in: the chat keeps it, its terminal opens behind',
+      'half a thought',
+      false,
+      undefined,
+      'back'
+    ],
+    ['pasting an image: the chat keeps it', '', true, undefined, 'back'],
+    ['picked as a chat: it stays a chat and says why', '', false, 'chat' as const, null]
+  ])(
+    'a New Chat its host refuses, %s',
+    async (_name, typed, pasting, requestedSurface, terminal) => {
+      const onHostDeclined = vi.fn(() => ({ opened: true }))
+      const launch = beginStructuredAgentSessionProvisionalLaunch({
+        plan: { ...planSettlingAs(declined()), ...(requestedSurface ? { requestedSurface } : {}) },
+        hooks: {},
+        focusIntent: { request: mocks.requestFocus, cancel: mocks.cancelFocus },
+        onHostDeclined
       })
+      mocks.draftText.value = typed
+      if (pasting) {
+        addNativeChatPendingAttachment('agent-session:claude_1', {
+          id: 'paste-1',
+          path: '',
+          pending: true
+        })
+      }
+
+      await expect(launch?.settlement).resolves.toMatchObject({
+        kind: terminal === 'front' ? 'terminal' : 'failed'
+      })
+      expect(onHostDeclined.mock.calls).toEqual(
+        terminal === 'back' ? [[{ kind: 'local' }, false]] : terminal ? [[{ kind: 'local' }]] : []
+      )
+      expect(mocks.closeUnifiedTab).toHaveBeenCalledTimes(terminal === 'front' ? 1 : 0)
     }
-
-    await expect(launch?.settlement).resolves.toMatchObject(settled)
-    expect(onHostDeclined).toHaveBeenCalledTimes(typed || pasting ? 0 : 1)
-    expect(mocks.closeUnifiedTab).toHaveBeenCalledTimes(typed || pasting ? 0 : 1)
-  })
-
-  it('keeps text entered while its fallback terminal is opening', async () => {
-    let open!: (terminal: { opened: boolean }) => void
-    const onHostDeclined = vi.fn(
-      () => new Promise<{ opened: boolean }>((resolve) => { open = resolve })
-    )
-    const launch = beginStructuredAgentSessionProvisionalLaunch({
-      plan: planSettlingAs(declined()),
-      hooks: {},
-      focusIntent: { request: mocks.requestFocus, cancel: mocks.cancelFocus },
-      onHostDeclined
-    })
-    await Promise.resolve()
-    expect(onHostDeclined).toHaveBeenCalledOnce()
-    mocks.draftText.value = 'keep this thought'
-    open({ opened: true })
-    await expect(launch?.settlement).resolves.toMatchObject({ kind: 'failed' })
-    expect(mocks.closeUnifiedTab).not.toHaveBeenCalled()
-  })
+  )
 
   it('asks first for a launch that carries a prompt, so a "no" can hand it on', async () => {
     const launch = beginStructuredAgentSessionProvisionalLaunch({

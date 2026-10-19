@@ -23,8 +23,7 @@ import type { StructuredPromptDeliveryResult } from '@/lib/structured-agent-sess
 import type { LaunchAgentInNewTabArgs } from '@/lib/launch-agent-in-new-tab'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { toRuntimeWorktreeSelector } from '@/runtime/runtime-worktree-selector'
-import { readStructuredChatHostPermissionVerdict } from '@/runtime/structured-chat-host-permission'
-import { notifyHostPermissionRefused } from '@/lib/structured-agent-session-launch-permission-notice'
+import { structuredChatUnavailableText } from '@/lib/structured-agent-session-launch-failure'
 
 /** What a host's "no" opens instead: the terminal the launch would have opened had it known. */
 export type StructuredLaunchTerminal = {
@@ -62,27 +61,11 @@ function notifyExplicitChatFailure(agent: TuiAgent, reason?: string): void {
       "Couldn't start a {{value0}} chat.",
       { value0: structuredAgentLabel(agent) }
     ),
-    {
-      description:
-        reason === 'wsl'
-          ? translate(
-              'components.native-chat.explicitChatWsl',
-              'Chat is not available in WSL. Open the agent in a terminal instead.'
-            )
-          : reason === 'remote'
-            ? translate(
-                'components.native-chat.explicitChatSsh',
-                'Chat is not available over SSH. Open the agent in a terminal instead.'
-              )
-            : translate(
-                'components.native-chat.explicitChatUnavailable',
-                'This workspace cannot run the chat. Check the agent installation or open it in a terminal.'
-              )
-    }
+    { description: structuredChatUnavailableText(reason) }
   )
 }
 
-function notifyHostDeclined(agent: TuiAgent): void {
+export function notifyHostDeclined(agent: TuiAgent): void {
   const agentLabel = structuredAgentLabel(agent)
   toast.info(
     translate(
@@ -123,7 +106,7 @@ function notifyHostUnreachable(agent: TuiAgent, executionHostId: ExecutionHostId
 /** What the caller's own terminal launch would have carried beyond the plan's agent and prompt. */
 export type DeclinedStructuredLaunchTerminalOptions = Pick<
   LaunchAgentInNewTabArgs,
-  'agentArgs' | 'launchPlatform' | 'launchSource' | 'initialCwd'
+  'agentArgs' | 'launchPlatform' | 'launchSource' | 'initialCwd' | 'activate'
 >
 
 /** A caller with no terminal path of its own gets the one a new agent tab would open. */
@@ -190,6 +173,8 @@ export function beginHostAdmittedStructuredLaunch(args: {
         resolveDelivery = resolve
       })
     : undefined
+  // Reached by an explicit chat that carries a prompt; one without opens before its host answers,
+  // and its chat says why instead.
   const failBeforeSurface = (error: unknown, reason?: string): StructuredAgentLaunchSettlement => {
     if (plan.requestedSurface === 'chat' && !admitted) {
       notifyExplicitChatFailure(plan.agent, reason)
@@ -245,23 +230,6 @@ export function beginHostAdmittedStructuredLaunch(args: {
           Promise.resolve(terminal.opened ? DELIVERED : NOT_DELIVERED)
         ).then(resolveDelivery, () => resolveDelivery(NOT_DELIVERED))
         return terminal.opened ? { kind: 'terminal' } : { kind: 'cancelled', sessionId: null }
-      }
-      // A host that would run the chat with more access than asked for gets nothing to start.
-      const permission = paired
-        ? await readStructuredChatHostPermissionVerdict(args.target, plan.agent)
-        : { kind: 'allowed' as const }
-      if (isCancelled()) {
-        resolveDelivery(NOT_DELIVERED)
-        return { kind: 'cancelled', sessionId: null }
-      }
-      if (permission.kind !== 'allowed') {
-        notifyHostPermissionRefused(plan.agent, permission.kind)
-        resolveDelivery({ delivered: false, failureNotified: true })
-        return {
-          kind: 'failed',
-          error: new Error('structured chat host runs with more access than asked for'),
-          notified: true
-        }
       }
       admitted = args.openAdmitted(
         admission.kind === 'admitted' ? admission.seedOptions : undefined

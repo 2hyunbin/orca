@@ -26,7 +26,7 @@ vi.mock('@/runtime/host-structured-agents', () => ({
 import { useNativeChatStructuredComposerTransport } from './use-native-chat-structured-composer-transport'
 import type { useStructuredAgentSession } from './use-structured-agent-session'
 
-function composerTransport(reported: boolean | undefined, transportEnabled = true, starting = false) {
+function composerAcceptsImages(reported: boolean | undefined): boolean | undefined {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: building the transport reads only these members; nothing is sent.
   const controller = { acceptsImages: reported } as unknown as ReturnType<
     typeof useStructuredAgentSession
@@ -36,8 +36,8 @@ function composerTransport(reported: boolean | undefined, transportEnabled = tru
       props: { agent: 'grok', sessionId: 'session-1', target: { kind: 'local' } },
       controller,
       sendThroughLaunch: () => false,
-      starting,
-      transportEnabled,
+      starting: false,
+      transportEnabled: true,
       worktreeId: undefined,
       optionPickerRequest: null,
       setOptionPickerRequest: () => {},
@@ -45,24 +45,14 @@ function composerTransport(reported: boolean | undefined, transportEnabled = tru
       onSubmitted: () => {}
     })
   )
-  return result.current
+  return result.current.acceptsImages
 }
 
 describe('the structured composer image gate', () => {
   it("follows the session's options answer over the host's agent list", () => {
-    expect(composerTransport(false).acceptsImages).toBe(false)
-    expect(composerTransport(true).acceptsImages).toBe(true)
+    expect(composerAcceptsImages(false)).toBe(false)
+    expect(composerAcceptsImages(true)).toBe(true)
     // No answer yet, or an older host: the agent list decides.
-    expect(composerTransport(undefined).acceptsImages).toBe(true)
-  })
-
-  it('keeps failed uploads gated after starting ends and unlocks only on publication', () => {
-    const pending = composerTransport(true, false, true)
-    const failed = composerTransport(true, false, false)
-    expect(pending.sessionPending).toBe(true)
-    expect(pending.sessionPendingNotice).toContain('Grok chat is still opening')
-    expect(failed.sessionPending).toBe(true)
-    expect(failed.sessionPendingNotice).toContain('Use Retry in the chat')
-    expect(composerTransport(true, true).sessionPending).toBeUndefined()
+    expect(composerAcceptsImages(undefined)).toBe(true)
   })
 })

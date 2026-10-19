@@ -4,6 +4,7 @@ import type { WindowsTerminalCapabilities } from '@/lib/windows-terminal-capabil
 import { useAppStore } from '../../store'
 import type { TabAgentLaunchOption } from './tab-agent-launch-options'
 import { useTabAgentMenuLaunch } from './QuickLaunchButton'
+import { queueChatFocusAtNewTabMenuClose } from './new-tab-menu-chat-focus'
 import { useNewTabAgentMenuRows, type NewTabAgentMenuModel } from './use-new-tab-agent-menu-rows'
 import type { AgentDetectionTarget } from '@/hooks/useDetectedAgents'
 import { buildTabAgentLaunchOptionsFromRows } from './tab-agent-launch-options'
@@ -233,7 +234,8 @@ export function useTabBarCreateMenuController({
     groupId: resolvedGroupId,
     launchSource: 'tab_bar_quick_launch',
     onFocusTerminal: queueTerminalTabFocusAfterNewTabMenuClose,
-    onFocusHostTerminal: queueNewActiveTerminalFocusAfterNewTabMenuClose
+    onFocusHostTerminal: queueNewActiveTerminalFocusAfterNewTabMenuClose,
+    onFocusChat: queueChatFocusAtNewTabMenuClose
   })
   const launchAgentFromNewTabEntry = (option: TabAgentLaunchOption): void => {
     if (option.row) {
