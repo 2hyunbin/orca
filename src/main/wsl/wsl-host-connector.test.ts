@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../wsl-background-distro-gate', () => ({
   readConfirmedRunningWslDistros: mocks.readRunning
 }))
-vi.mock('../ssh/orcad-managed-tunnel-identity', () => ({
+vi.mock('../managed-server/lifecycle/orcad-managed-tunnel-identity', () => ({
   verifyOrcadPairingIdentity: mocks.verify
 }))
 vi.mock('./wsl-orcad-liveness-wiring', () => ({

@@ -2,7 +2,7 @@
 import { readConfirmedRunningWslDistros } from '../wsl-background-distro-gate'
 import { parsePairingCode } from '../../shared/pairing'
 import { pairedRuntimeConnectionFromOffer } from '../../shared/paired-runtime-connection'
-import { verifyOrcadPairingIdentity } from '../ssh/orcad-managed-tunnel-identity'
+import { verifyOrcadPairingIdentity } from '../managed-server/lifecycle/orcad-managed-tunnel-identity'
 import { createWslDistroHolder, type WslDistroHolder } from './wsl-distro-holder'
 import { listWslHostDistros } from './wsl-host-distro-list'
 import type { WslHostConnector } from './wsl-host-service'
