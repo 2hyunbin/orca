@@ -5,7 +5,7 @@ import {
   OrcadManagedIdentityError,
   verifyOrcadPairingIdentity,
   type OrcadTunnelIdentity
-} from '../ssh/orcad-managed-tunnel-identity'
+} from '../managed-server/lifecycle/orcad-managed-tunnel-identity'
 import { tunneledOrcadPairingCode } from '../ssh/orcad-tunneled-pairing'
 import type { WslOrcadLaunch } from './wsl-orcad-deploy'
 

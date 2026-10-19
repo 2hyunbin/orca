@@ -9,6 +9,7 @@ import type {
   RuntimeMobileSessionTabsSnapshot
 } from '../../shared/runtime-types'
 import type { Tab } from '../../shared/tab-types'
+import { editorTabShowsFile } from '../../shared/workspace-layout/workspace-layout-editor-tab-file'
 import type {
   PersistedOpenFile,
   WorkspaceSessionState
@@ -19,10 +20,10 @@ export type HeadlessEditorTab = RuntimeMobileSessionMarkdownTab | RuntimeMobileS
 function editorUnifiedTab(
   session: WorkspaceSessionState,
   worktreeId: string,
-  filePath: string
+  file: PersistedOpenFile
 ): Tab | undefined {
   return (session.unifiedTabs?.[worktreeId] ?? []).find(
-    (tab) => tab.contentType === 'editor' && tab.entityId === filePath
+    (tab) => tab.contentType === 'editor' && editorTabShowsFile(tab.entityId, file, worktreeId)
   )
 }
 
@@ -31,7 +32,8 @@ function editorTab(
   worktreeId: string,
   file: PersistedOpenFile
 ): HeadlessEditorTab {
-  const unifiedTab = editorUnifiedTab(session, worktreeId, file.filePath)
+  const unifiedTab = editorUnifiedTab(session, worktreeId, file)
+  const activeFileId = session.activeFileIdByWorktree?.[worktreeId]
   const common = {
     // A file's id is its path, which is also the unified tab's entity.
     id: unifiedTab?.id ?? file.filePath,
@@ -41,7 +43,8 @@ function editorTab(
     isDirty: file.dirtyDraftContent !== undefined,
     isActive:
       session.activeTabTypeByWorktree?.[worktreeId] === 'editor' &&
-      session.activeFileIdByWorktree?.[worktreeId] === file.filePath,
+      !!activeFileId &&
+      editorTabShowsFile(activeFileId, file, worktreeId),
     color: unifiedTab?.color ?? null,
     isPinned: unifiedTab?.isPinned === true
   }
@@ -87,7 +90,7 @@ export function retireHeadlessEditorTab(
   if (file.dirtyDraftContent !== undefined && !force) {
     throw new Error(HEADLESS_EDITOR_UNSAVED_DRAFT_ERROR)
   }
-  const unifiedTabId = editorUnifiedTab(session, worktreeId, tab.filePath)?.id ?? tab.id
+  const unifiedTabId = editorUnifiedTab(session, worktreeId, file)?.id ?? tab.id
   const withoutTab = (ids: readonly string[] | undefined): string[] | undefined =>
     ids?.filter((id) => id !== unifiedTabId)
   const groups = (session.tabGroups?.[worktreeId] ?? []).map((group) => ({
@@ -96,7 +99,8 @@ export function retireHeadlessEditorTab(
     tabOrder: withoutTab(group.tabOrder) ?? [],
     ...(group.recentTabIds ? { recentTabIds: withoutTab(group.recentTabIds) } : {})
   }))
-  const wasActiveFile = session.activeFileIdByWorktree?.[worktreeId] === tab.filePath
+  const activeFileId = session.activeFileIdByWorktree?.[worktreeId]
+  const wasActiveFile = !!activeFileId && editorTabShowsFile(activeFileId, file, worktreeId)
   return {
     ...session,
     openFilesByWorktree: {
