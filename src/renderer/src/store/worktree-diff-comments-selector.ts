@@ -13,6 +13,7 @@ import type { AppState } from './types'
 import { getIndexedWorktreeById } from './worktree-repo-index'
 import { findFolderWorkspaceOwner } from '@/lib/folder-workspace-runtime-owner'
 import { namedHostForOwnerRef } from '@/lib/resolve-owner'
+import { findIndexedWorktreeOwnerForHost } from '@/lib/worktree-runtime-owner-index'
 import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 
@@ -60,11 +61,21 @@ function onlyCopy(copies: readonly DiffCommentCopy[]): DiffCommentCopy | null {
   return copies.length === 1 ? copies[0] : null
 }
 
+function diffCommentCopyNotesOrUndefined(copy: DiffCommentCopy | null): DiffComment[] | undefined {
+  return copy ? diffCommentCopyNotes(copy) : undefined
+}
+
+/** The copy's notes; the last duplicate wins, as in the id index the rest of the app reads. */
+export function diffCommentCopyNotes(copy: DiffCommentCopy): DiffComment[] | undefined {
+  return copy.worktrees.at(-1)?.diffComments
+}
+
 /**
  * The copy of a worktree whose review notes a change reads or writes. The same id on two hosts is
  * a twin, picked by, in order: the copy a queued write captured; the one copy holding the notes the
  * change names (UUIDs, so an async delivery still finds its copy after navigation); the open
- * workspace's host. Nothing else guesses.
+ * workspace's host, read with the owner index's host semantics; else the only copy. A named host
+ * no copy matches is a refusal, never the remaining copy.
  */
 export function findDiffCommentCopy(
   state: Pick<
@@ -89,16 +100,15 @@ export function findDiffCommentCopy(
   }
   const copies = [...byKey.values()]
   if (hint.key) {
-    return byKey.get(hint.key) ?? null
-  }
-  if (copies.length <= 1) {
-    return copies[0] ?? null
+    // Why: a listing refresh may stamp an unstamped row mid-queue; that is still the same row.
+    const unstamped = hint.key === composeWorktreeHostIdentity(undefined, worktreeId)
+    return byKey.get(hint.key) ?? (unstamped ? onlyCopy(copies) : null)
   }
   const { commentIds } = hint
   const holder = commentIds?.size
     ? onlyCopy(
         copies.filter((copy) =>
-          copy.worktrees[0].diffComments?.some((comment) => commentIds.has(comment.id))
+          diffCommentCopyNotes(copy)?.some((comment) => commentIds.has(comment.id))
         )
       )
     : null
@@ -106,14 +116,14 @@ export function findDiffCommentCopy(
     return holder
   }
   const named = namedHostForOwnerRef(state, { workspaceId: worktreeId })
-  // Why both: the selection names a row's own stamp, which a paired server's row may not route by.
-  return named
-    ? onlyCopy(
-        copies.filter(
-          (copy) => copy.hostId === named || copy.worktrees.some((row) => row.hostId === named)
-        )
-      )
-    : null
+  // Why: a lone unstamped row has unknown provenance, not another host's; the resolvers place it.
+  if (!named || (copies.length === 1 && !copies[0].hostId)) {
+    return onlyCopy(copies)
+  }
+  const owner = findIndexedWorktreeOwnerForHost(state.worktreesByRepo, worktreeId, named)
+  const copy = copies.find((candidate) => candidate.worktrees.some((row) => row === owner))
+  // Why: an unstamped row the selection names is on that host; the write says so to main.
+  return copy ? { ...copy, hostId: copy.hostId ?? named } : null
 }
 
 /** The list a change naming these notes would edit; see {@link findDiffCommentCopy}. */
@@ -126,8 +136,9 @@ export function readDiffCommentsForChange(
   const list =
     scope?.type === 'folder'
       ? findFolderWorkspaceOwner(state, scope.folderWorkspaceId)?.diffComments
-      : findDiffCommentCopy(state, worktreeId, { commentIds: new Set(commentIds) })?.worktrees[0]
-          .diffComments
+      : diffCommentCopyNotesOrUndefined(
+          findDiffCommentCopy(state, worktreeId, { commentIds: new Set(commentIds) })
+        )
   return list ?? []
 }
 
@@ -146,9 +157,11 @@ export function selectWorktreeDiffComments(
   // Mounted surfaces rerun this on every store write, so only the open workspace scans its bucket;
   // the rest share the immutable-snapshot id index.
   const open = namedHostForOwnerRef(state, { workspaceId: worktreeId })
-    ? findDiffCommentCopy(state, worktreeId)?.worktrees[0]
-    : undefined
-  return (open ?? getIndexedWorktreeById(state.worktreesByRepo, worktreeId))?.diffComments
+    ? findDiffCommentCopy(state, worktreeId)
+    : null
+  return open
+    ? diffCommentCopyNotes(open)
+    : getIndexedWorktreeById(state.worktreesByRepo, worktreeId)?.diffComments
 }
 
 export function selectWorktreeDiffCommentsOrEmpty(

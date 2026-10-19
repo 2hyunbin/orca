@@ -6,7 +6,7 @@ import type { Worktree } from '../../../../shared/worktree/types'
 import { getRepoIdFromWorktreeId } from './worktree-helpers'
 import { callRuntimeRpc } from '../../runtime/runtime-rpc-client'
 import { runtimeTargetForWorkspaceOwner } from '@/lib/resolve-owner'
-import { findDiffCommentCopy } from '../worktree-diff-comments-selector'
+import { diffCommentCopyNotes, findDiffCommentCopy } from '../worktree-diff-comments-selector'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { HostScopedWorktreeKey } from '../../../../shared/worktree/host-qualified-identity'
 import { toRuntimeWorktreeSelector } from '../../runtime/runtime-worktree-selector'
@@ -192,7 +192,7 @@ export function enqueueDiffCommentPersist(
         if (!copy) {
           throw new Error('The workspace copy is gone; review notes were not saved.')
         }
-        stateList = copy.worktrees[0].diffComments
+        stateList = diffCommentCopyNotes(copy)
         await persist(
           state,
           worktreeId,
@@ -275,7 +275,7 @@ export function mutateDiffComments(
     }
     executionHostId = copy.hostId
     copyKey = copy.key
-    previous = copy.worktrees[0].diffComments
+    previous = diffCommentCopyNotes(copy)
     const computed = mutate(previous ?? [])
     if (computed === null) {
       return s

@@ -203,6 +203,18 @@ describe('diff comments on twin worktrees', () => {
     expect(updateMeta.mock.calls[0][0]).not.toHaveProperty('executionHostId')
   })
 
+  it('saves an open unstamped row its SSH repo owns', async () => {
+    const store = createTwinStore('ssh:box')
+    store.setState({
+      repos: [{ ...repoBase, connectionId: 'box', executionHostId: 'ssh:box' }],
+      worktreesByRepo: { [REPO]: [worktree(undefined)] }
+    })
+
+    expect(await addNote(store)).not.toBeNull()
+
+    expect(updateMeta.mock.calls[0][0]).not.toHaveProperty('executionHostId')
+  })
+
   it('picks an SSH twin a paired server proxies by its own stamp', () => {
     const store = createTwinStore('ssh:box')
     const proxied = { ...worktree('ssh:box'), runtimeOwnerEnvironmentId: 'hub' }
@@ -214,5 +226,40 @@ describe('diff comments on twin worktrees', () => {
     const ssh = store.getState().worktreesByRepo[REPO][1]
     expect(ssh.diffComments?.map((c) => c.body)).toEqual(['ssh note'])
     expect(rowNotes(store, 'local')).toEqual([])
+  })
+
+  it('never falls back to the remaining copy when the open host has none', async () => {
+    const store = createTwinStore('local')
+    store.setState({ worktreesByRepo: { [REPO]: [worktree('ssh:box', [note('s1', 'ssh only')])] } })
+
+    await store.getState().clearDiffComments(WT)
+
+    expect(updateMeta).not.toHaveBeenCalled()
+    expect(rowNotes(store, 'ssh:box')).toEqual(['ssh only'])
+  })
+
+  it('treats an unstamped row as local when the local twin is open', async () => {
+    const store = createTwinStore('local')
+    store.setState({ worktreesByRepo: { [REPO]: [worktree(undefined), worktree('ssh:box')] } })
+
+    expect(await addNote(store)).not.toBeNull()
+
+    const [unstamped, ssh] = store.getState().worktreesByRepo[REPO]
+    expect(unstamped.diffComments?.map((c) => c.body)).toEqual(['ssh note'])
+    expect(ssh.diffComments).toEqual([])
+    expect(updateMeta).toHaveBeenCalledWith(expect.objectContaining({ executionHostId: 'local' }))
+  })
+
+  it('reads the latest duplicate row of the open copy, as the id index does', () => {
+    const store = createTwinStore('ssh:box')
+    store.setState({
+      worktreesByRepo: {
+        [REPO]: [worktree('local'), worktree('ssh:box'), worktree('ssh:box', [note('s1', 'fresh')])]
+      }
+    })
+
+    expect(selectWorktreeDiffCommentsOrEmpty(store.getState(), WT).map((c) => c.body)).toEqual([
+      'fresh'
+    ])
   })
 })
