@@ -7,9 +7,9 @@ import {
 import type { AiVaultResumeInChatEligibility } from './ai-vault-session-resume-in-chat'
 
 export type AiVaultSessionSurfaceSwitchTargets = {
-  /** Where "Resume in New Native Chat" opens, or null when it is not offered. */
+  /** Where "Switch to Chat" opens, or null when it is not offered. */
   resumeInNewChatWorkspaceId: string | null
-  /** Where "Resume in New CLI" opens its fork, or null when it is not offered. */
+  /** Where "Switch to Terminal" opens its fork, or null when it is not offered. */
   resumeInNewCliWorktreeId: string | null
 }
 
