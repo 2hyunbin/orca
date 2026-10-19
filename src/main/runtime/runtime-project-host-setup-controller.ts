@@ -21,7 +21,7 @@ import {
 } from '../../shared/execution-host'
 import { getProjectIdForProviderIdentity } from '../../shared/project-host-setup-projection'
 import { getProjectHostSetupForRepo } from '../../shared/project-host-setup-lookup'
-import { invalidateAuthorizedRootsCache } from '../ipc/filesystem-auth'
+import { invalidateAuthorizedRootsCache } from '../ipc/registered-worktree-roots-cache'
 import {
   SshHostNotServedError,
   sshTargetNotConnectedMessage
@@ -40,6 +40,10 @@ import {
   assertWslMoveHostSetupWritable,
   assertWslMoveReposWritable
 } from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
+import {
+  findProjectHostSetup,
+  type ProjectHostSetupTarget
+} from '../../shared/project-host-setup-target'
 
 type RuntimeProjectHostSetupDependencies = {
   getStore: () => RuntimeStore | null
@@ -62,6 +66,9 @@ function assertCloneHostIsSupported(hostId: ExecutionHostId | null | undefined):
     'Cloning onto an SSH host is not supported. Clone the repository on the host, then set the project up from that existing folder.'
   )
 }
+
+export const SERVER_SSH_PROJECT_ADD_UNAVAILABLE_MESSAGE =
+  "This Orca server can't add projects on its SSH hosts. Add the SSH host on your computer to open its projects."
 
 function sshTargetNotServedError(connectionId: string): SshHostNotServedError {
   return new SshHostNotServedError(connectionId, sshTargetNotConnectedMessage(connectionId))
@@ -124,12 +131,15 @@ export class RuntimeProjectHostSetupController {
     return this.completeSetup(args, repo, !knownRepoIds.has(repo.id))
   }
 
-  /** `repo.addRemote` stays registered for older clients; this process serves no SSH target. */
+  /**
+   * `repo.addRemote` stays registered for older clients, which still offer it; this process serves
+   * no SSH target, so the refusal says where such a project can be added instead.
+   */
   addSshRepo(args: { connectionId: string }): Promise<Repo> {
     if (!this.deps.getStore()) {
       throw new Error('runtime_unavailable')
     }
-    throw sshTargetNotServedError(args.connectionId)
+    throw new SshHostNotServedError(args.connectionId, SERVER_SSH_PROJECT_ADD_UNAVAILABLE_MESSAGE)
   }
 
   async setupClone(args: ProjectHostSetupCloneArgs): Promise<ProjectHostSetupResult> {
@@ -150,7 +160,7 @@ export class RuntimeProjectHostSetupController {
     if (!store || !updateProjectHostSetup) {
       throw new Error('runtime_unavailable')
     }
-    assertWslMoveHostSetupIdWritable(store, args.setupId)
+    assertWslMoveHostSetupIdWritable(store, args)
     return this.finishSetupUpdate(store, updateProjectHostSetup, args)
   }
 
@@ -162,7 +172,7 @@ export class RuntimeProjectHostSetupController {
     const result = await updateProjectHostSetupWithProvenKind(
       store,
       (setupArgs) => {
-        assertWslMoveHostSetupIdWritable(store, setupArgs.setupId)
+        assertWslMoveHostSetupIdWritable(store, setupArgs)
         return updateProjectHostSetup(setupArgs)
       },
       args,
@@ -188,9 +198,9 @@ export class RuntimeProjectHostSetupController {
     if (!store?.deleteProjectHostSetup) {
       throw new Error('runtime_unavailable')
     }
-    assertWslMoveHostSetupIdWritable(store, args.setupId)
+    assertWslMoveHostSetupIdWritable(store, args)
     if (args.force === false) {
-      this.assertSetupRemovalIsUnused(store, args.setupId)
+      this.assertSetupRemovalIsUnused(store, args)
     }
     const result = store.deleteProjectHostSetup(args)
     if (!result) {
@@ -211,8 +221,8 @@ export class RuntimeProjectHostSetupController {
   }
 
   // Why only for an explicit `force: false`: older clients omit it and must keep their delete.
-  private assertSetupRemovalIsUnused(store: RuntimeStore, setupId: string): void {
-    const setup = this.listSetups().find((entry) => entry.id === setupId)
+  private assertSetupRemovalIsUnused(store: RuntimeStore, target: ProjectHostSetupTarget): void {
+    const setup = findProjectHostSetup(this.listSetups(), target)
     // Same exact-host match the store's delete uses, so a sibling host's row is never measured.
     const repo = setup?.repoId
       ? this.deps
@@ -280,7 +290,7 @@ export class RuntimeProjectHostSetupController {
       if (!identity || getProjectIdForProviderIdentity(identity) !== args.projectId) {
         throw new Error('Imported folder does not match the selected project identity.')
       }
-      const updated = store.updateRepo(repo.id, {
+      const updated = store.updateRepo(repo, {
         upstream: {
           owner: identity.owner,
           repo: identity.repo,
@@ -294,7 +304,7 @@ export class RuntimeProjectHostSetupController {
       setup = getProjectHostSetupForRepo(this.listSetups(), repo)
     }
     const setupMethod = args.setupMethod ?? 'imported-existing-folder'
-    const updated = store.updateRepo(repo.id, { projectHostSetupMethod: setupMethod })
+    const updated = store.updateRepo(repo, { projectHostSetupMethod: setupMethod })
     if (!updated) {
       throw new Error(
         `Project setup repo disappeared before setup metadata could be linked: ${repo.id}`

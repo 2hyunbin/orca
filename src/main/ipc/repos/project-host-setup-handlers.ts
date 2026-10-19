@@ -64,7 +64,7 @@ function alignRepoWithRequestedProject(
       throw new Error('Imported folder does not match the selected project identity.')
     }
     // Why: stamp the selected project's provider identity when the folder lacks upstream, so projection can merge it.
-    const updated = store.updateRepo(repo.id, {
+    const updated = store.updateRepo(repo, {
       upstream: {
         owner: identity.owner,
         repo: identity.repo,
@@ -77,7 +77,7 @@ function alignRepoWithRequestedProject(
     repo = updated
     setup = getProjectHostSetupForRepo(store.getProjectHostSetups(), repo)
   }
-  const updated = store.updateRepo(repo.id, { projectHostSetupMethod: setupMethod })
+  const updated = store.updateRepo(repo, { projectHostSetupMethod: setupMethod })
   if (!updated) {
     throw new Error(
       `Project setup repo disappeared before setup metadata could be linked: ${repo.id}`
@@ -114,11 +114,11 @@ export function registerProjectHostSetupHandlers(mainWindow: BrowserWindow, stor
         rawArgs,
         'project_host_setup_update_invalid_args'
       )
-      assertWslMoveHostSetupIdWritable(store, args.setupId)
+      assertWslMoveHostSetupIdWritable(store, args)
       const result = await updateProjectHostSetupWithProvenKind(
         store,
         (setupArgs) => {
-          assertWslMoveHostSetupIdWritable(store, setupArgs.setupId)
+          assertWslMoveHostSetupIdWritable(store, setupArgs)
           return store.updateProjectHostSetup(setupArgs)
         },
         args
@@ -143,7 +143,7 @@ export function registerProjectHostSetupHandlers(mainWindow: BrowserWindow, stor
         rawArgs,
         'project_host_setup_delete_invalid_args'
       )
-      assertWslMoveHostSetupIdWritable(store, args.setupId)
+      assertWslMoveHostSetupIdWritable(store, args)
       const result = store.deleteProjectHostSetup(args)
       if (!result) {
         throw new Error(`Project host setup not found: ${args.setupId}`)
