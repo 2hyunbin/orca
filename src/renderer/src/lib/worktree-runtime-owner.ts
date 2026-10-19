@@ -22,7 +22,12 @@ import {
   getExecutionHostIdForFolderWorkspace,
   getRuntimeEnvironmentIdForFolderWorkspace
 } from './folder-workspace-runtime-owner'
-import { namedHostForOwnerRef, resolveOwner, type WorkspaceOwnerRef } from './resolve-owner'
+import {
+  namedHostForOwnerRef,
+  resolveOwner,
+  someWorktreeCopy,
+  type WorkspaceOwnerRef
+} from './resolve-owner'
 import { SELF_LOCAL_AUTHORITY, type HostAuthority } from '../../../shared/host-authority'
 import type { ExecutionHostOwnerMatch } from '../../../shared/worktree-execution-host-resolution'
 import {
@@ -249,16 +254,10 @@ function hasHostEvidence(state: WorktreeRuntimeOwnerState, workspaceId: string):
     )
   }
   const repoId = getRepoIdFromWorktreeId(workspaceId)
-  const isStampedCopy = (row: {
-    id: string
-    hostId?: string
-    runtimeOwnerEnvironmentId?: string
-  }) =>
-    row.id === workspaceId && Boolean(row.hostId?.trim() || row.runtimeOwnerEnvironmentId?.trim())
-  return Boolean(
-    state.worktreesByRepo?.[repoId]?.some(isStampedCopy) ||
-    state.detectedWorktreesByRepo?.[repoId]?.worktrees.some(isStampedCopy) ||
-    state.repos?.some((repo) => repo.id === repoId && hasRowHost(repo))
+  return (
+    someWorktreeCopy(state, workspaceId, (row) =>
+      Boolean(row.hostId?.trim() || row.runtimeOwnerEnvironmentId?.trim())
+    ) || Boolean(state.repos?.some((repo) => repo.id === repoId && hasRowHost(repo)))
   )
 }
 

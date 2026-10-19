@@ -319,7 +319,10 @@ export class SshConnection {
       throw new Error('Not connected')
     }
     const client = this.client
-    const remoteCommand = options?.wrapCommand === false ? cmd : wrapRemoteCommandForPosixShell(cmd)
+    const remoteCommand =
+      options?.wrapCommand === false
+        ? cmd
+        : wrapRemoteCommandForPosixShell(cmd, { compress: options?.compressCommand === true })
     return openSshSessionChannelWithRetry(() => {
       this.assertNotDisposed()
       return waitForSshChannelOpen(

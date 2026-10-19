@@ -101,6 +101,7 @@ export function createTerminalShutdownActions(
         guards.markShutdownPending()
         guards.unregisterHandlers()
         try {
+          opts?.onAdmitted?.()
           // Backend ownership is opt-in; the default owner RPC prevents remote PTY leaks.
           if (runtimeEnvironmentId && !backendOwnsPtyTeardown) {
             await (shutdownReason === 'manual-sleep'

@@ -53,7 +53,10 @@ export type {
 import type { AgentJournalDispatchRejection } from '../../../shared/agent-session-failure-words'
 import type { AgentSessionPromptResponse } from '../../../shared/agent-session-question-answer'
 import type { ProviderHistoryWindow } from '../agent-session-journal/journal-submission-reconciler'
-import type { StructuredAgentSessionStartupAttempt } from './structured-agent-session-startup-attempt-contract'
+import type {
+  StructuredAgentSessionStartupAttempt,
+  StructuredAgentSessionAcquisitionReceipt
+} from './structured-agent-session-startup-attempt-contract'
 import type { AgentSessionCreatePhaseRecorder } from '../../observability/agent-session-instrumentation'
 import type { AgentModelCatalogLiveListing } from '../agent-model-catalog/agent-model-catalog-entry'
 import type { StructuredAgentSessionProviderOpen } from './structured-agent-session-provider-open-contract'
@@ -284,6 +287,9 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
    *  `AgentSessionAcquisitionRootExitObservedError` when the provider root's own
    *  exit was observed first-hand but its descendants were not proven gone. */
   releaseAcquisition?(input: { sessionId: string }): Promise<boolean>
+  /** Whether this adapter owns a child, failed acquisition, or unacknowledged acquisition receipt. */
+  hasOwnedAcquisition?(sessionId: string): boolean
+  stoppedAcquisition?(sessionId: string): StructuredAgentSessionAcquisitionReceipt | undefined
   dispatch(input: {
     sessionId: string
     clientMessageId: string
@@ -439,5 +445,8 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   /** Stops a provider child for teardown without requiring a future-resume cursor. */
   disposeSession?(sessionId: string): Promise<boolean>
   /** Host acknowledgement that the proven-dead child, lease and journal owner are released. */
-  acknowledgeSessionRelease?(sessionId: string): void
+  acknowledgeSessionRelease?(
+    sessionId: string,
+    acquisition?: StructuredAgentSessionAcquisitionReceipt
+  ): void
 }

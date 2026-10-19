@@ -28,6 +28,7 @@ import { resetSshProviderAuthorities } from '../ssh/ssh-provider-authority'
 import { getGitRepoRoot } from '../git/repo'
 import { DEFAULT_REPO_BADGE_COLOR } from '../../shared/constants'
 import { createRepoHandlerHarness, resetLocalRepoMocks } from './repos-remote-test-harness'
+import { repoTarget } from '../persistence/repo-host-target-matcher.test-fixture'
 
 const {
   handleMock,
@@ -262,7 +263,7 @@ describe('repos:add + repos:clone', () => {
       setupMethod: 'imported-existing-folder'
     })
 
-    expect(mockStore.updateRepo).toHaveBeenNthCalledWith(1, existing.id, {
+    expect(mockStore.updateRepo).toHaveBeenNthCalledWith(1, repoTarget(existing.id), {
       upstream: {
         owner: 'acme',
         repo: 'orca',
@@ -275,7 +276,7 @@ describe('repos:add + repos:clone', () => {
     const added: Record<string, unknown>[] = []
     mockStore.getRepos.mockImplementation(() => added)
     mockStore.addRepo.mockImplementation((repo: Record<string, unknown>) => added.push(repo))
-    mockStore.updateRepo.mockImplementation((id, updates) => {
+    mockStore.updateRepo.mockImplementation(({ id }: { id: string }, updates) => {
       const repo = added.find((entry) => entry.id === id)
       if (!repo) {
         return null
@@ -363,6 +364,7 @@ describe('repos:add + repos:clone', () => {
       badgeColor: '#22c55e',
       worktreeBasePath: '../worktrees'
     }
+    mockStore.getRepo.mockReturnValue(updated)
     mockStore.updateRepo.mockReturnValue(updated)
 
     const result = await handlers.get('repos:update')!(null, {
@@ -371,7 +373,7 @@ describe('repos:add + repos:clone', () => {
     })
 
     expect(result).toBe(updated)
-    expect(mockStore.updateRepo).toHaveBeenCalledWith(updated.id, {
+    expect(mockStore.updateRepo).toHaveBeenCalledWith(repoTarget(updated.id), {
       worktreeBasePath: '../worktrees'
     })
     expect(mockStore.getRepos).not.toHaveBeenCalled()
@@ -388,6 +390,7 @@ describe('repos:add + repos:clone', () => {
       badgeColor: '#22c55e',
       agentWorktreeVisibility: 'show'
     }
+    mockStore.getRepo.mockReturnValue(updated)
     mockStore.updateRepo.mockReturnValue(updated)
 
     const result = await handlers.get('repos:update')!(null, {
@@ -396,7 +399,7 @@ describe('repos:add + repos:clone', () => {
     })
 
     expect(result).toBe(updated)
-    expect(mockStore.updateRepo).toHaveBeenCalledWith(updated.id, {
+    expect(mockStore.updateRepo).toHaveBeenCalledWith(repoTarget(updated.id), {
       agentWorktreeVisibility: 'show'
     })
   })
@@ -409,6 +412,7 @@ describe('repos:add + repos:clone', () => {
       kind: 'git',
       badgeColor: '#22c55e'
     }
+    mockStore.getRepo.mockReturnValue(updated)
     mockStore.updateRepo.mockReturnValue(updated)
 
     await handlers.get('repos:update')!(null, {
@@ -425,7 +429,7 @@ describe('repos:add + repos:clone', () => {
       }
     })
 
-    expect(mockStore.updateRepo).toHaveBeenCalledWith(updated.id, {
+    expect(mockStore.updateRepo).toHaveBeenCalledWith(repoTarget(updated.id), {
       customWorktreeVisibilitySources: [{ id: 'team', rootPath: '/srv/team' }],
       worktreeVisibilitySourcePreferences: {
         builtIn: { claude: 'show' },
