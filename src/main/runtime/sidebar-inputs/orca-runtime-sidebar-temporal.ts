@@ -48,7 +48,6 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     subscribeToPtyExit: (ptyId, listener) => this.subscribeToPtyExit(ptyId, listener),
     onClientEvent: (listener, options) => this.onClientEvent(listener, options),
     isViewing: (worktreeId, paneKey) => this.workspaceViewers.isViewing(worktreeId, paneKey),
-    isNotificationMuted: (worktreeId) => this.isWorkspaceNotificationMuted(worktreeId),
     onStampsWritten: (worktreeId) => this.notifySortStampsChanged(worktreeId),
     now: Date.now
   })

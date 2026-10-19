@@ -8,7 +8,7 @@ import type {
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { stopCurrentClaudeBackgroundTasks } from './claude-structured-control-actions'
 import { dispatchClaudeTurn } from './claude-structured-dispatch'
-import { claudeHeldSends, claudeHoldsDispatch } from './claude-command-lifecycle'
+import { claudeHoldsDispatch } from './claude-command-lifecycle'
 import { releaseClaudeAcquisition } from './claude-structured-acquisition-release'
 import { acquireClaudeSession } from './claude-structured-session-acquisition'
 import { supportsClaudeStructuredLocation } from './claude-structured-location-support'
@@ -216,11 +216,6 @@ export class ClaudeStructuredSessionAdapter implements StructuredAgentSessionAda
   holdsDispatch = (sessionId: string): boolean => {
     const session = this.sessions.get(sessionId)
     return session ? claudeHoldsDispatch(session) : false
-  }
-  heldSends = (sessionId: string): ReadonlySet<string> | undefined => {
-    const session = this.sessions.get(sessionId) ?? this.exits.get(sessionId)?.session
-    const held = session && claudeHeldSends(session)
-    return held ?? (this.settledExitErrors.has(sessionId) ? new Set() : undefined)
   }
   holdsLiveProviderProcess = (sessionId: string, acquisitionGeneration: string): boolean => {
     const session = this.sessions.get(sessionId)

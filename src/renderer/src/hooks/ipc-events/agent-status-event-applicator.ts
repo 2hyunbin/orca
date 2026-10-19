@@ -250,7 +250,7 @@ export function createAgentStatusEventApplicator(args: {
       },
       metadata: normalizeAgentStatusMetadata(data, authorityRestartId)
     }
-    // Why: replays are cached state, so they seed completion tracking unless they carry an unseen done.
+    // Why: replays are cached state, so they seed completion tracking unless they carry an unseen completion.
     const replayed =
       options?.replay === true || isSeenHostReplay(data, resolvedPayload.state, existingStatus)
     const applyPostCommitNotification = (): void => {
