@@ -5,7 +5,6 @@ import { getDefaultSettings } from '../../shared/constants'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 
 const mocks = vi.hoisted(() => {
-  // What each agent's launch resolver finds; a throw is an unrunnable Command setting.
   const programs: Record<string, () => { command: string; env: Record<string, string> }> = {}
   return {
     refreshed: new Set<() => void>(),

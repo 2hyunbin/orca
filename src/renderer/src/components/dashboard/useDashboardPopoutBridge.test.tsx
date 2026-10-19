@@ -56,10 +56,8 @@ import {
   repoIconsUnchanged,
   useDashboardPopoutBridge
 } from './useDashboardPopoutBridge'
-import type { DashboardSnapshotState } from './build-dashboard-snapshot'
-import type { AppState } from '@/store/types'
 
-type DashboardSnapshotWatchState = DashboardSnapshotState & Pick<AppState, 'agentStatusEpoch'>
+type DashboardSnapshotWatchState = Parameters<typeof dashboardSnapshotInputsChanged>[0]
 
 function makeSnapshotWatchState(): DashboardSnapshotWatchState {
   return {
