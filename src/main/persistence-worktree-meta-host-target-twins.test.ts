@@ -222,12 +222,14 @@ describe('worktree meta and lineage writes for same-id twins', () => {
     store.setWorktreeMeta(SSH, { displayName: 'ssh copy', sortOrder: 1 })
     store.setWorktreeMeta(solo, { sortOrder: 5 })
 
+    const notifyChanged = vi.fn()
+
     const result = persistRuntimeManagedWorktreeSortOrder({
       orderedIds: [WORKTREE_ID, solo.id],
       hostIds: ['ssh:ssh-1', 'local'],
       store,
       invalidateResolved: vi.fn(),
-      notifyChanged: vi.fn()
+      notifyChanged
     })
 
     expect(result).toEqual({ updated: 2 })
@@ -235,5 +237,26 @@ describe('worktree meta and lineage writes for same-id twins', () => {
     expect(store.getWorktreeMetaForHost(WORKTREE_ID, 'ssh:ssh-1')?.sortOrder).toBeGreaterThan(
       store.getWorktreeMetaForHost(solo.id, 'local')?.sortOrder ?? Infinity
     )
+    // An id-keyed patch would land on both copies, so the twinned repo is re-listed instead.
+    expect(notifyChanged).toHaveBeenCalledWith('dup', undefined)
+    expect(notifyChanged).toHaveBeenCalledWith('solo', [
+      expect.objectContaining({ worktreeId: solo.id })
+    ])
+  })
+
+  it('ignores a client host no repo row of this store lives on', async () => {
+    const store = await createTwinStore()
+    store.setWorktreeMeta(SSH, { displayName: 'ssh copy', sortOrder: 1 })
+
+    const result = persistRuntimeManagedWorktreeSortOrder({
+      orderedIds: [WORKTREE_ID],
+      hostIds: ['ssh:elsewhere'],
+      store,
+      invalidateResolved: vi.fn(),
+      notifyChanged: vi.fn()
+    })
+
+    expect(result).toEqual({ updated: 0 })
+    expect(store.getWorktreeMetaForHost(WORKTREE_ID, 'ssh:elsewhere')).toBeUndefined()
   })
 })

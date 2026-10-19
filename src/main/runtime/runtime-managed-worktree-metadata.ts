@@ -2,6 +2,7 @@ import type { GitPushTarget, Worktree } from '../../shared/worktree/types'
 import type { WorktreeMeta } from '../../shared/worktree/meta-types'
 import { worktreeWorkspaceKey } from '../../shared/workspace-scope'
 import { splitWorktreeId } from '../../shared/worktree/id'
+import { getRepoExecutionHostId } from '../../shared/execution-host'
 import type { WorktreeSortOrderUpdate } from '../../shared/worktree/sort-order-update'
 import { stripOrcaProvenanceMetaUpdates } from '../worktree-removal-safety'
 import { isRemovedFolderWorkspaceInstance } from '../folder-workspace-meta-presence'
@@ -150,7 +151,8 @@ export function persistRuntimeManagedWorktreeSortOrder(args: {
   hostIds?: WorktreeSortOrderRequest['hostIds']
   store: RuntimeStore
   invalidateResolved: () => void
-  notifyChanged: (repoId: string, sortOrders: WorktreeSortOrderUpdate[]) => void
+  /** `sortOrders` omitted: the repo has same-id copies, which an id-keyed patch cannot tell apart. */
+  notifyChanged: (repoId: string, sortOrders?: WorktreeSortOrderUpdate[]) => void
 }): { updated: number } {
   // A moving project keeps its old order; the rest of the batch still lands. Only what was saved
   // is reported and published.
@@ -172,7 +174,13 @@ export function persistRuntimeManagedWorktreeSortOrder(args: {
     }
   }
   for (const [repoId, sortOrders] of updatesByRepo) {
-    args.notifyChanged(repoId, sortOrders)
+    const hosts = new Set(
+      args.store
+        .getRepos()
+        .filter((repo) => repo.id === repoId)
+        .map(getRepoExecutionHostId)
+    )
+    args.notifyChanged(repoId, hosts.size > 1 ? undefined : sortOrders)
   }
   return { updated: updates.length }
 }

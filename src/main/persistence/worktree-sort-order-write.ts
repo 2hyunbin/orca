@@ -1,4 +1,9 @@
-import { parseExecutionHostId, type ExecutionHostId } from '../../shared/execution-host'
+import {
+  getRepoExecutionHostId,
+  parseExecutionHostId,
+  type ExecutionHostId
+} from '../../shared/execution-host'
+import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
 import type { Repo } from '../../shared/repo-types'
 import type { WorktreeMeta } from '../../shared/worktree/meta-types'
 import {
@@ -27,6 +32,20 @@ type SortOrderStore = {
   setWorktreeMeta: (target: HostWorktreeTarget, updates: Partial<WorktreeMeta>) => unknown
 }
 
+/** The client's host for this id only when one of this store's repo rows lives there. */
+function knownHost(
+  store: SortOrderStore,
+  worktreeId: string,
+  hostId: string | undefined
+): ExecutionHostId | null {
+  const parsed = parseExecutionHostId(hostId)?.id
+  const repoId = getRepoIdFromWorktreeId(worktreeId)
+  return parsed &&
+    store.getRepos().some((repo) => repo.id === repoId && getRepoExecutionHostId(repo) === parsed)
+    ? parsed
+    : null
+}
+
 /**
  * Saves an order onto the copies it names. An id the client did not qualify lands only when one
  * host owns it, so a same-id twin on another host keeps its own order.
@@ -45,7 +64,7 @@ export function writeWorktreeSortOrder(
     if (targets.has(worktreeId)) {
       return
     }
-    const hostId = parseExecutionHostId(hostIds?.[index])?.id
+    const hostId = knownHost(store, worktreeId, hostIds?.[index])
     targets.set(
       worktreeId,
       hostId

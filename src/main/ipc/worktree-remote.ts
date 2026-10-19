@@ -78,7 +78,7 @@ import { mergeWorktree } from './worktree-metadata-merge'
 import { resolveCreatedWorktree } from './created-worktree-reconciliation'
 import { notifyLineageRepos } from '../worktree-lineage-change-notification'
 import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
-import { getConnectionExecutionHostId } from '../../shared/execution-host'
+import { getConnectionExecutionHostId, getRepoExecutionHostId } from '../../shared/execution-host'
 import type { BranchPrefixSettings } from '../../shared/branch-prefix'
 import { parseWorkspaceKey, worktreeWorkspaceKey } from '../../shared/workspace-scope'
 import { sharesWorktreeLineageBoundary } from '../../shared/resolved-worktree-lineage'
@@ -835,6 +835,15 @@ function persistMaterializedPushTargetIfCreated(
   target: GitPushTarget
 ): void {
   if (!target.remoteCreated || !worktree || !store?.setWorktreeMeta) {
+    return
+  }
+  const repoId = getRepoIdFromWorktreeId(worktree.id)
+  const repos = store.getRepos?.()
+  // A copy whose repo this host no longer has gets no new row.
+  if (
+    repos &&
+    !repos.some((repo) => repo.id === repoId && getRepoExecutionHostId(repo) === worktree.hostId)
+  ) {
     return
   }
   // Bookkeeping incidental to the push: a project a WSL move is taking skips it, not the push.

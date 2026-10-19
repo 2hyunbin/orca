@@ -177,11 +177,12 @@ export abstract class OrcaRuntimeWithCreateManagedRemoteWorktree extends OrcaRun
       store: this.store,
       invalidateResolved: () => this.invalidateResolvedWorktreeCache(),
       notifyChanged: (repoId, sortOrders) =>
-        this.notifyWorktreesChanged(repoId, {
-          invalidateGitScans: false,
-          sortOrderOnly: true,
+        this.notifyWorktreesChanged(
+          repoId,
           sortOrders
-        })
+            ? { invalidateGitScans: false, sortOrderOnly: true, sortOrders }
+            : { invalidateGitScans: false }
+        )
     })
   }
 
