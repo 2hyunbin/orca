@@ -4,7 +4,7 @@ import type { ColdRestoreAgentResumeStartup } from './fresh-spawn-types'
 
 /** While `attempt` runs, the pane owns the resume record `startup` came from. */
 export function holdInPlaceResumeUntilSettled(
-  session: ConnectPanePtySession,
+  session: Pick<ConnectPanePtySession, 'disposed'>,
   startup: ColdRestoreAgentResumeStartup | null | undefined,
   attempt: Promise<unknown>
 ): void {

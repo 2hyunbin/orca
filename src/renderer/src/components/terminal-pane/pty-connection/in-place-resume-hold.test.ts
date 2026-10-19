@@ -9,9 +9,8 @@ function startupFor(paneKey: string): ColdRestoreAgentResumeStartup {
   return { sleepingRecordEntry: { paneKey } } as ColdRestoreAgentResumeStartup
 }
 
-function sessionWith(disposed: boolean): ConnectPanePtySession {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the hold reads only `disposed`.
-  return { disposed } as ConnectPanePtySession
+function sessionWith(disposed: boolean): Pick<ConnectPanePtySession, 'disposed'> {
+  return { disposed }
 }
 
 function deferred(): { promise: Promise<unknown>; resolve: () => void; reject: () => void } {
