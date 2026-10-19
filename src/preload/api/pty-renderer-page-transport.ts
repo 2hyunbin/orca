@@ -37,7 +37,7 @@ export async function dispatchRendererPage<T>(dispatch: (page: string) => T): Pr
   if (closed || !page) {
     throw new Error('Terminal connection ended with its document')
   }
-  return dispatch(page)
+  return await dispatch(page)
 }
 
 export function sendRendererPage(channel: string, args: Record<string, unknown>): void {
