@@ -1,7 +1,10 @@
 import { useCallback } from 'react'
+import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
+import { toVisibleTabType } from '../../../../shared/tab-types'
 import type { Tab, TabGroup } from '../../../../shared/tab-types'
 import { useAppStore } from '../../store'
 import { captureWorkspaceEmptiedReaction } from './workspace-emptied-reaction'
+import { track } from '@/lib/telemetry'
 import { isEditorTabContentType } from '@/store/slices/editor/tabs/editor-tab-content-type'
 
 export function useTabGroupCloseScopeCommands({
@@ -59,41 +62,41 @@ export function useTabGroupCloseScopeCommands({
     [closeMany, groupTabs]
   )
 
-  const closeToRight = useCallback(
-    (itemId: string) => {
-      // Why: store closeTabsToRight pre-closes dirty tabs; walk tabOrder (canonical L-to-R) via closeMany to stay dirty-aware.
+  const closeInDirection = useCallback(
+    (itemId: string, direction: 'left' | 'right') => {
+      // Preserve visible order and save prompts by routing through closeMany.
       const order = group?.tabOrder ?? []
       const index = order.indexOf(itemId)
       if (index === -1) {
         return
       }
       const tabById = new Map(groupTabs.map((candidate) => [candidate.id, candidate]))
-      const rightIds = order.slice(index + 1).filter((id) => {
+      const sideIds = direction === 'left' ? order.slice(0, index) : order.slice(index + 1)
+      const eligibleIds = sideIds.filter((id) => {
         const candidate = tabById.get(id)
         return candidate ? !candidate.isPinned : false
       })
-      closeMany(rightIds)
+      const item = tabById.get(itemId)
+      if (item) {
+        track('tabs_directional_close_requested', {
+          direction,
+          tab_type: toVisibleTabType(item.contentType),
+          surface: worktreeId === FLOATING_TERMINAL_WORKTREE_ID ? 'floating' : 'workspace',
+          eligible_tab_count: eligibleIds.length
+        })
+      }
+      closeMany(eligibleIds)
     },
-    [closeMany, group, groupTabs]
+    [closeMany, group, groupTabs, worktreeId]
   )
 
+  const closeToRight = useCallback(
+    (itemId: string) => closeInDirection(itemId, 'right'),
+    [closeInDirection]
+  )
   const closeToLeft = useCallback(
-    (itemId: string) => {
-      // Why: see closeToRight — walk tabOrder locally and route through the
-      // dirty-aware closeMany path instead of the store helper.
-      const order = group?.tabOrder ?? []
-      const index = order.indexOf(itemId)
-      if (index === -1) {
-        return
-      }
-      const tabById = new Map(groupTabs.map((candidate) => [candidate.id, candidate]))
-      const leftIds = order.slice(0, index).filter((id) => {
-        const candidate = tabById.get(id)
-        return candidate ? !candidate.isPinned : false
-      })
-      closeMany(leftIds)
-    },
-    [closeMany, group, groupTabs]
+    (itemId: string) => closeInDirection(itemId, 'left'),
+    [closeInDirection]
   )
 
   return { closeGroup, closeAllEditorTabsInGroup, closeOthers, closeToRight, closeToLeft }
