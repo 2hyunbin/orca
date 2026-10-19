@@ -7,6 +7,7 @@ import {
 } from '../worktree/host-qualified-identity'
 import { filterRecord, withoutKey } from './stored-record-fields'
 import { collectLayoutLeafIdsInOrder } from './terminal-pane-tree'
+import { editorFileKey } from './workspace-layout-editor-tab-file'
 import type {
   LayoutTerminalTab,
   WorkspaceLayout,
@@ -56,6 +57,8 @@ const tabIds = (workspace: WorkspaceLayout): string[] => workspace.tabs.map((tab
 const groupIds = (workspace: WorkspaceLayout): string[] => workspace.groups.map((group) => group.id)
 const filePaths = (workspace: WorkspaceLayout): string[] =>
   workspace.editorFiles?.map((file) => file.filePath) ?? []
+const fileKeys = (workspace: WorkspaceLayout): string[] =>
+  workspace.editorFiles?.map(editorFileKey) ?? []
 const browserTabIds = (workspace: WorkspaceLayout): string[] =>
   workspace.browserTabs?.map((tab) => tab.id) ?? []
 const terminalTabIds = (workspace: WorkspaceLayout): string[] =>
@@ -113,7 +116,7 @@ export function pruneViewRecord(
     groups,
     lastFocusedAt: keepHeldIds(record.lastFocusedAt, workspaces, tabIds),
     panes,
-    editorDrafts: keepHeldIds(record.editorDrafts, workspaces, filePaths)
+    editorDrafts: keepHeldIds(record.editorDrafts, workspaces, fileKeys)
   }
   if (activeGroups) {
     pruned.activeGroupIdByWorktree = filterRecord(
