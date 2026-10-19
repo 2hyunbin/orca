@@ -249,6 +249,126 @@ describe('reportWindowSaveDrift', () => {
     )
   })
 
+  it('logs main’s and the save’s pane trees for a pane tree difference', () => {
+    const logPath = join(logDir!, 'divergence.jsonl')
+    const stored = session([{ id: 'tab-a' }])
+    const next = structuredClone(stored)
+    next.terminalLayoutsByTabId['tab-a'] = {
+      ...next.terminalLayoutsByTabId['tab-a']!,
+      root: {
+        type: 'split',
+        direction: 'vertical',
+        ratio: 0.5,
+        first: { type: 'leaf', leafId: leaf(1) },
+        second: { type: 'leaf', leafId: leaf(2) }
+      }
+    }
+
+    save(stored, next)
+
+    const logged = JSON.parse(readFileSync(logPath, 'utf8').trim())
+    expect(logged.paths).toEqual(['tab tab-a changed: panes'])
+    expect(logged.values).toEqual([
+      {
+        record: 'tab tab-a',
+        field: 'panes',
+        before: { root: { type: 'leaf', leafId: leaf(1) } },
+        after: {
+          root: {
+            type: 'split',
+            direction: 'vertical',
+            ratio: 0.5,
+            first: { type: 'leaf', leafId: leaf(1) },
+            second: { type: 'leaf', leafId: leaf(2) }
+          }
+        }
+      }
+    ])
+  })
+
+  it('logs a changed title’s length, never its text', () => {
+    const logPath = join(logDir!, 'divergence.jsonl')
+    const secret = 'cat ~/.ssh/id_ed25519'
+
+    save(session([{ id: 'tab-a' }]), session([{ id: 'tab-a', title: secret }]))
+
+    const text = readFileSync(logPath, 'utf8')
+    expect(text).not.toContain(secret)
+    expect(JSON.parse(text.trim()).values).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          record: 'tab tab-a',
+          field: 'terminal',
+          after: { defaultTitle: `<text ${secret.length}>` }
+        })
+      ])
+    )
+  })
+
+  it('logs only the size of a pane’s resume record, which holds its prompt and launch env', () => {
+    const logPath = join(logDir!, 'divergence.jsonl')
+    const stored = session([{ id: 'tab-a' }])
+    const next = structuredClone(stored)
+    next.terminalLayoutsByTabId['tab-a'] = {
+      ...next.terminalLayoutsByTabId['tab-a']!,
+      titlesByLeafId: { [leaf(1)]: 'build' }
+    }
+    const record = {
+      paneKey: `tab-a:${leaf(1)}`,
+      worktreeId: GIT_KEY,
+      agent: 'claude' as const,
+      providerSession: { key: 'claude' as const, id: 'session-secret-id' },
+      prompt: 'fix the login bug',
+      state: 'done' as const,
+      capturedAt: 1,
+      updatedAt: 1,
+      launchConfig: { agentArgs: '', agentEnv: { type: 'env-secret-value' } }
+    }
+    stored.sleepingAgentSessionsByPaneKey = { [`tab-a:${leaf(1)}`]: record }
+    next.sleepingAgentSessionsByPaneKey = {
+      [`tab-a:${leaf(1)}`]: { ...record, prompt: 'a different prompt' }
+    }
+
+    save(stored, next)
+
+    const text = readFileSync(logPath, 'utf8')
+    for (const secret of [
+      'login bug',
+      'different prompt',
+      'session-secret',
+      'env-secret',
+      'build'
+    ]) {
+      expect(text).not.toContain(secret)
+    }
+    expect(JSON.parse(text.trim()).values).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ record: `leaf ${leaf(1)}`, field: 'title', after: '<text 5>' })
+      ])
+    )
+  })
+
+  it('cuts a long tab order down to its first ids and a count', () => {
+    const logPath = join(logDir!, 'divergence.jsonl')
+    const tabs = Array.from({ length: 30 }, (_, index) => ({ id: `tab-${index}` }))
+
+    save(session(tabs), session(tabs.toReversed()))
+
+    const logged = JSON.parse(readFileSync(logPath, 'utf8').trim())
+    const order = logged.values.find((value: { field: string }) => value.field === 'tabOrder')
+    expect(order.before).toEqual([
+      'tab-0',
+      'tab-1',
+      'tab-2',
+      'tab-3',
+      'tab-4',
+      'tab-5',
+      'tab-6',
+      'tab-7',
+      '+22 more'
+    ])
+  })
+
   it('leaves a paired server’s partition alone: its layout is the server’s', () => {
     const next = session([{ id: 'tab-c' }])
     expect(save(session([{ id: 'tab-a' }]), next, 'runtime:env-1')).toBe(next)
