@@ -4,6 +4,7 @@ import { translate } from '@/i18n/i18n'
 import {
   createPendingProviderSnapshot,
   hasUsageData,
+  hasUsageProviderSettingsForProvider,
   isProviderConfigured
 } from './status-bar-provider-visibility'
 
@@ -12,7 +13,7 @@ export type OwnerUsageState =
   | { kind: 'local' }
   /** A remote host owns usage and has not answered yet. */
   | { kind: 'remote-pending' }
-  | { kind: 'remote'; rateLimits: RateLimitState }
+  | { kind: 'remote'; ownerLabel: string; rateLimits: RateLimitState }
   /** The owning host's usage cannot be verified; no bar may claim numbers. */
   | {
       kind: 'remote-unverifiable'
@@ -90,6 +91,55 @@ function adoptRemoteRateLimits(remote: RateLimitState): RateLimitState {
   }
 }
 
+/** Stands in for a provider this device has set up but the owning host has not; carries no numbers. */
+export function isOwnerNotSetUpPlaceholder(provider: ProviderRateLimits): boolean {
+  return provider.usageMetadata?.ownerNotSetUp !== undefined
+}
+
+function isSetUpHere(local: RateLimitState, key: UsageProviderKey): boolean {
+  const provider = local[key]
+  return (
+    (provider != null && (isProviderConfigured(provider) || hasUsageData(provider))) ||
+    hasUsageProviderSettingsForProvider(USAGE_PROVIDER_IDS[key], local)
+  )
+}
+
+function isKeySavedHereOnly(local: RateLimitState, key: UsageProviderKey): boolean {
+  return key === 'minimax' || (key === 'zcode' && local.zcodePlanApiKeyConfigured === true)
+}
+
+// Why: hiding a provider set up here reads as "usage broke"; a numberless placeholder
+// keeps it visible without passing this device's numbers off as the host's.
+function addNotSetUpPlaceholders(
+  local: RateLimitState,
+  remote: RateLimitState,
+  ownerLabel: string
+): RateLimitState {
+  return {
+    ...remote,
+    ...mapProviders((key) => {
+      const hostProvider = remote[key]
+      // Why: a slot the host is still fetching or failing is the host's own; leave it be.
+      const hostHasProvider =
+        (hostProvider != null && hostProvider.status !== 'unavailable') ||
+        hasUsageProviderSettingsForProvider(USAGE_PROVIDER_IDS[key], remote)
+      if (hostHasProvider || !isSetUpHere(local, key)) {
+        return hostProvider
+      }
+      return {
+        ...createPendingProviderSnapshot(USAGE_PROVIDER_IDS[key]),
+        error: translate(
+          'auto.components.status.bar.tooltip.remoteOwnerNotSetUp',
+          'Not set up on {{server}}',
+          { server: ownerLabel }
+        ),
+        usageMetadata: { ownerNotSetUp: { keySavedHereOnly: isKeySavedHereOnly(local, key) } },
+        status: 'error'
+      }
+    })
+  }
+}
+
 // Why: an older host publishes no usage at all; its account services always cover these.
 const ACCOUNT_OWNED_PROVIDERS: ReadonlySet<UsageProviderKey> = new Set(['claude', 'codex'])
 
@@ -101,7 +151,7 @@ export function resolveOwnerUsageRateLimits(
     return local
   }
   if (owner.kind === 'remote') {
-    return adoptRemoteRateLimits(owner.rateLimits)
+    return addNotSetUpPlaceholders(local, adoptRemoteRateLimits(owner.rateLimits), owner.ownerLabel)
   }
   // Why: nothing of the viewer's (numbers or setup flags) may stand in for the remote host.
   if (owner.kind === 'remote-pending') {

@@ -15,6 +15,7 @@ import { useStatusBarMenuFocusHandoff } from './ProviderDetailsMenu'
 import { CLOSE_ALL_CONTEXT_MENUS_EVENT } from '@/lib/close-all-context-menus'
 import { useStatusBarDensity } from './status-bar-density'
 import { useOwnerUsageRateLimits } from './use-owner-usage-rate-limits'
+import { isOwnerNotSetUpPlaceholder } from './owner-usage-rate-limits'
 
 export function useStatusBarController(floatingTerminalOpen: boolean) {
   const floatingTerminalShortcut = useShortcutLabel('floatingTerminal.toggle')
@@ -224,11 +225,16 @@ export function useStatusBarController(floatingTerminalOpen: boolean) {
     showGrok ? visibleGrok : null,
     showCursor ? visibleCursor : null,
     showZcode ? visibleZcode : null
-  ].filter((p): p is ProviderRateLimits => p !== null)
+  ]
+    .filter((p): p is ProviderRateLimits => p !== null)
+    // Why: the bar collapses chips from the end, so placeholders give way first.
+    .sort((a, b) => Number(isOwnerNotSetUpPlaceholder(a)) - Number(isOwnerNotSetUpPlaceholder(b)))
 
+  // Why: the shown accounts are the owning host's, so Settings must open on that host.
+  const accountsHostScope = remoteOwner ? { hostScopeEnvironmentId: remoteOwner.environmentId } : {}
   const handleManageAccounts = (): void => {
     setUsageMenuOpen(false)
-    openSettingsTarget({ pane: 'accounts', repoId: null })
+    openSettingsTarget({ pane: 'accounts', repoId: null, ...accountsHostScope })
     openSettingsPage()
   }
   const handleUsageDetails = (): void => {
@@ -238,11 +244,17 @@ export function useStatusBarController(floatingTerminalOpen: boolean) {
   }
   const handleOpenProviderAccounts = (provider: ProviderRateLimits['provider']): void => {
     const sectionId = getUsageProviderAccountsSectionId(provider)
-    if (!sectionId) {
+    // Why: a placeholder for a CLI-owned provider still leads to the host's accounts.
+    if (!sectionId && !remoteOwner) {
       return
     }
     setUsageMenuOpen(false)
-    openSettingsTarget({ pane: 'accounts', repoId: null, sectionId })
+    openSettingsTarget({
+      pane: 'accounts',
+      repoId: null,
+      ...(sectionId ? { sectionId } : {}),
+      ...accountsHostScope
+    })
     openSettingsPage()
   }
   const canSignInFromUsageRow = (provider: ProviderRateLimits['provider']): boolean =>

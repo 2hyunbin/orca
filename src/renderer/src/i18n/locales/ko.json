@@ -4091,7 +4091,10 @@
                 "label": "로그인 만료",
                 "message": "Claude 사용량이 만료되었습니다. 이 계정에서 Claude를 시작하면 사용량이 갱신됩니다."
               }
-            }
+            },
+            "remoteOwnerNotSetUp": "{{server}}에 설정되지 않음",
+            "remoteOwnerKeySavedHere": "키는 이 컴퓨터에만 저장되어 있습니다.",
+            "notSetUp": "설정되지 않음"
           },
           "SshTargetStatusRow": {
             "sshHost": "SSH 호스트"

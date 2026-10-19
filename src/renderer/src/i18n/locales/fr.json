@@ -4207,7 +4207,10 @@
                 "label": "Connexion expirée",
                 "message": "L'utilisation de Claude a expiré. Démarrez Claude dans ce compte pour l'actualiser."
               }
-            }
+            },
+            "remoteOwnerNotSetUp": "Non configuré sur {{server}}",
+            "remoteOwnerKeySavedHere": "Sa clé est enregistrée uniquement sur cet ordinateur.",
+            "notSetUp": "Non configuré"
           },
           "SshTargetStatusRow": {
             "sshHost": "Hôte SSH"

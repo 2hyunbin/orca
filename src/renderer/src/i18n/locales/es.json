@@ -4086,7 +4086,10 @@
                 "label": "Inicio de sesión caducado",
                 "message": "El uso de Claude ha caducado. Inicia Claude en esta cuenta para actualizarlo."
               }
-            }
+            },
+            "remoteOwnerNotSetUp": "No configurado en {{server}}",
+            "remoteOwnerKeySavedHere": "Su clave solo está guardada en este equipo.",
+            "notSetUp": "No configurado"
           },
           "SshTargetStatusRow": {
             "sshHost": "Host SSH"

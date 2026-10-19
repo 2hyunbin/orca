@@ -4091,7 +4091,10 @@
                 "label": "登录已过期",
                 "message": "Claude 用量已过期。请在此账户中启动 Claude 以刷新。"
               }
-            }
+            },
+            "remoteOwnerNotSetUp": "未在 {{server}} 上设置",
+            "remoteOwnerKeySavedHere": "其密钥仅保存在此电脑上。",
+            "notSetUp": "未设置"
           },
           "SshTargetStatusRow": {
             "sshHost": "SSH 主机"

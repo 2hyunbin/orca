@@ -97,7 +97,20 @@ export function isClaudeUsageWaitingForClaude(p: ProviderRateLimits): boolean {
   )
 }
 
+/** Why a placeholder's provider is missing on the host, beyond its "Not set up on" label. */
+export function getOwnerNotSetUpNote(p: ProviderRateLimits): string | null {
+  return p.usageMetadata?.ownerNotSetUp?.keySavedHereOnly
+    ? translate(
+        'auto.components.status.bar.tooltip.remoteOwnerKeySavedHere',
+        'Its key is saved on this computer only.'
+      )
+    : null
+}
+
 export function getProviderUsageStatusLabel(p: ProviderRateLimits): string {
+  if (p.usageMetadata?.ownerNotSetUp) {
+    return translate('auto.components.status.bar.tooltip.notSetUp', 'Not set up')
+  }
   // Why: no refresh fixes an owner that cannot vouch for its usage, so never say "Refresh failed".
   if (p.usageMetadata?.unverifiableOwner) {
     return translate('auto.components.status.bar.tooltip.f8b8dbed85', 'Usage unavailable')
@@ -184,6 +197,10 @@ export function getProviderUsageErrorMessage(p: ProviderRateLimits): string {
   }
   if (p.usageMetadata?.unverifiableOwner) {
     return p.error
+  }
+  if (p.usageMetadata?.ownerNotSetUp) {
+    const note = getOwnerNotSetUpNote(p)
+    return note ? `${p.error}\n${note}` : p.error
   }
   const delegatedCliProvider = getDelegatedCliRefreshProvider(p)
   if (delegatedCliProvider === 'grok') {

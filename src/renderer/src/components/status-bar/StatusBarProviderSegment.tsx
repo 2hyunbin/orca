@@ -14,6 +14,7 @@ import {
   USAGE_WARNING_PERCENT,
   clampUsedPercent,
   getProviderDisplayName,
+  getProviderUsageErrorMessage,
   getProviderUsageStatusLabel
 } from './tooltip'
 import { isClaudeUsageWaitingForClaude } from './usage-error-copy'
@@ -248,10 +249,13 @@ export function ProviderSegment({
     )
   }
 
-  // Unavailable (CLI not installed)
-  if (p.status === 'unavailable') {
+  // Unavailable (CLI not installed), or set up on this device but not on the owning host
+  if (p.status === 'unavailable' || p.usageMetadata?.ownerNotSetUp) {
     return (
-      <span className="inline-flex items-center gap-1 text-muted-foreground/50">
+      <span
+        className="inline-flex items-center gap-1 text-muted-foreground/50"
+        title={p.usageMetadata?.ownerNotSetUp ? getProviderUsageErrorMessage(p) : undefined}
+      >
         <ProviderIcon provider={provider} /> --
       </span>
     )

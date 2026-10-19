@@ -181,7 +181,7 @@ export function useOwnerUsageRateLimits(local: RateLimitState): OwnerUsageRateLi
       }
     }
     return owned.rateLimits
-      ? { kind: 'remote', rateLimits: owned.rateLimits }
+      ? { kind: 'remote', ownerLabel: remoteOwner.label, rateLimits: owned.rateLimits }
       : { kind: 'remote-pending' }
   }, [remoteOwner, owned])
 
