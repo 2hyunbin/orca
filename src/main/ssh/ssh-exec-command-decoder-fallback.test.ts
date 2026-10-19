@@ -87,7 +87,7 @@ describe.skipIf(process.platform === 'win32')(
       expect(conn.exec).toHaveBeenCalledTimes(1)
     })
 
-    it('captures a snapshot through a gateway that truncates at 10 KiB and merges stderr', async () => {
+    it('captures a snapshot through a gateway that truncates the plain command and merges stderr', async () => {
       const base = mkdtempSync(join(tmpdir(), 'orcad-gateway-capture-'))
       try {
         const root = join(base, '.orca')
@@ -100,11 +100,22 @@ describe.skipIf(process.platform === 'win32')(
           snapshot,
           join(base, '.orca-remote')
         )
-        expect(
-          Buffer.byteLength(wrapRemoteCommandForPosixShell(command, { compress: false }))
-        ).toBeGreaterThan(10 * 1024)
+        // The command embeds the temp path ~40 times, so its size varies by OS; pick a cut the
+        // plain form always exceeds and the compressed form always fits.
+        const plainBytes = Buffer.byteLength(
+          wrapRemoteCommandForPosixShell(command, { compress: false })
+        )
+        const compressedBytes = Buffer.byteLength(
+          wrapRemoteCommandForPosixShell(command, { compress: true })
+        )
+        const gatewayLimitBytes = Math.min(
+          10 * 1024,
+          Math.floor((plainBytes + compressedBytes) / 2)
+        )
+        expect(plainBytes).toBeGreaterThan(gatewayLimitBytes)
+        expect(compressedBytes).toBeLessThan(gatewayLimitBytes)
 
-        const output = await execCommand(host({ gatewayLimitBytes: 10 * 1024 }), command)
+        const output = await execCommand(host({ gatewayLimitBytes }), command)
 
         expect(parseOrcadSnapshotCapture(output)).toBe('captured')
         expect(existsSync(join(snapshot, 'state.tar'))).toBe(true)
