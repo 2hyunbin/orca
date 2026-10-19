@@ -26,7 +26,13 @@ export type StructuredChatNamingDeps = {
   generate: (record: AgentSessionRecord, firstPrompt: string) => Promise<string | null>
   onNamed: (workspaceId: string, sessionId: string) => void
   logger: StructuredAgentSessionLogger
+  wait?: (ms: number) => Promise<void>
 }
+
+/** Backoff before each retry of a failed first name; the seed stays if every try fails. */
+const GENERATION_RETRY_DELAYS_MS = [2000, 4000]
+
+const waitFor = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
 export function createStructuredChatNamingHandler(deps: StructuredChatNamingDeps) {
   const attempted = new Set<string>()
@@ -43,6 +49,31 @@ export function createStructuredChatNamingHandler(deps: StructuredChatNamingDeps
       deps.onNamed(record.location.workspaceId, record.sessionId)
     } catch (error) {
       warn(record.sessionId, error)
+    }
+  }
+
+  async function generateWithRetries(
+    record: AgentSessionRecord,
+    firstPrompt: string,
+    stillSeeded: () => boolean
+  ): Promise<string | null> {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        const chatName = await deps.generate(record, firstPrompt)
+        if (chatName) {
+          return chatName
+        }
+      } catch (error) {
+        warn(record.sessionId, error)
+      }
+      const delay = GENERATION_RETRY_DELAYS_MS[attempt]
+      if (delay === undefined) {
+        return null
+      }
+      await (deps.wait ?? waitFor)(delay)
+      if (!stillSeeded()) {
+        return null
+      }
     }
   }
 
@@ -76,7 +107,10 @@ export function createStructuredChatNamingHandler(deps: StructuredChatNamingDeps
       return
     }
     refresh(seeded)
-    const chatName = await deps.generate(seeded, firstPrompt)
+    const stillSeeded = () =>
+      !namingOff() &&
+      store.getRecord(seeded.sessionId)?.conversationName === seeded.conversationName
+    const chatName = await generateWithRetries(seeded, firstPrompt, stillSeeded)
     if (!chatName || namingOff()) {
       return
     }

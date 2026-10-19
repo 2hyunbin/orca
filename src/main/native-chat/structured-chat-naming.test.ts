@@ -48,7 +48,8 @@ function rig(provider: 'claude' | 'codex') {
     readFirstPrompt: vi.fn(async () => 'Please repair the login flow'),
     generate: vi.fn(async () => 'auth/login'),
     onNamed: vi.fn(),
-    logger: { warn: vi.fn(), error: vi.fn() }
+    logger: { warn: vi.fn(), error: vi.fn() },
+    wait: vi.fn(async () => {})
   }
   const summary: AgentSessionStatusSummary = {
     sessionId: record.sessionId,
@@ -171,7 +172,7 @@ describe.each(['claude', 'codex'] as const)('structured %s chat naming', (provid
   })
 
   it.each(['rejected', 'declined', 'empty'] as const)(
-    'keeps the first-prompt name when generation is %s, without retrying',
+    'retries %s generation twice, then keeps the first-prompt name',
     async (outcome) => {
       const state = rig(provider)
       state.deps.generate = vi.fn(async () => {
@@ -186,10 +187,24 @@ describe.each(['claude', 'codex'] as const)('structured %s chat naming', (provid
       state.handle({ ...state.summary, latestPrompt: 'Second request' }, { replay: false })
       await settle()
       expect(state.read()?.conversationName).toBe('Please repair the login flow')
-      expect(state.deps.generate).toHaveBeenCalledTimes(1)
+      expect(state.deps.generate).toHaveBeenCalledTimes(3)
+      expect(state.deps.wait).toHaveBeenNthCalledWith(1, 2000)
+      expect(state.deps.wait).toHaveBeenNthCalledWith(2, 4000)
       expect(state.setConversationName).toHaveBeenCalledTimes(1)
     }
   )
+
+  it('takes the generated name from a retry after a failed first try', async () => {
+    const state = rig(provider)
+    state.deps.generate = vi
+      .fn<StructuredChatNamingDeps['generate']>()
+      .mockRejectedValueOnce(new Error('Agent failed'))
+      .mockResolvedValueOnce('auth/login')
+    state.handle(state.summary, { replay: false })
+    await settle()
+    expect(state.read()?.conversationName).toBe('auth/login')
+    expect(state.deps.generate).toHaveBeenCalledTimes(2)
+  })
 
   it('protects a name changed while generation runs', async () => {
     const state = rig(provider)
