@@ -40,9 +40,10 @@ export const PHONE_WATCH_RULES = {
   // Each rule trips on three complete minutes in a row over its line.
   consecutiveMinutes: 3,
   readMinutes: 10,
-  // Judged as a share of the minute's phone attempts (the signal plus completed accepts), not a
-  // count: a count line false-tripped 33/121 5-hour watches on busy c28 (10-18/19), where bursts
-  // of refusals arrive with the evening rise in accepts. A minute with fewer attempts is not judged.
+  // Judged as a share of the minute's phone attempts (the signal plus completed accepts; for
+  // confirm failures, the accepts), not a count: a count line false-tripped 33/121 5-hour watches
+  // on busy c28 (10-18/19), where bursts of refusals arrive with the evening rise in accepts. A
+  // minute with fewer attempts is not judged, so low-volume c7 (~2 accepts/min) is mostly unjudged.
   minAttemptsPerMinute: 4,
   // Over half of the minute's attempts, and 0.25 above the share before the flip, capped so two
   // failures per accept always trips. Exactly half is not enough: c28 (04:08Z) and c7 (09:13Z)
@@ -74,10 +75,20 @@ export function phoneShareLine(backgroundShare) {
   return Math.min(shareCeiling, Math.max(shareFloor, backgroundShare + shareOverBackground))
 }
 
-// Over the line: enough attempts that minute, and strictly more than the line refused or failed.
-export function phoneMinuteOver(count, completedAccepts, line) {
+// A completed accept makes one confirm, so confirm failures are a share of accepts (capped at
+// all of them); every other signal is an attempt that did not complete.
+function attemptsAndShare(signal, count, completedAccepts) {
+  if (signal === 'confirmFailures') {
+    return { attempts: completedAccepts, share: completedAccepts === 0 ? 0 : Math.min(count, completedAccepts) / completedAccepts }
+  }
   const attempts = count + completedAccepts
-  return attempts >= PHONE_WATCH_RULES.minAttemptsPerMinute && count / attempts > line
+  return { attempts, share: attempts === 0 ? 0 : count / attempts }
+}
+
+// Over the line: enough attempts that minute, and strictly more than the line refused or failed.
+export function phoneMinuteOver(signal, count, completedAccepts, line) {
+  const { attempts, share } = attemptsAndShare(signal, count, completedAccepts)
+  return attempts >= PHONE_WATCH_RULES.minAttemptsPerMinute && share > line
 }
 
 // The 10 minutes before phonePath went memory, from `readCellPhoneMinutes`: each signal's share of
@@ -89,7 +100,7 @@ export function measuredPhoneBackground(read) {
     share: Object.fromEntries(
       Object.values(PHONE_RULE_SIGNALS).map((signal) => {
         const count = sum(read.series[signal])
-        return [signal, count + accepted === 0 ? 0 : count / (count + accepted)]
+        return [signal, attemptsAndShare(signal, count, accepted).share]
       })
     ),
     minutes: read.minutes.length
@@ -308,7 +319,7 @@ function judgePhoneRules(cell, phone, state, at) {
       const recent = phone.series[signal].slice(-consecutiveMinutes)
       const detail = { backgroundShare: background.share[signal], line, recent, accepts }
       const over =
-        recent.length === consecutiveMinutes && recent.every((count, index) => phoneMinuteOver(count, accepts[index], line))
+        recent.length === consecutiveMinutes && recent.every((count, index) => phoneMinuteOver(signal, count, accepts[index], line))
       return [
         name,
         over ? trip(`${signal} over ${Math.round(line * 100)}% of attempts for ${consecutiveMinutes} min (${recent.join(', ')} against ${accepts.join(', ')} accepts)`, detail) : pass(detail)

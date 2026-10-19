@@ -1112,10 +1112,14 @@ test('phone rules: judged as a share of attempts, over half and over the backgro
   assert.equal(phoneShareLine(0.3), 0.55)
   assert.equal(phoneShareLine(0.5), 0.6)
   // Exactly half is not over; nor is a minute with under 4 attempts.
-  assert.equal(phoneMinuteOver(9, 9, 0.5), false)
-  assert.equal(phoneMinuteOver(11, 10, 0.5), true)
-  assert.equal(phoneMinuteOver(3, 0, 0.5), false)
-  assert.equal(phoneMinuteOver(4, 0, 0.5), true)
+  assert.equal(phoneMinuteOver('credentialRefusals', 9, 9, 0.5), false)
+  assert.equal(phoneMinuteOver('credentialRefusals', 11, 10, 0.5), true)
+  assert.equal(phoneMinuteOver('credentialRefusals', 3, 0, 0.5), false)
+  assert.equal(phoneMinuteOver('credentialRefusals', 4, 0, 0.5), true)
+  // Each accept makes one confirm: every confirm failing is all of them, not half the attempts.
+  assert.equal(phoneMinuteOver('confirmFailures', 4, 4, 0.6), true)
+  assert.equal(phoneMinuteOver('confirmFailures', 2, 4, 0.5), false)
+  assert.equal(phoneMinuteOver('confirmFailures', 9, 3, 0.5), false)
   const background = measuredPhoneBackground(phoneRead(10, () => ({ ...QUIET_PHONE_MINUTE(0), credentialRefusals: 1, completedAccepts: 9 })))
   assert.equal(background.share.credentialRefusals, 0.1)
   assert.equal(measuredPhoneBackground({ ...phoneRead(10, QUIET_PHONE_MINUTE), unmetered: ['2026-10-19T12:03'] }), null)
@@ -1341,50 +1345,67 @@ test('a failed phone flip back and the phone pages say what is still on', async 
 
 // Recorded, not synthetic: 26 h of c7, c28 and c29 runtime metrics (read-only, 10-18/19). The phone
 // counters are not on those images yet, so auth failures (host and phone 4401s, an over-count)
-// stand in for each phone signal, against completed accepts.
+// stand in for the refused or failed attempts, against completed accepts. They cannot stand in for
+// confirm failures: c28's 04:08Z minutes (9/9, 9/9, 11/10) read as confirms are a total outage.
 const PHONE_RULE_SIGNAL_NAMES = ['credentialRefusals', 'confirmFailures', 'attachDeadlines', 'acceptDatabaseErrors']
 const recordedPhoneMinutes = JSON.parse(readFileSync(new URL('./relay-phone-watch-recorded-quiet-minutes.json', import.meta.url), 'utf8')).cells
-// The minute index each recorded watch from `start` trips at, or null; `minute(i)` may rewrite a minute.
-function recordedTrip({ authFailuresPerMinute: failures, completedAcceptsPerMinute: accepts }, start, watchMinutes, minute = (i) => [failures[i], accepts[i]]) {
+// The minute index a recorded watch of `signal` from `start` trips at, or null; `minute(i)` may rewrite a minute.
+function recordedTrip({ authFailuresPerMinute: failures, completedAcceptsPerMinute: accepts }, signal, start, watchMinutes, minute = (i) => [failures[i], accepts[i]]) {
   const { readMinutes, consecutiveMinutes } = PHONE_WATCH_RULES
   const refused = failures.slice(start - readMinutes, start)
   const background = measuredPhoneBackground({
     ok: true,
     minutes: refused,
     unmetered: [],
-    series: { ...Object.fromEntries(PHONE_RULE_SIGNAL_NAMES.map((signal) => [signal, refused])), completedAccepts: accepts.slice(start - readMinutes, start) }
+    series: { ...Object.fromEntries(PHONE_RULE_SIGNAL_NAMES.map((name) => [name, refused])), completedAccepts: accepts.slice(start - readMinutes, start) }
   })
-  const line = phoneShareLine(background.share.credentialRefusals)
+  const line = phoneShareLine(background.share[signal])
   let run = 0
   for (let index = start; index < start + watchMinutes; index += 1) {
-    run = phoneMinuteOver(...minute(index), line) ? run + 1 : 0
+    run = phoneMinuteOver(signal, ...minute(index), line) ? run + 1 : 0
     if (run >= consecutiveMinutes) return index
   }
   return null
 }
 
-test('phone rules: 26 recorded hours of c7, c28 and c29 trip no rule in any 60- or 300-minute watch', () => {
+test('phone rules: 26 recorded hours of c7, c28 and c29 trip no attempt rule in any 60- or 300-minute watch', () => {
   assert.deepEqual(Object.keys(recordedPhoneMinutes), ['production-gce-c7', 'production-gce-c28', 'production-gce-c29'])
   for (const [cell, minutes] of Object.entries(recordedPhoneMinutes)) {
     for (const watchMinutes of [60, 300]) {
       for (let start = 10; start + watchMinutes <= minutes.authFailuresPerMinute.length; start += 5) {
-        assert.equal(recordedTrip(minutes, start, watchMinutes), null, `${cell}: a ${watchMinutes}-min watch from minute ${start} trips`)
+        assert.equal(recordedTrip(minutes, 'credentialRefusals', start, watchMinutes), null, `${cell}: a ${watchMinutes}-min watch from minute ${start} trips`)
       }
     }
   }
 })
 
-test('phone rules: the same recorded hours trip within 3 minutes once refusals are twice the accepts', () => {
-  for (const [cell, minutes] of Object.entries(recordedPhoneMinutes)) {
-    for (let start = 10; start + 60 <= minutes.authFailuresPerMinute.length; start += 5) {
-      // From minute 30: two refusals per accept (2/3 of attempts), and at least 4 attempts.
-      const broken = (index) => {
-        const accepted = minutes.completedAcceptsPerMinute[index]
-        return index >= start + 30 ? [Math.max(2 * accepted, 4), accepted] : [minutes.authFailuresPerMinute[index], accepted]
+// From minute 30 of each recorded hour, a broken path; it must trip by its third minute (sooner
+// when the minute before was already over) wherever those minutes carry 4 attempts each.
+const BROKEN_PATHS = {
+  'two refusals per accept': ['credentialRefusals', (failed, accepted) => [Math.max(2 * accepted, 4), accepted]],
+  'every accept errors on the database, phones give up after one try': ['acceptDatabaseErrors', (failed, accepted) => [accepted, 0]],
+  'every confirm fails': ['confirmFailures', (failed, accepted) => [accepted, accepted]]
+}
+test('phone rules: the same recorded hours trip on each broken path wherever its minutes are judged', () => {
+  for (const [name, [signal, breakMinute]] of Object.entries(BROKEN_PATHS)) {
+    for (const [cell, minutes] of Object.entries(recordedPhoneMinutes)) {
+      const { authFailuresPerMinute: failures, completedAcceptsPerMinute: accepts } = minutes
+      let judged = 0
+      for (let start = 10; start + 60 <= failures.length; start += 5) {
+        const broken = (index) => (index >= start + 30 ? breakMinute(failures[index], accepts[index]) : [failures[index], accepts[index]])
+        const judgedMinutes = [0, 1, 2].every((offset) => {
+          const [count, accepted] = broken(start + 30 + offset)
+          return (signal === 'confirmFailures' ? accepted : count + accepted) >= PHONE_WATCH_RULES.minAttemptsPerMinute
+        })
+        if (!judgedMinutes) continue
+        judged += 1
+        const at = recordedTrip(minutes, signal, start, 60, broken)
+        // Confirms may trip earlier: the stand-in reads as failing confirms on c28 (see above).
+        const earliest = signal === 'confirmFailures' ? start : start + 30
+        assert.ok(at !== null && at >= earliest && at <= start + 32, `${cell} ${name}: from minute ${start + 30} trips at ${at}`)
       }
-      // By its third minute; sooner when the minute before it was already over.
-      const at = recordedTrip(minutes, start, 60, broken)
-      assert.ok(at !== null && at >= start + 30 && at <= start + 32, `${cell}: a broken path from minute ${start + 30} trips at ${at}`)
+      // Busy cells are judged most of the day; low-volume c7 rarely reaches 4 attempts a minute.
+      if (cell !== 'production-gce-c7') assert.ok(judged > 150, `${cell} ${name}: ${judged} judged`)
     }
   }
 })
