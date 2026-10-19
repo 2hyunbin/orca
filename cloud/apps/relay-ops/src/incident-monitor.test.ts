@@ -643,6 +643,57 @@ describe('incident monitor evaluator', () => {
       expect.objectContaining({ code: 'selector_mismatch' })
     )
   })
+
+  // Why: the director refuses cell-status and migration reads on a reserve cell (2026-10-19, c7).
+  it('judges a reserve cell on probes, logs and selector, without its refused reads', () => {
+    const reserveSample = (): IncidentSample => {
+      const sample = healthySample()
+      sample.cells[0] = { ...sample.cells[0]!, reserve: true }
+      const admin = sample.sources['director-admin']!.signals
+      delete admin['cell.production-gce-c1.heartbeat_fresh']
+      delete admin['cell.production-gce-c1.heartbeat_age_ms']
+      delete admin['cell.production-gce-c1.migration_blocked']
+      delete admin['cell.production-gce-c1.migration_target_inactive']
+      return sample
+    }
+    expect(evaluateIncidentSample(reserveSample(), startedAt)).toMatchObject({
+      status: 'green',
+      failures: []
+    })
+
+    const crowded = reserveSample()
+    crowded.sources['relay-logs']!.signals['cell.production-gce-c1.queued_bytes'] = signal(
+      INCIDENT_MONITOR_THRESHOLDS.cellQueuedBytes + 1
+    )
+    expect(evaluateIncidentSample(crowded, startedAt).failures).toContainEqual(
+      expect.objectContaining({ signal: 'cell.production-gce-c1.queued_bytes' })
+    )
+
+    const unready = reserveSample()
+    unready.sources['active-probe']!.signals['cell.production-gce-c1.ready'] = signal(0)
+    expect(evaluateIncidentSample(unready, startedAt).failures).toContainEqual(
+      expect.objectContaining({ signal: 'cell.production-gce-c1.ready' })
+    )
+
+    const unknownAdmission = reserveSample()
+    delete unknownAdmission.sources['director-admin']!.signals[
+      'cell.production-gce-c1.admission_state'
+    ]
+    expect(evaluateIncidentSample(unknownAdmission, startedAt).failures).toContainEqual({
+      code: 'signal_missing',
+      source: 'director-admin',
+      signal: 'cell.production-gce-c1.admission_state'
+    })
+
+    const notReserve = reserveSample()
+    notReserve.cells[0] = { ...notReserve.cells[0]!, reserve: false }
+    expect(evaluateIncidentSample(notReserve, startedAt).failures).toContainEqual(
+      expect.objectContaining({
+        code: 'signal_missing',
+        signal: 'cell.production-gce-c1.heartbeat_fresh'
+      })
+    )
+  })
 })
 
 describe('incident monitor lifecycle', () => {
