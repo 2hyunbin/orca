@@ -10,6 +10,6 @@ export function supportsAcpStructuredLocation(
 ): boolean {
   return (
     supportsSupervisedProviderChildLocation(location, hasWindowsProcessStartTimeProof) &&
-    (spec.managedRuntime?.availableOnHost?.() ?? true)
+    (!spec.managedRuntime || spec.managedRuntime.pin() !== null)
   )
 }

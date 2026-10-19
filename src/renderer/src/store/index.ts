@@ -49,6 +49,7 @@ import { createTaskCreationDraftsSlice } from './slices/task-creation-drafts'
 import { createRemoteServerUpdatesSlice } from './slices/remote-server-updates'
 import { createTerminalQuickCommandHostsSlice } from './slices/terminal-quick-command-hosts'
 import { createStructuredSessionLaunchDirectorySlice } from './slices/structured-session-launch-directories'
+import { createWorkspaceAttentionSlice } from './slices/workspace-attention/workspace-attention-slice'
 import { e2eConfig } from '@/lib/e2e-config'
 import type { createWebRuntimeSessionTerminal } from '@/runtime/web-runtime-terminal-creation'
 import {
@@ -57,6 +58,7 @@ import {
 } from '@/lib/http-link-routing'
 import { installStoreListenerCensus } from './store-listener-census'
 import { installSettledSortEpoch } from './settled-sort-epoch'
+import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
 import { withReactCommitCascadeWriteProbe } from './react-commit-cascade-write-probe'
 import { withStoreIdentityChurnProbe } from './store-identity-churn-probe'
 import {
@@ -78,7 +80,10 @@ export const useAppStore = create<AppState>()(
   withDevelopmentStoreProbes(
     withReactCommitCascadeWriteProbe((...a) => {
       // Why first: settling inside the bump's own notify means hook subscribers never see it unsettled.
-      installSettledSortEpoch(a[2])
+      // Switch point: the stamp-sorted list reads no settled epoch.
+      if (!ORCA_SIDEBAR_INPUTS_IS_MAIN) {
+        installSettledSortEpoch(a[2])
+      }
       // Why: the inner api is only reachable here, before create() copies subscribe onto the hook.
       installStoreListenerCensus(a[2])
       return {
@@ -128,7 +133,8 @@ export const useAppStore = create<AppState>()(
         ...createTaskCreationDraftsSlice(...a),
         ...createRemoteServerUpdatesSlice(...a),
         ...createTerminalQuickCommandHostsSlice(...a),
-        ...createStructuredSessionLaunchDirectorySlice(...a)
+        ...createStructuredSessionLaunchDirectorySlice(...a),
+        ...createWorkspaceAttentionSlice(...a)
       }
     })
   )

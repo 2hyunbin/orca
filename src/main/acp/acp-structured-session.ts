@@ -2,13 +2,18 @@
 // process's exit reach the journal and the host.
 
 import { agentSessionFailureFact, providerDiagnostic } from '../../shared/agent-session-failure'
-import type { StructuredAgentSessionEndedEvent } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import { agentSessionFailureWords } from '../../shared/agent-session-failure-words'
+import type {
+  AgentSessionDispatchOutcome,
+  StructuredAgentSessionEndedEvent
+} from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import {
   UNVERIFIABLE_TURN_VERDICT,
   type StructuredAgentSessionTurnVerdict
 } from '../native-chat/agent-session-wire/structured-agent-session-stale-turn-verdict'
 import type { AcpLaunchSpec } from './acp-launch-specs'
 import type { AcpChildStops } from './acp-dialects/acp-dialect'
+import { acpAgentName } from './acp-structured-agent-definitions'
 import type { AcpSessionEvent } from './acp-session-runtime'
 import type { AcpStructuredConnection } from './acp-structured-connection'
 import type { AcpStructuredLane } from './acp-structured-lane'
@@ -148,4 +153,15 @@ export function endAcpStructuredSession(
     acquisitionGeneration: session.acquisitionGeneration,
     observedAt
   })
+}
+
+/** Only for a send refused before its prompt was written. */
+export function rejectedAcpDispatch(session: AcpStructuredSession): AgentSessionDispatchOutcome {
+  return {
+    state: 'rejected',
+    ...agentSessionFailureWords(
+      agentSessionFailureFact('providerExited', { neverReachedAgent: true }),
+      { surface: 'rejection', agentName: acpAgentName(session.spec.agent) }
+    )
+  }
 }

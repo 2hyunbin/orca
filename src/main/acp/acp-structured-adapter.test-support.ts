@@ -2,8 +2,8 @@
 // protocol runtime, translator and assembler, and a real on-disk journal to read back.
 
 import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { vi } from 'vitest'
-import { z } from 'zod'
 import type { AgentJournalMessageItem } from '../../shared/agent-session-journal-types'
 import type { AgentChatPermissionMode } from '../../shared/agent-chat-permission-mode'
 import type { ProviderProcessExit } from '../provider-process/managed-provider-process'
@@ -25,7 +25,6 @@ import { AcpStructuredSessionAdapter } from './acp-structured-session-adapter'
 import type { AcpStructuredSessionAdapterDeps } from './acp-structured-session-adapter-deps'
 
 export const GROK = acpLaunchSpecFor('grok')!
-const setConfigOptionSchema = z.object({ configId: z.string(), value: z.string() })
 const RIG_ENV = { PATH: '/usr/bin', ORCA_PANE_KEY: 'tab-1:pane-1', ORCA_AGENT_HOOK_PORT: '1234' }
 export const PROVIDER_SESSION = 'acp-session-1'
 export const PID = 4242
@@ -224,16 +223,13 @@ export async function openAcpAdapterRig(
       )
       // A row that enforces its permission mode sets it at every start; the agent confirms it.
       if (spec.permissionModeConfig) {
-        agent.on('session/set_config_option', (frame) => {
-          const { configId: id, value } = setConfigOptionSchema.parse(frame.params)
-          const set = { id, name: id, type: 'select', currentValue: value, options: [] }
-          agent.reply(frame, { configOptions: [...GROK_CONFIG_OPTIONS, set] })
-        })
+        agent.confirmConfigOptions(GROK_CONFIG_OPTIONS)
       }
       options.script?.(agent)
       return child
     },
     readProcessStartTime: async () => 1_700_000_000_000,
+    dataDirectory: join(tmpdir(), 'orca-acp-adapter-rig'),
     onEvent: (event) => lifecycle.push(event),
     onDispatchSettledLate: (settlement) => settled.push(settlement),
     mintGeneration: () => 'gen-acp',

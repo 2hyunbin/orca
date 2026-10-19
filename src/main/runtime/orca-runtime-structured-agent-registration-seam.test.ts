@@ -76,6 +76,7 @@ describe('the structured agent registration list', () => {
       connect: () => {
         throw new Error('no connection')
       },
+      dataDirectory: '/orca-data',
       isWindowsProcessStartTimeAvailable: () => true
     })
     Object.assign(runtime, {

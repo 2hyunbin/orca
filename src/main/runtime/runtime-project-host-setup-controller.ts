@@ -21,19 +21,25 @@ import {
 } from '../../shared/execution-host'
 import { getProjectIdForProviderIdentity } from '../../shared/project-host-setup-projection'
 import { getProjectHostSetupForRepo } from '../../shared/project-host-setup-lookup'
-import { invalidateAuthorizedRootsCache } from '../ipc/filesystem-auth'
+import { invalidateAuthorizedRootsCache } from '../ipc/registered-worktree-roots-cache'
 import {
   SshHostNotServedError,
   sshTargetNotConnectedMessage
 } from '../providers/ssh-host-not-served-error'
 import { runWorktreeChangeInvalidators } from '../ipc/worktree-change-invalidators'
 import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
+import { updateProjectHostSetupWithProvenKind } from '../folder-repo-git-conversion'
 import type { RuntimeStore } from './runtime-store-contract'
 import { readAllWorktreeMetaForRepo } from '../persistence/host-qualified-worktree-meta'
 import {
   countRepoWorkspacesWithMetadata,
   describeProjectRemovalRefusal
 } from './project-removal-impact'
+import {
+  assertWslMoveHostSetupIdWritable,
+  assertWslMoveHostSetupWritable,
+  assertWslMoveReposWritable
+} from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
 
 type RuntimeProjectHostSetupDependencies = {
   getStore: () => RuntimeStore | null
@@ -57,6 +63,9 @@ function assertCloneHostIsSupported(hostId: ExecutionHostId | null | undefined):
   )
 }
 
+export const SERVER_SSH_PROJECT_ADD_UNAVAILABLE_MESSAGE =
+  "This Orca server can't add projects on its SSH hosts. Add the SSH host on your computer to open its projects."
+
 function sshTargetNotServedError(connectionId: string): SshHostNotServedError {
   return new SshHostNotServedError(connectionId, sshTargetNotConnectedMessage(connectionId))
 }
@@ -73,6 +82,8 @@ export class RuntimeProjectHostSetupController {
     if (!store?.updateProject) {
       throw new Error('runtime_unavailable')
     }
+    const existing = store.getProjects?.().find((entry) => entry.id === projectId)
+    assertWslMoveReposWritable(store, existing?.sourceRepoIds ?? [])
     const project = store.updateProject(projectId, updates)
     if (!project) {
       throw new Error(`Project not found: ${projectId}`)
@@ -91,6 +102,7 @@ export class RuntimeProjectHostSetupController {
     if (!store?.createProjectHostSetup) {
       throw new Error('runtime_unavailable')
     }
+    assertWslMoveHostSetupWritable(store, args)
     const result = store.createProjectHostSetup(args)
     if (!result) {
       throw new Error(`Project not found: ${args.projectId}`)
@@ -115,12 +127,15 @@ export class RuntimeProjectHostSetupController {
     return this.completeSetup(args, repo, !knownRepoIds.has(repo.id))
   }
 
-  /** `repo.addRemote` stays registered for older clients; this process serves no SSH target. */
+  /**
+   * `repo.addRemote` stays registered for older clients, which still offer it; this process serves
+   * no SSH target, so the refusal says where such a project can be added instead.
+   */
   addSshRepo(args: { connectionId: string }): Promise<Repo> {
     if (!this.deps.getStore()) {
       throw new Error('runtime_unavailable')
     }
-    throw sshTargetNotServedError(args.connectionId)
+    throw new SshHostNotServedError(args.connectionId, SERVER_SSH_PROJECT_ADD_UNAVAILABLE_MESSAGE)
   }
 
   async setupClone(args: ProjectHostSetupCloneArgs): Promise<ProjectHostSetupResult> {
@@ -134,12 +149,31 @@ export class RuntimeProjectHostSetupController {
     )
   }
 
-  updateSetup(args: ProjectHostSetupUpdateArgs): ProjectHostSetupUpdateResult {
+  // Why sync up front: availability and the WSL move fence refuse before any Git probe starts.
+  updateSetup(args: ProjectHostSetupUpdateArgs): Promise<ProjectHostSetupUpdateResult> {
     const store = this.deps.getStore()
-    if (!store?.updateProjectHostSetup) {
+    const updateProjectHostSetup = store?.updateProjectHostSetup?.bind(store)
+    if (!store || !updateProjectHostSetup) {
       throw new Error('runtime_unavailable')
     }
-    const result = store.updateProjectHostSetup(args)
+    assertWslMoveHostSetupIdWritable(store, args.setupId)
+    return this.finishSetupUpdate(store, updateProjectHostSetup, args)
+  }
+
+  private async finishSetupUpdate(
+    store: RuntimeStore,
+    updateProjectHostSetup: NonNullable<RuntimeStore['updateProjectHostSetup']>,
+    args: ProjectHostSetupUpdateArgs
+  ): Promise<ProjectHostSetupUpdateResult> {
+    const result = await updateProjectHostSetupWithProvenKind(
+      store,
+      (setupArgs) => {
+        assertWslMoveHostSetupIdWritable(store, setupArgs.setupId)
+        return updateProjectHostSetup(setupArgs)
+      },
+      args,
+      true
+    )
     if (!result) {
       throw new Error(`Project host setup not found: ${args.setupId}`)
     }
@@ -160,6 +194,7 @@ export class RuntimeProjectHostSetupController {
     if (!store?.deleteProjectHostSetup) {
       throw new Error('runtime_unavailable')
     }
+    assertWslMoveHostSetupIdWritable(store, args.setupId)
     if (args.force === false) {
       this.assertSetupRemovalIsUnused(store, args.setupId)
     }
@@ -238,6 +273,11 @@ export class RuntimeProjectHostSetupController {
     if (!store) {
       throw new Error('runtime_unavailable')
     }
+    assertWslMoveHostSetupWritable(store, {
+      projectId: args.projectId,
+      hostId: getRepoExecutionHostId(initialRepo),
+      repoId: initialRepo.id
+    })
     let repo = initialRepo
     let setup = getProjectHostSetupForRepo(this.listSetups(), repo)
     if (setup.projectId !== args.projectId) {
@@ -246,7 +286,7 @@ export class RuntimeProjectHostSetupController {
       if (!identity || getProjectIdForProviderIdentity(identity) !== args.projectId) {
         throw new Error('Imported folder does not match the selected project identity.')
       }
-      const updated = store.updateRepo(repo.id, {
+      const updated = store.updateRepo(repo, {
         upstream: {
           owner: identity.owner,
           repo: identity.repo,
@@ -260,7 +300,7 @@ export class RuntimeProjectHostSetupController {
       setup = getProjectHostSetupForRepo(this.listSetups(), repo)
     }
     const setupMethod = args.setupMethod ?? 'imported-existing-folder'
-    const updated = store.updateRepo(repo.id, { projectHostSetupMethod: setupMethod })
+    const updated = store.updateRepo(repo, { projectHostSetupMethod: setupMethod })
     if (!updated) {
       throw new Error(
         `Project setup repo disappeared before setup metadata could be linked: ${repo.id}`

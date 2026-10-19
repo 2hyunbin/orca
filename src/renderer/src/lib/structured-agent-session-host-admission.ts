@@ -58,7 +58,12 @@ export async function askHostCreateSupport(
         seedOptions?: unknown
       }>(target, 'agentSession.createSupport', { worktree, agent })
       if (support.supported !== true) {
-        return { kind: 'declined', ...(support.reason ? { reason: support.reason } : {}) }
+        return {
+          kind: 'declined',
+          ...(typeof support.reason === 'string' && support.reason.trim()
+            ? { reason: support.reason }
+            : {})
+        }
       }
       const seedOptions = parseStructuredLaunchSeedOptions(support.seedOptions)
       return seedOptions ? { kind: 'admitted', seedOptions } : { kind: 'admitted' }
@@ -73,7 +78,7 @@ export async function askHostCreateSupport(
       }
       const code = runtimeErrorCode(error)
       if (isDefinitiveAgentSessionCreateRefusal(code)) {
-        return { kind: 'declined', reason: code }
+        return { kind: 'declined' }
       }
       const message = error instanceof Error ? error.message : String(error)
       return { kind: 'unreachable', code, message, error }

@@ -118,7 +118,7 @@ export async function acquireAcpStructuredSession(input: {
     {
       clientInfo: { name: 'orca', version: '1' },
       ...(acquire.onOutput ? { onOutput: acquire.onOutput } : {}),
-      ...(spec.signInPrompt ? { signInPrompt: spec.signInPrompt } : {}),
+      ...(spec.signIn ? { signIn: spec.signIn } : {}),
       onPermission: (request, context) => {
         if (!session?.turns.acceptsRequests) {
           // No prompt of Orca's runs (a turn the agent began itself included), or a Stop or steer
@@ -191,7 +191,7 @@ export async function acquireAcpStructuredSession(input: {
       dialect: spec.dialect,
       now,
       childStops: () => childStops,
-      ...acpLaneChildWorkDelivery(deps, sessionId),
+      ...acpLaneChildWorkDelivery(deps, sessionId, events),
       logger: deps.logger ?? createStructuredAgentSessionLogger(),
       onInputAccepted: (clientMessageId) => session?.turns.accept(clientMessageId),
       onFailed: () => input.forceClose(sessionId)
@@ -263,8 +263,9 @@ export async function acquireAcpStructuredSession(input: {
       // Unlike a saved pick, a refusal fails the start: the session would run another posture.
       // A start the host names no mode for asks, never more access than the chat chose.
       const requested = mode.values[acquire.permissionMode ?? 'ask'] ?? mode.values.ask
-      const { configOptions } = await connection.setConfigOption(mode.configId, requested)
-      if (configOptions.find((option) => option.id === mode.configId)?.currentValue !== requested) {
+      const configId = options.modeConfigId()
+      const { configOptions } = await connection.setConfigOption(configId, requested)
+      if (configOptions.find((option) => option.id === configId)?.currentValue !== requested) {
         throw new Error('Permission mode could not be confirmed')
       }
       options.adoptConfigOptions(configOptions)

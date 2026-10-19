@@ -1,8 +1,8 @@
-/** Download, hash-verify and cache pinned runtimes, driven only by their pinned assets. */
+/** Download, hash-verify and cache the pinned Node runtime, driven only by its pinned asset. */
 import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { chmod, link, mkdir, readdir, rename, rm } from 'node:fs/promises'
-import { basename, dirname, join } from 'node:path'
+import { chmod, link, mkdir, rm } from 'node:fs/promises'
+import { basename, join } from 'node:path'
 import { getMainHttpClient, type MainHttpClient } from '../network/http-client'
 import { downloadVerifiedArchive, extractRuntimeArchive } from './runtime-archive-download'
 import { findOrcadCachePath } from './orcad-cache-path'
@@ -36,13 +36,6 @@ export type PinnedRuntimeExecutable = PinnedRuntimeArchive & {
   /** Where the verified executable is published; `attempt` > 0 names a repair beside it. */
   cachePath: (attempt: number) => string
 }
-
-export type PinnedRuntimeFolder = PinnedRuntimeArchive & {
-  /** Archive-relative path and sha256 of every executable the folder must hold. */
-  members: readonly { path: string; sha256: string }[]
-}
-
-const OWN_STAGING_PREFIX = `.download-${process.pid}-`
 
 function archiveName(archive: PinnedRuntimeArchive): string {
   return basename(new URL(archive.url).pathname)
@@ -108,7 +101,23 @@ export async function materializeCachedRuntimeExecutable(
   const temporaryDir = join(runtimeDir, `.download-${process.pid}-${randomUUID()}`)
   await mkdir(temporaryDir, { recursive: true })
   try {
-    const extractedDir = await downloadAndExtract(runtime, [runtime.member], temporaryDir, options)
+    const archivePath = join(temporaryDir, archiveName(runtime))
+    await downloadVerifiedArchive(
+      runtime,
+      archivePath,
+      options.fetcher ?? getMainHttpClient().fetch,
+      options.signal
+    )
+    options.signal?.throwIfAborted()
+    const extractedDir = join(temporaryDir, 'extracted')
+    await mkdir(extractedDir)
+    const result = await extractRuntimeArchive(runtime, archivePath, extractedDir, options.signal)
+    options.signal?.throwIfAborted()
+    if (result.code !== 0) {
+      throw new Error(
+        `${runtime.label} archive extraction failed: ${result.stderr || result.stdout}`
+      )
+    }
     const executable = join(extractedDir, ...runtime.member.split('/'))
     await verifyFileSha256(executable, runtime.executableSha256, `${runtime.label} executable`)
     if (!runtime.isWindows) {
@@ -125,85 +134,6 @@ export async function materializeCachedRuntimeExecutable(
   } finally {
     await rm(temporaryDir, { recursive: true, force: true })
   }
-}
-
-/** Publishes `folder` by one rename once every member verifies, so it only ever exists verified and
- *  a launch never hashes it again. */
-export async function materializeVerifiedRuntimeFolder(
-  runtime: PinnedRuntimeFolder,
-  folder: string,
-  options: PinnedRuntimeMaterializeOptions
-): Promise<void> {
-  options.signal?.throwIfAborted()
-  const parent = dirname(folder)
-  await mkdir(parent, { recursive: true })
-  const temporaryDir = join(parent, `${OWN_STAGING_PREFIX}${randomUUID()}`)
-  await mkdir(temporaryDir, { recursive: true })
-  const paths = runtime.members.map((member) => member.path)
-  const verifyMembers = async (root: string): Promise<void> => {
-    for (const member of runtime.members) {
-      const path = join(root, ...member.path.split('/'))
-      await verifyFileSha256(path, member.sha256, `${runtime.label} ${member.path}`)
-      if (process.platform !== 'win32') {
-        await chmod(path, 0o755)
-      }
-    }
-  }
-  try {
-    const extractedDir = await downloadAndExtract(runtime, paths, temporaryDir, options)
-    await verifyMembers(extractedDir)
-    options.signal?.throwIfAborted()
-    await rename(extractedDir, folder).catch(async (error: unknown) => {
-      // A concurrent start published first; keep its folder only if it holds the same bytes.
-      await verifyMembers(folder).catch(() => {
-        throw new Error(`${runtime.label} folder is unavailable or corrupted: ${folder}`, {
-          cause: error
-        })
-      })
-    })
-  } finally {
-    await rm(temporaryDir, { recursive: true, force: true })
-  }
-}
-
-/** Removes the other versions beside `folder` and earlier processes' staging: one host owns the data
- *  root, so nothing runs from them; this process's staging may be a publish in flight. */
-export async function removeOtherRuntimeVersions(folder: string): Promise<void> {
-  const parent = dirname(folder)
-  const entries = await readdir(parent).catch((error: NodeJS.ErrnoException) =>
-    error.code === 'ENOENT' ? [] : Promise.reject(error)
-  )
-  const stale = entries.filter((e) => e !== basename(folder) && !e.startsWith(OWN_STAGING_PREFIX))
-  await Promise.all(stale.map((entry) => rm(join(parent, entry), { recursive: true, force: true })))
-}
-
-async function downloadAndExtract(
-  runtime: PinnedRuntimeArchive,
-  members: readonly string[],
-  temporaryDir: string,
-  options: PinnedRuntimeMaterializeOptions
-): Promise<string> {
-  const archivePath = join(temporaryDir, archiveName(runtime))
-  await downloadVerifiedArchive(
-    runtime,
-    archivePath,
-    options.fetcher ?? getMainHttpClient().fetch,
-    options.signal
-  )
-  options.signal?.throwIfAborted()
-  const extractedDir = join(temporaryDir, 'extracted')
-  await mkdir(extractedDir)
-  const result = await extractRuntimeArchive(
-    { label: runtime.label, members },
-    archivePath,
-    extractedDir,
-    options.signal
-  )
-  options.signal?.throwIfAborted()
-  if (result.code !== 0) {
-    throw new Error(`${runtime.label} archive extraction failed: ${result.stderr || result.stdout}`)
-  }
-  return extractedDir
 }
 
 /** Hard-link publication: a concurrent winner's identical bytes are kept, never replaced. */
@@ -279,18 +209,20 @@ export function materializeCachedNodeRuntime(
 export async function verifyFileSha256(
   path: string,
   expected: string,
-  label: string
+  label: string,
+  signal?: AbortSignal
 ): Promise<void> {
-  const actual = await fileSha256(path)
+  const actual = await fileSha256(path, signal)
+  signal?.throwIfAborted()
   if (actual !== expected) {
     throw new Error(`${label} checksum mismatch: expected ${expected}, got ${actual ?? 'missing'}`)
   }
 }
 
-export async function fileSha256(path: string): Promise<string | null> {
+export async function fileSha256(path: string, signal?: AbortSignal): Promise<string | null> {
   try {
     const hash = createHash('sha256')
-    for await (const chunk of createReadStream(path)) {
+    for await (const chunk of createReadStream(path, { signal })) {
       hash.update(chunk)
     }
     return hash.digest('hex')

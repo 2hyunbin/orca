@@ -26,6 +26,7 @@ import {
   hostTestAttachParams,
   hostTestOperationId
 } from '../native-chat/agent-session-wire/structured-agent-session-host-test-data'
+import { deferred } from './acp-scripted-agent.test-support'
 import { resolveAcpLaunchInvocation } from './acp-structured-launch-resolution'
 import { readAcpFixture, type AcpFixtureFrame } from './acp-timeline-fixture.test-support'
 
@@ -91,13 +92,15 @@ it('launches on its own private folder with file sign-in and no other Google cre
   const { command, env, envToDelete } = await resolveAcpLaunchInvocation(ANTIGRAVITY, home, {
     resolveEnvironment: async () => ({ ...user, PATH: '' }),
     resolveCommandSettings: () => ({ agentCmdOverrides: { antigravity: '/missing/agy' } }),
-    inheritedEnv: { GEMINI_API_KEY: 'k', ANTIGRAVITY_HARNESS_PATH: '/x' }
+    inheritedEnv: { GEMINI_API_KEY: 'k', ANTIGRAVITY_HARNESS_PATH: '/x', GCLOUD_PROJECT: 'p' },
+    dataDirectory: stateDirectory
   })
   expect(command).toBe(ANTIGRAVITY.command)
   expect(env).toMatchObject({ GEMINI_HOME: folder, AGY_ACP_FORCE_FILE_STORAGE: '1' })
   // A key deleted at spawn beats its overlay, so the file sign-in must not be among them.
   expect(envToDelete.sort()).toEqual([
     'ANTIGRAVITY_HARNESS_PATH',
+    'GCLOUD_PROJECT',
     'GEMINI_API_KEY',
     'GOOGLE_API_KEY'
   ])
@@ -161,4 +164,67 @@ it('runs the chat permission mode picked mid-chat as the server mode on the next
     expect.objectContaining({ configId: 'mode', value: 'auto_edit' }),
     expect.objectContaining({ configId: 'mode', value: 'yolo' })
   ])
+})
+
+it('refuses a new start while its sign-in changes, and stops one already starting', async () => {
+  const gate = ANTIGRAVITY.launchGate!
+  const rig = await openAcpAdapterRig({
+    spec: ANTIGRAVITY,
+    script: (agent) => agent.on('session/new', () => {})
+  })
+  const starting = rig.acquire().catch((error: unknown) => error)
+  await rig.frame('session/new')
+  const signIn = deferred<void>()
+  const operation = gate.run(
+    async () => {},
+    () => signIn.promise
+  )
+  expect(String(await starting)).toContain('closed while starting')
+  await expect(rig.acquire()).rejects.toMatchObject({ reason: 'accountSwitchInProgress' })
+  signIn.resolve()
+  await operation
+
+  const lateStart = gate.enter(undefined)
+  let left = false
+  let stopped = false
+  let worked = false
+  const failedOperation = gate.run(
+    async () => {
+      expect(left).toBe(true)
+      stopped = true
+      throw new Error('stop failed')
+    },
+    async () => {
+      worked = true
+    }
+  )
+  expect(lateStart.signal.aborted).toBe(true)
+  expect(stopped).toBe(false)
+  left = true
+  lateStart.leave()
+  await expect(failedOperation).rejects.toThrow('stop failed')
+  expect(worked).toBe(false)
+})
+
+it('stops a chat that has left the gate but is not loaded yet before the operation runs', async () => {
+  const [initialized, opened] = await readAcpFixture('antigravity-v1-question')
+  const rig = await openAcpAdapterRig({
+    spec: ANTIGRAVITY,
+    initialize: result(initialized),
+    script: (agent) =>
+      agent.on('session/new', (frame) =>
+        agent.reply(frame, { ...result(opened), sessionId: PROVIDER_SESSION })
+      )
+  })
+  // Its start returned, so the gate has no start to abort and no loaded chat lists it yet.
+  await rig.acquire()
+  const child = rig.child()
+  let ranOverLiveChild: boolean | null = null
+  await ANTIGRAVITY.launchGate!.run(
+    async () => {},
+    async () => {
+      ranOverLiveChild = !child.exited
+    }
+  )
+  expect(ranOverLiveChild).toBe(false)
 })

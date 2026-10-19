@@ -15,7 +15,7 @@ import {
 import { browserNetworkExecutionHostKey } from '../../browser/browser-network-execution-route'
 import { waitForTabRegistration } from '../../ipc/browser-tab-registration-wait'
 import { BROWSER_CLIENT_AUTOMATION_HOST_CAPABILITY } from '../../../shared/browser-client-automation-protocol'
-import { BROWSER_HOST_WEBVIEW_CAPABILITY } from '../browser-host-capability-selection'
+import { BROWSER_HOST_WEBVIEW_CAPABILITY } from '../browser-host/browser-host-capability-selection'
 import type { RuntimeBrowserCommandHost } from './browser-command-contracts'
 import type { RuntimeBrowserCommandTargets } from './browser-command-targets'
 
@@ -33,6 +33,7 @@ export class RuntimeBrowserTabCreation {
       | 'getAuthoritativeWindow'
       | 'markHeadlessBrowserSessionTabActive'
       | 'notifyHeadlessBrowserSessionTabsChanged'
+      | 'serveBrowserTabs'
     >,
     private readonly targets: Pick<
       RuntimeBrowserCommandTargets,
@@ -145,6 +146,16 @@ export class RuntimeBrowserTabCreation {
         profileId: params.profileId,
         ...(params.page ? { browserPageId: params.page } : {})
       })
+      if (worktreeId) {
+        this.host.serveBrowserTabs?.opened({
+          worktreeId,
+          pageId: created.browserPageId,
+          url,
+          title: '',
+          ...(params.profileId ? { profileId: params.profileId } : {}),
+          ...(params.targetGroupId ? { groupId: params.targetGroupId } : {})
+        })
+      }
       publishCreatedBrowserSessionTab(this.host, {
         placementKind: 'offscreen',
         browserPageId: created.browserPageId,

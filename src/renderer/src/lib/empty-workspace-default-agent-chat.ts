@@ -1,6 +1,5 @@
 import { isNativeChatEnabled } from '../../../shared/structured-native-chat-launch-route'
 import { pickTuiAgent } from '../../../shared/tui-agent-selection'
-import { withManagedRuntimeChatAgents } from '@/lib/managed-runtime-chat-agents'
 import { withTimeout } from '../../../shared/promise-timeout-fallback'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
@@ -74,11 +73,7 @@ export function openDefaultAgentChatInEmptyWorkspace(
   }
   const agent = pickTuiAgent(
     state.settings?.defaultTuiAgent,
-    withManagedRuntimeChatAgents(
-      state,
-      worktreeId,
-      readDetectedAgentsForTarget(state, target) ?? []
-    ),
+    readDetectedAgentsForTarget(state, target) ?? [],
     state.settings?.disabledTuiAgents
   )
   if (!agent) {
