@@ -4092,9 +4092,9 @@
                 "message": "Claude 用量已过期。请在此账户中启动 Claude 以刷新。"
               }
             },
-            "remoteOwnerNotSetUp": "未在 {{server}} 上设置",
+            "remoteOwnerNotConfigured": "未在 {{server}} 上配置",
             "remoteOwnerSignInSavedHere": "其登录信息仅保存在此电脑上。",
-            "notSetUp": "未设置"
+            "notConfiguredOnRemoteHost": "未在远程主机上配置"
           },
           "SshTargetStatusRow": {
             "sshHost": "SSH 主机"

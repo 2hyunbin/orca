@@ -64,11 +64,11 @@ describe('UsageRow', () => {
   it('renders a row detail line under a placeholder', () => {
     const markup = renderToStaticMarkup(
       <UsageRow
-        p={{ ...signedOutCodex, provider: 'minimax', error: 'Not set up on devbox' }}
+        p={{ ...signedOutCodex, provider: 'minimax', error: 'Not configured on devbox' }}
         display="used"
         state={{
           kind: 'unavailable',
-          statusLabel: 'Not set up on devbox',
+          statusLabel: 'Not configured on devbox',
           detail: 'Its sign-in is saved on this computer only.'
         }}
         showSignInAction={false}
@@ -76,7 +76,7 @@ describe('UsageRow', () => {
       />
     )
 
-    expect(markup).toContain('Not set up on devbox')
+    expect(markup).toContain('Not configured on devbox')
     expect(markup).toContain('Its sign-in is saved on this computer only.')
     expect(markup).not.toContain('Sign in')
   })

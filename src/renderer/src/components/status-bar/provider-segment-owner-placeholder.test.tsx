@@ -19,19 +19,19 @@ const placeholder: ProviderRateLimits = {
   session: null,
   weekly: null,
   updatedAt: 0,
-  error: 'Not set up on devbox',
+  error: 'Not configured on devbox',
   status: 'error',
   usageMetadata: { ownerNotSetUp: { signInSavedHereOnly: true } }
 }
 
 describe('ProviderSegment owner placeholder', () => {
-  it('labels the chip "Not set up", with the host in its tooltip and no warning glyph', () => {
+  it('labels the chip "Not configured on remote host", with the host in its tooltip and no warning glyph', () => {
     const markup = renderToStaticMarkup(
       <ProviderSegment p={placeholder} compact={false} display="used" />
     )
-    expect(markup).toContain('>Not set up</span>')
+    expect(markup).toContain('>Not configured on remote host</span>')
     expect(markup).toContain(
-      'title="Not set up on devbox\nIts sign-in is saved on this computer only."'
+      'title="Not configured on devbox\nIts sign-in is saved on this computer only."'
     )
     // Why: a placeholder is not a failure, so no warning glyph or refresh-failed copy.
     expect(markup).not.toContain('lucide-triangle-alert')
@@ -40,9 +40,9 @@ describe('ProviderSegment owner placeholder', () => {
 
   it('shows "--" instead of the label in compact density, keeping the tooltip', () => {
     const markup = renderToStaticMarkup(<ProviderSegment p={placeholder} compact display="used" />)
-    expect(markup).not.toContain('Not set up</span>')
+    expect(markup).not.toContain('Not configured on remote host</span>')
     // Why: an icon alone would read as a healthy chip.
     expect(markup).toContain('--')
-    expect(markup).toContain('title="Not set up on devbox')
+    expect(markup).toContain('title="Not configured on devbox')
   })
 })

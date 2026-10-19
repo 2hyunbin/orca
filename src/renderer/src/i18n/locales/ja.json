@@ -4092,9 +4092,9 @@
                 "message": "Claude の使用状況が期限切れです。このアカウントで Claude を起動して更新してください。"
               }
             },
-            "remoteOwnerNotSetUp": "{{server}} では未設定",
+            "remoteOwnerNotConfigured": "{{server}} では未構成",
             "remoteOwnerSignInSavedHere": "サインイン情報はこのコンピュータにのみ保存されています。",
-            "notSetUp": "未設定"
+            "notConfiguredOnRemoteHost": "リモートホストでは未構成"
           },
           "SshTargetStatusRow": {
             "sshHost": "SSH ホスト"

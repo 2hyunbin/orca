@@ -172,11 +172,11 @@ describe('resolveOwnerUsageRateLimits', () => {
       const minimax = resolved.minimax!
       expect(isOwnerNotSetUpPlaceholder(minimax)).toBe(true)
       expect(hasNoNumbers(minimax)).toBe(true)
-      expect(minimax.error).toBe('Not set up on devbox')
-      expect(getProviderUsageStatusLabel(minimax)).toBe('Not set up')
+      expect(minimax.error).toBe('Not configured on devbox')
+      expect(getProviderUsageStatusLabel(minimax)).toBe('Not configured on remote host')
       expect(getOwnerNotSetUpNote(minimax)).toBe('Its sign-in is saved on this computer only.')
       expect(getProviderUsageErrorMessage(minimax)).toBe(
-        'Not set up on devbox\nIts sign-in is saved on this computer only.'
+        'Not configured on devbox\nIts sign-in is saved on this computer only.'
       )
       // Why: the host's setup flags stay the host's.
       expect(resolved.minimaxApiKeyConfigured).toBe(false)

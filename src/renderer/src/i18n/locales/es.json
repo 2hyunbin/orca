@@ -4087,9 +4087,9 @@
                 "message": "El uso de Claude ha caducado. Inicia Claude en esta cuenta para actualizarlo."
               }
             },
-            "remoteOwnerNotSetUp": "No configurado en {{server}}",
+            "remoteOwnerNotConfigured": "No configurado en {{server}}",
             "remoteOwnerSignInSavedHere": "Su inicio de sesión solo está guardado en este equipo.",
-            "notSetUp": "No configurado"
+            "notConfiguredOnRemoteHost": "No configurado en el host remoto"
           },
           "SshTargetStatusRow": {
             "sshHost": "Host SSH"

@@ -108,14 +108,14 @@ describe('getUsageRosterRowState', () => {
         provider({
           provider: 'minimax',
           status: 'error',
-          error: 'Not set up on devbox',
+          error: 'Not configured on devbox',
           usageMetadata: { ownerNotSetUp: { signInSavedHereOnly: true } }
         }),
         false
       )
     ).toEqual({
       kind: 'unavailable',
-      statusLabel: 'Not set up on devbox',
+      statusLabel: 'Not configured on devbox',
       detail: 'Its sign-in is saved on this computer only.'
     })
   })

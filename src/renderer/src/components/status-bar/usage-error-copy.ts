@@ -97,7 +97,7 @@ export function isClaudeUsageWaitingForClaude(p: ProviderRateLimits): boolean {
   )
 }
 
-/** Why a placeholder's provider is missing on the host, beyond its "Not set up on" label. */
+/** Why a placeholder's provider is missing on the host, beyond its "Not configured on" label. */
 export function getOwnerNotSetUpNote(p: ProviderRateLimits): string | null {
   return p.usageMetadata?.ownerNotSetUp?.signInSavedHereOnly
     ? translate(
@@ -109,7 +109,10 @@ export function getOwnerNotSetUpNote(p: ProviderRateLimits): string | null {
 
 export function getProviderUsageStatusLabel(p: ProviderRateLimits): string {
   if (p.usageMetadata?.ownerNotSetUp) {
-    return translate('auto.components.status.bar.tooltip.notSetUp', 'Not set up')
+    return translate(
+      'auto.components.status.bar.tooltip.notConfiguredOnRemoteHost',
+      'Not configured on remote host'
+    )
   }
   // Why: no refresh fixes an owner that cannot vouch for its usage, so never say "Refresh failed".
   if (p.usageMetadata?.unverifiableOwner) {

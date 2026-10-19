@@ -84,13 +84,13 @@ test('a provider set up only on this computer stays visible, greyed, under a ser
       ({ env, id }) => window.__store?.getState().setActiveWorktree(id, `runtime:${env}`),
       { env: environmentId, id: worktreeId }
     )
-    const placeholder = minimaxChip(page).locator(`[title^="Not set up on ${HOST_NAME}"]`)
+    const placeholder = minimaxChip(page).locator(`[title^="Not configured on ${HOST_NAME}"]`)
     await expect(placeholder).toBeVisible({ timeout: 60_000 })
     await expect(placeholder).toHaveAttribute(
       'title',
-      `Not set up on ${HOST_NAME}\nIts sign-in is saved on this computer only.`
+      `Not configured on ${HOST_NAME}\nIts sign-in is saved on this computer only.`
     )
-    await expect(placeholder).toHaveText('Not set up')
+    await expect(placeholder).toHaveText('Not configured on remote host')
     await expect(page.getByText('Configure usage tracking')).toHaveCount(0)
     await expect(page.getByText(`No usage on ${HOST_NAME}`)).toHaveCount(0)
     await shoot(page, '2-server-owner-minimax-placeholder.png', outputPath)
@@ -99,6 +99,13 @@ test('a provider set up only on this computer stays visible, greyed, under a ser
       clip: { x: 0, y: 740, width: 480, height: 60 }
     })
 
+    // Why no assertion: shows how the longer label behaves just before the bar turns compact.
+    await page.setViewportSize({ width: 560, height: 800 })
+    await expect(placeholder).toBeVisible()
+    await page.screenshot({
+      path: outputPathFor('2d-server-owner-medium-status-bar-closeup.png', outputPath),
+      clip: { x: 0, y: 740, width: 560, height: 60 }
+    })
     // A narrow bar drops chip labels; the placeholder keeps "--" so it never reads as healthy.
     await page.setViewportSize({ width: 360, height: 800 })
     await expect(placeholder).toHaveText('--', { timeout: 10_000 })
@@ -107,10 +114,10 @@ test('a provider set up only on this computer stays visible, greyed, under a ser
       clip: { x: 0, y: 740, width: 360, height: 60 }
     })
     await page.setViewportSize({ width: 1280, height: 800 })
-    await expect(placeholder).toHaveText('Not set up')
+    await expect(placeholder).toHaveText('Not configured on remote host')
 
     await page.getByRole('button', { name: 'Usage', exact: true }).click()
-    const row = page.getByRole('menuitem').filter({ hasText: `Not set up on ${HOST_NAME}` })
+    const row = page.getByRole('menuitem').filter({ hasText: `Not configured on ${HOST_NAME}` })
     await expect(row).toBeVisible()
     await expect(row).toContainText('Its sign-in is saved on this computer only.')
     await page

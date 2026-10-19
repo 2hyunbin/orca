@@ -164,8 +164,8 @@ function addNotSetUpPlaceholders(
       return {
         ...createPendingProviderSnapshot(USAGE_PROVIDER_IDS[key]),
         error: translate(
-          'auto.components.status.bar.tooltip.remoteOwnerNotSetUp',
-          'Not set up on {{server}}',
+          'auto.components.status.bar.tooltip.remoteOwnerNotConfigured',
+          'Not configured on {{server}}',
           { server: ownerLabel }
         ),
         usageMetadata: {
