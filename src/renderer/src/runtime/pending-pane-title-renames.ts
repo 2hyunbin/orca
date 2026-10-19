@@ -8,8 +8,8 @@ export const PENDING_PANE_TITLE_HOLD_MS = 15_000
 
 type PendingRename = {
   title: string | null
-  /** The host's title when the user renamed; any other host value is a newer revision. */
-  previous: string | null
+  /** The host's title before these renames, then each earlier rename still in flight; any other host value is a newer revision. */
+  older: (string | null)[]
   notedAt: number
   /** Not yet sent to the host as an explicit rename. */
   unsent: boolean
@@ -43,9 +43,9 @@ export function notePendingPaneTitleRename(args: {
   const earlier = pendingByLeafId.get(args.leafId)
   pendingByLeafId.set(args.leafId, {
     title: args.title,
-    previous: earlier
-      ? earlier.previous
-      : args.layout?.titlesByLeafId?.[args.leafId]?.trim() || null,
+    older: earlier
+      ? [...earlier.older, earlier.title]
+      : [args.layout?.titlesByLeafId?.[args.leafId]?.trim() || null],
     notedAt: now,
     unsent: true
   })
@@ -63,10 +63,13 @@ export function takeUnsentPaneTitleRenames(leafIds: readonly string[]): string[]
   })
 }
 
-/** A push that failed carried nothing; drop its holds so the host's names show again. */
-export function dropPendingPaneTitleRenames(leafIds: readonly string[]): void {
+/** A push that failed carried nothing; the next push names these panes again, within the hold. */
+export function requeuePendingPaneTitleRenames(leafIds: readonly string[]): void {
   for (const leafId of leafIds) {
-    pendingByLeafId.delete(leafId)
+    const pending = pendingByLeafId.get(leafId)
+    if (pending) {
+      pending.unsent = true
+    }
   }
 }
 
@@ -85,7 +88,7 @@ export function withPendingPaneTitleRenames(
     }
     const hostTitle = titles[leafId]?.trim() || null
     // Echoed or superseded by a newer host revision: the host's name stands.
-    if (hostTitle === pending.title || hostTitle !== pending.previous) {
+    if (hostTitle === pending.title || !pending.older.includes(hostTitle)) {
       pendingByLeafId.delete(leafId)
       continue
     }

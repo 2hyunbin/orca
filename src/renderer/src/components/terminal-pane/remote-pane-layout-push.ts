@@ -3,7 +3,7 @@ import type { PaneLayoutEditIntent } from '../../../../shared/rpc-contract/sessi
 import { terminalLayoutEqual } from '../../../../shared/terminal-layout-equality'
 import { updateWebRuntimePaneLayout } from '@/runtime/web-runtime-terminal-actions'
 import {
-  dropPendingPaneTitleRenames,
+  requeuePendingPaneTitleRenames,
   takeUnsentPaneTitleRenames
 } from '@/runtime/pending-pane-title-renames'
 import { collectLeafIdsInOrder } from './terminal-layout-leaf-ids'
@@ -54,7 +54,7 @@ export function createRemotePaneLayoutPusher(): RemotePaneLayoutPusher {
         ...(intent ? { intent } : {})
       }).then((updated) => {
         if (!updated) {
-          dropPendingPaneTitleRenames(renamedLeafIds)
+          requeuePendingPaneTitleRenames(renamedLeafIds)
         }
         // Why: a disconnected or timed-out push carried no information, so the next persist must retry it.
         if (!updated && lastAttempt?.id === attempt.id) {

@@ -14,8 +14,7 @@ vi.mock('@/runtime/web-runtime-terminal-actions', () => ({
 }))
 
 const { createRemotePaneLayoutPusher } = await import('./remote-pane-layout-push')
-const { notePendingPaneTitleRename, withPendingPaneTitleRenames } =
-  await import('@/runtime/pending-pane-title-renames')
+const { notePendingPaneTitleRename } = await import('@/runtime/pending-pane-title-renames')
 const { toRemoteRuntimePtyId } = await import('../../../../shared/remote-runtime-pty-id')
 
 const PERSISTS = 100
@@ -218,28 +217,28 @@ describe('createRemotePaneLayoutPusher', () => {
     expect(updateWebRuntimePaneLayout).toHaveBeenCalledTimes(2)
   })
 
-  it('names a renamed pane in one push only, and drops its hold if that push fails', async () => {
+  it('names a renamed pane in its push, and again in the retry after that push fails', async () => {
     const remote = { 'leaf-a': toRemoteRuntimePtyId('pty-a', 'env-1') }
     notePendingPaneTitleRename({
       leafId: 'leaf-a',
       title: 'renamed',
       layout: makeLayout({ ptyIdsByLeafId: remote })
     })
-    updateWebRuntimePaneLayout.mockResolvedValue(false)
     const pusher = createRemotePaneLayoutPusher()
     const renamed = makeLayout({ titlesByLeafId: { 'leaf-a': 'renamed' } })
 
+    updateWebRuntimePaneLayout.mockResolvedValueOnce(false)
+    pusher.push({ worktreeId: 'wt-1', tabId: 'tab-1', layout: renamed })
+    await Promise.resolve()
+    await Promise.resolve()
     pusher.push({ worktreeId: 'wt-1', tabId: 'tab-1', layout: renamed })
     await Promise.resolve()
     await Promise.resolve()
     pusher.push({ worktreeId: 'wt-1', tabId: 'tab-1', layout: makeLayout() })
 
-    expect(updateWebRuntimePaneLayout.mock.calls[0]?.[0]).toMatchObject({
-      renamedLeafIds: ['leaf-a']
-    })
-    expect(updateWebRuntimePaneLayout.mock.calls[1]?.[0]).not.toHaveProperty('renamedLeafIds')
-    expect(withPendingPaneTitleRenames({ 'leaf-a': 'build' }, ['leaf-a'])).toEqual({
-      'leaf-a': 'build'
-    })
+    const sent = updateWebRuntimePaneLayout.mock.calls.map(([args]) => args)
+    expect(sent[0]).toMatchObject({ renamedLeafIds: ['leaf-a'] })
+    expect(sent[1]).toMatchObject({ renamedLeafIds: ['leaf-a'] })
+    expect(sent[2]).not.toHaveProperty('renamedLeafIds')
   })
 })

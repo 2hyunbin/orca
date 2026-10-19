@@ -3,7 +3,7 @@ import type { TerminalLayoutSnapshot } from '../../../shared/terminal-tab-types'
 import { toRemoteRuntimePtyId } from '../../../shared/remote-runtime-pty-id'
 import {
   PENDING_PANE_TITLE_HOLD_MS,
-  dropPendingPaneTitleRenames,
+  requeuePendingPaneTitleRenames,
   notePendingPaneTitleRename,
   takeUnsentPaneTitleRenames,
   withPendingPaneTitleRenames
@@ -84,14 +84,29 @@ describe('a local pane rename over host snapshots', () => {
     expect(takeUnsentPaneTitleRenames([closed])).toEqual([])
   })
 
-  it('gives way when the push carrying it failed', () => {
+  it('names a pane again in the next push after the push carrying it failed', () => {
     const leafId = '55555555-5555-4555-8555-555555555555'
     rename(leafId, 'mine')
+    expect(takeUnsentPaneTitleRenames([leafId])).toEqual([leafId])
 
-    dropPendingPaneTitleRenames([leafId])
+    requeuePendingPaneTitleRenames([leafId])
 
+    expect(takeUnsentPaneTitleRenames([leafId])).toEqual([leafId])
+  })
+
+  it('keeps the latest rename when an earlier one is echoed first', () => {
+    const leafId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+    rename(leafId, 'first')
+    rename(leafId, 'second', 'first')
+
+    expect(withPendingPaneTitleRenames({ [leafId]: 'first' }, [leafId], T0)).toEqual({
+      [leafId]: 'second'
+    })
     expect(withPendingPaneTitleRenames({ [leafId]: 'old' }, [leafId], T0)).toEqual({
-      [leafId]: 'old'
+      [leafId]: 'second'
+    })
+    expect(withPendingPaneTitleRenames({ [leafId]: 'second' }, [leafId], T0)).toEqual({
+      [leafId]: 'second'
     })
   })
 
