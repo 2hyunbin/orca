@@ -57,43 +57,90 @@ export class TerminalAgentPhonePush {
   private readonly newsByPane = new Map<string, PaneNews>()
   // The window's own fan-out keeps this same burst gate.
   private readonly recentDispatches = new Map<string, number>()
+  // Per pane, the `turnCompletedAt` of the turn last announced (or restored), until the next turn.
+  private readonly finishedTurnByPane = new Map<string, number>()
 
   constructor(private readonly deps: TerminalAgentPhonePushDeps) {}
 
   observe(change: AgentPaneChange): void {
-    if (change.kind !== 'moved') {
+    if (change.kind === 'seeded') {
+      this.rememberFinishedTurn(change.paneKey)
+      return
+    }
+    if (change.kind === 'observed') {
+      if (change.phase === 'working') {
+        this.observeLeadFinish(change.paneKey, change.workspace?.worktreeId)
+      }
       return
     }
     this.newsByPane.get(change.paneKey)?.quiet?.cancel()
     this.newsByPane.delete(change.paneKey)
-    const { transition } = change
+    const { transition, paneKey } = change
+    if (transition === 'prompt-submitted' || change.to === 'rest') {
+      this.finishedTurnByPane.delete(paneKey)
+    }
+    if (transition === 'needs-input') {
+      this.announce(paneKey, change.workspace.worktreeId, this.deps.readHookRow(paneKey))
+      return
+    }
+    if (transition !== 'turn-finished' && transition !== 'errored') {
+      return
+    }
+    const row = this.deps.readHookRow(paneKey)
+    // The all-clear of a turn already announced when its lead agent finished.
     if (
-      transition !== 'turn-finished' &&
-      transition !== 'errored' &&
-      transition !== 'needs-input'
+      row?.turnCompletedAt !== undefined &&
+      this.finishedTurnByPane.get(paneKey) === row.turnCompletedAt
     ) {
       return
     }
-    const row = this.deps.readHookRow(change.paneKey)
+    this.announce(paneKey, change.workspace.worktreeId, row)
+  }
+
+  // The lead agent finished while background work keeps the pane working: as the window does, that
+  // is the turn's finish, named by its `turnCompletedAt`.
+  private observeLeadFinish(paneKey: string, worktreeId: string | undefined): void {
+    const row = this.deps.readHookRow(paneKey)
+    const turnCompletedAt = row?.state === 'working' ? row.turnCompletedAt : undefined
+    if (
+      !row ||
+      !worktreeId ||
+      turnCompletedAt === undefined ||
+      this.finishedTurnByPane.get(paneKey) === turnCompletedAt
+    ) {
+      return
+    }
+    this.finishedTurnByPane.set(paneKey, turnCompletedAt)
+    this.newsByPane.get(paneKey)?.quiet?.cancel()
+    this.announce(paneKey, worktreeId, { ...row, state: 'done', stateStartedAt: turnCompletedAt })
+  }
+
+  private rememberFinishedTurn(paneKey: string): void {
+    const turnCompletedAt = this.deps.readHookRow(paneKey)?.turnCompletedAt
+    if (turnCompletedAt !== undefined) {
+      this.finishedTurnByPane.set(paneKey, turnCompletedAt)
+    }
+  }
+
+  private announce(paneKey: string, worktreeId: string, row: AgentStatusIpcPayload | null): void {
     // A structured chat's projected row is pushed by the structured lane.
     if (!row || row.structuredHost) {
       return
     }
-    const { worktreeId } = change.workspace
     const muted = this.deps.isWorkspaceMuted(worktreeId)
     // Muted news is still recorded: it is this host's call, so the window's copy stays silent too.
-    const news = this.buildNews(worktreeId, change.paneKey, row)
-    this.newsByPane.set(change.paneKey, news)
+    const news = this.buildNews(worktreeId, paneKey, row)
+    this.newsByPane.set(paneKey, news)
     if (muted) {
       return
     }
-    if (transition === 'needs-input') {
+    if (row.state !== 'done') {
       this.deliverUnlessLooking(news)
       return
     }
     news.quiet = this.deps.setTimer(() => {
       news.quiet = null
-      if (this.newsByPane.get(news.paneKey) === news && !this.deps.isWorkspaceMuted(worktreeId)) {
+      if (this.newsByPane.get(paneKey) === news && !this.deps.isWorkspaceMuted(worktreeId)) {
         this.deliverUnlessLooking(news)
       }
     }, AGENT_DONE_QUIET_MS)

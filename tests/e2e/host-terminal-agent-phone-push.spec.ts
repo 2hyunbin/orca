@@ -16,7 +16,10 @@ import type { RuntimeWorktreePsSummary } from '../../src/shared/runtime-worktree
 type PhoneAlert = { source: string; agentState?: string; worktreeId?: string; title: string }
 
 /** Every notification the host offers this phone, desktop-suppressed ones included. */
-async function collectPhoneAlerts(phone: PairedMobileClient): Promise<PhoneAlert[]> {
+async function collectPhoneAlerts(
+  phone: PairedMobileClient,
+  streamErrors: string[]
+): Promise<PhoneAlert[]> {
   const alerts: PhoneAlert[] = []
   let ready = false
   await phone.subscribe<{ type: string } & PhoneAlert>(
@@ -29,7 +32,8 @@ async function collectPhoneAlerts(phone: PairedMobileClient): Promise<PhoneAlert
         } else if (response.ok && response.result.type === 'notification') {
           alerts.push(response.result)
         }
-      }
+      },
+      onError: (error) => streamErrors.push(error.message)
     }
   )
   await expect.poll(() => ready).toBe(true)
@@ -55,7 +59,8 @@ test('a host with no window pushes its phone when a terminal agent finishes or n
     expect(worktreeId, 'the phone lists the serve host workspace').not.toBe('')
     const endpoint = await readHookEndpoint(host.app)
     const pane = { paneKey: `tab-push:${randomUUID()}`, worktreeId }
-    const alerts = await collectPhoneAlerts(phone)
+    const streamErrors: string[] = []
+    const alerts = await collectPhoneAlerts(phone, streamErrors)
 
     await postClaudeHook(endpoint, pane, { hook_event_name: 'UserPromptSubmit', prompt: 'go' })
     await postClaudeHook(endpoint, pane, { hook_event_name: 'Stop', last_assistant_message: 'ok' })
@@ -73,7 +78,7 @@ test('a host with no window pushes its phone when a terminal agent finishes or n
     const session = await phone.subscribe(
       'session.tabs.subscribe',
       { worktree: `id:${worktreeId}` },
-      { onResponse: () => {} },
+      { onResponse: () => {}, onError: (error) => streamErrors.push(error.message) },
       30_000
     )
     await postClaudeHook(endpoint, pane, { hook_event_name: 'Stop', last_assistant_message: 'ok' })
@@ -84,6 +89,7 @@ test('a host with no window pushes its phone when a terminal agent finishes or n
     // As a locked phone's lingering session ends within the minute.
     session.close()
     await expect.poll(() => agentAlerts(alerts)).toEqual(['done', 'waiting', 'done'])
+    expect(streamErrors).toEqual([])
   } finally {
     phone.dispose()
     await host.dispose()
@@ -114,7 +120,8 @@ test('a desktop with a window pushes its phone once for a terminal agent’s fin
   const phone = pairMobileClient(await createDesktopMobilePairingOffer(orcaPage))
   try {
     expect(await isUnread()).toBeFalsy()
-    const alerts = await collectPhoneAlerts(phone)
+    const streamErrors: string[] = []
+    const alerts = await collectPhoneAlerts(phone, streamErrors)
     await postClaudeHook(endpoint, pane, { hook_event_name: 'UserPromptSubmit', prompt: 'go' })
     await postClaudeHook(endpoint, pane, { hook_event_name: 'Stop', last_assistant_message: 'ok' })
     await expect.poll(() => agentAlerts(alerts)).toEqual(['done'])
@@ -122,6 +129,7 @@ test('a desktop with a window pushes its phone once for a terminal agent’s fin
     await expect.poll(isUnread).toBe(true)
     await new Promise((resolve) => setTimeout(resolve, 2_000))
     expect(agentAlerts(alerts)).toEqual(['done'])
+    expect(streamErrors).toEqual([])
   } finally {
     phone.dispose()
   }

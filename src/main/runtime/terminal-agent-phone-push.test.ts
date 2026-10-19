@@ -127,6 +127,43 @@ describe('TerminalAgentPhonePush', () => {
     expect(sent).toEqual([])
   })
 
+  it('announces a lead agent’s finish while background work runs, and not its later all-clear', () => {
+    const { push, sent, state, advance } = harness()
+    const observed = (): AgentPaneChange => ({
+      kind: 'observed',
+      paneKey: PANE,
+      workspace: { worktreeId: WT, sshHostId: null },
+      phase: 'working',
+      at: 1
+    })
+    state.hookRow = row({ state: 'working', stateStartedAt: 1_000, turnCompletedAt: 7_000 })
+    push.observe(observed())
+    // A background task's ping on the same turn is no news.
+    push.observe(observed())
+    advance(AGENT_DONE_QUIET_MS)
+    expect(sent.map((event) => [event.agentState, event.notificationId])).toEqual([
+      ['done', ID.replace(':5000', ':7000')]
+    ])
+    advance(5_000)
+    state.hookRow = row({ stateStartedAt: 9_000, turnCompletedAt: 7_000 })
+    push.observe(moved('turn-finished'))
+    advance(AGENT_DONE_QUIET_MS)
+    expect(sent).toHaveLength(1)
+  })
+
+  it('announces no finish restored with the pane', () => {
+    const { push, sent, state, advance } = harness({
+      hookRow: row({ state: 'working', turnCompletedAt: 7_000 })
+    })
+    const workspace = { worktreeId: WT, sshHostId: null }
+    push.observe({ kind: 'seeded', paneKey: PANE, workspace, phase: 'working', at: 1 })
+    push.observe({ kind: 'observed', paneKey: PANE, workspace, phase: 'working', at: 1 })
+    state.hookRow = row({ turnCompletedAt: 7_000 })
+    push.observe(moved('turn-finished'))
+    advance(AGENT_DONE_QUIET_MS)
+    expect(sent).toEqual([])
+  })
+
   it('pushes an agent that needs input at once, and a failed turn as finished', () => {
     const { push, sent, state, advance } = harness({
       hookRow: row({
