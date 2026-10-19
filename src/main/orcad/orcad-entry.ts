@@ -277,9 +277,7 @@ async function startOrcadRuntime(
     agentHookServer,
     () => runtime
   )
-  if (runtime.sidebarFacts) {
-    registerCleanup(runtime.sidebarFacts.attachSidebarAgentStatusStore(agentHookServer))
-  }
+  registerCleanup(runtime.attachAgentStatusStore(agentHookServer))
 
   // Why the headless entry point rather than registerPtyHandlers directly: this is the
   // same call `--serve` makes, and it threads the store through. Without the store the
@@ -306,6 +304,7 @@ async function startOrcadRuntime(
   await runtime.refreshRestoredOrchestrationAuthority()
   await runtime.reconcileLegacyWorkerTerminals()
   // Hook rows hydrated and the PTY runtime registered: stored sort tiers can be checked.
+  runtime.agentTransitions.seedRestoredRows()
   void runtime.sidebarFacts?.reconcileSortStampTiers(getLocalPtyProvider())
 
   // Runs after RPC stops (cleanups run reversed); later records save synchronously until exit.
