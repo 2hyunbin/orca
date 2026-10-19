@@ -170,31 +170,47 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
     if (this.projectSiblingSharesFence(repo)) {
       return { stopped: 0, worktreeIds: [] }
     }
-    let stopped = 0
     for (const id of listProjectTerminalWorktreeIds(repo.id, this.leaves, this.ptysById)) {
       projectWorktreeIds.add(id)
     }
-    for (const id of projectWorktreeIds) {
-      const opts = { resolvedWorktreeId: id, ...fence, ...options, requestStopsPastDeadline: true }
-      // Why exclusive: it waits out a spawn that holds the shared lease, so its PTY is registered
-      // and stopped. Bounded by the deadline so repo.rm still answers; past it PTYs are only asked.
-      // A timed-out waiter is dequeued by the lock, so it cannot hold later spawns back.
-      const release = await this.acquireWorktreeTerminalMutation(
-        id,
-        'exclusive',
-        options.deadline
-      ).catch(() => null)
-      try {
-        // Why raced: a provider's own exit wait can outlast the budget that keeps repo.rm answering.
-        const result = await raceDeadline(
-          this.stopTerminalsForWorktree(`id:${id}`, opts),
+    // Why all at once: one deadline covers the project, so a slow worktree must not spend the
+    // budget its siblings' stops need; each still holds only its own worktree's lock.
+    const stops = await Promise.allSettled(
+      [...projectWorktreeIds].map(async (id) => {
+        const opts = {
+          resolvedWorktreeId: id,
+          ...fence,
+          ...options,
+          requestStopsPastDeadline: true
+        }
+        // Why exclusive: it waits out a spawn that holds the shared lease, so its PTY is registered
+        // and stopped. Bounded by the deadline so repo.rm still answers; past it PTYs are only asked.
+        // A timed-out waiter is dequeued by the lock, so it cannot hold later spawns back.
+        const release = await this.acquireWorktreeTerminalMutation(
+          id,
+          'exclusive',
           options.deadline
-        )
-        stopped += result?.stopped ?? 0
-      } finally {
-        release?.()
-      }
+        ).catch(() => null)
+        try {
+          // Why raced: a provider's own exit wait can outlast the budget that keeps repo.rm answering.
+          const result = await raceDeadline(
+            this.stopTerminalsForWorktree(`id:${id}`, opts),
+            options.deadline
+          )
+          return result?.stopped ?? 0
+        } finally {
+          release?.()
+        }
+      })
+    )
+    const failure = stops.find((stop) => stop.status === 'rejected')
+    if (failure) {
+      throw failure.reason
     }
+    const stopped = stops.reduce(
+      (total, stop) => total + (stop.status === 'fulfilled' ? stop.value : 0),
+      0
+    )
     return { stopped, worktreeIds: [...projectWorktreeIds] }
   }
 
