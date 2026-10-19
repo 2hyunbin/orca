@@ -89,10 +89,13 @@ export async function readMinidumpFaultContext(
   view: MinidumpView,
   exceptionRva: number,
   exceptionCode: number | null,
-  exceptionAddress: bigint
+  exceptionAddress: bigint,
+  options: { readonly captureCodeBytes: boolean }
 ): Promise<MinidumpFaultContext> {
   const result: { -readonly [K in keyof MinidumpFaultContext]: MinidumpFaultContext[K] } = {}
-  const codeBytes = await readCapturedBytes(view, exceptionAddress)
+  const codeBytes = options.captureCodeBytes
+    ? await readCapturedBytes(view, exceptionAddress)
+    : null
   if (codeBytes) {
     result.codeBytes = codeBytes
   }

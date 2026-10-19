@@ -189,7 +189,11 @@ export async function parseMinidumpCrashSignature(
         signature.faultingModule = faulting.name
         signature.faultingModuleOffset = faulting.offset
       }
-      signature.fault = await readMinidumpFaultContext(view, exception.rva, code, address)
+      // Code bytes only from a loaded module: they exist to diff against the shipped binary,
+      // and bytes from JIT or other anonymous memory could carry page contents.
+      signature.fault = await readMinidumpFaultContext(view, exception.rva, code, address, {
+        captureCodeBytes: faulting !== undefined
+      })
     }
   }
 

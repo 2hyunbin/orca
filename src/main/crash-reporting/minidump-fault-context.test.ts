@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { minidumpSignatureDetails, parseMinidumpCrashSignature } from './minidump-crash-signature'
 
+const STREAM_TYPE_MODULE_LIST = 4
 const STREAM_TYPE_MEMORY_LIST = 5
 const STREAM_TYPE_EXCEPTION = 6
 const CONTEXT_SIZE = 0x4d0
@@ -14,11 +15,12 @@ type FaultDump = {
   rsp?: bigint
   contextFlags?: number
   memory?: { start: bigint; bytes: Buffer }[]
+  modules?: { base: bigint; size: number; name: string }[]
 }
 
-/** Exception stream, x64 CONTEXT and MemoryList laid out as Crashpad writes them. */
+/** Exception stream, x64 CONTEXT, MemoryList and ModuleList laid out as Crashpad writes them. */
 function buildFaultDump(options: FaultDump): Buffer {
-  const streamCount = options.memory ? 2 : 1
+  const streamCount = 1 + (options.memory ? 1 : 0) + (options.modules ? 1 : 0)
   let cursor = 32 + streamCount * 12
   const regions: Buffer[] = []
   const append = (buf: Buffer): number => {
@@ -56,6 +58,23 @@ function buildFaultDump(options: FaultDump): Buffer {
     streams.push({ type: STREAM_TYPE_MEMORY_LIST, size: list.length, rva: append(list) })
   }
 
+  if (options.modules) {
+    const nameRvas = options.modules.map((module) => {
+      const name = Buffer.from(module.name, 'utf16le')
+      const length = Buffer.alloc(4)
+      length.writeUInt32LE(name.length, 0)
+      return append(Buffer.concat([length, name]))
+    })
+    const list = Buffer.alloc(4 + options.modules.length * 108)
+    list.writeUInt32LE(options.modules.length, 0)
+    options.modules.forEach((module, index) => {
+      list.writeBigUInt64LE(module.base, 4 + index * 108)
+      list.writeUInt32LE(module.size, 12 + index * 108)
+      list.writeUInt32LE(nameRvas[index], 24 + index * 108)
+    })
+    streams.push({ type: STREAM_TYPE_MODULE_LIST, size: list.length, rva: append(list) })
+  }
+
   const header = Buffer.alloc(32 + streamCount * 12)
   header.writeUInt32LE(0x504d444d, 0)
   header.writeUInt32LE(streamCount, 8)
@@ -79,7 +98,8 @@ describe('minidump fault context', () => {
       params: [1n, rsp + 0x3c8n],
       memory: [
         { start: rip - 1n, bytes: Buffer.concat([Buffer.from([0x80]), CODE, Buffer.from([0x4c])]) }
-      ]
+      ],
+      modules: [{ base: rip - 0x23d3f88n, size: 0x9000000, name: 'C:\\Orca\\Orca.exe' }]
     })
 
     const signature = await parseMinidumpCrashSignature(dump)
@@ -121,10 +141,25 @@ describe('minidump fault context', () => {
         memory: [
           { start: 0x100n, bytes: Buffer.from('aa', 'hex') },
           { start: 0x4ffen, bytes: Buffer.from('9090cc0f0b', 'hex') }
-        ]
+        ],
+        modules: [{ base: 0x4000n, size: 0x2000, name: 'Orca.exe' }]
       })
     )
     expect(signature?.fault).toEqual({ codeBytes: 'cc0f0b' })
+  })
+
+  it('captures no code bytes outside a loaded module, such as JIT code', async () => {
+    const signature = await parseMinidumpCrashSignature(
+      buildFaultDump({
+        code: 0xc0000005,
+        rip: 0x9000n,
+        rsp: 0x10_0000_0000n,
+        params: [0n, 0x20n],
+        memory: [{ start: 0x9000n, bytes: CODE }],
+        modules: [{ base: 0x4000n, size: 0x2000, name: 'Orca.exe' }]
+      })
+    )
+    expect(signature?.fault).toEqual({ access: 'read', faultAddress: '0x20' })
   })
 
   it('degrades to nothing when the AV parameters or memory list are missing', async () => {
