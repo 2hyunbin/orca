@@ -35,4 +35,11 @@ describe('findProjectHostSetup', () => {
       })
     ).toBe(provisioned)
   })
+
+  it('refuses a wrongly named host for an independent setup', () => {
+    const provisioned = { id: 'p::gpu', hostId: 'local' as const, repoId: '' }
+    expect(
+      findProjectHostSetup([provisioned], { setupId: 'p::gpu', hostId: 'ssh:other' })
+    ).toBeUndefined()
+  })
 })

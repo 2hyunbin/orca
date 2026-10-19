@@ -1,4 +1,4 @@
-import type { ExecutionHostId } from './execution-host'
+import { parseExecutionHostId, type ExecutionHostId } from './execution-host'
 
 /**
  * Names one setup. Repo-backed setups take the repo id, so twins on different hosts share
@@ -23,10 +23,15 @@ export function findProjectHostSetup<T extends SetupIdentity>(
   if (exact) {
     return exact
   }
-  // Why: independent setup ids are minted unique, so a host mismatch there is a spelling
-  // difference (a client-minted `runtime:` stamp), never a sibling host's setup.
+  // Why: an independent setup's id is minted unique, and older servers stored the calling
+  // client's own `runtime:` id for themselves, which the RPC schema now reads as `local`.
   const [only] = candidates
-  return candidates.length === 1 && !only.repoId ? only : undefined
+  return candidates.length === 1 &&
+    !only.repoId &&
+    target.hostId === 'local' &&
+    parseExecutionHostId(only.hostId)?.kind === 'runtime'
+    ? only
+    : undefined
 }
 
 /** The host that runs a setup: a paired server's setups all carry its `runtime:` id as `hostId`. */
