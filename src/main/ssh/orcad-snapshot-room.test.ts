@@ -36,6 +36,7 @@ import { deployOrcad } from './orcad-remote-deploy'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 import { ORCAD_SNAPSHOT_SPACE_INSUFFICIENT_CODE } from './orcad-snapshot-room'
 import { isSnapshotCaptureCommand } from './orcad-snapshot-capture-command'
+import { OrcadFenceLostError } from '../managed-server/activation/orcad-activation-fence-scope'
 import {
   emptyOrcadActivationRecord,
   withActivatedVersion
@@ -173,6 +174,22 @@ describe('an update on a host without room for its snapshot (#30491)', () => {
 
     expect(await deploy()).toMatchObject({ outcome: 'installed-and-activated' })
     expect(host.activeVersion()).toBe(NEW)
+  })
+
+  it('still stops on a lost fence from the room probe', async () => {
+    vi.mocked(execCommand).mockImplementation(async (_conn, command) => {
+      if (command.includes('SNAPSHOT_SPACE')) {
+        throw Object.assign(new Error('fence lost'), {
+          exitCode: 75,
+          stdout: '__ORCAD_FENCE_LOST__\n'
+        })
+      }
+      return host.exec(command)
+    })
+
+    await expect(deploy()).rejects.toBeInstanceOf(OrcadFenceLostError)
+    expect([...host.alive]).toEqual([OLD])
+    expect(host.commands.some((command) => command.includes('kill -TERM'))).toBe(false)
   })
 
   it('updates when pruning earlier snapshots makes the room', async () => {

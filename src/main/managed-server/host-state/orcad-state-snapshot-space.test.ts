@@ -128,7 +128,11 @@ describe.skipIf(process.platform === 'win32')('snapshot room on a real shell (#3
   it('answers UNMEASURED, which reads as unknown, when a scan overruns its deadline', async () => {
     const bin = join(base, 'bin')
     mkdirSync(bin)
-    writeFileSync(join(bin, 'timeout'), '#!/bin/sh\nexit 124\n')
+    // Lets the syntax probe and the members' scan through; times out only the old snapshots'.
+    writeFileSync(
+      join(bin, 'timeout'),
+      '#!/bin/sh\nshift\ncase "$*" in *orcad-state-snapshots*) exit 124;; esac\nexec "$@"\n'
+    )
     chmodSync(join(bin, 'timeout'), 0o755)
 
     const output = await sh(

@@ -56,7 +56,9 @@ export function orcadSnapshotSpaceCommand(
   const sum = `awk '{ total += $1 } END { print total + 0 }'`
   return [
     // Both scans together stay inside the transport's 30 s exec timeout; 124+ is timeout's kill.
-    `deadline=; if command -v timeout >/dev/null 2>&1; then deadline="timeout ${SPACE_SCAN_DEADLINE_SECONDS}"; fi;`,
+    // BusyBox before 1.30 spells it `timeout -t SECS`.
+    `deadline=; if timeout 1 true 2>/dev/null; then deadline="timeout ${SPACE_SCAN_DEADLINE_SECONDS}";`,
+    `elif timeout -t 1 true 2>/dev/null; then deadline="timeout -t ${SPACE_SCAN_DEADLINE_SECONDS}"; fi;`,
     `set --; for old in ${quotePosixShell(snapshotsRoot)}/${CAPTURE_PREFIX}*; do [ -d "$old" ] || continue;`,
     `case "\${old##*/}" in (${prunePatterns(keep)}) ;; (*) set -- "$@" "$old";; esac; done;`,
     `need=$($deadline du -sk ${members.join(' ')} 2>/dev/null); need_status=$?;`,
