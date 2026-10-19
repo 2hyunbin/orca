@@ -16,6 +16,7 @@ import {
 afterEach(() => {
   events.removeAllListeners()
   vi.unstubAllEnvs()
+  vi.useRealTimers()
 })
 
 function nativeWindow() {
@@ -100,7 +101,7 @@ describe('native popup admission', () => {
         options: {},
         onCreated
       })
-    admit(onScripted)
+    const scriptedResponse = admit(onScripted)
     await Promise.resolve()
     // An OpenURL child admitted during its own turn must not consume the pending script admission.
     const onLinked = vi.fn(() => linked.browserWindow.webContents)
@@ -114,7 +115,9 @@ describe('native popup admission', () => {
     opener.contents.emit('did-create-window', linked.browserWindow)
     expect(onLinked).toHaveBeenCalledOnce()
     expect(onScripted).not.toHaveBeenCalled()
-    opener.contents.emit('did-create-window', scripted.browserWindow)
+    opener.contents.emit('did-create-window', scripted.browserWindow, {
+      options: scriptedResponse.overrideBrowserWindowOptions
+    })
     expect(onScripted).toHaveBeenCalledWith(
       expect.objectContaining({ nativeWindow: scripted.browserWindow })
     )
@@ -130,13 +133,15 @@ describe('native popup admission', () => {
     first.contents.session = opener.contents.session
     unadmitted.contents.session = opener.contents.session
     const onCreated = vi.fn(() => first.browserWindow.webContents)
-    allowNativeBrowserPopup({
+    const response = allowNativeBrowserPopup({
       opener: opener.browserWindow.webContents,
       options: {},
       onCreated
     })
     await Promise.resolve()
-    opener.contents.emit('did-create-window', first.browserWindow)
+    opener.contents.emit('did-create-window', first.browserWindow, {
+      options: response.overrideBrowserWindowOptions
+    })
     opener.contents.emit('did-create-window', unadmitted.browserWindow)
     expect(onCreated).toHaveBeenCalledOnce()
     expect(unadmitted.contents.close).toHaveBeenCalledOnce()
@@ -145,48 +150,196 @@ describe('native popup admission', () => {
     expect(first.window.destroy).not.toHaveBeenCalled()
   })
 
-  it.fails('KNOWN BLOCKER: a later scripted admission must not supersede the earlier request', async () => {
-    const opener = nativeWindow()
-    const first = nativeWindow()
-    const second = nativeWindow()
-    first.contents.session = opener.contents.session
-    second.contents.session = opener.contents.session
-    const earlier = vi.fn(() => first.browserWindow.webContents)
-    const later = vi.fn(() => second.browserWindow.webContents)
-    for (const onCreated of [earlier, later]) {
-      allowNativeBrowserPopup({
-        opener: opener.browserWindow.webContents,
-        options: { show: false },
-        onCreated
-      })
-      await Promise.resolve()
+  it.each([false, true])(
+    'correlates same-URL scripted children delivered in reverse: %s',
+    async (reverse) => {
+      const opener = nativeWindow()
+      const first = nativeWindow()
+      const second = nativeWindow()
+      first.contents.session = opener.contents.session
+      second.contents.session = opener.contents.session
+      const earlier = vi.fn(() => first.browserWindow.webContents)
+      const later = vi.fn(() => second.browserWindow.webContents)
+      const responses: Electron.WindowOpenHandlerResponse[] = []
+      for (const onCreated of [earlier, later]) {
+        responses.push(
+          allowNativeBrowserPopup({
+            opener: opener.browserWindow.webContents,
+            options: { show: false },
+            onCreated
+          })
+        )
+        await Promise.resolve()
+      }
+      const deliveries = [
+        [first.browserWindow, responses[0]],
+        [second.browserWindow, responses[1]]
+      ] as const
+      for (const [window, response] of reverse ? deliveries.toReversed() : deliveries) {
+        opener.contents.emit('did-create-window', window, {
+          options: response.overrideBrowserWindowOptions
+        })
+      }
+      expect(later).toHaveBeenCalledWith(
+        expect.objectContaining({ nativeWindow: second.browserWindow })
+      )
+      expect(earlier).toHaveBeenCalledWith(
+        expect.objectContaining({ nativeWindow: first.browserWindow })
+      )
+      expect(earlier).toHaveBeenCalledOnce()
+      expect(later).toHaveBeenCalledOnce()
+      expect(first.contents.close).not.toHaveBeenCalled()
+      expect(second.contents.close).not.toHaveBeenCalled()
     }
-    opener.contents.emit('did-create-window', second.browserWindow)
-    opener.contents.emit('did-create-window', first.browserWindow)
-    expect(later).toHaveBeenCalledWith(
-      expect.objectContaining({ nativeWindow: second.browserWindow })
-    )
-    expect(earlier).toHaveBeenCalledWith(
-      expect.objectContaining({ nativeWindow: first.browserWindow })
-    )
-  })
+  )
 
-  it.fails('KNOWN BLOCKER: canceled A must not transfer B to a late child of A', async () => {
+  it.each([0, 30_001])('never transfers B to a late child of A after %s ms', async (delay) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
     const opener = nativeWindow()
     const lateA = nativeWindow()
+    const childB = nativeWindow()
     lateA.contents.session = opener.contents.session
+    childB.contents.session = opener.contents.session
     const onA = vi.fn(() => lateA.browserWindow.webContents)
-    const onB = vi.fn(() => lateA.browserWindow.webContents)
-    for (const onCreated of [onA, onB]) {
+    const onB = vi.fn(() => childB.browserWindow.webContents)
+    const request = (onCreated: () => Electron.WebContents) =>
       allowNativeBrowserPopup({
         opener: opener.browserWindow.webContents,
         options: { show: false },
         onCreated
       })
+    const responseA = request(onA)
+    await Promise.resolve()
+    vi.advanceTimersByTime(delay)
+    expect(vi.getTimerCount()).toBe(delay === 0 ? 1 : 0)
+    const responseB = request(onB)
+    await Promise.resolve()
+    opener.contents.emit('did-create-window', lateA.browserWindow, {
+      options: responseA.overrideBrowserWindowOptions
+    })
+    expect(onA).toHaveBeenCalledTimes(delay === 0 ? 1 : 0)
+    expect(onB).not.toHaveBeenCalled()
+    expect(lateA.contents.close).toHaveBeenCalledTimes(delay === 0 ? 0 : 1)
+    opener.contents.emit('did-create-window', childB.browserWindow, {
+      options: responseB.overrideBrowserWindowOptions
+    })
+    expect(onB).toHaveBeenCalledWith(
+      expect.objectContaining({ nativeWindow: childB.browserWindow })
+    )
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it.each(['missing', 'unknown', 'ambiguous', 'other-opener'] as const)(
+    'rejects a %s marker without consuming a valid admission',
+    async (marker) => {
+      const opener = nativeWindow()
+      const otherOpener = nativeWindow()
+      const unrelated = nativeWindow()
+      const valid = nativeWindow()
+      unrelated.contents.session = opener.contents.session
+      valid.contents.session = opener.contents.session
+      const options = {
+        show: false,
+        webPreferences: { additionalArguments: ['--existing-option=preserved'] }
+      }
+      const onCreated = vi.fn(() => valid.browserWindow.webContents)
+      const response = allowNativeBrowserPopup({
+        opener: opener.browserWindow.webContents,
+        options,
+        onCreated
+      })
+      const otherResponse = allowNativeBrowserPopup({
+        opener: otherOpener.browserWindow.webContents,
+        options,
+        onCreated: vi.fn()
+      })
+      await Promise.resolve()
+      const args = response.overrideBrowserWindowOptions?.webPreferences?.additionalArguments ?? []
+      expect(args).toContain('--existing-option=preserved')
+      expect(options.webPreferences.additionalArguments).toEqual(['--existing-option=preserved'])
+      const markers = {
+        missing: [],
+        unknown: ['--orca-native-popup-admission=unrecognized'],
+        ambiguous: [...args, ...args],
+        'other-opener':
+          otherResponse.overrideBrowserWindowOptions?.webPreferences?.additionalArguments
+      }
+      opener.contents.emit('did-create-window', unrelated.browserWindow, {
+        url: 'https://example.com/identical',
+        options: { webPreferences: { additionalArguments: markers[marker] } }
+      })
+      expect(onCreated).not.toHaveBeenCalled()
+      expect(unrelated.contents.close).toHaveBeenCalledOnce()
+      for (const event of ['will-navigate', 'will-frame-navigate', 'will-redirect']) {
+        const preventDefault = vi.fn()
+        unrelated.contents.emit(event, { preventDefault })
+        expect(preventDefault).toHaveBeenCalledOnce()
+      }
+      expect(unrelated.contents.setWindowOpenHandler.mock.calls[0][0]()).toEqual({ action: 'deny' })
+      opener.contents.emit('did-create-window', valid.browserWindow, {
+        options: response.overrideBrowserWindowOptions
+      })
+      expect(onCreated).toHaveBeenCalledWith(
+        expect.objectContaining({ nativeWindow: valid.browserWindow })
+      )
+    }
+  )
+
+  it('bounds abandoned admissions and clears timers and listeners when the opener is destroyed', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const opener = nativeWindow()
+    const child = nativeWindow()
+    const evicted = nativeWindow()
+    child.contents.session = opener.contents.session
+    evicted.contents.session = opener.contents.session
+    const onCreated = vi.fn(() => child.browserWindow.webContents)
+    const responses: Electron.WindowOpenHandlerResponse[] = []
+    for (let request = 0; request < 65; request++) {
+      responses.push(
+        allowNativeBrowserPopup({
+          opener: opener.browserWindow.webContents,
+          options: { show: false },
+          onCreated
+        })
+      )
       await Promise.resolve()
     }
-    opener.contents.emit('did-create-window', lateA.browserWindow)
-    expect(onB).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(64)
+    expect(opener.contents.listenerCount('did-create-window')).toBe(1)
+    opener.contents.emit('did-create-window', evicted.browserWindow, {
+      options: responses[0].overrideBrowserWindowOptions
+    })
+    expect(onCreated).not.toHaveBeenCalled()
+    expect(evicted.contents.close).toHaveBeenCalledOnce()
+    opener.contents.emit('did-create-window', child.browserWindow, {
+      options: responses[64].overrideBrowserWindowOptions
+    })
+    expect(onCreated).toHaveBeenCalledOnce()
+    expect(vi.getTimerCount()).toBe(63)
+    opener.contents.emit('destroyed')
+    expect(vi.getTimerCount()).toBe(0)
+    expect(opener.contents.listenerCount('did-create-window')).toBe(0)
+  })
+
+  it('rejects expired admissions even before the expiration timer runs', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const opener = nativeWindow()
+    const child = nativeWindow()
+    child.contents.session = opener.contents.session
+    const onCreated = vi.fn(() => child.browserWindow.webContents)
+    const response = allowNativeBrowserPopup({
+      opener: opener.browserWindow.webContents,
+      options: { show: false },
+      onCreated
+    })
+    await Promise.resolve()
+    vi.setSystemTime(Date.now() + 30_001)
+    opener.contents.emit('did-create-window', child.browserWindow, {
+      options: response.overrideBrowserWindowOptions
+    })
+    expect(onCreated).not.toHaveBeenCalled()
+    expect(child.contents.close).toHaveBeenCalledOnce()
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it.fails('KNOWN BLOCKER: shared-session parents must not both prepare the same app notification', () => {
@@ -239,14 +392,17 @@ describe('native popup admission', () => {
     const child = nativeWindow()
     child.contents.session = opener.contents.session
     const onCreated = vi.fn(() => child.browserWindow.webContents)
-    allowNativeBrowserPopup({
+    const response = allowNativeBrowserPopup({
       opener: opener.browserWindow.webContents,
       options: { show: false },
       onCreated
     })
     await Promise.resolve()
-    opener.contents.emit('did-create-window', child.browserWindow)
-    opener.contents.emit('did-create-window', child.browserWindow)
+    for (let delivery = 0; delivery < 2; delivery++) {
+      opener.contents.emit('did-create-window', child.browserWindow, {
+        options: response.overrideBrowserWindowOptions
+      })
+    }
     expect(onCreated).toHaveBeenCalledOnce()
     expect(child.contents.close).not.toHaveBeenCalled()
   })

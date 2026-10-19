@@ -60,13 +60,19 @@ export class BrowserPopupAdapterProbeFixture {
       })
     }
     let adopted = true
+    let productionScripted = false
     let unrelatedDuringAdmission = false
     guest.on('console-message', ({ message }) => {
       if (message === 'orca-popup-fixture:probe-native') {
         adopted = false
+        productionScripted = false
       }
       if (message === 'orca-popup-fixture:probe-adopted') {
         adopted = true
+        productionScripted = false
+      }
+      if (message === 'orca-popup-fixture:probe-production-scripted') {
+        productionScripted = true
       }
       if (message === 'orca-popup-fixture:probe-unrelated') {
         unrelatedDuringAdmission = true
@@ -130,6 +136,23 @@ export class BrowserPopupAdapterProbeFixture {
           session: guest.session,
           additionalArguments: [`--orca-popup-probe=${request}`]
         }
+      }
+      if (productionScripted) {
+        return allowNativeBrowserPopup({
+          opener: guest,
+          targetUrl: details.url,
+          options,
+          onCreated: ({ nativeWindow }) => {
+            if (!nativeWindow) {
+              throw new Error('Missing native child')
+            }
+            this.record('production-adapter-created', nativeWindow.webContents, {
+              request,
+              owner: guest.id
+            })
+            return nativeWindow.webContents
+          }
+        })
       }
       return {
         action: 'allow',

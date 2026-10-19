@@ -1,4 +1,5 @@
 import { app, type BrowserWindow, type WebContents } from 'electron'
+import { randomUUID } from 'node:crypto'
 import { isBackgroundLaunch } from '../window/foreground-activation-policy'
 import type { PopupChildWindowOptions, PopupOriginBarWindow } from './popup-origin-bar-window'
 import {
@@ -9,11 +10,15 @@ import { MIN_POPUP_CONTENT_HEIGHT, MIN_POPUP_CONTENT_WIDTH } from './popup-windo
 import { describeCommittedPopupOrigin } from './popup-committed-origin'
 
 const rejectedNativePopups = new WeakSet<BrowserWindow>()
-// Why: like Electron, an opener's latest script admission answers the next child it shows.
-const pendingScriptedNativePopups = new WeakMap<
-  WebContents,
-  ((window: BrowserWindow) => void) | null
->()
+const SCRIPTED_POPUP_ARGUMENT_PREFIX = '--orca-native-popup-admission='
+const MAX_PENDING_SCRIPTED_POPUPS = 64
+const SCRIPTED_POPUP_ADMISSION_TTL_MS = 30_000
+type ScriptedPopupAdmission = {
+  admit: (window: BrowserWindow) => void
+  expiresAt: number
+  timeout: ReturnType<typeof setTimeout>
+}
+const pendingScriptedNativePopups = new WeakMap<WebContents, Map<string, ScriptedPopupAdmission>>()
 
 /** Chromium's OpenURL path has no adoptable contents or public navigation callback. */
 export function isNativeBrowserPopupRequest(input: {
@@ -39,6 +44,7 @@ export function allowNativeBrowserPopup(input: {
   canPresent?: () => boolean
   onCreated: (options: PopupChildWindowOptions) => WebContents
 }): Electron.WindowOpenHandlerResponse {
+  const requestArgument = `${SCRIPTED_POPUP_ARGUMENT_PREFIX}${randomUUID()}`
   const mayPresent = !isBackgroundLaunch() && input.options.show !== false
   const admit = (window: BrowserWindow): void => {
     markNativeBrowserPopupWindow(window)
@@ -82,7 +88,7 @@ export function allowNativeBrowserPopup(input: {
   queueMicrotask(() => {
     app.off('browser-window-created', onCreated)
     if (!admitted) {
-      awaitScriptedNativePopup(input.opener, admit)
+      awaitScriptedNativePopup(input.opener, requestArgument, admit)
     }
   })
   return {
@@ -96,7 +102,16 @@ export function allowNativeBrowserPopup(input: {
       useContentSize: true,
       minWidth: MIN_POPUP_CONTENT_WIDTH,
       minHeight: MIN_POPUP_CONTENT_HEIGHT,
-      webPreferences: { ...input.options.webPreferences, session: input.opener.session }
+      webPreferences: {
+        ...input.options.webPreferences,
+        session: input.opener.session,
+        additionalArguments: [
+          ...(input.options.webPreferences?.additionalArguments ?? []).filter(
+            (argument) => !argument.startsWith(SCRIPTED_POPUP_ARGUMENT_PREFIX)
+          ),
+          requestArgument
+        ]
+      }
     }
   }
 }
@@ -105,27 +120,67 @@ export function allowNativeBrowserPopup(input: {
 // the child's first request; unadmitted native children there are discarded rather than left bare.
 function awaitScriptedNativePopup(
   opener: WebContents,
+  requestArgument: string,
   admit: (window: BrowserWindow) => void
 ): void {
   if (opener.isDestroyed()) {
     return
   }
   if (!pendingScriptedNativePopups.has(opener)) {
-    opener.prependListener('did-create-window', (window) => {
+    const admissions = new Map<string, ScriptedPopupAdmission>()
+    pendingScriptedNativePopups.set(opener, admissions)
+    const onCreated = (window: BrowserWindow, details: Electron.DidCreateWindowDetails): void => {
       if (isNativeBrowserPopupWindow(window)) {
         return
       }
-      const pending = pendingScriptedNativePopups.get(opener)
-      pendingScriptedNativePopups.set(opener, null)
-      if (pending) {
-        pending(window)
+      // Electron carries these main-process options across delayed and reordered child delivery.
+      const markers = details?.options?.webPreferences?.additionalArguments?.filter((argument) =>
+        argument.startsWith(SCRIPTED_POPUP_ARGUMENT_PREFIX)
+      )
+      const marker = markers?.length === 1 ? markers[0] : undefined
+      const pending = marker ? admissions.get(marker) : undefined
+      if (marker && pending) {
+        admissions.delete(marker)
+        clearTimeout(pending.timeout)
+      }
+      if (pending && pending.expiresAt > Date.now()) {
+        pending.admit(window)
       } else {
         markNativeBrowserPopupWindow(window)
         rejectNativeBrowserPopup(window)
       }
+    }
+    opener.prependListener('did-create-window', onCreated)
+    opener.on('destroyed', () => {
+      opener.off('did-create-window', onCreated)
+      for (const pending of admissions.values()) {
+        clearTimeout(pending.timeout)
+      }
+      admissions.clear()
+      pendingScriptedNativePopups.delete(opener)
     })
   }
-  pendingScriptedNativePopups.set(opener, admit)
+  const admissions = pendingScriptedNativePopups.get(opener)
+  if (!admissions) {
+    return
+  }
+  const timeout = setTimeout(
+    () => admissions.delete(requestArgument),
+    SCRIPTED_POPUP_ADMISSION_TTL_MS
+  )
+  timeout.unref()
+  admissions.set(requestArgument, {
+    admit,
+    expiresAt: Date.now() + SCRIPTED_POPUP_ADMISSION_TTL_MS,
+    timeout
+  })
+  if (admissions.size > MAX_PENDING_SCRIPTED_POPUPS) {
+    const oldest = admissions.entries().next().value
+    if (oldest) {
+      clearTimeout(oldest[1].timeout)
+      admissions.delete(oldest[0])
+    }
+  }
 }
 
 /** Ends popup contents Chromium created before their pending first request can leave. */

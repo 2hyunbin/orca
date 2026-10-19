@@ -285,6 +285,55 @@ describe('Electron popup adapter API limits (not an admission safety gate)', () 
     await page.evaluate('console.log("orca-popup-fixture:probe-cleanup")')
     await closeChildren(page)
   })
+  // Production keeps an admission guard on the opener, so raw API probes run first.
+  it('correlates production scripted admissions for identical-URL children before navigation', async () => {
+    const page = guest('probe-one')
+    await page.evaluate('console.log("orca-popup-fixture:probe-production-scripted")')
+    const offset = status().adapterProbe?.length ?? 0
+    const before = receipts.length
+    await installBurst(page)
+    await page.locator('#identity-burst').click({ modifiers: ['Shift'] })
+    await expect
+      .poll(() => eventsSince(offset).filter((event) => event.event === 'loaded').length)
+      .toBe(3)
+    const events = eventsSince(offset)
+    const created = events.filter((event) => event.event === 'production-adapter-created')
+    const delivered = events.filter((event) => event.event === 'did-create-window')
+    expect(created).toHaveLength(3)
+    expect(delivered).toHaveLength(3)
+    for (const child of created) {
+      const delivery = delivered.find((event) => event.contentsId === child.contentsId)
+      expect(delivery?.owner).toBe(child.owner)
+      expect(delivery?.optionsArguments).toEqual([
+        `--orca-popup-probe=${String(child.request)}`,
+        expect.stringMatching(/^--orca-native-popup-admission=[\da-f-]+$/)
+      ])
+      expect(child.preferences).toMatchObject(expectedSecurity)
+      expect(
+        events.findIndex(
+          (event) =>
+            event.event === 'browser-window-created' && event.contentsId === child.contentsId
+        )
+      ).toBeLessThan(events.indexOf(child))
+      expect(
+        events.findIndex(
+          (event) => event.event === 'did-start-navigation' && event.contentsId === child.contentsId
+        )
+      ).toBeGreaterThan(events.indexOf(child))
+    }
+    expect(
+      receipts.slice(before).filter((receipt) => receipt.path === '/identical-child')
+    ).toHaveLength(3)
+    expect(
+      events
+        .filter((event) => event.event === 'loaded')
+        .map((event) => event.frameName)
+        .sort()
+    ).toEqual(['original-request-0', 'original-request-1', 'original-request-2'])
+    expect(status().windowsHidden).toBe(true)
+    snapshots.push(status())
+    await closeChildren(page)
+  })
 })
 
 function withoutRequestMarker(value: unknown): unknown {
