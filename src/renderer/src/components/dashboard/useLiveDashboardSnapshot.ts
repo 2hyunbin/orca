@@ -2,6 +2,7 @@ import { useMemo, useRef } from 'react'
 import { useAppStore } from '@/store'
 import type { DashboardSnapshot } from '../../../../shared/dashboard-snapshot'
 import { buildDashboardSnapshot } from './build-dashboard-snapshot'
+import { useChatProgramFactsVersion } from '@/lib/host-chat-program'
 import { createWorktreeAgentRowsCache } from './worktree-agent-rows-cache'
 
 /**
@@ -62,6 +63,8 @@ export function useLiveDashboardSnapshot(): DashboardSnapshot {
   // Why: freshness can flip a bucket without any backing map changing; the epoch
   // ticks on the freshness boundary so the memo re-derives stale-decayed cards.
   const agentStatusEpoch = useAppStore((s) => s.agentStatusEpoch)
+  // Launch options read host chat facts held outside the store.
+  const chatProgramFactsVersion = useChatProgramFactsVersion()
 
   return useMemo(
     // Why: Date.now() is read inside the memo (not a dep) so stale-decay
@@ -143,7 +146,8 @@ export function useLiveDashboardSnapshot(): DashboardSnapshot {
       detectedAgentIds,
       remoteDetectedAgentIds,
       runtimeDetectedAgentIds,
-      agentStatusEpoch
+      agentStatusEpoch,
+      chatProgramFactsVersion
     ]
   )
 }

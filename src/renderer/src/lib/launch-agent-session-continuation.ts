@@ -4,6 +4,12 @@ import { ensureDetectedAgentsForWorktree } from '@/lib/agent-detection-target-in
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { useAppStore } from '@/store'
+import {
+  acquireChatProgramFacts,
+  agentsOfferedForLaunch,
+  resolveChatProgramHost
+} from '@/lib/host-chat-program'
+import { workspaceKindForWorktreeId } from '../../../shared/workspace-launch-kind'
 import { isTuiAgentEnabled } from '../../../shared/tui-agent-selection'
 import type { LaunchSource } from '../../../shared/telemetry-events'
 import type { TuiAgent } from '../../../shared/tui-agent'
@@ -18,10 +24,18 @@ type LaunchAgentSessionContinuationArgs = {
   launchSource: LaunchSource
 }
 
+/** The agents a continuation can start here: detected ones, then those that open as a chat on
+ *  the workspace's host without their CLI. */
 export async function detectAgentSessionContinuationAgents(
   worktreeId: string
 ): Promise<TuiAgent[]> {
-  return ensureDetectedAgentsForWorktree(useAppStore.getState(), worktreeId)
+  const workspace = { kind: workspaceKindForWorktreeId(worktreeId), worktreeId }
+  const host = resolveChatProgramHost(useAppStore.getState(), workspace)
+  const [detected] = await Promise.all([
+    ensureDetectedAgentsForWorktree(useAppStore.getState(), worktreeId),
+    acquireChatProgramFacts(useAppStore.getState(), host.executionHostId, host.hostCapabilities)
+  ])
+  return agentsOfferedForLaunch(useAppStore.getState(), workspace, detected)
 }
 
 async function ensureAgentAvailable(agent: TuiAgent, worktreeId: string): Promise<boolean> {

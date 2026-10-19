@@ -1,7 +1,14 @@
 import type { TuiAgent } from '../../../shared/tui-agent'
 import type { AppState } from '@/store/types'
-import { TUI_AGENT_CONFIG } from '../../../shared/tui-agent-config'
-import { isTuiAgentEnabled, pickTuiAgent } from '../../../shared/tui-agent-selection'
+import { isTuiAgent } from '../../../shared/tui-agent-config'
+import { isTuiAgentEnabled } from '../../../shared/tui-agent-selection'
+import { workspaceKindForWorktreeId } from '../../../shared/workspace-launch-kind'
+import {
+  acquireChatProgramFacts,
+  agentChoiceOpensAsChat,
+  pickChosenOrDetectedAgent,
+  resolveChatProgramHost
+} from '@/lib/host-chat-program'
 import { buildDirectWorkItemAgentStartupPlan } from '@/lib/launch-work-item-direct-agent'
 import type { AgentSessionLaunchPlan } from '@/lib/agent-session-launch-plan'
 import {
@@ -59,20 +66,28 @@ export async function resolveDirectWorkItemAgent(args: {
     args.launchConnectionId === args.repoConnectionId
       ? await args.detectedAgentsPromise
       : await ensureDetectedAgentsForNewWorktree(args.latestStore, args.worktreeId, args.repoHost)
+  const store = args.latestStore
+  const workspace = { kind: workspaceKindForWorktreeId(args.worktreeId), worktreeId: args.worktreeId }
+  const host = resolveChatProgramHost(store, workspace)
+  await acquireChatProgramFacts(store, host.executionHostId, host.hostCapabilities)
+  const detected = detectedAgents.filter(isTuiAgent)
+  // A chosen agent may open as a chat without its CLI; the automatic pick stays on detected ones.
   if (args.agentOverride !== undefined) {
     return {
       agent: args.agentOverride,
       unavailable:
-        !detectedAgents.includes(args.agentOverride) ||
-        !isTuiAgentEnabled(args.agentOverride, args.latestStore.settings?.disabledTuiAgents)
+        !isTuiAgentEnabled(args.agentOverride, store.settings?.disabledTuiAgents) ||
+        (!detected.includes(args.agentOverride) &&
+          !agentChoiceOpensAsChat(store, args.agentOverride, workspace, detected))
     }
   }
   return {
-    agent: pickTuiAgent(
-      args.latestStore.settings?.defaultTuiAgent,
-      new Set(detectedAgents.filter((agent): agent is TuiAgent => agent in TUI_AGENT_CONFIG)),
-      args.latestStore.settings?.disabledTuiAgents
-    ),
+    agent: pickChosenOrDetectedAgent(store, {
+      chosen: store.settings?.defaultTuiAgent,
+      detected,
+      disabled: store.settings?.disabledTuiAgents,
+      workspace
+    }),
     unavailable: false
   }
 }

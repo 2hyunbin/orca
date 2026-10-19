@@ -1,15 +1,27 @@
 import type { TuiAgent } from '../../../shared/tui-agent'
+import type { ProspectiveWorkspace } from '@/lib/agent-launch-route-input'
 import {
   isTuiAgentEnabled,
   pickTuiAgent,
   TUI_AGENT_AUTO_PICK_ORDER
 } from '../../../shared/tui-agent-selection'
 
+/** `offeredAgentIds` adds agents a chosen default may open as a chat without their CLI; automatic
+ *  picks stay on detected agents. */
 export function pickQuickWorkspaceAgent(
   preferred: TuiAgent | 'blank' | null | undefined,
   detectedAgentIds: Iterable<TuiAgent> | null,
-  disabledTuiAgents?: Iterable<unknown> | null
+  disabledTuiAgents?: Iterable<unknown> | null,
+  offeredAgentIds?: ReadonlySet<TuiAgent> | null
 ): TuiAgent | null {
+  if (
+    preferred &&
+    preferred !== 'blank' &&
+    offeredAgentIds?.has(preferred) &&
+    isTuiAgentEnabled(preferred, disabledTuiAgents)
+  ) {
+    return preferred
+  }
   const candidates = detectedAgentIds ?? TUI_AGENT_AUTO_PICK_ORDER
   return pickTuiAgent(preferred, candidates, disabledTuiAgents)
 }
@@ -61,4 +73,19 @@ export function resolveQuickWorkspaceAgentSelection({
     return { quickAgent: quickAgentOverride, quickAgentOverride }
   }
   return { quickAgent: preferredQuickAgent, quickAgentOverride: preferredQuickAgent }
+}
+
+/** The workspace a composer's create would launch its agent in, before it exists. */
+export function composerLaunchWorkspace(props: {
+  repoId?: string | null
+  selectedRepoIsGit?: boolean
+  selectedRepoExecutionHostId?: string | null
+}): ProspectiveWorkspace {
+  return {
+    kind: props.selectedRepoIsGit === false ? 'folder' : 'git-worktree',
+    ...(props.repoId ? { repoId: props.repoId } : {}),
+    ...(props.selectedRepoExecutionHostId
+      ? { executionHostId: props.selectedRepoExecutionHostId }
+      : {})
+  }
 }

@@ -13,10 +13,12 @@ import AgentSettingsDialog from '@/components/agent/AgentSettingsDialog'
 import type { AddRepoDialogHostedController } from '@/components/sidebar/use-add-repo-hosted-controller'
 import { useComposerState } from '@/hooks/useComposerState'
 import {
+  composerLaunchWorkspace,
   pickQuickWorkspaceAgent,
   resolveQuickWorkspaceAgentSelection
 } from '@/lib/quick-workspace-agent-selection'
 import type { LinkedWorkItemSummary } from '@/lib/new-workspace'
+import { useAgentsOfferedForLaunch } from '@/lib/host-chat-program'
 import { shouldAllowComposerEnterSubmitTarget } from '@/lib/new-workspace-enter-guard'
 import { isScreenSubmitShortcut } from '@/lib/screen-submit-shortcut'
 import type { GitHubWorkItem } from '../../../shared/github/work-item-types'
@@ -169,16 +171,31 @@ function QuickTabBody({
   const [quickAgentOverride, setQuickAgentOverride] = useState<TuiAgent | null | undefined>(
     undefined
   )
+  const offeredAgentIds = useAgentsOfferedForLaunch(
+    composerLaunchWorkspace(cardProps),
+    cardProps.detectedAgentIds
+  )
   const preferredQuickAgent = useMemo<TuiAgent | null>(() => {
     const pref = settings?.defaultTuiAgent
     // Why: detection can still be pending when quick-create submits; keep the
     // prior catalog fallback while filtering disabled agents out of that choice.
-    return pickQuickWorkspaceAgent(pref, cardProps.detectedAgentIds, settings?.disabledTuiAgents)
-  }, [cardProps.detectedAgentIds, settings?.defaultTuiAgent, settings?.disabledTuiAgents])
+    return pickQuickWorkspaceAgent(
+      pref,
+      cardProps.detectedAgentIds,
+      settings?.disabledTuiAgents,
+      offeredAgentIds
+    )
+  }, [
+    cardProps.detectedAgentIds,
+    offeredAgentIds,
+    settings?.defaultTuiAgent,
+    settings?.disabledTuiAgents
+  ])
+  // An explicit pick stays valid where it opens as a chat without its CLI.
   const resolvedQuickAgentSelection = resolveQuickWorkspaceAgentSelection({
     quickAgentOverride,
     preferredQuickAgent,
-    detectedAgentIds: cardProps.detectedAgentIds,
+    detectedAgentIds: offeredAgentIds,
     disabledTuiAgents: settings?.disabledTuiAgents
   })
   if (resolvedQuickAgentSelection.quickAgentOverride !== quickAgentOverride) {

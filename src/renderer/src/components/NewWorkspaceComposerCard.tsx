@@ -39,6 +39,8 @@ import { getSshStatusLabel } from './new-workspace/new-workspace-composer-ssh-st
 import { useNewWorkspaceComposerFileDrop } from './new-workspace/use-new-workspace-composer-file-drop'
 import { useComposerFileDragOver } from './new-workspace/use-composer-file-drag-over'
 import { buildDefaultAgentSettingsUpdate } from '../../../shared/default-agent-settings'
+import { useAgentsOfferedForLaunch } from '@/lib/host-chat-program'
+import { composerLaunchWorkspace } from '@/lib/quick-workspace-agent-selection'
 
 // Why lazy: this pulls the ~41 KB project-location browser onto the boot graph, and nothing
 // reaches it without an explicit "Set location" click. Shared with the warm below so both hit
@@ -174,10 +176,14 @@ export default function NewWorkspaceComposerCard(
       disabledTuiAgents
     )
   )
+  // Detected agents, plus those that open as a chat on the project's host without their CLI.
+  const offeredAgentIds = useAgentsOfferedForLaunch(
+    composerLaunchWorkspace(props),
+    props.detectedAgentIds
+  )
   const visibleQuickAgents = agentCatalog.filter((agent) => {
     return (
-      enabledAgentIds.has(agent.id) &&
-      (props.detectedAgentIds === null || props.detectedAgentIds.has(agent.id))
+      enabledAgentIds.has(agent.id) && (offeredAgentIds === null || offeredAgentIds.has(agent.id))
     )
   })
 

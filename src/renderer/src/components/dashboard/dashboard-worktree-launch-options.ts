@@ -13,6 +13,9 @@ import {
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { getRuntimeAgentInventoryKey } from '@/store/slices/runtime-agent-inventory-key'
+import { workspaceKindForWorktreeId } from '../../../../shared/workspace-launch-kind'
+import { useAppStore } from '@/store'
+import { agentsOfferedForLaunch } from '@/lib/host-chat-program'
 
 export type DashboardLaunchDetectionState = Pick<
   AppState,
@@ -91,7 +94,8 @@ function detectedAgentsForWorktree(
     : (state.detectedAgentIds ?? [])
 }
 
-/** Host-detected choices plus providers already proven to run in the workspace. */
+/** Host-detected choices, agents that open as a chat there, and providers already proven to run
+ *  in the workspace. */
 export function buildDashboardWorktreeLaunchOptions(
   state: DashboardLaunchOptionState,
   cards: readonly DashboardCard[],
@@ -120,8 +124,14 @@ export function buildDashboardWorktreeLaunchOptions(
       break
     }
     const worktreeCards = cardsByWorktreeId.get(worktreeId) ?? []
+    const detected = detectedAgentsForWorktree(state, worktreeId, repoId, catalog)
+    // Agents that open as a chat there without their CLI launch from the board too.
     const available = new Set<TuiAgent>(
-      detectedAgentsForWorktree(state, worktreeId, repoId, catalog)
+      agentsOfferedForLaunch(
+        useAppStore.getState(),
+        { kind: workspaceKindForWorktreeId(worktreeId), worktreeId },
+        detected
+      )
     )
     for (const card of worktreeCards) {
       if (isTuiAgent(card.agentType)) {
