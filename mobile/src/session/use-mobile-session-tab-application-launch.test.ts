@@ -212,3 +212,36 @@ describe('landing on a launched tab', () => {
     expect(state.creatingTerminalRef.current).toBeNull()
   })
 })
+
+describe('a workspace that opens before its agent tab exists', () => {
+  const setup = (isActive: boolean) => terminalTab('setup', 'term_setup', isActive)
+  const chat = (isActive: boolean) => ({ ...chatTab('chat', 'sess-1'), isActive })
+
+  // The bug: the phone kept the interim Setup it had shown once the host resolved the agent chat.
+  it('follows the host from an interim Setup to the agent, unless this device tapped Setup', () => {
+    const { state } = scope(null)
+    state.activeSessionTabIdRef.current = null
+    state.selectedSessionTabIdRef.current = null
+    const apply = mount(state)
+
+    apply(snapshot([setup(true)]))
+    apply(snapshot([setup(false), chat(true)]))
+    expect(state.setActiveSessionTabId).toHaveBeenLastCalledWith('chat')
+    expect(state.activeSessionTabIdRef.current).toBe('chat')
+
+    state.pendingSelectionRef.current = { kind: 'terminal', handle: 'term_setup', tabId: 'setup' }
+    apply(snapshot([setup(false), chat(true)]))
+    expect(state.setActiveSessionTabId).toHaveBeenLastCalledWith('setup')
+    apply(snapshot([setup(true), chat(false)]))
+    expect(state.setActiveSessionTabId).toHaveBeenLastCalledWith('setup')
+    expect(state.pendingSelectionRef.current).toBeNull()
+
+    // A host that does not project per device keeps the phone's legacy reader.
+    const legacy = scope(null).state
+    legacy.selectedSessionTabIdRef.current = null
+    const applyLegacy = mount(legacy)
+    applyLegacy(snapshot([setup(true)], { publicationEpoch: 'host-epoch' }))
+    applyLegacy(snapshot([setup(false), chat(true)], { publicationEpoch: 'host-epoch' }))
+    expect(legacy.setActiveSessionTabId).toHaveBeenLastCalledWith('setup')
+  })
+})
