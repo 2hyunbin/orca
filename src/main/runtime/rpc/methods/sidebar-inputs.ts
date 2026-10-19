@@ -10,13 +10,6 @@ import { ClientWorkspaceViewParams } from '../../../../shared/rpc-contract/clien
 
 export const SIDEBAR_INPUT_METHODS = [
   defineMethod({
-    name: 'sidebarInputs.activityFacts',
-    permission: 'workspace',
-    params: null,
-    handler: async (_params, { runtime }) =>
-      runtime.sidebarFacts.getWorkspaceActivityFacts()
-  }),
-  defineMethod({
     name: 'sidebarInputs.repoIcons',
     permission: 'workspace',
     params: RepoIconDataUrlsParams,
@@ -44,15 +37,7 @@ export const SIDEBAR_INPUT_METHODS = [
     name: 'sidebarInputs.reviewFacts',
     permission: 'workspace',
     params: null,
-    handler: async (_params, { runtime }) =>
-      runtime.sidebarFacts.getWorkspaceReviewFacts()
-  }),
-  defineMethod({
-    name: 'sidebarInputs.temporal',
-    permission: 'workspace',
-    params: null,
-    handler: async (_params, { runtime }) =>
-      runtime.sidebarFacts.getSidebarTemporalSnapshot()
+    handler: async (_params, { runtime }) => runtime.sidebarFacts.getWorkspaceReviewFacts()
   }),
   defineMethod({
     name: 'sidebarInputs.read',
@@ -100,8 +85,7 @@ export const SIDEBAR_INPUT_METHODS = [
     name: 'sidebarInputs.workspaceCreations',
     permission: 'workspace',
     params: null,
-    handler: async (_params, { runtime }) =>
-      runtime.workspaceCreations.snapshot()
+    handler: async (_params, { runtime }) => runtime.workspaceCreations.snapshot()
   }),
   defineMethod({
     name: 'sidebarInputs.reportView',
