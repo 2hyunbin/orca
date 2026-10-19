@@ -71,11 +71,12 @@ export function useMarkdownDocumentWatchRefresh({
     }
     let timer: ReturnType<typeof setTimeout> | undefined
     let latestChangeAt = 0
-    let activeScan: object | null = null
+    let scanSeq = 0
+    let activeScan: number | null = null
     let scanWatchdog: ReturnType<typeof setTimeout> | undefined
     let changedDuringScan = false
     let disposed = false
-    const endScan = (scan: object): void => {
+    const endScan = (scan: number): void => {
       if (activeScan !== scan) {
         return
       }
@@ -93,7 +94,7 @@ export function useMarkdownDocumentWatchRefresh({
       }
       timer = setTimeout(() => {
         timer = undefined
-        const scan = {}
+        const scan = ++scanSeq
         activeScan = scan
         changedDuringScan = false
         // Why: local and UNC listings have no timeout; stop waiting for a hung scan after the
@@ -110,7 +111,7 @@ export function useMarkdownDocumentWatchRefresh({
       }
       latestChangeAt = performance.now()
       latestMembershipChangeAt.set(membershipChangeKey(owner, worktreePath), latestChangeAt)
-      if (activeScan) {
+      if (activeScan !== null) {
         changedDuringScan = true
         return
       }
