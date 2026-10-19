@@ -127,8 +127,7 @@ describe('agent completion polling under a host capture it cannot use', () => {
   it.each(['live', 'exited'] as const)(
     'separates remote %s from local shell ownership',
     (verdict) => {
-      const record = liveRecord(0)
-      const live = record.foregroundProcessEvidence
+      const live = liveRecord(0).foregroundProcessEvidence
       if (live?.verdict !== 'live') {
         throw new Error('Expected live fixture')
       }
@@ -136,7 +135,7 @@ describe('agent completion polling under a host capture it cannot use', () => {
       const onForegroundAgentExited = vi.fn()
       const result = inspect(
         {
-          ...record,
+          hasChildProcesses: true,
           foregroundProcess: 'zsh',
           foregroundProcessEvidence:
             verdict === 'live'
@@ -158,15 +157,14 @@ describe('agent completion polling under a host capture it cannot use', () => {
   ])(
     'reads a local daemon live read naming nothing as the shell, %s',
     (_label, capturedAgeMs, calls) => {
-      const record = liveRecord(capturedAgeMs)
-      const live = record.foregroundProcessEvidence
+      const live = liveRecord(capturedAgeMs).foregroundProcessEvidence
       if (live?.verdict !== 'live') {
         throw new Error('Expected live fixture')
       }
       const onForegroundShellObserved = vi.fn()
       inspect(
         {
-          ...record,
+          hasChildProcesses: true,
           foregroundProcess: null,
           foregroundProcessEvidence: { ...live, processName: null }
         },
