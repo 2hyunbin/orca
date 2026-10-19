@@ -1,3 +1,4 @@
+import type { SleepingAgentLaunchConfig } from './agent-session-resume'
 import type { GlobalSettings } from './global-settings-types'
 import { isTuiAgent } from './tui-agent-config'
 import { YOLO_TUI_AGENT_ARGS, YOLO_TUI_AGENT_ENV } from './tui-agent-permissions'
@@ -14,7 +15,8 @@ const UNSUPPORTED_TUI_AGENT_ARGS: Partial<Record<TuiAgent, readonly string[]>> =
   kilo: ['--dangerously-skip-permissions']
 }
 
-export const DEFAULT_TUI_AGENT_ARGS: Partial<Record<TuiAgent, string>> = YOLO_TUI_AGENT_ARGS
+export const DEFAULT_TUI_AGENT_ARGS: Partial<Record<TuiAgent, string>> &
+  Readonly<Record<string, string | undefined>> = YOLO_TUI_AGENT_ARGS
 
 export const DEFAULT_TUI_AGENT_ENV: Partial<Record<string, Record<string, string>>> =
   YOLO_TUI_AGENT_ENV
@@ -107,7 +109,7 @@ export function normalizeTuiAgentEnvRecord(
   return normalized
 }
 
-export function getTuiAgentDefaultArgs(agent: TuiAgent): string {
+export function getTuiAgentDefaultArgs(agent: string): string {
   return DEFAULT_TUI_AGENT_ARGS[agent] ?? ''
 }
 
@@ -116,8 +118,8 @@ export function getTuiAgentDefaultEnv(agent: string): Record<string, string> {
 }
 
 export function resolveTuiAgentLaunchArgs(
-  agent: TuiAgent,
-  configuredArgs: Partial<Record<TuiAgent, string>> | null | undefined
+  agent: string,
+  configuredArgs: Readonly<Record<string, string | undefined>> | null | undefined
 ): string {
   if (
     configuredArgs &&
@@ -167,4 +169,23 @@ export function resolveTuiAgentLaunchEnv(
     return { ...configuredEnv[agent] }
   }
   return getTuiAgentDefaultEnv(agent)
+}
+
+/**
+ * The command, args and env a resume relaunches with: only what its original Orca launch recorded.
+ * Why not settings defaults: an unrecorded launch (`claude` typed by hand) ran with none, and the
+ * defaults carry the permission bypass, so filling the gap would widen the resumed session.
+ */
+export function resolveResumeLaunchRecipe(
+  launchConfig: SleepingAgentLaunchConfig | undefined
+): SleepingAgentLaunchConfig {
+  if (!launchConfig) {
+    return { agentArgs: '', agentEnv: {} }
+  }
+  return {
+    agentArgs: launchConfig.agentArgs,
+    agentEnv: launchConfig.agentEnv,
+    ...(launchConfig.agentCommand ? { agentCommand: launchConfig.agentCommand } : {}),
+    ...(launchConfig.ompResumeFilePath ? { ompResumeFilePath: launchConfig.ompResumeFilePath } : {})
+  }
 }

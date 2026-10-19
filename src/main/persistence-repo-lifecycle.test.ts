@@ -22,8 +22,8 @@ import {
   advanceSshConnectionGeneration,
   assertSshMutationExpectation,
   resetSshConnectionGenerations
-} from './ssh/ssh-connection-generation'
-import { getRuntimeOwnedSshTargetId } from './ssh/ssh-connection-store'
+} from './ssh/connection/ssh-connection-generation'
+import { getRuntimeOwnedSshTargetId } from './ssh/connection/ssh-connection-store'
 import {
   _getLocalWorktreeScanGenerationCacheSize,
   getLocalWorktreeScanGeneration,
@@ -36,7 +36,7 @@ const { loadUserSshConfigMock, sshConfigHostsToTargetsMock } = vi.hoisted(() => 
   sshConfigHostsToTargetsMock: vi.fn()
 }))
 
-vi.mock('./ssh/ssh-config-parser', () => ({
+vi.mock('./ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: loadUserSshConfigMock,
   sshConfigHostsToTargets: sshConfigHostsToTargetsMock
 }))

@@ -1,13 +1,13 @@
 /** The incumbent slot across a journaled activation or rollback: retire it, then put it back. */
-import type { OrcadActivationLockControl } from './orcad-activation-lock'
-import type { OrcadSnapshotVerdict } from './orcad-activation-transaction'
+import type { OrcadActivationLockControl } from '../managed-server/activation/orcad-activation-lock'
+import type { OrcadSnapshotVerdict } from '../managed-server/activation/orcad-activation-transaction'
 import type { OrcadRestartAdmissionPort } from './orcad-restart-admission-client'
 import type { OrcadDeployOptions } from './orcad-remote-deploy'
-import { orcadStopFreedTheHost } from './orcad-remote-process-control'
-import type { OrcadActivationRecord } from './orcad-activation-record'
+import { orcadStopFreedTheHost } from '../managed-server/install/orcad-remote-process-control'
+import type { OrcadActivationRecord } from '../managed-server/activation/orcad-activation-record'
 import { planOrcadUpdate, type OrcadUpdateDecision } from './orcad-update-plan'
 import { CURRENT_ORCAD_DAEMON_PROTOCOL } from './orcad-daemon-protocol-crossing'
-import { withoutAbortSignal } from './orcad-remote-runtime-control'
+import { withoutAbortSignal } from '../managed-server/install/orcad-remote-runtime-control'
 import {
   launchOrcadSlot,
   slotLiveness,
@@ -47,12 +47,17 @@ export async function reserveIncumbentRestart(
       return notReserved('The older server could not be verified again. Nothing was stopped.')
     }
     const legacyPlan = planOrcadUpdate({
-      record: input.record, candidateVersion: input.candidateVersion, census,
-      candidateDaemonProtocol: CURRENT_ORCAD_DAEMON_PROTOCOL, force: true
+      record: input.record,
+      candidateVersion: input.candidateVersion,
+      census,
+      candidateDaemonProtocol: CURRENT_ORCAD_DAEMON_PROTOCOL,
+      force: true
     })
     return legacyPlan.action === 'proceed'
       ? { action: 'reserved', kind: 'legacy' }
-      : legacyPlan.action === 'defer' ? legacyPlan : notReserved(legacyPlan.reason)
+      : legacyPlan.action === 'defer'
+        ? legacyPlan
+        : notReserved(legacyPlan.reason)
   }
   if (!admission) {
     return notReserved('This Orca server cannot reserve a safe restart, so it keeps serving.')
@@ -106,7 +111,10 @@ export async function commitIncumbentRestart(
     if (stopped === 'still-running' || stopped === 'unconfirmed') {
       lock.retain()
     }
-    return { outcome: 'unconfirmed', reason: `The older server's stop was not confirmed (${stopped}).` }
+    return {
+      outcome: 'unconfirmed',
+      reason: `The older server's stop was not confirmed (${stopped}).`
+    }
   }
   const { admission, token } = restart
   const commit = await admission.commit(token)

@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { encodePairingOffer } from '../../shared/pairing'
-import { emptyOrcadActivationRecord } from '../ssh/orcad-activation-record'
+import { emptyOrcadActivationRecord } from '../managed-server/activation/orcad-activation-record'
 import type { OrcadHostTransport } from '../ssh/orcad-host-transport'
-import type { OrcadRemoteContext } from '../ssh/orcad-remote-context'
+import type { OrcadRemoteContext } from '../managed-server/install/orcad-remote-context'
 import type { ServeReadiness } from '../server/serve-readiness'
 import { getRemoteHostPlatform } from '../ssh/ssh-remote-platform'
-import type { StartedPortForward } from '../ssh/ssh-port-forward-provider'
+import type { StartedPortForward } from '../ssh/port-forwarding/ssh-port-forward-provider'
 import type {
   OrcadIncumbentConnector,
   OrcadRestartAdmissionPort
@@ -95,14 +95,12 @@ function dependencies(overrides: Partial<WslOrcadIncumbentDependencies> = {}) {
     }),
     census: vi.fn(async () => LIVE),
     // Each reservation call reports which bridge endpoint it reached.
-    restartAdmission: vi.fn(
-      (connect: OrcadIncumbentConnector): OrcadRestartAdmissionPort => ({
-        reserve: () =>
-          connect(async (connection) => ({ status: 'defer', reason: connection.endpoint })),
-        commit: async () => 'refused',
-        release: async () => {}
-      })
-    ),
+    restartAdmission: vi.fn((connect: OrcadIncumbentConnector): OrcadRestartAdmissionPort => ({
+      reserve: () =>
+        connect(async (connection) => ({ status: 'defer', reason: connection.endpoint })),
+      commit: async () => 'refused',
+      release: async () => {}
+    })),
     ...overrides
   }
   return { deps, close }

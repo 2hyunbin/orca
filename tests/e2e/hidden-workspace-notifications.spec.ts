@@ -82,6 +82,10 @@ async function setFilterAndSetting(
     },
     { hide: hideDefaultBranch, notify: notifyHiddenWorkspaces }
   )
+  // A switch-on build's host reads the persisted switch, written after the window's copy.
+  await expect
+    .poll(() => page.evaluate(async () => (await window.api.ui.get()).hideDefaultBranchWorkspace))
+    .toBe(hideDefaultBranch)
 }
 
 test.describe('Hidden workspace notifications', () => {

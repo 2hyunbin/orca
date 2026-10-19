@@ -19,7 +19,7 @@ import { leafIds, WindowSession } from './terminal-topology-window-session-fixtu
 import { checkWorkspaceLayoutRules } from '../../../shared/workspace-layout/workspace-layout-rules'
 
 vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../../ssh/ssh-config-parser', () => ({
+vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: () => ({ hosts: [] }),
   sshConfigHostsToTargets: () => []
 }))
@@ -46,12 +46,12 @@ class PaneLayoutRuntime extends OrcaRuntimeService {
     return null
   }
 
-  protected override getWorkspaceSessionForWorktree(): WorkspaceSessionState {
+  public override getWorkspaceSessionForWorktree(): WorkspaceSessionState {
     // SAFETY: paneLayoutHandler receives the real Store opened by this fixture.
     return this.requireStore().getWorkspaceSession!()
   }
 
-  protected override setWorkspaceSessionForWorktree(
+  public override setWorkspaceSessionForWorktree(
     _worktreeId: string,
     session: WorkspaceSessionState
   ): void {

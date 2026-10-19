@@ -101,6 +101,30 @@ describe('useFileSearchRunner result ownership', () => {
     })
   })
 
+  it('does not search a workspace that two hosts publish', async () => {
+    const worktreeId = 'twin-repo::/repo'
+    const state = {
+      settings: { activeRuntimeEnvironmentId: 'ambient-runtime-b' },
+      repos: [
+        { id: 'twin-repo', executionHostId: 'local' },
+        { id: 'twin-repo', connectionId: 'box', executionHostId: 'ssh:box' }
+      ],
+      worktreesByRepo: {
+        'twin-repo': [
+          { id: worktreeId, repoId: 'twin-repo', hostId: 'local' },
+          { id: worktreeId, repoId: 'twin-repo', hostId: 'ssh:box' }
+        ]
+      },
+      fileSearchStateByWorktree: { [worktreeId]: {} }
+    }
+    const { hook, updates } = renderSearchRunner(state, worktreeId)
+
+    await finishSearch(hook.result.current.executeSearch)
+
+    expect(mocks.searchRuntimeFiles).not.toHaveBeenCalled()
+    expect(updates).toContainEqual({ results: null, resultOwner: null, loading: false })
+  })
+
   it('commits explicit local ownership without inheriting an ambient runtime', async () => {
     const worktreeId = 'repo-a::/repo'
     const state = {

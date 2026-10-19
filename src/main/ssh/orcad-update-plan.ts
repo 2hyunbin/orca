@@ -18,14 +18,12 @@
  * has no answer that can be computed. That is why rollback is defined against a
  * pre-activation snapshot rather than against a version comparison.
  */
-import type { OrcadActivationRecord } from './orcad-activation-record'
+import type { OrcadActivationRecord } from '../managed-server/activation/orcad-activation-record'
 import type { OrcadTerminalCensus } from '../../shared/orcad-terminal-census'
 import {
   assessOrcadLiveDaemonCrossing,
   type OrcadDaemonProtocolFacts
 } from './orcad-daemon-protocol-crossing'
-
-export type { OrcadTerminalCensus } from '../../shared/orcad-terminal-census'
 
 export type OrcadUpdateDecision =
   | { action: 'noop'; reason: string }
@@ -74,11 +72,14 @@ export function planOrcadUpdate(input: OrcadUpdatePlanInput): OrcadUpdateDecisio
   const { chatWork } = input.census
   if (chatWork === undefined || chatWork === null) {
     if (input.census.restartAdmissionSupported === false) {
-      return input.force ? terminals : {
-        action: 'defer',
-        code: 'orcad_update_legacy_host',
-        reason: 'This older server cannot verify chat work. Finish its chats, then use Force update to upgrade it.'
-      }
+      return input.force
+        ? terminals
+        : {
+            action: 'defer',
+            code: 'orcad_update_legacy_host',
+            reason:
+              'This older server cannot verify chat work. Finish its chats, then use Force update to upgrade it.'
+          }
     }
     return {
       action: 'defer',

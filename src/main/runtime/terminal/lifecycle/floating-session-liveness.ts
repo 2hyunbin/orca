@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithRefreshPtyWorktreeRecordsWithControllerInventory } from '../../orca-runtime-refresh-pty-worktree-records-with-controller-inventory'
+import { OrcaRuntimeWithRefreshPtyWorktreeRecordsWithControllerInventory } from './pty-controller-inventory-refresh'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import { indexFloatingSnapshotPtyBindings } from '../../floating-snapshot-pty-bindings'
 import type {
@@ -108,6 +108,7 @@ export abstract class OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness extends
       pty?.connectionId === null ||
       this.ptyLivenessVerdictByPtyId.get(ptyId)?.verdict.status === 'exited'
     if (processDeathCertified) {
+      this.clearLiveProgramStatusFacet(ptyId)
       this.reconcileAgentStatusForEndedProcessFn?.(this.collectAgentStatusPaneKeysForPty(ptyId))
     }
     this.advancePtyLifecycleGeneration(ptyId)
@@ -128,6 +129,7 @@ export abstract class OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness extends
     this.providerVisibleStateByPtyId.delete(ptyId)
     this.providerVisibleRetryAtByPtyId.delete(ptyId)
     this.agentStatusOscProcessorsByPtyId.delete(ptyId)
+    this.liveProgramStatusFacetPtyIds.delete(ptyId)
     this.terminalSpawnCommandsByPtyId.delete(ptyId)
     this.terminalRunFacts.delete(ptyId)
     this.disposePtyTitleTracker(ptyId)

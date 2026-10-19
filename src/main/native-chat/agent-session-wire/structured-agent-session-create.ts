@@ -1,5 +1,6 @@
 import { structuredAgentSessionRestartRefusal } from './structured-agent-session-restart-admission'
 import { isFloatingWorkspaceId } from '../../../shared/floating-workspace-worktree'
+import { isAgentSessionCreateAdmissionRefusal } from '../../../shared/agent-session-definitive-refusal'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
 import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-session-mutation-envelope'
 import {
@@ -156,7 +157,13 @@ async function foundConversation(
     ? { ok: true as const, items: null }
     : await prepareAdoptedTranscript(params)
   if (!prepared.ok) {
-    return prepared
+    const { refusal } = prepared
+    return {
+      ok: false,
+      refusal: isAgentSessionCreateAdmissionRefusal(refusal)
+        ? { ...refusal, createAttemptRefusedBeforeCommit: true }
+        : refusal
+    }
   }
   const existing = context.sessions.get(sessionId)
   const opened = existing
