@@ -9,7 +9,6 @@ import {
   type ProjectHostSetupProjection
 } from '../../../../shared/project-host-setup-projection'
 import {
-  PROJECT_HOST_SETUP_HOST_TARGET_RUNTIME_CAPABILITY,
   PROJECT_HOST_SETUP_RUNTIME_CAPABILITY,
   WORKSPACE_RUN_CONTEXT_RUNTIME_CAPABILITY
 } from '../../../../shared/protocol-version'
@@ -20,10 +19,7 @@ import {
 } from '../../runtime/runtime-rpc-client'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { adoptEndpointProjectCatalog } from '../../../../shared/endpoint-catalog-adoption'
-import {
-  getProjectHostSetupExecutionHostId,
-  type ProjectHostSetupTarget
-} from '../../../../shared/project-host-setup-target'
+import type { ProjectHostSetupTarget } from '../../../../shared/project-host-setup-target'
 
 export function getProjectSetupRuntimeTarget(
   hostId: ProjectHostSetupExistingFolderArgs['hostId']
@@ -100,13 +96,10 @@ export async function assertProjectHostSetupMutationRuntimeCapabilities(
   )
 }
 
-// Why: twins share `id`; a paired server's setups also share its `runtime:` hostId.
+// Why: twins share `id`. A paired server's setups all carry its one `runtime:` hostId, so they
+// stay matched by id there, as before (the server's own by-id answer decides which one it was).
 export function isSameProjectHostSetup(a: ProjectHostSetup, b: ProjectHostSetup): boolean {
-  return (
-    a.id === b.id &&
-    a.hostId === b.hostId &&
-    getProjectHostSetupExecutionHostId(a) === getProjectHostSetupExecutionHostId(b)
-  )
+  return a.id === b.id && a.hostId === b.hostId
 }
 
 export function upsertProjectHostSetup(
@@ -119,17 +112,17 @@ export function upsertProjectHostSetup(
 }
 
 /**
- * Where a setup edit or removal goes. The execution host goes on the wire when the caller named
- * one or the row has a same-route twin; a unique by-id request stays as older peers expect.
+ * Where a setup edit or removal goes. This computer's catalog stamps every row with its real
+ * host, so a named host or a same-id twin goes on the wire; a paired server keeps the by-id
+ * request, because its rows' client-side host ids cannot name its twins.
  */
 export async function prepareProjectHostSetupMutation<T extends ProjectHostSetupTarget>(
   setups: readonly ProjectHostSetup[],
   args: T
-): Promise<{ target: RuntimeClientTarget; hostArgs: Omit<T, 'hostId'> & ProjectHostSetupTarget }> {
+): Promise<{ target: RuntimeClientTarget; hostArgs: T }> {
   const setup = setups.find(
     (entry) =>
-      entry.id === args.setupId &&
-      (args.hostId === undefined || getProjectHostSetupExecutionHostId(entry) === args.hostId)
+      entry.id === args.setupId && (args.hostId === undefined || entry.hostId === args.hostId)
   )
   if (!setup && args.hostId !== undefined) {
     // Why: an id-only fallback could land on a same-id setup of another host.
@@ -137,28 +130,14 @@ export async function prepareProjectHostSetupMutation<T extends ProjectHostSetup
   }
   const target = setup ? getProjectSetupRuntimeTarget(setup.hostId) : { kind: 'local' as const }
   await assertProjectHostSetupMutationRuntimeCapabilities(target)
-  const twinned =
-    setup !== undefined &&
-    setups.filter(
-      (entry) =>
-        entry.id === setup.id &&
-        getRuntimeTargetKey(getProjectSetupRuntimeTarget(entry.hostId)) ===
-          getRuntimeTargetKey(target)
-    ).length > 1
-  if (!setup || (!twinned && args.hostId === undefined)) {
-    return { target, hostArgs: args }
+  if (!setup || target.kind === 'environment') {
+    return { target, hostArgs: { ...args, hostId: undefined } }
   }
-  if (target.kind === 'environment') {
-    await assertRuntimeEnvironmentCapability(
-      target.environmentId,
-      PROJECT_HOST_SETUP_HOST_TARGET_RUNTIME_CAPABILITY,
-      'The selected Orca server cannot pick a project setup by host yet. Update Orca on the server and try again.',
-      15_000
-    )
+  const twinned = setups.some(
+    (entry) => entry !== setup && entry.id === setup.id && entry.hostId !== setup.hostId
+  )
+  return {
+    target,
+    hostArgs: twinned || args.hostId !== undefined ? { ...args, hostId: setup.hostId } : args
   }
-  return { target, hostArgs: { ...args, hostId: getProjectHostSetupExecutionHostId(setup) } }
-}
-
-function getRuntimeTargetKey(target: RuntimeClientTarget): string {
-  return target.kind === 'environment' ? `environment:${target.environmentId}` : 'local'
 }

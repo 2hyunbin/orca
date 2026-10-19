@@ -20,11 +20,3 @@ export function findProjectHostSetup<T extends SetupIdentity>(
       setup.id === target.setupId && (target.hostId === undefined || setup.hostId === target.hostId)
   )
 }
-
-/** The host that runs a setup: a paired server's setups all carry its `runtime:` id as `hostId`. */
-export function getProjectHostSetupExecutionHostId(setup: {
-  hostId: ExecutionHostId
-  executionHostId?: ExecutionHostId | null
-}): ExecutionHostId {
-  return setup.executionHostId ?? setup.hostId
-}
