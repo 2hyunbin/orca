@@ -182,13 +182,10 @@ export function useNewTabAgentMenuRows(
     localCapabilities.state === 'unlearned' || localCapabilities.state === 'pending'
   const capabilityPending =
     input.hostCapabilities == null && (local ? localAcquiring : facts.checking)
-  // Read even beside a roster: an agent that roster cannot answer is read from the host's mark.
-  const hostCatalogUnlearned = catalogUnlearned(
-    facts.executionHostId,
-    facts.runtimeId,
-    input.hostCapabilities
-  )
-  const hostCatalogPending = !roster && availability?.state !== 'pending' && hostCatalogUnlearned
+  const hostCatalogPending =
+    !roster &&
+    availability?.state !== 'pending' &&
+    catalogUnlearned(facts.executionHostId, facts.runtimeId, input.hostCapabilities)
   const localCatalogPending =
     !local &&
     catalogUnlearned(

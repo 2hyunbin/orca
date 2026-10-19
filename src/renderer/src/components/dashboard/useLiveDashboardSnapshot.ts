@@ -65,6 +65,9 @@ export function useLiveDashboardSnapshot(): DashboardSnapshot {
   // Why: freshness can flip a bucket without any backing map changing; the epoch
   // ticks on the freshness boundary so the memo re-derives stale-decayed cards.
   const agentStatusEpoch = useAppStore((s) => s.agentStatusEpoch)
+  // Why: the active workspace's selected host owns its launch options.
+  const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
+  const activeWorkspaceExecutionHostId = useAppStore((s) => s.activeWorkspaceExecutionHostId)
   // Launch options read host chat facts held outside the store.
   useEffect(() => {
     const holds = createDashboardChatProgramHolds()
@@ -163,7 +166,9 @@ export function useLiveDashboardSnapshot(): DashboardSnapshot {
       remoteDetectedAgentIds,
       runtimeDetectedAgentIds,
       agentStatusEpoch,
-      chatProgramFactsVersion
+      chatProgramFactsVersion,
+      activeWorktreeId,
+      activeWorkspaceExecutionHostId
     ]
   )
 }

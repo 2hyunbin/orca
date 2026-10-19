@@ -285,6 +285,7 @@ describe('useDashboardPopoutBridge', () => {
       { folderWorkspaces: [] },
       { projectGroups: [] },
       { restoredRuntimeHostIdByWorkspaceSessionKey: {} },
+      { activeWorkspaceExecutionHostId: 'local' },
       { runtimeEnvironments: [] },
       { runtimeEnvironmentCatalogHydrated: true },
       { removedRuntimeEnvironmentIds: new Set() }

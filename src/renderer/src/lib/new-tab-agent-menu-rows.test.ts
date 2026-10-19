@@ -2,7 +2,6 @@ import { expect, it } from 'vitest'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import { buildNewTabAgentMenuRows } from './new-tab-agent-menu-rows'
 const disabledTuiAgents: TuiAgent[] = ['pi']
-// The compatibility reading for a host without a program fact: the CLI is the program.
 const fromDetection = (detected: readonly TuiAgent[]) => (agent: TuiAgent) =>
   detected.includes(agent) ? ('available' as const) : ('missing' as const)
 const input = {

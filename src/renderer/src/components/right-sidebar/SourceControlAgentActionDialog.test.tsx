@@ -186,7 +186,6 @@ describe('SourceControlAgentActionDialog', () => {
     ).IS_REACT_ACT_ENVIRONMENT = true
     initialState = useAppStore.getState()
     vi.clearAllMocks()
-    // Like the real slices, a detection answer lands in the inventory the dialog reads.
     mocks.ensureDetectedAgents.mockImplementation(async () =>
       land({ localDetectedAgentIdsByContext: { host: ['codex'] } })
     )

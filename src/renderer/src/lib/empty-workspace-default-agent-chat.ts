@@ -1,6 +1,6 @@
+import { isNativeChatEnabled } from '../../../shared/structured-native-chat-launch-route'
 import { pickTuiAgent } from '../../../shared/tui-agent-selection'
 import { acquireAgentLaunchChoices } from './host-chat-program-acquisition'
-import { isNativeChatEnabled } from '../../../shared/structured-native-chat-launch-route'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
 import {
@@ -14,6 +14,7 @@ import {
 } from '@/lib/agent-detection-target-inventory'
 import { workspaceKindForWorktreeId } from '@/lib/agent-launch-route-input'
 import { chosenAgentChatUnlearned, agentChoiceOpensAsChat } from '@/lib/host-chat-program'
+import { newTabWorkspace } from '@/lib/agent-tab-shortcuts'
 import { planAgentSessionLaunch } from '@/lib/agent-session-launch-plan'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
@@ -34,11 +35,6 @@ function defaultChatDetectionTarget(
   return parseAgentDetectionTargetKey(getAgentDetectionTargetKeyForWorktree(state, worktreeId))
 }
 
-const workspaceOf = (worktreeId: string) => ({
-  kind: workspaceKindForWorktreeId(worktreeId),
-  worktreeId
-})
-
 /** True when the default chat could open here but the workspace host's agent list, or for a
  *  default whose CLI is not detected, whether its chat program runs there, has not loaded. */
 export function emptyWorkspaceDefaultChatAwaitsDetection(worktreeId: string): boolean {
@@ -54,7 +50,7 @@ export function emptyWorkspaceDefaultChatAwaitsDetection(worktreeId: string): bo
       state,
       state.settings?.defaultTuiAgent,
       detected,
-      workspaceOf(worktreeId)
+      newTabWorkspace(worktreeId)
     )
   )
 }
@@ -67,7 +63,7 @@ export async function loadEmptyWorkspaceDefaultChatDetection(worktreeId: string)
     return
   }
   await acquireAgentLaunchChoices(
-    workspaceOf(worktreeId),
+    newTabWorkspace(worktreeId),
     () => ensureDetectedAgentsForTarget(state, target),
     undefined,
     true
@@ -94,7 +90,7 @@ export function openDefaultAgentChatInEmptyWorkspace(
     state.settings?.defaultTuiAgent,
     detected ?? [],
     state.settings?.disabledTuiAgents,
-    (chosen) => agentChoiceOpensAsChat(state, chosen, workspaceOf(worktreeId), detected)
+    (chosen) => agentChoiceOpensAsChat(state, chosen, newTabWorkspace(worktreeId), detected)
   )
   if (!agent) {
     return null
@@ -103,7 +99,7 @@ export function openDefaultAgentChatInEmptyWorkspace(
   const agentSessionLaunchPlan = planAgentSessionLaunch(state, {
     requestId: newAgentLaunchRequestId(),
     agent,
-    workspace: workspaceOf(worktreeId)
+    workspace: { kind: workspaceKindForWorktreeId(worktreeId), worktreeId }
   })
   // Why: an agent that can only open as a TUI here would replace the shell with a process nobody asked for.
   if (agentSessionLaunchPlan.route === 'terminal-tui') {

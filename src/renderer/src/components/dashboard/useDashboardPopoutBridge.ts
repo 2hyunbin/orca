@@ -41,7 +41,7 @@ export function repoIconsUnchanged(
 
 type DashboardSnapshotWatchState = DashboardSnapshotState &
   Pick<AppState, 'agentStatusEpoch'> &
-  Partial<Pick<AppState, 'activeWorktreeId'>>
+  Partial<Pick<AppState, 'activeWorktreeId' | 'activeWorkspaceExecutionHostId'>>
 
 export function dashboardSnapshotInputsChanged(
   state: DashboardSnapshotWatchState,
@@ -49,6 +49,7 @@ export function dashboardSnapshotInputsChanged(
 ): boolean {
   return (
     state.activeWorktreeId !== previousState.activeWorktreeId ||
+    state.activeWorkspaceExecutionHostId !== previousState.activeWorkspaceExecutionHostId ||
     state.repos !== previousState.repos ||
     state.worktreesByRepo !== previousState.worktreesByRepo ||
     state.tabsByWorktree !== previousState.tabsByWorktree ||

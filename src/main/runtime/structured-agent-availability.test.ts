@@ -34,7 +34,6 @@ vi.mock('./structured-agent-runtime-metadata', () => ({
   STRUCTURED_AGENT_RUNTIME_METADATA: ['claude', 'grok', 'pi', 'opencode'].map((agent) => ({
     definition: { agent },
     supportsLocation: () => agent !== 'grok',
-    // Grok registers no program lookup.
     ...(agent === 'grok'
       ? {}
       : {
@@ -101,9 +100,8 @@ it('shares a host-home snapshot even if shell recapture fails, retaining it with
   expect(first.mock.calls[0][0]).toEqual([
     { agent: 'claude', state: 'available', chatProgram: 'available' },
     { agent: 'grok', state: 'refused', reason: 'agent', chatProgram: 'unknown' },
-    // A check that could not answer is no verdict, and says nothing about the program either.
+    // A check that could not answer is no verdict.
     { agent: 'pi', state: 'unknown', chatProgram: 'unknown' },
-    // Health and program are separate facts: a refused release Orca can still download.
     { agent: 'opencode', state: 'refused', reason: 'agent', chatProgram: 'installable' }
   ])
   expect(cwds).toEqual([homedir(), homedir(), homedir()])

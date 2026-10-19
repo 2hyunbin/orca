@@ -207,12 +207,12 @@ describe('QuickLaunchAgentMenuItems', () => {
   })
 
   // Why (#25523): a host that never answered is not a host with nothing installed.
-  it('says the host is unreachable instead of reporting no agents', () => {
+  it('says terminal agents could not be listed instead of reporting no agents', () => {
     useDetectedAgentsMock.mockReturnValueOnce({ detectedIds: null, detectionFailed: true })
 
     const html = renderAgentMenuItems()
 
-    expect(html).toContain('reach this workspace')
+    expect(html).toContain('list terminal agents for this workspace')
     expect(html).not.toContain('No agents detected')
   })
 

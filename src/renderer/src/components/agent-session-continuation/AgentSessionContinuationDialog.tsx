@@ -53,13 +53,11 @@ export function AgentSessionContinuationDialog({
   onOpenChange,
   onStarted
 }: AgentSessionContinuationDialogProps): React.JSX.Element {
-  useChatProgramFacts(
-    {
-      kind: workspaceKindForWorktreeId(request?.worktreeId ?? ''),
-      worktreeId: request?.worktreeId
-    },
-    open && Boolean(request)
-  )
+  const workspace = {
+    kind: workspaceKindForWorktreeId(request?.worktreeId ?? ''),
+    worktreeId: request?.worktreeId
+  }
+  useChatProgramFacts(workspace, open && Boolean(request))
   const abortRef = useRef<AbortController | null>(null)
   const settings = useAppStore((state) => state.settings)
   const [detectedAgents, setDetectedAgents] = useState<TuiAgent[]>([])
@@ -71,10 +69,6 @@ export function AgentSessionContinuationDialog({
   const [showStarting, setShowStarting] = useState(false)
   const disabledAgents = settings?.disabledTuiAgents ?? EMPTY_DISABLED_AGENTS
 
-  const workspace = {
-    kind: workspaceKindForWorktreeId(request?.worktreeId ?? ''),
-    worktreeId: request?.worktreeId
-  }
   const offered = agentsOfferedForLaunch(useAppStore.getState(), workspace, detectedAgents)
   const agents = getAgentCatalog().filter(
     (agent) =>
