@@ -86,7 +86,10 @@ describe('launchAgentInNewTab paired web runtime', () => {
     const activate = mode === true
     const status = mode === 'failed' ? 'failed' : 'created'
     mocks.createWebRuntimeSessionTerminal.mockResolvedValue({
-      outcome: { status },
+      outcome: {
+        status,
+        ...(status === 'failed' ? { message: 'The host refused the launch.' } : {})
+      },
       hostTabId: 'host-tab::leaf-1'
     })
     store.tabsByWorktree['wt-1'].push({ id: 'local-agent-tab', launchAgent: 'claude' })
@@ -123,6 +126,9 @@ describe('launchAgentInNewTab paired web runtime', () => {
     })
     expect(mocks.setActiveTabType).toHaveBeenCalledTimes(activate && status === 'created' ? 1 : 0)
     expect(mocks.toastError).toHaveBeenCalledTimes(status === 'failed' ? 1 : 0)
+    if (status === 'failed') {
+      expect(mocks.toastError).toHaveBeenCalledExactlyOnceWith('The host refused the launch.')
+    }
     // A local tab closes locally (the host close no-ops), so a launch leaves it alone.
     expect(mocks.closeTab).not.toHaveBeenCalled()
   })
