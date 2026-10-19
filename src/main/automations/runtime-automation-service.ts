@@ -97,6 +97,35 @@ function bindHeadlessRunTerminalRetention(
       await runtime.closeTerminal(handle)
       return true
     },
+    // Why: only a workspace made for this run sleeps; a shared one would gather a tab per run.
+    runOwnsWorkspace: (run) =>
+      run.workspaceId !== null &&
+      store.getWorktreeMeta(run.workspaceId)?.automationProvenance?.automationRunId === run.id,
+    sleepRunWorkspace: async (run) => {
+      const ptyId = run.terminalPtyId
+      if (!run.workspaceId || !ptyId) {
+        return false
+      }
+      try {
+        // Records the agent's resume for reopening; sole, since any other live terminal is a user's.
+        const sleep = await runtime.sleepTerminalsForWorktree(`id:${run.workspaceId}`, {
+          soleLivePtyId: ptyId
+        })
+        // Why not "stopped": retrying a sleep that stopped the PTY and then threw finds it not live.
+        const stillLive =
+          sleep.remainingLivePtyIds?.includes(ptyId) ??
+          (sleep.livePtyIds.includes(ptyId) && !sleep.stoppedPtyIds.includes(ptyId))
+        if (stillLive) {
+          return false
+        }
+      } catch (error) {
+        console.error('[automations] could not sleep a run workspace:', error)
+        return false
+      }
+      // The slept pane keeps its tab and pane key, which reopen and resume it.
+      await service.markDispatchResult({ runId: run.id, status: run.status, terminalPtyId: null })
+      return true
+    },
     inAutomationLane: (automationId, operation) =>
       service.runInAutomationLane(automationId, operation),
     forgetRunTerminal: async (run) => {
