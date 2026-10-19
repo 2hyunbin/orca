@@ -11,6 +11,7 @@ import {
   takeNextEditorFocusRequestToken
 } from '../focus/editor-focus-reveal'
 import { applyOpenFileToState, type OpenFileApplyScratch } from './open-file-apply'
+import { adoptOpenEditorBuffer } from '../file-ids/editor-file-buffer'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
 import { recordReopenedEditorFileInLayoutOwner } from '../tabs/editor-tab-layout-owner'
 
@@ -31,9 +32,13 @@ export function createOpenFileAction(
       refused: false
     }
     const before = ORCA_LAYOUT_OWNER_IS_MAIN ? get() : null
+    const priorOpenFiles = get().openFiles
     set((s) => applyOpenFileToState(s, file, options, scratch, linkIntent))
     if (scratch.refused) {
       return { fileId: scratch.editorItemFileId, result: null }
+    }
+    if (!priorOpenFiles.some((openFile) => openFile.id === scratch.editorItemFileId)) {
+      set((s) => adoptOpenEditorBuffer(s, scratch.editorItemFileId) ?? s)
     }
     // Why: a reentrant update may remove the chosen group after selection; never recreate it.
     if (

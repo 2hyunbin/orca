@@ -1,9 +1,12 @@
 import type { EditorGet, EditorSet } from '../types/editor-set-get'
 import type { EditorSlice } from '../types/editor-slice'
+import type { OpenFile } from '../types/open-file'
+import type { AppState } from '../../../types'
 import { isEditorTabContentType } from '../tabs/editor-tab-content-type'
 import type { Tab } from '../../../../../../shared/tab-types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
 import { withPreviewEnded } from '../../tabs/tab-preview-flag'
+import { getSameBufferFileIds } from '../file-ids/editor-file-buffer'
 import {
   previewEditorTabsOf,
   recordPromotedEditorTabsInLayoutOwner
@@ -77,27 +80,35 @@ export function createOpenFileMutations(
         if (file.readOnly === true || file.csvPreviewOnly === true) {
           return s
         }
-        const needsPreviewClear = dirty && file.isPreview
-        if (file.isDirty === dirty && !needsPreviewClear) {
+        const ids = new Set(getSameBufferFileIds(s, fileId))
+        const changing = s.openFiles.filter(
+          (f) => ids.has(f.id) && (f.isDirty !== dirty || (dirty && f.isPreview))
+        )
+        if (changing.length === 0) {
           return s
         }
-        if (ORCA_LAYOUT_OWNER_IS_MAIN && needsPreviewClear) {
-          promoted.push(...previewEditorTabsOf(s.unifiedTabsByWorktree, fileId))
+        const previewIds = new Set(
+          dirty ? changing.filter((f) => f.isPreview).map((f) => f.id) : []
+        )
+        if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+          for (const previewId of previewIds) {
+            promoted.push(...previewEditorTabsOf(s.unifiedTabsByWorktree, previewId))
+          }
         }
         const nextOpenFiles = s.openFiles.map((f) =>
-          f.id === fileId
-            ? { ...f, isDirty: dirty, ...(needsPreviewClear ? { isPreview: undefined } : {}) }
+          ids.has(f.id)
+            ? { ...f, isDirty: dirty, ...(previewIds.has(f.id) ? { isPreview: undefined } : {}) }
             : f
         )
         return {
           openFiles: nextOpenFiles,
-          ...(needsPreviewClear
+          ...(previewIds.size > 0
             ? {
                 unifiedTabsByWorktree: Object.fromEntries(
                   Object.entries(s.unifiedTabsByWorktree ?? {}).map(([worktreeId, tabs]) => [
                     worktreeId,
                     tabs.map((tab) =>
-                      tab.entityId === fileId && isEditorTabContentType(tab.contentType)
+                      previewIds.has(tab.entityId) && isEditorTabContentType(tab.contentType)
                         ? withPreviewEnded(tab)
                         : tab
                     )
@@ -115,33 +126,18 @@ export function createOpenFileMutations(
 
     setExternalMutation: (fileId, mutation) =>
       set((s) => {
-        const file = s.openFiles.find((f) => f.id === fileId)
-        if (!file) {
-          return s
-        }
         const next = mutation ?? undefined
-        if (file.externalMutation === next) {
-          return s
-        }
-        return {
-          openFiles: s.openFiles.map((f) =>
-            f.id === fileId ? { ...f, externalMutation: next } : f
-          )
-        }
+        return setOnSameBuffer(s, fileId, (f) =>
+          f.externalMutation === next ? f : { ...f, externalMutation: next }
+        )
       }),
 
     setLastKnownDiskSignature: (fileId, signature) =>
-      set((s) => {
-        const file = s.openFiles.find((f) => f.id === fileId)
-        if (!file || file.lastKnownDiskSignature === signature) {
-          return s
-        }
-        return {
-          openFiles: s.openFiles.map((f) =>
-            f.id === fileId ? { ...f, lastKnownDiskSignature: signature } : f
-          )
-        }
-      }),
+      set((s) =>
+        setOnSameBuffer(s, fileId, (f) =>
+          f.lastKnownDiskSignature === signature ? f : { ...f, lastKnownDiskSignature: signature }
+        )
+      ),
 
     clearPendingDiskBaselineVerification: (fileId) =>
       set((s) => {
@@ -201,4 +197,26 @@ export function createOpenFileMutations(
         openFiles: s.openFiles.map((f) => (f.id === fileId ? { ...f, isUntitled: undefined } : f))
       }))
   }
+}
+
+/** Applies `update` to every tab sharing `fileId`'s buffer; returns `s` when nothing changed. */
+function setOnSameBuffer(
+  s: AppState,
+  fileId: string,
+  update: (file: OpenFile) => OpenFile
+): AppState | Pick<AppState, 'openFiles'> {
+  if (!s.openFiles.some((f) => f.id === fileId)) {
+    return s
+  }
+  const ids = new Set(getSameBufferFileIds(s, fileId))
+  let changed = false
+  const openFiles = s.openFiles.map((f) => {
+    if (!ids.has(f.id)) {
+      return f
+    }
+    const next = update(f)
+    changed ||= next !== f
+    return next
+  })
+  return changed ? { openFiles } : s
 }

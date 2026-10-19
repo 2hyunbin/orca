@@ -20,6 +20,10 @@ import {
 import { getDiskBaselineSignature } from './diff-content-signature'
 import { trackExternalChangeConflictAction } from './editor-external-change-telemetry'
 import { editorTabFileAccess } from '@/lib/local-file-access'
+import {
+  getEditorBufferKey,
+  getSameBufferFileIds
+} from '@/store/slices/editor/file-ids/editor-file-buffer'
 
 export type AppStoreApi = Pick<StoreApi<AppState>, 'getState' | 'subscribe'>
 
@@ -40,10 +44,17 @@ export type EditorSaveQueue = {
 export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
   const autoSaveTimers = new Map<string, number>()
   const autoSaveScheduledContent = new Map<string, string>()
+  // Keyed by buffer, not tab: tabs of one physical file share a buffer, so their writes serialize.
   const saveQueue = new Map<string, Promise<void>>()
   const saveGeneration = new Map<string, number>()
 
-  const clearAutoSaveTimer = (fileId: string): void => {
+  const bufferKeyOf = (fileId: string): string => {
+    const state = store.getState()
+    const file = state.openFiles.find((openFile) => openFile.id === fileId)
+    return file ? getEditorBufferKey(file, state) : `tab:${fileId}`
+  }
+
+  const clearTabAutoSaveTimer = (fileId: string): void => {
     const timerId = autoSaveTimers.get(fileId)
     if (timerId !== undefined) {
       window.clearTimeout(timerId)
@@ -52,8 +63,15 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     autoSaveScheduledContent.delete(fileId)
   }
 
+  const clearAutoSaveTimer = (fileId: string): void => {
+    for (const id of getSameBufferFileIds(store.getState(), fileId)) {
+      clearTabAutoSaveTimer(id)
+    }
+  }
+
   const bumpSaveGeneration = (fileId: string): void => {
-    saveGeneration.set(fileId, (saveGeneration.get(fileId) ?? 0) + 1)
+    const key = bufferKeyOf(fileId)
+    saveGeneration.set(key, (saveGeneration.get(key) ?? 0) + 1)
   }
 
   const queueSave = (
@@ -62,13 +80,14 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     trigger: 'autosave' | 'user' = 'user'
   ): Promise<void> => {
     clearAutoSaveTimer(file.id)
-    const queuedGeneration = saveGeneration.get(file.id) ?? 0
+    const bufferKey = bufferKeyOf(file.id)
+    const queuedGeneration = saveGeneration.get(bufferKey) ?? 0
 
-    const previousSave = saveQueue.get(file.id) ?? Promise.resolve()
+    const previousSave = saveQueue.get(bufferKey) ?? Promise.resolve()
     const queuedSave = previousSave
       .catch(() => undefined)
       .then(async () => {
-        if ((saveGeneration.get(file.id) ?? 0) !== queuedGeneration) {
+        if ((saveGeneration.get(bufferKey) ?? 0) !== queuedGeneration) {
           return
         }
 
@@ -134,7 +153,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
           throw error
         }
 
-        if ((saveGeneration.get(file.id) ?? 0) !== queuedGeneration) {
+        if ((saveGeneration.get(bufferKey) ?? 0) !== queuedGeneration) {
           return
         }
 
@@ -166,18 +185,18 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
 
     let trackedSave: Promise<void>
     trackedSave = queuedSave.finally(() => {
-      if (saveQueue.get(file.id) === trackedSave) {
-        saveQueue.delete(file.id)
+      if (saveQueue.get(bufferKey) === trackedSave) {
+        saveQueue.delete(bufferKey)
       }
     })
-    saveQueue.set(file.id, trackedSave)
+    saveQueue.set(bufferKey, trackedSave)
     return trackedSave
   }
 
   const quiesceFileSave = async (fileId: string): Promise<void> => {
     // Why: rich markdown debounces serialization, so force the pending draft out before we cancel timers.
     flushPendingEditorChange(fileId)
-    const pendingSave = saveQueue.get(fileId)
+    const pendingSave = saveQueue.get(bufferKeyOf(fileId))
     clearAutoSaveTimer(fileId)
     bumpSaveGeneration(fileId)
     await pendingSave?.catch(() => undefined)
@@ -199,7 +218,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         !isAutosaveSuspendedForFile(file) &&
         draft !== undefined
       if (!shouldKeepTimer) {
-        clearAutoSaveTimer(fileId)
+        clearTabAutoSaveTimer(fileId)
       }
     }
 
@@ -216,15 +235,22 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         !canAutoSaveOpenFile(file) ||
         isAutosaveSuspendedForFile(file)
       ) {
-        clearAutoSaveTimer(file.id)
+        clearTabAutoSaveTimer(file.id)
         continue
       }
 
       if (autoSaveTimers.has(file.id) && autoSaveScheduledContent.get(file.id) === draft) {
         continue
       }
+      // One timer per buffer: a sibling tab of the same file already autosaves this draft.
+      if (
+        getSameBufferFileIds(state, file.id).some((id) => id !== file.id && autoSaveTimers.has(id))
+      ) {
+        clearTabAutoSaveTimer(file.id)
+        continue
+      }
 
-      clearAutoSaveTimer(file.id)
+      clearTabAutoSaveTimer(file.id)
       autoSaveScheduledContent.set(file.id, draft)
       const timerId = window.setTimeout(() => {
         autoSaveTimers.delete(file.id)
