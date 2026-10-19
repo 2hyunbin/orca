@@ -12,7 +12,7 @@ export function SourceControlActionOptionsPlaceholder({
     <div aria-hidden="true" className="grid grid-cols-2 gap-2">
       {Array.from({ length: count }, (_, index) => (
         <div key={index} className="space-y-2">
-          <Label className="text-2xs text-muted-foreground">&nbsp;</Label>
+          <Label>&nbsp;</Label>
           <div className="h-8 rounded-md border border-border bg-muted/40" />
         </div>
       ))}

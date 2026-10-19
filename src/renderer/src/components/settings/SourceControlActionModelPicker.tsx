@@ -41,9 +41,7 @@ export function SourceControlActionModelPicker({
   return (
     <div className="grid grid-cols-2 gap-2">
       <div className="space-y-2">
-        <Label className="text-[11px] text-muted-foreground">
-          {translate('settings.sourceControl.actionModel.model', 'Model')}
-        </Label>
+        <Label>{translate('settings.sourceControl.actionModel.model', 'Model')}</Label>
         <Select
           value={selected?.model ?? AGENT_DEFAULT_VALUE}
           disabled={disabled}
@@ -85,7 +83,7 @@ export function SourceControlActionModelPicker({
           const current = selected.options?.[option.id]
           return (
             <div key={option.id} className="space-y-2">
-              <Label className="text-[11px] text-muted-foreground">{option.label}</Label>
+              <Label>{option.label}</Label>
               <Select
                 value={current ?? AGENT_DEFAULT_VALUE}
                 disabled={disabled}
