@@ -9,6 +9,8 @@ import { setSecretStore } from '../../../../shared/secret-store'
 import type { RpcRequest } from '../core'
 import { RpcDispatcher } from '../dispatcher'
 import { USAGE_CREDENTIAL_METHODS } from './usage-credentials'
+import { RuntimeAccountController } from '../../runtime-account-controller'
+import { hostAccountsManagedByDesktopMessage } from '../../../../shared/host-account-launch-env'
 
 const home = vi.hoisted(() => ({ dir: '' }))
 vi.mock('node:os', async (importOriginal) => {
@@ -28,10 +30,10 @@ function createRuntime() {
     invalidateMiniMaxCredentialState: vi.fn(),
     invalidateZcodeCredentialState: vi.fn()
   }
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these methods only read getUsageRateLimits; the dispatcher only reads getRuntimeId.
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these methods only read requireUsageRateLimits; the dispatcher only reads getRuntimeId.
   const runtime = {
     getRuntimeId: () => 'runtime-a',
-    getUsageRateLimits: () => rateLimits
+    requireUsageRateLimits: () => rateLimits
   } as unknown as OrcaRuntimeService
   return { runtime, rateLimits }
 }
@@ -141,16 +143,27 @@ describe('usage credential RPC methods', () => {
     expect(existsSync(join(home.dir, '.orca', 'minimax-api-key.enc'))).toBe(false)
   })
 
-  it('saves without a usage poller where the desktop owns this host’s accounts', async () => {
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: as above, with no account services.
+  it('refuses every call where the desktop owns this host’s accounts, storing nothing', async () => {
+    const accounts = new RuntimeAccountController()
+    accounts.restoreHostLaunchEnv({ wslDistro: 'Ubuntu', claude: {}, terminal: {} }, () => {})
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: as above, backed by a real controller with no account services.
     const runtime = {
       getRuntimeId: () => 'runtime-a',
-      getUsageRateLimits: () => null
+      requireUsageRateLimits: () => accounts.requireUsageRateLimits()
     } as unknown as OrcaRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: [...USAGE_CREDENTIAL_METHODS] })
 
-    await expect(
-      call(dispatcher, 'accounts.zcodePlanSaveApiKey', { apiKey: SECRET })
-    ).resolves.toMatchObject({ ok: true, result: { apiKeyConfigured: true } })
+    for (const [method, params] of [
+      ['accounts.zcodePlanSaveApiKey', { apiKey: SECRET }],
+      ['accounts.minimaxSaveApiKey', { apiKey: SECRET }],
+      ['accounts.minimaxCredentialsStatus', undefined],
+      ['accounts.zcodePlanCredentialsStatus', undefined]
+    ] as const) {
+      await expect(call(dispatcher, method, params)).resolves.toMatchObject({
+        ok: false,
+        error: { message: hostAccountsManagedByDesktopMessage('Ubuntu') }
+      })
+    }
+    expect(existsSync(join(home.dir, '.orca'))).toBe(false)
   })
 })
