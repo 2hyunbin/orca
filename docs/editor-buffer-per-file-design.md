@@ -49,6 +49,10 @@ The **record id** is the execution host plus a normalized path:
   - A WSL distro. `\\wsl$` and `\\wsl.localhost` paths name the same distro and give the same key.
   - An SSH target, keyed by `(runtimeEnvironmentId, targetId)`. Keeping the runtime namespace keeps a direct target and the same target nested under a runtime separate. Reconnect generations and connection ids are not part of the key.
   - A runtime environment.
+  - Host keys include the continuity revision from `runtime-environment-revision.ts`.
+    - A re-pair proven to be the same machine maps to the same key, so sharing survives the reconnect.
+    - A retired id quarantines its records: they are kept as recoverable drafts and never merged with the new machine's records.
+    - 1b tests a replacement host with an identical path and identical baseline text.
 - **Path**: separators and drive letters are normalized, and case is kept exactly. Case sensitivity can differ per directory (on Windows, and under WSL), so it is never folded from a cached volume property. Two paths that differ only in case join one record only when the host proves they are the same file, with the same file id or inode from a stat.
 
 The workspace is never part of the id, and the id never goes over the wire.
@@ -130,14 +134,14 @@ Version ids restart when a model is recreated, for example after a dispose and r
 | Unstaged diff (single-file or combined section) | Only the modified side, which is the working file, attaches to the record and saves through it. |
 | Staged and branch diffs | Separate read-only snapshot models, outside the record. |
 | Markdown preview | Read-only text from `model`. Its Save is a record save but never counts as consent to overwrite. |
-| Mobile bridge | Keeps publishing one projection per tab, so the wire format doesn't change. A mobile save becomes an edit plus a save on the record, and a rolled-back save is undone as an edit. |
+| Mobile bridge | Keeps publishing one projection per tab, so the wire format doesn't change. A mobile save becomes an edit, with its own undo boundary, plus a save on the record. A failed save rolls back only if the model is still at the version that edit produced. Otherwise the current text is kept and the failure is reported, mirroring `restoreFailedMobileSaveDraft`. Phase 3 tests desktop typing during a failing mobile save. |
 
 **Interim adapter (from 1b until Phase 3).** Views that haven't been converted keep their own undo and route only their text through the record:
 
 - `record.applyText(text, source)` replaces the model's text as one edit.
   - Because these edits never undo through the model, dirty for them can't come from version ids. If the applied text's signature equals `baseline`, `savedAltVersion` is set to the current id, so undoing to clean in the view reads clean.
 - `record.pending`: views that publish on a delay (rich markdown waits 300 ms) register pending text on the record.
-  - When a view's pending edit starts, the record captures the model's alternative version as that edit's base.
+  - Each delayed view tracks the model's alternative version for the text last installed in it. This is updated with every programmatic sync into the view, and it becomes the base of the view's next pending edit.
   - The record flushes pending text before any dirty decision, close prompt, autosave or session capture, and before another view on the same record writes. Another view's first edit forces the flush, so exiting before the timer fires keeps the edit.
   - `applyText` replaces the text only if the model is still at the captured base. Otherwise the stale commit is not applied. It is kept as a recoverable copy and shown to the user. Until 1d it is shown through the existing Compare dialog.
 - Disk loads go through `record.loadFromDisk(text, signature)`:
@@ -154,14 +158,21 @@ Phase 1 ships as four PRs. After each one, behaviour matches main except for the
 
 - **1a. Record as state only.**
   - **Change**:
-    - Add a buffer slice that is the source of truth for the per-tab fields: draft, `isDirty`, `lastKnownDiskSignature`, `externalMutation` and the autosave gates.
+    - Add a buffer slice that is the source of truth for exactly these `OpenFile` fields: `isDirty`, `lastKnownDiskSignature`, `externalMutation`, `pendingDiskBaselineVerification`, `pendingLiveDiskVerification` and `pendingOwnerMigration`.
+    - Two things stay where they are in 1a. `editorDrafts` moves only in 1d. `pendingSelfMoveEcho` is a transient of the move itself, so it stays on the tab.
     - The `OpenFile` fields stay as a synchronized mirror, written in the same store update as the record. All of today's readers and tests keep working (about 139 test files build `OpenFile`s with these fields, plus 236 references outside tests). 1d removes the mirror.
     - The slice is keyed by the existing `OpenFile.id`, which makes the move purely mechanical. On main one path can already have several records in one workspace: unstaged diff tabs with their own id, draft and model; diverging duplicate siblings (`editor-close-document-siblings.test.ts`); and siblings that differ in read-only state, mode or owner generation. 1a keeps all of them.
     - Writers update the record instead of the tab.
+    - The lifecycle follows `openFiles` membership, in the same reducer step:
+      - **Create** on open, on hydrate (including the id re-keying in `hydrated-editor-file-ids.ts`) and on mirrored web-client tabs.
+      - **Delete** on close and on worktree teardown.
+      - **Re-key** on every id change: the atomic self-move re-key, `open-file-path-rekey.ts`, and layout moves through `workspace-layout-beside.ts` and `workspace-layout-disk-fields.ts`.
+      - A missing record is seeded from its `OpenFile`, never from defaults.
     - Text models are untouched. They stay one per URI, shared as on main, and are written only by today's paths, at today's times.
     - Dirty stays main's content compare (including the markdown trailing-whitespace leniency).
   - **Tests**:
     - Existing suites pass unchanged.
+    - A store invariant, checked after every `set` in dev and test builds: the set of records equals the set of edit-tab ids, and every mirror field equals its record.
     - Each writer lands in the record and its mirror atomically.
     - A dirty change propagates to each reader that depends on `openFiles` identity or fields: `web-session-tabs-sync/state-equality-files.ts`, session save in `lib/workspace-session.ts`, the mobile session projections, and `mobile-markdown-bridge.ts`.
 - **1b. Sharing across workspaces.**
@@ -189,6 +200,7 @@ Phase 1 ships as four PRs. After each one, behaviour matches main except for the
     - Dispose and reopen while dirty.
     - Exit before the rich-markdown publish timer fires.
     - Two panes edit within the delay window. The flush is forced, and a stale commit becomes a recoverable copy rather than being applied.
+    - The model updates, then a rich edit lands before the view syncs. The stale commit is fenced.
 - **1d. Delete caches and stored drafts.**
   - **Change**: delete the panel `fileContents` cache for editable tabs, `use-editor-buffer-content-sync`, and the `OpenFile` mirror fields. Drafts are derived at session save, after flushing pending text. Add the recoverable-copy UI, used for old-format drafts that differ and for dirty owner merges.
   - **Tests**: legacy drafts that differ; a session read by an older build.
