@@ -11,6 +11,7 @@ import { clearWorkspaceUnreadFlag, markWorkspaceUnreadFlag } from './workspace-u
 // With the switch on, the window raises the flag exactly where the owning host does not.
 
 const hostCapabilities = vi.hoisted(() => new Map<string, Promise<readonly string[]>>())
+const cachedStatus = vi.hoisted(() => new Map<string, readonly string[]>())
 
 vi.mock('../../../../../shared/sidebar-inputs-switch', () => ({
   ORCA_SIDEBAR_INPUTS_IS_MAIN: true
@@ -20,6 +21,9 @@ vi.mock('../worktrees/metadata/worktree-meta-persist', async (importOriginal) =>
   return { ...actual, persistWorktreeMeta: vi.fn(async () => undefined) }
 })
 vi.mock('@/runtime/runtime-rpc-client', () => ({
+  // Null before the environment's first status probe, as the real cache.
+  readCachedRuntimeEnvironmentCapability: (environmentId: string, capability: string) =>
+    cachedStatus.get(environmentId)?.includes(capability) ?? null,
   // Settles with the environment's status probe; rejects when it cannot be read.
   runtimeEnvironmentSupportsCapability: async (environmentId: string, capability: string) => {
     const capabilities = await hostCapabilities.get(environmentId)
@@ -78,6 +82,7 @@ function createStore() {
 beforeEach(() => {
   vi.clearAllMocks()
   hostCapabilities.clear()
+  cachedStatus.clear()
   hostCapabilities.set('new', Promise.resolve([WORKSPACE_UNREAD_HOST_RAISES_CAPABILITY]))
   hostCapabilities.set('old', Promise.resolve(['runtime.status.compat.v1']))
 })
@@ -108,7 +113,18 @@ describe('the window raises the unread flag only where its host does not', () =>
     )
   })
 
-  it('waits for a server’s status, and raises it when the status cannot be read', async () => {
+  it('answers from the cached status without probing again', async () => {
+    const { mark, isUnread } = createStore()
+    cachedStatus.set('slow', [WORKSPACE_UNREAD_HOST_RAISES_CAPABILITY])
+    hostCapabilities.set('slow', new Promise(() => {}))
+    await mark(SLOW_SERVER_WT)
+    expect(isUnread(SLOW_SERVER_WT)).toBe(false)
+    cachedStatus.set('slow', [])
+    await mark(SLOW_SERVER_WT)
+    expect(isUnread(SLOW_SERVER_WT)).toBe(true)
+  })
+
+  it('waits for a server’s first status, and raises it when the status cannot be read', async () => {
     const { mark, isUnread } = createStore()
     let answer: (capabilities: readonly string[]) => void = () => {}
     hostCapabilities.set('slow', new Promise((resolve) => (answer = resolve)))

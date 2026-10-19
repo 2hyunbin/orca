@@ -263,7 +263,7 @@ export class RuntimeRpcLifecycle extends RuntimeRpcWebSocketDispatch {
         if (socket.clientCapabilities.includes(AGENT_LAUNCH_RUNTIME_CAPABILITY)) {
           this.runtime.noteAgentLaunchClientReady?.()
         }
-        // A runtime-scoped client's capabilities are fixed by its handshake.
+        // Why once per socket: only phones send runtime.clientCapabilities.update.
         if (socket.device.scope === 'runtime') {
           this.runtime.sidebarFacts?.noteRuntimeClient(
             socket.connectionId,

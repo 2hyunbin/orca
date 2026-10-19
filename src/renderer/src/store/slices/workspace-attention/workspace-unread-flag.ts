@@ -13,7 +13,10 @@ import type { WorkspaceAttentionGet, WorkspaceAttentionSet } from './workspace-a
 import { workspaceHasLiveMarker } from './workspace-live-markers'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../../shared/sidebar-inputs-switch'
 import { WORKSPACE_UNREAD_HOST_RAISES_CAPABILITY } from '../../../../../shared/workspace-unread-raise-capability'
-import { runtimeEnvironmentSupportsCapability } from '@/runtime/runtime-rpc-client'
+import {
+  readCachedRuntimeEnvironmentCapability,
+  runtimeEnvironmentSupportsCapability
+} from '@/runtime/runtime-rpc-client'
 import { tryRuntimeTargetForWorktreeOwner } from '../worktrees/listing/worktree-owner-target'
 
 // The persisted workspace flag `isUnread`. Only the workspace-attention module writes it.
@@ -36,10 +39,9 @@ export function markWorkspaceUnreadFlag(
 }
 
 /**
- * Whether the workspace's owning host raises the flag itself, so this window must not. A local
- * owner runs this build: this app's main and the SSH hosts it reaches, or for the browser client
- * the host that served it. A paired server answers by capability; the window waits for its status,
- * and raises the flag when the status cannot be read, so none is lost.
+ * Whether the owning host raises the flag itself. A local owner runs this build (main, its SSH
+ * hosts, or the host that served the browser client). A paired server answers by capability; an
+ * unreadable status raises here, so no flag is lost.
  */
 async function ownerRaisesUnreadFlag(state: AppState, worktreeId: string): Promise<boolean> {
   const workspaceScope = parseWorkspaceKey(worktreeId)
@@ -57,6 +59,14 @@ async function ownerRaisesUnreadFlag(state: AppState, worktreeId: string): Promi
   }
   if (target.kind === 'local') {
     return true
+  }
+  // Why the cached answer first: a per-raise probe would delay the flag past a screen arrival.
+  const cached = readCachedRuntimeEnvironmentCapability(
+    target.environmentId,
+    WORKSPACE_UNREAD_HOST_RAISES_CAPABILITY
+  )
+  if (cached !== null) {
+    return cached
   }
   return runtimeEnvironmentSupportsCapability(
     target.environmentId,

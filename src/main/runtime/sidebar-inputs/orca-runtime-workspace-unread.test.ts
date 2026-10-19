@@ -14,6 +14,11 @@ import { requireSwitchedOn } from './require-switched-on'
 import { ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES } from '../../../shared/electron-remote-runtime-client-capabilities'
 import { remoteRuntimeClientCapabilities } from '../../../shared/remote-runtime-client-capabilities'
 import { WORKSPACE_UNREAD_HOST_RAISES_CAPABILITY } from '../../../shared/workspace-unread-raise-capability'
+import {
+  BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY,
+  BROWSER_CLIENT_PAGE_METADATA_RUNTIME_CAPABILITY,
+  BROWSER_NETWORK_TUNNEL_RUNTIME_CAPABILITY
+} from '../../../shared/protocol-version'
 
 vi.mock('../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
 
@@ -26,6 +31,23 @@ const PANE = `tab-1:${LEAF}`
 const PHONE: RpcDispatchStreamingOptions = { clientKind: 'mobile', connectionId: 'phone-1' }
 
 type Flag = { lastActivityAt: number; isUnread: boolean }
+
+/** What each kind of desktop socket sends: the request and subscription sockets, the browser host
+ *  lease and network tunnel (which add only browser capabilities to the shared base), and the CLI. */
+function currentDesktopSockets() {
+  return {
+    request: remoteRuntimeClientCapabilities(ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES),
+    lease: remoteRuntimeClientCapabilities([
+      BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY,
+      BROWSER_CLIENT_PAGE_METADATA_RUNTIME_CAPABILITY
+    ]),
+    tunnel: remoteRuntimeClientCapabilities([
+      BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY,
+      BROWSER_NETWORK_TUNNEL_RUNTIME_CAPABILITY
+    ]),
+    cli: remoteRuntimeClientCapabilities()
+  }
+}
 
 function createHeadlessHost() {
   const meta: Record<string, Flag> = { [WT]: { lastActivityAt: 0, isUnread: false } }
@@ -186,28 +208,24 @@ describe('workspace unread flag on a headless host', () => {
     }
   })
 
-  it('advertises that it raises the flag, so a current desktop leaves raising to it', () => {
+  it('advertises that it raises the flag, so no socket of a current desktop silences it', () => {
     const host = createHeadlessHost()
     expect(host.runtime.getStatus().capabilities).toContain(WORKSPACE_UNREAD_HOST_RAISES_CAPABILITY)
-    requireSwitchedOn(host.runtime.sidebarFacts).noteRuntimeClient(
-      'desktop-new',
-      ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES
-    )
-    // The CLI hosts no client pages and raises nothing itself.
-    requireSwitchedOn(host.runtime.sidebarFacts).noteRuntimeClient(
-      'cli-1',
-      remoteRuntimeClientCapabilities()
-    )
+    const facts = requireSwitchedOn(host.runtime.sidebarFacts)
+    for (const [connectionId, capabilities] of Object.entries(currentDesktopSockets())) {
+      facts.noteRuntimeClient(connectionId, capabilities)
+    }
     host.finishTurn()
     expect(host.meta[WT].isUnread).toBe(true)
   })
 
   it('leaves raising to an older desktop while it is connected, and still clears on the phone', async () => {
     const host = createHeadlessHost()
-    const olderDesktop = ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES.filter(
+    // Its browser host lease is enough: that socket hosts client pages without the capability.
+    const olderLease = currentDesktopSockets().lease.filter(
       (capability) => capability !== WORKSPACE_UNREAD_HOST_RAISES_CAPABILITY
     )
-    requireSwitchedOn(host.runtime.sidebarFacts).noteRuntimeClient('desktop-old', olderDesktop)
+    requireSwitchedOn(host.runtime.sidebarFacts).noteRuntimeClient('desktop-old', olderLease)
     host.finishTurn()
     expect(host.meta[WT].isUnread).toBe(false)
 

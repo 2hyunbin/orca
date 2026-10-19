@@ -20,8 +20,6 @@ import {
 } from './protocol-version'
 import { AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY } from './agent-session-create-capabilities'
 import { AGENT_SESSION_OPTIONAL_MODEL_CLIENT_CAPABILITY } from './agent-session-optional-model-capability'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from './sidebar-inputs-switch'
-import { WORKSPACE_UNREAD_HOST_RAISES_CAPABILITY } from './workspace-unread-raise-capability'
 
 // Electron clients can decode client-hosted page placement; becoming a page
 // host still requires the separate authenticated browser-client lease.
@@ -53,7 +51,5 @@ export const ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES = [
   // Only the renderer shows Deleting for a `removing` row; CLI and mobile get those rows omitted.
   WORKTREE_BACKGROUND_REMOVAL_RUNTIME_CAPABILITY,
   // The renderer shows a restored, unconfirmed agent row as identity only.
-  AGENT_STATUS_RESTORED_UNCONFIRMED_RUNTIME_CAPABILITY,
-  // Switch point: this desktop leaves the unread flag to a host that raises it.
-  ...(ORCA_SIDEBAR_INPUTS_IS_MAIN ? [WORKSPACE_UNREAD_HOST_RAISES_CAPABILITY] : [])
+  AGENT_STATUS_RESTORED_UNCONFIRMED_RUNTIME_CAPABILITY
 ] as const
