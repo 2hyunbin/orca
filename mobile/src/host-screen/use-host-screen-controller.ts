@@ -20,7 +20,7 @@ import {
 } from '../transport/client-context-connection-metrics'
 import { useHostDisplayWorktrees, useResolvedHostPlatform } from './use-host-display-worktrees'
 import { useHostListSections } from './use-host-list-sections'
-import { useSwitchedHostSidebarFeed } from './use-host-sidebar-feed'
+import { useHostSidebarFeed } from './use-host-sidebar-feed'
 import { useHostProjectSections } from './use-host-project-sections'
 import { useHostRepoMetadata, type FetchHostRepoMetadata } from './use-host-repo-metadata'
 import { useHostScreenIdentity } from './use-host-screen-identity'
@@ -88,7 +88,7 @@ export function useHostScreenController({
     },
     [fetchProjectSections, fetchRepoMetadataOnly]
   )
-  const sidebarFeed = useSwitchedHostSidebarFeed(client)
+  const sidebarFeed = useHostSidebarFeed(client)
   const catalog = useHostWorktreeCatalog({
     client,
     connState,
@@ -96,7 +96,7 @@ export function useHostScreenController({
     fetchRepoMetadata,
     hostCapabilities,
     hostId,
-    sidebarFeed: sidebarFeed?.triggers ?? null,
+    sidebarFeed: sidebarFeed.triggers,
     state,
     syncViewSettingsFromDesktop: settings.syncViewSettingsFromDesktop
   })
@@ -122,7 +122,7 @@ export function useHostScreenController({
 
   const hostPlatform = useResolvedHostPlatform(state, hostId)
   const displayWorktrees = useHostDisplayWorktrees(connState, state, hostPlatform)
-  const feed = sidebarFeed?.feed ?? null
+  const { feed } = sidebarFeed
   const sectionsResult = useHostListSections({
     client,
     feed,

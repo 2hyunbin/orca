@@ -42,7 +42,11 @@ describe('startHostWorktreeRefresh', () => {
   })
 
   function start(
-    sidebarFeed: Parameters<typeof startHostWorktreeRefresh>[0]['sidebarFeed'] = null
+    sidebarFeed: Parameters<typeof startHostWorktreeRefresh>[0]['sidebarFeed'] = {
+      refresh: () => {},
+      changed: () => {},
+      onInstalled: () => () => {}
+    }
   ): void {
     const client = {
       subscribe: vi.fn(
@@ -66,19 +70,6 @@ describe('startHostWorktreeRefresh', () => {
     vi.useRealTimers()
   })
 
-  it('keeps the worktree poll active but skips ticks while backgrounded', async () => {
-    start()
-    expect(fetchWorktrees).toHaveBeenCalledTimes(1)
-
-    appState.currentState = 'background'
-    await vi.advanceTimersByTimeAsync(6_000)
-    expect(fetchWorktrees).toHaveBeenCalledTimes(1)
-
-    appState.currentState = 'active'
-    await vi.advanceTimersByTimeAsync(3_000)
-    expect(fetchWorktrees).toHaveBeenCalledTimes(2)
-  })
-
   it('refreshes both snapshots immediately on foreground return', () => {
     start()
     fetchWorktrees.mockClear()
@@ -89,26 +80,6 @@ describe('startHostWorktreeRefresh', () => {
 
     expect(fetchWorktrees).toHaveBeenCalledWith({ allowDuringModal: true })
     expect(fetchRepoMetadata).toHaveBeenCalledWith({ queueIfInFlight: true })
-  })
-
-  it('polls repo metadata on the interval while foregrounded and skips it while backgrounded', async () => {
-    start()
-    // Mount force-fetch.
-    expect(fetchRepoMetadata).toHaveBeenCalledTimes(1)
-
-    // Foregrounded: repo.list rides the interval as a convergence safety-net for hosts on an
-    // older build, whose Settings edits emit no runtime reposChanged (the callee self-throttles).
-    await vi.advanceTimersByTimeAsync(9_000)
-    expect(fetchWorktrees).toHaveBeenCalledTimes(4)
-    expect(fetchRepoMetadata).toHaveBeenCalledTimes(4)
-
-    // Backgrounded: neither snapshot is polled.
-    fetchWorktrees.mockClear()
-    fetchRepoMetadata.mockClear()
-    appState.currentState = 'background'
-    await vi.advanceTimersByTimeAsync(9_000)
-    expect(fetchWorktrees).not.toHaveBeenCalled()
-    expect(fetchRepoMetadata).not.toHaveBeenCalled()
   })
 
   it('re-reads only the shared Workspace options on workspaceViewChanged', () => {

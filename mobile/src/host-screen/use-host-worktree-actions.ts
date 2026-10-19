@@ -1,8 +1,6 @@
 import { useCallback } from 'react'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../src/shared/sidebar-inputs-switch'
 import type { useRouter } from 'expo-router'
 import { floatingWorkspaceSessionPath } from '../session/floating-workspace'
-import { savePinnedIds } from '../storage/preferences'
 import type { useForgetHostClient } from '../transport/host-client-hooks'
 import { removeHostAndCloseClient } from '../transport/host-removal-lifecycle'
 import { isPageHostRemovalUnavailable } from '../transport/page-host-removal-refusal'
@@ -20,7 +18,7 @@ import {
   isSameWorktreeRow,
   removeWorktreeRow
 } from '../worktree/worktree-host-row-identity'
-import { isWorktreePinned, type Worktree } from '../worktree/workspace-list-sections'
+import type { Worktree } from '../worktree/workspace-list-types'
 import {
   worktreeActivate,
   worktreePinWrite,
@@ -56,12 +54,9 @@ export function useHostWorktreeActions(args: {
   const {
     newWorktreeModalRef,
     newWorktreeModalVisibleRef,
-    pinnedIds,
     setActionError,
     setConfirmRemoveHost,
     setLastKnownWorktrees,
-    setOptimisticActiveWorktreeIdentity,
-    setPinnedIds,
     serverWorkspaces,
     setRouteActionState,
     setServerNotice,
@@ -94,28 +89,6 @@ export function useHostWorktreeActions(args: {
     setRouteActionState((current) => setHostRouteNewWorktreeVisible(current, visible))
   }, [])
 
-  const updateLocalPins = useCallback(
-    (worktreeId: string, pinned: boolean) => {
-      // Switch point: a feed-built list keeps no pin cache of its own.
-      if (ORCA_SIDEBAR_INPUTS_IS_MAIN) {
-        return
-      }
-      setPinnedIds((prev) => {
-        const next = new Set(prev)
-        if (pinned) {
-          next.add(worktreeId)
-        } else {
-          next.delete(worktreeId)
-        }
-        if (hostId) {
-          void savePinnedIds(hostId, next)
-        }
-        return next
-      })
-    },
-    [hostId]
-  )
-
   const togglePin = useCallback(
     (item: Worktree) => {
       // Why: the desktop pins a server's workspace on that server (worktree.set at its owner).
@@ -138,10 +111,7 @@ export function useHostWorktreeActions(args: {
       }
       const { worktreeId } = item
       const worktree = worktrees.find((w) => w.worktreeId === worktreeId)
-      const currentlyPinned = worktree
-        ? isWorktreePinned(worktree, pinnedIds)
-        : pinnedIds.has(worktreeId)
-      const newPinned = !currentlyPinned
+      const newPinned = !(worktree?.isPinned ?? false)
 
       setWorktrees((prev) =>
         prev.map((w) => (w.worktreeId === worktreeId ? { ...w, isPinned: newPinned } : w))
@@ -149,8 +119,6 @@ export function useHostWorktreeActions(args: {
       setLastKnownWorktrees((prev) =>
         prev.map((w) => (w.worktreeId === worktreeId ? { ...w, isPinned: newPinned } : w))
       )
-
-      updateLocalPins(worktreeId, newPinned)
 
       if (client) {
         worktreePinWrite
@@ -161,7 +129,7 @@ export function useHostWorktreeActions(args: {
           .catch(() => {})
       }
     },
-    [client, clientForRow, worktrees, pinnedIds, updateLocalPins]
+    [client, clientForRow, worktrees]
   )
 
   const putWorktreeToSleep = useCallback(
@@ -256,10 +224,6 @@ export function useHostWorktreeActions(args: {
       const routeHost = workspaceRouteExecutionHost(client, hostCapabilities, item.hostId)
       if (routeHost === null) {
         return
-      }
-      // Switch point: a feed-built list highlights only what the desktop has open.
-      if (!ORCA_SIDEBAR_INPUTS_IS_MAIN) {
-        setOptimisticActiveWorktreeIdentity(getWorktreeRowIdentity(item))
       }
       const rowClient = clientForRow(item)
       if (rowClient && connState === 'connected') {

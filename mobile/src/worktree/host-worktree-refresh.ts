@@ -3,8 +3,6 @@ import type { RuntimeClientEventStreamMessage } from '../../../src/shared/runtim
 import type { RpcClient } from '../transport/rpc-client'
 import type { HostSidebarFeedTriggers } from '../host-screen/host-sidebar-feed-reader'
 
-const WORKTREE_REFRESH_MS = 3000
-
 type WorktreeRefreshOptions = { allowDuringModal?: boolean; queueIfInFlight?: boolean }
 type RepoRefreshOptions = { force?: boolean; queueIfInFlight?: boolean }
 
@@ -14,8 +12,8 @@ type HostWorktreeRefreshArgs = {
   fetchRepoMetadata: (options?: RepoRefreshOptions) => Promise<void>
   /** Re-reads the Workspace options the phone shares with the desktop. */
   syncViewSettings: (options?: { reconnected?: boolean }) => Promise<void>
-  /** The host's sidebar feed, which replaces the poll: its notices say when anything changed. */
-  sidebarFeed?: HostSidebarFeedTriggers | null
+  /** The host's sidebar feed: its notices say when anything changed. */
+  sidebarFeed: HostSidebarFeedTriggers
 }
 
 export function startHostWorktreeRefresh({
@@ -32,7 +30,7 @@ export function startHostWorktreeRefresh({
     if (AppState.currentState !== 'active') {
       return
     }
-    sidebarFeed?.refresh()
+    sidebarFeed.refresh()
     void fetchWorktrees({ allowDuringModal: true })
     void fetchRepoMetadata({ queueIfInFlight: true })
   }
@@ -42,20 +40,6 @@ export function startHostWorktreeRefresh({
       refreshOnForeground()
     }
   })
-  const interval = sidebarFeed
-    ? null
-    : setInterval(() => {
-        if (AppState.currentState !== 'active') {
-          return
-        }
-        void fetchWorktrees()
-        // Why: desktop Settings repo edits (icon/color/name, repo removal) now emit `reposChanged`
-        // (#11994), but a host on an older build does not; keep this periodic repo.list as the
-        // convergence safety-net. fetchRepoMetadata self-throttles to REPO_METADATA_REFRESH_MS
-        // (60s), so this is ~1 request/min while foregrounded — the AppState gate is what removes
-        // the waste (both stop while backgrounded).
-        void fetchRepoMetadata()
-      }, WORKTREE_REFRESH_MS)
   const unsubscribe = client.subscribe(
     'runtime.clientEvents.subscribe',
     null,
@@ -66,7 +50,7 @@ export function startHostWorktreeRefresh({
       const event = payload as RuntimeClientEventStreamMessage | { type: 'error' }
       if (event.type === 'ready') {
         // Every ready: a change between the last read and this subscription sent no notice.
-        sidebarFeed?.refresh()
+        sidebarFeed.refresh()
         const replayedAfterReconnect = eventStreamReady
         eventStreamReady = true
         if (replayedAfterReconnect) {
@@ -82,7 +66,7 @@ export function startHostWorktreeRefresh({
         return
       }
       if (event.type === 'sidebarInputsChanged') {
-        sidebarFeed?.changed(event)
+        sidebarFeed.changed(event)
       } else if (event.type === 'reposChanged') {
         // Why: folder workspace mutations publish reposChanged, and worktree.ps owns this catalog.
         void fetchWorktrees()
@@ -99,19 +83,16 @@ export function startHostWorktreeRefresh({
   )
 
   // A row's live content (agents, terminals) may follow any install; worktree.ps carries it.
-  const stopFollowingFeed = sidebarFeed?.onInstalled(
+  const stopFollowingFeed = sidebarFeed.onInstalled(
     () => void fetchWorktrees({ queueIfInFlight: true })
   )
-  sidebarFeed?.refresh()
+  sidebarFeed.refresh()
   void fetchWorktrees()
   void fetchRepoMetadata({ force: true, queueIfInFlight: true })
 
   return () => {
     stale = true
-    if (interval) {
-      clearInterval(interval)
-    }
-    stopFollowingFeed?.()
+    stopFollowingFeed()
     appStateSubscription.remove()
     unsubscribe()
   }

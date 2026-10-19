@@ -12,7 +12,7 @@ import type { Worktree as HostWorktree } from '../../../src/shared/worktree/type
 import { composeWorktreeHostIdentity } from '../../../src/shared/worktree/host-qualified-identity'
 import type { Section, Worktree } from '../worktree/workspace-list-types'
 import { resolveWorktreeHostId } from '../worktree/worktree-host-context-labels'
-import { filterWorktrees } from '../worktree/workspace-list-sections'
+import { filterWorktrees } from '../worktree/worktree-row-filter'
 import { rowFiltersForView, type MobileViewState } from '../worktree/workspace-view-settings'
 
 /** What the host screen draws from a feed-built list, besides its rows' own live content. */

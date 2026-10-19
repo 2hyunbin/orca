@@ -73,7 +73,9 @@ export function clientEventStreamMountAdapters(
               fetchWorktrees: fetching('fetchWorktrees'),
               fetchRepoMetadata: fetching('fetchRepoMetadata'),
               // The view-settings family records its own reads.
-              syncViewSettings: () => Promise.resolve()
+              syncViewSettings: () => Promise.resolve(),
+              // The feed reader's family records its own reads.
+              sidebarFeed: { refresh: () => {}, changed: () => {}, onInstalled: () => () => {} }
             })
             return
           }

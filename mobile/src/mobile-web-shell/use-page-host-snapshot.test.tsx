@@ -63,7 +63,7 @@ vi.mock('../transport/host-store', () => ({
   }
 }))
 
-import { savePinnedIds } from '../storage/preferences'
+import { saveHostSidebarWidth } from '../storage/preferences'
 import { writeLastVisitedWorktree } from '../worktree/last-visited-worktree-repo'
 import { PAGE_STORAGE_MAX_VALUE_CHARS } from './page-storage-keys'
 import { usePageHostSnapshot, type PageHostSnapshotView } from './use-page-host-snapshot'
@@ -139,10 +139,10 @@ describe('what the shell puts on every init', () => {
     // and the `init` answering its ready is built from this map with no read in between. A mirror
     // only the store read refreshed would hand the drawer the repo the user left, an `init` late.
     writeLastVisitedWorktree({ hostId: 'host-1', worktreeId: 'host-1/repo/wt' })
-    await savePinnedIds('host-1', new Set(['one']))
+    await saveHostSidebarWidth(400)
     expect(mounted.view().readStorage().storage).toEqual({
       [LAST_VISITED]: JSON.stringify({ hostId: 'host-1', worktreeId: 'host-1/repo/wt' }),
-      [PINS]: '["one"]'
+      'orca:hostSidebarWidth': '400'
     })
   })
 

@@ -9,10 +9,6 @@ vi.mock('../cache/worktree-cache', () => ({
   getCachedWorktrees: () => null,
   setCachedWorktrees: () => {}
 }))
-vi.mock('../storage/preferences', () => ({
-  loadPinnedIds: async () => new Set(),
-  savePinnedIds: async () => {}
-}))
 vi.mock('../transport/host-store', () => ({
   loadHosts: async () => [],
   updateLastConnected: async () => {}
@@ -58,7 +54,6 @@ function screenState(clientRef: ClientRef, applied: boolean[]) {
         'setHostPlatform',
         'setHostStoredDescriptor',
         'setLastKnownWorktrees',
-        'setPinnedIds',
         'setRepoHostIdByRepoId',
         'setServedProjectSections',
         'setWorktrees',
