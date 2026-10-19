@@ -3,6 +3,7 @@ type PromiseSettlement<T> =
   | { status: 'rejected'; error: unknown }
 
 type PromiseSettlementWaiter<T> = {
+  ready: boolean
   resolve: (value: T) => void
   reject: (error: unknown) => void
   onFulfilled?: (value: T) => void
@@ -13,7 +14,7 @@ type PromiseSettlementWaiter<T> = {
 
 export type PromiseSettlementWaitOptions<T> = {
   signal?: AbortSignal
-  /** Keep a cached settlement asynchronous, like attaching to the original promise. */
+  /** Preserve each caller's microtask order when observing a shared promise. */
   deferSettled?: boolean
   /** Preserve Promise.race ordering when raw settlement and abort share a turn. */
   abortInMicrotask?: boolean
@@ -71,6 +72,7 @@ export class PromiseSettlementWaiters<T> {
         }
       }
       waiter = {
+        ready: !options.deferSettled,
         resolve,
         reject,
         onFulfilled: options.onFulfilled,
@@ -93,10 +95,11 @@ export class PromiseSettlementWaiters<T> {
       if (options.signal?.aborted) {
         onAbort()
       }
-      const settlement = this.settlement
-      if (settlement) {
+      if (options.deferSettled) {
         queueMicrotask(() => {
-          if (this.waiters.delete(waiter)) {
+          waiter.ready = true
+          const settlement = this.settlement
+          if (settlement && this.waiters.delete(waiter)) {
             cleanupWaiter(waiter)
             settleWaiter(settlement, waiter)
           }
@@ -111,6 +114,9 @@ export class PromiseSettlementWaiters<T> {
     }
     this.settlement = settlement
     for (const waiter of this.waiters) {
+      if (!waiter.ready) {
+        continue
+      }
       this.waiters.delete(waiter)
       cleanupWaiter(waiter)
       settleWaiter(settlement, waiter)
