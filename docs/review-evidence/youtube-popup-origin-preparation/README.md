@@ -1,6 +1,6 @@
 # Popup committed-origin preparation evidence
 
-This is preparation for the YouTube popup repair, not a routing repair or a release claim. Production origin changes begin at `0eca44ad58` and `6aba69601e` (opaque-document correction), based on `37beafdd6da532d41ad2a1e13c84de9f309b2afd`; the accompanying harness commit adds validation only. Checks ran on macOS with Electron **43.7.8**, `ORCA_BACKGROUND_LAUNCH=1`, hidden windows, synthetic destinations and synthetic cookies on October 18, 2026 (October 19 UTC).
+This is preparation for the YouTube popup repair, not a routing repair or a release claim. Production origin changes begin at `0eca44ad58` and `6aba69601e` (opaque-document correction), based on `37beafdd6da532d41ad2a1e13c84de9f309b2afd`; the accompanying harness commit adds validation only. Both standalone fixture entrypoints require the background environment and invoke the existing `applyBackgroundActivationPolicy()` before `app.whenReady()`; each run rebuilds them through Vite. Checks ran on macOS with Electron **43.7.8**, `ORCA_BACKGROUND_LAUNCH=1`, hidden windows, synthetic destinations and synthetic cookies on October 18, 2026 (October 19 UTC).
 
 ## Origin behavior
 
@@ -50,7 +50,7 @@ Existing route/popup regression command:
 ORCA_BACKGROUND_LAUNCH=1 pnpm test src/main/browser/browser-route-guest-popups.test.ts src/main/browser/browser-manager-popup-child.test.ts src/main/browser/browser-manager-popup-routing.test.ts src/main/browser/browser-manager-popup-openerless-tab.test.ts src/main/browser/browser-popup-compatibility.electron.test.ts
 ```
 
-Result: **49 passed** across five files, including local and routed hidden Electron popup compatibility. `pnpm tc:node`, `pnpm tc:web` and `pnpm run check:code-quality:changed` pass. The Node/runtime boundary, unit-exclusion coverage and PR job routing checks pass: **51 tests** across four files. The unit-exclusion check initially caught missing package-job path routing; the explicit package-test list was added, and the rerun passed.
+Result: **49 passed** across five files, including local and routed hidden Electron popup compatibility. `pnpm tc:node`, `pnpm tc:web` and `pnpm run check:code-quality:changed` pass. After the final background-policy setup correction, both hidden suites were rebuilt and rerun: **10 passed, 2 explicit TODOs**. The Node/runtime boundary, unit-exclusion coverage and PR job routing checks pass: **51 tests** across four files. The unit-exclusion check initially caught missing package-job path routing; the explicit package-test list was added, and the rerun passed.
 
 ## Remaining repair gate
 

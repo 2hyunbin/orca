@@ -3,6 +3,12 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { openPopupWithOriginBar } from './popup-origin-bar-window'
 import { prepareNativeBrowserPopup } from './browser-popup-native-window'
+import { applyBackgroundActivationPolicy } from '../window/foreground-activation-policy'
+
+if (process.env.ORCA_BACKGROUND_LAUNCH !== '1') {
+  throw new Error('Popup identity probes require a background launch')
+}
+applyBackgroundActivationPolicy()
 
 app.commandLine.appendSwitch('host-resolver-rules', 'MAP popup-error.invalid 127.0.0.1')
 app.commandLine.appendSwitch('no-proxy-server')
