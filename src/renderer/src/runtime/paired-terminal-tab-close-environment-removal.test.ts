@@ -16,7 +16,10 @@ import {
   resetWebSessionCloseReplaysForTests,
   takeDueWebSessionCloseReplays
 } from './web-session-close-replay'
-import { isWebSessionCloseIntentPending } from './web-session-close-intent'
+import {
+  isWebSessionCloseIntentPending,
+  recordWebSessionCloseIntent
+} from './web-session-close-intent'
 import { resetWebSessionTabsSyncTestState } from './web-session-tabs-sync-test-harness'
 
 vi.mock('@/hooks/agent-hook-completion-notifications', () => ({
@@ -161,6 +164,11 @@ describe('held paired-host closes when a server is removed', () => {
     expect(due.map((replay) => replay.owner)).toEqual([
       { environmentId: 'env-a', pairingRevision: 2 }
     ])
+    // Once moved, a later catalog has nothing to move and asks for nothing.
+    refreshSnapshot.mockClear()
+    useAppStore.getState().setRuntimeEnvironments([managed('env-a', 2, 'key-a')])
+    await Promise.resolve()
+    expect(refreshSnapshot).not.toHaveBeenCalled()
   })
 
   it('keeps holding through a second undecided re-pair and moves them to the newest one', () => {
@@ -202,6 +210,19 @@ describe('held paired-host closes when a server is removed', () => {
 
     expect(heldRevisions('env-a')).toBeUndefined()
     expect(hidden('env-a', 2)).toBe(false)
+  })
+
+  it("dropping an old pairing's close leaves a fresh close of the same tab hidden", () => {
+    useAppStore.getState().setRuntimeEnvironments([environment('env-a')])
+    hold('env-a')
+    replaceRuntimeEnvironmentRevisions([{ id: 'env-a', createdAt: 1, pairingRevision: 2 }])
+    // The user closes the tab again under the new pairing; that close is still in flight.
+    recordWebSessionCloseIntent({ environmentId: 'env-a', pairingRevision: 2 }, WT, TAB, Date.now())
+
+    expect(takeDueWebSessionCloseReplays(STORE, 'env-a', WT, new Set([TAB]))).toEqual([])
+
+    expect(heldRevisions('env-a')).toBeUndefined()
+    expect(hidden('env-a', 2)).toBe(true)
   })
 
   it('drops, at the first catalog, the closes of a server removed while the app was closed', () => {

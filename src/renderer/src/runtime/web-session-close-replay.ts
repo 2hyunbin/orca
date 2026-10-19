@@ -41,6 +41,8 @@ export type WebSessionCloseReplay = {
 
 // Session-scoped on purpose: after a reload a held close starts a fresh attempt count.
 const attemptsByIntent = new Map<string, { attempts: number; inFlight: boolean }>()
+// Held closes also hidden under the current pairing while their own was unknown or undecided.
+const hiddenUnderCurrentPairing = new Set<string>()
 
 function attemptKey(environmentId: string, intentKey: string): string {
   return `${environmentId}\0${intentKey}`
@@ -109,14 +111,17 @@ function changeHeldIntents(
       continue
     }
     attemptsByIntent.delete(attemptKey(environmentId, key))
+    const hidUnderCurrent = hiddenUnderCurrentPairing.delete(attemptKey(environmentId, key))
     if (!stillHidden.has(key)) {
       revealHeldClose(intentOwner(environmentId, intent), intent.worktreeId, intent.hostTabIds)
-      // Why: a close waiting on an unknown or undecided pairing also hides under the current one.
-      revealHeldClose(
-        { environmentId },
-        intent.worktreeId,
-        intent.hostTabIds.filter((id) => !stillHeldTabs.has(`${intent.worktreeId}\0${id}`))
-      )
+      // Only the hide this close laid: a fresh close of the same tab may hide there too.
+      if (hidUnderCurrent) {
+        revealHeldClose(
+          { environmentId },
+          intent.worktreeId,
+          intent.hostTabIds.filter((id) => !stillHeldTabs.has(`${intent.worktreeId}\0${id}`))
+        )
+      }
       revealedWorktreeIds.add(intent.worktreeId)
     }
   }
@@ -192,6 +197,7 @@ function collectDueWebSessionCloseReplays(
         isRuntimeEnvironmentContinuationPending(environmentId, intent.pairingRevision))
     ) {
       hideHeldClose({ environmentId }, intent.worktreeId, intent.hostTabIds)
+      hiddenUnderCurrentPairing.add(key)
       continue
     }
     // Why: the close was the old pairing's, so a replacement host must never receive it; and past
@@ -354,4 +360,5 @@ export function replayWebSessionClosesDueForSnapshot(
 
 export function resetWebSessionCloseReplaysForTests(): void {
   attemptsByIntent.clear()
+  hiddenUnderCurrentPairing.clear()
 }
