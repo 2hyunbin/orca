@@ -46,6 +46,7 @@ export function materializedStablePaneReply(
   const { owner, result } = adoption
   return {
     ...result,
+    wslDistro: result.wslDistro ?? undefined,
     stablePaneOwner: {
       handle: owner.handle ?? fallbackHandle,
       tabId: owner.tabId,

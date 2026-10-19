@@ -41,7 +41,7 @@ export async function completePaneAdoption(
   const paneKey = makePaneKey(owner.tabId, owner.leafId)
   const cachedBeforeAttach = ptySizes.get(owner.ptyId)
   runtime?.beginPtyRegistration?.(owner.ptyId, owner.incarnationId)
-  runtime?.preparePtyExecutionContext?.(owner.ptyId, undefined, { preserveExisting: true })
+  runtime?.preparePtyExecutionContext?.(owner.ptyId, null, { preserveExisting: true })
   const beforeAttach = runtime?.getPtyOutputSequence?.(owner.ptyId) ?? 0
   let incarnationId = owner.incarnationId
   try {
@@ -68,11 +68,17 @@ export async function completePaneAdoption(
         )
       : undefined
     ensureWslHookRelayForReattach(result, args.connectionId)
-    runtime?.preparePtyExecutionContext?.(result.id, result.wslDistro)
+    runtime?.preparePtyExecutionContext?.(result.id, result.wslDistro ?? null, {
+      preserveExisting: result.wslDistro === undefined
+    })
     admitPtyReattachOwnership(runtime, result)
     if (
       !result.wslDistro &&
-      isNativeWindowsLocalPtySpawn({ connectionId: args.connectionId, cwd: args.spawnOptions.cwd })
+      isNativeWindowsLocalPtySpawn({
+        connectionId: args.connectionId,
+        cwd: args.spawnOptions.cwd,
+        shellOverride: args.spawnOptions.shellOverride
+      })
     ) {
       markNativeWindowsConptyPty(result.id)
     }
@@ -110,7 +116,7 @@ export async function completePaneAdoption(
         leafId: owner.leafId,
         ...(terminalHandle ? { terminalHandle } : {}),
         ...(result.incarnationId ? { incarnationId: result.incarnationId } : {}),
-        providerReattachLaunchIdentity: admitProviderReattachLaunchIdentity(result)
+        providerReattachLaunchIdentity: admitProviderReattachLaunchIdentity(result) ?? undefined
       }
     )
     if (rejected) {

@@ -112,7 +112,7 @@ export async function reconcilePaneOwner<T>(args: {
 export async function spawnForStablePane(
   args: StablePaneSpawnContext
 ): Promise<{ result: PtySpawnResult; owner: StablePaneOwner | null }> {
-  return reconcilePaneOwner({
+  return reconcilePaneOwner<{ result: PtySpawnResult; owner: StablePaneOwner | null }>({
     owner: args.owner,
     resolveOwner: () => args.resolveOwner?.() ?? null,
     attach: async (owner) => {

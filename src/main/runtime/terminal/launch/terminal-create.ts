@@ -28,7 +28,8 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
     // Why: this process starts every terminal it can place, so a slow window only delays showing
     // it; a window-made create that timed out here still ran later, and a retry duplicated it.
     if (worktreeSelector !== undefined) {
-      if (!this.ptyController?.spawn) {
+      const { ptyController } = this
+      if (!ptyController?.spawn) {
         throw new Error('runtime_unavailable')
       }
       const workspace = await this.resolveTerminalWorkspaceLaunchScope(worktreeSelector, created)
@@ -59,7 +60,7 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
         restoreHint.consumeThen(launchOpts.onPtySpawnCommitted)
       )
       // Claimed before any await, so a concurrent create of this pane cannot slip in between.
-      const claimedStablePaneCreate = this.ptyController.claimStablePaneCreate?.({
+      const claimedStablePaneCreate = ptyController.claimStablePaneCreate?.({
         worktreeId: workspace.id,
         connectionId: workspace.connectionId,
         tabId,
@@ -116,12 +117,11 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
           throw new Error('client_disconnected')
         }
         try {
-          const { launchAgent } = launchOpts
           launchOpts.onPtySpawnDispatched?.({
             launchConfig: effectiveLaunchConfig,
-            launchAgent
+            launchAgent: launchOpts.launchAgent
           })
-          result = await dependencies.spawnInAdmittedPane(this.store, this.ptyController, {
+          result = await dependencies.spawnInAdmittedPane(this.store, ptyController, {
             ...initialSize,
             cwd,
             command: sequencedStartupCommand
@@ -185,7 +185,7 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
         if (launchOpts.signal?.aborted) {
           throw new Error('client_disconnected')
         }
-        const adoptedBeforeLaunch = await this.ptyController.adoptStablePane?.({
+        const adoptedBeforeLaunch = await ptyController.adoptStablePane?.({
           ...initialSize,
           cwd,
           connectionId: workspace.connectionId,
@@ -198,7 +198,7 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
         })
         if (adoptedBeforeLaunch) {
           result = dependencies.materializedStablePaneReply(adoptedBeforeLaunch, preAllocatedHandle)
-        } else if (!this.ptyController.adoptStablePane) {
+        } else if (!ptyController.adoptStablePane) {
           result = await spawnFresh({ mustExist: false })
         }
         if (!result.stablePaneOwner) {

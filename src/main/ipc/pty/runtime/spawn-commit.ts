@@ -294,5 +294,5 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
       : { snapshotKittyKeyboardFlags: undefined }),
     isReattach: true
   })
-  return { ...ctx.result, ...response }
+  return { ...ctx.result, ...response, wslDistro: ctx.result.wslDistro ?? undefined }
 }
