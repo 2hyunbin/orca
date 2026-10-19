@@ -1,7 +1,7 @@
 import { findSqliteRuntimeTests } from './vitest-sqlite-runtime-scan.mjs'
 
 // SQLite publication, native bindings, worker IPC, socket liveness, and V8 retention use Node.
-export const NODE_RUNTIME_INCLUDE = [
+const NODE_RUNTIME_INCLUDE = [
   'config/scripts/vitest-sqlite-runtime-boundary.test.ts',
   'config/scripts/cloud-security-history-workflow.test.mjs',
   'config/scripts/skill-recipe-shell.test.mjs',
@@ -25,7 +25,6 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/renderer/src/components/terminal-pane/pty-input-write-queue.test.ts',
   'src/renderer/src/lib/react-commit-cascade-observer.test.ts',
   'src/renderer/src/lib/react-commit-cascade-telemetry.test.ts',
-  ...findSqliteRuntimeTests(),
   // These reach Node SQLite through a shared helper or a dynamic import, which the scan skips.
   'tests/e2e/native-chat-startup-option-pickers.unit.test.ts',
   'src/main/ai-vault-search/session-search-dependent-transcripts.test.ts',
@@ -166,3 +165,7 @@ export const NODE_RUNTIME_INCLUDE = [
   'config/scripts/vitest-node-runtime-boundary.test.ts',
   'config/scripts/vitest-node-runtime-pool.test.ts'
 ]
+
+export function getNodeRuntimeInclude() {
+  return [...NODE_RUNTIME_INCLUDE, ...findSqliteRuntimeTests()]
+}

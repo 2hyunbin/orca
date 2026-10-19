@@ -78,7 +78,9 @@ export function importsSqliteRuntime(file, source) {
 function readCache(version) {
   try {
     const cache = JSON.parse(readFileSync(CACHE_FILE, 'utf8'))
-    return cache.version === version ? cache.files : {}
+    return cache.version === version && cache.files && typeof cache.files === 'object'
+      ? cache.files
+      : {}
   } catch {
     return {}
   }
@@ -97,7 +99,12 @@ export function findSqliteRuntimeTests() {
     const path = file.replaceAll('\\', '/')
     const { mtimeMs, size } = statSync(resolve(root, path))
     const entry = cached[path]
-    if (entry?.[0] === mtimeMs && entry[1] === size) {
+    if (
+      Array.isArray(entry) &&
+      entry[0] === mtimeMs &&
+      entry[1] === size &&
+      typeof entry[2] === 'boolean'
+    ) {
       files[path] = entry
       continue
     }
