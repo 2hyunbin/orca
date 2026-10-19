@@ -5,6 +5,14 @@ import {
   type RepoHostFields
 } from '@/lib/agent-detection-target-inventory'
 import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
+import type { ProspectiveWorkspace } from '@/lib/agent-launch-route-input'
+import {
+  acquireChatProgramFacts,
+  agentChoiceOpensAsChat,
+  resolveChatProgramHost
+} from '@/lib/host-chat-program'
+import { getRepoExecutionHostId } from '../../../shared/execution-host'
+import { workspaceKindForWorktreeId } from '../../../shared/workspace-launch-kind'
 import { findGithubPrWorkspaceAttachment } from '@/lib/github-work-item-workspace-attachment'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
@@ -45,25 +53,36 @@ type SavedAgentOverrideResult =
   | { kind: 'launch-default' }
   | { kind: 'blocked' }
 
-function isAgentAvailable(agent: TuiAgent, detectedAgents: TuiAgent[]): boolean {
+/** Detected, or opening as a chat in `workspace` without its CLI. */
+function isAgentAvailable(
+  agent: TuiAgent,
+  detectedAgents: TuiAgent[],
+  workspace: ProspectiveWorkspace
+): boolean {
+  const state = useAppStore.getState()
   return (
-    detectedAgents.includes(agent) &&
-    isTuiAgentEnabled(agent, useAppStore.getState().settings?.disabledTuiAgents)
+    isTuiAgentEnabled(agent, state.settings?.disabledTuiAgents) &&
+    (detectedAgents.includes(agent) ||
+      agentChoiceOpensAsChat(state, agent, workspace, detectedAgents))
   )
 }
 
 async function resolveSavedAgentOverride(
   savedAgent: TuiAgent | null | undefined,
-  repo: RepoHostFields | null
+  repo: (RepoHostFields & { id: string }) | null
 ): Promise<SavedAgentOverrideResult> {
   if (!savedAgent) {
     return { kind: 'launch-default' }
   }
   const pendingAgents = ensureDetectedAgentsForRepo(useAppStore.getState(), repo ?? {})
+  const workspace: ProspectiveWorkspace = {
+    kind: 'git-worktree',
+    ...(repo ? { repoId: repo.id, executionHostId: getRepoExecutionHostId(repo) } : {})
+  }
   // Why: a paired server answers per workspace, so only the enabled check can run before it exists;
   // the direct launch checks installation on the new workspace.
   const available = pendingAgents
-    ? isAgentAvailable(savedAgent, await pendingAgents)
+    ? isAgentAvailable(savedAgent, await pendingAgents, workspace)
     : isTuiAgentEnabled(savedAgent, useAppStore.getState().settings?.disabledTuiAgents)
   if (!available) {
     toast.error(
@@ -81,9 +100,14 @@ async function pickExistingWorktreeAgent(
   worktreeId: string,
   savedAgent: TuiAgent | null | undefined
 ): Promise<TuiAgent | null> {
-  const detectedAgents = await ensureDetectedAgentsForWorktree(useAppStore.getState(), worktreeId)
+  const workspace = { kind: workspaceKindForWorktreeId(worktreeId), worktreeId }
+  const host = resolveChatProgramHost(useAppStore.getState(), workspace)
+  const [detectedAgents] = await Promise.all([
+    ensureDetectedAgentsForWorktree(useAppStore.getState(), worktreeId),
+    acquireChatProgramFacts(useAppStore.getState(), host.executionHostId, host.hostCapabilities)
+  ])
   if (savedAgent) {
-    if (isAgentAvailable(savedAgent, detectedAgents)) {
+    if (isAgentAvailable(savedAgent, detectedAgents, workspace)) {
       return savedAgent
     }
     toast.error(
@@ -98,7 +122,9 @@ async function pickExistingWorktreeAgent(
   const agent = pickSourceControlLaunchAgent({
     defaultAgent: settings?.defaultTuiAgent,
     detectedAgents,
-    disabledAgents: settings?.disabledTuiAgents
+    disabledAgents: settings?.disabledTuiAgents,
+    chosenOpensAsChat: (chosen) =>
+      agentChoiceOpensAsChat(useAppStore.getState(), chosen, workspace, detectedAgents)
   })
   if (!agent) {
     toast.error(

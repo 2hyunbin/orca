@@ -15,6 +15,9 @@ import { resolveGitLabMRDiscussionForChecks } from './gitlab-review-client'
 import { clearPendingPRCommentAiAck } from '../pr-comments-ai-launch-ack'
 import type { PRComment } from '../../../../../shared/github/comment-types'
 import { translate } from '@/i18n/i18n'
+import { useAppStore } from '@/store'
+import { agentChoiceOpensAsChat, useChatProgramFactsVersion } from '@/lib/host-chat-program'
+import { newTabWorkspace } from '@/lib/agent-tab-shortcuts'
 
 type ChecksPanelCommentResolutionInput = Pick<
   ChecksPanelControllerState,
@@ -151,12 +154,22 @@ export function useChecksPanelCommentResolution(model: ChecksPanelCommentResolut
   const commentsDisabledReason = canTargetPRComments
     ? undefined
     : 'Commenting requires a GitHub PR repository target.'
+  useChatProgramFactsVersion()
+  // The default agent counts where it opens as a chat without its CLI.
   const noEnabledAgentKnown =
     detectedAgentIds != null &&
     pickDefaultSourceControlAgent(
       settings?.defaultTuiAgent,
       detectedAgentIds,
-      settings?.disabledTuiAgents
+      settings?.disabledTuiAgents,
+      (agent) =>
+        Boolean(activeWorktreeId) &&
+        agentChoiceOpensAsChat(
+          useAppStore.getState(),
+          agent,
+          newTabWorkspace(activeWorktreeId ?? ''),
+          detectedAgentIds
+        )
     ) == null
   const aiActionDisabledReason = !activeWorktreeId
     ? 'Select a workspace before launching an AI action.'

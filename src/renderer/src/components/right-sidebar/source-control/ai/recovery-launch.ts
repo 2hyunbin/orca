@@ -1,5 +1,6 @@
 import { toast } from 'sonner'
-import type { AppState } from '@/store'
+import { useAppStore, type AppState } from '@/store'
+import type { TuiAgent } from '../../../../../../shared/tui-agent'
 import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
@@ -20,6 +21,12 @@ import type {
 } from '../../../../../../shared/source-control-ai-actions'
 import { buildSourceControlRecoveryAgentCommandInput } from '../../../../../../shared/source-control-recovery-agent-command'
 import { translate } from '@/i18n/i18n'
+import {
+  acquireChatProgramFacts,
+  agentChoiceOpensAsChat,
+  resolveChatProgramHost
+} from '@/lib/host-chat-program'
+import { newTabWorkspace } from '@/lib/agent-tab-shortcuts'
 
 type SourceControlAiLaunchStoreSnapshot = Pick<AppState, 'settings'> & WorktreeAgentInventoryState
 
@@ -134,11 +141,19 @@ export async function launchSourceControlRecoveryAgentWithDefault({
     return false
   }
 
-  const detectedAgents = await ensureDetectedAgentsForWorktree(store, activeWorktreeId)
+  const workspace = newTabWorkspace(activeWorktreeId)
+  const host = resolveChatProgramHost(useAppStore.getState(), workspace)
+  const [detectedAgents] = await Promise.all([
+    ensureDetectedAgentsForWorktree(store, activeWorktreeId),
+    acquireChatProgramFacts(useAppStore.getState(), host.executionHostId, host.hostCapabilities)
+  ])
+  // A saved or default agent may open as a chat without its CLI.
+  const opensAsChat = (agent: TuiAgent): boolean =>
+    agentChoiceOpensAsChat(useAppStore.getState(), agent, workspace, detectedAgents)
   const savedAgent = readSourceControlLaunchRecipeAgentId(savedRecipe)
   if (
     savedAgent &&
-    (!detectedAgents.includes(savedAgent) ||
+    ((!detectedAgents.includes(savedAgent) && !opensAsChat(savedAgent)) ||
       !isTuiAgentEnabled(savedAgent, store.settings?.disabledTuiAgents))
   ) {
     toast.error(copy.savedAgentUnavailable)
@@ -148,7 +163,8 @@ export async function launchSourceControlRecoveryAgentWithDefault({
     savedAgent,
     defaultAgent: store.settings?.defaultTuiAgent,
     detectedAgents,
-    disabledAgents: store.settings?.disabledTuiAgents
+    disabledAgents: store.settings?.disabledTuiAgents,
+    chosenOpensAsChat: opensAsChat
   })
   if (!agent) {
     toast.error(copy.noEnabledAgent)

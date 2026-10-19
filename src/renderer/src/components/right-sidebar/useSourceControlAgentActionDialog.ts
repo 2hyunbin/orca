@@ -14,7 +14,16 @@ import type { TuiAgent } from '../../../../shared/tui-agent'
 import type { SourceControlAgentActionDialogProps } from './SourceControlAgentActionDialog'
 import type { UseSourceControlAgentActionDialogResult } from './source-control-agent-action-dialog-result'
 import { ensureLocalRuntimeCapabilities } from '@/runtime/local-runtime-capabilities'
-import { sourceControlLaunchAppliesAgentArgs } from './source-control-launch-agent-args-applicability'
+import {
+  sourceControlLaunchAppliesAgentArgs,
+  sourceControlLaunchWorkspace
+} from './source-control-launch-agent-args-applicability'
+import {
+  acquireChatProgramFacts,
+  agentsOfferedForLaunch,
+  resolveChatProgramHost,
+  useChatProgramFactsVersion
+} from '@/lib/host-chat-program'
 import { useSavedSourceControlAgentActionAutoStart } from './useSavedSourceControlAgentActionAutoStart'
 import {
   buildSourceControlAgentSaveTargets,
@@ -97,6 +106,39 @@ export function useSourceControlAgentActionDialog({
       setDetecting(false)
     }
   }, [connectionId, connectionUnavailable, worktreeId])
+  const executionHostId = repo ? getRepoExecutionHostId(repo) : undefined
+  // Detected agents plus those that open as a chat there without their CLI: what Start may run.
+  const offerLaunchable = useCallback(
+    (detected: TuiAgent[]): TuiAgent[] =>
+      agentsOfferedForLaunch(
+        useAppStore.getState(),
+        sourceControlLaunchWorkspace({ worktreeId, repoId, executionHostId }),
+        detected
+      ),
+    [executionHostId, repoId, worktreeId]
+  )
+  const refreshAgents = useCallback(async () => {
+    const state = useAppStore.getState()
+    const host = resolveChatProgramHost(
+      state,
+      sourceControlLaunchWorkspace({ worktreeId, repoId, executionHostId })
+    )
+    const [detected] = await Promise.all([
+      refreshDetectedAgents(),
+      acquireChatProgramFacts(state, host.executionHostId, host.hostCapabilities)
+    ])
+    return { detected, launchable: offerLaunchable(detected) }
+  }, [executionHostId, offerLaunchable, refreshDetectedAgents, repoId, worktreeId])
+  const refreshLaunchableAgents = useCallback(
+    async (): Promise<TuiAgent[]> => (await refreshAgents()).launchable,
+    [refreshAgents]
+  )
+  const factsVersion = useChatProgramFactsVersion()
+  const launchableAgents = useMemo(
+    () => offerLaunchable(detectedAgents),
+    // factsVersion: host chat facts live outside React state.
+    [detectedAgents, offerLaunchable, factsVersion]
+  )
 
   useEffect(() => {
     if (!open) {
@@ -119,8 +161,8 @@ export function useSourceControlAgentActionDialog({
     // Why: whether CLI arguments apply is read synchronously from the local runtime's
     // capabilities; settling them alongside detection keeps the field from appearing for a
     // frame on a launch that turns out to be structured.
-    void Promise.all([refreshDetectedAgents(), ensureLocalRuntimeCapabilities()]).then(
-      ([nextAgents]) => {
+    void Promise.all([refreshAgents(), ensureLocalRuntimeCapabilities()]).then(
+      ([{ detected, launchable }]) => {
         if (stale || openCycleRef.current !== cycle) {
           return
         }
@@ -130,8 +172,9 @@ export function useSourceControlAgentActionDialog({
             pickSourceControlLaunchAgent({
               savedAgent: savedAgentId,
               defaultAgent: settings?.defaultTuiAgent,
-              detectedAgents: nextAgents,
-              disabledAgents
+              detectedAgents: detected,
+              disabledAgents,
+              chosenOpensAsChat: (agent) => launchable.includes(agent)
             })
         )
         setDetectedOpenCycle(cycle)
@@ -144,7 +187,7 @@ export function useSourceControlAgentActionDialog({
     defaultSaveTargetValue,
     disabledAgents,
     open,
-    refreshDetectedAgents,
+    refreshAgents,
     savedAgentId,
     savedAgentArgs,
     savedCommandInputTemplate,
@@ -155,8 +198,8 @@ export function useSourceControlAgentActionDialog({
   const closeDialog = useCallback(() => onOpenChange(false), [onOpenChange])
 
   const enabledDetectedAgents = useMemo(
-    () => detectedAgents.filter((agent) => isTuiAgentEnabled(agent, disabledAgents)),
-    [detectedAgents, disabledAgents]
+    () => launchableAgents.filter((agent) => isTuiAgentEnabled(agent, disabledAgents)),
+    [launchableAgents, disabledAgents]
   )
   const agentOptions = useMemo(
     () =>
@@ -167,7 +210,7 @@ export function useSourceControlAgentActionDialog({
   )
   const selectedAgentUnavailable = Boolean(
     selectedAgent &&
-    !isSourceControlAgentDetectedAndEnabled(selectedAgent, detectedAgents, disabledAgents)
+    !isSourceControlAgentDetectedAndEnabled(selectedAgent, launchableAgents, disabledAgents)
   )
   const hasEnabledAgents = enabledDetectedAgents.length > 0
   const commandInput = renderSourceControlActionCommandTemplate(commandTemplate, {
@@ -208,7 +251,7 @@ export function useSourceControlAgentActionDialog({
       isRemote: typeof connectionId === 'string',
       launchSource,
       connectionUnavailable,
-      refreshDetectedAgents,
+      refreshDetectedAgents: refreshLaunchableAgents,
       onStart,
       onSaveAgentDefault,
       onLaunchAccepted,
@@ -256,7 +299,7 @@ export function useSourceControlAgentActionDialog({
     connectionUnavailable,
     detecting,
     isStarting,
-    detectedAgents,
+    detectedAgents: launchableAgents,
     disabledAgents,
     onAutoStart: ({ detectedAgents: agentsForLaunch, saveTargetValue: matchedTargetValue }) =>
       startWithDetectedAgents({
