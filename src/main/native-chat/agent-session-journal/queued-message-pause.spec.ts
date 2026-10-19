@@ -68,8 +68,7 @@ export function registerQueuedMessagePauseTests(): void {
   function clearContext(journal: AgentSessionJournal) {
     return journal.context.clear(
       { operationId: `clear-${++clock}`, afterFence: 0, clearedAt: clock },
-      { write: () => {}, committed: () => {} },
-      `caller-clear-${clock}`
+      { write: () => {}, committed: () => {} }
     )
   }
 

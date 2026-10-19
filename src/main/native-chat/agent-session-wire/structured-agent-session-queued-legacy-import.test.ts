@@ -39,7 +39,7 @@ const message = (text: string): AgentJournalMessageItem => ({
   blocks: [{ type: 'text', text }],
   ...(text === '/compact' ? { command: { name: 'compact' } } : {})
 })
-const words = (fact: Parameters<typeof agentSessionFailureFact>[0]) =>
+const words = (fact: 'providerRejected' | 'cancelled') =>
   agentSessionFailureWords(
     fact === 'providerRejected'
       ? agentSessionFailureFact(fact, { detail: { text: 'refused', audience: 'person' } })
