@@ -14,11 +14,12 @@ const WORKSPACE = { kind: 'git-worktree', worktreeId: WORKTREE_ID, repoId: 'repo
  *  resolution refuses to name a connection rather than authorize a local read of a remote path. */
 function storeWithAmbiguousWorktreeRows(
   repoConnectionId: string | null,
-  otherHostId = 'ssh:other-box'
+  otherHostId = 'ssh:other-box',
+  settings: Record<string, unknown> = NATIVE_CHAT_SETTINGS
 ): AgentLaunchRouteStore & { repos: unknown[] } {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: only the slices owner resolution reads are staged.
   return {
-    settings: NATIVE_CHAT_SETTINGS,
+    settings,
     repos: [{ id: 'repo-1', path: '/repo', connectionId: repoConnectionId }],
     worktreesByRepo: {
       'repo-1': [{ id: WORKTREE_ID, repoId: 'repo-1', hostId: null }],
@@ -74,8 +75,10 @@ describe('launch route transcript readability', () => {
 it.each(['duplicate', 'sentinel', 'focused', 'owned'] as const)(
   'admits missing-status native chat only with explicit ownership: %s',
   (kind) => {
-    const store = storeWithAmbiguousWorktreeRows(null, 'runtime:server-1')
-    store.settings = { ...store.settings, activeRuntimeEnvironmentId: 'server-1' }
+    const store = storeWithAmbiguousWorktreeRows(null, 'runtime:server-1', {
+      ...NATIVE_CHAT_SETTINGS,
+      activeRuntimeEnvironmentId: 'server-1'
+    })
     if (kind !== 'duplicate') {
       delete store.worktreesByRepo![kind === 'focused' ? 'repo-2' : 'repo-1']
     }
