@@ -35,6 +35,10 @@ export function sftpSessionClosedError(): Error {
   })
 }
 
+export function isSftpSessionClosedError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'SftpSessionClosedError'
+}
+
 export function raceSftpFileTransferWithAbort<T>(
   operation: Promise<T>,
   signal: AbortSignal,

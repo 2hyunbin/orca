@@ -1,5 +1,5 @@
 /** What a managed-server setup that stopped short shows under its SSH host. */
-import { isUnconfirmedSshCommandTermination } from './remote-exec/remote-exec-command'
+import { isSftpSessionClosedError } from './ssh-file-transfer-abort'
 
 // Bounds a failure's detail; the host log tail inside it is already capped.
 const MAX_FAILURE_DETAIL_CHARS = 16_000
@@ -21,9 +21,10 @@ export function boundedDetail(text: string): string {
   return text.length > MAX_FAILURE_DETAIL_CHARS ? `…${text.slice(-MAX_FAILURE_DETAIL_CHARS)}` : text
 }
 
-// Why the cause chain: install steps wrap the transport error they hit (e.g. out-of-space checks).
+// Why only a closed session: other unconfirmed results (a host's busy or deadline answer) came from
+// a host that answered. Why the cause chain: install steps wrap the transport error they hit.
 function lostContact(failure: unknown, depth = 0): boolean {
-  if (isUnconfirmedSshCommandTermination(failure)) {
+  if (isSftpSessionClosedError(failure)) {
     return true
   }
   return depth < 4 && failure instanceof Error && lostContact(failure.cause, depth + 1)

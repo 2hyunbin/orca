@@ -13,6 +13,19 @@ import { sftpSessionClosedError } from './ssh-file-transfer-abort'
 // requests in flight, as fastPut's default 64 x 32 KiB does.
 export const SFTP_UPLOAD_IN_FLIGHT_BYTES = 2 * 1024 * 1024
 
+/**
+ * Why: on a dead connection ssh2's write stream waits on a CLOSE reply that never comes; settle on
+ * the session's close so the local file handle is closed, not left to garbage collection.
+ */
+function watchSessionClose(sftp: SFTPWrapper): { closed: Promise<'closed'>; release: () => void } {
+  let onClose: () => void = () => {}
+  const closed = new Promise<'closed'>((resolve) => {
+    onClose = () => resolve('closed')
+  })
+  sftp.once('close', onClose)
+  return { closed, release: () => sftp.removeListener('close', onClose) }
+}
+
 export function mkdirSftp(
   sftp: SFTPWrapper,
   path: string,
@@ -44,7 +57,7 @@ export async function uploadFile(
   let readStream: ReadStream | undefined
   let writeStream: ReturnType<SFTPWrapper['createWriteStream']> | undefined
   let writeStreamErrors: SftpStreamErrorLatch | undefined
-  let releaseSessionClose: (() => void) | undefined
+  const sessionClosed = watchSessionClose(sftp)
   const closeHandle = (): Promise<void> => {
     handleClose ??= handle.close()
     return handleClose
@@ -100,16 +113,10 @@ export async function uploadFile(
         throw error
       })
       readStream.pipe(writeStream)
-      // Why: on a dead connection the write stream waits on a CLOSE reply that never comes; settle
-      // anyway so the local file handle is closed, not left to garbage collection.
-      const sessionClosed = new Promise<'closed'>((resolve) => {
-        releaseSessionClose = (): void => {
-          sftp.removeListener('close', onSessionClose)
-        }
-        const onSessionClose = (): void => resolve('closed')
-        sftp.once('close', onSessionClose)
-      })
-      const results = await Promise.race([Promise.allSettled([readDone, writeDone]), sessionClosed])
+      const results = await Promise.race([
+        Promise.allSettled([readDone, writeDone]),
+        sessionClosed.closed
+      ])
       if (results === 'closed') {
         throw sftpSessionClosedError()
       }
@@ -121,7 +128,7 @@ export async function uploadFile(
       options?.signal?.removeEventListener('abort', abortTransfer)
     }
   } finally {
-    releaseSessionClose?.()
+    sessionClosed.release()
     writeStreamErrors?.markTransferSettled()
     readStream?.destroy()
     writeStream?.destroy()

@@ -146,6 +146,13 @@ async function withLinkedSftpTransfer(
       (signal): signal is AbortSignal => signal !== undefined
     )
   )
+  // Why apart from linkedSignal: a dead session is not a cancel, so the abort race must not see it;
+  // only the transfer does, so it stops and releases its local files.
+  const sessionLoss = new AbortController()
+  const transferSignal = createLinkedSshFileTransferSignal([
+    linkedSignal.signal,
+    sessionLoss.signal
+  ])
   try {
     if (host.usesSystemSshTransport()) {
       await transfer.system(linkedSignal.signal)
@@ -170,7 +177,9 @@ async function withLinkedSftpTransfer(
     })
     const onSessionClose = (): void => {
       if (!sftpEndRequested) {
-        sessionLost(sftpSessionClosedError())
+        const error = sftpSessionClosedError()
+        sessionLost(error)
+        sessionLoss.abort(error)
       }
     }
     sftp.once('close', onSessionClose)
@@ -178,8 +187,8 @@ async function withLinkedSftpTransfer(
       // Why: resolve on the same session that transfers — a later one is not authoritative for its namespace.
       const run = (async (): Promise<void> => {
         const targetPath = await resolveSftpTransferPathIfMapped(sftp, remotePath, options)
-        linkedSignal.signal.throwIfAborted()
-        await transfer.sftp(sftp, targetPath, linkedSignal.signal)
+        transferSignal.signal.throwIfAborted()
+        await transfer.sftp(sftp, targetPath, transferSignal.signal)
       })()
       await Promise.race([
         raceSftpFileTransferWithAbort(run, linkedSignal.signal, (onClose) => {
@@ -194,6 +203,7 @@ async function withLinkedSftpTransfer(
       endSftp()
     }
   } finally {
+    transferSignal.dispose()
     linkedSignal.dispose()
   }
 }

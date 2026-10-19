@@ -49,6 +49,13 @@ describe('a managed-server install that loses contact with the host', () => {
     await expect(deployFailingWith(wrapped)).resolves.toMatchObject({ contactLost: true })
   })
 
+  it('does not call a host’s own unconfirmed answer lost contact', async () => {
+    const busy = Object.assign(new Error('STATE_MUTATION_DEADLINE'), {
+      sshChannelCloseConfirmed: false
+    })
+    await expect(deployFailingWith(busy)).resolves.not.toHaveProperty('contactLost')
+  })
+
   it('keeps the plain try-again for a failure the host answered', async () => {
     const result = await deployFailingWith(new Error('tar: Unexpected EOF in archive'))
     expect(result).not.toHaveProperty('contactLost')
