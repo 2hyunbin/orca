@@ -132,6 +132,7 @@ export function applyStructuredAgentSessionModelCatalog(
   // The host says whether its listed default is what this launch runs; an older host never says,
   // so the client's own knowledge of the agent stands in. A reopened chat may keep its own model.
   const namesDefault =
+    catalog.origin !== 'unknown' &&
     models.length > 0 &&
     options.newLaunch &&
     (catalog.listingNamesConfiguredModel ?? seed.hostListingNamesConfiguredModel === true)
