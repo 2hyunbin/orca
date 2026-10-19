@@ -1,9 +1,5 @@
 import type { DiffComment } from '../../../shared/diff-comment-types'
-import {
-  LOCAL_EXECUTION_HOST_ID,
-  toRuntimeExecutionHostId,
-  type ExecutionHostId
-} from '../../../shared/execution-host'
+import { toRuntimeExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
 import type { Worktree } from '../../../shared/worktree/types'
 import type { AppState } from './types'
 import { getIndexedWorktreeById } from './worktree-repo-index'
@@ -55,13 +51,20 @@ export type DiffCommentRows = {
 }
 
 /**
- * The host a twin's write names: an SSH target names itself (a paired server proxying it is found
- * from there); a paired server's own row goes through that server.
+ * The host a twin's write names: a paired server's row goes through that server (rival servers
+ * may proxy the same SSH target), else the row's own stamp.
  */
 export function diffCommentTwinHostId(twin: DiffCommentTwin): ExecutionHostId | undefined {
-  return twin.runtimeOwnerEnvironmentId && (!twin.hostId || twin.hostId === LOCAL_EXECUTION_HOST_ID)
+  return twin.runtimeOwnerEnvironmentId
     ? toRuntimeExecutionHostId(twin.runtimeOwnerEnvironmentId)
     : twin.hostId
+}
+
+/** Rollback bookkeeping key: one per twin, so a twin's floor never restores another copy. */
+export function diffCommentFloorKey(worktreeId: string, twin: DiffCommentTwin | undefined): string {
+  return twin
+    ? `${JSON.stringify([twin.hostId ?? null, twin.runtimeOwnerEnvironmentId ?? null])}\0${worktreeId}`
+    : worktreeId
 }
 
 /**
@@ -129,7 +132,7 @@ export function diffCommentRowNotes(found: {
   return found.worktrees.at(-1)?.diffComments
 }
 
-/** What a queued write sends: its twin's latest notes, else the id's first row as before twins. */
+/** What a queued write sends: its twin's notes, else the id's, latest duplicate first. */
 export function readQueuedDiffComments(
   state: Pick<
     DiffCommentSelectorState,
@@ -140,7 +143,7 @@ export function readQueuedDiffComments(
 ): { list: DiffComment[] | undefined } | null {
   if (!twin) {
     const rows = state.worktreesByRepo[getRepoIdFromWorktreeId(worktreeId)] ?? []
-    return { list: rows.find((row) => row.id === worktreeId)?.diffComments }
+    return { list: rows.findLast((row) => row.id === worktreeId)?.diffComments }
   }
   const found = findDiffCommentRows(state, worktreeId, { twin })
   return found ? { list: diffCommentRowNotes(found) } : null

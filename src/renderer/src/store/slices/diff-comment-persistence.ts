@@ -1,26 +1,21 @@
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
 import type { DiffComment } from '../../../../shared/diff-comment-types'
-import type { FolderWorkspace } from '../../../../shared/folder-workspace-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { getRepoIdFromWorktreeId } from './worktree-helpers'
-import { callRuntimeRpc } from '../../runtime/runtime-rpc-client'
-import { runtimeTargetForWorkspaceOwner } from '@/lib/resolve-owner'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import {
+  diffCommentFloorKey,
   diffCommentRowNotes,
   findDiffCommentRows,
   readQueuedDiffComments,
   type DiffCommentTwin
 } from '../worktree-diff-comments-selector'
-import { toRuntimeWorktreeSelector } from '../../runtime/runtime-worktree-selector'
 import {
   findFolderWorkspaceOwner,
-  getExecutionHostIdForFolderWorkspace,
-  getRuntimeEnvironmentIdForFolderWorkspace
+  getExecutionHostIdForFolderWorkspace
 } from '@/lib/folder-workspace-runtime-owner'
-import { callHostRoute } from '@/runtime/host-route-call'
-import { hostRouteForAuthority } from '@/runtime/runtime-client-target'
+import { writeDiffCommentsToHost } from './diff-comment-host-write'
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 
 export function normalizeDiffComment(comment: DiffComment): DiffComment {
@@ -58,69 +53,11 @@ export function normalizeDiffComment(comment: DiffComment): DiffComment {
   }
 }
 
-async function persist(
-  state: AppState,
-  worktreeId: string,
-  diffComments: DiffComment[],
-  folderExecutionHostId?: ReturnType<typeof getExecutionHostIdForFolderWorkspace>,
-  twinHostId?: ExecutionHostId
-): Promise<void> {
-  const scope = parseWorkspaceKey(worktreeId)
-  if (scope?.type === 'folder') {
-    const executionHostId =
-      folderExecutionHostId ?? getExecutionHostIdForFolderWorkspace(state, scope.folderWorkspaceId)
-    const runtimeEnvironmentId = getRuntimeEnvironmentIdForFolderWorkspace(
-      state,
-      scope.folderWorkspaceId,
-      executionHostId
-    )
-    const updated = runtimeEnvironmentId
-      ? (
-          await callHostRoute<{ folderWorkspace: FolderWorkspace | null }>(
-            // Why local: the folder's catalog row lives on the server even when it names an SSH target.
-            hostRouteForAuthority({
-              endpoint: { kind: 'environment', environmentId: runtimeEnvironmentId },
-              at: 'local'
-            }),
-            'folderWorkspace.update',
-            { folderWorkspaceId: scope.folderWorkspaceId, updates: { diffComments } },
-            { timeoutMs: 15_000 }
-          )
-        ).folderWorkspace
-      : await window.api.folderWorkspaces.update({
-          folderWorkspaceId: scope.folderWorkspaceId,
-          updates: { diffComments }
-        })
-    if (!updated?.diffComments) {
-      throw new Error('Failed to persist folder workspace review notes')
-    }
-    return
-  }
-  const target = runtimeTargetForWorkspaceOwner(state, {
-    workspaceId: worktreeId,
-    hostId: twinHostId
-  })
-  if (!target) {
-    throw new Error('The workspace host is unresolved; review notes were not saved.')
-  }
-  if (target.kind === 'local') {
-    await window.api.worktrees.updateMeta({
-      worktreeId,
-      ...(twinHostId ? { executionHostId: twinHostId } : {}),
-      updates: { diffComments }
-    })
-    return
-  }
-  await callRuntimeRpc(
-    target,
-    'worktree.set',
-    { worktree: toRuntimeWorktreeSelector(worktreeId), diffComments },
-    { timeoutMs: 15_000 }
-  )
-}
-
 // Why: IPC writes aren't ordered, so serialize per worktree to stop an older snapshot from overwriting a newer one on disk.
 const persistQueueByWorktree = new Map<string, Promise<void>>()
+
+// Why: twins share a queue (one id), but each keeps its own rollback floor and mutation chain.
+const floorKeysByQueue = new Map<string, Set<string>>()
 
 // Why: rollback must converge to what actually reached disk; in a burst of failed writes each mutation's own predecessor is stale.
 const lastPersistedByQueue = new Map<string, DiffComment[] | undefined>()
@@ -159,21 +96,28 @@ export function enqueueDiffCommentPersist(
 ): Promise<void> {
   const folderExecutionHostId = mutation.folderExecutionHostId
   const queueKey = persistQueueKey(worktreeId, folderExecutionHostId)
+  // Why: a chain continues on whichever floor last produced this list, so a twin appearing or
+  // leaving mid-burst keeps the copy's floor; a new chain takes its twin's own floor.
+  const floorKey =
+    [...(floorKeysByQueue.get(queueKey) ?? [])].find(
+      (key) => lastMutationNextByQueue.get(key) === mutation.previous
+    ) ?? diffCommentFloorKey(queueKey, mutation.twin)
+  floorKeysByQueue.set(queueKey, (floorKeysByQueue.get(queueKey) ?? new Set()).add(floorKey))
   const prior = persistQueueByWorktree.get(queueKey) ?? Promise.resolve()
   // Why: an idle queue means disk still holds the pre-mutation list, so that list is this burst's rollback floor.
   // Why: a `previous` that isn't the last mutation's `next` means something outside the mutators replaced the list
   //      (hydration, folderWorkspaces refresh, remote push), so the old floor predates that state and must be re-seeded.
   // Why: seed before the queue entry below, or `has` is always true and the floor is never seeded.
-  const chainBroken = lastMutationNextByQueue.get(queueKey) !== mutation.previous
+  const chainBroken = lastMutationNextByQueue.get(floorKey) !== mutation.previous
   if (!persistQueueByWorktree.has(queueKey) || chainBroken) {
-    lastPersistedByQueue.set(queueKey, mutation.previous)
-    floorSeedEpochByQueue.set(queueKey, (floorSeedEpochByQueue.get(queueKey) ?? 0) + 1)
+    lastPersistedByQueue.set(floorKey, mutation.previous)
+    floorSeedEpochByQueue.set(floorKey, (floorSeedEpochByQueue.get(floorKey) ?? 0) + 1)
   }
-  lastMutationNextByQueue.set(queueKey, mutation.next)
+  lastMutationNextByQueue.set(floorKey, mutation.next)
   const run = async (): Promise<void> => {
     // Why: capture at dequeue time, alongside `stateList` — an epoch read at enqueue time would bar every write
     //      that straddles a chain break from recording a floor its coalesced payload already carries.
-    const seedEpoch = floorSeedEpochByQueue.get(queueKey)
+    const seedEpoch = floorSeedEpochByQueue.get(floorKey)
     // Why: the state-side array, not the normalized copy sent to disk — restoring the same instance keeps
     //      `getDiffComments` identity stable instead of churning selectors.
     let stateList: DiffComment[] | undefined
@@ -187,7 +131,7 @@ export function enqueueDiffCommentPersist(
           folderExecutionHostId
         )
         stateList = folderWorkspace?.diffComments
-        await persist(
+        await writeDiffCommentsToHost(
           state,
           worktreeId,
           (stateList ?? []).map(normalizeDiffComment),
@@ -202,7 +146,7 @@ export function enqueueDiffCommentPersist(
           throw new Error('The workspace copy is gone; review notes were not saved.')
         }
         stateList = queued.list
-        await persist(
+        await writeDiffCommentsToHost(
           state,
           worktreeId,
           (stateList ?? []).map(normalizeDiffComment),
@@ -213,16 +157,16 @@ export function enqueueDiffCommentPersist(
     } catch (err) {
       // Why: converge to what actually landed; rollback's identity guard no-ops when a later mutation owns the array.
       // Why: `has()`, not `get() ?? …` — an absent entry and a legitimately-`undefined` floor are different things.
-      const floor = lastPersistedByQueue.has(queueKey)
-        ? lastPersistedByQueue.get(queueKey)
+      const floor = lastPersistedByQueue.has(floorKey)
+        ? lastPersistedByQueue.get(floorKey)
         : mutation.previous
       rollback(set, worktreeId, floor, mutation)
       throw err
     }
     // Why: a chain break re-seeded the floor to an out-of-band replacement while this write was awaiting, so the
     //      list captured before the await predates it and must not be reinstated as the floor.
-    if (floorSeedEpochByQueue.get(queueKey) === seedEpoch) {
-      lastPersistedByQueue.set(queueKey, stateList)
+    if (floorSeedEpochByQueue.get(floorKey) === seedEpoch) {
+      lastPersistedByQueue.set(floorKey, stateList)
     }
   }
   const next = prior.then(run, run)
@@ -233,9 +177,12 @@ export function enqueueDiffCommentPersist(
     if (persistQueueByWorktree.get(queueKey) === next) {
       persistQueueByWorktree.delete(queueKey)
       // Why: tail-guarded only; a mid-burst delete would strand the remaining writes of the burst without a floor.
-      lastPersistedByQueue.delete(queueKey)
-      lastMutationNextByQueue.delete(queueKey)
-      floorSeedEpochByQueue.delete(queueKey)
+      for (const key of floorKeysByQueue.get(queueKey) ?? []) {
+        lastPersistedByQueue.delete(key)
+        lastMutationNextByQueue.delete(key)
+        floorSeedEpochByQueue.delete(key)
+      }
+      floorKeysByQueue.delete(queueKey)
     }
   }
   next.then(cleanup, cleanup)
@@ -284,7 +231,7 @@ export function mutateDiffComments(
       return s
     }
     twin = found.twin ? { twin: found.twin, twinHostId: found.hostId } : {}
-    previous = found.twin ? diffCommentRowNotes(found) : found.worktrees[0].diffComments
+    previous = diffCommentRowNotes(found)
     const computed = mutate(previous ?? [])
     if (computed === null) {
       return s

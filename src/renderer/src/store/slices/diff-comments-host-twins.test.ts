@@ -3,7 +3,10 @@ import type { DiffComment } from '../../../../shared/diff-comment-types'
 import type { Repo } from '../../../../shared/repo-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { createTestStore } from './store-test-helpers'
-import { selectWorktreeDiffCommentsOrEmpty } from '../worktree-diff-comments-selector'
+import {
+  diffCommentTwinHostId,
+  selectWorktreeDiffCommentsOrEmpty
+} from '../worktree-diff-comments-selector'
 
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
 
@@ -305,5 +308,48 @@ describe('diff comments on twin worktrees', () => {
     const [a, b] = store.getState().worktreesByRepo[REPO]
     expect(a.diffComments?.map((c) => c.body)).toEqual(['ssh note'])
     expect(b.diffComments?.map((c) => c.body)).toEqual(['hub b note'])
+  })
+
+  it("rolls a failed twin write back to its own notes, not the other twin's", async () => {
+    const store = createTwinStore('local')
+    store.setState({
+      worktreesByRepo: {
+        [REPO]: [worktree('local'), worktree('ssh:box', [note('s1', 'ssh note 1')])]
+      }
+    })
+    let failLocal = (_err: Error) => {}
+    updateMeta.mockImplementationOnce(() => new Promise((_resolve, reject) => (failLocal = reject)))
+
+    const local = addNote(store)
+    store.setState({ activeWorkspaceExecutionHostId: 'ssh:box' })
+    const ssh = addNote(store)
+    await vi.waitFor(() => expect(updateMeta).toHaveBeenCalledTimes(1))
+    failLocal(new Error('write failed'))
+
+    expect(await local).toBeNull()
+    expect(await ssh).not.toBeNull()
+    expect(rowNotes(store, 'local')).toEqual([])
+    expect(rowNotes(store, 'ssh:box')).toEqual(['ssh note 1', 'ssh note'])
+  })
+
+  it('names the paired server for a proxied SSH twin, as rival servers share the target', () => {
+    expect(diffCommentTwinHostId({ hostId: 'ssh:box', runtimeOwnerEnvironmentId: 'hub-a' })).toBe(
+      'runtime:hub-a'
+    )
+  })
+
+  it('edits the duplicate row the notes panel shows', async () => {
+    const store = createTwinStore(null)
+    store.setState({
+      worktreesByRepo: { [REPO]: [worktree('local'), worktree('local', [note('l1', 'old')])] }
+    })
+
+    expect(await store.getState().updateDiffComment(WT, 'l1', 'new')).toBe(true)
+
+    expect(updateMeta).toHaveBeenCalledWith(
+      expect.objectContaining({
+        updates: { diffComments: [expect.objectContaining({ body: 'new' })] }
+      })
+    )
   })
 })
