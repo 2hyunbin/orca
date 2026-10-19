@@ -291,7 +291,7 @@ describe('picks made while a chat launches', () => {
             efforts: [],
             serviceTiers: [{ value: 'priority', label: 'Fast' }]
           },
-          { id: 'gpt-nofast', label: 'No Fast', efforts: [] }
+          { id: 'gpt-nofast', label: 'No Fast', isDefault: false, efforts: [] }
         ]
       },
       { newLaunch: true }
