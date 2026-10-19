@@ -274,17 +274,6 @@ export function createStructuredAgentSessionConversationLifetime(host: {
           host.context().runtimeState.startupAttempts.childEnded(sessionId, child)
         }
       }),
-    /** Runs `task` in the chat's lane only when execution is idle. */
-    runWhileExecutionIdle: <T>(sessionId: string, task: () => Promise<T>): Promise<T | null> =>
-      serialize(sessionId, async () =>
-        disposed ||
-        sessions.get(sessionId)?.child ||
-        host.deliveryActive(sessionId) ||
-        providerHoldsDispatch(sessionId) ||
-        hasOpenDispatch(sessionId)
-          ? null
-          : await task()
-      ),
     /** Quit has begun: nothing opens a conversation or sweeps one after this. */
     dispose: (): void => {
       disposed = true

@@ -108,7 +108,13 @@ describe('an update over a serving incumbent', () => {
   // Q5: work that started during the upload, or a chat still owed, keeps the old server.
   it.each([
     [{ liveSessions: 1, startedSinceActivation: 1 }, false, 'orcad_update_terminals_running'],
-    [{ chatWork: 1 }, true, 'orcad_update_chat_work_running']
+    [{ chatWork: 1 }, true, 'orcad_update_chat_work_running'],
+    [{ liveSessions: 1, inProcessSessions: 1 }, true, 'orcad_update_ends_in_process_terminals'],
+    [
+      { liveSessions: null, daemonProtocolVersion: null },
+      true,
+      'orcad_update_daemon_protocol_unverifiable'
+    ]
   ] as const)('defers on the reservation census %j (force %s)', async (fresh, force, code) => {
     const restart = admission({
       reserve: async () => ({ status: 'reserved', token: 't', census: { ...IDLE, ...fresh } })
@@ -159,6 +165,12 @@ describe('an update over a serving incumbent', () => {
     await expect(deployOrcad(options)).resolves.toMatchObject({ code: 'orcad_update_legacy_host' })
     await expect(
       deployOrcad({ ...options, force: true, recountCensus: async () => IDLE })
+    ).resolves.toMatchObject({ code: 'orcad_update_restart_not_reserved' })
+    const unreadable = async (): Promise<never> => {
+      throw new Error('tunnel closed')
+    }
+    await expect(
+      deployOrcad({ ...options, force: true, recountCensus: unreadable })
     ).resolves.toMatchObject({ code: 'orcad_update_restart_not_reserved' })
     expect(signaledIncumbent()).toBe(false)
     await expect(

@@ -135,6 +135,8 @@ describe('readWslOrcadIncumbent', () => {
     expect(vi.mocked(deps.restartAdmission).mock.calls[0]?.[1]).toBe(
       Date.parse('2026-10-12T01:00:00.000Z')
     )
+    vi.mocked(deps.census).mockResolvedValueOnce({ ...LIVE, liveSessions: 3 })
+    await expect(incumbent.recount()).resolves.toMatchObject({ liveSessions: 3 })
     expect(deps.wake).toHaveBeenCalledTimes(1)
     expect(deps.listen).toHaveBeenCalledTimes(2)
     expect(close).toHaveBeenCalledTimes(2)
@@ -164,11 +166,14 @@ describe('readWslOrcadIncumbent', () => {
     const { deps } = dependencies({
       wake: vi.fn(async () => ({ outcome: 'unverifiable' as const }))
     })
-    await expect(readWslOrcadIncumbent({ context: context(), slot }, deps)).resolves.toEqual({
+    const incumbent = await readWslOrcadIncumbent({ context: context(), slot }, deps)
+    expect(incumbent).toMatchObject({
       census: UNVERIFIABLE,
       readiness: null,
       restartAdmission: null
     })
+    // The recount before the stop must refuse too, never read as zero.
+    await expect(incumbent.recount()).resolves.toEqual(UNVERIFIABLE)
     expect(deps.listen).not.toHaveBeenCalled()
   })
 
@@ -187,11 +192,9 @@ describe('readWslOrcadIncumbent', () => {
 
   it('touches nothing when no version is active', async () => {
     const { deps } = dependencies()
-    await expect(readWslOrcadIncumbent({ context: context(null), slot }, deps)).resolves.toEqual({
-      census: UNVERIFIABLE,
-      readiness: null,
-      restartAdmission: null
-    })
+    await expect(
+      readWslOrcadIncumbent({ context: context(null), slot }, deps)
+    ).resolves.toMatchObject({ census: UNVERIFIABLE, readiness: null, restartAdmission: null })
     expect(deps.wake).not.toHaveBeenCalled()
   })
 })

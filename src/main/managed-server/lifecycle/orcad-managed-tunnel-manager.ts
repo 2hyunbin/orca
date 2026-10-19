@@ -207,7 +207,8 @@ export class OrcadManagedTunnelManager {
     if (serving.rebind) {
       await this.ensure(environment)
     }
-    return serving
+    // Why re-check: an unanswered old port says nothing about the server the new tunnel reaches.
+    return serving.rebind && serving.state !== 'started' ? this.checkServing(environment) : serving
   }
 
   /** Never rebuilds, so it is safe inside a build: a moved port only drops the forward. */
@@ -217,7 +218,8 @@ export class OrcadManagedTunnelManager {
       active: this.active,
       getTarget: (id) => this.dependencies.getTargetStore()?.getTarget(id),
       forwards: this.forwards,
-      ensureServing: this.dependencies.ensureServing
+      ensureServing: this.dependencies.ensureServing,
+      readPublishedPort: this.targeting.readPublishedPort
     })
   }
 

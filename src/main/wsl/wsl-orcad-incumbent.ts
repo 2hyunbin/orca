@@ -33,14 +33,22 @@ export type WslOrcadIncumbent = {
   readiness: ServeReadiness | null
   /** Reserves its restart over a fresh bridge (no wake) under the fence; null without readiness. */
   restartAdmission: OrcadRestartAdmissionPort | null
-  /** Fresh proof for explicit Force on a host that predates restart admission. */
-  recount?: () => Promise<OrcadTerminalCensus>
+  /** Fresh proof (no wake) for explicit Force on a host that predates restart admission; never
+   *  zero unread. */
+  recount: () => Promise<OrcadTerminalCensus>
 }
 
 const UNVERIFIABLE: OrcadTerminalCensus = {
   liveSessions: null,
   startedSinceActivation: null,
   daemonProtocolVersion: null
+}
+
+const UNREADABLE: WslOrcadIncumbent = {
+  census: UNVERIFIABLE,
+  readiness: null,
+  recount: async () => UNVERIFIABLE,
+  restartAdmission: null
 }
 
 export type WslOrcadIncumbentDependencies = {
@@ -85,7 +93,7 @@ export async function readWslOrcadIncumbent(
   const record = args.context.activationRecord
   const activatedAt = record.activatedAt ? Date.parse(record.activatedAt) : Number.NaN
   if (!record.active || !Number.isFinite(activatedAt) || activatedAt < 0) {
-    return { census: UNVERIFIABLE, readiness: null, restartAdmission: null }
+    return UNREADABLE
   }
   let readiness: ServeReadiness
   try {
@@ -102,10 +110,10 @@ export async function readWslOrcadIncumbent(
         }
       )
     } else {
-      return { census: UNVERIFIABLE, readiness: null, restartAdmission: null }
+      return UNREADABLE
     }
   } catch {
-    return { census: UNVERIFIABLE, readiness: null, restartAdmission: null }
+    return UNREADABLE
   }
   const connect = incumbentConnector(args, readiness, dependencies)
   // Why release: finished automation shells would otherwise defer every update, as on SSH.
@@ -117,7 +125,10 @@ export async function readWslOrcadIncumbent(
   return {
     census,
     readiness,
-    recount: () => connect((connection) => dependencies.census(connection, activatedAt)),
+    recount: () =>
+      connect((connection) => dependencies.census(connection, activatedAt)).catch(
+        () => UNVERIFIABLE
+      ),
     restartAdmission: dependencies.restartAdmission(connect, activatedAt)
   }
 }

@@ -222,6 +222,7 @@ function restartAdmission() {
 }
 
 function options(overrides: Partial<OrcadDeployOptions> = {}): OrcadDeployOptions {
+  const census = overrides.census ?? IDLE_CENSUS
   return {
     conn: Object.create(null),
     host: getRemoteHostPlatform('linux-x64'),
@@ -232,8 +233,10 @@ function options(overrides: Partial<OrcadDeployOptions> = {}): OrcadDeployOption
     userDataDir: '/home/u/.orca',
     bindHost: '127.0.0.1',
     port: 7777,
-    census: IDLE_CENSUS,
+    census,
     restartAdmission: restartAdmission(),
+    // An unchanged recount unless a test opens a terminal during the upload.
+    recountCensus: async () => census,
     readinessTimeoutMs: 50,
     sleep: async () => {},
     now: () => new Date('2026-02-02T00:00:00.000Z'),

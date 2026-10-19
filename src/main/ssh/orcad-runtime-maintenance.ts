@@ -45,6 +45,7 @@ import {
   collectManagedTerminalCensus,
   managedOrcadRestartAdmission
 } from './orcad-terminal-census-client'
+import type { OrcadTerminalCensus } from '../../shared/orcad-terminal-census'
 import { findIncompleteManagedOrcadMigration } from '../managed-server/lifecycle/orcad-managed-migration-status'
 import { latestOrcadMigrationInto } from './orcad-migration-rollback-mark'
 import { tunneledOrcadPairingCode } from './orcad-tunneled-pairing'
@@ -120,13 +121,11 @@ export async function runManagedOrcadUpdate(
 ): Promise<OrcadManagedDeployResult> {
   // Why release: finished automation shells would otherwise defer every update on a host with
   // schedules; the update restarts the server anyway.
-  const census = await collectManagedTerminalCensus(
-    userDataPath,
-    environment,
-    context.activationRecord,
-    undefined,
-    { releaseFinishedAutomationTerminals: true }
-  )
+  const countTerminals = (): Promise<OrcadTerminalCensus> =>
+    collectManagedTerminalCensus(userDataPath, environment, context.activationRecord, undefined, {
+      releaseFinishedAutomationTerminals: true
+    })
+  const census = await countTerminals()
   const restartAdmission = managedOrcadRestartAdmission(
     userDataPath,
     environment,
@@ -141,12 +140,9 @@ export async function runManagedOrcadUpdate(
     localOrcadDir,
     target: context.serverTarget,
     census,
+    recountCensus: countTerminals,
     censusRecord: context.activationRecord,
     ...(restartAdmission ? { restartAdmission } : {}),
-    recountCensus: () =>
-      collectManagedTerminalCensus(userDataPath, environment, context.activationRecord, undefined, {
-        releaseFinishedAutomationTerminals: true
-      }),
     force: args.force,
     appVersion: getAppEnvironment().getVersion(),
     ...(args.admitRecord ? { admitRecord: args.admitRecord } : {})

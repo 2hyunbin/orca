@@ -162,9 +162,8 @@ async function launchOverTransport(
     localOrcadDir,
     target: context.serverTarget,
     ...managedOrcadDeployPolicy(context, appVersion, options.force),
-    ...(incumbent ? { census: incumbent.census } : {}),
+    ...(incumbent ? { census: incumbent.census, recountCensus: incumbent.recount } : {}),
     ...(incumbent?.restartAdmission ? { restartAdmission: incumbent.restartAdmission } : {}),
-    ...(incumbent?.recount ? { recountCensus: incumbent.recount } : {}),
     force: options.force,
     appVersion,
     recordedNodeRuntimeProbe: true

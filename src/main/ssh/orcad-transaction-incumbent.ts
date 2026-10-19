@@ -42,7 +42,8 @@ export async function reserveIncumbentRestart(
     return notReserved('This Orca server cannot reserve a safe restart, so it keeps serving.')
   }
   if (options.force && options.census.restartAdmissionSupported === false) {
-    const census = await options.recountCensus?.()
+    // A recount that fails reads as unverifiable, never as the older host.
+    const census = await options.recountCensus().catch(() => null)
     if (census?.restartAdmissionSupported !== false) {
       return notReserved('The older server could not be verified again. Nothing was stopped.')
     }

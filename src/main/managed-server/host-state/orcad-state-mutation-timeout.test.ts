@@ -87,7 +87,8 @@ const deploy = (): Promise<unknown> =>
     localOrcadDir: '/local/out/orcad',
     target: 'linux-x64-glibc',
     census,
-    restartAdmission: host.restartAdmission(OLD)
+    restartAdmission: host.restartAdmission(OLD),
+    recountCensus: async () => census
   })
 const rollback = (): Promise<unknown> =>
   rollbackOrcad({

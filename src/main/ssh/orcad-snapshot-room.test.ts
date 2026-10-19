@@ -58,6 +58,7 @@ function answerRoom(neededKb: number, reclaimKb: number, availableKb: number): v
   )
 }
 
+const IDLE = { liveSessions: 0, startedSinceActivation: 0, daemonProtocolVersion: 3 }
 const deploy = (extra: Partial<Parameters<typeof deployOrcad>[0]> = {}) =>
   deployOrcad({
     conn: Object.create(null),
@@ -72,8 +73,9 @@ const deploy = (extra: Partial<Parameters<typeof deployOrcad>[0]> = {}) =>
     now: () => new Date('2026-02-02T00:00:00.000Z'),
     localOrcadDir: '/local/out/orcad',
     target: 'linux-x64-glibc217',
-    census: { liveSessions: 0, startedSinceActivation: 0, daemonProtocolVersion: 3, chatWork: 0 },
+    census: { ...IDLE, chatWork: 0 },
     restartAdmission: host.restartAdmission(OLD),
+    recountCensus: async () => extra.census ?? IDLE,
     ...extra
   })
 
