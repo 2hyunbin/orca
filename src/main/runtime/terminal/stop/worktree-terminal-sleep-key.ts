@@ -1,12 +1,9 @@
 import {
   getConnectionExecutionHostId,
-  getRepoSshConnectionId,
-  getWorktreeExecutionHostId,
-  parseExecutionHostId,
+  getSshTargetIdForExecutionHost,
   type ExecutionHostId
 } from '../../../../shared/execution-host'
-import type { Repo } from '../../../../shared/repo-types'
-import type { Worktree } from '../../../../shared/worktree/types'
+import { resolveWorktreeLaunchHost, type LaunchHostRepo } from '../../worktree-launch-host-repo'
 import { worktreeIdentityKey } from '../../../../shared/worktree/id'
 import {
   composeWorktreeHostIdentity,
@@ -25,18 +22,20 @@ export function hostWorktreeSleepKey(
   return composeWorktreeHostIdentity(hostId, worktreeIdentityKey(worktreeId))
 }
 
-/** The host a spawn's `spawnWorktreeTarget` names: a `runtime:` stamp runs its nested SSH here. */
+/**
+ * The host this process launches the worktree's terminals on, from the same resolver the launch
+ * scope uses, so a spawn's `spawnWorktreeTarget` names the same key. Rival rows that disagree
+ * leave the launch refused; the worktree's own host stamp is the only answer then.
+ */
 export function resolvedWorktreeSleepKey(
-  worktree: Pick<Worktree, 'id' | 'hostId'>,
-  repo: Pick<Repo, 'connectionId' | 'executionHostId'> | undefined
+  repos: readonly LaunchHostRepo[],
+  worktree: { id: string; repoId: string; hostId?: string | null }
 ): HostScopedWorktreeKey {
-  const host = parseExecutionHostId(getWorktreeExecutionHostId(worktree, repo))
+  const launch = resolveWorktreeLaunchHost(repos, worktree)
   const connectionId =
-    host?.kind === 'ssh'
-      ? host.targetId
-      : host?.kind === 'runtime' && repo
-        ? getRepoSshConnectionId(repo)
-        : null
+    launch.kind === 'resolved'
+      ? launch.connectionId
+      : getSshTargetIdForExecutionHost(worktree.hostId)
   return hostWorktreeSleepKey(getConnectionExecutionHostId(connectionId), worktree.id)
 }
 

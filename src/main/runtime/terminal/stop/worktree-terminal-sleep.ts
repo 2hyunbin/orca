@@ -11,8 +11,7 @@ import { resolvedWorktreeSleepKey } from './worktree-terminal-sleep-key'
 
 export abstract class OrcaRuntimeWithSleepResolvedWorktreeTerminals extends OrcaRuntimeWithWorktreeSleepResumeRecording {
   protected getWorktreeTerminalSleepKey(worktree: ResolvedWorktree): string {
-    const repo = worktree.repoId ? this.store?.getRepo?.(worktree.repoId) : undefined
-    return resolvedWorktreeSleepKey(worktree, repo)
+    return resolvedWorktreeSleepKey(this.store?.getRepos() ?? [], worktree)
   }
 
   protected async sleepResolvedWorktreeTerminals(
