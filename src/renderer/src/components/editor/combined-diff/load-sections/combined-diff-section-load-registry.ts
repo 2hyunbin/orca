@@ -30,6 +30,7 @@ export type CombinedDiffSectionLoadRegistry = {
   retrySectionRef: React.RefObject<(index: number) => void>
   sectionLoadTokensRef: React.RefObject<Map<number, number>>
   sectionsRef: React.RefObject<DiffSection[]>
+  supersededLoadIndicesRef: React.RefObject<Set<number>>
 }
 
 export function useCombinedDiffSectionLoadRegistry(
@@ -44,6 +45,8 @@ export function useCombinedDiffSectionLoadRegistry(
   const sectionLoadTokensRef = useRef<Map<number, number>>(new Map())
   const renderedIndicesRef = useRef<Set<number>>(new Set())
   const reloadTimersRef = useRef<Map<number, number>>(new Map())
+  // Why: sections whose last load was discarded for a mid-flight invalidation; the next one commits.
+  const supersededLoadIndicesRef = useRef<Set<number>>(new Set())
   const loadSectionRef = useRef<(index: number) => Promise<void>>(async () => {})
   const retrySectionRef = useRef<(index: number) => void>(() => {})
   const requestSectionReloadRef = useRef<(index: number) => void>(() => {})
@@ -76,6 +79,7 @@ export function useCombinedDiffSectionLoadRegistry(
     requestSectionReloadRef,
     retrySectionRef,
     sectionLoadTokensRef,
-    sectionsRef
+    sectionsRef,
+    supersededLoadIndicesRef
   }
 }

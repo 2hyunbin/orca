@@ -295,6 +295,27 @@ describe('combined diff discarded-result analysis budget', () => {
     expect(mocks.fetch.mock.calls.length).toBeGreaterThanOrEqual(4)
   })
 
+  it('commits slow refetches while external writes never stop', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    let version = 0
+    mocks.fetch.mockImplementation(() => {
+      const next = textResult('base', `v${++version}`)
+      return new Promise<GitDiffResult>((resolve) => setTimeout(() => resolve(next), 250))
+    })
+    const hook = await startViewer()
+    hook.result.current.registry.renderedIndicesRef.current.add(0)
+    for (let elapsed = 0; elapsed < 5_000; elapsed += 100) {
+      hook.result.current.retry.requestSectionReload(0)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100)
+      })
+      await flushLoads()
+    }
+    // Every fetch superseded by the next invalidation would leave the first load on screen.
+    const shown = Number(hook.result.current.sections[0]?.modifiedContent.slice(1))
+    expect(shown).toBeGreaterThanOrEqual(3)
+  })
+
   it('keeps synchronous token-reload reentry into a replacement generation', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const body = 'reentrant obsolete\n'.padEnd(65_536, 'x')
