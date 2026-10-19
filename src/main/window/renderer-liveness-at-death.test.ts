@@ -22,6 +22,8 @@ function createWindow(state: { minimized?: boolean; visible?: boolean; destroyed
   return { window: window as unknown as Electron.BrowserWindow, contents }
 }
 
+const MAIN_FRAME_NAVIGATION = { isMainFrame: true, isSameDocument: false }
+
 describe('trackRendererLivenessAtDeath', () => {
   let now = 0
   beforeEach(() => {
@@ -32,10 +34,10 @@ describe('trackRendererLivenessAtDeath', () => {
   it('reports a document that never loaded as a blank window with its age', () => {
     const { window, contents } = createWindow()
     const tracker = trackRendererLivenessAtDeath(window, () => now)
-    contents.emit('did-navigate')
+    contents.emit('did-start-navigation', MAIN_FRAME_NAVIGATION)
     now += 866_000
 
-    expect(tracker.read()).toEqual({
+    expect(tracker.takeAtRendererGone()).toEqual({
       rendererDocumentLoaded: false,
       rendererDocumentAgeMs: 866_000,
       mainWindowState: 'visible',
@@ -52,35 +54,85 @@ describe('trackRendererLivenessAtDeath', () => {
     window.emit('unresponsive')
     now += 40_000
 
-    expect(tracker.read()).toMatchObject({
-      rendererUnresponsiveForMs: 45_000,
-      rendererDocumentLoaded: true,
-      mainWindowState: 'minimized'
-    })
     expect(recordCoalescedDurableCrashBreadcrumb).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'renderer_unresponsive' })
     )
-
     window.emit('responsive')
-    expect(tracker.read().rendererUnresponsiveForMs).toBeUndefined()
     expect(recordCoalescedDurableCrashBreadcrumb).toHaveBeenLastCalledWith(
       expect.objectContaining({ name: 'renderer_responsive', data: { hungForMs: 45_000 } })
     )
+    expect(tracker.takeAtRendererGone().rendererUnresponsiveForMs).toBeUndefined()
+
+    window.emit('unresponsive')
+    now += 30_000
+    expect(tracker.takeAtRendererGone()).toMatchObject({
+      rendererUnresponsiveForMs: 30_000,
+      rendererDocumentLoaded: true,
+      mainWindowState: 'minimized'
+    })
   })
 
   it('does not carry a hang into the next document after a recovery reload', () => {
     const { window, contents } = createWindow()
     const tracker = trackRendererLivenessAtDeath(window, () => now)
     window.emit('unresponsive')
-    contents.emit('did-navigate')
+    contents.emit('did-start-navigation', MAIN_FRAME_NAVIGATION)
 
-    expect(tracker.read().rendererUnresponsiveForMs).toBeUndefined()
+    expect(tracker.takeAtRendererGone().rendererUnresponsiveForMs).toBeUndefined()
   })
 
   it('omits window state instead of throwing for a destroyed window', () => {
     const { window } = createWindow({ destroyed: true })
     const tracker = trackRendererLivenessAtDeath(window, () => now)
 
-    expect(tracker.read()).toEqual({ rendererDocumentLoaded: false, rendererDocumentAgeMs: 0 })
+    expect(tracker.takeAtRendererGone()).toEqual({
+      rendererDocumentLoaded: false,
+      rendererDocumentAgeMs: 0
+    })
+  })
+
+  it('reports a failed main-frame load as not loaded, though did-finish-load follows it', () => {
+    const { window, contents } = createWindow()
+    const tracker = trackRendererLivenessAtDeath(window, () => now)
+    contents.emit('did-start-navigation', MAIN_FRAME_NAVIGATION)
+    contents.emit('did-fail-load', {}, -6, 'ERR_FILE_NOT_FOUND', 'file:///missing', true)
+    contents.emit('did-finish-load')
+    now += 12_000
+
+    expect(tracker.takeAtRendererGone()).toMatchObject({
+      rendererDocumentLoaded: false,
+      rendererDocumentLoadFailed: true,
+      rendererDocumentAgeMs: 12_000
+    })
+  })
+
+  it('ignores aborted loads, subframe failures and same-document navigations', () => {
+    const { window, contents } = createWindow()
+    const tracker = trackRendererLivenessAtDeath(window, () => now)
+    contents.emit('did-start-navigation', MAIN_FRAME_NAVIGATION)
+    contents.emit('did-fail-load', {}, -3, 'ERR_ABORTED', 'file:///app', true)
+    contents.emit('did-fail-load', {}, -6, 'ERR_FILE_NOT_FOUND', 'file:///frame', false)
+    contents.emit('did-finish-load')
+    now += 5_000
+    contents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: true })
+    contents.emit('did-start-navigation', { isMainFrame: false, isSameDocument: false })
+
+    const state = tracker.takeAtRendererGone()
+    expect(state).toMatchObject({ rendererDocumentLoaded: true, rendererDocumentAgeMs: 5_000 })
+    expect(state.rendererDocumentLoadFailed).toBeUndefined()
+  })
+
+  it('does not log the replacement renderer as the dead one recovering', () => {
+    const { window, contents } = createWindow()
+    const tracker = trackRendererLivenessAtDeath(window, () => now)
+    contents.emit('did-finish-load')
+    window.emit('unresponsive')
+    now += 20_000
+    expect(tracker.takeAtRendererGone().rendererUnresponsiveForMs).toBe(20_000)
+    recordCoalescedDurableCrashBreadcrumb.mockClear()
+
+    window.emit('responsive')
+
+    expect(recordCoalescedDurableCrashBreadcrumb).not.toHaveBeenCalled()
   })
 })

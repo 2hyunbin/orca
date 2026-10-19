@@ -10,10 +10,12 @@ import { recordCoalescedDurableCrashBreadcrumb } from '../crash-reporting/durabl
  * user ended a frozen Orca" — and that is an Orca bug to chase, not noise.
  */
 export type RendererLivenessAtDeath = {
-  /** Set only while Chromium considers the renderer hung; absent means responsive. */
+  /** Set only while Chromium flags the renderer hung (needs ~15s of unacknowledged input); absent = not detected hung. */
   rendererUnresponsiveForMs?: number
-  /** False when the current document never reached did-finish-load (blank window). */
+  /** False when the current document never finished loading, or its load failed (blank window). */
   rendererDocumentLoaded: boolean
+  /** Present when the current main-frame load failed; Electron still fires did-finish-load after it. */
+  rendererDocumentLoadFailed?: true
   /** Age of the current document, so "never loaded" reads as seconds or minutes. */
   rendererDocumentAgeMs: number
   /** Absent when the window was already destroyed. */
@@ -23,7 +25,9 @@ export type RendererLivenessAtDeath = {
 
 // Why no dispose: every listener lives on the window or its webContents and dies with them.
 export type RendererLivenessTracker = {
-  read: () => RendererLivenessAtDeath
+  /** Reads the state at a renderer death and clears the hang, so the replacement renderer's
+   * `responsive` is not logged as the dead one recovering. */
+  takeAtRendererGone: () => RendererLivenessAtDeath
 }
 
 // Why coalesced: a renderer that flaps hung/responsive must not evict the 30-slot ring.
@@ -36,6 +40,7 @@ export function trackRendererLivenessAtDeath(
   const contents = window.webContents
   let unresponsiveSince: number | null = null
   let documentLoaded = false
+  let documentLoadFailed = false
   let documentStartedAt = now()
 
   const onUnresponsive = (): void => {
@@ -59,32 +64,56 @@ export function trackRendererLivenessAtDeath(
       minIntervalMs: UNRESPONSIVE_CRUMB_MIN_INTERVAL_MS
     })
   }
-  // Why reset the hang here: a recovery reload is a fresh renderer, and a stale
-  // timestamp would make its first report claim a hang it never had.
-  const onNavigate = (): void => {
+  // Why start, not did-navigate: a failed load never commits, so did-navigate would leave the
+  // previous document's state in place for the blank window this exists to catch.
+  const onNavigationStart = (details?: {
+    isMainFrame?: boolean
+    isSameDocument?: boolean
+  }): void => {
+    // Why optional: a throwing listener would stop the emitter's later navigation listeners.
+    if (!details?.isMainFrame || details.isSameDocument) {
+      return
+    }
     unresponsiveSince = null
     documentLoaded = false
+    documentLoadFailed = false
     documentStartedAt = now()
   }
+  const onLoadFailed = (
+    _event: unknown,
+    errorCode: number,
+    _description: string,
+    _url: string,
+    isMainFrame: boolean
+  ): void => {
+    // -3 (ERR_ABORTED) is a superseded navigation, not a failed document.
+    if (isMainFrame && errorCode !== -3) {
+      documentLoadFailed = true
+    }
+  }
   const onLoaded = (): void => {
-    documentLoaded = true
+    documentLoaded = !documentLoadFailed
   }
   window.on('unresponsive', onUnresponsive)
   window.on('responsive', onResponsive)
-  contents.on('did-navigate', onNavigate)
+  contents.on('did-start-navigation', onNavigationStart)
+  contents.on('did-fail-load', onLoadFailed)
   contents.on('did-finish-load', onLoaded)
 
   return {
-    read: () => {
+    takeAtRendererGone: () => {
       const at = now()
-      return {
+      const state: RendererLivenessAtDeath = {
         ...(unresponsiveSince === null
           ? {}
           : { rendererUnresponsiveForMs: at - unresponsiveSince }),
         rendererDocumentLoaded: documentLoaded,
+        ...(documentLoadFailed ? { rendererDocumentLoadFailed: true } : {}),
         rendererDocumentAgeMs: at - documentStartedAt,
         ...readWindowState(window)
       }
+      unresponsiveSince = null
+      return state
     }
   }
 }

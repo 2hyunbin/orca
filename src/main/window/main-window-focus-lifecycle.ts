@@ -248,7 +248,7 @@ export function installMainWindowFocusLifecycle(args: {
   }
   const rendererLiveness = trackRendererLivenessAtDeath(mainWindow)
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
-    const liveness = rendererLiveness.read()
+    const liveness = rendererLiveness.takeAtRendererGone()
     rendererProcessGone = true
     retireBrowserClientPageRenderer(rendererWebContents)
     browserRouteWebContentsRegistry.retireRenderer(rendererWebContentsId)

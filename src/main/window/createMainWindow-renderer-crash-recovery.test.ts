@@ -100,7 +100,14 @@ describe('createMainWindow', () => {
       isLoadingMainFrame: vi.fn(() => false),
       mainFrame: {},
       on: vi.fn((event, handler) => {
-        windowHandlers[event] = handler
+        // Chain like an EventEmitter: several lifecycle modules listen to the same event.
+        const previous = windowHandlers[event]
+        windowHandlers[event] = previous
+          ? (...args: unknown[]) => {
+              previous(...args)
+              handler(...args)
+            }
+          : handler
       }),
       setZoomLevel: vi.fn(),
       setBackgroundThrottling: vi.fn(),
