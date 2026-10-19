@@ -3,6 +3,7 @@ import {
   structuredLaunchRequestedOptions
 } from '../../../shared/native-chat-session-option-defaults'
 import { structuredAgentSessionCreateFingerprint } from '../../../shared/structured-agent-session-mutation'
+import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from '../../../shared/agent-chat-permission-mode'
 import type { StructuredLaunchState } from './structured-agent-session-launch-registry'
 import { notifyStructuredLaunchListeners } from './structured-agent-session-launch-registry'
 import {
@@ -22,15 +23,24 @@ import {
   settleStructuredLaunchCreateOptions
 } from './structured-agent-session-launch-options'
 
-/** Freeze what create carries once; an ambiguous reply always replays the same payload. */
+/** Freeze what create carries once; an ambiguous reply always replays the same payload.
+ *  `hostTakesExplicitOptions`: the host advertises the create options-mode capability. */
 export function prepareStructuredLaunchCreateMessage(
   state: StructuredLaunchState,
-  optionsMode?: 'replace-model-selection'
+  hostTakesExplicitOptions: boolean
 ): void {
   const { intent } = state
   if (intent.createPrepared) {
     return
   }
+  if (!hostTakesExplicitOptions) {
+    omitStructuredLaunchPermissionMode(state)
+  }
+  // A permission mode alone overlays the host's remembered model selection.
+  const optionsMode =
+    hostTakesExplicitOptions && state.selection.explicit?.model !== undefined
+      ? 'replace-model-selection'
+      : undefined
   if (intent.createMessageSupport !== true) {
     prepareLegacyStructuredLaunchPrompts(intent.sessionId)
     intent.createPrepared = true
@@ -47,7 +57,7 @@ export function prepareStructuredLaunchCreateMessage(
     ...intent.params,
     ...(firstMessage ? { firstMessage } : {}),
     ...(options ? { options } : {}),
-    ...(optionsMode && state.selection.explicit ? { optionsMode } : {})
+    ...(optionsMode ? { optionsMode } : {})
   }
   intent.params = {
     ...params,
@@ -61,6 +71,19 @@ export function prepareStructuredLaunchCreateMessage(
   }
   intent.createPrepared = true
   notifyStructuredLaunchListeners()
+}
+
+/** Hosts before options-mode may refuse an action's mode (older permission tables): the chat takes
+ *  the host's new-chat default, as a phone launch does, and no later setOption re-applies it. */
+function omitStructuredLaunchPermissionMode(state: StructuredLaunchState): void {
+  const explicit = state.intent.explicitLaunchOptions
+  if (explicit?.[AGENT_CHAT_PERMISSION_MODE_OPTION_ID] === undefined) {
+    return
+  }
+  const { [AGENT_CHAT_PERMISSION_MODE_OPTION_ID]: _omitted, ...rest } = explicit
+  const kept = Object.keys(rest).length ? rest : undefined
+  state.intent.explicitLaunchOptions = kept
+  state.selection = { ...state.selection, explicit: kept }
 }
 
 /** Picks held so far, the launch's own permission mode, and the model and effort the chat shows:

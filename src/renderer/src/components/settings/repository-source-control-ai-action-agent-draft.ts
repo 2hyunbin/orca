@@ -22,7 +22,7 @@ export function withRepoAiActionAgent(
 ): RepoSourceControlAiOverrides {
   const currentRecipe =
     base.actionOverrides?.[actionId] ?? readCompleteRecipeForDraft(base, settings, actionId)
-  // A model id names one agent's model, so it does not survive a change of agent.
+  // A model and permission mode are one agent's choices; neither survives a change of agent.
   const { launchPreferences, ...rest } = currentRecipe
   return normalizeRepoAiDraft(
     setActionOverride(base, actionId, {

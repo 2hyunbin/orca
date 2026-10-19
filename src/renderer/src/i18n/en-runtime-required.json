@@ -3254,12 +3254,6 @@
         "probeSkippedHosts": "Hosts routed without the connection check (Try anyway):",
         "title": "Browse through SSH workspace hosts"
       }
-    },
-    "sourceControl": {
-      "actionModel": {
-        "argsTerminalOnly": "Used only when the agent opens in a terminal; chats ignore them.",
-        "effort": "Effort"
-      }
     }
   },
   "sparsePreset": {

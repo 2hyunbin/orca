@@ -47,7 +47,7 @@ export type StructuredAgentSessionLaunchIntent = {
   params: StructuredAgentSessionCreateParams
   createMessageSupport?: boolean
   createPrepared?: true
-  prepareCreate?: (optionsMode?: 'replace-model-selection') => void
+  prepareCreate?: (hostTakesExplicitOptions: boolean) => void
   beforeCreate?: () => boolean
   surfaceAddress?: StructuredLaunchSurfaceAddress
   /** The saved selection create seeds, read when the intent is built. */

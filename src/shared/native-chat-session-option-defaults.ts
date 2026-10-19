@@ -239,7 +239,8 @@ export function structuredLaunchRequestedOptions(selection: {
   }
 }
 
-/** Older Claude/Codex hosts overlay effort; a catalog default approximates omission there. */
+/** A create without model replacement overlays the remembered effort onto a named Claude/Codex
+ *  model; the catalog default approximates omission there. */
 export function structuredLaunchCompatibleOptions(
   agent: AgentType,
   requested: Readonly<Record<string, string>>

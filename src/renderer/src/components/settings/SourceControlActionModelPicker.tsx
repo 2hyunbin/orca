@@ -60,10 +60,11 @@ export function SourceControlActionModelPicker({
       ? selected.model
       : undefined
   const options = selected?.model ? sourceControlActionChatOptions(agent, selected.model) : []
+  // Model and Permissions take full rows so long values stay readable in the narrow column.
   return (
     <div className="grid auto-rows-[minmax(56.5px,auto)] grid-cols-2 gap-2">
       {catalog ? (
-        <div className="space-y-2">
+        <div className="col-span-2 space-y-2">
           <Label>{translate('settings.sourceControl.actionModel.model', 'Model')}</Label>
           <Select
             value={selected?.model ?? AGENT_DEFAULT_VALUE}
@@ -92,7 +93,7 @@ export function SourceControlActionModelPicker({
         </div>
       ) : null}
       {modes.length > 0 ? (
-        <div className="space-y-2">
+        <div className="col-span-2 space-y-2">
           <Label>{nativeChatPermissionPickerTitle()}</Label>
           <Select
             value={permissionMode ?? AGENT_DEFAULT_VALUE}

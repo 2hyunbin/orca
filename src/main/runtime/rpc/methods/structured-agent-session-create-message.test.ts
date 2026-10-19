@@ -239,6 +239,32 @@ it('keeps the seeded permission mode beside explicit picks on an acquired create
   )
 })
 
+it('keeps the remembered model under a permission mode picked alone on an acquired create', async () => {
+  // The not-at-rest path `agent.launch` with a prompt takes.
+  const resolveStructuredAgentSessionCreateIntent = async (input: { envelope: unknown }) => ({
+    envelope: input.envelope,
+    location: {
+      executionHostId: 'local',
+      wslDistro: null,
+      workspaceId: 'workspace-1',
+      workspaceKind: 'git-worktree'
+    },
+    provider: 'codex',
+    agent: 'codex',
+    accountHome: { variable: 'CODEX_HOME', path: '/host/.codex' },
+    options: { model: 'saved', effort: 'low', permissionMode: 'full-access' },
+    runtimeKind: 'native'
+  })
+  expect(
+    await call('agentSession.create', params({ permissionMode: 'ask' }), legacy, {
+      resolveStructuredAgentSessionCreateIntent
+    })
+  ).toMatchObject({ ok: true, result: { ok: true } })
+  expect(rig.adapter.acquire).toHaveBeenCalledWith(
+    expect.objectContaining({ options: { model: 'saved', effort: 'low' }, permissionMode: 'ask' })
+  )
+})
+
 it('rejects an explicit option the resting agent would reject before founding', async () => {
   expect(
     await call('agentSession.create', params({ unknownOption: 'yes' }), capable)

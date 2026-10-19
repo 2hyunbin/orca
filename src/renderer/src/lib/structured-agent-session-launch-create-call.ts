@@ -92,20 +92,19 @@ export async function launchStructuredAgentSession(
   }
   if (!intent.createPrepared) {
     let supported = false
-    let replaceOptions = false
+    let takesExplicitOptions = false
     try {
       supported = await supportsStructuredAgentSessionCreateMessage(intent.target)
-      replaceOptions =
+      takesExplicitOptions =
         supported &&
-        // A permission mode alone overlays the host's remembered model selection.
-        intent.explicitLaunchOptions?.model !== undefined &&
+        intent.explicitLaunchOptions !== undefined &&
         (await supportsStructuredAgentSessionCreateOptionsMode(intent.target))
     } catch {
       // Unknown capability stays on the compatible create path.
     }
     if (!intent.createPrepared) {
       intent.createMessageSupport = supported
-      intent.prepareCreate?.(replaceOptions ? 'replace-model-selection' : undefined)
+      intent.prepareCreate?.(takesExplicitOptions)
       intent.createPrepared = true
     }
   }

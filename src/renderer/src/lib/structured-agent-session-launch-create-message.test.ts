@@ -301,6 +301,20 @@ describe('the first message owned by create', () => {
     })
   })
 
+  it('leaves a host without options-mode on its own new-chat permission mode', async () => {
+    mocks.supportsMode.mockResolvedValue(false)
+    mocks.call.mockImplementation(async () => created())
+    const launch = startStructuredAgentLaunch('workspace-1', 'codex', {
+      requestId: newAgentLaunchRequestId(),
+      executionHostId: 'local',
+      prompt: 'opening text',
+      launchOptions: { permissionMode: 'full-access' }
+    })
+    await launch.launchResult
+    expect(createParams().options).toBeUndefined()
+    expect(mocks.call.mock.calls.map(([, method]) => method)).toEqual(['agentSession.create'])
+  })
+
   it('returns a refused create once after the new draft, with no later send', async () => {
     const create = deferred<unknown>()
     mocks.call.mockReturnValue(create.promise)
