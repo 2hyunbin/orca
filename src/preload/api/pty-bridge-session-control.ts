@@ -24,17 +24,7 @@ import type { PreloadApi } from '../api-types'
 import type { TerminalPanePlacement } from '../../shared/terminal-pane-placement'
 import type { AgentPaneLaunchRequest } from '../../shared/agent-pane-launch-request'
 
-// Why per page load: main admits this page when it opens, and every attachment or interest message names it.
-const rendererPage = crypto.randomUUID()
-let rendererPageOpened = false
-
-function openRendererPageOnce(): string {
-  if (!rendererPageOpened) {
-    rendererPageOpened = true
-    ipcRenderer.send('pty:openRendererPage', { page: rendererPage })
-  }
-  return rendererPage
-}
+import { dispatchRendererPage, sendRendererPage } from './pty-renderer-page-transport'
 
 type RendererAttachmentState = { consuming?: boolean; visible?: boolean }
 
@@ -101,15 +91,14 @@ export const ptySessionControlApi = {
     /** Host verdict on the shell-ready marker; absent when the execution host predates the field. */
     shellReadyArmed?: boolean
   }> =>
-    ipcRenderer.invoke(
-      'pty:spawn',
-      opts.rendererAttachment
-        ? {
+    opts.rendererAttachment
+      ? dispatchRendererPage((page) =>
+          ipcRenderer.invoke('pty:spawn', {
             ...opts,
-            rendererAttachment: { ...opts.rendererAttachment, page: openRendererPageOnce() }
-          }
-        : opts
-    ),
+            rendererAttachment: { ...opts.rendererAttachment, page }
+          })
+        )
+      : ipcRenderer.invoke('pty:spawn', opts),
   write: (id: string, data: string, inputKind: TerminalInputKind): void => {
     ipcRenderer.send('pty:write', { id, data, inputKind })
   },
@@ -181,19 +170,16 @@ export const ptySessionControlApi = {
     ipcRenderer.send('pty:setActiveRendererPty', { id, active })
   },
   openRendererAttachment: (key: string, ptyId: string, state: RendererAttachmentState): void => {
-    const page = openRendererPageOnce()
-    ipcRenderer.send('pty:openRendererAttachment', { ...state, page, key, ptyId })
+    sendRendererPage('pty:openRendererAttachment', { ...state, key, ptyId })
   },
   updateRendererAttachment: (key: string, state: RendererAttachmentState): void => {
-    const page = openRendererPageOnce()
-    ipcRenderer.send('pty:updateRendererAttachment', { ...state, page, key })
+    sendRendererPage('pty:updateRendererAttachment', { ...state, key })
   },
   closeRendererAttachment: (key: string): void => {
-    ipcRenderer.send('pty:closeRendererAttachment', { page: openRendererPageOnce(), key })
+    sendRendererPage('pty:closeRendererAttachment', { key })
   },
   setPtyDeliveryInterest: (id: string, interested: boolean): void => {
-    const page = openRendererPageOnce()
-    ipcRenderer.send('pty:setPtyDeliveryInterest', { page, id, interested })
+    sendRendererPage('pty:setPtyDeliveryInterest', { id, interested })
   },
   publishTerminalViewAttributes: (attributes: TerminalViewAttributes): void => {
     ipcRenderer.send('pty:terminalViewAttributes', attributes)

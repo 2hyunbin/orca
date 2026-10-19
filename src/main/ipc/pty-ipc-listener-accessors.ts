@@ -107,12 +107,6 @@ export function createPtyIpcListenerAccessors(ctx: {
     return () => listener({ isMainFrame: true, isSameDocument: false })
   }
 
-  /** The navigation started by getMainFrameNavigationListener commits a new document. */
-  function getMainFrameNavigationCommitListener(): () => void {
-    const listener = getMainWindowWebContentsListener('did-navigate')
-    return () => listener()
-  }
-
   function getPtyResizeListener(): (
     event: unknown,
     args: { id: string; cols: number; rows: number }
@@ -223,7 +217,6 @@ export function createPtyIpcListenerAccessors(ctx: {
     getPtyRendererDispatcherReadyListener,
     getMainWindowWebContentsListener,
     getMainFrameNavigationListener,
-    getMainFrameNavigationCommitListener,
     getPtyResizeListener,
     getPtySetRendererPtyConsumerListener,
     attachTestPaneView,

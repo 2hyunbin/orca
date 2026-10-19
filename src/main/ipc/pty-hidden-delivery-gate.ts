@@ -22,7 +22,8 @@ export type HiddenPtyDeliveryGateSettings = Pick<
 // Why: sidecar consumers (paste-draft pacing, background agent launches,
 // automation observers) need live bytes even while no visible view exists. Any
 // registered interest suppresses the gate for that PTY.
-const deliveryInterestRendererPtys = new Set<string>()
+const deliveryInterestRendererPtys = new Map<string, Set<string>>()
+const interestByPage = new Map<string, Set<string>>()
 // Why: reveal must restore from the model only when bytes were actually
 // dropped. Doubles as the marker latch: the first gated drop emits a restore
 // marker and every new consuming view re-emits one. It retires only when the
@@ -82,16 +83,25 @@ export function hasRendererPtyDeliveryInterest(id: string): boolean {
 
 /** For diagnostics and page retire: every PTY with interest or drop state. */
 export function getRendererDeliveryGatePtyIds(): string[] {
-  return [...new Set([...deliveryInterestRendererPtys, ...droppedSinceHiddenPtys.keys()])]
+  return [...new Set([...deliveryInterestRendererPtys.keys(), ...droppedSinceHiddenPtys.keys()])]
 }
 
 /** Renderer-side ref-counted interest, surfaced as boolean transitions. */
-export function setRendererPtyDeliveryInterest(id: string, interested: boolean): void {
-  if (interested) {
-    deliveryInterestRendererPtys.add(id)
-  } else {
-    deliveryInterestRendererPtys.delete(id)
-  }
+export function setRendererPtyDeliveryInterest(
+  id: string,
+  interested: boolean,
+  page: string
+): void {
+  const interests = interestByPage.get(page) ?? new Set<string>()
+  if (interested) interests.add(id)
+  else interests.delete(id)
+  if (interests.size) interestByPage.set(page, interests)
+  else interestByPage.delete(page)
+  const owners = deliveryInterestRendererPtys.get(id) ?? new Set<string>()
+  if (interested) owners.add(page)
+  else owners.delete(page)
+  if (owners.size) deliveryInterestRendererPtys.set(id, owners)
+  else deliveryInterestRendererPtys.delete(id)
 }
 
 export function shouldDropRendererPtyData(
@@ -123,14 +133,18 @@ export function recordHiddenRendererPtyDataDrop(
 }
 
 /** The renderer page died with its interest holds; drop memory stays for the successor's restore. */
-export function clearRendererPtyDeliveryInterest(): void {
-  deliveryInterestRendererPtys.clear()
+export function deleteRendererPtyDeliveryInterestForPage(page: string): void {
+  for (const id of interestByPage.get(page) ?? []) {
+    setRendererPtyDeliveryInterest(id, false, page)
+  }
 }
 
 /** Full per-PTY teardown — wired into clearProviderPtyState so every exit
  *  path (local, daemon, SSH, connection teardown) releases gate state. */
 export function clearHiddenRendererPtyDeliveryState(id: string): void {
-  deliveryInterestRendererPtys.delete(id)
+  for (const page of deliveryInterestRendererPtys.get(id) ?? []) {
+    setRendererPtyDeliveryInterest(id, false, page)
+  }
   droppedSinceHiddenPtys.delete(id)
 }
 
@@ -156,6 +170,7 @@ export function resetHiddenRendererPtyDeliveryDebugCounters(): void {
 /** Test seam: reset all module state between tests. */
 export function _resetHiddenRendererPtyDeliveryGateForTest(): void {
   deliveryInterestRendererPtys.clear()
+  interestByPage.clear()
   droppedSinceHiddenPtys.clear()
   resetHiddenRendererPtyDeliveryDebugCounters()
   _resetRendererAttachmentsForTest()

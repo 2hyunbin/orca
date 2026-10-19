@@ -29,7 +29,6 @@ export type RendererNavigationDetails = {
 export let rendererDidStartNavigationHandler:
   | ((details: RendererNavigationDetails) => void)
   | null = null
-export let rendererDidNavigateHandler: (() => void) | null = null
 
 // Why: Restart daemon must re-bind provider→renderer listeners after replaceDaemonProvider swaps localProvider, else subscribers stay bound to the disposed adapter and new PTY data silently drops.
 export let rebindProviderListeners: (() => void) | null = null
@@ -74,12 +73,10 @@ export function setRendererLifecycleResetState(args: {
   contents: PtyRendererDelivery['webContents'] | null
   handler: (() => void) | null
   navigation: ((details: RendererNavigationDetails) => void) | null
-  commit: (() => void) | null
 }): void {
   rendererLifecycleResetWebContents = args.contents
   rendererLifecycleResetHandler = args.handler
   rendererDidStartNavigationHandler = args.navigation
-  rendererDidNavigateHandler = args.commit
 }
 
 // Why: Restart daemon must detach listeners AFTER synthetic pty:exit events fan out but BEFORE replaceDaemonProvider swaps the adapter; this export narrows that window to the caller.

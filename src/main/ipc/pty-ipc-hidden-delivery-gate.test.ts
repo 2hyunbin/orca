@@ -1,10 +1,15 @@
+import { shouldDropRendererPtyData } from './pty-hidden-delivery-gate'
 import { describe, expect, it, vi } from 'vitest'
 import { spawnMock } from './pty-ipc-mock-registry'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 import { redactPtyIdForDiagnostics } from '../../shared/pty-delivery-diagnostics'
 import { registerPtyHandlers } from './pty/register-handlers'
 import { getPtyRendererDeliveryDebugSnapshot } from './pty/delivery/debug'
-import { openTestRendererPage } from './pty-ipc-test-pane-attachments'
+import {
+  openTestRendererPage,
+  sendTestAttachment,
+  getTestPageTransport
+} from './pty-ipc-test-pane-attachments'
 
 vi.mock('electron', () => import('./pty-ipc-mock-registry').then((m) => m.electronModuleMock()))
 vi.mock('fs', () => import('./pty-ipc-mock-registry').then((m) => m.fsModuleMock()))
@@ -91,24 +96,50 @@ describe('registerPtyHandlers', () => {
 
       daemon.setPtyBackgrounded.mockClear()
       handlers.clear()
-      let rawSubscriberPresent = false
       const nextRuntime = {
         setPtyController: vi.fn(),
-        hasRawTerminalViewSubscriber: vi.fn(() => rawSubscriberPresent),
-        onRemoteTerminalViewPresenceChanged: null as ((id: string) => void) | null,
-        registerRawTerminalViewSubscriber(id: string): void {
-          rawSubscriberPresent = true
-          this.onRemoteTerminalViewPresenceChanged?.(id)
-        }
+        hasRawTerminalViewSubscriber: vi.fn(() => false)
       }
       registerPtyHandlers(mainWindow as never, nextRuntime as never)
+      openTestRendererPage(mainWindowIpcEvent, 'known-id-page')
 
-      nextRuntime.registerRawTerminalViewSubscriber(result.id)
-      // Repeated presence signals must remain deduplicated.
-      nextRuntime.onRemoteTerminalViewPresenceChanged?.(result.id)
+      getPtySetRendererPtyVisibleListener()(null, { id: result.id, visible: true })
+      // The first known-id report must establish pacing, and repeated reports deduplicate.
+      getPtySetRendererPtyVisibleListener()(null, { id: result.id, visible: true })
 
       expect(daemon.setPtyBackgrounded).toHaveBeenCalledOnce()
       expect(daemon.setPtyBackgrounded).toHaveBeenCalledWith(result.id, false)
+    })
+    it('keeps successor interest across predecessor close and unclaimed late setup', () => {
+      registerPtyHandlers(mainWindow as never)
+      const predecessor = getTestPageTransport()
+      sendTestAttachment(mainWindowIpcEvent, 'pty:setPtyDeliveryInterest', {
+        id: 'shared',
+        interested: true
+      })
+      sendTestAttachment(mainWindowIpcEvent, 'pty:openRendererPage', { correlation: 'successor' })
+      const successor = getTestPageTransport()
+      sendTestAttachment(mainWindowIpcEvent, 'pty:setPtyDeliveryInterest', {
+        id: 'shared',
+        interested: true
+      })
+      // A late setup request grants no attachment and cannot supersede the active owner's token.
+      sendTestAttachment(mainWindowIpcEvent, 'pty:openRendererPage', {
+        correlation: 'late-old-request'
+      })
+      predecessor.port?.close()
+      expect(shouldDropRendererPtyData('shared', {})).toBe(false)
+      sendTestAttachment(mainWindowIpcEvent, 'pty:setPtyDeliveryInterest', {
+        page: predecessor.page,
+        id: 'shared',
+        interested: false
+      })
+      expect(shouldDropRendererPtyData('shared', {})).toBe(false)
+      // A different owner's close must not clear the successor's interest.
+      getTestPageTransport().port?.close()
+      expect(shouldDropRendererPtyData('shared', {})).toBe(false)
+      successor.port?.close()
+      expect(shouldDropRendererPtyData('shared', {})).toBe(true)
     })
     it('drops hidden PTY data after model ingestion and emits one out-of-band restore marker', async () => {
       vi.useFakeTimers()

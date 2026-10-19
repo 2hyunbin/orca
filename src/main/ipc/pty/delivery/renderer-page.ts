@@ -1,23 +1,25 @@
-import type { IpcMainEvent, IpcMainInvokeEvent } from 'electron'
+import { randomUUID } from 'node:crypto'
+import {
+  MessageChannelMain,
+  type IpcMainEvent,
+  type IpcMainInvokeEvent,
+  type MessagePortMain
+} from 'electron'
 import { isMainWindowPtyIpcEvent } from '../ipc/write-input'
 import type { PtyRendererDelivery } from '../session'
 
-/**
- * The one lifetime fence for renderer attachments: each page load mints an id in
- * its preload and opens it before any claim. Only the open switches pages, only
- * from the window's live main frame; a commit, crash or destroy retires the page.
- * In memory only, never persisted or sent to a host.
- */
-let current: string | null = null
-let navigatingFrom: string | null = null
-// Why null-init + wrapper fn: see debug.ts — rolldown const-folds `export let fn = noop` bridges (STA-5661).
+// Each retained endpoint owns exactly its document's connections, independently of navigation.
+const pages = new Map<
+  string,
+  { port: MessagePortMain; contents: PtyRendererDelivery['webContents'] }
+>()
+// Why null-init + wrapper fn: see debug.ts — rolldown const-folds mutable noop bridges.
 let retireImpl: ((page: string) => void) | null = null
 
 export function setRendererPageRetireHandler(fn: ((page: string) => void) | null): void {
   retireImpl = fn
 }
 
-/** A detached or vanished frame is a page that already navigated away. */
 function isLiveMainFrameSender(
   event: IpcMainEvent | IpcMainInvokeEvent,
   mainWindow: PtyRendererDelivery | undefined
@@ -29,52 +31,60 @@ function isLiveMainFrameSender(
   return Boolean(frame) && !frame?.detached && frame?.parent === null
 }
 
+function retireRendererPage(page: string): void {
+  const owner = pages.get(page)
+  if (!owner) return
+  pages.delete(page)
+  owner.port.close()
+  retireImpl?.(page)
+}
+
 export function openRendererPage(
   event: IpcMainEvent,
   mainWindow: PtyRendererDelivery | undefined,
-  page: unknown
+  correlation: unknown
 ): void {
-  if (typeof page !== 'string' || !page || !isLiveMainFrameSender(event, mainWindow)) {
+  if (
+    typeof correlation !== 'string' ||
+    !correlation ||
+    !isLiveMainFrameSender(event, mainWindow)
+  ) {
     return
   }
-  if (current !== page) {
-    retireCurrentRendererPage()
-    current = page
+  const frame = event.senderFrame
+  if (!frame) return
+  const { port1, port2 } = new MessageChannelMain()
+  const page = randomUUID()
+  pages.set(page, { port: port1, contents: event.sender })
+  port1.on('close', () => retireRendererPage(page))
+  port1.start()
+  try {
+    frame.postMessage('pty:rendererPageTransport', { correlation, page }, [port2])
+  } catch {
+    port2.close()
+    retireRendererPage(page)
   }
 }
 
-/** Claims act only for the open page; an unknown id never becomes current here. */
+/** Unknown or closed tokens cannot admit connections, even from the same frame. */
 export function isAdmittedRendererPage(
   event: IpcMainEvent | IpcMainInvokeEvent,
   mainWindow: PtyRendererDelivery | undefined,
   page: unknown
 ): page is string {
-  return typeof page === 'string' && page === current && isLiveMainFrameSender(event, mainWindow)
+  return (
+    typeof page === 'string' &&
+    pages.get(page)?.contents === event.sender &&
+    isLiveMainFrameSender(event, mainWindow)
+  )
 }
 
-/** Until commit the old page is still live, and a cancelled navigation keeps it. */
-export function noteRendererNavigationStart(): void {
-  navigatingFrom = current
-}
-
-export function noteRendererNavigationCommit(): void {
-  if (current !== null && current === navigatingFrom) {
-    retireCurrentRendererPage()
+export function retireRendererPages(contents: PtyRendererDelivery['webContents']): void {
+  for (const [page, owner] of pages) {
+    if (owner.contents === contents) retireRendererPage(page)
   }
-  navigatingFrom = null
-}
-
-export function retireCurrentRendererPage(): void {
-  const page = current
-  navigatingFrom = null
-  if (page === null) {
-    return
-  }
-  current = null
-  retireImpl?.(page)
 }
 
 export function _resetRendererPageForTest(): void {
-  current = null
-  navigatingFrom = null
+  for (const page of pages.keys()) retireRendererPage(page)
 }

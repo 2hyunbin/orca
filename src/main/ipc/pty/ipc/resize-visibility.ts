@@ -237,7 +237,7 @@ export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
       // Why: any delivery interest suppresses the hidden-delivery gate (raw-byte consumers keep receiving while hidden); not synced to the daemon pacer so interest churn can't un-pace a flood.
       const settings = session.getSettings?.()
       const wasDroppable = shouldDropRendererPtyData(args.id, settings)
-      setRendererPtyDeliveryInterest(args.id, args.interested === true)
+      setRendererPtyDeliveryInterest(args.id, args.interested === true, args.page)
       if (wasDroppable !== shouldDropRendererPtyData(args.id, settings)) {
         invalidatePendingPtyDrainPolicy(args.id)
       }

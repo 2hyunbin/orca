@@ -211,7 +211,7 @@ describe('reply ownership matrix', () => {
   it('never answers while renderer delivery interest holds the chunk delivered', async () => {
     const { runtime, replies } = createResponderRuntime()
     setTerminalViewAttributes(viewAttributes())
-    setRendererPtyDeliveryInterest('pty-i', true)
+    setRendererPtyDeliveryInterest('pty-i', true, 'test-page')
 
     runtime.onPtyData('pty-i', QUERY_BATCH, Date.now())
     await settle(runtime, 'pty-i')

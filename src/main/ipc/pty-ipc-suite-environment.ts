@@ -56,7 +56,7 @@ import { _resetHiddenRendererPtyDeliveryGateForTest } from './pty-hidden-deliver
 import { _resetRendererPageForTest } from './pty/delivery/renderer-page'
 import {
   resetTestPaneAttachments,
-  TEST_RENDERER_PAGE,
+  createTestRendererFrame,
   withTestPaneAttachment
 } from './pty-ipc-test-pane-attachments'
 import { __resetShellStartupEnvCache } from '../pty/shell-startup-env'
@@ -88,7 +88,7 @@ export type PtyIpcSuiteEnvironment = {
   mainWindow: PtyIpcTestMainWindow
   mainWindowIpcEvent: {
     sender: PtyIpcTestWebContents
-    senderFrame: { parent: null; detached: boolean }
+    senderFrame: ReturnType<typeof createTestRendererFrame>
   }
   foreignWindowIpcEvent: { sender: PtyIpcTestWebContents }
 }
@@ -112,7 +112,7 @@ export function createPtyIpcSuiteEnvironment(): PtyIpcSuiteEnvironment {
   // Why senderFrame: page admission accepts only the window's live main frame.
   const mainWindowIpcEvent = {
     sender: mainWindow.webContents,
-    senderFrame: { parent: null, detached: false }
+    senderFrame: createTestRendererFrame(mainWindow.webContents)
   }
   const foreignWindowIpcEvent = {
     sender: {
@@ -220,7 +220,7 @@ export function createPtyIpcSuiteEnvironment(): PtyIpcSuiteEnvironment {
     // Why: production gates PTY sends on pty:rendererDispatcherReady; model a live page by firing the handshake as soon as it registers.
     onMock.mockImplementation((channel: string, listener: (...args: unknown[]) => void) => {
       if (channel === 'pty:openRendererPage') {
-        listener(mainWindowIpcEvent, { page: TEST_RENDERER_PAGE })
+        listener(mainWindowIpcEvent, { correlation: 'initial-document' })
       }
       if (channel === 'pty:rendererDispatcherReady') {
         listener(mainWindowIpcEvent)

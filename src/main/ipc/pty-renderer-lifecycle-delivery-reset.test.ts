@@ -1,7 +1,8 @@
+import { shouldDropRendererPtyData } from './pty-hidden-delivery-gate'
 import { describe, expect, it, vi } from 'vitest'
 import { spawnMock } from './pty-ipc-mock-registry'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
-import { openTestRendererPage } from './pty-ipc-test-pane-attachments'
+import { openTestRendererPage, closeTestRendererPage } from './pty-ipc-test-pane-attachments'
 import { registerPtyHandlers } from './pty/register-handlers'
 import { getPtyRendererDeliveryDebugSnapshot } from './pty/delivery/debug'
 
@@ -60,8 +61,7 @@ describe('registerPtyHandlers', () => {
     getPtySetRendererPtyVisibleListener,
     getPtyRendererDispatcherReadyListener,
     getMainWindowWebContentsListener,
-    getMainFrameNavigationListener,
-    getMainFrameNavigationCommitListener
+    getMainFrameNavigationListener
   } = setupPtyIpcSuite()
 
   it('batches PTY output when it is not responding to recent input', async () => {
@@ -145,8 +145,12 @@ describe('registerPtyHandlers', () => {
       const setRendererPtyVisible = getPtySetRendererPtyVisibleListener()
       setRendererPtyVisible(null, { id: spawnResult.id, visible: true })
       getMainFrameNavigationListener()()
-      // The commit, not the start, ends the old page: a cancelled navigation keeps it.
-      getMainFrameNavigationCommitListener()()
+      expect(shouldDropRendererPtyData(spawnResult.id, {})).toBe(false)
+      // A connection first opened during navigation dies with that endpoint too.
+      getPtySetRendererPtyVisibleListener()(null, { id: 'late-known-id', visible: true })
+      // The document endpoint ends independently of successful or error navigation events.
+      closeTestRendererPage()
+      expect(shouldDropRendererPtyData('late-known-id', {})).toBe(true)
       // Reloaded page's dispatcher re-registers, releasing held sends (§1b).
       getPtyRendererDispatcherReadyListener()()
       mainWindow.webContents.send.mockClear()

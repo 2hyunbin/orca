@@ -1,13 +1,13 @@
 import { getPtyIpc } from '../../pty-host-bindings'
 import { redactPtyIdForDiagnostics } from '../../../../shared/pty-delivery-diagnostics'
 import {
-  clearRendererPtyDeliveryInterest,
+  deleteRendererPtyDeliveryInterestForPage,
   getRendererDeliveryGatePtyIds,
   rearmHiddenRendererPtyRestore,
   recordHiddenRendererPtyDataDrop,
   shouldDropRendererPtyData
 } from '../../pty-hidden-delivery-gate'
-import { closeStartupQueryAuthorityForPty } from '../provider/registry'
+import { closeStartupQueryAuthorityForPty, tryGetProviderForPty } from '../provider/registry'
 import {
   hasLocalVisibleRendererView,
   invalidatePendingPtyDrainPolicy
@@ -72,11 +72,8 @@ export function changeRendererPtyClaims(
       }
       invalidatePendingPtyDrainPolicy(id)
     }
-    // Why has(): a fresh id takes its first pacing state at registration, once it routes.
-    if (
-      next.visibleView !== previous.visibleView &&
-      session.backgroundedDeliverySyncByPty.has(id)
-    ) {
+    // A surviving known-id attach needs pacing even before this session has cached a hint.
+    if (next.visibleView !== previous.visibleView && tryGetProviderForPty(id)?.hasPty?.(id)) {
       session.syncPtyBackgroundedDelivery(id, 'attachment')
     }
   }
@@ -87,7 +84,7 @@ export function retireRendererPageClaims(session: PtyIpcSession, page: string): 
   mainDeliveryBreadcrumbs.record('renderer-page-retired')
   const ids = new Set([...getRendererDeliveryGatePtyIds(), ...getRendererAttachmentPtyIds()])
   changeRendererPtyClaims(session, [...ids], () => {
-    clearRendererPtyDeliveryInterest()
+    deleteRendererPtyDeliveryInterestForPage(page)
     deleteRendererAttachmentsForPage(page)
   })
   session.resyncBackgroundedDeliveriesAfterGateReset()
@@ -141,8 +138,8 @@ export function installRendererAttachmentIpc(session: PtyIpcSession): void {
   const ipcMain = getPtyIpc()
   const { mainWindow } = session
   ipcMain.removeAllListeners('pty:openRendererPage')
-  ipcMain.on('pty:openRendererPage', (event, args: { page?: unknown }) => {
-    openRendererPage(event, mainWindow, args?.page)
+  ipcMain.on('pty:openRendererPage', (event, args: { correlation?: unknown }) => {
+    openRendererPage(event, mainWindow, args?.correlation)
   })
 
   ipcMain.removeAllListeners('pty:openRendererAttachment')

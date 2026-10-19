@@ -47,9 +47,9 @@ describe('pty hidden delivery gate', () => {
     updateRendererAttachment(PAGE, 'a', { consuming: false })
     expect(shouldDropRendererPtyData(PTY_ID, {})).toBe(true)
 
-    setRendererPtyDeliveryInterest(PTY_ID, true)
+    setRendererPtyDeliveryInterest(PTY_ID, true, 'test-page')
     expect(shouldDropRendererPtyData(PTY_ID, {})).toBe(false)
-    setRendererPtyDeliveryInterest(PTY_ID, false)
+    setRendererPtyDeliveryInterest(PTY_ID, false, 'test-page')
     expect(shouldDropRendererPtyData(PTY_ID, {})).toBe(true)
   })
 
@@ -113,7 +113,7 @@ describe('pty hidden delivery gate', () => {
   })
 
   it('clears all per-PTY state on teardown and tracks debug counters', () => {
-    setRendererPtyDeliveryInterest('pty-2', true)
+    setRendererPtyDeliveryInterest('pty-2', true, 'test-page')
     recordHiddenRendererPtyDataDrop(PTY_ID, 7)
     recordHiddenRendererPtyDataDrop(PTY_ID, 5)
 

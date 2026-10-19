@@ -1,3 +1,4 @@
+import { TestRendererMessageChannel } from './pty-ipc-test-page-port'
 import { vi } from 'vitest'
 import type { Mock } from 'vitest'
 import type * as Wsl from '../wsl'
@@ -49,6 +50,7 @@ export const ensureCodexBackfillRecoveryMock: Mock<() => Promise<void>> = vi.fn(
 )
 
 export type ElectronModuleMock = {
+  MessageChannelMain: typeof TestRendererMessageChannel
   BrowserWindow: undefined
   app: { isPackaged: boolean; getPath: Mock; getVersion: () => string }
   powerMonitor: { on: Mock }
@@ -57,6 +59,7 @@ export type ElectronModuleMock = {
 }
 
 export const electronModuleMock = (): ElectronModuleMock => ({
+  MessageChannelMain: TestRendererMessageChannel,
   // Why defined-but-undefined: the real OrcaRuntimeService guards BrowserWindow with `?.`; vitest throws on reading exports the mock omits.
   BrowserWindow: undefined,
   app: {

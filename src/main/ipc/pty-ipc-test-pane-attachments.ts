@@ -1,3 +1,4 @@
+import type { TestRendererPort } from './pty-ipc-test-page-port'
 import { onMock } from './pty-ipc-mock-registry'
 
 /** Models the renderer preload for pane connects: one open page and one connection record per pane PTY. */
@@ -8,8 +9,12 @@ type Listener = (event: unknown, args: unknown) => unknown
 const keyByPty = new Map<string, string>()
 let nextKey = 1
 let page = TEST_RENDERER_PAGE
+let port: TestRendererPort | null = null
+let pageContents: unknown = null
 
 export function resetTestPaneAttachments(): void {
+  port = null
+  pageContents = null
   keyByPty.clear()
   nextKey = 1
   page = TEST_RENDERER_PAGE
@@ -87,10 +92,29 @@ export function reportTestPaneAttachment(
   })
 }
 
+export function createTestRendererFrame(contents: unknown) {
+  return {
+    parent: null,
+    detached: false,
+    postMessage: (_channel: string, reply: { page: string }, ports: TestRendererPort[]) => {
+      pageContents = contents
+      page = reply.page
+      port = ports[0] ?? null
+    }
+  }
+}
+
+export function closeTestRendererPage(): void {
+  port?.close()
+  port = null
+}
+
 /** Opens the test page from `webContents`' live main frame; returns that frame's IPC event. */
 export function openTestWindowPage(webContents: unknown): unknown {
-  const event = { sender: webContents, senderFrame: { parent: null, detached: false } }
-  listenerFor('pty:openRendererPage')(event, { page })
+  const event = { sender: webContents, senderFrame: createTestRendererFrame(webContents) }
+  if (!port || pageContents !== webContents) {
+    listenerFor('pty:openRendererPage')(event, { correlation: 'test-open' })
+  }
   return event
 }
 
@@ -103,10 +127,14 @@ export function attachTestPaneView(webContents: unknown, ptyId: string): void {
 /** A new page load opens its own page; the old page's records are retired with it. */
 export function openTestRendererPage(mainWindowIpcEvent: unknown, nextPage: string): void {
   keyByPty.clear()
-  page = nextPage
-  listenerFor('pty:openRendererPage')(mainWindowIpcEvent, { page })
+  closeTestRendererPage()
+  listenerFor('pty:openRendererPage')(mainWindowIpcEvent, { correlation: nextPage })
 }
 
 export function getTestRendererPage(): string {
   return page
+}
+
+export function getTestPageTransport() {
+  return { page, port }
 }
