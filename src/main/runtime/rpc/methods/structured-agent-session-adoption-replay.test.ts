@@ -1,3 +1,5 @@
+import type { AgentProcessVerdict } from '../../../../shared/agent-process-presence'
+import { AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY } from '../../../../shared/agent-session-create-capabilities'
 import '../unused-default-rpc-methods.test-fixture'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -12,6 +14,7 @@ import { StructuredAgentSessionHost } from '../../../native-chat/agent-session-w
 import { setStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
 import { OrcaRuntimeService } from '../../orca-runtime'
 import type { RpcRequest, RpcResponse } from '../core'
+import type { RpcDispatchStreamingOptions } from '../dispatcher-stream-options'
 import { RpcDispatcher } from '../dispatcher'
 import { STRUCTURED_AGENT_SESSION_METHODS } from './structured-agent-session'
 import { openTestJournalHostDatabase } from '../../../native-chat/agent-session-journal/journal-host-database-test-support'
@@ -22,6 +25,8 @@ import { claudeAndCodexAgents } from '../../../native-chat/agent-session-wire/st
 const SESSION = 'session-adoption-replay'
 const THREAD = 'thread-adoption-replay'
 const WORKSPACE = 'workspace-1'
+const SOURCE_LEAF = '11111111-1111-4111-8111-111111111111'
+const SOURCE_PANE = `tab-source:${SOURCE_LEAF}`
 const OPERATION = `${Date.now()}-00000000000000000000000000000001`
 const CLIENT = {
   clientId: 'device-a',
@@ -31,6 +36,14 @@ const CLIENT = {
 
 let root: string
 let host: StructuredAgentSessionHost
+
+// The source terminal is a shell with nothing left running in it.
+vi.mock('../../../../shared/process-table-snapshot-reader', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  getFreshShellForegroundSnapshot: async () => [
+    { pid: 10, ppid: 1, stat: 'Ss+', command: '/bin/zsh' }
+  ]
+}))
 
 function adapter(): StructuredAgentSessionAdapter {
   return {
@@ -66,7 +79,7 @@ function createParams(operationId = OPERATION, sessionId = SESSION) {
     agent: 'codex' as const,
     resumeFrom: {
       providerSessionId: THREAD,
-      cliSource: { workspaceId: WORKSPACE, paneKey: 'source-pane' }
+      cliSource: { workspaceId: WORKSPACE, paneKey: SOURCE_PANE }
     }
   }
   return {
@@ -84,7 +97,12 @@ function createParams(operationId = OPERATION, sessionId = SESSION) {
   }
 }
 
-async function call(dispatcher: RpcDispatcher, params: unknown, client = CLIENT, unary = false) {
+async function call(
+  dispatcher: RpcDispatcher,
+  params: unknown,
+  client: RpcDispatchStreamingOptions = CLIENT,
+  unary = false
+) {
   const replies: RpcResponse[] = []
   const request: RpcRequest = {
     id: `request-${replies.length + 1}`,
@@ -148,6 +166,7 @@ describe('committed adopting create RPC replay', () => {
 
     let selectedHome = originalHome
     const selectAccountHome = vi.fn(() => selectedHome)
+    let writerVerdict: AgentProcessVerdict = 'live'
     const runtime = new OrcaRuntimeService(
       {
         getSettings: () => ({
@@ -155,10 +174,17 @@ describe('committed adopting create RPC replay', () => {
         })
       } as never,
       undefined,
-      { prepareCodexStructuredLaunch: selectAccountHome }
+      {
+        prepareCodexStructuredLaunch: selectAccountHome,
+        readHookCliWriterObservation: () => ({
+          current: () => true,
+          topology: 'pane-owned',
+          presence: async () => writerVerdict
+        })
+      }
     )
     const sourceRow = {
-      paneKey: 'source-pane',
+      paneKey: SOURCE_PANE,
       worktreeId: WORKSPACE,
       agentType: 'codex',
       connectionId: null,
@@ -169,6 +195,15 @@ describe('committed adopting create RPC replay', () => {
       providerSession: { key: 'session_id' as const, id: THREAD, transcriptPath }
     }
     let rows: AgentStatusIpcPayload[] = [sourceRow]
+    runtime.registerPty('source-pty', WORKSPACE, null, {
+      tabId: 'tab-source',
+      leafId: SOURCE_LEAF,
+      incarnationId: 'i1'
+    })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the source census reads only listProcesses.
+    runtime.setPtyController({
+      listProcesses: async () => [{ id: 'source-pty', rootProcessId: 10, incarnationId: 'i1' }]
+    } as never)
     const sourceRows = vi
       .spyOn(runtime, 'getAgentProviderSessionRows')
       .mockImplementation(() => rows)
@@ -222,6 +257,48 @@ describe('committed adopting create RPC replay', () => {
       runtime,
       methods: STRUCTURED_AGENT_SESSION_METHODS
     })
+    const historyFields = {
+      worktree: `id:${WORKSPACE}`,
+      agent: 'codex' as const,
+      resumeFrom: { providerSessionId: THREAD }
+    }
+    const historyParams = {
+      ...historyFields,
+      envelope: {
+        ...createParams().envelope,
+        payloadFingerprint: computeAgentSessionPayloadFingerprint({
+          method: 'agentSession.create',
+          sessionId: SESSION,
+          fields: historyFields
+        })
+      }
+    }
+    for (const capabilities of [
+      CLIENT.clientCapabilities,
+      [...CLIENT.clientCapabilities, AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY]
+    ]) {
+      expect(
+        await call(
+          dispatcher,
+          historyParams,
+          { ...CLIENT, clientCapabilities: capabilities },
+          unary
+        )
+      ).toMatchObject({
+        ok: true,
+        result: {
+          ok: false,
+          refusal: {
+            code: 'agent_session_conflict',
+            details: { reason: 'conversationHeldElsewhere' },
+            createAttemptRefusedBeforeCommit: true
+          }
+        }
+      })
+      expect(store.getRecord(SESSION)).toBeFalsy()
+      expect(sessionAdapter.acquire).not.toHaveBeenCalled()
+    }
+    writerVerdict = 'exited'
     const params = createParams()
 
     rows = unary
@@ -298,27 +375,26 @@ describe('committed adopting create RPC replay', () => {
     expect(sessionAdapter.acquire).toHaveBeenCalledTimes(1)
     expect(internal.publishStructuredAgentSessionTab).toHaveBeenCalledTimes(2)
     expect(selectAccountHome).toHaveBeenCalledTimes(1)
-    expect(await call(dispatcher, createParams(OPERATION, 'another-chat'))).toMatchObject({
+    // The switched-out terminal is checked before the owner is named; an unavailable scan refuses.
+    const another = await call(dispatcher, createParams(OPERATION, 'another-chat'))
+    expect(another).toMatchObject({
       ok: true,
-      result: {
-        ok: false,
-        refusal: {
-          details: {
-            reason: 'conversationHeldElsewhere',
-            owner: { sessionId: SESSION, workspaceId: WORKSPACE }
-          }
-        }
-      }
+      result: { ok: false, refusal: { details: { reason: 'conversationHeldElsewhere' } } }
     })
+    expect(JSON.stringify(another).includes(`"owner"`)).toBe(unary)
 
+    // Only an exact committed replay bypasses an unavailable writer scan.
+    const freshRefusal = unary
+      ? { code: 'agent_session_identity_required' }
+      : { code: 'agent_session_conflict', details: { reason: 'conversationHeldElsewhere' } }
     const otherOperation = createParams(`${Date.now()}-00000000000000000000000000000002`)
     expect(await call(dispatcher, otherOperation)).toMatchObject({
       ok: true,
-      result: { ok: false, refusal: { code: 'agent_session_identity_required' } }
+      result: { ok: false, refusal: freshRefusal }
     })
     expect(await call(dispatcher, params, { ...CLIENT, clientId: 'device-b' })).toMatchObject({
       ok: true,
-      result: { ok: false, refusal: { code: 'agent_session_identity_required' } }
+      result: { ok: false, refusal: freshRefusal }
     })
     expect(sessionAdapter.acquire).toHaveBeenCalledTimes(1)
     expect(internal.publishStructuredAgentSessionTab).toHaveBeenCalledTimes(2)

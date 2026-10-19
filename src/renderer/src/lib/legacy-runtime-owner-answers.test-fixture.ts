@@ -1,6 +1,6 @@
 /**
- * The deprecated `resolveRuntimeOwnerForWorktree` over the alias matrix; must not move.
- * Captured by running main @ 37c314bcc960 over the whole matrix.
+ * What the deleted `resolveRuntimeOwnerForWorktree` answered over the owner matrix (main @
+ * 37c314bcc960), so its replacements can list every deliberate difference.
  */
 export const LEGACY_RUNTIME_OWNER_GOLDEN: Readonly<Record<string, string | null>> = {
   'focused | null': null,
