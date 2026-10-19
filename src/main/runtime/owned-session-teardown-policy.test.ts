@@ -196,8 +196,9 @@ const TEARDOWN_FUNCTIONS: Readonly<Record<string, readonly OwnedSessionKind[]>> 
   stopTerminalsForProject: ['pty', 'structured-chat', 'host-browser', 'launch']
 }
 
+// Functions, `const` arrows and class members; a call or import matching it is harmless.
 const TEARDOWN_NAME =
-  /(?:export (?:async )?function |^\s+(?:(?:async|private|protected|override|static|abstract) )*)((?:stop|close|teardown|kill|sleep|retire|forget)\w*For(?:Worktree|Project)s?)\b/gm
+  /(?:^(?:export )?(?:async )?function |^(?:export )?(?:const|let) |^\s+(?:(?:async|private|protected|public|override|static|abstract|readonly) )*)((?:stop|close|teardown|kill|sleep|retire|forget)\w*For(?:Worktree|Project)s?)\b/gm
 
 function declaredTeardownFunctions(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

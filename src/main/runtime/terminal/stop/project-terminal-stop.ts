@@ -175,34 +175,40 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
     }
     // Why all at once: one deadline covers the project, so a slow worktree must not spend the
     // budget its siblings' stops need; each still holds only its own worktree's lock.
-    const stops = await Promise.allSettled(
-      [...projectWorktreeIds].map(async (id) => {
-        const opts = {
-          resolvedWorktreeId: id,
-          ...fence,
-          ...options,
-          requestStopsPastDeadline: true
-        }
-        // Why exclusive: it waits out a spawn that holds the shared lease, so its PTY is registered
-        // and stopped. Bounded by the deadline so repo.rm still answers; past it PTYs are only asked.
-        // A timed-out waiter is dequeued by the lock, so it cannot hold later spawns back.
-        const release = await this.acquireWorktreeTerminalMutation(
-          id,
-          'exclusive',
+    const stopWorktree = async (id: string): Promise<number> => {
+      const opts = { resolvedWorktreeId: id, ...fence, ...options, requestStopsPastDeadline: true }
+      // Why exclusive: it waits out a spawn that holds the shared lease, so its PTY is registered
+      // and stopped. Bounded by the deadline so repo.rm still answers; past it PTYs are only asked.
+      // A timed-out waiter is dequeued by the lock, so it cannot hold later spawns back.
+      const release = await this.acquireWorktreeTerminalMutation(
+        id,
+        'exclusive',
+        options.deadline
+      ).catch(() => null)
+      try {
+        // Why raced: a provider's own exit wait can outlast the budget that keeps repo.rm answering.
+        const result = await raceDeadline(
+          this.stopTerminalsForWorktree(`id:${id}`, opts),
           options.deadline
-        ).catch(() => null)
-        try {
-          // Why raced: a provider's own exit wait can outlast the budget that keeps repo.rm answering.
-          const result = await raceDeadline(
-            this.stopTerminalsForWorktree(`id:${id}`, opts),
-            options.deadline
-          )
-          return result?.stopped ?? 0
-        } finally {
-          release?.()
-        }
-      })
-    )
+        )
+        return result?.stopped ?? 0
+      } finally {
+        release?.()
+      }
+    }
+    // Why rounds: the inventory refresh may still add workspaces after its own budget gave up.
+    const started = new Set<string>()
+    const stops: PromiseSettledResult<number>[] = []
+    for (;;) {
+      const added = [...projectWorktreeIds].filter((id) => !started.has(id))
+      if (added.length === 0) {
+        break
+      }
+      for (const id of added) {
+        started.add(id)
+      }
+      stops.push(...(await Promise.allSettled(added.map(stopWorktree))))
+    }
     const failure = stops.find((stop) => stop.status === 'rejected')
     if (failure) {
       throw failure.reason
