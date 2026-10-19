@@ -1,4 +1,11 @@
-import { useCallback, useLayoutEffect, useRef, useState, type ComponentRef, type RefObject } from 'react'
+import {
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ComponentRef,
+  type RefObject
+} from 'react'
 import { Pressable, Text, useWindowDimensions, type View } from 'react-native'
 import { AnchoredDetailCard, type DetailCardAnchor } from '../components/AnchoredDetailCard'
 import { StatusDot } from '../components/StatusDot'
