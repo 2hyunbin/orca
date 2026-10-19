@@ -197,7 +197,8 @@ import {
   FileRename,
   FileWrite,
   FileWriteBase64,
-  FileWriteBase64Chunk
+  FileWriteBase64Chunk,
+  FileWriteIfUnchanged
 } from './files-mutation-params'
 import {
   DocPreviewFileRead,
@@ -213,7 +214,7 @@ import {
   ResolveTerminalPath,
   ServerDirectoryBrowse
 } from './files-params'
-import { FileOpen, WorktreeSelector } from './files-target-params'
+import { FileOpen, FileWatch, WorktreeSelector } from './files-target-params'
 import { TerminalArtifactFile, TerminalArtifactFileWrite } from './files-terminal-artifact-params'
 import {
   FolderWorkspaceCreate,
@@ -534,6 +535,7 @@ import {
   AcknowledgeAttentionParams,
   AgentsParams,
   AttachParams,
+  AvailabilityParams,
   CancelParams,
   ConversationCommandParams,
   CreateParams,
@@ -552,6 +554,7 @@ import {
   RewindParams,
   SendParams,
   SetOptionParams,
+  SleepWorkspaceParams,
   SubscribeParams,
   SubscribeTurnCompletionsParams,
   ThreadGoalParams,
@@ -711,7 +714,9 @@ export const RPC_PARAMS_BY_METHOD = {
   'agentSession.rewind': RewindParams,
   'agentSession.send': SendParams,
   'agentSession.setOption': SetOptionParams,
+  'agentSession.sleepWorkspace': SleepWorkspaceParams,
   'agentSession.subscribe': SubscribeParams,
+  'agentSession.subscribeAvailability': AvailabilityParams,
   'agentSession.subscribeStatus': null,
   'agentSession.subscribeTurnCompletions': SubscribeTurnCompletionsParams,
   'agentSession.threadGoal': ThreadGoalParams,
@@ -901,10 +906,11 @@ export const RPC_PARAMS_BY_METHOD = {
   'files.searchPaths': FilePathSearch,
   'files.stat': FileTreePath,
   'files.unwatch': FileUnwatch,
-  'files.watch': WorktreeSelector,
+  'files.watch': FileWatch,
   'files.write': FileWrite,
   'files.writeBase64': FileWriteBase64,
   'files.writeBase64Chunk': FileWriteBase64Chunk,
+  'files.writeIfUnchanged': FileWriteIfUnchanged,
   'files.writeTerminalArtifact': TerminalArtifactFileWrite,
   'folderWorkspace.create': FolderWorkspaceCreate,
   'folderWorkspace.delete': FolderWorkspaceSelector,

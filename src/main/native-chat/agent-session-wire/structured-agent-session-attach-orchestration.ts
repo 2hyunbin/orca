@@ -120,7 +120,8 @@ export function attachStructuredAgentSession(
           }
           await selected.flight.outcome
         }
-      })()
+      })(),
+      { sessionId, location: params.location }
     )
   if (params.envelope.expectedRuntimeFence !== null) {
     return run()

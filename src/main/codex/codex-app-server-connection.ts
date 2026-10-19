@@ -47,7 +47,7 @@ async function connectCodexAppServer(
     spawnImpl,
     site: 'codex-app-server-teardown'
   })
-  const { child, terminateTree: terminateProcessTree } = managed
+  const { child } = managed
 
   let nextRequestId = 1
   let closing = false
@@ -67,7 +67,7 @@ async function connectCodexAppServer(
     writeResponse,
     onProtocolFailure: (error) => {
       handleUnexpectedEnd(error)
-      void terminateProcessTree()
+      void managed.close()
     }
   })
 
@@ -104,7 +104,7 @@ async function connectCodexAppServer(
       return
     }
     handleUnexpectedEnd(error)
-    void terminateProcessTree()
+    void managed.close()
   })
 
   const recordReader = createProviderRecordReader({
@@ -125,7 +125,7 @@ async function connectCodexAppServer(
     },
     onFatal: (error) => {
       handleUnexpectedEnd(error)
-      void terminateProcessTree()
+      void managed.close()
     }
   })
 

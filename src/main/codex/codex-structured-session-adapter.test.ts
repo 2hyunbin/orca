@@ -23,6 +23,8 @@ import {
 } from './codex-structured-session-adapter'
 import { codexProviderHandle } from '../../shared/agent-session-provider-handle-encoding'
 import { AgentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
+import { createCodexStructuredLaunchResolver } from '../runtime/structured-agent-launch-composition.test-support'
+import { agentSessionRecordFixture } from '../native-chat/agent-session-record-test-fixture'
 
 describe('CodexStructuredSessionAdapter.acquire', () => {
   it('keeps a started thread usable when its model listing never answers', async () => {
@@ -111,6 +113,51 @@ describe('CodexStructuredSessionAdapter.acquire', () => {
       'stub model/list rejected'
     )
     expect(codex.connections[0].closeCount).toBe(0)
+  })
+
+  it('opens the thread with the chat identity every command must keep', async () => {
+    const codex = fakeCodex()
+    const record = agentSessionRecordFixture({
+      sessionId: 'session-1',
+      provider: 'codex',
+      accountHome: { variable: 'CODEX_HOME', path: '/codex/home' }
+    })
+    const adapter = adapterFor(codex, {}, [], {
+      resolveLaunch: createCodexStructuredLaunchResolver({
+        store: { getRecord: () => record, pinLaunchDirectory: vi.fn() },
+        resolveWorkspacePath: async () => '/work/repo',
+        resolveCommand: () => 'codex',
+        resolveLaunchArgs: () => []
+      })
+    })
+
+    await acquireReadyCodexForTest(adapter, {
+      identity: identityFor('session-1'),
+      fence: 7,
+      spawnToken: 'spawn-9'
+    })
+
+    expect(codex.connections[0].calls[1]).toEqual({
+      method: 'thread/start',
+      params: {
+        cwd: '/work/repo',
+        approvalPolicy: 'on-request',
+        sandbox: 'workspace-write',
+        approvalsReviewer: 'user',
+        // A user's `inherit = "core"` policy would strip these from every command the chat runs.
+        config: {
+          'shell_environment_policy.set.ORCA_AGENT_SESSION_ID': 'session-1',
+          'shell_environment_policy.set.ORCA_STRUCTURED_SESSION': '1',
+          'shell_environment_policy.set.ORCA_CLI_COMMAND': expect.stringMatching(
+            /^[^:;]*[\\/]cli[\\/]bin[\\/]orca-dev$/
+          ),
+          'shell_environment_policy.set.ORCA_USER_DATA_PATH': expect.any(String),
+          'shell_environment_policy.set.ORCA_ENVIRONMENT': '',
+          'shell_environment_policy.set.ORCA_PAIRING_CODE': '',
+          'shell_environment_policy.set.ORCA_REMOTE_PAIRING': ''
+        }
+      }
+    })
   })
 
   it('resumes the thread the durable handle chain names, not the client one', async () => {

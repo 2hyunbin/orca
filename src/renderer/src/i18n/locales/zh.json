@@ -3254,6 +3254,7 @@
             "retry": "重试",
             "retrying": "正在重试...",
             "retryUnavailable": "重试仍无法重新连接。稍后再试。",
+            "openNewTerminal": "打开新终端",
             "ownerUnknown": "Orca 无法验证该终端的所有者。",
             "42b283ecfc": "Orca 无法安全地重新连接此终端，因为主机无法验证其保存的会话。 Orca 保持保存的会话不变。单击“重试”立即尝试重新连接。如果仍然无法重新连接，请打开一个新终端。",
             "e16012e31e": "拥有该会话的终端守护程序已退出，因此该会话及其回滚无法恢复。打开新终端以继续。",
@@ -18765,6 +18766,14 @@
       "visualUnavailable": "可视化不可用",
       "visualLoading": "正在加载可视化",
       "visualOpenInNewTab": "在新标签页中打开",
+      "resumeCommand": {
+        "description": "打开智能体会话历史",
+        "argumentHint": "[搜索]",
+        "workspaceUnavailable": "此聊天的工作区尚未加载。请稍后再试一次 /resume。",
+        "replaceTitle": "替换此聊天？",
+        "replaceDescription": "在此恢复“{{title}}”将停止 {{agent}} 在此聊天中正在进行的工作。",
+        "replace": "替换"
+      },
       "claudeSignIn": {
         "signingIn": "正在登录…"
       }
@@ -19744,6 +19753,10 @@
       "openInSidebarCopy": "输入您记得的内容，或询问智能体：“找到我们修复登录超时的会话。”",
       "open": "打开",
       "enableOnAll": "在所有计算机上启用"
+    },
+    "dialog": {
+      "select": "选择",
+      "open": "打开"
     }
   },
   "aiVault": {

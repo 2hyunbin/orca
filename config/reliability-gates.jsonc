@@ -9933,7 +9933,8 @@
         "pnpm exec vitest run --config config/vitest.config.ts src/renderer/src/lib/resume-sleeping-agent-session.test.ts",
         "pnpm exec vitest run --config config/vitest.config.ts tests/e2e/completed-worker-retirement-resume.unit.test.ts --reporter=verbose",
         "pnpm exec vitest run --config config/vitest.config.ts src/renderer/src/lib/resume-sleeping-agent-session.test.ts src/main/providers/local-pty-provider-spawn-session.test.ts src/main/daemon/terminal-host.test.ts src/main/daemon/daemon-pty-adapter.test.ts src/main/ipc/pty-pane-materialization-race.test.ts src/main/ipc/pty-persisted-incarnation-repair.test.ts src/main/ipc/pty-pane-reservation-settlement.test.ts src/main/runtime/orca-runtime.test.ts src/renderer/src/lib/pane-manager/pane-fit.test.ts src/renderer/src/components/terminal-pane/pty-connection-hidden-replay.test.ts src/renderer/src/components/terminal-pane/remote-runtime-pty-transport-host-session-launch.test.ts",
-        "pnpm exec electron-vite build --mode e2e && SKIP_BUILD=1 pnpm exec playwright test tests/e2e/live-background-terminal-mount-authority.spec.ts --config tests/playwright.config.ts --project electron-headless --workers=1"
+        "pnpm exec electron-vite build --mode e2e && SKIP_BUILD=1 pnpm exec playwright test tests/e2e/live-background-terminal-mount-authority.spec.ts --config tests/playwright.config.ts --project electron-headless --workers=1",
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/structured-agent-cli-writers.test.ts src/main/runtime/rpc/methods/structured-agent-session-adoption-replay.test.ts src/main/providers/agent-foreground-process-git-bash.win32.test.ts"
       ],
       "testFiles": [
         "src/renderer/src/lib/resume-sleeping-agent-session.test.ts",
@@ -9948,9 +9949,27 @@
         "src/renderer/src/lib/pane-manager/pane-fit.test.ts",
         "src/renderer/src/components/terminal-pane/pty-connection-hidden-replay.test.ts",
         "src/renderer/src/components/terminal-pane/remote-runtime-pty-transport-host-session-launch.test.ts",
-        "tests/e2e/live-background-terminal-mount-authority.spec.ts"
+        "tests/e2e/live-background-terminal-mount-authority.spec.ts",
+        "src/main/runtime/structured-agent-cli-writers.test.ts",
+        "src/main/runtime/rpc/methods/structured-agent-session-adoption-replay.test.ts",
+        "src/main/providers/agent-foreground-process-git-bash.win32.test.ts"
       ],
       "assertionRefs": [
+        {
+          "file": "src/main/runtime/structured-agent-cli-writers.test.ts",
+          "assertions": [
+            "accepts exact exited or unchanged shell-only proof, never loss of evidence",
+            "inspects the terminal a conversation leaves, whatever its rows now say"
+          ]
+        },
+        {
+          "file": "src/main/runtime/rpc/methods/structured-agent-session-adoption-replay.test.ts",
+          "assertions": ["captures source before routing (unary=%s)"]
+        },
+        {
+          "file": "src/main/providers/agent-foreground-process-git-bash.win32.test.ts",
+          "assertions": ["sets aside a detached ssh-agent for adoption, but not a background job"]
+        },
         {
           "file": "tests/e2e/completed-worker-retirement-resume.unit.test.ts",
           "assertions": [

@@ -213,7 +213,10 @@ describe('a Codex chat acquisition with visuals', () => {
       expect(methods.indexOf('config/read')).toBeLessThan(methods.indexOf(open))
       expect(connection.calls.find((call) => call.method === open)?.params).toMatchObject({
         ...MANUAL,
-        config: { 'sandbox_workspace_write.writable_roots': ['/home/me/scratch', VISUALS.folder] }
+        config: {
+          'sandbox_workspace_write.writable_roots': ['/home/me/scratch', VISUALS.folder],
+          [`shell_environment_policy.set.${NATIVE_CHAT_SCRATCH_DIR_ENV}`]: VISUALS.folder
+        }
       })
       expect(connection.launch.env?.[NATIVE_CHAT_SCRATCH_DIR_ENV]).toBe(VISUALS.folder)
     }
@@ -227,7 +230,11 @@ describe('a Codex chat acquisition with visuals', () => {
     // The adapter sends `initialize` itself now; nothing comes between it and the thread.
     expect(methods.slice(0, 2)).toEqual(['initialize', 'thread/start'])
     expect(methods).not.toContain('skills/extraRoots/set')
-    expect(connection.calls[1]?.params).not.toHaveProperty('config')
+    // Only the chat's identity overrides: no visuals root, and no inherited folder handed on.
+    const config = connection.calls[1]?.params?.config
+    const scratchDirOverride = `shell_environment_policy.set.${NATIVE_CHAT_SCRATCH_DIR_ENV}`
+    expect(config).not.toHaveProperty(['sandbox_workspace_write.writable_roots'])
+    expect(config).not.toHaveProperty([scratchDirOverride])
     expect(connection.launch.env).not.toHaveProperty(NATIVE_CHAT_SCRATCH_DIR_ENV)
   })
 })

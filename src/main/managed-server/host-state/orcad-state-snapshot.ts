@@ -30,7 +30,9 @@ import {
   type RemoteHostPlatform
 } from '../../ssh/ssh-remote-platform'
 import type { OrcadWindowsHostStateOp } from './orcad-windows-host-state-ops'
+import { pruneOrcadSnapshotsScript } from './orcad-state-snapshot-space'
 import {
+  ORCAD_SNAPSHOT_FAILURE,
   ORCAD_SNAPSHOT_MEMBERS,
   ORCAD_STATE_MUTATION_BUSY,
   ORCAD_STATE_MUTATION_DEADLINE,
@@ -116,7 +118,8 @@ export function serializedStateMutationCommand(
     } };`,
     'beat_fence;',
     `( while sleep ${heartbeatSeconds} && kill -0 $$ 2>/dev/null; do beat_fence; done ) >/dev/null 2>&1 & beat=$!;`,
-    `trap 'kill "$beat" 2>/dev/null; rm -rf "$lock"' EXIT;`,
+    // Reap quietly: some SSH gateways merge job-termination stderr into the snapshot verdict.
+    `trap 'kill "$beat" 2>/dev/null; wait "$beat" 2>/dev/null; rm -rf "$lock"' EXIT;`,
     script
   ].join(' ')
   const run = `sh -c ${quotePosixShell(guarded)}`
@@ -154,13 +157,15 @@ export function orcadRollbackRescueDirName(fullVersion: string, takenAtMs: numbe
  * Prints `CAPTURED`, or `EMPTY` when the data root holds none of the members — a first-ever
  * deployment, where there is no state to lose and therefore no snapshot to take. `EMPTY` is
  * reported rather than fabricating an empty archive, because a rollback that "restored" an
- * empty archive would wipe a root that had filled up in between.
+ * empty archive would wipe a root that had filled up in between. A failure prints its reason
+ * and removes its partial archive, which would otherwise fill the disk a retry needs (#30491).
  */
 export function captureOrcadStateSnapshotCommand(
   host: RemoteHostPlatform,
   userDataDir: string,
   snapshotDir: string,
-  baseDir: string
+  baseDir: string,
+  prune?: { snapshotsRoot: string; keep: readonly string[] }
 ): string {
   const windows = windowsStateCommand(host, baseDir, 'snapshot-capture', [userDataDir, snapshotDir])
   if (windows) {
@@ -175,33 +180,48 @@ export function captureOrcadStateSnapshotCommand(
     // `assertPlainMemberName` is what makes leaving them bare safe.
     (member) => {
       const path = `${root}/${quotePosixShell(member)}`
+      const name = assertPlainMemberName(member)
       return (
         `if [ -e ${path} ] || [ -L ${path} ]; then ` +
-        `${noSymlinkedStateCommand(path)} || { echo FAILED; exit 0; }; ` +
-        `members="$members ${assertPlainMemberName(member)}"; fi;`
+        `links=$(find ${path} -type l -print 2>&1) && [ -z "$links" ] || ` +
+        `snapshot_fail "${name} holds a symbolic link or an entry Orca cannot read: $links"; ` +
+        `members="$members ${name}"; fi;`
       )
     }
   ).join(' ')
   return serializedStateMutationCommand(
     baseDir,
     [
+      `snapshot_fail() { printf '${ORCAD_SNAPSHOT_FAILURE} %s\\n' "$(printf %s "$1" | tr '\\n' ' ' | cut -c 1-400)"; echo FAILED; exit 0; };`,
+      prune ? pruneOrcadSnapshotsScript(prune.snapshotsRoot, prune.keep) : '',
       `members=;`,
       memberTests,
-      'if [ -z "$members" ]; then echo EMPTY; else',
       // Umask first so the snapshot dir, not just the archive, is owner-only.
-      `umask 077 && mkdir -p ${dir} &&`,
+      'if [ -z "$members" ]; then echo EMPTY; else umask 077;',
       // Why a temp name then mv: a deploy killed mid-tar must not leave a truncated archive
       // that a later rollback would happily restore.
-      `tar -C ${root} -cf ${archive}.partial $members && mv ${archive}.partial ${archive} &&`,
-      'echo CAPTURED; fi'
+      `if err=$( { mkdir -p ${dir} && tar -C ${root} -cf ${archive}.partial $members &&`,
+      `mv ${archive}.partial ${archive}; } 2>&1 ); then echo CAPTURED; else`,
+      `rm -f ${archive}.partial; rmdir ${dir} 2>/dev/null; snapshot_fail "$err"; fi; fi`
     ].join(' ')
   )
 }
 
 export type OrcadSnapshotCapture = 'captured' | 'empty' | 'failed'
 
+/**
+ * The last line that is one of `verdicts`. Why not simply the last line: a gateway that merges
+ * stderr into stdout can append shell noise after the verdict (#30491).
+ */
+function lastVerdict(output: string, verdicts: readonly string[]): string | undefined {
+  return output
+    .split('\n')
+    .map((line) => line.trim())
+    .findLast((line) => verdicts.includes(line))
+}
+
 export function parseOrcadSnapshotCapture(output: string): OrcadSnapshotCapture {
-  const value = output.trim().split('\n').pop()?.trim()
+  const value = lastVerdict(output, ['CAPTURED', 'EMPTY', 'FAILED'])
   if (value === 'CAPTURED') {
     return 'captured'
   }
@@ -225,7 +245,7 @@ export type OrcadSnapshotPresence = 'present' | 'absent' | 'unverifiable'
 
 /** A lost probe is `unverifiable`, never `absent`. */
 export function parseOrcadSnapshotPresence(output: string): OrcadSnapshotPresence {
-  const value = output.trim().split('\n').pop()?.trim()
+  const value = lastVerdict(output, ['PRESENT', 'ABSENT', 'UNKNOWN'])
   if (value === 'PRESENT') {
     return 'present'
   }
@@ -309,7 +329,7 @@ function removeMembersCommand(root: string): string {
 export type OrcadSnapshotRestore = 'restored' | 'missing' | 'failed'
 
 export function parseOrcadSnapshotRestore(output: string): OrcadSnapshotRestore {
-  const value = output.trim().split('\n').pop()?.trim()
+  const value = lastVerdict(output, ['RESTORED', 'MISSING', 'FAILED'])
   if (value === 'RESTORED') {
     return 'restored'
   }
@@ -353,41 +373,5 @@ export function compareOrcadStateSnapshotCommand(
 }
 
 export function orcadSnapshotIsUnchanged(output: string): boolean {
-  return output.trim().split('\n').pop()?.trim() === 'UNCHANGED'
-}
-
-/**
- * Has the shared store been written since `activatedAt`?
- *
- * Prints the newest mtime (epoch seconds) across the snapshot members, or `UNKNOWN`. The
- * caller compares; an `UNKNOWN` becomes `null`, which `assessOrcadRollback` treats as "yes,
- * assume writes".
- */
-export function newestStateMtimeCommand(
-  host: RemoteHostPlatform,
-  userDataDir: string,
-  baseDir: string
-): string {
-  const windows = windowsStateCommand(host, baseDir, 'state-newest-mtime', [userDataDir])
-  if (windows) {
-    return windows
-  }
-  const root = quotePosixShell(userDataDir)
-  const paths = ORCAD_SNAPSHOT_MEMBERS.map((member) => `${root}/${quotePosixShell(member)}`).join(
-    ' '
-  )
-  return [
-    `newest=$(find ${paths} -type f -exec stat -c %Y {} + 2>/dev/null ||`,
-    `find ${paths} -type f -exec stat -f %m {} + 2>/dev/null);`,
-    'if [ -z "$newest" ]; then echo UNKNOWN; else',
-    `echo "$newest" | sort -n | tail -1; fi`
-  ].join(' ')
-}
-
-export function parseNewestStateMtimeSeconds(output: string): number | null {
-  const value = output.trim().split('\n').pop()?.trim()
-  if (!value || !/^\d+$/.test(value)) {
-    return null
-  }
-  return Number.parseInt(value, 10)
+  return lastVerdict(output, ['UNCHANGED', 'CHANGED', 'UNKNOWN']) === 'UNCHANGED'
 }

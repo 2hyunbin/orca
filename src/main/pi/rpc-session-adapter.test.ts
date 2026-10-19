@@ -228,27 +228,6 @@ describe('Pi RPC session ownership and delivery', () => {
     )
   })
 
-  it('holds each send from its handover until it settles, and none whose write failed', async () => {
-    const h = await setup()
-    const send = (clientMessageId: string) =>
-      h.adapter.dispatch({
-        sessionId,
-        fence: 7,
-        clientMessageId,
-        body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: clientMessageId }] }
-      })
-    vi.spyOn(h.connection, 'send').mockRejectedValueOnce(new Error('stdin closed'))
-    await expect(send('lost')).resolves.toMatchObject({ state: 'unknown' })
-    expect(h.adapter.heldSends(sessionId)).toEqual(new Set())
-
-    await send('first')
-    expect(h.adapter.heldSends(sessionId)).toEqual(new Set(['first']))
-    h.connection.receive({ type: 'agent_start' })
-    await send('steer')
-    // The first is accepted; the steer waits behind its running turn.
-    expect(h.adapter.heldSends(sessionId)).toEqual(new Set(['steer']))
-  })
-
   it('rejects stale fences and a Stop for a different turn before sending abort', async () => {
     const h = await setup()
     await expect(

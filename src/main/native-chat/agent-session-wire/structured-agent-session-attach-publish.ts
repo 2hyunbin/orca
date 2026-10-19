@@ -84,7 +84,6 @@ export async function publishAttachedChild(
           fence,
           phase: 'starting' as const,
           heldSends: () => context.deps.adapter.heldSends?.(sessionId),
-          exitObservation: eventSink.exitObservation,
           ...(startedFor === undefined ? {} : { startedFor }),
           ...(permissionMode === undefined ? {} : { permissionMode })
         }

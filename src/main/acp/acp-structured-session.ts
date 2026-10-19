@@ -21,10 +21,8 @@ import type { AcpStructuredOptions } from './acp-structured-options'
 import type { AcpStructuredPrompts } from './acp-structured-prompts'
 import type { AcpStructuredTurns } from './acp-structured-turns'
 import type { StructuredAgentSessionProviderOpenResult } from '../native-chat/agent-session-wire/structured-agent-session-provider-open-contract'
-import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 
 export type AcpStructuredSession = {
-  events?: StructuredAgentSessionEventSink
   sessionId: string
   fence: number
   acquisitionGeneration: string
@@ -103,7 +101,6 @@ export function closeAcpSessionJournal(
   if (session.journalClosed !== null) {
     return
   }
-  session.events?.observeExit?.(session.turns.heldSends)
   session.journalClosed = reason
   session.prompts.clear()
   session.turns.end(reason, cause)
@@ -124,7 +121,6 @@ export function endAcpStructuredSession(
     return
   }
   session.ended = true
-  session.events?.observeExit?.(undefined, observedAt)
   session.exitObservedAt = observedAt
   const stderr = session.connection.stderrTail()
   // Read at the proven exit: a crash usually ends the agent's stdout before its exit is observed,

@@ -3252,6 +3252,7 @@
             "retry": "Reintentar",
             "retrying": "Reintentando…",
             "retryUnavailable": "Reintentar no pudo volver a conectarse todavía. Vuelve a intentarlo en breve.",
+            "openNewTerminal": "Abrir terminal nueva",
             "ownerUnknown": "Orca no pudo verificar el propietario de esta terminal.",
             "42b283ecfc": "Orca no pudo volver a conectar de manera segura esta terminal porque el host no pudo verificar su sesión guardada. Orca dejó la sesión guardada sin cambios. Haga clic en Reintentar para intentar volver a conectarse ahora. Si aún no puede volver a conectarse, abra una nueva terminal.",
             "e16012e31e": "El demonio de terminal propietario de esta sesión salió, por lo que no se pudo recuperar la sesión y su desplazamiento hacia atrás. Abra una nueva terminal para continuar.",
@@ -18760,6 +18761,14 @@
       "visualUnavailable": "Visualización no disponible",
       "visualLoading": "Cargando visualización",
       "visualOpenInNewTab": "Abrir en una pestaña nueva",
+      "resumeCommand": {
+        "description": "Abrir el historial de sesiones de agentes",
+        "argumentHint": "[búsqueda]",
+        "workspaceUnavailable": "El workspace de este chat aún no se ha cargado. Vuelve a probar /resume en un momento.",
+        "replaceTitle": "¿Reemplazar este chat?",
+        "replaceDescription": "Reanudar “{{title}}” aquí detendrá lo que {{agent}} está haciendo en este chat.",
+        "replace": "Reemplazar"
+      },
       "claudeSignIn": {
         "signingIn": "Iniciando sesión…"
       }
@@ -19860,6 +19869,10 @@
       "openInSidebar": "Abrir en la barra lateral",
       "openInSidebarCopy": "Escribe lo que recuerdes o pídele a un agente: «encuentra la sesión donde arreglamos el tiempo de espera de inicio de sesión».",
       "enableOnAll": "Activar en todas las computadoras"
+    },
+    "dialog": {
+      "select": "Seleccionar",
+      "open": "Abrir"
     }
   },
   "common": {

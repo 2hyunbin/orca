@@ -293,9 +293,6 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
     }
   }
 
-  heldSends = (sessionId: string): ReadonlySet<string> | undefined =>
-    this.children.sessions.get(sessionId)?.turns?.heldSends
-
   stopBackgroundTasks: NonNullable<StructuredAgentSessionAdapter['stopBackgroundTasks']> = (
     input
   ) => stopAcpChildren(this.live(input.sessionId), input.fence, input.taskIds, input.acknowledge)
@@ -307,6 +304,9 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
   closeSession = (sessionId: string): Promise<boolean> => this.children.close(sessionId)
   disposeSession = (sessionId: string): Promise<boolean> => this.children.close(sessionId)
   releaseAcquisition = (input: { sessionId: string }) => this.children.close(input.sessionId)
+  hasOwnedAcquisition = (sessionId: string): boolean =>
+    this.children.sessions.has(sessionId) ||
+    this.children.starts.failedSessionIds().includes(sessionId)
   /** After a sink failure: the exit is recovered as unexpected. */
   forceCloseSession = (sessionId: string): Promise<boolean> => this.children.stop(sessionId, false)
 

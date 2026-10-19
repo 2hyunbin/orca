@@ -15,6 +15,7 @@ import type { CodexJournalTranslator } from './codex-structured-journal-translat
 import { codexProviderHandleLink } from './codex-structured-owner-identity'
 import { openCodexThread } from './codex-structured-thread-open'
 import { withCodexVisualsThreadConfig } from './codex-structured-visuals'
+import { NATIVE_CHAT_SCRATCH_DIR_ENV } from '../native-chat/native-chat-visuals-delivery'
 import {
   restoredCodexSessionOptions,
   reportedCodexSessionOptions
@@ -85,8 +86,17 @@ export async function openCodexStructuredSession(
     openInput.signal
   )
   current()
+  const commandEnv = {
+    ...launch.commandEnv,
+    ...(launch.visuals ? { [NATIVE_CHAT_SCRATCH_DIR_ENV]: launch.visuals.folder } : {})
+  }
   const opened = await waitForPromiseWithSignal(
-    openCodexThread(connection, threadLaunch, deps.requestTimeoutMs, openInput.signal),
+    openCodexThread(
+      connection,
+      { ...threadLaunch, commandEnv },
+      deps.requestTimeoutMs,
+      openInput.signal
+    ),
     openInput.signal
   )
   current()
@@ -99,7 +109,6 @@ export async function openCodexStructuredSession(
   }
   const catalogAccess = codexAcquireCatalogAccess(deps, launch)
   const session: CodexSession = {
-    events: input.events,
     account: start.account,
     connection,
     ...codexSessionLifecycle(input.fence, generation),

@@ -2,7 +2,11 @@
 // module, so it must not pull in the host or Node-only process code.
 
 import type { AgentSessionJournalIdentity } from '../../../shared/agent-session-journal-types'
-import type { AgentSessionRecord } from '../../../shared/agent-session-record'
+import type {
+  AgentSessionRecord,
+  AgentSessionExecutionLocation,
+  AgentSessionProcessIdentity
+} from '../../../shared/agent-session-record'
 import type { AgentChildWorkEvidence } from '../../../shared/agent-status-child-work-evidence'
 import type { StructuredAgentSessionEventSink } from './structured-agent-session-event-sink'
 import type { AgentChatPermissionMode } from '../../../shared/agent-chat-permission-mode'
@@ -48,4 +52,12 @@ export class StructuredAgentSessionStartupExpiredError extends Error {
 
 export function isStructuredAgentSessionStartupExpired(reason: unknown): boolean {
   return reason instanceof Error && reason.name === 'StructuredAgentSessionStartupExpiredError'
+}
+
+export type StructuredAgentSessionAcquisitionReceipt = Pick<
+  StructuredAgentSessionStartupAttempt,
+  'attemptId' | 'fence' | 'spawnToken'
+> & {
+  location: AgentSessionExecutionLocation
+  process?: AgentSessionProcessIdentity
 }
