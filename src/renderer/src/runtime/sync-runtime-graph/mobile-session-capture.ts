@@ -73,7 +73,7 @@ function captureMountedTerminalSurface(
   const paneLeafIds = manager?.getPanes().map((pane) => pane.leafId) ?? []
   const activePane = manager?.getActivePane() ?? null
   const firstChild = registered.getContainer()?.firstElementChild
-  // Mirrors getRuntimeLeafIdsForTerminal so captured pane ids cover every resolved leaf.
+  // Mirrors getRuntimeLeafIdsForTerminal; a layout-owner pane not mounted yet has no pane id here.
   const effectiveLeafIds =
     paneLeafIds.length > 0
       ? paneLeafIds
