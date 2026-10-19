@@ -22,6 +22,7 @@ import type {
 } from '../../../shared/agent-session-wire'
 import type { AgentSessionAttachParams } from './structured-agent-session-attach'
 import { performAttach, type AttachFlowInput } from './structured-agent-session-attach-flow'
+import { savedAgentSessionCatalogModels as savedModels } from './structured-agent-session-pick-reply'
 import { endStructuredAgentSessionReleasedChild } from './structured-agent-session-attach-failure'
 import { stampFailedCreateOwnerVerdict } from './structured-agent-session-failed-create-refusal'
 import {
@@ -218,6 +219,9 @@ async function runAttachUnderAbort(
   const { startupAttempts } = context.runtimeState
   try {
     const attached = await performAttach({
+      models: priorRecord
+        ? undefined
+        : await lock.wait(savedModels(context.deps, params.provider, sessionId)),
       store: context.deps.store,
       adapter: context.deps.adapter,
       agents: context.deps.agents,
