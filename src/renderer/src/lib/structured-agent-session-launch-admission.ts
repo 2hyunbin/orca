@@ -25,7 +25,8 @@ import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { toRuntimeWorktreeSelector } from '@/runtime/runtime-worktree-selector'
 import { readStructuredChatHostPermissionVerdict } from '@/runtime/structured-chat-host-permission'
 import { notifyHostPermissionRefused } from '@/lib/structured-agent-session-launch-permission-notice'
-import { readDetectedAgentsForWorktree } from '@/lib/agent-detection-target-inventory'
+import { resolveStructuredAgentSessionOwner } from '@/runtime/structured-agent-session-owner'
+import { readAgentInventoryForWorktree } from '@/lib/agent-detection-target-inventory'
 
 /** What a host's "no" opens instead: the terminal the launch would have opened had it known. */
 export type StructuredLaunchTerminal = {
@@ -160,8 +161,14 @@ export async function openDeclinedStructuredLaunchTerminal(args: {
 
 /** A declined chat falls back to its agent's terminal only where that CLI may be installed: a chat
  *  can be offered without it, and its terminal would only fail to start. */
-function declinedAgentTerminalHasCli(agent: TuiAgent, worktreeId: string): boolean {
-  return readDetectedAgentsForWorktree(useAppStore.getState(), worktreeId)?.includes(agent) !== false
+function declinedAgentTerminalHasCli(agent: TuiAgent, worktreeId: string, host: ExecutionHostId) {
+  const state = useAppStore.getState()
+  const inventory = readAgentInventoryForWorktree(state, worktreeId)
+  return (
+    resolveStructuredAgentSessionOwner(state, worktreeId) !== host ||
+    inventory.state !== 'successful' ||
+    inventory.ids?.includes(agent) !== false
+  )
 }
 
 /**
@@ -246,7 +253,7 @@ export function beginHostAdmittedStructuredLaunch(args: {
       if (admission.kind === 'declined') {
         const noCli =
           !args.declinedOpensCallerSurface &&
-          !declinedAgentTerminalHasCli(plan.agent, args.worktreeId)
+          !declinedAgentTerminalHasCli(plan.agent, args.worktreeId, args.executionHostId)
         if (plan.resumeFrom || plan.requestedSurface === 'chat' || noCli) {
           return failBeforeSurface(
             new StructuredAgentSessionCreateRefusalError('structured_agent_session_unsupported'),

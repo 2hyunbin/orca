@@ -1,21 +1,14 @@
+import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
 // @vitest-environment happy-dom
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => {
-  const detection: { detected: string[] | null } = { detected: null }
-  return Object.assign(detection, {
-    createSupport: vi.fn(),
-    toastInfo: vi.fn(),
-    toastError: vi.fn(),
-    launchAgentInNewTab: vi.fn(),
-    hostPermission: vi.fn()
-  })
-})
-
-vi.mock('@/lib/agent-detection-target-inventory', async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  readDetectedAgentsForWorktree: () => mocks.detected
+const mocks = vi.hoisted(() => ({
+  createSupport: vi.fn(),
+  toastInfo: vi.fn(),
+  toastError: vi.fn(),
+  launchAgentInNewTab: vi.fn(),
+  hostPermission: vi.fn()
 }))
 
 vi.mock('sonner', () => ({ toast: { info: mocks.toastInfo, error: mocks.toastError } }))
@@ -80,7 +73,6 @@ function expectNoChatCommitted(): void {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mocks.detected = null
   mocks.hostPermission.mockResolvedValue({ kind: 'allowed' })
   localStorage.clear()
   useAppStore.setState({
@@ -146,38 +138,57 @@ describe('a structured chat launch on a paired server', () => {
     expectNoChatCommitted()
   })
 
-  // A chat can be offered without its CLI, so a "no" must not start a terminal for a missing one.
-  it("reports the host's refusal instead of a terminal when the agent's CLI is not installed", async () => {
-    mocks.detected = ['codex']
+  it('uses actual discovery outcome for both decline callers, preserving failed-refresh and shell fallback', async () => {
+    const worktreeId = FLOATING_TERMINAL_WORKTREE_ID
+    const plan = () => adoptAgentSessionLaunchVerdict({ ...localPlan(), worktreeId })
+    useAppStore.getState().clearLocalDetectedAgents()
+    const detect = vi.fn().mockResolvedValue([])
+    const refresh = vi.fn().mockRejectedValue(new Error('failed'))
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: { preflight: { detectAgents: detect, refreshAgents: refresh } }
+    })
+    await useAppStore.getState().ensureNativeDetectedAgents()
     mocks.createSupport.mockResolvedValue({ supported: false })
-    const result = beginDirectWorkItemStructuredLaunch({
-      plan: pairedPlan(),
-      primaryTabId: null,
-      beforeOpen: vi.fn(),
-      declinedTerminal: { launchSource: 'task_page' }
-    })
-    expect(result.completed).toBe(true)
-    await vi.waitFor(() => expect(mocks.toastError).toHaveBeenCalledOnce())
-    const openTerminal = vi.fn()
-    const newTab = launchStructuredAgentFromNewTab({
-      plan: pairedPlan(),
-      worktreeId: WORKTREE,
-      openTerminal
-    })
-    await expect(newTab?.structuredSettlement).resolves.toMatchObject({ kind: 'failed' })
+    const openTerminal = vi.fn(() => ({ opened: true }))
+    const declined = () =>
+      launchStructuredAgentFromNewTab({ plan: plan(), worktreeId, openTerminal })
+    await expect(declined()?.structuredSettlement).resolves.toMatchObject({ kind: 'failed' })
+    const direct = () =>
+      beginDirectWorkItemStructuredLaunch({
+        plan: plan(),
+        primaryTabId: null,
+        beforeOpen: vi.fn(),
+        declinedTerminal: { agentArgs: '--model opus', launchSource: 'task_page' }
+      })
+    direct()
+    await vi.waitFor(() => expect(mocks.toastError).toHaveBeenCalledTimes(2))
     expect(openTerminal).not.toHaveBeenCalled()
     expect(mocks.launchAgentInNewTab).not.toHaveBeenCalled()
-    // The caller's own fallback, an empty workspace's shell, needs no CLI.
-    const seedShell = vi.fn(() => ({ opened: true }))
-    const shell = launchStructuredAgentFromNewTab({
-      plan: pairedPlan(),
-      worktreeId: WORKTREE,
-      onHostDeclined: seedShell,
-      openTerminal
+    await useAppStore.getState().refreshDetectedAgents(worktreeId)
+    expect(useAppStore.getState().readLocalAgentInventory(worktreeId)).toEqual({
+      state: 'failed',
+      ids: []
     })
-    await expect(shell?.structuredSettlement).resolves.toEqual({ kind: 'terminal' })
+    await expect(declined()?.structuredSettlement).resolves.toEqual({ kind: 'terminal' })
+    mocks.launchAgentInNewTab.mockReturnValue({
+      surface: { kind: 'local-terminal', tabId: 'fallback' }
+    })
+    direct()
+    await vi.waitFor(() => expect(mocks.launchAgentInNewTab).toHaveBeenCalledOnce())
+    expect(mocks.launchAgentInNewTab).toHaveBeenCalledWith(
+      expect.objectContaining({ agentArgs: '--model opus', prompt: 'fix the flaky test' })
+    )
+    const seedShell = vi.fn(() => ({ opened: true }))
+    await expect(
+      launchStructuredAgentFromNewTab({
+        plan: plan(),
+        worktreeId,
+        onHostDeclined: seedShell,
+        openTerminal
+      })?.structuredSettlement
+    ).resolves.toEqual({ kind: 'terminal' })
     expect(seedShell).toHaveBeenCalledOnce()
-    expectNoChatCommitted()
   })
 
   it('opens nothing and says so once when the server cannot be reached', async () => {
