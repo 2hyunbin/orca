@@ -21,7 +21,7 @@ afterEach(() => {
 function nativeWindow() {
   const contents = Object.assign(new EventEmitter(), {
     session: {},
-    mainFrame: { url: '' },
+    mainFrame: { url: '', origin: '' },
     isDestroyed: vi.fn(() => false),
     close: vi.fn(),
     setWindowOpenHandler: vi.fn()
@@ -363,6 +363,19 @@ describe('native popup admission', () => {
     expect(window.setTitle).toHaveBeenLastCalledWith('chrome-error:')
   })
 
+  it('uses a neutral title for an opaque network document and retains a surviving origin on abort', () => {
+    const { browserWindow, contents, window } = nativeWindow()
+    contents.mainFrame.url = 'https://committed.example/'
+    contents.mainFrame.origin = 'https://committed.example'
+    prepareNativeBrowserPopup(browserWindow, 'https://requested.example/')
+    contents.emit('did-fail-load', {}, -3, 'ERR_ABORTED', 'https://failed.example/', true)
+    expect(window.setTitle).toHaveBeenLastCalledWith('https://committed.example')
+    contents.mainFrame.url = 'https://failed.example/'
+    contents.mainFrame.origin = 'null'
+    contents.emit('did-fail-load', {}, -2, 'ERR_FAILED', 'https://failed.example/', true)
+    expect(window.setTitle).toHaveBeenLastCalledWith('unknown')
+  })
+
   it('protects the title and updates only main-frame origins, including redirects', () => {
     const { browserWindow, contents, window } = nativeWindow()
     prepareNativeBrowserPopup(browserWindow, 'https://example.com/post?code=synthetic', () => true)
@@ -380,6 +393,7 @@ describe('native popup admission', () => {
       true
     )
     expect(window.setTitle).toHaveBeenCalledTimes(1)
+    contents.mainFrame.url = 'https://destination.example.net/other'
     contents.emit('did-navigate', {}, 'https://destination.example.net/other')
     expect(window.setTitle).toHaveBeenLastCalledWith('https://destination.example.net')
   })

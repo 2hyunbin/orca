@@ -203,10 +203,10 @@ export function prepareNativeBrowserPopup(
   }
   window.on('page-title-updated', (event) => event.preventDefault())
   // A blocked/uncommitted redirect must never lend its origin to the old document.
-  contents.on('did-navigate', (_event, url) => updateOrigin(url))
-  contents.on('did-navigate-in-page', (_event, url, isMainFrame) => {
+  contents.on('did-navigate', () => updateOrigin(popupCommittedDocumentUrl(contents)))
+  contents.on('did-navigate-in-page', (_event, _url, isMainFrame) => {
     if (isMainFrame) {
-      updateOrigin(url)
+      updateOrigin(popupCommittedDocumentUrl(contents))
     }
   })
   contents.on('did-fail-load', () => updateOrigin(popupCommittedDocumentUrl(contents)))

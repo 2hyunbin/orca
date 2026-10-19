@@ -210,18 +210,18 @@ export function openPopupWithOriginBar(
     `data:text/html;charset=utf-8,${encodeURIComponent(ORIGIN_BAR_HTML)}`
   )
 
-  const handleDidNavigate = (_event: Electron.Event, url: string): void => {
-    currentUrl = url
+  const handleDidNavigate = (): void => {
+    currentUrl = popupCommittedDocumentUrl(contentWebContents)
     renderOrigin()
   }
   contentWebContents.on('did-navigate', handleDidNavigate)
   const handleInPageNavigate = (
     _event: Electron.Event,
-    url: string,
+    _url: string,
     isMainFrame: boolean
   ): void => {
     if (isMainFrame) {
-      handleDidNavigate(_event, url)
+      handleDidNavigate()
     }
   }
   contentWebContents.on('did-navigate-in-page', handleInPageNavigate)

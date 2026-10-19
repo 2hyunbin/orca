@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 type Handler = (...args: unknown[]) => void
 
 type FakeWebContents = {
-  mainFrame: { url: string }
+  mainFrame: { url: string; origin: string }
   on: ReturnType<typeof vi.fn>
   once: ReturnType<typeof vi.fn>
   off: ReturnType<typeof vi.fn>
@@ -22,7 +22,7 @@ const { fakeElectron } = vi.hoisted(() => {
     const add = (event: string, handler: Handler): void => {
       handlers.set(event, [...(handlers.get(event) ?? []), handler])
     }
-    const mainFrame = { url: '' }
+    const mainFrame = { url: '', origin: '' }
     return {
       mainFrame,
       on: vi.fn(add),
@@ -408,6 +408,30 @@ describe('openPopupWithOriginBar', () => {
       true
     )
     expect(bar.webContents.executeJavaScript.mock.calls.at(-1)?.[0]).toContain('"chrome-error:"')
+  })
+
+  it('never labels an opaque committed error or sandboxed document with its network URL', () => {
+    const adopted = createFakeWebContents()
+    adopted.mainFrame.url = 'https://opaque.example/document'
+    adopted.mainFrame.origin = 'null'
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The fixture implements the presenter's WebContents surface.
+    openPopupWithOriginBar({ webContents: adopted as never }, 'https://requested.example/')
+    const { bar } = lastViews()
+    bar.webContents.emit('did-finish-load')
+    expect(bar.webContents.executeJavaScript.mock.calls.at(-1)?.[0]).toContain('"unknown"')
+    adopted.mainFrame.origin = 'https://committed.example'
+    adopted.emit('did-navigate', {}, 'https://committed.example/')
+    adopted.emit('did-fail-load', {}, -3, 'ERR_ABORTED', 'https://failed.example/', true)
+    expect(bar.webContents.executeJavaScript.mock.calls.at(-1)?.[0]).toContain(
+      '"https://committed.example"'
+    )
+    adopted.mainFrame.url = 'https://failed.example/'
+    adopted.mainFrame.origin = 'null'
+    adopted.emit('did-fail-load', {}, -2, 'ERR_FAILED', 'https://failed.example/', true)
+    expect(bar.webContents.executeJavaScript.mock.calls.at(-1)?.[0]).toContain('"unknown"')
+    expect(bar.webContents.executeJavaScript.mock.calls.at(-1)?.[0]).toContain(
+      "classList.toggle('insecure', true)"
+    )
   })
 
   it('closes the window when the popup content is destroyed, without re-closing the contents', () => {
