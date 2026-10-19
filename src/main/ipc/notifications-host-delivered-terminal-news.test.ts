@@ -34,6 +34,7 @@ function register(hostNews: { notificationId: string | null } | null) {
     terminalAgentNewsDeliveredByHost: vi.fn(() => hostNews)
   }
   registerNotificationHandlers(
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: dispatch and dismiss read only the settings.
     {
       getSettings: () => ({
         notifications: {
@@ -45,6 +46,7 @@ function register(hostNews: { notificationId: string | null } | null) {
         }
       })
     } as never,
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: dispatch and dismiss reach only these members.
     runtime as never
   )
   return runtime
