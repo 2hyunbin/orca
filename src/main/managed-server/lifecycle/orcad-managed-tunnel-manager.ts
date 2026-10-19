@@ -308,7 +308,7 @@ export class OrcadManagedTunnelManager {
     recordActiveOrcadTunnel(this.active, environment.id, forward, {
       connection,
       preferredPort: deployment.remotePort,
-      sshTargetGeneration: target.generation,
+      sshTargetGeneration: deployment.sshTargetGeneration,
       targetId: target.id,
       transportGeneration
     })

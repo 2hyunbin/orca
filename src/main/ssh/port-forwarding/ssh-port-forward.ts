@@ -11,8 +11,11 @@ import type {
 export type { PortForwardEntry }
 export type { PortForwardCloseReason }
 
-/** A start a session teardown must close as soon as it resolves. */
-type StartingPortForward = { connectionId: string; closed: boolean }
+/**
+ * A forward between states: starting (closed as soon as it resolves once `closed` is set) or
+ * closing. Either may still hold its port, so a teardown waits for `settled`.
+ */
+type ForwardInTransit = { connectionId: string; closed: boolean; settled: Promise<unknown> }
 
 type SshPortForwardManagerCallbacks = {
   onForwardClosed?: (entry: PortForwardEntry, reason: PortForwardCloseReason) => void
@@ -20,7 +23,7 @@ type SshPortForwardManagerCallbacks = {
 
 export class SshPortForwardManager {
   private forwards = new Map<string, StartedPortForward>()
-  private starting = new Map<StartingPortForward, Promise<unknown>>()
+  private inTransit = new Set<ForwardInTransit>()
   private nextId = 1
   private providers: SshPortForwardProvider[]
   private callbacks: SshPortForwardManagerCallbacks
@@ -74,7 +77,7 @@ export class SshPortForwardManager {
     }
 
     let forward: StartedPortForward | null = null
-    const starting: StartingPortForward = { connectionId, closed: false }
+    const starting: ForwardInTransit = { connectionId, closed: false, settled: Promise.resolve() }
     const settled = (async (): Promise<StartedPortForward> => {
       const started = await provider.start(conn, {
         id,
@@ -102,11 +105,12 @@ export class SshPortForwardManager {
       this.forwards.set(id, started)
       return started
     })()
-    this.starting.set(starting, settled)
+    starting.settled = settled
+    this.inTransit.add(starting)
     try {
       return (await settled).entry
     } finally {
-      this.starting.delete(starting)
+      this.inTransit.delete(starting)
     }
   }
 
@@ -181,7 +185,13 @@ export class SshPortForwardManager {
       return Promise.resolve(null)
     }
     this.forwards.delete(id)
-    return forward.close().then(() => forward.entry)
+    const closing: ForwardInTransit = {
+      connectionId: forward.entry.connectionId,
+      closed: true,
+      settled: forward.close()
+    }
+    this.inTransit.add(closing)
+    return closing.settled.finally(() => this.inTransit.delete(closing)).then(() => forward.entry)
   }
 
   listForwards(connectionId?: string): PortForwardEntry[] {
@@ -194,19 +204,8 @@ export class SshPortForwardManager {
     return entries
   }
 
-  /** Also waits out this connection's starts, closing each, so none listens after it resolves. */
   async removeAllForwards(connectionId: string): Promise<void> {
-    const toRemove = [...this.forwards.entries()]
-      .filter(([, { entry }]) => entry.connectionId === connectionId)
-      .map(([id]) => id)
-    const starts = [...this.starting].filter(([start]) => start.connectionId === connectionId)
-    for (const [start] of starts) {
-      start.closed = true
-    }
-    await Promise.all([
-      ...toRemove.map((id) => this.removeForwardAsync(id)),
-      ...starts.map(([, settled]) => settled.catch(() => undefined))
-    ])
+    await this.closeAndSettle(connectionId)
   }
 
   /** Closes this connection's forwards that tunnel through a transport `conn` replaced. */
@@ -220,7 +219,27 @@ export class SshPortForwardManager {
 
   /** Stops every forward and waits until each released its port; quit uses it. */
   async closeAll(): Promise<void> {
-    await Promise.all([...this.forwards.keys()].map((id) => this.removeForwardAsync(id)))
+    await this.closeAndSettle()
+  }
+
+  /**
+   * Closes `connectionId`'s forwards (every one when omitted) and resolves only once none of them
+   * can still hold its port: starts and closes already under way included.
+   */
+  private async closeAndSettle(connectionId?: string): Promise<void> {
+    const owned = (owner: string): boolean => connectionId === undefined || owner === connectionId
+    const toRemove = [...this.forwards.entries()]
+      .filter(([, { entry }]) => owned(entry.connectionId))
+      .map(([id]) => id)
+    const inTransit = [...this.inTransit].filter((forward) => owned(forward.connectionId))
+    for (const forward of inTransit) {
+      forward.closed = true
+    }
+    const removals = toRemove.map((id) => this.removeForwardAsync(id))
+    await Promise.all([
+      ...removals,
+      ...inTransit.map((forward) => forward.settled.catch(() => undefined))
+    ])
   }
 
   dispose(): void {

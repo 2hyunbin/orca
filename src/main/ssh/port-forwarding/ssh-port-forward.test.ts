@@ -272,6 +272,63 @@ describe('SshPortForwardManager', () => {
     expect(resolved).toBe(true)
   })
 
+  it('waits for a close already under way before a connection teardown resolves', async () => {
+    let resolveClose!: () => void
+    const forward = createFakeSystemSshForward()
+    forward.close.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveClose = resolve
+      })
+    )
+    startSystemSshPortForwardProcessMock.mockReturnValue(forward)
+    const entry = await manager.addForward(
+      'conn-1',
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the system SSH provider reads only the members createSystemSshConn stubs.
+      createSystemSshConn() as never,
+      3000,
+      '127.0.0.1',
+      8080
+    )
+    void manager.removeForwardAndWait(entry.id)
+
+    let resolved = false
+    const teardown = manager.removeAllForwards('conn-1').then(() => {
+      resolved = true
+    })
+    await Promise.resolve()
+    expect(resolved).toBe(false)
+    resolveClose()
+    await teardown
+    expect(resolved).toBe(true)
+  })
+
+  it('closes a forward still starting when its connection is torn down', async () => {
+    let finishStart!: (value: ReturnType<typeof createFakeSystemSshForward>) => void
+    const forward = createFakeSystemSshForward()
+    startSystemSshPortForwardProcessMock.mockReturnValue(
+      new Promise((resolve) => {
+        finishStart = resolve
+      })
+    )
+    const adding = manager.addForward(
+      'conn-1',
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the system SSH provider reads only the members createSystemSshConn stubs.
+      createSystemSshConn() as never,
+      3000,
+      '127.0.0.1',
+      8080
+    )
+    await vi.waitFor(() => expect(startSystemSshPortForwardProcessMock).toHaveBeenCalled())
+
+    const teardown = manager.removeAllForwards('conn-1')
+    finishStart(forward)
+    await teardown
+
+    expect(forward.close).toHaveBeenCalled()
+    await expect(adding).rejects.toThrow('closed while this port forward was starting')
+    expect(manager.listForwards('conn-1')).toHaveLength(0)
+  })
+
   it('removes an unexpectedly exited system SSH forward and calls the close callback', async () => {
     const onForwardClosed = vi.fn()
     manager.setCallbacks({ onForwardClosed })
