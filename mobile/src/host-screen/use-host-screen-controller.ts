@@ -120,9 +120,9 @@ export function useHostScreenController({
   }
   const showNewWorktree = resolvedRouteActionState.showNewWorktree
 
-  const displayWorktrees = useHostDisplayWorktrees(connState, state, hostId)
-  const feed = sidebarFeed?.feed ?? null
   const hostPlatform = useResolvedHostPlatform(state, hostId)
+  const displayWorktrees = useHostDisplayWorktrees(connState, state, hostPlatform)
+  const feed = sidebarFeed?.feed ?? null
   const sectionsResult = useHostListSections({
     client,
     feed,

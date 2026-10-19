@@ -48,14 +48,14 @@ function sectionsFor(
   })
 }
 
-function sectionsFromDomains(domains: SidebarFeedDomains, view: MobileViewState) {
+function sectionsFromDomains(domains: SidebarFeedDomains, view: MobileViewState, search = '') {
   const built = buildSidebarFeedRows(domains, catalog, phoneFeedView(view))
   return buildHostFeedSections({
     rows: built.sectionRows,
     activeRowKeys: built.activeRowKeys,
     liveRows: [],
     repoHostIdByRepoId: new Map(),
-    search: ''
+    search
   })
 }
 
@@ -203,20 +203,21 @@ describe('the phone list from the sidebar feed', () => {
     expect(first).toMatchObject({ title: '', pendingCreations: [{ repoName: 'orca' }] })
   })
 
-  it('keeps a creation through search only when its project matches', () => {
-    const domains = feedDomains({ creations: new Map([['c1', { repoId: 'orca' }]]) })
-    const view = phoneView({ groupBy: 'none' })
-    const built = buildSidebarFeedRows(domains, catalog, phoneFeedView(view))
-    const search = (query: string) =>
-      buildHostFeedSections({
-        rows: built.sectionRows,
-        activeRowKeys: built.activeRowKeys,
-        liveRows: [],
-        repoHostIdByRepoId: new Map(),
-        search: query
-      }).flatMap((section) => section.pendingCreations ?? [])
-    expect(search('orc')).toHaveLength(1)
-    expect(search('gpu')).toHaveLength(0)
+  it('drops a creation from a section search narrows to its matching rows', () => {
+    const domains = feedDomains({ creations: new Map([['c1', { repoId: 'lab' }]]) })
+    const lab = sectionsFromDomains(domains, phoneView(), 'gpu').find(
+      (section) => section.title === 'lab'
+    )
+    expect(lab?.data.map((row) => row.worktreeId)).toEqual(['lab::/w/gpu'])
+    expect(lab?.pendingCreations).toBeUndefined()
+  })
+
+  it('keeps a creation under its project header when the search matches that header', () => {
+    const domains = feedDomains({ creations: new Map([['c1', { repoId: 'lab' }]]) })
+    const lab = sectionsFromDomains(domains, phoneView(), 'lab').find(
+      (section) => section.title === 'lab'
+    )
+    expect(lab?.pendingCreations).toEqual([{ key: 'pending:c1', repoName: null }])
   })
 
   it('narrows rows by search and drops sections left with none', () => {

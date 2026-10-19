@@ -19,7 +19,7 @@ const { assertNoDarkOutputOfOffSwitches } = createRequire(import.meta.url)(
  * as electron-builder's beforePack is: a server without it serves phones no page.
  */
 export function stageOrcadMobileWebBundle(outputDir, bundleDir = MOBILE_WEB_BUNDLE_DIR) {
-  // A dark orcad carries the dark page; the release template refuses the variable itself.
+  // The release template refuses the variable itself.
   assertNoDarkOutputOfOffSwitches([bundleDir])
   assertMobileWebBundleBuilt(bundleDir)
   // The guard refuses unlisted files, so the tree is the manifest, its assets and a dark marker.

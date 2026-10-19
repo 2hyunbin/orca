@@ -19,7 +19,8 @@ export function useResolvedHostPlatform(
 export function useHostDisplayWorktrees(
   connState: ConnectionState,
   state: HostScreenState,
-  hostId: string | undefined
+  /** Metadata reads it only for a mixed desktop catalog; server rows mix it too. */
+  hostPlatform: NodeJS.Platform | null
 ) {
   const { serverWorkspaces } = state
   // Why: a server's label and health come with its rows, alongside the desktop's SSH ones.
@@ -31,8 +32,6 @@ export function useHostDisplayWorktrees(
     () => withServerHosts(state.hostHealthById, serverWorkspaces.hosts, serverHostHealth),
     [state.hostHealthById, serverWorkspaces.hosts]
   )
-  // Why: metadata reads the platform only for a mixed desktop catalog; server rows mix it too.
-  const hostPlatform = useResolvedHostPlatform(state, hostId)
   return useMemo(() => {
     // Why: live `worktrees` is authoritative only while connected; under the amber
     // mount default, connecting/handshaking must keep the pre-reconnect list too.

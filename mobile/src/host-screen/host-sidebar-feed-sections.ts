@@ -221,12 +221,9 @@ function narrowSections(sections: readonly Section[], query: string): Section[] 
       return [section]
     }
     const data = section.data.filter((row) => matchesSearch(row, query))
-    // A creation has no name yet: only its project can match, as a row's can.
-    const pendingCreations = section.pendingCreations?.filter((creation) =>
-      creation.repoName?.toLowerCase().includes(query)
-    )
-    return data.length > 0 || pendingCreations?.length
-      ? [{ ...section, data, count: data.length, pendingCreations }]
+    // Only matching rows: a creation has no name to match yet.
+    return data.length > 0
+      ? [{ ...section, data, count: data.length, pendingCreations: undefined }]
       : []
   })
 }
