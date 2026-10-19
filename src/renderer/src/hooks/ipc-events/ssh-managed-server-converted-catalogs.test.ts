@@ -222,6 +222,40 @@ describe('a host that just moved to its managed server', () => {
     expect(store.getState().activeWorktreeId).toBe(worktreeId)
   })
 
+  it('lists the server rows itself when the cold-start scan finished without them', async () => {
+    const executionHostId = 'runtime:env-scan-missed'
+    const fetchWorktrees = vi.fn(async (repoId: string) => {
+      store.setState({
+        worktreesByRepo: {
+          ...store.getState().worktreesByRepo,
+          [repoId]: [
+            makeWorktree({ id: worktreeId, repoId, path: '/root/repo', hostId: executionHostId })
+          ]
+        }
+      })
+    })
+    store.setState({
+      fetchWorktrees,
+      activeRepoId: 'repo-1',
+      activeWorktreeId: worktreeId,
+      activeWorkspaceExecutionHostId: 'ssh:ssh-1'
+    })
+    applySshManagedServerTransition('ssh-1', undefined, {
+      kind: 'managed',
+      environmentId: 'env-scan-missed'
+    })
+    await vi.waitFor(() => expect(store.getState().worktreesByRepo['repo-1']).toEqual([]))
+
+    // Startup's scan began before the server's projects loaded, or failed for them.
+    store.setState({ startupWorktreeRefreshCompleted: true })
+
+    await vi.waitFor(() =>
+      expect(store.getState().activeWorkspaceExecutionHostId).toBe(executionHostId)
+    )
+    expect(fetchWorktrees).toHaveBeenCalledWith('repo-1', { executionHostId })
+    expect(store.getState().activeWorktreeId).toBe(worktreeId)
+  })
+
   describe('a project linked to the copy another desktop already put on the server', () => {
     const sourceRepo: Repo = { ...repo, id: 'repo-b', path: '/root/migrepo' }
     const sourceWorktreeId = 'repo-b::/root/migrepo'
