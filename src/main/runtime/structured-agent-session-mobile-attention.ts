@@ -22,6 +22,7 @@ import type {
   NotificationSettings
 } from '../../shared/notification-settings-types'
 import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
+import { parseWorkspaceKey } from '../../shared/workspace-scope'
 import { buildNotificationOptions } from '../ipc/notification-options'
 import type { MobileNotificationDispatchEvent } from './runtime-mobile-notification-controller'
 import type { RuntimeStore } from './runtime-store-contract'
@@ -51,8 +52,11 @@ export function readStructuredAttentionWorkspaceLabels(
   store: Pick<RuntimeStore, 'getRepo' | 'getWorktreeMeta' | 'getFolderWorkspaces'>,
   scope: AgentSessionExecutionLocation
 ): StructuredAttentionWorkspaceLabels {
-  if (scope.workspaceKind === 'folder') {
-    const folder = store.getFolderWorkspaces?.().find((item) => item.id === scope.workspaceId)
+  const folderScope = parseWorkspaceKey(scope.workspaceId)
+  if (folderScope?.type === 'folder') {
+    const folder = store
+      .getFolderWorkspaces?.()
+      .find((item) => item.id === folderScope.folderWorkspaceId)
     return folder ? { worktreeLabel: folder.name } : {}
   }
   const repo = store.getRepo(getRepoIdFromWorktreeId(scope.workspaceId))

@@ -58,6 +58,9 @@ export function isWorkspaceHiddenBySidebarFilters(
     hideCliCreatedWorkspaces: ui.hideCliCreatedWorkspaces === true,
     hideDetachedHeadWorkspaces: ui.hideDetachedHeadWorkspaces === true
   }
+  if (!hideOtherClients && !Object.values(switches).some(Boolean)) {
+    return false
+  }
   const folderScope = parseWorkspaceKey(workspaceId)
   if (folderScope?.type === 'folder') {
     // Folder rows answer only the other-client switch, as in the sidebar.
