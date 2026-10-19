@@ -22,6 +22,7 @@ import { getDiskBaselineSignature } from './diff-content-signature'
 import { ORCA_EDITOR_FILE_RELOADED_EVENT } from './editor-autosave'
 import { recordSelfWrite } from './editor-self-write-registry'
 import { scheduleEditorChangedOnDiskMark } from '@/hooks/editor-external-watch-disk-verification'
+import { collectOverflowEditorExternalReloadTargets } from '@/hooks/editor-external-watch-event-reconciliation'
 import { markFileChangedOnDisk } from './editor-changed-on-disk-mark'
 import { toEditorModelUri } from './editor-model-uri'
 import { isProgrammaticContentSyncInFlight } from './monaco-programmatic-sync'
@@ -193,6 +194,17 @@ describe('reloadMountedModelFromDisk', () => {
       [file.id]
     )
     resolveRead('disk text read before the newer write')
+
+    await expect(pending).resolves.toBe('superseded')
+    expect(model.getValue()).toBe('draft text')
+  })
+
+  it('drops the result when a watcher overflow arrives during the read', async () => {
+    const resolveRead = deferredRead()
+    const pending = reloadMountedModelFromDisk(file, mounted())
+    // Why: overflow names no paths, so it must count as a possible write to every tab, dirty ones too.
+    collectOverflowEditorExternalReloadTargets({ worktreeId: 'wt-1', worktreePath: '/repo' })
+    resolveRead('disk text read before the overflowed write')
 
     await expect(pending).resolves.toBe('superseded')
     expect(model.getValue()).toBe('draft text')

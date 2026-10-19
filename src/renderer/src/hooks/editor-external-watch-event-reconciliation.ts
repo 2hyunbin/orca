@@ -7,6 +7,7 @@ import {
 } from '@/components/editor/editor-autosave'
 import { indexEditorExternalWatchBatchPaths } from '@/components/editor/editor-external-watch-path-index'
 import { getRecentSelfWrite } from '@/components/editor/editor-self-write-registry'
+import { noteDiskChangeReceived } from '@/components/editor/editor-changed-on-disk-mark'
 import {
   hasActiveEditorPathMoves,
   isActiveMoveSourcePath
@@ -249,13 +250,17 @@ export function collectOverflowEditorExternalReloadTargets(
 ): EditorExternalWatchNotification[] {
   const state = useAppStore.getState()
   const notifications: EditorExternalWatchNotification[] = []
-  for (const file of state.openFiles) {
-    if (
-      file.worktreeId !== target.worktreeId ||
-      getOpenFileRuntimeOwner(file) !== (target.runtimeEnvironmentId ?? null) ||
-      !isExternalReloadableEditorTab(file) ||
-      file.isDirty
-    ) {
+  const affected = state.openFiles.filter(
+    (file) =>
+      file.worktreeId === target.worktreeId &&
+      getOpenFileRuntimeOwner(file) === (target.runtimeEnvironmentId ?? null) &&
+      isExternalReloadableEditorTab(file)
+  )
+  // Why: overflow may hide a write to any of these, dirty ones included; an in-flight banner
+  // reload must not apply a read that raced it.
+  noteDiskChangeReceived(affected.map((file) => file.id))
+  for (const file of affected) {
+    if (file.isDirty) {
       continue
     }
     if (file.externalMutation) {
