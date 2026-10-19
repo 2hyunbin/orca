@@ -13,7 +13,8 @@ export function useCombinedDiffViewPersist({
   sections,
   loadedIndicesRef,
   sideBySide,
-  viewStateKey
+  viewStateKey,
+  worktreeId
 }: {
   combinedGitStatusSignature: string
   entryCount: number
@@ -24,6 +25,7 @@ export function useCombinedDiffViewPersist({
   loadedIndicesRef: React.RefObject<Set<number>>
   sideBySide: boolean
   viewStateKey: string
+  worktreeId: string
 }): void {
   useEffect(() => {
     if (sections.length === 0 && entryCount > 0) {
@@ -32,6 +34,7 @@ export function useCombinedDiffViewPersist({
     const preservedScrollTop =
       combinedDiffScrollTopCache.get(viewStateKey) ?? scrollContainerRef.current?.scrollTop ?? 0
     setWithLRU(combinedDiffViewStateCache, viewStateKey, {
+      worktreeId,
       entrySignature,
       gitStatusSignature: combinedGitStatusSignature,
       sections,
@@ -51,6 +54,7 @@ export function useCombinedDiffViewPersist({
     sectionHeights,
     sections,
     sideBySide,
-    viewStateKey
+    viewStateKey,
+    worktreeId
   ])
 }

@@ -162,6 +162,18 @@ export function createBinaryStreamFrameReader(
     bufferedBytes -= bytes
   }
 
+  const ownPendingHead = (): void => {
+    const head = chunks[0]
+    // Copy only at a chunk boundary; copying after every frame makes batched output quadratic.
+    if (
+      head &&
+      head.buffer.byteLength > Buffer.poolSize &&
+      head.length * 2 < head.buffer.byteLength
+    ) {
+      chunks[0] = Buffer.from(head)
+    }
+  }
+
   const deliver = (kind: number, body: Buffer): void => {
     let event: unknown
     try {
@@ -195,6 +207,7 @@ export function createBinaryStreamFrameReader(
         }
         const frameBytes = FRAME_HEADER_BYTES + bodyBytes
         if (bufferedBytes < frameBytes) {
+          ownPendingHead()
           return
         }
         const head = contiguousHead(frameBytes)
@@ -202,6 +215,7 @@ export function createBinaryStreamFrameReader(
         consume(head, frameBytes)
         deliver(kind, body)
       }
+      ownPendingHead()
     }
   }
 }

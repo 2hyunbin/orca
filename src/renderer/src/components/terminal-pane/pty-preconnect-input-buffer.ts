@@ -274,11 +274,16 @@ export function createPtyPreconnectInputBuffer(
           return
         }
         const input = createInput(data, 'accepted', inputKind, resolve, signal)
+        const onAbort = (): void => withdraw(input)
+        input.resolve = (accepted) => {
+          signal?.removeEventListener('abort', onAbort)
+          resolve(accepted)
+        }
         if (!retain(input)) {
           resolve(false)
           return
         }
-        signal?.addEventListener('abort', () => withdraw(input), { once: true })
+        signal?.addEventListener('abort', onAbort, { once: true })
         notifyRetained(onRetained, input)
       })
     },

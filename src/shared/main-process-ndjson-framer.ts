@@ -1,3 +1,5 @@
+import { ownRetainedString } from './own-retained-string'
+
 export const NDJSON_MAX_LINE_BYTES = 16 * 1024 * 1024
 
 const REJECTED_LINE_PREFIX_MAX_BYTES = 64 * 1024
@@ -96,7 +98,7 @@ export function createIncrementalNdjsonFramer(
     }
     const prefix =
       segmentBytes <= remainingBytes ? segment : boundedUtf8Prefix(segment, remainingBytes)
-    prefixSegments.push(prefix)
+    prefixSegments.push(ownRetainedString(prefix))
     prefixBytes += prefix === segment ? segmentBytes : Buffer.byteLength(prefix, 'utf8')
   }
 
@@ -115,7 +117,7 @@ export function createIncrementalNdjsonFramer(
       })
       return
     }
-    pausedCompleteInput.push(complete)
+    pausedCompleteInput.push(ownRetainedString(complete))
     pausedCompleteInputBytes += completeBytes
   }
 
@@ -136,7 +138,7 @@ export function createIncrementalNdjsonFramer(
       discardingOversizedLine = true
       return
     }
-    pendingInput = suffix
+    pendingInput = ownRetainedString(suffix)
   }
 
   const process = (input: string): void => {
@@ -158,10 +160,8 @@ export function createIncrementalNdjsonFramer(
       } else {
         const segmentBytes = unbounded ? 0 : Buffer.byteLength(segment, 'utf8')
         const nextLineBytes = lineBytes + segmentBytes
-        if (!unbounded) {
-          rememberPrefix(segment, segmentBytes)
-        }
         if (nextLineBytes > maxLineBytes) {
+          rememberPrefix(segment, segmentBytes)
           const rejected: NdjsonRejectedRecord = {
             kind: 'line-too-long',
             maxLineBytes,
@@ -172,7 +172,11 @@ export function createIncrementalNdjsonFramer(
           discardingOversizedLine = !hasNewline
           onRejected(rejected)
         } else if (!hasNewline) {
-          lineSegments.push(segment)
+          if (!unbounded) {
+            rememberPrefix(segment, segmentBytes)
+          }
+          // A short unfinished record must not pin the records already consumed from this chunk.
+          lineSegments.push(segment.length === input.length ? segment : ownRetainedString(segment))
           lineBytes = nextLineBytes
           return
         } else {

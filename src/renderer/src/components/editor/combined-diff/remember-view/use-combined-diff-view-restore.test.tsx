@@ -106,6 +106,7 @@ describe('useCombinedDiffViewRestore deferral', () => {
       }
     ]
     combinedDiffViewStateCache.set(viewStateKey, {
+      worktreeId: 'wt-1',
       entrySignature: entrySet.entrySignature,
       gitStatusSignature: '',
       sections: loadedSections,

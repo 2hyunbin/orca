@@ -6,6 +6,7 @@ import {
 } from '../../editor-autosave'
 
 export type CachedCombinedDiffViewState = {
+  worktreeId: string
   entrySignature: string
   gitStatusSignature: string
   sections: DiffSection[]
@@ -18,6 +19,18 @@ export type CachedCombinedDiffViewState = {
 export const combinedDiffViewStateCache = new Map<string, CachedCombinedDiffViewState>()
 export const combinedDiffScrollTopCache = new Map<string, number>()
 export const combinedDiffScrollAnchorCache = new Map<string, VirtualizedScrollAnchor>()
+
+/** A deleted workspace cannot restore its cached file bodies. Ordinary tab closes keep them. */
+export function forgetCombinedDiffViewsForWorktrees(worktreeIds: Iterable<string>): void {
+  const removed = new Set(worktreeIds)
+  for (const [key, view] of combinedDiffViewStateCache) {
+    if (removed.has(view.worktreeId)) {
+      combinedDiffViewStateCache.delete(key)
+      combinedDiffScrollTopCache.delete(key)
+      combinedDiffScrollAnchorCache.delete(key)
+    }
+  }
+}
 
 // Why: session-scoped toolbar choices outlive the unmount, so they are module state rather than component state.
 export const combinedDiffViewPreferences: {

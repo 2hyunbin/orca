@@ -220,7 +220,8 @@ export default function CombinedDiffViewer({
     sectionHeights,
     sections,
     sideBySide: preferences.sideBySide,
-    viewStateKey
+    viewStateKey,
+    worktreeId: file.worktreeId
   })
   useCombinedDiffScrollPersistence({
     anchors,
