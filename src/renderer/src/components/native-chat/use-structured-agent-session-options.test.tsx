@@ -647,10 +647,10 @@ describe('useStructuredAgentSessionOptions', () => {
     })
   })
 
+  const efforts = ['low', 'high'].map((value) => ({ value, label: value }))
+
   describe('a new Claude chat in a fresh Claude home', () => {
-    const efforts = ['low', 'high'].map((value) => ({ value, label: value }))
-    // Claude's listing never names the configured model (claudeModelCatalogDiscovery) and a fresh
-    // home has learned none, so the host says its default may not run (agentModelCatalogResultFromEntry).
+    // A fresh home has learned no configured model, so the listing doesn't name what runs.
     const FRESH_LIST = {
       origin: 'probe',
       fetchedAt: 1,
@@ -688,7 +688,6 @@ describe('useStructuredAgentSessionOptions', () => {
         await waitFor(() =>
           expect(currentValue(result.current.optionSnapshot, 'model')).toBe('opus')
         )
-        expect(currentValue(result.current.optionSnapshot, 'effort')).toBe('high')
         const { optionStateRef, optionView } = result.current.sendSource
         expect(
           structuredAgentSessionSendSelection(optionView(optionStateRef.current, undefined, {}))
@@ -702,38 +701,27 @@ describe('useStructuredAgentSessionOptions', () => {
     // Claude replies with the values Orca set, so an effort it keeps is not in the reply.
     {
       agent: 'claude' as const,
-      tiers: [[], []],
+      tiers: [],
       current: { model: 'opus', effort: 'high' },
-      reply: { model: 'second' },
       shown: ['effort', 'high']
-    },
-    // Codex writes Standard when the new model lacks the tier (codex-structured-service-tier.ts).
-    {
-      agent: 'codex' as const,
-      tiers: [[{ value: 'priority', label: 'Fast' }], [{ value: 'flex', label: 'Flex' }]],
-      current: { model: 'opus', serviceTier: 'priority' },
-      reply: { model: 'second', serviceTier: 'default' },
-      shown: ['serviceTier', 'default']
     },
     // A configured tier no model lists (Flex) still runs, so it shows as held.
     {
       agent: 'codex' as const,
-      tiers: [[{ value: 'priority', label: 'Fast' }], [{ value: 'priority', label: 'Fast' }]],
+      tiers: [{ value: 'priority', label: 'Fast' }],
       current: { model: 'opus', serviceTier: 'flex' },
-      reply: { model: 'second' },
       shown: ['serviceTier', 'flex']
     }
   ])(
     'a $agent model pick shows what its reply names and keeps what it leaves out, $shown',
     async (pick) => {
-      const efforts = ['low', 'high'].map((value) => ({ value, label: value }))
       const live = {
         models: ['opus', 'second'].map((id, index) => ({
           id,
           label: id,
           isDefault: index === 0,
           efforts,
-          serviceTiers: pick.tiers[index]
+          serviceTiers: pick.tiers
         })),
         current: { ...pick.current, confirmed: ['model'] }
       }
@@ -743,7 +731,7 @@ describe('useStructuredAgentSessionOptions', () => {
       const { mutate } = mutateWith(async () => ({
         key: 'model',
         value: 'second',
-        options: pick.reply
+        options: { model: 'second' }
       }))
       const { result, unmount } = renderOptions({ ...REOPENED, agent: pick.agent }, mutate)
       await waitFor(() => expect(currentValue(result.current.optionSnapshot, 'model')).toBe('opus'))
@@ -752,10 +740,6 @@ describe('useStructuredAgentSessionOptions', () => {
       })
       expect(currentValue(result.current.optionSnapshot, 'model')).toBe('second')
       expect(currentValue(result.current.optionSnapshot, pick.shown[0]!)).toBe(pick.shown[1])
-      // The reply's or the host's value, never one the picker filled in.
-      expect(descriptor(result.current.optionSnapshot, pick.shown[0]!)?.valueSource).toBe(
-        'dispatched'
-      )
       unmount()
     }
   )

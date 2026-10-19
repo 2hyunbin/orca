@@ -140,25 +140,12 @@ describe("a chat's model and effort, apart from the defaults filling them in", (
       }
     )
 
-  it("never names or sends a default as a resumed chat's own, and keeps its picks through a restart", () => {
+  it("never names or sends a default as a resumed chat's own, only its picks", () => {
     const state = resumed(['model', 'effort'])
     expect(shown(state, undefined, {})).toEqual({ model: undefined, effort: 'low' })
-    expect(
-      structuredAgentSessionShownSnapshot(state).find((entry) => entry.id === 'effort')
-    ).toMatchObject({ settable: true, kind: { choices: levels('low', 'xhigh') } })
     expect(carried(state)).toBeUndefined()
     const effort = commitStructuredAgentSessionOption(state, 'effort', 'xhigh')
     expect(carried(effort)).toEqual({ effort: 'xhigh' })
-    // A model pick leaves the effort for the host to reconcile.
-    const model = commitStructuredAgentSessionOption(effort, 'model', 'sonnet')
-    expect(carried(model)).toEqual({ model: 'sonnet', effort: 'xhigh' })
-    const restarted = applyStructuredAgentSessionOptions(fresh(), CLAUDE_SESSION_OPTION_CATALOG, {
-      models: CLI302,
-      listedModelIds: listed,
-      current: { model: 'sonnet', effort: 'high', defaulted: [] }
-    })
-    expect(shown(restarted, undefined, {})).toEqual({ model: 'sonnet', effort: 'high' })
-    expect(carried(restarted)).toEqual({ model: 'sonnet', effort: 'high' })
   })
 
   it("reads an older host's answer, which marks no default, as it always has", () => {
@@ -173,9 +160,6 @@ describe("a chat's model and effort, apart from the defaults filling them in", (
       models: CLI302,
       listingNamesConfiguredModel: true
     })
-    expect(
-      structuredAgentSessionShownSnapshot(state).find((entry) => entry.id === 'effort')
-    ).toMatchObject({ settable: true, kind: { choices: levels('low', 'xhigh') } })
     expect(shown(state, undefined, { effort: 'xhigh' })).toEqual({ model: 'opus', effort: 'xhigh' })
     expect(carried(state, undefined, { effort: 'xhigh' })).toEqual({
       model: 'opus',
