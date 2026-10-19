@@ -27,6 +27,7 @@ export class CdpWsProxy {
   private readonly domFocusReplay: CdpDomFocusReplay
   private readonly pageCapture: CdpPageCaptureCommands
   private readonly input: CdpPageInputCommands
+  private commandGate: (() => void) | null = null
 
   constructor(
     private readonly webContents: WebContents,
@@ -159,6 +160,11 @@ export class CdpWsProxy {
     client?.close()
   }
 
+  /** While set, every client command must pass it first; a throw refuses the command unsent. */
+  setCommandGate(gate: (() => void) | null): void {
+    this.commandGate = gate
+  }
+
   private clearClientState(): void {
     // Why: session and focus state belongs to one websocket and must not cross client replacement.
     this.domFocusReplay.clear()
@@ -178,6 +184,16 @@ export class CdpWsProxy {
     }
     const clientId = msg.id
     this.responder.recordRequestSessionId(client, clientId, msg)
+    try {
+      this.commandGate?.()
+    } catch (error) {
+      this.responder.sendError(
+        clientId,
+        error instanceof Error ? error.message : String(error),
+        client
+      )
+      return
+    }
 
     if (this.discovery.handleCommand(client, clientId, msg)) {
       return

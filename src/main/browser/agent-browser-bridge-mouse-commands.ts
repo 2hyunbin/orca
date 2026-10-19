@@ -8,6 +8,7 @@ import {
 } from './agent-browser-bridge-mouse'
 import { acquireElectronDebugger } from './electron-debugger-lease'
 import { AgentBrowserBridgePointerCommands } from './agent-browser-bridge-pointer-commands'
+import { assertRemoteCliBrowserAccess } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
 
 export abstract class AgentBrowserBridgeMouseCommands extends AgentBrowserBridgePointerCommands {
   // ── Mouse commands ──
@@ -47,6 +48,8 @@ export abstract class AgentBrowserBridgeMouseCommands extends AgentBrowserBridge
           // Why: land the tap as one atomic op — separate move/down/up CLI calls visibly hover and can miss small controls.
           // Why: mobile-emulated BrowserViews can ignore CDP mouse clicks, so the runtime may already have activated DOM controls.
           if (!point.handled) {
+            // Why each step: a host's access can be revoked while an earlier await is pending.
+            assertRemoteCliBrowserAccess(target.webContentsId)
             await wc.debugger.sendCommand('Input.dispatchMouseEvent', {
               type: 'mousePressed',
               x: point.x,
@@ -56,6 +59,7 @@ export abstract class AgentBrowserBridgeMouseCommands extends AgentBrowserBridge
               modifiers: cdpModifiers,
               clickCount: 1
             })
+            assertRemoteCliBrowserAccess(target.webContentsId)
             await wc.debugger.sendCommand('Input.dispatchMouseEvent', {
               type: 'mouseReleased',
               x: point.x,

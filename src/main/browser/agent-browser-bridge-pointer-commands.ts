@@ -13,6 +13,7 @@ import { acquireElectronDebugger } from './electron-debugger-lease'
 import { AgentBrowserBridgeInputCommands } from './agent-browser-bridge-input-commands'
 import { isEmbeddedGuest } from './guest-direct-key-input'
 import { enablePageFocusEmulation } from './agent-input-focus-guard'
+import { assertRemoteCliBrowserAccess } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
 
 type CdpPointerEventParams = {
   type: 'mouseMoved' | 'mousePressed' | 'mouseReleased' | 'mouseWheel'
@@ -64,6 +65,8 @@ export abstract class AgentBrowserBridgePointerCommands extends AgentBrowserBrid
       if (press) {
         releaseFocusGuard = await this.focusPageForPress(wc, target.webContentsId)
       }
+      // Why after the focus await: a host's access can be revoked while it is pending.
+      assertRemoteCliBrowserAccess(target.webContentsId)
       await wc.debugger.sendCommand('Input.dispatchMouseEvent', params)
       return result
     } catch (error) {

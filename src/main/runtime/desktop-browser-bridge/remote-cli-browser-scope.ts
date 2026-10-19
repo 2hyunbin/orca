@@ -55,6 +55,20 @@ export function captureRemoteCliBrowserRevocation(): (webContentsId?: number) =>
   }
 }
 
+/**
+ * Captured where a browser command is queued: null outside a bridged command, else a runner that
+ * puts queued work back inside that scope, so its checks still see a later revocation.
+ */
+export function captureRemoteCliBrowserScope(): (<T>(run: () => T) => T) | null {
+  const active = scope.getStore()
+  return active ? (run) => scope.run(active, run) : null
+}
+
+/** Throws inside a bridged command once it was revoked or `webContentsId` stopped being admitted. */
+export function assertRemoteCliBrowserAccess(webContentsId?: number): void {
+  captureRemoteCliBrowserRevocation()(webContentsId)
+}
+
 /** Null outside a bridged command; inside one, the scoped workspace or a refusal. */
 export function resolveRemoteCliBrowserScopeSelector(
   selector: string

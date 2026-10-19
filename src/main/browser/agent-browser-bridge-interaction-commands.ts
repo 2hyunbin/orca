@@ -17,6 +17,7 @@ import { parseCdpKeyEvent, imeFallbackKeyEvent } from './cdp-keyboard-us-layout'
 import { dispatchPageKeyEvent, type GuestCdpSender } from './guest-direct-key-input'
 import { sendGuestCdpCommand } from './guest-cdp-command'
 import { AgentBrowserBridgeCaptureCommands } from './agent-browser-bridge-capture-commands'
+import { assertRemoteCliBrowserAccess } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
 
 export abstract class AgentBrowserBridgeInteractionCommands extends AgentBrowserBridgeCaptureCommands {
   async hover(
@@ -208,6 +209,8 @@ export abstract class AgentBrowserBridgeInteractionCommands extends AgentBrowser
             sendGuestCdpCommand(wc, method, params, sessionId)
           const guardFocus = (): Promise<() => void> =>
             this.browserManager.guardUserFocusForAgentInput(target.webContentsId)
+          // Why each step: a host's access can be revoked while an earlier await is pending.
+          assertRemoteCliBrowserAccess(target.webContentsId)
           await dispatchPageKeyEvent(
             wc,
             {
@@ -220,6 +223,7 @@ export abstract class AgentBrowserBridgeInteractionCommands extends AgentBrowser
             send,
             guardFocus
           )
+          assertRemoteCliBrowserAccess(target.webContentsId)
           await dispatchPageKeyEvent(
             wc,
             {

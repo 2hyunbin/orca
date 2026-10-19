@@ -6,7 +6,10 @@ import type {
   EnqueueTargetedCommandOptions,
   ResolvedBrowserCommandTarget
 } from './agent-browser-bridge-types'
-import { captureRemoteCliBrowserRevocation } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
+import {
+  captureRemoteCliBrowserRevocation,
+  captureRemoteCliBrowserScope
+} from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
 
 export abstract class AgentBrowserBridgeQueue extends AgentBrowserBridgeShutdown {
   // Why: route tab switch through the command queue so it can't race in-flight commands targeting the old tab.
@@ -61,6 +64,7 @@ export abstract class AgentBrowserBridgeQueue extends AgentBrowserBridgeShutdown
   ): Promise<T> {
     this.assertCommandAdmission()
     const assertNotRevoked = captureRemoteCliBrowserRevocation()
+    const bridged = captureRemoteCliBrowserScope()
     assertNotRevoked()
     const { browserPageId: pageId } = this.resolveCommandTarget(
       worktreeId,
@@ -78,15 +82,20 @@ export abstract class AgentBrowserBridgeQueue extends AgentBrowserBridgeShutdown
       queue.push({
         execute: () => {
           assertNotRevoked()
-          return this.executeQueuedCommand(
-            worktreeId,
-            pageId,
-            (session, target) => {
-              assertNotRevoked(target.webContentsId)
-              return execute(session, target)
-            },
-            options
-          )
+          const run = (): Promise<T> =>
+            this.executeQueuedCommand(
+              worktreeId,
+              pageId,
+              (session, target) => {
+                const gate = (): void => assertNotRevoked(target.webContentsId)
+                gate()
+                return bridged
+                  ? this.runRevocableCommand(session, gate, () => execute(session, target))
+                  : execute(session, target)
+              },
+              options
+            )
+          return bridged ? bridged(run) : run()
         },
         resolve: resolve as (value: unknown) => void,
         reject
@@ -109,6 +118,27 @@ export abstract class AgentBrowserBridgeQueue extends AgentBrowserBridgeShutdown
       await this.ensureSession(sessionName, browserPageId, target.webContentsId)
     }
     return execute(sessionName, target)
+  }
+
+  /**
+   * Runs a host's command so a revocation mid-command stops it: the page's CDP proxy refuses every
+   * later step the helper sends, and a step that failed that way reports the revocation.
+   */
+  private async runRevocableCommand<T>(
+    sessionName: string,
+    gate: () => void,
+    execute: () => Promise<T>
+  ): Promise<T> {
+    const proxy = this.sessions.get(sessionName)?.proxy
+    proxy?.setCommandGate(gate)
+    try {
+      return await execute()
+    } catch (error) {
+      gate()
+      throw error
+    } finally {
+      proxy?.setCommandGate(null)
+    }
   }
 
   protected async processQueue(sessionName: string): Promise<void> {
