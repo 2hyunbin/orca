@@ -13,6 +13,7 @@ import {
   resolveScopedWorktreeIdRow,
   type RepoWorktreeRowDeps
 } from './repo-worktree-row-resolution'
+import type { HostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 
 function repo(
   id: string,
@@ -52,7 +53,7 @@ function createDeps(repos: Repo[]): RepoWorktreeRowDeps & {
     getAllWorktreeLineage: () => ({}),
     getProjects: () => [],
     getSettings: () => ({}),
-    setWorktreeMeta: (worktreeId: string, updates: Partial<WorktreeMeta>) => {
+    setWorktreeMeta: ({ id: worktreeId }: HostWorktreeTarget, updates: Partial<WorktreeMeta>) => {
       const next = { ...metaById[worktreeId], ...updates } as WorktreeMeta
       metaById[worktreeId] = next
       return next

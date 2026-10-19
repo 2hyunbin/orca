@@ -7,6 +7,7 @@ import type {
 } from '../../shared/worktree/lineage-types'
 import { worktreeWorkspaceKey } from '../../shared/workspace-scope'
 import type { RuntimeStore } from './runtime-store-contract'
+import { worktreeRowTarget } from '../persistence/host-qualified-worktree-meta'
 
 type LineageParent =
   | {
@@ -37,7 +38,7 @@ export type WorktreeLineageRecordingResolution =
 
 export function recordCreatedWorktreeLineage(
   store: RuntimeStore | null,
-  worktree: Pick<Worktree, 'id' | 'instanceId'>,
+  worktree: Pick<Worktree, 'id' | 'instanceId' | 'hostId'>,
   resolution: WorktreeLineageRecordingResolution
 ): {
   lineage: WorktreeLineage | null
@@ -54,13 +55,16 @@ export function recordCreatedWorktreeLineage(
   const childInstanceId = worktree.instanceId
   const parentInstanceId = resolution.parent.instanceId
   const createdAt = Date.now()
+  const target = store ? worktreeRowTarget(store, worktree) : undefined
   if (
     resolution.parent.type === 'worktree' &&
     childInstanceId &&
     parentInstanceId &&
+    target &&
     store?.setWorktreeLineage
   ) {
-    lineage = store.setWorktreeLineage(worktree.id, {
+    lineage =
+      store.setWorktreeLineage(target, {
       worktreeId: worktree.id,
       worktreeInstanceId: childInstanceId,
       parentWorktreeId: resolution.parent.worktree.id,
@@ -76,7 +80,7 @@ export function recordCreatedWorktreeLineage(
         ? { createdByTerminalHandle: resolution.createdByTerminalHandle }
         : {}),
       createdAt
-    })
+    }) ?? null
   } else if (resolution.parent.type === 'worktree') {
     warnings.push({
       code: 'LINEAGE_PARENT_CONTEXT_MISSING',

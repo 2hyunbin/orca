@@ -46,6 +46,7 @@ import {
   readLaunchedAgentForeground,
   type LaunchedAgentForeground
 } from '../launched-agent-foreground'
+import { hostWorktreeTargetForRepo } from '../../persistence/host-qualified-worktree-meta'
 
 export abstract class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntimeWithListManagedWorktrees {
   protected abstract toAgentSessionOptions(
@@ -85,7 +86,7 @@ export abstract class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntime
     if (!targetsHost && this.store?.getWorktreeMeta(worktree.id)?.isUnread) {
       // Why: mobile/web session activation intentionally bypasses renderer
       // selection, so the runtime must acknowledge the unread state itself.
-      this.store.setWorktreeMeta(worktree.id, { isUnread: false })
+      this.store.setWorktreeMeta(hostWorktreeTargetForRepo(worktree.id, repo), { isUnread: false })
       this.notifyWorktreesChanged(repo.id)
     }
 

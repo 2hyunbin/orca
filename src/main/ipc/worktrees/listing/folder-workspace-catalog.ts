@@ -27,6 +27,7 @@ import {
   isFolderWorkspaceIdForRepo,
   mergeFolderWorkspace
 } from '../folder-workspace-model'
+import { hostWorktreeTargetForRepo } from '../../../persistence/host-qualified-worktree-meta'
 
 // A project a WSL move is taking still lists, with its repairs projected in memory only.
 function folderMetaWriter(
@@ -34,7 +35,8 @@ function folderMetaWriter(
   repo: Repo
 ): (worktreeId: string, updates: Partial<WorktreeMeta>) => WorktreeMeta {
   if (!isWslMoveRepoBlocked(repo)) {
-    return (worktreeId, updates) => store.setWorktreeMeta(worktreeId, updates)
+    return (worktreeId, updates) =>
+      store.setWorktreeMeta(hostWorktreeTargetForRepo(worktreeId, repo), updates)
   }
   return (worktreeId, updates) => {
     const existing = store.getWorktreeMeta(worktreeId)

@@ -6,8 +6,15 @@ import type {
   SortStamps
 } from '../../../shared/sidebar-list/sort-stamps'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../shared/workspace-scope'
+import type { Repo } from '../../../shared/repo-types'
+import {
+  hostWorktreeTarget,
+  type HostWorktreeTarget
+} from '../../../shared/worktree/host-qualified-identity'
+import { resolveWorktreeMetaOwner } from '../../persistence/host-qualified-worktree-meta'
 
-type StampedRecord = { lastActivityAt: number; isUnread?: boolean } & SmartStampFields
+type StampedRecord = { lastActivityAt: number; isUnread?: boolean; hostId?: ExecutionHostId } &
+  SmartStampFields
 type StampUpdates = {
   lastActivityAt: number
   smartTier: SmartTier | undefined
@@ -16,14 +23,10 @@ type StampUpdates = {
 
 /** The per-workspace record reads and writes, which the runtime's store satisfies. */
 export type WorkspaceRecordStore<TRecord, TUpdates> = {
-  getWorktreeMeta: (worktreeId: string) => TRecord | undefined
-  setWorktreeMeta: (worktreeId: string, updates: TUpdates) => unknown
+  getWorktreeMeta: (worktreeId: string) => (TRecord & { hostId?: ExecutionHostId }) | undefined
+  setWorktreeMeta: (target: HostWorktreeTarget, updates: TUpdates) => unknown
+  getRepos: () => readonly Repo[]
   getWorktreeMetaForHost?: (worktreeId: string, hostId: ExecutionHostId) => TRecord | undefined
-  setWorktreeMetaForHost?: (
-    worktreeId: string,
-    hostId: ExecutionHostId,
-    updates: TUpdates
-  ) => unknown
   getFolderWorkspace?: (folderWorkspaceId: string) => TRecord | undefined
   updateFolderWorkspace?: (folderWorkspaceId: string, updates: TUpdates) => unknown
 }
@@ -57,10 +60,14 @@ export function writeWorkspaceRecord<TUpdates>(
   const scope = parseWorkspaceKey(worktreeId)
   if (scope?.type === 'folder') {
     store?.updateFolderWorkspace?.(scope.folderWorkspaceId, updates)
-  } else if (sshHostId) {
-    store?.setWorktreeMetaForHost?.(worktreeId, sshHostId, updates)
-  } else {
-    store?.setWorktreeMeta(worktreeId, updates)
+    return
+  }
+  // No SSH host: the row the read above found, by its own stamp.
+  const target = sshHostId
+    ? hostWorktreeTarget({ id: worktreeId, hostId: sshHostId })
+    : store && resolveWorktreeMetaOwner(store, worktreeId)
+  if (target) {
+    store?.setWorktreeMeta(target, updates)
   }
 }
 

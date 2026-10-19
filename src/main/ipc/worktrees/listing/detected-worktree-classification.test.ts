@@ -9,6 +9,7 @@ import type { WorktreeMeta } from '../../../../shared/worktree/meta-types'
 import type { GitWorktreeInfo } from '../../../../shared/worktree/types'
 import type * as NodeCryptoModule from 'node:crypto'
 import type * as OwnershipModule from '../../../../shared/worktree/ownership'
+import type { HostWorktreeTarget } from '../../../../shared/worktree/host-qualified-identity'
 
 const { toDetectedWorktreeSpy } = vi.hoisted(() => ({ toDetectedWorktreeSpy: vi.fn() }))
 
@@ -89,11 +90,7 @@ function createStore(meta: Record<string, WorktreeMeta>, repos: Repo[] = [repo])
     getWorktreeMetaForHost: (id: string, hostId: string) =>
       rows[id]?.hostId === hostId ? rows[id] : undefined,
     getAllWorktreeMetaForHost: () => rows,
-    setWorktreeMeta: (id: string, patch: Partial<WorktreeMeta>) => {
-      rows[id] = { ...rows[id], ...patch } as WorktreeMeta
-      return rows[id]
-    },
-    setWorktreeMetaForHost: (id: string, hostId: string, patch: Partial<WorktreeMeta>) => {
+    setWorktreeMeta: ({ id, hostId }: HostWorktreeTarget, patch: Partial<WorktreeMeta>) => {
       rows[id] = { ...rows[id], ...patch, hostId } as WorktreeMeta
       return rows[id]
     }

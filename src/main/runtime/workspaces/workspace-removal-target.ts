@@ -42,6 +42,7 @@ import {
   resolveAgentTerminalCreateOptions,
   withHostAccountLaunchEnv
 } from '../runtime-agent-terminal-startup'
+import { removeWorktreeMetaRow } from '../../persistence/host-qualified-worktree-meta'
 
 export abstract class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRuntimeWithRemoveManagedWorktree {
   protected abstract resolveExplicitWorktreeIdScoped(
@@ -158,11 +159,7 @@ export abstract class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRu
     )
     const acceptedRendererSnapshot = this.acceptedRendererMobileSnapshotByWorktree.get(worktreeId)
     const storedSnapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
-    if (hostId) {
-      store.removeWorktreeMeta(worktreeId, hostId)
-    } else {
-      store.removeWorktreeMeta(worktreeId)
-    }
+    removeWorktreeMetaRow(store, worktreeId, hostId)
     // Why outside the same-id gate: retirement is per host and per pane, so a surviving owner keeps its own.
     this.dropAgentStatusForRemovedWorktreeFn?.(worktreeId, hostId ?? persistedHostId)
     if (!preservesSameIdOwner) {

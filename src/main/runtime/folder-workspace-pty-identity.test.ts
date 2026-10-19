@@ -10,6 +10,7 @@ import { makePaneKey } from '../../shared/stable-pane-id'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { FOLDER_WORKSPACE_INSTANCE_SEPARATOR } from '../../shared/worktree/id'
 import { OrcaRuntimeService } from './orca-runtime'
+import type { HostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 
 // Folder projects back several workspaces with ONE directory; only the
 // `::workspace:<uuid>` suffix separates them, so runtime PTY identity must keep it.
@@ -77,7 +78,7 @@ function createRuntimeInternals(
     getRepo: (id: string) => (id === REPO_ID ? REPO : undefined),
     getAllWorktreeMeta: () => meta,
     getWorktreeMeta: (worktreeId: string) => meta[worktreeId],
-    setWorktreeMeta: (worktreeId: string, patch: Record<string, unknown>) => {
+    setWorktreeMeta: ({ id: worktreeId }: HostWorktreeTarget, patch: Record<string, unknown>) => {
       meta[worktreeId] = { ...meta[worktreeId], ...patch }
       return meta[worktreeId]
     },

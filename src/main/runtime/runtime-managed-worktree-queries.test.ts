@@ -32,6 +32,7 @@ import {
   getLocalWorktreeScanGeneration,
   resetLocalWorktreeScanGenerationsForTests
 } from '../local-worktree-scan-generation'
+import type { HostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 
 const settings = {
   workspaceDir: '/worktrees',
@@ -144,7 +145,7 @@ describe('RuntimeManagedWorktreeQueries.listDetected', () => {
       getRepo: () => repo,
       getAllWorktreeMeta: () => ({}),
       getWorktreeMeta: () => undefined,
-      setWorktreeMeta: vi.fn((_id, updates) => metadata(updates)),
+      setWorktreeMeta: vi.fn((_target: HostWorktreeTarget, updates) => metadata(updates)),
       getAllWorktreeLineage: () => ({}),
       getSettings: () => ({
         ...settings,

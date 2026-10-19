@@ -16,6 +16,7 @@ import { pruneWorktreePRRefreshAliases } from '../../../github/pr-refresh-coordi
 import { recordWorkspaceCleanupRemovalSnapshotPrune } from '../../../workspace-cleanup-removal-snapshot-prune'
 import { pruneWorkspaceCleanupScanSnapshot } from '../../../workspace-cleanup-scan-snapshot'
 import { pruneWorkspaceSpaceAnalysisSnapshot } from '../../../workspace-space-analysis-snapshot'
+import { removeWorktreeMetaRow } from '../../../persistence/host-qualified-worktree-meta'
 
 export async function stopPtysForDestructiveWorktreeRemoval(
   runtime: OrcaRuntimeService,
@@ -91,11 +92,7 @@ export function removeWorktreeMetadataAndTransientState(
       hasWorktreeRemovalRepoOwnerOnOtherHost(store, repoId, hostId))
   )
   // Why: worktree IDs are path-derived and reusable; drop process-local caches before the same ID can map to a new workspace.
-  if (hostId) {
-    store.removeWorktreeMeta(worktreeId, hostId)
-  } else {
-    store.removeWorktreeMeta(worktreeId)
-  }
+  removeWorktreeMetaRow(store, worktreeId, hostId)
   // Why outside the same-id gate: retirement is per host and per pane, so a surviving owner keeps its own.
   agentHookServer.dropStatusEntriesForRemovedWorktree(worktreeId, hostId ?? persistedHostId)
   if (!preservesSameIdOwner) {

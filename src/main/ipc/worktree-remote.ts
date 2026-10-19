@@ -145,6 +145,11 @@ import {
 import { createRetiredNameLookup } from '../../shared/worktree/retired-name-registry'
 import { findPendingWorktreeRemovalConflict } from '../worktree-removal-table'
 import { isWslMoveWorktreeBlocked } from '../persistence/moving-wsl-projects/wsl-move-background-backoff'
+import {
+  hostWorktreeTargetForRepo,
+  resolveWorktreeMetaOwner,
+  worktreeRowTarget
+} from '../persistence/host-qualified-worktree-meta'
 // Why: bound the fallback `git fetch origin` so a Windows credential-manager GUI hang (STA-1292) can't wedge worktree creation forever.
 const CREATE_BASE_FALLBACK_FETCH_TIMEOUT_MS = 60_000
 // Why (#17828 CodeRabbit follow-up): the deferred materialize fetch runs off the main
@@ -264,7 +269,10 @@ export function recordWorkspaceLineageForCreatedWorktree(
         `[worktree-create] parent ${parentScope.worktreeId} is outside ${worktree.id}'s execution host; skipping lineage`
       )
     } else {
-      lineage = store.setWorktreeLineage(worktree.id, {
+      const target = worktreeRowTarget(store, worktree)
+      lineage =
+        (target &&
+          store.setWorktreeLineage(target, {
         worktreeId: worktree.id,
         worktreeInstanceId: worktree.instanceId,
         parentWorktreeId: parentScope.worktreeId,
@@ -272,7 +280,8 @@ export function recordWorkspaceLineageForCreatedWorktree(
         origin: 'manual',
         capture: { source: 'manual-action', confidence: 'explicit' },
         createdAt
-      })
+      })) ??
+        null
     }
   }
 
@@ -807,11 +816,15 @@ function persistMaterializedPushTargetIfCreated(
   if (!target.remoteCreated || !worktreeId || !store?.setWorktreeMeta) {
     return
   }
+  const owner = resolveWorktreeMetaOwner(
+    { getWorktreeMeta: (id) => store.getAllWorktreeMeta()[id], getRepos: () => store.getRepos?.() ?? [] },
+    worktreeId
+  )
   // Bookkeeping incidental to the push: a project a WSL move is taking skips it, not the push.
-  if (isWslMoveWorktreeBlocked(worktreeId, store.getAllWorktreeMeta()[worktreeId]?.hostId)) {
+  if (!owner || isWslMoveWorktreeBlocked(worktreeId, owner.hostId)) {
     return
   }
-  store.setWorktreeMeta(worktreeId, { pushTarget: target })
+  store.setWorktreeMeta(owner, { pushTarget: target })
 }
 
 function isPushTargetRemoteCreatedByKnownWorktree(
@@ -1575,7 +1588,7 @@ async function performLocalWorktreeCreate(
     ...(args.workspaceStatus !== undefined ? { workspaceStatus: args.workspaceStatus } : {})
   }
   const { worktree } = timing.timeSync('persist_metadata', () => {
-    const meta = store.setWorktreeMeta(worktreeId, metaUpdates)
+    const meta = store.setWorktreeMeta(hostWorktreeTargetForRepo(worktreeId, repo), metaUpdates)
     return { worktree: mergeWorktree(repo.id, created, meta) }
   })
   onWorkspaceCreated?.(worktreeId)
