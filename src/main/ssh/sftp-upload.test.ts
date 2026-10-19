@@ -24,7 +24,7 @@ function createWritable(): Writable {
 }
 
 function createSftpMock(): SFTPWrapper {
-  return {
+  return Object.assign(new EventEmitter(), {
     mkdir: vi.fn((_path: string, cb: (err?: Error | null) => void) => cb(null)),
     createWriteStream: vi.fn(() => createWritable()),
     readdir: vi.fn((_path: string, cb: (err?: Error | null, entries?: unknown[]) => void) =>
@@ -32,7 +32,7 @@ function createSftpMock(): SFTPWrapper {
     ),
     unlink: vi.fn((_path: string, cb: (err?: Error | null) => void) => cb(null)),
     rmdir: vi.fn((_path: string, cb: (err?: Error | null) => void) => cb(null))
-  } as unknown as SFTPWrapper
+  }) as unknown as SFTPWrapper
 }
 
 describe('sftp-upload', () => {
@@ -296,7 +296,10 @@ describe('sftp-upload', () => {
 
 describe('uploadFile over a high-latency link', () => {
   // ssh2's own WriteStream over a fake session whose every request takes one "round trip".
-  function slowSftp(roundTripMs: number): {
+  function slowSftp(
+    roundTripMs: number,
+    stallAfterWrites = Number.POSITIVE_INFINITY
+  ): {
     sftp: SFTPWrapper
     written: Map<number, Buffer>
     maxInFlight: () => number
@@ -323,6 +326,10 @@ describe('uploadFile over a high-latency link', () => {
         inFlight += 1
         peak = Math.max(peak, inFlight)
         written.set(pos, Buffer.from(buf.subarray(off, off + len)))
+        if (written.size > stallAfterWrites) {
+          // A dead link: the request is never answered.
+          return
+        }
         later(() => {
           inFlight -= 1
           cb(null, len)
@@ -354,6 +361,35 @@ describe('uploadFile over a high-latency link', () => {
         [...written.entries()].sort(([a], [b]) => a - b).map(([, chunk]) => chunk)
       )
       expect(reassembled.equals(contents)).toBe(true)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('fails, as contact lost, when the SSH session closes under a stalled upload', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'orca-sftp-upload-'))
+    await writeFile(join(dir, 'node.tar.gz'), Buffer.alloc(8 * 1024 * 1024))
+    const { sftp, written } = slowSftp(1, 4)
+    try {
+      const upload = uploadFile(sftp, join(dir, 'node.tar.gz'), '/remote/node.tar.gz')
+      await vi.waitFor(() => expect(written.size).toBeGreaterThan(4))
+      sftp.emit('close')
+      await expect(upload).rejects.toMatchObject({
+        name: 'SftpSessionClosedError',
+        sshChannelCloseConfirmed: false
+      })
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('stops watching the session once the upload settles', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'orca-sftp-upload-'))
+    await writeFile(join(dir, 'small.bin'), Buffer.alloc(1024))
+    const { sftp } = slowSftp(1)
+    try {
+      await uploadFile(sftp, join(dir, 'small.bin'), '/remote/small.bin')
+      expect(sftp.listenerCount('close')).toBe(0)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

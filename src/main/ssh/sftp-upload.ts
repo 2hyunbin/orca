@@ -12,6 +12,31 @@ import { latchLateSftpStreamErrors, type SftpStreamErrorLatch } from './sftp-str
 // requests in flight, as fastPut's default 64 x 32 KiB does.
 export const SFTP_UPLOAD_IN_FLIGHT_BYTES = 2 * 1024 * 1024
 
+/**
+ * Why: when the SSH connection dies, ssh2 ends the SFTP session and fails the requests it had
+ * sent, but a write stream whose next chunk waits for channel window is never told, so the
+ * transfer would wait forever. Contact was lost, so whether the host kept the bytes is unknown.
+ */
+export function sftpSessionClosedError(): Error {
+  return Object.assign(new Error('The SSH connection closed before the transfer finished'), {
+    name: 'SftpSessionClosedError',
+    sshChannelCloseConfirmed: false
+  })
+}
+
+function failStreamOnSessionClose(
+  sftp: SFTPWrapper,
+  stream: { destroy(error?: Error): unknown }
+): () => void {
+  const onClose = (): void => {
+    stream.destroy(sftpSessionClosedError())
+  }
+  sftp.once('close', onClose)
+  return () => {
+    sftp.removeListener('close', onClose)
+  }
+}
+
 export function mkdirSftp(
   sftp: SFTPWrapper,
   path: string,
@@ -43,6 +68,7 @@ export async function uploadFile(
   let readStream: ReadStream | undefined
   let writeStream: ReturnType<SFTPWrapper['createWriteStream']> | undefined
   let writeStreamErrors: SftpStreamErrorLatch | undefined
+  let releaseSessionClose: (() => void) | undefined
   const closeHandle = (): Promise<void> => {
     handleClose ??= handle.close()
     return handleClose
@@ -70,6 +96,7 @@ export async function uploadFile(
     // Why: the OPEN reply can land after this transfer settles; without a listener that
     // outlives it, ssh2 throws it synchronously into the socket handler (#15479).
     writeStreamErrors = latchLateSftpStreamErrors(writeStream, remotePath)
+    releaseSessionClose = failStreamOnSessionClose(sftp, writeStream)
     readStream = handle.createReadStream({ autoClose: false })
     // Why: `finished` drops its listeners once the read ends; an abort (a quit's disconnect) that
     // destroys the ended stream with the signal's reason would then emit an unhandled 'error' that
@@ -107,6 +134,7 @@ export async function uploadFile(
       options?.signal?.removeEventListener('abort', abortTransfer)
     }
   } finally {
+    releaseSessionClose?.()
     writeStreamErrors?.markTransferSettled()
     readStream?.destroy()
     writeStream?.destroy()
@@ -126,8 +154,10 @@ export function uploadBuffer(
       flags: options?.append ? 'a' : options?.exclusive ? 'wx' : 'w'
     })
     const lateErrors = latchLateSftpStreamErrors(writeStream, remotePath)
+    const releaseSessionClose = failStreamOnSessionClose(sftp, writeStream)
 
     const cleanupListeners = (): void => {
+      releaseSessionClose()
       lateErrors.markTransferSettled()
       writeStream.off('close', onClose)
       writeStream.off('error', onError)
@@ -158,8 +188,10 @@ export function writeStringViaSftp(
   return new Promise((resolve, reject) => {
     const ws = sftp.createWriteStream(remotePath)
     const lateErrors = latchLateSftpStreamErrors(ws, remotePath)
+    const releaseSessionClose = failStreamOnSessionClose(sftp, ws)
     let settled = false
     const cleanup = (): void => {
+      releaseSessionClose()
       lateErrors.markTransferSettled()
       sftp.removeListener('error', onError)
       ws.removeListener('close', onClose)
