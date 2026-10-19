@@ -5,9 +5,7 @@ import {
   OrcaRuntimeWithSidebarTemporal,
   sidebarFactsRuntime
 } from './sidebar-inputs/orca-runtime-sidebar-temporal'
-import { OrcaRuntimeWithMigrationCatalog } from './orca-runtime-migration-catalog'
-import { AgentTransitionDetector } from '../agent-hooks/agent-transition-detector'
-import type { AgentStatusStoreView } from './sidebar-inputs/workspace-activity-facts-producer'
+import { OrcaRuntimeWithAgentTransitions } from './orca-runtime-agent-transitions'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../shared/sidebar-inputs-switch'
 import type { RuntimeCommandSurfaceHost } from './orca-runtime-core'
 import type {
@@ -51,17 +49,12 @@ import { HEADLESS_RUNTIME_WINDOW_ID } from '../../shared/runtime-session-contrac
 import { getHostDisplayLabelOverrides } from '../../shared/host-setting-overrides'
 
 // Switch point: a window-fed build keeps no sidebar facts layer.
-const OrcaRuntimeSidebarBase: typeof OrcaRuntimeWithMigrationCatalog = ORCA_SIDEBAR_INPUTS_IS_MAIN
+const OrcaRuntimeSidebarBase: typeof OrcaRuntimeWithAgentTransitions = ORCA_SIDEBAR_INPUTS_IS_MAIN
   ? OrcaRuntimeWithSidebarTemporal
-  : OrcaRuntimeWithMigrationCatalog
+  : OrcaRuntimeWithAgentTransitions
 
 // oxlint-disable-next-line typescript/no-unsafe-declaration-merging -- SAFETY: The existing Linear installer supplies the canonical prototype surface.
 class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
-  /** Agent pane transitions from the hook server's store, on every host and in every build. */
-  readonly agentTransitions = new AgentTransitionDetector({
-    resolveTabWorktreeId: (tabId) => this.tabs.get(tabId)?.worktreeId,
-    now: Date.now
-  })
   /** This runtime as its sidebar facts layer; null unless built with ORCA_SIDEBAR_INPUTS=main. */
   get sidebarFacts() {
     return sidebarFactsRuntime(this)
@@ -173,7 +166,7 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
     })
   }
 
-  constructor(...args: ConstructorParameters<typeof OrcaRuntimeWithMigrationCatalog>) {
+  constructor(...args: ConstructorParameters<typeof OrcaRuntimeWithAgentTransitions>) {
     super(...args)
     // Why: the runtime listing re-runs a scan the worktree-change generation overtook and re-lists
     // through this runtime's scan cache, so a worktree change must reach both. The desktop IPC
@@ -181,20 +174,6 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
     registerDetectedWorktreeScanInvalidation()
     registerWorktreeChangeInvalidator((repoId) => this.invalidateWorktreeCatalog(repoId))
     publishWorkspaceViewChanges(this.store, (event) => this.emitClientEvent(event))
-  }
-
-  /** Attaches every reader of the hook server's store this runtime owns. */
-  attachAgentStatusStore(store: AgentStatusStoreView): () => void {
-    // Readers subscribe first, so the statuses present at attach reach them as seeds.
-    const detachSidebar = this.sidebarFacts?.attachSidebarAgentStatusStore(
-      store,
-      this.agentTransitions
-    )
-    const detachTransitions = this.agentTransitions.attach(store)
-    return () => {
-      detachTransitions()
-      detachSidebar?.()
-    }
   }
 
   /** Whether a window owns the layout and can show a launch's tab ahead of its process. */

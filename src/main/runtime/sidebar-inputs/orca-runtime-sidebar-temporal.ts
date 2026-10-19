@@ -17,7 +17,6 @@ import type { Repo } from '../../../shared/repo-types'
 import { SidebarRetentionOwner, type SidebarRetentionCandidates } from './sidebar-retention-owner'
 import type { AgentStatusStoreView } from './workspace-activity-facts-producer'
 import { SortStampsProducer } from './sort-stamps-producer'
-import type { AgentTransitionDetector } from '../../agent-hooks/agent-transition-detector'
 import { writeUnreadFlag } from './sort-stamp-records'
 import { WorkspaceViewers } from './workspace-viewers'
 import { TerminalUseProducer } from './terminal-use-producer'
@@ -168,14 +167,13 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     this.notifyWorktreesChanged(getRepoIdFromWorktreeId(worktreeId), { invalidateGitScans: false })
   }
 
-  /** Attaches every sidebar producer that reads the hook server's store, or its transitions. */
-  attachSidebarAgentStatusStore(
-    store: AgentStatusStoreView,
-    transitions: AgentTransitionDetector
-  ): () => void {
+  override attachAgentStatusStore(store: AgentStatusStoreView): () => void {
+    // The sidebar subscribes first, so the statuses present at attach reach it as seeds.
     const detachActivity = this.workspaceActivityFacts.attachAgentStatusStore(store)
-    const detachStamps = this.sortStamps.attachAgentTransitions(transitions)
+    const detachStamps = this.sortStamps.attachAgentTransitions(this.agentTransitions)
+    const detachTransitions = super.attachAgentStatusStore(store)
     return () => {
+      detachTransitions()
       detachActivity()
       detachStamps()
       this.sidebarTemporal.dispose()

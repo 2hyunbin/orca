@@ -36,13 +36,10 @@ export type SortStampsStore = WorkspaceRecordStore<StampedRecord, StampUpdates |
   getFolderWorkspaces?: () => readonly (StampedRecord & { id: string })[]
 }
 
-/** A workspace record: its id, and the SSH host whose record it is (null reads by id alone). */
-export type WorkspaceRef = AgentPaneWorkspace
-
 /** The workspace's own record: folder, SSH host, or local. */
 export function readWorkspaceRecord<TRecord>(
   store: WorkspaceRecordStore<TRecord, never> | null,
-  { worktreeId, sshHostId }: WorkspaceRef
+  { worktreeId, sshHostId }: AgentPaneWorkspace
 ): TRecord | undefined {
   const scope = parseWorkspaceKey(worktreeId)
   return scope?.type === 'folder'
@@ -54,7 +51,7 @@ export function readWorkspaceRecord<TRecord>(
 
 export function writeWorkspaceRecord<TUpdates>(
   store: WorkspaceRecordStore<unknown, TUpdates> | null,
-  { worktreeId, sshHostId }: WorkspaceRef,
+  { worktreeId, sshHostId }: AgentPaneWorkspace,
   updates: TUpdates
 ): void {
   const scope = parseWorkspaceKey(worktreeId)
@@ -70,7 +67,7 @@ export function writeWorkspaceRecord<TUpdates>(
 /** Sets the workspace's unread flag; true when its record held the other value. */
 export function writeUnreadFlag(
   store: SortStampsStore | null,
-  workspace: WorkspaceRef,
+  workspace: AgentPaneWorkspace,
   isUnread: boolean
 ): boolean {
   const record = readWorkspaceRecord(store, workspace)
@@ -85,7 +82,7 @@ export function writeUnreadFlag(
 // Only a workspace with a record is stamped; writing would create one for a stale id.
 export function readSortStamps(
   store: SortStampsStore | null,
-  workspace: WorkspaceRef
+  workspace: AgentPaneWorkspace
 ): SortStamps | null {
   const record = readWorkspaceRecord(store, workspace)
   if (!record) {
@@ -101,7 +98,7 @@ export function readSortStamps(
 
 export function writeSortStamps(
   store: SortStampsStore | null,
-  workspace: WorkspaceRef,
+  workspace: AgentPaneWorkspace,
   stamps: SortStamps
 ): void {
   // Both tier keys are always written, so Rest clears them.

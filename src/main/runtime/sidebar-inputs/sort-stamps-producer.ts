@@ -14,6 +14,7 @@ import {
   agentPaneWorkspace,
   sameAgentPaneWorkspace,
   type AgentPaneChange,
+  type AgentPaneWorkspace,
   type AgentTransitionDetector
 } from '../../agent-hooks/agent-transition-detector'
 import {
@@ -21,8 +22,7 @@ import {
   readSortStamps,
   writeSortStamps,
   writeUnreadFlag,
-  type SortStampsStore,
-  type WorkspaceRef
+  type SortStampsStore
 } from './sort-stamp-records'
 
 export type { SortStampsStore } from './sort-stamp-records'
@@ -54,7 +54,7 @@ export type SortStampsSources = {
   now: () => number
 }
 
-type TrackedPane = WorkspaceRef & { state: AgentPaneState }
+type TrackedPane = AgentPaneWorkspace & { state: AgentPaneState }
 type TitlePane = { ptyId: string; releaseExit: () => void }
 
 /**
@@ -171,7 +171,7 @@ export class SortStampsProducer {
   private observeTitlePane(
     ptyId: string,
     paneKey: string,
-    workspace: WorkspaceRef,
+    workspace: AgentPaneWorkspace,
     phase: AgentPhase
   ): void {
     const known = this.titlePanes.get(paneKey)
@@ -212,7 +212,7 @@ export class SortStampsProducer {
    */
   private seed(
     paneKey: string,
-    workspace: WorkspaceRef | null,
+    workspace: AgentPaneWorkspace | null,
     phase: AgentPhase,
     observedAt: number
   ): void {
@@ -242,7 +242,7 @@ export class SortStampsProducer {
   /** One pane observed in `observed`; a pane that left or changed workspace rests where it was. */
   private move(
     paneKey: string,
-    workspace: WorkspaceRef | null,
+    workspace: AgentPaneWorkspace | null,
     observed: AgentPhase,
     at: number
   ): void {
@@ -268,7 +268,7 @@ export class SortStampsProducer {
   }
 
   private writeAgentChange(
-    workspace: WorkspaceRef,
+    workspace: AgentPaneWorkspace,
     from: AgentPhase,
     to: AgentPhase,
     now: number,
@@ -285,7 +285,7 @@ export class SortStampsProducer {
 
   // One clock read per event, so a pane's time and its Recent stamp agree.
   private stamp(
-    workspace: WorkspaceRef,
+    workspace: AgentPaneWorkspace,
     event: SortStampEvent,
     now = this.sources.now(),
     paneKey: string | null = null
