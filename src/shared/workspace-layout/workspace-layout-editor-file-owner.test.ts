@@ -224,6 +224,35 @@ describe('editor file records keyed by path and owner, layout-owner build', () =
     ])
   })
 
+  it("a reload keeps a path-id preview tab's flag on its own owner's record only", () => {
+    const stored: WorkspaceSessionState = addWorkspace(emptySession(), GIT_KEY, [
+      {
+        id: 'group-1',
+        tabs: [
+          { id: PATH, kind: 'editor', entry: { isPreview: true } },
+          { id: runtimeId(GIT_KEY), kind: 'editor' }
+        ]
+      }
+    ])
+    stored.openFilesByWorktree = {
+      [GIT_KEY]: [
+        { ...RUNTIME_FILE, worktreeId: GIT_KEY },
+        { ...LOCAL_FILE, worktreeId: GIT_KEY, isPreview: true }
+      ]
+    }
+    let id = 0
+    const loaded = loadWorkspaceLayout(LOCAL_EXECUTION_HOST_ID, stored, {
+      mintId: () => `minted-${++id}`,
+      mintLeafId: () => `00000000-0000-4000-8000-${String(++id).padStart(12, '0')}`
+    })
+    const tabs = loaded.layout.workspaces[GIT_KEY]!.tabs
+
+    expect(tabs.map((tab) => tab.isPreview)).toEqual([true, undefined])
+    expect(saveWorkspaceLayout(loaded).openFilesByWorktree?.[GIT_KEY]).toEqual(
+      stored.openFilesByWorktree[GIT_KEY]
+    )
+  })
+
   it('match by path alone when the switch is off, as a headless host does today', () => {
     mocks.layoutOwnerIsMain = false
     const { model } = bothOpen(FLOATING, localId(FLOATING))

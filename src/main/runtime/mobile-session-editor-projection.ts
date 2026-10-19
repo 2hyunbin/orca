@@ -40,6 +40,11 @@ function editorUnifiedTab(
   )
 }
 
+/** A file's phone tab id: its unified tab's, else its path. */
+function listedTabId(unifiedTab: Tab | undefined, file: PersistedOpenFile): string {
+  return unifiedTab?.id ?? file.filePath
+}
+
 function editorTab(
   session: WorkspaceSessionState,
   worktreeId: string,
@@ -48,8 +53,7 @@ function editorTab(
   const unifiedTab = editorUnifiedTab(session, worktreeId, file)
   const activeFileId = session.activeFileIdByWorktree?.[worktreeId]
   const common = {
-    // A file's id is its path, which is also the unified tab's entity.
-    id: unifiedTab?.id ?? file.filePath,
+    id: listedTabId(unifiedTab, file),
     title: file.relativePath.split(/[\\/]/).pop() || file.relativePath || 'File',
     filePath: file.filePath,
     relativePath: file.relativePath,
@@ -95,12 +99,13 @@ function listedFile(
   tab: Pick<HeadlessEditorTab, 'id' | 'filePath'>
 ): PersistedOpenFile | undefined {
   const samePath = files.filter((candidate) => candidate.filePath === tab.filePath)
-  return (
-    samePath.find(
-      (candidate) =>
-        (editorUnifiedTab(session, worktreeId, candidate)?.id ?? candidate.filePath) === tab.id
-    ) ?? samePath[0]
-  )
+  // Why no fallback for two: a stale id would retire the other owner's record.
+  return samePath.length < 2
+    ? samePath[0]
+    : samePath.find(
+        (candidate) =>
+          listedTabId(editorUnifiedTab(session, worktreeId, candidate), candidate) === tab.id
+      )
 }
 
 /** The session without one persisted editor tab, or null when it holds no such tab. */

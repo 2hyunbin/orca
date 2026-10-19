@@ -166,4 +166,10 @@ describe('two owners of one path on a headless host, layout-owner build', () => 
     expect(retired?.unifiedTabs?.[WT]?.map((tab) => tab.id)).toEqual(['tab-runtime'])
     expect(retired?.activeFileIdByWorktree?.[WT]).toBeNull()
   })
+
+  it('retires nothing for a tab id neither owner is listed under', () => {
+    expect(
+      retireHeadlessEditorTab(twoOwnerSession(), WT, { id: 'tab-gone', filePath: FILE }, true)
+    ).toBeNull()
+  })
 })
