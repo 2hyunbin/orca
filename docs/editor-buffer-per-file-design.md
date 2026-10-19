@@ -152,17 +152,22 @@ From 1b until 1d, a file whose only view is rich, notebook or CSV holds its text
 
 Phase 1 ships as four PRs. After each one, behaviour matches main except for the change that PR names.
 
-- **1a. Record as state only (small).**
+- **1a. Record as state only.**
   - **Change**:
-    - Move the per-tab fields (draft, dirty, disk signature, changed-on-disk mark, autosave pauses) into a buffer slice, read through selectors.
+    - Add a buffer slice that is the source of truth for the per-tab fields: draft, `isDirty`, `lastKnownDiskSignature`, `externalMutation` and the autosave gates.
+    - The `OpenFile` fields stay as a synchronized mirror, written in the same store update as the record. All of today's readers and tests keep working (about 139 test files build `OpenFile`s with these fields, plus 236 references outside tests). 1d removes the mirror.
     - The slice is keyed by the existing `OpenFile.id`, which makes the move purely mechanical. On main one path can already have several records in one workspace: unstaged diff tabs with their own id, draft and model; diverging duplicate siblings (`editor-close-document-siblings.test.ts`); and siblings that differ in read-only state, mode or owner generation. 1a keeps all of them.
     - Writers update the record instead of the tab.
     - Text models are untouched. They stay one per URI, shared as on main, and are written only by today's paths, at today's times.
     - Dirty stays main's content compare (including the markdown trailing-whitespace leniency).
-  - **Tests**: existing suites pass unchanged; each writer lands in the record.
+  - **Tests**:
+    - Existing suites pass unchanged.
+    - Each writer lands in the record and its mirror atomically.
+    - A dirty change propagates to each reader that depends on `openFiles` identity or fields: `web-session-tabs-sync/state-equality-files.ts`, session save in `lib/workspace-session.ts`, the mobile session projections, and `mobile-markdown-bridge.ts`.
 - **1b. Sharing across workspaces.**
   - **Change**: these land together, because sharing without the queue or the close rule would let one workspace's Discard or autosave clobber the other's edits, and model writes without one record per model reopen the stale-text path:
-    - Collapse ids: only edit-mode views of one text model share a record, across workspaces. Diff, read-only, preview and stale-owner records stay separate until Phase 3.
+    - Collapse ids: every edit-mode record that already shares a text model, across workspaces and including read-only siblings, joins one record. Read-only becomes a permission on the view.
+    - Diff, preview and stale-owner records stay separate until Phase 3. Any of them that still shares a model URI gets its own URI here.
     - One save queue and one autosave timer per record.
     - Only closing the last view asks to save.
     - The interim adapter's `applyText`, `pending` and `loadFromDisk`.
@@ -173,18 +178,19 @@ Phase 1 ships as four PRs. After each one, behaviour matches main except for the
     - Discard on a view that isn't the last; one autosave.
     - A rich edit in A while B's editor is mounted.
     - Owner-resolution merging.
+    - A read-only sibling mounts while its writable sibling is dirty, and the edits survive.
     - Joins where both sides are dirty: owner resolution, divergent legacy drafts restored in one workspace or two, and a rename onto a dirty record.
     - Key rules: exact case, mixed case sensitivity, WSL aliases, `(runtimeEnvironmentId, targetId)`.
   - **From #30714**: keep the URI shape, the close behaviour and their tests. Drop the per-tab fan-out (`getSameBufferFileIds`).
 - **1c. Dirty from alternative version ids.**
-  - **Change**: drop the content compare for model edits. Edits from the adapter use the baseline rule above. Recreating a model resets `savedAltVersion`. This comes after 1b because version-based dirty needs exactly one record per model.
+  - **Change**: drop the content compare for model edits. Edits from the adapter use the baseline rule above. Recreating a model resets `savedAltVersion`. This comes after 1b because version-based dirty needs exactly one record per model. Any model still owned by more than one record, such as a dirty-and-dirty pair kept separate, keeps the content compare until 1d resolves the pair.
   - **Tests**:
     - Undo back to clean in the code editor and in rich, notebook and CSV views.
     - Dispose and reopen while dirty.
     - Exit before the rich-markdown publish timer fires.
     - Two panes edit within the delay window. The flush is forced, and a stale commit becomes a recoverable copy rather than being applied.
 - **1d. Delete caches and stored drafts.**
-  - **Change**: delete the panel `fileContents` cache for editable tabs and `use-editor-buffer-content-sync`. Drafts are derived at session save, after flushing pending text. Add the recoverable-copy UI, used for old-format drafts that differ and for dirty owner merges.
+  - **Change**: delete the panel `fileContents` cache for editable tabs, `use-editor-buffer-content-sync`, and the `OpenFile` mirror fields. Drafts are derived at session save, after flushing pending text. Add the recoverable-copy UI, used for old-format drafts that differ and for dirty owner merges.
   - **Tests**: legacy drafts that differ; a session read by an older build.
 
 Code-editor saves stay unguarded through Phase 1, exactly as on main.
@@ -192,7 +198,7 @@ Code-editor saves stay unguarded through Phase 1, exactly as on main.
 ### Phase 2: reload and guarded saves
 
 - **Change**: reload applies as a version-checked, coalesced, undoable edit on the save queue. Keep My Edits records consent. Every save is a guarded write, and a refusal carries `currentSignature`.
-- **Deletes**: the Undo toast and its saved snapshot, the `orca:editor-file-reloaded` event, and unguarded code-editor saves.
+- **Deletes**: the Undo toast and its saved snapshot, but only for views whose edits live in the model. Unconverted views (diff, rich, notebook, CSV) keep the toast until each one converts in Phase 3. Also deletes the `orca:editor-file-reloaded` event and unguarded code-editor saves.
 - **Tests**:
   - Typing, or a watcher event, during the read.
   - A clean record keeps making progress under writes that keep coming, with no banner.
@@ -204,13 +210,14 @@ Code-editor saves stay unguarded through Phase 1, exactly as on main.
   - A file deleted on disk.
   - CRLF, BOM, and an emoji split across two characters.
   - A runtime without the capability.
+  - Edit, external change, Reload, then Undo on a real diff view, which still recovers through the toast.
 - **From #30681**: keep the version check before applying, the programmatic-edit marker, cancelling reads in progress, and the pause at the undo boundary (now on the record). Drop its one-model-per-tab assumption and its per-tab session field.
 - **From #30417**: keep `currentSignature`, Keep as consent, Save while the banner shows as overwrite, deleted-file handling and the line-ending tests. Drop separate models per workspace, the branching on where the file was last edited, and the fallback to the store's draft.
 
 ### Phase 3: the remaining views
 
 - **Change**: rich markdown, notebook, CSV, unstaged diffs and mobile saves become native projections of the record, as mapped above.
-- **Deletes**: the interim adapter's callers, `diffContents` for editable sides, per-section save state, the "Discard your unsaved edits?" confirmation, and the #30415 watch exceptions.
+- **Deletes**: the interim adapter's callers, each view's remaining reload Undo toast as it converts, `diffContents` for editable sides, per-section save state, the "Discard your unsaved edits?" confirmation, and the #30415 watch exceptions.
 - **Tests**: each view runs against a real model, and an edit made in one view then saved from another is still guarded.
 
 ## Risks and open questions
