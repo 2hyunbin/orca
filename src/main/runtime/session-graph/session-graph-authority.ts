@@ -232,9 +232,11 @@ export abstract class OrcaRuntimeWithTransitionGraphReloadToTerminalState extend
       signal: context.signal,
       hostEnabled: isDesktopBrowserBridgeHostEnabled(),
       registry: getDesktopBrowserBridgeRegistry(this),
-      // Why a desktop hosting this runtime's pages counts: those commands never need the bridge.
+      // Why desktop-hosted pages count, even with their desktop gone: this runtime lists and
+      // retires them itself, so those commands never need the bridge.
       localBrowserAvailable:
         runtimeBrowserCommandsFactoryIsAvailable() ||
+        getRuntimeBrowserPageRegistry(this).listPages().length > 0 ||
         hasPairedPageHost({ getBrowserHostLeaseRegistry: () => getBrowserHostLeaseRegistry(this) }),
       resolveWorkspace: (selector) => this.resolveBrowserWorkspace(selector)
     })
