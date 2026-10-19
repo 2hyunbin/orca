@@ -9,7 +9,7 @@ export abstract class OrcaRuntimeWithAgentTransitions extends OrcaRuntimeWithMig
     now: Date.now
   })
 
-  /** Attaches every reader of the hook server's store this runtime owns. */
+  /** Attaches the detector; layers above subscribe their readers first. */
   attachAgentStatusStore(store: AgentStatusStoreView): () => void {
     return this.agentTransitions.attach(store)
   }
