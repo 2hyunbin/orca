@@ -104,8 +104,7 @@ export default function CombinedDiffViewer({
     setSectionHeights,
     setSections,
     setSideBySide: preferences.setSideBySide,
-    viewStateKey,
-    worktreeId: file.worktreeId
+    viewStateKey
   })
   const { loadSection, loadDeferredSection } = useCombinedDiffSectionLoader({
     entrySet,
@@ -221,8 +220,7 @@ export default function CombinedDiffViewer({
     sectionHeights,
     sections,
     sideBySide: preferences.sideBySide,
-    viewStateKey,
-    worktreeId: file.worktreeId
+    viewStateKey
   })
   useCombinedDiffScrollPersistence({
     anchors,

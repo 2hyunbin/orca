@@ -27,6 +27,8 @@ export function dispatchAgentFileActivityEvent(worktreeId: string): void {
 export type AgentFileActivityPacer = {
   /** `minGapMs` is the shortest spacing this activity may have from the worktree's last emit. */
   signal: (worktreeId: string, minGapMs: number) => void
+  /** Whether any worktree has activity waiting out its gap. */
+  hasPending: () => boolean
   dispose: () => void
 }
 
@@ -75,6 +77,14 @@ export function createAgentFileActivityPacer(
       const current = slot
       current.dueAt = dueAt
       current.timer = setTimeout(() => fire(worktreeId, current), dueAt - now)
+    },
+    hasPending: () => {
+      for (const slot of slots.values()) {
+        if (slot.pendingGapMs !== null) {
+          return true
+        }
+      }
+      return false
     },
     dispose: () => {
       for (const slot of slots.values()) {

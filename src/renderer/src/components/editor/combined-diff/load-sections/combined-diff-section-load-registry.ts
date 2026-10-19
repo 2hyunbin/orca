@@ -24,8 +24,6 @@ export type CombinedDiffSectionLoadRegistry = {
   loadSectionRef: React.RefObject<(index: number) => Promise<void>>
   loadedIndicesRef: React.RefObject<Set<number>>
   loadingIndicesRef: React.RefObject<Set<number>>
-  /** In-flight sections owed one more read once theirs commits (activity landed mid-read). */
-  followUpReloadIndicesRef: React.RefObject<Set<number>>
   reloadTimersRef: React.RefObject<Map<number, number>>
   renderedIndicesRef: React.RefObject<Set<number>>
   requestSectionReloadRef: React.RefObject<(index: number) => void>
@@ -39,7 +37,6 @@ export function useCombinedDiffSectionLoadRegistry(
 ): CombinedDiffSectionLoadRegistry {
   const loadedIndicesRef = useRef<Set<number>>(new Set())
   const loadingIndicesRef = useRef<Set<number>>(new Set())
-  const followUpReloadIndicesRef = useRef<Set<number>>(new Set())
   const deferredLoadRequestsRef = useRef<Set<number>>(new Set())
   const sectionsRef = useRef<DiffSection[]>([])
   const generationRef = useRef(0)
@@ -74,7 +71,6 @@ export function useCombinedDiffSectionLoadRegistry(
     loadSectionRef,
     loadedIndicesRef,
     loadingIndicesRef,
-    followUpReloadIndicesRef,
     reloadTimersRef,
     renderedIndicesRef,
     requestSectionReloadRef,

@@ -273,6 +273,7 @@ export function useFileExplorerWatch({
     return () => {
       disposed = true
       window.removeEventListener(ORCA_AGENT_FILE_ACTIVITY_EVENT, handleAgentFileActivity)
+      const hadPendingAgentRefresh = agentRefreshPacer.hasPending()
       agentRefreshPacer.dispose()
       window.removeEventListener(ORCA_WORKTREE_FILE_CHANGE_EVENT, handleRuntimeChange)
       unsubscribeListener?.()
@@ -280,7 +281,7 @@ export function useFileExplorerWatch({
         activeResyncByWatchKey.delete(currentWatchKey)
       }
       const hadDeferredEvents = deferredRef.current.length > 0
-      if (scheduler.cancel() || hadDeferredEvents) {
+      if (scheduler.cancel() || hadDeferredEvents || hadPendingAgentRefresh) {
         // The tree cache survives Files being hidden, so remember work canceled after receipt.
         resyncWatchKeys.add(currentWatchKey)
       }

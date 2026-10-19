@@ -51,13 +51,11 @@ afterEach(() => {
   cleanup()
 })
 
-describe('combined diff agent activity', () => {
-  it('re-reads loaded sections when an agent may have changed the worktree', () => {
+describe('combined diff views stay on watcher evidence', () => {
+  it('does not re-read on agent activity', () => {
     const requestSectionReload = renderRevalidation('uncommitted')
-    act(() => dispatchAgentFileActivityEvent('wt-other'))
-    expect(requestSectionReload).not.toHaveBeenCalled()
     act(() => dispatchAgentFileActivityEvent('wt-1'))
-    expect(requestSectionReload.mock.calls).toEqual([[0], [2]])
+    expect(requestSectionReload).not.toHaveBeenCalled()
   })
 
   it('ignores a re-read scoped to another tab of the same path', () => {

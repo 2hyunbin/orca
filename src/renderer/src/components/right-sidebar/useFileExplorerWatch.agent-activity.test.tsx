@@ -105,6 +105,42 @@ describe('file explorer agent activity refresh', () => {
     expect(refreshTree).toHaveBeenCalledTimes(2)
   })
 
+  it('rereads on return when Files closed with a paced remote reread still queued', async () => {
+    owner.current = { kind: 'ssh', connectionId: 'conn-1' }
+    const hook = renderHook<void, { activeWorktreeId: string | null }>(
+      ({ activeWorktreeId }: { activeWorktreeId: string | null }) =>
+        useFileExplorerWatch({
+          worktreePath: '/repo',
+          activeWorktreeId,
+          dirCache: { '/repo': { children: [] } },
+          setDirCache: vi.fn(),
+          expanded: new Set(['/repo/src']),
+          setSelectedPath: vi.fn(),
+          refreshDir,
+          refreshTree,
+          inlineInput: null,
+          dragSourcePath: null,
+          isNativeDragOver: false
+        }),
+      { initialProps: { activeWorktreeId: 'wt' } }
+    )
+    act(() => dispatchAgentFileActivityEvent('wt'))
+    await settle()
+    act(() => dispatchAgentFileActivityEvent('wt'))
+    expect(refreshTree).toHaveBeenCalledOnce()
+
+    // Files unsubscribes (e.g. the sidebar hides) before the paced reread fires.
+    hook.rerender({ activeWorktreeId: null })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000)
+    })
+    expect(refreshTree).toHaveBeenCalledOnce()
+
+    hook.rerender({ activeWorktreeId: 'wt' })
+    await settle()
+    expect(refreshTree).toHaveBeenCalledTimes(2)
+  })
+
   it('defers the refresh while an inline rename is open', async () => {
     const hook = renderWatch({ parentPath: '/repo', type: 'file', depth: 0 })
     act(() => dispatchAgentFileActivityEvent('wt'))

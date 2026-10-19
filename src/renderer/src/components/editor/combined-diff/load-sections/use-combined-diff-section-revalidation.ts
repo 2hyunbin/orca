@@ -11,7 +11,6 @@ import {
   type CombinedDiffFileTreeMode
 } from '../resolve-changes/combined-diff-section-identity'
 import type { CombinedDiffSectionLoadRegistry } from './combined-diff-section-load-registry'
-import { ORCA_AGENT_FILE_ACTIVITY_EVENT } from '@/hooks/agent-file-activity-event'
 
 // Why: git status and on-disk writes both revalidate loaded rows; one hook owns both watches so
 // they cannot disagree about which sections are eligible.
@@ -36,7 +35,7 @@ export function useCombinedDiffSectionRevalidation({
   shouldAutoReloadFromGitStatus: boolean
   treeMode: CombinedDiffFileTreeMode
 }): string {
-  const { followUpReloadIndicesRef, loadedIndicesRef, loadingIndicesRef } = registry
+  const { loadedIndicesRef } = registry
   const combinedGitStatusSignature = React.useMemo(() => {
     if (!shouldAutoReloadFromGitStatus) {
       return ''
@@ -74,11 +73,8 @@ export function useCombinedDiffSectionRevalidation({
     }
     const handler = (event: Event): void => {
       const detail = (event as CustomEvent<EditorPathMutationTarget>).detail
-      if (
-        !detail ||
-        detail.worktreeId !== file.worktreeId ||
-        (detail.fileIds && !detail.fileIds.includes(file.id))
-      ) {
+      // Why: a file-id-scoped re-read targets other tabs and is no path evidence.
+      if (!detail || detail.worktreeId !== file.worktreeId || detail.fileIds) {
         return
       }
       const hasRuntimeOwnerFilter = Object.hasOwn(detail, 'runtimeEnvironmentId')
@@ -103,40 +99,10 @@ export function useCombinedDiffSectionRevalidation({
     return () =>
       window.removeEventListener(ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT, handler as EventListener)
   }, [
-    file.id,
     file.runtimeEnvironmentId,
     file.worktreeId,
     requestSectionReload,
     sectionIndexByKeyRef,
-    treeMode
-  ])
-
-  // Why: agent activity carries no paths; loaded sections re-read (requestSectionReload skips
-  // dirty ones), which also covers snapshot views that ignore status changes.
-  useEffect(() => {
-    if (treeMode !== 'all' && treeMode !== 'uncommitted') {
-      return
-    }
-    const handler = (event: WindowEventMap[typeof ORCA_AGENT_FILE_ACTIVITY_EVENT]): void => {
-      if (event.detail?.worktreeId !== file.worktreeId) {
-        return
-      }
-      for (const index of Array.from(loadedIndicesRef.current)) {
-        requestSectionReload(index)
-      }
-      // Why: superseding a read on every burst would starve it; it commits, then reads once more.
-      for (const index of loadingIndicesRef.current) {
-        followUpReloadIndicesRef.current.add(index)
-      }
-    }
-    window.addEventListener(ORCA_AGENT_FILE_ACTIVITY_EVENT, handler)
-    return () => window.removeEventListener(ORCA_AGENT_FILE_ACTIVITY_EVENT, handler)
-  }, [
-    file.worktreeId,
-    followUpReloadIndicesRef,
-    loadedIndicesRef,
-    loadingIndicesRef,
-    requestSectionReload,
     treeMode
   ])
 
