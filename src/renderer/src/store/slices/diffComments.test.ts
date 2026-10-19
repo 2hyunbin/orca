@@ -197,6 +197,7 @@ describe('addDiffComment', () => {
     )
     expect(updateMeta).toHaveBeenCalledWith({
       worktreeId: WT,
+      executionHostId: 'local',
       updates: {
         diffComments: [
           expect.objectContaining({
@@ -317,6 +318,7 @@ describe('updateDiffComment', () => {
     expect(ok).toBe(true)
     expect(updateMeta).toHaveBeenCalledWith({
       worktreeId: WT,
+      executionHostId: 'local',
       updates: {
         diffComments: [expect.objectContaining({ id: 'c1', body: 'local body' })]
       }
@@ -434,6 +436,7 @@ describe('markDiffCommentsSent', () => {
     expect(updateMeta).toHaveBeenCalledTimes(1)
     expect(updateMeta).toHaveBeenCalledWith({
       worktreeId: WT,
+      executionHostId: 'local',
       updates: {
         diffComments: [expect.objectContaining({ id: 'c1', sentAt: 3000 }), expect.any(Object)]
       }
@@ -486,6 +489,7 @@ describe('clearDeliveredDiffComments', () => {
     expect(updateMeta).toHaveBeenCalledTimes(1)
     expect(updateMeta).toHaveBeenCalledWith({
       worktreeId: WT,
+      executionHostId: 'local',
       updates: { diffComments: [pending] }
     })
   })
@@ -503,6 +507,7 @@ describe('clearDeliveredDiffComments', () => {
     expect(store.getState().getDiffComments(WT)).toEqual([edited])
     expect(updateMeta).toHaveBeenCalledWith({
       worktreeId: WT,
+      executionHostId: 'local',
       updates: { diffComments: [edited] }
     })
   })
@@ -553,6 +558,7 @@ describe('bulk clear diff comments', () => {
     expect(updateMeta).toHaveBeenCalledTimes(1)
     expect(updateMeta).toHaveBeenCalledWith({
       worktreeId: WT,
+      executionHostId: 'local',
       updates: { diffComments: [] }
     })
   })
@@ -577,6 +583,7 @@ describe('bulk clear diff comments', () => {
     expect(updateMeta).toHaveBeenCalledTimes(1)
     expect(updateMeta).toHaveBeenCalledWith({
       worktreeId: WT,
+      executionHostId: 'local',
       updates: { diffComments: [expect.objectContaining({ id: 'c2' })] }
     })
   })

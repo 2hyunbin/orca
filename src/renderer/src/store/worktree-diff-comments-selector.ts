@@ -1,14 +1,16 @@
 import type { DiffComment } from '../../../shared/diff-comment-types'
-import type { ExecutionHostId } from '../../../shared/execution-host'
+import {
+  LOCAL_EXECUTION_HOST_ID,
+  parseExecutionHostId,
+  toRuntimeExecutionHostId,
+  type ExecutionHostId
+} from '../../../shared/execution-host'
 import type { Worktree } from '../../../shared/worktree/types'
 import type { AppState } from './types'
 import { getIndexedWorktreeById } from './worktree-repo-index'
 import { findFolderWorkspaceOwner } from '@/lib/folder-workspace-runtime-owner'
 import { namedHostForOwnerRef } from '@/lib/resolve-owner'
-import {
-  findIndexedWorktreeOwnerForHost,
-  resolveIndexedWorktreeOwner
-} from '@/lib/worktree-runtime-owner-index'
+import { worktreeMatchesHost } from './slices/worktrees/listing/worktree-host-ownership'
 import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 
@@ -28,43 +30,63 @@ type DiffCommentSelectorState = Pick<AppState, 'worktreesByRepo'> &
     >
   >
 
+/** One worktree on one host; `worktrees` holds every row a listing race duplicated for it. */
+export type DiffCommentCopy = { executionHostId: ExecutionHostId; worktrees: readonly Worktree[] }
+
+function copyHostId(row: Pick<Worktree, 'hostId' | 'runtimeOwnerEnvironmentId'>): ExecutionHostId {
+  const environmentId = row.runtimeOwnerEnvironmentId?.trim()
+  return environmentId
+    ? toRuntimeExecutionHostId(environmentId)
+    : (parseExecutionHostId(row.hostId)?.id ?? LOCAL_EXECUTION_HOST_ID)
+}
+
+function onlyCopy(copies: readonly DiffCommentCopy[]): DiffCommentCopy | null {
+  return copies.length === 1 ? copies[0] : null
+}
+
 /**
- * The git worktree row whose review notes a change reads or writes. The same id on two hosts is a
- * twin: only `executionHostId`, else the open workspace's host, picks one, and that host travels
- * with the write. A named host the row no longer matches is no row at all.
+ * The copy of a git worktree whose review notes a change reads or writes. The same id on two hosts
+ * is a twin, picked by, in order: the host a queued write captured; the one copy holding the notes
+ * the change names (UUIDs, so an async delivery still finds its copy after navigation); the open
+ * workspace's host. Nothing else guesses.
  */
-export function findDiffCommentWorktree(
+export function findDiffCommentCopy(
   state: Pick<
     DiffCommentSelectorState,
     'worktreesByRepo' | 'activeWorktreeId' | 'activeWorkspaceExecutionHostId'
   >,
   worktreeId: string,
-  executionHostId?: ExecutionHostId
-): { worktree: Worktree; executionHostId?: ExecutionHostId } | null {
-  const rows = state.worktreesByRepo[getRepoIdFromWorktreeId(worktreeId)] ?? []
-  const resolution = resolveIndexedWorktreeOwner(state.worktreesByRepo, worktreeId)
-  if (resolution.kind !== 'ambiguous') {
-    const owner =
-      resolution.kind === 'resolved' &&
-      (!executionHostId ||
-        findIndexedWorktreeOwnerForHost(state.worktreesByRepo, worktreeId, executionHostId) ===
-          resolution.owner)
-        ? resolution.owner
-        : null
-    const worktree = rows.find((row) => row === owner)
-    if (!worktree) {
-      return null
+  hint: { executionHostId?: ExecutionHostId; commentIds?: ReadonlySet<string> } = {}
+): DiffCommentCopy | null {
+  const byHost = new Map<ExecutionHostId, Worktree[]>()
+  for (const row of state.worktreesByRepo[getRepoIdFromWorktreeId(worktreeId)] ?? []) {
+    if (row.id === worktreeId) {
+      const hostId = copyHostId(row)
+      byHost.set(hostId, [...(byHost.get(hostId) ?? []), row])
     }
-    // Why no host for an unnamed unique row: it keeps the id-only write and one queue per row.
-    return executionHostId ? { worktree, executionHostId } : { worktree }
   }
-  const named =
-    executionHostId ?? namedHostForOwnerRef(state, { workspaceId: worktreeId }) ?? undefined
-  const owner = named
-    ? findIndexedWorktreeOwnerForHost(state.worktreesByRepo, worktreeId, named)
+  const copies = [...byHost].map(([executionHostId, worktrees]) => ({ executionHostId, worktrees }))
+  if (hint.executionHostId) {
+    return copies.find((copy) => copy.executionHostId === hint.executionHostId) ?? null
+  }
+  if (copies.length <= 1) {
+    return copies[0] ?? null
+  }
+  const { commentIds } = hint
+  const holder = commentIds?.size
+    ? onlyCopy(
+        copies.filter((copy) =>
+          copy.worktrees[0].diffComments?.some((comment) => commentIds.has(comment.id))
+        )
+      )
     : null
-  const worktree = rows.find((row) => row === owner)
-  return worktree && named ? { worktree, executionHostId: named } : null
+  if (holder) {
+    return holder
+  }
+  const named = namedHostForOwnerRef(state, { workspaceId: worktreeId })
+  return named
+    ? onlyCopy(copies.filter((copy) => worktreeMatchesHost(copy.worktrees[0], named)))
+    : null
 }
 
 export function selectWorktreeDiffComments(
@@ -79,10 +101,10 @@ export function selectWorktreeDiffComments(
     return findFolderWorkspaceOwner(state, scope.folderWorkspaceId)?.diffComments
   }
   // Why: the open twin's own notes; an unnamed twin still reads its first copy, as writes refuse it.
-  // Mounted surfaces rerun this on every store write, so only the open workspace pays the owner
-  // index; the rest share the immutable-snapshot id index.
+  // Mounted surfaces rerun this on every store write, so only the open workspace scans its bucket;
+  // the rest share the immutable-snapshot id index.
   const open = namedHostForOwnerRef(state, { workspaceId: worktreeId })
-    ? findDiffCommentWorktree(state, worktreeId)?.worktree
+    ? findDiffCommentCopy(state, worktreeId)?.worktrees[0]
     : undefined
   return (open ?? getIndexedWorktreeById(state.worktreesByRepo, worktreeId))?.diffComments
 }

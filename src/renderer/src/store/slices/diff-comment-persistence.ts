@@ -6,7 +6,7 @@ import type { Worktree } from '../../../../shared/worktree/types'
 import { getRepoIdFromWorktreeId } from './worktree-helpers'
 import { callRuntimeRpc } from '../../runtime/runtime-rpc-client'
 import { runtimeTargetForWorkspaceOwner } from '@/lib/resolve-owner'
-import { findDiffCommentWorktree } from '../worktree-diff-comments-selector'
+import { findDiffCommentCopy } from '../worktree-diff-comments-selector'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { toRuntimeWorktreeSelector } from '../../runtime/runtime-worktree-selector'
 import {
@@ -128,7 +128,7 @@ const floorSeedEpochByQueue = new Map<string, number>()
 export type DiffCommentMutation = {
   previous: DiffComment[] | undefined
   next: DiffComment[]
-  /** Folders: always. Git worktrees: only for a twin, the copy the user has open. */
+  /** The host of the folder or worktree copy changed, so its write lands on that copy. */
   executionHostId?: ExecutionHostId
 }
 
@@ -184,13 +184,12 @@ export function enqueueDiffCommentPersist(
         )
       } else {
         const state = get()
-        const owner = findDiffCommentWorktree(state, worktreeId, executionHostId)
-        // Why: the copy these notes were made on is gone or now shares its id; writing another
-        // copy's list under this host would overwrite it.
-        if (!owner) {
-          throw new Error('The workspace copy is gone or ambiguous; review notes were not saved.')
+        const copy = findDiffCommentCopy(state, worktreeId, { executionHostId })
+        // Why: the copy these notes were made on is gone; never send another copy's list instead.
+        if (!copy) {
+          throw new Error('The workspace copy is gone; review notes were not saved.')
         }
-        stateList = owner.worktree.diffComments
+        stateList = copy.worktrees[0].diffComments
         await persist(
           state,
           worktreeId,
@@ -230,11 +229,27 @@ export function enqueueDiffCommentPersist(
   return next
 }
 
+/** The list a change naming these notes would edit; see {@link findDiffCommentCopy}. */
+export function readDiffCommentsForChange(
+  state: AppState,
+  worktreeId: string,
+  commentIds: Iterable<string>
+): DiffComment[] {
+  const scope = parseWorkspaceKey(worktreeId)
+  const list =
+    scope?.type === 'folder'
+      ? findFolderWorkspaceOwner(state, scope.folderWorkspaceId)?.diffComments
+      : findDiffCommentCopy(state, worktreeId, { commentIds: new Set(commentIds) })?.worktrees[0]
+          .diffComments
+  return list ?? []
+}
+
 // Why: derive the next list inside the `set` updater so concurrent writes can't clobber each other via a stale closure.
 export function mutateDiffComments(
   set: Parameters<StateCreator<AppState>>[0],
   worktreeId: string,
-  mutate: (existing: DiffComment[]) => DiffComment[] | null
+  mutate: (existing: DiffComment[]) => DiffComment[] | null,
+  commentIds?: Iterable<string>
 ): DiffCommentMutation | null {
   const repoId = getRepoIdFromWorktreeId(worktreeId)
   let previous: DiffComment[] | undefined
@@ -261,20 +276,23 @@ export function mutateDiffComments(
       }
     }
     const repoList = s.worktreesByRepo[repoId]
-    const found = findDiffCommentWorktree(s, worktreeId)
-    if (!repoList || !found) {
+    const copy = findDiffCommentCopy(
+      s,
+      worktreeId,
+      commentIds ? { commentIds: new Set(commentIds) } : {}
+    )
+    if (!repoList || !copy) {
       return s
     }
-    const target = found.worktree
-    executionHostId = found.executionHostId
-    previous = target.diffComments
+    executionHostId = copy.executionHostId
+    previous = copy.worktrees[0].diffComments
     const computed = mutate(previous ?? [])
     if (computed === null) {
       return s
     }
     next = computed
     const nextList: Worktree[] = repoList.map((w) =>
-      w === target ? { ...w, diffComments: computed } : w
+      copy.worktrees.includes(w) ? { ...w, diffComments: computed } : w
     )
     return { worktreesByRepo: { ...s.worktreesByRepo, [repoId]: nextList } }
   })
@@ -310,17 +328,16 @@ function rollback(
     if (!repoList) {
       return s
     }
-    const target = findDiffCommentWorktree(s, worktreeId, executionHostId)?.worktree
+    // Why: only roll back rows no later mutation replaced, else our stale `previous` would erase newer state.
+    const targets = (
+      findDiffCommentCopy(s, worktreeId, { executionHostId })?.worktrees ?? []
+    ).filter((w) => w.diffComments === expectedCurrent)
     // Why: worktree gone since the mutation; bail before remapping so we don't allocate a new array identity and fire spurious notifications.
-    if (!target) {
-      return s
-    }
-    // Why: only roll back if no later mutation replaced the array, else our stale `previous` would erase newer state.
-    if (target.diffComments !== expectedCurrent) {
+    if (targets.length === 0) {
       return s
     }
     const nextList: Worktree[] = repoList.map((w) =>
-      w === target ? { ...w, diffComments: previous } : w
+      targets.includes(w) ? { ...w, diffComments: previous } : w
     )
     return { worktreesByRepo: { ...s.worktreesByRepo, [repoId]: nextList } }
   })

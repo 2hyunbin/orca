@@ -145,4 +145,48 @@ describe('diff comments on twin worktrees', () => {
     expect(updateMeta).not.toHaveBeenCalled()
     expect(rowNotes(store, 'local')).toEqual(['local note'])
   })
+
+  it('keeps one queue for a copy when its twin leaves between saves', async () => {
+    const store = createTwinStore('ssh:box')
+    updateMeta.mockRejectedValue(new Error('write failed'))
+
+    const first = addNote(store)
+    // The local copy goes before the second save, so the SSH copy is the only row left.
+    store.setState({ worktreesByRepo: { [REPO]: [store.getState().worktreesByRepo[REPO][1]] } })
+    const second = addNote(store)
+
+    expect(await first).toBeNull()
+    expect(await second).toBeNull()
+    expect(rowNotes(store, 'ssh:box')).toEqual([])
+  })
+
+  it('writes every duplicated row of one copy, so reads see the note', async () => {
+    const store = createTwinStore(null)
+    store.setState({ worktreesByRepo: { [REPO]: [worktree('local'), worktree('local')] } })
+
+    expect(await addNote(store)).not.toBeNull()
+
+    expect(
+      store
+        .getState()
+        .getDiffComments(WT)
+        .map((c) => c.body)
+    ).toEqual(['ssh note'])
+  })
+
+  it('clears delivered notes on their own copy after the user moved away', async () => {
+    const store = createTwinStore('ssh:box')
+    const sent = await addNote(store)
+    if (!sent) {
+      throw new Error('note was not saved')
+    }
+    store.setState({ activeWorktreeId: null, activeWorkspaceExecutionHostId: null })
+
+    expect(await store.getState().clearDeliveredDiffComments(WT, [sent])).toBe(true)
+
+    expect(rowNotes(store, 'ssh:box')).toEqual([])
+    expect(updateMeta).toHaveBeenLastCalledWith(
+      expect.objectContaining({ executionHostId: 'ssh:box', updates: { diffComments: [] } })
+    )
+  })
 })

@@ -6,7 +6,8 @@ import { isMarkdownComment } from '@/lib/diff-comment-compat'
 import {
   enqueueDiffCommentPersist,
   mutateDiffComments,
-  normalizeDiffComment
+  normalizeDiffComment,
+  readDiffCommentsForChange
 } from './diff-comment-persistence'
 import { selectWorktreeDiffCommentsOrEmpty } from '../worktree-diff-comments-selector'
 
@@ -106,7 +107,7 @@ export const createDiffCommentsSlice: StateCreator<AppState, [], [], DiffComment
     }
 
     // Why: distinguish "comment missing" (false; keep draft, likely edit-while-deleted) from "body unchanged" (true; close editor) before mutating.
-    const existing = get().getDiffComments(worktreeId)
+    const existing = readDiffCommentsForChange(get(), worktreeId, [commentId])
     const existingIdx = existing.findIndex((c) => c.id === commentId)
     if (existingIdx === -1) {
       return false
@@ -115,19 +116,24 @@ export const createDiffCommentsSlice: StateCreator<AppState, [], [], DiffComment
       return true
     }
 
-    const result = mutateDiffComments(set, worktreeId, (current) => {
-      const idx = current.findIndex((c) => c.id === commentId)
-      if (idx === -1) {
-        return null
-      }
-      if (current[idx].body === trimmed) {
-        return null
-      }
-      const next = current.slice()
-      // Why: editing a sent note makes the agent's copy stale, so reset sentAt to re-queue it for the next Send.
-      next[idx] = { ...current[idx], body: trimmed, sentAt: undefined }
-      return next
-    })
+    const result = mutateDiffComments(
+      set,
+      worktreeId,
+      (current) => {
+        const idx = current.findIndex((c) => c.id === commentId)
+        if (idx === -1) {
+          return null
+        }
+        if (current[idx].body === trimmed) {
+          return null
+        }
+        const next = current.slice()
+        // Why: editing a sent note makes the agent's copy stale, so reset sentAt to re-queue it for the next Send.
+        next[idx] = { ...current[idx], body: trimmed, sentAt: undefined }
+        return next
+      },
+      [commentId]
+    )
     if (!result) {
       // Why: comment vanished or the same body was already written between pre-check and set; treat as success so the editor closes.
       return true
@@ -146,14 +152,19 @@ export const createDiffCommentsSlice: StateCreator<AppState, [], [], DiffComment
       return true
     }
     const snapshotsById = new Map(comments.map((comment) => [comment.id, comment]))
-    const result = mutateDiffComments(set, worktreeId, (existing) => {
-      const next = existing.filter((comment) => {
-        const snapshot = snapshotsById.get(comment.id)
-        // Why: delivery is async; a note edited after its snapshot was sent is a fresh pending note that must stay visible.
-        return !snapshot || !deliverySnapshotMatches(comment, snapshot)
-      })
-      return next.length === existing.length ? null : next
-    })
+    const result = mutateDiffComments(
+      set,
+      worktreeId,
+      (existing) => {
+        const next = existing.filter((comment) => {
+          const snapshot = snapshotsById.get(comment.id)
+          // Why: delivery is async; a note edited after its snapshot was sent is a fresh pending note that must stay visible.
+          return !snapshot || !deliverySnapshotMatches(comment, snapshot)
+        })
+        return next.length === existing.length ? null : next
+      },
+      snapshotsById.keys()
+    )
     if (!result) {
       return true
     }
@@ -172,17 +183,22 @@ export const createDiffCommentsSlice: StateCreator<AppState, [], [], DiffComment
       return true
     }
     const ids = new Set(commentIds)
-    const result = mutateDiffComments(set, worktreeId, (existing) => {
-      let changed = false
-      const next = existing.map((comment) => {
-        if (!ids.has(comment.id) || comment.sentAt === sentAt) {
-          return comment
-        }
-        changed = true
-        return { ...comment, sentAt }
-      })
-      return changed ? next : null
-    })
+    const result = mutateDiffComments(
+      set,
+      worktreeId,
+      (existing) => {
+        let changed = false
+        const next = existing.map((comment) => {
+          if (!ids.has(comment.id) || comment.sentAt === sentAt) {
+            return comment
+          }
+          changed = true
+          return { ...comment, sentAt }
+        })
+        return changed ? next : null
+      },
+      ids
+    )
     if (!result) {
       return true
     }
@@ -197,10 +213,15 @@ export const createDiffCommentsSlice: StateCreator<AppState, [], [], DiffComment
   },
 
   deleteDiffComment: async (worktreeId, commentId) => {
-    const result = mutateDiffComments(set, worktreeId, (existing) => {
-      const next = existing.filter((c) => c.id !== commentId)
-      return next.length === existing.length ? null : next
-    })
+    const result = mutateDiffComments(
+      set,
+      worktreeId,
+      (existing) => {
+        const next = existing.filter((c) => c.id !== commentId)
+        return next.length === existing.length ? null : next
+      },
+      [commentId]
+    )
     if (!result) {
       return
     }
