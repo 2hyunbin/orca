@@ -319,8 +319,8 @@ describe('launch facts outside the tables', () => {
         }
         vi.spyOn(selecting, 'resolveWorktreeSelector').mockResolvedValue({ id: pane.worktreeId })
         const events: string[] = []
-        const releases: ReturnType<typeof vi.fn>[] = []
-        const finishes: ReturnType<typeof vi.fn>[] = []
+        const releases: ReturnType<typeof vi.fn<() => void>>[] = []
+        const finishes: ReturnType<typeof vi.fn<() => void>>[] = []
         let firstId: string | undefined
         let queuedSleep: Promise<void> | undefined
         let attempts = 0
