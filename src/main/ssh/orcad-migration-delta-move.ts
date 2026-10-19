@@ -177,7 +177,7 @@ async function commitDelta(
       throw error
     }
   }
-  retainOrcadMigrationSource(userDataPath, cutover.migrationId, now)
+  await retainOrcadMigrationSource(userDataPath, cutover.migrationId, store, now)
   return { outcome: 'moved', migrationId: cutover.migrationId }
 }
 

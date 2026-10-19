@@ -138,7 +138,7 @@ export async function convertSshTargetToManagedOrcad(
     throw new Error(`orcad_migration_commit_not_proven:${committed.phase}`)
   }
   if (committed.phase === 'destination-committed') {
-    retainOrcadMigrationSource(userDataPath, committed.migrationId, args.now)
+    await retainOrcadMigrationSource(userDataPath, committed.migrationId, store, args.now)
   }
   const linkedProjects = linkedOrcadMigrationProjects(store, linked)
   return {
