@@ -224,18 +224,32 @@ describe('a host that just moved to its managed server', () => {
 
   it('lists the server rows itself when the cold-start scan finished without them', async () => {
     const executionHostId = 'runtime:env-scan-missed'
-    const fetchWorktrees = vi.fn(async (repoId: string) => {
-      store.setState({
-        worktreesByRepo: {
-          ...store.getState().worktreesByRepo,
-          [repoId]: [
-            makeWorktree({ id: worktreeId, repoId, path: '/root/repo', hostId: executionHostId })
-          ]
-        }
-      })
-    })
+    const call = vi.fn(async (args: RuntimeEnvironmentCallRequest) =>
+      args.method === 'worktree.detectedList'
+        ? {
+            id: 'rpc',
+            ok: true,
+            result: {
+              repoId: 'repo-1',
+              authoritative: true,
+              source: 'git',
+              worktrees: [
+                makeWorktree({
+                  id: worktreeId,
+                  repoId: 'repo-1',
+                  path: '/root/repo',
+                  hostId: executionHostId
+                })
+              ]
+            },
+            _meta: { runtimeId: 'orcad' }
+          }
+        : serverReply(args)
+    )
+    Object.assign(window.api.runtimeEnvironments, { call })
+    const listedServerRows = (): boolean =>
+      call.mock.calls.some(([args]) => args.method === 'worktree.detectedList')
     store.setState({
-      fetchWorktrees,
       activeRepoId: 'repo-1',
       activeWorktreeId: worktreeId,
       activeWorkspaceExecutionHostId: 'ssh:ssh-1'
@@ -245,6 +259,7 @@ describe('a host that just moved to its managed server', () => {
       environmentId: 'env-scan-missed'
     })
     await vi.waitFor(() => expect(store.getState().worktreesByRepo['repo-1']).toEqual([]))
+    expect(listedServerRows()).toBe(false)
 
     // Startup's scan began before the server's projects loaded, or failed for them.
     store.setState({ startupWorktreeRefreshCompleted: true })
@@ -252,7 +267,7 @@ describe('a host that just moved to its managed server', () => {
     await vi.waitFor(() =>
       expect(store.getState().activeWorkspaceExecutionHostId).toBe(executionHostId)
     )
-    expect(fetchWorktrees).toHaveBeenCalledWith('repo-1', { executionHostId })
+    expect(listedServerRows()).toBe(true)
     expect(store.getState().activeWorktreeId).toBe(worktreeId)
   })
 
