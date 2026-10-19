@@ -15,6 +15,7 @@ import { buildSleepingAgentSessionData } from './workspace-session-sleeping-agen
 import { buildActiveConnectionIdsAtShutdown } from './workspace-session-reconnect-targets'
 import { withoutStagedBrowserTabs } from './workspace-session-staged-browser-tabs'
 import { buildBrowserSessionData } from './workspace-session-browser-tabs'
+import { getDraftAutosaveGuardFields } from './workspace-session-draft-guards'
 
 export { buildActiveConnectionIdsAtShutdown }
 
@@ -145,10 +146,7 @@ export function buildEditorSessionData(
       ...(f.readOnly === true ? { readOnly: true } : {}),
       ...(f.readOnly === true && f.liveTail === true ? { liveTail: true } : {}),
       ...(dirtyDraftContent !== undefined ? { dirtyDraftContent } : {}),
-      // Why: baseline travels with the draft so restore can detect a changed-on-disk conflict before autosave clobbers an offline agent write.
-      ...(dirtyDraftContent !== undefined && f.lastKnownDiskSignature
-        ? { lastKnownDiskSignature: f.lastKnownDiskSignature }
-        : {})
+      ...(dirtyDraftContent !== undefined ? getDraftAutosaveGuardFields(f) : {})
     })
     const ids =
       editFileIdsByWorktree[f.worktreeId] ?? (editFileIdsByWorktree[f.worktreeId] = new Set())

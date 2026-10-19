@@ -16,10 +16,7 @@ import {
   beginProgrammaticContentSync,
   endProgrammaticContentSync
 } from './monaco-programmatic-sync'
-import {
-  resumeAutosaveAfterReloadUndo,
-  watchReloadUndoBoundary
-} from './reload-undo-autosave-pause'
+import { watchReloadUndoBoundary } from './reload-undo-autosave-pause'
 
 type AppState = ReturnType<typeof useAppStore.getState>
 
@@ -103,7 +100,7 @@ export async function reloadMountedModelFromDisk(
   state.clearEditorDraft(file.id)
   state.markFileDirty(file.id, false)
   state.setExternalMutation(file.id, null)
-  watchReloadUndoBoundary(model, file.id)
+  watchReloadUndoBoundary(model, modelKey)
   return 'applied'
 }
 
@@ -117,7 +114,7 @@ export function discardDraftAndReloadContent(
   state.clearEditorDraft(file.id)
   state.markFileDirty(file.id, false)
   state.setExternalMutation(file.id, null)
-  resumeAutosaveAfterReloadUndo(file.id)
+  state.setAutosavePausedAfterReloadUndo([file.id], false)
   reloadContent(file)
 }
 

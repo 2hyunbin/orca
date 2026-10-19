@@ -93,6 +93,9 @@ export type EditorFilesSlice = {
   setExternalMutation: (fileId: string, mutation: 'deleted' | 'renamed' | 'changed' | null) => void
   setLastKnownDiskSignature: (fileId: string, signature: string) => void
   clearPendingDiskBaselineVerification: (fileId: string) => void
+  setAutosavePausedAfterReloadUndo: (fileIds: readonly string[], paused: boolean) => void
+  /** Clears the pause only if it is still the generation the caller observed. */
+  resumeAutosaveAfterReloadUndo: (fileId: string, generation: number) => void
   setPendingDiskBaselineVerification: (fileId: string, value: boolean) => void
   setPendingLiveDiskVerification: (fileId: string, value: boolean) => void
   clearSelfMoveEcho: (fileId: string) => void

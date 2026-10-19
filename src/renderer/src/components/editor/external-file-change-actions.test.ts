@@ -56,6 +56,7 @@ function mockStore(): void {
     markFileDirty,
     setExternalMutation,
     setLastKnownDiskSignature,
+    setAutosavePausedAfterReloadUndo: vi.fn(),
     editorDrafts: {},
     openFiles,
     settings: {}

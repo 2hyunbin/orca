@@ -120,7 +120,8 @@ export function localDesktopSession(): WorkspaceSessionState {
         worktreeId: GIT_KEY,
         language: 'typescript',
         dirtyDraftContent: 'export {}\n',
-        lastKnownDiskSignature: 'sig-1'
+        lastKnownDiskSignature: 'sig-1',
+        autosavePausedAfterReloadUndo: true
       }
     ]
   }

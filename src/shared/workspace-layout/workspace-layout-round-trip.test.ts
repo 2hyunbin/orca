@@ -107,7 +107,8 @@ describe('workspace layout Loader and Serializer', () => {
     expect(loaded.desktopView.editorDrafts['repo-1::/Users/dev/orca']).toEqual({
       '/Users/dev/orca/src/app.ts': {
         dirtyDraftContent: 'export {}\n',
-        lastKnownDiskSignature: 'sig-1'
+        lastKnownDiskSignature: 'sig-1',
+        autosavePausedAfterReloadUndo: true
       }
     })
   })

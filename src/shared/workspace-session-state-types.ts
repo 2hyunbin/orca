@@ -26,6 +26,8 @@ export type PersistedOpenFile = {
   /** Signature of the disk content the dirty draft is based on; lets restore
    *  re-derive a changed-on-disk conflict from ground truth. */
   lastKnownDiskSignature?: string
+  /** The draft is an undone banner reload; autosave stays paused until an explicit save. */
+  autosavePausedAfterReloadUndo?: boolean
   /** Why: a read-only tab (AI Vault View Log) must survive restart still
    *  read-only; persisted only when true so old sessions stay writable. */
   readOnly?: boolean

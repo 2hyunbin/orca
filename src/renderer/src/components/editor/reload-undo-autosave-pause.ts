@@ -1,24 +1,31 @@
 import type { editor, IDisposable } from 'monaco-editor'
+import { useAppStore } from '@/store'
+import { getEditorModelOwnerKey } from './editor-model-owner'
+import { toEditorModelUri } from './editor-model-uri'
 
-const pausedFileIds = new Set<string>()
 const watchByModel = new WeakMap<editor.ITextModel, IDisposable>()
 
-/** Undone-reload text is the user's choice, but only an explicit save may write it. */
-export function isAutosavePausedAfterReloadUndo(fileId: string): boolean {
-  return pausedFileIds.has(fileId)
-}
-
-export function resumeAutosaveAfterReloadUndo(fileId: string): void {
-  pausedFileIds.delete(fileId)
+// Why: one model can back several tabs (the same file in overlapping workspaces); all share its text.
+function setPausedForModelTabs(modelKey: string, paused: boolean): void {
+  const state = useAppStore.getState()
+  const fileIds = state.openFiles
+    .filter(
+      (file) =>
+        file.mode === 'edit' &&
+        toEditorModelUri(file.filePath, getEditorModelOwnerKey(file, state)) === modelKey
+    )
+    .map((file) => file.id)
+  state.setAutosavePausedAfterReloadUndo(fileIds, paused)
 }
 
 /**
- * Pause autosave whenever undo/redo moves the model to before a banner reload, and resume when it
- * moves back after it. The boundary lasts until the next reload or the model goes away.
+ * Pause autosave for every tab on this model whenever undo/redo moves it to before a banner
+ * reload, and resume when it moves back after it. Undone-reload text is the user's choice, but
+ * only an explicit save may write it. The boundary lasts until the next reload or model disposal.
  */
-export function watchReloadUndoBoundary(model: editor.ITextModel, fileId: string): void {
+export function watchReloadUndoBoundary(model: editor.ITextModel, modelKey: string): void {
   watchByModel.get(model)?.dispose()
-  resumeAutosaveAfterReloadUndo(fileId)
+  setPausedForModelTabs(modelKey, false)
   const afterReloadVersions = new Set([model.getAlternativeVersionId()])
   let beforeReload = false
   const subscription = model.onDidChangeContent((event) => {
@@ -34,17 +41,12 @@ export function watchReloadUndoBoundary(model: editor.ITextModel, fileId: string
       return
     }
     beforeReload = nowBeforeReload
-    if (beforeReload) {
-      pausedFileIds.add(fileId)
-    } else {
-      resumeAutosaveAfterReloadUndo(fileId)
-    }
+    setPausedForModelTabs(modelKey, beforeReload)
   })
   const willDispose = model.onWillDispose(stop)
   function stop(): void {
     subscription.dispose()
     willDispose.dispose()
-    resumeAutosaveAfterReloadUndo(fileId)
     if (watchByModel.get(model)?.dispose === stop) {
       watchByModel.delete(model)
     }

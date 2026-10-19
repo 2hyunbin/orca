@@ -83,9 +83,16 @@ export type DesktopLayoutView = Pick<WorkspaceSessionState, ViewSessionField> & 
   editorDrafts: Record<string, Record<string, EditorDraft>>
 }
 
-export type EditorDraft = Pick<PersistedOpenFile, 'dirtyDraftContent' | 'lastKnownDiskSignature'>
+export type EditorDraft = Pick<
+  PersistedOpenFile,
+  'dirtyDraftContent' | 'lastKnownDiskSignature' | 'autosavePausedAfterReloadUndo'
+>
 
-export const EDITOR_DRAFT_FIELDS = ['dirtyDraftContent', 'lastKnownDiskSignature'] as const
+export const EDITOR_DRAFT_FIELDS = [
+  'dirtyDraftContent',
+  'lastKnownDiskSignature',
+  'autosavePausedAfterReloadUndo'
+] as const
 
 export const BROWSER_TAB_LAYOUT_FIELDS = [
   'id',

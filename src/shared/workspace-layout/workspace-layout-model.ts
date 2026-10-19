@@ -57,7 +57,11 @@ export type LayoutGroup = { id: string; tabOrder: string[] }
 /** An open editor file minus its unsaved draft (the view's) and what its tab and workspace hold. */
 export type LayoutEditorFile = Omit<
   PersistedOpenFile,
-  'dirtyDraftContent' | 'lastKnownDiskSignature' | 'isPreview' | 'worktreeId'
+  | 'dirtyDraftContent'
+  | 'lastKnownDiskSignature'
+  | 'autosavePausedAfterReloadUndo'
+  | 'isPreview'
+  | 'worktreeId'
 >
 
 /** A browser tab minus the live page state its host view reports. */

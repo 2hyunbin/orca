@@ -197,6 +197,7 @@ const FILE = {
   externalSshTargetId: own('file', 'externalSshTargetId'),
   dirtyDraftContent: own('editorDraft', 'dirtyDraftContent'),
   lastKnownDiskSignature: own('editorDraft', 'lastKnownDiskSignature'),
+  autosavePausedAfterReloadUndo: own('editorDraft', 'autosavePausedAfterReloadUndo'),
   readOnly: own('file', 'readOnly'),
   liveTail: own('file', 'liveTail')
 } as const satisfies Record<keyof PersistedOpenFile, DiskFieldWritten>

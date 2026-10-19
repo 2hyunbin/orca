@@ -16301,6 +16301,9 @@
           "stopped": "Large paste stopped before it finished.",
           "cancelled": "Large paste cancelled because its original target changed."
         },
+        "AutosavePausedNotice": {
+          "message": "Autosave paused after undoing a reload. Press {{value0}} to save."
+        },
         "ExternalFileChangeBanner": {
           "7c41e90d12": "This file changed on disk while you have unsaved edits. Saving will overwrite the newer disk content.",
           "3fa2b8d417": "Reload from Disk",

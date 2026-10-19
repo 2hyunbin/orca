@@ -4,6 +4,7 @@ import { isEditorTabContentType } from '../tabs/editor-tab-content-type'
 import type { Tab } from '../../../../../../shared/tab-types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
 import { withPreviewEnded } from '../../tabs/tab-preview-flag'
+import { nextAutosavePauseGeneration } from './autosave-pause-generation'
 import {
   previewEditorTabsOf,
   recordPromotedEditorTabsInLayoutOwner
@@ -19,6 +20,8 @@ export function createOpenFileMutations(
   | 'setExternalMutation'
   | 'setLastKnownDiskSignature'
   | 'clearPendingDiskBaselineVerification'
+  | 'setAutosavePausedAfterReloadUndo'
+  | 'resumeAutosaveAfterReloadUndo'
   | 'setPendingDiskBaselineVerification'
   | 'setPendingLiveDiskVerification'
   | 'clearSelfMoveEcho'
@@ -139,6 +142,41 @@ export function createOpenFileMutations(
         return {
           openFiles: s.openFiles.map((f) =>
             f.id === fileId ? { ...f, lastKnownDiskSignature: signature } : f
+          )
+        }
+      }),
+
+    setAutosavePausedAfterReloadUndo: (fileIds, paused) =>
+      set((s) => {
+        const ids = new Set(fileIds)
+        if (
+          !s.openFiles.some(
+            (f) => ids.has(f.id) && paused !== (f.autosavePausedAfterReloadUndo !== undefined)
+          )
+        ) {
+          return s
+        }
+        return {
+          openFiles: s.openFiles.map((f) =>
+            ids.has(f.id)
+              ? {
+                  ...f,
+                  autosavePausedAfterReloadUndo: paused ? nextAutosavePauseGeneration() : undefined
+                }
+              : f
+          )
+        }
+      }),
+
+    resumeAutosaveAfterReloadUndo: (fileId, generation) =>
+      set((s) => {
+        const file = s.openFiles.find((f) => f.id === fileId)
+        if (file?.autosavePausedAfterReloadUndo !== generation) {
+          return s
+        }
+        return {
+          openFiles: s.openFiles.map((f) =>
+            f.id === fileId ? { ...f, autosavePausedAfterReloadUndo: undefined } : f
           )
         }
       }),

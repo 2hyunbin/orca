@@ -5,6 +5,7 @@ import type { AppState } from '../../../types'
 import type { OpenFile } from '../types/open-file'
 import { buildOwnedEditorFileId } from '../file-ids/editor-file-ids'
 import { resolveHydratedEditorFileSelection } from '../file-ids/hydrated-editor-file-selection'
+import { nextAutosavePauseGeneration } from './autosave-pause-generation'
 import { resolveHydratedEditorFrontmatter } from '../file-ids/hydrated-editor-frontmatter'
 import {
   addEditorFileIdMigration,
@@ -105,6 +106,9 @@ export function buildHydratedEditorSessionState(
         ...(isReadOnly ? { readOnly: true } : {}),
         ...(isReadOnly && pf.liveTail === true ? { liveTail: true } : {}),
         lastKnownDiskSignature: isReadOnly ? undefined : pf.lastKnownDiskSignature,
+        ...(!isReadOnly && pf.dirtyDraftContent !== undefined && pf.autosavePausedAfterReloadUndo
+          ? { autosavePausedAfterReloadUndo: nextAutosavePauseGeneration() }
+          : {}),
         // Why: suspend autosave until the conflict scan verifies disk vs baseline, else a slow remote read clobbers an offline write.
         pendingDiskBaselineVerification:
           !isReadOnly &&

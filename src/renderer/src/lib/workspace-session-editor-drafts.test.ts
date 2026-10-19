@@ -105,6 +105,30 @@ describe('workspace session editor drafts', () => {
     )
   })
 
+  it('persists an autosave pause after an undone reload only alongside a dirty draft', () => {
+    const tab = {
+      filePath: '/tmp/undone.md',
+      relativePath: 'undone.md',
+      worktreeId: 'wt-1',
+      language: 'markdown',
+      mode: 'edit' as const,
+      autosavePausedAfterReloadUndo: 3
+    }
+    const payload = buildWorkspaceSessionPayload(
+      createSnapshot({
+        openFiles: [
+          { ...tab, id: '/tmp/undone.md', isDirty: true },
+          { ...tab, id: '/tmp/clean.md', filePath: '/tmp/clean.md', isDirty: false }
+        ],
+        editorDrafts: { '/tmp/undone.md': 'pre-reload text' }
+      })
+    )
+
+    const [dirty, clean] = payload.openFilesByWorktree?.['wt-1'] ?? []
+    expect(dirty?.autosavePausedAfterReloadUndo).toBe(true)
+    expect(clean?.autosavePausedAfterReloadUndo).toBeUndefined()
+  })
+
   it('persists the disk baseline signature only alongside a dirty draft', () => {
     const payload = buildWorkspaceSessionPayload(
       createSnapshot({

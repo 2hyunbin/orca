@@ -19,6 +19,7 @@ import { EditorFileLoadErrorView } from './EditorFileLoadErrorView'
 import { RecoverableRenderErrorBoundary } from '../error-boundaries/RecoverableRenderErrorBoundary'
 import type { FileContent } from './editor-panel-content-types'
 import { ExternalFileChangeBanner } from './ExternalFileChangeBanner'
+import { AutosavePausedNotice } from './AutosavePausedNotice'
 import type { useMarkdownDocuments } from './useMarkdownDocuments'
 import { EditorMarkdownFileSurface } from './EditorMarkdownFileSurface'
 import type { MarkdownRenderState } from './markdown-render-mode'
@@ -168,6 +169,8 @@ export function EditorEditFileSurface({
         currentContent={currentContent}
         reloadContent={reloadContent}
       />
+    ) : activeFile.autosavePausedAfterReloadUndo !== undefined ? (
+      <AutosavePausedNotice />
     ) : null
 
   if (isChangesMode) {

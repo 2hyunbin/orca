@@ -8,7 +8,6 @@ import {
   MIN_EDITOR_AUTO_SAVE_DELAY_MS
 } from '../../../../shared/constants'
 import { clampNumber } from '@/lib/terminal-theme'
-import { isAutosavePausedAfterReloadUndo } from './reload-undo-autosave-pause'
 
 export const ORCA_EDITOR_QUIESCE_FILE_SAVES_EVENT = 'orca:editor-quiesce-file-saves'
 export const ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT = 'orca:editor-external-file-change'
@@ -92,7 +91,7 @@ export function canAutoSaveOpenFile(file: OpenFile): boolean {
 export function isAutosaveSuspendedForFile(
   file: Pick<
     OpenFile,
-    | 'id'
+    | 'autosavePausedAfterReloadUndo'
     | 'externalMutation'
     | 'pendingDiskBaselineVerification'
     | 'pendingLiveDiskVerification'
@@ -104,7 +103,7 @@ export function isAutosaveSuspendedForFile(
     file.pendingDiskBaselineVerification === true ||
     file.pendingLiveDiskVerification === true ||
     file.pendingOwnerMigration === true ||
-    isAutosavePausedAfterReloadUndo(file.id)
+    file.autosavePausedAfterReloadUndo !== undefined
   )
 }
 
