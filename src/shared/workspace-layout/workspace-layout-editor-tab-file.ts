@@ -31,6 +31,17 @@ export function sameEditorFile(a: FileOwner, b: FileOwner): boolean {
   return editorFileKey(a) === editorFileKey(b)
 }
 
+/** Whether an editor file id (a bare path or an owned id) names one of the workspace's records. */
+export function holdsEditorFileId(
+  workspace: { worktreeId: string; editorFiles?: readonly FileOwner[] },
+  fileId: string
+): boolean {
+  return (
+    workspace.editorFiles?.some((file) => editorTabShowsFile(fileId, file, workspace.worktreeId)) ??
+    false
+  )
+}
+
 export function editorTabFile<F extends FileOwner>(
   workspace: { worktreeId: string; editorFiles?: readonly F[] },
   entityId: string
