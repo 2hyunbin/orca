@@ -19054,6 +19054,14 @@
           "copied": "Tab ID copied",
           "failed": "Could not copy tab ID",
           "copy": "Copy Tab ID"
+        },
+        "bulkClose": {
+          "others": "Close other tabs?",
+          "right": "Close tabs to the right?",
+          "left": "Close tabs to the left?",
+          "editors": "Close all editor tabs?",
+          "description": "The selected tabs will be closed. Pinned tabs will stay open.",
+          "confirm": "Close tabs"
         }
       }
     },

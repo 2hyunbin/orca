@@ -18890,6 +18890,14 @@
           "copied": "ID de l'onglet copié",
           "failed": "Impossible de copier l'ID de l'onglet",
           "copy": "Copier l'ID de l'onglet"
+        },
+        "bulkClose": {
+          "others": "Fermer les autres onglets ?",
+          "right": "Fermer les onglets à droite ?",
+          "left": "Fermer les onglets à gauche ?",
+          "editors": "Fermer tous les onglets de l’éditeur ?",
+          "description": "Les onglets sélectionnés seront fermés. Les onglets épinglés resteront ouverts.",
+          "confirm": "Fermer les onglets"
         }
       }
     },
