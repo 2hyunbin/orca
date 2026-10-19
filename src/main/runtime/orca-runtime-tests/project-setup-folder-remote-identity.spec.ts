@@ -10,20 +10,24 @@ import {
   tmpdir
 } from '../orca-runtime-test-mocks.spec'
 import { store } from '../orca-runtime-test-fixtures.spec'
+import type { Repo } from '../../../shared/repo-types'
+import type { RuntimeStore } from '../runtime-store-contract'
 
-function createRuntime(repos: Record<string, unknown>[]): OrcaRuntimeService {
-  const runtimeStore = {
+function createRuntime(repos: Repo[]): OrcaRuntimeService {
+  const runtimeStore: RuntimeStore = {
     ...store,
-    getRepos: () => [...repos] as never,
-    addRepo: (repo: Record<string, unknown>) => repos.push(repo),
-    getRepo: (id: string) => repos.find((repo) => repo.id === id) as never,
-    updateRepo: ({ id }: { id: string }, updates: Record<string, unknown>) => {
+    getRepos: () => [...repos],
+    addRepo: (repo: Repo) => {
+      repos.push(repo)
+    },
+    getRepo: (id: string) => repos.find((repo) => repo.id === id),
+    updateRepo: ({ id }, updates) => {
       const repo = repos.find((entry) => entry.id === id)
       if (!repo) {
         return null
       }
       Object.assign(repo, updates)
-      return { ...repo } as never
+      return { ...repo }
     },
     removeProjectForHost: (id: string) => {
       const index = repos.findIndex((repo) => repo.id === id)
@@ -31,10 +35,10 @@ function createRuntime(repos: Record<string, unknown>[]): OrcaRuntimeService {
         repos.splice(index, 1)
       }
     },
-    getProjects: () => projectHostSetupProjectionFromRepos(repos as never).projects as never,
-    getProjectHostSetups: () => projectHostSetupProjectionFromRepos(repos as never).setups as never
+    getProjects: () => [...projectHostSetupProjectionFromRepos(repos).projects],
+    getProjectHostSetups: () => [...projectHostSetupProjectionFromRepos(repos).setups]
   }
-  return new OrcaRuntimeService(runtimeStore as never)
+  return new OrcaRuntimeService(runtimeStore)
 }
 
 async function withGitFolder(
@@ -57,7 +61,7 @@ const repoA = { provider: 'github' as const, owner: 'acme', repo: 'repo-a' }
 
 describe('OrcaRuntimeService project setup of an existing folder (#30663)', () => {
   it('refuses to relabel a folder whose own GitHub remote names another repository', async () => {
-    const repos: Record<string, unknown>[] = []
+    const repos: Repo[] = []
     getRepoUpstreamMock.mockResolvedValueOnce(null)
     const runtime = createRuntime(repos)
 
@@ -78,7 +82,7 @@ describe('OrcaRuntimeService project setup of an existing folder (#30663)', () =
   })
 
   it('links a fork whose upstream remote names the project', async () => {
-    const repos: Record<string, unknown>[] = []
+    const repos: Repo[] = []
     getRepoUpstreamMock.mockResolvedValueOnce(null)
     const runtime = createRuntime(repos)
 
@@ -101,7 +105,7 @@ describe('OrcaRuntimeService project setup of an existing folder (#30663)', () =
   })
 
   it('still links a folder whose remote is not on GitHub', async () => {
-    const repos: Record<string, unknown>[] = []
+    const repos: Repo[] = []
     getRepoUpstreamMock.mockResolvedValueOnce(null)
     const runtime = createRuntime(repos)
 
