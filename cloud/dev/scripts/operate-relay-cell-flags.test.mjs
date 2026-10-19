@@ -586,7 +586,7 @@ test('a flip back that outlasts its wait keeps Postgres on reserve and says how 
   assert.equal(lines.find((line) => line.event === 'orca_relay_cell_reregistration_wait')?.waitMs, 1_666_667)
 })
 
-test('break glass records db for a cell that cannot answer, typed for that cell only', async () => {
+test('break glass records db (and drops phonePath) for a cell that cannot answer, typed for that cell only', async () => {
   const glass = { ...RESERVE, set: 'admitMode=default', 'expected-generation': '7' }
   assert.throws(() => parseCellFlagsRequest(values({ ...glass, 'break-glass': 'BREAK GLASS production-gce-c27' })), /break glass requires/)
   assert.throws(
@@ -594,7 +594,7 @@ test('break glass records db for a cell that cannot answer, typed for that cell 
     /on its own/
   )
   const fake = fakeGoogleAndCell({
-    stored: { generation: '7', object: { v: 1, cellId: CELL, flags: { admitMode: 'reserve', readinessLocal: true } } }
+    stored: { generation: '7', object: { v: 1, cellId: CELL, flags: { admitMode: 'reserve', readinessLocal: true, phonePath: 'memory' } } }
   })
   fake.state.directorAdmitMode = 'reserve'
   const inner = fake.fetchImpl
