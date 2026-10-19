@@ -6,6 +6,9 @@ const RELAY_BACKOFF_CEILING_MS = 30_000
 export const RELAY_STABLE_CONNECTION_MS = RELAY_BACKOFF_CEILING_MS
 const RELAY_HOST_OFFLINE_RETRY_MIN_MS = 5_000
 const RELAY_HOST_OFFLINE_RETRY_MAX_MS = 15_000
+// Why: an attach timeout means the desktop's control is seated, so a transient
+// data-dial miss is worth one quick redial of the same cell.
+const RELAY_ATTACH_TIMEOUT_REDIAL_MS = 1_000
 // Why: gates must slow recovery down, never end it — a relay-only phone has no
 // direct path to refresh credentials, so a timerless gate is a permanent outage.
 // The cadence escalates and jitters so a permanently revoked device is not a
@@ -29,7 +32,10 @@ export class RelayRetryDelays {
     return Math.max(RELAY_BACKOFF_MIN_MS, floorMs, Math.floor(cap * this.jitterFraction()))
   }
 
-  hostOfflineDelayMs(): number {
+  hostOfflineDelayMs(attachTimeoutRedial = false): number {
+    if (attachTimeoutRedial) {
+      return RELAY_ATTACH_TIMEOUT_REDIAL_MS
+    }
     const range = RELAY_HOST_OFFLINE_RETRY_MAX_MS - RELAY_HOST_OFFLINE_RETRY_MIN_MS
     return RELAY_HOST_OFFLINE_RETRY_MIN_MS + Math.floor(range * this.jitterFraction())
   }

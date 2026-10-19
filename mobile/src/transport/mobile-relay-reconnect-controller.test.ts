@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { MobileRelayRpcSession } from './mobile-relay-rpc-session'
 import { MobileE2EEAuthenticationError } from './mobile-e2ee-v2-physical-channel'
+import { MOBILE_RELAY_PHONE_CLOSE_REASON } from '../../../src/shared/mobile-relay-close-codes'
 import { RelayOuterError } from './mobile-relay-e2ee-link'
 import { RelayReconnectController } from './mobile-relay-reconnect-controller'
 import { RelayDirectorHttpError } from './mobile-relay-resume-director'
@@ -380,22 +381,30 @@ describe('relay reconnect controller', () => {
     expect(relayFailureAllowsGraceRetry(new RelayOuterError(4429))).toBe(false)
   })
 
-  it('grants one attach-timeout re-resolve per failure streak', () => {
-    const reconnect = createController(vi.fn())
+  it('redials an attach timeout once quickly per failure streak', () => {
+    const onRetry = vi.fn()
+    const reconnect = createController(onRetry)
+    const attachTimeout = () =>
+      new RelayOuterError(4404, true, MOBILE_RELAY_PHONE_CLOSE_REASON.HOST_ATTACH_TIMEOUT)
 
-    expect(reconnect.claimAttachTimeoutRetry()).toBe(true)
-    expect(reconnect.claimAttachTimeoutRetry()).toBe(false)
-    reconnect.reset()
-    expect(reconnect.claimAttachTimeoutRetry()).toBe(true)
+    reconnect.registerFailure(attachTimeout())
+    vi.advanceTimersByTime(999)
+    expect(onRetry).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1)
+    expect(onRetry).toHaveBeenCalledOnce()
 
-    // A brief connection continues the streak; only a stable one ends it.
-    reconnect.setActiveSession({ getFailure: () => null })
-    reconnect.registerFailure(new RelayOuterError(4408), false)
-    expect(reconnect.claimAttachTimeoutRetry()).toBe(false)
+    reconnect.registerFailure(attachTimeout())
+    vi.advanceTimersByTime(9_999)
+    expect(onRetry).toHaveBeenCalledOnce()
+    vi.advanceTimersByTime(1)
+    expect(onRetry).toHaveBeenCalledTimes(2)
+
+    // A stable connection ends the streak and earns a fresh quick redial.
     reconnect.setActiveSession({ getFailure: () => null })
     vi.advanceTimersByTime(30_000)
-    reconnect.registerFailure(new RelayOuterError(4408), false)
-    expect(reconnect.claimAttachTimeoutRetry()).toBe(true)
+    reconnect.registerFailure(attachTimeout())
+    vi.advanceTimersByTime(1_000)
+    expect(onRetry).toHaveBeenCalledTimes(3)
   })
 })
 

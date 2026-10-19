@@ -53,7 +53,7 @@ describe('relay protocol contract', () => {
       DRAINING: 4503
     })
     // Shipped phones match this exact text; it is a wire value, not copy.
-    expect(RELAY_PHONE_CLOSE_REASON).toEqual({ HOST_ATTACH_TIMEOUT: 'host attach timeout' })
+    expect(RELAY_PHONE_CLOSE_REASON).toEqual({ HOST_ATTACH_TIMEOUT: 'attach-timeout' })
     expect(RELAY_PROTOCOL_LIMITS).toMatchObject({
       firstFrameDeadlineMs: 2_000,
       maxHttpBodyBytes: 4_096,

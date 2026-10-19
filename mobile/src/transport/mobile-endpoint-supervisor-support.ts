@@ -1,7 +1,3 @@
-import {
-  MOBILE_RELAY_CLOSE_CODE,
-  MOBILE_RELAY_PHONE_CLOSE_REASON
-} from '../../../src/shared/mobile-relay-close-codes'
 import { RelayOuterError } from './mobile-relay-e2ee-link'
 import { MobileE2EEAuthenticationError } from './mobile-e2ee-v2-physical-channel'
 import { ReplacementAuthenticationTimeoutError } from './replacement-session-authentication'
@@ -40,15 +36,12 @@ export class RelayDialAbortedError extends Error {
   }
 }
 
-// One credential attempt: dial, and on a director-class failure (or the first
-// attach timeout of an outage) re-resolve the cell assignment, persist it
-// durably, then dial once more.
+// One credential attempt: dial, and on a director-class failure re-resolve the
+// cell assignment, persist it durably, then dial once more.
 export async function dialRelayThroughDirectorFallback(args: {
   resumeToken: string
   relay: () => MobileRelayEndpoint
   dial: () => Promise<RelayDialResult>
-  // Spends the once-per-outage re-resolve an attach timeout earns.
-  claimAttachTimeoutRetry: () => boolean
   resolveRelay: (input: {
     relay: MobileRelayEndpoint
     resumeToken: string
@@ -57,23 +50,16 @@ export async function dialRelayThroughDirectorFallback(args: {
 }): Promise<RelayDialResult> {
   const first = await args.dial()
   const relay = args.relay()
-  if (first.ok || first.error instanceof RelayDialAbortedError) {
-    return first
-  }
-  // Why: an attach timeout re-resolves at once with no rate-limit wait — the failed
-  // dial already spent the cell's 10s attach deadline, past the director's 5s
-  // per-host resolve floor.
-  const attachTimeout = isHostAttachTimeout(first.error)
-  if (attachTimeout ? !args.claimAttachTimeoutRetry() : !isDirectorResolutionFailure(first.error)) {
+  if (
+    first.ok ||
+    first.error instanceof RelayDialAbortedError ||
+    !isDirectorResolutionFailure(first.error)
+  ) {
     return first
   }
   try {
     const resolved = await args.resolveRelay({ relay, resumeToken: args.resumeToken })
     await args.persistResolvedRelay(resolved)
-    // Why: a half-open control keeps failing on its own cell; only a move earns a redial.
-    if (attachTimeout && resolved.cellUrl === relay.cellUrl) {
-      return first
-    }
     return await args.dial()
   } catch (error) {
     return { ok: false, error: toError(error) }
@@ -89,16 +75,6 @@ export function isDirectorResolutionFailure(error: Error): boolean {
   return (
     !(error instanceof MobileE2EEAuthenticationError) &&
     (!(error instanceof RelayOuterError) || [4409, 4503, 1006].includes(error.code))
-  )
-}
-
-// The cell held this dial for the desktop's data link, which never attached while
-// its control still looked alive — a half-open control the director may have moved.
-export function isHostAttachTimeout(error: Error): boolean {
-  return (
-    error instanceof RelayOuterError &&
-    error.code === MOBILE_RELAY_CLOSE_CODE.HOST_OFFLINE &&
-    error.closeReason === MOBILE_RELAY_PHONE_CLOSE_REASON.HOST_ATTACH_TIMEOUT
   )
 }
 

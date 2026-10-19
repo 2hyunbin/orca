@@ -15,8 +15,8 @@ export type MobileRelayCloseCode =
 // which names host control-socket closes. Peers that predate one never send it.
 export const MOBILE_RELAY_PHONE_CLOSE_REASON = {
   // A 4404 sent while the desktop's control looked alive but its data link
-  // missed the attach deadline — the desktop may be reachable through another cell.
-  HOST_ATTACH_TIMEOUT: 'host attach timeout'
+  // missed the attach deadline; worth one quick redial of the same cell.
+  HOST_ATTACH_TIMEOUT: 'attach-timeout'
 } as const
 export type MobileRelayLeg = 'host-control' | 'host-data' | 'phone-invite' | 'phone-resume'
 

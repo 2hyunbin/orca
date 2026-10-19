@@ -243,7 +243,7 @@ describe('MobileRelayE2eeLink', () => {
       expect(error).toMatchObject({
         code: 4404,
         rejectedByRelayHello: true,
-        closeReason: 'host attach timeout'
+        closeReason: 'attach-timeout'
       })
     } finally {
       vi.useRealTimers()

@@ -9,7 +9,6 @@ import {
   relay
 } from './mobile-endpoint-supervisor-test-fakes'
 import { RelayOuterError } from './mobile-relay-e2ee-link'
-import { RelayDirectorHttpError } from './mobile-relay-resume-director'
 import type { MobileEndpointSupervisorDependencies } from './mobile-endpoint-supervisor'
 import type { RpcClient } from './rpc-client'
 
@@ -17,9 +16,9 @@ vi.mock('react-native', () => ({ Platform: { OS: 'ios' } }))
 vi.mock('expo-secure-store', () => ({ WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'when-unlocked' }))
 vi.mock('expo-crypto', () => ({ getRandomBytes: (length: number) => new Uint8Array(length) }))
 
-const movedRelay = { ...relay, cellUrl: 'https://relay-c2.onorca.dev', assignmentEpoch: 8 }
 // The fakes' fixed jitter puts the known-offline wait at 5039ms.
 const HOST_OFFLINE_WAIT_MS = 5_039
+const ATTACH_TIMEOUT_REDIAL_MS = 1_000
 
 function attachTimeout(): RelayOuterError {
   return new RelayOuterError(4404, true, MOBILE_RELAY_PHONE_CLOSE_REASON.HOST_ATTACH_TIMEOUT)
@@ -71,80 +70,52 @@ describe('relay dial refused because the desktop data link missed its attach dea
     vi.restoreAllMocks()
   })
 
-  it('re-resolves through the director at once and dials the cell it names', async () => {
+  it('redials the same cell after a short delay without asking the director', async () => {
     const { logical, openRelay } = cellRefusing(attachTimeout, 1)
-    const resolveRelay = vi.fn(async () => movedRelay)
+    const resolveRelay = vi.fn(async () => relay)
     const supervisor = start(logical, { openRelay, resolveRelay })
 
     await supervisor.start()
+    expect(openRelay).toHaveBeenCalledOnce()
+    await vi.advanceTimersByTimeAsync(ATTACH_TIMEOUT_REDIAL_MS - 1)
+    expect(openRelay).toHaveBeenCalledOnce()
+    await vi.advanceTimersByTimeAsync(1)
 
-    expect(resolveRelay).toHaveBeenCalledOnce()
     expect(openRelay).toHaveBeenCalledTimes(2)
-    expect(openRelay.mock.calls[1]?.[0].cellUrl).toBe(movedRelay.cellUrl)
+    expect(openRelay.mock.calls[1]?.[0].cellUrl).toBe(relay.cellUrl)
+    expect(resolveRelay).not.toHaveBeenCalled()
     expect(logical.getState()).toBe('connected')
     supervisor.stop()
   })
 
-  it('falls back to the known-offline wait when the retry fails the same way', async () => {
+  it('falls back to the known-offline wait when the redial fails the same way', async () => {
     const { logical, openRelay } = cellRefusing(attachTimeout)
-    const resolveRelay = vi.fn(async () => movedRelay)
+    const resolveRelay = vi.fn(async () => relay)
     const supervisor = start(logical, { openRelay, resolveRelay })
 
     await supervisor.start()
+    await vi.advanceTimersByTimeAsync(ATTACH_TIMEOUT_REDIAL_MS)
     expect(openRelay).toHaveBeenCalledTimes(2)
 
     await vi.advanceTimersByTimeAsync(HOST_OFFLINE_WAIT_MS - 1)
     expect(openRelay).toHaveBeenCalledTimes(2)
     await vi.advanceTimersByTimeAsync(1)
     expect(openRelay).toHaveBeenCalledTimes(3)
-    await vi.advanceTimersByTimeAsync(HOST_OFFLINE_WAIT_MS)
-    expect(openRelay).toHaveBeenCalledTimes(4)
-    // The quick re-resolve is spent for this outage.
-    expect(resolveRelay).toHaveBeenCalledOnce()
-    supervisor.stop()
-  })
-
-  it('does not redial a cell the director still names', async () => {
-    const { logical, openRelay } = cellRefusing(attachTimeout)
-    const resolveRelay = vi.fn(async () => relay)
-    const supervisor = start(logical, { openRelay, resolveRelay })
-
-    await supervisor.start()
-
-    expect(resolveRelay).toHaveBeenCalledOnce()
-    expect(openRelay).toHaveBeenCalledOnce()
+    // The quick redial is spent for this failure streak.
     await vi.advanceTimersByTimeAsync(HOST_OFFLINE_WAIT_MS - 1)
-    expect(openRelay).toHaveBeenCalledOnce()
-    supervisor.stop()
-  })
-
-  it('honours a director Retry-After on the quick re-resolve and spends the retry', async () => {
-    const { logical, openRelay } = cellRefusing(attachTimeout)
-    const resolveRelay = vi.fn(async () => {
-      throw new RelayDirectorHttpError(503, 5_000)
-    })
-    const supervisor = start(logical, { openRelay, resolveRelay })
-
-    await supervisor.start()
-    expect(openRelay).toHaveBeenCalledOnce()
-
-    await vi.advanceTimersByTimeAsync(4_999)
-    expect(openRelay).toHaveBeenCalledOnce()
-    await vi.advanceTimersByTimeAsync(1)
-    expect(openRelay).toHaveBeenCalledTimes(2)
-    expect(resolveRelay).toHaveBeenCalledOnce()
+    expect(openRelay).toHaveBeenCalledTimes(3)
+    expect(resolveRelay).not.toHaveBeenCalled()
     supervisor.stop()
   })
 
   it('keeps the known-offline wait for a 4404 without the reason', async () => {
     const { logical, openRelay } = cellRefusing(() => new RelayOuterError(4404, true))
-    const resolveRelay = vi.fn(async () => movedRelay)
+    const resolveRelay = vi.fn(async () => relay)
     const supervisor = start(logical, { openRelay, resolveRelay })
 
     await supervisor.start()
 
     expect(resolveRelay).not.toHaveBeenCalled()
-    expect(openRelay).toHaveBeenCalledOnce()
     await vi.advanceTimersByTimeAsync(HOST_OFFLINE_WAIT_MS - 1)
     expect(openRelay).toHaveBeenCalledOnce()
     await vi.advanceTimersByTimeAsync(1)
@@ -152,18 +123,20 @@ describe('relay dial refused because the desktop data link missed its attach dea
     supervisor.stop()
   })
 
-  it('earns a fresh quick retry when the app returns to the foreground', async () => {
+  it('earns a fresh quick redial when the app returns to the foreground', async () => {
     const { logical, openRelay } = cellRefusing(attachTimeout)
-    const resolveRelay = vi.fn(async () => movedRelay)
-    const supervisor = start(logical, { openRelay, resolveRelay })
+    const supervisor = start(logical, { openRelay })
     await supervisor.start()
-    expect(resolveRelay).toHaveBeenCalledOnce()
+    await vi.advanceTimersByTimeAsync(ATTACH_TIMEOUT_REDIAL_MS)
+    expect(openRelay).toHaveBeenCalledTimes(2)
 
     supervisor.setForeground(false)
     supervisor.setForeground(true)
     await vi.advanceTimersByTimeAsync(0)
+    expect(openRelay).toHaveBeenCalledTimes(3)
+    await vi.advanceTimersByTimeAsync(ATTACH_TIMEOUT_REDIAL_MS)
 
-    expect(resolveRelay).toHaveBeenCalledTimes(2)
+    expect(openRelay).toHaveBeenCalledTimes(4)
     supervisor.stop()
   })
 })

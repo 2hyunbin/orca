@@ -21,7 +21,7 @@ describe('mobile relay close-code contract', () => {
   })
 
   it('locks the phone close reasons the relay mirrors', () => {
-    expect(MOBILE_RELAY_PHONE_CLOSE_REASON).toEqual({ HOST_ATTACH_TIMEOUT: 'host attach timeout' })
+    expect(MOBILE_RELAY_PHONE_CLOSE_REASON).toEqual({ HOST_ATTACH_TIMEOUT: 'attach-timeout' })
   })
 
   it('uses the configured director and never a cell-supplied URL', () => {

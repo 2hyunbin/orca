@@ -212,8 +212,6 @@ export class RelayReconnectController {
 
   recordRejectedCredential = (version: number): void => this.credentials.recordRejected(version)
 
-  claimAttachTimeoutRetry = (): boolean => this.failureCount.claimAttachTimeoutRetry()
-
   registerActiveFailure(logical: StableLogicalRpcClient): Error | null {
     if (logical.getActivePath() !== 'relay') {
       return null
@@ -278,7 +276,7 @@ export class RelayReconnectController {
     // only reaches this branch — a director HTTP error carries no relay close code.
     const delay =
       recovery?.kind === 'retry-after-host-offline'
-        ? this.delays.hostOfflineDelayMs()
+        ? this.delays.hostOfflineDelayMs(this.failureCount.claimAttachTimeoutRedial(error))
         : this.delays.transportDelayMs(failureCount, relayDirectorRetryAfterMs(error))
     this.nextAttemptAt = now + delay
     if (error instanceof MobileE2EEAuthenticationError) {

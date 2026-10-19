@@ -14,6 +14,6 @@ export type RelayCloseCode = (typeof RELAY_CLOSE_CODE)[keyof typeof RELAY_CLOSE_
 // code; not RELAY_HOST_CLOSE_REASON, which names host control-socket closes.
 export const RELAY_PHONE_CLOSE_REASON = {
   // A HOST_OFFLINE sent while the host's control looked alive but its data link
-  // missed hostAttachDeadlineMs — the phone re-resolves through the director once.
-  HOST_ATTACH_TIMEOUT: 'host attach timeout'
+  // missed hostAttachDeadlineMs; the phone redials the same cell once, quickly.
+  HOST_ATTACH_TIMEOUT: 'attach-timeout'
 } as const
