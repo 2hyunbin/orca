@@ -119,7 +119,7 @@ describe('runtime environment store', () => {
       pairingCode: pairingCode('ws://127.0.0.1:6768')
     })
 
-    for (const name of ['Build', ' build ']) {
+    for (const name of ['Build', ' build ', '"build"']) {
       expect(() =>
         addEnvironmentFromPairingCode(userDataPath, {
           name,

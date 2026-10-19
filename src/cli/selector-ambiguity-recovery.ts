@@ -9,7 +9,9 @@ export type SelectorAmbiguityRecovery = {
 
 const EXACT_FORMS = {
   repo: {
-    forms: 'id:<repo-id> or path:<absolute-path>',
+    // Why the --project route: a local and an SSH project can share both repo id and path.
+    forms:
+      'id:<repo-id> or path:<absolute-path>; if two hosts share that id or path, use --project <id> --host <host> where the command takes them',
     list: 'orca repo list --json',
     noun: 'project'
   },
