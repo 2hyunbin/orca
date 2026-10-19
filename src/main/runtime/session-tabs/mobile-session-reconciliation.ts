@@ -5,6 +5,8 @@ import { OrcaRuntimeWithWriteOrchestrationPointerPty } from '../orchestration/te
 import type { RuntimeMobileSessionTabsSnapshot } from '../../../shared/runtime-types'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { getMobileSessionSnapshotTabIdentityKeys } from '../mobile-session-tab-merge'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { withMainPaneTerminals } from './layout-owner-pane-terminal-fill'
 
 export abstract class OrcaRuntimeWithSyncMobileSessionTabs extends OrcaRuntimeWithWriteOrchestrationPointerPty {
   protected abstract buildPreservedHeadlessMobileSessionSnapshot(
@@ -192,7 +194,17 @@ export abstract class OrcaRuntimeWithSyncMobileSessionTabs extends OrcaRuntimeWi
       const launchDraftFencedSnapshot = this.nativeChatDraftResolutions.applyFence(snapshot)
       const fencedSnapshot = this.applyMobileSessionRetirementFences(launchDraftFencedSnapshot)
       this.releaseRuntimeSessionOwnershipForRendererRetiredTabs(fencedSnapshot, existing)
-      const nextSnapshot = this.mergePreservedHeadlessMobileSessionTabs(fencedSnapshot, existing)
+      // Switch point: main's binding names the terminal of a pane the window lists before it.
+      const boundSnapshot = ORCA_LAYOUT_OWNER_IS_MAIN
+        ? withMainPaneTerminals(fencedSnapshot, (tabId, leafId) => {
+            const ptyId =
+              this.getWorkspaceSessionForWorktree(snapshot.worktree)?.terminalLayoutsByTabId?.[
+                tabId
+              ]?.ptyIdsByLeafId?.[leafId] ?? null
+            return ptyId && this.ptysById.get(ptyId)?.connected === true ? ptyId : null
+          })
+        : fencedSnapshot
+      const nextSnapshot = this.mergePreservedHeadlessMobileSessionTabs(boundSnapshot, existing)
       // Why: clients drop same-epoch frames whose version isn't strictly newer,
       // and main-local touches may already have emitted a higher version than
       // the renderer's counter — keep the stored version strictly monotonic so
