@@ -64,7 +64,9 @@ export class TerminalAgentPhonePush {
 
   observe(change: AgentPaneChange): void {
     if (change.kind === 'seeded') {
-      this.rememberFinishedTurn(change.paneKey)
+      if (change.phase !== 'rest') {
+        this.rememberFinishedTurn(change.paneKey)
+      }
       return
     }
     if (change.kind === 'observed') {
@@ -73,32 +75,30 @@ export class TerminalAgentPhonePush {
       }
       return
     }
-    this.newsByPane.get(change.paneKey)?.quiet?.cancel()
-    this.newsByPane.delete(change.paneKey)
     const { transition, paneKey } = change
-    if (transition === 'prompt-submitted' || change.to === 'rest') {
-      this.finishedTurnByPane.delete(paneKey)
-    }
-    if (transition === 'needs-input') {
-      this.announce(paneKey, change.workspace.worktreeId, this.deps.readHookRow(paneKey))
-      return
-    }
-    if (transition !== 'turn-finished' && transition !== 'errored') {
-      return
-    }
-    const row = this.deps.readHookRow(paneKey)
-    // The all-clear of a turn already announced when its lead agent finished.
+    const finished = transition === 'turn-finished' || transition === 'errored'
+    const row = finished || transition === 'needs-input' ? this.deps.readHookRow(paneKey) : null
+    // The all-clear of a turn announced when its lead agent finished: that news still stands.
     if (
+      finished &&
       row?.turnCompletedAt !== undefined &&
       this.finishedTurnByPane.get(paneKey) === row.turnCompletedAt
     ) {
       return
     }
-    this.announce(paneKey, change.workspace.worktreeId, row)
+    this.newsByPane.get(paneKey)?.quiet?.cancel()
+    this.newsByPane.delete(paneKey)
+    if (transition === 'prompt-submitted' || change.to === 'rest') {
+      this.finishedTurnByPane.delete(paneKey)
+    }
+    if (row) {
+      // A finish waits out the quiet window, as the window's does; a request for input does not.
+      this.announce(paneKey, change.workspace.worktreeId, row, finished)
+    }
   }
 
   // The lead agent finished while background work keeps the pane working: as the window does, that
-  // is the turn's finish, named by its `turnCompletedAt`.
+  // is the turn's finish, named by its `turnCompletedAt`, and announced at once.
   private observeLeadFinish(paneKey: string, worktreeId: string | undefined): void {
     const row = this.deps.readHookRow(paneKey)
     const turnCompletedAt = row?.state === 'working' ? row.turnCompletedAt : undefined
@@ -112,7 +112,8 @@ export class TerminalAgentPhonePush {
     }
     this.finishedTurnByPane.set(paneKey, turnCompletedAt)
     this.newsByPane.get(paneKey)?.quiet?.cancel()
-    this.announce(paneKey, worktreeId, { ...row, state: 'done', stateStartedAt: turnCompletedAt })
+    const finish = { ...row, state: 'done' as const, stateStartedAt: turnCompletedAt }
+    this.announce(paneKey, worktreeId, finish, false)
   }
 
   private rememberFinishedTurn(paneKey: string): void {
@@ -122,9 +123,14 @@ export class TerminalAgentPhonePush {
     }
   }
 
-  private announce(paneKey: string, worktreeId: string, row: AgentStatusIpcPayload | null): void {
+  private announce(
+    paneKey: string,
+    worktreeId: string,
+    row: AgentStatusIpcPayload,
+    waitOutQuiet: boolean
+  ): void {
     // A structured chat's projected row is pushed by the structured lane.
-    if (!row || row.structuredHost) {
+    if (row.structuredHost) {
       return
     }
     const muted = this.deps.isWorkspaceMuted(worktreeId)
@@ -134,7 +140,7 @@ export class TerminalAgentPhonePush {
     if (muted) {
       return
     }
-    if (row.state !== 'done') {
+    if (!waitOutQuiet) {
       this.deliverUnlessLooking(news)
       return
     }

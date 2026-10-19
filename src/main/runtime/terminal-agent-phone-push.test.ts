@@ -140,7 +140,7 @@ describe('TerminalAgentPhonePush', () => {
     push.observe(observed())
     // A background task's ping on the same turn is no news.
     push.observe(observed())
-    advance(AGENT_DONE_QUIET_MS)
+    // At once, as the window announces it.
     expect(sent.map((event) => [event.agentState, event.notificationId])).toEqual([
       ['done', ID.replace(':5000', ':7000')]
     ])
@@ -148,6 +148,28 @@ describe('TerminalAgentPhonePush', () => {
     state.hookRow = row({ stateStartedAt: 9_000, turnCompletedAt: 7_000 })
     push.observe(moved('turn-finished'))
     advance(AGENT_DONE_QUIET_MS)
+    expect(sent).toHaveLength(1)
+    // The all-clear leaves the finish standing, so the window's copy stays covered.
+    expect(
+      push.coveringNews({ ...windowFinish, notificationId: ID.replace(':5000', ':7000') })
+    ).not.toBeNull()
+  })
+
+  it('pushes a lead agent’s finish held for a looking phone even after the all-clear', () => {
+    const { push, sent, state, looking } = harness()
+    looking.add(WT)
+    state.hookRow = row({ state: 'working', turnCompletedAt: 7_000 })
+    push.observe({
+      kind: 'observed',
+      paneKey: PANE,
+      workspace: { worktreeId: WT, sshHostId: null },
+      phase: 'working',
+      at: 1
+    })
+    state.hookRow = row({ turnCompletedAt: 7_000 })
+    push.observe(moved('turn-finished'))
+    looking.delete(WT)
+    push.notePhoneSessionClosed(WT)
     expect(sent).toHaveLength(1)
   })
 
