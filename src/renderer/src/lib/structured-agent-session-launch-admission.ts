@@ -24,7 +24,7 @@ import type { LaunchAgentInNewTabArgs } from '@/lib/launch-agent-in-new-tab'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { toRuntimeWorktreeSelector } from '@/runtime/runtime-worktree-selector'
 import { readStructuredChatHostPermissionVerdict } from '@/runtime/structured-chat-host-permission'
-import { notifyHostPermissionRefused } from './structured-agent-session-launch-permission-notice'
+import { notifyHostPermissionRefused } from '@/lib/structured-agent-session-launch-permission-notice'
 import { structuredChatUnavailableText } from '@/lib/structured-agent-session-launch-failure'
 import type { WebRuntimeTerminalCreateOutcome } from '@/runtime/web-runtime-session-types'
 

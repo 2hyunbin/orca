@@ -112,7 +112,7 @@ export async function openTerminalForDeclinedChat(
           )
         : translate(
             'components.native-chat.structuredSessionTerminalNotVisible',
-            "Orca opened {{value0}} in a terminal, but it hasn't appeared here yet. Your chat draft is still here.",
+            "Orca opened {{value0}} in a terminal, but couldn't show it here when the launch finished. Your chat draft was kept.",
             { value0: structuredAgentLabel(args.plan.agent) }
           )
     }
@@ -129,6 +129,10 @@ export async function openTerminalForDeclinedChat(
     activate: false,
     recordInteraction: false
   })
+  if (Boolean(current.isPinned) !== Boolean(replacement.isPinned)) {
+    const setPinned = current.isPinned ? state.pinTab : state.unpinTab
+    setPinned(replacement.id, { recordInteraction: false })
+  }
   insertUnifiedTabAfterAnchor(worktreeId, replacement.id, current.id)
   const placed = useAppStore.getState()
   const group = (placed.groupsByWorktree[worktreeId] ?? []).find((g) => g.id === current.groupId)
@@ -145,7 +149,15 @@ export async function openTerminalForDeclinedChat(
     placed.activeWorktreeId === worktreeId &&
     placed.activeGroupIdByWorktree[worktreeId] === current.groupId &&
     group.activeTabId === current.id
-  placed.closeUnifiedTab(tab.id)
+  if (current.customLabel !== null) {
+    placed.setTabCustomTitle(replacement.entityId, current.customLabel, {
+      recordInteraction: false
+    })
+  }
+  if (current.color !== null) {
+    placed.setTabColor(replacement.entityId, current.color, { recordInteraction: false })
+  }
+  placed.closeUnifiedTab(tab.id, { recordInteraction: false })
   if (foreground) {
     useAppStore.getState().setActiveTab(replacement.entityId)
     useAppStore.getState().activateTab(replacement.id)

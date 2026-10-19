@@ -88,6 +88,13 @@ it('sends no queued card and retries no start on a host held for its permission 
     )
     return {
       ...reveal,
+      publishedNotices: structuredSessionNotices({
+        launch: { lifecycle: 'published', failure: null, retry: reveal.retryLaunch },
+        agentLabel: 'Claude',
+        sessionError: null,
+        composerError: null,
+        hostPermission: gate.notice
+      }),
       notices: structuredSessionNotices({
         launch: { lifecycle: 'failed', failure: null, retry: reveal.retryLaunch },
         agentLabel: 'Claude',
@@ -99,6 +106,10 @@ it('sends no queued card and retries no start on a host held for its permission 
   })
   await vi.waitFor(() => expect(result.current.notices[0]?.action?.label).toBe('Check again'))
 
+  expect(result.current.publishedNotices[0]).toMatchObject({
+    text: "Orca couldn't confirm the host's permissions for Claude.",
+    action: { label: 'Check again' }
+  })
   await act(() => result.current.queuedMessages.resume())
   await act(() => result.current.queuedMessages.steer('m1'))
   expect(result.current.queuedMessages.steerNewest()).toBe(false)

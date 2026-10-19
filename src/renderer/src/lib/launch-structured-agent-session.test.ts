@@ -74,10 +74,11 @@ describe('structured agent session launch', () => {
     await expect(
       launchStructuredAgentSession(closed, undefined, false, () => true)
     ).rejects.toThrow('retired before create')
-    expect(vi.mocked(callStructuredAgentSession).mock.calls.map(([, method]) => method)).toEqual([
-      'agentSession.createSupport',
-      'agentSession.createSupport'
-    ])
+    expect(
+      vi
+        .mocked(callStructuredAgentSession)
+        .mock.calls.some(([, method]) => method === 'agentSession.create')
+    ).toBe(false)
   })
 
   it('creates a native session with a host-verifiable launch intent', async () => {

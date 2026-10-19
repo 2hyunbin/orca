@@ -121,7 +121,7 @@ export function shouldQueueTerminalFocusAfterMenuClose(
  *
  * Returns `null` when no startup plan can be built (e.g. a whitespace-only prompt).
  */
-export function launchAgentInNewTab(args: LaunchAgentInNewTabArgs): LaunchAgentInNewTabResult {
+function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgentInNewTabResult {
   const {
     agent,
     worktreeId,
@@ -146,7 +146,6 @@ export function launchAgentInNewTab(args: LaunchAgentInNewTabArgs): LaunchAgentI
     return null
   }
   const { resolvedLaunchPlatform, isRemote, queuedShell } = executionContext
-  const cmdOverrides = store.settings?.agentCmdOverrides ?? {}
   const effectiveAgentArgs =
     agentArgs !== undefined
       ? agentArgs
@@ -155,13 +154,12 @@ export function launchAgentInNewTab(args: LaunchAgentInNewTabArgs): LaunchAgentI
   const trimmedPrompt = prompt?.trim() ?? ''
   const hasPrompt = trimmedPrompt.length > 0
   const isFollowupPath = TUI_AGENT_CONFIG[agent].promptInjectionMode === 'stdin-after-start'
-  const workspaceKind = workspaceKindForWorktreeId(worktreeId)
   // Why: a followup-path agent gets its prompt pasted unsubmitted after start, so route it as a draft.
   const routePromptDelivery =
     hasPrompt && isFollowupPath && promptDelivery === 'auto-submit' ? 'draft' : promptDelivery
   const startupPlanBase = {
     agent,
-    cmdOverrides,
+    cmdOverrides: store.settings?.agentCmdOverrides ?? {},
     platform: resolvedLaunchPlatform,
     shell: queuedShell,
     isRemote,
@@ -187,7 +185,7 @@ export function launchAgentInNewTab(args: LaunchAgentInNewTabArgs): LaunchAgentI
     agent,
     requestedSurface: args.requestedSurface,
     selectedExecutionHostId: args.selectedExecutionHostId,
-    workspace: { kind: workspaceKind, worktreeId },
+    workspace: { kind: workspaceKindForWorktreeId(worktreeId), worktreeId },
     prompt: trimmedPrompt,
     promptDelivery: routePromptDelivery,
     tuiCustomization: { cwd: initialCwd },
@@ -195,7 +193,7 @@ export function launchAgentInNewTab(args: LaunchAgentInNewTabArgs): LaunchAgentI
     ...(args.promptKeptByCaller ? { promptKeptByCaller: true as const } : {})
   })
   if ('awaited' in route) {
-    return launchOnceHostAnswered(route, args, startupPlan, launchAgentInNewTab)
+    return launchOnceHostAnswered(route, args, startupPlan, launchAgentInNewTabInternal)
   }
   const { plan } = route
   if (plan?.route === 'structured-native-chat') {
@@ -208,7 +206,7 @@ export function launchAgentInNewTab(args: LaunchAgentInNewTabArgs): LaunchAgentI
       ...(args.onStructuredHostDeclined ? { onHostDeclined: args.onStructuredHostDeclined } : {}),
       // The host's "no" opens this same launch as a terminal, with the caller's arguments.
       openTerminal: (terminalPlan, terminalActivate) =>
-        launchAgentInNewTab({
+        launchAgentInNewTabInternal({
           ...args,
           beforeSurfaceOpen: undefined,
           ...(terminalActivate === false ? { prompt: undefined, activate: false } : {}),
@@ -218,8 +216,9 @@ export function launchAgentInNewTab(args: LaunchAgentInNewTabArgs): LaunchAgentI
     })
     if (!structured) {
       args.focusIntent?.cancel()
+      return null
     }
-    return structured ? { ...structured, startupPlan } : null
+    return { ...structured, startupPlan }
   }
 
   args.focusIntent?.cancel()
@@ -360,3 +359,5 @@ export function launchAgentInNewTab(args: LaunchAgentInNewTabArgs): LaunchAgentI
     ...(promptDeliveryResult ? { promptDeliveryResult } : {})
   }
 }
+
+export { launchAgentInNewTabInternal as launchAgentInNewTab }

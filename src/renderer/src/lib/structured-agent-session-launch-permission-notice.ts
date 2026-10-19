@@ -15,7 +15,7 @@ export function hostPermissionRefusedText(
   return kind === 'unverified'
     ? translate(
         'components.native-chat.hostPermission.unverified',
-        "Orca couldn't confirm the host's permissions for {{value0}}, so the chat didn't start.",
+        "Orca couldn't confirm the host's permissions for {{value0}}.",
         { value0: agentLabel }
       )
     : translate(

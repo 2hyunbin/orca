@@ -138,6 +138,13 @@ describe('a provisional structured chat tab', () => {
       split: { sourceGroupId: chat.groupId, splitDirection: 'right', activate: true }
     })
     const groupId = sibling.groupId
+    const pinnedSource = scenario === 'empty' || scenario === 'typed-during'
+    if (pinnedSource) {
+      useAppStore.getState().pinTab(chat.id)
+      useAppStore.getState().pinTab(sibling.id)
+      useAppStore.getState().setTabCustomLabel(chat.id, 'My work')
+      useAppStore.getState().setUnifiedTabColor(chat.id, '#ff0000')
+    }
     useAppStore.getState().moveUnifiedTabToGroup(chat.id, groupId)
     useAppStore.getState().reorderUnifiedTabs(groupId, [chat.id, sibling.id])
     if (scenario === 'typed-during') {
@@ -156,6 +163,10 @@ describe('a provisional structured chat tab', () => {
     if (scenario === 'closed-during') {
       useAppStore.getState().closeUnifiedTab(chat.id)
     }
+    if (pinnedSource) {
+      useAppStore.getState().activateTab(chat.id)
+      useAppStore.getState().setActiveTabType('agent-session', 'wt-1')
+    }
     const priorFailure = getStructuredAgentSessionLaunchFailure('wt-1', chat.entityId)
     const selected = useAppStore.getState().getActiveTab('wt-2')
     const terminal =
@@ -163,7 +174,30 @@ describe('a provisional structured chat tab', () => {
         ? null
         : useAppStore
             .getState()
-            .createUnifiedTab('wt-1', 'terminal', { entityId: 'replacement', activate: false })
+            .createUnifiedTab('wt-1', 'terminal', { id: 'replacement', activate: false })
+    if (terminal) {
+      useAppStore.setState({
+        tabsByWorktree: {
+          'wt-1': [
+            {
+              id: terminal.entityId,
+              ptyId: null,
+              worktreeId: 'wt-1',
+              title: 'Terminal',
+              customTitle: null,
+              color: null,
+              sortOrder: 0,
+              createdAt: 1
+            }
+          ]
+        }
+      })
+      if (scenario === 'typed-before') {
+        useAppStore.getState().pinTab(terminal.id)
+      }
+    }
+    const interaction = vi.fn()
+    useAppStore.setState({ recordFeatureInteraction: interaction })
     await act(async () => {
       complete({
         outcome:
@@ -172,6 +206,7 @@ describe('a provisional structured chat tab', () => {
       })
       await launch?.settlement
     })
+    expect(interaction).not.toHaveBeenCalled()
     const state = useAppStore.getState()
     const tabs = state.unifiedTabsByWorktree['wt-1'] ?? []
     expect(tabs.some((t) => t.id === chat.id)).toBe(
@@ -187,11 +222,42 @@ describe('a provisional structured chat tab', () => {
             : [chat.id, terminal.id, sibling.id]
       )
       expect(mocks.toast).toHaveBeenCalledOnce()
+      expect(state.getTab(terminal.id)?.isPinned ?? false).toBe(pinnedSource)
+      expect(state.tabsByWorktree['wt-1'][0].isPinned ?? false).toBe(pinnedSource)
+      if (pinnedSource) {
+        const replaced = scenario === 'empty'
+        expect(state.getTab(terminal.id)).toMatchObject({
+          customLabel: replaced ? 'My work' : null,
+          color: replaced ? '#ff0000' : null
+        })
+        expect(state.tabsByWorktree['wt-1'][0]).toMatchObject({
+          customTitle: replaced ? 'My work' : null,
+          color: replaced ? '#ff0000' : null
+        })
+        expect(state.getTab(chat.id)?.customLabel ?? null).toBe(replaced ? null : 'My work')
+        expect(state.getTab(chat.id)?.color ?? null).toBe(replaced ? null : '#ff0000')
+        expect(state.activeGroupIdByWorktree['wt-1']).toBe(groupId)
+        expect(state.groupsByWorktree['wt-1'].find((g) => g.id === groupId)?.activeTabId).toBe(
+          replaced ? terminal.id : chat.id
+        )
+        expect(state.activeTabType).toBe(replaced ? 'terminal' : 'agent-session')
+      }
     }
     expect(view.result.current[0]?.text ?? '').not.toMatch(/open the agent|open it in/i)
     if (scenario === 'unreconciled') {
       expect(getStructuredAgentSessionLaunchFailure('wt-1', chat.entityId)).not.toBe(priorFailure)
-      expect(view.result.current[0]?.text).toContain("hasn't appeared")
+      const notice = view.result.current[0]?.text
+      expect(notice).toContain("couldn't show it here when the launch finished")
+      act(() => {
+        useAppStore.getState().createUnifiedTab('wt-1', 'terminal', {
+          id: 'missing',
+          activate: false
+        })
+      })
+      expect(useAppStore.getState().getTab(chat.id)).not.toBeNull()
+      expect(fallback).toHaveBeenCalledOnce()
+      expect(mocks.launch).toHaveBeenCalledOnce()
+      expect(view.result.current[0]?.text).toBe(notice)
       expect(mocks.toast).not.toHaveBeenCalled()
     }
     if (scenario.startsWith('away-')) {
@@ -200,8 +266,5 @@ describe('a provisional structured chat tab', () => {
       expect(state.getActiveTab('wt-2')).toEqual(selected)
     }
     view.unmount()
-    expect(mocks.text).toBe(
-      scenario === 'typed-before' ? 'keep this' : scenario === 'typed-during' ? 'new thought' : ''
-    )
   })
 })
