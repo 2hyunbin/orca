@@ -116,7 +116,8 @@ export function serializedStateMutationCommand(
     } };`,
     'beat_fence;',
     `( while sleep ${heartbeatSeconds} && kill -0 $$ 2>/dev/null; do beat_fence; done ) >/dev/null 2>&1 & beat=$!;`,
-    `trap 'kill "$beat" 2>/dev/null; rm -rf "$lock"' EXIT;`,
+    // Reap quietly: some SSH gateways merge job-termination stderr into the snapshot verdict.
+    `trap 'kill "$beat" 2>/dev/null; wait "$beat" 2>/dev/null; rm -rf "$lock"' EXIT;`,
     script
   ].join(' ')
   const run = `sh -c ${quotePosixShell(guarded)}`
