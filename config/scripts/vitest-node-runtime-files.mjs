@@ -87,6 +87,7 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/main/native-chat/agent-session-wire/structured-agent-session-status-first-input-identity.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-outgrown-child.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-permission-mode.test.ts',
+  'src/main/native-chat/agent-session-wire/structured-agent-session-queued-legacy-import.test.ts',
   'src/main/native-chat/structured-chat-naming-command-first.test.ts',
   'src/main/native-chat/structured-chat-naming-status-hook.test.ts',
   'src/main/runtime/agent-session-conversation-name-store.test.ts',
