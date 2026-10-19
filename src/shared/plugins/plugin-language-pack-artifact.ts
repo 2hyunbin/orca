@@ -3,7 +3,8 @@ import {
   translatablePluginChromeContainer
 } from './plugin-translatable-chrome'
 
-export const PLUGIN_LANGUAGE_CATALOG_MAX_ENTRIES = 20_000
+// Why headroom: a complete pack already carries ~18k entries and the English catalog keeps growing.
+export const PLUGIN_LANGUAGE_CATALOG_MAX_ENTRIES = 50_000
 export const PLUGIN_LANGUAGE_CATALOG_MAX_DEPTH = 16
 
 const DANGEROUS_CATALOG_KEYS = new Set(['__proto__', 'prototype', 'constructor'])
@@ -18,6 +19,8 @@ export type PluginLanguagePackRegistration = {
   pluginKey: string
   locale: string
   catalog: Record<string, unknown>
+  /** Whole percent of translatable English strings this pack translates. */
+  coverage: number
 }
 
 export function isPluginLanguagePackRegistration(
@@ -34,6 +37,9 @@ export function isPluginLanguagePackRegistration(
     pack.resourceLanguage === pluginLanguageResourceId(pack.id as `plugin:${string}`) &&
     typeof pack.pluginKey === 'string' &&
     typeof pack.locale === 'string' &&
+    typeof pack.coverage === 'number' &&
+    pack.coverage >= 0 &&
+    pack.coverage <= 100 &&
     checkPluginLanguagePackCatalog(pack.catalog).ok
   )
 }
@@ -75,7 +81,8 @@ function isCatalogObject(value: unknown): value is Record<string, unknown> {
   )
 }
 
-function protectedTranslation(path: string): boolean {
+/** Security copy that no language pack may replace. */
+export function isProtectedPluginTranslationPath(path: string): boolean {
   if (!path.startsWith(PROTECTED_TRANSLATION_ROOT)) {
     return false
   }
@@ -159,7 +166,7 @@ function walkPluginLanguagePackCatalog(
       const path = frame.path ? `${frame.path}.${key}` : key
       // Walk protected containers only to reach exempt chrome; still check every leaf’s full path.
       if (
-        protectedTranslation(path) &&
+        isProtectedPluginTranslationPath(path) &&
         !(isCatalogObject(value) && translatablePluginChromeContainer(path))
       ) {
         return { ok: false, error: `catalog cannot replace protected security copy at ${path}` }
