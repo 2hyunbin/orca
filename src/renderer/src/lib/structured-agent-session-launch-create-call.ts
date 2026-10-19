@@ -11,6 +11,7 @@ import { readAgentSessionRefusalReference } from '../../../shared/agent-session-
 import { readAgentSessionErrorRefusal } from '../../../shared/agent-session-write-failure'
 import {
   callStructuredAgentSession,
+  supportsStructuredAgentSessionCreateOptionsMode,
   supportsStructuredAgentSessionCreateMessage
 } from '@/runtime/structured-agent-session-client'
 import { publishStructuredAgentSessionCreateHydration } from './structured-agent-session-create-hydration'
@@ -91,14 +92,19 @@ export async function launchStructuredAgentSession(
   }
   if (!intent.createPrepared) {
     let supported = false
+    let replaceOptions = false
     try {
       supported = await supportsStructuredAgentSessionCreateMessage(intent.target)
+      replaceOptions =
+        supported &&
+        Boolean(intent.explicitLaunchOptions) &&
+        (await supportsStructuredAgentSessionCreateOptionsMode(intent.target))
     } catch {
       // Unknown capability stays on the compatible create path.
     }
     if (!intent.createPrepared) {
       intent.createMessageSupport = supported
-      intent.prepareCreate?.()
+      intent.prepareCreate?.(replaceOptions ? 'replace-model-selection' : undefined)
       intent.createPrepared = true
     }
   }

@@ -32,7 +32,7 @@ function buildArgs(
     trimmedCommandInput: 'Fix the bug',
     agentArgs: '--model gpt-5',
     agentArgsApply: true,
-    commandTemplate: '{basePrompt}',
+    recipe: { agentId: 'codex', commandInputTemplate: '{basePrompt}', agentArgs: '--model gpt-5' },
     saveTargetValue: 'none',
     actionId: 'resolveComments',
     repoId: null,
@@ -413,4 +413,25 @@ describe('runSourceControlAgentActionStart CLI arguments applicability', () => {
       expect.objectContaining({ agentArgs: '--model gpt-5' })
     )
   })
+})
+
+it('executes the actual bound namespace while saving the literal default recipe', async () => {
+  const recipe = {
+    agentId: null,
+    commandInputTemplate: '{basePrompt}',
+    agentArgs: '',
+    launchPreferences: { agentId: 'codex' as const, model: 'chosen' }
+  }
+  const onStart = vi.fn().mockResolvedValue(true)
+  await runSourceControlAgentActionStart(
+    buildArgs({ recipe, onStart, selectedAgent: 'codex', saveTargetValue: 'global' })
+  )
+  expect(onStart).toHaveBeenCalledWith(
+    expect.objectContaining({ sessionOptions: { model: 'chosen' } })
+  )
+  expect(mocks.onSaveAgentDefault).toHaveBeenLastCalledWith(
+    { type: 'global' },
+    'resolveComments',
+    recipe
+  )
 })

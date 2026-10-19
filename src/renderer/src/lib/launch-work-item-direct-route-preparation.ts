@@ -86,6 +86,7 @@ export async function prepareDirectWorkItemAgentLaunch(args: {
   agentOverride?: TuiAgent
   agentArgs?: string | null
   sessionOptions?: Readonly<Record<string, string>>
+  resolveSessionOptions?: (agent: TuiAgent) => Readonly<Record<string, string>> | undefined
   repoConnectionId: string | null
   repoHost: RepoHostFields & { path: string }
   detectedAgentsPromise: Promise<string[]> | null
@@ -134,6 +135,11 @@ export async function prepareDirectWorkItemAgentLaunch(args: {
         // Non-critical: activation still has the explicit startup below.
       })
   }
+  const sessionOptions = effectiveAgent
+    ? args.resolveSessionOptions
+      ? args.resolveSessionOptions(effectiveAgent)
+      : args.sessionOptions
+    : undefined
   const plan =
     effectiveAgent === null
       ? null
@@ -145,7 +151,7 @@ export async function prepareDirectWorkItemAgentLaunch(args: {
             workspace: { kind: 'git-worktree', worktreeId: args.worktreeId, repoId: args.repoId },
             prompt: args.draftContent,
             promptDelivery: args.promptDelivery,
-            ...(args.sessionOptions ? { launchOptions: args.sessionOptions } : {})
+            ...(sessionOptions ? { launchOptions: sessionOptions } : {})
           })
   const structuredLaunch = plan?.route === 'structured-native-chat'
 

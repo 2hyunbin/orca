@@ -105,7 +105,7 @@ function publishWithHeldOptions(
   state: StructuredLaunchState,
   created: Promise<StructuredAgentLaunchReceipt>
 ): Promise<StructuredAgentLaunchReceipt> {
-  state.intent.prepareCreate = () => prepareStructuredLaunchCreateMessage(state)
+  state.intent.prepareCreate = (mode) => prepareStructuredLaunchCreateMessage(state, mode)
   return created.then((receipt) => publishStructuredLaunchCreateOptions(state, receipt))
 }
 

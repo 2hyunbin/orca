@@ -5,6 +5,7 @@ import type {
 } from '../../../shared/agent-session-wire'
 import {
   STRUCTURED_LAUNCH_OPTION_IDS,
+  structuredLaunchCompatibleOptions,
   structuredLaunchRequestedOptions
 } from '../../../shared/native-chat-session-option-defaults'
 import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from '../../../shared/agent-chat-permission-mode'
@@ -166,7 +167,8 @@ export async function applyStructuredLaunchExplicitOptions(
   if (!requested) {
     return applyStructuredLaunchHeldOptions(state, receipt)
   }
-  const entries = Object.entries(requested).sort(([a], [b]) =>
+  const compatible = structuredLaunchCompatibleOptions(state.intent.agent, requested)
+  const entries = Object.entries(compatible).sort(([a], [b]) =>
     a === 'model' ? -1 : b === 'model' ? 1 : 0
   )
   for (const [id, encoded] of entries) {
@@ -184,7 +186,7 @@ export async function applyStructuredLaunchExplicitOptions(
       encoded
     )
     settleHeldOption(state, id, encoded, outcome)
-    if (outcome.kind === 'refused') {
+    if (outcome.kind === 'refused' && requested[id] !== undefined) {
       for (const [key, value] of Object.entries(state.selection.held)) {
         settleHeldOption(state, key, value, outcome)
       }

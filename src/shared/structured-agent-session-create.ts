@@ -31,6 +31,7 @@ export type StructuredAgentSessionCreateParams = {
   tabId?: string
   /** Sent only to a host advertising `AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY`. */
   firstMessage?: StructuredAgentSessionFirstMessage
+  optionsMode?: 'replace-model-selection'
   options?: Readonly<Record<string, string>>
 }
 
@@ -68,6 +69,7 @@ export function structuredAgentSessionCreateParams(args: {
   resumeFrom?: StructuredAgentSessionResumeSource
   tabId?: string
   firstMessage?: StructuredAgentSessionFirstMessage
+  optionsMode?: 'replace-model-selection'
   options?: Readonly<Record<string, string>>
   randomUuid: () => string
   now?: number
@@ -78,6 +80,7 @@ export function structuredAgentSessionCreateParams(args: {
     ...(args.resumeFrom ? { resumeFrom: args.resumeFrom } : {}),
     ...(args.tabId ? { tabId: args.tabId } : {}),
     ...(args.firstMessage ? { firstMessage: args.firstMessage } : {}),
+    ...(args.optionsMode ? { optionsMode: args.optionsMode } : {}),
     ...(args.options ? { options: args.options } : {})
   }
   return {

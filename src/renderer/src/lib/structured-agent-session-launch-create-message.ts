@@ -1,4 +1,7 @@
-import { structuredLaunchRequestedOptions } from '../../../shared/native-chat-session-option-defaults'
+import {
+  structuredLaunchCompatibleOptions,
+  structuredLaunchRequestedOptions
+} from '../../../shared/native-chat-session-option-defaults'
 import { structuredAgentSessionCreateFingerprint } from '../../../shared/structured-agent-session-mutation'
 import type { StructuredLaunchState } from './structured-agent-session-launch-registry'
 import { notifyStructuredLaunchListeners } from './structured-agent-session-launch-registry'
@@ -20,7 +23,10 @@ import {
 } from './structured-agent-session-launch-options'
 
 /** Freeze what create carries once; an ambiguous reply always replays the same payload. */
-export function prepareStructuredLaunchCreateMessage(state: StructuredLaunchState): void {
+export function prepareStructuredLaunchCreateMessage(
+  state: StructuredLaunchState,
+  optionsMode?: 'replace-model-selection'
+): void {
   const { intent } = state
   if (intent.createPrepared) {
     return
@@ -32,11 +38,16 @@ export function prepareStructuredLaunchCreateMessage(state: StructuredLaunchStat
     return
   }
   const firstMessage = prepareStructuredLaunchPromptForCreate(intent.sessionId, intent.target)
-  const options = structuredLaunchCreateOptions(state)
+  const requested = structuredLaunchCreateOptions(state)
+  const options =
+    requested && state.selection.explicit && !optionsMode
+      ? structuredLaunchCompatibleOptions(intent.agent, requested)
+      : requested
   const params = {
     ...intent.params,
     ...(firstMessage ? { firstMessage } : {}),
-    ...(options ? { options } : {})
+    ...(options ? { options } : {}),
+    ...(optionsMode && state.selection.explicit ? { optionsMode } : {})
   }
   intent.params = {
     ...params,

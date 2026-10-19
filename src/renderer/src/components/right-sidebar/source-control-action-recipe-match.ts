@@ -32,7 +32,7 @@ function normalizeSourceControlActionRecipeForComparison(
   recipe: PersistedSourceControlActionRecipe | null | undefined
 ): NormalizedSourceControlActionRecipe {
   return {
-    agentId: recipe?.agentId ?? recipe?.launchPreferences?.agentId ?? null,
+    agentId: recipe?.agentId ?? null,
     commandInputTemplate:
       typeof recipe?.commandInputTemplate === 'string'
         ? recipe.commandInputTemplate.trim()

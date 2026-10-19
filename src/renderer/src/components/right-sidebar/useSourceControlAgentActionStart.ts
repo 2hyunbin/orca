@@ -20,7 +20,7 @@ type UseSourceControlAgentActionStartArgs = {
   agentArgs: string
   /** False when the launch would be structured native chat, which reads no CLI arguments. */
   agentArgsApply: boolean
-  commandTemplate: string
+  recipe: SourceControlActionRecipe
   saveLaunchRecipe: boolean
   saveTargetValue: string
   actionId: SourceControlLaunchActionId
@@ -77,7 +77,7 @@ export function useSourceControlAgentActionStart({
   trimmedCommandInput,
   agentArgs,
   agentArgsApply,
-  commandTemplate,
+  recipe,
   saveLaunchRecipe,
   saveTargetValue,
   actionId,
@@ -158,7 +158,7 @@ export function useSourceControlAgentActionStart({
           trimmedCommandInput,
           agentArgs,
           agentArgsApply,
-          commandTemplate,
+          recipe,
           saveTargetValue: saveLaunchRecipe ? (saveTargetValueOverride ?? saveTargetValue) : 'none',
           actionId,
           repoId,
@@ -189,7 +189,7 @@ export function useSourceControlAgentActionStart({
       agentArgs,
       agentArgsApply,
       buildPlan,
-      commandTemplate,
+      recipe,
       connectionUnavailable,
       groupId,
       launchSource,

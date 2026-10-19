@@ -14,11 +14,7 @@ import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { sourceControlActionRecipeMatchesTarget } from './source-control-action-recipe-match'
 import { resolveSourceControlAgentSaveTarget } from './source-control-agent-action-dialog-support'
-import { resolveSourceControlActionRecipe } from '../../../../shared/source-control-ai'
-import {
-  resolveSourceControlActionSessionOptions,
-  withSavedSourceControlActionLaunchPreferences
-} from '../../../../shared/source-control-action-launch-preferences'
+import { resolveSourceControlActionSessionOptions } from '../../../../shared/source-control-action-launch-preferences'
 
 type RunSourceControlAgentActionStartArgs = {
   selectedAgent: TuiAgent
@@ -26,7 +22,7 @@ type RunSourceControlAgentActionStartArgs = {
   agentArgs: string
   /** False when the launch would be structured native chat, which reads no CLI arguments. */
   agentArgsApply: boolean
-  commandTemplate: string
+  recipe: SourceControlActionRecipe
   saveTargetValue: string
   actionId: SourceControlLaunchActionId
   repoId?: string | null
@@ -68,7 +64,7 @@ export async function runSourceControlAgentActionStart({
   trimmedCommandInput,
   agentArgs,
   agentArgsApply,
-  commandTemplate,
+  recipe,
   saveTargetValue,
   actionId,
   repoId,
@@ -93,8 +89,7 @@ export async function runSourceControlAgentActionStart({
   // an empty string would beat that fallback and silently suppress them.
   const launchAgentArgs = agentArgsApply ? agentArgs : undefined
   // The dialog edits agent, arguments and prompt; the model stays the saved one for that agent.
-  const savedRecipe = resolveSourceControlActionRecipe({ settings, repo, actionId })
-  const sessionOptions = resolveSourceControlActionSessionOptions(savedRecipe, selectedAgent)
+  const sessionOptions = resolveSourceControlActionSessionOptions(recipe, selectedAgent)
   const notifyLaunchAccepted = (): void => {
     if (launchAcceptedNotified) {
       return
@@ -161,23 +156,19 @@ export async function runSourceControlAgentActionStart({
   }
 
   const saveTarget = resolveSourceControlAgentSaveTarget(saveTargetValue, repoId)
-  const launchRecipe: SourceControlActionRecipe = withSavedSourceControlActionLaunchPreferences(
-    { agentId: selectedAgent, commandInputTemplate: commandTemplate, agentArgs },
-    savedRecipe
-  )
   const launchRecipeAlreadySaved = Boolean(
     saveTarget &&
     sourceControlActionRecipeMatchesTarget({
       actionId,
       target: saveTarget,
-      recipe: launchRecipe,
+      recipe,
       settings,
       repo
     })
   )
   if (saveTarget && onSaveAgentDefault && !launchRecipeAlreadySaved) {
     try {
-      await onSaveAgentDefault(saveTarget, actionId, launchRecipe)
+      await onSaveAgentDefault(saveTarget, actionId, recipe)
     } catch (error) {
       // Why: the prompt already reached the agent; a failed recipe save must not strand the
       // caller's accepted-launch bookkeeping (neither onLaunched nor onLaunchAborted would fire).

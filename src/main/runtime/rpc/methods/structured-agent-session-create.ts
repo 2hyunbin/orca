@@ -50,6 +50,7 @@ export function structuredAgentSessionCreateIntentFingerprint(params: {
   resumeFrom?: StructuredAgentSessionResumeSource
   tabId?: string
   firstMessage?: StructuredAgentSessionFirstMessage
+  optionsMode?: 'replace-model-selection'
   options?: Readonly<Record<string, string>>
 }): string {
   return computeAgentSessionPayloadFingerprint({
@@ -61,6 +62,7 @@ export function structuredAgentSessionCreateIntentFingerprint(params: {
       resumeFrom: params.resumeFrom,
       tabId: params.tabId,
       firstMessage: params.firstMessage,
+      optionsMode: params.optionsMode,
       options: params.options
     }
   })
@@ -79,6 +81,7 @@ export async function prepareStructuredAgentSessionCreateForWorktree(args: {
   resumeFrom?: StructuredAgentSessionResumeSource
   structuredAgentCliSourceEvidence?: StructuredAgentCliSourceEvidence
   /** Explicit picks override seed keys at rest; acquired in-process launches replace the seed. */
+  optionsMode?: 'replace-model-selection'
   options?: Readonly<Record<string, string>>
   /** The tab id the caller reserved for this chat, taken when its tab is published; absent, the tab
    *  gets the id clients derive. Beside `options`, after the fingerprint, likewise. */
@@ -147,7 +150,7 @@ export async function prepareStructuredAgentSessionCreateForWorktree(args: {
       ...(args.options
         ? {
             options:
-              atRest && !args.options.model
+              atRest && args.optionsMode !== 'replace-model-selection'
                 ? { ...resolved.options, ...args.options }
                 : { ...seededPermissionMode(resolved.options), ...args.options }
           }
@@ -252,6 +255,7 @@ export async function createStructuredAgentSessionForWorktree(args: {
   worktree: string
   agent: StructuredAgentId
   activate: boolean
+  optionsMode?: 'replace-model-selection'
   options?: Readonly<Record<string, string>>
   tabId?: string
 }): Promise<AgentSessionMutationResult<AgentSessionAttachResult>> {

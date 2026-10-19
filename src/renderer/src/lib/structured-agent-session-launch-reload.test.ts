@@ -130,6 +130,7 @@ describe('structured agent launch reload recovery', () => {
         payloadFingerprint: string
         expectedRuntimeFence: number | null
         explicitLaunchOptions?: Readonly<Record<string, string>>
+        optionsMode?: 'replace-model-selection'
         options?: Readonly<Record<string, string>>
       }) => ({
         ...launchIntent(args.worktreeId, args.sessionId),
@@ -138,6 +139,7 @@ describe('structured agent launch reload recovery', () => {
         params: {
           ...launchIntent(args.worktreeId, args.sessionId).params,
           agent: args.agent,
+          optionsMode: args.optionsMode,
           options: args.options,
           envelope: {
             sessionId: args.sessionId,
@@ -161,6 +163,7 @@ describe('structured agent launch reload recovery', () => {
           agent: 'codex',
           lifecycle: 'pending',
           explicitLaunchOptions: { model: 'action-model', fastMode: 'false' },
+          optionsMode: 'replace-model-selection',
           options: { model: 'frozen-model', effort: 'high' },
           clientOperationId: 'operation-reloaded',
           payloadFingerprint: 'fingerprint-reloaded',
@@ -186,6 +189,7 @@ describe('structured agent launch reload recovery', () => {
         worktreeId,
         explicitLaunchOptions: { model: 'action-model', fastMode: 'false' },
         params: expect.objectContaining({
+          optionsMode: 'replace-model-selection',
           options: { model: 'frozen-model', effort: 'high' },
           envelope: expect.objectContaining({
             clientOperationId: 'operation-reloaded',

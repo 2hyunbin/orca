@@ -47,7 +47,7 @@ export type StructuredAgentSessionLaunchIntent = {
   params: StructuredAgentSessionCreateParams
   createMessageSupport?: boolean
   createPrepared?: true
-  prepareCreate?: () => void
+  prepareCreate?: (optionsMode?: 'replace-model-selection') => void
   beforeCreate?: () => boolean
   surfaceAddress?: StructuredLaunchSurfaceAddress
   /** The saved selection create seeds, read when the intent is built. */
@@ -171,6 +171,7 @@ export function restoreStructuredAgentSessionLaunchIntent(args: {
   explicitLaunchOptions?: Readonly<Record<string, string>>
   seedOptions?: Readonly<Record<string, string>>
   firstMessage?: StructuredAgentSessionFirstMessage
+  optionsMode?: 'replace-model-selection'
   options?: Readonly<Record<string, string>>
   createMessageSupport?: boolean
 }): StructuredAgentSessionLaunchIntent {
@@ -200,6 +201,7 @@ export function restoreStructuredAgentSessionLaunchIntent(args: {
       agent: args.agent,
       ...(args.resumeFrom ? { resumeFrom: args.resumeFrom } : {}),
       ...(args.firstMessage ? { firstMessage: args.firstMessage } : {}),
+      ...(args.optionsMode ? { optionsMode: args.optionsMode } : {}),
       ...(args.options ? { options: args.options } : {})
     },
     ...(args.createMessageSupport === undefined

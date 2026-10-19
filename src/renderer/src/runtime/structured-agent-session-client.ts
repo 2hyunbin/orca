@@ -16,7 +16,10 @@ import {
   STRUCTURED_AGENT_SESSION_CLI_SOURCE_RUNTIME_CAPABILITY,
   type RuntimeCapability
 } from '../../../shared/protocol-version'
-import { AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY } from '../../../shared/agent-session-create-capabilities'
+import {
+  AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY,
+  AGENT_SESSION_CREATE_OPTIONS_MODE_RUNTIME_CAPABILITY
+} from '../../../shared/agent-session-create-capabilities'
 import { callRuntimeRpc, runtimeEnvironmentSupportsCapability } from './runtime-rpc-client'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import {
@@ -47,6 +50,15 @@ export function supportsStructuredAgentSessionPromptCancel(
   target: RuntimeClientTarget
 ): Promise<boolean> {
   return structuredAgentSessionHostSupports(target, AGENT_SESSION_PROMPT_CANCEL_RUNTIME_CAPABILITY)
+}
+
+export function supportsStructuredAgentSessionCreateOptionsMode(
+  target: RuntimeClientTarget
+): Promise<boolean> {
+  return structuredAgentSessionHostSupports(
+    target,
+    AGENT_SESSION_CREATE_OPTIONS_MODE_RUNTIME_CAPABILITY
+  )
 }
 
 export function supportsStructuredAgentSessionCreateMessage(

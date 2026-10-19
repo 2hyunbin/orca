@@ -35,6 +35,7 @@ export function restorePersistedStructuredLaunchState(
       ...(record.resumeFrom ? { resumeFrom: record.resumeFrom } : {}),
       ...(record.seedOptions ? { seedOptions: record.seedOptions } : {}),
       ...(record.firstMessage ? { firstMessage: record.firstMessage } : {}),
+      ...(record.optionsMode ? { optionsMode: record.optionsMode } : {}),
       ...(record.options ? { options: record.options } : {}),
       ...(record.explicitLaunchOptions
         ? { explicitLaunchOptions: record.explicitLaunchOptions }

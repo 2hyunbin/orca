@@ -61,6 +61,11 @@ function renderForm(
       statusCopy: null,
       agentArgs: '',
       agentArgsApply: true,
+      recipe: {
+        agentId: overrides.selectedAgent ?? 'codex',
+        commandInputTemplate: overrides.commandTemplate ?? '{basePrompt}',
+        agentArgs: overrides.agentArgs ?? ''
+      },
       commandTemplate: '{basePrompt}',
       savedCommandInputTemplate: '{basePrompt}',
       saveLaunchRecipe: true,

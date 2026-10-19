@@ -21,7 +21,9 @@ import { getDirectWorkItemDraftContent } from '@/lib/launch-work-item-direct-dra
 import {
   resolveDirectPrStartPoint,
   resolveDirectLaunchOwnerRow,
-  resolveDirectSetupDecision
+  resolveDirectSetupDecision,
+  planDirectWorkItemLaunch,
+  resolveDirectProspectiveAgent
 } from '@/lib/launch-work-item-direct-preflight'
 import type { LaunchWorkItemDirectArgs } from '@/lib/launch-work-item-direct-types'
 import {
@@ -36,13 +38,10 @@ import {
 import { prepareDirectWorkItemAgentLaunch } from '@/lib/launch-work-item-direct-route-preparation'
 import {
   planAgentSessionLaunch,
-  awaitStructuredRouteHostAnswer,
   type AgentSessionLaunchPlan
 } from '@/lib/agent-session-launch-plan'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
-import { pickTuiAgent } from '../../../shared/tui-agent-selection'
-import { isTuiAgent } from '../../../shared/tui-agent-config'
-import { ensureDetectedAgentsForRepo } from '@/lib/agent-detection-target-inventory'
+import { loadProjectLaunchContext } from '@/lib/agent-detection-target-inventory'
 
 /**
  * "Use" flow: create the workspace, activate it, launch the default agent,
@@ -101,7 +100,10 @@ export async function launchWorkItemDirect(args: LaunchWorkItemDirectArgs): Prom
   const shell = repoLaunchHost.platform === 'win32' ? 'powershell' : 'posix'
   // Why: agent detection shells out and can be cold/slow. Start it now, but
   // don't let it serialize setup-policy resolution or git worktree creation.
-  const detectedAgentsPromise = agentOverride ? null : ensureDetectedAgentsForRepo(store, repo)
+  const projectContextPromise = loadProjectLaunchContext(repoOwnerTarget, repoId).then(
+    (context) => ({ context }),
+    () => null
+  )
 
   const setupResolution = await resolveDirectSetupDecision(repoId, repo, repoOwnerHostId)
   if (setupResolution.kind === 'needs-modal') {
@@ -153,35 +155,32 @@ export async function launchWorkItemDirect(args: LaunchWorkItemDirectArgs): Prom
     }
   }
 
-  const prospectiveAgent =
-    agentOverride ??
-    pickTuiAgent(
-      settings?.defaultTuiAgent,
-      new Set(((await detectedAgentsPromise) ?? []).filter(isTuiAgent)),
-      settings?.disabledTuiAgents
-    )
-  const sessionOptions = prospectiveAgent
-    ? (args.resolveSessionOptions?.(prospectiveAgent) ?? args.sessionOptions)
-    : undefined
+  const projectPreflight = await projectContextPromise
+  if (!projectPreflight) {
+    toast.error(unavailableAgentErrorMessage())
+    return false
+  }
+  const projectContext = projectPreflight.context
+  const { detectedAgentsPromise, prospectiveAgent } = await resolveDirectProspectiveAgent(
+    store,
+    repo,
+    projectContext,
+    agentOverride
+  )
   const requestId = newAgentLaunchRequestId()
   const draftContent = await getDirectWorkItemDraftContent(item, repoConnectionId)
-  const prospectiveRequest = prospectiveAgent
-    ? {
-        requestId,
-        agent: prospectiveAgent,
-        workspace: { kind: 'git-worktree' as const, repoId, executionHostId: repoOwnerHostId },
-        prompt: draftContent,
-        promptDelivery,
-        ...(sessionOptions ? { launchOptions: sessionOptions } : {})
-      }
-    : null
-  if (prospectiveRequest) {
-    await awaitStructuredRouteHostAnswer(useAppStore.getState(), prospectiveRequest, 3000)
-  }
-  const preflightPlan = prospectiveRequest
-    ? planAgentSessionLaunch(useAppStore.getState(), prospectiveRequest)
-    : undefined
-  if (preflightPlan?.route !== 'structured-native-chat') {
+  const preflightPlan = await planDirectWorkItemLaunch({
+    requestId,
+    prospectiveAgent,
+    projectContext,
+    repoId,
+    repoOwnerHostId,
+    draftContent,
+    promptDelivery,
+    resolveSessionOptions: args.resolveSessionOptions,
+    sessionOptions: args.sessionOptions
+  })
+  if (!projectContext || preflightPlan?.route !== 'structured-native-chat') {
     const agentArgsPlan = planAgentCliArgsSuffix(agentArgs, shell)
     if (!agentArgsPlan.ok) {
       // Why: direct launches may create a worktree before the agent startup plan
@@ -239,7 +238,8 @@ export async function launchWorkItemDirect(args: LaunchWorkItemDirectArgs): Prom
       repoId,
       agentOverride: preflightPlan?.agent ?? agentOverride,
       agentArgs,
-      ...(sessionOptions ? { sessionOptions } : {}),
+      ...(args.sessionOptions ? { sessionOptions: args.sessionOptions } : {}),
+      resolveSessionOptions: args.resolveSessionOptions,
       repoConnectionId,
       repoHost: repo,
       detectedAgentsPromise,

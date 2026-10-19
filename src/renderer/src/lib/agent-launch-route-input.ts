@@ -1,3 +1,4 @@
+import type { ProjectLaunchContext } from '../../../shared/rpc-contract/preflight-params'
 import {
   LOCAL_EXECUTION_HOST_ID,
   parseExecutionHostId,
@@ -36,6 +37,7 @@ export type ProspectiveWorkspaceKind = NonNullable<AgentLaunchRoutingInput['work
  * environment, or the host instead of a worktree.
  */
 export type ProspectiveWorkspace = {
+  executionContext?: ProjectLaunchContext['executionContext']
   kind: ProspectiveWorkspaceKind
   repoId?: string
   worktreeId?: string
@@ -152,7 +154,11 @@ export function buildAgentLaunchRouteInput(
       ? { clientCapabilities: pairedHostClientCapabilities() }
       : {}),
     workspaceKind: workspace.kind,
-    projectRuntime: resolveProjectRuntime(store, workspace, executionHostId),
+    projectExecutionKind: workspace.executionContext?.kind,
+    projectRuntime:
+      workspace.executionContext?.kind === 'host'
+        ? workspace.executionContext.projectRuntime
+        : resolveProjectRuntime(store, workspace, executionHostId),
     promptDelivery: args.promptDelivery,
     launchText: args.prompt,
     nativeChatTranscriptIsLocalReadable: resolveTranscriptIsLocalReadable(

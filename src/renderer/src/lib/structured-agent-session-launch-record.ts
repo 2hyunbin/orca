@@ -56,6 +56,7 @@ export type StructuredAgentLaunchPersistedRecord = {
   resumeFrom?: StructuredAgentSessionResumeSource
   firstMessage?: StructuredAgentSessionFirstMessage
   explicitLaunchOptions?: Readonly<Record<string, string>>
+  optionsMode?: 'replace-model-selection'
   options?: Readonly<Record<string, string>>
   createMessageSupport?: boolean
   /** A paired server's reported seed, which this machine cannot re-derive after a reload. */
@@ -69,7 +70,7 @@ export function structuredAgentLaunchRecordFor(
   intent: StructuredAgentSessionLaunchIntent,
   lifecycle: StructuredAgentLaunchPersistedLifecycle
 ): StructuredAgentLaunchPersistedRecord {
-  const { envelope, resumeFrom, firstMessage, options } = intent.params
+  const { envelope, resumeFrom, firstMessage, optionsMode, options } = intent.params
   // A local launch re-reads this machine's settings on reload; only a paired server's seed is kept.
   const pairedSeed = intent.target.kind === 'local' ? undefined : intent.seedOptions
   return {
@@ -83,6 +84,7 @@ export function structuredAgentLaunchRecordFor(
     expectedRuntimeFence: envelope.expectedRuntimeFence,
     ...(resumeFrom ? { resumeFrom } : {}),
     ...(firstMessage ? { firstMessage } : {}),
+    ...(optionsMode ? { optionsMode } : {}),
     ...(options ? { options } : {}),
     ...(intent.explicitLaunchOptions
       ? { explicitLaunchOptions: intent.explicitLaunchOptions }
@@ -125,6 +127,7 @@ export function validRecord(value: unknown): value is Omit<
   const executionHostId = 'executionHostId' in value ? value.executionHostId : undefined
   const failedAt = 'failedAt' in value ? value.failedAt : undefined
   const firstMessage = 'firstMessage' in value ? value.firstMessage : undefined
+  const optionsMode = 'optionsMode' in value ? value.optionsMode : undefined
   const options = 'options' in value ? value.options : undefined
   const createMessageSupport =
     'createMessageSupport' in value ? value.createMessageSupport : undefined
@@ -140,6 +143,7 @@ export function validRecord(value: unknown): value is Omit<
     (expectedRuntimeFence === null || typeof expectedRuntimeFence === 'number') &&
     (failedAt === undefined || Number.isFinite(failedAt)) &&
     (firstMessage === undefined || validFirstMessage(firstMessage)) &&
+    (optionsMode === undefined || optionsMode === 'replace-model-selection') &&
     (options === undefined || isAgentSessionOptions(options)) &&
     (!('explicitLaunchOptions' in value) ||
       value.explicitLaunchOptions === undefined ||
