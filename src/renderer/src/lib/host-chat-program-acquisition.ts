@@ -99,10 +99,13 @@ export async function acquireAgentLaunchChoices(
   let ended = false
   let lease = holdChatProgramFacts(bound)
   let changed = Promise.withResolvers<void>()
+  let failure: AgentLaunchChoiceCancelled | undefined
   let cancel = (): void => {}
   const cancelled = new Promise<never>((_, reject) => {
-    cancel = () =>
-      reject(new AgentLaunchChoiceCancelled('Agent launch owner changed or action cancelled'))
+    cancel = () => {
+      failure = new AgentLaunchChoiceCancelled('Agent launch owner changed or action cancelled')
+      reject(failure)
+    }
   })
   const check = (): void => {
     const next = resolveChatProgramContext(useAppStore.getState(), workspace)
@@ -154,19 +157,19 @@ export async function acquireAgentLaunchChoices(
       totalDeadline ? Promise.race([detection, expired]) : detection,
       cancelled
     ])
-    while (!ended) {
+    do {
       check()
       const observed = lease
       const first = observed.first()
       await Promise.race([Promise.all([observed.catalog, first]), changed.promise, cancelled])
       check()
-      if (observed === lease && first === lease.first()) {
+      if (failure) {
+        throw failure
+      }
+      if (ended || (observed === lease && first === lease.first())) {
         break
       }
-    }
-    check()
-    // A settled rejection queues first, so an owner change seen by check() wins.
-    await Promise.race([cancelled, Promise.resolve()])
+    } while (!ended)
     const inventory = workspace.worktreeId
       ? readAgentInventoryForWorktree(useAppStore.getState(), workspace.worktreeId)
       : null
