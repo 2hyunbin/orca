@@ -99,7 +99,9 @@ export async function openTerminalForDeclinedChat(
     !launchState.cancelled
   if (current && ownsFailure) {
     launchState.failure = {
-      ...launchState.failure,
+      ...(launchState.failure?.code === 'structured_agent_session_unsupported'
+        ? launchState.failure
+        : {}),
       kind: 'refused',
       code: 'structured_agent_session_unsupported',
       causeText: replacement

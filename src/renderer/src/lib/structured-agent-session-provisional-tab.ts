@@ -1,3 +1,4 @@
+import type { NativeChatComposerFocusIntent } from '@/components/native-chat/use-native-chat-composer-reveal-focus'
 import type { Tab } from '../../../shared/tab-types'
 import type {
   AgentSessionLaunchPlan,
