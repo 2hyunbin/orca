@@ -6,7 +6,15 @@ import type {
   EnqueueTargetedCommandOptions,
   ResolvedBrowserCommandTarget
 } from './agent-browser-bridge-types'
-import { captureRemoteCliBrowserRevocation } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
+import { isAdmissionRevoked, runWithRemoteCliPageAdmission } from './remote-cli-page-admission'
+import { AGENT_BROWSER_CLEANUP_TIMEOUT_MS } from './agent-browser-bridge-types'
+import { releaseHeldPageInput } from './guest-direct-key-input'
+import {
+  captureRemoteCliBrowserRevocation,
+  captureRemoteCliBrowserRevokedSignal,
+  captureRemoteCliBrowserScope,
+  runOutsideRemoteCliBrowserScope
+} from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
 
 export abstract class AgentBrowserBridgeQueue extends AgentBrowserBridgeShutdown {
   // Why: route tab switch through the command queue so it can't race in-flight commands targeting the old tab.
@@ -61,6 +69,7 @@ export abstract class AgentBrowserBridgeQueue extends AgentBrowserBridgeShutdown
   ): Promise<T> {
     this.assertCommandAdmission()
     const assertNotRevoked = captureRemoteCliBrowserRevocation()
+    const origin = captureRemoteCliBrowserScope()
     assertNotRevoked()
     const { browserPageId: pageId } = this.resolveCommandTarget(
       worktreeId,
@@ -78,15 +87,22 @@ export abstract class AgentBrowserBridgeQueue extends AgentBrowserBridgeShutdown
       queue.push({
         execute: () => {
           assertNotRevoked()
-          return this.executeQueuedCommand(
-            worktreeId,
-            pageId,
-            (session, target) => {
-              assertNotRevoked(target.webContentsId)
-              return execute(session, target)
-            },
-            options
-          )
+          const run = (): Promise<T> =>
+            this.executeQueuedCommand(
+              worktreeId,
+              pageId,
+              (session, target) => {
+                const gate = (): void => assertNotRevoked(target.webContentsId)
+                gate()
+                return origin.bridged
+                  ? this.runAdmitted(session, target.webContentsId, gate, () =>
+                      execute(session, target)
+                    )
+                  : execute(session, target)
+              },
+              options
+            )
+          return origin.run(run)
         },
         resolve: resolve as (value: unknown) => void,
         reject
@@ -109,6 +125,55 @@ export abstract class AgentBrowserBridgeQueue extends AgentBrowserBridgeShutdown
       await this.ensureSession(sessionName, browserPageId, target.webContentsId)
     }
     return execute(sessionName, target)
+  }
+
+  /**
+   * Holds the page for a host's command: every later page-affecting step, including the helper's
+   * through the CDP proxy, is refused once the host is revoked, and the command reports that.
+   */
+  private async runAdmitted<T>(
+    sessionName: string,
+    webContentsId: number,
+    gate: () => void,
+    execute: () => Promise<T>
+  ): Promise<T> {
+    // Why: the helper's daemon outlives its killed client and keeps retrying; retire it while the
+    // page is still held, or its next step lands once the hold is gone. Retiring on the signal also
+    // frees the page's queue now instead of at the helper's exec timeout.
+    let retiring: Promise<void> | null = null
+    const retire = (): Promise<void> =>
+      (retiring ??= runOutsideRemoteCliBrowserScope(() =>
+        this.destroySession(sessionName, {
+          closeTimeoutMs: AGENT_BROWSER_CLEANUP_TIMEOUT_MS,
+          keepQueuedCommands: true
+        })
+      ))
+    const signal = captureRemoteCliBrowserRevokedSignal()
+    const onRevoked = (): void => void retire()
+    signal?.addEventListener('abort', onRevoked, { once: true })
+    const held = async (): Promise<T> => {
+      try {
+        return await execute()
+      } finally {
+        signal?.removeEventListener('abort', onRevoked)
+        if (retiring || isAdmissionRevoked(gate)) {
+          await retire()
+        }
+      }
+    }
+    try {
+      return await runWithRemoteCliPageAdmission(webContentsId, gate, held, (release) => {
+        const wc = this.getWebContents(webContentsId)
+        return wc
+          ? releaseHeldPageInput(wc, release, () =>
+              this.browserManager.guardUserFocusForAgentInput(webContentsId)
+            )
+          : Promise.resolve()
+      })
+    } catch (error) {
+      gate()
+      throw error
+    }
   }
 
   protected async processQueue(sessionName: string): Promise<void> {
