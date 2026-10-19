@@ -46,6 +46,11 @@ beforeAll(() => {
 afterAll(() => restoreViewport())
 afterEach(cleanup)
 
+const continueUsageLimit = vi.fn()
+const usageLimitView = { hostLabel: null, remoteHost: false, continueAvailable: false,
+  offeredTurnItemId: null, continueNow: vi.fn(), usageLimitTurnItemId: 'item-2', continueUsageLimit }
+
+
 {
   const TURN_MS = 12_000
 
@@ -246,10 +251,6 @@ afterEach(cleanup)
     loadEarlier: vi.fn(),
     readPhase: 'ready'
   }
-
-  const continueUsageLimit = vi.fn()
-  const usageLimitView = { hostLabel: null, remoteHost: false, continueAvailable: false,
-    offeredTurnItemId: null, continueNow: vi.fn(), usageLimitTurnItemId: 'item-2', continueUsageLimit }
 
   it.each(['claude', 'codex', 'grok'] as const)('keeps a collapsed %s quota failure and Continue visible', (agent) => {
     continueUsageLimit.mockClear()
