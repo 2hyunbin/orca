@@ -134,8 +134,7 @@ export type StructuredAgentSessionEventSink = StructuredAgentSessionTransitionSi
   tryReviseResolvedItemAndPublish?(
     reservedBytes: number,
     resolve: StructuredAgentSessionRevisionResolver,
-    options: StructuredAgentSessionRevisionOptions,
-    onPublished?: () => void
+    options: StructuredAgentSessionRevisionOptions
   ): StructuredAgentSessionSinkAdmission
   /** Queues one journal-derived lifecycle append; a null resolution is a no-op. */
   tryAppendLifecycleTransition?(

@@ -16,9 +16,10 @@ const OBJECTIVE = 'reply with exactly the word done'
 
 function goalSink(
   journalGoal: AgentJournalThreadGoal | null = null,
-  journalRow?: { identity: AgentJournalItemIdentity; body: AgentJournalItemBody }
+  journalRow?: { identity: AgentJournalItemIdentity; body: AgentJournalItemBody },
+  deferred = false
 ) {
-  const state = journal()
+  const state = journal({ deferred })
   const rows = state.appends
   let stopped = false
   const backgroundTasks = new ClaudeBackgroundTaskTracker()
@@ -76,12 +77,12 @@ function goalSink(
   const pressStop = () => {
     stopped = true
   }
-  return { frame, reply, result, goals, savedGoal, pressStop }
+  return { frame, reply, result, goals, savedGoal, pressStop, flush: state.flush }
 }
 
 describe('Claude /goal journaling', () => {
-  it('journals the goal Claude reports, its time, and its completion when Claude ends on its own', () => {
-    const { reply, result, goals } = goalSink()
+  it.each([false, true])('journals the goal and its completion before adjacent idle (deferred %s)', (deferred) => {
+    const { frame, reply, result, goals, flush } = goalSink(null, undefined, deferred)
     reply('goal-set', '<synthetic>', `Goal set: ${OBJECTIVE}`)
     reply('work-1', 'claude-haiku-4-5', 'Working on it.')
     // A turn cap stops Claude before the goal passes: the goal stays open and gains the time.
@@ -90,8 +91,11 @@ describe('Claude /goal journaling', () => {
       { subtype: 'error_max_turns', is_error: true, terminal_reason: 'max_turns' },
       5_000
     )
+    frame({ type: 'system', subtype: 'session_state_changed', state: 'idle' }, 1)
     reply('work-2', 'claude-haiku-4-5', 'done')
     result('result-2', { subtype: 'success', is_error: false, terminal_reason: 'completed' }, 3_000)
+    frame({ type: 'system', subtype: 'session_state_changed', state: 'idle' }, 1)
+    flush()
 
     expect(goals()).toEqual([
       {

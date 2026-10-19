@@ -10,8 +10,7 @@
 
 import type {
   AgentJournalItemBody,
-  AgentJournalItemIdentity,
-  AgentJournalTurnScope
+  AgentJournalItemIdentity
 } from '../../../shared/agent-session-journal-types'
 import type { JournalLifecycleMutationInput } from '../agent-session-journal/journal-row-builders'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
@@ -27,7 +26,7 @@ import { structuredAgentSessionJournalAppendOptions } from './structured-agent-s
 /** What a transition step reads: rows by key, every row, and the turns they joined. */
 export type StructuredAgentSessionTransitionJournal = Pick<
   AgentSessionJournal,
-  'epoch' | 'visitItems' | 'itemBody' | 'item' | 'visitItemsWithLinkage' | 'submissions' | 'canonicalItemId'
+  'epoch' | 'visitItems' | 'itemBody' | 'item' | 'visitItemsWithLinkage'
 >
 
 export type StructuredAgentSessionTransitionStep =
@@ -39,7 +38,6 @@ export type StructuredAgentSessionTransitionStep =
       resolve: (journal: StructuredAgentSessionTransitionJournal) => {
         identity: AgentJournalItemIdentity
         body: AgentJournalItemBody
-        turnScope?: AgentJournalTurnScope
       } | null
       options: StructuredAgentSessionItemAppendOptions
     }

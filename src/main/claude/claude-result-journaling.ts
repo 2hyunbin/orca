@@ -4,10 +4,7 @@
 // Split out of the translator when that file reached its line budget; the translator still owns
 // the open turn and every collaborator this writes through.
 
-import {
-  queueClaudeTerminalFailure,
-  writeClaudeTerminalFailure
-} from './claude-terminal-failure'
+import { writeClaudeTerminalFailure } from './claude-terminal-failure'
 import type { ClaudeContextFacts } from './claude-context-facts'
 import { claudeCommandResultEnd } from './claude-command-turn'
 import type { ClaudeMessageJournalContext } from './claude-message-journaling'
@@ -17,7 +14,7 @@ import {
   claudeResultFailure,
   isSettledClaudeResultKind
 } from './claude-structured-provider-fallback'
-import { claudeTurnEndForResult, type ClaudeTurnEnd } from './claude-turn-lifecycle-item'
+import { claudeTurnEndForResult } from './claude-turn-lifecycle-item'
 import { claudeFrameParentRef, isRootClaudeFrame } from './claude-turn-opening'
 import type { ClaudeGoalBackgroundWork } from './claude-background-task-tracker'
 
@@ -67,40 +64,9 @@ export function journalClaudeResult(
   const endedTurnStartedAt = turn.startedAt
   const turnId = settlesTurn ? turn.id : null
   const leftToStop = turnId !== null && sink.journalStopDecidesTurn?.(turnId, observedAt) === true
-  const complete = (commandEnd?: ClaudeTurnEnd | null): void => {
-    if (settlesTurn) {
-      turn.suppressReopenOnFailure(message.is_error === true)
-      corrections.abandon()
-      context.settle(message, commandEnd ?? claudeTurnEndForResult(message, observedAt, leftToStop))
-      streamedBlocks.clear()
-      streamedText.settle()
-    }
-    const goal = threadGoal.settle(message, {
-      backgroundWork: goalBackgroundWork(),
-      stoppedByPerson: leftToStop,
-      turnStartedAt: endedTurnStartedAt
-    }, observedAt)
-    if (goal) {
-      sink.appendItem(goal.identity, goal.body, { turnScope: endedTurnScope })
-      sink.publish()
-    }
-  }
-  // An owed prompt resolution is independent of which turn owns this result.
+  // Retry owed prompt cancellations before a command result can return.
   if (settlesTurn) {
     prompts.retryPendingCancellations()
-  }
-  if (settlesTurn && !turn.ownsTerminal(message)) {
-    const failure = claudeResultFailure(message)
-    const body = usageLimits.result(message, failure !== null, { cause: 'quota' })
-    queueClaudeTerminalFailure(sink, turn, message, body, () => {
-      const kind = claudeProviderFrameKind(message)
-      if (failure || !isSettledClaudeResultKind(kind)) {
-        providerFallback.append(kind, message, failure?.text, undefined,
-          { reportsFailure: failure !== null },
-          () => ({ turnScope: { kind: 'thread' }, observedAt }))
-      }
-    }, () => complete())
-    return
   }
   const commandEnd = settlesTurn ? claudeCommandResultEnd(turn, sink, message, observedAt) : null
   if (commandEnd === 'another-input') {
@@ -111,7 +77,22 @@ export function journalClaudeResult(
   if (usageLimit && endedTurnIdentity) {
     writeClaudeTerminalFailure(sink, endedTurnIdentity, usageLimit)
   }
-  complete(commandEnd)
+  if (settlesTurn) {
+    turn.suppressReopenOnFailure(message.is_error === true)
+    corrections.abandon()
+    context.settle(message, commandEnd ?? claudeTurnEndForResult(message, observedAt, leftToStop))
+    streamedBlocks.clear()
+    streamedText.settle()
+  }
+  const goal = threadGoal.settle(message, {
+    backgroundWork: goalBackgroundWork(),
+    stoppedByPerson: leftToStop,
+    turnStartedAt: endedTurnStartedAt
+  }, observedAt)
+  if (goal) {
+    sink.appendItem(goal.identity, goal.body, { turnScope: endedTurnScope })
+    sink.publish()
+  }
   const kind = claudeProviderFrameKind(message)
   if (usageLimit && endedTurnIdentity) {
     return

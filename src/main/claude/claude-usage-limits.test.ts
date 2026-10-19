@@ -61,17 +61,20 @@ function messageTexts(t: ReturnType<typeof setup>): string[] {
 }
 
 describe('a Claude usage limit', () => {
-  it('ends the turn on one limit row, again when the CLI does not repeat the rejection', () => {
+  it.each([false, true])('keeps one limit row across a result and idle (quota first %s)', (quotaFirst) => {
     const t = setup()
-    t.handle(userFrame('turn-a', 1_000))
+    if (!quotaFirst) { t.handle(userFrame('turn-a', 1_000)) }
     t.handle(rateLimitEvent('rejected', 1_100))
-    t.handle(frame({ ...assistantFrame('first', 1_150, 20).message, user_message_uuid: 'turn-a' }, 1_150))
+    if (!quotaFirst) {
+      t.handle(frame({ ...assistantFrame('first', 1_150, 20).message, user_message_uuid: 'turn-a' }, 1_150))
+    }
     t.handle(frame({
       ...refusedFrame('a', 1_200, LIMIT_TEXT).message,
       user_message_uuid: undefined,
       api_error: 'usage_limit_reached'
     }, 1_200))
     t.handle(failedResult('a', 1_300, 'Request failed'))
+    t.handle(frame({ type: 'system', subtype: 'session_state_changed', state: 'idle' }, 1_301))
     // The CLI throttles an unchanged rejection: the next turn carries none.
     t.handle(userFrame('turn-b', 2_000))
     t.handle(refusedFrame('b', 2_200, LIMIT_TEXT))
@@ -159,33 +162,7 @@ const quota = (uuid: string, stamp?: string) => frame({
   user_message_uuid: stamp, api_error: 'usage_limit_reached'
 }, 1100)
 
-it.each([false, true])('reconciles replay and late detail without touching newer work (provider-opened %s)', (providerOpened) => {
-  const t = setup({ deferred: true })
-  if (!providerOpened) { t.handle(userFrame('owner', 1000)) }
-  const refusal = quota('owner', providerOpened ? undefined : 'owner')
-  t.handle(refusal)
-  t.handle(frame({ ...failedResult('owner', 1200, LIMIT_TEXT).message, user_message_uuid: 'owner' }, 1200))
-  t.handle(refusal)
-  t.handle(frame({ ...failedResult('owner', 1300, LIMIT_TEXT).message, user_message_uuid: 'owner' }, 1300))
-  t.handle(userFrame('newer', 2000))
-  const stampedReplay = frame({ ...refusal.message, user_message_uuid: 'owner' }, 2100)
-  t.handle(stampedReplay)
-  t.handle(frame({ ...failedResult('owner', 2200, LIMIT_TEXT).message, user_message_uuid: 'owner' }, 2200))
-  t.flush()
-  expect(statusRows(t)).toHaveLength(1)
-  expect(t.items().find((item) => item.body.kind === 'status')?.revision).toBe(1)
-  expect(t.translator.currentTurnId).toBe('newer')
-  const endpoints = t.items().filter((item) => item.body.kind === 'turn')
-  t.handle(frame({ ...failedResult('owner', 2300, 'New provider explanation').message, user_message_uuid: 'owner' }, 2300))
-  t.flush()
-  expect(t.items().filter((item) => item.body.kind === 'turn')).toEqual(endpoints)
-  expect(t.turnRow('newer')?.body).toMatchObject({ state: 'running' })
-  expect(statusRows(t)).toHaveLength(1)
-  expect(statusRows(t)[0]?.failure?.detail?.text).toContain('New provider explanation')
-  t.translator.dispose()
-})
-
-it.each(['idle', 'exit'] as const)('keeps quota failure through a deferred resultless %s and merges late detail', (ending) => {
+it.each(['idle', 'exit'] as const)('keeps quota failure and Continue through a deferred resultless %s', (ending) => {
   const t = setup({ deferred: true })
   t.handle(userFrame('owner', 1000))
   t.handle(quota('refusal', 'owner'))
@@ -199,12 +176,6 @@ it.each(['idle', 'exit'] as const)('keeps quota failure through a deferred resul
     state: ending === 'idle' ? 'completed' : 'interrupted', outcome: 'failure'
   })
   expect(latestNativeChatUsageLimitCut(t.items(), [])).not.toBeNull()
-  const end = t.turnRow('owner')
-  t.handle(frame({ ...failedResult('owner', 1400, 'Later explanation').message, user_message_uuid: 'owner' }, 1400))
-  t.flush()
-  expect(t.turnRow('owner')).toEqual(end)
-  expect(statusRows(t)).toHaveLength(1)
-  expect(statusRows(t)[0]?.failure?.detail?.text).toContain('Later explanation')
   t.translator.dispose()
 })
 
@@ -219,16 +190,20 @@ it.each(['before', 'after', 'child', 'ordinary', 'success', 'other', 'superseded
     t.handle(frame({ ...refusedFrame('other', 1150, 'Requires credits').message,
       api_error: 'model_requires_usage_credits', user_message_uuid: 'owner' }, 1150))
   }
-  const stopAt = mode === 'before' ? 1150 : 1300
-  t.sink.journalStopDecidesTurn = (_turnId, endAt) =>
-    (mode === 'before' || mode === 'after') && endAt >= stopAt
+  if (mode === 'before') {
+    t.queueStop('owner', 1150)
+    expect(t.sink.journalStopDecidesTurn?.('owner', 1200)).toBe(false)
+  }
   if (mode === 'success') {
     t.handle(frame({ type: 'result', subtype: 'success', is_error: false, result: 'done' }, 1200))
   } else if (mode === 'superseded') {
     t.handle(userFrame('newer', 1200))
+  } else if (mode === 'before') {
+    t.handle(frame({ type: 'system', subtype: 'session_state_changed', state: 'idle' }, 1200))
   } else {
     t.handle({ type: 'ended', sessionId: 'orca-session', reason: 'Provider exited', observedAt: 1200 })
   }
+  if (mode === 'after') { t.queueStop('owner', 1300) }
   t.flush()
   const outcome = mode === 'before' ? 'cancellation' : mode === 'after' ? 'failure'
     : mode === 'success' ? 'success' : mode === 'superseded' ? 'superseded' : undefined

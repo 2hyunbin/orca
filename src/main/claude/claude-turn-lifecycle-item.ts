@@ -11,8 +11,6 @@ import type { ClaudeCommandTurn } from './claude-command-turn'
 
 export type ClaudeCurrentTurn = {
   sessionId: string
-  /** Live correlation can precede the user echo that supplies the durable association. */
-  inputUuid?: string
   turnId: string
   startedAt: number
   /** Host clock at the send that opened the turn; absent when the provider

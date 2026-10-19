@@ -21,9 +21,8 @@ import {
 import { writeAgentJournalTurnRow } from '../native-chat/agent-session-timeline/agent-journal-turn-row-revision'
 import type { ClaudeCommandTurn } from './claude-command-turn'
 import { createClaudeTurnOpener, type ClaudeTurnSource } from './claude-turn-opening'
-import { finalizeClaudeTerminalTurn } from './claude-terminal-failure'
+import { refineClaudeQuotaTurnEnd } from './claude-terminal-failure'
 import type { ClaudeUsageLimitEvidence } from './claude-usage-limits'
-import { claudeText } from './claude-structured-item-translation'
 import type { ClaudeStartedSend } from './claude-structured-session-state'
 
 export type ClaudeOpenTurnDeps = {
@@ -38,7 +37,6 @@ export type ClaudeOpenTurnDeps = {
 
 export class ClaudeOpenTurn {
   private current: ClaudeCurrentTurn | null = null
-  private cursorGeneration = 0
   usageLimitEvidence: ClaudeUsageLimitEvidence | null = null
   /** Provider output may not reopen a turn after the session ended or a turn
    *  failed: nothing would ever close the turn it opened, and the row would read
@@ -71,19 +69,6 @@ export class ClaudeOpenTurn {
     })
   }
 
-  get generation(): number {
-    return this.cursorGeneration
-  }
-
-  ownsTerminal(frame: Record<string, unknown>): boolean {
-    const stamp = claudeText(frame.user_message_uuid)
-    const input = this.current?.command?.sentUuid ?? this.current?.inputUuid
-    const inputs = frame.user_message_uuids
-    return this.current !== null &&
-      (!stamp || !input || stamp === input || stamp === this.current.turnId ||
-        (Array.isArray(inputs) && (inputs.includes(input) || inputs.includes(this.current.turnId))))
-  }
-
   get id(): string | null {
     return this.current?.turnId ?? null
   }
@@ -110,10 +95,6 @@ export class ClaudeOpenTurn {
   /** When the open turn started, or null when none is open. */
   get startedAt(): number | null {
     return this.current?.startedAt ?? null
-  }
-
-  get isReopenSuppressed(): boolean {
-    return this.reopenSuppressed
   }
 
   get isOpen(): boolean {
@@ -147,7 +128,6 @@ export class ClaudeOpenTurn {
    *  later would sweep THIS turn. The replaced turn is recorded superseded: a newer
    *  request ended it, whoever sent that request. */
   open(turn: ClaudeCurrentTurn, observedAt: number): void {
-    this.cursorGeneration += 1
     this.usageLimitEvidence = null
     this.deps.onOpen?.()
     if (this.current) {
@@ -167,7 +147,6 @@ export class ClaudeOpenTurn {
   /** A conversation command the host opened a turn for. Its row is the host's, already written,
    *  so only an end is published; the command's result is what ends it. */
   beginCommand(turn: ClaudeCurrentTurn): void {
-    this.cursorGeneration += 1
     this.usageLimitEvidence = null
     this.deps.onOpen?.()
     if (this.current) {
@@ -212,14 +191,16 @@ export class ClaudeOpenTurn {
   /** End the open turn, if one is open, and clear the live activity line. The
    *  context facts the end brings ride the same revision. */
   settle(end: ClaudeTurnEnd, contextUsage?: AgentSessionContextUsage): void {
-    this.cursorGeneration += 1
+    const quotaEnd = this.current !== null && end.outcome === undefined &&
+      this.usageLimitEvidence?.cause === 'quota'
+    this.suppressReopenOnFailure(quotaEnd)
     // Every settle is a provider cycle ending (result, idle, child exit).
     this.cycleWorkObserved = false
     this.usageLimitEvidence = null
     // Even with no turn open: work a suppressed turn produced still ends here.
     this.deps.endOpenWork(end.completedAt)
     if (this.current) {
-      this.publish(this.current, end, contextUsage)
+      this.publish(this.current, end, contextUsage, quotaEnd)
       this.usageLimitEvidence = null
       this.current = null
     }
@@ -246,11 +227,12 @@ export class ClaudeOpenTurn {
   private publish(
     turn: ClaudeCurrentTurn,
     end?: ClaudeTurnEnd,
-    contextUsage?: AgentSessionContextUsage
+    contextUsage?: AgentSessionContextUsage,
+    quotaEnd = false
   ): void {
     const item = claudeTurnLifecycleItem(turn, end)
     const write = { lifecycle: item.body, ...(contextUsage ? { contextUsage } : {}) }
-    if (end && finalizeClaudeTerminalTurn(this.deps.sink, item.identity, write, this)) {
+    if (quotaEnd && refineClaudeQuotaTurnEnd(this.deps.sink, item.identity, write)) {
       return
     }
     writeAgentJournalTurnRow(

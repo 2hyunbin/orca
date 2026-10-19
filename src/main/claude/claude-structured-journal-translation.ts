@@ -272,10 +272,7 @@ export function createClaudeJournalTranslator(
         }
         context.observeResponse(event.message, event.observedAt ?? Date.now())
         publishActivity(kind, event.message)
-        // The CLI's own turn-over signal, and the only end a turn stopped by a
-        // fault with no result frame ever gets. Reopen stays allowed: output
-        // after an idle belongs to a turn, and suppressing it would read as
-        // idle while the agent works.
+        // Idle also closes faults without a result; the live cause decides failed reopening.
         if (claudeSessionStateEndsTurn(event.message)) {
           corrections.abandon()
           // No verdict: the CLI said the turn is over, not how it ended.

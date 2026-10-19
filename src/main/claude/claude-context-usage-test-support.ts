@@ -11,7 +11,8 @@ import type {
   StructuredAgentSessionEventSink,
   StructuredAgentSessionRevisionJournal
 } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
-import type { StructuredAgentSessionTransitionJournal } from '../native-chat/agent-session-wire/structured-agent-session-transition'
+import { createJournalReducerState } from '../native-chat/agent-session-journal/journal-reducer'
+import { personStopDecidesTurn } from '../native-chat/agent-session-journal/journal-stop-turn-end'
 import type { ClaudeContextReportTarget } from './claude-context-facts'
 import { createClaudeJournalTranslator } from './claude-structured-journal-translation'
 import { claudeTurnLifecycleIdentity } from './claude-turn-lifecycle-item'
@@ -40,11 +41,8 @@ export function journal({ deferred = false } = {}) {
     })
   }
   const scans = { count: 0 }
-  const bound: StructuredAgentSessionRevisionJournal & StructuredAgentSessionTransitionJournal = {
+  const bound: StructuredAgentSessionRevisionJournal = {
     item: (itemId) => rows.get(itemId) ?? null,
-    canonicalItemId: (itemId) => itemId,
-    submissions: () => [],
-    visitItemsWithLinkage: (visit) => { for (const row of rows.values()) { visit(row.itemId, row.sequence, row.body, row) } },
     epoch: 'test',
     visitItems: (visit) => {
       scans.count += 1
@@ -57,31 +55,21 @@ export function journal({ deferred = false } = {}) {
   const revise: NonNullable<StructuredAgentSessionEventSink['tryReviseResolvedItemAndPublish']> = (
     _reservedBytes,
     resolve,
-    options,
-    onPublished
+    options
   ) => {
     run(() => {
       const resolved = resolve(bound)
       if (resolved) { appendItem(resolved.identity, resolved.body, options) }
-      onPublished?.()
     })
     return { accepted: true }
   }
+  const stopState = createJournalReducerState('orca-session', 'test')
+  const queueStop = (turnId: string, at: number): void => run(() => {
+    stopState.queuePauseMarks.latestStop = { sequence: rows.size + 1, event: { reason: 'user-stop', turnId, at } }
+  })
   const sink: StructuredAgentSessionEventSink = {
+    journalStopDecidesTurn: (turnId, at) => personStopDecidesTurn(stopState, turnId, at),
     appendItem: (...args) => run(() => appendItem(...args)),
-    journalItems: () => bound,
-    tryAppendTransition: (transition) => {
-      run(() => {
-        for (const step of transition.steps) {
-          if (step.kind === 'item') {
-            const resolved = step.resolve(bound)
-            if (resolved) { appendItem(resolved.identity, resolved.body, { ...step.options, turnScope: resolved.turnScope ?? step.options.turnScope }) }
-          }
-        }
-        transition.onPublished?.()
-      })
-      return { accepted: true }
-    },
     tryReviseResolvedItem: revise,
     tryReviseResolvedItemAndPublish: revise,
     appendTombstone: () => {},
@@ -90,7 +78,7 @@ export function journal({ deferred = false } = {}) {
   const turnRow = (turnId: string) =>
     rows.get(agentJournalItemKey(claudeTurnLifecycleIdentity('claude-session', turnId)))
   const items = () => [...rows.values()].sort((left, right) => left.sequence - right.sequence)
-  return { sink, clock, appends, rows, turnRow, items, scans, flush }
+  return { sink, clock, appends, rows, turnRow, items, scans, flush, queueStop }
 }
 
 export function frame(message: Record<string, unknown>, observedAt: number, startsTurn = false) {
