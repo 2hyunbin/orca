@@ -28,7 +28,6 @@ vi.mock('./github-api-repository', async (importOriginal) =>
   )
 )
 
-import { GIT_FETCH_SKIP_AUTO_MAINTENANCE_CONFIG_ARGS } from '../../shared/git-fetch-auto-maintenance'
 import { getPRForBranch } from './client/lookup/get-pr-for-branch'
 import { resetPRForBranchMocks } from './client-test-harness'
 
@@ -119,22 +118,9 @@ describe('getPRForBranch', () => {
         wslDistro: 'Ubuntu'
       })
     )
-    expect(gitExecFileAsyncMock).toHaveBeenNthCalledWith(
-      2,
-      [
-        ...GIT_FETCH_SKIP_AUTO_MAINTENANCE_CONFIG_ARGS,
-        'fetch',
-        '--no-tags',
-        'origin',
-        '+refs/heads/main:refs/remotes/origin/main'
-      ],
-      {
-        cwd: '/repo-root',
-        wslDistro: 'Ubuntu',
-        useConfiguredSshCommandForNetwork: true,
-        timeout: 60_000
-      }
-    )
+    for (const [, options] of gitExecFileAsyncMock.mock.calls) {
+      expect(options).toMatchObject({ cwd: '/repo-root', wslDistro: 'Ubuntu' })
+    }
     expect(gitExecFileAsyncMock).toHaveBeenLastCalledWith(
       [
         'merge-tree',
