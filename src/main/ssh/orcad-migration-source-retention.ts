@@ -21,15 +21,35 @@ export type OrcadMigrationDraftRenameStore = Pick<
   | 'setWorkspaceSession'
 >
 
+// One retain per migration at a time: a second caller waits for the first and then finds it done.
+const retainsInFlight = new Map<string, Promise<OrcadMigrationSourceCutover>>()
+
 /**
  * Marks a committed migration as finished for this build while its source rows stay. Its unsaved
  * drafts are renamed to the server first, durably, so the retained mark proves they were.
  */
-export async function retainOrcadMigrationSource(
+export function retainOrcadMigrationSource(
   userDataPath: string,
   migrationId: string,
   store: OrcadMigrationDraftRenameStore,
   now: () => Date = () => new Date()
+): Promise<OrcadMigrationSourceCutover> {
+  const pending = retainsInFlight.get(migrationId)
+  if (pending) {
+    return pending
+  }
+  const retain = retainOnce(userDataPath, migrationId, store, now).finally(() =>
+    retainsInFlight.delete(migrationId)
+  )
+  retainsInFlight.set(migrationId, retain)
+  return retain
+}
+
+async function retainOnce(
+  userDataPath: string,
+  migrationId: string,
+  store: OrcadMigrationDraftRenameStore,
+  now: () => Date
 ): Promise<OrcadMigrationSourceCutover> {
   const cutover = readCommittedCutover(userDataPath, migrationId)
   if (cutover.sourceRetainedAt) {
@@ -41,11 +61,9 @@ export async function retainOrcadMigrationSource(
       // A startup rename may still be only in memory; the retained mark must not outrun it.
       return { value: undefined, persist: 'if-dirty' }
     }
+    // No rollback: the renamed rows are correct either way, and a retry adds nothing twice.
     writeDestinationSession(store, cutover, renamed.next)
-    return {
-      value: undefined,
-      rollback: () => writeDestinationSession(store, cutover, renamed.before)
-    }
+    return { value: undefined }
   })
   // Why no baseline here: the source may have changed since the commit (a crash, then an older
   // build); only the fence's pre-commit baseline proves what the server holds.
@@ -108,7 +126,7 @@ function renamedDestinationSession(
     'collectOrcadMigrationSourceDrafts' | 'getWorkspaceSession'
   >,
   cutover: OrcadMigrationSourceCutover
-): { before: WorkspaceSessionState; next: WorkspaceSessionState } | null {
+): { next: WorkspaceSessionState } | null {
   const before = store.getWorkspaceSession(
     toRuntimeExecutionHostId(cutover.destinationEnvironmentId)
   )
@@ -117,7 +135,7 @@ function renamedDestinationSession(
     store.collectOrcadMigrationSourceDrafts(cutover.manifest),
     cutover.destinationEnvironmentId
   )
-  return next ? { before, next } : null
+  return next ? { next } : null
 }
 
 function writeDestinationSession(

@@ -188,6 +188,17 @@ describe('renaming unsaved drafts to the server on commit', () => {
     expect(serverFiles()).toEqual([])
   })
 
+  it('shares one retain between concurrent callers, so a later one never renames again', async () => {
+    saveFiles(SOURCE_HOST, [draftedFile('/srv/app/a.md', 'source A')])
+    writeOrcadMigrationSourceCutover(userDataPath, committed())
+    const first = retainOrcadMigrationSource(userDataPath, 'm-1', store)
+    expect(retainOrcadMigrationSource(userDataPath, 'm-1', store)).toBe(first)
+    await first
+    saveFiles(SERVER_HOST, [])
+    await retainOrcadMigrationSource(userDataPath, 'm-1', store)
+    expect(serverFiles()).toEqual([])
+  })
+
   it('keeps newer typing in the server copy when the connect retains first', async () => {
     saveFiles(SOURCE_HOST, [draftedFile('/srv/app/a.md', 'source A')])
     saveFiles(SERVER_HOST, [
