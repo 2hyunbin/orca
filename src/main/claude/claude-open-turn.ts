@@ -201,7 +201,6 @@ export class ClaudeOpenTurn {
     this.deps.endOpenWork(end.completedAt)
     if (this.current) {
       this.publish(this.current, end, contextUsage, quotaEnd)
-      this.usageLimitEvidence = null
       this.current = null
     }
     this.deps.sink.setActivity?.(null)

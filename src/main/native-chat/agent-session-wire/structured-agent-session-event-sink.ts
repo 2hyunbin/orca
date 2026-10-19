@@ -288,14 +288,6 @@ export function createDeferredStructuredAgentSessionEventSink(deps: {
       options
     )
 
-  const appendTombstone: NonNullable<StructuredAgentSessionEventSink['tryAppendTombstone']> = (
-    identity,
-    options = {}
-  ) => queue.submit({
-    bytes: Buffer.byteLength(agentJournalItemKey(identity), 'utf8') + 256,
-    run: (bound) => bound.journal.appendTombstone(identity, { fence: bound.fence })
-  }, options)
-
   return {
     exitObservation: () => exit,
     sink: {
@@ -320,8 +312,23 @@ export function createDeferredStructuredAgentSessionEventSink(deps: {
       },
       tryAppendLifecycleBatch: appendLifecycleBatch,
       bindReadingControl: (control) => queue.bindReadingControl(control),
-      appendTombstone: (identity, options) => void appendTombstone(identity, options),
-      tryAppendTombstone: appendTombstone,
+      appendTombstone: (identity, options = {}) => {
+        queue.submit(
+          {
+            bytes: Buffer.byteLength(agentJournalItemKey(identity), 'utf8') + 256,
+            run: (bound) => bound.journal.appendTombstone(identity, { fence: bound.fence })
+          },
+          options
+        )
+      },
+      tryAppendTombstone: (identity, options = {}) =>
+        queue.submit(
+          {
+            bytes: Buffer.byteLength(agentJournalItemKey(identity), 'utf8') + 256,
+            run: (bound) => bound.journal.appendTombstone(identity, { fence: bound.fence })
+          },
+          options
+        ),
       publish: (options = {}) => void publish(options),
       written: queue.written,
       setActivity: (activity) => {

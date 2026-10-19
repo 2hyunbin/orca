@@ -117,7 +117,7 @@ export function journalClaudeMessage(
     usageLimit ??
     ctx.threadGoal.report(message, claudeMessageIdentity(envelope), observedAt) ??
     messageBody ?? ordinaryFailure
-  const terminalIdentity = terminal && ctx.turn.identity && (usageLimit || message.api_error)
+  const terminalIdentity = terminal && ctx.turn.identity && usageLimit
     ? ctx.turn.identity : null
   const identity =
     (body && envelope.role === 'assistant'

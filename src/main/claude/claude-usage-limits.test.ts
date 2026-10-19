@@ -99,6 +99,26 @@ describe('a Claude usage limit', () => {
     t.translator.dispose()
   })
 
+  it('keeps a removed-media notice before later work and its usage-limit warning', () => {
+    const t = setup({ deferred: true })
+    const removed = 'API Error: the image could not be processed and was removed'
+    t.handle(userFrame('turn-a', 1000))
+    t.handle(frame({ ...refusedFrame('media', 1100, removed).message,
+      api_error: 'media_removed', error: undefined, user_message_uuid: 'turn-a' }, 1100))
+    t.handle(assistantFrame('answer', 1200, 20))
+    t.handle(frame({ ...refusedFrame('a', 1300, LIMIT_TEXT).message,
+      api_error: 'usage_limit_reached' }, 1300))
+    t.handle(failedResult('a', 1400, LIMIT_TEXT))
+    t.flush()
+    const visible = t.items().flatMap(({ body }) =>
+      body.kind === 'message' && body.role === 'assistant'
+        ? body.blocks.flatMap((block) => block.type === 'text' ? [block.text] : [])
+        : body.kind === 'status' && body.failure?.kind === 'usageLimitReached' ? ['quota'] : []
+    )
+    expect(visible).toEqual([removed, 'answer', 'quota'])
+    t.translator.dispose()
+  })
+
   it('keeps typed other causes and replacement turns separate from the account snapshot', () => {
     const t = setup()
     t.handle(userFrame('turn-limited', 1_000))
