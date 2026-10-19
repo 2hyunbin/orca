@@ -11,6 +11,7 @@ import type {
   StructuredAgentSessionProviderChild
 } from './structured-agent-session-host-types'
 import { sameProviderChild } from './structured-agent-session-provider-child'
+import type { StructuredAgentSessionHostRuntimeState } from './structured-agent-session-host-runtime-state'
 import { stopAgentSessionProviderRoot } from './structured-agent-session-provider-exit-proof'
 
 /** Stops one chat captured by a workspace Sleep and reports whether the stop is proven. */
@@ -92,9 +93,37 @@ function workspaceSleepChatAtRest(
   )
 }
 
+/** The same abort a close gives a registered start, remembering which starts it aborted so the
+ *  result is read once they settle, outside the lane their last commits need. */
+export function workspaceSleepStartAborts(
+  runtimeState: () => Pick<
+    StructuredAgentSessionHostRuntimeState,
+    'startFlights' | 'acquireAborts'
+  >,
+  sessionId: string
+) {
+  const aborted: Promise<unknown>[] = []
+  return {
+    abort: (): void => {
+      const flight = runtimeState().startFlights.get(sessionId)
+      if (flight) {
+        aborted.push(flight.outcome)
+      }
+      runtimeState().acquireAborts.abort(sessionId, 'closed while starting')
+    },
+    settle: (
+      input: Pick<Parameters<typeof stopWorkspaceSleepChat>[0], 'deps' | 'sessions' | 'sessionId'>,
+      result: { fence: number; stopped: boolean } | null
+    ) =>
+      settleWorkspaceSleepAbortedStarts(input, result, aborted, () =>
+        runtimeState().startFlights.has(sessionId)
+      )
+  }
+}
+
 /** A start the stop aborted settles after the stop's step; once it has, and no newer start runs,
  *  the chat it left at rest counts as stopped. */
-export async function settleWorkspaceSleepAbortedStarts(
+async function settleWorkspaceSleepAbortedStarts(
   input: Pick<Parameters<typeof stopWorkspaceSleepChat>[0], 'deps' | 'sessions' | 'sessionId'>,
   result: { fence: number; stopped: boolean } | null,
   abortedStarts: readonly Promise<unknown>[],

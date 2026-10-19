@@ -30,8 +30,8 @@ import { deferredStructuredAgentSessionLogger } from './structured-agent-session
 import { sameProviderChild } from './structured-agent-session-provider-child'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import {
-  settleWorkspaceSleepAbortedStarts,
-  stopWorkspaceSleepChat
+  stopWorkspaceSleepChat,
+  workspaceSleepStartAborts
 } from './structured-agent-session-workspace-sleep-stop'
 import type { StructuredAgentSessionExpiredStartup } from './structured-agent-session-startup-attempt'
 import {
@@ -127,26 +127,17 @@ export function createStructuredAgentSessionConversationLifetime(host: {
       const location = deps().store.getRecord(sessionId)?.location
       return location?.workspaceId === workspaceId && location.executionHostId === executionHostId
     }
-    const abortedStarts: Promise<unknown>[] = []
-    // The same abort a close gives a registered start, remembering which start it was.
-    const abortStart = (): void => {
-      const { runtimeState } = host.context()
-      const flight = runtimeState.startFlights.get(sessionId)
-      if (flight) {
-        abortedStarts.push(flight.outcome)
-      }
-      runtimeState.acquireAborts.abort(sessionId, 'closed while starting')
-    }
+    const starts = workspaceSleepStartAborts(() => host.context().runtimeState, sessionId)
     // Pending creates do not yet have a record; their queued close waits for founding to finish.
     if (matches()) {
-      abortStart()
+      starts.abort()
     }
     const closed = serialize(sessionId, async () => {
       if (!matches()) {
         return null
       }
       readRefusals.forget(sessionId)
-      abortStart()
+      starts.abort()
       const record = deps().store.getRecord(sessionId)
       if (!record) {
         return null
@@ -179,13 +170,7 @@ export function createStructuredAgentSessionConversationLifetime(host: {
       // final identity check against a later restart.
       return { fence: deps().store.getRecord(sessionId)?.lease.runtimeFence ?? fence, stopped }
     })
-    // Settled outside the lane its last commits need, so only a newer start reads as later work.
-    return settleWorkspaceSleepAbortedStarts(
-      { deps: deps(), sessions, sessionId },
-      await closed,
-      abortedStarts,
-      () => host.context().runtimeState.startFlights.has(sessionId)
-    )
+    return starts.settle({ deps: deps(), sessions, sessionId }, await closed)
   }
 
   const idleSweep = new StructuredAgentSessionIdleSweep({
