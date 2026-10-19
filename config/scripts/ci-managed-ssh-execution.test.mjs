@@ -60,6 +60,7 @@ it('uses one PR shard for at most two selected files and preserves the full defa
 it('keeps shared SSH fixtures on the full suite but excludes the experimental sidebar spec', () => {
   for (const file of [
     'tests/e2e/helpers/orcad-managed-workspace.ts',
+    'tests/e2e/helpers/paired-host-terminal.ts',
     '.github/workflows/e2e.yml'
   ]) {
     expect(selectPrE2eSpecs([file])).toContain(MANAGED_SSH_E2E_SPEC_PREFIX)

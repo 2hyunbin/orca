@@ -481,7 +481,8 @@ export function selectPrE2eSpecs(
   if (
     routePaths.some(
       (file) =>
-        MANAGED_SSH_HARNESS.test(file) ||
+        (file.startsWith('tests/e2e/helpers/') &&
+          [...specs].some((spec) => spec.startsWith(MANAGED_SSH_E2E_SPEC_PREFIX))) ||
         file === '.github/workflows/e2e.yml' ||
         file === 'config/scripts/ci-e2e-job-selection.mjs'
     )
