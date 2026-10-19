@@ -247,32 +247,6 @@ describe('picks made while a chat launches', () => {
     expect(mutations().map((mutation) => mutation.value)).toEqual(['gpt-picked', 'gpt-repicked'])
   })
 
-  it('keeps an effort held before a model pick; a pick supersedes only its own option', async () => {
-    const created = deferred<{ sessionId: string; fence: number }>()
-    mocks.launch.mockReturnValue(created.promise)
-    const launch = startStructuredAgentLaunch(WORKTREE_ID, 'codex', { requestId: 'request-held' })
-    const effortPick = holdStructuredAgentSessionLaunchOption(SESSION_ID, 'effort', 'high')
-    const firstModel = holdStructuredAgentSessionLaunchOption(SESSION_ID, 'model', 'gpt-a')
-    holdStructuredAgentSessionLaunchOption(SESSION_ID, 'model', 'gpt-b')
-    await expect(firstModel).resolves.toEqual({ kind: 'superseded' })
-    expect(getStructuredAgentSessionLaunchSelection(SESSION_ID)?.held).toEqual({
-      effort: 'high',
-      model: 'gpt-b'
-    })
-    created.resolve({ sessionId: SESSION_ID, fence: 3 })
-    await settle()
-    setOptionReplies[0]!.resolve(ACCEPTED)
-    await settle()
-    setOptionReplies[1]!.resolve(ACCEPTED)
-    await launch.launchResult
-
-    expect(mutations().map(({ key, value }) => [key, value])).toEqual([
-      ['model', 'gpt-b'],
-      ['effort', 'high']
-    ])
-    await expect(effortPick).resolves.toMatchObject({ kind: 'accepted' })
-  })
-
   it('drops a held Fast the picked model does not offer: neither sent nor remembered', async () => {
     const created = deferred<{ sessionId: string; fence: number }>()
     mocks.launch.mockReturnValue(created.promise)

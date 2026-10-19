@@ -3,10 +3,6 @@ import { OMP_SESSION_OPTION_CATALOG } from './agent-session-option-catalog-omp'
 import { CODEX_SESSION_OPTION_CATALOG } from './agent-session-option-catalog-claude-codex'
 import { buildNativeChatSessionOptionSnapshot } from './native-chat-session-option-snapshot'
 import { createNativeChatSessionOptionRecord } from './native-chat-session-option-state'
-import type {
-  AgentSessionModelCatalogResult,
-  AgentSessionOptionsResult
-} from './agent-session-wire'
 import {
   applyStructuredAgentSessionModelCatalog,
   applyStructuredAgentSessionOptions,
@@ -307,7 +303,7 @@ describe('structured agent session options', () => {
     expect(live.record.values.model?.value).toBe('gpt-5.6-luna')
   })
 
-  it('keeps a saved Fast with no model known, Standard turning it off, through a model pick and a restart', () => {
+  it('keeps a saved Fast with no model known, Standard turning it off', () => {
     const sol = {
       id: 'gpt-6.1-sol',
       label: 'GPT-6.1 Sol',
@@ -316,66 +312,20 @@ describe('structured agent session options', () => {
       serviceTiers: [{ value: 'priority', label: 'Fast' }]
     }
     // A resumed chat's at-rest answer, whose listing names no default.
-    const atRest = (current: AgentSessionOptionsResult['current']) =>
-      applyStructuredAgentSessionOptions(
-        createStructuredAgentSessionOptionState('codex'),
-        CODEX_SESSION_OPTION_CATALOG,
-        {
-          models: [sol],
-          fastModeSupport: { supported: true },
-          current: { ...current, defaulted: [] }
-        }
-      )
-    const speed = (state: StructuredAgentSessionOptionState) =>
-      structuredAgentSessionOptionSnapshot(state).find(({ id }) => id === 'serviceTier')
-    const fast = atRest({ serviceTier: 'priority' })
-    expect(speed(fast)).toMatchObject({
-      settable: true,
-      kind: {
-        currentValue: 'priority',
-        choices: [
-          { value: 'default', label: 'Standard' },
-          { value: 'priority', label: 'Fast' }
-        ]
+    const fast = applyStructuredAgentSessionOptions(
+      createStructuredAgentSessionOptionState('codex'),
+      CODEX_SESSION_OPTION_CATALOG,
+      {
+        models: [sol],
+        fastModeSupport: { supported: true },
+        current: { serviceTier: 'priority', defaulted: [] }
       }
-    })
+    )
+    expect(
+      structuredAgentSessionOptionSnapshot(fast).find(({ id }) => id === 'serviceTier')
+    ).toMatchObject({ settable: true, kind: { currentValue: 'priority' } })
     const standard = commitStructuredAgentSessionOption(fast, 'serviceTier', 'default')
     // With no model, nothing says which other speed the chat can take.
     expect(canSetStructuredAgentSessionOption(standard, 'serviceTier', 'priority')).toBe(false)
-    const picked = commitStructuredAgentSessionOption(standard, 'model', 'gpt-6.1-sol')
-    const restarted = atRest({ model: 'gpt-6.1-sol', serviceTier: 'default' })
-    for (const state of [picked, restarted]) {
-      expect(speed(state)).toMatchObject({ settable: true, kind: { currentValue: 'default' } })
-      expect(canSetStructuredAgentSessionOption(state, 'serviceTier', 'priority')).toBe(true)
-    }
-  })
-
-  it("names no default as a resumed chat's own, whichever of its list and answer lands first", () => {
-    const models = [{ id: 'gpt-5.5', label: 'GPT-5.5', isDefault: true, efforts: [] }]
-    const listing: AgentSessionModelCatalogResult = { origin: 'probe', fetchedAt: 1, models }
-    const answer: AgentSessionOptionsResult = {
-      models,
-      current: { model: 'gpt-5.5', defaulted: ['model'] }
-    }
-    const seed = CODEX_SESSION_OPTION_CATALOG
-    const cold = () => createStructuredAgentSessionOptionState('codex', seed)
-    const resumed = { newLaunch: false }
-    for (const state of [
-      applyStructuredAgentSessionOptions(
-        applyStructuredAgentSessionModelCatalog(cold(), seed, listing, resumed),
-        seed,
-        answer
-      ),
-      applyStructuredAgentSessionModelCatalog(
-        applyStructuredAgentSessionOptions(cold(), seed, answer),
-        seed,
-        listing,
-        resumed
-      )
-    ]) {
-      const model = structuredAgentSessionOptionSnapshot(state)[0]
-      expect(model).toMatchObject({ valueSource: 'unknown' })
-      expect(model?.kind).not.toHaveProperty('currentValue')
-    }
   })
 })

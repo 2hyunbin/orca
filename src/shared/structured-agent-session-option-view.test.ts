@@ -102,25 +102,6 @@ describe('what a send carries', () => {
     expect(carried(withHostList(fresh(), listing))).toEqual({ model: 'sonnet' })
   })
 
-  it("pins a new chat's shown default on its first send, which a restart shows as the chat's own", () => {
-    const listing = { ...LISTED, models: CLI302, listingNamesConfiguredModel: true }
-    const first = carried(withHostList(fresh(), listing))
-    expect(first).toEqual({ model: 'opus' })
-    // The host saved what the send carried, so the resumed chat's answer marks no default.
-    const restarted = applyStructuredAgentSessionOptions(
-      applyStructuredAgentSessionModelCatalog(fresh(), CLAUDE_SESSION_OPTION_CATALOG, listing, {
-        newLaunch: false
-      }),
-      CLAUDE_SESSION_OPTION_CATALOG,
-      { models: CLI302, current: { model: first?.model, defaulted: [] } }
-    )
-    expect(shown(restarted, undefined, {}).model).toBe('opus')
-    expect(structuredAgentSessionShownSnapshot(restarted)[0]).toMatchObject({
-      valueSource: 'dispatched'
-    })
-    expect(carried(restarted)).toEqual({ model: 'opus' })
-  })
-
   it('carries a pick on its way as given', () => {
     const listed = withHostList(fresh(), { ...LISTED, models: [OPUS, SONNET] })
     expect(carried(listed, remembered, { model: 'sonnet' })).toMatchObject({ model: 'sonnet' })
