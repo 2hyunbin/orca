@@ -40,6 +40,12 @@ import {
   foldJournalQueuePauseMark,
   type JournalQueuePauseMarks
 } from './queued-message-pause'
+import {
+  createJournalQueueState,
+  foldJournalQueueEcho,
+  foldJournalQueueRow,
+  type JournalQueueState
+} from './journal-queue-fold'
 
 export const MAX_JOURNAL_APPLIED_SETTLEMENT_IDS = 4_096
 
@@ -77,6 +83,8 @@ export type JournalReducerState = {
   queuePauseMarks: JournalQueuePauseMarks
   /** Host-only: each handed-over send's stopped-message history, from its latest `pending` row. */
   stoppedHistoryCarried: Map<string, readonly string[]>
+  /** The queued messages, folded from their own rows and their hand-offs (`journal-queue-fold.ts`). */
+  queue: JournalQueueState
 }
 
 export function createJournalReducerState(sessionId: string, epoch: string): JournalReducerState {
@@ -100,7 +108,8 @@ export function createJournalReducerState(sessionId: string, epoch: string): Jou
     derivedTurnScope: new JournalDerivedTurnScope(),
     latestAcceptedTurnSequence: 0,
     queuePauseMarks: createJournalQueuePauseMarks(),
-    stoppedHistoryCarried: new Map()
+    stoppedHistoryCarried: new Map(),
+    queue: createJournalQueueState()
   }
 }
 
@@ -109,9 +118,17 @@ export function applyJournalRow(
   row: JournalRow,
   savedAt = row.ts
 ): void {
+  // An echo is read against the cards before it applies; every other row after.
+  foldJournalQueueEcho(state, row)
+  applyJournalRowFacts(state, row, savedAt)
+  foldJournalQueueRow(state, row)
+}
+
+function applyJournalRowFacts(state: JournalReducerState, row: JournalRow, savedAt: number): void {
   state.lastSequence = Math.max(state.lastSequence, row.seq)
   state.highestFence = Math.max(state.highestFence, row.fence)
-  if (row.kind === 'epoch') {
+  // A queued card is never activity: it feeds no working status and no idle sweep.
+  if (row.kind === 'epoch' || row.kind === 'queue') {
     return
   }
   state.lastActivityAt = Math.max(state.lastActivityAt, row.ts)

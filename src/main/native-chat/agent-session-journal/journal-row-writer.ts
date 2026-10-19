@@ -52,18 +52,10 @@ export type JournalRowWriterDeps = {
   highestFence: () => number
   nextSequence: () => number
   commit: (rows: readonly JournalRow[], savedAt: number) => void
-  /** Standing hook run for EVERY appended row — the queued-draft returned
-   *  transition rides here so no rejection path can bypass it. Bookkeeping: it
-   *  runs in its own savepoint, so its failure is reported and never vetoes the row. */
-  inTransaction?: JournalRowTransactionHook
-  /** After any rollback, so a cache filled inside the transaction cannot outlive it. */
-  rolledBack?: () => void
   /** Rows an OS crash may lose without losing anything but streamed text; they commit without
    *  the per-commit fsync (`isJournalStreamedTextRevision`). */
   streamedTextRevision?: (row: JournalRow) => boolean
 }
-
-const BOOKKEEPING_SAVEPOINT = 'journal_row_bookkeeping'
 
 export class JournalRowWriter {
   constructor(private readonly deps: JournalRowWriterDeps) {}
@@ -78,21 +70,15 @@ export class JournalRowWriter {
       const savedAt = this.deps.now()
       const row = build(this.deps.nextSequence(), savedAt)
       assertJournalFence(row.fence, this.deps.highestFence())
-      try {
-        // One INSERT: the chat's epoch pointer moves only when the epoch does.
-        this.deps.database().transaction(
-          (db) => {
-            insertJournalRow(db, this.deps.sessionId, row, savedAt)
-            hook?.(db, row)
-            receipt?.write(db, row)
-            this.runBookkeeping(db, row)
-          },
-          !hook && !receipt && this.streamed([row])
-        )
-      } catch (error) {
-        this.deps.rolledBack?.()
-        throw error
-      }
+      // One INSERT: the chat's epoch pointer moves only when the epoch does.
+      this.deps.database().transaction(
+        (db) => {
+          insertJournalRow(db, this.deps.sessionId, row, savedAt)
+          hook?.(db, row)
+          receipt?.write(db, row)
+        },
+        !hook && !receipt && this.streamed([row])
+      )
       // COMMIT landed, so the row is durable: adopt it before anything that can
       // fail. Rejecting here instead would leave the next append reusing a
       // sequence the table already holds. The ledger first: it cannot throw, the fold can.
@@ -129,21 +115,15 @@ export class JournalRowWriter {
     for (const row of rows) {
       assertJournalFence(row.fence, this.deps.highestFence())
     }
-    try {
-      this.deps.database().transaction(
-        (db) => {
-          for (const row of rows) {
-            insertJournalRow(db, this.deps.sessionId, row, ts)
-            this.runBookkeeping(db, row)
-          }
-          receipt?.write(db, receiptRow?.(rows))
-        },
-        !receipt && this.streamed(rows)
-      )
-    } catch (error) {
-      this.deps.rolledBack?.()
-      throw error
-    }
+    this.deps.database().transaction(
+      (db) => {
+        for (const row of rows) {
+          insertJournalRow(db, this.deps.sessionId, row, ts)
+        }
+        receipt?.write(db, receiptRow?.(rows))
+      },
+      !receipt && this.streamed(rows)
+    )
     receipt?.committed()
     this.deps.commit(rows, ts)
     return rows
@@ -165,28 +145,5 @@ export class JournalRowWriter {
   private streamed(rows: readonly JournalRow[]): boolean {
     const { streamedTextRevision } = this.deps
     return streamedTextRevision !== undefined && rows.every((row) => streamedTextRevision(row))
-  }
-
-  private runBookkeeping(db: Database.Database, row: JournalRow): void {
-    const hook = this.deps.inTransaction
-    if (!hook) {
-      return
-    }
-    db.exec(`SAVEPOINT ${BOOKKEEPING_SAVEPOINT}`)
-    try {
-      hook(db, row)
-      db.exec(`RELEASE ${BOOKKEEPING_SAVEPOINT}`)
-    } catch (error) {
-      db.exec(`ROLLBACK TO ${BOOKKEEPING_SAVEPOINT}`)
-      db.exec(`RELEASE ${BOOKKEEPING_SAVEPOINT}`)
-      this.deps.rolledBack?.()
-      // The draft store re-derives what this missed from the committed rows: at open, and in
-      // the drain step before a draft sends.
-      console.warn('[journal-append] row bookkeeping skipped:', {
-        sessionId: this.deps.sessionId,
-        kind: row.kind,
-        error: error instanceof Error ? error.message : String(error)
-      })
-    }
   }
 }

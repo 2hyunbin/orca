@@ -52,18 +52,14 @@ import type {
   JournalTombstoneInput,
   ResolveDispatchInput
 } from './journal-store-contracts'
-import type { JournalQueuedMessages } from './journal-queued-messages'
+import type { JournalQueuedMessages, JournalQueuePlan } from './journal-queued-messages'
 import {
   journalQueueResumeRowBuilder,
   journalQueueReopenRowBuilder,
   journalStopEventRowBuilder
 } from './journal-stop-and-resume-rows'
 import type { AgentJournalEpochReason, JournalStopEvent } from './journal-row-schema'
-import type {
-  JournalOperationReceipt,
-  JournalRowTransactionHook,
-  JournalRowWriter
-} from './journal-row-writer'
+import type { JournalOperationReceipt, JournalRowWriter } from './journal-row-writer'
 import type { JournalSubmissionWriter } from './journal-submission-writer'
 import type { JournalEpochController } from './journal-epoch-controller'
 import { JournalWriteQueue } from './journal-write-queue'
@@ -97,7 +93,7 @@ export class AgentSessionJournal {
   private readonly submissionWriter: JournalSubmissionWriter
   private readonly stepWriter: JournalStepWriter
   private readonly restore: () => Promise<void>
-  /** Draft rows queued while the agent works; never reducer input or owed work. */
+  /** The cards queued while the agent works (`journal-queue-fold.ts`); never owed work. */
   readonly queuedMessages: JournalQueuedMessages
   readonly stopMarks: JournalStopMarks
   /** A person's Stop accepted (`journal-stop-acceptance.ts`). */
@@ -361,9 +357,9 @@ export class AgentSessionJournal {
   /** A dispatch transition (`JournalSubmissionWriter.resolveDispatch`). */
   resolveDispatch(
     input: ResolveDispatchInput,
-    hook?: JournalRowTransactionHook
+    cards?: () => JournalQueuePlan
   ): Promise<AgentJournalCursor> {
-    return this.submissionWriter.resolveDispatch(input, hook)
+    return this.submissionWriter.resolveDispatch(input, cards)
   }
 
   /** Retire unanswered sends after their execution owner ended, without assuming delivery. */

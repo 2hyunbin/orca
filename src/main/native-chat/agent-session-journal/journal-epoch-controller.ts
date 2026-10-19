@@ -6,6 +6,7 @@ import type { JournalReducerState } from './journal-reducer'
 import type { JournalHostDatabase } from './journal-host-database'
 import { replaceJournalEpoch, type JournalReplacementItem } from './journal-epoch-replacement'
 import type { JournalQueuePauseRestatement } from './queued-message-pause'
+import type { JournalQueueRestatement } from './journal-queued-messages'
 import { publishNewEpoch } from './journal-epoch-rollover'
 import type { JournalLoad } from './journal-open'
 import type { AgentJournalEpochReason } from './journal-row-schema'
@@ -25,6 +26,8 @@ export class JournalEpochController {
       state: () => JournalReducerState
       /** What of the live epoch's Stop and Resume a replacement restates. */
       queuePauseRestatement: () => JournalQueuePauseRestatement
+      /** The cards a new epoch writes again (`retainedQueueFacts`). */
+      queueRestatement: () => JournalQueueRestatement
       cursor: () => AgentJournalCursor
       adopt: (loaded: JournalLoad) => void
     }
@@ -38,6 +41,7 @@ export class JournalEpochController {
       reason,
       fence,
       now: this.deps.now(),
+      queue: this.deps.queueRestatement(),
       onPublished: this.deps.adopt
     })
   }
@@ -73,6 +77,7 @@ export class JournalEpochController {
         items,
         previous: this.deps.state(),
         queuePause: this.deps.queuePauseRestatement(),
+        queue: this.deps.queueRestatement(),
         now: this.deps.now,
         mintEpoch: this.deps.mintEpoch,
         onPublished: this.deps.adopt
