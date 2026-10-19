@@ -79,6 +79,8 @@ export function useDetailCardScope({
       }
       return nodes
     }
+    // The returned cleanup disconnects this observer; its callback only refreshes the same subscriptions.
+    // react-doctor-disable-next-line react-doctor/effect-observer-needs-disconnect
     const observer = new MutationObserver(() => {
       for (const node of mask(root)) {
         observer.observe(node, { childList: true })

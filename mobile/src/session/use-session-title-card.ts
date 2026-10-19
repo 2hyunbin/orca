@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useRef, useState, type ComponentRef } from 'react'
 import {
-  Text,
+  type Text,
   useWindowDimensions,
   type LayoutChangeEvent,
   type LayoutRectangle,
