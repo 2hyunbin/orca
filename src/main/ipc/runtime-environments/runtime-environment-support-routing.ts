@@ -84,6 +84,7 @@ export function executeSupportRoutedCall(args: {
   params: unknown
   timeoutMs: number
   expectedPairingRevision?: number
+  expectedRuntimeId?: string
   envelope?: RuntimeOrchestrationEnvelope
   signal?: AbortSignal
 }): Promise<RuntimeRpcResponse<unknown>> {
@@ -93,6 +94,7 @@ export function executeSupportRoutedCall(args: {
     method: args.method,
     timeoutMs: args.timeoutMs,
     expectedPairingRevision: args.expectedPairingRevision,
+    expectedRuntimeId: args.expectedRuntimeId,
     signal: args.signal,
     supported: (route) =>
       sendRemoteRuntimeSharedControlRequestAbortable(
@@ -186,6 +188,8 @@ export async function routeRuntimeEnvironmentCallBySupport(args: {
   method: string
   timeoutMs: number
   expectedPairingRevision?: number
+  /** The caller's request was shaped for this runtime; a replacement must never receive it. */
+  expectedRuntimeId?: string
   signal?: AbortSignal
   supported: (route: SupportRoute) => Promise<RuntimeRpcResponse<unknown>>
   unsupported: (route: SupportRoute) => Promise<RuntimeRpcResponse<unknown>>
@@ -196,7 +200,8 @@ export async function routeRuntimeEnvironmentCallBySupport(args: {
     const revisionFailure = runtimeEnvironmentRevisionFailure(
       environment,
       args.expectedPairingRevision,
-      args.method
+      args.method,
+      args.expectedRuntimeId
     )
     if (revisionFailure) {
       return revisionFailure
@@ -210,6 +215,10 @@ export async function routeRuntimeEnvironmentCallBySupport(args: {
       outcome.kind !== 'stale_incarnation' &&
       isRuntimeEnvironmentCapabilityOutcomeCurrent(outcome)
     ) {
+      // Why: checked after the connection is ready, just before sending, where a reconnect lands.
+      if (args.expectedRuntimeId !== undefined && outcome.runtimeId !== args.expectedRuntimeId) {
+        return runtimeEnvironmentChangedFailure(environment, args.method)
+      }
       const route = { environment, connection, outcome }
       const response = await (outcome.kind === 'supported'
         ? args.supported(route)

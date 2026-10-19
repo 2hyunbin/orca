@@ -1,4 +1,5 @@
 import type { RuntimeStatus } from '../../../shared/runtime-types'
+import { RUNTIME_CONNECTION_CHANGED_MESSAGE } from '../web/web-runtime-request-registry'
 import { assertFileMutationOwnershipCapability } from '../../../shared/file-mutation-ownership'
 import { callRuntimeRpc } from './runtime-rpc-client'
 import {
@@ -16,16 +17,74 @@ export type RuntimeFileImportSession = {
   assertCurrent: () => void
 }
 
-export async function assertRuntimeFileMutationCapability(
+async function getRuntimeFileMutationStatus(
   target: RuntimeFileMutationTarget,
   expectedEnvironmentPairingRevision: number | undefined
-): Promise<string> {
+): Promise<RuntimeStatus> {
   const status = await callRuntimeRpc<RuntimeStatus>(target, 'status.get', undefined, {
     timeoutMs: 15_000,
     expectedEnvironmentPairingRevision
   })
   assertFileMutationOwnershipCapability(status)
-  return status.runtimeId
+  return status
+}
+
+export async function assertRuntimeFileMutationCapability(
+  target: RuntimeFileMutationTarget,
+  expectedEnvironmentPairingRevision: number | undefined
+): Promise<string> {
+  return (await getRuntimeFileMutationStatus(target, expectedEnvironmentPairingRevision)).runtimeId
+}
+
+/** Thrown before sending, so nothing reached either runtime and a re-probed retry is safe. */
+export class RuntimeConnectionChangedError extends Error {
+  constructor() {
+    super(RUNTIME_CONNECTION_CHANGED_MESSAGE)
+  }
+}
+
+/** The paired web client's transport refuses with the same wording before it sends. */
+export function isRuntimeConnectionChangedError(error: unknown): boolean {
+  return (
+    error instanceof RuntimeConnectionChangedError ||
+    (error instanceof Error && error.message === RUNTIME_CONNECTION_CHANGED_MESSAGE)
+  )
+}
+
+export type RuntimeFileMutationPlan<TResult> =
+  | { method?: string; params: unknown }
+  | { result: TResult }
+
+/**
+ * `plan` sees the ownership probe's capabilities, so a capability-gated field costs no extra status
+ * call. The send is pinned to that runtime and connection: a reconnect to an older one in between
+ * would silently strip whatever the plan relied on.
+ */
+export async function callRuntimeFileMutationWithCapabilities<TResult>(
+  target: RuntimeFileMutationTarget,
+  method: string,
+  plan: (capabilities: readonly string[]) => Promise<RuntimeFileMutationPlan<TResult>>,
+  timeoutMs: number
+): Promise<TResult> {
+  const requestRevision = captureRuntimeEnvironmentRequestRevision(target.environmentId, undefined)
+  const connectionGeneration = getRuntimeEnvironmentConnectionGeneration(target.environmentId)
+  const status = await getRuntimeFileMutationStatus(target, requestRevision)
+  const planned = await plan(status.capabilities ?? [])
+  if ('result' in planned) {
+    return planned.result
+  }
+  return callRuntimeRpc<TResult>(target, planned.method ?? method, planned.params, {
+    timeoutMs,
+    expectedEnvironmentPairingRevision: requestRevision,
+    expectedEnvironmentRuntimeId: status.runtimeId,
+    beforeSend: () => {
+      if (
+        getRuntimeEnvironmentConnectionGeneration(target.environmentId) !== connectionGeneration
+      ) {
+        throw new RuntimeConnectionChangedError()
+      }
+    }
+  })
 }
 
 export async function callRuntimeFileMutation<TResult>(
@@ -39,7 +98,7 @@ export async function callRuntimeFileMutation<TResult>(
     target.environmentId,
     expectedEnvironmentPairingRevision
   )
-  await assertRuntimeFileMutationCapability(target, requestRevision)
+  await getRuntimeFileMutationStatus(target, requestRevision)
   return callRuntimeRpc<TResult>(target, method, params, {
     timeoutMs,
     expectedEnvironmentPairingRevision: requestRevision
