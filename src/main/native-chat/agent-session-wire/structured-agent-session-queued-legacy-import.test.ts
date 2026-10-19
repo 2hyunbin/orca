@@ -3,6 +3,7 @@
 // import runs once per open, all-or-nothing, until no readable legacy row is left.
 
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
 import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
 import {
@@ -21,13 +22,14 @@ import {
 import {
   createQueuedMessageTestRig,
   eventually,
+  QUEUED_RIG_CALLER as CALLER,
   type QueuedMessageTestRig
 } from './structured-agent-session-queued-message-rig.test-fixture'
 
 let rig: QueuedMessageTestRig
 
 beforeEach(async () => {
-  rig = await createQueuedMessageTestRig({ restartable: true })
+  rig = await createQueuedMessageTestRig({ restartable: true, rewind: async () => ({ ok: true }) })
 })
 
 afterEach(() => rig.dispose())
@@ -66,7 +68,8 @@ async function handOff(
   attempt: string,
   card: string,
   text: string,
-  as: 'providerRejected' | 'cancelled' | 'accepted'
+  as: 'providerRejected' | 'cancelled' | 'accepted',
+  fence = 0
 ): Promise<void> {
   const body = message(text)
   const payloadFingerprint = agentSessionSendBodyFingerprint(journal.queuedMessages.sessionId, body)
@@ -74,20 +77,20 @@ async function handOff(
     clientMessageId: attempt,
     payloadFingerprint,
     body,
-    fence: 0,
+    fence,
     handoverRecorded: true,
     queuedMessageId: card
   })
   await journal.resolveDispatch({
     clientMessageId: attempt,
     state: 'pending',
-    fence: 0,
+    fence,
     turnScope: AGENT_JOURNAL_THREAD_SCOPE
   })
   await journal.resolveDispatch(
     as === 'accepted'
-      ? { clientMessageId: attempt, state: 'accepted', providerIdentity: null, fence: 0 }
-      : { clientMessageId: attempt, state: 'rejected', ...words(as), fence: 0 }
+      ? { clientMessageId: attempt, state: 'accepted', providerIdentity: null, fence }
+      : { clientMessageId: attempt, state: 'rejected', ...words(as), fence }
   )
 }
 
@@ -267,4 +270,62 @@ it("moves an earlier build's cards into the journal, each action its own card, t
   expect(queueRows('session-y')).toEqual([])
   expect(reopened.queuedMessages.list()).toEqual([])
   await reopened.close()
+})
+
+it('a rewind while the import has failed moves the legacy cards first: a refused one stays returned', async () => {
+  // Made before the clear, which leaves the chat no provider handle to read.
+  const earlier = journalFor(SESSION)
+  const clear = { command: 'clear' as const }
+  expect(
+    await rig.host.conversationCommand(CALLER, {
+      ...clear,
+      envelope: rig.envelope(clear, 'agentSession.conversationCommand', hostTestOperationId())
+    })
+  ).toMatchObject({ ok: true })
+  const target = rig.send('rewound away')
+  expect(await target.result).toMatchObject({ ok: true })
+  await eventually(async () =>
+    expect((await rig.submission(target.id))?.handedOverAt).toBeDefined()
+  )
+  await rig.settleAccepted(target.id, 'target')
+  await rig.host.close(SESSION, 'evict')
+  await earlier.open()
+  const fence = rig.store.getRecord(SESSION)!.lease.runtimeFence
+  await handOff(
+    earlier,
+    'att-refused',
+    'disp-refused',
+    'refused, never settled',
+    'providerRejected',
+    fence
+  )
+  await earlier.close()
+  seedLegacy(SESSION, [
+    ['disp-refused', 'dispatched', 'refused, never settled', 'att-refused'],
+    ['edited', 'waiting', 'waiting, edited']
+  ])
+  db().exec(`CREATE TEMP TRIGGER fail_import BEFORE DELETE ON queued_messages
+    BEGIN SELECT RAISE(ABORT, 'disk full'); END`)
+  const warned = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+  const held = [
+    { messageId: 'disp-refused', state: 'returned' },
+    { messageId: 'edited', state: 'waiting' }
+  ]
+  expect(await rig.drafts()).toEqual(held)
+  db().exec('DROP TRIGGER fail_import')
+  warned.mockRestore()
+
+  const live = rig.host.collaboratorsForTests().sessions.get(SESSION)!.journal
+  const rewound = { itemId: agentJournalSubmissionKey(target.id), expectedEpoch: live.epoch }
+  expect(
+    await rig.host.rewind(CALLER, {
+      ...rewound,
+      envelope: rig.envelope(rewound, 'agentSession.rewind', hostTestOperationId())
+    })
+  ).toMatchObject({ ok: true })
+  expect(live.epoch).toBe(rewound.expectedEpoch)
+  expect(live.submission('att-refused')).toBeUndefined()
+  expect(await rig.drafts()).toEqual(held)
+  await nothingSentTo('edited')
+  expect(legacyIds()).toEqual([])
 })

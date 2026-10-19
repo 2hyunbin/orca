@@ -239,6 +239,13 @@ export class JournalQueuedMessages {
     }
   }
 
+  /** Every legacy card moved into the journal, every legacy row deleted, with a write that retires
+   *  hand-offs: each card's reading is then latched in the fold before its hand-off is gone. */
+  adoptionOfAll(): JournalQueuePlan {
+    const { rows } = this.plan(this.legacy.messageIds().map((messageId) => ({ messageId })))
+    return { rows, receipt: this.legacy.deletionOfAll() }
+  }
+
   /** The bulk move of an earlier build's cards, once per open (`LegacyQueuedCards.importAtOpen`). */
   importAtOpen(): Promise<void> {
     return this.legacy.importAtOpen()

@@ -130,9 +130,14 @@ export class LegacyQueuedCards {
     }
   }
 
+  /** Every readable legacy row's card id. */
+  messageIds(): string[] {
+    return this.rows().map((row) => row.messageId)
+  }
+
   /** `deletion` of every readable legacy row: a new epoch restates their cards with its own. */
   deletionOfAll(): JournalOperationReceipt {
-    return this.deletion(this.rows().map((row) => row.messageId))
+    return this.deletion(this.messageIds())
   }
 
   /** Every readable row, unanswered ones as journal rows, all deleted, in ONE transaction; a
