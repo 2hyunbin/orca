@@ -213,7 +213,6 @@ export function NativeChatStructuredSession(
     composerReady: composerShown && install.slot.kind !== 'install'
   })
   const questionBody = prompt?.body.kind === 'question' ? prompt.body : null
-  const questions = questionBody ? agentSessionPromptQuestions(questionBody) : []
   const structuredTransport = useNativeChatStructuredComposerTransport({
     props,
     controller,
@@ -385,7 +384,7 @@ export function NativeChatStructuredSession(
           {prompt && questionBody ? (
             <NativeChatStructuredQuestionCard
               key={`${prompt.itemId}:${prompt.revision}`}
-              questions={questions}
+              questions={agentSessionPromptQuestions(questionBody)}
               onAnswer={(response) => void promptResponse.respond(prompt, response)}
               isSubmitting={promptResponse.holds(prompt)}
               onCancel={cancelPrompt}
