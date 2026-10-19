@@ -222,6 +222,7 @@ async function startWithEngine() {
   const engineTab = { browserPageId: 'engine-page', index: 0, url: '', title: '', active: true }
   const engine = {
     browserTabList: vi.fn(async () => ({ tabs: [engineTab] })),
+    browserTabCurrent: vi.fn(async () => ({ tab: engineTab })),
     browserTabCreate: vi.fn(async () => ({ browserPageId: 'engine-page' })),
     browserTabSwitch: vi.fn(async () => ({ switched: 0, browserPageId: 'engine-page' })),
     browserTabClose: vi.fn(async () => ({ closed: true }))
@@ -272,6 +273,19 @@ it('lists desktop-hosted pages after the engine’s tabs, as automation would pi
   await expect(commands.browserTabShow({ page: opened.browserPageId })).resolves.toMatchObject({
     tab: { browserPageId: opened.browserPageId, index: 1 }
   })
+  await startup.stop()
+})
+
+it('keeps the engine’s own per-workspace current tab where no desktop page is selected', async () => {
+  const { startup, engine } = await startWithEngine()
+  const paired = pairedHost({ desktopAttached: true })
+  const commands = createRuntimeBrowserCommands(paired.host)
+  await commands.browserOpenUrlOnClient({ url: 'https://example.org/', worktree: 'id:wt-c' })
+
+  await expect(commands.browserTabCurrent({ worktree: 'id:wt-a' })).resolves.toMatchObject({
+    tab: { browserPageId: 'engine-page' }
+  })
+  expect(engine.browserTabCurrent).toHaveBeenCalledWith({ worktree: 'id:wt-a' })
   await startup.stop()
 })
 

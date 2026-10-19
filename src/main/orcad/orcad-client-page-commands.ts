@@ -6,7 +6,11 @@
 import { BrowserError } from '../browser/browser-error'
 import type { RuntimeBrowserCommands } from '../runtime/browser/browser-commands'
 import type { RuntimeBrowserCommandHost } from '../runtime/browser/browser-command-contracts'
-import type { BrowserTabListResult, BrowserTabSwitchResult } from '../../shared/runtime-types'
+import type {
+  BrowserTabListResult,
+  BrowserTabShowResult,
+  BrowserTabSwitchResult
+} from '../../shared/runtime-types'
 import { browserUnavailableError } from '../runtime/runtime-browser-commands-factory'
 import { browserTabCreateClientPageStartsActive } from '../runtime/browser-tab-create-publication'
 import {
@@ -136,6 +140,8 @@ function engineTabs(forward: Forward): BrowserEngineTabs {
   return {
     list: async (params) =>
       requireTabResult(await forward([params], 'browserTabList'), isTabListResult),
+    current: async (params) =>
+      requireTabResult(await forward([params], 'browserTabCurrent'), isTabShowResult),
     switchTo: async (params) =>
       requireTabResult(await forward([params], 'browserTabSwitch'), isTabSwitchResult)
   }
@@ -157,6 +163,10 @@ function isTabListResult(value: unknown): value is BrowserTabListResult {
         isRecord(tab) && typeof tab.browserPageId === 'string' && typeof tab.active === 'boolean'
     )
   )
+}
+
+function isTabShowResult(value: unknown): value is BrowserTabShowResult {
+  return isRecord(value) && isRecord(value.tab) && typeof value.tab.browserPageId === 'string'
 }
 
 function isTabSwitchResult(value: unknown): value is BrowserTabSwitchResult {

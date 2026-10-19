@@ -24,6 +24,8 @@ export type BrowserClientPageQueryHost = Pick<
 /** The tabs a host's own engine holds, beside the pages desktops host for it. */
 export type BrowserEngineTabs = {
   list(params: { worktree?: string }): Promise<BrowserTabListResult>
+  /** The engine's own per-workspace selection, which its list's global flags do not show. */
+  current(params: { worktree?: string }): Promise<BrowserTabShowResult>
   switchTo(params: {
     page: string
     worktree?: string
@@ -63,11 +65,20 @@ export class BrowserClientPageQueries {
   }
 
   async browserTabCurrent(params: { worktree?: string }): Promise<BrowserTabShowResult> {
-    const tab = (await this.browserTabList(params)).tabs.find((candidate) => candidate.active)
-    if (!tab) {
-      throw new BrowserError('browser_no_tab', 'No browser tab open in this worktree')
+    const listed = await this.browserTabList(params)
+    const clientTab = listed.tabs.find(
+      (candidate) =>
+        candidate.active &&
+        this.host.getRuntimeBrowserPageRegistry().getPage(candidate.browserPageId)
+    )
+    if (clientTab) {
+      return { tab: clientTab }
     }
-    return { tab }
+    if (this.engine) {
+      // Why the engine's own answer: engine tabs come first, so its index is the logical one.
+      return this.engine.current(params)
+    }
+    throw new BrowserError('browser_no_tab', 'No browser tab open in this worktree')
   }
 
   async browserTabShow(params: { page: string; worktree?: string }): Promise<BrowserTabShowResult> {
