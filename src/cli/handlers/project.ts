@@ -110,7 +110,8 @@ async function getOptionalSetupHostId(
       'This Orca server cannot pick a project setup by host yet. Update Orca on the server and try again.'
     )
   }
-  return await getResolvedHostId(flags, client)
+  // Unresolved, like the setup paths: a removed SSH target's stale setup must stay deletable.
+  return await getRequiredHostId(flags, client)
 }
 
 function getOptionalRepoKind(flags: Map<string, string | boolean>): RepoKind | undefined {

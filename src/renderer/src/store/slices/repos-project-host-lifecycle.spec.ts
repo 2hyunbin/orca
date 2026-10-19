@@ -144,7 +144,6 @@ export function registerReposProjectHostLifecycleTests(): void {
         method: 'projectHostSetup.update',
         params: {
           setupId: runtimeSetup.id,
-          hostId: 'runtime:env-1',
           updates: { displayName: 'GPU VM renamed' }
         },
         timeoutMs: 15_000
@@ -178,12 +177,12 @@ export function registerReposProjectHostLifecycleTests(): void {
       expect(runtimeEnvironmentCall).toHaveBeenCalledWith({
         selector: 'env-1',
         method: 'projectHostSetup.delete',
-        params: { setupId: runtimeSetup.id, hostId: 'runtime:env-1' },
+        params: { setupId: runtimeSetup.id },
         timeoutMs: 15_000
       })
     })
 
-    it('routes a duplicate setup ID by its host and replaces only that twin', async () => {
+    it('a setup id shared with another route updates only its own row', async () => {
       const localSetup: ProjectHostSetup = {
         ...runtimeSetup,
         hostId: 'local',
@@ -207,14 +206,13 @@ export function registerReposProjectHostLifecycleTests(): void {
 
       expect(projectsUpdateHostSetup).toHaveBeenCalledWith({
         setupId: localSetup.id,
-        hostId: 'local',
         updates: { displayName: 'Local renamed' }
       })
       expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
       expect(store.getState().projectHostSetups).toEqual([updatedLocalSetup, runtimeSetup])
     })
 
-    it('routes a duplicate setup-ID deletion by its host and removes only that twin', async () => {
+    it('a setup id shared with another route removes only its own row', async () => {
       const localSetup: ProjectHostSetup = {
         ...runtimeSetup,
         hostId: 'local',
@@ -230,12 +228,29 @@ export function registerReposProjectHostLifecycleTests(): void {
 
       await store.getState().deleteProjectHostSetup({ setupId: localSetup.id })
 
-      expect(projectsDeleteHostSetup).toHaveBeenCalledWith({
-        setupId: localSetup.id,
-        hostId: 'local'
-      })
+      expect(projectsDeleteHostSetup).toHaveBeenCalledWith({ setupId: localSetup.id })
       expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
       expect(store.getState().projectHostSetups).toEqual([runtimeSetup])
+    })
+
+    it('names the SSH twin of a local setup on this computer', async () => {
+      const localSetup: ProjectHostSetup = { ...runtimeSetup, hostId: 'local' }
+      const sshSetup: ProjectHostSetup = { ...runtimeSetup, hostId: 'ssh:box' }
+      projectsDeleteHostSetup.mockResolvedValue({ project, setup: sshSetup })
+      const store = createTestStore()
+      store.setState({
+        projects: [project],
+        projectHostSetups: [localSetup, sshSetup],
+        settings: { activeRuntimeEnvironmentId: null } as never
+      })
+
+      await store.getState().deleteProjectHostSetup({ setupId: sshSetup.id, hostId: 'ssh:box' })
+
+      expect(projectsDeleteHostSetup).toHaveBeenCalledWith({
+        setupId: sshSetup.id,
+        hostId: 'ssh:box'
+      })
+      expect(store.getState().projectHostSetups).toEqual([localSetup])
     })
 
     it("names a paired server's SSH twin by its execution host and removes only that twin", async () => {

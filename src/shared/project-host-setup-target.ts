@@ -1,4 +1,4 @@
-import { parseExecutionHostId, type ExecutionHostId } from './execution-host'
+import type { ExecutionHostId } from './execution-host'
 
 /**
  * Names one setup. Repo-backed setups take the repo id, so twins on different hosts share
@@ -9,29 +9,16 @@ export type ProjectHostSetupTarget = {
   hostId?: ExecutionHostId
 }
 
-type SetupIdentity = { id: string; hostId: string; repoId: string }
+type SetupIdentity = { id: string; hostId: string }
 
 export function findProjectHostSetup<T extends SetupIdentity>(
   setups: readonly T[],
   target: ProjectHostSetupTarget
 ): T | undefined {
-  const candidates = setups.filter((setup) => setup.id === target.setupId)
-  if (target.hostId === undefined) {
-    return candidates[0]
-  }
-  const exact = candidates.find((setup) => setup.hostId === target.hostId)
-  if (exact) {
-    return exact
-  }
-  // Why: older servers stamped their own rows with the calling client's `runtime:` id, which the
-  // RPC schema now reads as `local`; accept that stamp only when exactly one row carries it.
-  if (target.hostId !== 'local') {
-    return undefined
-  }
-  const legacy = candidates.filter(
-    (setup) => parseExecutionHostId(setup.hostId)?.kind === 'runtime'
+  return setups.find(
+    (setup) =>
+      setup.id === target.setupId && (target.hostId === undefined || setup.hostId === target.hostId)
   )
-  return legacy.length === 1 ? legacy[0] : undefined
 }
 
 /** The host that runs a setup: a paired server's setups all carry its `runtime:` id as `hostId`. */

@@ -22,29 +22,10 @@ describe('findProjectHostSetup', () => {
     expect(findProjectHostSetup([local], { setupId: 'repo-1', hostId: 'ssh:box' })).toBeUndefined()
   })
 
-  it('tolerates a client-minted host stamp on an independent setup, whose id is unique', () => {
-    const provisioned = {
-      id: 'p::gpu',
-      hostId: 'runtime:old-client-id' as const,
-      repoId: ''
-    }
-    expect(
-      findProjectHostSetup([provisioned], {
-        setupId: 'p::gpu',
-        hostId: 'local'
-      })
-    ).toBe(provisioned)
-  })
-
   it('refuses a wrongly named host for an independent setup', () => {
     const provisioned = { id: 'p::gpu', hostId: 'local' as const, repoId: '' }
     expect(
       findProjectHostSetup([provisioned], { setupId: 'p::gpu', hostId: 'ssh:other' })
     ).toBeUndefined()
-  })
-
-  it("reads a repo-backed row's legacy runtime stamp as local without touching its twin", () => {
-    const legacy = { id: 'repo-1', hostId: 'runtime:old-client-id' as const, repoId: 'repo-1' }
-    expect(findProjectHostSetup([ssh, legacy], { setupId: 'repo-1', hostId: 'local' })).toBe(legacy)
   })
 })

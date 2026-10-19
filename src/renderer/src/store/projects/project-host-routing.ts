@@ -119,13 +119,13 @@ export function upsertProjectHostSetup(
 }
 
 /**
- * Where a setup edit or removal goes, with the host that runs the setup named on the wire.
- * A caller's `hostId` is that execution host: the only field telling a server's twins apart.
+ * Where a setup edit or removal goes. Only a twin (same id, same route) names its execution
+ * host on the wire, so a unique setup keeps today's by-id request and its legacy host stamps.
  */
 export async function prepareProjectHostSetupMutation<T extends ProjectHostSetupTarget>(
   setups: readonly ProjectHostSetup[],
   args: T
-): Promise<{ target: RuntimeClientTarget; hostArgs: T }> {
+): Promise<{ target: RuntimeClientTarget; hostArgs: Omit<T, 'hostId'> & ProjectHostSetupTarget }> {
   const setup = setups.find(
     (entry) =>
       entry.id === args.setupId &&
@@ -134,9 +134,18 @@ export async function prepareProjectHostSetupMutation<T extends ProjectHostSetup
   const target = setup ? getProjectSetupRuntimeTarget(setup.hostId) : { kind: 'local' as const }
   await assertProjectHostSetupMutationRuntimeCapabilities(target)
   const twinned =
-    setup &&
-    setups.filter((entry) => entry.id === setup.id && entry.hostId === setup.hostId).length > 1
-  if (twinned && target.kind === 'environment') {
+    setup !== undefined &&
+    setups.filter(
+      (entry) =>
+        entry.id === setup.id &&
+        getRuntimeTargetKey(getProjectSetupRuntimeTarget(entry.hostId)) ===
+          getRuntimeTargetKey(target)
+    ).length > 1
+  if (!twinned) {
+    const { hostId: _hostId, ...byId } = args
+    return { target, hostArgs: byId }
+  }
+  if (target.kind === 'environment') {
     await assertRuntimeEnvironmentCapability(
       target.environmentId,
       PROJECT_HOST_SETUP_HOST_TARGET_RUNTIME_CAPABILITY,
@@ -144,8 +153,9 @@ export async function prepareProjectHostSetupMutation<T extends ProjectHostSetup
       15_000
     )
   }
-  return {
-    target,
-    hostArgs: setup ? { ...args, hostId: getProjectHostSetupExecutionHostId(setup) } : args
-  }
+  return { target, hostArgs: { ...args, hostId: getProjectHostSetupExecutionHostId(setup) } }
+}
+
+function getRuntimeTargetKey(target: RuntimeClientTarget): string {
+  return target.kind === 'environment' ? `environment:${target.environmentId}` : 'local'
 }
