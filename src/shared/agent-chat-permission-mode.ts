@@ -92,8 +92,8 @@ export function chatModelSupportsAutoMode(
   return listedChatModelRow(models, model)?.supportsAutoMode === true
 }
 
-/** Whether the listing shows the chat's model can't run `auto`. Claude marks only the models that
- *  run it, and a CLI that marks none predates `auto`; a model the listing lacks is not evidence. */
+/** Whether the listing shows the chat's model can't run `auto`. Claude marks only supporting models.
+ *  A CLI before 2.1.72 does not report model auto support; an unlisted model is not evidence. */
 export function chatModelListedWithoutAutoMode(
   models: readonly ListedChatModel[],
   model: string | null | undefined

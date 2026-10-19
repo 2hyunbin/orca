@@ -89,7 +89,7 @@ describe('the permission mode a chat starts with', () => {
         launchPermission('claude', { permissionMode: 'auto', ...options }, rows).result
       ).resolves.toBe('ask')
     }
-    // A CLI that marks no model predates auto (2.1.71) and would refuse it.
+    // A CLI before 2.1.72 does not report model auto support; the auto value arrived in 2.1.71.
     await expect(
       launchPermission(
         'claude',
