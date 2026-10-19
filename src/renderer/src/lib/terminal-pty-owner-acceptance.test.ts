@@ -42,7 +42,7 @@ describe('resolveTerminalPtyOwner acceptance', () => {
 
   it('keeps a setup terminal and a row-less worktree local under single focus', () => {
     const single = OWNER_RESOLUTION_CASES.find((c) => c.name === 'single focus | legacy-repo::wt')!
-    expect(resolveTerminalPtyOwner(single.state, 'onboarding-setup::/tmp/skill')).toEqual({
+    expect(resolveTerminalPtyOwner(single.state, 'ephemeral-setup-terminal:skill-panel')).toEqual({
       kind: 'non-runtime'
     })
     expect(resolveTerminalPtyOwner(single.state, 'unknown-repo::wt')).toEqual({

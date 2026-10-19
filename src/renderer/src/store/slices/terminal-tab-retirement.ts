@@ -65,7 +65,7 @@ export function getTerminalPtyOwnershipIdentity(
   // Why: hydrated legacy runtime IDs omit their owner, but still refer to the same provider
   // terminal as a scoped ID in the owning worktree. This reads the owner spawn started it on, as
   // close does, so identity never disagrees with what a close retires.
-  const owner = resolveTerminalPtyOwner(state, worktreeId)
+  const owner = resolveTerminalPtyOwner(state, worktreeId, 'spawn')
   // Why: a twin's legacy id can't be pinned to either host, so it matches only its own exact id.
   if (owner.kind === 'ambiguous') {
     return `pty:${ptyId}`

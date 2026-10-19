@@ -4,7 +4,10 @@ import {
 } from '@/runtime/runtime-environment-revision'
 import type { AppState } from '../types'
 import { callRuntimeRpc, ensureRuntimeEnvironmentCompatible } from '@/runtime/runtime-rpc-client'
-import { resolveTerminalWorktreeRoute } from '@/lib/terminal-worktree-route'
+import {
+  resolveTerminalPtyOwner,
+  resolveTerminalWorktreeRoute
+} from '@/lib/terminal-worktree-route'
 import {
   classifyTerminalRetirementWorktree,
   type TerminalTabRetirementPlan
@@ -25,9 +28,13 @@ export function startTerminalTabProviderRetirement({
   tabId: string
   canRetireRuntimeTerminal?: () => boolean
 }): void {
-  const fallbackWorktreeRoute = retirementPlan.worktreeId
-    ? resolveTerminalWorktreeRoute(state, retirementPlan.worktreeId)
-    : { runtimeEnvironmentId: null }
+  const { worktreeId } = retirementPlan
+  // Why: an unscoped `remote:` id of an unattributable twin must not be closed on this app.
+  const fallbackWorktreeRoute = !worktreeId
+    ? { runtimeEnvironmentId: null }
+    : resolveTerminalPtyOwner(state, worktreeId, 'spawn').kind === 'ambiguous'
+      ? null
+      : resolveTerminalWorktreeRoute(state, worktreeId)
   const retirementTasks: Promise<unknown>[] = localPtyTeardownOwnedExternally
     ? []
     : retirementPlan.localOrSshPtyIds.map(async (ptyId) => window.api.pty.kill(ptyId))
@@ -35,7 +42,6 @@ export function startTerminalTabProviderRetirement({
   let unroutableRuntimeTerminalCount = 0
   if (!remoteCloseOwnedByHost) {
     for (const terminal of retirementPlan.runtimeTerminals) {
-      // Why: an unscoped `remote:` id with a refused owner must never be closed on this app.
       if (!terminal.environmentId && !fallbackWorktreeRoute) {
         unroutableRuntimeTerminalCount += 1
         continue

@@ -143,14 +143,22 @@ const AMBIGUOUS_PTY_OWNER: TerminalPtyOwner = { kind: 'ambiguous' }
 /**
  * Where spawn started a worktree's PTYs, for teardown, close and PTY identity. A contested or
  * unattributed-twin owner is `ambiguous`; an id no row places stays this app's, as it always has.
+ * `spawn` is for unscoped `remote:` ids, which live where spawn put them; `teardown` keeps a setup
+ * terminal's raw ids local, as they always have been.
  */
 export function resolveTerminalPtyOwner(
   state: WorktreeRuntimeOwnerState,
-  worktreeId: string | null | undefined
+  worktreeId: string | null | undefined,
+  purpose: TerminalHostOwnershipPurpose = 'teardown'
 ): TerminalPtyOwner {
-  // Why: setup terminals' raw ids have always been killed locally; their runtime PTYs are scoped.
-  if (!worktreeId || isEphemeralSetupTerminalWorktreeId(worktreeId)) {
+  if (!worktreeId) {
     return NON_RUNTIME_PTY_OWNER
+  }
+  if (isEphemeralSetupTerminalWorktreeId(worktreeId)) {
+    const ownership = resolveTerminalHostOwnership(state, worktreeId, purpose)
+    return ownership.kind === 'runtime'
+      ? { kind: 'runtime', environmentId: ownership.runtimeEnvironmentId }
+      : NON_RUNTIME_PTY_OWNER
   }
   if (
     !namedHostForOwnerRef(state, { workspaceId: worktreeId }) &&
