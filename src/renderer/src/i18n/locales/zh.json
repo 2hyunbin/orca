@@ -12686,7 +12686,8 @@
           "storedOnHost": "已保存在 {{host}}",
           "miniMaxStorage": "保存在 {{host}}，并在刷新用量时从那里发送到所选的 MiniMax 端点。",
           "cookieNeedsDesktop": "{{host}} 上没有可发送会话 Cookie 的 Orca 桌面应用。请改为保存 API 密钥。",
-          "checking": "正在检查 {{host}}…"
+          "checking": "正在检查 {{host}}…",
+          "sealedElsewhere": "由 {{host}} 上的另一个 Orca 应用保存，此应用无法读取。请在该应用中更改。"
         },
         "useUsageHostSettings": {
           "updateFailed": "无法更新 {{host}} 上的设置。"

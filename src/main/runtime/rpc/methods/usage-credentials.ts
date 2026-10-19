@@ -4,6 +4,7 @@ import {
   UsageCredentialSessionCookieParams
 } from '../../../../shared/rpc-contract/usage-credentials-params'
 import {
+  assertMiniMaxCredentialOpensHere,
   clearMiniMaxApiKeyCredential,
   clearMiniMaxSessionCookieCredential,
   getMiniMaxCredentialsStatus,
@@ -11,6 +12,7 @@ import {
   saveMiniMaxSessionCookieCredential
 } from '../../../minimax/minimax-credential-commands'
 import {
+  assertZcodePlanApiKeyOpensHere,
   clearZcodePlanApiKeyCredential,
   getZcodePlanCredentialsStatus,
   saveZcodePlanApiKeyCredential
@@ -18,7 +20,8 @@ import {
 
 // Why on the host: its own usage poller reads these keys, so a paired client saves them here.
 // Statuses carry presence and protection only; a key never travels back to a client. A host with
-// no poller (a WSL host, whose desktop owns its accounts) refuses every call instead.
+// no poller (a WSL host, whose desktop owns its accounts) refuses every call instead, and a key the
+// other Orca app on this machine sealed is never overwritten or deleted from here.
 export const USAGE_CREDENTIAL_METHODS = [
   defineMethod({
     name: 'accounts.minimaxCredentialsStatus',
@@ -33,29 +36,41 @@ export const USAGE_CREDENTIAL_METHODS = [
     name: 'accounts.minimaxSaveApiKey',
     permission: 'accounts-admin',
     params: UsageCredentialApiKeyParams,
-    handler: async ({ apiKey }, { runtime }) =>
-      saveMiniMaxApiKeyCredential(runtime.requireUsageRateLimits(), apiKey)
+    handler: async ({ apiKey }, { runtime }) => {
+      const rateLimits = runtime.requireUsageRateLimits()
+      assertMiniMaxCredentialOpensHere('apiKey')
+      return saveMiniMaxApiKeyCredential(rateLimits, apiKey)
+    }
   }),
   defineMethod({
     name: 'accounts.minimaxClearApiKey',
     permission: 'accounts-admin',
     params: null,
-    handler: async (_, { runtime }) =>
-      clearMiniMaxApiKeyCredential(runtime.requireUsageRateLimits())
+    handler: async (_, { runtime }) => {
+      const rateLimits = runtime.requireUsageRateLimits()
+      assertMiniMaxCredentialOpensHere('apiKey')
+      return clearMiniMaxApiKeyCredential(rateLimits)
+    }
   }),
   defineMethod({
     name: 'accounts.minimaxSaveSessionCookie',
     permission: 'accounts-admin',
     params: UsageCredentialSessionCookieParams,
-    handler: async ({ cookie }, { runtime }) =>
-      saveMiniMaxSessionCookieCredential(runtime.requireUsageRateLimits(), cookie)
+    handler: async ({ cookie }, { runtime }) => {
+      const rateLimits = runtime.requireUsageRateLimits()
+      assertMiniMaxCredentialOpensHere('cookie')
+      return saveMiniMaxSessionCookieCredential(rateLimits, cookie)
+    }
   }),
   defineMethod({
     name: 'accounts.minimaxClearSessionCookie',
     permission: 'accounts-admin',
     params: null,
-    handler: async (_, { runtime }) =>
-      clearMiniMaxSessionCookieCredential(runtime.requireUsageRateLimits())
+    handler: async (_, { runtime }) => {
+      const rateLimits = runtime.requireUsageRateLimits()
+      assertMiniMaxCredentialOpensHere('cookie')
+      return clearMiniMaxSessionCookieCredential(rateLimits)
+    }
   }),
   defineMethod({
     name: 'accounts.zcodePlanCredentialsStatus',
@@ -70,14 +85,20 @@ export const USAGE_CREDENTIAL_METHODS = [
     name: 'accounts.zcodePlanSaveApiKey',
     permission: 'accounts-admin',
     params: UsageCredentialApiKeyParams,
-    handler: async ({ apiKey }, { runtime }) =>
-      saveZcodePlanApiKeyCredential(runtime.requireUsageRateLimits(), apiKey)
+    handler: async ({ apiKey }, { runtime }) => {
+      const rateLimits = runtime.requireUsageRateLimits()
+      assertZcodePlanApiKeyOpensHere()
+      return saveZcodePlanApiKeyCredential(rateLimits, apiKey)
+    }
   }),
   defineMethod({
     name: 'accounts.zcodePlanClearApiKey',
     permission: 'accounts-admin',
     params: null,
-    handler: async (_, { runtime }) =>
-      clearZcodePlanApiKeyCredential(runtime.requireUsageRateLimits())
+    handler: async (_, { runtime }) => {
+      const rateLimits = runtime.requireUsageRateLimits()
+      assertZcodePlanApiKeyOpensHere()
+      return clearZcodePlanApiKeyCredential(rateLimits)
+    }
   })
 ] as const

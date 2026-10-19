@@ -20,7 +20,11 @@ import { collectZcodeUsageWindows, ZcodeUsageWindowView } from './zcode-plan-usa
 import { useZcodePlanCredentials } from './use-zcode-plan-credentials'
 import { ZcodeCliSetupSection } from './ZcodeCliSetupSection'
 import { UnsealedCredentialNotice } from './UnsealedCredentialNotice'
-import { usageCredentialAccessNotice, type UsageCredentialHost } from './usage-credential-host'
+import {
+  usageCredentialAccessNotice,
+  usageCredentialSealedElsewhereNotice,
+  type UsageCredentialHost
+} from './usage-credential-host'
 import type { UsageHostSettingsModel } from './use-usage-host-settings'
 
 const SEARCH_KEYWORDS = [
@@ -68,6 +72,11 @@ export function ZcodePlanAccountsSection({
   const site =
     usageSettings.settings?.zcodePlanSite ?? (!webClient && hostLabel === null ? 'zai' : undefined)
   const siteEditable = credentialEditable && usageSettings.settings !== null
+  const sealedElsewhereNotice = usageCredentialSealedElsewhereNotice(
+    host,
+    status?.apiKeySealedElsewhere === true
+  )
+  const keyEditable = credentialEditable && sealedElsewhereNotice === null
   const detailsUnavailable = webClient || status?.detailsUnavailable === true
   const consoleUrl = site ? ZCODE_PLAN_SITE_CONSOLE_URLS[site] : undefined
   const apiKeyConfigured = status?.apiKeyConfigured === true
@@ -318,11 +327,14 @@ export function ZcodePlanAccountsSection({
             'GLM Coding Plan'
           )}
         />
+        {sealedElsewhereNotice ? (
+          <p className="text-xs text-muted-foreground">{sealedElsewhereNotice}</p>
+        ) : null}
         <div className="flex gap-2">
           <Input
             id="zcode-plan-api-key"
             type="password"
-            disabled={credentialBusy || !credentialEditable}
+            disabled={credentialBusy || !keyEditable}
             value={apiKeyDraft}
             onChange={(e) => setApiKeyDraft(e.target.value)}
             placeholder={translate(
@@ -335,7 +347,7 @@ export function ZcodePlanAccountsSection({
           <Button
             size="xs"
             onClick={() => void saveApiKey()}
-            disabled={credentialBusy || !credentialEditable || !apiKeyDraft.trim()}
+            disabled={credentialBusy || !keyEditable || !apiKeyDraft.trim()}
             className="shrink-0"
           >
             {credentialBusy ? <Loader2 className="size-3 animate-spin" /> : null}
@@ -348,7 +360,7 @@ export function ZcodePlanAccountsSection({
               variant="ghost"
               size="xs"
               onClick={() => void clearApiKey()}
-              disabled={credentialBusy || !credentialEditable}
+              disabled={credentialBusy || !keyEditable}
               className="shrink-0"
             >
               {translate(

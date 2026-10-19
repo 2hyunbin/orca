@@ -31,14 +31,16 @@ vi.mock('../minimax/minimax-cookie-store', () => ({
   getMiniMaxSessionCookieProtection: getCookieProtectionMock,
   saveMiniMaxSessionCookie: saveMiniMaxSessionCookieMock,
   clearMiniMaxSessionCookie: clearMiniMaxSessionCookieMock,
-  hasMiniMaxSessionCookie: hasMiniMaxSessionCookieMock
+  hasMiniMaxSessionCookie: hasMiniMaxSessionCookieMock,
+  readMiniMaxSessionCookie: () => 'session=synthetic'
 }))
 
 vi.mock('../minimax/minimax-api-key-store', () => ({
   getMiniMaxApiKeyProtection: getApiKeyProtectionMock,
   saveMiniMaxApiKey: saveMiniMaxApiKeyMock,
   clearMiniMaxApiKey: clearMiniMaxApiKeyMock,
-  hasMiniMaxApiKey: hasMiniMaxApiKeyMock
+  hasMiniMaxApiKey: hasMiniMaxApiKeyMock,
+  readMiniMaxApiKey: () => 'synthetic-key'
 }))
 
 vi.mock('../rate-limits/minimax/minimax-request-context', () => ({
@@ -120,7 +122,9 @@ describe('registerMiniMaxCredentialsHandlers', () => {
       cookieProtection: 'sealed',
       // Null, not 'sealed': nothing is stored, so there is nothing to make a claim about.
       apiKeyProtection: null,
-      sessionCookieSupported: true
+      sessionCookieSupported: true,
+      cookieSealedElsewhere: false,
+      apiKeySealedElsewhere: false
     })
   })
 
@@ -138,7 +142,9 @@ describe('registerMiniMaxCredentialsHandlers', () => {
       apiKeyConfigured: true,
       cookieProtection: null,
       apiKeyProtection: 'sealed',
-      sessionCookieSupported: true
+      sessionCookieSupported: true,
+      cookieSealedElsewhere: false,
+      apiKeySealedElsewhere: false
     })
   })
 

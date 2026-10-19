@@ -6,14 +6,20 @@ import {
   clearMiniMaxSessionCookie,
   getMiniMaxSessionCookieProtection,
   hasMiniMaxSessionCookie,
+  readMiniMaxSessionCookie,
   saveMiniMaxSessionCookie
 } from './minimax-cookie-store'
 import {
   clearMiniMaxApiKey,
   getMiniMaxApiKeyProtection,
   hasMiniMaxApiKey,
+  readMiniMaxApiKey,
   saveMiniMaxApiKey
 } from './minimax-api-key-store'
+import {
+  credentialSealedElsewhere,
+  refuseCredentialSealedElsewhere
+} from '../credentials/credential-sealed-elsewhere'
 import { clearMiniMaxSessionCookieJar } from '../rate-limits/minimax/minimax-request-context'
 import { refreshAfterCredentialChange } from '../ipc/credential-change-rate-limit-refresh'
 import { getMainHttpClient } from '../network/http-client'
@@ -31,7 +37,25 @@ export function getMiniMaxCredentialsStatus(): MiniMaxCredentialsStatus {
     apiKeyConfigured,
     cookieProtection: cookieConfigured ? getMiniMaxSessionCookieProtection() : null,
     apiKeyProtection: apiKeyConfigured ? getMiniMaxApiKeyProtection() : null,
-    sessionCookieSupported: getMainHttpClient().partitionSession !== undefined
+    sessionCookieSupported: getMainHttpClient().partitionSession !== undefined,
+    cookieSealedElsewhere: credentialSealedElsewhere(
+      () => cookieConfigured,
+      readMiniMaxSessionCookie
+    ),
+    apiKeySealedElsewhere: credentialSealedElsewhere(() => apiKeyConfigured, readMiniMaxApiKey)
+  }
+}
+
+/** For a paired client, before it saves or forgets: see refuseCredentialSealedElsewhere. */
+export function assertMiniMaxCredentialOpensHere(credential: 'apiKey' | 'cookie'): void {
+  if (credential === 'apiKey' && credentialSealedElsewhere(hasMiniMaxApiKey, readMiniMaxApiKey)) {
+    refuseCredentialSealedElsewhere('MiniMax API key')
+  }
+  if (
+    credential === 'cookie' &&
+    credentialSealedElsewhere(hasMiniMaxSessionCookie, readMiniMaxSessionCookie)
+  ) {
+    refuseCredentialSealedElsewhere('MiniMax session cookie')
   }
 }
 

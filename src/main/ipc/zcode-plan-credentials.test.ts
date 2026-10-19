@@ -14,7 +14,8 @@ vi.mock('../zcode/zcode-plan-api-key-store', () => ({
   hasZcodePlanApiKey: mocks.hasKey,
   getZcodePlanApiKeyProtection: mocks.protection,
   saveZcodePlanApiKey: mocks.save,
-  clearZcodePlanApiKey: mocks.clear
+  clearZcodePlanApiKey: mocks.clear,
+  readZcodePlanApiKey: () => 'synthetic-key'
 }))
 vi.mock('../rate-limits/zcode-usage-fetcher', () => ({ hasZcodeCliPlanCredentials: mocks.hasCli }))
 
@@ -42,7 +43,8 @@ describe('GLM credential IPC', () => {
     expect(handler('zcodePlanCredentials:getStatus')()).toEqual({
       apiKeyConfigured: true,
       zcodeCliConfigured: true,
-      apiKeyProtection: 'sealed'
+      apiKeyProtection: 'sealed',
+      apiKeySealedElsewhere: false
     })
   })
 
@@ -57,12 +59,14 @@ describe('GLM credential IPC', () => {
     expect(handler('zcodePlanCredentials:saveApiKey')(null, 'synthetic-key')).toEqual({
       apiKeyConfigured: true,
       zcodeCliConfigured: false,
-      apiKeyProtection: null
+      apiKeyProtection: null,
+      apiKeySealedElsewhere: false
     })
     expect(handler('zcodePlanCredentials:clearApiKey')()).toEqual({
       apiKeyConfigured: false,
       zcodeCliConfigured: false,
-      apiKeyProtection: null
+      apiKeyProtection: null,
+      apiKeySealedElsewhere: false
     })
   })
 })

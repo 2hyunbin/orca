@@ -12681,7 +12681,8 @@
           "storedOnHost": "Guardada en {{host}}",
           "miniMaxStorage": "Guardada en {{host}} y enviada desde allí al endpoint de MiniMax seleccionado para actualizar el uso.",
           "cookieNeedsDesktop": "{{host}} no tiene la app de escritorio de Orca para enviar una cookie de sesión. Guarda una clave de API en su lugar.",
-          "checking": "Comprobando {{host}}…"
+          "checking": "Comprobando {{host}}…",
+          "sealedElsewhere": "Guardada por otra app de Orca en {{host}}, que esta no puede leer. Cámbiala en esa app."
         },
         "useUsageHostSettings": {
           "updateFailed": "No se pudo actualizar el ajuste en {{host}}."

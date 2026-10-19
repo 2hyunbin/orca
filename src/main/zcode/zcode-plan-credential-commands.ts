@@ -6,8 +6,13 @@ import {
   clearZcodePlanApiKey,
   getZcodePlanApiKeyProtection,
   hasZcodePlanApiKey,
+  readZcodePlanApiKey,
   saveZcodePlanApiKey
 } from './zcode-plan-api-key-store'
+import {
+  credentialSealedElsewhere,
+  refuseCredentialSealedElsewhere
+} from '../credentials/credential-sealed-elsewhere'
 import { hasZcodeCliPlanCredentials } from '../rate-limits/zcode-usage-fetcher'
 import { refreshAfterCredentialChange } from '../ipc/credential-change-rate-limit-refresh'
 import type { RateLimitService } from '../rate-limits/service'
@@ -16,10 +21,19 @@ import type { ZcodePlanCredentialsStatus } from '../../shared/zcode-plan-sites'
 type UsageRefresher = Pick<RateLimitService, 'refresh' | 'invalidateZcodeCredentialState'>
 
 export function getZcodePlanCredentialsStatus(): ZcodePlanCredentialsStatus {
+  const apiKeyConfigured = hasZcodePlanApiKey()
   return {
-    apiKeyConfigured: hasZcodePlanApiKey(),
+    apiKeyConfigured,
     zcodeCliConfigured: hasZcodeCliPlanCredentials(),
-    apiKeyProtection: getZcodePlanApiKeyProtection()
+    apiKeyProtection: getZcodePlanApiKeyProtection(),
+    apiKeySealedElsewhere: credentialSealedElsewhere(() => apiKeyConfigured, readZcodePlanApiKey)
+  }
+}
+
+/** For a paired client, before it saves or forgets: see refuseCredentialSealedElsewhere. */
+export function assertZcodePlanApiKeyOpensHere(): void {
+  if (credentialSealedElsewhere(hasZcodePlanApiKey, readZcodePlanApiKey)) {
+    refuseCredentialSealedElsewhere('GLM Coding Plan API key')
   }
 }
 

@@ -55,6 +55,20 @@ export function usageCredentialAccessNotice(
   return null
 }
 
+/** Why: the desktop app and orcad on one machine cannot read each other's keys; never clobber one. */
+export function usageCredentialSealedElsewhereNotice(
+  host: UsageCredentialHost,
+  sealedElsewhere: boolean
+): string | null {
+  return host.label !== null && sealedElsewhere
+    ? translate(
+        'auto.components.settings.usageCredentialHost.sealedElsewhere',
+        'Saved by another Orca app on {{host}}, which this one cannot read. Change it in that app.',
+        { host: host.label }
+      )
+    : null
+}
+
 /** The storage line under a saved key: this computer, or the selected host. */
 export function usageCredentialStoredLabel(host: UsageCredentialHost): string {
   return host.label === null

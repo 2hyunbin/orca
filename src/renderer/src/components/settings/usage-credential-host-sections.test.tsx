@@ -112,6 +112,19 @@ describe('usage keys on the Settings host', () => {
     expect(screen.getByPlaceholderText('Paste your MiniMax API key')).toBeEnabled()
   })
 
+  it('locks a key the other Orca app on the host sealed, and says where to change it', async () => {
+    mocks.callMiniMax.mockResolvedValue({ ...miniMaxStatus, apiKeySealedElsewhere: true })
+    renderMiniMax()
+
+    expect(
+      await screen.findByText(
+        'Saved by another Orca app on Build box, which this one cannot read. Change it in that app.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Paste your MiniMax API key')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Forget key' })).toBeDisabled()
+  })
+
   it('asks to update an older host and offers no save', async () => {
     mocks.callMiniMax.mockRejectedValue(new UsageCredentialsHostOutdatedError())
     renderMiniMax()

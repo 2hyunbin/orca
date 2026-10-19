@@ -11,7 +11,10 @@ import { SearchableSetting } from './SearchableSetting'
 import { UnsealedCredentialNotice } from './UnsealedCredentialNotice'
 import type { ProviderRateLimits } from '../../../../shared/rate-limit-types'
 import type { MiniMaxCredentialsModel } from './use-minimax-credentials'
-import type { UsageCredentialHost } from './usage-credential-host'
+import {
+  usageCredentialSealedElsewhereNotice,
+  type UsageCredentialHost
+} from './usage-credential-host'
 
 /** Why it names the host: the poller that sends the key runs where the key is stored. */
 export function miniMaxStorageHelp(host: UsageCredentialHost): string {
@@ -102,6 +105,8 @@ export function MiniMaxCredentials({
   const {
     editable,
     sessionCookieSupported,
+    miniMaxCookieSealedElsewhere,
+    miniMaxApiKeySealedElsewhere,
     miniMaxCookieDraft,
     setMiniMaxCookieDraft,
     miniMaxConfigured,
@@ -117,8 +122,11 @@ export function MiniMaxCredentials({
     clearMiniMaxApiKey
   } = credentials
   const now = useNow(60_000)
-  const cookieEditable = editable && sessionCookieSupported
-  const apiKeyLocked = miniMaxCredentialBusy || !editable
+  const cookieNotice = usageCredentialSealedElsewhereNotice(host, miniMaxCookieSealedElsewhere)
+  const apiKeyNotice = usageCredentialSealedElsewhereNotice(host, miniMaxApiKeySealedElsewhere)
+  const cookieLocked = !editable || cookieNotice !== null
+  const cookieEditable = !cookieLocked && sessionCookieSupported
+  const apiKeyLocked = miniMaxCredentialBusy || !editable || apiKeyNotice !== null
   return (
     <>
       <SearchableSetting
@@ -174,6 +182,7 @@ export function MiniMaxCredentials({
             'MiniMax Session Cookie'
           )}
         />
+        {cookieNotice ? <p className="text-xs text-muted-foreground">{cookieNotice}</p> : null}
         <div className="flex gap-2">
           <Input
             id="minimax-cookie"
@@ -204,7 +213,7 @@ export function MiniMaxCredentials({
               variant="ghost"
               size="xs"
               onClick={() => void clearMiniMaxCookie()}
-              disabled={miniMaxCredentialBusy || !editable}
+              disabled={miniMaxCredentialBusy || cookieLocked}
               className="h-7 shrink-0 text-xs text-muted-foreground hover:text-foreground"
             >
               {translate('auto.components.settings.AccountsPane.316ca4e610', 'Forget cookie')}
@@ -283,6 +292,7 @@ export function MiniMaxCredentials({
             'MiniMax API key'
           )}
         />
+        {apiKeyNotice ? <p className="text-xs text-muted-foreground">{apiKeyNotice}</p> : null}
         <div className="flex gap-2">
           <Input
             id="minimax-api-key"

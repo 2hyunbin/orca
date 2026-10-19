@@ -9,4 +9,7 @@ export type MiniMaxCredentialsStatus = {
   apiKeyProtection: SecretAtRestProtection | null
   /** False on a host without the desktop's cookie jar (orcad); older hosts omit it. */
   sessionCookieSupported?: boolean
+  /** Saved by the other Orca app on that machine (desktop vs orcad), which this host cannot read. */
+  cookieSealedElsewhere?: boolean
+  apiKeySealedElsewhere?: boolean
 }

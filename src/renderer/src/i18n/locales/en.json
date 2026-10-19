@@ -12962,7 +12962,8 @@
           "storedOnHost": "Stored on {{host}}",
           "miniMaxStorage": "Stored on {{host}} and sent from there to the selected MiniMax endpoint for usage refreshes.",
           "cookieNeedsDesktop": "{{host}} has no Orca desktop app to send a session cookie from. Save an API key instead.",
-          "checking": "Checking {{host}}…"
+          "checking": "Checking {{host}}…",
+          "sealedElsewhere": "Saved by another Orca app on {{host}}, which this one cannot read. Change it in that app."
         },
         "useUsageHostSettings": {
           "updateFailed": "Could not update the setting on {{host}}."

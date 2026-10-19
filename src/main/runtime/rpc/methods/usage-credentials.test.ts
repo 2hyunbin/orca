@@ -1,5 +1,5 @@
 import '../unused-default-rpc-methods.test-fixture'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import type * as NodeOs from 'node:os'
 import { join } from 'node:path'
@@ -9,6 +9,7 @@ import { setSecretStore } from '../../../../shared/secret-store'
 import type { RpcRequest } from '../core'
 import { RpcDispatcher } from '../dispatcher'
 import { USAGE_CREDENTIAL_METHODS } from './usage-credentials'
+import { API_KEY_ENVELOPE_PREFIX } from '../../../zcode/zcode-plan-api-key-store'
 import { RuntimeAccountController } from '../../runtime-account-controller'
 import { hostAccountsManagedByDesktopMessage } from '../../../../shared/host-account-launch-env'
 
@@ -142,6 +143,51 @@ describe('usage credential RPC methods', () => {
     expect(JSON.stringify(refused)).not.toContain(SECRET)
     expect(existsSync(join(home.dir, '.orca', 'minimax-api-key.enc'))).toBe(false)
   })
+
+  it('rejects a blank key as invalid instead of saving it', async () => {
+    const { runtime } = createRuntime()
+    const dispatcher = new RpcDispatcher({ runtime, methods: [...USAGE_CREDENTIAL_METHODS] })
+
+    await expect(
+      call(dispatcher, 'accounts.zcodePlanSaveApiKey', { apiKey: '   ' })
+    ).resolves.toMatchObject({ ok: false, error: { code: 'invalid_argument' } })
+  })
+
+  it.each([
+    ['MiniMax', 'minimax-api-key.enc', 'orca-minimax-api-key:v1:', 'minimax'],
+    ['GLM', 'zcode-plan-api-key.enc', API_KEY_ENVELOPE_PREFIX, 'zcodePlan']
+  ] as const)(
+    'never overwrites or forgets a %s key the other Orca app on this machine sealed',
+    async (_provider, fileName, prefix, methodPrefix) => {
+      const { runtime, rateLimits } = createRuntime()
+      const dispatcher = new RpcDispatcher({ runtime, methods: [...USAGE_CREDENTIAL_METHODS] })
+      // Sealed by a store this process cannot open (the desktop's safeStorage, seen from orcad).
+      const keyPath = join(home.dir, '.orca', fileName)
+      const foreign = `${prefix}encrypted:${Buffer.from('sealed-elsewhere').toString('base64')}`
+      mkdirSync(join(home.dir, '.orca'), { recursive: true })
+      writeFileSync(keyPath, foreign)
+
+      await expect(
+        call(dispatcher, `accounts.${methodPrefix}CredentialsStatus`)
+      ).resolves.toMatchObject({
+        ok: true,
+        result: { apiKeyConfigured: true, apiKeySealedElsewhere: true }
+      })
+      for (const [method, params] of [
+        [`accounts.${methodPrefix}SaveApiKey`, { apiKey: SECRET }],
+        [`accounts.${methodPrefix}ClearApiKey`, undefined]
+      ] as const) {
+        const refused = await call(dispatcher, method, params)
+        expect(refused).toMatchObject({
+          ok: false,
+          error: { message: expect.stringContaining('Change it in that app.') }
+        })
+        expect(JSON.stringify(refused)).not.toContain(SECRET)
+      }
+      expect(readFileSync(keyPath, 'utf8')).toBe(foreign)
+      expect(rateLimits.refresh).not.toHaveBeenCalled()
+    }
+  )
 
   it('refuses every call where the desktop owns this host’s accounts, storing nothing', async () => {
     const accounts = new RuntimeAccountController()

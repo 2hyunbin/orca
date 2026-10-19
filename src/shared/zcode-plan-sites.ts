@@ -25,4 +25,6 @@ export type ZcodePlanCredentialsStatus = {
   apiKeyConfigured: boolean
   zcodeCliConfigured: boolean
   apiKeyProtection: SecretAtRestProtection | null
+  /** Saved by the other Orca app on that machine (desktop vs orcad), which this host cannot read. */
+  apiKeySealedElsewhere?: boolean
 }
