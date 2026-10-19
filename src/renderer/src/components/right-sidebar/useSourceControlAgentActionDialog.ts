@@ -6,7 +6,6 @@ import {
 } from '../../../../shared/source-control-launch-agent-selection'
 import { useAppStore } from '@/store'
 import { useRepoById } from '@/store/selectors'
-import { ensureDetectedAgentsForWorktree } from '@/lib/agent-detection-target-inventory'
 import { renderSourceControlActionCommandTemplate } from '../../../../shared/source-control-ai-actions'
 import { getRepoExecutionHostId } from '../../../../shared/execution-host'
 import { isTuiAgentEnabled } from '../../../../shared/tui-agent-selection'
@@ -14,16 +13,8 @@ import type { TuiAgent } from '../../../../shared/tui-agent'
 import type { SourceControlAgentActionDialogProps } from './SourceControlAgentActionDialog'
 import type { UseSourceControlAgentActionDialogResult } from './source-control-agent-action-dialog-result'
 import { ensureLocalRuntimeCapabilities } from '@/runtime/local-runtime-capabilities'
-import {
-  sourceControlLaunchAppliesAgentArgs,
-  sourceControlLaunchWorkspace
-} from './source-control-launch-agent-args-applicability'
-import {
-  acquireChatProgramFacts,
-  agentsOfferedForLaunch,
-  resolveChatProgramHost,
-  useChatProgramFactsVersion
-} from '@/lib/host-chat-program'
+import { sourceControlLaunchAppliesAgentArgs } from './source-control-launch-agent-args-applicability'
+import { useSourceControlLaunchableAgents } from './use-source-control-launchable-agents'
 import { useSavedSourceControlAgentActionAutoStart } from './useSavedSourceControlAgentActionAutoStart'
 import {
   buildSourceControlAgentSaveTargets,
@@ -72,8 +63,6 @@ export function useSourceControlAgentActionDialog({
   )
   const [agentArgs, setAgentArgs] = useState(savedAgentArgs ?? '')
   const [selectedAgent, setSelectedAgent] = useState<TuiAgent | null>(savedAgentId ?? null)
-  const [detectedAgents, setDetectedAgents] = useState<TuiAgent[]>([])
-  const [detecting, setDetecting] = useState(false)
   const openCycleRef = useRef(0)
   const wasOpenRef = useRef(false)
   const [openCycle, setOpenCycle] = useState(0)
@@ -85,60 +74,16 @@ export function useSourceControlAgentActionDialog({
   const disabledAgents = settings?.disabledTuiAgents
   const connectionUnavailable = Boolean(worktreeId && connectionId === undefined)
 
-  const refreshDetectedAgents = useCallback(async (): Promise<TuiAgent[]> => {
-    if (connectionUnavailable) {
-      setDetectedAgents([])
-      setDetecting(false)
-      return []
-    }
-    setDetecting(true)
-    try {
-      const state = useAppStore.getState()
-      // Why: the workspace's own host answers, including a paired server's SSH workspace.
-      const nextAgents = await (worktreeId
-        ? ensureDetectedAgentsForWorktree(state, worktreeId)
-        : typeof connectionId === 'string'
-          ? state.ensureRemoteDetectedAgents(connectionId)
-          : state.ensureDetectedAgents())
-      setDetectedAgents(nextAgents)
-      return nextAgents
-    } finally {
-      setDetecting(false)
-    }
-  }, [connectionId, connectionUnavailable, worktreeId])
-  const executionHostId = repo ? getRepoExecutionHostId(repo) : undefined
-  // Detected agents plus those that open as a chat there without their CLI: what Start may run.
-  const offerLaunchable = useCallback(
-    (detected: TuiAgent[]): TuiAgent[] =>
-      agentsOfferedForLaunch(
-        useAppStore.getState(),
-        sourceControlLaunchWorkspace({ worktreeId, repoId, executionHostId }),
-        detected
-      ),
-    [executionHostId, repoId, worktreeId]
-  )
-  const refreshAgents = useCallback(async () => {
-    const state = useAppStore.getState()
-    const host = resolveChatProgramHost(
-      state,
-      sourceControlLaunchWorkspace({ worktreeId, repoId, executionHostId })
-    )
-    const [detected] = await Promise.all([
-      refreshDetectedAgents(),
-      acquireChatProgramFacts(state, host.executionHostId, host.hostCapabilities)
-    ])
-    return { detected, launchable: offerLaunchable(detected) }
-  }, [executionHostId, offerLaunchable, refreshDetectedAgents, repoId, worktreeId])
-  const refreshLaunchableAgents = useCallback(
-    async (): Promise<TuiAgent[]> => (await refreshAgents()).launchable,
-    [refreshAgents]
-  )
-  const factsVersion = useChatProgramFactsVersion()
-  const launchableAgents = useMemo(
-    () => offerLaunchable(detectedAgents),
-    // factsVersion: host chat facts live outside React state.
-    [detectedAgents, offerLaunchable, factsVersion]
-  )
+  const { detecting, refreshAgents, refreshLaunchableAgents, launchableAgents } =
+    useSourceControlLaunchableAgents({
+      target: {
+        worktreeId,
+        repoId,
+        executionHostId: repo ? getRepoExecutionHostId(repo) : undefined
+      },
+      connectionId,
+      connectionUnavailable
+    })
 
   useEffect(() => {
     if (!open) {
