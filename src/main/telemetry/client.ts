@@ -256,10 +256,6 @@ export async function setOptIn(via: OptInVia, optedIn: boolean): Promise<void> {
     return
   }
   const settings = storeRef.getSettings()
-  const telemetryBeforeUpdate = settings.telemetry
-  const wasPendingBanner =
-    telemetryBeforeUpdate?.existedBeforeTelemetryRelease === true &&
-    telemetryBeforeUpdate.optedIn === null
   // Deep-merge (persistence.ts:552) so flipping `optedIn` won't clobber `installId` / `existedBeforeTelemetryRelease`.
   storeRef.updateSettings({
     telemetry: {
@@ -273,9 +269,8 @@ export async function setOptIn(via: OptInVia, optedIn: boolean): Promise<void> {
     if (client) {
       await client.optIn()
     }
-    if (wasPendingBanner) {
-      trackAppOpenedOnce()
-    }
+    // Settings opt-in also starts an observable session that needs an adoption denominator.
+    trackAppOpenedOnce()
     track('telemetry_opted_in', { via })
   } else {
     if (!client) {
@@ -338,9 +333,8 @@ export function trackAppOpenedOnce(): void {
   if (appOpenedTrackedThisSession) {
     return
   }
-  appOpenedTrackedThisSession = true
   // Why: `nth_repo_added: 0` marks the session-zero / pre-repo cohort. See docs/onboarding-funnel-cohort-addendum.md.
-  track('app_opened', { ...getCohortAtEmit() })
+  appOpenedTrackedThisSession = track('app_opened', { ...getCohortAtEmit() })
 }
 
 export async function shutdownTelemetry(): Promise<void> {

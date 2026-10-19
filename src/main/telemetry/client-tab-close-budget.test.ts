@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EventProps } from '../../shared/telemetry-events'
-import { _setCommonPropsForTests, initTelemetry, track } from './client'
+import {
+  _setCommonPropsForTests,
+  initTelemetry,
+  setOptIn,
+  track,
+  trackAppOpenedOnce
+} from './client'
 import {
   BASE_COMMON,
   cleanupTelemetryClientTest,
@@ -88,6 +94,59 @@ describe('directional tab close event budget', () => {
 
     expect(track('tabs_directional_close_requested', left)).toBe(true)
     expect(state.mock.capture).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([true, false])(
+    'includes settings opt-in in the denominator (sampled: %s)',
+    async (sampled) => {
+      if (!sampled) {
+        _setCommonPropsForTests(BASE_COMMON)
+      }
+      state.settings.telemetry!.optedIn = false
+      trackAppOpenedOnce()
+      expect(track('tabs_directional_close_requested', left)).toBe(false)
+      expect(state.mock.capture).not.toHaveBeenCalled()
+
+      await setOptIn('settings', true)
+      expect(track('tabs_directional_close_requested', left)).toBe(sampled)
+      await setOptIn('settings', false)
+      await setOptIn('settings', true)
+      trackAppOpenedOnce()
+      expect(track('tabs_directional_close_requested', left)).toBe(false)
+
+      const captures = state.mock.capture.mock.calls.map(([capture]) => capture)
+      const opened = captures.filter((capture) => capture.event === 'app_opened')
+      expect(opened).toHaveLength(1)
+      expect(opened[0].properties).toMatchObject({
+        tab_close_sampled: sampled,
+        tab_close_sample_rate: 0.1,
+        session_id: BASE_COMMON.session_id
+      })
+      expect(captures[0]).toEqual(opened[0])
+      const closes = captures.filter(
+        (capture) => capture.event === 'tabs_directional_close_requested'
+      )
+      expect(closes).toHaveLength(sampled ? 1 : 0)
+      if (sampled) {
+        expect(closes[0].properties.session_id).toBe(opened[0].properties.session_id)
+      }
+    }
+  )
+
+  it('does not consume the denominator while an environment consent override blocks opt-in', async () => {
+    process.env.DO_NOT_TRACK = '1'
+    await setOptIn('settings', true)
+    expect(track('tabs_directional_close_requested', left)).toBe(false)
+    expect(state.mock.capture).not.toHaveBeenCalled()
+
+    delete process.env.DO_NOT_TRACK
+    await setOptIn('settings', true)
+    expect(track('tabs_directional_close_requested', left)).toBe(true)
+    expect(state.mock.capture.mock.calls.map(([capture]) => capture.event)).toEqual([
+      'app_opened',
+      'telemetry_opted_in',
+      'tabs_directional_close_requested'
+    ])
   })
 
   it('marks sampled installs on the existing app-open event without adding an event', () => {
