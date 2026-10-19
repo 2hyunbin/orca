@@ -22,6 +22,7 @@ import {
   ORCAD_WINDOWS_PROCESS_TREE_FILENAME
 } from '../../../shared/orcad-artifacts'
 import {
+  ORCAD_STOP_NOW_REQUEST,
   ORCAD_STOP_REQUEST_FILENAME,
   ORCAD_STOP_REQUESTS_CAPABILITY
 } from '../../../shared/orcad-stop-request'
@@ -160,7 +161,16 @@ const ops = {
     const first = orcadState(dir, record)
     if (first === 'dead') return answer('ALREADY_EXITED')
     if (first !== 'alive') return answer('UNKNOWN')
-    try { fs.writeFileSync(path.join(dir, ${text(ORCAD_STOP_REQUEST_FILENAME)}), '', { mode: 0o600 }) } catch { return answer('SIGNAL_FAILED') }
+    // "Stop now", renamed in whole: the listener only reacts to the request's own name.
+    const request = path.join(dir, ${text(ORCAD_STOP_REQUEST_FILENAME)})
+    const temp = request + '.' + process.pid + '.tmp'
+    try {
+      fs.writeFileSync(temp, ${text(ORCAD_STOP_NOW_REQUEST)}, { mode: 0o600 })
+      fs.renameSync(temp, request)
+    } catch {
+      try { fs.rmSync(temp, { force: true }) } catch {}
+      return answer('SIGNAL_FAILED')
+    }
     process.stdout.write('SIGNALED\\n')
     const end = Date.now() + Number(waitArg) * 1000
     const tick = () => {

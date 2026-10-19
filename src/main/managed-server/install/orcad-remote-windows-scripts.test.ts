@@ -12,7 +12,10 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { runProcess, spawnProcess } from '@orca/process-host'
 import { ORCAD_WINDOWS_PROCESS_TREE_FILENAME } from '../../../shared/orcad-artifacts'
-import { ORCAD_STOP_REQUEST_FILENAME } from '../../../shared/orcad-stop-request'
+import {
+  ORCAD_STOP_NOW_REQUEST,
+  ORCAD_STOP_REQUEST_FILENAME
+} from '../../../shared/orcad-stop-request'
 import {
   ORCAD_WINDOWS_PROCESS_FILENAME,
   ORCAD_READINESS_FILENAME
@@ -149,14 +152,15 @@ describe('Windows stop script', () => {
       .split(/\r?\n/u)
       .at(-1)
 
-  /** Stands in for orcad's stop-request listener: exits once the request file appears. */
+  /** Stands in for orcad's stop-request listener: exits once the complete "stop now" appears. */
   function fakeOrcad(): number {
     const child = spawnProcess({
       program: process.execPath,
       args: [
         '-e',
-        'const fs=require("fs");setInterval(()=>{if(fs.existsSync(process.argv[1]))process.exit(0)},50)',
-        requestFile()
+        'const fs=require("fs");const [p,m]=process.argv.slice(1);setInterval(()=>{if(fs.existsSync(p)&&fs.readFileSync(p,"utf8")===m)process.exit(0)},50)',
+        requestFile(),
+        ORCAD_STOP_NOW_REQUEST
       ]
     })
     children.push(child)

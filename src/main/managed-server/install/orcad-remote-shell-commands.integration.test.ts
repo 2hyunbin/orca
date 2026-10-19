@@ -56,7 +56,10 @@ import {
   parseNewestStateMtimeSeconds
 } from '../host-state/orcad-state-newest-mtime'
 import { getRemoteHostPlatform } from '../../ssh/ssh-remote-platform'
-import { ORCAD_STOP_REQUEST_FILENAME } from '../../../shared/orcad-stop-request'
+import {
+  ORCAD_STOP_NOW_REQUEST,
+  ORCAD_STOP_REQUEST_FILENAME
+} from '../../../shared/orcad-stop-request'
 
 const host = getRemoteHostPlatform('linux-x64')
 let root = ''
@@ -117,9 +120,10 @@ async function launchTestRuntime(
       `});`,
       ...(stopRequests
         ? [
-            // Like orcad's listener: consume the slot request, then stop.
+            // Like orcad's listener: only the complete "stop now" request stops it.
+            `const request = ${JSON.stringify(requestFile)};`,
             `setInterval(() => {`,
-            `  if (fs.existsSync(${JSON.stringify(requestFile)})) {`,
+            `  if (fs.existsSync(request) && fs.readFileSync(request, 'utf8') === ${JSON.stringify(ORCAD_STOP_NOW_REQUEST)}) {`,
             `    fs.unlinkSync(${JSON.stringify(requestFile)});`,
             `    fs.writeFileSync(${JSON.stringify(terminatedFile)}, 'requested');`,
             `    process.exit(0);`,

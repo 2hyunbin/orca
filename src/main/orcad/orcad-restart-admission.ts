@@ -3,7 +3,10 @@ import type { OrcadRestartAdmissionResult } from '../../shared/orcad-restart-adm
 import type { OrcadTerminalCensus } from '../../shared/orcad-terminal-census'
 import type { OrcadShutdownTrigger } from './orcad-lifecycle'
 import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
-import { type OrcadRestartWorkAdmission, orcadRestartWorkAdmission } from './orcad-restart-work-admission'
+import {
+  type OrcadRestartWorkAdmission,
+  orcadRestartWorkAdmission
+} from './orcad-restart-work-admission'
 
 const RESERVATION_MS = 30_000
 const DRAIN_MS = 5_000
@@ -23,7 +26,10 @@ export class OrcadRestartAdmission {
   private committedToken: string | null = null
   private held: { token: string; owner: symbol; timer: ReturnType<typeof setTimeout> } | null = null
 
-  constructor(private readonly admission: OrcadRestartWorkAdmission, private readonly ports: RestartPorts) {}
+  constructor(
+    private readonly admission: OrcadRestartWorkAdmission,
+    private readonly ports: RestartPorts
+  ) {}
 
   async reserve(activatedAt: number, force = false): Promise<OrcadRestartAdmissionResult> {
     if (!this.ports.shutdown()) {
@@ -50,17 +56,29 @@ export class OrcadRestartAdmission {
         await Promise.race([
           this.ports.drain(),
           new Promise<never>((_resolve, reject) => {
-            deadline = setTimeout(() => reject(new Error('Idle chat providers did not release in time.')), DRAIN_MS)
+            deadline = setTimeout(
+              () => reject(new Error('Idle chat providers did not release in time.')),
+              DRAIN_MS
+            )
           })
         ])
       } finally {
         clearTimeout(deadline)
       }
       const census = await this.ports.collect(activatedAt)
-      if (!this.owns(token) || this.admission.pending > 0 || this.ports.hasProviders() || census.chatWork !== 0) {
+      if (
+        !this.owns(token) ||
+        this.admission.pending > 0 ||
+        this.ports.hasProviders() ||
+        census.chatWork !== 0
+      ) {
         return this.refuse(token, 'Chat work could not be proven idle.', census)
       }
-      if (census.inProcessSessions !== 0 || census.liveSessions === null || (!force && census.liveSessions > 0)) {
+      if (
+        census.inProcessSessions !== 0 ||
+        census.liveSessions === null ||
+        (!force && census.liveSessions > 0)
+      ) {
         return this.refuse(token, 'Running terminals prevent a safe restart.', census)
       }
       return { status: 'reserved', token, census }
@@ -81,7 +99,14 @@ export class OrcadRestartAdmission {
       )
     }
     const shutdown = this.ports.shutdown()
-    if (!shutdown || this.admission.pending > 0 || this.ports.hasProviders() || this.ports.chatWork() > 0 || !this.held || !this.admission.closeForShutdown(this.held.owner)) {
+    if (
+      !shutdown ||
+      this.admission.pending > 0 ||
+      this.ports.hasProviders() ||
+      this.ports.chatWork() > 0 ||
+      !this.held ||
+      !this.admission.closeForShutdown(this.held.owner)
+    ) {
       return this.refuse(token, 'New work prevents this restart.')
     }
     // No await between the final facts and shutdown; admission stays closed until process exit.
@@ -105,8 +130,11 @@ export class OrcadRestartAdmission {
   /** Older clients already decide terminal policy; only the host can protect its chats. */
   async restartLegacySlot(): Promise<void> {
     const reserved = await this.reserve(0, true)
-    if (reserved.status === 'reserved' && reserved.token) {
-      this.commit(reserved.token)
+    const ended =
+      reserved.status === 'reserved' && reserved.token ? this.commit(reserved.token) : reserved
+    if (ended.status === 'defer') {
+      // The requester only sees a server that kept running; this is the one record of why.
+      console.warn('[orcad] a plain-slot restart request was deferred:', ended.reason)
     }
   }
 
@@ -114,21 +142,29 @@ export class OrcadRestartAdmission {
     return this.held?.token === token && this.admission.owns(this.held.owner)
   }
 
-  private refuse(token: string, reason: string, census?: OrcadTerminalCensus): OrcadRestartAdmissionResult {
+  private refuse(
+    token: string,
+    reason: string,
+    census?: OrcadTerminalCensus
+  ): OrcadRestartAdmissionResult {
     this.release(token)
     return { ...defer(reason), ...(census ? { census } : {}) }
   }
 }
 
 let requestShutdown: OrcadShutdownTrigger | null = null
-export function bindOrcadRestartShutdown(request: OrcadShutdownTrigger): void { requestShutdown = request }
+export function bindOrcadRestartShutdown(request: OrcadShutdownTrigger): void {
+  requestShutdown = request
+}
 
 export const orcadRestartAdmission = new OrcadRestartAdmission(orcadRestartWorkAdmission, {
   collect: async (activatedAt) => {
     const { collectOrcadTerminalCensus } = await import('./orcad-terminal-census')
     return collectOrcadTerminalCensus(activatedAt)
   },
-  drain: async () => { await getStructuredAgentSessionHost()?.drainForRestart() },
+  drain: async () => {
+    await getStructuredAgentSessionHost()?.drainForRestart()
+  },
   hasProviders: () => getStructuredAgentSessionHost()?.hasLoadedProviders() ?? false,
   chatWork: () => getStructuredAgentSessionHost()?.restartWorkCount() ?? 0,
   shutdown: () => requestShutdown
