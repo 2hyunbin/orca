@@ -106,11 +106,30 @@ export async function giveWorkspaceALivePty(page: Page, worktreeId: string): Pro
   return waitForActivePanePtyId(page, 30_000)
 }
 
+/** Dismisses the setup-script prompt when it covers the row, as a user would to reach it. */
+async function uncoverSidebarRow(page: Page, row: Locator): Promise<void> {
+  const prompt = page.locator('[data-setup-script-prompt-layer]').first()
+  if (!(await prompt.isVisible())) {
+    return
+  }
+  const [rowBox, promptBox] = await Promise.all([row.boundingBox(), prompt.boundingBox()])
+  if (
+    rowBox &&
+    promptBox &&
+    rowBox.y + rowBox.height > promptBox.y &&
+    rowBox.y < promptBox.y + promptBox.height
+  ) {
+    await prompt.getByRole('button', { name: 'Dismiss setup scripts' }).click()
+    await expect(prompt).toBeHidden()
+  }
+}
+
 /** The shipping sleep path: right-click the sidebar row, click "Sleep". */
 export async function sleepWorkspaceViaSidebar(page: Page, worktreeId: string): Promise<void> {
   const row = rowLocator(page, worktreeId)
   await expect(row).toBeVisible()
   await row.scrollIntoViewIfNeeded()
+  await uncoverSidebarRow(page, row)
   const scope = row.locator('[data-worktree-context-menu-scope="worktree"]').first()
   const target = (await scope.count()) > 0 ? scope : row
   await target.click({ button: 'right' })
@@ -123,6 +142,7 @@ export async function activateWorkspaceByClick(page: Page, worktreeId: string): 
   const row = rowLocator(page, worktreeId)
   await expect(row).toBeVisible()
   await row.scrollIntoViewIfNeeded()
+  await uncoverSidebarRow(page, row)
   await row.click()
   await expect
     .poll(() => page.evaluate(() => window.__store?.getState().activeWorktreeId ?? null), {
