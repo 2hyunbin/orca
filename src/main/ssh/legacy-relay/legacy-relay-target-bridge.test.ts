@@ -482,14 +482,21 @@ describe('one target’s legacy relay bridge', () => {
       listedIncarnation: () => undefined,
       refresh: async () => {}
     }
-    await expect(
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: stop() reads only these members.
-      stops.stopAndWait(
-        epochPty,
-        lostReply as unknown as LegacyRelayTargetBridge,
-        Date.now() + 5_000
-      )
-    ).resolves.toBe(true)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: stop() reads only these members.
+    const target = lostReply as unknown as LegacyRelayTargetBridge
+    await expect(stops.stopAndWait(epochPty, target, Date.now() + 5_000)).resolves.toBe(true)
+  })
+
+  it('still sees an unfenced stop’s exit report that trails its reply, never re-serving the pane', async () => {
+    relay.exitOnShutdown = false
+    const subject = bridge()
+    await subject.refresh()
+    const settled = stops.stopAndWait(PTY, subject, Date.now() + 5_000)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(relay.shutdowns).toEqual(['pty-1'])
+    expect(subject.snapshot()).toEqual([])
+    relay.clients[0].emitExit('pty-1', 0)
+    await expect(settled).resolves.toBe(true)
   })
 
   it('leaves a taken stop unproven while no exit report or complete listing confirms it', async () => {

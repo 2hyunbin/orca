@@ -29,6 +29,9 @@ type StopTarget = Pick<
  * Who the closed tab's process was: the relay's incarnation when it reports one, else the live
  * connection that showed it. Neither, for a stop recorded while the relay couldn't be asked.
  */
+/** How long a sent unfenced stop keeps its pane tracked for the relay's exit report. */
+const UNFENCED_EXIT_WAIT_MS = 5_000
+
 type PendingStop = { incarnationId?: string; client?: LegacyRelayClient }
 
 export class LegacyRelayPaneStops {
@@ -71,7 +74,7 @@ export class LegacyRelayPaneStops {
       // Unfenced: only this connection can prove the process, and a restart would forget the close,
       // so it gets one try now and the lease ends as any closed tab's does.
       const sent = bridge && state === 'live' ? await this.send(ptyId, bridge) : false
-      this.abandon(ptyId, bridge)
+      this.abandon(ptyId, bridge, sent)
       return sent ? { status: 'requested' } : { status: 'unverifiable' }
     }
     if (!bridge || state !== 'live') {
@@ -182,14 +185,16 @@ export class LegacyRelayPaneStops {
    * The stop can't be proven to reach the tab's process, so it is never sent. The lease ends as any
    * closed tab's does, so a process that took the id is never served under the closed tab.
    */
-  private abandon(ptyId: string, bridge: StopTarget | null): void {
+  private abandon(ptyId: string, bridge: StopTarget | null, sent = false): void {
     this.closing.delete(ptyId)
     const relayPtyId = parseAppSshPtyId(ptyId)?.relayPtyId
     if (relayPtyId) {
       this.host()?.retireLease(this.targetId, relayPtyId)
     }
-    // The next listing drops the pane it still holds for that lease.
-    void bridge?.refresh()
+    // The next listing drops the pane it still holds for that lease; after a sent stop, only once
+    // the relay's exit report had its chance, since dropping the pane first would hide it.
+    const relist = sent ? this.exits.wait(ptyId, UNFENCED_EXIT_WAIT_MS) : Promise.resolve()
+    void relist.then(() => bridge?.refresh())
   }
 
   /** The old relay's own stop, fenced to the process the tab ran; false when it can't be asked. */

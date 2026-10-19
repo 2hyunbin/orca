@@ -81,7 +81,7 @@ export class LegacyRelayTargetBridge {
   }
 
   snapshot(): LegacyRelayBridgedPane[] {
-    return servedBridgedPanes(this.deps.targetId, this.panes)
+    return servedBridgedPanes(this.deps.targetId, this.panes, this.deps.leases())
   }
 
   /** Re-reads every relay; concurrent callers share one pass. */

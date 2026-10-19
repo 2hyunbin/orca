@@ -97,13 +97,15 @@ export function toPane(
   }
 }
 
-/** The panes a bridge serves; a closed tab's pane whose stop is still owed is not one. */
+/** The panes a bridge serves; a closed tab's pane, its stop owed or its lease ended, is not one. */
 export function servedBridgedPanes(
   targetId: string,
-  panes: ReadonlyMap<string, Pane>
+  panes: ReadonlyMap<string, Pane>,
+  leases: readonly SshRemotePtyLease[]
 ): LegacyRelayBridgedPane[] {
+  const served = bridgeableLeasesByRelayId(leases)
   return [...panes]
-    .filter(([, pane]) => !pane.stopping)
+    .filter(([, pane]) => !pane.stopping && served.has(pane.relayPtyId))
     .map(([ptyId, pane]) => toBridgedPane(targetId, ptyId, pane))
 }
 
