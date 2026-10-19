@@ -46,6 +46,7 @@ function createHarness() {
   let listener: (event: RuntimeClientEvent) => void = () => {}
   // Stamping tests watch every workspace, so no unread flag is raised; the unread tests unwatch.
   const viewing = { isViewing: (_id: string, _pane: string | null): boolean => true }
+  const muted = new Set<string>()
   const store: SortStampsStore = {
     getWorktreeMeta: (id) => meta.get(id),
     setWorktreeMeta: (id, updates) => {
@@ -82,6 +83,7 @@ function createHarness() {
       return () => {}
     },
     isViewing: (id, pane) => viewing.isViewing(id, pane),
+    isNotificationMuted: (id) => muted.has(id),
     onStampsWritten: (id) => notified.push(id),
     now: () => Date.now()
   })
@@ -100,6 +102,7 @@ function createHarness() {
     fenced,
     notified,
     viewing,
+    muted,
     sideEffects: (
       facts: TerminalSideEffectFact[],
       extra: { pane?: string; ptyId?: string; connectionId?: string } = {}
@@ -627,6 +630,30 @@ describe('SortStampsProducer: unread flag', () => {
       payload: { state: 'waiting', prompt: 'task', agentType: 'codex' }
     })
     expect(h.folders.get(FOLDER_ID)?.isUnread).toBe(true)
+  })
+
+  it('raises no flag for a muted workspace, but still stamps it', () => {
+    const h = unwatched()
+    h.muted.add(WT)
+    h.muted.add(FOLDER)
+    hook(h.server, 'working')
+    advance(20_000)
+    hook(h.server, 'done')
+    h.sideEffects([{ kind: 'bell' }])
+    expect(h.meta.get(WT)?.isUnread).toBeUndefined()
+    expect(h.meta.get(WT)?.lastActivityAt).toBeGreaterThan(0)
+
+    h.server.ingestTerminalStatus({
+      paneKey: PANE,
+      tabId: 'tab-a',
+      worktreeId: FOLDER,
+      payload: { state: 'waiting', prompt: 'task', agentType: 'codex' }
+    })
+    expect(h.folders.get(FOLDER_ID)?.isUnread).toBeUndefined()
+
+    h.muted.delete(WT)
+    h.sideEffects([{ kind: 'bell' }])
+    expect(h.meta.get(WT)?.isUnread).toBe(true)
   })
 
   it('raises nothing for a restored status, a frozen project or a workspace with no record', () => {

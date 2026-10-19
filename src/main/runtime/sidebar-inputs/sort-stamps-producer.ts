@@ -49,6 +49,8 @@ export type SortStampsSources = {
   ) => () => void
   /** Whether a client is looking at the workspace, or at the pane's tab. */
   isViewing: (worktreeId: string, paneKey: string | null) => boolean
+  /** "Notify About Hidden Workspaces" is off and the Filters hide it: news raises no flag. */
+  isNotificationMuted: (worktreeId: string) => boolean
   /** A record's stamps or unread flag changed; clients re-list it. */
   onStampsWritten: (worktreeId: string) => void
   now: () => number
@@ -61,8 +63,8 @@ type TitlePane = { ptyId: string; releaseExit: () => void }
  * Writes the sort stamps of every workspace this host owns, at the source: the transition
  * detector's hook panes (terminal agents and structured chats), hookless agents' titles, bells,
  * and terminals a CLI starts. Creation stamps itself where the record is made. Rest panes are not
- * kept. The same news raises the workspace's unread flag unless a client is looking at it; clients
- * clear it.
+ * kept. The same news raises the workspace's unread flag unless a client is looking at it or its
+ * notifications are muted; clients clear it.
  */
 export class SortStampsProducer {
   private readonly panes = new Map<string, TrackedPane>()
@@ -302,6 +304,7 @@ export class SortStampsProducer {
     const raised =
       isUnreadNews(event) &&
       !this.sources.isViewing(workspace.worktreeId, paneKey) &&
+      !this.sources.isNotificationMuted(workspace.worktreeId) &&
       writeUnreadFlag(this.sources.store(), workspace, true)
     if (next || raised) {
       this.sources.onStampsWritten(workspace.worktreeId)
