@@ -1,12 +1,12 @@
-import {
-  getGitRemoteProviderIdentity,
-  getProjectIdForProviderIdentity
-} from './project-host-setup-projection'
+import { getGitRemoteProviderIdentity } from './project-host-setup-projection'
 import type { ProjectProviderIdentity } from './project-types'
 import type { Repo } from './repo-types'
 
-function describeIdentity(identity: ProjectProviderIdentity): string {
-  return `${identity.host ? `${identity.host}/` : ''}${identity.owner}/${identity.repo}`
+function sameOwnerAndRepo(left: ProjectProviderIdentity, right: ProjectProviderIdentity): boolean {
+  return (
+    left.owner.toLowerCase() === right.owner.toLowerCase() &&
+    left.repo.toLowerCase() === right.repo.toLowerCase()
+  )
 }
 
 /**
@@ -15,19 +15,17 @@ function describeIdentity(identity: ProjectProviderIdentity): string {
  * another GitHub repository would be silently relabelled into the wrong project (#30663).
  */
 export function assertImportedFolderRemoteMatchesProject(
-  repo: Pick<Repo, 'gitRemoteIdentity'>,
+  folder: Pick<Repo, 'gitRemoteIdentity'>,
   projectIdentity: ProjectProviderIdentity
 ): void {
-  const folderIdentity = getGitRemoteProviderIdentity(repo)
-  if (
-    !folderIdentity ||
-    getProjectIdForProviderIdentity(folderIdentity) ===
-      getProjectIdForProviderIdentity(projectIdentity)
-  ) {
+  const folderIdentity = getGitRemoteProviderIdentity(folder)
+  // Why owner/repo only: a remote host can be an SSH alias (`github-work`) that resolves to the
+  // project's host, so a host difference alone proves nothing.
+  if (!folderIdentity || sameOwnerAndRepo(folderIdentity, projectIdentity)) {
     return
   }
-  const remoteName = repo.gitRemoteIdentity?.remoteName ?? 'origin'
+  const remoteName = folder.gitRemoteIdentity?.remoteName ?? 'origin'
   throw new Error(
-    `Imported folder does not match the selected project: its Git remote "${remoteName}" points at ${describeIdentity(folderIdentity)}, not ${describeIdentity(projectIdentity)}. Choose the project that matches this folder, or, if the folder is a fork, add the project's repository as its "upstream" remote.`
+    `Imported folder does not match the selected project: its Git remote "${remoteName}" points at ${folderIdentity.owner}/${folderIdentity.repo}, not ${projectIdentity.owner}/${projectIdentity.repo}. Choose the project that matches this folder. If the folder is a fork, add the project's repository as its "upstream" remote; if the repository was renamed, update the folder's remote URL.`
   )
 }
