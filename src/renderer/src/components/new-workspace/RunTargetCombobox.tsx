@@ -24,6 +24,7 @@ import { MachineStateLabel } from '@/components/machines/MachineStateLabel'
 import { useNow } from '@/hooks/use-now'
 import { formatMachineSummary } from '@/lib/machines/machine-copy'
 import { AddHostSubmenuRow } from './RunTargetSubmenus'
+import { machineGroupLabel } from './RunTargetMachineRow'
 import RunTargetRowList from './RunTargetRowList'
 import RunTargetField from './RunTargetField'
 import { HostListOverflowNote } from '@/components/host-picker/HostListOverflowNote'
@@ -203,9 +204,13 @@ export default function RunTargetCombobox({
       if (row.kind === 'machine') {
         onRecipeChange?.(null)
       }
+      // Why: a paired server's machine runs worktrees at the project's location on it.
+      if (row.kind === 'machine' && row.machine.locationKey) {
+        onHostChange?.(row.machine.locationKey)
+      }
       activateMachine(row, close)
     },
-    [activateMachine, close, onRecipeChange]
+    [activateMachine, close, onHostChange, onRecipeChange]
   )
 
   /** Commits a row, or opens its submenu when the row is a submenu row. */
@@ -278,7 +283,7 @@ export default function RunTargetCombobox({
       ? `${getEphemeralVmLabel()} / ${selectedRecipe.name}`
       : (selectedHost?.label ?? '')
   const fieldDetail = selectedMachine
-    ? formatMachineSummary(selectedMachine.group.name, selectedMachine.machine)
+    ? formatMachineSummary(machineGroupLabel(selectedMachine.group), selectedMachine.machine)
     : selectedRecipe
       ? getRecipeDetail(selectedRecipe)
       : (selectedHost?.path ?? '')
