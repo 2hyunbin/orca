@@ -43,7 +43,7 @@ function saveWorkspace(
     workspaceKey: key,
     worktreeId,
     hostId: loaded.layout.hostId,
-    editorFiles: workspace.editorFiles,
+    workspace,
     leaves: workspace.leaves ?? {},
     facts,
     view
