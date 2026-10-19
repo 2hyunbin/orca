@@ -24,6 +24,13 @@ import { translate } from '@/i18n/i18n'
 import { getActiveWorktreeRuntimeEnvironmentId } from './terminal-workspace-model'
 import type { TerminalColdActivationController } from './terminal-cold-activation'
 
+/** A tab the user creates is this window's choice of tab (desktop-tab-choice). */
+function recordUserCreatedTab(worktreeId: string | null): void {
+  if (worktreeId) {
+    useAppStore.getState().recordDesktopTabChoice?.(worktreeId)
+  }
+}
+
 export function useTerminalCreateActions(controller: TerminalColdActivationController) {
   const {
     activeWorktreeId,
@@ -39,6 +46,7 @@ export function useTerminalCreateActions(controller: TerminalColdActivationContr
       if (!activeWorktreeId) {
         return
       }
+      recordUserCreatedTab(activeWorktreeId)
       const targetGroupId =
         useAppStore.getState().activeGroupIdByWorktree[activeWorktreeId] ??
         useAppStore.getState().groupsByWorktree[activeWorktreeId]?.[0]?.id
@@ -71,6 +79,7 @@ export function useTerminalCreateActions(controller: TerminalColdActivationContr
       if (!activeWorktreeId) {
         return
       }
+      recordUserCreatedTab(activeWorktreeId)
       const { groupId, focusIntent } = context ?? captureAgentTabLaunchContext(activeWorktreeId)
       const result = launchAgentInNewTab({
         requestId: newAgentLaunchRequestId(),
@@ -97,6 +106,7 @@ export function useTerminalCreateActions(controller: TerminalColdActivationContr
     if (!activeWorktreeId) {
       return
     }
+    recordUserCreatedTab(activeWorktreeId)
     const targetGroupId =
       useAppStore.getState().activeGroupIdByWorktree[activeWorktreeId] ??
       useAppStore.getState().groupsByWorktree[activeWorktreeId]?.[0]?.id
@@ -110,6 +120,7 @@ export function useTerminalCreateActions(controller: TerminalColdActivationContr
     if (!activeWorktreeId) {
       return
     }
+    recordUserCreatedTab(activeWorktreeId)
     const targetGroupId =
       useAppStore.getState().activeGroupIdByWorktree[activeWorktreeId] ??
       useAppStore.getState().groupsByWorktree[activeWorktreeId]?.[0]?.id
@@ -142,15 +153,20 @@ export function useTerminalCreateActions(controller: TerminalColdActivationContr
     })
   }, [activeWorktreeId, createBrowserTab, openNewBrowserTabInActiveWorkspace])
 
-  const handleOpenEntry = useCallback(async (args: TabCreateEntryArgs) => {
-    await openTabBarEntry(args)
-  }, [])
+  const handleOpenEntry = useCallback(
+    async (args: TabCreateEntryArgs) => {
+      recordUserCreatedTab(activeWorktreeId)
+      await openTabBarEntry(args)
+    },
+    [activeWorktreeId]
+  )
 
   const handleDuplicateBrowserTab = useCallback(
     (browserTabId: string, sourceUnifiedTabId: string) => {
       if (!activeWorktreeId) {
         return
       }
+      recordUserCreatedTab(activeWorktreeId)
       const state = useAppStore.getState()
       const tabs = state.browserTabsByWorktree[activeWorktreeId] ?? []
       const source = tabs.find((tab) => tab.id === browserTabId)
@@ -196,6 +212,7 @@ export function useTerminalCreateActions(controller: TerminalColdActivationContr
     if (!activeWorktreeId) {
       return
     }
+    recordUserCreatedTab(activeWorktreeId)
     const targetGroupId =
       useAppStore.getState().activeGroupIdByWorktree[activeWorktreeId] ??
       useAppStore.getState().groupsByWorktree[activeWorktreeId]?.[0]?.id

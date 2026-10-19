@@ -10,8 +10,9 @@ import { findWorktreeById } from '../worktree-helpers'
 
 /**
  * This window's own tab choices, the desktop half of `resolveWorkspaceViewerTab`: a workspace is
- * listed once its user clicks, keys or explicitly opens one of its tabs, or restores a saved
- * selection. Until then its shown tab is a derived default, which is never saved as a choice.
+ * listed once its user clicks, keys to, opens or creates one of its tabs, or restores a saved
+ * selection. Automatic creates (seed, Setup, default tabs, adopted PTYs, host-published creation
+ * surfaces) never list it; until then its shown tab is a derived default, never saved as a choice.
  */
 export type DesktopTabChoices = Readonly<Record<string, true>>
 

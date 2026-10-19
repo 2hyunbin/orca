@@ -190,6 +190,7 @@ export function createBrowserTabActions(
       if (!worktreeId) {
         return
       }
+      state.recordDesktopTabChoice?.(worktreeId)
       const browserAvailability = getClientCreationActionPolicy(state, worktreeId)[
         'managed-browser'
       ]

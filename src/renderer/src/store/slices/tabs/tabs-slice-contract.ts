@@ -31,7 +31,7 @@ export type TabsSlice = {
   activeGroupIdByWorktree: Record<string, string>
   layoutByWorktree: Record<string, TabGroupLayoutNode>
   desktopTabChoices: DesktopTabChoices
-  /** A click, key or explicit open chose a tab here; creates and display projection never do. */
+  /** The user picked or created a tab here; automatic creates and display projection never do. */
   recordDesktopTabChoice: (worktreeId: string) => void
   createUnifiedTab: (
     worktreeId: string,

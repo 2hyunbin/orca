@@ -18,6 +18,8 @@ export function createNewTerminalTab(
   if (!worktreeRoute) {
     return
   }
+  // A terminal the user opens is this window's choice of tab (desktop-tab-choice).
+  state.recordDesktopTabChoice?.(activeWorktreeId)
   const runtimeEnvironmentId = worktreeRoute.runtimeEnvironmentId
   if (isWebRuntimeSessionActive(runtimeEnvironmentId)) {
     // Why: paired web clients receive host-owned terminal tabs through

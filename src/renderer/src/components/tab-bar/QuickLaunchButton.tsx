@@ -76,6 +76,8 @@ export function useTabAgentMenuLaunch({
       const { agent } = row
       const entry = getCatalogEntry(agent)
       const label = entry?.label ?? agent
+      // An agent the user launches from "+" is this window's choice of tab.
+      useAppStore.getState().recordDesktopTabChoice?.(worktreeId)
       const result = launchAgentInNewTab({
         requestId: newAgentLaunchRequestId(),
         focusIntent: captureNativeChatComposerFocusIntent(),

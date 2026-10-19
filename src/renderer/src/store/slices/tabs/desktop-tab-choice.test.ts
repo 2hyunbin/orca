@@ -13,6 +13,8 @@ import { buildLayoutFrameSlices } from '../../workspace-layout-frame-slices'
 import { createStoreSessionMockApi } from '../store-session-test-harness'
 import { createTestStore } from '../store-test-helpers'
 import { deriveActiveSurfaceForWorktree } from './tabs-surface'
+import { useAppStore } from '@/store'
+import { createNewTerminalTab } from '@/components/terminal/terminal-tab-create'
 
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
 vi.mock('@/lib/agent-status', async (importOriginal) => {
@@ -26,7 +28,11 @@ const WT = `${REPO_ID}::/workspace/created-from-phone`
 const OTHER = `${REPO_ID}::/workspace/where-the-desktop-is`
 const worktreesByRepo = {
   [REPO_ID]: [
-    { ...makeWorktree(WT, '/workspace/created-from-phone'), createdWithAgent: 'claude' as const },
+    {
+      ...makeWorktree(WT, '/workspace/created-from-phone'),
+      hostId: LOCAL_EXECUTION_HOST_ID,
+      createdWithAgent: 'claude' as const
+    },
     makeWorktree(OTHER, '/workspace/where-the-desktop-is')
   ]
 }
@@ -111,6 +117,24 @@ describe('a workspace this window has not chosen a tab in', () => {
       const resaved = buildWorkspaceSessionPayload(after)
       expect(shown(reloaded(resaved))).toEqual(expected)
       expect(shownByFrames(resaved, after)).toBe(expected.tabId)
+
+      // A terminal the user opens is a choice too: a restart reopens on it, as on main.
+      const repo = {
+        id: REPO_ID,
+        path: '/workspace',
+        displayName: 'repo',
+        badgeColor: '',
+        addedAt: 0
+      }
+      // Data only: the reloaded state's actions write to its own test store.
+      const data = Object.entries(after).filter(([, value]) => typeof value !== 'function')
+      useAppStore.setState({ ...Object.fromEntries(data), repos: [repo] })
+      createNewTerminalTab(WT)
+      const opened = useAppStore.getState().tabsByWorktree[WT]!.at(-1)!.id
+      expect(shown(reloaded(buildWorkspaceSessionPayload(useAppStore.getState())))).toEqual({
+        tabId: opened,
+        type: 'terminal'
+      })
     }
   )
 })
