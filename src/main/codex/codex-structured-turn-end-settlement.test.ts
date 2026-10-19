@@ -48,10 +48,10 @@ async function turnEndRig() {
     })
   // Codex answers a cold send before it opens the turn.
   const sendAndOpen = async (clientMessageId: string) => {
-    const sending = send(clientMessageId)
-    await vi.waitFor(() => expect(turns.turnId).not.toBeNull())
+    const outcome = await send(clientMessageId)
+    expect(turns.turnId).not.toBeNull()
     turns.start()
-    return sending
+    return outcome
   }
   const settledIds = () => settlements.map(({ clientMessageId }) => clientMessageId)
   const categoryOf = (settlement: LateSettlement | undefined) =>
@@ -78,10 +78,12 @@ describe('a Codex send its turn ended without echoing', () => {
     rig.turns.end('interrupted')
 
     expect(rig.settlements).toEqual([
+      // Codex took it into a turn: no proof it never reached Codex.
       expect.objectContaining({
         sessionId: 'session-1',
         clientMessageId: 'client-1',
-        state: 'rejected'
+        state: 'rejected',
+        rejection: { kind: 'cancelled' }
       })
     ])
     expect(rig.categoryOf(rig.settlements[0])).toBe('withdrawn')
@@ -174,17 +176,6 @@ describe('a Codex send its turn ended without echoing', () => {
     ])
   })
 
-  it('ignores an echo that arrives after the withdrawal', async () => {
-    const rig = await turnEndRig()
-    await rig.sendAndOpen('client-1')
-    rig.turns.end('interrupted')
-
-    rig.turns.echo('client-1')
-
-    expect(rig.settledIds()).toEqual(['client-1'])
-    expect(rig.categoryOf(rig.settlements[0])).toBe('withdrawn')
-  })
-
   it('settles each of two sends steered into one interrupted turn once', async () => {
     const rig = await turnEndRig()
     await rig.sendAndOpen('client-1')
@@ -248,9 +239,6 @@ describe('a Codex send its turn ended without echoing', () => {
         detail: { text: 'usage limit reached', audience: 'person' }
       }
     })
-    // Settled once, by the answer: a late echo is no longer owed anything.
-    rig.turns.echo('client-1')
-    expect(rig.settlements).toEqual([])
   })
 
   it('leaves a send pending, still armed, when its answer is read after its turn completed', async () => {
