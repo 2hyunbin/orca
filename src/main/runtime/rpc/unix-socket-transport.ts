@@ -1,7 +1,7 @@
 // Why: this is the original Unix socket / named pipe transport extracted from
 // runtime-rpc.ts. It preserves the exact same behavior: newline-delimited JSON,
 // 30s idle timeout (suspended while a dispatch is in flight), 1MB max message,
-// 512-connection budget, chmod 0o600 on Unix.
+// 512-connection budget (hard limit 640), chmod 0o600 on Unix.
 // It also owns the keepalive timer and per-connection abort signal so the
 // server-side handler can cancel long-poll dispatches when the client goes
 // away. See design doc §3.1.
@@ -11,9 +11,11 @@ import type { RpcMessageContext, RpcTransport } from './transport'
 
 const MAX_RUNTIME_RPC_MESSAGE_BYTES = 1024 * 1024
 const RUNTIME_RPC_SOCKET_IDLE_TIMEOUT_MS = 30_000
-// Why: an fd backstop, not a policy: long-polls take no slot, so each held one keeps a socket open. Past this,
-// long-polls get a retryable runtime_busy instead of Node silently dropping the socket ("Restart Orca").
+// Why: long-polls take no slot, so each held one keeps a socket open. Past this budget a long-poll gets a
+// retryable runtime_busy (not a silent drop that reads as "Restart Orca") and the socket closes after its reply.
 export const RUNTIME_RPC_CONNECTION_BUDGET = 512
+// Why: the hard fd bound; past the budget only short or idle sockets remain, so this headroom is rarely reached.
+const HARD_CONNECTION_HEADROOM = 128
 const DEFAULT_KEEPALIVE_INTERVAL_MS = 10_000
 
 export type UnixSocketTransportOptions = {
@@ -70,6 +72,7 @@ export class UnixSocketTransport implements RpcTransport {
     const server = createServer((socket) => {
       this.handleConnection(socket)
     })
+    server.maxConnections = this.connectionBudget + HARD_CONNECTION_HEADROOM
 
     await new Promise<void>((resolve, reject) => {
       server.once('error', reject)
@@ -234,6 +237,9 @@ export class UnixSocketTransport implements RpcTransport {
       cleanupDispatch(false)
       if (!socket.destroyed && socket.writable) {
         socket.write(`${response}\n`)
+        if (overConnectionBudget) {
+          socket.end()
+        }
       }
     }
 
