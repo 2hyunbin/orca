@@ -241,7 +241,7 @@ describe('runSleepWorktree', () => {
     expect(mocks.state.shutdownWorktreeTerminals).not.toHaveBeenCalled()
     expect(mocks.suspendWorkspace).not.toHaveBeenCalled()
     expect(mocks.clearWorktreeSleepIntent).toHaveBeenCalledWith('wt-1')
-    expect(mocks.state.setActiveWorktree).toHaveBeenLastCalledWith('wt-1', undefined)
+    expect(mocks.state.setActiveWorktree).toHaveBeenLastCalledWith('wt-1')
     expect(mocks.toastError).toHaveBeenCalledWith(
       'Failed to sleep workspace',
       expect.objectContaining({
@@ -259,7 +259,7 @@ describe('runSleepWorktree', () => {
 
     await runSleepWorktree('wt-1')
 
-    expect(mocks.state.setActiveWorktree.mock.calls).toEqual([[null], ['wt-1', undefined]])
+    expect(mocks.state.setActiveWorktree.mock.calls).toEqual([[null], ['wt-1']])
     expect(mocks.suspendWorkspace).not.toHaveBeenCalled()
     expect(mocks.toastError).toHaveBeenCalledWith(
       'Failed to sleep workspace',
