@@ -181,7 +181,6 @@ export const SQLITE_DATABASE_RUNTIME_INCLUDE = [
   'src/main/runtime/runtime-orchestration-sender-names.test.ts',
   'src/main/runtime/runtime-rpc-orchestration-db-migration.test.ts',
   'src/main/runtime/runtime-rpc-request-authorization.test.ts',
-  'src/main/runtime/runtime-rpc-websocket-long-poll-caps.test.ts',
   'src/main/runtime/settled-worker-process-replacement.test.ts',
   'src/main/runtime/structured-agent-launch-args-wiring.test.ts',
   'src/main/runtime/structured-agent-session-codex-compact-exit.test.ts',
