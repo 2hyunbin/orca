@@ -269,11 +269,8 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
 
-      connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({ isVisibleRef: { current: false } }) as never
-      )
+      const deps = createDeps({ isVisibleRef: { current: false } })
+      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
       mockStoreState.agentLaunchConfigByPaneKey[paneKey] = {
@@ -300,9 +297,12 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
         expect(mockStoreState.sleepingAgentSessionsByPaneKey[paneKey]).toMatchObject({
           agent: 'codex'
         })
+        // Orca's own stop keeps the chat view over the sleeping agent.
+        expect(deps.onAgentExitedRef.current).not.toHaveBeenCalled()
       } else {
         expect(mockStoreState.clearSleepingAgentSession).toHaveBeenCalledExactlyOnceWith(paneKey)
         expect(mockStoreState.sleepingAgentSessionsByPaneKey[paneKey]).toBeUndefined()
+        expect(deps.onAgentExitedRef.current).toHaveBeenCalledWith(LEAF_1)
       }
       expect(mockStoreState.paneForegroundAgentByPaneKey[paneKey]).toEqual({
         agent: null,
