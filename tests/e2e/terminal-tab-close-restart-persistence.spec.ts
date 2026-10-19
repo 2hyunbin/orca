@@ -22,7 +22,6 @@ import type {
   RuntimeWorktreeRecord
 } from '../../src/shared/runtime-types'
 
-test.describe.configure({ mode: 'serial' })
 
 for (const e26Run of [1, 2, 3]) {
 test(`durable whole-tab close removes a split tab across restart #${e26Run}`, async (// oxlint-disable-next-line no-empty-pattern -- This lifecycle test owns both Electron launches and intentionally opts out of the default app fixture.
@@ -102,9 +101,15 @@ test(`durable whole-tab close removes a split tab across restart #${e26Run}`, as
     await expect
       .poll(
         async () => {
-          const listed = await client.call<RuntimeTerminalListResult>('terminal.list', {
-            worktree: `id:${worktreeId}`
-          })
+          let listed: Awaited<ReturnType<typeof client.call<RuntimeTerminalListResult>>>
+          try {
+            listed = await client.call<RuntimeTerminalListResult>('terminal.list', {
+              worktree: `id:${worktreeId}`
+            })
+          } catch (error) {
+            console.log(`[e26] spec terminal.list threw ${String(error)} t=${Date.now()}`)
+            return -1
+          }
           const matching = listed.result.terminals.filter(
             (terminal) => terminal.worktreeId === worktreeId && terminal.tabId === closedTabId
           )

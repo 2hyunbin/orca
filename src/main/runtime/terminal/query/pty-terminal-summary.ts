@@ -57,6 +57,7 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
       (this.pendingPtyRegistrationIncarnations.has(pty.ptyId) ||
         this.terminalMutationLock.hasActiveSpawns(worktreeIdentityKey(pty.worktreeId)))
     ) {
+      console.warn(`[e26] surface_ownership_unavailable ${JSON.stringify({ ptyId: pty.ptyId, tabId: pty.tabId, paneKey: pty.paneKey, seq: pty.surfaceRecordedAtGraphSequence, graphSeq: this.graphSequence, pending: this.pendingPtyRegistrationIncarnations.has(pty.ptyId), leaves: [...this.leaves.entries()].map(([k, l]) => `${k}=${l.ptyId}`) })} t=${Date.now()}`)
       throw new Error('terminal_surface_ownership_unavailable')
     }
     return {
