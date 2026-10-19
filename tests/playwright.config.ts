@@ -36,6 +36,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   forbidOnly: !!process.env.CI,
   retries: 0,
+  repeatEach: 10,
   reporter: 'list',
   use: {
     // Why: this suite intentionally runs with retries disabled so first-failure
