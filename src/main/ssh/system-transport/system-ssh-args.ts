@@ -116,8 +116,9 @@ export function buildSshArgs(target: SshTarget, options?: SystemSshBuildArgsOpti
 /**
  * Args for an `ssh -N` forward process. Unmultiplexed: through any ControlMaster (Orca's or the
  * user's ssh_config) the master owns the listener and its refusals, so killing the child would
- * neither close the forward nor report why sshd refused it. Reusing a live master's login was
- * never a working route: its `-N` mux client exits at once, leaving the port on the master.
+ * neither close the forward nor report why sshd refused it. So a forward logs in on its own, even
+ * where a live master holds a login it cannot repeat: through that master its `-N` mux client
+ * exits at once and the port stays on the master, out of Orca's reach.
  */
 export function buildForwardProcessSshArgs(
   target: SshTarget,
