@@ -6,10 +6,8 @@ import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState } from '../transport/types'
 import { RpcIncompatibleReplyError } from '../transport/rpc-incompatible-reply-error'
 import { useWorktreeResync } from '../transport/use-worktree-resync'
-import {
-  startHostWorktreeRefresh,
-  type HostSidebarFeedTriggers
-} from '../worktree/host-worktree-refresh'
+import { startHostWorktreeRefresh } from '../worktree/host-worktree-refresh'
+import type { HostSidebarFeedTriggers } from './host-sidebar-feed-reader'
 import { areWorktreeListsEqual } from '../worktree/worktree-list-snapshot'
 import {
   clearConfirmedActiveWorktreeIdentity,

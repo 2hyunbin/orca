@@ -89,7 +89,7 @@ describe('the phone’s own option changes', () => {
   })
 
   it('stay quiet about a refusal of a change a later one replaced', async () => {
-    const answers: Array<(reply: RpcResponse) => void> = []
+    const answers: ((reply: RpcResponse) => void)[] = []
     const screen = mount(() => new Promise((resolve) => answers.push(resolve)))
     let first: Promise<PendingViewOutcome> | null = null
     act(() => {
@@ -107,7 +107,9 @@ describe('the phone’s own option changes', () => {
     const screen = mount(() => new Promise(() => {}))
     act(() => void screen.current().controls.sendView({ sortBy: 'name' }, { sortBy: 'name' }))
     expect(screen.current().status.stale).toBe(false)
-    act(() => vi.advanceTimersByTime(PENDING_VIEW_CHANGE_STALE_MS))
+    act(() => {
+      vi.advanceTimersByTime(PENDING_VIEW_CHANGE_STALE_MS)
+    })
     expect(screen.current().status.stale).toBe(true)
     expect(screen.current().status.pending).toHaveLength(1)
   })

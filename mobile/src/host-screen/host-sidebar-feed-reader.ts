@@ -12,6 +12,14 @@ import type { SidebarInputsChangedEvent } from '../../../src/shared/sidebar-list
 import type { UnvalidatedRpcRequestPort } from '../transport/unvalidated-rpc-request-port'
 import { readHostMethodReply, sidebarInputsRead } from './host-sidebar-feed-operations'
 
+/** What the worktree refresh drives the feed with. */
+export type HostSidebarFeedTriggers = {
+  refresh: () => void
+  changed: (notice: Pick<SidebarInputsChangedEvent, 'generation' | 'revision'>) => void
+  /** Each new install; returns the unsubscribe. */
+  onInstalled: (listener: () => void) => () => void
+}
+
 export type HostSidebarFeedRead = {
   installed: InstalledSidebarInputs | null
   /** The host has no feed (method_not_found, or forbidden by an older mobile allowlist). */

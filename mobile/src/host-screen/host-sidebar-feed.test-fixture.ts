@@ -80,14 +80,28 @@ export function feedDomains(overrides: Partial<SidebarFeedDomains> = {}): Sideba
   }
 }
 
+type ServedRepo = ServedProjectSections['repos'][number]
+
+function servedRepo(fields: Pick<ServedRepo, 'id' | 'path'> & Partial<ServedRepo>): ServedRepo {
+  return {
+    displayName: fields.id,
+    badgeColor: undefined,
+    addedAt: undefined,
+    connectionId: undefined,
+    executionHostId: undefined,
+    ...fields
+  }
+}
+
 export const SERVED_SECTIONS: ServedProjectSections = {
   repos: [
-    { id: 'orca', displayName: 'orca', path: '/r/orca', badgeColor: '#f00' },
-    { id: 'lab', displayName: 'lab', path: '/r/lab', connectionId: 'gpu' }
+    servedRepo({ id: 'orca', path: '/r/orca', badgeColor: '#f00' }),
+    servedRepo({ id: 'lab', path: '/r/lab', connectionId: 'gpu' })
   ],
   projects: [],
   setups: [],
-  projectOrderBy: 'manual'
+  projectOrderBy: 'manual',
+  projectGroups: undefined
 }
 
 export function phoneView(overrides: Partial<MobileViewState> = {}): MobileViewState {

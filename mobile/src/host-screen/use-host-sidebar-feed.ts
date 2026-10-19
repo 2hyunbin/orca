@@ -9,8 +9,11 @@ import {
   type SidebarFeedDomains
 } from '../../../src/shared/sidebar-list/sidebar-feed-domains'
 import type { RpcClient } from '../transport/rpc-client'
-import type { HostSidebarFeedTriggers } from '../worktree/host-worktree-refresh'
-import { HostSidebarFeedReader, type HostSidebarFeedRead } from './host-sidebar-feed-reader'
+import {
+  HostSidebarFeedReader,
+  type HostSidebarFeedRead,
+  type HostSidebarFeedTriggers
+} from './host-sidebar-feed-reader'
 
 /** What this page's list rules mean; a host publishing another meaning would build another list. */
 const SUPPORTED_SIDEBAR_SEMANTICS_VERSIONS: readonly number[] = [SIDEBAR_INPUTS_SEMANTICS_VERSION]

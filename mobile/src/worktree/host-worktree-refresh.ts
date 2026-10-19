@@ -1,7 +1,7 @@
 import { AppState } from 'react-native'
 import type { RuntimeClientEventStreamMessage } from '../../../src/shared/runtime-client-events'
 import type { RpcClient } from '../transport/rpc-client'
-import type { SidebarInputsChangedEvent } from '../../../src/shared/sidebar-list/sidebar-inputs-feed-contract'
+import type { HostSidebarFeedTriggers } from '../host-screen/host-sidebar-feed-reader'
 
 const WORKTREE_REFRESH_MS = 3000
 
@@ -16,13 +16,6 @@ type HostWorktreeRefreshArgs = {
   syncViewSettings: (options?: { reconnected?: boolean }) => Promise<void>
   /** The host's sidebar feed, which replaces the poll: its notices say when anything changed. */
   sidebarFeed?: HostSidebarFeedTriggers | null
-}
-
-export type HostSidebarFeedTriggers = {
-  refresh: () => void
-  changed: (notice: Pick<SidebarInputsChangedEvent, 'generation' | 'revision'>) => void
-  /** Each new install; returns the unsubscribe. */
-  onInstalled: (listener: () => void) => () => void
 }
 
 export function startHostWorktreeRefresh({

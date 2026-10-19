@@ -108,10 +108,13 @@ export function buildHostFeedSections(sources: HostFeedListSources): Section[] {
     liveRowOf(worktree.id, hostId) ?? feedOnlyRow(worktree, hostId, repoName, workspaceKind)
   const push = (section: Section) => sections.push(section)
   const current = (): Section => {
-    if (sections.length === 0) {
-      push({ key: 'all', title: '', data: [] })
+    const last = sections.at(-1)
+    if (last) {
+      return last
     }
-    return sections[sections.length - 1]
+    const first: Section = { key: 'all', title: '', data: [] }
+    push(first)
+    return first
   }
 
   for (const row of sources.rows) {
