@@ -255,6 +255,29 @@ describe('remote worktree event lineage refresh', () => {
     expect(store.getState().setActiveWorktree).not.toHaveBeenCalled()
   })
 
+  it('leaves the other twin copy the user picked during the rename refresh selected', async () => {
+    store.setState({
+      activeWorktreeId: 'repo-rename::/old',
+      activeWorkspaceExecutionHostId: 'runtime:env-1',
+      migrateWorktreeIdentity: vi.fn(() =>
+        store.setState({ activeWorktreeId: 'repo-rename::/new' })
+      ),
+      fetchWorktrees: vi.fn().mockImplementation(async () => {
+        store.setState({ activeWorkspaceExecutionHostId: 'local' })
+        return true
+      })
+    })
+    const { worktreeChangeRefreshQueue: queue } = createWorktreeEventRuntime(unsubs, () => false)
+    queue.enqueue({
+      repoId: 'repo-rename',
+      executionHostId: 'runtime:env-1',
+      renamed: { oldWorktreeId: 'repo-rename::/old', newWorktreeId: 'repo-rename::/new' }
+    })
+    await flushPromises()
+
+    expect(store.getState().setActiveWorktree).not.toHaveBeenCalled()
+  })
+
   it('keeps forced-local and unowned notifications on their existing refresh paths', async () => {
     const { worktreeChangeRefreshQueue: queue } = createWorktreeEventRuntime(unsubs, () => false)
     queue.enqueue({ repoId: 'local', forceLocalOwner: true, sortOrderOnly: true })
