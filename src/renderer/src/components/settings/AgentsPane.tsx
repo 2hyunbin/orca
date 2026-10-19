@@ -1,13 +1,4 @@
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
-import { Button } from '../ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger
-} from '../ui/dropdown-menu'
-import { ChevronDown } from 'lucide-react'
-import type { AgentPermissionMode } from '../../../../shared/tui-agent-permissions'
 import { getLocalExecutionHostLabel } from '../../../../shared/execution-host'
 import { useAppStore } from '@/store'
 import { AgentAwakeSetting } from './AgentAwakeSetting'
@@ -24,7 +15,6 @@ import {
   getAgentWorkspaceTrustTitle
 } from './agent-workspace-trust-copy'
 import { SettingsSubsectionHeader, SettingsSwitchRow } from './SettingsFormControls'
-import { translate } from '@/i18n/i18n'
 import { isPairedWebClientWindow } from '@/lib/desktop-window-chrome'
 import { getAgentsPaneSearchEntries } from './agents-search'
 import {
@@ -33,13 +23,18 @@ import {
 } from './agent-availability-settings'
 import { AgentAvailabilityControl } from './AgentCatalogRow'
 import { AgentLaunchSettingsSection } from './AgentLaunchSettingsSection'
+import {
+  AgentPermissionsSetting,
+  type AgentPermissionsSettingProps
+} from './AgentPermissionsSetting'
 import type { SettingsHostScope } from './settings-host-scope'
 
 export {
   buildAgentAvailabilitySettingsUpdate,
   createAgentAvailabilityUpdateQueue,
   getAgentsPaneSearchEntries,
-  AgentAvailabilityControl
+  AgentAvailabilityControl,
+  AgentPermissionsSetting
 }
 
 type AgentSettingProps = {
@@ -54,39 +49,6 @@ type AgentsPaneProps = AgentSettingProps & {
   wslAvailable?: boolean
   wslDistros?: string[]
   wslCapabilitiesLoading?: boolean
-}
-
-export function AgentPermissionsSetting({
-  onChange
-}: {
-  mode: AgentPermissionMode
-  onChange: (mode: Exclude<AgentPermissionMode, 'mixed'>) => void
-  autoSupported?: boolean
-}): React.JSX.Element {
-  return (
-    <SettingsSubsectionHeader
-      title={translate('auto.components.settings.AgentsPane.agentPermissions', 'Agent Permissions')}
-      description={translate('settings.agents.permissionsScope', 'Defaults for new terminals.')}
-      action={
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              {translate('settings.agents.setAllPermissions', 'Set defaults…')}
-              <ChevronDown className="size-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => onChange('manual')}>
-              {translate('settings.agents.setAllManual', 'Manual defaults')}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => onChange('yolo')}>
-              {translate('settings.agents.setAllYolo', 'Yolo defaults')}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      }
-    />
-  )
 }
 
 export function AgentsPane({
@@ -138,12 +100,8 @@ export function AgentsPane({
   )
 }
 
-function renderAgentPermissions(
-  mode: AgentPermissionMode,
-  onChange: (mode: Exclude<AgentPermissionMode, 'mixed'>) => void,
-  autoSupported?: boolean
-): React.ReactNode {
-  return <AgentPermissionsSetting mode={mode} onChange={onChange} autoSupported={autoSupported} />
+function renderAgentPermissions(props: AgentPermissionsSettingProps): React.ReactNode {
+  return <AgentPermissionsSetting {...props} />
 }
 
 export function AgentStatusHooksSetting({ settings, updateSettings }: AgentSettingProps) {

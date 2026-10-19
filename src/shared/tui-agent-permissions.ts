@@ -52,6 +52,10 @@ const PERMISSION_AGENT_IDS = Object.keys(TUI_AGENT_CONFIG).filter(
   (agent): agent is TuiAgent => agent in YOLO_TUI_AGENT_ARGS || agent in YOLO_TUI_AGENT_ENV
 )
 
+export function hasConfigurableTuiAgentPermissions(agent: TuiAgent): boolean {
+  return agent in YOLO_TUI_AGENT_ARGS || agent in YOLO_TUI_AGENT_ENV
+}
+
 function normalizeArgs(value: string | null | undefined): string {
   return value?.trim() ?? ''
 }
@@ -116,35 +120,63 @@ export function resolveTuiAgentPermissionMode(args: {
   return combinePermissionModes(modes)
 }
 
-export function resolveAgentPermissionModeSummary(args: {
+type AgentPermissionSettings = {
   agentDefaultArgs?: Partial<Record<TuiAgent, string>> | null
   agentDefaultEnv?: Partial<Record<TuiAgent, Record<string, string>>> | null
-}): AgentPermissionMode {
-  const modes: AgentPermissionMode[] = []
-  const autoModes: AgentPermissionMode[] = []
+}
 
+// Custom launch arguments are left alone by every bulk change, so they don't count toward the summary.
+function presetPermissionModes(
+  args: AgentPermissionSettings
+): { agent: TuiAgent; mode: Exclude<AgentPermissionMode, 'mixed'> }[] {
+  const result: { agent: TuiAgent; mode: Exclude<AgentPermissionMode, 'mixed'> }[] = []
   for (const agent of PERMISSION_AGENT_IDS) {
     const mode = resolveTuiAgentPermissionMode({
       agent,
       agentArgs: args.agentDefaultArgs?.[agent],
       agentEnv: args.agentDefaultEnv?.[agent]
     })
-    modes.push(mode)
-    if (agent in AUTO_TUI_AGENT_ARGS) {
-      autoModes.push(mode)
+    if (mode !== 'mixed') {
+      result.push({ agent, mode })
     }
   }
+  return result
+}
 
+export function resolveAgentPermissionModeSummary(
+  args: AgentPermissionSettings
+): AgentPermissionMode {
+  const presets = presetPermissionModes(args)
+  const autoModes = presets.filter(({ agent }) => agent in AUTO_TUI_AGENT_ARGS)
   // Auto changes only supporting agents, so the rest keep their existing permission policy.
-  if (autoModes.every((mode) => mode === 'auto') && !modes.includes('mixed')) {
+  if (autoModes.length > 0 && autoModes.every(({ mode }) => mode === 'auto')) {
     return 'auto'
   }
-  return combinePermissionModes(modes)
+  return combinePermissionModes(presets.map(({ mode }) => mode))
+}
+
+/** Combined mode of preset agents Auto doesn't cover, so the UI can say what they still use. */
+export function resolveNonAutoAgentPermissionMode(
+  args: AgentPermissionSettings
+): 'manual' | 'yolo' | 'mixed' {
+  const modes = new Set<AgentPermissionMode>()
+  for (const { agent, mode } of presetPermissionModes(args)) {
+    if (!(agent in AUTO_TUI_AGENT_ARGS)) {
+      modes.add(mode)
+    }
+  }
+  // No preset left to describe (all custom arguments) reads as no single mode.
+  if (modes.size !== 1) {
+    return 'mixed'
+  }
+  return modes.has('yolo') ? 'yolo' : 'manual'
 }
 
 export function applyAgentPermissionMode(args: {
   mode: Exclude<AgentPermissionMode, 'mixed'>
   agent?: TuiAgent
+  /** Leave Auto-capable agents as they are, e.g. to change only the agents Auto doesn't cover. */
+  exceptAuto?: boolean
   agentDefaultArgs?: Partial<Record<TuiAgent, string>> | null
   agentDefaultEnv?: Partial<Record<TuiAgent, Record<string, string>>> | null
 }): {
@@ -157,7 +189,7 @@ export function applyAgentPermissionMode(args: {
   const agents = args.agent ? [args.agent] : PERMISSION_AGENT_IDS
   for (const agent of agents) {
     const autoArgs = AUTO_TUI_AGENT_ARGS[agent]
-    if (args.mode === 'auto' && !autoArgs) {
+    if ((args.mode === 'auto' && !autoArgs) || (args.exceptAuto && autoArgs)) {
       continue
     }
     if (agent in YOLO_TUI_AGENT_ARGS) {

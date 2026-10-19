@@ -4,12 +4,9 @@ import type {
   AgentLaunchSettingsMutation
 } from '../../../../shared/agent-launch-settings'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
-import {
-  AUTO_TUI_AGENT_ARGS,
-  resolveTuiAgentPermissionMode,
-  type AgentPermissionMode
-} from '../../../../shared/tui-agent-permissions'
-import { AgentRowPermissionControl } from './AgentRowPermissionControl'
+import { AUTO_TUI_AGENT_ARGS } from '../../../../shared/tui-agent-permissions'
+import type { AgentPermissionsSettingProps } from './AgentPermissionsSetting'
+import { buildAgentRowPermissions } from './agent-row-permission-model'
 import {
   getTuiAgentDefaultArgs,
   getTuiAgentDefaultEnv,
@@ -26,11 +23,7 @@ import { HostAgentEnvironmentEditor } from './HostAgentEnvironmentEditor'
 import { buildCodexSessionSourceHomeControl } from './codex-session-source-home-control'
 import { translate } from '@/i18n/i18n'
 
-export type AgentPermissionsRenderer = (
-  mode: AgentPermissionMode,
-  onChange: (mode: Exclude<AgentPermissionMode, 'mixed'>) => void,
-  autoSupported?: boolean
-) => React.ReactNode
+export type AgentPermissionsRenderer = (props: AgentPermissionsSettingProps) => React.ReactNode
 
 export function AgentLaunchSettingsCatalog({
   settings,
@@ -70,6 +63,13 @@ export function AgentLaunchSettingsCatalog({
   const save = (mutation: AgentLaunchSettingsMutation): void => {
     void mutate(mutation).catch(() => {})
   }
+  const permissions = buildAgentRowPermissions({
+    agents: catalog.map((agent) => agent.id),
+    settings,
+    localEnv: local ? (local.settings.agentDefaultEnv ?? {}) : null,
+    autoSupported,
+    save
+  })
   const rowProps = (
     agent: (typeof catalog)[number],
     isDetected: boolean
@@ -86,18 +86,7 @@ export function AgentLaunchSettingsCatalog({
     cmdOverride: isDetected ? settings.agentCmdOverrides[agent.id] : undefined,
     argsOverride: resolveTuiAgentLaunchArgs(agent.id, settings.agentDefaultArgs),
     envOverride: local ? resolveTuiAgentLaunchEnv(agent.id, local.settings.agentDefaultEnv) : {},
-    permissionControl:
-      isDetected && autoSupported && agent.id in AUTO_TUI_AGENT_ARGS ? (
-        <AgentRowPermissionControl
-          label={agent.label}
-          mode={resolveTuiAgentPermissionMode({
-            agent: agent.id,
-            agentArgs: resolveTuiAgentLaunchArgs(agent.id, settings.agentDefaultArgs)
-          })}
-          autoSupported={agent.id in AUTO_TUI_AGENT_ARGS}
-          onChange={(mode) => save({ type: 'permissions', agent: agent.id, mode })}
-        />
-      ) : undefined,
+    permission: permissions.rows.get(agent.id),
     onSetDefault: () =>
       save({
         type: 'default',
@@ -145,11 +134,17 @@ export function AgentLaunchSettingsCatalog({
         )}
         onSetDefault={(agent) => save({ type: 'default', agent })}
       />
-      {renderPermissions(
-        settings.autoPermissionMode ? 'auto' : settings.permissionMode,
-        (mode) => save({ type: 'permissions', mode }),
+      {renderPermissions({
+        mode: permissions.globalMode,
+        nonAutoMode: settings.nonAutoPermissionMode,
+        majorityMode: permissions.majorityMode,
+        autoAgentLabels: catalog
+          .filter((agent) => agent.id in AUTO_TUI_AGENT_ARGS)
+          .map((agent) => agent.label),
+        onChange: (mode) => save({ type: 'permissions', mode }),
+        onChangeNonAuto: (mode) => save({ type: 'permissions', mode, exceptAuto: true }),
         autoSupported
-      )}
+      })}
       <AgentDetectionCatalog
         detectedAgents={detectedAgents}
         undetectedAgents={undetectedAgents}

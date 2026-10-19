@@ -506,17 +506,37 @@ describe('AgentsPane', () => {
     expect(matchesSettingsSearch('approve for me', getAgentsPaneSearchEntries())).toBe(true)
   })
 
-  it('keeps automatic permissions out of the bulk action', () => {
-    const onChange = vi.fn()
-    const element = AgentPermissionsSetting({ mode: 'mixed', onChange })
-    const items = element.props.action.props.children[1].props.children
-    expect(items).toHaveLength(2)
-    items[0].props.onSelect()
-    items[1].props.onSelect()
-    expect(onChange.mock.calls).toEqual([['manual'], ['yolo']])
-    expect(renderToStaticMarkup(<TooltipProvider>{element}</TooltipProvider>)).toContain(
-      'Set defaults…'
+  it.each([
+    ['manual', undefined, 'How much agents can do without asking you.', 1],
+    ['auto', 'yolo', 'Supported agents</button> approve safe actions on their own.', 2],
+    ['auto', 'mixed', 'Supported agents</button> approve safe actions on their own.', 1],
+    ['mixed', undefined, 'Most agents use Yolo. Choosing a mode resets the marked exceptions', 0]
+  ] as const)('describes %s permissions with others %s', (mode, nonAutoMode, copy, checked) => {
+    const markup = renderToStaticMarkup(
+      <TooltipProvider>
+        <AgentPermissionsSetting
+          mode={mode}
+          nonAutoMode={nonAutoMode}
+          majorityMode="yolo"
+          autoAgentLabels={['Claude', 'Claude Agent Teams', 'Codex']}
+          onChange={vi.fn()}
+          onChangeNonAuto={vi.fn()}
+        />
+      </TooltipProvider>
     )
+    expect(markup).toContain(copy)
+    expect(markup.includes('inert=""')).toBe(mode !== 'auto')
+    expect(markup.match(/aria-checked="true"/g)?.length ?? 0).toBe(checked)
+  })
+
+  it('explains inline when the host cannot run Auto', () => {
+    const markup = renderToStaticMarkup(
+      <TooltipProvider>
+        <AgentPermissionsSetting mode="yolo" autoSupported={false} onChange={vi.fn()} />
+      </TooltipProvider>
+    )
+    expect(markup).toContain('Auto needs a newer Orca on this host.')
+    expect(markup).toMatch(/aria-disabled="true"[^>]*>Auto</)
   })
 
   it('keeps catalog agent ids, labels, and commands discoverable in settings search', () => {

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { StrictMode } from 'react'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   projectAgentLaunchSettings,
@@ -11,6 +11,7 @@ import { TooltipProvider } from '../ui/tooltip'
 import type { AgentPermissionsRenderer } from './AgentLaunchSettingsCatalog'
 import { AgentPermissionsSetting, AgentsPane } from './AgentsPane'
 import { useAppStore } from '@/store'
+import { applyAgentPermissionMode } from '../../../../shared/tui-agent-permissions'
 import { createGlobalSettingsFixture } from '../../../../shared/global-settings-test-fixture'
 
 const transport = vi.hoisted(() => ({
@@ -40,8 +41,8 @@ const host = () =>
     agentDefaultArgs: { claude: '--host-marker' },
     agentDefaultEnv: { claude: { API_KEY: 'host-secret' } }
   })
-const renderPermissions: AgentPermissionsRenderer = (_mode, change) => (
-  <button onClick={() => change('manual')}>Manual</button>
+const renderPermissions: AgentPermissionsRenderer = ({ onChange }) => (
+  <button onClick={() => onChange('manual')}>Manual</button>
 )
 const pane = (revision: number) => (
   <TooltipProvider>
@@ -74,25 +75,119 @@ describe('host launch settings form', () => {
             environmentId="ssh-host"
             pairingRevision={17}
             hostName="SSH host"
-            renderPermissions={(mode, onChange, autoSupported) => (
-              <AgentPermissionsSetting
-                mode={mode}
-                onChange={onChange}
-                autoSupported={autoSupported}
-              />
-            )}
+            renderPermissions={(props) => <AgentPermissionsSetting {...props} />}
           />
         </TooltipProvider>
       )
       await screen.findByDisplayValue('--host-marker')
-      const control = screen.queryByRole('button', { name: 'Claude permissions' })
-      expect(control !== null).toBe(supported)
+      const auto = screen.getByRole('radio', { name: 'Auto' })
+      expect(auto.getAttribute('aria-disabled') === 'true').toBe(!supported)
+      fireEvent.click(auto)
       if (supported) {
-        expect(control?.hasAttribute('disabled')).toBe(true)
+        await waitFor(() =>
+          expect(transport.mutate).toHaveBeenCalledWith(
+            { environmentId: 'ssh-host', pairingRevision: 17 },
+            { type: 'permissions', mode: 'auto' },
+            expect.any(AbortSignal)
+          )
+        )
+      } else {
+        expect(transport.mutate).not.toHaveBeenCalled()
       }
-      expect(screen.queryByRole('radio', { name: /^Auto$/ })).toBeNull()
     }
   )
+
+  const fullPane = () => (
+    <TooltipProvider>
+      <HostAgentLaunchSettings
+        environmentId="ssh-host"
+        pairingRevision={17}
+        hostName="SSH host"
+        renderPermissions={(props) => <AgentPermissionsSetting {...props} />}
+      />
+    </TooltipProvider>
+  )
+
+  it('changes only the agents Auto does not cover from the Other agents control', async () => {
+    const automatic = projectAgentLaunchSettings(
+      applyAgentPermissionMode({ mode: 'auto', ...applyAgentPermissionMode({ mode: 'yolo' }) })
+    )
+    transport.read.mockResolvedValue(automatic)
+    transport.mutate.mockResolvedValue(automatic)
+    render(fullPane())
+    const others = await screen.findByRole('radiogroup', { name: 'Permissions for other agents' })
+    fireEvent.focus(screen.getByRole('button', { name: 'Supported agents' }))
+    expect((await screen.findByRole('tooltip')).textContent).toContain(
+      'Claude, Claude Agent Teams, and Codex'
+    )
+    expect(within(others).getByRole('radio', { name: 'Yolo' }).getAttribute('aria-checked')).toBe(
+      'true'
+    )
+    fireEvent.click(within(others).getByRole('radio', { name: 'Manual' }))
+    await waitFor(() =>
+      expect(transport.mutate).toHaveBeenCalledWith(
+        { environmentId: 'ssh-host', pairingRevision: 17 },
+        { type: 'permissions', mode: 'manual', exceptAuto: true },
+        expect.any(AbortSignal)
+      )
+    )
+  })
+
+  it('marks an exception and opens its own permission control from the badge', async () => {
+    const yolo = applyAgentPermissionMode({ mode: 'yolo' })
+    const settings = projectAgentLaunchSettings({
+      ...yolo,
+      agentDefaultArgs: { ...yolo.agentDefaultArgs, claude: '' }
+    })
+    transport.read.mockResolvedValue(settings)
+    transport.mutate.mockResolvedValue(settings)
+    render(fullPane())
+    fireEvent.click(await screen.findByRole('button', { name: 'Claude permissions: Manual' }))
+    const control = await screen.findByRole('radiogroup', { name: 'Claude permissions' })
+    await waitFor(() =>
+      expect(document.activeElement).toBe(within(control).getByRole('radio', { name: 'Manual' }))
+    )
+    fireEvent.click(within(control).getByRole('radio', { name: 'Auto' }))
+    await waitFor(() =>
+      expect(transport.mutate).toHaveBeenCalledWith(
+        { environmentId: 'ssh-host', pairingRevision: 17 },
+        { type: 'permissions', agent: 'claude', mode: 'auto' },
+        expect.any(AbortSignal)
+      )
+    )
+  })
+
+  it('replaces custom arguments with the expected mode from the row', async () => {
+    render(fullPane())
+    await screen.findByDisplayValue('--host-marker')
+    fireEvent.click(screen.getByRole('button', { name: 'Replace with Manual' }))
+    await waitFor(() =>
+      expect(transport.mutate).toHaveBeenCalledWith(
+        { environmentId: 'ssh-host', pairingRevision: 17 },
+        { type: 'arguments', agent: 'claude', value: '' },
+        expect.any(AbortSignal)
+      )
+    )
+  })
+
+  it('offers the most common mode for a custom-argument row', async () => {
+    const yolo = applyAgentPermissionMode({ mode: 'yolo' })
+    const settings = projectAgentLaunchSettings({
+      ...yolo,
+      agentDefaultArgs: { ...yolo.agentDefaultArgs, claude: '--model sonnet', codex: '' }
+    })
+    transport.read.mockResolvedValue(settings)
+    transport.mutate.mockResolvedValue(settings)
+    render(fullPane())
+    fireEvent.click(await screen.findByRole('button', { name: 'Replace with Yolo' }))
+    await waitFor(() =>
+      expect(transport.mutate).toHaveBeenCalledWith(
+        { environmentId: 'ssh-host', pairingRevision: 17 },
+        { type: 'arguments', agent: 'claude', value: '--dangerously-skip-permissions' },
+        expect.any(AbortSignal)
+      )
+    )
+  })
 
   it.each(['pill', 'row'] as const)(
     'clears the selected default through its %s',
@@ -189,7 +284,7 @@ describe('host launch settings form', () => {
       </TooltipProvider>
     )
     const args = await screen.findByDisplayValue('--host-marker')
-    expect(screen.getByText('Defaults for new terminals.')).toBeTruthy()
+    expect(screen.getByText(/How much agents can do without asking you/)).toBeTruthy()
     expect(screen.queryByDisplayValue('--desktop-marker')).toBeNull()
     fireEvent.change(args, { target: { value: '--r10-marker' } })
     fireEvent.blur(args)
@@ -202,8 +297,7 @@ describe('host launch settings form', () => {
     )
     expect(updateDesktop).not.toHaveBeenCalled()
     expect(desktop.agentDefaultEnv?.claude?.DESKTOP_KEY).toBe('desktop-secret')
-    fireEvent.keyDown(screen.getByRole('button', { name: 'Set defaults…' }), { key: 'Enter' })
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Manual defaults' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Manual' }))
     await waitFor(() =>
       expect(transport.mutate).toHaveBeenCalledWith(
         { environmentId: 'ssh-host', pairingRevision: 17 },
@@ -271,7 +365,10 @@ describe('host launch settings form', () => {
     expect(transport.mutate).toHaveBeenCalledTimes(1)
     finishArguments(projectAgentLaunchSettings({ agentDefaultArgs: { claude: '--next-marker' } }))
     await waitFor(() => expect(transport.mutate).toHaveBeenCalledTimes(2))
-    expect(transport.mutate.mock.calls[1]?.[1]).toEqual({ type: 'permissions', mode: 'manual' })
+    expect(transport.mutate.mock.calls[1]?.[1]).toEqual({
+      type: 'permissions',
+      mode: 'manual'
+    })
   })
 
   it('does not display launch controls or local defaults for an old server', async () => {

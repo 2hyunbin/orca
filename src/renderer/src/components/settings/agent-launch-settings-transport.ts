@@ -49,7 +49,7 @@ export async function mutateHostAgentLaunchSettings(
   }
   if (
     mutation.type === 'permissions' &&
-    (mutation.mode === 'auto' || mutation.agent !== undefined) &&
+    (mutation.mode === 'auto' || mutation.agent !== undefined || mutation.exceptAuto) &&
     !(await runtimeEnvironmentSupportsCapability(
       owner.environmentId,
       AGENT_LAUNCH_AUTO_PERMISSIONS_CAPABILITY

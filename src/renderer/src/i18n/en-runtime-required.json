@@ -1122,9 +1122,6 @@
         },
         "AgentsPane": {
           "9b175d0f5e": "Pre-selected agent when opening a new workspace.",
-          "agentPermissionsDescription": "Choose whether Orca launches agents with fewer permission prompts or with manual checks.",
-          "agentPermissionsInfo": "Agent permissions info",
-          "agentPermissionsTooltip": "Doesn't apply to agents where you've overridden launch arguments.",
           "c8794e622e": "Detected",
           "db9e9e5887": "Customize command",
           "df123171d1": "Not installed"
@@ -1660,7 +1657,6 @@
             "agent-trust-folder": "folder",
             "agent-trust-trust": "trust",
             "agent-trust-worktree": "worktree",
-            "agentPermissionsDescription": "Switch agent permission defaults between Yolo and Manual.",
             "be59907510": "override",
             "be7ea3553b": "tab",
             "c1317fe641": "restore",

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   applyAgentPermissionMode,
   resolveAgentPermissionModeSummary,
+  resolveNonAutoAgentPermissionMode,
   resolveTuiAgentPermissionMode,
   AUTO_TUI_AGENT_ARGS,
   YOLO_TUI_AGENT_ARGS,
@@ -31,22 +32,82 @@ describe('tui agent permissions', () => {
     }
   })
 
-  it('preserves custom arguments and reports a partially automatic profile as mixed', () => {
+  it('preserves custom arguments and leaves them out of the Auto summary', () => {
     const automatic = applyAgentPermissionMode({
       mode: 'auto',
       agentDefaultArgs: { claude: '--model sonnet' }
     })
     expect(automatic.agentDefaultArgs.claude).toBe('--model sonnet')
     expect(automatic.agentDefaultArgs.codex).toBe('--approve-for-me')
-    expect(resolveAgentPermissionModeSummary(automatic)).toBe('mixed')
+    expect(resolveAgentPermissionModeSummary(automatic)).toBe('auto')
   })
 
-  it('keeps a custom unsupported agent visible as mixed in an otherwise auto profile', () => {
+  it('keeps an Auto profile Auto when an unsupported agent has custom arguments', () => {
     const automatic = applyAgentPermissionMode({
       mode: 'auto',
-      agentDefaultArgs: { gemini: '--model custom' }
+      agentDefaultArgs: { ...YOLO_TUI_AGENT_ARGS, gemini: '--model custom' },
+      agentDefaultEnv: YOLO_TUI_AGENT_ENV
     })
-    expect(resolveAgentPermissionModeSummary(automatic)).toBe('mixed')
+    expect(resolveAgentPermissionModeSummary(automatic)).toBe('auto')
+    expect(resolveNonAutoAgentPermissionMode(automatic)).toBe('yolo')
+  })
+
+  it('does not call a profile Auto when every Auto-capable agent has custom arguments', () => {
+    expect(
+      resolveAgentPermissionModeSummary({
+        agentDefaultArgs: {
+          claude: '--model a',
+          'claude-agent-teams': '--model b',
+          codex: '--model c'
+        }
+      })
+    ).toBe('manual')
+  })
+
+  it('reports the agents Auto does not cover as mixed only when their presets differ', () => {
+    const automatic = applyAgentPermissionMode({
+      mode: 'auto',
+      ...applyAgentPermissionMode({ mode: 'yolo' })
+    })
+    expect(resolveNonAutoAgentPermissionMode(automatic)).toBe('yolo')
+    expect(
+      resolveNonAutoAgentPermissionMode({
+        ...automatic,
+        agentDefaultArgs: { ...automatic.agentDefaultArgs, gemini: '' }
+      })
+    ).toBe('mixed')
+  })
+
+  it('reports no single mode when every agent Auto does not cover has custom arguments', () => {
+    const automatic = applyAgentPermissionMode({ mode: 'auto' })
+    const custom = Object.fromEntries(
+      Object.keys(YOLO_TUI_AGENT_ARGS)
+        .filter((agent) => !(agent in AUTO_TUI_AGENT_ARGS))
+        .map((agent) => [agent, '--custom-flag'])
+    )
+    expect(
+      resolveNonAutoAgentPermissionMode({
+        agentDefaultArgs: { ...automatic.agentDefaultArgs, ...custom },
+        agentDefaultEnv: { goose: { GOOSE_MODE: 'custom' } }
+      })
+    ).toBe('mixed')
+  })
+
+  it('changes only agents Auto does not cover when asked to', () => {
+    const automatic = applyAgentPermissionMode({
+      mode: 'auto',
+      ...applyAgentPermissionMode({ mode: 'yolo' })
+    })
+    const manualOthers = applyAgentPermissionMode({
+      mode: 'manual',
+      exceptAuto: true,
+      ...automatic
+    })
+    expect(manualOthers.agentDefaultArgs).toMatchObject(AUTO_TUI_AGENT_ARGS)
+    expect(manualOthers.agentDefaultArgs.gemini).toBe('')
+    expect(manualOthers.agentDefaultEnv.goose).toEqual({})
+    expect(resolveAgentPermissionModeSummary(manualOthers)).toBe('auto')
+    expect(resolveNonAutoAgentPermissionMode(manualOthers)).toBe('manual')
   })
 
   it('recognizes the current default profile as yolo', () => {
@@ -79,7 +140,7 @@ describe('tui agent permissions', () => {
     expect(result.agentDefaultEnv.goose).toEqual({})
   })
 
-  it('reports mixed when custom arguments are present', () => {
+  it('ignores custom arguments when summarizing the shared mode', () => {
     expect(
       resolveAgentPermissionModeSummary({
         agentDefaultArgs: {
@@ -88,7 +149,7 @@ describe('tui agent permissions', () => {
         },
         agentDefaultEnv: YOLO_TUI_AGENT_ENV
       })
-    ).toBe('mixed')
+    ).toBe('yolo')
   })
 
   it('resolves one Codex yolo launch as yolo', () => {

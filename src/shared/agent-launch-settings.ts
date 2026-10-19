@@ -17,6 +17,7 @@ import {
   YOLO_TUI_AGENT_ENV,
   resolveTuiAgentPermissionMode,
   resolveAgentPermissionModeSummary,
+  resolveNonAutoAgentPermissionMode,
   type AgentPermissionMode
 } from './tui-agent-permissions'
 
@@ -41,12 +42,20 @@ export type AgentLaunchSettings = {
   environmentNames: Partial<Record<TuiAgent, string[]>>
   permissionMode: Exclude<AgentPermissionMode, 'auto'>
   autoPermissionMode?: true
+  /** With Auto on: the combined mode of agents Auto doesn't cover. Absent from older hosts. */
+  nonAutoPermissionMode?: 'manual' | 'yolo' | 'mixed'
 }
 
 export type AgentLaunchSettingsMutation =
   | { type: 'default'; agent: GlobalSettings['defaultTuiAgent']; setupOnly?: boolean }
   | { type: 'availability'; agent: TuiAgent; enabled: boolean }
-  | { type: 'permissions'; mode: Exclude<AgentPermissionMode, 'mixed'>; agent?: TuiAgent }
+  | {
+      type: 'permissions'
+      mode: Exclude<AgentPermissionMode, 'mixed'>
+      agent?: TuiAgent
+      /** Change only agents Auto doesn't cover. Sent only to hosts with the Auto capability. */
+      exceptAuto?: true
+    }
   | { type: 'command'; agent: TuiAgent; value: string }
   | { type: 'arguments'; agent: TuiAgent; value: string }
   | { type: 'environment-set'; agent: TuiAgent; name: string; value: string }
@@ -70,7 +79,12 @@ export function projectAgentLaunchSettings(
     ),
     // Older clients understand Mixed and ignore the optional automatic-mode marker.
     permissionMode: permissionMode === 'auto' ? 'mixed' : permissionMode,
-    ...(permissionMode === 'auto' ? { autoPermissionMode: true } : {})
+    ...(permissionMode === 'auto'
+      ? {
+          autoPermissionMode: true,
+          nonAutoPermissionMode: resolveNonAutoAgentPermissionMode(settings)
+        }
+      : {})
   }
 }
 
@@ -110,6 +124,12 @@ export function agentLaunchSettingsMutationUpdates(
           throw new Error('Edit custom launch arguments before choosing a permission mode')
         }
         return applyAgentPermissionMode({ ...settings, mode: mutation.mode, agent })
+      }
+      if (mutation.exceptAuto) {
+        if (mutation.mode === 'auto') {
+          throw new Error('Auto cannot apply to agents without automatic permission review')
+        }
+        return applyAgentPermissionMode({ ...settings, mode: mutation.mode, exceptAuto: true })
       }
       return applyAgentPermissionMode({ ...settings, mode: mutation.mode })
     }

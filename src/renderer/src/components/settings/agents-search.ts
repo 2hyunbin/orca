@@ -152,7 +152,10 @@ const getAllAgentsPaneSearchEntries = createLocalizedCatalog(() => [
       'auto.components.settings.agents.search.agentPermissions',
       'Agent Permissions'
     ),
-    description: translate('settings.agents.permissionsScope', 'Defaults for new terminals.'),
+    description: translate(
+      'settings.agents.permissionsSearchDescription',
+      'Launch agents with Manual, Auto, or Yolo permissions.'
+    ),
     keywords: [
       ...translateSearchKeyword('auto.components.settings.agents.search.permission', 'permission'),
       ...translateSearchKeyword(
