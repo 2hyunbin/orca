@@ -14028,8 +14028,8 @@
             "deleteReasonNonLocalHost": "只能删除此设备上的会话。",
             "deleteReasonSyntheticPath": "此会话无法在 Orca 中删除。",
             "deleteReasonUnsupportedAgent": "{{value0}} 会话无法在 Orca 中删除。",
-            "resumeInNewNativeChat": "在新的本机聊天中恢复",
-            "resumeInNewCli": "在新的 CLI 中恢复",
+            "resumeInNewNativeChat": "切换到聊天",
+            "resumeInNewCli": "切换到终端",
             "resumeInNewCliTooltipFork": "将此对话派生到新的 CLI 会话中。",
             "resumeInNewCliTooltipChat": "本机聊天保持不变。"
           },
@@ -18785,8 +18785,8 @@
     "tab": {
       "bar": {
         "SortableTabContextMenu": {
-          "switchToTerminalView": "切换到终端视图",
-          "switchToChatView": "切换到聊天视图",
+          "switchToTerminalView": "切换到终端",
+          "switchToChatView": "切换到聊天",
           "closeTabsToLeft": "关闭左侧的所有选项卡"
         },
         "BrowserTab": {

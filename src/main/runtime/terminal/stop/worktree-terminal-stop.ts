@@ -8,6 +8,7 @@ import type {
   RuntimeWorktreeTerminalSleepResult
 } from '../../../../shared/runtime-types'
 import type { WorktreeTerminalStopOptions } from './worktree-terminal-stop-options'
+import type { HostWorktreeTarget } from '../../../../shared/worktree/host-qualified-identity'
 import type { WorktreeTerminalMutationKind } from '../../worktree-terminal-mutation-lock'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 import { cloneWorkspaceSessionState } from '../../../persistence/restoring-sessions/session-owner-fields'
@@ -24,7 +25,8 @@ import { clearClosedWorktreeResumeRecords } from './worktree-sleep-resume-record
 
 export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntimeWithResolveTerminalSplitSourceAuthority {
   protected abstract sleepResolvedWorktreeTerminals(
-    worktree: ResolvedWorktree
+    worktree: ResolvedWorktree,
+    soleLivePtyId?: string
   ): Promise<RuntimeWorktreeTerminalSleepResult>
 
   private collectWorktreePtyIds(
@@ -245,13 +247,19 @@ export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntim
     }
   }
 
+  /** With `soleLivePtyId`, stops nothing unless that PTY is the worktree's only live terminal. */
   async sleepTerminalsForWorktree(
-    worktreeSelector: string
+    worktreeSelector: string,
+    options: { soleLivePtyId?: string } = {}
   ): Promise<RuntimeWorktreeTerminalSleepResult> {
     const worktree = await this.resolveWorktreeSelector(worktreeSelector)
     const existing = this.terminalSleepByWorktreeId.get(worktree.id)
     if (existing) {
       return await existing
+    }
+    if (options.soleLivePtyId) {
+      // Why not shared: a full sleep joining this one would get back a sleep that stopped nothing.
+      return await this.sleepResolvedWorktreeTerminals(worktree, options.soleLivePtyId)
     }
 
     const sleeping = this.sleepResolvedWorktreeTerminals(worktree)
@@ -265,13 +273,15 @@ export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntim
     }
   }
 
+  /** `target` is the spawn's own workspace copy: the host whose provider runs it. */
   async acquireWorktreeTerminalSpawn(
-    worktreeId?: string,
+    target: HostWorktreeTarget | undefined,
     opts: { refuseSleptWorktree?: boolean } = {}
   ): Promise<() => void> {
-    if (!worktreeId) {
+    if (!target) {
       return () => {}
     }
+    const worktreeId = target.id
     const release = await this.acquireWorktreeTerminalMutation(worktreeId, 'shared')
     const key = worktreeIdentityKey(worktreeId)
     const sleepState = this.terminalSleepStateByWorktreeId.get(key)

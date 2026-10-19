@@ -14028,8 +14028,8 @@
             "deleteReasonNonLocalHost": "このデバイス上のセッションのみ削除できます。",
             "deleteReasonSyntheticPath": "このセッションは Orca では削除できません。",
             "deleteReasonUnsupportedAgent": "{{value0}} のセッションは Orca では削除できません。",
-            "resumeInNewNativeChat": "新規ネイティブチャットで再開",
-            "resumeInNewCli": "新規 CLI で再開",
+            "resumeInNewNativeChat": "チャットに切り替える",
+            "resumeInNewCli": "ターミナルに切り替える",
             "resumeInNewCliTooltipFork": "この会話を新しい CLI セッションにフォークします。",
             "resumeInNewCliTooltipChat": "ネイティブチャットはそのまま残ります。"
           },
@@ -18820,8 +18820,8 @@
     "tab": {
       "bar": {
         "SortableTabContextMenu": {
-          "switchToTerminalView": "ターミナルビューに切り替える",
-          "switchToChatView": "チャットビューに切り替える",
+          "switchToTerminalView": "ターミナルに切り替える",
+          "switchToChatView": "チャットに切り替える",
           "closeTabsToLeft": "左側のすべてのタブを閉じる"
         },
         "BrowserTab": {

@@ -380,7 +380,9 @@ describe('client accept abandoned mid-DB-phase', () => {
     await h.registry.acceptClient(client as unknown as WebSocket, identity.relayHostId, 'credential')
     now += RELAY_PROTOCOL_LIMITS.hostAttachDeadlineMs
     vi.advanceTimersByTime(RELAY_PROTOCOL_LIMITS.hostAttachDeadlineMs)
-    expect(client.close).toHaveBeenCalledWith(RELAY_CLOSE_CODE.HOST_OFFLINE, expect.any(String))
+    // The phone-only reason; relay-hello itself is unchanged for strict old parsers.
+    expect(client.close).toHaveBeenCalledWith(RELAY_CLOSE_CODE.HOST_OFFLINE, 'attach-timeout')
+    expect(client.send).toHaveBeenCalledWith(JSON.stringify({ type: 'relay-hello', ok: false, code: 4404 }))
     expect(h.observer.recordPhoneAttachDeadline).toHaveBeenCalledOnce()
     expect(h.observer.recordPhoneRejection).toHaveBeenCalledWith(RELAY_CLOSE_CODE.HOST_OFFLINE)
     const lines = warn.mock.calls

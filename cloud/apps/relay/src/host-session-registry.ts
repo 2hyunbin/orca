@@ -18,10 +18,12 @@ import {
   RELAY_HOST_CAPABILITY_IDLE_REGIONAL_REHOME,
   RELAY_PROTOCOL_LIMITS,
   RELAY_CLOSE_CODE,
+  RELAY_PHONE_CLOSE_REASON,
   type IdleRegionalRehomeCommit,
   type IdleRegionalRehomeDeferReason,
   type IdleRegionalRehomeResult,
   type RelayHostCloseReason,
+  type RelayPhoneCloseReason,
   type RelayRegion
 } from '@orca-cloud/relay-contract'
 import nacl from 'tweetnacl'
@@ -981,7 +983,12 @@ export class HostSessionRegistry {
       this.failReservationBestEffort(reservation)
       if (credentialActivityId) this.releaseActivityBestEffort(identity, credentialActivityId)
       this.recordAttachDeadline(session, reservation)
-      this.rejectClient(socket, RELAY_CLOSE_CODE.HOST_OFFLINE)
+      // OTA phones redial this cell once, quickly: the control is still seated here.
+      this.rejectClient(
+        socket,
+        RELAY_CLOSE_CODE.HOST_OFFLINE,
+        RELAY_PHONE_CLOSE_REASON.HOST_ATTACH_TIMEOUT
+      )
     }, RELAY_PROTOCOL_LIMITS.hostAttachDeadlineMs)
     const pending: PendingConnection = {
       connId,
@@ -2559,17 +2566,17 @@ export class HostSessionRegistry {
     if (session.socket) send(session.socket, 'control-error', { ...(reqId ? { reqId } : {}), code })
   }
 
-  // hostCloseReason rides the WebSocket close reason, never relay-hello: every
-  // shipped phone parses relay-hello with a strict schema that rejects an
-  // unknown key, and none of them read the close reason at all.
+  // closeReason rides the WebSocket close reason, never relay-hello: every shipped
+  // phone parses relay-hello with a strict schema that rejects an unknown key, and
+  // ignores a close reason it does not know.
   private rejectClient(
     socket: WebSocket,
     code: number,
-    hostCloseReason?: RelayHostCloseReason | null
+    closeReason?: RelayHostCloseReason | RelayPhoneCloseReason | null
   ): void {
     this.observer.recordPhoneRejection?.(code)
     send(socket, 'relay-hello', { ok: false, code })
-    closeRelayWebSocket(socket, code, hostCloseReason ?? 'relay connection rejected')
+    closeRelayWebSocket(socket, code, closeReason ?? 'relay connection rejected')
   }
 
   private releaseControlActivity(session: HostSession): void {

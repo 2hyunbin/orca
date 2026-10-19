@@ -32,13 +32,30 @@ export const NOT_HOST_TWINNED_PARAMS = new Map([
   ['SshProfileOperations.oldTargetId', 'the id names the host itself']
 ])
 
+// The store keeps one row per id: minted UUIDs, de-duplicated on load, and a conflicting
+// migration import is refused (orcad-catalog-row-identity.ts `selectNewRows`).
+const UNIQUE_GROUP_ID = 'group ids are minted UUIDs, one row per id in the store'
+const UNIQUE_FOLDER_ID = 'folder workspace ids are minted UUIDs, one row per id in the store'
+
 /** Matches exempt by method, with the reason. Keep each reason true. */
 export const NOT_HOST_TWINNED = new Map([
   ['AutomationPersistence.advanceAutomationNextRun', 'automation ids are minted UUIDs'],
   ['AutomationPersistence.deleteAutomation', 'automation ids are minted UUIDs'],
   ['AutomationPersistence.updateAutomation', 'automation ids are minted UUIDs'],
+  [
+    'MetadataLineageOperations.removeUnhostedWorktreeMeta',
+    'acts only on a row no host stamped; it refuses a stamped one'
+  ],
+  [
+    'OrcadMigrationBlobInstallPersistence.installDeferredOrcadMigrationShellHistory',
+    'a retry trigger: the id only gates a store-wide reinstall; nothing is written under it'
+  ],
   ['ProfilePreferences.recordFeatureInteraction', 'a feature id, not a row'],
+  ['ProjectCollectionOperations.deleteProjectGroup', UNIQUE_GROUP_ID],
+  ['ProjectCollectionOperations.removeFolderWorkspace', UNIQUE_FOLDER_ID],
+  ['ProjectCollectionOperations.updateFolderWorkspace', UNIQUE_FOLDER_ID],
   ['ProjectCollectionOperations.updateProject', 'one Project row spans every host'],
+  ['ProjectCollectionOperations.updateProjectGroup', UNIQUE_GROUP_ID],
   [
     'RepoLifecycleOperations.reorderRepos',
     'a whole-catalog permutation: a duplicated id fails its check, so it refuses instead of guessing'
