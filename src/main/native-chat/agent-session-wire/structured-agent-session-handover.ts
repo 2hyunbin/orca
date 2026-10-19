@@ -114,8 +114,10 @@ export async function beginSubmissionHandover(
     dispatch: async () => {
       let outcome: AgentSessionDispatchOutcome | null
       try {
+        // Aborted before the call, Orca still held it: a queued card waits again. Only a card carries
+        // the proof; on a direct send it would owe the message as stopped history.
         outcome = attempt?.signal.aborted
-          ? cancelledDispatch()
+          ? cancelledDispatch(submission.queuedMessageId !== undefined)
           : // A child gone since the row: its end settles the row, and nothing reaches the wire.
             stillCurrent()
             ? await dispatchSafely(
@@ -203,7 +205,8 @@ async function dispatchSafely(
       fence: ctx.fence,
       requestedAt
     })
-    return signal?.aborted && outcome.state === 'rejected' ? cancelledDispatch() : outcome
+    // An adapter's own refusal says the write never happened, aborted or not.
+    return outcome
   } catch (error) {
     if (signal?.aborted && error === abortSignalReason(signal)) {
       return cancelledDispatch()
@@ -221,9 +224,12 @@ async function dispatchSafely(
   }
 }
 
-function cancelledDispatch(): AgentSessionDispatchOutcome {
+function cancelledDispatch(neverReachedAgent = false): AgentSessionDispatchOutcome {
   return {
     state: 'rejected',
-    ...agentSessionFailureWords(agentSessionFailureFact('cancelled'), { surface: 'rejection' })
+    ...agentSessionFailureWords(
+      agentSessionFailureFact('cancelled', neverReachedAgent ? { neverReachedAgent } : {}),
+      { surface: 'rejection' }
+    )
   }
 }

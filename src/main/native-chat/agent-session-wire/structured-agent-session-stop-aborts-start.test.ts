@@ -129,3 +129,33 @@ it('answers that it stopped the queued message even when its write throws after 
   expect(await stopping).toMatchObject({ ok: true, value: { cancelled: true } })
   expect(await rig.submission(first.id)).toMatchObject({ rejection: { kind: 'cancelled' } })
 })
+
+// A Stop between the hand-off's row and the agent call: Orca still held the card, so it waits again.
+it('returns a queued card to waiting when the Stop lands before Orca hands it to the agent', async () => {
+  rig = await createQueuedMessageTestRig({ restartable: true })
+  const working = await rig.workingSend()
+  const queued = await rig.send('queued behind the turn', 'queue-if-active').result
+  if (!queued.ok || !('queued' in queued.value)) {
+    throw new Error('expected a queued receipt')
+  }
+  const card = queued.value.queued.messageId
+  const journal = rig.host.collaboratorsForTests().sessions.get(SESSION)!.journal
+  const resolve = journal.resolveDispatch.bind(journal)
+  let stopping: ReturnType<QueuedMessageTestRig['stop']> | undefined
+  vi.spyOn(journal, 'resolveDispatch').mockImplementation(async (input) => {
+    const written = await resolve(input)
+    if (input.state === 'pending' && input.clientMessageId !== working && !stopping) {
+      stopping = rig.stop()
+    }
+    return written
+  })
+  await rig.settleAccepted(working, 'working')
+
+  await eventually(() => expect(stopping).toBeDefined())
+  expect(await stopping).toMatchObject({ ok: true })
+  await eventually(async () =>
+    expect(await rig.drafts()).toEqual([{ messageId: card, state: 'waiting' }])
+  )
+  expect(await rig.queuePause()).toEqual({ reason: 'stopped' })
+  expect(rig.dispatch).toHaveBeenCalledTimes(1)
+})
