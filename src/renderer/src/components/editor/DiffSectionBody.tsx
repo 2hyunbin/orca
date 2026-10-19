@@ -23,6 +23,7 @@ import {
   PLUGIN_SYNTAX_EDITOR_OPTIONS,
   applyModelLanguage
 } from '@/lib/monaco-languages/plugin-syntax-editor-options'
+import { useMonacoTheme } from '@/hooks/use-monaco-theme'
 
 const ImageDiffViewer = lazy(() => import('./ImageDiffViewer'))
 
@@ -68,6 +69,7 @@ export function DiffSectionBody({
   onMount
 }: DiffSectionBodyProps): React.JSX.Element {
   const language = usePluginSyntaxLanguage(section.path, coreLanguage)
+  const monacoTheme = useMonacoTheme(isDark)
   const renderLimit = section.largeDiffRenderLimit?.limited ? section.largeDiffRenderLimit : null
   const diffEditorRef = useRef<editor.IStandaloneDiffEditor | null>(null)
   const wordWrapOptionsSubRef = useRef<{ dispose: () => void } | null>(null)
@@ -218,7 +220,7 @@ export function DiffSectionBody({
           language={language}
           original={section.originalContent}
           modified={section.modifiedContent}
-          theme={isDark ? 'vs-dark' : 'vs'}
+          theme={monacoTheme}
           onMount={handleEditorMount}
           // The React wrapper may dispose models before widgets; retain them through teardown and dispose unattached models next tick.
           originalModelPath={`${modelPathBase}:original`}

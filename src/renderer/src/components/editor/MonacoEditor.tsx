@@ -21,7 +21,6 @@ import { useMonacoContentSyncBridge } from './use-monaco-content-sync-bridge'
 import { useMonacoMarkdownAnnotations } from './use-monaco-markdown-annotations'
 import { useMonacoEditorDecorations } from './use-monaco-editor-decorations'
 import { useMonacoEditorMount } from './use-monaco-editor-mount'
-import { useDocumentDarkTheme } from '@/hooks/use-document-dark-theme'
 import { snapshotMonacoViewState } from './monaco-view-state-persistence'
 import { MonacoMarkdownAnnotationOverlay } from './MonacoMarkdownAnnotationOverlay'
 import { usePluginSyntaxLanguage } from './use-plugin-syntax-language'
@@ -29,6 +28,7 @@ import {
   PLUGIN_SYNTAX_EDITOR_OPTIONS,
   applyModelLanguage
 } from '@/lib/monaco-languages/plugin-syntax-editor-options'
+import { useMonacoTheme } from '@/hooks/use-monaco-theme'
 import { useEditorModelRekeyCarry } from './editor-model-rekey-carry'
 
 type MonacoEditorProps = {
@@ -140,7 +140,7 @@ export default function MonacoEditor({
   const [gutterMenuOpen, setGutterMenuOpen] = useState(false)
   const [gutterMenuPoint, setGutterMenuPoint] = useState({ x: 0, y: 0 })
   const [gutterMenuLine, setGutterMenuLine] = useState(1)
-  const isDark = useDocumentDarkTheme()
+  const monacoTheme = useMonacoTheme()
 
   const { queueReveal, cancelScheduledReveal, clearTransientRevealHighlight } =
     useMonacoRevealScheduler()
@@ -283,7 +283,7 @@ export default function MonacoEditor({
         language={language}
         // Use defaultValue because Orca owns later content sync; controlled values would duplicate setValue.
         defaultValue={content}
-        theme={isDark ? 'vs-dark' : 'vs'}
+        theme={monacoTheme}
         onChange={contentSync.handleChange}
         onMount={handleMount}
         options={{
