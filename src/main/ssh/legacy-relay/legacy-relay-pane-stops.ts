@@ -73,8 +73,10 @@ export class LegacyRelayPaneStops {
     if (!this.record(ptyId, incarnationId)) {
       // Unfenced: only this connection can prove the process, and a restart would forget the close,
       // so it gets one try now and the lease ends as any closed tab's does.
-      const sent = bridge && state === 'live' ? await this.send(ptyId, bridge) : false
-      this.abandon(ptyId, bridge, sent)
+      const attempted = Boolean(bridge) && state === 'live'
+      const sent = bridge && attempted ? await this.send(ptyId, bridge) : false
+      // A failed reply may still have stopped it, so its exit report gets the same chance.
+      this.abandon(ptyId, bridge, attempted)
       return sent ? { status: 'requested' } : { status: 'unverifiable' }
     }
     if (!bridge || state !== 'live') {
@@ -187,15 +189,15 @@ export class LegacyRelayPaneStops {
    * The stop can't be proven to reach the tab's process, so it is never sent. The lease ends as any
    * closed tab's does, so a process that took the id is never served under the closed tab.
    */
-  private abandon(ptyId: string, bridge: StopTarget | null, sent = false): void {
+  private abandon(ptyId: string, bridge: StopTarget | null, attempted = false): void {
     this.closing.delete(ptyId)
     const relayPtyId = parseAppSshPtyId(ptyId)?.relayPtyId
     if (relayPtyId) {
       this.host()?.retireLease(this.targetId, relayPtyId)
     }
-    // The next listing drops the pane it still holds for that lease; after a sent stop, only once
-    // the relay's exit report had its chance, since dropping the pane first would hide it.
-    const relist = sent ? this.exits.wait(ptyId, UNFENCED_EXIT_WAIT_MS) : Promise.resolve()
+    // The next listing drops the pane it still holds for that lease; after an attempted stop, only
+    // once the relay's exit report had its chance, since dropping the pane first would hide it.
+    const relist = attempted ? this.exits.wait(ptyId, UNFENCED_EXIT_WAIT_MS) : Promise.resolve()
     void relist.then(() => bridge?.refresh())
   }
 
