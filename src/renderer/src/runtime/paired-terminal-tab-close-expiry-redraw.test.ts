@@ -72,6 +72,22 @@ describe('an expired held paired-host close', () => {
     expect(shouldApplyWebSessionTabsSnapshot(SNAPSHOT, ENV)).toBe(true)
   })
 
+  it('redraws another worktree whose expired close the same drop pruned', () => {
+    const otherWorktree = 'repo::/other'
+    const otherSnapshot = { ...SNAPSHOT, worktree: otherWorktree }
+    holdWebSessionCloseForReplay(STORE, OWNER, WT, [HOST_TAB])
+    holdWebSessionCloseForReplay(STORE, OWNER, otherWorktree, [HOST_TAB])
+    expect(shouldApplyWebSessionTabsSnapshot(SNAPSHOT, ENV)).toBe(true)
+    expect(shouldApplyWebSessionTabsSnapshot(otherSnapshot, ENV)).toBe(true)
+
+    vi.setSystemTime(NOW + PAIRED_TERMINAL_TAB_CLOSE_INTENT_MAX_AGE_MS + 1)
+    recordReceivedWebSessionTabsSnapshot(ENV, SNAPSHOT)
+
+    expect(useAppStore.getState().pairedTerminalTabCloseIntentsByEnvironment[ENV]).toBeUndefined()
+    expect(isWebSessionCloseIntentPending(OWNER, otherWorktree, HOST_TAB, Date.now())).toBe(false)
+    expect(shouldApplyWebSessionTabsSnapshot(otherSnapshot, ENV)).toBe(true)
+  })
+
   it('still refuses an unchanged snapshot when nothing was un-hidden', () => {
     expect(shouldApplyWebSessionTabsSnapshot(SNAPSHOT, ENV)).toBe(true)
     recordReceivedWebSessionTabsSnapshot(ENV, SNAPSHOT)
