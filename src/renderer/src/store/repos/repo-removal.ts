@@ -1,4 +1,3 @@
-import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import type { StateCreator } from 'zustand'
 import { toast } from 'sonner'
 import type { AppState } from '../types'
@@ -200,17 +199,8 @@ export function createRepoRemovalActions(
                   .flatMap((worktree) => (worktree.projectId ? [worktree.projectId] : []))
               ]
             : []
-        for (const wId of exclusiveWorktreeIds) {
-          const tabs = get().tabsByWorktree[wId] ?? []
-          for (const tab of tabs) {
-            for (const ptyId of get().ptyIdsByTabId[tab.id] ?? []) {
-              if (!isRemoteRuntimePtyId(ptyId)) {
-                window.api.pty.kill(ptyId)
-              }
-            }
-          }
-        }
-
+        // No PTY kills here: the removal above ran on the host, which stopped the project's terminals,
+        // chats and browser pages from its own tables, including ones this window never listed.
         // Why: use the canonical per-worktree purge to evict all worktree-scoped maps (hand-deletion leaked most); runs before the set() below so it still sees tabsByWorktree.
         closeRemovedHostTwinState(get, set, twins, preCallTwins)
         get().purgeWorktreeTerminalState(exclusiveWorktreeIds)
