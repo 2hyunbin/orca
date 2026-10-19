@@ -32,9 +32,12 @@ export function startTerminalTabProviderRetirement({
     ? []
     : retirementPlan.localOrSshPtyIds.map(async (ptyId) => window.api.pty.kill(ptyId))
   const localOrSshTaskCount = retirementTasks.length
+  let unroutableRuntimeTerminalCount = 0
   if (!remoteCloseOwnedByHost) {
     for (const terminal of retirementPlan.runtimeTerminals) {
+      // Why: an unscoped `remote:` id with a refused owner must never be closed on this app.
       if (!terminal.environmentId && !fallbackWorktreeRoute) {
+        unroutableRuntimeTerminalCount += 1
         continue
       }
       const environmentId = terminal.environmentId ?? fallbackWorktreeRoute?.runtimeEnvironmentId
@@ -43,12 +46,13 @@ export function startTerminalTabProviderRetirement({
       )
     }
   }
-  if (retirementPlan.unroutablePtyIds.length > 0) {
+  const unroutableCount = retirementPlan.unroutablePtyIds.length + unroutableRuntimeTerminalCount
+  if (unroutableCount > 0) {
     // Log the worktree shape, never its id, because worktree ids embed absolute paths.
     console.warn('[terminal-retirement] skipped PTYs with no resolvable owner', {
       tabId,
       worktreeKind: classifyTerminalRetirementWorktree(retirementPlan.worktreeId),
-      count: retirementPlan.unroutablePtyIds.length
+      count: unroutableCount
     })
   }
   // Close remains synchronous; provider failures cannot block ownership revocation.

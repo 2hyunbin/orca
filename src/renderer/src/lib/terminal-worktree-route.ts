@@ -4,10 +4,19 @@ import { parseExecutionHostId } from '../../../shared/execution-host'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import type { AppState } from '@/store/types'
 import { resolveOwnerWithLegacyFallback } from './worktree-runtime-owner'
-import { runtimeEnvironmentIdUnlessTwin } from './resolve-owner'
+import { namedHostForOwnerRef, runtimeEnvironmentIdUnlessTwin } from './resolve-owner'
 import type { WorktreeRuntimeOwnerState } from './worktree-runtime-owner-state'
-import { resolveWorktreeOperationRouteResult } from './worktree-operation-route'
+import {
+  resolveStrictWorktreeOperationRouteResultForHost,
+  resolveWorktreeOperationRouteResult,
+  type WorktreeOperationRouteResolution
+} from './worktree-operation-route'
 import { getSingleFocusedRuntimeEnvironmentId } from './single-runtime-legacy-owner'
+import {
+  hasIndexedDetectedWorktree,
+  resolveIndexedRepoOwner,
+  resolveIndexedWorktreeOwner
+} from './worktree-runtime-owner-index'
 
 export type TerminalWorktreeRoute = {
   runtimeEnvironmentId: string | null
@@ -86,7 +95,7 @@ export function resolveTerminalHostOwnership(
       getSingleFocusedRuntimeEnvironmentId(state)
     )
   }
-  const resolution = resolveWorktreeOperationRouteResult(state, worktreeId)
+  const resolution = resolveGitWorktreeRoute(state, worktreeId)
   if (resolution.kind === 'resolved') {
     if (resolution.route.runtimeEnvironmentId) {
       // Why: a real worktree row keeps its runtime owner on teardown. Unlike the host-agnostic
@@ -110,6 +119,75 @@ export function resolveTerminalHostOwnership(
     return ownershipForRuntimeEnvironmentId(getSingleFocusedRuntimeEnvironmentId(state))
   }
   return UNRESOLVED_TERMINAL_HOST
+}
+
+/** A named host takes the strict route, so rival servers for one `ssh:` target never read as direct. */
+function resolveGitWorktreeRoute(
+  state: WorktreeRuntimeOwnerState,
+  worktreeId: string
+): WorktreeOperationRouteResolution {
+  const hostId = namedHostForOwnerRef(state, { workspaceId: worktreeId })
+  return hostId
+    ? resolveStrictWorktreeOperationRouteResultForHost(state, worktreeId, hostId)
+    : resolveWorktreeOperationRouteResult(state, worktreeId)
+}
+
+export type TerminalPtyOwner =
+  | { kind: 'runtime'; environmentId: string }
+  | { kind: 'non-runtime' }
+  | { kind: 'ambiguous' }
+
+const NON_RUNTIME_PTY_OWNER: TerminalPtyOwner = { kind: 'non-runtime' }
+const AMBIGUOUS_PTY_OWNER: TerminalPtyOwner = { kind: 'ambiguous' }
+
+/**
+ * Where spawn started a worktree's PTYs, for teardown, close and PTY identity. A contested or
+ * unattributed-twin owner is `ambiguous`; an id no row places stays this app's, as it always has.
+ */
+export function resolveTerminalPtyOwner(
+  state: WorktreeRuntimeOwnerState,
+  worktreeId: string | null | undefined
+): TerminalPtyOwner {
+  // Why: setup terminals' raw ids have always been killed locally; their runtime PTYs are scoped.
+  if (!worktreeId || isEphemeralSetupTerminalWorktreeId(worktreeId)) {
+    return NON_RUNTIME_PTY_OWNER
+  }
+  if (
+    !namedHostForOwnerRef(state, { workspaceId: worktreeId }) &&
+    isUnattributedTwinWorktree(state, worktreeId)
+  ) {
+    return AMBIGUOUS_PTY_OWNER
+  }
+  const ownership = resolveTerminalHostOwnership(state, worktreeId, 'spawn')
+  switch (ownership.kind) {
+    case 'runtime':
+      return { kind: 'runtime', environmentId: ownership.runtimeEnvironmentId }
+    case 'local-or-ssh':
+      return NON_RUNTIME_PTY_OWNER
+    case 'unresolved':
+      return parseWorkspaceKey(worktreeId)?.type !== 'folder' &&
+        resolveGitWorktreeRoute(state, worktreeId).kind === 'missing'
+        ? NON_RUNTIME_PTY_OWNER
+        : AMBIGUOUS_PTY_OWNER
+  }
+}
+
+/**
+ * An unstamped worktree row with no detected copy, in a project two hosts publish: no row says
+ * which host started its PTYs, so only each PTY's own `remote:<env>` id may.
+ */
+export function isUnattributedTwinWorktree(
+  state: WorktreeRuntimeOwnerState,
+  worktreeId: string
+): boolean {
+  const worktree = resolveIndexedWorktreeOwner(state.worktreesByRepo, worktreeId)
+  return (
+    worktree.kind === 'resolved' &&
+    !worktree.owner.runtimeOwnerEnvironmentId?.trim() &&
+    !parseExecutionHostId(worktree.owner.hostId) &&
+    !hasIndexedDetectedWorktree(state.detectedWorktreesByRepo, worktreeId) &&
+    resolveIndexedRepoOwner(state.repos, worktree.owner.repoId).kind === 'ambiguous'
+  )
 }
 
 /**
