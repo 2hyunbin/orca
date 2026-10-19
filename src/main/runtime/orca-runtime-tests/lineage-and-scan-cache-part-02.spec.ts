@@ -560,6 +560,7 @@ describe('OrcaRuntimeService', () => {
         createdAt: 1
       }
     }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a partial store mock; the code under test reads only the members it defines.
     const runtime = new OrcaRuntimeService({
       ...store,
       getRepos: () => [folderRepo],

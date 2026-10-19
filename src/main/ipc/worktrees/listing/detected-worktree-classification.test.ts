@@ -80,6 +80,7 @@ function settledMeta(overrides: Partial<WorktreeMeta> = {}): WorktreeMeta {
 
 function createStore(meta: Record<string, WorktreeMeta>, repos: Repo[] = [repo]) {
   const rows = { ...meta }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a partial store mock; the code under test reads only the members it defines.
   return {
     getRepos: () => repos,
     getSettings: () => ({ workspaceDir: '/workspace', nestWorkspaces: true }),

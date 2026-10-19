@@ -21,6 +21,7 @@ import {
   removeWorktreeMetaRow,
   resolveWorktreeMetaOwner
 } from './persistence/host-qualified-worktree-meta'
+import { persistRuntimeManagedWorktreeSortOrder } from './runtime/runtime-managed-worktree-metadata'
 
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
@@ -57,11 +58,11 @@ function lineage(instanceId: string): WorktreeLineage {
   }
 }
 
-function createTwinStore() {
+function createTwinStore(state: Record<string, unknown> = {}) {
   mkdirSync(testState.dir, { recursive: true })
   writeFileSync(
     join(testState.dir, 'orca-data.json'),
-    JSON.stringify({ ...getDefaultPersistedState(testState.dir), repos: twinRepos }),
+    JSON.stringify({ ...getDefaultPersistedState(testState.dir), repos: twinRepos, ...state }),
     'utf-8'
   )
   return createFreshStore()
@@ -132,9 +133,7 @@ describe('worktree meta and lineage writes for same-id twins', () => {
 
     store.migrateWorktreeIdentity(SSH, 'dup::/renamed')
 
-    expect(store.getWorktreeMetaForHost('dup::/renamed', 'ssh:ssh-1')?.displayName).toBe(
-      'ssh copy'
-    )
+    expect(store.getWorktreeMetaForHost('dup::/renamed', 'ssh:ssh-1')?.displayName).toBe('ssh copy')
     expect(store.getWorktreeMeta(WORKTREE_ID)?.displayName).toBe('local copy')
     expect(store.getWorktreeMetaForHost('dup::/renamed', 'local')).toBeUndefined()
   })
@@ -156,6 +155,24 @@ describe('worktree meta and lineage writes for same-id twins', () => {
 
     expect(store.getWorktreeMetaForHost(WORKTREE_ID, 'local')).toBeUndefined()
     expect(store.getWorktreeMetaForHost(WORKTREE_ID, 'ssh:ssh-1')?.displayName).toBe('ssh copy')
+  })
+
+  it('neither saves nor reports a sort order for an unstamped twin row', async () => {
+    const store = await createTwinStore({
+      worktreeMeta: { [WORKTREE_ID]: { displayName: 'legacy', sortOrder: 1 } }
+    })
+    const notifyChanged = vi.fn()
+
+    const result = persistRuntimeManagedWorktreeSortOrder({
+      orderedIds: [WORKTREE_ID],
+      store,
+      invalidateResolved: vi.fn(),
+      notifyChanged
+    })
+
+    expect(result).toEqual({ updated: 0 })
+    expect(notifyChanged).not.toHaveBeenCalled()
+    expect(store.getWorktreeMeta(WORKTREE_ID)?.sortOrder).toBe(1)
   })
 
   it('resolves an id-only caller to the stamp, and refuses an unstamped twin', async () => {

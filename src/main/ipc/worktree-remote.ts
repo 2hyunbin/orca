@@ -81,7 +81,6 @@ import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
 import type { BranchPrefixSettings } from '../../shared/branch-prefix'
 import { parseWorkspaceKey, worktreeWorkspaceKey } from '../../shared/workspace-scope'
 import { sharesWorktreeLineageBoundary } from '../../shared/resolved-worktree-lineage'
-import { readWorktreeMetaForHost } from '../persistence/host-qualified-worktree-meta'
 import {
   cleanupUnusedWorktreePushTargetRemoteWithExec,
   sameGitHubRemoteUrl,
@@ -147,6 +146,7 @@ import { findPendingWorktreeRemovalConflict } from '../worktree-removal-table'
 import { isWslMoveWorktreeBlocked } from '../persistence/moving-wsl-projects/wsl-move-background-backoff'
 import {
   hostWorktreeTargetForRepo,
+  readWorktreeMetaForHost,
   resolveWorktreeMetaOwner,
   worktreeRowTarget
 } from '../persistence/host-qualified-worktree-meta'
@@ -258,6 +258,7 @@ export function recordWorkspaceLineageForCreatedWorktree(
   // Why: only a worktree parent produces sidebar nesting; a folder parent has no WorktreeLineage row.
   let lineage: CreateWorktreeResult['lineage'] = null
   let parentOutsideLineageBoundary = false
+  let lineageOwnedByTwin = false
   if (parentScope.type === 'worktree' && parentWorktreeMeta) {
     if (!parentWorktreeMeta.instanceId) {
       console.warn(
@@ -273,20 +274,22 @@ export function recordWorkspaceLineageForCreatedWorktree(
       lineage =
         (target &&
           store.setWorktreeLineage(target, {
-        worktreeId: worktree.id,
-        worktreeInstanceId: worktree.instanceId,
-        parentWorktreeId: parentScope.worktreeId,
-        parentWorktreeInstanceId: parentWorktreeMeta.instanceId,
-        origin: 'manual',
-        capture: { source: 'manual-action', confidence: 'explicit' },
-        createdAt
-      })) ??
+            worktreeId: worktree.id,
+            worktreeInstanceId: worktree.instanceId,
+            parentWorktreeId: parentScope.worktreeId,
+            parentWorktreeInstanceId: parentWorktreeMeta.instanceId,
+            origin: 'manual',
+            capture: { source: 'manual-action', confidence: 'explicit' },
+            createdAt
+          })) ??
         null
+      lineageOwnedByTwin = lineage === null
     }
   }
 
   // Why: a workspace row for an out-of-boundary worktree parent is a cross-host link that survives restarts.
-  if (parentOutsideLineageBoundary) {
+  // A twin-owned bucket keeps the twin's workspace row too.
+  if (parentOutsideLineageBoundary || lineageOwnedByTwin) {
     return NO_CREATED_WORKTREE_LINEAGE
   }
 
@@ -817,7 +820,10 @@ function persistMaterializedPushTargetIfCreated(
     return
   }
   const owner = resolveWorktreeMetaOwner(
-    { getWorktreeMeta: (id) => store.getAllWorktreeMeta()[id], getRepos: () => store.getRepos?.() ?? [] },
+    {
+      getWorktreeMeta: (id) => store.getAllWorktreeMeta()[id],
+      getRepos: () => store.getRepos?.() ?? []
+    },
     worktreeId
   )
   // Bookkeeping incidental to the push: a project a WSL move is taking skips it, not the push.

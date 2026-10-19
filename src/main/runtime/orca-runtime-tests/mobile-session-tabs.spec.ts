@@ -544,6 +544,7 @@ describe('OrcaRuntimeService', () => {
       ...store,
       getAllWorktreeMeta: () => metaById,
       getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
+      getWorktreeMetaForHost: (worktreeId: string) => metaById[worktreeId],
       setWorktreeMeta
     } as never)
     runtime.setNotifier({
@@ -586,6 +587,7 @@ describe('OrcaRuntimeService', () => {
       ...store,
       getAllWorktreeMeta: () => metaById,
       getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
+      getWorktreeMetaForHost: (worktreeId: string) => metaById[worktreeId],
       getWorkspaceSession: () => ({
         ...getDefaultWorkspaceSession(),
         sleepingAgentSessionsByPaneKey: {

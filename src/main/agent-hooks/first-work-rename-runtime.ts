@@ -98,7 +98,8 @@ export function firstWorkRenameDeps(
           renameWorktreeFolderOnFirstWork(worktreeId, newLeaf, {
             getRepo: (repoId) => store.getRepo(repoId),
             getSettings: () => store.getSettings(),
-            migrateWorktreeIdentity: (target, newId) => store.migrateWorktreeIdentity!(target, newId),
+            migrateWorktreeIdentity: (target, newId) =>
+              store.migrateWorktreeIdentity!(target, newId),
             notifyWorktreeRenamed: (repoId, oldId, newId) =>
               runtime.notifyWorktreeFolderRenamed(repoId, oldId, newId),
             pathExists: async (candidate) => existsSync(candidate),

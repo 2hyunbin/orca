@@ -11,14 +11,7 @@ import { isWslMoveRepoBlocked } from './persistence/moving-wsl-projects/wsl-move
 import { hostWorktreeTarget } from '../shared/worktree/host-qualified-identity'
 
 type WorktreeLineagePruningStore = Pick<Store, 'getRepos' | 'getWorktreeMeta' | 'setWorktreeMeta'> &
-  Partial<
-    Pick<
-      Store,
-      | 'getAllWorktreeLineage'
-      | 'getAllWorkspaceLineage'
-      | 'removeWorktreeLineage'
-    >
-  >
+  Partial<Pick<Store, 'getAllWorktreeLineage' | 'getAllWorkspaceLineage' | 'removeWorktreeLineage'>>
 
 function worktreeIdBelongsToRepo(worktreeId: string, repoPrefix: string): boolean {
   return worktreeId.startsWith(repoPrefix)
@@ -110,7 +103,9 @@ export function pruneLineageForMissingRepoWorktrees(
       !isLive(childScope.worktreeId) &&
       isWorkspaceKey(childWorkspaceKey)
     ) {
-      store.removeWorktreeLineage(hostWorktreeTarget({ id: childScope.worktreeId, hostId: expectedHostId }))
+      store.removeWorktreeLineage(
+        hostWorktreeTarget({ id: childScope.worktreeId, hostId: expectedHostId })
+      )
     }
   }
   for (const [childId, lineage] of Object.entries(worktreeLineage)) {

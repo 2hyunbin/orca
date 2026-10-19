@@ -13,8 +13,11 @@ import {
 } from '../../../shared/worktree/host-qualified-identity'
 import { resolveWorktreeMetaOwner } from '../../persistence/host-qualified-worktree-meta'
 
-type StampedRecord = { lastActivityAt: number; isUnread?: boolean; hostId?: ExecutionHostId } &
-  SmartStampFields
+type StampedRecord = {
+  lastActivityAt: number
+  isUnread?: boolean
+  hostId?: ExecutionHostId
+} & SmartStampFields
 type StampUpdates = {
   lastActivityAt: number
   smartTier: SmartTier | undefined

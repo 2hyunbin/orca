@@ -315,6 +315,7 @@ describe('worktree.ps on a degraded repo scan', () => {
     listWorktreesStrictMock.mockResolvedValue([
       { path: REPO_PATH, head: 'abc', branch: 'main', isBare: false, isMainWorktree: true }
     ])
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a partial store mock; the code under test reads only the members it defines.
     const runtime = new OrcaRuntimeService(makeStore({ removeWorktreeLineage }) as never)
 
     const result = await runtime.getWorktreePs(10_000)
@@ -330,6 +331,7 @@ describe('worktree.ps on a degraded repo scan', () => {
     try {
       const removeWorktreeLineage = vi.fn()
       listWorktreesStrictMock.mockImplementation(neverSettles)
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a partial store mock; the code under test reads only the members it defines.
       const runtime = new OrcaRuntimeService(makeStore({ removeWorktreeLineage }) as never)
 
       await advancePastRepoScanBudget(runtime.getWorktreePs(10_000))

@@ -47,6 +47,7 @@ function createDeps(repos: Repo[]): RepoWorktreeRowDeps & {
   listFolderWorkspaces: ReturnType<typeof vi.fn<RepoWorktreeRowDeps['listFolderWorkspaces']>>
 } {
   const metaById: Record<string, WorktreeMeta> = {}
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a partial store mock; the code under test reads only the members it defines.
   const store = {
     getRepos: () => repos,
     getAllWorktreeMeta: () => metaById,

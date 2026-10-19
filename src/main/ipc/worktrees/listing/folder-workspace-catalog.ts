@@ -7,6 +7,7 @@ import { mergeWorktreeMetaForWrite } from '../../../persistence/loading-store/wo
 import { isWslMoveRepoBlocked } from '../../../persistence/moving-wsl-projects/wsl-move-background-backoff'
 import { getRepoExecutionHostId } from '../../../../shared/execution-host'
 import {
+  hostWorktreeTargetForRepo,
   readAllWorktreeMetaForHost,
   readWorktreeMetaForHost
 } from '../../../persistence/host-qualified-worktree-meta'
@@ -27,7 +28,6 @@ import {
   isFolderWorkspaceIdForRepo,
   mergeFolderWorkspace
 } from '../folder-workspace-model'
-import { hostWorktreeTargetForRepo } from '../../../persistence/host-qualified-worktree-meta'
 
 // A project a WSL move is taking still lists, with its repairs projected in memory only.
 function folderMetaWriter(

@@ -294,7 +294,6 @@ export class MetadataLineageOperations {
     scheduleSave(this[metadataLineageOperationsContext].scheduling)
     return lineage
   }
-
 }
 
 // Raw-id buckets (legacy meta, lineage) belong to the first host that stamped the id (D7).

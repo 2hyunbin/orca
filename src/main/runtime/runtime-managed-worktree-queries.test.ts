@@ -140,6 +140,7 @@ describe('RuntimeManagedWorktreeQueries.listDetected', () => {
 
   it('omits host-owned source defaults for clients that do not support them', async () => {
     const repo = folderRepo({ path: '/source/app' })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a partial store mock; the code under test reads only the members it defines.
     const store = {
       getRepos: () => [repo],
       getRepo: () => repo,

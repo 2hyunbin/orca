@@ -343,11 +343,14 @@ describe('materializeWorktreePushTargetRemote', () => {
     })
     const target = forkTarget()
     const setWorktreeMeta = vi.fn()
-    // The write lands on the row's own host stamp.
+    // The write lands on the id's only repo row.
     const store: WorktreePushTargetStore = {
-      getAllWorktreeMeta: () => ({ 'worktree-1': { hostId: 'local' } }),
+      getAllWorktreeMeta: () => ({}),
+      getRepos: () => [
+        { id: 'worktree-1', path: REPO_PATH, displayName: 'r', badgeColor: '#000', addedAt: 1 }
+      ],
       setWorktreeMeta
-    } as unknown as WorktreePushTargetStore
+    }
 
     const result = await materializeWorktreePushTargetRemote(
       REPO_PATH,

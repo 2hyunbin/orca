@@ -19,7 +19,7 @@ import {
   listWorktreesMock,
   removeWorktreeMock
 } from './worktrees-test-module-mocks'
-import { handlers, setupWorktreeHandlers, store } from './worktrees-test-harness'
+import { handlers, harnessRepo, setupWorktreeHandlers, store } from './worktrees-test-harness'
 import { rememberPreservedBranchCleanupTarget } from './worktrees/removal/preserved-branch-cleanup'
 import * as issueCommandFile from '../issue-command-file'
 import { hostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
@@ -53,7 +53,6 @@ let userDataPath: string
 beforeEach(() => {
   setupWorktreeHandlers()
   // The staying worktree's repo must be registered: an unstamped write resolves its host from it.
-  const [harnessRepo] = store.getRepos() as { id: string }[]
   store.getRepos.mockReturnValue([harnessRepo, { ...harnessRepo, id: 'repo-2' }])
   userDataPath = mkdtempSync(join(tmpdir(), 'wsl-move-worktree-ipc-'))
   loadWslMoveFence(userDataPath)

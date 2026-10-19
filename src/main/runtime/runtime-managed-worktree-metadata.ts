@@ -49,10 +49,6 @@ export async function updateRuntimeManagedWorktreeMetadata(args: {
     : undefined
   let nextParentRepoId: string | undefined
   const executionHostId = worktree.identity?.executionHostId ?? worktree.hostId
-  const target = worktreeRowTarget(args.store, { id: worktree.id, hostId: executionHostId })
-  if (!target) {
-    throw new Error('selector_ambiguous')
-  }
   if (
     isWslMoveSourceHost(executionHostId) &&
     shouldDropWslMoveProjectUpdate(
@@ -62,6 +58,10 @@ export async function updateRuntimeManagedWorktreeMetadata(args: {
     )
   ) {
     return worktree
+  }
+  const target = worktreeRowTarget(args.store, { id: worktree.id, hostId: executionHostId })
+  if (!target) {
+    throw new Error('selector_ambiguous')
   }
   if (lineage?.parentWorktree) {
     args.ports.invalidateResolved()
@@ -114,7 +114,7 @@ export async function updateRuntimeManagedWorktreeMetadata(args: {
     })
     if (!recorded) {
       throw new RuntimeLineageError(
-        'LINEAGE_PARENT_CONTEXT_MISSING',
+        'LINEAGE_PARENT_CONTEXT_CONFLICT',
         'A same-id workspace on another host owns this lineage.'
       )
     }
@@ -158,13 +158,16 @@ export function persistRuntimeManagedWorktreeSortOrder(args: {
     args.orderedIds,
     (worktreeId) => args.store.getWorktreeMeta(worktreeId),
     Date.now()
-  ).filter((update) => !isWslMoveWorkspaceBlocked(args.store, update.worktreeId))
-  for (const update of updates) {
-    const target = resolveWorktreeMetaOwner(args.store, update.worktreeId)
+  ).filter((update) => {
+    const target = isWslMoveWorkspaceBlocked(args.store, update.worktreeId)
+      ? undefined
+      : resolveWorktreeMetaOwner(args.store, update.worktreeId)
+    // Only what was saved is reported and published.
     if (target) {
       args.store.setWorktreeMeta(target, { sortOrder: update.sortOrder })
     }
-  }
+    return target !== undefined
+  })
   if (updates.length === 0) {
     return { updated: 0 }
   }
