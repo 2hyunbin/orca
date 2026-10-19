@@ -100,6 +100,18 @@ function matchRecipes(
   )
 }
 
+/** The rows that open a nested list rather than committing. */
+function buildSubmenuRows(hasRecipes: boolean, hasAddHost: boolean): RunTargetRowModel[] {
+  const rows: RunTargetRowModel[] = []
+  if (hasRecipes) {
+    rows.push({ key: RUN_TARGET_RECIPES_KEY, kind: 'recipes' })
+  }
+  if (hasAddHost) {
+    rows.push({ key: RUN_TARGET_ADD_HOST_KEY, kind: 'add-host' })
+  }
+  return rows
+}
+
 /**
  * Filters hosts and recipes by a typed query. The submenu rows survive filtering
  * only while they still have something to show — "Add host" always survives, so
@@ -120,10 +132,7 @@ export function buildRunTargetRows({
   const matchedRecipes = matchRecipes(recipes, trimmed)
   const rows: RunTargetRowModel[] = [
     ...buildHostRows(hostOptions, trimmed),
-    ...(matchedRecipes.length > 0
-      ? [{ key: RUN_TARGET_RECIPES_KEY, kind: 'recipes' as const }]
-      : []),
-    ...(hasAddHost ? [{ key: RUN_TARGET_ADD_HOST_KEY, kind: 'add-host' as const }] : [])
+    ...buildSubmenuRows(matchedRecipes.length > 0, hasAddHost)
   ]
   return { rows, matchedRecipes }
 }
