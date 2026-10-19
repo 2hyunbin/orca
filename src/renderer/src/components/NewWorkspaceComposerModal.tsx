@@ -172,9 +172,25 @@ function QuickTabBody({
   const [quickAgentOverride, setQuickAgentOverride] = useState<TuiAgent | null | undefined>(
     undefined
   )
-  const offeredAgentIds = useAgentsOfferedForLaunch(
-    composerLaunchWorkspace(cardProps),
-    cardProps.detectedAgentIds
+  const launchWorkspace = useMemo(
+    () =>
+      composerLaunchWorkspace({
+        repoId: cardProps.repoId,
+        selectedRepoIsGit: cardProps.selectedRepoIsGit,
+        selectedRepoExecutionHostId: cardProps.selectedRepoExecutionHostId
+      }),
+    [cardProps.repoId, cardProps.selectedRepoIsGit, cardProps.selectedRepoExecutionHostId]
+  )
+  const offeredAgentIds = useAgentsOfferedForLaunch(launchWorkspace, cardProps.detectedAgentIds)
+  const choicePending = useCallback(
+    (agent: TuiAgent) =>
+      agentChoicePending(
+        useAppStore.getState(),
+        agent,
+        launchWorkspace,
+        cardProps.detectedAgentIds ? [...cardProps.detectedAgentIds] : null
+      ),
+    [cardProps.detectedAgentIds, launchWorkspace]
   )
   const preferredQuickAgent = useMemo<TuiAgent | null>(() => {
     const pref = settings?.defaultTuiAgent
@@ -185,16 +201,11 @@ function QuickTabBody({
       cardProps.detectedAgentIds,
       settings?.disabledTuiAgents,
       offeredAgentIds,
-      (agent) =>
-        agentChoicePending(
-          useAppStore.getState(),
-          agent,
-          composerLaunchWorkspace(cardProps),
-          cardProps.detectedAgentIds ? [...cardProps.detectedAgentIds] : null
-        )
+      choicePending
     )
   }, [
     cardProps.detectedAgentIds,
+    choicePending,
     offeredAgentIds,
     settings?.defaultTuiAgent,
     settings?.disabledTuiAgents
@@ -205,15 +216,7 @@ function QuickTabBody({
     preferredQuickAgent,
     detectedAgentIds: cardProps.detectedAgentIds,
     offeredAgentIds,
-    selectedChoiceUnresolved: Boolean(
-      quickAgentOverride &&
-      agentChoicePending(
-        useAppStore.getState(),
-        quickAgentOverride,
-        composerLaunchWorkspace(cardProps),
-        cardProps.detectedAgentIds ? [...cardProps.detectedAgentIds] : null
-      )
-    ),
+    selectedChoiceUnresolved: Boolean(quickAgentOverride && choicePending(quickAgentOverride)),
     disabledTuiAgents: settings?.disabledTuiAgents
   })
   if (resolvedQuickAgentSelection.quickAgentOverride !== quickAgentOverride) {
