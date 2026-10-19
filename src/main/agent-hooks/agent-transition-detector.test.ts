@@ -154,10 +154,13 @@ describe('AgentTransitionDetector', () => {
     detector.subscribe((change) => received.push(change))
     const server = new AgentHookServer()
     detector.attach(server)
-    ingest(server, { state: 'working' })
-    expect(received).toHaveLength(1)
-    expect(error).toHaveBeenCalledTimes(1)
-    error.mockRestore()
+    try {
+      ingest(server, { state: 'working' })
+      expect(received).toHaveLength(1)
+      expect(error).toHaveBeenCalledTimes(1)
+    } finally {
+      error.mockRestore()
+    }
   })
 
   it('stops observing once detached', () => {

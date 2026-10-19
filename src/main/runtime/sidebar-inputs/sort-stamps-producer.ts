@@ -63,8 +63,9 @@ function sameWorkspace(a: WorkspaceRef | undefined, b: WorkspaceRef | null): boo
 /**
  * Writes the sort stamps of every workspace this host owns, at the source: the transition
  * detector's hook panes (terminal agents and structured chats), hookless agents' titles, bells,
- * and terminals a CLI starts. Creation stamps itself where the record is made. Rest panes are not kept. The same news
- * raises the workspace's unread flag unless a client is looking at it; clients clear it.
+ * and terminals a CLI starts. Creation stamps itself where the record is made. Rest panes are not
+ * kept. The same news raises the workspace's unread flag unless a client is looking at it; clients
+ * clear it.
  */
 export class SortStampsProducer {
   private readonly panes = new Map<string, TrackedPane>()
