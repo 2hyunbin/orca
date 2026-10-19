@@ -146,7 +146,7 @@ export function assertPhonePathNeedsReserve(flags, changes) {
     if (changes.admitMode === 'reserve' && !('phonePath' in changes)) {
       throw new Error(
         'the object still says phonePath=memory: name phonePath in the same write ' +
-          '(e.g. --set admitMode=reserve,phonePath=db), so a reserve flip never turns phones over unnamed'
+          '(e.g. --set admitMode=reserve,phonePath=default), so a reserve flip never turns phones over unnamed'
       )
     }
     return
@@ -172,7 +172,8 @@ export function parseFlagChanges(text) {
     }
     const value = spec.parse(raw)
     if (value === undefined) throw new Error(`switch ${key} cannot be ${JSON.stringify(raw)}`)
-    changes[key] = value
+    // phonePath=db is the default, stored as no key: an image without the switch refuses the key.
+    changes[key] = key === 'phonePath' && value === 'db' ? null : value
   }
   if (Object.keys(changes).length === 0) throw new Error('set names no switch to change')
   return changes
