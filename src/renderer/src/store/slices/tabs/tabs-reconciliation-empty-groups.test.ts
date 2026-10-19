@@ -3,6 +3,9 @@ import { createTestStore, makeTab } from '../store-test-helpers'
 import { createTabsSliceMockApi } from '../tabs-slice-test-harness'
 import { captureEditorOpenLinkIntent } from '../editor/tabs/editor-open-target-group'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
 
 createTabsSliceMockApi()

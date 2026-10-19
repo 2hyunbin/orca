@@ -8,6 +8,9 @@ import { fixture } from './profile-state-delayed-authority-fixture'
 import type * as AgreementModule from '../terminal-topology/terminal-pane-placement-agreement'
 import type { PersistPtyBindingArgs } from './pty-binding-persistence'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 const agreementCheck = vi.hoisted(() => ({ throws: false }))
 vi.mock('../terminal-topology/terminal-pane-placement-agreement', async (importOriginal) => {
   const actual = await importOriginal<typeof AgreementModule>()

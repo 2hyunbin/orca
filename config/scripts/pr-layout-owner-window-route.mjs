@@ -1,13 +1,13 @@
-// Paths whose change runs the advisory `layout_owner_switch_on` job in pr.yml.
+// Paths whose change runs the advisory `layout_owner_window` job in pr.yml: the rollback build.
 import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 import { MANAGED_SSH_E2E_SPEC_PREFIX } from './ci-e2e-job-selection.mjs'
 import { LAYOUT_ORACLE_E2E_SPECS } from './pr-layout-oracle-route.mjs'
 
-/** The oracle, its positive control, and the layout-owner acceptance specs. */
-export const LAYOUT_OWNER_SWITCH_ON_E2E_SPECS = [
+/** The oracle and the layout-owner acceptance specs; those for main's layout alone skip here. */
+export const LAYOUT_OWNER_WINDOW_E2E_SPECS = [
   ...LAYOUT_ORACLE_E2E_SPECS,
-  // Positive control: its direct store write must leave at least one divergence report.
+  // Positive control for a save-divergence run (layout_owner: main): its direct store write reports.
   'tests/e2e/cli-file-open-position.spec.ts',
   'tests/e2e/relaunch-first-terminal.spec.ts',
   'tests/e2e/relaunch-sleeping-agents-resume-on-view.spec.ts',
@@ -38,9 +38,10 @@ export const LAYOUT_OWNER_SWITCH_ON_E2E_SPECS = [
   MANAGED_SSH_E2E_SPEC_PREFIX
 ]
 
-const LAYOUT_OWNER_SWITCH_ON_PREFIXES = [
+const LAYOUT_OWNER_WINDOW_PREFIXES = [
   'src/shared/workspace-layout',
   'src/shared/layout-owner-switch.ts',
+  'config/dark-build-switches.cjs',
   'src/main/persistence/',
   'src/main/runtime/',
   'src/renderer/src/store/',
@@ -48,12 +49,12 @@ const LAYOUT_OWNER_SWITCH_ON_PREFIXES = [
   // The job itself.
   '.github/workflows/pr.yml',
   '.github/workflows/e2e.yml',
-  'config/scripts/pr-layout-owner-switch-on-route.mjs',
+  'config/scripts/pr-layout-owner-window-route.mjs',
   'config/scripts/layout-save-divergence-summary.mjs'
 ]
 
-export function isLayoutOwnerSwitchOnSource(file) {
-  return LAYOUT_OWNER_SWITCH_ON_PREFIXES.some((prefix) => file.startsWith(prefix))
+export function isLayoutOwnerWindowSource(file) {
+  return LAYOUT_OWNER_WINDOW_PREFIXES.some((prefix) => file.startsWith(prefix))
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -63,5 +64,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     input += chunk
   }
   const changedPaths = input.split(/\r?\n/).filter(Boolean)
-  process.stdout.write(`${changedPaths.some(isLayoutOwnerSwitchOnSource)}\n`)
+  process.stdout.write(`${changedPaths.some(isLayoutOwnerWindowSource)}\n`)
 }

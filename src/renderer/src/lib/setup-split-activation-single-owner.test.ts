@@ -10,6 +10,9 @@ import { activateAndRevealWorktree } from './worktree-activation'
 import { gateWorktreeAgentActivation } from './worktree-agent-activation-gate'
 import { makeCreatedAgentWorktree as makeWorktree } from './worktree-activation-created-agent.test-fixture'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 /**
  * Conditional old-host reconstruction, not proof of STA-9417: a host-created worktree with a
  * split of the (unmounted) primary tab, then the first activation of that worktree. When main's

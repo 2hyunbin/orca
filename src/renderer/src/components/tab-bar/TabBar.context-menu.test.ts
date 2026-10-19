@@ -6,6 +6,9 @@ import {
   stubTooltip
 } from './tab-bar-windows-shell-launch-render-stubs'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 const appStoreSnapshot: {
   activeTabId: string | null
   activeTabType: 'terminal' | 'editor' | 'browser' | 'simulator' | null

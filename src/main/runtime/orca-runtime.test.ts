@@ -1,5 +1,8 @@
 // Compatibility entrypoint: reliability gates invoke this path directly; fragments stay side-effect ordered.
-export {}
+import { vi } from 'vitest'
+
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 await import('./rpc/unused-default-rpc-methods.test-fixture')
 await import('./orca-runtime-test-mocks.spec')

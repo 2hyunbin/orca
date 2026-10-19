@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from 'vitest'
 import type * as AgentStatusModule from '@/lib/agent-status'
 import { createTestStore, makeWorktree } from './store-test-helpers'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 const mocks = vi.hoisted(() => ({ callRuntimeRpc: vi.fn() }))
 vi.mock('@/lib/doc-preview-grants', () => ({
   releaseDocPreviewGrant: vi.fn(),

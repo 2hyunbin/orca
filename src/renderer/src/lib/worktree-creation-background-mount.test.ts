@@ -3,6 +3,9 @@ import type { WorktreeCreationRequest } from '@/lib/pending-worktree-creation'
 import type { CreateWorktreeResult } from '../../../shared/worktree/create-types'
 import type * as BackgroundMountModule from '@/components/terminal/background-terminal-worktree-mount'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 const { requestMount } = vi.hoisted(() => ({ requestMount: vi.fn() }))
 
 vi.mock('@/components/terminal/background-terminal-worktree-mount', async (importOriginal) => ({

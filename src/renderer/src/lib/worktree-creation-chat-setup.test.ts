@@ -9,6 +9,9 @@ import {
 import { registerWorktreeActivationReset } from './worktree-activation.test-fixture'
 import type { WorktreeCreationRequest } from './pending-worktree-creation'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 vi.mock('./worktree-creation-structured-session', () => ({
   launchStructuredWorktreeSession: vi.fn(async (args) => ({
     accepted: true,

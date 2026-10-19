@@ -6,6 +6,9 @@ import type { AppState } from '@/store'
 import { attachRestoredTabConflictScan } from './editor-restored-tab-conflict-scan'
 import { getDiskBaselineSignature } from './diff-content-signature'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 const mocks = vi.hoisted(() => ({
   readRuntimeFileContent: vi.fn(),
   getConnectionIdForFile: vi.fn(),

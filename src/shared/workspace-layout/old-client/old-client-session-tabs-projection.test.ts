@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { RuntimeMobileSessionTabsSnapshot } from '../../runtime-session-contracts'
 import { resolveSessionTabRow } from './old-client-session-tab-rows'
 import {
@@ -9,6 +9,9 @@ import {
 import { BLANK_BROWSER_TAB_STATE } from '../workspace-layout-beside'
 import { build, testContext, WS } from '../workspace-layout-command.test-fixture'
 import type { WorkspaceLayoutModel } from '../workspace-layout-model'
+
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 /**
  * A workspace as a desktop leaves it: a renamed terminal tab split in two (one pane titled, both

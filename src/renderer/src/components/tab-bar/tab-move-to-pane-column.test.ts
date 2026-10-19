@@ -3,6 +3,9 @@ import { useAppStore } from '../../store'
 import type { Tab } from '../../../../shared/tab-types'
 import { canMoveTabToNewPaneColumn, moveTabToNewPaneColumn } from './tab-move-to-pane-column'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 const WT = 'wt-1'
 
 const mocks = vi.hoisted(() => ({

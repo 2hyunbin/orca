@@ -10,6 +10,9 @@ import { structuredAgentSessionCreateFingerprint } from '../../../shared/structu
 import { isStructuredAgentSessionMainAgentWorking } from '../../../shared/structured-agent-session-main-agent-working'
 import type { HostCreateSupport } from './structured-agent-session-host-admission'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 const mocks = vi.hoisted(() => {
   const settings: Record<string, unknown> = {}
   return {

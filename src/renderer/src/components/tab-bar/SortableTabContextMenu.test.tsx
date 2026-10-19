@@ -8,6 +8,9 @@ import { REQUEST_ACTIVE_TERMINAL_PANE_SPLIT_EVENT } from '@/constants/terminal'
 import { requestActiveTerminalPaneSplit } from './request-active-terminal-pane-split'
 import { SortableTabContextMenu } from './SortableTabContextMenu'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 const storeMock = vi.hoisted(() => ({
   dropUnifiedTab: vi.fn(),
   state: {

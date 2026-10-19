@@ -20,6 +20,9 @@ import {
   registerWorktreeActivationReset
 } from './worktree-activation.test-fixture'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 const defaultChat = vi.hoisted(() => ({
   open: vi.fn(),
   awaitsDetection: vi.fn(),

@@ -6,6 +6,9 @@ import { getDefaultSettings } from '../../../shared/constants'
 import type { Worktree } from '../../../shared/worktree/types'
 import type { WorktreeCreationRequest } from '@/lib/pending-worktree-creation'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 const mocks = vi.hoisted(() => ({ createSupport: vi.fn() }))
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), info: vi.fn(), success: vi.fn() } }))

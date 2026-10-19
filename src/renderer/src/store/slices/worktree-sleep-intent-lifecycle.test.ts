@@ -9,6 +9,9 @@ import {
   resetStructuredAgentSessionReadOwnersForTests
 } from '@/components/native-chat/structured-agent-session-read-owner'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 const { clearWorktreeSleepIntent, hasWorktreeSleepIntent, markWorktreeSleepIntent } = intent
 const WORKTREE_ID = 'repo1::/path/wt1'
 const FOLDER_KEY = 'folder:folder-1'

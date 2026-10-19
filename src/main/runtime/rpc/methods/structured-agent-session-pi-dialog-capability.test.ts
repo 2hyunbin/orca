@@ -39,6 +39,9 @@ import {
   WORK_METHODS
 } from './structured-agent-session-gate-classification.test-fixture'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 const OLD_CLIENT = {
   ...STRUCTURED_CLIENT,
   clientCapabilities: [

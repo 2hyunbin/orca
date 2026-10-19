@@ -26,6 +26,9 @@ import {
 } from './worktrees-test-fixtures'
 import type { HostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 vi.mock('electron', async () =>
   (await import('./worktrees-test-module-mocks')).electronModuleMock()
 )

@@ -5,44 +5,46 @@ import { parse } from 'yaml'
 import { MANAGED_SSH_E2E_SPEC_PREFIX, selectGeneralE2eSpecs } from './ci-e2e-job-selection.mjs'
 import { divergenceKind, summarizeDivergence } from './layout-save-divergence-summary.mjs'
 import {
-  isLayoutOwnerSwitchOnSource,
-  LAYOUT_OWNER_SWITCH_ON_E2E_SPECS
-} from './pr-layout-owner-switch-on-route.mjs'
+  isLayoutOwnerWindowSource,
+  LAYOUT_OWNER_WINDOW_E2E_SPECS
+} from './pr-layout-owner-window-route.mjs'
 
 const projectDir = resolve(import.meta.dirname, '../..')
 const read = (file) => parse(readFileSync(join(projectDir, file), 'utf8'))
 const prWorkflow = read('.github/workflows/pr.yml')
 const e2eWorkflow = read('.github/workflows/e2e.yml')
 
-describe('layout owner switch-on job', () => {
-  const job = prWorkflow.jobs.layout_owner_switch_on
+describe('layout owner window (rollback build) job', () => {
+  const job = prWorkflow.jobs.layout_owner_window
 
-  it('runs the listed specs on a switch-on build of the merge commit', () => {
+  it('runs the listed specs on a rollback build of the merge commit', () => {
     expect(job.uses).toBe('./.github/workflows/e2e.yml')
     expect(job.with.ref).toBe('${{ github.sha }}')
-    expect(job.with.layout_owner).toBe('main')
-    expect(JSON.parse(job.with.test_files)).toEqual(LAYOUT_OWNER_SWITCH_ON_E2E_SPECS)
-    for (const spec of LAYOUT_OWNER_SWITCH_ON_E2E_SPECS) {
+    expect(job.with.layout_owner).toBe('window')
+    expect(JSON.parse(job.with.test_files)).toEqual(LAYOUT_OWNER_WINDOW_E2E_SPECS)
+    for (const spec of LAYOUT_OWNER_WINDOW_E2E_SPECS) {
       if (spec !== MANAGED_SSH_E2E_SPEC_PREFIX) {
         expect(existsSync(join(projectDir, spec)), spec).toBe(true)
       }
     }
-    // Every spec that gates on the switch-on build marker runs here.
-    const gated = readdirSync(join(projectDir, 'tests/e2e'))
+    // Every spec gated on main owning the layout runs in the general lane, where the build is the
+    // shipped default, and here, where the rollback build must skip it. None reads a marker itself.
+    const specs = readdirSync(join(projectDir, 'tests/e2e'))
       .filter((file) => file.endsWith('.spec.ts'))
       .map((file) => `tests/e2e/${file}`)
-      .filter((spec) =>
-        readFileSync(join(projectDir, spec), 'utf8').includes('ORCA_LAYOUT_OWNER_MAIN')
-      )
-    expect(gated.length).toBeGreaterThan(0)
-    expect(LAYOUT_OWNER_SWITCH_ON_E2E_SPECS).toEqual(expect.arrayContaining(gated))
-    expect(selectGeneralE2eSpecs(LAYOUT_OWNER_SWITCH_ON_E2E_SPECS)).not.toContain(
+    const read = (spec) => readFileSync(join(projectDir, spec), 'utf8')
+    const gated = specs.filter((spec) => read(spec).includes('LAYOUT_OWNER_BUILD'))
+    expect(gated.length).toBeGreaterThanOrEqual(4)
+    expect(specs.filter((spec) => read(spec).includes('ORCA_LAYOUT_OWNER_'))).toEqual([])
+    expect(selectGeneralE2eSpecs(gated)).toEqual(gated)
+    expect(LAYOUT_OWNER_WINDOW_E2E_SPECS).toEqual(expect.arrayContaining(gated))
+    expect(selectGeneralE2eSpecs(LAYOUT_OWNER_WINDOW_E2E_SPECS)).not.toContain(
       'tests/e2e/workspace-layout-oracle-headless.spec.ts'
     )
   })
 
   it('does not block the merge and keeps its artifacts apart', () => {
-    expect(prWorkflow.jobs.verify.needs).not.toContain('layout_owner_switch_on')
+    expect(prWorkflow.jobs.verify.needs).not.toContain('layout_owner_window')
     const suffixes = Object.values(prWorkflow.jobs)
       .filter((other) => other.uses === './.github/workflows/e2e.yml')
       .map((other) => other.with.artifact_suffix ?? '')
@@ -56,12 +58,17 @@ describe('layout owner switch-on job', () => {
     const build = e2eWorkflow.jobs.build.steps.find((step) => step.name === 'Build E2E outputs')
     expect(build.run).toContain('export ORCA_LAYOUT_OWNER="$LAYOUT_OWNER"')
     expect(e2eWorkflow.on.workflow_call.inputs.layout_owner.default).toBe('')
+    const marker = e2eWorkflow.jobs.build.steps.find(
+      (step) => step.name === 'Check layout-owner build marker'
+    )
+    expect(marker.run).toContain('test -f out/main/ORCA_LAYOUT_OWNER_WINDOW')
   })
 
   it('routes layout sources, the e2e tree and the job itself', () => {
     for (const file of [
       'src/shared/workspace-layout/workspace-layout-load.ts',
       'src/shared/layout-owner-switch.ts',
+      'config/dark-build-switches.cjs',
       'src/main/persistence/window-save-divergence.ts',
       'src/main/runtime/terminal-surface-close.ts',
       'src/renderer/src/store/slices/terminals.ts',
@@ -69,15 +76,15 @@ describe('layout owner switch-on job', () => {
       '.github/workflows/pr.yml',
       '.github/workflows/e2e.yml'
     ]) {
-      expect(isLayoutOwnerSwitchOnSource(file), file).toBe(true)
+      expect(isLayoutOwnerWindowSource(file), file).toBe(true)
     }
     for (const file of ['src/renderer/src/components/ui/button.tsx', 'docs/STYLEGUIDE.md']) {
-      expect(isLayoutOwnerSwitchOnSource(file), file).toBe(false)
+      expect(isLayoutOwnerWindowSource(file), file).toBe(false)
     }
     const filter = prWorkflow.jobs.code_paths.steps.find((step) => step.id === 'e2e_filter')
-    expect(filter.run).toContain('node config/scripts/pr-layout-owner-switch-on-route.mjs')
+    expect(filter.run).toContain('node config/scripts/pr-layout-owner-window-route.mjs')
     expect(prWorkflow.jobs.code_paths.steps[0].with['sparse-checkout']).toContain(
-      '/config/scripts/pr-layout-owner-switch-on-route.mjs'
+      '/config/scripts/pr-layout-owner-window-route.mjs'
     )
   })
 })

@@ -7,6 +7,9 @@ import { makeCreatedAgentWorktree } from '@/lib/worktree-activation-created-agen
 import { makePaneKey } from '../../../shared/stable-pane-id'
 import { waitForWorktreeAgentActivationGateForTests } from './worktree-agent-activation-gate'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 // Red repro for the aug20 "windows 2" incident (restart-reattach/resume-relaunch):
 // a runtime-owned (paired remote) worktree's web-mirror tab holds a sleeping
 // record for an agent whose host PTY is STILL ALIVE, but at activation time the

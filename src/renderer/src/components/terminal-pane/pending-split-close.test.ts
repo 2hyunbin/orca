@@ -3,6 +3,9 @@ import { makeCloseTestTab, preparePendingSplitClose } from './pending-split-clos
 import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
 import { flushPtySideEffects } from './pty-transport-test-harness'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 const replyFor = (kind: 'reattach' | 'cold-restore-new' | 'ordinary-fresh') => ({
   id: 'pty-restored',
   ...(kind === 'reattach' ? { isReattach: true } : {}),

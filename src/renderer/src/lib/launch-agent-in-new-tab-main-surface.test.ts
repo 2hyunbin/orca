@@ -5,6 +5,9 @@ import { FLOATING_TERMINAL_WORKTREE_ID, getDefaultSettings } from '../../../shar
 import { createTestStore, makeWorktree, seedStore } from '../store/slices/store-test-helpers'
 import { createStoreCascadesMockApi } from '../store/slices/store-cascades-test-harness'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 const storeBox = vi.hoisted(() => {
   const box: { store: unknown } = { store: null }
   return box

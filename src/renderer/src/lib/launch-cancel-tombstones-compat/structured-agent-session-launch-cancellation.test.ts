@@ -16,6 +16,9 @@ import { beginStructuredAgentSessionAuthoritativeInventory } from './structured-
 import { resetStructuredAgentLaunchPersistenceForTests } from '../structured-agent-session-launch-persistence'
 import { refreshLocalStructuredSessionTabs } from '@/runtime/local-structured-session-tabs-sync/inventory-refresh'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 const layoutOwner: StructuredLaunchSlotOwner = {
   unifiedTabsByWorktree: {},
   groupsByWorktree: {},

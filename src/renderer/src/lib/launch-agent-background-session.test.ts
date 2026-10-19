@@ -9,6 +9,9 @@ import {
   resetAgentBackgroundSessionTestHarness
 } from '@/lib/agent-background-session-test-state'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 const mockSpawn = vi.fn()
 const mockKill = vi.fn()
 const mockWrite = vi.fn()

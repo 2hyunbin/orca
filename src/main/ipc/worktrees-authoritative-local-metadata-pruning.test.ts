@@ -20,6 +20,9 @@ import {
   registerWorktreeRootsForRepo
 } from './registered-worktree-roots-cache'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 const localWorktreePathPresenceMock = vi.hoisted(() => vi.fn())
 
 vi.mock('electron', async () =>
