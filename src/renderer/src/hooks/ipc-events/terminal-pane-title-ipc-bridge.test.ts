@@ -64,6 +64,18 @@ describe('a pane title from main', () => {
     expect(event.detail).toEqual({ tabId: 'tab-1', leafId: LEAF_ID, title: 'REVIEWER' })
   })
 
+  it("names a never-mounted tab's one pane from a rootless layout", () => {
+    const rootless: TerminalLayoutSnapshot = {
+      root: null,
+      activeLeafId: LEAF_ID,
+      expandedLeafId: null,
+      ptyIdsByLeafId: { [LEAF_ID]: 'pty-1' }
+    }
+    fakeStore.terminalLayoutsByTabId = { 'tab-1': rootless }
+    applyRuntimePaneTitle({ tabId: 'tab-1', leafId: LEAF_ID, title: 'REVIEWER' })
+    expect(layout()).toEqual({ ...rootless, titlesByLeafId: { [LEAF_ID]: 'REVIEWER' } })
+  })
+
   it('drops the field once the last title is cleared', () => {
     applyRuntimePaneTitle({ tabId: 'tab-1', leafId: SIBLING_ID, title: '' })
     expect(layout()).not.toHaveProperty('titlesByLeafId')

@@ -9,6 +9,7 @@ import { useAppStore } from '../../store'
 import type { TerminalLayoutSnapshot } from '../../../../shared/terminal-tab-types'
 import { isTerminalLeafId } from '../../../../shared/stable-pane-id'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { resolveRootlessTerminalLayoutLeafId } from '../../../../shared/workspace-layout/terminal-pane-tree'
 
 function showRuntimePaneTitle(tabId: string, leafId: string, title: string | null): void {
   const store = useAppStore.getState()
@@ -37,11 +38,11 @@ function showRuntimePaneTitle(tabId: string, leafId: string, title: string | nul
 export function applyRuntimePaneTitle({ tabId, leafId, title }: SetTerminalPaneTitleDetail): void {
   const store = useAppStore.getState()
   const layout = store.terminalLayoutsByTabId[tabId]
-  if (
-    !layout ||
-    !isTerminalLeafId(leafId) ||
-    !collectLeafIdsInOrder(layout.root).includes(leafId)
-  ) {
+  // A never-mounted tab's layout can be rootless and name its one pane elsewhere.
+  const leafIds = layout?.root
+    ? collectLeafIdsInOrder(layout.root)
+    : [layout && resolveRootlessTerminalLayoutLeafId(layout)]
+  if (!layout || !isTerminalLeafId(leafId) || !leafIds.includes(leafId)) {
     return
   }
   const normalizedTitle = title?.trim() || null
