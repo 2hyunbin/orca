@@ -18760,6 +18760,14 @@
       "visualUnavailable": "Visualización no disponible",
       "visualLoading": "Cargando visualización",
       "visualOpenInNewTab": "Abrir en una pestaña nueva",
+      "resumeCommand": {
+        "description": "Abrir el historial de sesiones de agentes",
+        "argumentHint": "[búsqueda]",
+        "workspaceUnavailable": "El workspace de este chat aún no se ha cargado. Vuelve a probar /resume en un momento.",
+        "replaceTitle": "¿Reemplazar este chat?",
+        "replaceDescription": "Reanudar “{{title}}” aquí detendrá lo que {{agent}} está haciendo en este chat.",
+        "replace": "Reemplazar"
+      },
       "claudeSignIn": {
         "signingIn": "Iniciando sesión…"
       }
@@ -18783,6 +18791,14 @@
           "copied": "ID de pestaña copiado",
           "failed": "No se pudo copiar el ID de pestaña",
           "copy": "Copiar ID de pestaña"
+        },
+        "bulkClose": {
+          "others": "¿Cerrar las otras pestañas?",
+          "right": "¿Cerrar las pestañas de la derecha?",
+          "left": "¿Cerrar las pestañas de la izquierda?",
+          "editors": "¿Cerrar todas las pestañas del editor?",
+          "description": "Se cerrarán las pestañas seleccionadas. Las pestañas fijadas permanecerán abiertas.",
+          "confirm": "Cerrar pestañas"
         }
       }
     },
@@ -19852,6 +19868,10 @@
       "openInSidebar": "Abrir en la barra lateral",
       "openInSidebarCopy": "Escribe lo que recuerdes o pídele a un agente: «encuentra la sesión donde arreglamos el tiempo de espera de inicio de sesión».",
       "enableOnAll": "Activar en todas las computadoras"
+    },
+    "dialog": {
+      "select": "Seleccionar",
+      "open": "Abrir"
     }
   },
   "common": {

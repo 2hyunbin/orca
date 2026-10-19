@@ -18869,6 +18869,14 @@
       "visualUnavailable": "Visualisation indisponible",
       "visualLoading": "Chargement de la visualisation",
       "visualOpenInNewTab": "Ouvrir dans un nouvel onglet",
+      "resumeCommand": {
+        "description": "Ouvrir l'historique des sessions d'agent",
+        "argumentHint": "[recherche]",
+        "workspaceUnavailable": "L'espace de travail de ce chat n'est pas encore chargé. Réessayez /resume dans un instant.",
+        "replaceTitle": "Remplacer ce chat ?",
+        "replaceDescription": "Reprendre « {{title}} » ici arrêtera ce que {{agent}} fait dans ce chat.",
+        "replace": "Remplacer"
+      },
       "claudeSignIn": {
         "signingIn": "Connexion…"
       }
@@ -18892,6 +18900,14 @@
           "copied": "ID de l'onglet copié",
           "failed": "Impossible de copier l'ID de l'onglet",
           "copy": "Copier l'ID de l'onglet"
+        },
+        "bulkClose": {
+          "others": "Fermer les autres onglets ?",
+          "right": "Fermer les onglets à droite ?",
+          "left": "Fermer les onglets à gauche ?",
+          "editors": "Fermer tous les onglets de l’éditeur ?",
+          "description": "Les onglets sélectionnés seront fermés. Les onglets épinglés resteront ouverts.",
+          "confirm": "Fermer les onglets"
         }
       }
     },
@@ -19736,6 +19752,10 @@
       "openInSidebarCopy": "Tapez ce dont vous vous souvenez ou demandez à un agent : « recherchez la session où nous avons corrigé le délai d'expiration de la connexion ».",
       "open": "Ouvrir",
       "enableOnAll": "Activer sur tous les ordinateurs"
+    },
+    "dialog": {
+      "select": "Sélectionner",
+      "open": "Ouvrir"
     }
   },
   "aiVault": {

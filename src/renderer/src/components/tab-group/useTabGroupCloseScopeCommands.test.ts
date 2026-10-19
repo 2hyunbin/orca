@@ -1,18 +1,27 @@
 // @vitest-environment happy-dom
-import { renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import type { Tab, TabContentType, TabGroup } from '../../../../shared/tab-types'
 import { useTabGroupCloseScopeCommands } from './useTabGroupCloseScopeCommands'
 
-const mocks = vi.hoisted(() => ({
-  track: vi.fn(),
-  closeEmptyGroup: vi.fn()
-}))
+const mocks = vi.hoisted(() => {
+  const state: {
+    groupsByWorktree: Record<string, TabGroup[]>
+    unifiedTabsByWorktree: Record<string, Tab[]>
+  } = { groupsByWorktree: {}, unifiedTabsByWorktree: {} }
+  return { track: vi.fn(), closeEmptyGroup: vi.fn(), state }
+})
 
 vi.mock('@/lib/telemetry', () => ({ track: mocks.track }))
 vi.mock('../../store', () => ({
-  useAppStore: (selector: (state: { closeEmptyGroup: () => void }) => unknown) => selector(mocks)
+  useAppStore: Object.assign(
+    (selector: (state: { closeEmptyGroup: () => void }) => unknown) => selector(mocks),
+    { getState: () => mocks.state }
+  )
+}))
+vi.mock('../confirmation-dialog-context', () => ({
+  useConfirmationDialog: () => async () => true
 }))
 vi.mock('./workspace-emptied-reaction', () => ({
   captureWorkspaceEmptiedReaction: vi.fn(() => vi.fn())
@@ -58,12 +67,14 @@ function commands({
     tab('right'),
     tab('left')
   ]
+  mocks.state = {
+    groupsByWorktree: { [worktreeId]: [group] },
+    unifiedTabsByWorktree: { [worktreeId]: groupTabs }
+  }
   const hook = renderHook(() =>
     useTabGroupCloseScopeCommands({
       groupId: group.id,
       worktreeId,
-      group,
-      groupTabs,
       closeItem: vi.fn(),
       closeMany
     })
@@ -76,7 +87,7 @@ beforeEach(() => vi.clearAllMocks())
 describe('directional tab close telemetry', () => {
   it.each(['left', 'right'] as const)(
     'counts one %s request before asking to close tabs',
-    (direction) => {
+    async (direction) => {
       const expectedIds = direction === 'left' ? ['left'] : ['right', 'last']
       const closeMany = vi.fn((ids: string[]) => {
         expect(mocks.track).toHaveBeenCalledExactlyOnceWith('tabs_directional_close_requested', {
@@ -90,11 +101,13 @@ describe('directional tab close telemetry', () => {
       })
       const scope = commands({ closeMany })
 
-      if (direction === 'left') {
-        scope.closeToLeft('selected')
-      } else {
-        scope.closeToRight('selected')
-      }
+      await act(async () => {
+        if (direction === 'left') {
+          scope.closeToLeft('selected')
+        } else {
+          scope.closeToRight('selected')
+        }
+      })
 
       expect(closeMany).toHaveBeenCalledExactlyOnceWith(expectedIds)
     }
@@ -130,7 +143,7 @@ describe('directional tab close telemetry', () => {
       surface: 'workspace',
       eligible_tab_count: 0
     })
-    expect(scope.closeMany).toHaveBeenCalledExactlyOnceWith([])
+    expect(scope.closeMany).not.toHaveBeenCalled()
   })
 
   it('does not count stale tab ids or unrelated close commands', () => {

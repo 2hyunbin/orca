@@ -125,8 +125,8 @@ const ownFlowId = (owner: RuntimeClientTarget): string | null => flowOf(owner)?.
 export async function cancelAntigravityChatSignIn(owner: RuntimeClientTarget): Promise<void> {
   const flowId = ownFlowId(owner)
   if (flowId) {
-    await callAntigravityChatSignIn(owner, 'Cancel', { flowId }).catch(
-      (cause: unknown) => note(localFor(owner), { error: message(cause) })
+    await callAntigravityChatSignIn(owner, 'Cancel', { flowId }).catch((cause: unknown) =>
+      note(localFor(owner), { error: message(cause) })
     )
   }
 }

@@ -15,7 +15,7 @@ import {
 } from '../../shared/remote-runtime-client'
 import { claudeSessionIdForOrcaSession } from '../claude/claude-structured-session-id'
 import { packagedClaudeChatScenario } from '../orcad/orcad-structured-chat-scenario'
-import { shellEscape } from '../ssh/ssh-connection-utils'
+import { quotePosixShell } from '../../shared/shell-argument-quoting'
 import { wslClaudeChatScenario } from './wsl-orcad-chat-scenario'
 import {
   installWslChatFixture,
@@ -55,7 +55,7 @@ async function exerciseChat(lane: ChatLane, root: string, worktree: string, cwd:
   const ackPath = `${root}/partial-observed`
   const scenarioPath = `${root}/scenario.json`
   const reportPath = `${root}/report.json`
-  await lane.guest(`rm -f ${shellEscape(ackPath)}`)
+  await lane.guest(`rm -f ${quotePosixShell(ackPath)}`)
   await writeChatFixtureFile(
     lane,
     scenarioPath,
@@ -125,7 +125,7 @@ async function exerciseChat(lane: ChatLane, root: string, worktree: string, cwd:
       upload
     )
     expect(attachment.path).toMatch(/^\//u)
-    expect(await lane.guest(`base64 -w0 ${shellEscape(attachment.path)}`)).toBe(png)
+    expect(await lane.guest(`base64 -w0 ${quotePosixShell(attachment.path)}`)).toBe(png)
     const body = {
       kind: 'message',
       role: 'user',
@@ -150,7 +150,7 @@ async function exerciseChat(lane: ChatLane, root: string, worktree: string, cwd:
     dropping = true
     // Close the actual WSL bridge, not just the chat subscription; the guest owns the turn.
     await lane.reconnect(async () => {
-      await lane.guest(`touch ${shellEscape(ackPath)}`)
+      await lane.guest(`touch ${quotePosixShell(ackPath)}`)
     })
     subscription.close()
     rows.clear()
@@ -186,7 +186,7 @@ async function exerciseChat(lane: ChatLane, root: string, worktree: string, cwd:
       })
     ).toMatchObject({ ok: true, value: { cancelled: true } })
     const report = WslChatProviderReport.parse(
-      JSON.parse(await lane.guest(`cat ${shellEscape(reportPath)}`))
+      JSON.parse(await lane.guest(`cat ${quotePosixShell(reportPath)}`))
     )
     expect(report.cwd).toBe(cwd)
     expect(report.execPath).toMatch(/^\//u)
@@ -260,7 +260,7 @@ async function exerciseChat(lane: ChatLane, root: string, worktree: string, cwd:
       { timeout: 30_000 }
     )
     const resumed = WslChatProviderReport.parse(
-      JSON.parse(await lane.guest(`cat ${shellEscape(reportPath)}`))
+      JSON.parse(await lane.guest(`cat ${quotePosixShell(reportPath)}`))
     )
     expect(resumed.cwd).toBe(cwd)
     expect(resumed.argv.join(' ')).toMatch(new RegExp(`--resume(?:=| )${providerId}`))

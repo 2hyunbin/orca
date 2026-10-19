@@ -19030,6 +19030,14 @@
       "claudeSignIn": {
         "signingIn": "Signing in…"
       },
+      "resumeCommand": {
+        "description": "Open Agent Session History",
+        "argumentHint": "[search]",
+        "workspaceUnavailable": "This chat's workspace isn't loaded yet. Try /resume again in a moment.",
+        "replaceTitle": "Replace this chat?",
+        "replaceDescription": "Resuming “{{title}}” here will stop what {{agent}} is doing in this chat.",
+        "replace": "Replace"
+      },
       "hostPermission": {
         "checking": "Checking this host's chat permissions…",
         "launchRefused": "Orca did not start a {{value0}} chat",
@@ -19056,6 +19064,14 @@
           "copied": "Tab ID copied",
           "failed": "Could not copy tab ID",
           "copy": "Copy Tab ID"
+        },
+        "bulkClose": {
+          "others": "Close other tabs?",
+          "right": "Close tabs to the right?",
+          "left": "Close tabs to the left?",
+          "editors": "Close all editor tabs?",
+          "description": "The selected tabs will be closed. Pinned tabs will stay open.",
+          "confirm": "Close tabs"
         }
       }
     },
@@ -19827,6 +19843,10 @@
       "openInSidebarCopy": "Type what you remember, or ask an agent: “find the session where we fixed the login timeout.”",
       "open": "Open",
       "enableOnAll": "Enable on all computers"
+    },
+    "dialog": {
+      "select": "Select",
+      "open": "Open"
     }
   },
   "aiVault": {

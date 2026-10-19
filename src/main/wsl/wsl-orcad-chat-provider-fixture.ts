@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { folderWorkspaceKey } from '../../shared/workspace-scope'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { shellEscape } from '../ssh/ssh-connection-utils'
+import { quotePosixShell } from '../../shared/shell-argument-quoting'
 
 export type WslChatHost = {
   rpc<T>(method: string, params?: unknown): Promise<T>
@@ -16,7 +16,7 @@ export async function writeChatFixtureFile(
   content: string
 ): Promise<void> {
   await host.guest(
-    `printf %s ${shellEscape(Buffer.from(content).toString('base64'))} | base64 -d > ${shellEscape(path)}`
+    `printf %s ${quotePosixShell(Buffer.from(content).toString('base64'))} | base64 -d > ${quotePosixShell(path)}`
   )
 }
 
@@ -24,7 +24,7 @@ export async function writeChatFixtureFile(
 export async function installWslChatFixture(lane: WslChatHost) {
   const home = (await lane.guest('printf %s "$HOME"')).trim()
   const root = `${home}/wsl chat fixture`
-  await lane.guest(`mkdir -p ${shellEscape(root)}`)
+  await lane.guest(`mkdir -p ${quotePosixShell(root)}`)
   const runtime = (await lane.guest(`readlink -f /proc/${lane.runtimePid}/exe`)).trim()
   const script = `${root}/scripted.mjs`
   const cli = `${root}/claude`
@@ -36,13 +36,13 @@ export async function installWslChatFixture(lane: WslChatHost) {
   await writeChatFixtureFile(
     lane,
     cli,
-    `#!/bin/sh\nexec ${shellEscape(runtime)} ${shellEscape(script)} "$@"\n`
+    `#!/bin/sh\nexec ${quotePosixShell(runtime)} ${quotePosixShell(script)} "$@"\n`
   )
-  await lane.guest(`chmod 700 ${shellEscape(cli)}`)
+  await lane.guest(`chmod 700 ${quotePosixShell(cli)}`)
   await lane.rpc('settings.mutateAgentLaunch', {
     type: 'command',
     agent: 'claude',
-    value: shellEscape(cli)
+    value: quotePosixShell(cli)
   })
   await lane.rpc('settings.update', {
     nativeChatPermissionMode: 'ask',
@@ -58,7 +58,7 @@ export async function installWslChatFixture(lane: WslChatHost) {
     name: 'WSL chat lane'
   })
   const folderPath = `${root}/folder project`
-  await lane.guest(`mkdir -p ${shellEscape(folderPath)}`)
+  await lane.guest(`mkdir -p ${quotePosixShell(folderPath)}`)
   const folder = await lane.rpc<{ folderWorkspace: { id: string } }>('folderWorkspace.create', {
     projectGroupId: group.group.id,
     folderPath,

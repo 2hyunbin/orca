@@ -18765,6 +18765,14 @@
       "visualUnavailable": "可视化不可用",
       "visualLoading": "正在加载可视化",
       "visualOpenInNewTab": "在新标签页中打开",
+      "resumeCommand": {
+        "description": "打开智能体会话历史",
+        "argumentHint": "[搜索]",
+        "workspaceUnavailable": "此聊天的工作区尚未加载。请稍后再试一次 /resume。",
+        "replaceTitle": "替换此聊天？",
+        "replaceDescription": "在此恢复“{{title}}”将停止 {{agent}} 在此聊天中正在进行的工作。",
+        "replace": "替换"
+      },
       "claudeSignIn": {
         "signingIn": "正在登录…"
       }
@@ -18788,6 +18796,14 @@
           "copied": "已复制标签页 ID",
           "failed": "无法复制标签页 ID",
           "copy": "复制标签页 ID"
+        },
+        "bulkClose": {
+          "others": "关闭其他标签页？",
+          "right": "关闭右侧标签页？",
+          "left": "关闭左侧标签页？",
+          "editors": "关闭所有编辑器标签页？",
+          "description": "选中的标签页将关闭。固定的标签页将保持打开。",
+          "confirm": "关闭标签页"
         }
       }
     },
@@ -19736,6 +19752,10 @@
       "openInSidebarCopy": "输入您记得的内容，或询问智能体：“找到我们修复登录超时的会话。”",
       "open": "打开",
       "enableOnAll": "在所有计算机上启用"
+    },
+    "dialog": {
+      "select": "选择",
+      "open": "打开"
     }
   },
   "aiVault": {
