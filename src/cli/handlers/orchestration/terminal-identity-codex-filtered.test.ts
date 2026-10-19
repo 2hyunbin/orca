@@ -27,7 +27,7 @@ describe('no_active_sender_terminal inside a Codex command', () => {
 
     expect(err.code).toBe('no_active_sender_terminal')
     expect(err.message).toContain('shell_environment_policy')
-    expect(err.message).toContain('will not restore it')
+    expect(err.message).toContain('inherit = "all" with include_only')
   })
 
   it('keeps the generic advice outside Codex', () => {

@@ -1,14 +1,14 @@
 // Orca's `codex` shell function for every shell family: runs launch prep and adds
 // --no-daemon. Pure text, so any host that writes a shell script can embed it.
 // Why --no-daemon: Codex 0.156+ otherwise shares one server per CODEX_HOME that runs every tab's
-// hooks with the first tab's Orca env and dies with it (#22873). These args need that server or exit 2.
-export const CODEX_SHARED_SERVER_ARGS = ['agents', 'queue', '--no-daemon', '--remote'] as const
-const CODEX_SHARED_SERVER_ARG_PATTERN = `^(${CODEX_SHARED_SERVER_ARGS.join('|')}|--remote=.*)$`
-// Why: these need the shared server, and Codex counts any `-c` as opting out of it.
-const CODEX_SHARED_SERVER_ONLY_ARGS = CODEX_SHARED_SERVER_ARGS.filter(
-  (arg) => arg !== '--no-daemon'
-)
-const CODEX_SHARED_SERVER_ONLY_ARG_PATTERN = `^(${CODEX_SHARED_SERVER_ONLY_ARGS.join('|')}|--remote=.*)$`
+// hooks with the first tab's Orca env and dies with it (#22873).
+// These args need that server (or exit 2 beside the flag), and Codex counts any `-c` as leaving it.
+const CODEX_SHARED_SERVER_ARGS = ['agents', 'queue', '--remote'] as const
+// An explicit --no-daemon needs no second one.
+export const CODEX_NO_DAEMON_SKIP_ARGS = [...CODEX_SHARED_SERVER_ARGS, '--no-daemon'] as const
+const argPattern = (args: readonly string[]): string => `^(${args.join('|')}|--remote=.*)$`
+const CODEX_SHARED_SERVER_ARG_PATTERN = argPattern(CODEX_SHARED_SERVER_ARGS)
+const CODEX_NO_DAEMON_SKIP_ARG_PATTERN = argPattern(CODEX_NO_DAEMON_SKIP_ARGS)
 
 /**
  * The caller identity `orca` reads, which a user's `shell_environment_policy` (`inherit = "core"`)
@@ -50,7 +50,7 @@ if [[ -n "\${__orca_codex_binary:-}" && -x "\${__orca_codex_binary}" ]]; then
     for __orca_codex_arg in "$@"; do
       case "$__orca_codex_arg" in
         --no-daemon) __orca_codex_isolate=0 ;;
-        ${CODEX_SHARED_SERVER_ONLY_ARGS.join('|')}|--remote=*) __orca_codex_isolate=0 __orca_codex_identity=0 ;;
+        ${CODEX_SHARED_SERVER_ARGS.join('|')}|--remote=*) __orca_codex_isolate=0 __orca_codex_identity=0 ;;
       esac
     done
     if [[ "$__orca_codex_identity" != 0 ]]; then
@@ -77,10 +77,10 @@ if test "$__orca_codex_type" = file
     if test -x "$ORCA_CODEX_LAUNCH_PREFLIGHT"
       command "$ORCA_CODEX_LAUNCH_PREFLIGHT" agent hooks prepare-codex >/dev/null 2>&1; or true
     end
-    if test "$ORCA_CODEX_ISOLATE" != 0; and not string match -qr -- '${CODEX_SHARED_SERVER_ONLY_ARG_PATTERN}' $argv
+    if test "$ORCA_CODEX_ISOLATE" != 0; and not string match -qr -- '${CODEX_SHARED_SERVER_ARG_PATTERN}' $argv
 ${PREPENDED_IDENTITY_KEYS.map((key) => `      test -n "$${key}"; and set argv -c "${identitySetArg(key, `$${key}`)}" $argv`).join('\n')}
     end
-    if test "$ORCA_CODEX_ISOLATE" != 0; and not string match -qr -- '${CODEX_SHARED_SERVER_ARG_PATTERN}' $argv; and command codex --help 2>/dev/null </dev/null | string match -q -- '*--no-daemon*'
+    if test "$ORCA_CODEX_ISOLATE" != 0; and not string match -qr -- '${CODEX_NO_DAEMON_SKIP_ARG_PATTERN}' $argv; and command codex --help 2>/dev/null </dev/null | string match -q -- '*--no-daemon*'
       set argv --no-daemon $argv
     end
     command codex $argv
@@ -110,7 +110,7 @@ if ($orcaCodexCommand -and
             } catch {
             }
         }
-        if ($env:ORCA_CODEX_ISOLATE -ne '0' -and -not (@($args) -cmatch '${CODEX_SHARED_SERVER_ARG_PATTERN}')) {
+        if ($env:ORCA_CODEX_ISOLATE -ne '0' -and -not (@($args) -cmatch '${CODEX_NO_DAEMON_SKIP_ARG_PATTERN}')) {
             try {
                 if ((& $orcaCodexExecutable.Source --help 2>$null) -match '--no-daemon') {
                     $orcaCodexFlags = @('--no-daemon')
@@ -119,7 +119,7 @@ if ($orcaCodexCommand -and
             }
         }
         $orcaCodexIdentity = @()
-        if ($env:ORCA_CODEX_ISOLATE -ne '0' -and -not (@($args) -cmatch '${CODEX_SHARED_SERVER_ONLY_ARG_PATTERN}')) {
+        if ($env:ORCA_CODEX_ISOLATE -ne '0' -and -not (@($args) -cmatch '${CODEX_SHARED_SERVER_ARG_PATTERN}')) {
             foreach ($k in ${CODEX_COMMAND_IDENTITY_ENV_KEYS.map((key) => `'${key}'`).join(',')}) { $v = [Environment]::GetEnvironmentVariable($k); if ($v) { $orcaCodexIdentity += '-c', "${identitySetArg('$k', '$v')}" } }
         }
         $orcaCodexArgs = @(__OrcaEscapeNativeArgs $orcaCodexExecutable.Source (@($orcaCodexIdentity) + @($args)))

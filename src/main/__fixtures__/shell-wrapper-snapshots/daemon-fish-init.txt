@@ -18,7 +18,7 @@ if test "$__orca_codex_type" = file
       test -n "$ORCA_PANE_KEY"; and set argv -c "shell_environment_policy.set.ORCA_PANE_KEY='$ORCA_PANE_KEY'" $argv
       test -n "$ORCA_TERMINAL_HANDLE"; and set argv -c "shell_environment_policy.set.ORCA_TERMINAL_HANDLE='$ORCA_TERMINAL_HANDLE'" $argv
     end
-    if test "$ORCA_CODEX_ISOLATE" != 0; and not string match -qr -- '^(agents|queue|--no-daemon|--remote|--remote=.*)$' $argv; and command codex --help 2>/dev/null </dev/null | string match -q -- '*--no-daemon*'
+    if test "$ORCA_CODEX_ISOLATE" != 0; and not string match -qr -- '^(agents|queue|--remote|--no-daemon|--remote=.*)$' $argv; and command codex --help 2>/dev/null </dev/null | string match -q -- '*--no-daemon*'
       set argv --no-daemon $argv
     end
     command codex $argv
