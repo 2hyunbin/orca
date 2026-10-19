@@ -47,17 +47,16 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
 
   // Overlapping attaches (connect, attach, reattach) each get a viewer; the newest issued keeps
   // its own, whichever answers last, and every other one is handed back.
-  const adoptViewer = (seq: number, acquisitionId: number): boolean => {
+  const adoptViewer = (seq: number, acquisitionId: number): void => {
     if (seq < seqs.viewer) {
       api?.detach({ ptyId, acquisitionId })
-      return false
+      return
     }
     if (viewer !== null && viewer !== acquisitionId) {
       api?.detach({ ptyId, acquisitionId: viewer })
     }
     viewer = acquisitionId
     seqs.viewer = seq
-    return true
   }
 
   const release = (): void => {
@@ -204,9 +203,8 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
       showUnreachable()
       return { id: ptyId, isReattach: true, replay: '' }
     }
-    // A newer attach already painted its screen; this older one's would be stale.
-    const current = adoptViewer(seq, result.acquisitionId)
-    return { id: ptyId, isReattach: true, replay: current ? result.replay : '' }
+    adoptViewer(seq, result.acquisitionId)
+    return { id: ptyId, isReattach: true, replay: result.replay }
   }
 
   const bridged = (): boolean => mode === 'bridge'

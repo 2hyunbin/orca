@@ -422,7 +422,8 @@ describe('a runtime pane bridged to an older relay’s terminal', () => {
     answers[1](2)
     await vi.waitFor(() => expect(transport.isConnected()).toBe(true))
     answers[0](1)
-    await expect(older).resolves.toMatchObject({ replay: '' })
+    // The connect still paints its screen: the attach that won delivers none of its own.
+    await expect(older).resolves.toMatchObject({ replay: 'SCREEN-1' })
     expect(bridge.detach.mock.calls.map(([args]) => args.acquisitionId)).toEqual([1])
     transport.detach?.()
     expect(bridge.detach.mock.calls.map(([args]) => args.acquisitionId)).toEqual([1, 2])
