@@ -131,7 +131,9 @@ describe('registerPtyHandlers', () => {
       vi.useFakeTimers()
       const daemon = installObservableDaemonTestProvider()
       const spawnGate = makeDeferred()
+      let spawnStarted = false
       daemon.spawn.mockImplementation(async (options: { sessionId?: string }) => {
+        spawnStarted = true
         await spawnGate.promise
         return { id: options.sessionId ?? 'daemon-pty' }
       })
@@ -144,15 +146,19 @@ describe('registerPtyHandlers', () => {
           rows: 24,
           sessionId: 'daemon-session'
         }) as Promise<{ id: string }>
-        await Promise.resolve()
+        // A daemon emits only once its spawn runs; the record is bound by then.
+        await vi.waitFor(() => expect(spawnStarted).toBe(true))
         mainWindow.webContents.send.mockClear()
 
         daemon.emitData('daemon-session', 'pre-spawn prompt\x1b[c')
         vi.advanceTimersByTime(50)
-        expect(mainWindow.webContents.send).toHaveBeenCalledWith('pty:data', {
-          id: 'daemon-session',
-          data: 'pre-spawn prompt\x1b[c'
-        })
+        expect(mainWindow.webContents.send).toHaveBeenCalledWith(
+          'pty:data',
+          expect.objectContaining({
+            id: 'daemon-session',
+            data: 'pre-spawn prompt\x1b[c'
+          })
+        )
         expect(mainWindow.webContents.send).not.toHaveBeenCalledWith(
           'pty:modelRestoreNeeded',
           expect.anything()

@@ -51,6 +51,7 @@ vi.mock('../codex/codex-state-db-backfill-recovery', () =>
 
 describe('registerPtyHandlers', () => {
   const {
+    attachTestPaneView,
     handlers,
     mainWindow,
     mainWindowIpcEvent,
@@ -94,6 +95,7 @@ describe('registerPtyHandlers', () => {
         getProfiles: vi.fn()
       } as never)
       registerPtyHandlers(mainWindow as never)
+      attachTestPaneView('remote-like-pty')
       const ackData = getPtyAckDataListener()
       mainWindow.webContents.send.mockClear()
 
@@ -283,6 +285,7 @@ describe('registerPtyHandlers', () => {
 
 describe('PTY cumulative acknowledgement accounting', () => {
   const {
+    attachTestPaneView,
     mainWindow,
     createMockProc,
     getPtyAckDataListener,
@@ -440,6 +443,7 @@ describe('PTY cumulative acknowledgement accounting', () => {
         getProfiles: vi.fn()
       } as never)
       registerPtyHandlers(mainWindow as never)
+      attachTestPaneView('cumulative-pty')
       const ackData = getPtyAckDataListener()
       mainWindow.webContents.send.mockClear()
 

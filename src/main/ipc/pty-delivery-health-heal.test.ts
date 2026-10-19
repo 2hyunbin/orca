@@ -50,6 +50,8 @@ vi.mock('../codex/codex-state-db-backfill-recovery', () =>
 
 describe('registerPtyHandlers', () => {
   const {
+    openTestWindowPage,
+    attachTestPaneView,
     handlers,
     mainWindow,
     createMockProc,
@@ -79,7 +81,9 @@ describe('registerPtyHandlers', () => {
 
     try {
       registerPtyHandlers(destroyableWindow as never)
-      await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24, cwd: '/tmp' })
+      // The pane's page lives in this window, so its spawn record is admitted here.
+      const windowEvent = openTestWindowPage(destroyableWindow)
+      await handlers.get('pty:spawn')!(windowEvent, { cols: 80, rows: 24, cwd: '/tmp' })
       destroyableWindow.webContents.send.mockClear()
       mockProc.emitData('x'.repeat(600 * 1024))
       vi.advanceTimersByTime(8)
@@ -197,6 +201,9 @@ describe('registerPtyHandlers', () => {
       const provider = installObservableDaemonTestProvider()
       registerPtyHandlers(mainWindow as never)
       const bulkIds = Array.from({ length: 16 }, (_, index) => `writeoff-bulk-${index}`)
+      for (const id of [...bulkIds, 'writeoff-held']) {
+        attachTestPaneView(id)
+      }
       mainWindow.webContents.send.mockClear()
       for (const id of bulkIds) {
         provider.emitData(id, 'x'.repeat(600 * 1024))

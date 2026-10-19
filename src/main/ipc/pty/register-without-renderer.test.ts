@@ -189,7 +189,7 @@ describe('PTY registration without renderer delivery', () => {
     }
     registerPtyHandlers(renderer, runtime)
     expect(rendererEvents.listenerCount('did-finish-load')).toBe(0)
-    expect(rendererEvents.listenerCount('render-process-gone')).toBe(2)
+    expect(rendererEvents.listenerCount('render-process-gone')).toBe(1)
 
     await registerHeadlessPtyRuntime(runtime)
     expect(rendererEvents.eventNames()).toEqual([])
@@ -213,7 +213,7 @@ describe('PTY registration without renderer delivery', () => {
     vi.advanceTimersByTime(20)
     expect(onData).toHaveBeenCalledTimes(2)
     expect(rendererEvents.listenerCount('did-finish-load')).toBe(0)
-    expect(rendererEvents.listenerCount('render-process-gone')).toBe(2)
+    expect(rendererEvents.listenerCount('render-process-gone')).toBe(1)
     expect(mainWindow.webContents.send).toHaveBeenCalledWith(
       'pty:data',
       expect.objectContaining({ id: 'daemon-pty', data: 'output' })

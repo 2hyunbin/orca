@@ -439,6 +439,7 @@ describe('registerPtyHandlers', () => {
 
 describe('PTY bounded output draining', () => {
   const {
+    attachTestPaneView,
     handlers,
     mainWindow,
     createMockProc,
@@ -755,6 +756,9 @@ describe('PTY bounded output draining', () => {
     try {
       registerPtyHandlers(mainWindow as never)
       const ptyIds = Array.from({ length: 100 }, (_, index) => `pressure-pty-${index}`)
+      for (const id of ptyIds) {
+        attachTestPaneView(id)
+      }
       for (const id of ptyIds) {
         provider.emitData(id, 'a')
       }

@@ -50,6 +50,7 @@ vi.mock('../codex/codex-state-db-backfill-recovery', () =>
 
 describe('registerPtyHandlers', () => {
   const {
+    attachTestPaneView,
     handlers,
     mainWindow,
     createMockProc,
@@ -199,6 +200,7 @@ describe('registerPtyHandlers', () => {
     try {
       const provider = installObservableDaemonTestProvider()
       registerPtyHandlers(mainWindow as never)
+      attachTestPaneView('flood-pty')
       mainWindow.webContents.send.mockClear()
 
       // Flood in 64KB chunks like a `yes`-style producer honoring pause — node-pty pause() stops the fd read, so it stops emitting.
@@ -233,14 +235,19 @@ describe('registerPtyHandlers', () => {
 })
 
 describe('PTY producer flow control', () => {
-  const { mainWindow, installObservableDaemonTestProvider, getPtyDataSendCalls } =
-    setupPtyIpcSuite()
+  const {
+    attachTestPaneView,
+    mainWindow,
+    installObservableDaemonTestProvider,
+    getPtyDataSendCalls
+  } = setupPtyIpcSuite()
 
   it('resumes a paused producer when the PTY exits before draining', async () => {
     vi.useFakeTimers()
     try {
       const provider = installObservableDaemonTestProvider()
       registerPtyHandlers(mainWindow as never)
+      attachTestPaneView('flood-pty')
       mainWindow.webContents.send.mockClear()
 
       const finalPendingData = 'x'.repeat(320 * 1024)
@@ -260,6 +267,7 @@ describe('PTY producer flow control', () => {
     try {
       const provider = installObservableDaemonTestProvider()
       registerPtyHandlers(mainWindow as never)
+      attachTestPaneView('flood-pty')
       mainWindow.webContents.send.mockClear()
 
       provider.emitData('flood-pty', 'x'.repeat(320 * 1024))
@@ -278,6 +286,7 @@ describe('PTY producer flow control', () => {
     try {
       const provider = installObservableDaemonTestProvider()
       registerPtyHandlers(mainWindow as never)
+      attachTestPaneView('flood-pty')
       mainWindow.webContents.send.mockClear()
 
       const finalPendingData = 'x'.repeat(320 * 1024)
@@ -320,6 +329,7 @@ describe('PTY producer flow control', () => {
     try {
       const provider = installObservableDaemonTestProvider()
       registerPtyHandlers(mainWindow as never)
+      attachTestPaneView('send-fail-complete')
       mainWindow.webContents.send.mockClear()
       let failed = false
       let markerFailed = false

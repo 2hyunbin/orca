@@ -201,6 +201,8 @@ async function paneSpawnRequest(c: WindowLaunchCase): Promise<unknown> {
     JSON.stringify(rest)
       .replaceAll(tab.id, LAUNCH_TAB_ID)
       .replaceAll(String(rest.launchToken), LAUNCH_TOKEN)
+      // The connection key is a per-module counter; only its presence is the contract.
+      .replace(/"rendererAttachment":\{"key":"[^"]*"/, '"rendererAttachment":{"key":"connection"')
   )
 }
 
@@ -222,7 +224,11 @@ describe('window-tab producers: the pty:spawn request a real pane sends', () => 
   it.each([...WINDOW_LAUNCH_CASES, ...PLUS_LAUNCH_CASES, ...WORKSPACE_START_LAUNCH_CASES])(
     'row $row: $name',
     async (c) => {
-      expect(await paneSpawnRequest(c)).toEqual(windowSpawnRequest(c))
+      // A visible pane's spawn carries its own consuming connection record.
+      expect(await paneSpawnRequest(c)).toEqual({
+        ...windowSpawnRequest(c),
+        rendererAttachment: { key: 'connection', consuming: true, visible: true }
+      })
     }
   )
 })

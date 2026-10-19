@@ -567,15 +567,17 @@ describe('registerPtyHandlers', () => {
           cwd: '/tmp'
         })) as { id: string }
         const setConsuming = getPtySetRendererPtyConsumerListener()
+        // Why relative: earlier cases' unexited PTYs stay owned, and no view consumes them.
+        const gatedBefore = getPtyRendererDeliveryDebugSnapshot().hiddenDeliveryGatedPtyCount
 
         setConsuming(null, { id: spawnResult.id, consuming: false })
         expect(getPtyRendererDeliveryDebugSnapshot()).toMatchObject({
-          hiddenDeliveryGatedPtyCount: 1
+          hiddenDeliveryGatedPtyCount: gatedBefore + 1
         })
 
         mockProc.emitExit(0)
         expect(getPtyRendererDeliveryDebugSnapshot()).toMatchObject({
-          hiddenDeliveryGatedPtyCount: 0,
+          hiddenDeliveryGatedPtyCount: gatedBefore,
           deliveryInterestPtyCount: 0
         })
       } finally {

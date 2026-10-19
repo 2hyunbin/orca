@@ -87,6 +87,19 @@ export function reportTestPaneAttachment(
   })
 }
 
+/** Opens the test page from `webContents`' live main frame; returns that frame's IPC event. */
+export function openTestWindowPage(webContents: unknown): unknown {
+  const event = { sender: webContents, senderFrame: { parent: null, detached: false } }
+  listenerFor('pty:openRendererPage')(event, { page })
+  return event
+}
+
+/** A pane already shows `ptyId` in `webContents`' page: a consuming, visible connection. */
+export function attachTestPaneView(webContents: unknown, ptyId: string): void {
+  const event = openTestWindowPage(webContents)
+  reportTestPaneAttachment(event, event, ptyId, { consuming: true, visible: true })
+}
+
 /** A new page load opens its own page; the old page's records are retired with it. */
 export function openTestRendererPage(mainWindowIpcEvent: unknown, nextPage: string): void {
   keyByPty.clear()

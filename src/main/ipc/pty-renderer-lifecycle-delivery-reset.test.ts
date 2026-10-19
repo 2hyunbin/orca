@@ -460,6 +460,7 @@ describe('registerPtyHandlers', () => {
 
 describe('PTY renderer send recovery', () => {
   const {
+    attachTestPaneView,
     handlers,
     mainWindow,
     mainWindowIpcEvent,
@@ -477,6 +478,7 @@ describe('PTY renderer send recovery', () => {
     try {
       const provider = installObservableDaemonTestProvider()
       registerPtyHandlers(mainWindow as never)
+      attachTestPaneView('send-fail-partial')
       mainWindow.webContents.send.mockClear()
       const firstChunk = 'x'.repeat(16 * 1024)
       let failed = false
@@ -526,6 +528,7 @@ describe('PTY renderer send recovery', () => {
     try {
       const provider = installObservableDaemonTestProvider()
       registerPtyHandlers(mainWindow as never)
+      attachTestPaneView('send-fail-reset')
       const resetRenderer = getMainFrameNavigationListener()
       const readyRenderer = getPtyRendererDispatcherReadyListener()
       let failed = false
@@ -608,6 +611,7 @@ describe('PTY renderer send recovery', () => {
     try {
       const provider = installObservableDaemonTestProvider()
       registerPtyHandlers(mainWindow as never)
+      attachTestPaneView('send-fail-exit')
       const pending = 'x'.repeat(320 * 1024)
       provider.emitData('send-fail-exit', pending)
       expect(provider.pauseProducer).toHaveBeenCalledWith('send-fail-exit')
@@ -649,6 +653,7 @@ describe('PTY renderer send recovery', () => {
     try {
       const provider = installObservableDaemonTestProvider()
       registerPtyHandlers(mainWindow as never)
+      attachTestPaneView('flood-pty')
       provider.emitData('flood-pty', 'x'.repeat(3 * 1024 * 1024))
       expect(getPtyRendererDeliveryDebugSnapshot()).toMatchObject({
         pendingPtyCount: 1,

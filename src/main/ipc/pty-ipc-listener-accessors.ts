@@ -1,5 +1,10 @@
 import { onMock } from './pty-ipc-mock-registry'
-import { getTestRendererPage, reportTestPaneAttachment } from './pty-ipc-test-pane-attachments'
+import {
+  attachTestPaneView as attachPaneView,
+  openTestWindowPage as openWindowPage,
+  getTestRendererPage,
+  reportTestPaneAttachment
+} from './pty-ipc-test-pane-attachments'
 
 type IpcHandlerMap = Map<string, (_event: unknown, args: unknown) => unknown>
 type MainWindowDouble = {
@@ -54,6 +59,16 @@ export function createPtyIpcListenerAccessors(ctx: {
   ) => void {
     return (event, args) =>
       reportTestPaneAttachment(mainWindowIpcEvent, event, args.id, { visible: args.visible })
+  }
+
+  /** A visible pane in `window` (the suite window by default) already consumes `ptyId`. */
+  function attachTestPaneView(ptyId: string, window: { webContents: unknown } = mainWindow): void {
+    attachPaneView(window.webContents, ptyId)
+  }
+
+  /** Opens the test page from `window`'s main frame and returns its IPC event. */
+  function openTestWindowPage(window: { webContents: unknown }): unknown {
+    return openWindowPage(window.webContents)
   }
 
   /** The pane connection for `id` reports whether its view consumes the bytes. */
@@ -211,6 +226,8 @@ export function createPtyIpcListenerAccessors(ctx: {
     getMainFrameNavigationCommitListener,
     getPtyResizeListener,
     getPtySetRendererPtyConsumerListener,
+    attachTestPaneView,
+    openTestWindowPage,
     getPtyHiddenOutputRestoreAppliedListener,
     getPtySetDeliveryInterestListener,
     DELIVERY_RESYNC_UNANSWERED_WARNING,

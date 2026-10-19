@@ -212,7 +212,10 @@ describe('registerPtyHandlers hidden-output restore ack', () => {
       })
       daemon.emitData(id, 'live')
       vi.advanceTimersByTime(50)
-      expect(mainWindow.webContents.send).toHaveBeenCalledWith('pty:data', { id, data: 'live' })
+      expect(mainWindow.webContents.send).toHaveBeenCalledWith(
+        'pty:data',
+        expect.objectContaining({ id, data: 'live' })
+      )
 
       // Its own retirement leaves no connection: main drops and owns replies again.
       send('pty:closeRendererAttachment', { key: 'new' })

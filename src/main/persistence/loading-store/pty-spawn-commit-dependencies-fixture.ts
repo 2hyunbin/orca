@@ -27,7 +27,7 @@ export function createPtySpawnCommitDependencies(
     reconcileSharedRuntimeResumeHome: unexpectedPreflight,
     stripSequencedStartupResumeArgv: unexpectedPreflight,
     trustedTerminalHandleEnv: new Set(),
-    syncPtyBackgroundedDelivery: unexpectedPreflight,
+    syncPtyBackgroundedDelivery: () => {},
     stopReplacedPty: unexpectedPreflight,
     requestSerializedBuffer: unexpectedPreflight,
     shutdownProviderAndDetectExit: unexpectedPreflight,

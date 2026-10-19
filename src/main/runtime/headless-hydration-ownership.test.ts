@@ -1,7 +1,11 @@
-import { expect, it, vi } from 'vitest'
+import { expect, it, onTestFinished, vi } from 'vitest'
 import { HeadlessEmulator } from '../daemon/headless-emulator'
 import type { PtyProviderBufferSnapshot } from '../providers/pty-provider-contract'
 import { deferred, makeDeferred, syncSinglePty } from './orca-runtime-test-fixtures.spec'
+import {
+  closeRendererAttachment,
+  openRendererAttachment
+} from '../ipc/pty/delivery/renderer-attachments'
 import {
   createHydrationRuntime,
   EMPTY_RETAINED_STATE,
@@ -30,6 +34,9 @@ function prepare() {
 
 it('does not start renderer hydration after the model retires before its callback', async () => {
   const { runtime, snapshot, serialize } = prepare()
+  // A consuming pane owns this chunk's replies, so main must not forward them.
+  openRendererAttachment('page', 'view', PTY_ID, { consuming: true, visible: true })
+  onTestFinished(() => closeRendererAttachment('page', 'view'))
   runtime.onPtyData(PTY_ID, 'queued-live', 1)
   const old = runtime.model()
   const write = vi.spyOn(old.emulator, 'write')
