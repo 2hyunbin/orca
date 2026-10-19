@@ -53,9 +53,11 @@ export async function seedLineageScenario(
     { worktreeId: parentId, updates: { displayName: 'E2E lineage parent', sortOrder: 0 } },
     { worktreeId: childId, updates: { displayName: 'E2E lineage child', sortOrder: 1 } }
   ])
-  await linkWorkspaces(page, [{ childId, parentId }])
+  if (!options.inlineOnly) {
+    await linkWorkspaces(page, [{ childId, parentId }])
+  }
   if (options.inlineOnly) {
-    // The window keeps only the records' inline link, as when its lineage side-map never hydrated.
+    // Window-only on purpose: the records' inline link with no side map, which main cannot produce.
     await page.evaluate(({ parentId, childId, parentInstanceId, childInstanceId }) => {
       const lineage = {
         worktreeId: childId,

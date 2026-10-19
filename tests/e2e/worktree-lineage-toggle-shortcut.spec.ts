@@ -237,7 +237,7 @@ test.describe('Toggle Child Workspaces shortcut', () => {
   }) => {
     const { parentId, childId } = await seedLineageScenario(orcaPage)
     await setToggleBinding(orcaPage, ['Mod+Alt+H'])
-    // The child was recreated at the same path: its new instance no longer matches the link.
+    // Stands in for recreating the child at the same path: its new instance no longer matches the link.
     await writeWorkspaceMeta(orcaPage, [
       { worktreeId: childId, updates: { instanceId: 'recreated-child' } }
     ])

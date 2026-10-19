@@ -71,14 +71,31 @@ export async function addRepoWithWorkspaces(
   }
 }
 
-/** Writes workspace metadata through main, all at once. */
+/** Writes workspace metadata through main, all at once, and fails unless main lists it. */
 export async function writeWorkspaceMeta(
   page: Page,
   updates: { worktreeId: string; updates: Partial<WorktreeMeta> }[]
 ): Promise<void> {
   await evaluatePolled(
     page,
-    (updates) => window.__store!.getState().updateWorktreesMeta(updates),
+    async (updates) => {
+      // The store keeps its own copy when main refuses, so check main's listing.
+      await window.__store!.getState().updateWorktreesMeta(updates)
+      const repoIds = [...new Set(updates.map(({ worktreeId }) => worktreeId.split('::')[0]!))]
+      const listed = new Map(
+        (await Promise.all(repoIds.map((repoId) => window.api.worktrees.list({ repoId }))))
+          .flat()
+          .map((worktree) => [worktree.id, worktree])
+      )
+      for (const { worktreeId, updates: written } of updates) {
+        const kept = new Map(Object.entries(listed.get(worktreeId) ?? {}))
+        for (const [field, value] of Object.entries(written)) {
+          if (kept.get(field) !== value) {
+            throw new Error(`main did not keep ${field} for ${worktreeId}`)
+          }
+        }
+      }
+    },
     updates
   )
 }

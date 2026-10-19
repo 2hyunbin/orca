@@ -39,7 +39,10 @@ for (const newCardStyle of [false, true]) {
       async ({ newCardStyle, parentId }) => {
         const store = window.__store!
         const state = store.getState()
-        const collapsedGroups = [`lineage:local|${parentId}`]
+        const parent = state.allWorktrees().find((worktree) => worktree.id === parentId)!
+        const collapsedGroups = [
+          `lineage:${parent.hostId ? `${parent.hostId}|${parent.id}` : parent.id}`
+        ]
         await window.api.ui.set({ groupBy: 'none', collapsedGroups })
         await state.updateSettings({ experimentalNewWorktreeCardStyle: newCardStyle })
         store.setState({
