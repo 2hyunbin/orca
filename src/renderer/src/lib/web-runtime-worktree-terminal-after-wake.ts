@@ -114,8 +114,14 @@ export async function ensureWebRuntimeWorktreeTerminalAfterWake(
   }
 
   const startup = opts?.startup
+  // Why a separate promise: the caller learns only whether a terminal opened, never the host the
+  // create resolved, so routing stays with the explicit environment above.
+  let settle: (opened: boolean) => void = () => {}
+  const opened = new Promise<boolean>((resolve) => {
+    settle = resolve
+  })
   // Why: sleep keeps tab rows but terminal.stop clears host PTYs, while a failed create receipt leaves a selected agent with no host surface.
-  return createWebRuntimeSessionTerminal(
+  void createWebRuntimeSessionTerminal(
     {
       worktreeId,
       environmentId: runtimeEnvironmentId,
@@ -145,9 +151,11 @@ export async function ensureWebRuntimeWorktreeTerminalAfterWake(
           id: `web-runtime-worktree-terminal:${runtimeEnvironmentId}:${worktreeId}`
         })
       }
-      return outcome.status === 'created'
+      settle(outcome.status === 'created')
     })
     .finally(() => {
+      settle(false)
       endWebRuntimeWakeTerminalRespawn(worktreeId)
     })
+  return opened
 }

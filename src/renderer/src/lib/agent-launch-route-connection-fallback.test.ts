@@ -75,7 +75,7 @@ it.each(['duplicate', 'sentinel', 'focused', 'owned'] as const)(
   'admits missing-status native chat only with explicit ownership: %s',
   (kind) => {
     const store = storeWithAmbiguousWorktreeRows(null, 'runtime:server-1')
-    store.settings = { ...NATIVE_CHAT_SETTINGS, activeRuntimeEnvironmentId: 'server-1' }
+    store.settings = { ...store.settings, activeRuntimeEnvironmentId: 'server-1' }
     if (kind !== 'duplicate') {
       delete store.worktreesByRepo![kind === 'focused' ? 'repo-2' : 'repo-1']
     }
