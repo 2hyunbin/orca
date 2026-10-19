@@ -2,6 +2,7 @@ import type { BrowserWindow } from 'electron'
 import { ipcMain } from 'electron'
 import type { Store } from '../../persistence'
 import type { Repo } from '../../../shared/repo-types'
+import type { RepoHostTarget } from '../../../shared/repo-host-identity'
 import type { NestedRepoScanResult, ProjectGroup } from '../../../shared/project-group-types'
 import { notifyReposChanged } from './repos-changed-notification'
 import {
@@ -70,7 +71,10 @@ export function registerProjectGroupHandlers(mainWindow: BrowserWindow, store: S
       'invalid_project_group_move_repo_args'
     )
     assertWslMoveProjectWritable(store, { repoId: args.projectId })
-    const moved = store.moveProjectToGroup(args.projectId, args.groupId, args.order)
+    const target: RepoHostTarget | undefined = args.hostId
+      ? { id: args.projectId, executionHostId: args.hostId }
+      : store.getRepo(args.projectId)
+    const moved = target ? store.moveProjectToGroup(target, args.groupId, args.order) : null
     if (moved) {
       notifyReposChanged(mainWindow)
     }

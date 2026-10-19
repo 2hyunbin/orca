@@ -1,0 +1,16 @@
+# Store writes whose first parameter is a bare repo or worktree id (R4-2), as Class.method.
+# This is a RATCHET: entries may only be REMOVED. Take RepoHostTarget or HostWorktreeTarget.
+# Prune after a fix: pnpm check:id-only-store-write-ratchet --prune
+AutomationPersistence.snapshotAutomationRunWorkspaceDisplayName
+MetadataLineageOperations.migrateWorktreeIdentity
+MetadataLineageOperations.removeWorktreeLineage
+MetadataLineageOperations.removeWorktreeMeta
+MetadataLineageOperations.setWorktreeLineage
+MetadataLineageOperations.setWorktreeMeta
+MetadataLineageOperations.setWorktreeMetaForHost
+OrcadMigrationBlobInstallPersistence.installDeferredOrcadMigrationShellHistory
+ProjectCollectionOperations.deleteProjectGroup
+ProjectCollectionOperations.removeFolderWorkspace
+ProjectCollectionOperations.updateFolderWorkspace
+ProjectCollectionOperations.updateProjectGroup
+SessionHostPartitionOperations.removeWorkspaceSessionStateForWorktree

@@ -114,7 +114,7 @@ export function registerRepoCatalogHandlers(
         scheduleCurrentWorktreeBaseDirectoryWatcherSync()
         return
       }
-      store.removeProjectForHost(args.repoId, hostId)
+      store.removeProjectForHost({ id: args.repoId, executionHostId: hostId })
       invalidateAuthorizedRootsCache()
       notifyReposChanged(mainWindow)
     }

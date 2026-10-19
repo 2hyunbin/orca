@@ -487,7 +487,7 @@ describe('orcad migration catalog persistence', () => {
     const store = createStore()
     const input = manifest()
     commitCatalog(store, input)
-    store.removeProjectForHost(REPOSITORY.id, 'local')
+    store.removeProjectForHost({ id: REPOSITORY.id, executionHostId: 'local' })
 
     expect(store.getOrcadMigrationCatalogState(input).state).toBe('committed')
     expect(store.getRepos()).toEqual([])

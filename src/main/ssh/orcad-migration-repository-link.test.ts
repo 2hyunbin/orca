@@ -402,7 +402,7 @@ describe('moving the host again after its server was stopped', () => {
       connectionId: TARGET.id,
       createdFrom: 'manual'
     })
-    store.moveProjectToGroup('desktop-repo', group.id)
+    store.moveProjectToGroup(store.getRepo('desktop-repo')!, group.id)
     return group.id
   }
   const groupName = (owner: Store, id: string) =>
@@ -443,7 +443,7 @@ describe('moving the host again after its server was stopped', () => {
     server.updateProjectGroup(groupId, { name: 'Renamed on the server' })
     stopServer()
     store.addRepo(repo('added-after-stop', '/root/later'))
-    store.moveProjectToGroup('added-after-stop', groupId)
+    store.moveProjectToGroup(store.getRepo('added-after-stop')!, groupId)
 
     await expect(convert()).resolves.toMatchObject({ outcome: 'converted' })
     expect(server.getRepo('added-after-stop')?.projectGroupId).toBe(groupId)
@@ -478,7 +478,7 @@ describe('moving the host again after its server was stopped', () => {
       connectionId: TARGET.id,
       createdFrom: 'manual'
     })
-    store.moveProjectToGroup('desktop-repo', child.id)
+    store.moveProjectToGroup(store.getRepo('desktop-repo')!, child.id)
     await convert()
     server.updateProjectGroup(parent.id, { name: 'Parent renamed on the server' })
     stopServer()
@@ -512,7 +512,7 @@ describe('moving the host again after its server was stopped', () => {
     await expect(convert()).resolves.toMatchObject({ outcome: 'converted' })
     expect(groupName(server, groupId)).toBe('Before')
     store.addRepo(repo('added-later', '/root/later'))
-    store.moveProjectToGroup('added-later', groupId)
+    store.moveProjectToGroup(store.getRepo('added-later')!, groupId)
     await expect(runDelta()).resolves.toMatchObject({ outcome: 'moved' })
     expect(server.getRepo('added-later')?.projectGroupId).toBe(groupId)
   })
@@ -605,7 +605,7 @@ describe('moving the host again after its server was stopped', () => {
     await convert()
     server.updateProjectGroup(groupId, { name: 'Renamed on the server', isCollapsed: true })
     store.addRepo(repo('added-later', '/root/later'))
-    store.moveProjectToGroup('added-later', groupId)
+    store.moveProjectToGroup(store.getRepo('added-later')!, groupId)
     await expect(runDelta()).resolves.toMatchObject({ outcome: 'moved' })
     expect(server.getRepo('added-later')?.projectGroupId).toBe(groupId)
     expect(groupName(server, groupId)).toBe('Renamed on the server')
@@ -624,10 +624,10 @@ describe('moving the host again after its server was stopped', () => {
         stopServer()
         await convert()
       }
-      server.moveProjectToGroup('desktop-repo', null)
+      server.moveProjectToGroup(server.getRepo('desktop-repo')!, null)
       server.deleteProjectGroup(groupId)
       store.addRepo(repo('added-later', '/root/later'))
-      store.moveProjectToGroup('added-later', groupId)
+      store.moveProjectToGroup(store.getRepo('added-later')!, groupId)
       await expect(runDelta()).resolves.toMatchObject({
         outcome: 'refused',
         code: 'orcad_delta_refused_by_server'

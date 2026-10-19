@@ -36,7 +36,9 @@ export function registerRuntimeRemoveProjectHostScopeTests(): void {
 
   function createRuntime() {
     const repos = makeRepos()
-    const removeProjectForHost = vi.fn((id: string, hostId: string) => {
+    const removeProjectForHost = vi.fn((target: RepoHostTarget) => {
+      const id = target.id
+      const hostId = getRepoExecutionHostId(target)
       for (let index = repos.length - 1; index >= 0; index -= 1) {
         const repo = repos[index]
         const repoHostId =
@@ -59,6 +61,10 @@ export function registerRuntimeRemoveProjectHostScopeTests(): void {
       updateRepo: (target: RepoHostTarget, updates: Partial<Repo>) => {
         const row = findRepoRowForHostScopedWrite(repos, target.id, getRepoExecutionHostId(target))
         return row ? Object.assign(row, updates) : null
+      },
+      moveProjectToGroup: (target: RepoHostTarget, groupId: string | null) => {
+        const row = findRepoRowForHostScopedWrite(repos, target.id, getRepoExecutionHostId(target))
+        return row ? Object.assign(row, { projectGroupId: groupId }) : null
       },
       removeProjectForHost
     } as never)
@@ -88,6 +94,16 @@ export function registerRuntimeRemoveProjectHostScopeTests(): void {
       await expect(runtime.removeProject('dup')).rejects.toThrow('selector_ambiguous')
       expect(removeProjectForHost).not.toHaveBeenCalled()
       expect(repos).toHaveLength(2)
+    })
+  })
+
+  describe('projectGroup.moveProject with the same repo id on two execution hosts', () => {
+    it('moves the SSH row a path selector picked, not its local sibling', async () => {
+      const { runtime, repos } = createRuntime()
+
+      await runtime.moveProjectToGroup('path:/remote/dup', 'group-1')
+
+      expect(repos.map((repo) => repo.projectGroupId)).toEqual([undefined, 'group-1'])
     })
   })
 

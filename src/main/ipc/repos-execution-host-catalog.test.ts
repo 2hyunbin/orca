@@ -64,4 +64,43 @@ describe('projectGroups IPC validation', () => {
 
     expect(mockStore.updateProjectGroup).not.toHaveBeenCalled()
   })
+
+  it('moves the twin on the host the renderer named, not the first row with the id', () => {
+    const localRow = { id: 'dup', path: '/laptop/dup', executionHostId: 'local' }
+    mockStore.getRepo.mockReturnValue(localRow)
+    mockStore.moveProjectToGroup.mockReturnValue({ id: 'dup', connectionId: 'ssh-1' })
+
+    handlers.get('projectGroups:moveProject')!(null, {
+      projectId: 'dup',
+      groupId: 'group-1',
+      hostId: 'ssh:ssh-1'
+    })
+
+    expect(mockStore.moveProjectToGroup).toHaveBeenCalledWith(
+      { id: 'dup', executionHostId: 'ssh:ssh-1' },
+      'group-1',
+      undefined
+    )
+  })
+
+  it('keeps moving the first row with the id for a caller that names no host', () => {
+    const localRow = { id: 'dup', path: '/laptop/dup', executionHostId: 'local' }
+    mockStore.getRepo.mockReturnValue(localRow)
+
+    handlers.get('projectGroups:moveProject')!(null, { projectId: 'dup', groupId: null })
+
+    expect(mockStore.moveProjectToGroup).toHaveBeenCalledWith(localRow, null, undefined)
+  })
+
+  it('rejects an invalid host id before persistence', () => {
+    expect(() =>
+      handlers.get('projectGroups:moveProject')!(null, {
+        projectId: 'dup',
+        groupId: null,
+        hostId: 'not a host'
+      })
+    ).toThrow('invalid_project_group_move_repo_args')
+
+    expect(mockStore.moveProjectToGroup).not.toHaveBeenCalled()
+  })
 })
