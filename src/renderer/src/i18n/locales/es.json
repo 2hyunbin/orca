@@ -18578,9 +18578,7 @@
         "queued": "En cola",
         "clearAll": "Borrar todo",
         "pasteOrDropImages": "Pega o suelta imágenes",
-        "saveNeedsContent": "Añade texto o una imagen para guardar",
-        "saveTooManyImages": "Demasiadas imágenes para guardar en un mensaje",
-        "saveTooLarge": "Este mensaje es demasiado largo para guardarlo"
+        "saveNeedsContent": "Añade texto o una imagen para guardar"
       },
       "thought": "Pensó",
       "thoughtForDuration": "Pensó durante {{duration}}",

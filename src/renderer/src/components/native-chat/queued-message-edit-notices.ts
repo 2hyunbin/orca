@@ -34,28 +34,3 @@ export function queuedEditNotice(
       )
   }
 }
-
-/** Why a queued edit's Save is off, in words the person can act on. */
-export function queuedEditSaveReason(
-  reason: 'not-editable' | 'empty' | 'too-large' | 'too-many-blocks'
-): string {
-  switch (reason) {
-    case 'empty':
-      return translate(
-        'components.native-chat.queuedMessages.saveNeedsContent',
-        'Add text or an image to save'
-      )
-    case 'too-many-blocks':
-      return translate(
-        'components.native-chat.queuedMessages.saveTooManyImages',
-        'Too many images to save in one message'
-      )
-    case 'too-large':
-      return translate(
-        'components.native-chat.queuedMessages.saveTooLarge',
-        'This message is too long to save'
-      )
-    case 'not-editable':
-      return queuedEditNotice('editFailed')
-  }
-}

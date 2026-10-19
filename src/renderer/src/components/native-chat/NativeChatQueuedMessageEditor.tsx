@@ -32,8 +32,7 @@ export function NativeChatQueuedMessageEditor({
   const field = useRef<HTMLTextAreaElement>(null)
   const intake = useNativeChatQueuedEditImageIntake(editor, attachTo, field)
   const chips = editor.images?.chips ?? []
-  const reason = editor.images?.reason
-  const saveDisabled = editor.acquiring || editor.saving || !editor.canSave
+  const empty = editor.images?.empty === true
   useLayoutEffect(() => {
     if (editor.acquiring) {
       return
@@ -124,20 +123,30 @@ export function NativeChatQueuedMessageEditor({
       />
       <div className="mt-1.5 flex items-center gap-1.5">
         {intake.editable ? <QueuedEditAttachButton onAttach={intake.attach} /> : null}
-        {reason || intake.editable ? (
+        {empty || intake.editable ? (
           <span className="min-w-0 truncate text-xs text-muted-foreground">
-            {reason ??
-              translate(
-                'components.native-chat.queuedMessages.pasteOrDropImages',
-                'Paste or drop images'
-              )}
+            {empty
+              ? translate(
+                  'components.native-chat.queuedMessages.saveNeedsContent',
+                  'Add text or an image to save'
+                )
+              : translate(
+                  'components.native-chat.queuedMessages.pasteOrDropImages',
+                  'Paste or drop images'
+                )}
           </span>
         ) : null}
-        <QueuedEditSaveButton
-          disabled={saveDisabled}
-          reason={saveDisabled ? reason : undefined}
-          onSave={editor.save}
-        />
+        <div className="ml-auto">
+          <Button
+            type="button"
+            size="xs"
+            disabled={editor.acquiring || editor.saving || !editor.canSave}
+            onClick={editor.save}
+          >
+            {translate('components.native-chat.queuedMessages.save', 'Save')}
+            <ButtonKeyHint />
+          </Button>
+        </div>
       </div>
     </div>
   )
@@ -154,38 +163,6 @@ function QueuedEditAttachButton({ onAttach }: { onAttach: () => void }): React.J
       </TooltipTrigger>
       <TooltipContent side="top" sideOffset={4}>
         {label}
-      </TooltipContent>
-    </Tooltip>
-  )
-}
-
-/** A disabled Save says why, as the chat box's Send does, when the person can fix it. */
-function QueuedEditSaveButton({
-  disabled,
-  reason,
-  onSave
-}: {
-  disabled: boolean
-  reason: string | undefined
-  onSave: () => void
-}): React.JSX.Element {
-  const button = (
-    <Button type="button" size="xs" disabled={disabled} aria-label={reason} onClick={onSave}>
-      {translate('components.native-chat.queuedMessages.save', 'Save')}
-      <ButtonKeyHint />
-    </Button>
-  )
-  if (!reason) {
-    return <div className="ml-auto">{button}</div>
-  }
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        {/* A disabled button gets no pointer events, so the wrapper carries the hover. */}
-        <span className="ml-auto inline-flex">{button}</span>
-      </TooltipTrigger>
-      <TooltipContent side="top" sideOffset={4}>
-        {reason}
       </TooltipContent>
     </Tooltip>
   )

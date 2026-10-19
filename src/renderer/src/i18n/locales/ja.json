@@ -18761,9 +18761,7 @@
         "queued": "キュー待ち",
         "clearAll": "すべてクリア",
         "pasteOrDropImages": "画像を貼り付けるかドロップ",
-        "saveNeedsContent": "保存するにはテキストか画像を追加してください",
-        "saveTooManyImages": "1 件のメッセージに保存できる画像の数を超えています",
-        "saveTooLarge": "このメッセージは長すぎて保存できません"
+        "saveNeedsContent": "保存するにはテキストか画像を追加してください"
       },
       "thought": "考えました",
       "thoughtForDuration": "{{duration}} 考えました",

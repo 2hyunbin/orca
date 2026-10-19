@@ -40,6 +40,58 @@ function sameImages(
   )
 }
 
+/** An edit in progress: the typed text, the card's own image blocks still kept (verbatim), and
+ *  the images added in this edit, whose `path` is empty while the upload is pending. */
+export type QueuedMessageEditDraft = {
+  text: string
+  kept: readonly { block: QueuedMessageImageBlock }[]
+  added: readonly { path: string; pending?: boolean }[]
+}
+
+/** The card's image blocks an edit starts from, each with a chip id that survives removals. */
+export function queuedEditKeptImages(
+  body: AgentJournalMessageItem
+): { id: string; block: QueuedMessageImageBlock }[] {
+  return body.blocks.flatMap((block, index) =>
+    block.type === 'image-ref' ? [{ id: `kept-${index}`, block }] : []
+  )
+}
+
+function queuedEditImagesChanged(
+  body: AgentJournalMessageItem,
+  draft: QueuedMessageEditDraft
+): boolean {
+  const kept = draft.kept.map(({ block }) => block)
+  return draft.added.length > 0 || !sameImages(kept, imageBlocks(body))
+}
+
+export function queuedEditDirty(
+  body: AgentJournalMessageItem,
+  draft: QueuedMessageEditDraft
+): boolean {
+  return draft.text !== queuedMessageEditableText(body) || queuedEditImagesChanged(body, draft)
+}
+
+export function queuedEditImagesPending(draft: QueuedMessageEditDraft): boolean {
+  return draft.added.some((image) => image.pending)
+}
+
+/** What Save writes; the image set only when it changed and the host takes it, so a text-only
+ *  Save stays what every host accepts. */
+export function queuedEditInput(
+  body: AgentJournalMessageItem,
+  draft: QueuedMessageEditDraft,
+  imagesCapable: boolean
+): QueuedMessageEdit {
+  if (!imagesCapable || !queuedEditImagesChanged(body, draft)) {
+    return { text: draft.text }
+  }
+  const added = draft.added.flatMap((image) =>
+    image.pending ? [] : [{ type: 'image-ref' as const, path: image.path }]
+  )
+  return { text: draft.text, images: [...draft.kept.map(({ block }) => block), ...added] }
+}
+
 /** The edited body; sender, kind and send mode stay. Without `images` the text replaces the
  *  first text block in place and attachments stay; with them the blocks are rebuilt in a fresh
  *  send's order (text, then images), within the limits `SendBody` enforces. */

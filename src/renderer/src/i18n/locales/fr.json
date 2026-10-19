@@ -18830,9 +18830,7 @@
         "queued": "En file d'attente",
         "clearAll": "Tout effacer",
         "pasteOrDropImages": "Collez ou déposez des images",
-        "saveNeedsContent": "Ajoutez du texte ou une image pour enregistrer",
-        "saveTooManyImages": "Trop d’images pour un seul message",
-        "saveTooLarge": "Ce message est trop long pour être enregistré"
+        "saveNeedsContent": "Ajoutez du texte ou une image pour enregistrer"
       },
       "thought": "A réfléchi",
       "thoughtForDuration": "A réfléchi pendant {{duration}}",

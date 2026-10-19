@@ -13,17 +13,17 @@ import type {
 import type { AgentJournalSubmission } from '../../../../shared/agent-session-journal-types'
 import { agentSessionSendBodyFingerprint } from '../../../../shared/structured-agent-session-send-mutation'
 import {
+  queuedEditDirty,
+  queuedEditImagesPending,
+  queuedEditInput,
   queuedMessageEditableText,
   queuedMessageWithEdit
 } from '../../../../shared/queued-message-edit'
 import { queuedEditNotice } from './queued-message-edit-notices'
 import {
   handOffQueuedEdit,
-  queuedEditDirty,
   queuedEditImageFields,
   queuedEditImagesEditor,
-  queuedEditImagesPending,
-  queuedEditInput,
   releaseQueuedEditImages,
   type QueuedEditImagesEditor,
   type QueuedEditImageState
@@ -67,7 +67,6 @@ export type QueuedMessageInlineEditor = {
 type Edit = QueuedEditImageState & {
   scope: string
   messageId: string
-  body: AgentSessionQueuedMessage['body']
   /** The body Save expects to replace; fixed for the edit, so a newer text is never overwritten. */
   baseFingerprint: string
   acquiring: boolean
@@ -118,7 +117,7 @@ export function useStructuredAgentSessionQueuedEdit(args: {
       if (active.current !== edit) {
         return
       }
-      if (queuedEditDirty(edit) && handOffQueuedEdit(edit)) {
+      if (queuedEditDirty(edit.body, edit) && handOffQueuedEdit(edit)) {
         toast.error(queuedEditNotice(latest.current.promptOpen ? 'editGonePrompt' : 'editGone'))
       }
       close()
@@ -133,7 +132,7 @@ export function useStructuredAgentSessionQueuedEdit(args: {
       const edit = active.current
       active.current = null
       reopen.current = null
-      if (edit && queuedEditDirty(edit)) {
+      if (edit && queuedEditDirty(edit.body, edit)) {
         handOffQueuedEdit(edit)
       }
       edit?.lease.end()
@@ -170,7 +169,6 @@ export function useStructuredAgentSessionQueuedEdit(args: {
         draftKey: composerScopeKey,
         messageId,
         body: message.body,
-        originalText: text,
         text,
         ...queuedEditImageFields(
           message.body,
@@ -219,11 +217,11 @@ export function useStructuredAgentSessionQueuedEdit(args: {
     if (!edit || edit.acquiring || edit.saving) {
       return
     }
-    if (!queuedEditDirty(edit)) {
+    if (!queuedEditDirty(edit.body, edit)) {
       close()
       return
     }
-    const input = queuedEditInput(edit, imagesCapable)
+    const input = queuedEditInput(edit.body, edit, imagesCapable)
     const edited = queuedMessageWithEdit(edit.body, input)
     if (!edited.ok || queuedEditImagesPending(edit)) {
       return
@@ -289,7 +287,10 @@ export function useStructuredAgentSessionQueuedEdit(args: {
   useEffect(() => {
     const edit = active.current
     if (edit && !edit.saving && messages !== null) {
-      const typed = queuedMessageWithEdit(edit.body, queuedEditInput(edit, imagesCapable))
+      const typed = queuedMessageWithEdit(
+        edit.body,
+        queuedEditInput(edit.body, edit, imagesCapable)
+      )
       const desired = typed.ok ? agentSessionSendBodyFingerprint(sessionId, typed.body) : null
       const view = { messages, cards, submissions }
       const standing = queuedEditStanding(view, sessionId, edit.messageId, desired)
@@ -312,7 +313,8 @@ export function useStructuredAgentSessionQueuedEdit(args: {
     }
   }, [begin, cards, close, gone, imagesCapable, messages, scope, sessionId, shown, submissions])
 
-  const typed = shown && queuedMessageWithEdit(shown.body, queuedEditInput(shown, imagesCapable))
+  const typed =
+    shown && queuedMessageWithEdit(shown.body, queuedEditInput(shown.body, shown, imagesCapable))
   const editor: QueuedMessageInlineEditor | undefined =
     shown && typed && shown.scope === scope
       ? {
