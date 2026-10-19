@@ -176,7 +176,6 @@ vi.mock('@/runtime/local-runtime-capabilities', () => ({
   awaitLocalRuntimeCapabilities: () => ({ known: Promise.resolve([]), stop: () => {} })
 }))
 vi.mock('@/lib/worktree-runtime-owner', () => ({
-  getExplicitRuntimeEnvironmentIdForWorktree: () => null,
   getExecutionHostIdForWorktree: () =>
     store.repos[0]?.connectionId ? `ssh:${store.repos[0].connectionId}` : 'local',
   runtimeEnvironmentIdWithLegacyFallbackUnlessTwin: () => null

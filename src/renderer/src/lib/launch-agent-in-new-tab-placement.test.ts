@@ -68,7 +68,6 @@ vi.mock('@/runtime/web-runtime-session-environment', () => ({
 }))
 
 vi.mock('@/lib/worktree-runtime-owner', () => ({
-  getExplicitRuntimeEnvironmentIdForWorktree: () => null,
   getExecutionHostIdForWorktree: () => 'local',
   runtimeEnvironmentIdWithLegacyFallbackUnlessTwin: () => null
 }))

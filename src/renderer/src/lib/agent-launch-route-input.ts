@@ -22,10 +22,8 @@ import {
 } from '@/lib/local-preflight-context'
 import type { NativeChatLaunchPromptDelivery } from '@/lib/native-chat-launch-prompt-delivery'
 import { isNativeChatTranscriptLocalReadable } from '@/lib/native-chat-transcript-readability'
-import {
-  getExecutionHostIdForWorktree,
-  getExplicitRuntimeEnvironmentIdForWorktree
-} from '@/lib/worktree-runtime-owner'
+import { getExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
+import { runtimeEnvironmentIdForWorkspaceOwner } from '@/lib/resolve-owner'
 import { readLocalRuntimeCapabilitiesOrUnknown } from '@/runtime/local-runtime-capabilities'
 import { resolveStructuredAgentSessionOwner } from '@/runtime/structured-agent-session-owner'
 import { pairedHostClientCapabilities } from '@/runtime/paired-host-client-capabilities'
@@ -148,12 +146,14 @@ export function buildAgentLaunchRouteInput(
     : undefined
   const executionHostId = owner ?? resolveExecutionHostId(store, workspace)
   const parsedOwner = owner ? parseRoutableExecutionHostId(owner) : null
-  const explicitRuntimeEnvironmentId = workspace.worktreeId
-    ? getExplicitRuntimeEnvironmentIdForWorktree(store, workspace.worktreeId)
-    : null
+  const explicitOwner =
+    parsedOwner?.kind === 'runtime' && workspace.worktreeId
+      ? runtimeEnvironmentIdForWorkspaceOwner(store, { workspaceId: workspace.worktreeId })
+      : null
   const admissionHostId =
     parsedOwner?.kind === 'runtime'
-      ? parsedOwner.environmentId === explicitRuntimeEnvironmentId
+      ? explicitOwner?.kind === 'resolved' &&
+        explicitOwner.environmentId === parsedOwner.environmentId
         ? parsedOwner.id
         : undefined
       : owner && parsedOwner?.kind === 'local'

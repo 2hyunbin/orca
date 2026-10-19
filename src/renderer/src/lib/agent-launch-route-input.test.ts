@@ -9,7 +9,7 @@ import type * as ConnectionOwnerResolutionModule from './connection-owner-resolu
 
 const mocks = vi.hoisted(() => ({
   getExecutionHostIdForWorktree: vi.fn(),
-  getExplicitRuntimeEnvironmentIdForWorktree: vi.fn(),
+  runtimeEnvironmentIdForWorkspaceOwner: vi.fn(),
   getConnectionIdFromState: vi.fn(),
   getLocalProjectExecutionRuntimeContext: vi.fn(),
   getLocalRepoProjectExecutionRuntimeContext: vi.fn(),
@@ -18,8 +18,10 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/worktree-runtime-owner', () => ({
-  getExecutionHostIdForWorktree: mocks.getExecutionHostIdForWorktree,
-  getExplicitRuntimeEnvironmentIdForWorktree: mocks.getExplicitRuntimeEnvironmentIdForWorktree
+  getExecutionHostIdForWorktree: mocks.getExecutionHostIdForWorktree
+}))
+vi.mock('@/lib/resolve-owner', () => ({
+  runtimeEnvironmentIdForWorkspaceOwner: mocks.runtimeEnvironmentIdForWorkspaceOwner
 }))
 // Why the partial mock: only the worktree-owner answer is staged here; the repo fallback must be
 // the real resolver, since it is what this suite pins.
@@ -85,7 +87,7 @@ function store(settings: Record<string, unknown> = STRUCTURED_SETTINGS): AgentLa
 function stageLocalStructuredHost(): void {
   vi.clearAllMocks()
   mocks.getExecutionHostIdForWorktree.mockReturnValue('local')
-  mocks.getExplicitRuntimeEnvironmentIdForWorktree.mockReturnValue(null)
+  mocks.runtimeEnvironmentIdForWorkspaceOwner.mockReturnValue({ kind: 'resolved', environmentId: null })
   mocks.getConnectionIdFromState.mockReturnValue(null)
   mocks.getLocalProjectExecutionRuntimeContext.mockReturnValue(undefined)
   mocks.getLocalRepoProjectExecutionRuntimeContext.mockReturnValue(undefined)
@@ -381,7 +383,10 @@ describe('buildAgentLaunchRouteInput', () => {
 
     beforeEach(() => {
       mocks.getExecutionHostIdForWorktree.mockReturnValue('runtime:server-1')
-      mocks.getExplicitRuntimeEnvironmentIdForWorktree.mockReturnValue('server-1')
+      mocks.runtimeEnvironmentIdForWorkspaceOwner.mockReturnValue({
+        kind: 'resolved',
+        environmentId: 'server-1'
+      })
       mocks.readLocalRuntimeCapabilitiesOrUnknown.mockReturnValue([])
     })
 

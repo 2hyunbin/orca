@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as StructuredAgentSessionClientModule from '@/runtime/structured-agent-session-client'
 
 vi.mock('@/runtime/structured-agent-session-client', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/runtime/structured-agent-session-client')>()),
+  ...(await importOriginal<typeof StructuredAgentSessionClientModule>()),
   callStructuredAgentSession: vi.fn(async () => ({ supported: false }))
 }))
 
