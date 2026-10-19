@@ -466,7 +466,8 @@ import {
   PreflightAgentDetection,
   PreflightCheck,
   PreflightDetectRemoteAgents,
-  PreflightDetectRemoteWindowsTerminalCapabilities
+  PreflightDetectRemoteWindowsTerminalCapabilities,
+  PreflightProjectAgentDetection
 } from './preflight-params'
 import {
   ProjectHostSetupClone,
@@ -1199,7 +1200,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'plugins.readPanelEntry': PluginReadPanelEntryParams,
   'plugins.setEnabled': PluginSetEnabledParams,
   'preflight.check': PreflightCheck,
-  'preflight.detectAgents': PreflightAgentDetection,
+  'preflight.detectAgents': PreflightProjectAgentDetection,
   'preflight.detectRemoteAgents': PreflightDetectRemoteAgents,
   'preflight.detectRemoteWindowsTerminalCapabilities':
     PreflightDetectRemoteWindowsTerminalCapabilities,

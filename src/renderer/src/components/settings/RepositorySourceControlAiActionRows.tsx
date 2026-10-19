@@ -87,7 +87,7 @@ export function RepositorySourceControlAiActionRows({
   onActionSave
 }: RepositorySourceControlAiActionRowsProps): React.JSX.Element {
   useSourceControlActionAgentInventory()
-  const resolveChatAgent = useSourceControlActionChatAgent(null, defaultTuiAgent).resolve
+  const resolveChatAgent = useSourceControlActionChatAgent(null, defaultTuiAgent ?? null).resolve
   return (
     <div className="space-y-3">
       <Label className="text-xs font-medium">

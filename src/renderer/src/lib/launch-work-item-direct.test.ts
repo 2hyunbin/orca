@@ -840,7 +840,7 @@ describe('launchWorkItemDirect', () => {
     vi.spyOn(localCapabilities, 'readLocalRuntimeCapabilitiesOrUnknown').mockReturnValue(
       RUNTIME_CAPABILITIES
     )
-    mocks.store.settings = { ...mocks.store.settings, experimentalNativeChat: true }
+    mocks.store.settings = Object.assign({}, mocks.store.settings, { experimentalNativeChat: true })
     vi.mocked(beginDirectWorkItemStructuredLaunch).mockReturnValueOnce({
       completed: true,
       structuredLaunch: true,
