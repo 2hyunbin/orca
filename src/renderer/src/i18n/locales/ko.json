@@ -12460,7 +12460,10 @@
           "planLevel": "요금제: {{value0}}",
           "hostOnly": "요금제 사이트와 API 키는 Orca를 실행 중인 컴퓨터의 데스크톱 앱에서 변경하세요.",
           "detailsUnavailable": "요금제 자격 증명 세부 정보는 Orca를 실행 중인 컴퓨터에서만 볼 수 있습니다.",
-          "siteUnavailable": "호스트 요금제 사이트 이용 불가"
+          "siteUnavailable": "호스트 요금제 사이트 이용 불가",
+          "keyStoredOnHostHelp": "{{host}}에 저장되며, 사용량을 새로 고칠 때 그곳에서 선택한 사이트로만 전송됩니다. ZCode CLI 로그인보다 우선합니다.",
+          "usingCliOnHostHelp": "Orca는 {{host}}의 ZCode CLI 자격 증명 저장소에서 선택한 Coding Plan을 읽습니다. 그곳에 플랜을 연결하려면 아래에 API 키를 저장하세요.",
+          "notConfiguredOnHostHelp": "아래에 플랜 API 키를 저장하거나 {{host}}에서 ZCode CLI로 로그인하세요."
         },
         "sshManagedHostRemove": {
           "description": "{{label}}에서 관리형 Orca 서버가 실행 중입니다. 관리형 서버에서 중지…를 사용해 호스트에서 서버를 제거하거나, 호스트가 없어졌다면 잊기…를 사용하세요. 그런 다음 이 SSH 호스트를 제거할 수 있습니다.",
@@ -12676,6 +12679,17 @@
           "submit": "Re-pair",
           "success": "Re-paired with {{name}}",
           "failed": "Re-pair failed"
+        },
+        "usageCredentialHost": {
+          "outdated": "이 키를 {{host}}에 저장하려면 해당 호스트의 Orca를 업데이트하세요.",
+          "unreachable": "{{host}}에 연결할 수 없어 키가 저장되어 있는지 알 수 없습니다.",
+          "storedOnHost": "{{host}}에 저장됨",
+          "miniMaxStorage": "{{host}}에 저장되며, 사용량을 새로 고칠 때 그곳에서 선택한 MiniMax 엔드포인트로 전송됩니다.",
+          "cookieNeedsDesktop": "{{host}}에는 세션 쿠키를 보낼 Orca 데스크톱 앱이 없습니다. 대신 API 키를 저장하세요.",
+          "checking": "{{host}} 확인 중…"
+        },
+        "useUsageHostSettings": {
+          "updateFailed": "{{host}}의 설정을 업데이트하지 못했습니다."
         }
       },
       "right": {

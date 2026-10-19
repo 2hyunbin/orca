@@ -45,6 +45,11 @@ vi.mock('../rate-limits/minimax/minimax-request-context', () => ({
   clearMiniMaxSessionCookieJar: clearMiniMaxSessionCookieJarMock
 }))
 
+const httpClientState = vi.hoisted(() => ({ hasCookieJar: true }))
+vi.mock('../network/http-client', () => ({
+  getMainHttpClient: () => (httpClientState.hasCookieJar ? { partitionSession: () => ({}) } : {})
+}))
+
 import { registerMiniMaxCredentialsHandlers } from './minimax-credentials'
 import type { RateLimitService } from '../rate-limits/service'
 import type { RateLimitState } from '../../shared/rate-limit-types'
@@ -74,6 +79,7 @@ async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
 describe('registerMiniMaxCredentialsHandlers', () => {
   beforeEach(() => {
     ipcState.handleHandlers.clear()
+    httpClientState.hasCookieJar = true
     saveMiniMaxSessionCookieMock.mockReset()
     clearMiniMaxSessionCookieMock.mockReset()
     clearMiniMaxSessionCookieJarMock.mockReset()
@@ -113,7 +119,8 @@ describe('registerMiniMaxCredentialsHandlers', () => {
       apiKeyConfigured: false,
       cookieProtection: 'sealed',
       // Null, not 'sealed': nothing is stored, so there is nothing to make a claim about.
-      apiKeyProtection: null
+      apiKeyProtection: null,
+      sessionCookieSupported: true
     })
   })
 
@@ -130,7 +137,8 @@ describe('registerMiniMaxCredentialsHandlers', () => {
       cookieConfigured: false,
       apiKeyConfigured: true,
       cookieProtection: null,
-      apiKeyProtection: 'sealed'
+      apiKeyProtection: 'sealed',
+      sessionCookieSupported: true
     })
   })
 
@@ -284,5 +292,19 @@ describe('registerMiniMaxCredentialsHandlers', () => {
     registerMiniMaxCredentialsHandlers(null)
     const status = await invoke('minimaxCredentials:getStatus')
     expect(status).toMatchObject({ apiKeyConfigured: true, apiKeyProtection: 'plaintext' })
+  })
+
+  it('refuses a session cookie where no browser cookie jar exists, without storing it', async () => {
+    httpClientState.hasCookieJar = false
+    const { service, refresh } = makeRefreshMock()
+    registerMiniMaxCredentialsHandlers(service as RateLimitService)
+    await expect(invoke('minimaxCredentials:saveCookie', 'session=secret-value')).rejects.toThrow(
+      /^(?!.*secret-value).*Save an API key instead\.$/
+    )
+    expect(saveMiniMaxSessionCookieMock).not.toHaveBeenCalled()
+    expect(refresh).not.toHaveBeenCalled()
+    await expect(invoke('minimaxCredentials:getStatus')).resolves.toMatchObject({
+      sessionCookieSupported: false
+    })
   })
 })

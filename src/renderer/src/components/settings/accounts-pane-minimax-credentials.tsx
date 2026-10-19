@@ -9,7 +9,23 @@ import { Label } from '../ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
 import { SearchableSetting } from './SearchableSetting'
 import { UnsealedCredentialNotice } from './UnsealedCredentialNotice'
-import type { AccountsPaneSectionModel } from './accounts-pane-types'
+import type { ProviderRateLimits } from '../../../../shared/rate-limit-types'
+import type { MiniMaxCredentialsModel } from './use-minimax-credentials'
+import type { UsageCredentialHost } from './usage-credential-host'
+
+/** Why it names the host: the poller that sends the key runs where the key is stored. */
+export function miniMaxStorageHelp(host: UsageCredentialHost): string {
+  return host.label === null
+    ? translate(
+        'auto.components.settings.AccountsPane.selectedEndpointStorage',
+        'Stored locally and sent to the selected MiniMax endpoint for usage refreshes.'
+      )
+    : translate(
+        'auto.components.settings.usageCredentialHost.miniMaxStorage',
+        'Stored on {{host}} and sent from there to the selected MiniMax endpoint for usage refreshes.',
+        { host: host.label }
+      )
+}
 
 function formatMiniMaxRelativeRefresh(updatedAt: number, now: number): string {
   const diffMs = Math.max(0, now - updatedAt)
@@ -19,7 +35,13 @@ function formatMiniMaxRelativeRefresh(updatedAt: number, now: number): string {
   return formatUiRelativeTime(-diffMs)
 }
 
-function MiniMaxCookieHelpPopover({ consoleUrl }: { consoleUrl: string }): React.JSX.Element {
+function MiniMaxCookieHelpPopover({
+  consoleUrl,
+  host
+}: {
+  consoleUrl: string
+  host: UsageCredentialHost
+}): React.JSX.Element {
   const steps = [
     translate(
       'auto.components.settings.AccountsPane.openSelectedConsole',
@@ -49,10 +71,12 @@ function MiniMaxCookieHelpPopover({ consoleUrl }: { consoleUrl: string }): React
           {translate('auto.components.settings.AccountsPane.9fec52de4b', 'How to copy the cookie')}
         </p>
         <p className="text-muted-foreground">
-          {translate(
-            'auto.components.settings.AccountsPane.cookieSelectedEndpoint',
-            'Stored locally and sent to the selected MiniMax endpoint for usage refreshes.'
-          )}
+          {host.label === null
+            ? translate(
+                'auto.components.settings.AccountsPane.cookieSelectedEndpoint',
+                'Stored locally and sent to the selected MiniMax endpoint for usage refreshes.'
+              )
+            : miniMaxStorageHelp(host)}
         </p>
       </div>
       <ol className="list-decimal space-y-1 pl-4 text-muted-foreground">
@@ -65,19 +89,24 @@ function MiniMaxCookieHelpPopover({ consoleUrl }: { consoleUrl: string }): React
 }
 
 export function MiniMaxCredentials({
-  model,
+  credentials,
+  host,
+  miniMaxRateLimits,
   consoleUrl
 }: {
-  model: AccountsPaneSectionModel
+  credentials: MiniMaxCredentialsModel
+  host: UsageCredentialHost
+  miniMaxRateLimits: ProviderRateLimits | null
   consoleUrl: string
 }): React.JSX.Element {
   const {
+    editable,
+    sessionCookieSupported,
     miniMaxCookieDraft,
     setMiniMaxCookieDraft,
     miniMaxConfigured,
     miniMaxCookieProtection,
     miniMaxCredentialBusy,
-    miniMaxRateLimits,
     saveMiniMaxCookie,
     clearMiniMaxCookie,
     miniMaxApiKeyDraft,
@@ -86,8 +115,10 @@ export function MiniMaxCredentials({
     miniMaxApiKeyProtection,
     saveMiniMaxApiKey,
     clearMiniMaxApiKey
-  } = model
+  } = credentials
   const now = useNow(60_000)
+  const cookieEditable = editable && sessionCookieSupported
+  const apiKeyLocked = miniMaxCredentialBusy || !editable
   return (
     <>
       <SearchableSetting
@@ -132,7 +163,7 @@ export function MiniMaxCredentials({
               </Button>
             </PopoverTrigger>
             <PopoverContent align="end" side="bottom" sideOffset={6} className="w-80 p-0">
-              <MiniMaxCookieHelpPopover consoleUrl={consoleUrl} />
+              <MiniMaxCookieHelpPopover consoleUrl={consoleUrl} host={host} />
             </PopoverContent>
           </Popover>
         </div>
@@ -147,7 +178,7 @@ export function MiniMaxCredentials({
           <Input
             id="minimax-cookie"
             type="password"
-            disabled={miniMaxCredentialBusy}
+            disabled={miniMaxCredentialBusy || !cookieEditable}
             value={miniMaxCookieDraft}
             onChange={(e) => setMiniMaxCookieDraft(e.target.value)}
             placeholder={translate(
@@ -160,7 +191,7 @@ export function MiniMaxCredentials({
           <Button
             size="xs"
             onClick={() => void saveMiniMaxCookie()}
-            disabled={miniMaxCredentialBusy || !miniMaxCookieDraft.trim()}
+            disabled={miniMaxCredentialBusy || !cookieEditable || !miniMaxCookieDraft.trim()}
             className="h-7 shrink-0 text-xs"
           >
             {miniMaxCredentialBusy ? <Loader2 className="size-3 animate-spin" /> : null}
@@ -173,13 +204,22 @@ export function MiniMaxCredentials({
               variant="ghost"
               size="xs"
               onClick={() => void clearMiniMaxCookie()}
-              disabled={miniMaxCredentialBusy}
+              disabled={miniMaxCredentialBusy || !editable}
               className="h-7 shrink-0 text-xs text-muted-foreground hover:text-foreground"
             >
               {translate('auto.components.settings.AccountsPane.316ca4e610', 'Forget cookie')}
             </Button>
           ) : null}
         </div>
+        {editable && !sessionCookieSupported ? (
+          <p className="text-xs text-muted-foreground">
+            {translate(
+              'auto.components.settings.usageCredentialHost.cookieNeedsDesktop',
+              '{{host}} has no Orca desktop app to send a session cookie from. Save an API key instead.',
+              { host: host.label ?? '' }
+            )}
+          </p>
+        ) : null}
         <p className="text-xs text-muted-foreground">
           {translate(
             'auto.components.settings.AccountsPane.copySelectedConsoleCookie',
@@ -247,7 +287,7 @@ export function MiniMaxCredentials({
           <Input
             id="minimax-api-key"
             type="password"
-            disabled={miniMaxCredentialBusy}
+            disabled={apiKeyLocked}
             value={miniMaxApiKeyDraft}
             onChange={(e) => setMiniMaxApiKeyDraft(e.target.value)}
             placeholder={translate(
@@ -260,7 +300,7 @@ export function MiniMaxCredentials({
           <Button
             size="xs"
             onClick={() => void saveMiniMaxApiKey()}
-            disabled={miniMaxCredentialBusy || !miniMaxApiKeyDraft.trim()}
+            disabled={apiKeyLocked || !miniMaxApiKeyDraft.trim()}
             className="h-7 shrink-0 text-xs"
           >
             {miniMaxCredentialBusy ? <Loader2 className="size-3 animate-spin" /> : null}
@@ -273,7 +313,7 @@ export function MiniMaxCredentials({
               variant="ghost"
               size="xs"
               onClick={() => void clearMiniMaxApiKey()}
-              disabled={miniMaxCredentialBusy}
+              disabled={apiKeyLocked}
               className="h-7 shrink-0 text-xs text-muted-foreground hover:text-foreground"
             >
               {translate('auto.components.settings.AccountsPane.a7b1e3c5d2', 'Forget key')}

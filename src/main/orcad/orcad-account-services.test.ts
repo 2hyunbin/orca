@@ -102,6 +102,8 @@ describe('orcad account services', () => {
   it('serves accounts.* from this host', async () => {
     const { runtime, store } = createRuntime()
     expect(install(runtime, store, false)).not.toBeNull()
+    // Saved MiniMax/GLM keys refresh this host's own usage poller.
+    expect(runtime.getUsageRateLimits()).not.toBeNull()
 
     await expect(call(runtime, 'accounts.list', { refreshUsage: false })).resolves.toMatchObject({
       claude: { accounts: [], activeAccountId: null },
@@ -156,6 +158,7 @@ describe('orcad account services', () => {
   it('leaves a WSL host to the desktop that owns its accounts', async () => {
     const { runtime, store } = createRuntime()
     expect(install(runtime, store, true)).toBeNull()
+    expect(runtime.getUsageRateLimits()).toBeNull()
 
     await expect(call(runtime, 'accounts.list', { refreshUsage: false })).rejects.toThrow(
       'Account services are not configured on this runtime'

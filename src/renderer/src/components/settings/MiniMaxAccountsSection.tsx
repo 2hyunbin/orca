@@ -1,38 +1,53 @@
 import { ExternalLink, ShieldCheck } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
+import type { FeatureInteractionId } from '../../../../shared/feature-interaction-catalog'
+import type { ProviderRateLimits } from '../../../../shared/rate-limit-types'
 import { Label } from '../ui/label'
 import { MiniMaxIcon } from '../status-bar/icons'
 import { SearchableSetting } from './SearchableSetting'
-import type { AccountsPaneSectionModel } from './accounts-pane-types'
 import { DebouncedSettingsTextInput } from './DebouncedSettingsTextInput'
-
-import { MiniMaxCredentials } from './accounts-pane-minimax-credentials'
+import { MiniMaxCredentials, miniMaxStorageHelp } from './accounts-pane-minimax-credentials'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
+import { useMiniMaxCredentials } from './use-minimax-credentials'
+import {
+  usageCredentialAccessNotice,
+  usageCredentialStoredLabel,
+  type UsageCredentialHost
+} from './usage-credential-host'
+import type { UsageHostSettingsModel } from './use-usage-host-settings'
 
-export function renderMiniMaxAccountsSection(model: AccountsPaneSectionModel): React.JSX.Element {
-  const {
-    miniMaxConfigured,
-    miniMaxApiKeyConfigured,
-    miniMaxCredentialBusy,
-    settings,
-    updateSettings,
-    recordFeatureInteraction
-  } = model
+export function MiniMaxAccountsSection({
+  host,
+  usageSettings,
+  miniMaxRateLimits,
+  recordFeatureInteraction
+}: {
+  host: UsageCredentialHost
+  usageSettings: UsageHostSettingsModel
+  /** This computer's poll; null for another host, whose usage it does not describe. */
+  miniMaxRateLimits: ProviderRateLimits | null
+  recordFeatureInteraction: (featureId: FeatureInteractionId) => void
+}): React.JSX.Element {
+  const credentials = useMiniMaxCredentials(host.owner)
+  const { miniMaxConfigured, miniMaxApiKeyConfigured, miniMaxCredentialBusy } = credentials
+  const settings = usageSettings.settings
   const consoleUrl =
-    settings.minimaxEndpoint === 'cn'
+    settings?.minimaxEndpoint === 'cn'
       ? 'https://platform.minimaxi.com/console/usage'
       : 'https://platform.minimax.io/console/usage'
   const configured = miniMaxConfigured || miniMaxApiKeyConfigured
+  const accessNotice = usageCredentialAccessNotice(host, credentials.access)
+  const settingsUnavailable = settings === null
   const handleMiniMaxEndpointChange = (value: string): void => {
-    if ((value !== 'overseas' && value !== 'cn') || value === settings.minimaxEndpoint) {
+    if ((value !== 'overseas' && value !== 'cn') || value === settings?.minimaxEndpoint) {
       return
     }
     recordFeatureInteraction('usage-tracking')
-    void updateSettings({ minimaxEndpoint: value })
+    void usageSettings.update({ minimaxEndpoint: value })
   }
   return (
-    <section key="minimax" id="accounts-minimax" className="space-y-4 scroll-mt-6">
+    <section id="accounts-minimax" className="space-y-4 scroll-mt-6">
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <h3 className="flex items-center gap-2 text-sm font-semibold">
@@ -70,20 +85,19 @@ export function renderMiniMaxAccountsSection(model: AccountsPaneSectionModel): R
           )}
         />
         <div className="space-y-0.5">
-          <p className="text-xs font-medium">
-            {configured
-              ? translate('auto.components.settings.AccountsPane.0b8c1c7e02', 'Stored locally')
-              : translate(
-                  'auto.components.settings.AccountsPane.credentialsNotSet',
-                  'Credentials not set'
-                )}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {translate(
-              'auto.components.settings.AccountsPane.selectedEndpointStorage',
-              'Stored locally and sent to the selected MiniMax endpoint for usage refreshes.'
-            )}
-          </p>
+          {accessNotice ? (
+            <p className="text-xs font-medium">{accessNotice}</p>
+          ) : (
+            <p className="text-xs font-medium">
+              {configured
+                ? usageCredentialStoredLabel(host)
+                : translate(
+                    'auto.components.settings.AccountsPane.credentialsNotSet',
+                    'Credentials not set'
+                  )}
+            </p>
+          )}
+          <p className="text-xs text-muted-foreground">{miniMaxStorageHelp(host)}</p>
         </div>
       </div>
 
@@ -100,9 +114,9 @@ export function renderMiniMaxAccountsSection(model: AccountsPaneSectionModel): R
           {translate('auto.components.settings.AccountsPane.f8a4b9d210', 'MiniMax endpoint')}
         </Label>
         <Select
-          value={settings.minimaxEndpoint}
+          value={settings?.minimaxEndpoint ?? ''}
           onValueChange={handleMiniMaxEndpointChange}
-          disabled={miniMaxCredentialBusy}
+          disabled={miniMaxCredentialBusy || settingsUnavailable}
         >
           <SelectTrigger id="minimax-endpoint" className="h-8 w-full text-xs">
             <SelectValue />
@@ -132,7 +146,12 @@ export function renderMiniMaxAccountsSection(model: AccountsPaneSectionModel): R
         </Select>
       </SearchableSetting>
 
-      <MiniMaxCredentials model={model} consoleUrl={consoleUrl} />
+      <MiniMaxCredentials
+        credentials={credentials}
+        host={host}
+        miniMaxRateLimits={miniMaxRateLimits}
+        consoleUrl={consoleUrl}
+      />
 
       <div className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-3">
         <div className="flex items-center justify-between gap-3">
@@ -163,8 +182,9 @@ export function renderMiniMaxAccountsSection(model: AccountsPaneSectionModel): R
           </Label>
           <DebouncedSettingsTextInput
             type="text"
-            value={settings.minimaxGroupId}
-            commit={(minimaxGroupId) => updateSettings({ minimaxGroupId })}
+            value={settings?.minimaxGroupId ?? ''}
+            commit={(minimaxGroupId) => void usageSettings.update({ minimaxGroupId })}
+            disabled={settingsUnavailable}
             placeholder={translate(
               'auto.components.settings.AccountsPane.0747d6391a',
               'Use group ID from cookie'
@@ -188,8 +208,9 @@ export function renderMiniMaxAccountsSection(model: AccountsPaneSectionModel): R
           </Label>
           <DebouncedSettingsTextInput
             type="text"
-            value={settings.minimaxUsageModels}
-            commit={(minimaxUsageModels) => updateSettings({ minimaxUsageModels })}
+            value={settings?.minimaxUsageModels ?? ''}
+            commit={(minimaxUsageModels) => void usageSettings.update({ minimaxUsageModels })}
+            disabled={settingsUnavailable}
             placeholder={translate('auto.components.settings.AccountsPane.3c92b0d31c', 'general')}
             spellCheck={false}
             className="text-xs"

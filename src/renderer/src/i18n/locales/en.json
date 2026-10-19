@@ -12877,7 +12877,10 @@
           "planLevel": "Plan: {{value0}}",
           "hostOnly": "Change the plan site and API key in the desktop app on the computer running Orca.",
           "detailsUnavailable": "Plan credential details are only readable on the computer running Orca.",
-          "siteUnavailable": "Host plan site unavailable"
+          "siteUnavailable": "Host plan site unavailable",
+          "keyStoredOnHostHelp": "Stored on {{host}} and sent from there only to the selected site for usage refreshes. It takes priority over the ZCode CLI sign-in.",
+          "usingCliOnHostHelp": "Orca reads the selected Coding Plan from the ZCode CLI credential store on {{host}}. Save an API key below to link the plan there instead.",
+          "notConfiguredOnHostHelp": "Save the plan API key below, or sign in with the ZCode CLI on {{host}}."
         },
         "deltaMove": {
           "action": "Move the new projects…",
@@ -12952,6 +12955,17 @@
           "submit": "Re-pair",
           "success": "Re-paired with {{name}}",
           "failed": "Re-pair failed"
+        },
+        "usageCredentialHost": {
+          "outdated": "Update Orca on {{host}} to save this key there.",
+          "unreachable": "Could not reach {{host}}, so whether a key is saved there is unknown.",
+          "storedOnHost": "Stored on {{host}}",
+          "miniMaxStorage": "Stored on {{host}} and sent from there to the selected MiniMax endpoint for usage refreshes.",
+          "cookieNeedsDesktop": "{{host}} has no Orca desktop app to send a session cookie from. Save an API key instead.",
+          "checking": "Checking {{host}}…"
+        },
+        "useUsageHostSettings": {
+          "updateFailed": "Could not update the setting on {{host}}."
         }
       },
       "right": {

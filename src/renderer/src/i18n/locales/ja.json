@@ -12460,7 +12460,10 @@
           "planLevel": "計画: {{value0}}",
           "hostOnly": "Orca を実行しているコンピュータ上のデスクトップアプリでプランサイトと API キーを変更します。",
           "detailsUnavailable": "プランの認証情報の詳細は、Orca を実行しているコンピュータでのみ読み取ることができます。",
-          "siteUnavailable": "ホストプランサイトが利用できない"
+          "siteUnavailable": "ホストプランサイトが利用できない",
+          "keyStoredOnHostHelp": "{{host}} に保存され、使用量の更新時にそこから選択したサイトにのみ送信されます。ZCode CLI のサインインより優先されます。",
+          "usingCliOnHostHelp": "Orca は {{host}} の ZCode CLI 認証情報ストアから選択した Coding Plan を読み取ります。そこでプランを紐付けるには、下で API キーを保存してください。",
+          "notConfiguredOnHostHelp": "下でプランの API キーを保存するか、{{host}} で ZCode CLI にサインインしてください。"
         },
         "sshManagedHostRemove": {
           "description": "{{label}} では管理対象の Orca サーバーが実行されています。管理対象サーバーで「停止…」を使ってホストからサーバーを削除するか、ホストがもう存在しない場合は「登録を解除…」を使ってください。その後、この SSH ホストを削除できます。",
@@ -12676,6 +12679,17 @@
           "submit": "Re-pair",
           "success": "Re-paired with {{name}}",
           "failed": "Re-pair failed"
+        },
+        "usageCredentialHost": {
+          "outdated": "このキーを {{host}} に保存するには、そのホストの Orca を更新してください。",
+          "unreachable": "{{host}} に接続できないため、キーが保存されているかどうかは不明です。",
+          "storedOnHost": "{{host}} に保存済み",
+          "miniMaxStorage": "{{host}} に保存され、使用量の更新時にそこから選択した MiniMax エンドポイントへ送信されます。",
+          "cookieNeedsDesktop": "{{host}} にはセッション Cookie を送信する Orca デスクトップアプリがありません。代わりに API キーを保存してください。",
+          "checking": "{{host}} を確認しています…"
+        },
+        "useUsageHostSettings": {
+          "updateFailed": "{{host}} の設定を更新できませんでした。"
         }
       },
       "right": {

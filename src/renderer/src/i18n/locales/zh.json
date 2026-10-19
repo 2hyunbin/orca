@@ -12466,7 +12466,10 @@
           "planLevel": "套餐：{{value0}}",
           "hostOnly": "请在运行 Orca 的电脑上的桌面应用中更改套餐站点和 API 密钥。",
           "detailsUnavailable": "计划凭据详细信息只能在运行 Orca 的计算机上读取。",
-          "siteUnavailable": "主机计划网站不可用"
+          "siteUnavailable": "主机计划网站不可用",
+          "keyStoredOnHostHelp": "保存在 {{host}}，刷新用量时仅从那里发送到所选站点。它优先于 ZCode CLI 登录。",
+          "usingCliOnHostHelp": "Orca 从 {{host}} 上的 ZCode CLI 凭据存储读取所选的 Coding Plan。在下方保存 API 密钥即可在那里关联该套餐。",
+          "notConfiguredOnHostHelp": "在下方保存套餐 API 密钥，或在 {{host}} 上使用 ZCode CLI 登录。"
         },
         "NotificationHostToggles": {
           "offCount": "{{count}} 台已关闭",
@@ -12676,6 +12679,17 @@
           "submit": "Re-pair",
           "success": "Re-paired with {{name}}",
           "failed": "Re-pair failed"
+        },
+        "usageCredentialHost": {
+          "outdated": "请更新 {{host}} 上的 Orca，才能将此密钥保存在那里。",
+          "unreachable": "无法连接 {{host}}，因此不确定那里是否已保存密钥。",
+          "storedOnHost": "已保存在 {{host}}",
+          "miniMaxStorage": "保存在 {{host}}，并在刷新用量时从那里发送到所选的 MiniMax 端点。",
+          "cookieNeedsDesktop": "{{host}} 上没有可发送会话 Cookie 的 Orca 桌面应用。请改为保存 API 密钥。",
+          "checking": "正在检查 {{host}}…"
+        },
+        "useUsageHostSettings": {
+          "updateFailed": "无法更新 {{host}} 上的设置。"
         }
       },
       "right": {

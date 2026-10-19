@@ -12568,7 +12568,10 @@
           "planLevel": "Forfait : {{value0}}",
           "hostOnly": "Modifiez le site du plan et la clé API dans l'application de bureau sur l'ordinateur exécutant Orca.",
           "detailsUnavailable": "Les détails des informations d'identification du plan ne sont lisibles que sur l'ordinateur exécutant Orca.",
-          "siteUnavailable": "Site du plan d'hébergement indisponible"
+          "siteUnavailable": "Site du plan d'hébergement indisponible",
+          "keyStoredOnHostHelp": "Enregistrée sur {{host}} et envoyée depuis cet hôte uniquement au site sélectionné pour actualiser l’utilisation. Elle a priorité sur la connexion de la CLI ZCode.",
+          "usingCliOnHostHelp": "Orca lit le Coding Plan sélectionné dans le magasin d’identifiants de la CLI ZCode sur {{host}}. Enregistrez une clé API ci-dessous pour y lier le plan.",
+          "notConfiguredOnHostHelp": "Enregistrez la clé API du plan ci-dessous, ou connectez-vous avec la CLI ZCode sur {{host}}."
         },
         "sshManagedHostRemove": {
           "description": "{{label}} exécute un serveur Orca géré. Dans Serveurs gérés, utilisez Arrêter… pour retirer le serveur de l’hôte, ou Oublier… si l’hôte n’existe plus. Vous pourrez ensuite supprimer cet hôte SSH.",
@@ -12784,6 +12787,17 @@
           "submit": "Re-pair",
           "success": "Re-paired with {{name}}",
           "failed": "Re-pair failed"
+        },
+        "usageCredentialHost": {
+          "outdated": "Mettez à jour Orca sur {{host}} pour y enregistrer cette clé.",
+          "unreachable": "Impossible de joindre {{host}} : on ne sait donc pas si une clé y est enregistrée.",
+          "storedOnHost": "Enregistrée sur {{host}}",
+          "miniMaxStorage": "Enregistrée sur {{host}} et envoyée depuis cet hôte au point de terminaison MiniMax sélectionné pour actualiser l’utilisation.",
+          "cookieNeedsDesktop": "{{host}} n’a pas l’application de bureau Orca pour envoyer un cookie de session. Enregistrez plutôt une clé API.",
+          "checking": "Vérification de {{host}}…"
+        },
+        "useUsageHostSettings": {
+          "updateFailed": "Impossible de mettre à jour le réglage sur {{host}}."
         }
       },
       "right": {
