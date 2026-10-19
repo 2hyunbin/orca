@@ -1,6 +1,6 @@
 // Stand-in for Claude Code's stream-json control protocol: answers `initialize`, reports init and
-// runs each prompt as a short turn, so a structured chat works without the real CLI. Launched only through a generated
-// wrapper whose first argument is the launch log the spec reads back.
+// runs each prompt as a short turn, so a structured chat works without the real CLI. Launched only
+// through a generated wrapper whose first argument is the launch log the spec reads back.
 const { randomUUID } = require('node:crypto')
 const fs = require('node:fs')
 
