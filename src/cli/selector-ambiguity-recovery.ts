@@ -25,6 +25,8 @@ const EXACT_FORMS = {
 export function selectorAmbiguityRecovery(selectors: {
   repo?: string
   worktree?: string
+  /** The command chose a paired server, so the listing must ask that server, not this machine. */
+  remoteServerSelected?: boolean
 }): SelectorAmbiguityRecovery | undefined {
   const entries = (['worktree', 'repo'] as const).flatMap((flag) => {
     const selector = selectors[flag]
@@ -44,7 +46,9 @@ export function selectorAmbiguityRecovery(selectors: {
           : `More than one ${exact.noun} matches --${flag} "${selector}".`
       return [
         `${matched} Pass an exact selector: ${exact.forms}.`,
-        `List the exact values with \`${exact.list}\`.`
+        selectors.remoteServerSelected
+          ? `List the exact values with \`${exact.list}\`, passing the same server flag (--environment, --pairing-code or --host runtime:<id>) as this command.`
+          : `List the exact values with \`${exact.list}\`.`
       ]
     })
   }

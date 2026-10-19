@@ -34,7 +34,8 @@ function contextRecovery(
   if (code === 'selector_ambiguous') {
     return selectorAmbiguityRecovery({
       repo: context.repoSelector,
-      worktree: context.worktreeSelector
+      worktree: context.worktreeSelector,
+      remoteServerSelected: context.remoteServerSelected
     })
   }
   // Why: a paired server's handle sent to this machine reads as a dead terminal, not a missing flag.

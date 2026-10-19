@@ -62,6 +62,16 @@ describe('ambiguous selector recovery', () => {
     log.mockRestore()
   })
 
+  it('keeps the listing on the paired server the command chose', () => {
+    const output = formatCliError(selectorAmbiguous(), {
+      commandPath: ['repo', 'show'],
+      repoSelector: 'app',
+      remoteServerSelected: true
+    })
+
+    expect(output).toContain('`orca repo list --json`, passing the same server flag')
+  })
+
   it('stays silent when no selector flag was passed', () => {
     expect(formatCliError(selectorAmbiguous(), { commandPath: ['repo', 'list'] })).toBe(
       'selector_ambiguous'
