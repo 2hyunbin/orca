@@ -8452,6 +8452,7 @@
           "e57dde9d93": "Modifications non enregistrées"
         },
         "RuntimeAccessGrantList": {
+          "sshAccessCaveat": "Revoking here doesn't stop someone with SSH access to this computer from pairing again. To cut them off, remove their SSH access.",
           "8b82879581": "Toute personne disposant d'une autorisation active peut se connecter jusqu'à sa révocation. Révoquer l'accès partagé déconnecte immédiatement les clients actifs.",
           "68ec21309f": "Révoquer l'accès",
           "6f6d5188ed": "Révoquer {{value0}}",

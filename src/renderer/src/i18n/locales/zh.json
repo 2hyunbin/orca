@@ -8291,6 +8291,7 @@
           "e57dde9d93": "未保存的更改"
         },
         "RuntimeAccessGrantList": {
+          "sshAccessCaveat": "Revoking here doesn't stop someone with SSH access to this computer from pairing again. To cut them off, remove their SSH access.",
           "8b82879581": "任何拥有有效授权的人都可以连接，直到您撤销授权为止。撤销共享访问会立即断开活动客户端的连接。",
           "68ec21309f": "撤销访问权限",
           "6f6d5188ed": "撤销 {{value0}}",

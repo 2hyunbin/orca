@@ -8629,6 +8629,7 @@
           "e57dde9d93": "Unsaved changes"
         },
         "RuntimeAccessGrantList": {
+          "sshAccessCaveat": "Revoking here doesn't stop someone with SSH access to this computer from pairing again. To cut them off, remove their SSH access.",
           "8b82879581": "Anyone with an active grant can connect until you revoke it. Revoking shared access disconnects active clients immediately.",
           "68ec21309f": "Revoke access",
           "6f6d5188ed": "Revoke {{value0}}",

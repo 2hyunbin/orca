@@ -8291,6 +8291,7 @@
           "e57dde9d93": "저장되지 않은 변경사항"
         },
         "RuntimeAccessGrantList": {
+          "sshAccessCaveat": "Revoking here doesn't stop someone with SSH access to this computer from pairing again. To cut them off, remove their SSH access.",
           "8b82879581": "활성화된 권한을 가진 사람은 누구나 취소할 때까지 연결할 수 있습니다. 공유 액세스를 취소하면 활성 클라이언트의 연결이 즉시 끊어집니다.",
           "68ec21309f": "액세스 취소",
           "6f6d5188ed": "{{value0}} 취소",
