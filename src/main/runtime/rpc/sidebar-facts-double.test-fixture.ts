@@ -14,7 +14,7 @@ export function createSidebarFactsDouble(): OrcaRuntimeService['sidebarFacts'] {
 }
 
 /** A partial runtime for RPC tests, with the no-op sidebar facts layer unless it brings its own. */
-export function runtimeDoubleWithSidebarFacts(double: object): OrcaRuntimeService {
+export function runtimeDoubleWithSidebarFacts(double: Record<string, unknown>): OrcaRuntimeService {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: each test's RPC path reads only the members its double provides.
   return { sidebarFacts: createSidebarFactsDouble(), ...double } as unknown as OrcaRuntimeService
 }
