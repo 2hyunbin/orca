@@ -4,12 +4,12 @@ import { createTestStore } from '../slices/store-test-helpers'
 import { startTerminalTabProviderRetirement } from './terminal-tab-close-providers'
 
 const mocks = vi.hoisted(() => {
-  const ptyOwner: TerminalPtyOwner = { kind: 'non-runtime' }
+  const ptyOwner: { current: TerminalPtyOwner } = { current: { kind: 'non-runtime' } }
   return { ptyOwner, callRuntimeRpc: vi.fn(async () => undefined) }
 })
 
 vi.mock('@/lib/terminal-worktree-route', () => ({
-  resolveTerminalPtyOwner: () => mocks.ptyOwner,
+  resolveTerminalPtyOwner: () => mocks.ptyOwner.current,
   resolveTerminalWorktreeRoute: () => ({ runtimeEnvironmentId: 'env-a' })
 }))
 
@@ -46,7 +46,7 @@ describe('closing an unscoped remote terminal id', () => {
   afterEach(() => warn.mockRestore())
 
   it('closes it where spawn started it', () => {
-    mocks.ptyOwner = { kind: 'runtime', environmentId: 'env-a' }
+    mocks.ptyOwner.current = { kind: 'runtime', environmentId: 'env-a' }
     retire()
     expect(mocks.callRuntimeRpc).toHaveBeenCalledWith(
       { kind: 'environment', environmentId: 'env-a' },
@@ -56,7 +56,7 @@ describe('closing an unscoped remote terminal id', () => {
   })
 
   it('skips and logs it, never closing on this app, when the owner is ambiguous', () => {
-    mocks.ptyOwner = { kind: 'ambiguous' }
+    mocks.ptyOwner.current = { kind: 'ambiguous' }
     retire()
     expect(mocks.callRuntimeRpc).not.toHaveBeenCalled()
     expect(warn).toHaveBeenCalledWith(
