@@ -39,22 +39,18 @@ export type CodexAppServerLaunch = ProviderProcessLaunch
 // Stop or close can end the child without queueing behind its request.
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
 
-/**
- * Spawns `codex app-server`, completes the initialize handshake, and returns a
- * connection that stays open until `close()`. Rejects — after reaping the child
- * — when the handshake cannot complete.
- */
-export async function openCodexAppServerConnection(
+/** Builds the transport so an owner can record its process before initialization. */
+async function connectCodexAppServer(
   launch: CodexAppServerLaunch,
   handlers: CodexAppServerConnectionHandlers = {},
-  spawnImpl: PipedProcessSpawner = spawnProcess
+  spawnImpl: PipedProcessSpawner,
+  initialize: boolean
 ): Promise<CodexAppServerConnection> {
   const managed = spawnManagedProviderProcess(launch, {
     spawnImpl,
-    site: 'codex-app-server-teardown',
-    ...(handlers.onOutput ? { onOutput: handlers.onOutput } : {})
+    site: 'codex-app-server-teardown'
   })
-  const { child, terminateTree: terminateProcessTree } = managed
+  const { child } = managed
 
   let nextRequestId = 1
   let closing = false
@@ -74,7 +70,7 @@ export async function openCodexAppServerConnection(
     writeResponse,
     onProtocolFailure: (error) => {
       handleUnexpectedEnd(error)
-      void terminateProcessTree()
+      void managed.close()
     }
   })
 
@@ -111,7 +107,7 @@ export async function openCodexAppServerConnection(
       return
     }
     handleUnexpectedEnd(error)
-    void terminateProcessTree()
+    void managed.close()
   })
 
   const recordReader = createProviderRecordReader({
@@ -132,7 +128,7 @@ export async function openCodexAppServerConnection(
     },
     onFatal: (error) => {
       handleUnexpectedEnd(error)
-      void terminateProcessTree()
+      void managed.close()
     }
   })
 
@@ -243,18 +239,36 @@ export async function openCodexAppServerConnection(
     if (child.pid !== undefined) {
       await handlers.onSpawned?.(child.pid)
     }
-    handshaking = true
-    await initializeCodexAppServerConnection(connection, handlers.signal)
+    if (initialize) {
+      handshaking = true
+      await initializeCodexAppServerConnection(connection)
+    }
   } catch (error) {
     if ((await close()) !== true) {
       throw new CodexAppServerHandshakeExitUnprovenError(connection, error)
     }
     throw !handshaking ||
-      handlers.signal?.aborted ||
       error instanceof CodexAppServerUnsupportedError ||
       error instanceof CodexAppServerTimeoutError
       ? error
       : buildExitError(error instanceof Error ? error : new Error(String(error)))
   }
   return connection
+}
+
+/** Publishes the transport after its process identity is recorded, before initialization. */
+export function spawnCodexAppServerConnection(
+  launch: CodexAppServerLaunch,
+  handlers: CodexAppServerConnectionHandlers = {},
+  spawnImpl: PipedProcessSpawner = spawnProcess
+): Promise<CodexAppServerConnection> {
+  return connectCodexAppServer(launch, handlers, spawnImpl, false)
+}
+
+export function openCodexAppServerConnection(
+  launch: CodexAppServerLaunch,
+  handlers: CodexAppServerConnectionHandlers = {},
+  spawnImpl: PipedProcessSpawner = spawnProcess
+): Promise<CodexAppServerConnection> {
+  return connectCodexAppServer(launch, handlers, spawnImpl, true)
 }

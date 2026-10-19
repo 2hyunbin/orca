@@ -1,4 +1,7 @@
-import type { RuntimeConstructionDependencies } from './runtime-construction-dependencies'
+import type {
+  RuntimeConstructionBindings,
+  RuntimeConstructionDependencies
+} from './runtime-construction-dependencies'
 import type { OrcaRuntimeWithRuntimeId as IdentityState } from './runtime-identity-state'
 import type { OrcaRuntimeWithStopRequestedPtyIds as ServiceState } from './runtime-service-state'
 import type { OrcaRuntimeWithPreservedBranchCleanup as HostServices } from './runtime-host-services'
@@ -55,6 +58,9 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
   declare protected readonly getAgentProviderSessionRowsForPaneFn: HostServices['getAgentProviderSessionRowsForPaneFn']
   declare protected readonly attestAgentHookCompatibilityAuthorityFn: HostServices['attestAgentHookCompatibilityAuthorityFn']
   declare protected readonly retireAgentHookCompatibilityAuthorityFn: HostServices['retireAgentHookCompatibilityAuthorityFn']
+  declare protected readonly readHookCliWriterObservationFn:
+    | RuntimeConstructionBindings['readHookCliWriterObservation']
+    | null
   declare protected readonly checkHookAgentPresenceFn: HostServices['checkHookAgentPresenceFn']
   declare protected readonly reconcileAgentStatusForEndedProcessFn: HostServices['reconcileAgentStatusForEndedProcessFn']
   declare protected readonly forgetHookAgentExitFn: HostServices['forgetHookAgentExitFn']
@@ -206,6 +212,7 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
       deps?.attestAgentHookCompatibilityAuthority ?? null
     this.retireAgentHookCompatibilityAuthorityFn =
       deps?.retireAgentHookCompatibilityAuthority ?? null
+    this.readHookCliWriterObservationFn = deps?.readHookCliWriterObservation ?? null
     this.checkHookAgentPresenceFn = deps?.checkHookAgentPresence ?? null
     this.reconcileAgentStatusForEndedProcessFn = deps?.reconcileAgentStatusForEndedProcess ?? null
     this.forgetHookAgentExitFn = deps?.forgetHookAgentExit ?? null
