@@ -6,6 +6,10 @@ import {
 } from '../../runtime/agent-session-create-operation'
 import { callRuntimeRpc } from '../../runtime/runtime-rpc-client'
 import { toRuntimeTerminalWorktreeSelector } from '../../runtime/runtime-worktree-selector'
+import {
+  admitSpawnConsumerAttempt,
+  type SpawnConsumerAttempt
+} from './pty-renderer-delivery-claims'
 
 type PtyConnectOptions = Parameters<PtyTransport['connect']>[0]
 const modelLaunchOperations = new WeakMap<IpcPtyTransportOptions, AgentSessionCreateOperation>()
@@ -21,7 +25,8 @@ export type IpcPtySpawnResponse = PtyConnectResult & {
 export async function spawnIpcPty(
   transportOptions: IpcPtyTransportOptions,
   connectOptions: PtyConnectOptions,
-  admittedSessionId?: string
+  admittedSessionId?: string,
+  consumerAttempt?: SpawnConsumerAttempt
 ): Promise<IpcPtySpawnResponse> {
   if (
     !admittedSessionId &&
@@ -66,7 +71,8 @@ export async function spawnIpcPty(
     return spawnIpcPty(
       { ...transportOptions, command: undefined, launchConfig: undefined },
       { ...connectOptions, command: undefined, launchConfig: undefined },
-      created.terminal.ptyId
+      created.terminal.ptyId,
+      consumerAttempt
     )
   }
   const {
@@ -100,6 +106,10 @@ export async function spawnIpcPty(
     resumesAgent && !admittedSessionId ? connectOptions.resumeSpawnIntent : undefined
   // Why: a reattach under an admitted session id must never stop the PTY it is reattaching.
   const replacesPtyId = admittedSessionId ? null : (connectOptions.claimReplacedPtyId?.() ?? null)
+  // Why here: minted only once the request actually leaves, after any awaited preparation.
+  const consumerClaimToken = consumerAttempt
+    ? admitSpawnConsumerAttempt(consumerAttempt)
+    : undefined
   return window.api.pty.spawn({
     cols: connectOptions.cols ?? 80,
     rows: connectOptions.rows ?? 24,
@@ -133,6 +143,7 @@ export async function spawnIpcPty(
     ...(connectionId ? { connectionId } : {}),
     ...(admittedSessionId ? { sessionId: admittedSessionId } : {}),
     ...(connectOptions.initiallyHidden ? { initiallyHidden: true } : {}),
+    ...(consumerClaimToken !== undefined ? { consumerClaimToken } : {}),
     worktreeId,
     ...(tabId ? { tabId } : {}),
     ...(leafId ? { leafId } : {}),

@@ -115,7 +115,8 @@ export type PtySpawnOptions = {
   /** Host-scoped structured-create identity used only for lower-owner replay. */
   agentSessionCreateOperationId?: string
   /** Signals that the native process exists even if later publication fails. */
-  onPtySpawnCommitted?: () => void
+  /** Local providers pass the id they allocated, before activation can emit output. */
+  onPtySpawnCommitted?: (ptyId?: string) => void
   /** Cancels only before physical dispatch; operation identity fences later ambiguity. */
   signal?: AbortSignal
 }

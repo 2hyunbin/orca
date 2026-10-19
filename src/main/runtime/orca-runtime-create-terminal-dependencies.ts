@@ -35,10 +35,7 @@ export { newTabIn } from './runtime-terminal-spawn-placement'
 export { spawnInAdmittedPane } from './runtime-pane-admission'
 export type { IpcMainEvent } from 'electron'
 
-// Why initiallyHidden: no renderer pane exists yet, so main must answer startup queries — Muse
-// exits silently when its startup cursor-position query goes unanswered.
 export const BACKGROUND_TERMINAL_SPAWN_FLAGS = {
-  initiallyHidden: true,
   persistHostSessionBinding: true
 } as const
 

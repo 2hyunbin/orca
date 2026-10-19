@@ -16,6 +16,7 @@ import type { ReplacedPaneOwner } from '../pane/pane-owner-replacement'
 import { localProvider } from '../provider/registry'
 import type { AdoptStablePaneResult, PtySpawnIpcArgs, PtySpawnIpcDeps } from './spawn-types'
 import type { PaneAgentLaunch } from './spawn-agent-launch-end'
+import type { SpawnConsumerClaim } from '../delivery/spawn-consumer-claims'
 
 export type PtyIpcSpawnState = {
   deps: PtySpawnIpcDeps
@@ -91,13 +92,14 @@ export type PtyIpcSpawnState = {
   codexResumeHomeSelected: boolean
   hadSessionSizeBeforeAttach: boolean
   sessionSizeBeforeAttach: { cols: number; rows: number } | undefined
-  initiallyHidden: boolean
-  preSpawnHiddenMarkId: string | null
+  /** This request's pending visible consumer; bound at the provider boundary. */
+  consumerClaim: SpawnConsumerClaim | null
 }
 
 export function createPtyIpcSpawnState(
   deps: PtySpawnIpcDeps,
-  args: PtySpawnIpcArgs
+  args: PtySpawnIpcArgs,
+  consumerClaim: SpawnConsumerClaim | null = null
 ): PtyIpcSpawnState {
   return {
     deps,
@@ -167,7 +169,6 @@ export function createPtyIpcSpawnState(
     codexResumeHomeSelected: false,
     hadSessionSizeBeforeAttach: false,
     sessionSizeBeforeAttach: undefined,
-    initiallyHidden: false,
-    preSpawnHiddenMarkId: null
+    consumerClaim
   }
 }

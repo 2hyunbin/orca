@@ -13,7 +13,6 @@ import { getConnectionExecutionHostId } from '../../../../shared/execution-host'
 
 export async function preparePtyIpcSpawnPreflight(ctx: PtyIpcSpawnState): Promise<void> {
   const args = ctx.args
-  // Establish daemon identity before the first await so hidden delivery is gated before byte zero.
   // Only this machine spawns here: an `ssh:` connection throws, so every line below is local.
   ctx.provider = getProvider(getConnectionExecutionHostId(args.connectionId))
   ctx.isDaemonHostSpawn =
@@ -22,14 +21,6 @@ export async function preparePtyIpcSpawnPreflight(ctx: PtyIpcSpawnState): Promis
   ctx.effectiveSessionId =
     args.sessionId ?? (ctx.isDaemonHostSpawn ? mintPtySessionId(args.worktreeId) : undefined)
   ctx.effectiveSessionAppId = ctx.effectiveSessionId
-  ctx.initiallyHidden = args.initiallyHidden === true
-  ctx.preSpawnHiddenMarkId =
-    ctx.initiallyHidden && ctx.isDaemonHostSpawn && ctx.effectiveSessionAppId !== undefined
-      ? ctx.effectiveSessionAppId
-      : null
-  if (ctx.preSpawnHiddenMarkId !== null) {
-    ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(ctx.preSpawnHiddenMarkId, true)
-  }
   if (!ctx.earlyStablePaneOwner) {
     const admission = ctx.deps.assertWorkspaceAcceptsNewPty(args.worktreeId, args.sessionId)
     if (admission) {
@@ -47,7 +38,8 @@ export async function preparePtyIpcSpawnPreflight(ctx: PtyIpcSpawnState): Promis
           worktreeId: ctx.earlyWorktreeId,
           tabId: ctx.earlyStablePaneOwner.tabId,
           leafId: ctx.earlyStablePaneOwner.leafId,
-          ownsPaneSpawnReservation: true
+          ownsPaneSpawnReservation: true,
+          consumerClaim: ctx.consumerClaim
         })
       : null
   ctx.spawnTiming.mark('stable_adoption')
@@ -62,25 +54,12 @@ export async function preparePtyIpcSpawnPreflight(ctx: PtyIpcSpawnState): Promis
     : recoverFreshSpawnProviderRouting(ctx.provider, args.sessionId)
   if (freshSpawnRecovery) {
     await freshSpawnRecovery
-    const previousHiddenMarkId = ctx.preSpawnHiddenMarkId
     ctx.isDaemonHostSpawn =
       !(ctx.provider instanceof LocalPtyProvider) && !routesFreshSpawnsToLocalProvider(ctx.provider)
     ctx.isMintedSessionId = args.sessionId === undefined && ctx.isDaemonHostSpawn
     ctx.effectiveSessionId =
       args.sessionId ?? (ctx.isDaemonHostSpawn ? mintPtySessionId(args.worktreeId) : undefined)
     ctx.effectiveSessionAppId = ctx.effectiveSessionId
-    ctx.preSpawnHiddenMarkId =
-      ctx.initiallyHidden && ctx.isDaemonHostSpawn && ctx.effectiveSessionAppId !== undefined
-        ? ctx.effectiveSessionAppId
-        : null
-    if (previousHiddenMarkId !== ctx.preSpawnHiddenMarkId) {
-      if (previousHiddenMarkId !== null) {
-        ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(previousHiddenMarkId, false)
-      }
-      if (ctx.preSpawnHiddenMarkId !== null) {
-        ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(ctx.preSpawnHiddenMarkId, true)
-      }
-    }
   }
   ctx.isClaudeLaunch = !ctx.preAdoptedStablePane && isClaudeLaunchCommand(args.command)
   // Why: daemon host-env setup needs a stable id BEFORE provider.spawn so buildPtyHostEnv hooks/Pi cleanup can run; daemon still honors opts.sessionId ?? mint().

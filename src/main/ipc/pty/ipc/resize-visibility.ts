@@ -4,13 +4,11 @@ import type {
   PtyRendererDeliveryHealthReply,
   PtyRendererDeliveryStateReport
 } from '../../../../shared/pty-renderer-delivery-health'
-import { redactPtyIdForDiagnostics } from '../../../../shared/pty-delivery-diagnostics'
 import { installTerminalViewAttributesIpc } from './terminal-view-attributes-ipc'
 import {
   consumeHiddenRendererPtyDropMemory,
-  recordHiddenRendererPtyDataDrop,
   setRendererPtyDeliveryInterest,
-  shouldDropHiddenRendererPtyData
+  shouldDropRendererPtyData
 } from '../../pty-hidden-delivery-gate'
 import { tryGetProviderForPty, closeStartupQueryAuthorityForPty } from '../provider/registry'
 import {
@@ -18,17 +16,14 @@ import {
   invalidatePendingPtyDrainPolicy,
   invalidatePendingPtyDrainPriority,
   ptySizes,
-  rendererVisibilityKnownPtys,
   visibleRendererPtys
 } from '../delivery/visibility-state'
-import {
-  mainDeliveryBreadcrumbs,
-  resetRendererDeliveryAccountingForLifecycleReset
-} from '../delivery/debug'
+import { resetRendererDeliveryAccountingForLifecycleReset } from '../delivery/debug'
 import { PTY_DELIVERY_HEAL_MIN_ACK_SILENCE_MS } from '../delivery/constants'
 import { applyCumulativeAck } from '../delivery/accounting'
-import { sendModelRestoreNeededMarker } from '../delivery/payload'
+import { admitRendererDocument } from '../delivery/renderer-document'
 import { isMainWindowPtyIpcEvent } from './write-input'
+import { installRendererConsumerIpc } from './renderer-consumer-ipc'
 import type { PtyIpcSession } from '../session'
 
 export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
@@ -227,89 +222,41 @@ export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
   })
 
   ipcMain.removeAllListeners('pty:setRendererPtyVisible')
-  ipcMain.on('pty:setRendererPtyVisible', (_event, args: { id: string; visible: boolean }) => {
-    if (typeof args.id !== 'string' || !args.id) {
-      return
-    }
-    // Why: data produced while no renderer can see this PTY must keep that origin through batching, even if the user switches back before the flush lands.
-    rendererVisibilityKnownPtys.add(args.id)
-    if (args.visible) {
-      visibleRendererPtys.add(args.id)
-      closeStartupQueryAuthorityForPty(args.id)
-    } else {
-      visibleRendererPtys.delete(args.id)
-    }
-    session.syncPtyBackgroundedDelivery(args.id, 'visibility-report')
-  })
-
-  ipcMain.removeAllListeners('pty:setHiddenRendererPty')
-  ipcMain.on('pty:setHiddenRendererPty', (_event, args: { id: string; hidden: boolean }) => {
-    if (typeof args.id !== 'string' || !args.id) {
-      return
-    }
-    mainDeliveryBreadcrumbs.record(args.hidden === true ? 'gate-mark' : 'gate-unmark', {
-      id: redactPtyIdForDiagnostics(args.id)
-    })
-    const transition = session.transitionHiddenRendererPtyDeliveryState(
-      args.id,
-      args.hidden === true
-    )
-    if (args.hidden === true) {
-      closeStartupQueryAuthorityForPty(args.id)
-      // Why: drop bytes queued for a newly hidden PTY instead of holding them under ACK starvation; reveal restores from the snapshot.
-      const pending = session.pendingData.get(args.id)
-      if (pending && transition.droppable) {
-        session.pendingData.delete(args.id)
-        session.updateProducerFlowControl(args.id)
-        session.pendingOverflowMarkedPtys.delete(args.id)
-        const drop = recordHiddenRendererPtyDataDrop(args.id, pending.data.length)
-        if (drop.shouldEmitRestoreMarker) {
-          sendModelRestoreNeededMarker(
-            session,
-            args.id,
-            'hidden-drop',
-            runtime?.getPtyOutputSequence(args.id),
-            drop.hiddenDropEpisode
-          )
-        }
+  ipcMain.on(
+    'pty:setRendererPtyVisible',
+    (_event, args: { doc?: unknown; id: string; visible: boolean }) => {
+      if (typeof args.id !== 'string' || !args.id || !admitRendererDocument(args.doc)) {
+        return
       }
-      if (transition.policyChanged) {
-        invalidatePendingPtyDrainPolicy(args.id)
+      if (args.visible) {
+        visibleRendererPtys.add(args.id)
+        closeStartupQueryAuthorityForPty(args.id)
+      } else {
+        visibleRendererPtys.delete(args.id)
       }
-      session.syncPtyBackgroundedDelivery(args.id, 'gate-mark')
-      return
+      session.syncPtyBackgroundedDelivery(args.id, 'visibility-report')
     }
-    if (transition.policyChanged) {
-      invalidatePendingPtyDrainPolicy(args.id)
-    }
-    session.syncPtyBackgroundedDelivery(args.id, 'gate-unmark')
-    // Why: a reload/remount may have replaced the view that latched restore-needed, so re-emit on unhide; a redundant replay is cheap/idempotent, a missed restore corrupts the pane.
-    if (transition.droppedWhileHidden) {
-      sendModelRestoreNeededMarker(
-        session,
-        args.id,
-        'unhide',
-        runtime?.getPtyOutputSequence(args.id),
-        transition.hiddenDropEpisode
-      )
-    }
-  })
+  )
 
+  installRendererConsumerIpc(session)
   installTerminalViewAttributesIpc(session)
 
   ipcMain.removeAllListeners('pty:setPtyDeliveryInterest')
-  ipcMain.on('pty:setPtyDeliveryInterest', (_event, args: { id: string; interested: boolean }) => {
-    if (typeof args.id !== 'string' || !args.id) {
-      return
+  ipcMain.on(
+    'pty:setPtyDeliveryInterest',
+    (_event, args: { doc?: unknown; id: string; interested: boolean }) => {
+      if (typeof args.id !== 'string' || !args.id || !admitRendererDocument(args.doc)) {
+        return
+      }
+      // Why: any delivery interest suppresses the hidden-delivery gate (raw-byte consumers keep receiving while hidden); not synced to the daemon pacer so interest churn can't un-pace a flood.
+      const settings = session.getSettings?.()
+      const wasDroppable = shouldDropRendererPtyData(args.id, settings)
+      setRendererPtyDeliveryInterest(args.id, args.interested === true)
+      if (wasDroppable !== shouldDropRendererPtyData(args.id, settings)) {
+        invalidatePendingPtyDrainPolicy(args.id)
+      }
     }
-    // Why: any delivery interest suppresses the hidden-delivery gate (raw-byte consumers keep receiving while hidden); not synced to the daemon pacer so interest churn can't un-pace a flood.
-    const settings = session.getSettings?.()
-    const wasDroppable = shouldDropHiddenRendererPtyData(args.id, settings)
-    setRendererPtyDeliveryInterest(args.id, args.interested === true)
-    if (wasDroppable !== shouldDropHiddenRendererPtyData(args.id, settings)) {
-      invalidatePendingPtyDrainPolicy(args.id)
-    }
-  })
+  )
 
   ipcMain.removeAllListeners('pty:signal')
   ipcMain.on('pty:signal', (_event, args: { id: string; signal: string }) => {

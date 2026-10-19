@@ -1,3 +1,5 @@
+import { hasSpawnConsumerClaim } from './spawn-consumer-claims'
+
 export const SYNTHETIC_KILL_EXIT_DUPLICATE_WINDOW_MS = 30_000
 // Why: kill switch — flip to disable producer flow control (pause/resume) without untangling the wiring.
 export const PRODUCER_FLOW_CONTROL_ENABLED = true
@@ -8,7 +10,11 @@ export const lastInputAtByPty = new Map<string, number>()
 export const interactiveOutputCharsByPty = new Map<string, number>()
 export const activeRendererPtys = new Set<string>()
 export const visibleRendererPtys = new Set<string>()
-export const rendererVisibilityKnownPtys = new Set<string>()
+
+/** A local view is on screen, or a window spawn is about to mount one. */
+export function hasLocalVisibleRendererView(id: string): boolean {
+  return visibleRendererPtys.has(id) || hasSpawnConsumerClaim(id)
+}
 // Why null-init + wrapper fns: see debug.ts — rolldown const-folds `export let fn = noop` bridges (STA-5661).
 let invalidatePendingPtyDrainPriorityImpl: ((id?: string, schedule?: boolean) => void) | null = null
 let invalidatePendingPtyDrainPolicyImpl: ((id?: string, schedule?: boolean) => void) | null = null

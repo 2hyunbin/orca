@@ -5,10 +5,6 @@ import type { Store } from '../../persistence'
 import type { GlobalSettings } from '../../../shared/global-settings-types'
 import { LocalPtyProvider } from '../../providers/local-pty-provider'
 import type { TerminalStartupCwdMissingDirFallback } from '../../../shared/terminal-startup-cwd'
-import {
-  getHiddenRendererPtyDeliveryDebug,
-  resetRendererScopedHiddenPtyDeliveryState
-} from '../pty-hidden-delivery-gate'
 import { localProvider, type ResolvedPtyHost } from './provider/registry'
 import { finishPtyShutdown } from './provider/liveness'
 import type { GetSelectedCodexHomePath, PrepareClaudeAuth } from './host-env/types'
@@ -23,7 +19,7 @@ import {
   type PtyKillIpcDeps
 } from './ipc/renderer-kill'
 import { installPtyWriteIpcHandlers } from './ipc/write'
-import { installPtySpawnIpcHandler } from './ipc/spawn'
+import { installPtySpawnIpcHandler, openWindowSpawnConsumerClaim } from './ipc/spawn'
 import { installPtyLeafMoveIpcHandler } from './ipc/leaf-move'
 import { installPtyRuntimeController } from './runtime/controller'
 import { installPtySnapshotIpcHandlers } from './ipc/snapshot'
@@ -34,14 +30,9 @@ import {
 } from './host-env/spawn-cwd'
 import {
   setInvalidatePendingPtyDrainPolicy,
-  setInvalidatePendingPtyDrainPriority,
-  invalidatePendingPtyDrainPolicy
+  setInvalidatePendingPtyDrainPriority
 } from './delivery/visibility-state'
-import {
-  setRebindProviderListeners,
-  setDidFinishLoadHandler,
-  setRendererGateResetState
-} from './provider/listener-lifecycle'
+import { setRebindProviderListeners, setDidFinishLoadHandler } from './provider/listener-lifecycle'
 import {
   resetRendererDeliveryAccountingForLifecycleReset,
   setResetRendererDeliveryAccountingForLifecycleReset,
@@ -49,7 +40,6 @@ import {
 } from './delivery/debug'
 import {
   registerRendererLifecycleResetHandlers,
-  clearRendererGateResetHandlers,
   clearDidFinishLoadHandler
 } from './delivery/lifecycle-reset'
 import { createPtyIpcSession, type PtyIpcSessionOptions, type PtyRendererDelivery } from './session'
@@ -178,27 +168,6 @@ export function registerPtyHandlers(
   setRebindProviderListeners(() => bindProviderListeners(session))
   installPtySerializeBufferIpc(session)
 
-  // Why: reload/crash orphans delivery-interest holds and hidden marks; reset so surviving PTYs aren't stuck force-fed or gated — each pane's first sync re-marks.
-  clearRendererGateResetHandlers()
-  const resetRendererPtyDeliveryGateState = (): void => {
-    const gateDebug = getHiddenRendererPtyDeliveryDebug()
-    resetRendererScopedHiddenPtyDeliveryState()
-    if (gateDebug.hiddenDeliveryGatedPtyCount > 0 || gateDebug.deliveryInterestPtyCount > 0) {
-      invalidatePendingPtyDrainPolicy()
-    }
-    // Why: the daemon pacer must not keep throttling ptys whose hidden marks died with the renderer; the fresh renderer's sync re-marks the still-hidden ones.
-    session.resyncBackgroundedDeliveriesAfterGateReset()
-  }
-  if (mainWindow) {
-    setRendererGateResetState({
-      contents: mainWindow.webContents,
-      load: resetRendererPtyDeliveryGateState,
-      gone: resetRendererPtyDeliveryGateState
-    })
-    mainWindow.webContents.on('did-finish-load', resetRendererPtyDeliveryGateState)
-    mainWindow.webContents.on('render-process-gone', resetRendererPtyDeliveryGateState)
-  }
-
   // Why: only LocalPtyProvider PTYs (main-process) can be orphaned on reload; daemon sessions survive by design and cleanup would kill them.
   clearDidFinishLoadHandler()
   if (mainWindow && localProvider instanceof LocalPtyProvider) {
@@ -260,8 +229,6 @@ export function registerPtyHandlers(
     trustedTerminalHandleEnv: session.trustedTerminalHandleEnv,
     retiredRejectedPtyIds: session.retiredRejectedPtyIds,
     mainWindow,
-    transitionSpawnHiddenRendererPtyDeliveryState:
-      session.transitionSpawnHiddenRendererPtyDeliveryState,
     syncPtyBackgroundedDelivery: session.syncPtyBackgroundedDelivery
   })
 
@@ -292,8 +259,7 @@ export function registerPtyHandlers(
     resolveCodexResumeLaunch,
     reconcileSharedRuntimeResumeHome,
     stripSequencedStartupResumeArgv,
-    transitionSpawnHiddenRendererPtyDeliveryState:
-      session.transitionSpawnHiddenRendererPtyDeliveryState,
+    openSpawnConsumerClaim: (event, args) => openWindowSpawnConsumerClaim(event, args, mainWindow),
     trustedTerminalHandleEnv: session.trustedTerminalHandleEnv,
     sendPtySpawnedToRenderer: session.sendPtySpawnedToRenderer,
     syncPtyBackgroundedDelivery: session.syncPtyBackgroundedDelivery,

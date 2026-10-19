@@ -111,16 +111,6 @@ export async function buildPtyIpcSpawnOptions(
       : null
   }
   ctx.finishTerminalInstall = beginPtySpawnForWorktree(args.worktreeId, ctx.cwd, args.connectionId)
-  ctx.initiallyHidden = args.initiallyHidden === true
-  // Why: daemon PTYs can emit before spawn() resolves, so the hidden mark must beat byte zero (terminal-query-authority.md §races); other providers are safe with the post-spawn mark below.
-  // TEMPORARY (C5e): absent-owner cleanup clears the early mark before replacement spawn.
-  ctx.preSpawnHiddenMarkId =
-    ctx.initiallyHidden && ctx.isDaemonHostSpawn && ctx.effectiveSessionAppId !== undefined
-      ? ctx.effectiveSessionAppId
-      : null
-  if (ctx.preSpawnHiddenMarkId !== null) {
-    ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(ctx.preSpawnHiddenMarkId, true)
-  }
   const runtime = ctx.deps.runtime
   const acquireWorktreeSpawn = runtime?.acquireWorktreeTerminalSpawn
   ctx.releaseWorktreeSpawn = acquireWorktreeSpawn

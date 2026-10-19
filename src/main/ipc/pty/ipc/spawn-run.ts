@@ -17,6 +17,7 @@ import { commitPtyIpcSpawn } from './spawn-commit'
 import { createPtyIpcSpawnState, type PtyIpcSpawnState } from './spawn-state'
 import { triggerPtySpawnPushTargetMaterialization } from './spawn-push-target-materialization'
 import type { PtySpawnIpcArgs, PtySpawnIpcDeps } from './spawn-types'
+import type { SpawnConsumerClaim } from '../delivery/spawn-consumer-claims'
 
 function releaseAbandonedAgentTeamsLeader(ctx: PtyIpcSpawnState): void {
   if (!ctx.agentTeamsLeaderHandle) {
@@ -26,8 +27,12 @@ function releaseAbandonedAgentTeamsLeader(ctx: PtyIpcSpawnState): void {
   ctx.agentTeamsLeaderHandle = null
 }
 
-export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArgs) {
-  const ctx = createPtyIpcSpawnState(deps, args)
+export async function runPtyIpcSpawn(
+  deps: PtySpawnIpcDeps,
+  args: PtySpawnIpcArgs,
+  consumerClaim: SpawnConsumerClaim | null = null
+) {
+  const ctx = createPtyIpcSpawnState(deps, args, consumerClaim)
   const replacedPaneKey =
     args.replacesPtyId !== undefined ? resolveEarlyPaneSpawnReservationKey(args) : null
   if (replacedPaneKey) {
@@ -86,9 +91,6 @@ export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArg
   } catch (caught) {
     const err = endPaneAgentLaunch(ctx, { error: caught }) ?? caught
     releaseAbandonedAgentTeamsLeader(ctx)
-    if (ctx.preSpawnHiddenMarkId !== null) {
-      ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(ctx.preSpawnHiddenMarkId, false)
-    }
     if (ctx.pendingRegistrationPtyId) {
       deps.runtime?.cancelPendingPtyRegistration?.(
         ctx.pendingRegistrationPtyId,

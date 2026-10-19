@@ -51,8 +51,10 @@ export type PtyApi = {
     projectRuntime?: ProjectExecutionRuntimeResolution
     terminalKittyKeyboardProtocol?: boolean
     terminalColorQueryReplies?: { foreground?: string; background?: string }
-    // Why: mark the PTY hidden before its first byte so the delivery gate owns spawn-time queries (terminal-query-authority.md §races).
+    // Why: an unmeasured hidden request; main only seeds its provisional size from it.
     initiallyHidden?: boolean
+    /** A mounting pane's pending visible consumer, held by main until the pane reports its own. */
+    consumerClaimToken?: number
     // Why: main sync-flushes the (worktreeId,tabId,leafId→ptyId) binding before pty:spawn returns to close a SIGKILL race (INVESTIGATION.md).
     tabId?: string
     leafId?: string
@@ -129,9 +131,11 @@ export type PtyApi = {
   rendererDispatcherReady: () => void
   setActiveRendererPty: (id: string, active: boolean) => void
   setRendererPtyVisible: (id: string, visible: boolean) => void
-  /** Hidden-delivery gate (Phase 4): hidden=true lets main drop renderer
-   *  byte delivery after model ingestion; reveal restores from snapshots. */
-  setHiddenRendererPty: (id: string, hidden: boolean) => void
+  /** Hidden-delivery gate (Phase 4): with no consuming view main drops
+   *  renderer byte delivery after model ingestion; reveal restores from snapshots. */
+  setRendererPtyConsumer: (id: string, consuming: boolean) => void
+  /** Ends a spawn's pending consumer claim once the pane reported its own. */
+  settleSpawnConsumerClaim: (token: number) => void
   /** Ref-counted-on-the-renderer delivery-interest signal that suppresses
    *  the hidden-delivery gate while any raw-byte consumer is registered. */
   setPtyDeliveryInterest: (id: string, interested: boolean) => void

@@ -1,3 +1,4 @@
+import type { IpcMainInvokeEvent } from 'electron'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import type {
   AgentProviderSessionMetadata,
@@ -17,6 +18,7 @@ import type {
   PrepareCodexSessionResume
 } from '../host-env/types'
 import type { StablePaneOwner } from '../pane/stable-owner'
+import type { SpawnConsumerClaim } from '../delivery/spawn-consumer-claims'
 import type { ResolvedPtyHost } from '../provider/registry'
 import type { PtySpawnCodexResumeDeps } from '../spawn-host-env'
 
@@ -45,8 +47,11 @@ export type PtySpawnIpcArgs = {
     foreground?: unknown
     background?: unknown
   }
-  // Why: hidden-at-spawn declaration (terminal-query-authority.md §races) — main marks hidden before byte zero so the gate owns spawn-time queries.
+  // Why: an unmeasured hidden request; only seeds the provisional size (C5d TEMPORARY).
   initiallyHidden?: boolean
+  // Why: a mounting pane's pending visible consumer, held until the pane reports its own; the preload adds the document.
+  consumerClaimToken?: number
+  rendererDocumentId?: string
   // Why: closes the SIGKILL race (INVESTIGATION.md) by letting main sync-flush the binding before pty:spawn returns; only the Ctrl+T daemon-host path threads these.
   tabId?: string
   leafId?: string
@@ -76,6 +81,7 @@ export type AdoptStablePaneArgs = {
   tabId: string
   leafId: string
   ownsPaneSpawnReservation?: true
+  consumerClaim?: SpawnConsumerClaim | null
 }
 
 export type AdoptStablePaneResult = {
@@ -106,7 +112,10 @@ export type PtySpawnIpcDeps = PtySpawnCodexResumeDeps & {
     missingDirFallback?: TerminalStartupCwdMissingDirFallback
   ) => string | undefined
   localStartupCwdDirectoryExists: (path: string) => boolean
-  transitionSpawnHiddenRendererPtyDeliveryState: (id: string, hidden: boolean) => void
+  openSpawnConsumerClaim?: (
+    event: IpcMainInvokeEvent,
+    args: PtySpawnIpcArgs
+  ) => SpawnConsumerClaim | null
   trustedTerminalHandleEnv: Set<string>
   sendPtySpawnedToRenderer: (id: string) => void
   syncPtyBackgroundedDelivery: (id: string, caller: string) => void

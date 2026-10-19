@@ -62,7 +62,6 @@ export type PtyRuntimeControllerDeps = PtySpawnCodexResumeDeps & {
   trustedTerminalHandleEnv: Set<string>
   retiredRejectedPtyIds: Map<string, NodeJS.Timeout>
   mainWindow?: PtyRendererDelivery
-  transitionSpawnHiddenRendererPtyDeliveryState?: (id: string, hidden: boolean) => void
   syncPtyBackgroundedDelivery?: (id: string, caller: string) => void
 }
 

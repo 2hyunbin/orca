@@ -136,7 +136,7 @@ export async function spawnLocalPty(
         }
         throw error
       }
-      args.onPtySpawnCommitted?.()
+      args.onPtySpawnCommitted?.(id)
       plan.shellPath = spawnResult.shellPath
       // Why: a Windows fallback embeds its startup command in argv; honor the winning shell's delivery flag to avoid a double write.
       if (spawnResult.startupCommandDeliveredInShellArgs !== undefined) {

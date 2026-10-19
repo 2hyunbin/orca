@@ -74,6 +74,7 @@ export async function adoptStablePane(
     owner,
     worktreeId: args.worktreeId,
     connectionId: args.connectionId,
+    consumerClaim: args.consumerClaim,
     resolveOwner: () =>
       resolveStablePaneOwner(runtime, store, paneKey, args.worktreeId, args.connectionId)
   })

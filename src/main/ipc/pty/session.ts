@@ -15,7 +15,7 @@ import type { PendingPtyData } from '../pty-pending-data-drain-contract'
 import { activeRendererPtys } from './delivery/visibility-state'
 import {
   isHiddenPtyDeliveryGateEnabled,
-  shouldDropHiddenRendererPtyData
+  shouldDropRendererPtyData
 } from '../pty-hidden-delivery-gate'
 import type { CodexHomePtySpawnedLifecycleArgs, PrepareCodexSessionResume } from './host-env/types'
 import { tryGetProviderForPty } from './provider/registry'
@@ -154,17 +154,6 @@ export type PtyIpcSession = {
   consumeSyntheticKillExit: (id: string, incarnationId?: string) => boolean
   syncPtyBackgroundedDelivery: (id: string, caller: string) => void
   resyncBackgroundedDeliveriesAfterGateReset: () => void
-  transitionHiddenRendererPtyDeliveryState: (
-    id: string,
-    hidden: boolean
-  ) => {
-    droppable: boolean
-    droppedWhileHidden: boolean
-    hiddenDropEpisode?: number
-    policyChanged: boolean
-  }
-  transitionSpawnHiddenRendererPtyDeliveryState: (id: string, hidden: boolean) => void
-  rendererPtyIsKnownHidden: (id: string) => boolean
   schedulePendingDataAfterCreditReport: (creditedAny: boolean) => void
   writeOffLostRendererDelivery: (report: PtyRendererDeliveryStateReport) => PtyDeliveryWriteOff[]
   getRendererInFlightCharsForPty: (id: string) => number
@@ -248,9 +237,6 @@ export function createPtyIpcSession(args: {
     consumeSyntheticKillExit: unsetSessionFn,
     syncPtyBackgroundedDelivery: unsetSessionFn,
     resyncBackgroundedDeliveriesAfterGateReset: unsetSessionFn,
-    transitionHiddenRendererPtyDeliveryState: unsetSessionFn,
-    transitionSpawnHiddenRendererPtyDeliveryState: unsetSessionFn,
-    rendererPtyIsKnownHidden: unsetSessionFn,
     schedulePendingDataAfterCreditReport: unsetSessionFn,
     writeOffLostRendererDelivery: unsetSessionFn,
     getRendererInFlightCharsForPty: unsetSessionFn
@@ -260,7 +246,7 @@ export function createPtyIpcSession(args: {
     (id) => {
       const runnableLane = activeRendererPtys.has(id) ? 'active' : 'background'
       // Why first: hidden bytes are dropped from main's pending queue even when renderer credit is exhausted.
-      if (shouldDropHiddenRendererPtyData(id, session.getSettings?.())) {
+      if (shouldDropRendererPtyData(id, session.getSettings?.())) {
         return runnableLane
       }
       if (

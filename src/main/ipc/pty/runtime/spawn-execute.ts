@@ -13,7 +13,6 @@ import { clearProviderPtyState } from '../provider/state-cleanup'
 import { isProviderAgentSessionOwnerLive } from '../provider/liveness'
 import { failPtySpawnExecute } from '../spawn-execute-failure'
 import type { RuntimePtySpawnState } from './spawn-state'
-import { markRuntimeSpawnHiddenBeforeSpawn } from './spawn-hidden-delivery'
 
 export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise<void> {
   const args = ctx.args
@@ -42,9 +41,6 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
           )
     const expectedPtyId =
       stablePaneOwnerCandidate?.ptyId ?? ctx.effectiveSessionAppId ?? ctx.sessionId
-    if (!stablePaneOwnerCandidate) {
-      markRuntimeSpawnHiddenBeforeSpawn(ctx)
-    }
     if (expectedPtyId) {
       ctx.deps.runtime?.beginPtyRegistration?.(expectedPtyId)
       ctx.pendingRegistrationPtyId = expectedPtyId

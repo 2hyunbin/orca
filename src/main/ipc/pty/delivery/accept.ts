@@ -1,12 +1,8 @@
 import {
   recordHiddenRendererPtyDataDrop,
-  shouldDropHiddenRendererPtyData
+  shouldDropRendererPtyData
 } from '../../pty-hidden-delivery-gate'
-import {
-  rendererVisibilityKnownPtys,
-  visibleRendererPtys,
-  activeRendererPtys
-} from './visibility-state'
+import { activeRendererPtys, hasLocalVisibleRendererView } from './visibility-state'
 import { PTY_BATCH_INTERVAL_MS } from './constants'
 import {
   appendPendingPtyData,
@@ -19,10 +15,6 @@ import { requestDeliveryResyncForGatedPty } from './accounting'
 import { warnIfDroppingHiddenBytesForVisiblePty } from './debug-snapshot'
 import { clearFlushTimerIfIdle } from './flush'
 import type { PtyIpcSession } from '../session'
-
-export function rendererPtyIsKnownHidden(id: string): boolean {
-  return rendererVisibilityKnownPtys.has(id) && !visibleRendererPtys.has(id)
-}
 
 export function acceptPtyDataForRenderer(
   session: PtyIpcSession,
@@ -54,7 +46,7 @@ export function acceptPtyDataForRenderer(
   if (session.rendererExitingPtyIds.has(payload.id)) {
     return
   }
-  if (shouldDropHiddenRendererPtyData(payload.id, session.getSettings?.())) {
+  if (shouldDropRendererPtyData(payload.id, session.getSettings?.())) {
     const droppedChars = payload.data.length
     const drop = recordHiddenRendererPtyDataDrop(payload.id, droppedChars)
     warnIfDroppingHiddenBytesForVisiblePty(session, payload.id, droppedChars)
@@ -72,7 +64,7 @@ export function acceptPtyDataForRenderer(
   if (payload.data.length === 0 && !payload.transformed) {
     return
   }
-  const containsBackgroundOutput = rendererPtyIsKnownHidden(payload.id)
+  const containsBackgroundOutput = !hasLocalVisibleRendererView(payload.id)
   const overflowMarkedBeforeAppend = session.pendingOverflowMarkedPtys.has(payload.id)
   const pending = appendPendingPtyData(
     session,

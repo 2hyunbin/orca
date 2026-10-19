@@ -83,13 +83,10 @@ export function bindSerializeHiddenOutputSnapshot(session: ConnectPanePtySession
     }
   }
 
-  // Why: hidden/parked panes used to mark hidden only at the first
-  // session.dataCallback sync, leaving a spawn-time window where neither side
-  // answered queries (the spawn-time DA1 loss). Declaring hidden on the
-  // spawn IPC lets main mark the PTY before its first byte — including
-  // codex spawns: the model responder answers their startup probes from
-  // byte zero now that the 10s renderer query window is gone.
-  // Remote-runtime PTYs are never gate-markable (no local main transit).
+  // Why: a hidden spawn sends no pending consumer claim, so main owns its
+  // startup queries from byte zero (the spawn-time DA1 loss); a visible one
+  // promises a consumer until the pane reports. Remote-runtime PTYs never
+  // transit local main.
   session.shouldDeclareHiddenAtSpawn = function (): boolean {
     return (
       session.hiddenDeliveryGateActive &&
@@ -99,13 +96,6 @@ export function bindSerializeHiddenOutputSnapshot(session: ConnectPanePtySession
     )
   }
 
-  // ── Hidden-delivery gate sync (Phase 4) ─────────────────────────────
-  // Why: marks this pane's PTY hidden in main while no visible view needs
-  // its bytes; main then drops delivery after model ingestion and reveal
-  // restores from the snapshot. The marked id is tracked locally so PTY
-  // changes (reattach/restart) can never leave a stale id gated.
-  session.hiddenDeliverySyncedPtyId = null
-  session.releaseHiddenDeliveryClaim = null
   session.modelRestoreSubscribedPtyId = null
   session.unregisterModelRestoreNeeded = null
 

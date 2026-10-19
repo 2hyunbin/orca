@@ -16,10 +16,7 @@ import { buildRuntimePtySpawnOptions } from './spawn-options'
 import { executeRuntimePtySpawn } from './spawn-execute'
 import { commitRuntimePtySpawn } from './spawn-commit'
 import { createRuntimePtySpawnState, type RuntimePtySpawnArgs } from './spawn-state'
-import {
-  commitRuntimeSpawnHiddenDelivery,
-  releaseRuntimeSpawnPreSpawnHiddenMark
-} from './spawn-hidden-delivery'
+import { syncPtyDeliveryAfterRegistration } from '../delivery/producer-sync'
 
 function toRuntimeSpawnReply(result: {
   id: string
@@ -93,10 +90,10 @@ export async function spawnPtyFromRuntimeController(
     }
     await executeRuntimePtySpawn(ctx)
     const committed = await commitRuntimePtySpawn(ctx)
-    commitRuntimeSpawnHiddenDelivery(ctx)
+    // Why after commit: ptyOwnership must exist so pacing routes; a host spawn has no local view to wait for.
+    syncPtyDeliveryAfterRegistration(deps, ctx.result.id)
     return toRuntimeSpawnReply(committed)
   } catch (err) {
-    releaseRuntimeSpawnPreSpawnHiddenMark(ctx)
     if (ctx.pendingRegistrationPtyId) {
       deps.runtime?.cancelPendingPtyRegistration?.(
         ctx.pendingRegistrationPtyId,

@@ -2,42 +2,43 @@
  * Main-side hidden-delivery gate for renderer PTY byte delivery (Phase 4 of
  * the terminal model/view architecture).
  *
- * The renderer marks a PTY hidden when no visible view consumes its bytes;
- * main then drops renderer-bound delivery AFTER model ingestion — the runtime
- * already parsed the chunk, and reveal restores from the model snapshot via
- * the existing seq-guarded machinery. Any renderer party that still needs raw
- * bytes (dispatcher sidecars) registers delivery
- * interest, which suppresses the gate for that PTY.
+ * Delivery is derived from positive claims: a local view that consumes the
+ * PTY's bytes (renderer consumer report or a window spawn's pending claim), or
+ * a raw-byte sidecar's delivery interest. With neither, main drops
+ * renderer-bound delivery AFTER model ingestion and answers the PTY's queries;
+ * reveal restores from the model snapshot via the seq-guarded machinery.
  */
 import type { GlobalSettings } from '../../shared/global-settings-types'
+import { _resetRendererDocumentForTest } from './pty/delivery/renderer-document'
+import {
+  _resetSpawnConsumerClaimsForTest,
+  hasSpawnConsumerClaim
+} from './pty/delivery/spawn-consumer-claims'
 
 export type HiddenPtyDeliveryGateSettings = Pick<
   GlobalSettings,
   'terminalMainSideEffectAuthority' | 'terminalHiddenDeliveryGate'
 >
 
-const hiddenRendererPtys = new Set<string>()
+// Why: the renderer's aggregate per-owner consumer claim; absence means no local view consumes bytes.
+const rendererConsumerPtys = new Set<string>()
 // Why: sidecar consumers (paste-draft pacing, background agent launches,
 // automation observers) need live bytes even while no visible view exists. Any
 // registered interest suppresses the gate for that PTY.
 const deliveryInterestRendererPtys = new Set<string>()
 // Why: reveal must restore from the model only when bytes were actually
 // dropped. Doubles as the marker latch: the first gated drop emits a restore
-// marker and every unhide re-emits one. It retires only when the renderer acks
-// the restore painted, or on PTY teardown — a retiring hidden pane unhides after
-// unregistering its marker handler, so spending it on unhide loses the gap.
-// 'awaiting-paint' = an unhide re-emitted the marker; a drop after that starts a
-// new episode the in-flight restore's snapshot may predate, so its ack must not
-// retire it.
+// marker and every new consumer report re-emits one. It retires only when the
+// renderer acks the restore painted, or on PTY teardown — a replacement view may
+// take the marker handler while the old one still consumes, so spending it on a
+// report loses the gap. 'awaiting-paint' = a report re-emitted the marker; a drop
+// after that starts a new episode the in-flight restore's snapshot may predate,
+// so its ack must not retire it.
 const droppedSinceHiddenPtys = new Map<
   string,
   { state: 'unrevealed' | 'awaiting-paint'; episode: number }
 >()
 let nextHiddenDropEpisode = 1
-// Why: a runtime background spawn has no renderer party to re-mark it after a
-// reload/crash, so its hidden mark must outlive renderer-scoped resets until a
-// renderer unmarks it (visible mount) or the PTY is torn down.
-const runtimeOwnedHiddenRendererPtys = new Set<string>()
 
 let droppedHiddenDeliveryChars = 0
 let droppedHiddenDeliveryChunks = 0
@@ -53,29 +54,21 @@ export function isHiddenPtyDeliveryGateEnabled(
   )
 }
 
-/** Renderer-reported "no visible view needs bytes" bit. Never clears drop
- *  memory: a hidden remount or renderer reload re-marks an already-dropped
- *  PTY, and erasing the latch there would make the eventual reveal skip the
- *  restore. */
-export function markHiddenRendererPty(id: string): void {
-  hiddenRendererPtys.add(id)
-}
-
-/** Clears the hidden bit. Returns whether bytes were dropped while hidden so
- *  the caller can emit a restore marker. Reads the latch without spending it:
- *  the marker may reach no handler (see droppedSinceHiddenPtys). */
-export function unmarkHiddenRendererPty(id: string): {
-  droppedWhileHidden: boolean
-  hiddenDropEpisode?: number
-} {
-  hiddenRendererPtys.delete(id)
-  runtimeOwnedHiddenRendererPtys.delete(id)
+/** One view newly consumes (or the last view stopped consuming) this PTY's
+ *  bytes. A consuming report returns the outstanding drop episode so the newest
+ *  marker handler can pull the restore; it reads the latch without spending it. */
+export function setRendererPtyConsumer(id: string, consuming: boolean): number | undefined {
+  if (!consuming) {
+    rendererConsumerPtys.delete(id)
+    return undefined
+  }
+  rendererConsumerPtys.add(id)
   const latch = droppedSinceHiddenPtys.get(id)
   if (!latch) {
-    return { droppedWhileHidden: false }
+    return undefined
   }
   latch.state = 'awaiting-paint'
-  return { droppedWhileHidden: true, hiddenDropEpisode: latch.episode }
+  return latch.episode
 }
 
 /** Retires drop memory once the renderer reports painting a restore requested
@@ -88,24 +81,23 @@ export function consumeHiddenRendererPtyDropMemory(id: string, hiddenDropEpisode
   }
 }
 
-export function isHiddenRendererPty(id: string): boolean {
-  return hiddenRendererPtys.has(id)
+export function hasLocalRendererConsumer(id: string): boolean {
+  return rendererConsumerPtys.has(id) || hasSpawnConsumerClaim(id)
 }
 
-/** Marks a PTY hidden on behalf of the runtime (no renderer view exists). */
-export function markRuntimeOwnedHiddenRendererPty(id: string): void {
-  hiddenRendererPtys.add(id)
-  runtimeOwnedHiddenRendererPtys.add(id)
+export function hasRendererPtyDeliveryInterest(id: string): boolean {
+  return deliveryInterestRendererPtys.has(id)
 }
 
-export function isRuntimeOwnedHiddenRendererPty(id: string): boolean {
-  return runtimeOwnedHiddenRendererPtys.has(id)
-}
-
-/** For freeze diagnostics only: hidden ptys must appear in the per-pty report
- *  table even when the gate dropped every byte before any send/accounting. */
-export function getHiddenRendererPtyIds(): string[] {
-  return [...hiddenRendererPtys]
+/** For diagnostics and document retire: every PTY with renderer claim or drop state. */
+export function getRendererDeliveryGatePtyIds(): string[] {
+  return [
+    ...new Set([
+      ...rendererConsumerPtys,
+      ...deliveryInterestRendererPtys,
+      ...droppedSinceHiddenPtys.keys()
+    ])
+  ]
 }
 
 /** Renderer-side ref-counted interest, surfaced as boolean transitions. */
@@ -117,13 +109,13 @@ export function setRendererPtyDeliveryInterest(id: string, interested: boolean):
   }
 }
 
-export function shouldDropHiddenRendererPtyData(
+export function shouldDropRendererPtyData(
   id: string,
   settings: HiddenPtyDeliveryGateSettings | null | undefined
 ): boolean {
   return (
     isHiddenPtyDeliveryGateEnabled(settings) &&
-    hiddenRendererPtys.has(id) &&
+    !hasLocalRendererConsumer(id) &&
     !deliveryInterestRendererPtys.has(id)
   )
 }
@@ -145,32 +137,22 @@ export function recordHiddenRendererPtyDataDrop(
   return { shouldEmitRestoreMarker: true, hiddenDropEpisode: episode }
 }
 
-/** Renderer process replaced (reload / crash): its ref-counted interest
- *  holds and hidden marks died with it, so keeping them would gate (or
- *  force-feed) PTYs no live renderer party asked about. Runtime-owned marks
- *  survive: no renderer party exists to re-mark them. Drop memory is
- *  preserved — surviving daemon/SSH PTYs may have dropped bytes the old
- *  renderer never restored; the new renderer's first hidden/visible sync
- *  re-marks or unmarks and the unmark path re-emits the restore marker. */
-export function resetRendererScopedHiddenPtyDeliveryState(): void {
-  hiddenRendererPtys.clear()
+/** The renderer document died: its consumer reports and interest holds died
+ *  with it. Drop memory is preserved for the successor's restore. */
+export function clearRendererScopedPtyDeliveryClaims(): void {
+  rendererConsumerPtys.clear()
   deliveryInterestRendererPtys.clear()
-  for (const id of runtimeOwnedHiddenRendererPtys) {
-    hiddenRendererPtys.add(id)
-  }
 }
 
 /** Full per-PTY teardown — wired into clearProviderPtyState so every exit
  *  path (local, daemon, SSH, connection teardown) releases gate state. */
 export function clearHiddenRendererPtyDeliveryState(id: string): void {
-  hiddenRendererPtys.delete(id)
-  runtimeOwnedHiddenRendererPtys.delete(id)
+  rendererConsumerPtys.delete(id)
   deliveryInterestRendererPtys.delete(id)
   droppedSinceHiddenPtys.delete(id)
 }
 
 export type HiddenRendererPtyDeliveryDebug = {
-  hiddenDeliveryGatedPtyCount: number
   deliveryInterestPtyCount: number
   hiddenDeliveryDroppedChars: number
   hiddenDeliveryDroppedChunks: number
@@ -178,7 +160,6 @@ export type HiddenRendererPtyDeliveryDebug = {
 
 export function getHiddenRendererPtyDeliveryDebug(): HiddenRendererPtyDeliveryDebug {
   return {
-    hiddenDeliveryGatedPtyCount: hiddenRendererPtys.size,
     deliveryInterestPtyCount: deliveryInterestRendererPtys.size,
     hiddenDeliveryDroppedChars: droppedHiddenDeliveryChars,
     hiddenDeliveryDroppedChunks: droppedHiddenDeliveryChunks
@@ -192,9 +173,10 @@ export function resetHiddenRendererPtyDeliveryDebugCounters(): void {
 
 /** Test seam: reset all module state between tests. */
 export function _resetHiddenRendererPtyDeliveryGateForTest(): void {
-  hiddenRendererPtys.clear()
-  runtimeOwnedHiddenRendererPtys.clear()
+  rendererConsumerPtys.clear()
   deliveryInterestRendererPtys.clear()
   droppedSinceHiddenPtys.clear()
   resetHiddenRendererPtyDeliveryDebugCounters()
+  _resetSpawnConsumerClaimsForTest()
+  _resetRendererDocumentForTest()
 }

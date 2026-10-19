@@ -13,8 +13,8 @@ import { ensureArabicShapingJoinerForText } from '@/lib/pane-manager/terminal-ar
 import { registerPtyModelRestoreNeededHandler } from '../pty-model-restore-channel'
 import type { PtyModelRestoreNeededEvent } from '../../../../../shared/pty-model-restore-marker'
 import {
-  acquireHiddenRendererPtyDeliveryClaim,
-  declareRendererPtyDeliveryVisible
+  clearRendererPtyConsumerClaim,
+  setRendererPtyConsumerClaim
 } from '../pty-renderer-delivery-claims'
 
 import { HIDDEN_OUTPUT_RESTORE_FLOOD_SUPPRESS_MS } from './hidden-output-restore-limits'
@@ -192,33 +192,17 @@ export function bindForegroundOutputRefresh(session: ConnectPanePtySession): voi
       )
       return
     }
-    if (session.hiddenDeliverySyncedPtyId !== null && session.hiddenDeliverySyncedPtyId !== ptyId) {
-      session.releaseHiddenDeliveryClaim?.()
-      session.releaseHiddenDeliveryClaim = null
-      session.hiddenDeliverySyncedPtyId = null
-    }
-    if (
-      !ptyId ||
-      !session.isHiddenDeliveryGateManagedPty(ptyId) ||
-      !session.canUseHiddenOutputSnapshot(ptyId)
-    ) {
+    if (!ptyId || isRemoteRuntimePtyId(ptyId)) {
       return
     }
-    const shouldHide =
-      !session.disposed && !shouldWritePtyOutputForeground(session.deps.isVisibleRef.current)
-    const isFirstSyncForPty = session.hiddenDeliverySyncedPtyId !== ptyId
-    session.hiddenDeliverySyncedPtyId = ptyId
-    if (shouldHide) {
-      if (!session.releaseHiddenDeliveryClaim) {
-        session.releaseHiddenDeliveryClaim = acquireHiddenRendererPtyDeliveryClaim(ptyId)
-      }
-    } else if (session.releaseHiddenDeliveryClaim) {
-      session.releaseHiddenDeliveryClaim()
-      session.releaseHiddenDeliveryClaim = null
-    } else if (isFirstSyncForPty) {
-      // Why: clear unconditionally on first sync — a stale main-side hidden bit can survive a renderer reload for daemon-backed PTYs that keep their session id.
-      declareRendererPtyDeliveryVisible(ptyId)
-    }
+    // Why: a pane created with the gate off keeps feeding its byte parsers, so it always consumes.
+    setRendererPtyConsumerClaim(
+      session.transport,
+      ptyId,
+      !session.disposed &&
+        (!session.hiddenDeliveryGateActive ||
+          shouldWritePtyOutputForeground(session.deps.isVisibleRef.current))
+    )
   }
   session.releaseHiddenRendererPtyDelivery = (): void => {
     session.transport.setOutputPaused?.(false)
@@ -228,9 +212,7 @@ export function bindForegroundOutputRefresh(session: ConnectPanePtySession): voi
         session.dropSideEffectFactConsumer()
       }
     }
-    session.releaseHiddenDeliveryClaim?.()
-    session.releaseHiddenDeliveryClaim = null
-    session.hiddenDeliverySyncedPtyId = null
+    clearRendererPtyConsumerClaim(session.transport)
     session.unregisterModelRestoreNeeded?.()
     session.unregisterModelRestoreNeeded = null
     session.modelRestoreSubscribedPtyId = null

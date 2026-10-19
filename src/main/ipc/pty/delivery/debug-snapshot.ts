@@ -6,9 +6,11 @@ import {
 } from '../../../../shared/pty-delivery-diagnostics'
 import {
   getHiddenRendererPtyDeliveryDebug,
-  getHiddenRendererPtyIds,
-  isHiddenRendererPty
+  getRendererDeliveryGatePtyIds,
+  shouldDropRendererPtyData
 } from '../../pty-hidden-delivery-gate'
+import { ptyOwnership } from '../provider/ownership-state'
+import { getSpawnConsumerClaimPtyIds } from './spawn-consumer-claims'
 import {
   lastPowerResumeAtMs,
   lastPowerSuspendAtMs,
@@ -19,16 +21,23 @@ import { activeRendererPtys, visibleRendererPtys } from './visibility-state'
 import { DELIVERY_DIAGNOSTICS_MAX_PTYS } from './constants'
 import type { PtyIpcSession } from '../session'
 
-export function buildMainDeliveryDiagnostics(session: PtyIpcSession): PtyMainDeliveryDiagnostics {
-  const now = Date.now()
-  // Include hidden/visible/active members even without an accounting entry: a pty gated before its first byte is exactly the wedge case to surface.
-  const ids = new Set([
+/** Every PTY delivery could concern, so a pty gated before its first byte still surfaces (the wedge case). */
+function collectDeliveryDiagnosticPtyIds(session: PtyIpcSession): Set<string> {
+  return new Set([
     ...session.rendererDeliveryAccountingByPty.keys(),
     ...session.pendingData.keys(),
-    ...getHiddenRendererPtyIds(),
     ...visibleRendererPtys,
-    ...activeRendererPtys
+    ...activeRendererPtys,
+    ...getRendererDeliveryGatePtyIds(),
+    ...getSpawnConsumerClaimPtyIds(),
+    ...ptyOwnership.keys()
   ])
+}
+
+export function buildMainDeliveryDiagnostics(session: PtyIpcSession): PtyMainDeliveryDiagnostics {
+  const now = Date.now()
+  const settings = session.getSettings?.()
+  const ids = collectDeliveryDiagnosticPtyIds(session)
   const perPty: PtyPerPtyDeliveryDiagnostics[] = []
   for (const id of ids) {
     const accounting = session.rendererDeliveryAccountingByPty.get(id)
@@ -38,7 +47,7 @@ export function buildMainDeliveryDiagnostics(session: PtyIpcSession): PtyMainDel
       ackedChars: accounting?.ackedChars ?? 0,
       inFlightChars: accounting ? accounting.sentChars - accounting.ackedChars : 0,
       pendingChars: session.pendingData.get(id)?.data.length ?? 0,
-      hidden: isHiddenRendererPty(id),
+      hidden: shouldDropRendererPtyData(id, settings),
       visible: visibleRendererPtys.has(id),
       active: activeRendererPtys.has(id),
       msSinceLastSend: accounting ? now - accounting.lastSendAtMs : null,
@@ -81,16 +90,23 @@ export function readCurrentPtyRendererDeliveryDebugSnapshot(
     }
     maxRendererInFlightCharsByPty = Math.max(maxRendererInFlightCharsByPty, inFlight)
   }
-  // Why: a pty both hidden-gated and reported visible means main is starving a visible pane (v1.4.124-rc.2.perf field lead).
+  const settings = session.getSettings?.()
+  let hiddenDeliveryGatedPtyCount = 0
+  for (const id of collectDeliveryDiagnosticPtyIds(session)) {
+    if (shouldDropRendererPtyData(id, settings)) {
+      hiddenDeliveryGatedPtyCount++
+    }
+  }
+  // Why: a pty both gated and reported visible means main is starving a visible pane (v1.4.124-rc.2.perf field lead).
   let hiddenDeliveryGatedVisiblePtyCount = 0
   for (const id of visibleRendererPtys) {
-    if (isHiddenRendererPty(id)) {
+    if (shouldDropRendererPtyData(id, settings)) {
       hiddenDeliveryGatedVisiblePtyCount++
     }
   }
   let hiddenDeliveryGatedActivePtyCount = 0
   for (const id of activeRendererPtys) {
-    if (isHiddenRendererPty(id)) {
+    if (shouldDropRendererPtyData(id, settings)) {
       hiddenDeliveryGatedActivePtyCount++
     }
   }
@@ -109,6 +125,7 @@ export function readCurrentPtyRendererDeliveryDebugSnapshot(
     peakMaxRendererInFlightCharsByPty: session.peakMaxRendererInFlightCharsByPty,
     ackGatedFlushSkipCount: session.ackGatedFlushSkipCount,
     ...hiddenDeliveryDebug,
+    hiddenDeliveryGatedPtyCount,
     hiddenDeliveryGatedVisiblePtyCount,
     hiddenDeliveryGatedActivePtyCount,
     pendingDroppedChars: session.pendingDroppedChars,

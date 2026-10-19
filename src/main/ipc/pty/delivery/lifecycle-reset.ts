@@ -2,16 +2,18 @@ import type { PtyRendererDelivery } from '../session'
 import {
   didFinishLoadHandler,
   didFinishLoadWebContents,
+  rendererDidNavigateHandler,
   rendererDidStartNavigationHandler,
-  rendererGateResetGoneHandler,
-  rendererGateResetLoadHandler,
-  rendererGateResetWebContents,
   rendererLifecycleResetHandler,
   rendererLifecycleResetWebContents,
   setDidFinishLoadHandler,
-  setRendererGateResetState,
   setRendererLifecycleResetState
 } from '../provider/listener-lifecycle'
+import {
+  noteRendererNavigationCommit,
+  noteRendererNavigationStart,
+  retireCurrentRendererDocument
+} from './renderer-document'
 import { mainDeliveryBreadcrumbs, resetRendererDeliveryAccountingForLifecycleReset } from './debug'
 import {
   activeRendererPtys,
@@ -50,6 +52,9 @@ export function clearRendererLifecycleResetHandlers(): void {
       rendererDidStartNavigationHandler
     )
   }
+  if (rendererDidNavigateHandler) {
+    rendererLifecycleResetWebContents.removeListener('did-navigate', rendererDidNavigateHandler)
+  }
   if (rendererLifecycleResetHandler) {
     rendererLifecycleResetWebContents.removeListener(
       'render-process-gone',
@@ -57,7 +62,7 @@ export function clearRendererLifecycleResetHandlers(): void {
     )
     rendererLifecycleResetWebContents.removeListener('destroyed', rendererLifecycleResetHandler)
   }
-  setRendererLifecycleResetState({ contents: null, handler: null, navigation: null })
+  setRendererLifecycleResetState({ contents: null, handler: null, navigation: null, commit: null })
 }
 
 export function registerRendererLifecycleResetHandlers(
@@ -68,34 +73,27 @@ export function registerRendererLifecycleResetHandlers(
   if (!webContents) {
     return
   }
-  const handler = markRendererPtysHiddenForRendererLifecycleReset
+  const handler = (): void => {
+    markRendererPtysHiddenForRendererLifecycleReset()
+    retireCurrentRendererDocument()
+  }
   const navigationHandler = (details: { isMainFrame: boolean; isSameDocument: boolean }) => {
     if (!details.isMainFrame || details.isSameDocument) {
       return
     }
     markRendererPtysHiddenForRendererLifecycleReset()
+    noteRendererNavigationStart()
   }
+  // Why did-navigate: only a main-frame commit ends the old document; a cancelled navigation keeps it.
+  const commitHandler = (): void => noteRendererNavigationCommit()
   setRendererLifecycleResetState({
     contents: webContents,
     handler,
-    navigation: navigationHandler
+    navigation: navigationHandler,
+    commit: commitHandler
   })
   webContents.on('did-start-navigation', navigationHandler)
+  webContents.on('did-navigate', commitHandler)
   webContents.on('render-process-gone', handler)
   webContents.on('destroyed', handler)
-}
-
-export function clearRendererGateResetHandlers(): void {
-  if (rendererGateResetWebContents) {
-    if (rendererGateResetLoadHandler) {
-      rendererGateResetWebContents.removeListener('did-finish-load', rendererGateResetLoadHandler)
-    }
-    if (rendererGateResetGoneHandler) {
-      rendererGateResetWebContents.removeListener(
-        'render-process-gone',
-        rendererGateResetGoneHandler
-      )
-    }
-  }
-  setRendererGateResetState({ contents: null, load: null, gone: null })
 }

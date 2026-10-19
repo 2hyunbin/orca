@@ -24,6 +24,9 @@ import type { PreloadApi } from '../api-types'
 import type { TerminalPanePlacement } from '../../shared/terminal-pane-placement'
 import type { AgentPaneLaunchRequest } from '../../shared/agent-pane-launch-request'
 
+// Why per page load: main fences every renderer claim by this document, so a reload's claims die with it.
+const rendererDocumentId = crypto.randomUUID()
+
 export const ptySessionControlApi = {
   spawn: (opts: {
     cols: number
@@ -46,8 +49,10 @@ export const ptySessionControlApi = {
     projectRuntime?: ProjectExecutionRuntimeResolution
     terminalKittyKeyboardProtocol?: boolean
     terminalColorQueryReplies?: { foreground?: string; background?: string }
-    // Why: marks the PTY hidden before its first byte so the delivery gate + model responder own spawn-time queries (terminal-query-authority.md §races).
+    // Why: an unmeasured hidden request; main only seeds its provisional size from it.
     initiallyHidden?: boolean
+    // Why: a mounting pane's pending visible consumer, which main holds until the pane reports its own.
+    consumerClaimToken?: number
     // Why: closes the SIGKILL race (INVESTIGATION.md) — main sync-flushes the (worktreeId, tabId, leafId → ptyId) binding before pty:spawn returns.
     tabId?: string
     leafId?: string
@@ -84,7 +89,11 @@ export const ptySessionControlApi = {
     agentResumeUnavailable?: true
     /** Host verdict on the shell-ready marker; absent when the execution host predates the field. */
     shellReadyArmed?: boolean
-  }> => ipcRenderer.invoke('pty:spawn', opts),
+  }> =>
+    ipcRenderer.invoke(
+      'pty:spawn',
+      opts.consumerClaimToken === undefined ? opts : { ...opts, rendererDocumentId }
+    ),
   write: (id: string, data: string, inputKind: TerminalInputKind): void => {
     ipcRenderer.send('pty:write', { id, data, inputKind })
   },
@@ -156,13 +165,16 @@ export const ptySessionControlApi = {
     ipcRenderer.send('pty:setActiveRendererPty', { id, active })
   },
   setRendererPtyVisible: (id: string, visible: boolean): void => {
-    ipcRenderer.send('pty:setRendererPtyVisible', { id, visible })
+    ipcRenderer.send('pty:setRendererPtyVisible', { doc: rendererDocumentId, id, visible })
   },
-  setHiddenRendererPty: (id: string, hidden: boolean): void => {
-    ipcRenderer.send('pty:setHiddenRendererPty', { id, hidden })
+  setRendererPtyConsumer: (id: string, consuming: boolean): void => {
+    ipcRenderer.send('pty:setRendererPtyConsumer', { doc: rendererDocumentId, id, consuming })
+  },
+  settleSpawnConsumerClaim: (token: number): void => {
+    ipcRenderer.send('pty:settleSpawnConsumerClaim', { doc: rendererDocumentId, token })
   },
   setPtyDeliveryInterest: (id: string, interested: boolean): void => {
-    ipcRenderer.send('pty:setPtyDeliveryInterest', { id, interested })
+    ipcRenderer.send('pty:setPtyDeliveryInterest', { doc: rendererDocumentId, id, interested })
   },
   publishTerminalViewAttributes: (attributes: TerminalViewAttributes): void => {
     ipcRenderer.send('pty:terminalViewAttributes', attributes)

@@ -118,7 +118,7 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
     })
   }
 
-  return {
+  const transport: PtyTransport = {
     getPendingEscapeTailAnsi: outputProcessor.getPendingEscapeTailAnsi,
     connect: async (options) => {
       const connectGeneration = advancePtyLifecycle()
@@ -137,7 +137,8 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
           bind,
           isCurrent: (id) => lifecycleGeneration === connectGeneration && connected && ptyId === id,
           setCallbacks,
-          getCallbacks: () => storedCallbacks
+          getCallbacks: () => storedCallbacks,
+          claimOwner: transport
         })
       } finally {
         if (pendingConnectGeneration === connectGeneration) {
@@ -290,4 +291,5 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
       }
     }
   }
+  return transport
 }

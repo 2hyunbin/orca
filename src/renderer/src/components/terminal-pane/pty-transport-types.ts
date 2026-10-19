@@ -173,10 +173,9 @@ export type PtyTransport = {
     cols?: number
     rows?: number
     sessionId?: string
-    /** Hidden-at-spawn declaration (terminal-query-authority.md): no visible
-     *  view will consume this PTY's bytes, so main marks it hidden BEFORE the
-     *  first byte and the gate + model responder own spawn-time queries.
-     *  Ignored by remote-runtime transports (not gate-markable). */
+    /** No visible view will consume this PTY's bytes, so the local connect
+     *  sends no pending consumer claim and main owns spawn-time queries.
+     *  Ignored by remote-runtime transports. */
     initiallyHidden?: boolean
     /** Sent only when this connect resumes an agent, and only to hosts that accept it. */
     resumeSpawnIntent?: RestoreSpawnIntent

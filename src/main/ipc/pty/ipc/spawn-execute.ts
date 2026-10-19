@@ -56,9 +56,12 @@ export async function executePtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<void> {
           owner: stablePaneOwnerCandidate,
           worktreeId: args.worktreeId,
           connectionId: args.connectionId,
-          resolveOwner
+          resolveOwner,
+          consumerClaim: ctx.consumerClaim
         })
     ctx.result = stablePaneSpawn.result
+    // Why: reconciles a renamed or adopted id before commit publishes it.
+    ctx.consumerClaim?.bind(ctx.result.id)
     ctx.stablePaneOwner = stablePaneSpawn.owner
     if (
       ctx.stablePaneOwner &&

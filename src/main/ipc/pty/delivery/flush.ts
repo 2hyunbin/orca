@@ -1,6 +1,6 @@
 import {
   recordHiddenRendererPtyDataDrop,
-  shouldDropHiddenRendererPtyData
+  shouldDropRendererPtyData
 } from '../../pty-hidden-delivery-gate'
 import type { PendingPtyData } from '../../pty-pending-data-drain-contract'
 import { activeRendererPtys } from './visibility-state'
@@ -104,7 +104,7 @@ export function flushPendingData(session: PtyIpcSession): void {
       }
       const { id, pending } = selection
       // Why drop, never re-queue: the model already ingested hidden-gated bytes; reveal restores from the snapshot+seq machinery.
-      if (shouldDropHiddenRendererPtyData(id, settings)) {
+      if (shouldDropRendererPtyData(id, settings)) {
         session.pendingData.remove(selection)
         session.pendingOverflowMarkedPtys.delete(id)
         session.updateProducerFlowControl(id)

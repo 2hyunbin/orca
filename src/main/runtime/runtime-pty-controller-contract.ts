@@ -80,8 +80,6 @@ export type RuntimePtyController = {
     /** The agent launch's runtime fact; when present the PTY shell comes only from it. */
     launchRuntime?: AgentLaunchRuntime
     isNewSession?: boolean
-    /** No renderer view exists at spawn; main owns delivery and query replies until one mounts. */
-    initiallyHidden?: boolean
     persistHostSessionBinding?: boolean
     expectedSourceBinding?: PtyBindingSourceExpectation
     placement?: TerminalPanePlacement

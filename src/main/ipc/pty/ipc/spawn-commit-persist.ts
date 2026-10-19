@@ -1,5 +1,5 @@
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
-import { closeStartupQueryAuthorityForPty } from '../provider/registry'
+import { syncPtyDeliveryAfterRegistration } from '../delivery/producer-sync'
 import { createTerminalSessionStateSaveFailureMessage } from '../../../../shared/terminal-session-state-save-failure'
 import { recordCodexPaneAccountForSpawn } from '../host-env/codex-home'
 import { persistAdmittedStablePaneBinding } from '../pane/stable-owner'
@@ -102,17 +102,8 @@ export function publishPtyIpcSpawnCommit(ctx: PtyIpcSpawnState, committedSize: P
   if (ctx.result.incarnationId) {
     ptyIncarnationById.set(ctx.result.id, ctx.result.incarnationId)
   }
-  if (ctx.initiallyHidden) {
-    // Refresh the pre-spawn hidden mark only after this incarnation survives its save.
-    ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(ctx.result.id, true)
-    if (ctx.preSpawnHiddenMarkId !== null && ctx.preSpawnHiddenMarkId !== ctx.result.id) {
-      // Defense: never strand a mark on an id the provider renamed.
-      ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(ctx.preSpawnHiddenMarkId, false)
-    }
-    // Why after ptyOwnership.set: provider lookup routes by ownership, and a hidden-spawned agent should be paceable from its first flood.
-    ctx.deps.syncPtyBackgroundedDelivery(ctx.result.id, 'spawn')
-    closeStartupQueryAuthorityForPty(ctx.result.id)
-  }
+  // Why after ptyOwnership.set: provider lookup routes by ownership, so pacing applies from the first flood.
+  syncPtyDeliveryAfterRegistration(ctx.deps, ctx.result.id)
   if (ctx.preAllocatedHandle && !ctx.stablePaneOwner?.handle) {
     if (ctx.deps.runtime?.registerPreAllocatedHandleForPty) {
       ctx.deps.runtime.registerPreAllocatedHandleForPty(ctx.result.id, ctx.preAllocatedHandle)

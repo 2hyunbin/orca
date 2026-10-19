@@ -3,7 +3,8 @@
  * authority.
  *
  * The delivery decision is the reply decision: main answers a query iff the
- * hidden-delivery gate dropped the chunk that carried it. This module owns
+ * hidden-delivery gate dropped the chunk that carried it — no local view or
+ * raw sidecar consumed it, which is the default for a PTY nobody attached. This module owns
  * the responder kill-switch predicate and the main-side mirror of the
  * renderer's native-Windows-ConPTY determination, recorded per PTY at spawn
  * so the runtime emulator can register the DA1 override before byte zero.
@@ -12,7 +13,7 @@ import type { GlobalSettings } from '../../shared/global-settings-types'
 import { isWslUncPath } from '../../shared/wsl-paths'
 import {
   isHiddenPtyDeliveryGateEnabled,
-  shouldDropHiddenRendererPtyData
+  shouldDropRendererPtyData
 } from '../ipc/pty-hidden-delivery-gate'
 
 export type TerminalModelQueryAuthoritySettings = Pick<
@@ -42,7 +43,7 @@ export function shouldModelAnswerHiddenPtyQueries(opts: {
   return (
     isTerminalModelQueryAuthorityEnabled(opts.settings) &&
     !opts.hasRemoteViewSubscriber &&
-    shouldDropHiddenRendererPtyData(opts.ptyId, opts.settings)
+    shouldDropRendererPtyData(opts.ptyId, opts.settings)
   )
 }
 
