@@ -88,9 +88,13 @@ export async function writeWorkspaceMeta(
           .map((worktree) => [worktree.id, worktree])
       )
       for (const { worktreeId, updates: written } of updates) {
-        const kept = new Map(Object.entries(listed.get(worktreeId) ?? {}))
+        const worktree = listed.get(worktreeId)
+        if (!worktree) {
+          throw new Error(`main does not list ${worktreeId}`)
+        }
+        const kept = new Map(Object.entries(worktree))
         for (const [field, value] of Object.entries(written)) {
-          if (kept.get(field) !== value) {
+          if (JSON.stringify(kept.get(field)) !== JSON.stringify(value)) {
             throw new Error(`main did not keep ${field} for ${worktreeId}`)
           }
         }
