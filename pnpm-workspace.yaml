@@ -116,6 +116,10 @@ allowBuilds:
   '@orca/windows-registry': false
   '@orca/windows-security': false
 
+# Links the project's @types/<peer> next to every package that peer-depends on <peer> (e.g.
+# @types/react beside lucide-react), so peer types resolve under the global virtual store.
+addMissingPeerTypes: true
+
 # These packages' published .d.ts import modules they never declare. Hoisting hides that,
 # but under the global virtual store each package sees only its declared deps, so the types
 # silently became `any` or (jest-dom) the vitest matcher augmentation vanished.
@@ -155,21 +159,6 @@ packageExtensions:
   remark-parse:
     dependencies:
       vfile: ^6.0.0
-  '@dnd-kit/core': &react-types-peer
-    peerDependencies:
-      '@types/react': '*'
-    peerDependenciesMeta:
-      '@types/react':
-        optional: true
-  '@dnd-kit/sortable': *react-types-peer
-  '@dnd-kit/utilities': *react-types-peer
-  '@monaco-editor/react': *react-types-peer
-  cmdk: *react-types-peer
-  emoji-picker-react: *react-types-peer
-  lucide-react: *react-types-peer
-  react-colorful: *react-types-peer
-  react-i18next: *react-types-peer
-  sonner: *react-types-peer
 
 overrides:
   monaco-editor>dompurify: 3.4.16
