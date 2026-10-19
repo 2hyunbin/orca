@@ -117,9 +117,32 @@ describe('deriveComposerAutocomplete — one grammar for every agent', () => {
     expect(result.items.map((entry) => entry.token)).toEqual(['$typescript'])
   })
 
-  it('no longer treats `$` as a composer trigger', () => {
-    expect(deriveComposerAutocomplete('use $type', 9, COMMANDS, skills, codex).mode).toBe('none')
-    expect(deriveComposerAutocomplete('$react', 6, COMMANDS, skills, codex).mode).toBe('none')
+  it('opens only Codex skills under `$`, and a pick keeps Codex `$` token', () => {
+    for (const [draft, query] of [
+      ['use $type', 'type'],
+      ['$', '']
+    ] as const) {
+      const result = deriveComposerAutocomplete(draft, draft.length, COMMANDS, skills, codex)
+      expect(result).toMatchObject({ mode: 'slash', prefix: '$', query, dispatchable: false })
+      if (result.mode !== 'slash') {
+        return
+      }
+      expect(result.items.every((entry) => entry.kind === 'skill')).toBe(true)
+    }
+    const picked = applyPickerSuggestion('use $typ now', 8, {
+      kind: 'skill',
+      id: 'skill:typescript',
+      name: 'typescript',
+      token: '$typescript',
+      description: null,
+      sources: []
+    })
+    expect(picked.draft).toBe('use $typescript  now')
+  })
+
+  it('leaves `$` as prose for agents whose skills use `/`', () => {
+    const claude = getNativeChatAgentProfile('claude')
+    expect(deriveComposerAutocomplete('use $type', 9, COMMANDS, skills, claude).mode).toBe('none')
   })
 
   it('does not fire inside shell-style text', () => {
@@ -291,7 +314,7 @@ describe('native skill and command picker', () => {
       expect(isSkillPickerTriggered('validate it with /elec', profile)).toBe(true)
       expect(isSkillPickerTriggered('open /Users/me', profile)).toBe(false)
       // Without a catalog fetch the menu would sit on a permanent loading row.
-      expect(isSkillPickerTriggered('use $elec', profile)).toBe(false)
+      expect(isSkillPickerTriggered('use $elec', profile)).toBe(agent === 'codex')
     }
   )
 

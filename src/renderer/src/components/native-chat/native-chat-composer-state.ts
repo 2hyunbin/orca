@@ -13,6 +13,7 @@ import {
   buildNativeChatPickerItems,
   LEADING_SLASH_TRIGGER,
   MID_PROMPT_SLASH_TRIGGER,
+  SKILL_SIGIL_TRIGGER,
   type NativeChatPickerItem,
   type NativeChatSkillDiscoverySnapshot
 } from '../../../../shared/native-chat-picker-items'
@@ -34,7 +35,8 @@ type PickerAutocomplete = {
   query: string
   items: NativeChatPickerItem[]
   triggerKey: string
-  prefix: '/'
+  /** `$` lists only the skills of an agent whose skills carry that sigil. */
+  prefix: '/' | '$'
   /** Only a draft-leading `/command` reaches the agent as a command. */
   dispatchable: boolean
   grouped: boolean
@@ -59,7 +61,11 @@ export function isSkillPickerTriggered(
   if (!profile) {
     return false
   }
-  return LEADING_SLASH_TRIGGER.test(before) || MID_PROMPT_SLASH_TRIGGER.test(before)
+  return (
+    LEADING_SLASH_TRIGGER.test(before) ||
+    MID_PROMPT_SLASH_TRIGGER.test(before) ||
+    (profile.skillPrefix === '$' && SKILL_SIGIL_TRIGGER.test(before))
+  )
 }
 
 export function deriveComposerAutocomplete(
@@ -76,6 +82,7 @@ export function deriveComposerAutocomplete(
   const leadingMatch = before.match(LEADING_SLASH_TRIGGER)
   if (leadingMatch) {
     return deriveSlashAutocomplete(
+      '/',
       leadingMatch[1],
       0,
       agentCommands,
@@ -92,17 +99,21 @@ export function deriveComposerAutocomplete(
       ? { mode: 'none' }
       : { mode: 'mention', query: mentionMatch[1], triggerKey }
   }
-  // Why: `/` is the whole composer grammar, so a mid-prompt token opens the same
-  // menu a leading one does — it just cannot dispatch.
+  // Why: `/` is the shared composer grammar, so a mid-prompt token opens the same
+  // menu a leading one does — it just cannot dispatch. `$` is the skill sigil's own
+  // skills-only menu.
+  const sigilMatch = profile?.skillPrefix === '$' ? before.match(SKILL_SIGIL_TRIGGER) : null
   const midPromptMatch = profile ? before.match(MID_PROMPT_SLASH_TRIGGER) : null
-  if (!midPromptMatch) {
+  const match = sigilMatch ?? midPromptMatch
+  if (!match) {
     return { mode: 'none' }
   }
-  const query = midPromptMatch[1]
+  const query = match[1]
   return deriveSlashAutocomplete(
+    sigilMatch ? '$' : '/',
     query,
     before.length - query.length - 1,
-    agentCommands,
+    sigilMatch ? [] : agentCommands,
     profile,
     discovery,
     dismissedTriggerKey,
@@ -111,6 +122,7 @@ export function deriveComposerAutocomplete(
 }
 
 function deriveSlashAutocomplete(
+  prefix: '/' | '$',
   query: string,
   triggerPosition: number,
   agentCommands: readonly SlashCommandSuggestion[],
@@ -119,7 +131,7 @@ function deriveSlashAutocomplete(
   dismissedTriggerKey: string | null,
   sessionSkills: readonly NativeChatSessionSkill[] | undefined
 ): ComposerAutocomplete {
-  const triggerKey = `/:${triggerPosition}`
+  const triggerKey = `${prefix}:${triggerPosition}`
   if (dismissedTriggerKey === triggerKey) {
     return { mode: 'none' }
   }
@@ -138,9 +150,9 @@ function deriveSlashAutocomplete(
     mode: 'slash',
     query,
     triggerKey,
-    prefix: '/',
-    dispatchable: triggerPosition === 0,
-    grouped: skillsEnabled,
+    prefix,
+    dispatchable: prefix === '/' && triggerPosition === 0,
+    grouped: skillsEnabled && prefix === '/',
     commandsEnabled: agentCommands.length > 0,
     skillsEnabled,
     items,

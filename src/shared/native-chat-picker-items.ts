@@ -301,14 +301,16 @@ function comparePickerSkills(
   )
 }
 
-// `/` is the composer's only trigger, for every agent. A draft-leading slash is
-// the one that can dispatch; elsewhere the token starts after whitespace and its
-// query stops at the next `/` so file paths stay prose.
+// `/` is the composer's trigger for every agent. A draft-leading slash is the one
+// that can dispatch; elsewhere the token starts after whitespace and its query
+// stops at the next `/` so file paths stay prose.
 export const LEADING_SLASH_TRIGGER = /^\/(\S*)$/
 export const MID_PROMPT_SLASH_TRIGGER = /\s\/([^\s/]*)$/
+// An agent whose skills carry their own sigil (Codex `$`) also opens its skills alone on it.
+export const SKILL_SIGIL_TRIGGER = /(?:^|\s)\$(\S*)$/
 
-/** Replaces the typed `/token` with the item's own token, which for a skill is
- *  the agent-native form even though every agent is typed the same way. */
+/** Replaces the typed trigger token with the item's own token, which for a skill
+ *  is the agent-native form whichever trigger opened the menu. */
 export function applyPickerSuggestion(
   draft: string,
   caret: number,
@@ -316,7 +318,10 @@ export function applyPickerSuggestion(
 ): { draft: string; caret: number; insertedToken: string } {
   const before = draft.slice(0, caret)
   const after = draft.slice(caret)
-  const match = before.match(LEADING_SLASH_TRIGGER) ?? before.match(MID_PROMPT_SLASH_TRIGGER)
+  const match =
+    before.match(LEADING_SLASH_TRIGGER) ??
+    before.match(MID_PROMPT_SLASH_TRIGGER) ??
+    (item.kind === 'skill' ? before.match(SKILL_SIGIL_TRIGGER) : null)
   if (!match) {
     return { draft, caret, insertedToken: '' }
   }
