@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { WorktreeRuntimeOwnerState } from '@/lib/worktree-runtime-owner-state'
 import {
   resolveTerminalPasteRuntime,
   resolveTerminalPasteRuntimeEnvironmentId
@@ -116,7 +117,7 @@ describe('terminal paste runtime', () => {
   })
 
   it('uploads to the server a PTY id names, even when two hosts publish the workspace', () => {
-    const twin = {
+    const twin: WorktreeRuntimeOwnerState = {
       settings: { activeRuntimeEnvironmentId: null },
       repos: [
         { id: 'twin', connectionId: null, executionHostId: 'local' },
