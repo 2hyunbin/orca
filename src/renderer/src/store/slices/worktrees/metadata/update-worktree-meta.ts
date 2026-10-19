@@ -158,7 +158,7 @@ export function createUpdateWorktreeMeta(
       : shouldClearStaleHostedReviewPushTarget
         ? { ...normalizedUpdates, ...displayNameProvenance, pushTarget: undefined }
         : { ...normalizedUpdates, ...displayNameProvenance }
-    const renameCleared =
+    const enriched =
       'displayName' in targetEnriched
         ? {
             ...targetEnriched,
@@ -166,8 +166,6 @@ export function createUpdateWorktreeMeta(
             firstAgentMessageRenameError: null
           }
         : targetEnriched
-    // A comment edit is not a Recent event: the host owns the stamps.
-    const enriched = renameCleared
 
     let didApply = false
     set((s) => {

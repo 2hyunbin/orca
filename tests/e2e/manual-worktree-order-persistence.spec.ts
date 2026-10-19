@@ -126,7 +126,6 @@ test('manual drag survives activity and persisted-profile reload', async ({
       if (!store) {
         throw new Error('store unavailable')
       }
-      store.getState().bumpWorktreeActivity(activityId)
       const orderedIds = store
         .getState()
         .allWorktrees()

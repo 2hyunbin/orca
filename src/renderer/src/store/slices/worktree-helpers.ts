@@ -134,8 +134,6 @@ export type WorktreeSlice = {
    * — NOT by selection-triggered side-effects like clearing `isUnread`.
    */
   sortEpoch: number
-  /** sortEpoch after the settle window; the sidebar sort reads this (see store/settled-sort-epoch.ts). */
-  settledSortEpoch: number
   /** Bumped by sortOrder-only changes, which skip sortEpoch so live Smart can't loop on its own saves. */
   sortOrderEpoch: number
   /**
@@ -286,7 +284,6 @@ export type WorktreeSlice = {
     link: TerminalGitHubPRLink,
     context?: WorkspaceReferenceTerminalContext
   ) => void
-  bumpWorktreeActivity: (worktreeId: string) => void
   /**
    * Monotonic stamp of the focus-recency timestamp for a worktree. No-op if
    * the supplied (or current) timestamp is not strictly greater than the
