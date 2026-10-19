@@ -31,7 +31,7 @@ export type UnsentSendHold =
   | { cause: 'chatClosed'; which?: (submission: AgentJournalSubmission) => boolean }
 
 /** The body an unsent send is kept with, or null when it is rejected instead:
- *  - a card's own hand-off: its rejection already returns the card (`rejectedDraftSettlement`);
+ *  - a card's own hand-off: its rejection already returns the card (`queuedHandOffOutcome`);
  *  - `/compact` and other commands: a command in flight is not resumed, the person re-runs it;
  *  - a direct image: it retains the existing rejected-send recovery instead of becoming a card;
  *  - a send not from a person: orchestration mail (the mailbox re-sends it), a dispatch preamble
@@ -220,7 +220,7 @@ function headOfQueuePositions(
     if (body && !earlier.includes(clientMessageId)) {
       placed.push({ messageId: clientMessageId, position: 0 })
     } else if (
-      // Kept by its settlement (`rejectedDraftSettlement`): a Send the person asked for.
+      // Kept by its settlement (`queuedHandOffOutcome`): a Send the person asked for.
       submission.origin === 'client' &&
       submission.queuedMessageId !== undefined &&
       cards.some((card) => card.consumedAs === clientMessageId)

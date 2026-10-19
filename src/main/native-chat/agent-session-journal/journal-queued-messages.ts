@@ -264,8 +264,13 @@ export class JournalQueuedMessages {
       if (card.state === 'waiting') {
         return true
       }
-      const handOff = card.consumedAs ? submissions.get(card.consumedAs)?.dispatchState : undefined
-      return card.state === 'dispatched' && (handOff === 'pending' || handOff === 'unknown')
+      const handOff = card.consumedAs ? submissions.get(card.consumedAs) : undefined
+      // A recovered doubt outlived its writer: nothing brings that card back to waiting.
+      return (
+        card.state === 'dispatched' &&
+        (handOff?.dispatchState === 'pending' ||
+          (handOff?.dispatchState === 'unknown' && handOff.recovered !== true))
+      )
     })
   }
 

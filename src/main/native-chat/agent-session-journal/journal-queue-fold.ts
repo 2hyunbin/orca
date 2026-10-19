@@ -1,8 +1,8 @@
 // The queue's fold: each card as the chat's own rows say it stands. A card's outcome is decided by
-// the row that decides it (its hand-off's dispatch row, an echo proving delivery) and kept from
-// then on, so a later rewind that retires the hand-off cannot change it, and replay reads the same.
+// the row that decides it (its hand-off's dispatch row) and kept from then on, so a later rewind
+// that retires the hand-off cannot change it, and replay reads the same. A hand-off ends the card's
+// queue life: it waits again only where Orca proves the agent never got it.
 
-import type { UnreadAgentSessionFailureFact } from '../../../shared/agent-session-failure'
 import type {
   AgentJournalCursor,
   AgentJournalSubmission
@@ -12,38 +12,41 @@ import { isAgentSessionOptions } from '../../../shared/agent-session-record'
 import { structuredAgentSessionCommandTurnIdentity } from '../../../shared/structured-agent-session-command-turn-identity'
 import { agentSessionSendBodyFingerprint } from '../../../shared/structured-agent-session-send-mutation'
 import { readStoredRejectionFact } from './journal-dispatch-reducer'
-import { rejectedDraftSettlement } from './journal-dispatch-settlement'
+import { queuedHandOffOutcome } from './journal-dispatch-settlement'
 import type { JournalQueueRow, JournalQueuedChange } from './journal-queue-events'
 import type { JournalReducerState } from './journal-reducer'
 import type { JournalRow } from './journal-row-schema'
-import { appliedEchoDelivering, draftsDeliveredByEcho } from './queued-message-delivered-echo'
+import { foldQueuedHandOffInDoubt } from './journal-submission-fold'
 import type { QueuedMessageRow } from './queued-message-table'
 
 export type JournalQueueState = {
   cards: Map<string, QueuedMessageRow>
   /** Moves with every card change, so a reader's memo recomputes only when it must. */
   revision: number
-  /** Echoes that already proved a card delivered: each proves one delivery, never a second. */
-  pairedEchoes: Set<string>
 }
 
 export function createJournalQueueState(): JournalQueueState {
-  return { cards: new Map(), revision: 0, pairedEchoes: new Set() }
+  return { cards: new Map(), revision: 0 }
 }
 
 /**
- * What a refusal makes of the dispatched card it handed off: a withdrawal waits again at its own
- * position under the queue's pause; a failure returns the card with its reason, except a command
+ * What a refusal makes of the dispatched card it handed off (`queuedHandOffOutcome`): one Orca
+ * proves never reached the agent waits again at its own position under the queue's pause; one that
+ * may have reached it stays spent; a failure returns the card with its reason, except a command
  * refused in its own turn, which is spent because that turn's row says why and a returned card
  * would hold every card behind it.
  */
 export function rejectedCardTransition(
   card: QueuedMessageRow,
-  rejected: { reason: string | null; rejection?: UnreadAgentSessionFailureFact },
+  rejected: AgentJournalSubmission,
   commandTurnReported: boolean
 ): QueuedMessageRow {
-  if (rejectedDraftSettlement(rejected).state === 'waiting') {
+  const outcome = queuedHandOffOutcome(rejected)
+  if (outcome === 'waiting') {
     return { ...card, state: 'waiting', holdReason: null, consumedAs: null }
+  }
+  if (outcome === 'inDoubt') {
+    return card
   }
   if (card.body.command && commandTurnReported) {
     return { ...card, state: 'withdrawn' }
@@ -67,14 +70,13 @@ function commandTurnReported(state: JournalReducerState, clientMessageId: string
  * THE classification of a `queued` change, for the fold, the import and the read of a card not yet
  * imported, so each reads a card exactly as the others do. Its hand-off still in this epoch settles
  * it as that hand-off's answer does; gone, the saved refusal returns it, and with none it is a
- * hand-off nothing can answer: hidden, never resent and never shown as refused. An echo it pairs
- * with joins `pairedEchoes`: the fold's own set, or a reader's copy of it.
+ * hand-off nothing can answer: hidden, never resent and never shown as refused. Pure: the fold
+ * settles a hand-off in doubt afterwards (`settleHandOffInDoubt`).
  */
 export function queuedCardFromChange(
   state: JournalReducerState,
   messageId: string,
-  change: JournalQueuedChange,
-  pairedEchoes: Set<string>
+  change: JournalQueuedChange
 ): QueuedMessageRow {
   const card: QueuedMessageRow = {
     messageId,
@@ -99,7 +101,7 @@ export function queuedCardFromChange(
       holdReason: null,
       consumedAs: attempt
     }
-    return settledHandOff(state, handedOff, submission, pairedEchoes)
+    return settledHandOff(state, handedOff, submission)
   }
   const { returned } = change
   if (typeof returned === 'object' && returned !== null) {
@@ -115,27 +117,7 @@ export function queuedCardFromChange(
   if (attempt !== null) {
     return { ...card, state: 'dispatched', holdReason: null, consumedAs: attempt }
   }
-  return deliveredWaitingCard(state, card, pairedEchoes)
-}
-
-/** Before an item or batch applies: each provider echo proving a waiting card's earlier hand-off
- *  was delivered spends that card, so none is sent twice. */
-export function foldJournalQueueEcho(state: JournalReducerState, row: JournalRow): void {
-  const { cards } = state.queue
-  if (cards.size === 0 || (row.kind !== 'item' && row.kind !== 'lifecycle-batch')) {
-    return
-  }
-  for (const delivered of draftsDeliveredByEcho(
-    state,
-    () => [...cards.values()],
-    row,
-    state.queue.pairedEchoes
-  )) {
-    const card = cards.get(delivered)
-    if (card) {
-      setCard(state, { ...card, state: 'withdrawn', holdReason: null })
-    }
-  }
+  return card
 }
 
 /** After any row applies: what it does to the cards. */
@@ -161,7 +143,8 @@ export function foldJournalQueueRow(state: JournalReducerState, row: JournalRow)
     const submission = state.submissions.get(row.clientMessageId)
     const card = cardHandedOffAs(state, submission)
     if (card && submission) {
-      setCard(state, settledHandOff(state, card, submission, state.queue.pairedEchoes))
+      setCard(state, settledHandOff(state, card, submission))
+      settleHandOffInDoubt(state, row.clientMessageId)
     }
   } else if (row.kind === 'item' || row.kind === 'lifecycle-batch') {
     spendReportedCommandCards(state)
@@ -171,7 +154,11 @@ export function foldJournalQueueRow(state: JournalReducerState, row: JournalRow)
 function applyQueueRow(state: JournalReducerState, row: JournalQueueRow): void {
   const { change } = row
   if (change.op === 'queued') {
-    setCard(state, queuedCardFromChange(state, row.messageId, change, state.queue.pairedEchoes))
+    const card = queuedCardFromChange(state, row.messageId, change)
+    setCard(state, card)
+    if (card.consumedAs !== null) {
+      settleHandOffInDoubt(state, card.consumedAs)
+    }
     return
   }
   const card = state.queue.cards.get(row.messageId)
@@ -208,33 +195,22 @@ function cardHandedOffAs(
 function settledHandOff(
   state: JournalReducerState,
   card: QueuedMessageRow,
-  submission: AgentJournalSubmission,
-  pairedEchoes: Set<string>
+  submission: AgentJournalSubmission
 ): QueuedMessageRow {
   if (submission.dispatchState !== 'rejected') {
     return card
   }
   const reported = commandTurnReported(state, submission.clientMessageId)
-  return deliveredWaitingCard(
-    state,
-    rejectedCardTransition(card, submission, reported),
-    pairedEchoes
-  )
+  return rejectedCardTransition(card, submission, reported)
 }
 
-/** A card that waits again is checked against the echoes already applied, so one whose earlier
- *  hand-off reached the agent after all is spent rather than resent. */
-function deliveredWaitingCard(
-  state: JournalReducerState,
-  card: QueuedMessageRow,
-  pairedEchoes: Set<string>
-): QueuedMessageRow {
-  const echo = card.state === 'waiting' ? appliedEchoDelivering(state, card, pairedEchoes) : null
-  if (echo === null) {
-    return card
+/** The card's own hand-off, refused while it may have reached the agent: read as sent
+ *  (`foldQueuedHandOffInDoubt`). */
+function settleHandOffInDoubt(state: JournalReducerState, clientMessageId: string): void {
+  const submission = state.submissions.get(clientMessageId)
+  if (submission?.dispatchState === 'rejected' && queuedHandOffOutcome(submission) === 'inDoubt') {
+    foldQueuedHandOffInDoubt(state, submission)
   }
-  pairedEchoes.add(echo)
-  return { ...card, state: 'withdrawn', holdReason: null }
 }
 
 /** A returned command card is spent once its own turn's row reports the refusal. */

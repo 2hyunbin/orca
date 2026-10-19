@@ -4,6 +4,7 @@
 // fold reads the answer it leaves, so the two can never disagree: a row the
 // reducer ignores must not alter a card.
 
+import { agentJournalSubmissionProvenUnwritten } from '../../../shared/agent-session-queued-submission'
 import type { AgentJournalSubmission } from '../../../shared/agent-session-journal-types'
 import { classifyDispatchRejection } from '../../../shared/structured-agent-session-dispatch-rejection'
 
@@ -19,15 +20,18 @@ export function journalDispatchRowApplies(
   )
 }
 
-/** What a consumed draft becomes when its submission is rejected. */
-export type RejectedDraftSettlement = { state: 'returned' | 'waiting' }
+/** What a refused hand-off makes of its card: a failure returns it; a message Orca proves never
+ *  reached the agent waits again; anything else may have reached it, so it is never sent again. */
+export type QueuedHandOffOutcome = 'returned' | 'waiting' | 'inDoubt'
 
-/**
- * A withdrawal waits at its original position under the queue's pause; a failure returns the
- * card, except a command refused in its own turn, whose row already reports it.
- */
-export function rejectedDraftSettlement(
-  rejected: Pick<AgentJournalSubmission, 'reason'> & { rejection?: unknown }
-): RejectedDraftSettlement {
-  return { state: classifyDispatchRejection(rejected).verdict !== null ? 'returned' : 'waiting' }
+export function queuedHandOffOutcome(
+  rejected: Pick<
+    AgentJournalSubmission,
+    'reason' | 'rejection' | 'handoverRecorded' | 'handedOverAt' | 'answeredInTurn'
+  >
+): QueuedHandOffOutcome {
+  if (classifyDispatchRejection(rejected).verdict !== null) {
+    return 'returned'
+  }
+  return agentJournalSubmissionProvenUnwritten(rejected) ? 'waiting' : 'inDoubt'
 }

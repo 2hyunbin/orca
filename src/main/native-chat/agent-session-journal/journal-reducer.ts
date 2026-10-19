@@ -42,7 +42,6 @@ import {
 } from './queued-message-pause'
 import {
   createJournalQueueState,
-  foldJournalQueueEcho,
   foldJournalQueueRow,
   type JournalQueueState
 } from './journal-queue-fold'
@@ -83,6 +82,11 @@ export type JournalReducerState = {
   queuePauseMarks: JournalQueuePauseMarks
   /** Host-only: each handed-over send's stopped-message history, from its latest `pending` row. */
   stoppedHistoryCarried: Map<string, readonly string[]>
+  /** Where each queued card's hand-off was placed when handed over; never stored. */
+  queuedHandOffPlaces: Map<
+    string,
+    Pick<AgentJournalRenderItem, 'sequence' | 'observedAt' | 'turnScope'>
+  >
   /** The queued messages, folded from their own rows and their hand-offs (`journal-queue-fold.ts`). */
   queue: JournalQueueState
 }
@@ -109,6 +113,7 @@ export function createJournalReducerState(sessionId: string, epoch: string): Jou
     latestAcceptedTurnSequence: 0,
     queuePauseMarks: createJournalQueuePauseMarks(),
     stoppedHistoryCarried: new Map(),
+    queuedHandOffPlaces: new Map(),
     queue: createJournalQueueState()
   }
 }
@@ -118,8 +123,6 @@ export function applyJournalRow(
   row: JournalRow,
   savedAt = row.ts
 ): void {
-  // An echo is read against the cards before it applies; every other row after.
-  foldJournalQueueEcho(state, row)
   applyJournalRowFacts(state, row, savedAt)
   foldJournalQueueRow(state, row)
 }

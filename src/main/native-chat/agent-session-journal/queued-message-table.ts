@@ -1,6 +1,7 @@
 // A queued message as every reader sees it: a card the journal fold derives from the chat's own
 // rows (`journal-queue-fold.ts`). It becomes an ordinary submission when it is handed off, and the
-// hand-off's answer settles it: a refusal returns it, a withdrawal waits again, delivery spends it.
+// hand-off's answer settles it: a refusal returns it, one Orca proves never reached the agent waits
+// again, and anything else spends it.
 // The `queued_messages` table earlier builds wrote is read only to bring its cards into the
 // journal (`journal-queue-import.ts`).
 

@@ -24,8 +24,8 @@ type LegacyDeps = Pick<
 >
 
 /** The `queued` change a legacy row moves into the journal as, or null when it is answered and
- *  nothing is written: withdrawn, delivered, or a hand-off an echo proves delivered. Its hand-off
- *  link is kept, and its stored refusal only where that hand-off is not in this epoch. */
+ *  nothing is written: withdrawn or delivered. Its hand-off link is kept, and its stored refusal
+ *  only where that hand-off is not in this epoch. */
 export function legacyQueuedChange(
   state: JournalReducerState,
   row: QueuedMessageRow
@@ -47,8 +47,7 @@ export function legacyQueuedChange(
         }
       : {})
   }
-  // A reader's copy: only the fold, folding the imported row, pairs an echo for good.
-  const card = queuedCardFromChange(state, row.messageId, change, new Set(state.queue.pairedEchoes))
+  const card = queuedCardFromChange(state, row.messageId, change)
   return unanswered(card, state.submissions) ? change : null
 }
 
@@ -93,9 +92,7 @@ export class LegacyQueuedCards {
       const state = this.deps.state()
       const cards = this.rows().flatMap((row) => {
         const change = legacyQueuedChange(state, row)
-        return change
-          ? [queuedCardFromChange(state, row.messageId, change, new Set(state.queue.pairedEchoes))]
-          : []
+        return change ? [queuedCardFromChange(state, row.messageId, change)] : []
       })
       this.viewed = { key, cards }
     }
