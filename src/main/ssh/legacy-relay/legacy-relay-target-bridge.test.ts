@@ -504,6 +504,16 @@ describe('one target’s legacy relay bridge', () => {
     expect(next.snapshot()).toEqual([])
   })
 
+  it('stops serving an unfenced legacy pane once its one stop failed', async () => {
+    const subject = bridge()
+    await subject.refresh()
+    relay.shutdownError = new Error('timed out')
+    await stops.stop(PTY, subject)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(subject.snapshot()).toEqual([])
+    expect(subject.livePaneCount()).toBe(0)
+  })
+
   it('never serves an unfenced legacy pane again after its tab closed and Orca restarted', async () => {
     await expect(stops.stop(PTY, null)).resolves.toEqual({ status: 'unverifiable' })
     stops = paneStops()

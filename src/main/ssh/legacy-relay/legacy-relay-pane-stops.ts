@@ -70,7 +70,7 @@ export class LegacyRelayPaneStops {
       // Unfenced: only this connection can prove the process, and a restart would forget the close,
       // so it gets one try now and the lease ends as any closed tab's does.
       const sent = bridge && state === 'live' ? await this.send(ptyId, bridge) : false
-      this.abandon(ptyId)
+      this.abandon(ptyId, bridge)
       return sent ? { status: 'requested' } : { status: 'unverifiable' }
     }
     if (!bridge || state !== 'live') {
@@ -161,12 +161,14 @@ export class LegacyRelayPaneStops {
    * The stop can't be proven to reach the tab's process, so it is never sent. The lease ends as any
    * closed tab's does, so a process that took the id is never served under the closed tab.
    */
-  private abandon(ptyId: string): void {
+  private abandon(ptyId: string, bridge: StopTarget | null): void {
     this.closing.delete(ptyId)
     const relayPtyId = parseAppSshPtyId(ptyId)?.relayPtyId
     if (relayPtyId) {
       this.host()?.retireLease(this.targetId, relayPtyId)
     }
+    // The next listing drops the pane it still holds for that lease.
+    void bridge?.refresh()
   }
 
   /** The old relay's own stop, fenced to the process the tab ran; false when it can't be asked. */
@@ -184,7 +186,7 @@ export class LegacyRelayPaneStops {
       ? listed === pending.incarnationId || (listed === undefined && sameProcess)
       : sameProcess
     if (!proven) {
-      this.abandon(ptyId)
+      this.abandon(ptyId, bridge)
       return false
     }
     try {
@@ -193,7 +195,7 @@ export class LegacyRelayPaneStops {
     } catch (error) {
       // The relay's own fence refused it: that id now runs another process.
       if (/incarnation mismatch/i.test(error instanceof Error ? error.message : String(error))) {
-        this.abandon(ptyId)
+        this.abandon(ptyId, bridge)
       }
       return false
     }
