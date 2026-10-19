@@ -7,10 +7,12 @@ import { worktreeIdentityKey } from '../../../../shared/worktree/id'
 import type { RuntimeWorktreeTerminalSleepResult } from '../../../../shared/runtime-types'
 import { WORKTREE_TERMINAL_SLEEP_TIMEOUT_MS } from '../../orca-runtime-postlude'
 import { teardownRpcDeadline } from '../../worktree-teardown-deadline'
+import { sleptNothing } from './worktree-terminal-sleep-result'
 
 export abstract class OrcaRuntimeWithSleepResolvedWorktreeTerminals extends OrcaRuntimeWithWorktreeSleepResumeRecording {
   protected async sleepResolvedWorktreeTerminals(
-    worktree: ResolvedWorktree
+    worktree: ResolvedWorktree,
+    soleLivePtyId?: string
   ): Promise<RuntimeWorktreeTerminalSleepResult> {
     const sleepDeadline = Date.now() + WORKTREE_TERMINAL_SLEEP_TIMEOUT_MS
     const releaseMutation = await this.acquireWorktreeTerminalMutation(
@@ -36,12 +38,7 @@ export abstract class OrcaRuntimeWithSleepResolvedWorktreeTerminals extends Orca
         }
         if (this.getLivePtyIdsForWorktree(worktree.id, refreshedPtyLiveness).size === 0) {
           releaseMutation()
-          return {
-            stopped: 0,
-            stoppedPtyIds: [],
-            livePtyIds: [],
-            postStopVerified: true
-          }
+          return sleptNothing()
         }
         this.emitClientEvent({
           type: 'worktreeTerminalSleepState',
@@ -78,6 +75,10 @@ export abstract class OrcaRuntimeWithSleepResolvedWorktreeTerminals extends Orca
         throw new Error('terminal_liveness_unavailable')
       }
       const livePtyIds = this.getLivePtyIdsForWorktree(worktree.id, refreshedPtyLiveness)
+      // Why under the lock: any other live terminal here is a user's, and no spawn can slip in now.
+      if (soleLivePtyId && [...livePtyIds].some((ptyId) => ptyId !== soleLivePtyId)) {
+        return sleptNothing(livePtyIds)
+      }
       generation = ++this.terminalSleepGeneration
       for (const ptyId of livePtyIds) {
         pendingPtyIds.add(ptyId)
@@ -133,12 +134,7 @@ export abstract class OrcaRuntimeWithSleepResolvedWorktreeTerminals extends Orca
           terminalHandlesByPtyId
         })
         fullyCommitted = true
-        return {
-          stopped: 0,
-          stoppedPtyIds: [],
-          livePtyIds: [],
-          postStopVerified: true
-        }
+        return sleptNothing()
       }
       // Why before the stop: a PTY's exit clears its hook rows, and with them the session ids.
       const resumeCapture = await this.sleepResumeRecords.capture(worktree.id, livePtyIds)

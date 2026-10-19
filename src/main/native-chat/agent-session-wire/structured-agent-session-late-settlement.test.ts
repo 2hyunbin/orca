@@ -104,8 +104,11 @@ beforeEach(async () => {
     store,
     adapter: startsWhenPublished(
       {
+        open: async () => ({
+          reportedOptions: { model: '' }
+        }),
         acquire: vi.fn(async ({ fence }) => ({
-          providerChildPhase: 'starting' as const,
+          acquisitionGeneration: globalThis.crypto.randomUUID(),
           process: {
             hostId: 'local',
             pid: 4242,
@@ -261,6 +264,12 @@ describe('settling a send the provider proves it received after the ack window',
       state: 'rejected',
       ...agentSessionFailureWords(agentSessionFailureFact('cancelled'), { surface: 'rejection' })
     })
+    // A receipt after the withdrawal cannot turn it into sent.
+    await host.settleLateDispatch({
+      sessionId: SESSION,
+      clientMessageId: params.envelope.clientOperationId,
+      providerIdentity: { provider: 'claude', sessionId: THREAD, uuid: 'late-echo' }
+    })
 
     expect(await submissions()).toMatchObject([
       {
@@ -277,7 +286,7 @@ describe('settling a send the provider proves it received after the ack window',
     const params = sendParams('settle from provider echo')
     await host.send(CALLER, params)
     await handedOver(params.envelope.clientOperationId)
-    vi.spyOn(journal(), 'resolveDispatch').mockRejectedValueOnce(
+    vi.spyOn(journal(), 'acceptLate').mockRejectedValueOnce(
       new Error('direct settlement write failed')
     )
 
@@ -306,21 +315,25 @@ describe('settling a send the provider proves it received after the ack window',
     ])
   })
 
-  it('leaves an already accepted send alone', async () => {
+  it('leaves an already accepted send alone, adding no row', async () => {
+    dispatch.mockResolvedValueOnce({ state: 'admitted' })
     const params = sendParams('ordinary send')
     await host.send(CALLER, params)
-    await vi.waitFor(async () =>
-      expect(await submissions()).toMatchObject([{ dispatchState: 'accepted' }])
-    )
+    await handedOver(params.envelope.clientOperationId)
+    const before = journal().cursor()
+    const receipt = (uuid: string) =>
+      host.settleLateDispatch({
+        sessionId: SESSION,
+        clientMessageId: params.envelope.clientOperationId,
+        providerIdentity: { provider: 'claude', sessionId: THREAD, uuid }
+      })
 
-    await host.settleLateDispatch({
-      sessionId: SESSION,
-      clientMessageId: params.envelope.clientOperationId,
-      providerIdentity: { provider: 'claude', sessionId: THREAD, uuid: 'a-different-uuid' }
-    })
+    await Promise.all([receipt('echo-row'), receipt('echo-row')])
+    await receipt('a-different-uuid')
 
-    expect(await submissions()).toMatchObject([
-      { clientMessageId: params.envelope.clientOperationId, dispatchState: 'accepted' }
+    const after = journal().readSince(before)
+    expect(after.ok && after.rows.filter((row) => row.kind === 'dispatch')).toMatchObject([
+      { state: 'accepted', providerItemId: `claude:${THREAD}:echo-row` }
     ])
   })
 

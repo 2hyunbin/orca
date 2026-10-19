@@ -6,7 +6,7 @@ import type { AgentJournalMessageItem } from '../../../shared/agent-session-jour
 import { readAgentJournalMessageBody } from '../../../shared/agent-session-journal-body-admission'
 import { readStoredRejectionFact } from './journal-dispatch-reducer'
 import type { QueuedMessageRow } from './queued-message-table'
-import { isAgentSessionOptions } from '../../../shared/agent-session-record'
+import { readAgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 
 export const LEGACY_QUEUED_MESSAGE_COLUMNS =
   'message_id, position, body_json, fingerprint, state, hold_reason, returned_reason, returned_rejection, consumed_as, queued_epoch, queued_sequence, options_json'
@@ -63,14 +63,14 @@ export function readStoredQueuedMessageRow(row: unknown): QueuedMessageRow | nul
   }
 }
 
-/** A bad value only loses the model the send carried, never the card. */
-function storedOptions(json: string | null): { options?: Record<string, string> } {
+/** A bad value only loses the choices the send carried, never the card. */
+function storedOptions(json: string | null): Pick<QueuedMessageRow, 'options'> {
   if (json === null) {
     return {}
   }
   try {
-    const options: unknown = JSON.parse(json)
-    return isAgentSessionOptions(options) ? { options } : {}
+    const options = readAgentSessionExecutionOptions(JSON.parse(json))
+    return options ? { options } : {}
   } catch {
     return {}
   }

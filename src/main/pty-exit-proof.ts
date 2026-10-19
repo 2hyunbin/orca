@@ -19,10 +19,15 @@ export type PtyExitProofSource =
   | 'stop-confirmed'
 
 export class PtyExitProof {
-  private constructor(readonly source: PtyExitProofSource) {}
+  private constructor(
+    readonly source: PtyExitProofSource,
+    readonly incarnationId: string | undefined
+  ) {}
 
-  static from(source: PtyExitProofSource): PtyExitProof {
-    return new PtyExitProof(source)
+  /** `incarnationId` is the one the evidence was about (`undefined` only for records that carry
+   *  none, like relay leases): a same-id respawn must not inherit it. */
+  static from(source: PtyExitProofSource, incarnationId: string | undefined): PtyExitProof {
+    return new PtyExitProof(source, incarnationId)
   }
 }
 

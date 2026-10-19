@@ -8,7 +8,7 @@ import type {
   AgentJournalSubmission
 } from '../../../shared/agent-session-journal-types'
 import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
-import { isAgentSessionOptions } from '../../../shared/agent-session-record'
+import { readAgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import { structuredAgentSessionCommandTurnIdentity } from '../../../shared/structured-agent-session-command-turn-identity'
 import { agentSessionSendBodyFingerprint } from '../../../shared/structured-agent-session-send-mutation'
 import { readStoredRejectionFact } from './journal-dispatch-reducer'
@@ -78,6 +78,7 @@ export function queuedCardFromChange(
   messageId: string,
   change: JournalQueuedChange
 ): QueuedMessageRow {
+  const options = readAgentSessionExecutionOptions(change.options)
   const card: QueuedMessageRow = {
     messageId,
     position: change.position,
@@ -89,7 +90,7 @@ export function queuedCardFromChange(
     returnedRejection: null,
     consumedAs: null,
     queuedAt: readQueuedAt(change.queuedAt),
-    ...(isAgentSessionOptions(change.options) ? { options: change.options } : {})
+    ...(options ? { options } : {})
   }
   const attempt =
     typeof change.attempt === 'string' && change.attempt.length > 0 ? change.attempt : null

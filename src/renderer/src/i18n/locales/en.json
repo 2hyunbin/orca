@@ -12820,7 +12820,8 @@
           "behindNoTemplate": "Runs a managed Orca server this app can’t update; this build has no server for this host.",
           "behindMigrating": "Runs a managed Orca server that updates after its project move finishes.",
           "behindCheckFailed": "Runs a managed Orca server; Orca couldn’t check whether it is behind this app.",
-          "runtimeNoexec": "This host doesn’t allow running programs from ~/.orca-remote, so Orca can’t start its server there. This usually means the home folder is mounted with noexec. Ask the host’s administrator to allow running programs there, then connect again."
+          "runtimeNoexec": "This host doesn’t allow running programs from ~/.orca-remote, so Orca can’t start its server there. This usually means the home folder is mounted with noexec. Ask the host’s administrator to allow running programs there, then connect again.",
+          "setupContactLost": "Orca lost contact with this host while setting up its server. Nothing on the host was stopped. Connect again to continue."
         },
         "ZcodeCliSetupSection": {
           "title": "Use GLM with ZCode",
@@ -14303,8 +14304,8 @@
             "deleteReasonNonLocalHost": "Only sessions on this device can be deleted.",
             "deleteReasonSyntheticPath": "This session can't be deleted from Orca.",
             "deleteReasonUnsupportedAgent": "{{value0}} sessions can't be deleted from Orca.",
-            "resumeInNewNativeChat": "Resume in New Native Chat",
-            "resumeInNewCli": "Resume in New CLI",
+            "resumeInNewNativeChat": "Switch to Chat",
+            "resumeInNewCli": "Switch to Terminal",
             "resumeInNewCliTooltipFork": "Forks this conversation into a new CLI session.",
             "resumeInNewCliTooltipChat": "The native chat stays as it is."
           },
@@ -18080,6 +18081,16 @@
           "externalLinkTitle": "Open link to {{host}}?",
           "externalLinkConfirm": "Open link",
           "externalLinkCancel": "Cancel"
+        },
+        "externalApp": {
+          "title": "Open {{app}}?",
+          "schemeTitle": "Open this {{scheme}} link?",
+          "description": "{{origin}} wants to open another application.",
+          "anonymousDescription": "A page in the browser wants to open another application.",
+          "confirm": "Open {{app}}",
+          "confirmLink": "Open link",
+          "cancel": "Cancel",
+          "launchFailed": "Couldn't open an app for this {{scheme}} link. It may not be installed."
         }
       },
       "HostedReviewUnlinkMenuItem": {
@@ -19069,8 +19080,8 @@
     "tab": {
       "bar": {
         "SortableTabContextMenu": {
-          "switchToTerminalView": "Switch to terminal view",
-          "switchToChatView": "Switch to chat view",
+          "switchToTerminalView": "Switch to Terminal",
+          "switchToChatView": "Switch to Chat",
           "closeTabsToLeft": "Close All Tabs To The Left"
         },
         "BrowserTab": {

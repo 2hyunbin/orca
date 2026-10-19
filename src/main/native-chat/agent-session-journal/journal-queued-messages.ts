@@ -5,6 +5,7 @@
 
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
 import type { AgentSessionQueuedMessageUpdateResult } from '../../../shared/agent-session-wire'
+import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import {
   journalQueueRowBuilder,
   type JournalQueueCardChange,
@@ -90,7 +91,7 @@ export class JournalQueuedMessages {
       body: AgentJournalMessageItem
       requireAttachments?: true
       holdReason?: QueuedMessageHoldReason
-      options?: Readonly<Record<string, string>>
+      options?: AgentSessionExecutionOptions
     },
     receipt?: JournalOperationReceipt
   ): Promise<QueuedMessageRow> {

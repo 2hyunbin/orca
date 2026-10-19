@@ -362,6 +362,9 @@ export class AgentSessionJournal {
     return this.submissionWriter.resolveDispatch(input, cards)
   }
 
+  /** A provider's late receipt (`JournalSubmissionWriter.acceptLate`). */
+  acceptLate: JournalSubmissionWriter['acceptLate'] = (i) => this.submissionWriter.acceptLate(i)
+
   /** Retire unanswered sends after their execution owner ended, without assuming delivery. */
   async markPendingSubmissionsUnknown(fence: number, reason?: string): Promise<string[]> {
     return markJournalPendingSubmissionsUnknown(this, fence, reason)

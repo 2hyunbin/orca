@@ -6,6 +6,7 @@ import {
   type AgentJournalSubmission
 } from '../../../shared/agent-session-journal-types'
 import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
+import { readAgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import { journalRenderItem } from './journal-render-item'
 import { statedOrDerivedTurnScope, upsertJournalItem } from './journal-item-fold'
 import type { JournalReducerState } from './journal-reducer'
@@ -13,12 +14,12 @@ import type { JournalRow } from './journal-row-schema'
 import { journalDispatchRowApplies } from './journal-dispatch-settlement'
 import { DISPATCH_DOUBT_PROVIDER_ENDED_UNANSWERED } from './journal-dispatch-doubt-reasons'
 import { dispatchWasWithdrawn } from '../../../shared/structured-agent-session-dispatch-rejection'
-import { isAgentSessionOptions } from '../../../shared/agent-session-record'
 
 export function applyJournalSubmission(
   state: JournalReducerState,
   row: Extract<JournalRow, { kind: 'submission' }>
 ): void {
+  const options = readAgentSessionExecutionOptions(row.options)
   state.submissions.set(row.clientMessageId, {
     clientMessageId: row.clientMessageId,
     fence: row.fence,
@@ -38,8 +39,8 @@ export function applyJournalSubmission(
     // Kept as written, a newer build's kind too; an undecodable one as an empty kind, so neither
     // reads as a row without one.
     ...(row.source !== undefined ? { source: { kind: storedSourceKind(row.source) } } : {}),
-    // A stored value this build cannot read only loses the model it carried, never the row.
-    ...(isAgentSessionOptions(row.options) ? { options: row.options } : {})
+    // A stored value this build cannot read only loses the choices it carried, never the row.
+    ...(options ? { options } : {})
   })
   const itemId = agentJournalSubmissionKey(row.clientMessageId)
   // A message handed over later belongs to no turn until its handover names one.

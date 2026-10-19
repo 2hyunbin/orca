@@ -127,9 +127,9 @@ describe('acting on a terminal proof', () => {
       provenPtyIds: ['att', 'det', 'exp', 'ter']
     })
     expect(markSshRemotePtyLease.mock.calls).toEqual([
-      ['ssh-1', 'att', PtyExitProof.from('host-census')],
-      ['ssh-1', 'det', PtyExitProof.from('host-census')],
-      ['ssh-1', 'exp', PtyExitProof.from('host-census')]
+      ['ssh-1', 'att', PtyExitProof.from('host-census', undefined)],
+      ['ssh-1', 'det', PtyExitProof.from('host-census', undefined)],
+      ['ssh-1', 'exp', PtyExitProof.from('host-census', undefined)]
     ])
   })
 

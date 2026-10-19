@@ -3,6 +3,7 @@
 // card is folded by THE reducer (`journal-queue-fold.ts`) and nothing stores it a second time.
 
 import type { UnreadAgentSessionFailureFact } from '../../../shared/agent-session-failure'
+import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import {
   AGENT_SESSION_JOURNAL_QUEUE_SCHEMA_VERSION,
   type AgentJournalCursor,
@@ -27,7 +28,7 @@ export type JournalQueueChange =
       /** Holds this one card from sending by itself (`QueuedMessageHoldReason`). */
       holdReason?: string
       /** The model and effort its send carried. */
-      options?: Readonly<Record<string, string>>
+      options?: AgentSessionExecutionOptions
       /** A restated or imported card's hand-off: the submission it went out as. */
       attempt?: string
       /** Only where the refusal's own rows are gone (a replaced epoch, an imported card whose hand-off

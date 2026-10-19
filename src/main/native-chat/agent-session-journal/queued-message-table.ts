@@ -11,6 +11,7 @@ import type {
   AgentJournalMessageItem
 } from '../../../shared/agent-session-journal-types'
 import type { QUEUED_MESSAGE_PAUSED_SEND_FAILED } from '../../../shared/agent-session-queued-message-wire'
+import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 
 export type QueuedMessageState = 'waiting' | 'dispatched' | 'returned' | 'withdrawn'
 
@@ -53,6 +54,6 @@ export type QueuedMessageRow = {
   /** Where the journal stood when it was queued: a Stop's pause holds only cards queued before
    *  it. Null on cards from builds before it was recorded, which read as queued before any Stop. */
   queuedAt: AgentJournalCursor | null
-  /** The model and effort its send carried, applied to the turn it starts when it goes out. */
-  options?: Readonly<Record<string, string>>
+  /** The choices its send carried, applied to the turn it starts when it goes out. */
+  options?: AgentSessionExecutionOptions
 }

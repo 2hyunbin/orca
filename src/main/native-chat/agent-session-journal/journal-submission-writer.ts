@@ -5,6 +5,7 @@ import type {
   AgentJournalCursor,
   AgentSessionJournalIdentity
 } from '../../../shared/agent-session-journal-types'
+import { journalDispatchRowApplies } from './journal-dispatch-settlement'
 import type { JournalQueuedMessages, JournalQueuePlan } from './journal-queued-messages'
 import type { JournalAttachmentClaim } from './journal-submission-hook'
 import type { JournalReducerState } from './journal-reducer'
@@ -108,6 +109,17 @@ export class JournalSubmissionWriter {
         (rows) => rows[0]
       )
       .then((rows) => rowCursor(rows.slice(0, 1)))
+  }
+
+  /** A provider's late receipt, decided at its turn in the queue: a send a write ahead of it
+   *  already settled gets no row, so repeated receipts save and publish once. */
+  async acceptLate(input: Extract<ResolveDispatchInput, { state: 'accepted' }>): Promise<void> {
+    const { rowWriter, state } = this.deps
+    await rowWriter.enqueueRows(() =>
+      journalDispatchRowApplies(state().submissions.get(input.clientMessageId))
+        ? [journalDispatchRowBuilder(state, input)]
+        : []
+    )
   }
 }
 
