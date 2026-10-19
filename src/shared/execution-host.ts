@@ -77,6 +77,8 @@ export function toRuntimeExecutionHostId(environmentId: string): `runtime:${stri
 // SSH/run-target surfaces. The renderer can't read the target.owner field, so it
 // recognizes them by their deterministic id prefix. getRuntimeOwnedSshTargetId
 // (main) builds on this same prefix to keep the two in sync.
+// The prefix also means "address and filesystem are replaced every provision", so only
+// on-demand-runtime owners may use it; main decides hidden-ness from `owner` alone.
 export const RUNTIME_OWNED_SSH_TARGET_ID_PREFIX = 'runtime-ssh-'
 
 export function isRuntimeOwnedSshTargetId(targetId: string | null | undefined): boolean {
