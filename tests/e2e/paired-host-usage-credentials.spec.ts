@@ -177,6 +177,9 @@ test('a paired desktop saves a MiniMax key on its headless orcad host', async ({
   test.setTimeout(300_000)
   const slotDir = path.resolve('out/orcad')
   const program = resolveBundledOrcadRuntime(slotDir)
+  if (!program) {
+    throw new Error('pnpm build:orcad must produce a packaged slot in out/orcad')
+  }
   // Short root: macOS caps a unix socket path at 104 bytes, and the daemon's lives in userData.
   const scratch = mkdtempSync(
     path.join(process.platform === 'win32' ? os.tmpdir() : '/tmp', 'orca-uc-')
