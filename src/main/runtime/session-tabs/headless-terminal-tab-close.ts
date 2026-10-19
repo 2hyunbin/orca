@@ -226,6 +226,7 @@ export abstract class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends Orca
       expandedLeafId: string | null
       chatLeafId?: string | null
       titlesByLeafId?: Record<string, string>
+      renamedLeafIds?: string[]
     }
   ): Promise<{ updated: true }> {
     const explicitWorktreeId = this.getExplicitSessionWorktreeIdSelector(worktreeSelector)
@@ -242,12 +243,15 @@ export abstract class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends Orca
     // would be overwritten and could fight the renderer. Only pane names, which
     // the window takes one pane at a time, are passed on to it.
     if (this.getAvailableAuthoritativeWindow()) {
-      if (args.titlesByLeafId && this.notifier?.setPaneTitle) {
+      // Why: only panes the client says it renamed; a resent map may predate the host's names.
+      const renamed = new Set(args.renamedLeafIds)
+      if (args.titlesByLeafId && renamed.size > 0 && this.notifier?.setPaneTitle) {
         const tab = this.getWorkspaceSessionForWorktree(worktreeId)?.tabsByWorktree[
           worktreeId
         ]?.find((candidate) => candidate.id === hostTabId)
         const { titlesByLeafId, root } = args
-        for (const { leafId, title } of paneTitlesForDesktopWindow({ root, titlesByLeafId, tab })) {
+        const forwarded = paneTitlesForDesktopWindow({ root, titlesByLeafId, tab })
+        for (const { leafId, title } of forwarded.filter(({ leafId }) => renamed.has(leafId))) {
           // A failed send must fail the call, so the client retries rather than dropping it.
           if (!this.notifier.setPaneTitle(hostTabId, leafId, title)) {
             throw new Error('runtime_unavailable')

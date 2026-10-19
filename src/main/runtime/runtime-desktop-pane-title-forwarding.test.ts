@@ -36,13 +36,15 @@ function desktopHostRuntime() {
   const before = structuredClone(savedLayout())
   const renamePanes = (
     root: TerminalPaneLayoutNode,
-    titlesByLeafId: Record<string, string> | undefined
+    titlesByLeafId: Record<string, string> | undefined,
+    renamedLeafIds: string[] = [HEADLESS_LEAF_ID, HEADLESS_SECOND_LEAF_ID]
   ) =>
     runtime.updateMobileSessionPaneLayout(`id:${TEST_WORKTREE_ID}`, {
       tabId: 'host-tab',
       root,
       expandedLeafId: null,
-      ...(titlesByLeafId ? { titlesByLeafId } : {})
+      ...(titlesByLeafId ? { titlesByLeafId } : {}),
+      renamedLeafIds
     })
   return { setPaneTitle, renameTerminal, renamePanes, savedLayout, before }
 }
@@ -60,6 +62,23 @@ describe('client pane names on a host with its own desktop window', () => {
     expect(renameTerminal).not.toHaveBeenCalled()
     // The window saves what it shows; main must not write over the window's layout.
     expect(savedLayout()).toEqual(before)
+  })
+
+  it('passes on only the panes the client renamed', async () => {
+    const { setPaneTitle, renamePanes } = desktopHostRuntime()
+
+    await renamePanes(SPLIT_ROOT, { [HEADLESS_LEAF_ID]: 'server' }, [HEADLESS_SECOND_LEAF_ID])
+
+    expect(setPaneTitle.mock.calls).toEqual([['host-tab', HEADLESS_SECOND_LEAF_ID, null]])
+  })
+
+  it('ignores a resent title map, as an older client sends on every divider drag', async () => {
+    const { setPaneTitle, renamePanes } = desktopHostRuntime()
+
+    // Its map can predate a name the host set since, so it must not revert that name.
+    await renamePanes(SPLIT_ROOT, { [HEADLESS_LEAF_ID]: 'stale' }, [])
+
+    expect(setPaneTitle).not.toHaveBeenCalled()
   })
 
   it('sends nothing when the client left titles out, which means unchanged', async () => {

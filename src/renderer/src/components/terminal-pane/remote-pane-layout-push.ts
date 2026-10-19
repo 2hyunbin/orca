@@ -2,6 +2,11 @@ import type { TerminalLayoutSnapshot } from '../../../../shared/terminal-tab-typ
 import type { PaneLayoutEditIntent } from '../../../../shared/rpc-contract/session-tabs-schemas-params'
 import { terminalLayoutEqual } from '../../../../shared/terminal-layout-equality'
 import { updateWebRuntimePaneLayout } from '@/runtime/web-runtime-terminal-actions'
+import {
+  dropPendingPaneTitleRenames,
+  takeUnsentPaneTitleRenames
+} from '@/runtime/pending-pane-title-renames'
+import { collectLeafIdsInOrder } from './terminal-layout-leaf-ids'
 
 export type RemotePaneLayoutPusher = {
   push: (input: {
@@ -36,6 +41,8 @@ export function createRemotePaneLayoutPusher(): RemotePaneLayoutPusher {
       }
       const attempt = { id: ++nextAttemptId, worktreeId, tabId, snapshot: layout }
       lastAttempt = attempt
+      // Why: a resent full title map is not a rename; only these panes were renamed here.
+      const renamedLeafIds = takeUnsentPaneTitleRenames(collectLeafIdsInOrder(layout.root))
       void updateWebRuntimePaneLayout({
         worktreeId,
         tabId,
@@ -43,8 +50,12 @@ export function createRemotePaneLayoutPusher(): RemotePaneLayoutPusher {
         expandedLeafId: layout.expandedLeafId,
         chatLeafId: layout.chatLeafId ?? null,
         ...(layout.titlesByLeafId ? { titlesByLeafId: layout.titlesByLeafId } : {}),
+        ...(renamedLeafIds.length > 0 ? { renamedLeafIds } : {}),
         ...(intent ? { intent } : {})
       }).then((updated) => {
+        if (!updated) {
+          dropPendingPaneTitleRenames(renamedLeafIds)
+        }
         // Why: a disconnected or timed-out push carried no information, so the next persist must retry it.
         if (!updated && lastAttempt?.id === attempt.id) {
           lastAttempt = null
