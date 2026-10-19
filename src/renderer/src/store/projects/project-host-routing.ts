@@ -119,8 +119,8 @@ export function upsertProjectHostSetup(
 }
 
 /**
- * Where a setup edit or removal goes. Only a twin (same id, same route) names its execution
- * host on the wire, so a unique setup keeps today's by-id request and its legacy host stamps.
+ * Where a setup edit or removal goes. The execution host goes on the wire when the caller named
+ * one or the row has a same-route twin; a unique by-id request stays as older peers expect.
  */
 export async function prepareProjectHostSetupMutation<T extends ProjectHostSetupTarget>(
   setups: readonly ProjectHostSetup[],
@@ -131,6 +131,10 @@ export async function prepareProjectHostSetupMutation<T extends ProjectHostSetup
       entry.id === args.setupId &&
       (args.hostId === undefined || getProjectHostSetupExecutionHostId(entry) === args.hostId)
   )
+  if (!setup && args.hostId !== undefined) {
+    // Why: an id-only fallback could land on a same-id setup of another host.
+    throw new Error(`Project host setup not found on ${args.hostId}: ${args.setupId}`)
+  }
   const target = setup ? getProjectSetupRuntimeTarget(setup.hostId) : { kind: 'local' as const }
   await assertProjectHostSetupMutationRuntimeCapabilities(target)
   const twinned =
@@ -141,15 +145,14 @@ export async function prepareProjectHostSetupMutation<T extends ProjectHostSetup
         getRuntimeTargetKey(getProjectSetupRuntimeTarget(entry.hostId)) ===
           getRuntimeTargetKey(target)
     ).length > 1
-  if (!twinned) {
-    const { hostId: _hostId, ...byId } = args
-    return { target, hostArgs: byId }
+  if (!setup || (!twinned && args.hostId === undefined)) {
+    return { target, hostArgs: args }
   }
   if (target.kind === 'environment') {
     await assertRuntimeEnvironmentCapability(
       target.environmentId,
       PROJECT_HOST_SETUP_HOST_TARGET_RUNTIME_CAPABILITY,
-      'This project is set up on more than one host of the selected Orca server, and that server cannot tell them apart yet. Update Orca on the server and try again.',
+      'The selected Orca server cannot pick a project setup by host yet. Update Orca on the server and try again.',
       15_000
     )
   }

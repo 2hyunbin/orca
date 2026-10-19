@@ -8,7 +8,6 @@ import {
 import { buildExecutionHostRegistry } from '../../../../shared/execution-host-registry'
 import { getHostDisplayLabelOverrides } from '../../../../shared/host-setting-overrides'
 import type { ProjectHostSetup } from '../../../../shared/project-types'
-import { getProjectHostSetupExecutionHostId } from '../../../../shared/project-host-setup-target'
 import type { Repo } from '../../../../shared/repo-types'
 import { useAppStore } from '../../store'
 import { getProjectHostSetupProjectionFromState } from '../../store/selectors'
@@ -371,10 +370,7 @@ export function RepositoryHostSetupsSection({
                   size="sm"
                   onClick={async () => {
                     setDeletingSetupId(setup.id)
-                    await deleteProjectHostSetup({
-                      setupId: setup.id,
-                      hostId: getProjectHostSetupExecutionHostId(setup)
-                    })
+                    await deleteProjectHostSetup({ setupId: setup.id })
                     setDeletingSetupId(null)
                   }}
                 >

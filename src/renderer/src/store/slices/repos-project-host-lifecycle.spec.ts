@@ -233,6 +233,23 @@ export function registerReposProjectHostLifecycleTests(): void {
       expect(store.getState().projectHostSetups).toEqual([runtimeSetup])
     })
 
+    it('refuses a named host the catalog has no setup for instead of deleting by id', async () => {
+      const localSetup: ProjectHostSetup = { ...runtimeSetup, hostId: 'local' }
+      const store = createTestStore()
+      store.setState({
+        projects: [project],
+        projectHostSetups: [localSetup],
+        settings: { activeRuntimeEnvironmentId: null } as never
+      })
+
+      await expect(
+        store.getState().deleteProjectHostSetup({ setupId: localSetup.id, hostId: 'ssh:gone' })
+      ).resolves.toBeNull()
+
+      expect(projectsDeleteHostSetup).not.toHaveBeenCalled()
+      expect(store.getState().projectHostSetups).toEqual([localSetup])
+    })
+
     it('names the SSH twin of a local setup on this computer', async () => {
       const localSetup: ProjectHostSetup = { ...runtimeSetup, hostId: 'local' }
       const sshSetup: ProjectHostSetup = { ...runtimeSetup, hostId: 'ssh:box' }
