@@ -751,10 +751,7 @@ describe('claim keys and unreadable rows', () => {
   })
 
   // Nothing reads the checkpoint any more, so even one this build could never have parsed loads.
-  it.each([
-    { epoch: 3, sequence: 0 },
-    { epoch: 'bad', sequence: 1 }
-  ])(
+  it.each([null, { epoch: 3, sequence: 0 }, { epoch: 'bad', sequence: 1 }])(
     "loads a record carrying an older build's journal checkpoint %o, and drops it on the next write",
     async (journalCheckpoint) => {
       const first = await open()
