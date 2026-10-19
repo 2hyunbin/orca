@@ -149,6 +149,15 @@ describe('SSH host server status line', () => {
     expect(line?.text).not.toContain('relay')
   })
 
+  it('tells a noexec host what to change, not to install an older Orca', () => {
+    const line = sshHostServerStatusLine(plain, {
+      managedServer: { kind: 'relay', reason: 'orcad_unavailable', detail: 'runtime_noexec' }
+    })
+    expect(line).toMatchObject({ tone: 'destructive', text: expect.stringContaining('noexec') })
+    expect(line?.text).toContain('connect again')
+    expect(line?.text).not.toContain('older version')
+  })
+
   it('says plainly when neither port forwarding nor the SSH session reaches the server', () => {
     const live = sshHostServerStatusLine(plain, {
       managedServer: {

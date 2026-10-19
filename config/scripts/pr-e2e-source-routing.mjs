@@ -270,6 +270,18 @@ export const PR_E2E_SOURCE_ROUTES = [
       )
   },
   {
+    // The spec runs only in a switch-on build; it guards the phone's list against the desktop's.
+    id: 'ssh.orcad-phone-feed-list',
+    specs: ['tests/e2e/ssh-orcad-phone-feed-list.spec.ts'],
+    matches: (file) =>
+      MANAGED_SSH_HARNESS.test(file) ||
+      /^tests\/e2e\/helpers\/(?:phone-feed-list|sidebar-inputs-build)\.ts$/.test(file) ||
+      (isProductSource(file) &&
+        /^(?:src\/shared\/sidebar-list\/sidebar-(?:feed|inputs)-|mobile\/src\/host-screen\/host-sidebar-feed-)/.test(
+          file
+        ))
+  },
+  {
     id: 'browser-network.ssh-docker-route',
     specs: ['tests/e2e/ssh-browser-network-execution-route.docker.unit.test.ts'],
     matches: (file) =>

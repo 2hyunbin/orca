@@ -4,7 +4,8 @@ const mocks = vi.hoisted(() => ({
   createTab: vi.fn(),
   closeTab: vi.fn(),
   createWebRuntimeSessionTerminal: vi.fn(),
-  setActiveTabType: vi.fn()
+  setActiveTabType: vi.fn(),
+  toastError: vi.fn()
 }))
 
 const store = {
@@ -51,7 +52,7 @@ const store = {
 }
 
 vi.mock('@/store', () => ({ useAppStore: { getState: () => store } }))
-vi.mock('sonner', () => ({ toast: { message: vi.fn(), error: vi.fn() } }))
+vi.mock('sonner', () => ({ toast: { message: vi.fn(), error: mocks.toastError } }))
 vi.mock('@/components/tab-bar/reconcile-order', () => ({ reconcileTabOrder: vi.fn(() => []) }))
 vi.mock('@/lib/agent-paste-draft', () => ({ pasteDraftWhenAgentReady: vi.fn() }))
 vi.mock('@/lib/telemetry', () => ({
@@ -121,6 +122,7 @@ describe('launchAgentInNewTab paired web runtime', () => {
       ...(status === 'created' ? { tabId: 'web-terminal-host-tab' } : {})
     })
     expect(mocks.setActiveTabType).toHaveBeenCalledTimes(activate && status === 'created' ? 1 : 0)
+    expect(mocks.toastError).toHaveBeenCalledTimes(status === 'failed' ? 1 : 0)
     // A local tab closes locally (the host close no-ops), so a launch leaves it alone.
     expect(mocks.closeTab).not.toHaveBeenCalled()
   })

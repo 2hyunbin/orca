@@ -19,6 +19,8 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/main/ai-vault/session-parse-cache-large-scan.test.ts',
   'src/main/ai-vault/session-parse-cache-metadata-checkpoint.test.ts',
   'src/main/ai-vault/session-parse-cache-persistence.test.ts',
+  'src/main/ai-vault/session-scanner-scope-cwd-facts.test.ts',
+  'src/main/ai-vault/session-scanner-scope-walk.test.ts',
   // Electron main bridges streams with Node's implementation.
   'src/main/host/electron-http-client.test.ts',
   'src/main/daemon/daemon-init-provider-installation.test.ts',
