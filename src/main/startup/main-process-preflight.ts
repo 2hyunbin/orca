@@ -1,6 +1,6 @@
 import { antigravityHookService } from '../antigravity/hook-service'
 import { getRelocatedDaemonHost } from '../daemon/daemon-host-relocation'
-import { app, ipcMain, powerMonitor, session } from 'electron'
+import { app, ipcMain, MessageChannelMain, powerMonitor, session } from 'electron'
 import { is } from '@electron-toolkit/utils'
 import os from 'node:os'
 import { join } from 'node:path'
@@ -303,7 +303,11 @@ function initializeMainProcessPreflight(options: MainProcessPreflightOptions): b
   // whether a window exists is irrelevant. Installing this in attachMainWindowServices
   // meant `orca serve` registered its PTY handlers against no-ops before any window
   // attached, so a paired desktop owner never received them.
-  setPtyHostBindings({ ipc: ipcMain, power: powerMonitor })
+  setPtyHostBindings({
+    ipc: ipcMain,
+    power: powerMonitor,
+    createMessageChannel: () => new MessageChannelMain()
+  })
   // Why also at process level: the runtime's notification, window-lookup and
   // tab-create-reply channel are desktop-only. A Node host installs none and the
   // runtime routes notifications to paired clients instead.

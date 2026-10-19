@@ -128,7 +128,10 @@ export function createPtyIpcSuiteEnvironment(): PtyIpcSuiteEnvironment {
   beforeEach(() => {
     // Why here: pty.ts registers against injected surfaces now, so the mocked ipcMain
     // must be installed for the shared `handlers` map to keep capturing registrations.
-    setPtyHostBindings({ ipc: testPtyIpcSurface() })
+    setPtyHostBindings({
+      ipc: testPtyIpcSurface(),
+      createMessageChannel: () => new electron.MessageChannelMain()
+    })
     // Why here: pty.ts reads app paths and the packaged flag through the AppEnvironment
     // port now, so the shared vi.mock('electron') app object alone is inert. Back the
     // port with the same mocks so every suite's existing expectations still hold.

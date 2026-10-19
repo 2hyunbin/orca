@@ -1,10 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import {
-  MessageChannelMain,
-  type IpcMainEvent,
-  type IpcMainInvokeEvent,
-  type MessagePortMain
-} from 'electron'
+import type { IpcMainEvent, IpcMainInvokeEvent, MessagePortMain } from 'electron'
+import { createPtyMessageChannel } from '../../pty-host-bindings'
 import { isMainWindowPtyIpcEvent } from '../ipc/write-input'
 import type { PtyRendererDelivery } from '../session'
 
@@ -33,7 +29,9 @@ function isLiveMainFrameSender(
 
 function retireRendererPage(page: string): void {
   const owner = pages.get(page)
-  if (!owner) return
+  if (!owner) {
+    return
+  }
   pages.delete(page)
   owner.port.close()
   retireImpl?.(page)
@@ -52,8 +50,10 @@ export function openRendererPage(
     return
   }
   const frame = event.senderFrame
-  if (!frame) return
-  const { port1, port2 } = new MessageChannelMain()
+  if (!frame) {
+    return
+  }
+  const { port1, port2 } = createPtyMessageChannel()
   const page = randomUUID()
   pages.set(page, { port: port1, contents: event.sender })
   port1.on('close', () => retireRendererPage(page))
@@ -81,10 +81,14 @@ export function isAdmittedRendererPage(
 
 export function retireRendererPages(contents: PtyRendererDelivery['webContents']): void {
   for (const [page, owner] of pages) {
-    if (owner.contents === contents) retireRendererPage(page)
+    if (owner.contents === contents) {
+      retireRendererPage(page)
+    }
   }
 }
 
 export function _resetRendererPageForTest(): void {
-  for (const page of pages.keys()) retireRendererPage(page)
+  for (const page of pages.keys()) {
+    retireRendererPage(page)
+  }
 }

@@ -8,13 +8,26 @@ import { runProcessSync } from '@orca/process-host'
 
 const directory = mkdtempSync(join(tmpdir(), 'orca-structured-provider-build-'))
 const bundle = join(directory, 'orcad-server.js')
+let electronImporters = []
 
 beforeAll(async () => {
-  await buildOrcadEntry(bundle)
+  const result = await buildOrcadEntry(bundle)
+  electronImporters = Object.entries(result.metafile.inputs)
+    .filter(([, input]) =>
+      input.imports.some((entry) => {
+        const specifier = entry.original ?? entry.path
+        return specifier === 'electron' || specifier.startsWith('electron/')
+      })
+    )
+    .map(([file]) => file)
 }, 60_000)
 
 afterAll(() => {
   rmSync(directory, { recursive: true, force: true })
+})
+
+it('keeps Electron out of the packaged server dependency graph', () => {
+  expect(electronImporters).toEqual([])
 })
 
 it('loads the structured Claude SDK through the packaged server under plain Node', () => {

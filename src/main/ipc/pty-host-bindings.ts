@@ -1,4 +1,4 @@
-import type { IpcMainEvent, IpcMainInvokeEvent } from 'electron'
+import type { IpcMainEvent, IpcMainInvokeEvent, MessageChannelMain } from 'electron'
 
 /**
  * The host facilities the PTY handlers register against.
@@ -44,9 +44,10 @@ export const noopPtyPowerSurface: PtyPowerSurface = {
 
 let currentIpc: PtyIpcSurface = noopPtyIpcSurface
 let currentPower: PtyPowerSurface = noopPtyPowerSurface
+let currentCreateMessageChannel: (() => MessageChannelMain) | null = null
 
 /**
- * Install the host surfaces once at startup. Defaults are no-ops rather than a throw,
+ * Install the host surfaces once at startup. IPC and power default to no-ops rather than a throw,
  * unlike AppEnvironment/SecretStore: a host with no renderer legitimately has nothing to
  * register against, and silently not registering handlers nobody can call is correct
  * rather than a hidden downgrade.
@@ -54,9 +55,11 @@ let currentPower: PtyPowerSurface = noopPtyPowerSurface
 export function setPtyHostBindings(bindings: {
   ipc?: PtyIpcSurface
   power?: PtyPowerSurface
+  createMessageChannel?: () => MessageChannelMain
 }): void {
   currentIpc = bindings.ipc ?? noopPtyIpcSurface
   currentPower = bindings.power ?? noopPtyPowerSurface
+  currentCreateMessageChannel = bindings.createMessageChannel ?? null
 }
 
 export function getPtyIpc(): PtyIpcSurface {
@@ -65,4 +68,11 @@ export function getPtyIpc(): PtyIpcSurface {
 
 export function getPtyPower(): PtyPowerSurface {
   return currentPower
+}
+
+export function createPtyMessageChannel(): MessageChannelMain {
+  if (!currentCreateMessageChannel) {
+    throw new Error('Renderer message channels are unavailable on this host')
+  }
+  return currentCreateMessageChannel()
 }

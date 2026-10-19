@@ -18,7 +18,9 @@ ipcRenderer.on(
       typeof reply.page !== 'string' ||
       event.ports.length !== 1
     ) {
-      for (const endpoint of event.ports) endpoint.close()
+      for (const endpoint of event.ports) {
+        endpoint.close()
+      }
       return
     }
     port = event.ports[0] ?? null
@@ -32,7 +34,9 @@ ipcRenderer.send('pty:openRendererPage', { correlation })
 
 export async function dispatchRendererPage<T>(dispatch: (page: string) => T): Promise<T> {
   const page = await ready
-  if (closed || !page) throw new Error('Terminal connection ended with its document')
+  if (closed || !page) {
+    throw new Error('Terminal connection ended with its document')
+  }
   return dispatch(page)
 }
 

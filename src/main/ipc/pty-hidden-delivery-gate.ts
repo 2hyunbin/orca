@@ -93,15 +93,27 @@ export function setRendererPtyDeliveryInterest(
   page: string
 ): void {
   const interests = interestByPage.get(page) ?? new Set<string>()
-  if (interested) interests.add(id)
-  else interests.delete(id)
-  if (interests.size) interestByPage.set(page, interests)
-  else interestByPage.delete(page)
+  if (interested) {
+    interests.add(id)
+  } else {
+    interests.delete(id)
+  }
+  if (interests.size) {
+    interestByPage.set(page, interests)
+  } else {
+    interestByPage.delete(page)
+  }
   const owners = deliveryInterestRendererPtys.get(id) ?? new Set<string>()
-  if (interested) owners.add(page)
-  else owners.delete(page)
-  if (owners.size) deliveryInterestRendererPtys.set(id, owners)
-  else deliveryInterestRendererPtys.delete(id)
+  if (interested) {
+    owners.add(page)
+  } else {
+    owners.delete(page)
+  }
+  if (owners.size) {
+    deliveryInterestRendererPtys.set(id, owners)
+  } else {
+    deliveryInterestRendererPtys.delete(id)
+  }
 }
 
 export function shouldDropRendererPtyData(
