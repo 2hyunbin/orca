@@ -550,6 +550,29 @@ describe('moving the host again after its server was stopped', () => {
     expect(plan.added.map((row) => row.id)).toEqual(['added-later'])
   })
 
+  it('keeps the server’s empty nested groups when their parent was renamed while managed', async () => {
+    const parent = store.createProjectGroup({
+      name: 'Parent',
+      parentPath: '/root',
+      connectionId: TARGET.id,
+      createdFrom: 'manual'
+    })
+    const child = store.createProjectGroup({
+      name: 'Child',
+      parentPath: '/root',
+      parentGroupId: parent.id,
+      connectionId: TARGET.id,
+      createdFrom: 'manual'
+    })
+    await convert()
+    server.updateProjectGroup(parent.id, { name: 'Parent renamed on the server' })
+    stopServer()
+
+    await expect(convert()).resolves.toMatchObject({ outcome: 'converted' })
+    expect(groupName(server, parent.id)).toBe('Parent renamed on the server')
+    expect(groupName(server, child.id)).toBe('Child')
+  })
+
   it('does not link a same-id group the server keeps for another host', async () => {
     const group = store.createProjectGroup({
       name: 'Empty',
@@ -591,6 +614,18 @@ describe('moving the host again after its server was stopped', () => {
     })
     await expect(runDelta()).resolves.toMatchObject({ outcome: 'moved' })
     expect(server.getFolderWorkspace(folder.id)?.projectGroupId).toBe(groupId)
+    expect(groupName(server, groupId)).toBe('Renamed on the server')
+  })
+
+  // Opus repro: a group the first move imported, changed on the server, was re-exported too.
+  it('moves a later row into a group the first move imported and the server changed', async () => {
+    const groupId = groupDesktopRepo()
+    await convert()
+    server.updateProjectGroup(groupId, { name: 'Renamed on the server', isCollapsed: true })
+    store.addRepo(repo('added-later', '/root/later'))
+    store.moveProjectToGroup('added-later', groupId)
+    await expect(runDelta()).resolves.toMatchObject({ outcome: 'moved' })
+    expect(server.getRepo('added-later')?.projectGroupId).toBe(groupId)
     expect(groupName(server, groupId)).toBe('Renamed on the server')
   })
 

@@ -60,8 +60,9 @@ export function orcadDeltaSourceStore(
   const linked = moved.flatMap((cutover) => cutover.linkedRepositoryIds ?? [])
   const linkedGroups = moved.flatMap((cutover) => cutover.linkedProjectGroupIds ?? [])
   const linkedFolders = moved.flatMap((cutover) => cutover.linkedFolderWorkspaceIds ?? [])
-  // The server's record of a linked group wins, as at the relink: a new row in it references the
+  // The server's record of a group it got from a move or link wins: a new row in it references the
   // server's group, since this desktop's retained copy may be stale and would conflict.
+  const serverGroups = new Set([...ids.projectGroupIds, ...linkedGroups])
   return orcadSourceStoreWithout(
     store,
     target,
@@ -69,10 +70,10 @@ export function orcadDeltaSourceStore(
       ...ids,
       repositoryIds: new Set([...ids.repositoryIds, ...linked]),
       folderWorkspaceIds: new Set([...ids.folderWorkspaceIds, ...linkedFolders]),
-      projectGroupIds: new Set([...ids.projectGroupIds, ...linkedGroups])
+      projectGroupIds: serverGroups
     },
     moved.at(-1)?.destinationEnvironmentId,
-    new Set(linkedGroups)
+    serverGroups
   )
 }
 
