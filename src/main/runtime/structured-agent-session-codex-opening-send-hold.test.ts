@@ -558,13 +558,11 @@ describe('a send whose turn Codex answered and never opened', () => {
 
 // Codex reports the thread idle ahead of the `turn/completed` of a turn it opened, as the fake does.
 describe('a send in a turn Codex opened, when Codex reports the thread idle', () => {
-  // The turn an answer named is saved apart and settles nothing.
   function lateSettlements(clientMessageId: string) {
     return vi
       .mocked(host.settleLateDispatch)
       .mock.calls.map(([settlement]) => settlement)
       .filter((settlement) => settlement.clientMessageId === clientMessageId)
-      .filter((settlement) => !('sendAnswered' in settlement))
       .map((settlement) => ('state' in settlement ? settlement.state : 'accepted'))
   }
 

@@ -16,7 +16,6 @@ import {
 import { CodexBackgroundTaskTracker, codexChildWorkSink } from './codex-background-task-tracker'
 import { CodexSubagentExecutions } from './codex-subagent-executions'
 import { createCodexDispatchEchoes } from './codex-structured-dispatch-echo'
-import { createCodexDispatchObservations } from './codex-structured-dispatch-observations'
 import { createCodexSessionJournalTranslator } from './codex-structured-session-journal'
 import { openCodexAppServerConnection } from './codex-app-server-connection'
 import {
@@ -79,13 +78,6 @@ export async function acquireCodexStructuredSession(input: {
       : null
   const subagentExecutions = new CodexSubagentExecutions()
   const dispatchEchoes = createCodexDispatchEchoes(() => deps.onHeldSendsChanged?.({ sessionId }))
-  const observations = createCodexDispatchObservations({
-    sessionId,
-    fence: acquireInput.fence,
-    journal: () => acquireInput.events?.journalItems?.() ?? null,
-    held: () => dispatchEchoes.heldSends(),
-    ...(deps.onDispatchSettledLate ? { save: deps.onDispatchSettledLate } : {})
-  })
   let account: AgentSessionAccountKind | undefined
   // Minted before the translator, which names this connection's frame rows with it.
   const acquisitionGeneration = mintCodexAcquisitionGeneration(deps)
@@ -94,10 +86,11 @@ export async function acquireCodexStructuredSession(input: {
     account: () => account,
     sessionId,
     acquisitionId: acquisitionGeneration,
+    fence: acquireInput.fence,
+    journal: () => acquireInput.events?.journalItems?.() ?? null,
     deps,
     primaryThreadId: () => primaryThreadId,
     dispatchEchoes,
-    observations,
     subagentExecutions,
     prompts: acquisition.prompts
   })
@@ -249,7 +242,6 @@ export async function acquireCodexStructuredSession(input: {
       reportedOptions: reportedCodexThreadOptions(opened),
       ...(catalogAccess ? { catalogAccess } : {}),
       dispatchEchoes,
-      observations,
       translator,
       backgroundTasks: new CodexBackgroundTaskTracker(opened.threadId, subagentExecutions, sink),
       forceCloseUnexpected: (reason) =>

@@ -145,8 +145,7 @@ describe('a Codex turn ends once, on its completion', () => {
       startedAt: 1_000,
       requestedAt: 900,
       completedAt: 2_100,
-      durationMs: 1_100,
-      endedBy: 'provider'
+      durationMs: 1_100
     })
     expect(
       tap.rows.filter((row) => row.body.kind === 'status' && row.body.tone === 'error')
@@ -182,8 +181,7 @@ describe('a Codex turn ends once, on its completion', () => {
         userItemId: agentJournalSubmissionKey(CLIENT_MESSAGE_ID),
         startedAt: 1_000,
         requestedAt: 900,
-        completedAt: 2_050,
-        endedBy: 'host'
+        completedAt: 2_050
       }
     ])
     expect(
@@ -269,8 +267,7 @@ describe('a Codex turn ends once, on its completion', () => {
         userItemId: `codex:${THREAD_ID}:${TURN_ID}:0`,
         startedAt: 1_000,
         completedAt: 4_500,
-        durationMs: 3_250,
-        endedBy: 'provider'
+        durationMs: 3_250
       }
     ])
   })

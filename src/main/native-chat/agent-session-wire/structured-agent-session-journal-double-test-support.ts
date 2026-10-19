@@ -56,17 +56,11 @@ export function withJournalQueueMembers<T extends AppendingDouble>(
           continue
         }
         const { resolve, ...batch } = step.batch
-        // A double holds no submissions, so the real appender would save none of `observed`.
-        const { mutations, dispatches } = resolve()
-        const writes = mutations.length > 0 || dispatches.length > 0
-        if (writes) {
-          await journal.appendLifecycleBatch?.({
-            ...batch,
-            mutations,
-            ...(dispatches.length > 0 ? { dispatches } : {})
-          })
+        const mutations = resolve()
+        if (mutations.length > 0) {
+          await journal.appendLifecycleBatch?.({ ...batch, mutations })
         }
-        wrote.push(writes)
+        wrote.push(mutations.length > 0)
       }
       return wrote
     }

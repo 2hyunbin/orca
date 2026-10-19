@@ -119,8 +119,6 @@ export function settleCodexJournalTurn(input: {
   attributionFor: CodexRowAttribution
   /** The end of a conversation command the turn carried, which settles with it. */
   commandEnd?: readonly JournalLifecycleIdentityMutationInput[]
-  /** Observations not yet saved, saved ahead of the turn's end (`appendCodexLifecycleMutations`). */
-  observed?: Parameters<typeof appendCodexLifecycleMutations>[3]
 }): StructuredAgentSessionSinkAdmission {
   const mutations: JournalLifecycleIdentityMutationInput[] = []
   const activeItemsToForget: { key: string; threadId: string; itemId: string }[] = []
@@ -165,8 +163,7 @@ export function settleCodexJournalTurn(input: {
   const admission = appendCodexLifecycleMutations(
     input.sink,
     `turn-completed:${input.sessionId}:${input.threadId}:${input.turnId}`,
-    mutations,
-    input.observed
+    mutations
   )
   if (!admission.accepted) {
     return admission

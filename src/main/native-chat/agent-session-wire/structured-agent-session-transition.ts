@@ -14,7 +14,6 @@ import type {
 } from '../../../shared/agent-session-journal-types'
 import type { JournalLifecycleMutationInput } from '../agent-session-journal/journal-row-builders'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
-import type { JournalObservedSend } from '../agent-session-journal/journal-store-contracts'
 import type { JournalStep } from '../agent-session-journal/journal-step-writer'
 import { estimateStructuredAgentSessionItemBytes } from './structured-agent-session-event-sink-estimate'
 import type {
@@ -25,12 +24,12 @@ import type { StructuredAgentSessionSinkQueue } from './structured-agent-session
 import { structuredAgentSessionJournalAppendOptions } from './structured-agent-session-journal-append-options'
 
 /** What a transition step reads: rows by key, every row, and the turns they joined; and, from a
- *  bound journal, a send's submission and saved answer. */
+ *  bound journal, a send's submission. */
 export type StructuredAgentSessionTransitionJournal = Pick<
   AgentSessionJournal,
   'epoch' | 'visitItems' | 'itemBody' | 'item' | 'visitItemsWithLinkage'
 > &
-  Partial<Pick<AgentSessionJournal, 'submission' | 'sendAnswer'>>
+  Partial<Pick<AgentSessionJournal, 'submission'>>
 
 export type StructuredAgentSessionTransitionStep =
   | {
@@ -55,9 +54,6 @@ export type StructuredAgentSessionTransitionStep =
       resolve: (
         journal: StructuredAgentSessionTransitionJournal
       ) => readonly JournalLifecycleMutationInput[]
-      /** Snapshotted at admission; whatever the fold still lacks of them is saved ahead of the
-       *  mutations, in the same transaction. */
-      observed?: readonly JournalObservedSend[]
     }
 
 export type StructuredAgentSessionTransition = {
@@ -127,11 +123,7 @@ function transitionAppend(
                     fence,
                     ownerFence: fence,
                     recovered: step.recovered,
-                    resolve: () => ({
-                      mutations: step.resolve(journal),
-                      dispatches: [],
-                      ...(step.observed ? { observed: step.observed } : {})
-                    })
+                    resolve: () => step.resolve(journal)
                   }
                 }
           )

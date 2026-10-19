@@ -9,10 +9,7 @@ import {
 } from '../../../shared/agent-session-failure'
 import { PROVIDER_EXIT_ROW_PREFIX } from '../../../shared/agent-session-stop-row-identity'
 import { structuredAgentSessionFailureWordsContext } from './structured-agent-session-send-preparation'
-import type {
-  StructuredAgentSessionEndedEvent,
-  StructuredAgentSessionLifecycleEvent
-} from './structured-agent-session-adapter'
+import type { StructuredAgentSessionEndedEvent } from './structured-agent-session-adapter'
 import type {
   StructuredAgentSessionHostSession,
   StructuredAgentSessionProviderChild
@@ -117,21 +114,6 @@ export function settleStructuredAgentSessionChildExit<
       ...(event.startupUnanswered ? { startupUnanswered: event.startupUnanswered } : {})
     })
   })
-}
-
-/** Leaves what an exit carried on the child it names as the event arrives, ahead of any queue, so
- *  whichever path ends that child (its close, a sink failure's stop, this report) saves it. */
-export function noteStructuredAgentSessionChildExit(
-  sessions: ReadonlyMap<string, Pick<StructuredAgentSessionHostSession, 'child'>>,
-  event: StructuredAgentSessionLifecycleEvent
-): void {
-  if (event.type !== 'ended' || !event.observedSends) {
-    return
-  }
-  const child = sessions.get(event.sessionId)?.child
-  if (child?.fence === event.fence && child.generation === event.acquisitionGeneration) {
-    child.observedSends = event.observedSends
-  }
 }
 
 /** Ends the record of a child whose exit this host saw or proved; a no-op once it has left. */
@@ -279,8 +261,7 @@ export async function endExitedStructuredAgentSessionChildUnderSerialize<
         journal: session.journal,
         exit: settlement,
         // Ended whether or not the release lands: the host saw the root go.
-        ended: { fence: child.fence, rootGone: true },
-        ...(child.observedSends ? { observed: child.observedSends } : {})
+        ended: { fence: child.fence, rootGone: true }
       })
       if (!settled.ok) {
         logExitFailure(context, sessionId, 'exit-settlement', settled.error)

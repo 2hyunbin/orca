@@ -18,11 +18,6 @@ import {
   type CodexJournalActiveTurns
 } from './codex-structured-journal-translation-turn-state'
 import type { CodexDispatchRequestOrigin } from './codex-structured-dispatch-echo'
-import type { CodexDispatchObservations } from './codex-structured-dispatch-observations'
-import {
-  boundInlineText,
-  DEFAULT_JOURNAL_PAYLOAD_LIMITS
-} from '../native-chat/agent-session-journal/journal-payload-bounds'
 import {
   codexTurnLifecycleState,
   codexTurnOutcome,
@@ -48,21 +43,17 @@ type TurnBoundaryEvent = {
   dispatchSequenceAtReceipt?: number
 }
 
-/** Who ended the turn travels with the end, so a host inference never reads as Codex's own. */
-type TurnTerminal = Pick<AgentJournalTurnLifecycle, 'receiptsComplete' | 'blockedInput'> & {
+type TurnTerminal = {
   state: 'completed' | 'interrupted'
   completedAt: number
   /** Null when Codex named no verdict, or when the host inferred this end itself. */
   outcome?: AgentJournalTurnOutcome | null
   durationMs?: number | null
-  endedBy: 'provider' | 'host'
 }
 
 /** Opens and settles the durable lifecycle row for each primary-thread turn. */
 export class CodexJournalTurnBoundaries {
   private readonly recentTurns = new CodexJournalRecentTurns()
-  /** Why a prompt hook blocked input in a running primary turn (`blockedInputKey`). */
-  private readonly blockedInputs = new Map<string, string>()
 
   constructor(
     private readonly deps: {
@@ -76,7 +67,6 @@ export class CodexJournalTurnBoundaries {
       resetActivity: (threadId: string) => void
       attributionFor: CodexRowAttribution
       commands: CodexJournalCommandTurn
-      observations?: Pick<CodexDispatchObservations, 'certifies' | 'retained' | 'prune' | 'lose'>
       now?: () => number
     }
   ) {}
@@ -169,8 +159,7 @@ export class CodexJournalTurnBoundaries {
     if (!suppressionAdmission.accepted) {
       return suppressionAdmission
     }
-    const namedTurnId = readCodexTurnId(event.params)
-    const turnId = namedTurnId ?? this.deps.activeTurns.current(event.threadId)
+    const turnId = readCodexTurnId(event.params) ?? this.deps.activeTurns.current(event.threadId)
     if (!turnId) {
       return CODEX_JOURNAL_ADMITTED
     }
@@ -201,16 +190,7 @@ export class CodexJournalTurnBoundaries {
             state: codexTurnLifecycleState(status),
             outcome: codexTurnOutcome(status),
             completedAt,
-            durationMs: readCodexTurnDurationMs(event.params),
-            endedBy: 'provider',
-            // Only a named, recognized end of a start this child saw, with its capture whole.
-            ...(namedTurnId !== null &&
-            codexTurnOutcome(status) !== null &&
-            this.deps.activeTurns.has(event.threadId, turnId) &&
-            this.deps.observations?.certifies()
-              ? { receiptsComplete: true as const }
-              : {}),
-            ...this.blockedInput(event.threadId, turnId)
+            durationMs: readCodexTurnDurationMs(event.params)
           })
         : null
     const requestOrigin = this.deps.activeTurns.requestOrigin(event.threadId, turnId)
@@ -231,16 +211,7 @@ export class CodexJournalTurnBoundaries {
       pendingPrompts: this.deps.pendingPrompts,
       ...(this.deps.clearPromptTurn ? { clearPromptTurn: this.deps.clearPromptTurn } : {}),
       attributionFor: this.deps.attributionFor,
-      commandEnd,
-      ...(turnLifecycle && this.deps.observations
-        ? {
-            observed: {
-              sends: this.deps.observations.retained(),
-              saved: this.deps.observations.prune,
-              lose: this.deps.observations.lose
-            }
-          }
-        : {})
+      commandEnd
     })
     if (admission.accepted) {
       if (turnLifecycle) {
@@ -252,7 +223,6 @@ export class CodexJournalTurnBoundaries {
         )
       }
       this.deps.items.ordinals.forgetTurn(event.threadId, turnId)
-      this.blockedInputs.delete(blockedInputKey(event.threadId, turnId))
       this.deps.activeTurns.forget(event.threadId, turnId)
       this.deps.commands.settled(turnId)
       this.deps.resetActivity(event.threadId)
@@ -274,39 +244,8 @@ export class CodexJournalTurnBoundaries {
       ...(startedAt !== undefined ? { startedAt } : {}),
       ...(requestOrigin !== undefined ? { requestedAt: requestOrigin.requestedAt } : {}),
       completedAt: terminal.completedAt,
-      ...(terminal.durationMs != null ? { durationMs: terminal.durationMs } : {}),
-      endedBy: terminal.endedBy,
-      ...(terminal.receiptsComplete ? { receiptsComplete: true } : {}),
-      ...(terminal.blockedInput ? { blockedInput: terminal.blockedInput } : {})
+      ...(terminal.durationMs != null ? { durationMs: terminal.durationMs } : {})
     }
-  }
-
-  /** A `hook/completed` whose prompt hook blocked input in the running primary turn it names. */
-  observeHook(event: TurnBoundaryEvent): void {
-    const run = readRecord(readRecord(event.params).run)
-    const turnId = readCodexTurnId(event.params)
-    if (
-      !turnId ||
-      (run.status !== 'blocked' && run.status !== 'stopped') ||
-      run.eventName !== 'userPromptSubmit' ||
-      event.threadId !== this.deps.primaryThreadId() ||
-      !this.deps.activeTurns.has(event.threadId, turnId)
-    ) {
-      return
-    }
-    const entries = Array.isArray(run.entries) ? run.entries.map(readRecord) : []
-    // Codex drops the input for both a block (feedback entry) and a stop (stop entry).
-    const feedback = entries.find((entry) => entry.kind === 'feedback' || entry.kind === 'stop')
-    const reason = typeof feedback?.text === 'string' ? feedback.text : ''
-    this.blockedInputs.set(
-      blockedInputKey(event.threadId, turnId),
-      boundInlineText(reason, DEFAULT_JOURNAL_PAYLOAD_LIMITS).text
-    )
-  }
-
-  private blockedInput(threadId: string, turnId: string): Pick<TurnTerminal, 'blockedInput'> {
-    const reason = this.blockedInputs.get(blockedInputKey(threadId, turnId))
-    return reason === undefined ? {} : { blockedInput: { reason } }
   }
 
   /** Whether this translator writes the turn's record: a primary turn no command claimed. */
@@ -317,15 +256,10 @@ export class CodexJournalTurnBoundaries {
   clear(): void {
     this.deps.activeTurns.clear()
     this.recentTurns.clear()
-    this.blockedInputs.clear()
     this.deps.commands.clear()
   }
 
   private receiptTime(event: TurnBoundaryEvent): number {
     return event.observedAt ?? this.deps.now?.() ?? Date.now()
   }
-}
-
-function blockedInputKey(threadId: string, turnId: string): string {
-  return JSON.stringify([threadId, turnId])
 }

@@ -13,7 +13,6 @@ import type { AgentSessionSpawnTokenScan } from '../../runtime/agent-session-spa
 import type { JournalHostDatabase } from '../agent-session-journal/journal-host-database'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import type { DeferredStructuredAgentSessionEventSink } from './structured-agent-session-event-sink'
-import type { JournalObservedSend } from '../agent-session-journal/journal-store-contracts'
 import type { JournalStopSettle } from '../agent-session-journal/queued-message-pause'
 import type {
   StructuredAgentSessionAdapter,
@@ -83,8 +82,6 @@ export type StructuredAgentSessionProviderChild = StructuredAgentSessionProvider
   readonly heldSends?: () => ReadonlySet<string> | undefined
   readonly exitObservation?: DeferredStructuredAgentSessionEventSink['exitObservation']
   close?: StructuredAgentSessionChildClose
-  /** What its exit carried of sends not yet saved (`noteStructuredAgentSessionChildExit`). */
-  observedSends?: readonly JournalObservedSend[]
 }
 
 /** What ending a child established about its provider root. A stop's comes only from

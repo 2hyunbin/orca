@@ -35,7 +35,6 @@ import type {
   AgentSessionProcessIdentity
 } from '../../../shared/agent-session-record'
 import type { StructuredAgentSessionAtRestCommands } from './structured-agent-session-at-rest-commands'
-import type { JournalObservedSend } from '../agent-session-journal/journal-store-contracts'
 import type {
   AgentSessionOptionsResult,
   AgentSessionSlashCommand
@@ -212,8 +211,6 @@ export type StructuredAgentSessionEndedEvent = {
   startupUnproven?: true
   /** The provider ended before it answered its start, so it ran nothing it was handed. */
   startupUnanswered?: true
-  /** What the provider said about sends that was not yet saved: the host's exit settlement saves it. */
-  observedSends?: readonly JournalObservedSend[]
 }
 
 /** The child a publish-first acquire handed over has now proven its start: startup facts applied.

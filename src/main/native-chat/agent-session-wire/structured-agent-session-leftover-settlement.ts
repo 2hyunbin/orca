@@ -20,7 +20,6 @@ import {
   type StaleStructuredAgentSessionStateJournal
 } from './structured-agent-session-stale-state-settlement'
 import type { DeadGenerationJournal } from './structured-agent-session-unfinished-work'
-import type { JournalObservedSend } from '../agent-session-journal/journal-store-contracts'
 import { STALE_SESSION_ROW_PREFIX } from '../../../shared/agent-session-stop-row-identity'
 import { structuredAgentSessionFailureWordsContext } from './structured-agent-session-send-preparation'
 import {
@@ -46,9 +45,6 @@ export type StructuredAgentSessionLeftoverSettlementInput = {
   /** This host's sight of a child's root exit, which ends its generation even when the release
    *  write failed (`StructuredAgentSessionHostSession.lastEndedChild`). */
   ended?: StructuredAgentSessionWorkEvidence['ended']
-  /** What the exited child's provider said about sends and had not saved. Its own input, not the
-   *  exit's account: saved at the lease's fence even once a later generation is live. */
-  observed?: readonly JournalObservedSend[]
 }
 
 export type StructuredAgentSessionLeftoverSettlement =
@@ -109,10 +105,8 @@ export async function settleStructuredAgentSessionLeftovers(
           ...exited.dispatches,
           ...stale.dispatches.filter((entry) => !settledByExit.has(entry.clientMessageId))
         ]
-        // Saved first: a receipt here supersedes the doubt either plan gives the same send.
-        const observed = input.observed ?? []
-        planned = mutations.length + dispatches.length + observed.length
-        return { mutations, dispatches, observed }
+        planned = mutations.length + dispatches.length
+        return { mutations, dispatches }
       }
     })
     return { ok: true, planned }

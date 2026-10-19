@@ -16,12 +16,7 @@ export function dropUnusableRowAnnotations(record: Record<string, unknown>): voi
       }
     }
   }
-  dropUnusableTurnAnnotations(record)
-  // The mark's row stays a known tombstone; only the answer it cannot read goes.
-  const answered = record.kind === 'tombstone' ? record.sendAnswered : undefined
-  if (answered !== undefined && !(isPlainObject(answered) && isTurnItemId(answered.turnItemId))) {
-    delete record.sendAnswered
-  }
+  dropUnusableContextUsage(record)
 }
 
 /** Linkage ids this build cannot trust, removed from a row it still keeps.
@@ -73,10 +68,10 @@ function dropUnusableOwnerFence(record: Record<string, unknown>): void {
   }
 }
 
-/** Context facts and end provenance this build cannot read, removed from the turn row that carries
+/** Context facts this build cannot read, removed from the turn row that carries
  *  them. Same reasoning as linkage: they are an annotation on the turn, and
  *  rejecting the row for them would truncate the journal from that row on. */
-function dropUnusableTurnAnnotations(record: Record<string, unknown>): void {
+function dropUnusableContextUsage(record: Record<string, unknown>): void {
   const bodies = [
     record.kind === 'item' ? record.body : undefined,
     ...(record.kind === 'lifecycle-batch' && Array.isArray(record.mutations)
@@ -84,31 +79,15 @@ function dropUnusableTurnAnnotations(record: Record<string, unknown>): void {
       : [])
   ]
   for (const body of bodies) {
-    if (!isPlainObject(body) || body.kind !== 'turn') {
-      continue
-    }
     if (
+      isPlainObject(body) &&
+      body.kind === 'turn' &&
       body.contextUsage !== undefined &&
       !isAdmissibleAgentSessionContextUsage(body.contextUsage)
     ) {
       delete body.contextUsage
     }
-    // An end's provenance this build cannot read is unknown, as on a row from before it.
-    if (body.endedBy !== 'provider' && body.endedBy !== 'host') {
-      delete body.endedBy
-    }
-    if (body.receiptsComplete !== true) {
-      delete body.receiptsComplete
-    }
-    const blocked = body.blockedInput
-    if (blocked !== undefined && !(isPlainObject(blocked) && typeof blocked.reason === 'string')) {
-      delete body.blockedInput
-    }
   }
-}
-
-function isTurnItemId(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

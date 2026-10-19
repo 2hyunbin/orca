@@ -12,7 +12,6 @@ import {
 } from './codex-app-server-connection'
 import { isCodexAppServerUnsupportedError } from './codex-app-server-session'
 import type { CodexDispatchEchoes } from './codex-structured-dispatch-echo'
-import type { CodexDispatchObservations } from './codex-structured-dispatch-observations'
 import { readCodexTurnId } from './codex-structured-thread-facts'
 import {
   codexRunningOrOpeningTurn,
@@ -51,7 +50,6 @@ export type CodexTurnHost = {
   options: Map<string, string>
   reportedOptions?: { model?: string }
   dispatchEchoes: CodexDispatchEchoes
-  observations?: Pick<CodexDispatchObservations, 'answer'>
   activeTurnIds?: ReadonlySet<string>
   /** Running turns whose interrupt Codex already answered: aborted, so never steered. */
   abortedTurnIds?: ReadonlySet<string>
@@ -206,10 +204,6 @@ export async function dispatchCodexTurn(
   }
   if (!answer) {
     return { state: 'rejected', ...codexDispatchRejection(agentSessionFailureFact('queueFull')) }
-  }
-  // The turn Codex chose, kept apart from the receipt and before an ended turn can settle the send.
-  if (answer.turnId) {
-    session.observations?.answer(input.clientMessageId, answer.turnId)
   }
   // An answer read after the turn it names already ended is settled by that end.
   if (!answer.turnId) {

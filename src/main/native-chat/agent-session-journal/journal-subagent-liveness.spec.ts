@@ -264,12 +264,7 @@ export function registerJournalSubagentLivenessTests(): void {
       await journal.appendSteps([
         {
           kind: 'settlement',
-          batch: {
-            settlementId: 'composed:0',
-            fence: 0,
-            recovered: true,
-            resolve: () => ({ mutations: resolve(), dispatches: [] })
-          }
+          batch: { settlementId: 'composed:0', fence: 0, recovered: true, resolve }
         }
       ])
       const settled = journal.snapshot()
@@ -291,12 +286,7 @@ export function registerJournalSubagentLivenessTests(): void {
       await journal.appendSteps([
         {
           kind: 'settlement',
-          batch: {
-            settlementId: 'composed:0',
-            fence: 0,
-            recovered: true,
-            resolve: () => ({ mutations: resolve(), dispatches: [] })
-          }
+          batch: { settlementId: 'composed:0', fence: 0, recovered: true, resolve }
         }
       ])
       expect(journal.snapshot()).toEqual(settled)

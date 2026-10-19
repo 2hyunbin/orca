@@ -393,10 +393,7 @@ describe('resolved lifecycle batches', () => {
           batch: {
             settlementId: 'twice',
             fence: 1,
-            resolve: () => ({
-              mutations: [failedTool(identity('once')), failedTool(twice), failedTool(twice)],
-              dispatches: []
-            })
+            resolve: () => [failedTool(identity('once')), failedTool(twice), failedTool(twice)]
           }
         }
       ])

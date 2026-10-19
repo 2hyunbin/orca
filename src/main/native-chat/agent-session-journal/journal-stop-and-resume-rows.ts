@@ -1,11 +1,8 @@
-// The rows a Stop's event, a person's Resume, a reopen that found waiting cards and a provider's
-// answer to a send append: tombstones of ids no item ever takes, each carrying its record as an
-// extra key (`journal-row-schema.ts` says why not a row kind).
+// The rows a Stop's event, a person's Resume and a reopen that found waiting cards append:
+// tombstones of ids no item ever takes, each carrying its record as an extra key
+// (`journal-row-schema.ts` says why not a row kind).
 
-import {
-  agentJournalItemKey,
-  agentJournalSendAnsweredKey
-} from '../../../shared/agent-session-journal-item-key'
+import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 import type { JournalReducerState } from './journal-reducer'
 import { journalRowBase } from './journal-row-builders'
 import type { JournalStopEvent, JournalTombstoneRow } from './journal-row-schema'
@@ -69,19 +66,6 @@ export function buildJournalQueueReopenRow(
     revision: 1,
     queueReopen: true,
     ...(input.since !== undefined ? { queueReopenSince: input.since } : {}),
-    ...journalRowBase(input.state.epoch, input.seq, input.fence, input.ts)
-  }
-}
-
-/** The provider answered this send into the turn keyed `turnItemId` (`JournalTombstoneRow`). */
-export function buildJournalSendAnsweredRow(
-  input: RowPlace & { clientMessageId: string; turnItemId: string }
-): JournalTombstoneRow {
-  return {
-    kind: 'tombstone',
-    itemId: agentJournalSendAnsweredKey(input.clientMessageId),
-    revision: 1,
-    sendAnswered: { turnItemId: input.turnItemId },
     ...journalRowBase(input.state.epoch, input.seq, input.fence, input.ts)
   }
 }

@@ -346,7 +346,6 @@ describe('already-wedged profiles become usable on load', () => {
         turnId: 'turn-1',
         startedAt: NOW - 5_000,
         recovered: true,
-        endedBy: 'host',
         ...verdict
       })
       expect(activeStructuredAgentSessionTurnId(restoredJournal().snapshot().items)).toBe(null)
@@ -394,8 +393,7 @@ describe('already-wedged profiles become usable on load', () => {
       state: 'interrupted',
       startedAt: NOW - 5_000,
       completedAt: SEEDED_TURN_STARTED_AT,
-      recovered: true,
-      endedBy: 'host'
+      recovered: true
     })
     expect(store.getRecord(SESSION)?.lease).toMatchObject({
       claimStatus: 'live',
@@ -433,8 +431,7 @@ describe('already-wedged profiles become usable on load', () => {
       state: 'interrupted',
       startedAt: NOW - 5_000,
       completedAt: NOW - 1_000,
-      recovered: true,
-      endedBy: 'host'
+      recovered: true
     })
     expect(store.getRecord(SESSION)?.lease).toMatchObject({
       claimStatus: 'live',
@@ -490,8 +487,7 @@ describe('already-wedged profiles become usable on load', () => {
         state: 'interrupted',
         startedAt: NOW - 5_000,
         completedAt: SEEDED_TURN_STARTED_AT,
-        recovered: true,
-        endedBy: 'host'
+        recovered: true
       })
     }
   )
@@ -573,8 +569,7 @@ describe('already-wedged profiles become usable on load', () => {
       state: 'interrupted',
       startedAt: NOW - 5_000,
       completedAt: NOW - 5_000,
-      recovered: true,
-      endedBy: 'host'
+      recovered: true
     })
     expect(
       restoredJournal()

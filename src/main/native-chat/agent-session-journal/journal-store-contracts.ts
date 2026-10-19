@@ -99,31 +99,16 @@ export type JournalLifecycleBatchInput = {
   rejectsQueued?: AgentJournalDispatchRejection
 }
 
-/** What a provider said about one send, kept until saved: its exact echo, saved as `accepted` by
- *  that identity, and the turn its answer named (`JournalTombstoneRow.sendAnswered`). Read in
- *  journal epoch `epoch`; a later epoch saves none of it. */
-export type JournalObservedSend = {
-  clientMessageId: string
-  epoch: string
-  providerIdentity?: AgentJournalItemIdentity
-  answeredTurnItemId?: string
-}
-
-/** One batch's rows as planned at its own turn in the queue, in one transaction: observations the
- *  fold still lacks, then verdicts for sends no receipt here accepts, then mutations. */
-export type JournalResolvedLifecycleBatch = {
-  mutations: readonly JournalLifecycleMutationInput[]
-  dispatches: readonly ResolveDispatchInput[]
-  observed?: readonly JournalObservedSend[]
-}
-
 /** A lifecycle batch whose rows are chosen at its own turn in the write queue, so a write queued
  *  ahead of it (an answer, a Stop) is what it plans from. */
 export type JournalPlannedLifecycleBatchInput = Pick<
   JournalLifecycleBatchInput,
   'settlementId' | 'fence' | 'recovered'
 > & {
-  plan: () => JournalResolvedLifecycleBatch
+  plan: () => {
+    mutations: readonly JournalLifecycleMutationInput[]
+    dispatches: readonly ResolveDispatchInput[]
+  }
 }
 
 export type JournalResolvedLifecycleBatchInput = Omit<
@@ -131,7 +116,7 @@ export type JournalResolvedLifecycleBatchInput = Omit<
   'mutations' | 'rejectsQueued' | 'dispatches'
 > & {
   /** Read from the fold with every earlier write landed; may return none. */
-  resolve: () => JournalResolvedLifecycleBatch
+  resolve: () => readonly JournalLifecycleMutationInput[]
 }
 
 export type JournalSubmissionInput = {

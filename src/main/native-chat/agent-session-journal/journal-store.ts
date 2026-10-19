@@ -264,8 +264,6 @@ export class AgentSessionJournal {
   submissions = (): AgentJournalSubmission[] => [...this.state.submissions.values()]
 
   submission = (clientMessageId: string) => this.state.submissions.get(clientMessageId)
-  /** The turn item the provider answered this send into, once saved (`journal-observed-sends.ts`). */
-  sendAnswer = (clientMessageId: string) => this.state.sendAnswers.get(clientMessageId)
 
   pendingSubmissions = (): AgentJournalSubmission[] =>
     this.submissions().filter((entry) => entry.dispatchState === 'pending')

@@ -75,7 +75,6 @@ export function createCodexJournalTranslator(
     resetActivity,
     attributionFor,
     commands,
-    ...(deps.observations ? { observations: deps.observations } : {}),
     ...(deps.now ? { now: deps.now } : {})
   })
   const routeThreadItem = createCodexThreadItemRouter({
@@ -168,8 +167,7 @@ export function createCodexJournalTranslator(
             turnBoundaries.ownsRecord(threadId, turnId)
               ? turnBoundaries.settled(threadId, turnId, {
                   state: 'interrupted',
-                  completedAt: event.observedAt ?? deps.now?.() ?? Date.now(),
-                  endedBy: 'host'
+                  completedAt: event.observedAt ?? deps.now?.() ?? Date.now()
                 })
               : null,
           attributionFor,
@@ -256,9 +254,6 @@ export function createCodexJournalTranslator(
             classification: 'error-surface'
           })
         )
-      }
-      if (event.method === 'hook/completed') {
-        turnBoundaries.observeHook(event)
       }
       // A turn-ending `error` is a row inside the turn it names; the failed
       // `turn/completed` Codex sends after it is that turn's end. The thread

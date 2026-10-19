@@ -1,6 +1,5 @@
 // What the runtime does when a provider settles a dispatch after the fact. It runs off the request
-// that caused it, so its failure has nobody to return to and is logged instead. A late settlement's
-// promise settles once its write landed or failed, so a provider can re-check what it kept.
+// that caused it, so its failure has nobody to return to and is logged instead.
 
 import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
 import type { StructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
@@ -14,12 +13,12 @@ export function createStructuredAgentSessionDispatchFollowUps(input: {
 }): {
   onDispatchSettledLate: (
     settlement: Parameters<StructuredAgentSessionHost['settleLateDispatch']>[0]
-  ) => Promise<void> | undefined
+  ) => void
 } {
   const { logger } = input
   return {
-    onDispatchSettledLate: (settlement) =>
-      input
+    onDispatchSettledLate: (settlement) => {
+      void input
         .host()
         ?.settleLateDispatch(settlement)
         .catch((error: unknown) =>
@@ -29,5 +28,6 @@ export function createStructuredAgentSessionDispatchFollowUps(input: {
             error
           })
         )
+    }
   }
 }

@@ -14,10 +14,7 @@ import type {
 } from '../codex/codex-app-server-connection'
 import { codexTurnLifecycleFake } from '../codex/codex-turn-lifecycle-fake'
 import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
-import type {
-  AgentJournalItemBody,
-  AgentJournalSubmission
-} from '../../shared/agent-session-journal-types'
+import type { AgentJournalSubmission } from '../../shared/agent-session-journal-types'
 import type { AgentSessionSubscribeEvent } from '../../shared/agent-session-wire'
 import { hasUnansweredStructuredAgentSessionDispatch } from '../../shared/structured-agent-session-unanswered-dispatch'
 import {
@@ -40,20 +37,6 @@ import {
   loadTestJournal
 } from '../native-chat/agent-session-journal/journal-host-database-test-support'
 import type Database from '../sqlite/sync-database'
-import {
-  agentJournalItemKey,
-  agentJournalSendAnsweredKey
-} from '../../shared/agent-session-journal-item-key'
-import { codexTurnLifecycleIdentity } from '../codex/codex-structured-journal-translation-turns'
-
-// The retained-observation bound, shrunk by the loss case; the held-send bound keeps its own.
-const observationBound = vi.hoisted(() => ({ value: 256 }))
-vi.mock('../codex/codex-structured-dispatch-echo', async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  get MAX_CODEX_PENDING_DISPATCH_ECHOES() {
-    return observationBound.value
-  }
-}))
 
 const CALLER = { callerKey: 'codex-held-sends-test' }
 
@@ -63,9 +46,6 @@ let fence: number
 let handlers: CodexAppServerConnectionHandlers | undefined
 let answers: number
 let steers: number
-let closes: number
-/** Holds every `turn/steer` answer until it resolves. */
-let steerHold: Promise<void> | null
 let turns: ReturnType<typeof codexTurnLifecycleFake>
 let operations = 0
 const events: AgentSessionSubscribeEvent[] = []
@@ -125,9 +105,6 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-codex-held-sends-'))
   answers = 0
   steers = 0
-  closes = 0
-  steerHold = null
-  observationBound.value = 256
   events.length = 0
   turns = codexTurnLifecycleFake(
     THREAD,
@@ -151,18 +128,14 @@ beforeEach(async () => {
         }
         if (method === 'turn/steer') {
           steers += 1
-          const steered = turns.routes['turn/steer'](params)
-          return steerHold ? steerHold.then(() => steered) : steered
+          return turns.routes['turn/steer'](params)
         }
         return {}
       },
       notify: () => {},
       respond: () => {},
       respondWithError: () => {},
-      close: async () => {
-        closes += 1
-        return true
-      }
+      close: async () => true
     }
     return connection
   }
@@ -221,24 +194,6 @@ function failJournalWrites(fails: (rows: Record<string, unknown>[]) => boolean):
     return transaction.bind(this)(checked, streamed)
   })
 }
-
-/** A receipt saved on its own, with no turn row beside it. */
-function bareReceipt(rows: Record<string, unknown>[], clientMessageId: string): boolean {
-  return (
-    rows.some(
-      (row) =>
-        row.kind === 'dispatch' &&
-        row.state === 'accepted' &&
-        row.clientMessageId === clientMessageId
-    ) && !rows.some((row) => row.kind === 'item' || row.kind === 'lifecycle-batch')
-  )
-}
-
-function turnBody(items: Iterable<{ body: AgentJournalItemBody }>, turnId: string) {
-  return [...items].find((item) => item.body.kind === 'turn' && item.body.turnId === turnId)?.body
-}
-
-const TURN_ITEM_ID = agentJournalItemKey(codexTurnLifecycleIdentity(SESSION, 'turn-1'))
 
 describe('a Codex send whose turn completes without taking it', () => {
   it('allows /compact afterwards without returning or publishing an unconfirmed command', async () => {
@@ -361,121 +316,41 @@ describe('a Codex send whose turn completes without taking it', () => {
   })
 })
 
-describe('what Codex said about a send, saved whatever its own write did', () => {
-  it.each(['dies on its own', 'is closed by quitting Orca'])(
-    'saves a failed receipt with its turn end and a failed answer when Codex %s, by exact id',
-    async (exit) => {
-      const a = await send('the same words')
-      await vi.waitFor(() => expect(answers).toBe(1))
-      turns.start()
-      let releaseSteer = (): void => {}
-      steerHold = new Promise<void>((resolve) => {
-        releaseSteer = resolve
-      })
-      const b = await send('the same words')
-      await vi.waitFor(() => expect(steers).toBe(1))
-      const failed = { receipts: 0, marks: 0 }
-      failJournalWrites((rows) => {
-        if (bareReceipt(rows, b)) {
-          failed.receipts += 1
-          return true
-        }
-        const mark = rows.some((row) => row.itemId === agentJournalSendAnsweredKey(b))
-        if (mark && failed.marks === 0) {
-          failed.marks = 1
-          return true
-        }
-        return false
-      })
-
-      // One stdout read: B's first echo prunes its held entry, and the turn ends after both echoes.
-      const echo = {
-        threadId: THREAD,
-        turnId: 'turn-1',
-        item: { type: 'userMessage', id: 'item-b', clientId: b, content: [] }
-      }
-      handlers?.onNotification?.('item/started', echo)
-      handlers?.onNotification?.('item/completed', echo)
-      turns.end('completed')
-
-      await vi.waitFor(async () => expect((await rawSubmission(b)).dispatchState).toBe('accepted'))
-      expect(failed.receipts).toBeGreaterThan(0)
-      expect(closes).toBe(0)
-      expect(lastPublished(b)).toMatchObject({ dispatchState: 'accepted' })
-      expect(turnBody((await host.journalSnapshot(SESSION)).items, 'turn-1')).toMatchObject({
-        endedBy: 'provider',
-        receiptsComplete: true
-      })
-
-      // B's steer is answered after its turn ended, and that mark's first save fails.
-      releaseSteer()
-      await vi.waitFor(() => expect(failed.marks).toBe(1))
-      if (exit === 'dies on its own') {
-        handlers?.onExit?.(new Error('codex exited'))
-        await vi.waitFor(async () =>
-          expect((await rawSubmission(a)).dispatchState).not.toBe('pending')
-        )
-      }
-      // A quit's close ends the child itself, before Codex's own report of that exit is settled.
-      await stopStructuredAgentSessionRuntime()
-
-      const reopened = loadTestJournal(root, SESSION)?.state
-      expect(reopened?.submissions.get(b)).toMatchObject({
-        dispatchState: 'accepted',
-        providerItemId: expect.stringMatching(/^codex:/)
-      })
-      expect(reopened?.submissions.get(a)?.dispatchState).not.toBe('accepted')
-      expect(reopened?.sendAnswers.get(b)).toBe(TURN_ITEM_ID)
-      expect(turnBody(reopened?.items.values() ?? [], 'turn-1')).toMatchObject({
-        endedBy: 'provider',
-        receiptsComplete: true
-      })
-      expect(answers).toBe(1)
-    }
-  )
-
-  it('drops the oldest unsaved receipt past the bound, and no later end certifies', async () => {
-    observationBound.value = 1
-    // Before 0.148, with turn-1 picked for a send whose answer was lost, Codex answers B as turn-2.
-    turns = codexTurnLifecycleFake(
-      THREAD,
-      () => (method, params) => handlers?.onNotification?.(method, params),
-      { legacyStartAnswers: true }
-    )
-    const start = turns.routes['turn/start']
-    turns.routes['turn/start'] = () => {
-      turns.routes['turn/start'] = start
-      start()
-      throw new Error('codex app-server request timed out: turn/start')
-    }
-    await send('first')
+describe('a Codex receipt whose first save fails', () => {
+  it('saves from the second echo, after the send was released, by exact id', async () => {
+    const a = await send('the same words')
     await vi.waitFor(() => expect(answers).toBe(1))
-    const b = await send('second')
-    await vi.waitFor(() => expect(answers).toBe(2))
     turns.start()
-    failJournalWrites((rows) => bareReceipt(rows, b))
-
-    // B's receipt names turn-1; C's answer, while C is held, overflows that unsaved receipt.
-    turns.echo(b)
-    const c = await send('third')
+    const b = await send('the same words')
     await vi.waitFor(() => expect(steers).toBe(1))
-    turns.echo(c)
-    turns.end('completed')
-    await vi.waitFor(async () => expect((await rawSubmission(c)).dispatchState).toBe('accepted'))
-    expect((await rawSubmission(b)).dispatchState).not.toBe('accepted')
+    let receiptWrites = 0
+    failJournalWrites((rows) => {
+      const receipt = rows.some(
+        (row) => row.kind === 'dispatch' && row.state === 'accepted' && row.clientMessageId === b
+      )
+      return receipt && ++receiptWrites === 1
+    })
 
-    const d = await send('fourth')
-    await vi.waitFor(() => expect(answers).toBe(3))
-    turns.start()
-    turns.echo(d)
-    turns.end('completed')
-    await vi.waitFor(async () => expect((await rawSubmission(d)).dispatchState).toBe('accepted'))
-    expect(closes).toBe(0)
-    await stopStructuredAgentSessionRuntime()
-    const items = [...(loadTestJournal(root, SESSION)?.state.items.values() ?? [])]
-    for (const turnId of ['turn-1', 'turn-3']) {
-      expect(turnBody(items, turnId)).toMatchObject({ endedBy: 'provider' })
-      expect(turnBody(items, turnId)).not.toHaveProperty('receiptsComplete')
+    const echo = {
+      threadId: THREAD,
+      turnId: 'turn-1',
+      item: { type: 'userMessage', id: 'item-b', clientId: b, content: [] }
     }
+    handlers?.onNotification?.('item/started', echo)
+    await vi.waitFor(() => expect(receiptWrites).toBe(1))
+    expect((await rawSubmission(b)).dispatchState).toBe('pending')
+    // The first echo released B's armed entry, so only the journal still says its receipt is owed.
+    handlers?.onNotification?.('item/completed', echo)
+    turns.end('completed')
+    await vi.waitFor(async () => expect((await rawSubmission(b)).dispatchState).toBe('accepted'))
+    expect(lastPublished(b)).toMatchObject({ dispatchState: 'accepted' })
+
+    await stopStructuredAgentSessionRuntime()
+    const reopened = loadTestJournal(root, SESSION)?.state
+    expect(reopened?.submissions.get(b)).toMatchObject({
+      dispatchState: 'accepted',
+      providerItemId: expect.stringMatching(/^codex:/)
+    })
+    expect(reopened?.submissions.get(a)?.dispatchState).not.toBe('accepted')
   })
 })

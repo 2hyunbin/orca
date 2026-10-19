@@ -30,8 +30,6 @@ export function handleCodexSessionExit(input: {
   session.events?.observeExit?.(session.dispatchEchoes.heldSends(), session.exitObservedAt)
   // Before the admission check: the child is gone whether or not its end was admitted.
   session.turnOpenWaits.releaseAll()
-  // Snapshotted before the translator goes: only the host's exit settlement saves these.
-  const observedSends = session.observations?.retained() ?? []
   const event: StructuredAgentSessionEndedEvent = {
     type: 'ended',
     sessionId: input.sessionId,
@@ -44,8 +42,7 @@ export function handleCodexSessionExit(input: {
     cause: session.orcaClose?.requested ? 'requested-close' : 'unexpected-exit',
     fence: session.fence,
     acquisitionGeneration: session.acquisitionGeneration,
-    observedAt: session.exitObservedAt,
-    ...(observedSends.length > 0 ? { observedSends } : {})
+    observedAt: session.exitObservedAt
   } as const
   // A synchronous sink rejection (usually backpressure) leaves the terminal rows to the host's
   // exit settlement, which writes its own bounded fallback. The exit itself is observed, so the
@@ -62,7 +59,6 @@ export function handleCodexSessionExit(input: {
   // Nothing can echo for this child any more; the journal's pending-submission
   // recovery is what settles the sends these were armed for.
   session.dispatchEchoes.clear()
-  session.observations?.clear()
   session.backgroundTasks.clear()
   // Every close path funnels here, so the session's children end with it on each one.
   session.backgroundTasks.publishChildWork()
