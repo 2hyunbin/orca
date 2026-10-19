@@ -237,18 +237,18 @@ describe('bundle — collection', () => {
     expect(bundle.bytes).toBeGreaterThan(_internalsForTests.MAX_BUNDLE_BYTES - 8192)
   })
 
-  it('caps the daemon log at its reserved share', () => {
+  it('gives the daemon log whatever quiet traces leave unused', () => {
     const daemonFile = join(dir, 'daemon.log')
     writeFileSync(traceFile, makeNDJSON([makeSpan({ name: 'recent' })]))
     const detail = 'd'.repeat(1024)
     writeFileSync(
       daemonFile,
       makeNDJSON(
-        Array.from({ length: 3000 }, () => ({
+        Array.from({ length: 3000 }, (_, index) => ({
           src: 'daemon',
           ts: new Date().toISOString(),
           pid: 1,
-          event: 'session-attached',
+          event: `session-attached-${index}`,
           detail
         }))
       )
@@ -265,7 +265,54 @@ describe('bundle — collection', () => {
       orcaChannel: 'stable'
     })
     expect(bundle.payload).toContain('"name":"recent"')
-    expect(bundle.bytes).toBeLessThan(_internalsForTests.DAEMON_LOG_BUDGET_BYTES + 8192)
+    // All ~3 MiB of daemon lines fit beside one span; the share is a floor, not a cap.
+    expect(bundle.payload).toContain('"event":"session-attached-0"')
+    expect(bundle.payload).toContain('"event":"session-attached-2999"')
+    expect(bundle.bytes).toBe(Buffer.byteLength(bundle.payload))
+    expect(bundle.bytes).toBeLessThanOrEqual(_internalsForTests.MAX_BUNDLE_BYTES)
+  })
+
+  it('keeps the newest daemon share when both sources overflow the cap', () => {
+    const daemonFile = join(dir, 'daemon.log')
+    const filler = 'x'.repeat(4096)
+    writeFileSync(
+      traceFile,
+      makeNDJSON(Array.from({ length: 1500 }, () => makeSpan({ name: 'git.exec', filler })))
+    )
+    const detail = 'd'.repeat(1024)
+    writeFileSync(
+      daemonFile,
+      makeNDJSON(
+        Array.from({ length: 6000 }, (_, index) => ({
+          src: 'daemon',
+          ts: new Date().toISOString(),
+          pid: 1,
+          event: `session-attached-${index}`,
+          detail
+        }))
+      )
+    )
+    const bundle = collectBundle({
+      traceFilePath: traceFile,
+      maxFiles: 10,
+      daemonLogFilePath: daemonFile,
+      daemonLogMaxFiles: 3,
+      appVersion: '1',
+      platform: 'win32',
+      arch: 'x64',
+      osRelease: 'test',
+      orcaChannel: 'stable'
+    })
+    const daemonBytes = bundle.payload
+      .split('\n')
+      .filter((line) => line.includes('"src":"daemon"'))
+      .reduce((total, line) => total + Buffer.byteLength(line) + 1, 0)
+    expect(bundle.payload).toContain('"name":"git.exec"')
+    expect(bundle.payload).toContain('"event":"session-attached-5999"')
+    expect(daemonBytes).toBeGreaterThan(_internalsForTests.DAEMON_LOG_BUDGET_BYTES - 4096)
+    // Plus the sliver spans could not use: less than one 4 KiB span record.
+    expect(daemonBytes).toBeLessThan(_internalsForTests.DAEMON_LOG_BUDGET_BYTES + 8192)
+    expect(bundle.bytes).toBeLessThanOrEqual(_internalsForTests.MAX_BUNDLE_BYTES)
   })
 
   it('collects no daemon log lines when no daemon log path is given', () => {

@@ -147,6 +147,24 @@ function collectNewestRecords(
   return { lines, bytes }
 }
 
+/** The newest `lines` (already newest → oldest) that fit `budgetBytes`, one newline each. */
+function takeNewestLines(
+  lines: readonly string[],
+  budgetBytes: number
+): { lines: string[]; bytes: number } {
+  const taken: string[] = []
+  let bytes = 0
+  for (const line of lines) {
+    const lineBytes = Buffer.byteLength(line) + 1
+    if (bytes + lineBytes > budgetBytes) {
+      break
+    }
+    taken.push(line)
+    bytes += lineBytes
+  }
+  return { lines: taken, bytes }
+}
+
 /**
  * Read the last N minutes of NDJSON across the rotated family into a redacted bundle payload.
  * Main keeps the uploadable payload so a compromised renderer can't substitute bytes after preview.
@@ -177,18 +195,23 @@ export function collectBundle(opts: CollectBundleOptions): CollectedBundle {
 
   // Why the daemon log goes first with its own share: trace spans alone fill the cap on a
   // busy host, which dropped every daemon line from most field OOM bundles.
-  const daemon = opts.daemonLogFilePath
+  const available = MAX_BUNDLE_BYTES - headerBytes
+  // Collect the daemon log up to the whole bundle, reserve its newest share before spans,
+  // then hand it back whatever spans leave unused, so a quiet trace never caps it at the share.
+  const daemonAll = opts.daemonLogFilePath
     ? collectNewestRecords(
         listRotatedFiles(opts.daemonLogFilePath, opts.daemonLogMaxFiles ?? opts.maxFiles),
-        Math.min(DAEMON_LOG_BUDGET_BYTES, MAX_BUNDLE_BYTES - headerBytes),
+        available,
         recordWindow
       )
     : { lines: [], bytes: 0 }
+  const reserved = takeNewestLines(daemonAll.lines, Math.min(DAEMON_LOG_BUDGET_BYTES, available))
   const traces = collectNewestRecords(
     listRotatedFiles(opts.traceFilePath, opts.maxFiles),
-    MAX_BUNDLE_BYTES - headerBytes - daemon.bytes,
+    available - reserved.bytes,
     recordWindow
   )
+  const daemon = takeNewestLines(daemonAll.lines, available - traces.bytes)
   const lines = [headerLine, ...traces.lines, ...daemon.lines]
   const spanCount = traces.lines.length + daemon.lines.length
   const currentBytes = headerBytes + traces.bytes + daemon.bytes
