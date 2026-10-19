@@ -33,8 +33,12 @@ const posix = getRemoteHostPlatform('linux-x64')
 // Linux hosts often run dash as /bin/sh; its builtins differ from bash's (`kill -- -pgid`).
 const SHELL = process.env.ORCA_TEST_POSIX_SHELL ?? '/bin/sh'
 
-async function sh(command: string): Promise<string> {
-  const result = await runProcess({ program: SHELL, args: ['-c', command] })
+async function sh(command: string, env?: NodeJS.ProcessEnv): Promise<string> {
+  const result = await runProcess({
+    program: SHELL,
+    args: ['-c', command],
+    ...(env ? { env: { ...process.env, ...env } } : {})
+  })
   return result.stdout
 }
 
@@ -135,6 +139,28 @@ describe.skipIf(process.platform === 'win32')('snapshot commands on a real shell
         await sh(restoreOrcadStateSnapshotCommand(posix, root, snapshot, remoteBase))
       )
     ).toBe('restored')
+    expect(readFileSync(join(root, 'profiles', 'p.json'), 'utf8')).toBe('old')
+  })
+
+  it('fails a restore whose member cannot move in, then reruns cleanly from the archive', async () => {
+    await sh(captureOrcadStateSnapshotCommand(posix, root, snapshot, remoteBase))
+    writeFileSync(join(root, 'profiles', 'p.json'), 'migrated')
+    // A `mv` that refuses only the profiles member, so the restore stops part way through.
+    const bin = join(base, 'bin')
+    mkdirSync(bin)
+    const mvPath = (await runProcess({ program: SHELL, args: ['-c', 'command -v mv'] })).stdout
+    writeFileSync(
+      join(bin, 'mv'),
+      `#!/bin/sh\ncase "$1" in *profiles) exit 1;; esac\nexec ${mvPath.trim()} "$@"\n`,
+      { mode: 0o755 }
+    )
+    const restore = restoreOrcadStateSnapshotCommand(posix, root, snapshot, remoteBase)
+
+    const failed = await sh(restore, { PATH: `${bin}:${process.env.PATH ?? ''}` })
+    expect(parseOrcadSnapshotRestore(failed)).toBe('failed')
+    expect(existsSync(join(root, '.orcad-state-restore-stage', 'profiles'))).toBe(true)
+
+    expect(parseOrcadSnapshotRestore(await sh(restore))).toBe('restored')
     expect(readFileSync(join(root, 'profiles', 'p.json'), 'utf8')).toBe('old')
   })
 
