@@ -10,14 +10,16 @@ import {
 const { MOBILE_WEB_BUNDLE_DIR, assertMobileWebBundleBuilt } = createRequire(import.meta.url)(
   './verify-packaged-mobile-web-bundle.cjs'
 )
+const { assertNotDarkBuild } = createRequire(import.meta.url)('../dark-build-switches.cjs')
 
 /**
  * The built page (pnpm build:mobile-web) into an orcad package. Fatal when it is missing or stale,
  * as electron-builder's beforePack is: a server without it serves phones no page.
  */
 export function stageOrcadMobileWebBundle(outputDir, bundleDir = MOBILE_WEB_BUNDLE_DIR) {
+  assertNotDarkBuild([bundleDir])
   assertMobileWebBundleBuilt(bundleDir)
-  // The guard refuses unlisted files, so the tree is exactly the manifest and its assets.
+  // The guards refuse unlisted files and dark markers, so the tree is exactly the manifest and its assets.
   cpSync(bundleDir, join(outputDir, ...ORCAD_MOBILE_WEB_DIR.split('/')), { recursive: true })
 }
 

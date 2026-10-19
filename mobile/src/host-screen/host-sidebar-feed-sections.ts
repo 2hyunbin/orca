@@ -170,13 +170,31 @@ export function buildHostFeedSections(sources: HostFeedListSources): Section[] {
         })
         break
       }
-      // A creation in progress and the desktop-only cards draw nothing on the phone.
-      case 'pending-creation':
+      case 'pending-creation': {
+        const section = current()
+        section.pendingCreations ??= []
+        section.pendingCreations.push({ key: row.key, repoName: row.repo?.displayName ?? '' })
+        break
+      }
+      // The desktop-only cards draw nothing on the phone.
       case 'imported-worktrees-card':
       case 'new-external-worktrees-inbox':
         break
     }
   }
+  return query ? narrowSections(sections, query) : sections
+}
+
+/**
+ * Before the first feed read: the rows this page last listed (worktree.ps, or the cache the screen
+ * opened with), in their served order under no header, so an offline open is not blank.
+ */
+export function buildPreFeedSections(rows: readonly Worktree[], search: string): Section[] {
+  if (rows.length === 0) {
+    return []
+  }
+  const sections: Section[] = [{ key: 'all', title: '', data: [...rows] }]
+  const query = search.trim().toLowerCase()
   return query ? narrowSections(sections, query) : sections
 }
 
@@ -187,6 +205,9 @@ function narrowSections(sections: readonly Section[], query: string): Section[] 
       return [section]
     }
     const data = section.data.filter((row) => matchesSearch(row, query))
-    return data.length > 0 ? [{ ...section, data, count: data.length }] : []
+    // An unnamed creation can match no search.
+    return data.length > 0
+      ? [{ ...section, data, count: data.length, pendingCreations: undefined }]
+      : []
   })
 }

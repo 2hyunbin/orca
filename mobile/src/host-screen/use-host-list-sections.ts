@@ -10,7 +10,7 @@ import { buildFilterRepos, type WorkspaceSectionRepo } from '../worktree/workspa
 import type { Section, SectionRepo, Worktree } from '../worktree/workspace-list-types'
 import { rowFiltersForView } from '../worktree/workspace-view-settings'
 import { buildHostFeedCatalog, buildHostFeedView } from './host-sidebar-feed-inputs'
-import { buildHostFeedSections } from './host-sidebar-feed-sections'
+import { buildHostFeedSections, buildPreFeedSections } from './host-sidebar-feed-sections'
 import { useHostRepoIconDataUrls } from './use-host-repo-icon-data-urls'
 import type { HostSidebarFeed } from './use-host-sidebar-feed'
 import type { HostScreenState } from './use-host-screen-state'
@@ -127,6 +127,7 @@ function useFeedHostListSections({
     () => (domains ? buildSidebarFeedRows(domains, catalog, view) : null),
     [domains, catalog, view]
   )
+  const loading = feed?.kind === 'loading'
   const sections = useMemo(
     () =>
       built
@@ -137,8 +138,10 @@ function useFeedHostListSections({
             repoHostIdByRepoId: state.repoHostIdByRepoId,
             search: state.search
           })
-        : NO_SECTIONS,
-    [built, displayWorktrees, state.repoHostIdByRepoId, state.search]
+        : loading
+          ? buildPreFeedSections(displayWorktrees, state.search)
+          : NO_SECTIONS,
+    [built, loading, displayWorktrees, state.repoHostIdByRepoId, state.search]
   )
 
   const iconIds = useMemo(() => [...new Set(domains?.repoIcons.values() ?? [])], [domains])

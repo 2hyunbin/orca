@@ -1,4 +1,5 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parse } from 'yaml'
@@ -40,6 +41,15 @@ it('stages the manifest and every asset it lists, byte for byte', async () => {
   expect(readFileSync(join(outputDir, ORCAD_MOBILE_WEB_MANIFEST))).toEqual(
     readFileSync(join(bundleDir, 'manifest.json'))
   )
+})
+
+it('refuses a page built with a dark switch on', async () => {
+  const { darkBuildMarkers } = createRequire(import.meta.url)('../dark-build-switches.cjs')
+  await writeMobileWebBundleFixtureTree({ outDir: bundleDir })
+  const [marker] = darkBuildMarkers({ ORCA_SIDEBAR_INPUTS: 'main' })
+  writeFileSync(join(bundleDir, marker.fileName), marker.text)
+  expect(() => stageOrcadMobileWebBundle(outputDir, bundleDir)).toThrow('ORCA_SIDEBAR_INPUTS=main')
+  expect(existsSync(join(outputDir, ORCAD_MOBILE_WEB_MANIFEST))).toBe(false)
 })
 
 it('fails the build when the page was never built', () => {

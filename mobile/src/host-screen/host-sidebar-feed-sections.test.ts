@@ -4,20 +4,25 @@ import {
   type SidebarFeedView
 } from '../../../src/shared/sidebar-list/sidebar-feed-rows'
 import type { ExecutionHostScope } from '../../../src/shared/execution-host'
+import type { SidebarFeedDomains } from '../../../src/shared/sidebar-list/sidebar-feed-domains'
 import { resolveVisibleWorkspaceHostIds } from '../../../src/shared/workspace-view/workspace-host-visibility'
 import { buildHostFeedCatalog, buildHostFeedView } from './host-sidebar-feed-inputs'
-import { buildHostFeedSections } from './host-sidebar-feed-sections'
+import { buildHostFeedSections, buildPreFeedSections } from './host-sidebar-feed-sections'
 import { SERVED_SECTIONS, feedDomains, liveRow, phoneView } from './host-sidebar-feed.test-fixture'
 import type { MobileViewState } from '../worktree/workspace-view-settings'
 
 const catalog = buildHostFeedCatalog(SERVED_SECTIONS, [], [])
 
-function phoneFeedView(view: MobileViewState, showPinnedInGroups = false): SidebarFeedView {
+function phoneFeedView(
+  view: MobileViewState,
+  showPinnedInGroups = false,
+  hostPlatform: NodeJS.Platform | null = 'darwin'
+): SidebarFeedView {
   return buildHostFeedView({
     view,
     projectOrderBy: 'manual',
     desktop: { ...feedDomains().desktop!, showPinnedInGroups },
-    hostPlatform: 'darwin'
+    hostPlatform
   })
 }
 
@@ -40,6 +45,17 @@ function sectionsFor(
     liveRows: options.live ?? [],
     repoHostIdByRepoId: new Map([['lab', 'ssh:gpu']]),
     search: options.search ?? ''
+  })
+}
+
+function sectionsFromDomains(domains: SidebarFeedDomains, view: MobileViewState) {
+  const built = buildSidebarFeedRows(domains, catalog, phoneFeedView(view))
+  return buildHostFeedSections({
+    rows: built.sectionRows,
+    activeRowKeys: built.activeRowKeys,
+    liveRows: [],
+    repoHostIdByRepoId: new Map(),
+    search: ''
   })
 }
 
@@ -94,22 +110,34 @@ describe('the phone list from the sidebar feed', () => {
     }
   })
 
-  it('names the desktop’s own host by its platform, not the phone’s', () => {
-    const view = phoneView({
-      filters: { ...phoneView().filters, visibleHostIds: ['local', 'ssh:gpu'] }
-    })
-    const built = buildSidebarFeedRows(feedDomains(), catalog, phoneFeedView(view))
-    const sections = buildHostFeedSections({
-      rows: built.sectionRows,
-      activeRowKeys: built.activeRowKeys,
-      liveRows: [],
-      repoHostIdByRepoId: new Map(),
-      search: ''
-    })
-    expect(sections.map((section) => section.title)).toEqual(
-      expect.arrayContaining(['Local Mac', 'GPU box'])
-    )
-  })
+  // The test process runs on its own platform, which plays the phone's here.
+  it.each([
+    ['darwin', 'Local Mac'],
+    ['win32', 'Local Windows'],
+    [null, 'This computer']
+  ] as const)(
+    'names a %s desktop’s own host "%s", never by the phone’s platform',
+    (platform, label) => {
+      const view = phoneView({
+        filters: { ...phoneView().filters, visibleHostIds: ['local', 'ssh:gpu'] }
+      })
+      const built = buildSidebarFeedRows(
+        feedDomains(),
+        catalog,
+        phoneFeedView(view, false, platform)
+      )
+      const sections = buildHostFeedSections({
+        rows: built.sectionRows,
+        activeRowKeys: built.activeRowKeys,
+        liveRows: [],
+        repoHostIdByRepoId: new Map(),
+        search: ''
+      })
+      expect(sections.map((section) => section.title)).toEqual(
+        expect.arrayContaining([label, 'GPU box'])
+      )
+    }
+  )
 
   it('draws each row with the live content worktree.ps served, matched by host', () => {
     const sections = sectionsFor(phoneView(), {
@@ -153,11 +181,51 @@ describe('the phone list from the sidebar feed', () => {
     })
   })
 
+  it('draws a creation the host is running under its project, until the host lists it', () => {
+    const creating = (worktreeId?: string) =>
+      sectionsFromDomains(
+        feedDomains({
+          creations: new Map([['c1', { repoId: 'lab', ...(worktreeId ? { worktreeId } : {}) }]])
+        }),
+        phoneView()
+      ).find((section) => section.title === 'lab')!
+    expect(creating().pendingCreations).toEqual([{ key: 'pending:c1', repoName: 'lab' }])
+    expect(creating().data.map((row) => row.worktreeId)).toEqual(['lab::/w/gpu'])
+    // Once the host names a workspace it lists, only the workspace shows.
+    expect(creating('lab::/w/gpu').pendingCreations).toBeUndefined()
+  })
+
+  it('draws creations above every group when not grouped by project', () => {
+    const [first] = sectionsFromDomains(
+      feedDomains({ creations: new Map([['c1', { repoId: 'orca' }]]) }),
+      phoneView({ groupBy: 'none' })
+    )
+    expect(first).toMatchObject({ title: '', pendingCreations: [{ repoName: 'orca' }] })
+  })
+
   it('narrows rows by search and drops sections left with none', () => {
     const sections = sectionsFor(phoneView(), { search: 'gpu' })
     expect(sections.flatMap((section) => section.data.map((row) => row.worktreeId))).toEqual([
       'lab::/w/gpu'
     ])
     expect(sections.map((section) => section.title)).toEqual(['lab'])
+  })
+})
+
+describe('the phone list before the first feed read', () => {
+  const cached = [
+    liveRow({ worktreeId: 'orca::/w/b', displayName: 'beta' }),
+    liveRow({ worktreeId: 'orca::/w/a', displayName: 'alpha' })
+  ]
+
+  it('shows the rows the page last listed, in their order, under no header', () => {
+    expect(buildPreFeedSections(cached, '')).toEqual([{ key: 'all', title: '', data: cached }])
+  })
+
+  it('narrows them by search, and draws nothing with none', () => {
+    expect(buildPreFeedSections(cached, 'alp')[0]?.data.map((row) => row.worktreeId)).toEqual([
+      'orca::/w/a'
+    ])
+    expect(buildPreFeedSections([], '')).toEqual([])
   })
 })
