@@ -16,6 +16,7 @@ function storeWithAmbiguousWorktreeRows(
   repoConnectionId: string | null,
   otherHostId = 'ssh:other-box'
 ): AgentLaunchRouteStore & { repos: unknown[] } {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: only the slices owner resolution reads are staged.
   return {
     settings: NATIVE_CHAT_SETTINGS,
     repos: [{ id: 'repo-1', path: '/repo', connectionId: repoConnectionId }],
