@@ -16,7 +16,7 @@ export function promptTextContent(text: string): JSONContent {
         typeof part === 'string'
           ? part
               .split(NATIVE_CHAT_PASTED_TEXT_TOKEN)
-              .flatMap((piece, index) =>
+              .flatMap((piece, index): JSONContent[] =>
                 piece === ''
                   ? []
                   : index % 2 === 1

@@ -33,8 +33,9 @@ export function useNativeChatComposerHandle(
     })
 
   const insertPastedTextOrFile = useNativeChatPastedTextFile({
-    scopeKey: args.attachmentScopeKey,
-    scopeEditor: pastedTextEditor,
+    scopeKey: args.attachmentScopeKey ?? '',
+    // Without a draft scope there is no draft for a pending paste to settle in.
+    scopeEditor: args.attachmentScopeKey ? pastedTextEditor : null,
     resolveAttachmentOwner: args.resolveAttachmentOwner,
     insertTypedText: insertPastedText,
     setNotice: args.setNotice
