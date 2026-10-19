@@ -102,13 +102,17 @@ describe('folder workspaces render under every Group by mode', () => {
   it('keys the same folder id on two hosts apart, as the desktop draws them', () => {
     const folders = [
       makeFolderWorkspace(),
-      makeFolderWorkspace({ executionHostId: 'runtime:env-1', connectionId: null })
+      makeFolderWorkspace({ executionHostId: 'runtime:env-1', connectionId: null }),
+      makeFolderWorkspace({ connectionId: 'gpu-vm' })
     ]
     const rows = folderRows(buildSidebarRows({ groupBy: 'none', folderWorkspaces: folders }))
-    expect(rows.map((row) => row.key)).toEqual([
-      'folder-workspace:local|folder:fw-1',
-      'folder-workspace:runtime:env-1|folder:fw-1'
-    ])
+    expect(new Set(rows.map((row) => row.key))).toEqual(
+      new Set([
+        'folder-workspace:local|folder:fw-1',
+        'folder-workspace:runtime:env-1|folder:fw-1',
+        'folder-workspace:ssh:gpu-vm|folder:fw-1'
+      ])
+    )
     expect(rows.map(getRenderRowKey)).toEqual(rows.map((row) => row.key))
   })
 })
