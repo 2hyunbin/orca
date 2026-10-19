@@ -6,6 +6,7 @@ import {
 } from '../../../shared/execution-host'
 import {
   composeWorktreeHostIdentity,
+  getWorktreeIdFromHostIdentity,
   type HostScopedWorktreeKey
 } from '../../../shared/worktree/host-qualified-identity'
 import type { Worktree } from '../../../shared/worktree/types'
@@ -34,17 +35,32 @@ type DiffCommentSelectorState = Pick<AppState, 'worktreesByRepo'> &
   >
 
 /**
- * The host a row's notes are written through: its own stamp, except that a paired server's row
- * stamped `local` (or not at all) is local to that server. `undefined` leaves the owner to the
- * route resolvers, as for any unstamped row.
+ * The host a row's notes are written through: a paired server's row goes through that server
+ * (rival servers may stamp the same SSH target), else its own stamp. `undefined` leaves the owner
+ * to the route resolvers, as for any unstamped row.
  */
 function copyHostId(
   row: Pick<Worktree, 'hostId' | 'runtimeOwnerEnvironmentId'>
 ): ExecutionHostId | undefined {
   const environmentId = row.runtimeOwnerEnvironmentId?.trim()
-  return environmentId && (!row.hostId || row.hostId === LOCAL_EXECUTION_HOST_ID)
-    ? toRuntimeExecutionHostId(environmentId)
-    : row.hostId
+  return environmentId ? toRuntimeExecutionHostId(environmentId) : row.hostId
+}
+
+/** Same copy, allowing an unstamped row that a listing has since stamped `local`. */
+export function isSameDiffCommentCopy(
+  a: HostScopedWorktreeKey | undefined,
+  b: HostScopedWorktreeKey | undefined
+): boolean {
+  if (a === b) {
+    return true
+  }
+  if (!a || !b) {
+    return false
+  }
+  const worktreeId = getWorktreeIdFromHostIdentity(a)
+  const unstamped = composeWorktreeHostIdentity(undefined, worktreeId)
+  const local = composeWorktreeHostIdentity(LOCAL_EXECUTION_HOST_ID, worktreeId)
+  return (a === unstamped && b === local) || (a === local && b === unstamped)
 }
 
 /**

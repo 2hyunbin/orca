@@ -284,4 +284,36 @@ describe('diff comments on twin worktrees', () => {
     expect(updateMeta).toHaveBeenCalledTimes(2)
     expect(updateMeta.mock.calls[1][0].updates.diffComments).toHaveLength(2)
   })
+
+  it('rolls a failed burst back to disk when a listing stamps the row mid-burst', async () => {
+    const store = createTwinStore(null)
+    store.setState({ worktreesByRepo: { [REPO]: [worktree(undefined)] } })
+    updateMeta.mockRejectedValue(new Error('write failed'))
+
+    const first = addNote(store)
+    const [row] = store.getState().worktreesByRepo[REPO]
+    store.setState({ worktreesByRepo: { [REPO]: [{ ...row, hostId: 'local' }] } })
+    const second = addNote(store)
+
+    expect(await first).toBeNull()
+    expect(await second).toBeNull()
+    expect(rowNotes(store, 'local')).toEqual([])
+  })
+
+  it('keeps two paired servers proxying one SSH target apart', () => {
+    const store = createTwinStore('runtime:hub-a')
+    const viaA = { ...worktree('ssh:box'), runtimeOwnerEnvironmentId: 'hub-a' }
+    const viaB = {
+      ...worktree('ssh:box', [note('b1', 'hub b note')]),
+      runtimeOwnerEnvironmentId: 'hub-b'
+    }
+    store.setState({ worktreesByRepo: { [REPO]: [viaA, viaB] } })
+
+    expect(selectWorktreeDiffCommentsOrEmpty(store.getState(), WT)).toEqual([])
+    void addNote(store).catch(() => {})
+
+    const [a, b] = store.getState().worktreesByRepo[REPO]
+    expect(a.diffComments?.map((c) => c.body)).toEqual(['ssh note'])
+    expect(b.diffComments?.map((c) => c.body)).toEqual(['hub b note'])
+  })
 })

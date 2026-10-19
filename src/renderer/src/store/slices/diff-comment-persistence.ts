@@ -6,7 +6,11 @@ import type { Worktree } from '../../../../shared/worktree/types'
 import { getRepoIdFromWorktreeId } from './worktree-helpers'
 import { callRuntimeRpc } from '../../runtime/runtime-rpc-client'
 import { runtimeTargetForWorkspaceOwner } from '@/lib/resolve-owner'
-import { diffCommentCopyNotes, findDiffCommentCopy } from '../worktree-diff-comments-selector'
+import {
+  diffCommentCopyNotes,
+  findDiffCommentCopy,
+  isSameDiffCommentCopy
+} from '../worktree-diff-comments-selector'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { HostScopedWorktreeKey } from '../../../../shared/worktree/host-qualified-identity'
 import { toRuntimeWorktreeSelector } from '../../runtime/runtime-worktree-selector'
@@ -115,11 +119,11 @@ async function persist(
 }
 
 // Why: IPC writes aren't ordered, so serialize per worktree to stop an older snapshot from overwriting a newer one on disk.
-// A worktree's line is its bare id, so a host stamp landing mid-burst keeps one line.
+// A worktree's queue is its bare id, so a host stamp landing mid-burst keeps one queue and floor.
 const persistQueueByWorktree = new Map<string, Promise<void>>()
 
-// Why: rollback floors are per copy (a twin's floor is not this copy's); cleared with the id's queue.
-const floorKeysByWorktree = new Map<string, Set<string>>()
+// Why: the copy a floor was taken from; a twin's floor is never another copy's rollback target.
+const floorCopyByQueue = new Map<string, HostScopedWorktreeKey | undefined>()
 
 // Why: rollback must converge to what actually reached disk; in a burst of failed writes each mutation's own predecessor is stale.
 const lastPersistedByQueue = new Map<string, DiffComment[] | undefined>()
@@ -154,20 +158,19 @@ export function enqueueDiffCommentPersist(
   mutation: DiffCommentMutation
 ): Promise<void> {
   const { executionHostId, copyKey } = mutation
-  const queueKey = copyKey ?? persistQueueKey(worktreeId, executionHostId)
-  const orderKey = copyKey ? worktreeId : queueKey
-  const prior = persistQueueByWorktree.get(orderKey) ?? Promise.resolve()
+  const queueKey = copyKey ? worktreeId : persistQueueKey(worktreeId, executionHostId)
+  const prior = persistQueueByWorktree.get(queueKey) ?? Promise.resolve()
   // Why: an idle queue means disk still holds the pre-mutation list, so that list is this burst's rollback floor.
   // Why: a `previous` that isn't the last mutation's `next` means something outside the mutators replaced the list
   //      (hydration, folderWorkspaces refresh, remote push), so the old floor predates that state and must be re-seeded.
   // Why: seed before the queue entry below, or `has` is always true and the floor is never seeded.
   const chainBroken = lastMutationNextByQueue.get(queueKey) !== mutation.previous
-  if (!persistQueueByWorktree.has(orderKey) || chainBroken) {
+  if (!persistQueueByWorktree.has(queueKey) || chainBroken) {
     lastPersistedByQueue.set(queueKey, mutation.previous)
+    floorCopyByQueue.set(queueKey, copyKey)
     floorSeedEpochByQueue.set(queueKey, (floorSeedEpochByQueue.get(queueKey) ?? 0) + 1)
   }
   lastMutationNextByQueue.set(queueKey, mutation.next)
-  floorKeysByWorktree.set(orderKey, (floorKeysByWorktree.get(orderKey) ?? new Set()).add(queueKey))
   const run = async (): Promise<void> => {
     // Why: capture at dequeue time, alongside `stateList` — an epoch read at enqueue time would bar every write
     //      that straddles a chain break from recording a floor its coalesced payload already carries.
@@ -177,41 +180,30 @@ export function enqueueDiffCommentPersist(
     let stateList: DiffComment[] | undefined
     try {
       const scope = parseWorkspaceKey(worktreeId)
+      const state = get()
       if (scope?.type === 'folder') {
-        const state = get()
-        const folderWorkspace = findFolderWorkspaceOwner(
+        stateList = findFolderWorkspaceOwner(
           state,
           scope.folderWorkspaceId,
           executionHostId
-        )
-        stateList = folderWorkspace?.diffComments
-        await persist(
-          state,
-          worktreeId,
-          (stateList ?? []).map(normalizeDiffComment),
-          executionHostId
-        )
+        )?.diffComments
       } else {
-        const state = get()
         const copy = findDiffCommentCopy(state, worktreeId, { key: copyKey })
         // Why: the copy these notes were made on is gone; never send another copy's list instead.
         if (!copy) {
           throw new Error('The workspace copy is gone; review notes were not saved.')
         }
         stateList = diffCommentCopyNotes(copy)
-        await persist(
-          state,
-          worktreeId,
-          (stateList ?? []).map(normalizeDiffComment),
-          executionHostId
-        )
       }
+      await persist(state, worktreeId, (stateList ?? []).map(normalizeDiffComment), executionHostId)
     } catch (err) {
       // Why: converge to what actually landed; rollback's identity guard no-ops when a later mutation owns the array.
       // Why: `has()`, not `get() ?? …` — an absent entry and a legitimately-`undefined` floor are different things.
-      const floor = lastPersistedByQueue.has(queueKey)
-        ? lastPersistedByQueue.get(queueKey)
-        : mutation.previous
+      const floor =
+        lastPersistedByQueue.has(queueKey) &&
+        isSameDiffCommentCopy(floorCopyByQueue.get(queueKey), copyKey)
+          ? lastPersistedByQueue.get(queueKey)
+          : mutation.previous
       rollback(set, worktreeId, floor, mutation, copyKey)
       throw err
     }
@@ -219,22 +211,21 @@ export function enqueueDiffCommentPersist(
     //      list captured before the await predates it and must not be reinstated as the floor.
     if (floorSeedEpochByQueue.get(queueKey) === seedEpoch) {
       lastPersistedByQueue.set(queueKey, stateList)
+      floorCopyByQueue.set(queueKey, copyKey)
     }
   }
   const next = prior.then(run, run)
-  persistQueueByWorktree.set(orderKey, next)
+  persistQueueByWorktree.set(queueKey, next)
   // Why: clear the queue entry only if still the tail, so later enqueues chain onto the real in-flight promise.
   // Why: then(cleanup, cleanup) not finally, so a rejection is consumed here rather than re-thrown as unhandledRejection.
   const cleanup = (): void => {
-    if (persistQueueByWorktree.get(orderKey) === next) {
-      persistQueueByWorktree.delete(orderKey)
+    if (persistQueueByWorktree.get(queueKey) === next) {
+      persistQueueByWorktree.delete(queueKey)
       // Why: tail-guarded only; a mid-burst delete would strand the remaining writes of the burst without a floor.
-      for (const floorKey of floorKeysByWorktree.get(orderKey) ?? []) {
-        lastPersistedByQueue.delete(floorKey)
-        lastMutationNextByQueue.delete(floorKey)
-        floorSeedEpochByQueue.delete(floorKey)
-      }
-      floorKeysByWorktree.delete(orderKey)
+      lastPersistedByQueue.delete(queueKey)
+      floorCopyByQueue.delete(queueKey)
+      lastMutationNextByQueue.delete(queueKey)
+      floorSeedEpochByQueue.delete(queueKey)
     }
   }
   next.then(cleanup, cleanup)
