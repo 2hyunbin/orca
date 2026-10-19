@@ -2,6 +2,7 @@ import { findSqliteRuntimeTests } from './vitest-sqlite-runtime-scan.mjs'
 
 // SQLite publication, native bindings, worker IPC, socket liveness, and V8 retention use Node.
 const NODE_RUNTIME_INCLUDE = [
+  'src/main/runtime/structured-agent-cli-writers.test.ts',
   'config/scripts/vitest-sqlite-runtime-boundary.test.ts',
   'config/scripts/cloud-security-history-workflow.test.mjs',
   'config/scripts/skill-recipe-shell.test.mjs',
@@ -18,6 +19,8 @@ const NODE_RUNTIME_INCLUDE = [
   'src/main/ai-vault/session-parse-cache-large-scan.test.ts',
   'src/main/ai-vault/session-parse-cache-metadata-checkpoint.test.ts',
   'src/main/ai-vault/session-parse-cache-persistence.test.ts',
+  'src/main/ai-vault/session-scanner-scope-cwd-facts.test.ts',
+  'src/main/ai-vault/session-scanner-scope-walk.test.ts',
   // Electron main bridges streams with Node's implementation.
   'src/main/host/electron-http-client.test.ts',
   'src/main/daemon/daemon-init-provider-installation.test.ts',
