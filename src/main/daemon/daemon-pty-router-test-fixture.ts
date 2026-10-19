@@ -64,8 +64,9 @@ export function createAdapter(
     requestIdleRetirement: vi.fn(async () => ({ state: 'retiring' as const })),
     releaseIdleRetirementFence: vi.fn(),
     isIdleRetirementAdmissionClosed: vi.fn(() => false),
+    // Why the test's own pid: exit proof checks it, and an arbitrary pid may or may not exist on the host.
     getLastAuthenticatedDaemonIdentity: vi.fn(() => ({
-      pid: 4242,
+      pid: process.pid,
       startedAtMs: 0,
       launchNonce: label
     })),
