@@ -4,12 +4,14 @@ import {
   deliverLaunchPromptToAgentTab,
   seedNativeChatLaunchDraftForAgentTab
 } from '@/lib/agent-launch-prompt-delivery'
-import { notifyDirectWorkItemAgentStartTimeout } from '@/lib/launch-work-item-direct-agent'
+import {
+  buildDirectWorkItemAgentStartupPlan,
+  notifyDirectWorkItemAgentStartTimeout
+} from '@/lib/launch-work-item-direct-agent'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import type { AppState } from '@/store/types'
 import { TUI_AGENT_CONFIG } from '../../../shared/tui-agent-config'
 import { isTuiAgentEnabled, pickTuiAgent } from '../../../shared/tui-agent-selection'
-import { buildDirectWorkItemAgentStartupPlan } from '@/lib/launch-work-item-direct-agent'
 import type { AgentSessionLaunchPlan } from '@/lib/agent-session-launch-plan'
 import {
   resolveExecutionHostAgentStartupShell,
