@@ -130,7 +130,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const lines = existsSync(logPath) ? readFileSync(logPath, 'utf8').split('\n') : []
   const reports = reportPaths
     .filter((path) => existsSync(path))
-    .map((path) => JSON.parse(readFileSync(path, 'utf8')))
+    .flatMap((path) => {
+      try {
+        return [JSON.parse(readFileSync(path, 'utf8'))]
+      } catch {
+        // A report cut short by a killed run: its divergences count as unattributed.
+        return []
+      }
+    })
   const summary = summarizeDivergence(lines, reports)
   writeFileSync(summaryPath, `${JSON.stringify(summary, null, 2)}\n`)
   const markdown = divergenceMarkdown(summary, `Layout save divergence: ${basename(logPath)}`)
