@@ -21,6 +21,7 @@ import { GROK_CONFIG_OPTIONS } from '../../acp/acp-structured-adapter.test-suppo
 import { SessionConfigOptionSchema } from '../../acp/generated/acp-protocol.generated'
 import { withLiveCatalogListing } from '../agent-model-catalog/agent-model-catalog-entry'
 import { StructuredAgentSessionTaskQueue } from './structured-agent-session-task-queue'
+import { recordAgentSessionRanOptions } from '../../runtime/agent-session-record-options'
 import {
   claudeAndCodexAgents,
   NO_STRUCTURED_AGENTS
@@ -52,6 +53,7 @@ function restingRecord(): AgentSessionRecord {
     accountHome: { variable: 'CODEX_HOME', path: '/homes/a' },
     providerHandleChain: [],
     location: { executionHostId: 'local', wslDistro: null },
+    lease: { claimStatus: 'released', ownerProcess: null, runtimeFence: 1 },
     options: {}
   } as unknown as AgentSessionRecord
 }
@@ -276,34 +278,60 @@ describe('a chat at rest, read by the host', () => {
       const options = { model: 'gpt-account', serviceTier: 'flex' }
       const answer = await readAtRest({ options }, [], false, models)
       expect(answer.current).toMatchObject({ serviceTier: runs })
-      const record = { ...restingRecord(), options }
-      const picked = await recordStructuredAgentSessionOptionIntent(
-        {
-          store: { getRecord: () => record, replaceSessionOptions: vi.fn() },
-          agents: claudeAndCodexAgents(),
-          modelCatalog: catalog(models)
-        },
-        { sessionId: SESSION, fence: 1, persistOptions: vi.fn(), publish: vi.fn(), now: () => 0 },
-        { key: 'model', value: 'gpt-account' }
-      )
-      expect(picked).toMatchObject({ value: { options: { serviceTier: runs } } })
-      expect(record.options.serviceTier).toBe('flex')
+      const chat = picking(options, models)
+      expect(await chat.pick('model', 'gpt-account')).toMatchObject({
+        value: { options: { serviceTier: runs } }
+      })
+      expect(chat.record().options?.serviceTier).toBe('flex')
     }
   )
 
-  it('drops a saved effort the newly picked model does not offer', async () => {
-    const record = { ...restingRecord(), options: { model: 'gpt-flex', effort: 'xhigh' } }
-    const persistOptions = vi.fn()
-    await recordStructuredAgentSessionOptionIntent(
-      {
-        store: { getRecord: () => record, replaceSessionOptions: vi.fn() },
-        agents: claudeAndCodexAgents(),
-        modelCatalog: catalog()
-      },
-      { sessionId: SESSION, fence: 1, persistOptions, publish: vi.fn(), now: () => 0 },
-      { key: 'model', value: 'gpt-account' }
-    )
-    expect(persistOptions).toHaveBeenCalledWith({ model: 'gpt-account' })
+  const high = [{ value: 'high', label: 'High' }]
+  const efforts: AgentSessionModelOption[] = [
+    { id: 'a', label: 'A', isDefault: true, efforts: high },
+    { id: 'b', label: 'B', isDefault: false, efforts: high },
+    { id: 'c', label: 'C', isDefault: false, efforts: [] }
+  ]
+  function picking(options: Record<string, string>, models = efforts) {
+    let record: AgentSessionRecord = { ...restingRecord(), options }
+    const store = {
+      getRecord: () => record,
+      replaceSessionOptions: vi.fn(),
+      reviseSessionOptions: async <A>(
+        revise: (held: AgentSessionRecord, args: A) => AgentSessionRecord,
+        args: A
+      ) => (record = revise(record, args))
+    }
+    const deps = { store, agents: claudeAndCodexAgents(), modelCatalog: catalog(models) }
+    const ctx = { sessionId: SESSION, fence: 1, publish: vi.fn(), now: () => 0 }
+    return {
+      pick: (key: string, value: string) =>
+        recordStructuredAgentSessionOptionIntent(deps, ctx, { key, value }),
+      ran: (model: string, ran: Record<string, string>, rows = models) =>
+        (record = recordAgentSessionRanOptions(record, {
+          ...ctx,
+          model,
+          options: ran,
+          models: rows
+        })),
+      record: () => record
+    }
+  }
+
+  it('admits options only under the model the chat runs, whichever write lands first', async () => {
+    const chat = picking({ model: 'a', effort: 'high' })
+    // A model pick drops an inherited effort its row does not offer; an offered one is refused.
+    await chat.pick('model', 'c')
+    expect(chat.record().options).toEqual({ model: 'c' })
+    expect(await chat.pick('effort', 'high')).toMatchObject({ ok: false })
+    await chat.pick('model', 'b')
+    // A turn that ran on another model, recorded late, fills nothing, though b offers its effort.
+    expect(chat.ran('a', { effort: 'high' }).options).toEqual({ model: 'b' })
+    expect(chat.ran('b', { effort: 'high' }).options).toEqual({ model: 'b', effort: 'high' })
+    // A catalog that later drops it, or a pick, keeps the saved value.
+    chat.ran('b', { effort: 'low' }, [])
+    await chat.pick('serviceTier', 'priority')
+    expect(chat.record().options).toEqual({ model: 'b', effort: 'high', serviceTier: 'priority' })
   })
 })
 

@@ -31,6 +31,7 @@ import { attachStructuredAgentSession } from './structured-agent-session-attach-
 import { readAgentSessionHydrationPage } from './agent-session-history-page'
 import { resolveAgentSessionReplayOutcome } from './structured-agent-session-replay-outcome'
 import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
+import { savedAgentSessionCatalogModels as savedModels } from './structured-agent-session-pick-reply'
 
 export type StructuredAgentSessionCreateOptions = {
   firstMessage?: { clientMessageId: string; body: AgentJournalMessageItem }
@@ -107,6 +108,7 @@ async function foundConversation(
   const request = reserveRequestFor({
     sessionId,
     params,
+    models: prior ? undefined : await savedModels(deps, params.provider, sessionId),
     callerKey,
     fingerprint: params.envelope.payloadFingerprint,
     now: context.now(),

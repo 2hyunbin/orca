@@ -6,6 +6,7 @@ import {
   providerDiagnosticOf
 } from '../../../shared/agent-session-failure'
 import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
+import type { StructuredAgentSessionHandedOptions } from './structured-agent-session-ran-options'
 import { isAgentSessionOptionRejectedError } from './structured-agent-session-option-error'
 import { abortSignalReason } from '../../../shared/abort-signal-reason'
 import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
@@ -35,8 +36,8 @@ export type AgentSessionHandoverContext = StructuredAgentSessionCommandHandoverC
   acquireAborts?: Pick<StructuredAgentSessionAcquireAborts, 'begin'>
   deliveryOrder?: StructuredAgentSessionDeliveryOrder
   workChanged?: () => void
-  /** A message the agent took: a chat with no saved model keeps the options it ran. */
-  recordRanOptions?: (message: AgentSessionExecutionOptions | undefined) => Promise<void>
+  /** A message the agent took: a chat keeps, where it has none saved, the options it ran. */
+  recordRanOptions?: (handed: StructuredAgentSessionHandedOptions) => Promise<void>
 }
 
 /** A handover whose pending row and abort handle are committed: the provider call runs outside the
@@ -135,7 +136,10 @@ export async function beginSubmissionHandover(
       return async () => {
         await resolveHandover(ctx, clientMessageId, outcome)
         if (outcome?.state === 'accepted' || outcome?.state === 'admitted') {
-          await ctx.recordRanOptions?.(submission.options)
+          await ctx.recordRanOptions?.({
+            message: submission.options,
+            executed: outcome.ranOptions
+          })
         }
       }
     }

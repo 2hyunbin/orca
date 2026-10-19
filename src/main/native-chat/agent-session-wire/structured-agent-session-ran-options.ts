@@ -1,5 +1,6 @@
-// A chat keeps, for each of its options it has none saved for, what its turn ran: the message's
-// choice, else what its agent reports running. A default the host filled in is never one.
+// A chat keeps, for each of its options it has none saved for, what its turn ran: the provider's
+// own evidence of the dispatch, else the message's choice and what its agent reports running. A
+// setting or a default the host filled in is never one.
 
 import type { AgentSessionOptionsResult } from '../../../shared/agent-session-wire'
 import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
@@ -9,20 +10,27 @@ import type {
   StructuredAgentSessionProviderChild
 } from './structured-agent-session-host-types'
 import { structuredAgentSessionOptionOverridesRefusal } from './structured-agent-session-option-intent'
+import { savedAgentSessionCatalogModels } from './structured-agent-session-pick-reply'
+import { recordAgentSessionRanOptions } from '../../runtime/agent-session-record-options'
 
 type RanOptionsContext = {
-  deps: Pick<StructuredAgentSessionHostDeps, 'store' | 'logger' | 'agents'>
+  deps: Pick<StructuredAgentSessionHostDeps, 'store' | 'logger' | 'agents' | 'modelCatalog'>
   sessions: ReadonlyMap<string, StructuredAgentSessionHostSession>
   now: () => number
 }
 
 type RanOptions = Partial<Record<'model' | 'effort' | 'serviceTier' | 'fastMode', string>>
 
-/** In memory per child: what it last reported running, and whether a turn it was handed still
- *  owes a record because nothing had reported a model yet. */
+export type StructuredAgentSessionStructuredAgentSessionHandedOptionsOptions = {
+  message?: AgentSessionExecutionOptions
+  executed?: Readonly<Record<string, string>>
+}
+
+/** In memory per child: what it last reported running, and a handed-over turn that still owes a
+ *  record because nothing had named its model yet. */
 const childRuns = new WeakMap<
   StructuredAgentSessionProviderChild,
-  { reported?: RanOptions; owed?: true }
+  { reported?: RanOptions; owed?: StructuredAgentSessionHandedOptions }
 >()
 
 function currentChild(context: RanOptionsContext, sessionId: string, fence: number) {
@@ -67,7 +75,7 @@ export async function noteStructuredAgentSessionReportedOptions(
   const runs = childRuns.get(child)
   childRuns.set(child, { reported: ran })
   if (runs?.owed) {
-    await recordStructuredAgentSessionRanOptions(context, sessionId, fence, undefined)
+    await recordStructuredAgentSessionRanOptions(context, sessionId, fence, runs.owed)
   }
 }
 
@@ -75,14 +83,14 @@ export async function noteStructuredAgentSessionReportedOptions(
 export type StructuredAgentSessionRanRecorder = (
   sessionId: string,
   fence: number
-) => (message: AgentSessionExecutionOptions | undefined) => Promise<void>
+) => (handed: StructuredAgentSessionHandedOptions) => Promise<void>
 
 /** After a turn was handed over; bookkeeping, so a failure is logged and never refuses the send. */
 export async function recordStructuredAgentSessionRanOptions(
   context: RanOptionsContext,
   sessionId: string,
   fence: number,
-  message: AgentSessionExecutionOptions | undefined
+  handed: StructuredAgentSessionHandedOptions
 ): Promise<void> {
   const child = currentChild(context, sessionId, fence)
   const { store, logger, agents } = context.deps
@@ -90,21 +98,24 @@ export async function recordStructuredAgentSessionRanOptions(
   if (!child || !record) {
     return
   }
+  const { message, executed } = handed
   const reported = childRuns.get(child)?.reported
-  const model = message?.model ?? reported?.model
-  childRuns.set(child, { ...(reported ? { reported } : {}), ...(model ? {} : { owed: true }) })
-  if (!model) {
+  const model = executed?.model ?? message?.model ?? reported?.model
+  childRuns.set(child, { ...(reported ? { reported } : {}), ...(model ? {} : { owed: handed }) })
+  if (!model || (record.options?.model ?? model) !== model) {
     return
   }
-  // The report's other values ran only with its own model.
+  // The report's other values ran only with its own model; a message's tier or Fast may not have
+  // run, as a steer runs its turn's.
   const report = reported?.model === model ? reported : {}
   const ran: Record<string, string> = {}
   for (const [key, value] of Object.entries({
-    model,
-    effort: message?.effort ?? report.effort,
-    // A message's own tier or Fast may not have run: a steer runs its turn's.
-    serviceTier: report.serviceTier,
-    fastMode: report.fastMode
+    ...(executed ?? {
+      effort: message?.effort ?? report.effort,
+      serviceTier: report.serviceTier,
+      fastMode: report.fastMode
+    }),
+    model
   })) {
     // Never over a saved choice, nor one every later send would carry and the agent refuse.
     if (
@@ -115,11 +126,20 @@ export async function recordStructuredAgentSessionRanOptions(
       ran[key] = value
     }
   }
-  if (Object.keys(ran).length === 0) {
+  // Nothing new, or a model the agent would refuse on every later send.
+  if (record.options?.model === undefined ? !ran.model : Object.keys(ran).length === 0) {
     return
   }
+  const models = await savedAgentSessionCatalogModels(context.deps, record.provider, sessionId)
   await store
-    .recordRanOptions({ sessionId, fence: child.fence, options: ran, now: context.now() })
+    .reviseSessionOptions(recordAgentSessionRanOptions, {
+      sessionId,
+      fence: child.fence,
+      model,
+      options: ran,
+      models,
+      now: context.now()
+    })
     .catch((error: unknown) =>
       logger.warn('recording the options a turn ran failed', {
         scope: 'ran-options',

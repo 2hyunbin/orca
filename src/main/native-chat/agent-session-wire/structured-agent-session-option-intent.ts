@@ -8,7 +8,14 @@ import {
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import type { StructuredAgentRegistry } from './structured-agent-registry'
 import type { AgentSessionTurnContext, TurnOutcome } from './structured-agent-session-turns'
-import { structuredAgentSessionPickOptions } from './structured-agent-session-pick-reply'
+import {
+  savedAgentSessionCatalogModels,
+  structuredAgentSessionPickReply
+} from './structured-agent-session-pick-reply'
+import {
+  agentSessionOptionAdmitted,
+  pickAgentSessionOption
+} from '../../runtime/agent-session-record-options'
 
 /** Whether the agent takes this pick: a permission mode it offers, or an option key it names. */
 function acceptsOptionPick(
@@ -42,42 +49,56 @@ export function structuredAgentSessionOptionOverridesRefusal(
       )
 }
 
-/** Records a pick for the next start. Only a key the provider would accept is kept. */
+/** Records a pick for the next start. Only a key the provider would accept is kept, and only a
+ *  value the chat's model runs; a model pick drops an inherited effort or Fast it doesn't. */
 export async function recordStructuredAgentSessionOptionIntent(
   deps: {
-    store: Pick<AgentSessionRecordStore, 'getRecord' | 'replaceSessionOptions'>
+    store: Pick<
+      AgentSessionRecordStore,
+      'getRecord' | 'replaceSessionOptions' | 'reviseSessionOptions'
+    >
     agents: Pick<StructuredAgentRegistry, 'definition'>
-  } & Parameters<typeof structuredAgentSessionPickOptions>[0],
-  ctx: Pick<AgentSessionTurnContext, 'sessionId' | 'fence' | 'persistOptions' | 'publish' | 'now'>,
+  } & Parameters<typeof savedAgentSessionCatalogModels>[0],
+  ctx: Pick<AgentSessionTurnContext, 'sessionId' | 'fence' | 'publish' | 'now'>,
   input: { key: string; value: string }
 ): Promise<TurnOutcome<AgentSessionOptionResult>> {
-  const record = deps.store.getRecord(ctx.sessionId)
-  if (!record || !acceptsOptionPick(deps.agents, record.provider, input.key, input.value)) {
+  const { sessionId, fence } = ctx
+  const record = deps.store.getRecord(sessionId)
+  const named =
+    record !== null && acceptsOptionPick(deps.agents, record.provider, input.key, input.value)
+  const models = record
+    ? await savedAgentSessionCatalogModels(deps, record.provider, sessionId)
+    : []
+  const model = deps.store.getRecord(sessionId)?.options?.model
+  if (
+    !record ||
+    !named ||
+    !agentSessionOptionAdmitted(record.provider, models, model, input.key, input.value)
+  ) {
     return {
       ok: false,
       refusal: refuse(
         'agent_session_operation_invalid',
         { reason: 'optionRejected' },
-        `${record?.provider ?? 'This session'} has no session option named ${input.key}`
+        named
+          ? `${record?.provider} model ${model} does not offer ${input.key} ${input.value}`
+          : `${record?.provider ?? 'This session'} has no session option named ${input.key}`
       )
     }
   }
-  const { options, replied } = await structuredAgentSessionPickOptions(
-    deps,
-    record,
-    ctx.sessionId,
-    input,
-    () => deps.store.getRecord(ctx.sessionId)?.options
-  )
-  // The answer still names the mode among the options, as the wire always has.
-  await (input.key === AGENT_CHAT_PERMISSION_MODE_OPTION_ID
-    ? deps.store.replaceSessionOptions({
-        sessionId: ctx.sessionId,
-        fence: ctx.fence,
-        permissionMode: input.value,
-        now: ctx.now()
-      })
-    : ctx.persistOptions(options))
+  let options: Readonly<Record<string, string>>
+  if (input.key === AGENT_CHAT_PERMISSION_MODE_OPTION_ID) {
+    const permissionMode = input.value
+    await deps.store.replaceSessionOptions({ sessionId, fence, permissionMode, now: ctx.now() })
+    // The answer still names the mode among the options, as the wire always has.
+    options = { ...record.options, [input.key]: input.value }
+  } else {
+    const picked = { sessionId, fence, ...input, models, now: ctx.now() }
+    options = (await deps.store.reviseSessionOptions(pickAgentSessionOption, picked)).options ?? {}
+  }
   ctx.publish()
-  return { ok: true, value: { ...input, options: replied } }
+  return {
+    ok: true,
+    value: { ...input, options: structuredAgentSessionPickReply(options, models) }
+  }
 }

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { AgentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
 import { optionSession } from './codex-structured-option-session.test-fixture'
 import { resolvedCodexMessageOptions } from './codex-structured-message-options'
-import { startCodexTurn } from './codex-structured-turn-start'
+import { dispatchCodexTurn, startCodexTurn } from './codex-structured-turn-start'
 import { CodexAppServerRequestError } from './codex-app-server-connection'
 import type { CodexSession } from './codex-structured-session-state'
 import {
@@ -164,6 +164,34 @@ describe('Codex captured message choices', () => {
       model: 'model-a',
       effort: 'low'
     })
+  })
+
+  it('reports what a turn ran: a listed effort for an unlisted thread one, a steer its turn', async () => {
+    const request = vi.fn(async (method: string, _params?: Record<string, unknown>) =>
+      method === 'turn/steer' ? { turnId: 'turn-1' } : { turn: { id: 'turn-1' } }
+    )
+    const session = optionSession(request)
+    session.reportedOptions = { model: 'model-a', effort: 'xhigh' }
+    seedMessageDefaults(session)
+    const send = async (id: string, choices: Record<string, string>) =>
+      dispatchCodexTurn(
+        session,
+        {
+          sessionId: 'session-1',
+          clientMessageId: id,
+          body: USER_MESSAGE,
+          turnOptions: await resolvedCodexMessageOptions(session, choices)
+        },
+        undefined
+      )
+    const ran = { model: 'model-a', effort: 'low' }
+    expect(await send('first', { model: 'model-a' })).toMatchObject({ ranOptions: ran })
+    expect(request.mock.calls[0]?.[1]).toMatchObject(ran)
+    session.activeTurnIds = new Set(['turn-1'])
+    const steered = await send('steer', { model: 'model-a', serviceTier: 'priority' })
+    expect(request.mock.calls.at(-1)?.[0]).toBe('turn/steer')
+    expect(steered).toMatchObject({ ranOptions: ran })
+    expect(steered).not.toHaveProperty('ranOptions.serviceTier')
   })
 
   it('inherits untouched native tier and personality without a configuration probe', async () => {

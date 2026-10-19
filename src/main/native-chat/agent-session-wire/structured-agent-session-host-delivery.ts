@@ -142,12 +142,12 @@ export function createStructuredAgentSessionConversationDelivery(input: {
     stopping: input.clientDelivery.readStopping,
     now: () => deps.now?.() ?? Date.now(),
     acquireAborts: input.acquireAborts,
-    recordRanOptions: (sessionId, fence) => (message) =>
+    recordRanOptions: (sessionId, fence) => (handed) =>
       recordStructuredAgentSessionRanOptions(
         { deps, sessions, now: () => deps.now?.() ?? Date.now() },
         sessionId,
         fence,
-        message
+        handed
       )
   })
   const adoptOpened = async (
