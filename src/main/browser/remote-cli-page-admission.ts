@@ -1,56 +1,75 @@
 /**
- * The pages an SSH host's command is driving right now, each with the check that refuses its next
- * step once that host is revoked. Every page-affecting sink (guest CDP sends, native input events,
- * edit commands) consults it, so no queued or deferred step of a running command outlives the
- * revocation.
+ * One SSH host command's hold on a page. While it runs, every page sink (guest CDP sends, native
+ * input, edit commands, the CDP proxy's intake) refuses work attributed to it once the host is
+ * revoked. Work is attributed by async context: the command's own through its bridged scope, its
+ * out-of-process helper's through the proxy message it arrived on. The hold also owns the
+ * command's input cancel list: what it pressed and has not released, let go of on revocation.
  */
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { runOutsideRemoteCliBrowserScope } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
+import {
+  assertRemoteCliBrowserAccess,
+  runOutsideRemoteCliBrowserScope
+} from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
 
 /** The CDP input event that lets go of something a command pressed. */
 export type HeldInputRelease = { method: string; params: Record<string, unknown> }
 
+export type PageHoldHooks = {
+  /** Fires when the host is revoked; `retire` then runs at once, while the page is still held. */
+  revoked?: AbortSignal
+  /** Stops the command's helper, whose daemon outlives its killed client and keeps retrying. */
+  retire?: () => Promise<void>
+  releaseHeld?: (release: HeldInputRelease) => Promise<unknown>
+}
+
 type Admission = {
   admit: () => void
-  /** What this command pressed and has not released, keyed by button, key or touch. */
+  /** Keyed by button, key or touch. */
   held: Map<string, HeldInputRelease>
 }
 
 const admissions = new Map<number, Admission>()
-/** The admission a proxy message arrived under; its deferred steps keep it after the hold ends. */
+/** The hold a proxy message arrived under; its deferred steps keep it after the hold ends. */
 const messageAdmission = new AsyncLocalStorage<() => void>()
 
 /**
- * Runs a host's command holding the page. If the host is revoked mid-press, the command's own
- * release is refused like every other step, so the desktop lets go of what it left held once the
- * command ends: from outside the host's scope, with routing probes no longer refused.
+ * Runs a host's command holding the page. On revocation every later step is refused, releases
+ * included, so once the command ends the desktop lets go of what it left held, from outside the
+ * host's scope. A failure after revocation reports the revocation.
  */
 export async function runWithRemoteCliPageAdmission<T>(
   webContentsId: number,
   admit: () => void,
   run: () => Promise<T>,
-  releaseHeld?: (release: HeldInputRelease) => Promise<unknown>
+  hooks: PageHoldHooks = {}
 ): Promise<T> {
   const admission: Admission = { admit, held: new Map() }
+  let retiring: Promise<void> | undefined
+  const retire = (): Promise<void> | undefined =>
+    hooks.retire && (retiring ??= runOutsideRemoteCliBrowserScope(hooks.retire))
+  const onRevoked = (): void => void retire()
+  hooks.revoked?.addEventListener('abort', onRevoked, { once: true })
   admissions.set(webContentsId, admission)
   try {
-    return await run()
-  } finally {
-    if (admissions.get(webContentsId) === admission) {
-      admissions.delete(webContentsId)
+    try {
+      return await run()
+    } finally {
+      hooks.revoked?.removeEventListener('abort', onRevoked)
+      if (isRevoked(admit)) {
+        await retire()
+      }
+      if (admissions.get(webContentsId) === admission) {
+        admissions.delete(webContentsId)
+      }
+      const { releaseHeld } = hooks
+      if (releaseHeld && admission.held.size > 0 && isRevoked(admit)) {
+        await runOutsideRemoteCliBrowserScope(() => releaseAll(admission.held, releaseHeld))
+      }
     }
-    if (releaseHeld && admission.held.size > 0 && isAdmissionRevoked(admit)) {
-      await runOutsideRemoteCliBrowserScope(() => releaseAll(admission.held, releaseHeld))
-    }
+  } catch (error) {
+    admit()
+    throw error
   }
-}
-
-/** Throws while a revoked host's command still holds this page; a no-op otherwise. */
-export function assertRemoteCliPageAdmitted(webContentsId: number | undefined): void {
-  if (webContentsId !== undefined) {
-    admissions.get(webContentsId)?.admit()
-  }
-  messageAdmission.getStore()?.()
 }
 
 /** Runs a proxy message's handling, deferred steps included, under the page's current hold. */
@@ -59,20 +78,37 @@ export function runUnderRemoteCliPageAdmission<T>(webContentsId: number, handle:
   return admission ? messageAdmission.run(admission.admit, handle) : handle()
 }
 
-/** Records input that reached a page a host's command holds, so a revocation can release it. */
-export function noteRemoteCliInput(
-  webContentsId: number | undefined,
-  method: string,
-  params?: Record<string, unknown>
-): void {
-  const admission = webContentsId === undefined ? undefined : admissions.get(webContentsId)
-  if (admission) {
-    trackInput(admission, method, params)
-  }
+/** The page sinks' gate: throws for work of a revoked host's command; a no-op for the desktop's. */
+export function assertRemoteCliPageAccess(webContentsId?: number): void {
+  assertRemoteCliBrowserAccess(webContentsId)
+  messageAdmission.getStore()?.()
 }
 
-/** True once the host behind this admission check was revoked. */
-export function isAdmissionRevoked(admit: () => void): boolean {
+/**
+ * Delivers one input event, recording it on the page's hold: a press counts as held once it may
+ * have landed, a release only once it surely did.
+ */
+export function trackRemoteCliInput<T>(
+  webContentsId: number | undefined,
+  method: string,
+  params: Record<string, unknown> | undefined,
+  deliver: () => Promise<T>
+): Promise<T> {
+  const admission = webContentsId === undefined ? undefined : admissions.get(webContentsId)
+  if (!admission || !params) {
+    return deliver()
+  }
+  if (!['mouseReleased', 'keyUp', 'touchEnd', 'touchCancel'].includes(String(params.type))) {
+    trackInput(admission, method, params)
+    return deliver()
+  }
+  return deliver().then((result) => {
+    trackInput(admission, method, params)
+    return result
+  })
+}
+
+function isRevoked(admit: () => void): boolean {
   try {
     admit()
     return false
@@ -94,17 +130,9 @@ async function releaseAll(
   }
 }
 
-export function isInputRelease(params: Record<string, unknown>): boolean {
-  return ['mouseReleased', 'keyUp', 'touchEnd', 'touchCancel'].includes(String(params.type))
-}
-
-function trackInput(
-  admission: Admission,
-  method: string | undefined,
-  params: Record<string, unknown> | undefined
-): void {
-  const type = params?.type
-  if (!params || typeof type !== 'string') {
+function trackInput(admission: Admission, method: string, params: Record<string, unknown>): void {
+  const type = params.type
+  if (typeof type !== 'string') {
     return
   }
   if (

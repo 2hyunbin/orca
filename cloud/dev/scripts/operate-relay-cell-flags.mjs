@@ -439,7 +439,8 @@ async function breakGlassToDatabase(request, dependencies, { fetchImpl, log, sle
   if (current.generation !== request.expectedGeneration) {
     throw generationConflict(current.generation, request.expectedGeneration)
   }
-  const object = desiredObject(request, current.object)
+  // phonePath goes too: a dead cell comes back with phones on the database path as well.
+  const object = desiredObject({ ...request, changes: { ...request.changes, phonePath: null } }, current.object)
   const generation = await writeObject(fetchImpl, request, object, accessToken, audit)
   await directorAdmitMode(fetchImpl, request, idToken, sleep, 'db')
   const result = { event: 'orca_relay_cell_admit_mode_break_glass', cellId: request.cellId, generation, audit }
