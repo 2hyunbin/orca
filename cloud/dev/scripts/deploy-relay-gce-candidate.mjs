@@ -351,7 +351,10 @@ export function createAdminPost(config, deps, token) {
         await deps.wait(deps.random() * ADMIN_RETRY_BASE_MS * 2 ** (attempt - 1))
         continue
       }
-      return await responseJson(response, path, body?.cellId)
+      // The director names no cell, so a two-cell request names both.
+      const cells =
+        body?.cellId ?? [body?.sourceCellId, body?.targetCellId].filter(Boolean).join(' or ')
+      return await responseJson(response, path, cells || null)
     }
     throw new Error(`${path} retry attempts exhausted`)
   }

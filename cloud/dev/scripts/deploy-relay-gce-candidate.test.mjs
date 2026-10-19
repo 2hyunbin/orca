@@ -85,6 +85,14 @@ test('a reserve-cell refusal names the flip back to db; other 404s keep their er
     ),
     /cell-status failed: cell_not_found/
   )
+  await assert.rejects(
+    post({ error: 'cell_in_reserve_mode' })(
+      'https://relay.example',
+      '/v1/admin/evacuation-status',
+      { v: 1, sourceCellId: 'production-gce-c7', targetCellId: 'production-gce-c8' }
+    ),
+    /production-gce-c7 or production-gce-c8 is in reserve mode/
+  )
 })
 
 test('verifies a 1,000-cap cell against both runtime and director telemetry', () => {
