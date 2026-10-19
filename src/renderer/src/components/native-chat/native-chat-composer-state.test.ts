@@ -148,6 +148,14 @@ describe('deriveComposerAutocomplete — one grammar for every agent', () => {
   it('does not fire inside shell-style text', () => {
     expect(deriveComposerAutocomplete('price$tag', 9, COMMANDS, skills, codex).mode).toBe('none')
   })
+
+  // `echo $HOME` + Enter once swapped `$HOME` for a skill whose description named $CODEX_HOME.
+  it.each(['echo $HOME', 'costs $5', 'run $(pwd)'])('leaves shell `$` in %j as prose', (draft) => {
+    expect(isSkillPickerTriggered(draft, codex)).toBe(false)
+    expect(deriveComposerAutocomplete(draft, draft.length, COMMANDS, skills, codex).mode).toBe(
+      'none'
+    )
+  })
 })
 
 describe('filterSlashCommands', () => {

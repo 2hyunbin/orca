@@ -13,7 +13,7 @@ import {
   buildNativeChatPickerItems,
   LEADING_SLASH_TRIGGER,
   MID_PROMPT_SLASH_TRIGGER,
-  SKILL_SIGIL_TRIGGER,
+  matchSkillSigil,
   type NativeChatPickerItem,
   type NativeChatSkillDiscoverySnapshot
 } from '../../../../shared/native-chat-picker-items'
@@ -64,7 +64,7 @@ export function isSkillPickerTriggered(
   return (
     LEADING_SLASH_TRIGGER.test(before) ||
     MID_PROMPT_SLASH_TRIGGER.test(before) ||
-    (profile.skillPrefix === '$' && SKILL_SIGIL_TRIGGER.test(before))
+    (profile.skillPrefix === '$' && matchSkillSigil(before) !== null)
   )
 }
 
@@ -102,18 +102,17 @@ export function deriveComposerAutocomplete(
   // Why: `/` is the shared composer grammar, so a mid-prompt token opens the same
   // menu a leading one does — it just cannot dispatch. `$` is the skill sigil's own
   // skills-only menu.
-  const sigilMatch = profile?.skillPrefix === '$' ? before.match(SKILL_SIGIL_TRIGGER) : null
-  const midPromptMatch = profile ? before.match(MID_PROMPT_SLASH_TRIGGER) : null
-  const match = sigilMatch ?? midPromptMatch
-  if (!match) {
+  const sigilQuery = profile?.skillPrefix === '$' ? matchSkillSigil(before) : null
+  const query = sigilQuery ?? (profile ? before.match(MID_PROMPT_SLASH_TRIGGER)?.[1] : undefined)
+  if (query === undefined) {
     return { mode: 'none' }
   }
-  const query = match[1]
+  const isSigil = sigilQuery !== null
   return deriveSlashAutocomplete(
-    sigilMatch ? '$' : '/',
+    isSigil ? '$' : '/',
     query,
     before.length - query.length - 1,
-    sigilMatch ? [] : agentCommands,
+    isSigil ? [] : agentCommands,
     profile,
     discovery,
     dismissedTriggerKey,
