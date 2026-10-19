@@ -50,6 +50,7 @@ test.describe('Workspace emoji picker', () => {
       state.openModal('edit-meta', {
         worktreeId: worktree.id,
         repoId: worktree.repoId,
+        executionHostId: worktree.hostId,
         currentDisplayName: worktree.displayName,
         currentComment: worktree.comment,
         focus: 'displayName'
@@ -72,7 +73,7 @@ test.describe('Workspace emoji picker', () => {
     await orcaPage.evaluate(() => window.__store!.getState().openModal('worktree-palette'))
     const palette = orcaPage.getByRole('dialog', { name: 'Jump to...' })
     const paletteInput = palette.getByPlaceholder(
-      'Search chats, terminals, worktrees, settings, and actions...'
+      'Search chats, terminals, workspaces, tasks, settings, and actions...'
     )
     await expect(paletteInput).toBeFocused()
     await captureProof(orcaPage, testInfo, 'cmd-j-before.png')
