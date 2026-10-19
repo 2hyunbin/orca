@@ -187,6 +187,7 @@ describe('a structured chat on a paired server', () => {
     mocks.callRuntimeRpc.mockResolvedValue({ runtimeId: 'runtime-a', capabilities: [] })
     await expect(prepareNativeChatSessionAttachmentUpload(owner)).resolves.toEqual({
       ok: false,
+      unsupported: true,
       notice:
         'This needs a newer Orca on the computer running this chat. Update Orca there, then try again.'
     })

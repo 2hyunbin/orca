@@ -82,6 +82,8 @@ export function useNativeChatComposerAttachments({
   revealPendingImageAttachment: (id: string, previewUrl?: string) => void
   dropPendingImageAttachment: (id: string) => boolean
   pendingChips: NativeChatPendingAttachmentChips
+  /** The editor while it shows this scope; null once it went or shows another. */
+  scopeEditor: () => NativeChatComposerInput | null
 } {
   const { imageAttachments, setPreview, releasePreview, releaseAllPreviews } =
     useNativeChatComposerImageChips(attachmentScopeKey)
@@ -300,6 +302,7 @@ export function useNativeChatComposerAttachments({
 
   return {
     pendingChips,
+    scopeEditor,
     imageAttachments,
     attachResolvedPaths,
     clearImageAttachments: () => {

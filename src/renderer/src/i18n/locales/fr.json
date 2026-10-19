@@ -18347,6 +18347,8 @@
         "removeAttachment": "Retirer la pièce jointe",
         "pastedImageLabel": "Image collée",
         "pastedTextLabel": "Texte collé",
+        "pasteNotSavedLabel": "Collage non enregistré",
+        "pasteNotSaved": "Ce collage n'a pas été enregistré. Collez-le à nouveau ou retirez-le.",
         "pastedTextTooLarge": "Ce collage ferait dépasser à votre message la limite de 256 Ko par message. Raccourcissez-le, puis collez-le à nouveau.",
         "draftNotSaved": "Ce brouillon n'a pas encore pu être enregistré. Orca continue d'essayer.",
         "imageNotBroughtBack": "L'image {{name}} n'a pas pu être récupérée avec ce brouillon. Joignez-la à nouveau ou retirez-la.",

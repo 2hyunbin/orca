@@ -18262,6 +18262,8 @@
         "removeAttachment": "添付ファイルを削除する",
         "pastedImageLabel": "貼り付けた画像",
         "pastedTextLabel": "貼り付けたテキスト",
+        "pasteNotSavedLabel": "貼り付けを保存できませんでした",
+        "pasteNotSaved": "この貼り付けは保存されませんでした。もう一度貼り付けるか、削除してください。",
         "pastedTextTooLarge": "この貼り付けでメッセージが 1 件あたりの上限 256 KB を超えます。短くしてからもう一度貼り付けてください。",
         "draftNotSaved": "この下書きはまだ保存できていません。Orca は保存を再試行し続けます。",
         "imageNotBroughtBack": "{{name}} をこの下書きと一緒に復元できませんでした。もう一度添付するか、削除してください。",

@@ -18262,6 +18262,8 @@
         "removeAttachment": "첨부파일 삭제",
         "pastedImageLabel": "붙여넣은 이미지",
         "pastedTextLabel": "붙여넣은 텍스트",
+        "pasteNotSavedLabel": "붙여넣기 저장 안 됨",
+        "pasteNotSaved": "이 붙여넣기는 저장되지 않았습니다. 다시 붙여넣거나 제거하세요.",
         "pastedTextTooLarge": "이 붙여넣기로 메시지가 메시지당 한도인 256KB를 초과합니다. 줄인 다음 다시 붙여넣으세요.",
         "draftNotSaved": "이 초안을 아직 저장하지 못했습니다. Orca가 계속 다시 시도합니다.",
         "imageNotBroughtBack": "{{name}}을(를) 이 초안과 함께 복원하지 못했습니다. 다시 첨부하거나 제거하세요.",

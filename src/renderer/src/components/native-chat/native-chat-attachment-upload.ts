@@ -202,7 +202,9 @@ export { nativeChatLocalAttachmentUnsupportedNotice } from './native-chat-compos
 export async function prepareNativeChatSessionAttachmentUpload(
   owner: NativeChatRuntimeSessionAttachmentOwner
 ): Promise<
-  { ok: true; target: AgentSessionAttachmentUploadTarget } | { ok: false; notice: string }
+  | { ok: true; target: AgentSessionAttachmentUploadTarget }
+  /** `unsupported`: the server answered that it keeps no attachments. */
+  | { ok: false; notice: string; unsupported?: true }
 > {
   const status = await callRuntimeRpc<RuntimeStatus>(
     { kind: 'environment', environmentId: owner.environmentId },
@@ -214,6 +216,7 @@ export async function prepareNativeChatSessionAttachmentUpload(
     // The same words as any write a server too old for it refuses.
     return {
       ok: false,
+      unsupported: true,
       notice: translate(
         'components.native-chat.writeNotice.unsupported',
         AGENT_SESSION_WRITE_NOTICE_COPY.unsupported

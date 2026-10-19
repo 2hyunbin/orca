@@ -18227,6 +18227,8 @@
         "removeAttachment": "移除附件",
         "pastedImageLabel": "粘贴的图片",
         "pastedTextLabel": "粘贴的文本",
+        "pasteNotSavedLabel": "粘贴未保存",
+        "pasteNotSaved": "此粘贴内容未保存。请重新粘贴或将其移除。",
         "pastedTextTooLarge": "此次粘贴会使消息超过单条消息 256 KB 的上限。请缩短后再粘贴。",
         "draftNotSaved": "此草稿尚未保存成功。Orca 会继续尝试。",
         "imageNotBroughtBack": "无法随此草稿恢复 {{name}}。请重新附加或将其移除。",

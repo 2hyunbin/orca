@@ -18545,6 +18545,8 @@
         "removeAttachment": "Remove attachment",
         "pastedImageLabel": "Pasted image",
         "pastedTextLabel": "Pasted text",
+        "pasteNotSavedLabel": "Paste not saved",
+        "pasteNotSaved": "This paste was not saved. Paste it again or remove it.",
         "pastedTextTooLarge": "This paste would put your message over the 256 KB limit for one message. Shorten it, then paste again.",
         "draftNotSaved": "This draft couldn't be saved yet. Orca keeps trying.",
         "imageNotBroughtBack": "{{name}} couldn't be brought back with this draft. Attach it again or remove it.",

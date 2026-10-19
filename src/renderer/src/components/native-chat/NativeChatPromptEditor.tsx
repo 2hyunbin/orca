@@ -28,6 +28,7 @@ import {
   promptTextPosition
 } from './native-chat-prompt-document'
 import type { NativeChatComposerInput } from './native-chat-composer-input'
+import { replaceNativeChatPastedTextNodes } from './native-chat-pasted-text-reference'
 import { NativeChatImageRowProvider } from './NativeChatImageReferencePill'
 
 type Props = Omit<HTMLAttributes<HTMLDivElement>, 'onChange' | 'onSelect'> & {
@@ -284,6 +285,28 @@ export function NativeChatPromptEditor({
               if (tr.docChanged) {
                 editor.view.dispatch(tr.setMeta('addToHistory', false))
               }
+            },
+            stagePastedText: (token, register) => {
+              const { doc, selection } = editor.state
+              register(doc.slice(selection.from, selection.to), editor.schema)
+              const pill = { type: NativeChatFileReference.name, attrs: { token } }
+              editor.view.dispatch(closeHistory(editor.state.tr))
+              editor.view.dispatch(
+                editor.state.tr.replaceSelectionWith(editor.schema.nodeFromJSON(pill), false)
+              )
+              editor.view.dispatch(closeHistory(editor.state.tr))
+            },
+            replacePastedText: (token, content) => {
+              if (editor.view.composing) {
+                return 'composing'
+              }
+              const { tr } = editor.state
+              const replaced = replaceNativeChatPastedTextNodes(tr, token, content)
+              // Not a step of its own: undo takes back the paste, and redo then brings the result.
+              if (replaced) {
+                editor.view.dispatch(tr.setMeta('addToHistory', false))
+              }
+              return replaced
             },
             insertFileReferences: (paths) => {
               editor.commands.insertContentAt(

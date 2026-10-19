@@ -11,7 +11,7 @@ import { useNativeChatLaunchDraftAdoption } from './use-native-chat-launch-draft
 import { NativeChatComposerField } from './NativeChatComposerField'
 import type { NativeChatResolvedTarget } from './native-chat-composer-target'
 import { useNativeChatComposerAttachments } from './use-native-chat-composer-attachments'
-import { nativeChatImageSendBlock } from './native-chat-image-reattach'
+import { nativeChatComposerSendBlock } from './native-chat-composer-pasted-text-references'
 import { useNativeChatComposerHandle } from './use-native-chat-composer-handle'
 import { useNativeChatFileDrops } from './use-native-chat-file-drops'
 import { useNativeChatComposerKeyDown } from './use-native-chat-composer-keydown'
@@ -178,12 +178,12 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
     })
     const { imageAttachments, attachResolvedPaths, clearImageAttachments, removeImageAttachment } =
       attachments
-    const imageBlock = nativeChatImageSendBlock(imageAttachments)
-    const sendBlockedReason = imageBlock.reason ?? structuredTransport?.sendBlockedReason ?? null
+    const sendBlock = nativeChatComposerSendBlock(imageAttachments, draftScopeKey)
+    const sendBlockedReason = sendBlock.reason ?? structuredTransport?.sendBlockedReason ?? null
     const sendHeld =
       disabled ||
       structuredTransport?.sendOut === true ||
-      imageBlock.holdsSend ||
+      sendBlock.holdsSend ||
       structuredTransport?.sendBlockedReason !== undefined
     const sendButtonDisabled = isWorking
       ? !hasPty || !onStop
@@ -230,7 +230,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       resolvePendingImageAttachment: attachments.pendingChips.resolve,
       revealPendingImageAttachment: attachments.revealPendingImageAttachment,
       dropPendingImageAttachment: attachments.dropPendingImageAttachment,
-      pastedTextChips: structuredTransport ? attachments.pendingChips : null,
+      pastedTextEditor: structuredTransport ? attachments.scopeEditor : null,
       setNotice
     })
 
