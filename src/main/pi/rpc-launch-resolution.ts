@@ -41,7 +41,7 @@ export type PiRpcLaunchPartDeps = {
 
 // From 0.84.0 Pi emits agent_settled after retries and detached compaction, which a chat's turn
 // waits on; older Pi (the 0.73.x package included) runs only in a terminal.
-const PI_RPC_MINIMUM_VERSIONS = ['0.84.0'] as const
+export const PI_RPC_MINIMUM_VERSIONS = ['0.84.0'] as const
 
 /** The binary a Pi launch with `env` spawns; create support resolves through here too. */
 export function resolvePiRpcCommand(

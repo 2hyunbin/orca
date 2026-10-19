@@ -3,7 +3,11 @@ import type { StructuredAgentId } from '../../shared/agent-session-provider-hand
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import { isTuiAgent } from '../../shared/tui-agent-config'
 import { resolveTuiAgentLaunchEnv } from '../../shared/tui-agent-launch-defaults'
-import { launchableRelease, type AgentCliVersionCheck } from '../agent-cli-version-probe'
+import {
+  checkAgentCliVersion,
+  launchableRelease,
+  type AgentCliVersionCheck
+} from '../agent-cli-version-probe'
 import {
   resolveStructuredAgentSessionCreateSupport,
   warnStructuredAgentSessionCreateUnsupported,
@@ -61,7 +65,10 @@ export async function observeStructuredAgentLaunch(
     refreshShellOnMiss ? refreshHostAgentBaseEnvironmentAfterMiss : undefined,
     { env: ({ env }) => env, cwd: once }
   )
-  return check.checkVersion({ ...launch, cwd: await once() })
+  return checkAgentCliVersion(
+    { program: launch.command, cwd: await once(), env: launch.env },
+    check.minimumVersions
+  )
 }
 
 /** Admission's answer in the workspace `cwd` names: only a too-old or unstartable binary keeps the
