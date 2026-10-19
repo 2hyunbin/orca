@@ -10,7 +10,7 @@ import { makePaneKey } from '../../../../shared/stable-pane-id'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import { useWorktreeAgentRows } from './useWorktreeAgentRows'
 import { useShallow } from 'zustand/react/shallow'
-import { selectAcknowledgedAgentTimes } from './worktree-card-agent-ack-inputs'
+import { selectAgentRowsUnread } from './worktree-card-agent-ack-inputs'
 
 Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true)
 
@@ -68,7 +68,7 @@ it.skipIf(!process.env.ORCA_AGENT_ROWS_BENCH)(
         function VisibleProbe({ index }: { index: number }) {
           const rows = useWorktreeAgentRows(`wt-${index}`, true)
           useWorktreeAgentRows(`wt-${index}`, false)
-          useAppStore(useShallow((state) => selectAcknowledgedAgentTimes(state, rows)))
+          useAppStore(useShallow((state) => selectAgentRowsUnread(state, rows)))
           renders += 1
           return null
         }

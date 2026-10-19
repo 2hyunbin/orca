@@ -1,3 +1,7 @@
+import {
+  clientReadsCurrentRequests,
+  STRUCTURED_AGENT_SESSION_CURRENT_REQUESTS_METHODS
+} from './structured-agent-session-current-requests'
 // `agentSession.*` — the structured session RPC surface.
 //
 // Every method here is gated on the client advertising
@@ -9,6 +13,10 @@ import {
   projectBackgroundTaskEvent,
   projectBackgroundTaskHistory
 } from './structured-agent-session-background-task-capability'
+import {
+  projectQueuedImageCardPublication,
+  projectQueuedImageCardHistory
+} from './structured-agent-session-queued-image-capability'
 import {
   projectTurnItemEvent,
   projectTurnItemHistory
@@ -54,10 +62,15 @@ import {
   OptionsParams,
   RewindParams,
   SendParams,
+  SleepWorkspaceParams,
   SubscribeParams,
   UnsubscribeParams
 } from './structured-agent-session-schemas'
 import { sendStructuredAgentSessionForClient } from './structured-agent-session-send-compatibility'
+import { getStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
+import { structuredSessionNeverStarted } from '../../agent-session-record-founding'
+import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
+import { AGENT_SESSION_SNAPSHOT_CATCH_UP_CLIENT_CAPABILITY } from '../../../../shared/protocol-version'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import {
   noteStructuredAgentSessionClose,
@@ -154,6 +167,52 @@ export const STRUCTURED_AGENT_SESSION_METHODS = [
       return { ok: true as const }
     }
   }),
+  defineMethod({
+    name: 'agentSession.sleepWorkspace',
+    permission: 'workspace',
+    params: SleepWorkspaceParams,
+    handler: async (params, ctx) => {
+      requireStructuredCapability(ctx)
+      const installed = getStructuredAgentSessionHost()
+      if (installed) {
+        return installed.sleepWorkspace(params.workspaceId)
+      }
+      let store: Awaited<ReturnType<typeof ctx.runtime.openAgentSessionRecordStore>>
+      try {
+        store = await ctx.runtime.openAgentSessionRecordStore()
+      } catch (error) {
+        const appeared = getStructuredAgentSessionHost()
+        if (appeared) {
+          return appeared.sleepWorkspace(params.workspaceId)
+        }
+        console.warn('[agent-session] workspace sleep record inventory unavailable', error)
+        return { stoppedSessionIds: [], failures: [{ reason: 'inventory-unavailable' }] }
+      }
+      const appeared = getStructuredAgentSessionHost()
+      if (appeared) {
+        return appeared.sleepWorkspace(params.workspaceId)
+      }
+      try {
+        const records = store
+          .listRecords()
+          .filter(
+            (record) =>
+              record.location.workspaceId === params.workspaceId &&
+              record.location.executionHostId === LOCAL_EXECUTION_HOST_ID
+          )
+        const stoppedSessionIds = records
+          .filter(structuredSessionNeverStarted)
+          .map((record) => record.sessionId)
+        const failures = records
+          .filter((record) => !structuredSessionNeverStarted(record))
+          .map((record) => ({ sessionId: record.sessionId, reason: 'stop-unverifiable' as const }))
+        return failures.length > 0 ? { stoppedSessionIds, failures } : { stoppedSessionIds }
+      } catch (error) {
+        console.warn('[agent-session] workspace sleep record inventory failed', error)
+        return { stoppedSessionIds: [], failures: [{ reason: 'inventory-unavailable' }] }
+      }
+    }
+  }),
   ...STRUCTURED_AGENT_SESSION_PROMPT_RESPONSE_METHODS,
   defineMethod({
     name: 'agentSession.history',
@@ -162,7 +221,10 @@ export const STRUCTURED_AGENT_SESSION_METHODS = [
     handler: async (params, ctx) => {
       const host = await requireInstalledHost(ctx, params.sessionId)
       return projectTurnItemHistory(
-        projectBackgroundTaskHistory(await host.history(params), ctx),
+        projectQueuedImageCardHistory(
+          projectBackgroundTaskHistory(await host.history(params), ctx),
+          ctx
+        ),
         ctx,
         host.sessionAgent(params.sessionId)
       )
@@ -184,8 +246,11 @@ export const STRUCTURED_AGENT_SESSION_METHODS = [
       // Resolves once the conversation is open and the opening snapshot (or the missed batch) is
       // emitted; a close that raced the open disposes what it bound.
       dispose = await host.subscribe({
+        readsCurrentRequests: clientReadsCurrentRequests(ctx),
         id: subscriptionId,
         sessionId: params.sessionId,
+        projectQueuePublication: (publication) =>
+          projectQueuedImageCardPublication(publication, ctx),
         emit: (event) =>
           emit(
             projectTurnItemEvent(
@@ -195,6 +260,13 @@ export const STRUCTURED_AGENT_SESSION_METHODS = [
             )
           ),
         ...(params.cursor ? { cursor: params.cursor } : {}),
+        // Desktop snapshots require settled send echoes and independent current requests.
+        snapshotCatchUp:
+          ctx.clientKind === undefined ||
+          ctx.clientKind === 'mobile' ||
+          (ctx.clientCapabilities?.includes(AGENT_SESSION_SNAPSHOT_CATCH_UP_CLIENT_CAPABILITY) ===
+            true &&
+            clientReadsCurrentRequests(ctx)),
         // Every phone's app, whatever its version, ends a stream over a frame its bridge cannot carry.
         ...(ctx.clientKind === 'mobile' ? { boundedFrames: true } : {})
       })
@@ -226,5 +298,6 @@ export const STRUCTURED_AGENT_SESSION_METHODS = [
   ...STRUCTURED_AGENT_SESSION_TURN_COMPLETION_METHODS,
   ...STRUCTURED_AGENT_SESSION_THREAD_GOAL_METHODS,
   ...STRUCTURED_AGENT_SESSION_CONVERSATION_OUTLINE_METHODS,
+  ...STRUCTURED_AGENT_SESSION_CURRENT_REQUESTS_METHODS,
   ...STRUCTURED_AGENT_SESSION_OPTIONS_READ_METHODS
 ]

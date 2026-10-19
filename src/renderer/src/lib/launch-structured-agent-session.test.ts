@@ -67,9 +67,9 @@ describe('structured agent session launch', () => {
       code: 'structured_agent_session_host_permission'
     })
     const closed = createStructuredAgentSessionLaunchIntent('workspace-1', 'claude')
-    await expect(launchStructuredAgentSession(closed, undefined, false, () => true)).rejects.toThrow(
-      'cancelled before create'
-    )
+    await expect(
+      launchStructuredAgentSession(closed, undefined, false, () => true)
+    ).rejects.toThrow('cancelled before create')
     expect(vi.mocked(callStructuredAgentSession).mock.calls.map(([, method]) => method)).toEqual([
       'agentSession.createSupport',
       'agentSession.createSupport'
@@ -325,8 +325,10 @@ describe('structured agent session launch', () => {
       kind: 'admitted'
     })
     vi.mocked(callStructuredAgentSession).mockResolvedValueOnce({ supported: false, reason: 'wsl' })
+    // The reason names what to tell the user (for example, no chat in WSL).
     await expect(admitStructuredLaunchOnHost(server, 'id:wt-1', 'claude')).resolves.toEqual({
-      kind: 'declined'
+      kind: 'declined',
+      reason: 'wsl'
     })
     vi.mocked(callStructuredAgentSession).mockRejectedValueOnce(new Error('runtime unreachable'))
     await expect(admitStructuredLaunchOnHost(server, 'id:wt-1', 'claude')).resolves.toEqual({
@@ -580,5 +582,38 @@ describe('structured agent session launch', () => {
     ).catch((caught: unknown) => caught)
 
     expect(transportError).not.toBeInstanceOf(StructuredAgentSessionCreateRefusalError)
+  })
+
+  // Pins the thrown-error half (round-2 S5): a host that flattened the refusal to runtime_error
+  // still ends it with the token, and client-minted codes never prove nothing was created.
+  it('reads a definitive token from a flattened runtime_error message', async () => {
+    mockSupportedCreate(() => {
+      throw Object.assign(new Error('structured_agent_session_unsupported'), {
+        code: 'runtime_error'
+      })
+    })
+    const error = await launchStructuredAgentSession(
+      createStructuredAgentSessionLaunchIntent('workspace-flattened-refusal', 'codex')
+    ).catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(StructuredAgentSessionCreateRefusalError)
+    expect(error).toMatchObject({ code: 'structured_agent_session_unsupported' })
+  })
+
+  it.each([
+    'runtime_manually_disconnected',
+    'runtime_rpc_queue_overloaded',
+    'runtime_unavailable',
+    'remote_runtime_unavailable',
+    'method_not_supported'
+  ])('keeps a thrown %s outcome unknown', async (code) => {
+    mockSupportedCreate(() => {
+      throw Object.assign(new Error('failed'), { code })
+    })
+    const error = await launchStructuredAgentSession(
+      createStructuredAgentSessionLaunchIntent(`workspace-client-${code}`, 'codex')
+    ).catch((caught: unknown) => caught)
+
+    expect(error).not.toBeInstanceOf(StructuredAgentSessionCreateRefusalError)
   })
 })

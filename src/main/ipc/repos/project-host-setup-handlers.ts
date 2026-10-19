@@ -16,6 +16,7 @@ import { getProjectIdForProviderIdentity } from '../../../shared/project-host-se
 import { getProjectHostSetupForRepo } from '../../../shared/project-host-setup-lookup'
 import { getRepoExecutionHostId, parseExecutionHostId } from '../../../shared/execution-host'
 import { prepareLocalWorktreeRootForRepo } from '../../worktree-root-preparation'
+import { updateProjectHostSetupWithProvenKind } from '../../folder-repo-git-conversion'
 import { invalidateAuthorizedRootsCache } from '../registered-worktree-roots-cache'
 import { emitRepoAdded } from './repo-added-telemetry'
 import { notifyReposChanged } from './repos-changed-notification'
@@ -63,7 +64,7 @@ function alignRepoWithRequestedProject(
       throw new Error('Imported folder does not match the selected project identity.')
     }
     // Why: stamp the selected project's provider identity when the folder lacks upstream, so projection can merge it.
-    const updated = store.updateRepo(repo.id, {
+    const updated = store.updateRepo(repo, {
       upstream: {
         owner: identity.owner,
         repo: identity.repo,
@@ -76,7 +77,7 @@ function alignRepoWithRequestedProject(
     repo = updated
     setup = getProjectHostSetupForRepo(store.getProjectHostSetups(), repo)
   }
-  const updated = store.updateRepo(repo.id, { projectHostSetupMethod: setupMethod })
+  const updated = store.updateRepo(repo, { projectHostSetupMethod: setupMethod })
   if (!updated) {
     throw new Error(
       `Project setup repo disappeared before setup metadata could be linked: ${repo.id}`
@@ -107,14 +108,21 @@ export function registerProjectHostSetupHandlers(mainWindow: BrowserWindow, stor
 
   ipcMain.handle(
     'projectHostSetups:update',
-    (_event, rawArgs: ProjectHostSetupUpdateArgs): ProjectHostSetupUpdateResult => {
+    async (_event, rawArgs: ProjectHostSetupUpdateArgs): Promise<ProjectHostSetupUpdateResult> => {
       const args = parseProjectGroupIpcArgs(
         ProjectHostSetupUpdateIpcArgs,
         rawArgs,
         'project_host_setup_update_invalid_args'
       )
       assertWslMoveHostSetupIdWritable(store, args.setupId)
-      const result = store.updateProjectHostSetup(args)
+      const result = await updateProjectHostSetupWithProvenKind(
+        store,
+        (setupArgs) => {
+          assertWslMoveHostSetupIdWritable(store, setupArgs.setupId)
+          return store.updateProjectHostSetup(setupArgs)
+        },
+        args
+      )
       if (!result) {
         throw new Error(`Project host setup not found: ${args.setupId}`)
       }

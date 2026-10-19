@@ -25,10 +25,8 @@ import { installRuntimeGitCommandSurface } from '../runtime-git-command-surface'
 import { installRuntimeRepositoryCommandSurface } from '../runtime-repository-command-surface'
 import { installRuntimeReviewCommandSurface } from '../runtime-review-command-surface'
 import { installRuntimeServiceCommandSurface } from '../runtime-service-command-surface'
-import {
-  RuntimeSkillCommands,
-  installRuntimeSkillCommandSurface
-} from '../runtime-skill-command-surface'
+import { RuntimeSkillCommands } from '../runtime-skill-command-surface'
+import { installRuntimeSkillCommandSurface } from '../runtime-skill-command-contract'
 import { getAppEnvironment } from '../../../shared/app-environment'
 import { RuntimeClientSettingsController } from '../runtime-client-settings'
 import { RuntimeSessionSearchSettingsController } from '../runtime-session-search-settings'
@@ -47,6 +45,7 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
   declare protected readonly getLocalProviderFn: HostServices['getLocalProviderFn']
   declare readonly onPtyStopped: HostServices['onPtyStopped']
   declare protected readonly onTerminalAgentStatus: HostServices['onTerminalAgentStatus']
+  declare protected readonly onTerminalProgramStatusFacet: HostServices['onTerminalProgramStatusFacet']
   declare protected readonly onTerminalSideEffects: HostServices['onTerminalSideEffects']
   declare protected readonly onClaudeTerminalEvidence: HostServices['onClaudeTerminalEvidence']
   declare readonly getAgentStatusSnapshotFn: HostServices['getAgentStatusSnapshotFn']
@@ -233,6 +232,7 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
     this.getLocalProviderFn = deps?.getLocalProvider ?? null
     this.onPtyStopped = deps?.onPtyStopped ?? null
     this.onTerminalAgentStatus = deps?.onTerminalAgentStatus ?? null
+    this.onTerminalProgramStatusFacet = deps?.onTerminalProgramStatusFacet ?? null
     this.onClaudeTerminalEvidence = deps?.onClaudeTerminalEvidence ?? null
     this.buildAgentHookPtyEnv = deps?.buildAgentHookPtyEnv ?? null
     this.getDesktopWindowStatusFn = deps?.getDesktopWindowStatus ?? (() => 'openable')

@@ -38,6 +38,9 @@ export const uiTerminalAndSessionTabsApi = {
       launchToken?: string
       launchAgent?: TuiAgent
       viewMode?: 'terminal' | 'chat'
+      targetGroupId?: string
+      afterTabId?: string
+      shellOverride?: string
       title?: string
       ptyId?: string
       activate?: boolean
@@ -65,6 +68,9 @@ export const uiTerminalAndSessionTabsApi = {
         launchToken?: string
         launchAgent?: TuiAgent
         viewMode?: 'terminal' | 'chat'
+        targetGroupId?: string
+        afterTabId?: string
+        shellOverride?: string
         title?: string
         ptyId?: string
         activate?: boolean
@@ -170,6 +176,16 @@ export const uiTerminalAndSessionTabsApi = {
     ) => callback(data)
     ipcRenderer.on('ui:renameTerminal', listener)
     return () => ipcRenderer.removeListener('ui:renameTerminal', listener)
+  },
+  onSetPaneTitle: (
+    callback: (data: { tabId: string; leafId: string; title: string | null }) => void
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: { tabId: string; leafId: string; title: string | null }
+    ) => callback(data)
+    ipcRenderer.on('ui:setPaneTitle', listener)
+    return () => ipcRenderer.removeListener('ui:setPaneTitle', listener)
   },
   onFocusTerminal: (
     callback: (data: {

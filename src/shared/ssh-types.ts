@@ -71,13 +71,10 @@ export type SshTarget = {
   relayGracePeriodSeconds?: number
   /** Lets this host's `orca` CLI drive this desktop's Orca browser tabs in the host's own
    *  workspaces (desktop browser bridge) and its relay-era terminals' orchestration commands.
-   *  Off by default: the host is a guest, not an owner. */
+   *  On unless explicitly `false`; read it through `isRemoteCliControlAllowed`. */
   allowRemoteCliControl?: boolean
-  /** Stamped when the switch is turned on with that meaning. A `true` without it was set while the
-   *  switch did nothing (1.4.225 onward), so load turns it off and asks for a fresh opt-in. */
+  /** Retired: written by earlier builds and ignored now. Kept so a downgrade still finds its stamp. */
   allowRemoteCliControlConsent?: 'desktop-browser-bridge'
-  /** Orca turned the switch off for that reason; settings say why until the switch is saved again. */
-  allowRemoteCliControlReset?: boolean
   /** Set to true after a successful connection that triggered a credential
    *  prompt (passphrase or password). Persisted so startup reconnect can
    *  partition targets into eager (no passphrase) vs deferred (passphrase)
@@ -284,7 +281,16 @@ export const SSH_MANAGED_SERVER_PHASES = [
   'starting'
 ] as const
 
-export const SSH_MANAGED_SERVER_UPDATE_STATES = ['host-newer', 'deferred', 'failed'] as const
+// Every state but host-newer means the server may be behind this app. Readers drop unknown states.
+export const SSH_MANAGED_SERVER_UPDATE_STATES = [
+  'host-newer',
+  'deferred',
+  'failed',
+  'rolled-back',
+  'no-template',
+  'migrating',
+  'check-failed'
+] as const
 
 /** Why a managed server kept its version on this connect; absent when it is current or updated. */
 export type SshManagedServerUpdateNote = {

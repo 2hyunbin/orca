@@ -76,6 +76,7 @@ export function structuredHostStub(
       value: { itemId: 'item-1', epoch: 'rewound-epoch' }
     })),
     close: vi.fn(async () => undefined),
+    sleepWorkspace: vi.fn(async () => ({ stoppedSessionIds: [] })),
     revealSession: vi.fn(async () => ({
       sessionId,
       workspaceId,
@@ -92,6 +93,7 @@ export function structuredHostStub(
     modelCatalog: vi.fn(() => ({ origin: 'unknown' as const })),
     readCommands: vi.fn(() => ({ commands: [{ name: 'clear', kind: 'command' as const }] })),
     history: vi.fn(() => ({ ok: true, page: { items: [] } })),
+    readCurrentRequests: vi.fn(() => ({ json: '[]', nextCursor: null })),
     sessionAgent: vi.fn(() => null),
     journalSnapshot: vi.fn(() => ({
       sessionId,
