@@ -58,7 +58,7 @@ describe('collectDuplicateOrcadMigrationSessionIdentities', () => {
       }
     }
     expect(collectDuplicateOrcadMigrationSessionIdentities(next)).toEqual([
-      'one terminal pane saved twice in the tab "Build" in /srv/repo: close that tab, or choose Move anyway'
+      'one terminal pane saved twice in the tab "Build" in /srv/repo: close that tab'
     ])
   })
 
@@ -66,7 +66,7 @@ describe('collectDuplicateOrcadMigrationSessionIdentities', () => {
     const next = session()
     next.tabsByWorktree[WORKTREE] = [terminal('tab-a'), terminal('tab-a')]
     expect(collectDuplicateOrcadMigrationSessionIdentities(next)).toEqual([
-      'one terminal tab saved twice in /srv/repo: close one of them, or choose Move anyway'
+      'one terminal tab saved twice in /srv/repo: close one of them'
     ])
   })
 })

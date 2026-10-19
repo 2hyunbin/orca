@@ -469,7 +469,7 @@ describe('#30610: one terminal pane saved in two tabs', () => {
     expect(exportState(state).payload.dormantState?.workspaceSession).toBeUndefined()
     expect(census(state).counts['workspace-session']).toBe(1)
     expect(refusal(state)).toBe(
-      'This SSH host cannot move yet: saved tabs and panes (one terminal pane saved in two tabs in /srv/repo, "tab-a" and "tab-b": close one of them, or choose Move anyway).'
+      'This SSH host cannot move yet: saved tabs and panes (one terminal pane saved in two tabs, "tab-a" and "tab-b", in /srv/repo: close one of them).'
     )
   })
 

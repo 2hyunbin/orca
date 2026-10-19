@@ -10,7 +10,7 @@ const KIND_LABELS: Record<string, string> = {
   group: 'one tab group saved twice'
 }
 
-const CLEAR = 'close one of them, or choose Move anyway'
+const CLEAR = 'close one of them'
 
 /**
  * Identities the server keeps unique but this desktop saved more than once (#30610). Caught here
@@ -46,8 +46,8 @@ export function collectDuplicateOrcadMigrationSessionIdentities(
     const names = tabIds.map((tabId, index) => `"${tabs[index]?.title ?? tabId}"`)
     items.push(
       tabIds.length === 1
-        ? `one terminal pane saved twice in the tab ${names[0]}${where}: close that tab, or choose Move anyway`
-        : `one terminal pane saved in ${tabIds.length === 2 ? 'two' : tabIds.length} tabs${where}, ${names.join(' and ')}: ${CLEAR}`
+        ? `one terminal pane saved twice in the tab ${names[0]}${where}: close that tab`
+        : `one terminal pane saved in ${tabIds.length === 2 ? 'two' : tabIds.length} tabs, ${names.join(' and ')},${where}: ${CLEAR}`
     )
   }
   return items
