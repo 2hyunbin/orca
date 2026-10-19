@@ -15,10 +15,13 @@ async function shoot(
   name: string,
   outputPath: (name: string) => string
 ): Promise<void> {
-  const file = process.env.ORCA_E2E_SCREENSHOT_DIR
+  await page.screenshot({ path: outputPathFor(name, outputPath) })
+}
+
+function outputPathFor(name: string, outputPath: (name: string) => string): string {
+  return process.env.ORCA_E2E_SCREENSHOT_DIR
     ? path.join(process.env.ORCA_E2E_SCREENSHOT_DIR, name)
     : outputPath(name)
-  await page.screenshot({ path: file })
 }
 
 function minimaxChip(page: Page) {
@@ -87,9 +90,14 @@ test('a provider set up only on this computer stays visible, greyed, under a ser
       'title',
       `Not set up on ${HOST_NAME}\nIts sign-in is saved on this computer only.`
     )
+    await expect(placeholder).toHaveText('Not set up')
     await expect(page.getByText('Configure usage tracking')).toHaveCount(0)
     await expect(page.getByText(`No usage on ${HOST_NAME}`)).toHaveCount(0)
     await shoot(page, '2-server-owner-minimax-placeholder.png', outputPath)
+    await page.screenshot({
+      path: outputPathFor('2b-server-owner-status-bar-closeup.png', outputPath),
+      clip: { x: 0, y: 740, width: 480, height: 60 }
+    })
 
     await page.getByRole('button', { name: 'Usage', exact: true }).click()
     const row = page.getByRole('menuitem').filter({ hasText: `Not set up on ${HOST_NAME}` })

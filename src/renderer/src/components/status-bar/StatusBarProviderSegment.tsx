@@ -249,14 +249,24 @@ export function ProviderSegment({
     )
   }
 
-  // Unavailable (CLI not installed), or set up on this device but not on the owning host
-  if (p.status === 'unavailable' || p.usageMetadata?.ownerNotSetUp) {
+  // Unavailable (CLI not installed)
+  if (p.status === 'unavailable') {
+    return (
+      <span className="inline-flex items-center gap-1 text-muted-foreground/50">
+        <ProviderIcon provider={provider} /> --
+      </span>
+    )
+  }
+
+  // Set up on this device but not on the owning host: labelled like a failure, minus the alarm
+  if (p.usageMetadata?.ownerNotSetUp) {
     return (
       <span
-        className="inline-flex items-center gap-1 text-muted-foreground/50"
-        title={p.usageMetadata?.ownerNotSetUp ? getProviderUsageErrorMessage(p) : undefined}
+        className="inline-flex items-center gap-1 text-muted-foreground"
+        title={getProviderUsageErrorMessage(p)}
       >
-        <ProviderIcon provider={provider} /> --
+        <ProviderIcon provider={provider} />
+        {!compact && <span className="text-[11px] font-medium">{statusLabel}</span>}
       </span>
     )
   }

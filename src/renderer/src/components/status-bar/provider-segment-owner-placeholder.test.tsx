@@ -25,16 +25,22 @@ const placeholder: ProviderRateLimits = {
 }
 
 describe('ProviderSegment owner placeholder', () => {
-  it('renders greyed like an unavailable provider, with the host in its tooltip', () => {
+  it('labels the chip "Not set up", with the host in its tooltip and no warning glyph', () => {
     const markup = renderToStaticMarkup(
       <ProviderSegment p={placeholder} compact={false} display="used" />
     )
-    expect(markup).toContain('text-muted-foreground/50')
+    expect(markup).toContain('>Not set up</span>')
     expect(markup).toContain(
       'title="Not set up on devbox\nIts sign-in is saved on this computer only."'
     )
     // Why: a placeholder is not a failure, so no warning glyph or refresh-failed copy.
     expect(markup).not.toContain('lucide-triangle-alert')
     expect(markup).not.toContain('Refresh failed')
+  })
+
+  it('drops the label in compact density, keeping the tooltip', () => {
+    const markup = renderToStaticMarkup(<ProviderSegment p={placeholder} compact display="used" />)
+    expect(markup).not.toContain('Not set up</span>')
+    expect(markup).toContain('title="Not set up on devbox')
   })
 })
