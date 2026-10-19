@@ -4,13 +4,19 @@ import { makePaneKey } from '../../../shared/stable-pane-id'
 import { useAppStore } from '@/store'
 import { resumeSleepingAgentSessionsForWorktree } from './resume-sleeping-agent-session'
 import { recordPaneIsOwnedByPreservedPane } from './sleeping-agent-pane-ownership'
+import { holdPaneResumeInPlace } from './pane-spawn-deferral-registry'
 
-const mocks = vi.hoisted(() => ({ layoutOwnerIsMain: false }))
+const mocks = vi.hoisted(() => ({ layoutOwnerIsMain: false, launch: vi.fn(() => true) }))
 
 vi.mock('../../../shared/layout-owner-switch', () => ({
   get ORCA_LAYOUT_OWNER_IS_MAIN() {
     return mocks.layoutOwnerIsMain
   }
+}))
+
+// The sweep's decision is under test; the new tab it would open is not.
+vi.mock('./sleeping-agent-session-launch', () => ({
+  launchSleepingAgentSession: mocks.launch
 }))
 
 const initialAppStoreState = useAppStore.getState()
@@ -19,6 +25,7 @@ const PANE_KEY = makePaneKey('tab-1', LEAF_ID)
 
 afterEach(() => {
   mocks.layoutOwnerIsMain = false
+  mocks.launch.mockClear()
   useAppStore.setState(initialAppStoreState, true)
 })
 
@@ -34,8 +41,8 @@ const record: SleepingAgentSessionRecord = {
   origin: 'quit'
 }
 
-// The first visit after a reboot: main found the pane's terminal gone and retired its binding
-// before the pane's fresh start, so the pane is in the layout with no terminal bound.
+// A pane in the layout with no terminal bound: either main cleared a gone terminal's binding
+// during the pane's reattach (a first visit after a reboot), or the pane's agent died in place.
 function retiredBindingState(): void {
   useAppStore.setState({
     activeWorktreeId: 'wt-1',
@@ -68,21 +75,54 @@ function retiredBindingState(): void {
   })
 }
 
-describe('a resume record whose pane main kept with its terminal binding retired', () => {
-  it('is owned by that pane on main-owned layouts, so the sweep leaves it to resume in place', () => {
+describe('a resume record whose pane has no terminal bound', () => {
+  it('on main-owned layouts, is left to the pane while its own start resumes it in place', () => {
+    mocks.layoutOwnerIsMain = true
+    retiredBindingState()
+    // The pane's reattach is in flight; main has cleared the gone terminal's binding meanwhile.
+    const release = holdPaneResumeInPlace(PANE_KEY, () => true)
+    try {
+      expect(recordPaneIsOwnedByPreservedPane(record, useAppStore.getState())).toBe(true)
+      expect(resumeSleepingAgentSessionsForWorktree('wt-1')).toBe(0)
+      expect(mocks.launch).not.toHaveBeenCalled()
+      const state = useAppStore.getState()
+      expect(state.tabsByWorktree['wt-1']?.map((tab) => tab.id)).toEqual(['tab-1'])
+      expect(state.sleepingAgentSessionsByPaneKey[PANE_KEY]).toBe(record)
+    } finally {
+      release()
+    }
+  })
+
+  it('on main-owned layouts, a mounted pane whose agent died is not its owner: the sweep resumes it', () => {
     mocks.layoutOwnerIsMain = true
     retiredBindingState()
 
-    expect(recordPaneIsOwnedByPreservedPane(record, useAppStore.getState())).toBe(true)
-    expect(resumeSleepingAgentSessionsForWorktree('wt-1')).toBe(0)
-    const state = useAppStore.getState()
-    expect(state.tabsByWorktree['wt-1']?.map((tab) => tab.id)).toEqual(['tab-1'])
-    expect(state.sleepingAgentSessionsByPaneKey[PANE_KEY]).toBe(record)
+    expect(recordPaneIsOwnedByPreservedPane(record, useAppStore.getState())).toBe(false)
+    expect(resumeSleepingAgentSessionsForWorktree('wt-1')).toBe(1)
+    expect(mocks.launch).toHaveBeenCalledWith(record, undefined)
   })
 
-  it('keeps the window-owned rule: an unbound pane does not own it', () => {
+  it('a start that settled, or a disposed pane, no longer owns it', () => {
+    mocks.layoutOwnerIsMain = true
     retiredBindingState()
+    holdPaneResumeInPlace(PANE_KEY, () => true)()
+    const disposedRelease = holdPaneResumeInPlace(PANE_KEY, () => false)
+    try {
+      expect(recordPaneIsOwnedByPreservedPane(record, useAppStore.getState())).toBe(false)
+    } finally {
+      disposedRelease()
+    }
+  })
 
-    expect(recordPaneIsOwnedByPreservedPane(record, useAppStore.getState())).toBe(false)
+  it('keeps the window-owned rule: an unbound pane does not own it, in flight or not', () => {
+    retiredBindingState()
+    const release = holdPaneResumeInPlace(PANE_KEY, () => true)
+    try {
+      expect(recordPaneIsOwnedByPreservedPane(record, useAppStore.getState())).toBe(false)
+    } finally {
+      release()
+    }
+    expect(resumeSleepingAgentSessionsForWorktree('wt-1')).toBe(1)
+    expect(mocks.launch).toHaveBeenCalledWith(record, undefined)
   })
 })
