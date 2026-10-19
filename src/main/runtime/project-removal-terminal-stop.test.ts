@@ -189,6 +189,33 @@ describe('project removal on the execution host', () => {
     releaseLocal()
   })
 
+  it('refuses a spawn on any host once no row with the removed id survives', async () => {
+    const sshRow: Repo = { ...store.getRepo(TEST_REPO_ID)!, connectionId: 'ssh-target' }
+    let rows = [sshRow]
+    const runtime = new OrcaRuntimeService({
+      ...store,
+      getRepo: (id: string) => rows.find((row) => row.id === id),
+      getRepos: () => rows,
+      removeProjectForHost: () => {
+        rows = []
+      }
+    })
+    runtime.setPtyController({
+      write: () => true,
+      kill: vi.fn(() => false),
+      stopAndWait: vi.fn(async () => true),
+      getForegroundProcess: async () => null
+    })
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
+
+    await runtime.removeProject(TEST_REPO_ID)
+
+    await expect(runtime.acquireWorktreeTerminalSpawn(TEST_WORKTREE_ID)).rejects.toThrow(
+      'repo_not_found'
+    )
+  })
+
   it('stops nothing when a same-id sibling row would claim the same PTYs', async () => {
     const removeProjectForHost = vi.fn()
     const stopAndWait = vi.fn(async (_ptyId: string) => true)

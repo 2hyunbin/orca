@@ -127,4 +127,29 @@ describe('project removal and native chat sessions', () => {
     expect(closed).toEqual(['ssh-chat'])
     expect([...visible]).toEqual(['local-chat'])
   })
+
+  it('still closes the chats when the terminal stop fails', async () => {
+    const { closed } = installHost([record('live-chat', TEST_WORKTREE_ID)])
+    const runtime = createRuntime([store.getRepo(TEST_REPO_ID)!])
+    runtime.registerPty('pty-1', TEST_WORKTREE_ID, null)
+    vi.spyOn(runtime, 'stopTerminalsForWorktree').mockRejectedValue(
+      new Error('runtime_unavailable')
+    )
+
+    await expect(runtime.removeProject(TEST_REPO_ID)).resolves.toEqual({ removed: true })
+
+    expect(closed).toEqual(['live-chat'])
+  })
+
+  it('still closes the chats when the terminal stops spent the removal budget', async () => {
+    const { closed } = installHost([record('live-chat', TEST_WORKTREE_ID)])
+    const runtime = createRuntime([])
+
+    await runtime.stopTerminalsForProject(store.getRepo(TEST_REPO_ID)!, {
+      deadline: Date.now() - 1,
+      closeStructuredSessions: true
+    })
+
+    expect(closed).toEqual(['live-chat'])
+  })
 })
