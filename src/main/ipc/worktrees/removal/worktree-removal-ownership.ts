@@ -8,15 +8,13 @@ import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { Repo } from '../../../../shared/repo-types'
 import { hasWorktreeRemovalRepoOwnerOnOtherHost } from '../../../worktree-removal-repo-owner'
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
-import { advertisedUrlWatcher } from '../../../ports/advertised-url-watcher'
 import { agentHookServer } from '../../../agent-hooks/server'
-import { localhostWorktreeLabelProxy } from '../../../localhost-worktree-label-proxy'
-import { deleteWorktreeHistoryDir } from '../../../terminal-history-deletion'
-import { pruneWorktreePRRefreshAliases } from '../../../github/pr-refresh-coordinator'
-import { recordWorkspaceCleanupRemovalSnapshotPrune } from '../../../workspace-cleanup-removal-snapshot-prune'
-import { pruneWorkspaceCleanupScanSnapshot } from '../../../workspace-cleanup-scan-snapshot'
-import { pruneWorkspaceSpaceAnalysisSnapshot } from '../../../workspace-space-analysis-snapshot'
 import { removeWorktreeMetaRow } from '../../../persistence/host-qualified-worktree-meta'
+import { pruneWorktreePRRefreshAliases } from '../../../github/pr-refresh-coordinator'
+import {
+  dropRemovedWorktreeProcessState,
+  pruneRemovedWorktreeSnapshots
+} from '../../../worktree-removal-process-cleanup'
 
 export async function stopPtysForDestructiveWorktreeRemoval(
   runtime: OrcaRuntimeService,
@@ -96,26 +94,16 @@ export function removeWorktreeMetadataAndTransientState(
   // Why outside the same-id gate: retirement is per host and per pane, so a surviving owner keeps its own.
   agentHookServer.dropStatusEntriesForRemovedWorktree(worktreeId, hostId ?? persistedHostId)
   if (!preservesSameIdOwner) {
-    advertisedUrlWatcher.forgetWorktree(worktreeId)
-    // Why: drop this worktree's localhost label routes so they don't accumulate in the proxy's route maps all session.
-    localhostWorktreeLabelProxy.unregisterWorktree(worktreeId)
-    // Why: schedule async history tree removal — never recursive-rmSync on the delete critical path.
-    deleteWorktreeHistoryDir(worktreeId)
-    // Why: release the removed worktree's PR-refresh aliases so coalesced queue entries don't retain it all session (memory creep).
+    dropRemovedWorktreeProcessState(worktreeId)
+    // Why here, not in the shared drop: the PR-refresh queue is desktop-only and imports Electron.
     pruneWorktreePRRefreshAliases(worktreeId)
     // Why: the desktop also hosts browser pages for paired clients; the runtime path closes them too.
     runtime.releaseRemovedWorktreeHostSessions(worktreeId, entryPoint)
   }
-  // Why: removed workspaces must never resurrect from the persisted cleanup/space scan snapshots.
-  const snapshotDirectory = store.getProfileStorageDirectory()
-  if (snapshotPruneBatchId) {
-    recordWorkspaceCleanupRemovalSnapshotPrune(snapshotDirectory, {
-      batchId: snapshotPruneBatchId,
-      worktreeId,
-      executionHostId: hostId
-    })
-    return
-  }
-  void pruneWorkspaceCleanupScanSnapshot(snapshotDirectory, worktreeId, hostId)
-  void pruneWorkspaceSpaceAnalysisSnapshot(snapshotDirectory, worktreeId, hostId)
+  pruneRemovedWorktreeSnapshots(
+    store.getProfileStorageDirectory(),
+    worktreeId,
+    hostId,
+    snapshotPruneBatchId
+  )
 }
