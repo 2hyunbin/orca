@@ -1,6 +1,6 @@
 import type { PtySpawnResult } from '../../../providers/pty-provider-contract'
+import { spawnWorktreeTarget } from '../../../../shared/worktree/host-qualified-identity'
 import { ptyIncarnationById } from '../provider/ownership-state'
-import { ptySizes } from '../delivery/visibility-state'
 import { tryGetProviderForPty } from '../provider/registry'
 import { ensureWslHookRelayForReattach } from '../../../agent-hooks/wsl-hook-relay-reattach'
 import { noteWslDistrosRunning } from '../../../wsl-background-distro-gate'
@@ -11,7 +11,8 @@ import {
 } from '../pane/agent-session-owners'
 import { spawnForStablePane, resolveStablePaneOwner } from '../pane/stable-owner'
 import { clearProviderPtyState } from '../provider/state-cleanup'
-import { isProviderAgentSessionOwnerLive, normalizeNodePtySpawnError } from '../provider/liveness'
+import { isProviderAgentSessionOwnerLive } from '../provider/liveness'
+import { failPtySpawnExecute } from '../spawn-execute-failure'
 import type { RuntimePtySpawnState } from './spawn-state'
 import { markRuntimeSpawnHiddenBeforeSpawn } from './spawn-hidden-delivery'
 
@@ -20,10 +21,13 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
   const runtime = ctx.deps.runtime
   const acquireWorktreeSpawn = runtime?.acquireWorktreeTerminalSpawn
   ctx.releaseWorktreeSpawn = acquireWorktreeSpawn
-    ? await acquireWorktreeSpawn.call(runtime, args.worktreeId, {
-        refuseSleptWorktree: args.refuseSleptWorktree
-      })
+    ? await acquireWorktreeSpawn.call(
+        runtime,
+        spawnWorktreeTarget(args.worktreeId, args.connectionId),
+        { refuseSleptWorktree: args.refuseSleptWorktree }
+      )
     : undefined
+  let awaitingAnotherStart = false
   try {
     if (args.preAllocatedHandle) {
       ctx.deps.trustedTerminalHandleEnv.add(args.preAllocatedHandle)
@@ -116,8 +120,12 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
             throw new Error('execution_owner_unavailable')
           }
           return await isProviderAgentSessionOwnerLive(ownerProvider, owner)
+        },
+        onJoin: () => {
+          awaitingAnotherStart = true
         }
       })
+      awaitingAnotherStart = false
       ctx.result = providerResult ?? {
         id: ensured.owner.ptyId,
         isReattach: true,
@@ -196,46 +204,12 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
     }
     ctx.deps.runtime?.preparePtyExecutionContext?.(ctx.result.id, spawnedWslDistro)
   } catch (err) {
-    if (
-      (ctx.isNewDaemonSession || ctx.preparedProvisionalExecutionContext) &&
-      ctx.effectiveSessionAppId
-    ) {
-      ctx.deps.runtime?.preparePtyExecutionContext?.(ctx.effectiveSessionAppId, null, {
-        resetIncarnation: true
-      })
-    }
-    const rawMessage = err instanceof Error ? err.message : String(err)
-    if (rawMessage === 'agent_session_exited_during_start' && ctx.rejectedRegistrationCandidate) {
-      ctx.deps.runtime?.releaseRejectedPtyRegistrationFence?.(
-        ctx.rejectedRegistrationCandidate.id,
-        ctx.rejectedRegistrationCandidate.incarnationId
-      )
-    }
-    if (ctx.pendingRegistrationPtyId) {
-      ctx.deps.runtime?.cancelPendingPtyRegistration?.(
-        ctx.pendingRegistrationPtyId,
-        ctx.rejectedRegistrationCandidate?.incarnationId
-      )
-      ctx.pendingRegistrationPtyId = null
-    }
-    const spawnError = normalizeNodePtySpawnError(err)
-    const exitedBeforeSpawnReply =
-      ctx.rejectedRegistrationCandidate?.exitedBeforeSpawnReply === true
-    if (ctx.effectiveSessionAppId !== undefined) {
-      if (
-        ctx.hadSessionSizeBeforeAttach &&
-        ctx.sessionSizeBeforeAttach &&
-        !exitedBeforeSpawnReply
-      ) {
-        ptySizes.set(ctx.effectiveSessionAppId, ctx.sessionSizeBeforeAttach)
-      } else {
-        ptySizes.delete(ctx.effectiveSessionAppId)
-      }
-    }
-    if (ctx.isNewDaemonSession && ctx.sessionId !== undefined) {
-      clearProviderPtyState(ctx.sessionId)
-    }
-    throw spawnError
+    throw failPtySpawnExecute(ctx, err, {
+      sessionId: ctx.sessionId,
+      ownsNewSession: ctx.isNewDaemonSession,
+      telemetry: args.telemetry,
+      joinedAnotherStart: awaitingAnotherStart
+    })
   } finally {
     if (args.preAllocatedHandle) {
       ctx.deps.trustedTerminalHandleEnv.delete(args.preAllocatedHandle)

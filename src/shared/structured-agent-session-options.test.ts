@@ -8,13 +8,18 @@ import {
   applyStructuredAgentSessionOptions,
   createStructuredAgentSessionOptionState,
   settleStructuredAgentSessionBuiltinCatalog,
-  structuredAgentSessionOptionSnapshot
+  structuredAgentSessionOptionSnapshot,
+  type StructuredAgentSessionOptionState
 } from './structured-agent-session-options'
 import { structuredAgentSessionOptionView } from './structured-agent-session-option-view'
 
-function viewModel(...args: Parameters<typeof structuredAgentSessionOptionView>) {
+function viewModel(
+  state: StructuredAgentSessionOptionState,
+  seed: Readonly<Record<string, string>> | undefined,
+  held: Readonly<Record<string, string>>
+) {
   const model = structuredAgentSessionOptionSnapshot(
-    structuredAgentSessionOptionView(...args)
+    structuredAgentSessionOptionView(state, seed, held)
   ).find((descriptor) => descriptor.id === 'model')
   return model?.kind.type === 'select' ? model.kind.currentValue : undefined
 }

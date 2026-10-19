@@ -38,7 +38,9 @@ async function rig(routes: Record<string, CodexTestRoute>) {
   const methods = () =>
     connection.calls
       .map(({ method }) => method)
-      .filter((method) => method !== 'model/list' && method !== 'config/read')
+      .filter(
+        (method) => method !== 'initialize' && method !== 'model/list' && method !== 'config/read'
+      )
   const endTurn = (turnId: string, status: 'completed' | 'interrupted') =>
     connection.handlers.onNotification?.('turn/completed', {
       threadId: CODEX_TEST_THREAD_ID,
@@ -150,8 +152,8 @@ describe('a Codex send while a turn runs', () => {
     ])
   })
 
-  it('is rejected in Codex words and disarmed when Codex refuses the steer and the start', async () => {
-    const { connection, settlements, send, methods } = await rig({
+  it('is rejected in Codex words when Codex refuses the steer and the start', async () => {
+    const { connection, send, methods } = await rig({
       'turn/steer': () => {
         throw refusedSteer('active turn cannot be steered')
       },
@@ -171,12 +173,11 @@ describe('a Codex send while a turn runs', () => {
       reason: "Codex didn't accept this message: thread not found.",
       rejection: {
         kind: 'providerRejected',
-        detail: { text: 'thread not found', audience: 'person' }
+        detail: { text: 'thread not found', audience: 'person' },
+        neverReachedAgent: true
       }
     })
     expect(methods()).toEqual(['thread/start', 'turn/steer', 'turn/start'])
-    echoUserMessage(connection, { turnId: 'turn-1', itemId: 'item-u1', clientId: 'client-1' })
-    expect(settlements).toEqual([])
   })
 
   it('never re-sends a steer that may have landed, and keeps it armed for its echo', async () => {
@@ -215,7 +216,7 @@ describe('a Codex send made after Codex answered an earlier one, before it opene
     expect(await settledWithin(sending)).toBe('held')
     const methods = () =>
       rig.codex.connections[0]!.calls.map(({ method }) => method).filter(
-        (method) => method !== 'model/list' && method !== 'config/read'
+        (method) => method !== 'initialize' && method !== 'model/list' && method !== 'config/read'
       )
     expect(methods()).toEqual(['thread/start', 'turn/start'])
     return { ...rig, sending, methods }

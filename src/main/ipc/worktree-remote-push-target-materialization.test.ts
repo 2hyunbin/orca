@@ -6,6 +6,7 @@ const { gitExecFileAsyncMock } = vi.hoisted(() => ({ gitExecFileAsyncMock: vi.fn
 vi.mock('../git/runner', () => ({ gitExecFileAsync: gitExecFileAsyncMock }))
 
 import { materializeWorktreePushTargetRemote } from './worktree-remote'
+import { hostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 
 const REPO_PATH = '/repo-root'
 const FORK_URL = 'git@github.com:contributor/orca.git'
@@ -80,6 +81,62 @@ describe('materializeWorktreePushTargetRemote', () => {
       `${FORK_REMOTE}/${target.branchName}`,
       'contributor/fix'
     ])
+  })
+
+  it('preserves the legacy null-store failure after existing-remote adoption work', async () => {
+    const commands: string[][] = []
+    gitExecFileAsyncMock.mockImplementation(async (args: string[]) => {
+      commands.push(args)
+      if (args[0] === 'remote' && args[1] === 'get-url') {
+        return { stdout: `${FORK_URL}\n`, stderr: '' }
+      }
+      if (args[0] === 'config' && args[1] === '--get-all') {
+        throw new Error('no such section')
+      }
+      if (args[0] === 'symbolic-ref') {
+        return { stdout: 'contributor/fix\n', stderr: '' }
+      }
+      return { stdout: '', stderr: '' }
+    })
+    await expect(
+      materializeWorktreePushTargetRemote(REPO_PATH, forkTarget(), null, 'repo-1')
+    ).rejects.toBeInstanceOf(TypeError)
+    expect(commands).toEqual([
+      ['remote', 'get-url', FORK_REMOTE],
+      ['config', '--get-all', `remote.${FORK_REMOTE}.fetch`],
+      [
+        'config',
+        '--add',
+        `remote.${FORK_REMOTE}.fetch`,
+        `+refs/heads/contributor/fix*:refs/remotes/${FORK_REMOTE}/contributor/fix*`
+      ],
+      ['config', `remote.${FORK_REMOTE}.tagOpt`, '--no-tags'],
+      ['rev-parse', '--verify', '--quiet', `refs/remotes/${FORK_REMOTE}/contributor/fix`],
+      ['symbolic-ref', '--short', 'HEAD'],
+      ['branch', '--set-upstream-to', `${FORK_REMOTE}/contributor/fix`, 'contributor/fix']
+    ])
+  })
+
+  it('accepts a null store when both persistence identifiers are omitted', async () => {
+    gitExecFileAsyncMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'remote' && args[1] === 'get-url') {
+        return { stdout: `${FORK_URL}\n`, stderr: '' }
+      }
+      if (args[0] === 'config' && args[1] === '--get-all') {
+        throw new Error('no such section')
+      }
+      if (args[0] === 'symbolic-ref') {
+        return { stdout: 'contributor/fix\n', stderr: '' }
+      }
+      return { stdout: '', stderr: '' }
+    })
+    const target = forkTarget()
+
+    await expect(materializeWorktreePushTargetRemote(REPO_PATH, target, null)).resolves.toBe(target)
+    expect(gitExecFileAsyncMock).toHaveBeenLastCalledWith(
+      ['branch', '--set-upstream-to', `${FORK_REMOTE}/${target.branchName}`, 'contributor/fix'],
+      { cwd: REPO_PATH }
+    )
   })
 
   it('materializes the remote (add + provenance + fetch) when the probe misses', async () => {
@@ -286,10 +343,14 @@ describe('materializeWorktreePushTargetRemote', () => {
     })
     const target = forkTarget()
     const setWorktreeMeta = vi.fn()
+    // The write lands on the id's only repo row.
     const store: WorktreePushTargetStore = {
       getAllWorktreeMeta: () => ({}),
+      getRepos: () => [
+        { id: 'worktree-1', path: REPO_PATH, displayName: 'r', badgeColor: '#000', addedAt: 1 }
+      ],
       setWorktreeMeta
-    } as unknown as WorktreePushTargetStore
+    }
 
     const result = await materializeWorktreePushTargetRemote(
       REPO_PATH,
@@ -301,9 +362,12 @@ describe('materializeWorktreePushTargetRemote', () => {
     )
 
     expect(result).toEqual({ ...target, remoteCreated: true })
-    expect(setWorktreeMeta).toHaveBeenCalledWith('worktree-1', {
-      pushTarget: { ...target, remoteCreated: true }
-    })
+    expect(setWorktreeMeta).toHaveBeenCalledWith(
+      hostWorktreeTarget({ id: 'worktree-1', hostId: 'local' }),
+      {
+        pushTarget: { ...target, remoteCreated: true }
+      }
+    )
   })
 
   it('does not touch the store when no worktreeId is provided', async () => {

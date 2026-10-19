@@ -6,13 +6,13 @@
 // others' current answer.
 
 import type { AgentChildWorkEvidence } from '../../../shared/agent-status-child-work-evidence'
+import type { AgentChildWorkView } from '../../../shared/agent-status-child-work-view'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
 import {
   AGENT_MESSAGE_SOURCE,
   USER_MESSAGE_SOURCE,
   type AgentSessionMessageSource
 } from '../../../shared/agent-session-message-source'
-import type { AgentChildWorkView } from '../../../shared/agent-status-child-work-view'
 import type { AgentSessionOperationOutcome } from '../../../shared/agent-session-operation-ledger'
 import type {
   AgentSessionCancelResult,
@@ -26,8 +26,9 @@ import type { AgentSessionConversationCommandResult } from '../../../shared/agen
 import { DISPATCH_DOUBT_SUBMISSION_MISSING } from '../agent-session-journal/journal-dispatch-doubt-reasons'
 import type { StructuredAgentSessionBackgroundStopInput } from './structured-agent-session-background-stop'
 import {
-  agentSessionMessagePayload,
-  agentSessionSendBodyFingerprint
+  agentSessionSendBodyFingerprint,
+  agentSessionSendFields,
+  type StructuredAgentSessionSendMutation
 } from '../../../shared/structured-agent-session-send-mutation'
 import {
   STRUCTURED_AGENT_SESSION_COMPACT_COMMAND,
@@ -36,7 +37,6 @@ import {
 import {
   performPrompt,
   performSend,
-  performSetOption,
   type AgentSessionTurnContext,
   type TurnOutcome
 } from './structured-agent-session-turns'
@@ -134,16 +134,15 @@ function sendSource(params: {
   return params.body.from ? AGENT_MESSAGE_SOURCE : undefined
 }
 
-export function sendPlan(params: {
-  envelope: AgentSessionMutationEnvelope
-  body: AgentJournalMessageItem
-  retryUnknown?: true
-  delivery?: 'queue-if-active'
-  userSend?: true
-  /** A person's message the host sends for them; `userSend` is always one. */
-  personsMessage?: true
-  beforeRun?: () => void
-}): MutationPlan<AgentSessionSendResult> {
+export function sendPlan(
+  params: StructuredAgentSessionSendMutation & {
+    retryUnknown?: true
+    userSend?: true
+    /** A person's message the host sends for them; `userSend` is always one. */
+    personsMessage?: true
+    beforeRun?: () => void
+  }
+): MutationPlan<AgentSessionSendResult> {
   // The operation id IS the client message id: one send, one durable row, one
   // key the client reconciles its optimistic bubble against.
   const clientMessageId = params.envelope.clientOperationId
@@ -152,16 +151,13 @@ export function sendPlan(params: {
     operationIdScope: 'global',
     conversationWrite: true,
     commandReceipt: submissionOrDraftReceipt(clientMessageId),
-    // `delivery` joins the OPERATION fingerprint only; the submission row keeps
+    // Control fields join the OPERATION fingerprint only; the submission row keeps
     // the body-only fingerprint the reducer's echo-aliasing recomputes.
-    fields: {
-      body: agentSessionMessagePayload(params.body),
-      ...(params.delivery ? { delivery: params.delivery } : {})
-    },
+    fields: agentSessionSendFields(params),
     recoverUnknownFromDurableState: true,
     // `retryUnknown` is a compatibility-only client signal. A recorded send
     // always replays and never reaches the provider twice.
-    run: (ctx) => {
+    run: async (ctx) => {
       // Asked at acceptance: a send accepted after this one is queued behind it.
       params.beforeRun?.()
       const source = sendSource(params)
@@ -169,6 +165,7 @@ export function sendPlan(params: {
         origin: params.userSend ? 'client' : 'host',
         ...(source ? { source } : {}),
         clientMessageId,
+        ...(params.options ? { options: params.options } : {}),
         // Body-only, so the reducer's echo aliasing never sees control fields or the sender.
         payloadFingerprint: agentSessionSendBodyFingerprint(params.envelope.sessionId, params.body),
         body: params.body
@@ -190,7 +187,7 @@ export function sendPlan(params: {
         .submissions()
         .find((entry) => entry.clientMessageId === clientMessageId)
       if (submission) {
-        return { clientMessageId, submission }
+        return { clientMessageId, submission: { ...submission } }
       }
       // A pending row wrote nothing, so the send runs for the first time. Succeeded: accepted,
       // then a new epoch dropped its row. Unknown: only builds before this one wrote that.
@@ -283,6 +280,7 @@ export function cancelPlan(params: {
   /** The session's child records, which name the tasks a background Stop reaches. */
   childWork?: () => readonly AgentChildWorkView[] | undefined
   acknowledgeStops?: (evidence: AgentChildWorkEvidence[]) => void
+  captureStops?: StructuredAgentSessionBackgroundStopInput['captureStops']
   unlisted?: StructuredAgentSessionBackgroundStopInput['unlisted']
 }): MutationPlan<AgentSessionCancelResult> {
   const named = params.turnId !== undefined ? { turnId: params.turnId } : {}
@@ -337,9 +335,13 @@ export function setOptionPlan(params: {
   return {
     method: 'agentSession.setOption',
     fields: { key: params.key, value: params.value },
-    run: (ctx) => performSetOption(ctx, params),
-    // A pending row may have crashed before the adapter call. Reapplying the
-    // same assignment is safe; only a settled success can be answered directly.
+    run: async (ctx) => {
+      const options = { ...ctx.persistedOptions, [params.key]: params.value }
+      await ctx.persistOptions(options)
+      ctx.publish()
+      return { ok: true, value: { ...params, options } }
+    },
+    // Reapply unsettled picks; only a settled success can be replayed directly.
     replay: (ctx, outcome) =>
       outcome.status === 'succeeded'
         ? {

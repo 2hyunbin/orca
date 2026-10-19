@@ -299,7 +299,7 @@ describe('acquisition path', () => {
       })
     )
     expect(store.getRecord('session-alpha')?.lease.runtimeFence).toBe(2)
-    expect(store.getRecord('session-alpha')?.options).toEqual({ permissionMode: 'ask' })
+    expect(store.getRecord('session-alpha')?.permissionMode).toBe('ask')
   })
 })
 
@@ -745,9 +745,10 @@ describe('claim keys and unreadable rows', () => {
         Object.assign(record.lease, { journalCheckpoint: { epoch: 'bad', sequence: 1 } })
     ],
     [
-      'missing live proof',
+      // No proof yet is a live owner whose provider has not answered; a proof naming no link is not.
+      'live proof naming no handle',
       (record: PersistedAgentSessionRecord) =>
-        Object.assign(record.lease, { provenHandleLinkId: null })
+        Object.assign(record.lease, { provenHandleLinkId: 'link-never-minted' })
     ]
   ])('quarantines a record with %s', async (_name, corrupt) => {
     const first = await open()
