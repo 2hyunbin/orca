@@ -219,6 +219,44 @@ describe('a pane main first hears of at its terminal binding goes where the wind
     })
   })
 
+  it("keeps main's divider above the window's new split", async () => {
+    const store = createStore()
+    seedTwoPaneTab(store, 0.7)
+
+    await bindNewPane(store, {
+      kind: 'split',
+      parentLeafId: TEST_LEAF_1,
+      direction: 'horizontal',
+      proposedRoot: {
+        type: 'split',
+        direction: 'vertical',
+        first: {
+          type: 'split',
+          direction: 'horizontal',
+          first: leaf(NEW_LEAF),
+          second: leaf(TEST_LEAF_1),
+          ratio: 0.4
+        },
+        second: leaf(TEST_LEAF_2),
+        ratio: 0.5
+      }
+    })
+
+    expect(root(store)).toEqual({
+      type: 'split',
+      direction: 'vertical',
+      first: {
+        type: 'split',
+        direction: 'horizontal',
+        first: leaf(NEW_LEAF),
+        second: leaf(TEST_LEAF_1),
+        ratio: 0.4
+      },
+      second: leaf(TEST_LEAF_2),
+      ratio: 0.7
+    })
+  })
+
   it('ignores a window tree holding the new pane twice', async () => {
     const store = createStore()
     seedTwoPaneTab(store)
