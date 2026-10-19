@@ -181,7 +181,7 @@ export class CdpWsProxy {
     this.responder.recordRequestSessionId(client, clientId, msg)
     // Why here too: a revoked host's helper is refused even its read-only steps, so it stops at once.
     try {
-      assertRemoteCliPageAdmitted(this.webContents.id, msg.method, msg.params)
+      assertRemoteCliPageAdmitted(this.webContents.id)
     } catch (error) {
       this.responder.sendError(
         clientId,

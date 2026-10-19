@@ -7,6 +7,7 @@ import type {
   ResolvedBrowserCommandTarget
 } from './agent-browser-bridge-types'
 import { runWithRemoteCliPageAdmission } from './remote-cli-page-admission'
+import { releaseHeldPageInput } from './guest-direct-key-input'
 import {
   captureRemoteCliBrowserRevocation,
   captureRemoteCliBrowserScope
@@ -131,7 +132,10 @@ export abstract class AgentBrowserBridgeQueue extends AgentBrowserBridgeShutdown
     execute: () => Promise<T>
   ): Promise<T> {
     try {
-      return await runWithRemoteCliPageAdmission(webContentsId, gate, execute)
+      return await runWithRemoteCliPageAdmission(webContentsId, gate, execute, (release) => {
+        const wc = this.getWebContents(webContentsId)
+        return wc ? releaseHeldPageInput(wc, release) : Promise.resolve()
+      })
     } catch (error) {
       gate()
       throw error

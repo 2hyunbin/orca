@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { CdpWsProxy } from './cdp-ws-proxy'
 import { runWithRemoteCliPageAdmission } from './remote-cli-page-admission'
 import { sendGuestCdpCommand } from './guest-cdp-command'
+import { releaseHeldPageInput } from './guest-direct-key-input'
 import {
   connect,
   createMockWebContents,
@@ -16,6 +17,15 @@ vi.mock('electron', () => ({
 
 const PAGE_ID = 7
 const REVOKED = 'The Orca desktop stopped sharing its browser before this command ran.'
+
+function keyUps(mock: MockWebContents): string[] {
+  return [
+    ...mock.webContents.sendInputEvent.mock.calls.map((call) => call[0].type),
+    ...mock.webContents.debugger.sendCommand.mock.calls
+      .filter((call) => call[0] === 'Input.dispatchKeyEvent')
+      .map((call) => String(call[1]?.type))
+  ].filter((type) => type === 'keyUp')
+}
 
 function mouseEvents(mock: MockWebContents): string[] {
   return mock.webContents.debugger.sendCommand.mock.calls
@@ -91,7 +101,9 @@ describe('CdpWsProxy under a host command', () => {
           throw new Error(REVOKED)
         }
       },
-      () => new Promise<void>((resolve) => (finish = resolve))
+      () => new Promise<void>((resolve) => (finish = resolve)),
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mock implements every WebContents member the release path calls.
+      (release) => releaseHeldPageInput({ ...mock.webContents, id: PAGE_ID } as never, release)
     )
     return {
       revoke: () => (revoked = true),
@@ -110,7 +122,7 @@ describe('CdpWsProxy under a host command', () => {
   const shiftUp = { type: 'keyUp', key: 'Shift', code: 'ShiftLeft' }
 
   it.each(['window', 'webview'])(
-    'still releases a button and key pressed before the revocation (%s page)',
+    'refuses a revoked release, then lets go of the button and key itself (%s page)',
     async (pageType) => {
       mock.webContents.getType.mockReturnValue(pageType)
       const page = holdPage()
@@ -122,20 +134,34 @@ describe('CdpWsProxy under a host command', () => {
       const mouseUp = await sendAndReceive(client, { id: 7, method: MOUSE, params: released })
       const keyUp = await sendAndReceive(client, { id: 8, method: KEY, params: shiftUp })
 
-      expect(mouseUp.error).toBeUndefined()
-      expect(keyUp.error).toBeUndefined()
-      expect(mouseEvents(mock)).toEqual(['mousePressed', 'mouseReleased'])
-      const keyUps = [
-        ...mock.webContents.sendInputEvent.mock.calls.map((call) => call[0].type),
-        ...mock.webContents.debugger.sendCommand.mock.calls
-          .filter((call) => call[0] === KEY)
-          .map((call) => String(call[1]?.type))
-      ].filter((type) => type === 'keyUp')
-      expect(keyUps).toHaveLength(1)
+      expect(mouseUp).toMatchObject({ error: { message: REVOKED } })
+      expect(keyUp).toMatchObject({ error: { message: REVOKED } })
+      expect(mouseEvents(mock)).toEqual(['mousePressed'])
+      expect(keyUps(mock)).toHaveLength(0)
       await page.release()
+      // Off the page, so letting go completes no click the host had started.
+      expect(mock.webContents.debugger.sendCommand).toHaveBeenCalledWith(
+        MOUSE,
+        expect.objectContaining({ type: 'mouseReleased', x: -1, y: -1 })
+      )
+      expect(mouseEvents(mock)).toEqual(['mousePressed', 'mouseReleased'])
+      expect(keyUps(mock)).toHaveLength(1)
       client.close()
     }
   )
+
+  it('lets go of nothing when the command released what it pressed before the revocation', async () => {
+    const page = holdPage()
+    const client = await connect(endpoint)
+
+    await sendAndReceive(client, { id: 11, method: MOUSE, params: pressed })
+    await sendAndReceive(client, { id: 12, method: MOUSE, params: released })
+    page.revoke()
+    await page.release()
+
+    expect(mouseEvents(mock)).toEqual(['mousePressed', 'mouseReleased'])
+    client.close()
+  })
 
   it('refuses a release of something the revoked command never pressed', async () => {
     const page = holdPage()

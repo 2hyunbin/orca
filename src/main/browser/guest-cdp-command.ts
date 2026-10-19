@@ -1,10 +1,7 @@
 import type { WebContents } from 'electron'
 import { BrowserError } from './browser-error'
-import {
-  assertRemoteCliBrowserAccess,
-  captureRemoteCliBrowserScope
-} from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
-import { isHeldRemoteCliInputRelease, noteRemoteCliInputPress } from './remote-cli-page-admission'
+import { assertRemoteCliBrowserAccess } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
+import { noteRemoteCliInput } from './remote-cli-page-admission'
 
 // Why: Chromium resizes the page's view for these without checking the view still exists
 // (WebContentsImpl::SetDeviceEmulationSize). A crashed renderer takes its view with it until the
@@ -32,12 +29,7 @@ export function sendGuestCdpCommand(
 ): Promise<unknown> {
   try {
     // Why: only a host's own command runs in its scope; desktop-owned sends are never refused here.
-    if (!isHeldRemoteCliInputRelease(guest.id, method, params)) {
-      assertRemoteCliBrowserAccess(guest.id)
-    }
-    if (captureRemoteCliBrowserScope().bridged) {
-      noteRemoteCliInputPress(guest.id, method, params)
-    }
+    assertRemoteCliBrowserAccess(guest.id)
   } catch (error) {
     return Promise.reject(error)
   }
@@ -51,6 +43,7 @@ export function sendGuestCdpCommand(
       )
     )
   }
+  noteRemoteCliInput(guest.id, method, params)
   return Promise.resolve(
     sessionId === undefined
       ? guest.debugger.sendCommand(method, params)

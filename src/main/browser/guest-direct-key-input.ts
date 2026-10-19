@@ -8,6 +8,8 @@ import {
 } from './guest-focused-frame-route'
 import { sendFrameSessionInput } from './guest-frame-input-sessions'
 import { planCdpKeyEvent, planInsertText, type GuestEditCommand } from './guest-key-event-plan'
+import { sendGuestCdpCommand } from './guest-cdp-command'
+import type { HeldInputRelease } from './remote-cli-page-admission'
 
 // Why: Chromium routes main-session CDP key and text input on a <webview> guest by the
 // window's focus, so it lands in whatever the user is typing into (#20595). Events sent to
@@ -162,6 +164,18 @@ export async function dispatchPageKeyEvent(
   } finally {
     release()
   }
+}
+
+/** Lets go of what a revoked host's command left pressed; a key goes where the focus routes it. */
+export function releaseHeldPageInput(
+  webContents: WebContents,
+  release: HeldInputRelease
+): Promise<unknown> {
+  const send: GuestCdpSender = (method, params, sessionId) =>
+    sendGuestCdpCommand(webContents, method, params, sessionId)
+  return release.method === 'Input.dispatchKeyEvent'
+    ? dispatchPageKeyEvent(webContents, release.params, send)
+    : send(release.method, release.params)
 }
 
 export type TextInsertionRoute = {

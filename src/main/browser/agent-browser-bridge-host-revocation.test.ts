@@ -210,7 +210,7 @@ describe('AgentBrowserBridge under a host revocation', () => {
     expect(release).toHaveBeenCalled()
   })
 
-  it('still releases a press that reached the page before the host was revoked', async () => {
+  it('lets go off the page of a press that landed just before the host was revoked', async () => {
     const wc = mockWebContents(100)
     const revoked = new AbortController()
     wc.debugger.sendCommand.mockImplementation(async (method: string, params?: unknown) => {
@@ -229,15 +229,16 @@ describe('AgentBrowserBridge under a host revocation', () => {
     })
     webContentsFromIdMock.mockReturnValue(wc)
 
-    await runInRemoteCliBrowserScope(
+    const click = runInRemoteCliBrowserScope(
       WORKSPACE,
       () => bridge.mouseClick(10, 20, 'left', undefined, 'tab-1', 18),
       revoked.signal
-    ).catch(() => {})
+    )
 
+    await expect(click).rejects.toMatchObject({ code: 'desktop_browser_bridge_unavailable' })
     expect(dispatchedMouseEvents(wc)).toEqual([
-      ['Input.dispatchMouseEvent', expect.objectContaining({ type: 'mousePressed' })],
-      ['Input.dispatchMouseEvent', expect.objectContaining({ type: 'mouseReleased' })]
+      ['Input.dispatchMouseEvent', expect.objectContaining({ type: 'mousePressed', x: 10 })],
+      ['Input.dispatchMouseEvent', expect.objectContaining({ type: 'mouseReleased', x: -1, y: -1 })]
     ])
   })
 
