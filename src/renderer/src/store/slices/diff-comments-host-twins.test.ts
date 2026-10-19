@@ -415,4 +415,34 @@ describe('diff comments on twin worktrees', () => {
       'unstamped'
     ])
   })
+
+  it('never sends a copy listed after a queued save, even after a refresh replaced its notes', async () => {
+    const store = createTwinStore('local')
+    store.setState({ worktreesByRepo: { [REPO]: [worktree('local')] } })
+    let releaseFirst = () => {}
+    updateMeta.mockImplementationOnce(
+      () => new Promise((resolve) => (releaseFirst = () => resolve({})))
+    )
+
+    const first = addNote(store)
+    const second = addNote(store)
+    await vi.waitFor(() => expect(updateMeta).toHaveBeenCalledTimes(1))
+    // A refresh rebuilds the local row's list and lists an SSH copy, which the user opens.
+    const [local] = store.getState().worktreesByRepo[REPO]
+    store.setState({
+      activeWorkspaceExecutionHostId: 'ssh:box',
+      worktreesByRepo: {
+        [REPO]: [
+          { ...local, diffComments: [...(local.diffComments ?? [])] },
+          worktree('ssh:box', [note('s1', 'remote')])
+        ]
+      }
+    })
+    releaseFirst()
+    await Promise.all([first, second])
+
+    const sent = updateMeta.mock.calls[1][0]
+    expect(sent.executionHostId).toBe('local')
+    expect(sent.updates.diffComments.map((c: DiffComment) => c.body)).not.toContain('remote')
+  })
 })

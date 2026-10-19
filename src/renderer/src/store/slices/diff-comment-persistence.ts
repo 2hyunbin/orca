@@ -72,7 +72,7 @@ export type DiffCommentMutation = {
   previous: DiffComment[] | undefined
   next: DiffComment[]
   folderExecutionHostId?: ReturnType<typeof getExecutionHostIdForFolderWorkspace>
-  /** Set only when two hosts publish the id: the twin changed. */
+  /** The identity of the rows changed, so a queued save never reads a copy listed later. */
   twin?: DiffCommentTwin
   /** The rows' own host, whenever they stamp one; the write names it. */
   writeHostId?: ExecutionHostId

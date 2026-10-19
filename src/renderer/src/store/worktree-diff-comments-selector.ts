@@ -43,7 +43,7 @@ function isTwin(row: Worktree, twin: DiffCommentTwin): boolean {
   )
 }
 
-/** `twin` only for a twin; `hostId` whenever the rows name one: the host the write names. */
+/** The rows' identity (`twin`) and, whenever they name one, the host the write names. */
 export type DiffCommentRows = {
   twin?: DiffCommentTwin
   hostId?: ExecutionHostId
@@ -68,9 +68,8 @@ export function diffCommentFloorKey(worktreeId: string, twin: DiffCommentTwin | 
 }
 
 /**
- * The rows whose review notes a change reads or writes. `twin` is set only when two hosts publish
- * the id; otherwise every row of the id is the one worktree, exactly as before twins existed. A
- * twin is picked by, in order: the twin a queued write captured; the one twin holding the notes the
+ * The rows whose review notes a change reads or writes. With one host publishing the id, every
+ * row of it is the one worktree, exactly as before twins existed. With two, a twin is picked by, in order: the twin a queued write captured; the one twin holding the notes the
  * change names (UUIDs, so an async delivery still finds its copy after navigation); the open
  * workspace's host. Nothing else guesses.
  */
@@ -107,8 +106,10 @@ export function findDiffCommentRows(
   }
   if (rows.every((row) => isTwin(row, twinOf(rows[0])))) {
     // Why the stamp even without a twin: main refuses a host-less write while the repo has twins.
-    const hostId = diffCommentTwinHostId(twinOf(rows[0]))
-    return { ...(hostId ? { hostId } : {}), worktrees: rows }
+    // The identity too, so a queued save never reads a copy listed after it.
+    const twin = twinOf(rows[0])
+    const hostId = diffCommentTwinHostId(twin)
+    return { twin, ...(hostId ? { hostId } : {}), worktrees: rows }
   }
   const holders = commentIds?.size
     ? rows.filter((row) => row.diffComments?.some((comment) => commentIds.has(comment.id)))
