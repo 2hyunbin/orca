@@ -152,6 +152,18 @@ describe('held paired-host closes when a server is removed', () => {
     ])
   })
 
+  it('keeps holding through a second undecided re-pair and moves them to the newest one', () => {
+    useAppStore.getState().setRuntimeEnvironments([managed('env-a', 1, 'key-a')])
+    hold('env-a')
+    useAppStore.getState().setRuntimeEnvironments([managed('env-a', 2)])
+    useAppStore.getState().setRuntimeEnvironments([managed('env-a', 3)])
+    expect(takeDueWebSessionCloseReplays(STORE, 'env-a', WT, new Set([TAB]))).toEqual([])
+
+    useAppStore.getState().setRuntimeEnvironments([managed('env-a', 3, 'key-a')])
+
+    expect(heldRevisions('env-a')).toEqual([3])
+  })
+
   it('drops the held closes once the late host key proves another machine', () => {
     useAppStore.getState().setRuntimeEnvironments([managed('env-a', 1, 'key-a')])
     hold('env-a')

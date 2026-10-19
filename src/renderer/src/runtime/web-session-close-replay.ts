@@ -87,13 +87,14 @@ function revealHeldClose(
  * The one way a held close leaves the store. Whatever the change removed -- the named intents, a
  * cap eviction, or anything past the age bound that the store prunes on the way -- is never sent
  * again, so it stops hiding its tab, except a delivered close the host's next snapshot will settle.
+ * Returns the worktrees whose tabs it un-hid.
  */
 function changeHeldIntents(
   store: Pick<PairedTerminalTabCloseIntentStore, 'getIntents'>,
   environmentId: string,
   change: () => void,
   stillHidden: ReadonlySet<string> = new Set()
-): boolean {
+): ReadonlySet<string> {
   const before = listHeldIntents(store, environmentId)
   change()
   const after = listHeldIntents(store, environmentId)
@@ -101,7 +102,7 @@ function changeHeldIntents(
   const stillHeldTabs = new Set(
     after.flatMap((intent) => intent.hostTabIds.map((id) => `${intent.worktreeId}\0${id}`))
   )
-  let revealed = false
+  const revealedWorktreeIds = new Set<string>()
   for (const intent of before) {
     const key = pairedTerminalTabCloseIntentKey(intent)
     if (kept.has(key)) {
@@ -116,10 +117,10 @@ function changeHeldIntents(
         intent.worktreeId,
         intent.hostTabIds.filter((id) => !stillHeldTabs.has(`${intent.worktreeId}\0${id}`))
       )
-      revealed = true
+      revealedWorktreeIds.add(intent.worktreeId)
     }
   }
-  return revealed
+  return revealedWorktreeIds
 }
 
 /** Keeps an unsent user close, hiding its tab; a repeat for the same tab keeps its attempt count. */
@@ -214,7 +215,9 @@ function collectDueWebSessionCloseReplays(
   }
   const revealed =
     dropped.length > 0 &&
-    changeHeldIntents(store, environmentId, () => store.clear(environmentId, dropped))
+    changeHeldIntents(store, environmentId, () => store.clear(environmentId, dropped)).has(
+      worktreeId
+    )
   return { due, revealed }
 }
 
