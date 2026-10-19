@@ -75,11 +75,11 @@ describe('the idle sweep', () => {
   it('keeps owed background work on update and releases an idle provider without the cache wait', async () => {
     await foundRestTestChat(rig)
     rig.host.collaboratorsForTests().lifetime.idleSweep.dispose()
-    rig.sink.readChildWork.mockReturnValue([childView('update-child', 'agent', 'working')])
+    reportChildren(childEdge('update-child', 'agent', 'working'))
     expect(rig.host.restartWorkCount()).toBeGreaterThan(0)
     await rig.host.drainForRestart()
     expect(rig.adapter.closeSession).not.toHaveBeenCalled()
-    rig.sink.readChildWork.mockReturnValue([])
+    reportChildren(childEdge('update-child', 'agent', 'done'))
     expect(rig.host.restartWorkCount()).toBe(0)
     await rig.host.drainForRestart()
     expect(rig.host.hasLoadedProviders()).toBe(false)
