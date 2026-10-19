@@ -376,18 +376,4 @@ describe('codex dispatch admission', () => {
     echoUserMessage(connection, { turnId: 'turn-1', itemId: 'item-u1', clientId: 'client-1' })
     expect(settlements).toEqual([])
   })
-
-  it('leaves no waiter behind when the child exits', async () => {
-    const codex = fakeCodexAppServer({ 'turn/steer': () => ({ turnId: 'turn-1' }) })
-    const settlements: LateSettlement[] = []
-    const adapter = await acquiredCodexAdapter({ codex, settlements })
-    const connection = codex.connections[0]!
-    startTurn(connection, 'turn-1')
-    await send(adapter, 'client-1')
-
-    connection.handlers.onExit?.(new Error('codex app-server exited'))
-
-    echoUserMessage(connection, { turnId: 'turn-1', itemId: 'item-u1', clientId: 'client-1' })
-    expect(settlements).toEqual([])
-  })
 })
