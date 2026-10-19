@@ -24,11 +24,31 @@ export function admitPtySpawnOwnership(
     runtime?.assertPtyRegistrationAllowed?.(result.id, result.incarnationId)
     // A failed local save must not strand a live process already admitted by its host.
     setAdoptedPtyOwnership(result.id)
+  } else if (exitedBeforeAdmission(runtime, result)) {
+    // Its exit listener already ran; tracking it now would resurrect it.
+    return
   } else {
     setPtyOwnership(result.id, LOCAL_EXECUTION_HOST_ID)
   }
   if (result.incarnationId) {
     ptyIncarnationById.set(result.id, result.incarnationId)
+  }
+}
+
+/** The runtime's incarnation-scoped start fence, read without failing the commit: registration
+ *  reports the early exit itself. */
+function exitedBeforeAdmission(
+  runtime: OrcaRuntimeService | undefined,
+  result: PtySpawnResult
+): boolean {
+  try {
+    runtime?.assertPtyRegistrationAllowed?.(result.id, result.incarnationId)
+    return false
+  } catch (error) {
+    if (error instanceof Error && error.message === 'agent_session_exited_during_start') {
+      return true
+    }
+    throw error
   }
 }
 
@@ -85,16 +105,12 @@ export function registerPersistedPtySpawn(
   } catch (error) {
     const [ptyId, worktreeId, connectionId, binding] = args
     // An exit during the binding write precedes runtime surface registration.
-    const exitedDuringStart =
+    if (
       error instanceof Error &&
       error.message === 'agent_session_exited_during_start' &&
-      runtime?.getPtyLivenessVerdict?.(ptyId)?.status === 'exited'
-    if (exitedDuringStart) {
-      // The start fence saw this incarnation exit, possibly before the commit recorded ownership.
-      const proof = PtyExitProof.from('exit-observed', binding?.incarnationId)
-      finishPtyShutdown(ptyId, null, undefined, proof)
-    }
-    if (exitedDuringStart && binding) {
+      runtime?.getPtyLivenessVerdict?.(ptyId)?.status === 'exited' &&
+      binding
+    ) {
       return retirePersistedStablePaneOwner(
         store,
         { ...binding, ptyId, persistedIncarnationId: binding.incarnationId },

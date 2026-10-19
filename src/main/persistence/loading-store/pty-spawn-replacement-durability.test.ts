@@ -228,14 +228,62 @@ it.each(
   }
 )
 
-it.each(['ipc', 'runtime'])(
-  'leaves no ownership for a %s spawn that exited before its commit began',
-  async (controller) => {
+it.each(
+  ['ipc', 'runtime'].flatMap((controller) =>
+    [false, true].map((saveAndShutdownFail) => ({ controller, saveAndShutdownFail }))
+  )
+)(
+  'leaves a $controller spawn that exited before its commit began exited (save and shutdown fail: $saveAndShutdownFail)',
+  async ({ controller, saveAndShutdownFail }) => {
     const { store } = await fixture()
     const runtime = new OrcaRuntimeService(store)
     runtime.onPtySpawned(binding.ptyId, binding.incarnationId)
     // The provider's exit listener ran before the commit recorded ownership.
     await runtime.onPtyExit(binding.ptyId, 0, binding.incarnationId, { providerExitObserved: true })
+    const deps = createPtySpawnCommitDependencies(runtime, store)
+    if (saveAndShutdownFail) {
+      vi.spyOn(store, 'persistPtyBinding').mockRejectedValue(new Error('disk full'))
+    }
+    let commit: () => Promise<unknown>
+    let provider: { shutdown: (...args: never[]) => Promise<void> }
+    if (controller === 'ipc') {
+      const ctx = createPtyIpcSpawnState(deps, { ...binding, cols: 80, rows: 24 })
+      ctx.result = { id: binding.ptyId, incarnationId: binding.incarnationId }
+      ctx.metadataLeafId = binding.leafId
+      ctx.validatedLeafId = binding.leafId
+      provider = ctx.provider
+      commit = () => commitPtyIpcSpawn(ctx)
+    } else {
+      const ctx = createRuntimePtySpawnState(deps, { ...binding, cols: 80, rows: 24 })
+      ctx.result = { id: binding.ptyId, incarnationId: binding.incarnationId }
+      ctx.metadataLeafId = binding.leafId
+      await admitRuntimeSpawnPane(store, binding)
+      ctx.hostSessionBinding = { store, ...binding }
+      provider = ctx.provider
+      commit = () => commitRuntimePtySpawn(ctx)
+    }
+    if (saveAndShutdownFail) {
+      vi.spyOn(provider, 'shutdown').mockRejectedValue(new Error('shutdown timed out'))
+    }
+
+    await commit().catch(() => undefined)
+
+    expect(ptyOwnership.has(binding.ptyId)).toBe(false)
+    expect(ptyIncarnationById.has(binding.ptyId)).toBe(false)
+    expect(runtime.getPtyLivenessVerdict(binding.ptyId)?.status).toBe('exited')
+  }
+)
+
+it.each(['ipc', 'runtime'])(
+  'tracks a %s same-id respawn whose predecessor left an exited verdict',
+  async (controller) => {
+    const { store } = await fixture()
+    const runtime = new OrcaRuntimeService(store)
+    runtime.onPtySpawned(binding.ptyId, replacementIncarnation)
+    await runtime.onPtyExit(binding.ptyId, 0, replacementIncarnation, {
+      providerExitObserved: true
+    })
+    // A daemon respawn under the same id does not reset that id-keyed verdict.
     const deps = createPtySpawnCommitDependencies(runtime, store)
     let commit: () => Promise<unknown>
     if (controller === 'ipc') {
@@ -255,7 +303,10 @@ it.each(['ipc', 'runtime'])(
 
     await commit().catch(() => undefined)
 
-    expect(ptyOwnership.has(binding.ptyId)).toBe(false)
-    expect(ptyIncarnationById.has(binding.ptyId)).toBe(false)
+    expect(ptyOwnership.get(binding.ptyId)).toBe(LOCAL_EXECUTION_HOST_ID)
+    expect(ptyIncarnationById.get(binding.ptyId)).toBe(binding.incarnationId)
+    await runtime.onPtyExit(binding.ptyId, 0, binding.incarnationId, {
+      providerExitObserved: true
+    })
   }
 )
