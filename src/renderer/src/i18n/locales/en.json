@@ -12819,7 +12819,8 @@
           "behindRolledBack": "Runs an older managed Orca server than this app; the last update was rolled back. Use Update server to try again.",
           "behindNoTemplate": "Runs a managed Orca server this app can’t update; this build has no server for this host.",
           "behindMigrating": "Runs a managed Orca server that updates after its project move finishes.",
-          "behindCheckFailed": "Runs a managed Orca server; Orca couldn’t check whether it is behind this app."
+          "behindCheckFailed": "Runs a managed Orca server; Orca couldn’t check whether it is behind this app.",
+          "runtimeNoexec": "This host doesn’t allow running programs from ~/.orca-remote, so Orca can’t start its server there. This usually means the home folder is mounted with noexec. Ask the host’s administrator to allow running programs there, then connect again."
         },
         "ZcodeCliSetupSection": {
           "title": "Use GLM with ZCode",
@@ -18218,7 +18219,8 @@
         "reconnectTimeout": "The server did not reconnect on the updated version."
       },
       "webRuntimeSession": {
-        "remoteHostDisconnected": "The workspace is not connected to a remote Orca host."
+        "remoteHostDisconnected": "The workspace is not connected to a remote Orca host.",
+        "terminalCreateUnconfirmed": "Orca couldn’t confirm that the new terminal opened on the host."
       },
       "gitlabJobTraceClient": {
         "loadFailed": "Failed to load the GitLab job log.",
@@ -18814,6 +18816,8 @@
         "showTerminal": "Show terminal"
       },
       "resumeInNewChat": {
+        "exitUnconfirmedFromTerminal": "Orca can't confirm {{agent}} has exited in its terminal. Stop what's running there or close the terminal, then open this conversation from Session History.",
+        "exitUnconfirmed": "Orca can't confirm {{agent}} has exited in its terminal. Stop what's running there or close the terminal, then try again.",
         "notSavedYet": "{{agent}} hasn't saved this conversation yet. Try again after it replies.",
         "cannotResume": "This {{agent}} conversation can't be resumed in a native chat."
       },
