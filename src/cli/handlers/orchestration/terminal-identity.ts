@@ -249,9 +249,10 @@ export function throwNoActiveSenderTerminal(): never {
         'Orca keeps it when Codex is started by typing `codex` in an Orca bash, zsh, fish or ' +
         'PowerShell terminal, unless Codex is started by full path or from cmd.exe, Codex server ' +
         'sharing is on, or the policy sets include_only. Otherwise let ORCA_* through in the ' +
-        'Codex config (add "ORCA_*" to include_only, or use inherit = "all" with include_only ' +
-        'listing the variables to keep plus "ORCA_*"). Pass --from only with your own terminal\'s ' +
-        "handle — another pane's handle would act on its mailbox."
+        'Codex config: inherit = "all" with include_only listing the variables to keep plus ' +
+        '"ORCA_*" (include_only alone cannot restore what inherit = "core" removed). ' +
+        "Pass --from only with your own terminal's handle — another pane's handle would act on " +
+        'its mailbox.'
     )
   }
   throw new RuntimeClientError(

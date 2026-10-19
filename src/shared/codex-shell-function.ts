@@ -89,6 +89,8 @@ end
 set -e __orca_codex_type`
 }
 
+// Why the identity loop is one line: this wrapper rides in PowerShell's command-line budget
+// (windows-shell-args.ts), which a long startup command also needs.
 export function getPowerShellCodexShellLaunchPreflight(): string {
   return `$orcaCodexCommand = Get-Command codex -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($orcaCodexCommand -and
@@ -118,12 +120,7 @@ if ($orcaCodexCommand -and
         }
         $orcaCodexIdentity = @()
         if ($env:ORCA_CODEX_ISOLATE -ne '0' -and -not (@($args) -cmatch '${CODEX_SHARED_SERVER_ONLY_ARG_PATTERN}')) {
-            foreach ($orcaCodexKey in @(${CODEX_COMMAND_IDENTITY_ENV_KEYS.map((key) => `'${key}'`).join(', ')})) {
-                $orcaCodexValue = [Environment]::GetEnvironmentVariable($orcaCodexKey)
-                if ($orcaCodexValue) {
-                    $orcaCodexIdentity += @('-c', "${identitySetArg('$orcaCodexKey', '$orcaCodexValue')}")
-                }
-            }
+            foreach ($k in ${CODEX_COMMAND_IDENTITY_ENV_KEYS.map((key) => `'${key}'`).join(',')}) { $v = [Environment]::GetEnvironmentVariable($k); if ($v) { $orcaCodexIdentity += '-c', "${identitySetArg('$k', '$v')}" } }
         }
         $orcaCodexArgs = @(__OrcaEscapeNativeArgs $orcaCodexExecutable.Source (@($orcaCodexIdentity) + @($args)))
         # Why: a native command inside a function never sees the function's pipeline input on its own.
