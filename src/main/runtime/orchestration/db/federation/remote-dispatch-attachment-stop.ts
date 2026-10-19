@@ -72,6 +72,7 @@ export function findActiveRemoteAttachmentForPane(
   paneKey: string
 ): RemoteDispatchAttachmentRow | undefined {
   if (!parsePaneKey(paneKey)) {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The schema-pinned attachment projection returns RemoteDispatchAttachmentRow rows; the adapter exposes unknown.
     return this.db
       .prepare(
         `SELECT ${REMOTE_DISPATCH_ATTACHMENT_COLUMN_LIST} FROM remote_dispatch_attachments
@@ -80,6 +81,7 @@ export function findActiveRemoteAttachmentForPane(
       )
       .get(paneKey) as RemoteDispatchAttachmentRow | undefined
   }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The schema-pinned attachment projection returns RemoteDispatchAttachmentRow rows; the adapter exposes unknown.
   return this.db
     .prepare(
       `SELECT ${REMOTE_DISPATCH_ATTACHMENT_COLUMN_LIST} FROM remote_dispatch_attachments

@@ -175,6 +175,7 @@ function findPotentiallyLiveAttachmentsForCreator(
   if (!creator.paneKey || !creator.processIncarnation) {
     return []
   }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The schema-pinned attachment projection returns RemoteDispatchAttachmentRow rows; the adapter exposes unknown.
   const rows = this.db
     .prepare(
       `SELECT ${REMOTE_DISPATCH_ATTACHMENT_COLUMN_LIST} FROM remote_dispatch_attachments
