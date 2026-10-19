@@ -271,12 +271,7 @@ describe("a new chat's effort pill before its agent starts", () => {
       expect(first.model?.value).toBe(model)
       expect(first.effort?.value).toBe(effort)
       expect(settled).toEqual(first)
-      expect(atRest.current).toEqual({
-        model,
-        effort,
-        defaulted: [],
-        ...modeOf(agent)
-      })
+      expect(atRest.current).toEqual({ model, effort, defaulted: [], ...modeOf(agent) })
     }
   )
 
@@ -304,11 +299,7 @@ describe("a new chat's effort pill before its agent starts", () => {
     })
 
     // The account default is not what this repo runs, so its effort is never claimed.
-    expect(atRest.current).toEqual({
-      model: 'gpt-5.5',
-      defaulted: [],
-      permissionMode: 'ask'
-    })
+    expect(atRest.current).toEqual({ model: 'gpt-5.5', defaulted: [], permissionMode: 'ask' })
     expect(atRest.conversationCommands).toEqual(['clear', 'compact'])
   })
 
@@ -338,10 +329,6 @@ describe("a new chat's effort pill before its agent starts", () => {
   it('leaves the effort of a saved model to the agent, as its running child reports it', async () => {
     const { atRest } = await newChatFrames('codex', { saved: { model: 'gpt-5.5-mini' } })
 
-    expect(atRest.current).toEqual({
-      model: 'gpt-5.5-mini',
-      defaulted: [],
-      permissionMode: 'ask'
-    })
+    expect(atRest.current).toEqual({ model: 'gpt-5.5-mini', defaulted: [], permissionMode: 'ask' })
   })
 })

@@ -36,6 +36,7 @@ import { structuredAgentSessionLaunchPermission } from './structured-agent-sessi
 import type { AgentSessionTurnContext, TurnOutcome } from './structured-agent-session-turns'
 import type { StructuredAgentSessionMutationContext } from './structured-agent-session-host-mutations'
 import { structuredAgentSessionNeverSent } from './structured-agent-session-never-sent'
+import { restingPickReplyOptions } from './structured-agent-session-pick-reply'
 
 type RestingOptions = Pick<
   AgentSessionOptionsResult,
@@ -170,7 +171,7 @@ export async function recordStructuredAgentSessionOptionIntent(
   deps: {
     store: Pick<AgentSessionRecordStore, 'getRecord' | 'replaceSessionOptions'>
     agents: Pick<StructuredAgentRegistry, 'definition'>
-  },
+  } & Parameters<typeof restingPickReplyOptions>[0],
   ctx: Pick<AgentSessionTurnContext, 'sessionId' | 'fence' | 'persistOptions' | 'publish' | 'now'>,
   input: { key: string; value: string }
 ): Promise<TurnOutcome<AgentSessionOptionResult>> {
@@ -196,7 +197,8 @@ export async function recordStructuredAgentSessionOptionIntent(
       })
     : ctx.persistOptions(options))
   ctx.publish()
-  return { ok: true, value: { ...input, options } }
+  const replied = await restingPickReplyOptions(deps, record, ctx.sessionId, options)
+  return { ok: true, value: { ...input, options: replied } }
 }
 
 /** A live child's own answer, or the answer at rest; the goal, usage and rewind either way. */

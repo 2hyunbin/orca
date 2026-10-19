@@ -21,7 +21,7 @@ type TieredModel = { id: string; serviceTiers?: readonly { value: string }[] }
 const modelTierValues = (model: TieredModel | undefined) =>
   model?.serviceTiers?.map((choice) => choice.value)
 
-/** The tier a chat at rest runs under its saved model, which no agent has reported yet. */
+/** The tier a chat at rest runs under its saved model; one no model lists is the agent's configured tier. */
 export function savedEffectiveServiceTier(
   saved: { model?: string; serviceTier?: string },
   models: readonly TieredModel[]
@@ -34,7 +34,7 @@ export function savedEffectiveServiceTier(
         ? modelTierValues(models.find((entry) => entry.id === saved.model))
         : undefined,
       listedTiers: models.flatMap((entry) => modelTierValues(entry) ?? []),
-      reported: false
+      reported: true
     })
   )
 }

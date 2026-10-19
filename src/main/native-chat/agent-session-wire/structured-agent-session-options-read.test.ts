@@ -12,13 +12,19 @@ import {
   type AgentModelCatalogSuccess
 } from '../agent-model-catalog/agent-model-catalog-store'
 import type { StructuredAgentSessionMutationContext } from './structured-agent-session-host-mutations'
-import { readStructuredAgentSessionOptions } from './structured-agent-session-options-read'
+import {
+  readStructuredAgentSessionOptions,
+  recordStructuredAgentSessionOptionIntent
+} from './structured-agent-session-options-read'
 import { AcpStructuredOptions } from '../../acp/acp-structured-options'
 import { GROK_CONFIG_OPTIONS } from '../../acp/acp-structured-adapter.test-support'
 import { SessionConfigOptionSchema } from '../../acp/generated/acp-protocol.generated'
 import { withLiveCatalogListing } from '../agent-model-catalog/agent-model-catalog-entry'
 import { StructuredAgentSessionTaskQueue } from './structured-agent-session-task-queue'
-import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-test-support'
+import {
+  claudeAndCodexAgents,
+  NO_STRUCTURED_AGENTS
+} from './structured-agent-session-adapter-router-test-support'
 
 const SESSION = 'session-1'
 
@@ -211,15 +217,20 @@ describe('options at rest', () => {
 describe('a chat at rest, read by the host', () => {
   const created: RestingFacts['providerHandleChain'] = [{ origin: 'created' }]
   const turn: AgentJournalItemBody = { kind: 'turn', turnId: 'turn-1', state: 'completed' }
-  const flex = [{ value: 'flex', label: 'Flex' }]
+  const fast = [{ value: 'priority', label: 'Fast' }]
+  const flex = [...fast, { value: 'flex', label: 'Flex' }]
   const listed: AgentSessionModelOption[] = [
-    { id: 'gpt-account', label: 'Model', isDefault: true, efforts: [], serviceTiers: [] },
+    { id: 'gpt-account', label: 'Model', isDefault: true, efforts: [], serviceTiers: fast },
     { id: 'gpt-flex', label: 'Flex', isDefault: false, efforts: [], serviceTiers: flex }
   ]
+  const catalog = (models = listed) => ({
+    read: async () => ({ origin: 'probe' as const, models, fetchedAt: 1 })
+  })
   function readAtRest(
     facts: RestingFacts,
     items: AgentJournalItemBody[] = [],
-    wroteBeforeOpen = false
+    wroteBeforeOpen = false,
+    models = listed
   ) {
     const record = { ...restingRecord(), ...facts }
     const resting = {
@@ -233,7 +244,7 @@ describe('a chat at rest, read by the host', () => {
         adapter: {},
         agents: NO_STRUCTURED_AGENTS,
         store: { getRecord: () => record },
-        modelCatalog: { read: async () => ({ origin: 'probe', models: listed, fetchedAt: 1 }) }
+        modelCatalog: catalog(models)
       },
       serialize: (_sessionId: string, task: () => Promise<unknown>) => task(),
       openConversation: async () => resting,
@@ -255,13 +266,30 @@ describe('a chat at rest, read by the host', () => {
     expect(read.current).toMatchObject({ model: 'gpt-account', defaulted })
   })
 
-  it("names the tier the chat's model runs, and keeps the saved one", async () => {
-    const options = { model: 'gpt-account', serviceTier: 'flex' }
-    await expect(readAtRest({ options })).resolves.toMatchObject({
-      current: { serviceTier: 'default' }
-    })
-    expect(options.serviceTier).toBe('flex')
-  })
+  it.each([
+    ['another model offers', listed, 'default'],
+    // Codex lists no Flex; a Flex from the user's config runs as configured.
+    ['no model lists', listed.slice(0, 1), 'flex']
+  ])(
+    'names the tier the model runs where %s it, and keeps the saved one',
+    async (_n, models, runs) => {
+      const options = { model: 'gpt-account', serviceTier: 'flex' }
+      const answer = await readAtRest({ options }, [], false, models)
+      expect(answer.current).toMatchObject({ serviceTier: runs })
+      const record = { ...restingRecord(), options }
+      const picked = await recordStructuredAgentSessionOptionIntent(
+        {
+          store: { getRecord: () => record, replaceSessionOptions: vi.fn() },
+          agents: claudeAndCodexAgents(),
+          modelCatalog: catalog(models)
+        },
+        { sessionId: SESSION, fence: 1, persistOptions: vi.fn(), publish: vi.fn(), now: () => 0 },
+        { key: 'model', value: 'gpt-account' }
+      )
+      expect(picked).toMatchObject({ value: { options: { serviceTier: runs } } })
+      expect(record.options.serviceTier).toBe('flex')
+    }
+  )
 })
 
 describe('live Codex option reads', () => {

@@ -701,15 +701,25 @@ describe('useStructuredAgentSessionOptions', () => {
     // Claude replies with the values Orca set, so an effort it keeps is not in the reply.
     {
       agent: 'claude' as const,
-      tiers: [],
+      tiers: [[], []],
       current: { model: 'opus', effort: 'high' },
+      reply: {},
       shown: ['effort', 'high']
+    },
+    // Codex writes Standard when the new model lacks the tier, which shows with no later read.
+    {
+      agent: 'codex' as const,
+      tiers: [[{ value: 'priority', label: 'Fast' }], [{ value: 'flex', label: 'Flex' }]],
+      current: { model: 'opus', serviceTier: 'priority' },
+      reply: { serviceTier: 'default' },
+      shown: ['serviceTier', 'default']
     },
     // A configured tier no model lists (Flex) still runs, so it shows as held.
     {
       agent: 'codex' as const,
-      tiers: [{ value: 'priority', label: 'Fast' }],
+      tiers: [[{ value: 'priority', label: 'Fast' }], [{ value: 'priority', label: 'Fast' }]],
       current: { model: 'opus', serviceTier: 'flex' },
+      reply: {},
       shown: ['serviceTier', 'flex']
     }
   ])(
@@ -721,7 +731,7 @@ describe('useStructuredAgentSessionOptions', () => {
           label: id,
           isDefault: index === 0,
           efforts,
-          serviceTiers: pick.tiers
+          serviceTiers: pick.tiers[index]
         })),
         current: { ...pick.current, confirmed: ['model'] }
       }
@@ -731,7 +741,7 @@ describe('useStructuredAgentSessionOptions', () => {
       const { mutate } = mutateWith(async () => ({
         key: 'model',
         value: 'second',
-        options: { model: 'second' }
+        options: { model: 'second', ...pick.reply }
       }))
       const { result, unmount } = renderOptions({ ...REOPENED, agent: pick.agent }, mutate)
       await waitFor(() => expect(currentValue(result.current.optionSnapshot, 'model')).toBe('opus'))
