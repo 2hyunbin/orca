@@ -150,7 +150,8 @@ async function commandTurn(clientMessageId: string) {
   return (await journal()).items.find((item) => item.itemId === itemId)
 }
 
-it('answers at handover, then journals its own entry, turn and result (B1, B16)', async () => {
+it('answers at handover before the provider reports holding the command, then journals its result', async () => {
+  Object.assign(state.host.deps.adapter, { heldSends: () => new Set<string>() })
   await attach()
   const events = await subscribe()
   const params = compactParams()
@@ -248,15 +249,16 @@ it('hands over a message held behind the command when the command ends just as t
   await state.host.conversationCommand(CALLER, compactParams())
   await vi.waitFor(() => expect(compact).toHaveBeenCalledOnce(), { interval: 1 })
   const { journal: live } = state.host['sessions'].get(SESSION)!
-  const activeTurnId = live.activeTurnId
+  const runningTurn = live.runningTurn
   let ended = false
-  vi.spyOn(live, 'activeTurnId').mockImplementation(() => {
-    const read = activeTurnId()
+  // The loop reads the command through the host's current-work projection, which asks this.
+  vi.spyOn(live, 'runningTurn').mockImplementation(() => {
+    const read = runningTurn()
     // The provider's end lands the moment the loop's own step reads the command as running and
     // stops; no other reader's view of it matters here.
     if (
       !ended &&
-      read?.startsWith('compact:') &&
+      read?.turnId.startsWith('compact:') &&
       /at (?:StructuredAgentSessionDeliveryLoop\.)?prepare \(.*structured-agent-session-delivery-loop/.test(
         new Error('who reads').stack ?? ''
       )
@@ -378,7 +380,7 @@ it('refuses the command at handover when the provider opened a turn meanwhile (B
   void state.host['tasks'].serialize(SESSION, () => held.promise)
   const commanded = state.host.conversationCommand(CALLER, params)
   void state.host['tasks'].serialize(SESSION, async () => {
-    events?.appendItem(
+    await events?.appendItem(
       { provider: 'codex', threadId: THREAD, turnId: 'provider-turn', ordinal: 0 },
       { kind: 'turn', turnId: 'provider-turn', state: 'running' },
       { turnScope: AGENT_JOURNAL_THREAD_SCOPE, lifecycle: true }

@@ -3,7 +3,10 @@ import type {
   AgentSessionMutationResult
 } from '../../../shared/agent-session-wire'
 import { hasRuntimeRpcErrorCode } from '../../../shared/runtime-rpc-error-code'
-import { isDefinitiveAgentSessionCreateRefusal } from '../../../shared/agent-session-definitive-refusal'
+import {
+  isAgentSessionCreateAdmissionRefusal,
+  isDefinitiveAgentSessionCreateRefusal
+} from '../../../shared/agent-session-definitive-refusal'
 import { readAgentSessionRefusalReference } from '../../../shared/agent-session-wire-refusals'
 import { readAgentSessionErrorRefusal } from '../../../shared/agent-session-write-failure'
 import {
@@ -19,6 +22,7 @@ import {
 import type { StructuredAgentLaunchReceipt } from './structured-agent-session-launch-recovery'
 import {
   StructuredAgentSessionCreateError,
+  StructuredAgentSessionCreateAbandonedError,
   StructuredAgentSessionCreateRefusalError,
   StructuredAgentSessionCreateUnknownOutcomeError
 } from './structured-agent-session-launch-errors'
@@ -78,7 +82,8 @@ export type StructuredLaunchHostSeedListener = (seedOptions: LaunchSeed) => void
 
 export async function launchStructuredAgentSession(
   intent: StructuredAgentSessionLaunchIntent,
-  onHostSeed?: StructuredLaunchHostSeedListener
+  onHostSeed?: StructuredLaunchHostSeedListener,
+  priorCreateOutcomeUnknown = false
 ): Promise<StructuredAgentLaunchReceipt> {
   const hostSeed = await requireHostCreateSupport(intent)
   if (intent.target.kind !== 'local') {
@@ -98,6 +103,13 @@ export async function launchStructuredAgentSession(
     }
   }
   let result: AgentSessionMutationResult<AgentSessionAttachResult>
+  if (intent.beforeCreate?.() === false) {
+    abandonStructuredAgentSessionLaunchIntent(intent)
+    throw new StructuredAgentSessionCreateAbandonedError(
+      'Conversation source retired before create.'
+    )
+  }
+  delete intent.beforeCreate
   try {
     result = await callStructuredAgentSession<AgentSessionMutationResult<AgentSessionAttachResult>>(
       intent.target,
@@ -119,8 +131,17 @@ export async function launchStructuredAgentSession(
   if (!result.ok) {
     const { code, message, ownerVerdict } = result.refusal
     const refusal = readAgentSessionRefusalReference(result.refusal)
-    // A failed operation whose provider is proven gone is a failure a new operation may retry.
-    if (!isDefinitiveAgentSessionCreateRefusal(code) && ownerVerdict !== 'exited') {
+    const attemptRefusedBeforeCommit =
+      !priorCreateOutcomeUnknown &&
+      result.refusal.createAttemptRefusedBeforeCommit === true &&
+      refusal !== undefined &&
+      isAgentSessionCreateAdmissionRefusal(refusal)
+    // Attempt proof cannot settle an earlier create whose reply was lost.
+    if (
+      !attemptRefusedBeforeCommit &&
+      !isDefinitiveAgentSessionCreateRefusal(code) &&
+      ownerVerdict !== 'exited'
+    ) {
       // Keep the focus intent: the session may exist, and recovery still has to adopt it.
       throw new StructuredAgentSessionCreateUnknownOutcomeError(message, code, refusal)
     }
@@ -148,6 +169,6 @@ export async function launchStructuredAgentSession(
   return {
     sessionId: result.value.sessionId,
     fence: result.value.fence,
-    ...(firstMessage ? { firstMessage } : {})
+    ...(firstMessage ? { firstMessage, cursor: result.cursor } : {})
   }
 }
