@@ -3492,7 +3492,7 @@
         "bar": {
           "BrowserTab": {
             "6e0bc8f3a8": "Abrir en el navegador",
-            "9dd880bd56": "Cerrar pestañas a la derecha",
+            "9dd880bd56": "Cerrar todas las pestañas a la derecha",
             "1611a1324b": "Cerrar",
             "5d6e89891f": "Duplicar pestaña",
             "966feb9ad5": "Dividir a la derecha",
@@ -3509,7 +3509,7 @@
             "52ce4f4605": "Copiar ruta relativa",
             "5b85754786": "Copiar ruta",
             "bfd5797ef4": "Abrir vista previa de Markdown",
-            "e5ff31ccaf": "Cerrar pestañas a la derecha",
+            "e5ff31ccaf": "Cerrar todas las pestañas a la derecha",
             "ba1369dd24": "Cerrar todas las pestañas del editor",
             "1ba8492c5b": "Cerrar",
             "68cc610e7f": "Renombrar",
@@ -3542,7 +3542,7 @@
           "SortableTabContextMenu": {
             "35e8892fd0": "Color de pestaña",
             "2f697b3c31": "Cambiar título",
-            "c1ee099c7e": "Cerrar pestañas a la derecha",
+            "c1ee099c7e": "Cerrar todas las pestañas a la derecha",
             "8d16f9cd30": "Cerrar otras",
             "89359a36f7": "Cerrar",
             "21132389e9": "Dividir a la derecha",
@@ -18767,15 +18767,15 @@
         "SortableTabContextMenu": {
           "switchToTerminalView": "Cambiar a la vista de terminal",
           "switchToChatView": "Cambiar a vista de chat",
-          "closeTabsToLeft": "Cerrar pestañas a la izquierda"
+          "closeTabsToLeft": "Cerrar todas las pestañas a la izquierda"
         },
         "BrowserTab": {
           "closeOthers": "Cerrar otras",
-          "closeTabsToLeft": "Cerrar pestañas a la izquierda"
+          "closeTabsToLeft": "Cerrar todas las pestañas a la izquierda"
         },
         "EditorFileTabContextMenu": {
           "closeOthers": "Cerrar otras",
-          "closeTabsToLeft": "Cerrar pestañas a la izquierda"
+          "closeTabsToLeft": "Cerrar todas las pestañas a la izquierda"
         },
         "CopyTabIdMenuItem": {
           "copied": "ID de pestaña copiado",

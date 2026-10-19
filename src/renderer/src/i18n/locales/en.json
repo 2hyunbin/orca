@@ -3725,7 +3725,7 @@
         "bar": {
           "BrowserTab": {
             "6e0bc8f3a8": "Open In Browser",
-            "9dd880bd56": "Close Tabs To The Right",
+            "9dd880bd56": "Close All Tabs To The Right",
             "1611a1324b": "Close",
             "5d6e89891f": "Duplicate Tab",
             "966feb9ad5": "Split Right",
@@ -3742,7 +3742,7 @@
             "52ce4f4605": "Copy Relative Path",
             "5b85754786": "Copy Path",
             "bfd5797ef4": "Open Markdown Preview",
-            "e5ff31ccaf": "Close Tabs To The Right",
+            "e5ff31ccaf": "Close All Tabs To The Right",
             "ba1369dd24": "Close All Editor Tabs",
             "1ba8492c5b": "Close",
             "68cc610e7f": "Rename",
@@ -3775,7 +3775,7 @@
           "SortableTabContextMenu": {
             "35e8892fd0": "Tab Color",
             "2f697b3c31": "Change Title",
-            "c1ee099c7e": "Close Tabs To The Right",
+            "c1ee099c7e": "Close All Tabs To The Right",
             "8d16f9cd30": "Close Others",
             "89359a36f7": "Close",
             "21132389e9": "Split Right",
@@ -19040,15 +19040,15 @@
         "SortableTabContextMenu": {
           "switchToTerminalView": "Switch to terminal view",
           "switchToChatView": "Switch to chat view",
-          "closeTabsToLeft": "Close Tabs To The Left"
+          "closeTabsToLeft": "Close All Tabs To The Left"
         },
         "BrowserTab": {
           "closeOthers": "Close Others",
-          "closeTabsToLeft": "Close Tabs To The Left"
+          "closeTabsToLeft": "Close All Tabs To The Left"
         },
         "EditorFileTabContextMenu": {
           "closeOthers": "Close Others",
-          "closeTabsToLeft": "Close Tabs To The Left"
+          "closeTabsToLeft": "Close All Tabs To The Left"
         },
         "CopyTabIdMenuItem": {
           "copied": "Tab ID copied",

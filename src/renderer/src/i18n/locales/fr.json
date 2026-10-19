@@ -3605,7 +3605,7 @@
         "bar": {
           "BrowserTab": {
             "6e0bc8f3a8": "Ouvrir dans le navigateur",
-            "9dd880bd56": "Fermer les onglets à droite",
+            "9dd880bd56": "Fermer tous les onglets à droite",
             "1611a1324b": "Fermer",
             "5d6e89891f": "Dupliquer l'onglet",
             "966feb9ad5": "Scinder vers la droite",
@@ -3622,7 +3622,7 @@
             "52ce4f4605": "Copier le chemin relatif",
             "5b85754786": "Copier le chemin",
             "bfd5797ef4": "Ouvrir l'aperçu Markdown",
-            "e5ff31ccaf": "Fermer les onglets à droite",
+            "e5ff31ccaf": "Fermer tous les onglets à droite",
             "ba1369dd24": "Fermer tous les onglets de l'éditeur",
             "1ba8492c5b": "Fermer",
             "68cc610e7f": "Renommer",
@@ -3655,7 +3655,7 @@
           "SortableTabContextMenu": {
             "35e8892fd0": "Couleur de l'onglet",
             "2f697b3c31": "Modifier le titre",
-            "c1ee099c7e": "Fermer les onglets à droite",
+            "c1ee099c7e": "Fermer tous les onglets à droite",
             "8d16f9cd30": "Fermer les autres",
             "89359a36f7": "Fermer",
             "21132389e9": "Scinder vers la droite",
@@ -18876,15 +18876,15 @@
         "SortableTabContextMenu": {
           "switchToTerminalView": "Passer à la vue terminal",
           "switchToChatView": "Passer à la vue chat",
-          "closeTabsToLeft": "Fermer les onglets à gauche"
+          "closeTabsToLeft": "Fermer tous les onglets à gauche"
         },
         "BrowserTab": {
           "closeOthers": "Fermer les autres",
-          "closeTabsToLeft": "Fermer les onglets à gauche"
+          "closeTabsToLeft": "Fermer tous les onglets à gauche"
         },
         "EditorFileTabContextMenu": {
           "closeOthers": "Fermer les autres",
-          "closeTabsToLeft": "Fermer les onglets à gauche"
+          "closeTabsToLeft": "Fermer tous les onglets à gauche"
         },
         "CopyTabIdMenuItem": {
           "copied": "ID de l'onglet copié",
