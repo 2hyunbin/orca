@@ -247,7 +247,12 @@ afterEach(cleanup)
     readPhase: 'ready'
   }
 
+  const continueUsageLimit = vi.fn()
+  const usageLimitView = { hostLabel: null, remoteHost: false, continueAvailable: false,
+    offeredTurnItemId: null, continueNow: vi.fn(), usageLimitTurnItemId: 'item-2', continueUsageLimit }
+
   it.each(['claude', 'codex', 'grok'] as const)('keeps a collapsed %s quota failure and Continue visible', (agent) => {
+    continueUsageLimit.mockClear()
     const items: AgentJournalRenderItem[] = [
       journalItem(1, { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'Start' }] }),
       journalItem(2, { kind: 'turn', turnId: 'turn-1', userItemId: 'item-1',
@@ -259,12 +264,9 @@ afterEach(cleanup)
           detail: { text: 'The provider refused this request.', audience: 'person' }
         }, { surface: 'row' }) }), turnScope: { kind: 'turn', turnItemId: 'item-2' } }
     ]
-    const continueUsageLimit = vi.fn()
-    const view = { hostLabel: null, remoteHost: false, continueAvailable: false,
-      offeredTurnItemId: null, continueNow: vi.fn(), usageLimitTurnItemId: 'item-2', continueUsageLimit }
     render(
       <TooltipProvider>
-        <NativeChatOrcaStopContext.Provider value={view}>
+        <NativeChatOrcaStopContext.Provider value={usageLimitView}>
           <NativeChatMessageList
             session={{ ...session, agent, status: 'ready', messages: projectStructuredAgentSessionMessages(items, [], []) }}
             journalItems={items}

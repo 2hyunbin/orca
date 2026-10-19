@@ -232,8 +232,7 @@ export function NativeChatStructuredSession(
     agent: props.agent,
     sessionId: props.sessionId,
     isWorking: controller.isWorking || hostHeld,
-    reportComposerError,
-    focusComposer,
+    reportComposerError, focusComposer,
     transport: structuredTransport
   })
 
