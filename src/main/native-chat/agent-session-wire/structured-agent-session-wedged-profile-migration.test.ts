@@ -38,7 +38,9 @@ import {
 } from '../../runtime/agent-session-record-store-test-harness'
 import type { StructuredAgentSessionAdapter } from './structured-agent-session-adapter'
 import { openAgentSessionJournal } from '../agent-session-journal/journal-store-factory'
-import { AgentSessionJournal } from '../agent-session-journal/journal-store'
+import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
+import { JournalLifecycleBatchAppender } from '../agent-session-journal/journal-lifecycle-batch-appender'
+import * as recoveryResolution from './structured-agent-session-recovery-resolution'
 import { StructuredAgentSessionHost } from './structured-agent-session-host'
 import type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
 import {
@@ -463,7 +465,7 @@ describe('already-wedged profiles become usable on load', () => {
       })
       // The read restore's settlement fails, and nothing retries it.
       const failing = vi
-        .spyOn(AgentSessionJournal.prototype, 'appendLifecycleBatch')
+        .spyOn(JournalLifecycleBatchAppender.prototype, 'appendPlanned')
         .mockRejectedValue(new Error('journal unavailable'))
       await host.restoreReadableSessions()
       failing.mockRestore()
@@ -500,7 +502,17 @@ describe('already-wedged profiles become usable on load', () => {
       stopOwnerProcess
     })
 
-    await host.restoreReadableSessions()
+    const resolveRecovery = recoveryResolution.resolveStructuredSessionRecovery
+    const recovery = vi
+      .spyOn(recoveryResolution, 'resolveStructuredSessionRecovery')
+      .mockImplementation((deps, sessionId) =>
+        resolveRecovery({ ...deps, delay: async () => {} }, sessionId)
+      )
+    try {
+      await host.restoreReadableSessions()
+    } finally {
+      recovery.mockRestore()
+    }
 
     expect(stopOwnerProcess.mock.calls).toEqual([
       [DEAD_OWNER.pid, 'SIGTERM'],
@@ -541,9 +553,10 @@ describe('already-wedged profiles become usable on load', () => {
     }
   )
 
-  it('marks a running turn left behind by a released lease unverifiable on a cold acquire', async () => {
+  it('interrupts a running turn left behind by a released lease on a cold acquire', async () => {
     // No settlement latch: the record was released cleanly, but the journal still says a turn is
-    // running. The child that wrote it is gone and nothing observed its exit.
+    // running. Nothing observed the child's exit, but the runtime that held it was replaced, and
+    // nothing after its start proves it alive.
     await seedStore(wedgedRecord({ claimStatus: 'released', handoffStage: null }))
     await seedRunningTurn()
     openHost()
@@ -553,8 +566,9 @@ describe('already-wedged profiles become usable on load', () => {
     expect(acquire).toHaveBeenCalledOnce()
     expect(turnLifecycle('turn-1')).toEqual({
       turnId: 'turn-1',
-      state: 'unverifiable',
+      state: 'interrupted',
       startedAt: NOW - 5_000,
+      completedAt: NOW - 5_000,
       recovered: true
     })
     expect(

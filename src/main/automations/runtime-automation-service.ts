@@ -7,14 +7,13 @@ import type { CodexUsageStore } from '../codex-usage/store'
 import type { Store } from '../persistence'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { AutomationService } from './service'
-import type { AutomationRun } from '../../shared/automations-types'
 import { createHeadlessRunTerminalRetention } from './headless-run-terminal-retention'
 import {
   getTuiAgentDetectCommands,
   isTuiAgent,
   TUI_AGENT_CONFIG
 } from '../../shared/tui-agent-config'
-import { buildHeadlessAutomationWorktreeCreateArgs } from './headless-workspace-create'
+import { launchHeadlessAutomationAgent, runOwnHandle } from './headless-automation-agent-launch'
 import { createRuntimeAutomationRunTerminalObserver } from './runtime-terminal-run-observer'
 
 const MAX_REMEMBERED_LAUNCHES = 256
@@ -50,60 +49,19 @@ export function createRuntimeAutomationService(input: {
     onAutomationsChanged: (payload) => runtime.notifyAutomationsChanged(payload),
     allowRemoteHostScheduling: input.headless,
     headlessDispatcher: input.headless
-      ? async ({ automation, run, target }) => {
-          let terminalHandle: string
-          let terminalSessionId: string | null = null
-          let terminalPaneKey: string | null = null
-          let terminalPtyId: string | null = null
-          let workspaceId: string
-          let workspaceDisplayName: string | null = null
-          if (automation.workspaceMode === 'new_per_run') {
-            const created = await runtime.createManagedWorktree(
-              buildHeadlessAutomationWorktreeCreateArgs({ automation, run, repo: target.repo })
-            )
-            terminalHandle = created.startupTerminal?.handle ?? ''
-            terminalSessionId = created.startupTerminal?.tabId ?? null
-            terminalPaneKey = created.startupTerminal?.paneKey ?? null
-            terminalPtyId = created.startupTerminal?.ptyId ?? null
-            workspaceId = created.worktree.id
-            workspaceDisplayName = created.worktree.displayName ?? null
-            if (!terminalHandle) {
-              throw new Error(
-                created.warning ||
-                  'Automation workspace was created, but no agent terminal started.'
-              )
-            }
-          } else {
-            if (!automation.workspaceId) {
-              throw new Error('The target workspace is no longer available.')
-            }
-            const terminal = await runtime.launchAgentTerminal(`id:${automation.workspaceId}`, {
-              agent: automation.agentId,
-              prompt: automation.prompt,
-              title: run.title
-            })
-            terminalHandle = terminal.handle
-            terminalSessionId = terminal.tabId ?? null
-            terminalPaneKey = terminal.paneKey ?? null
-            terminalPtyId = terminal.ptyId ?? null
-            workspaceId = terminal.worktreeId
-            const worktree = await runtime.showManagedWorktree(`id:${workspaceId}`)
-            workspaceDisplayName = worktree.displayName ?? null
-          }
-          if (terminalPaneKey) {
-            launchedHandles.set(terminalPaneKey, terminalHandle)
+      ? async (request) => {
+          const { terminalHandle, ...launch } = await launchHeadlessAutomationAgent(runtime, {
+            ...request,
+            runs: store.listAutomationRuns(request.automation.id)
+          })
+          if (launch.terminalPaneKey) {
+            launchedHandles.set(launch.terminalPaneKey, terminalHandle)
             if (launchedHandles.size > MAX_REMEMBERED_LAUNCHES) {
               launchedHandles.delete(launchedHandles.keys().next().value ?? '')
             }
           }
           // No completion: the run's watcher observes it, retrying wait timeouts until it settles.
-          return {
-            workspaceId,
-            workspaceDisplayName,
-            terminalSessionId,
-            terminalPaneKey,
-            terminalPtyId
-          }
+          return launch
         }
       : undefined
   })
@@ -139,6 +97,8 @@ function bindHeadlessRunTerminalRetention(
       await runtime.closeTerminal(handle)
       return true
     },
+    inAutomationLane: (automationId, operation) =>
+      service.runInAutomationLane(automationId, operation),
     forgetRunTerminal: async (run) => {
       // A run still dispatched had its agent exit without a result, proven by its idle shell.
       const unfinished = run.status === 'dispatched'
@@ -173,16 +133,4 @@ function automationAgentCommands(agentId: string | undefined): string[] {
   }
   const config = TUI_AGENT_CONFIG[agentId]
   return [...getTuiAgentDetectCommands(config), config.launchCmd]
-}
-
-/** The run's pane handle while that pane still holds the run's own PTY; null otherwise. */
-function runOwnHandle(runtime: OrcaRuntimeService, run: AutomationRun): string | null {
-  const handle = run.terminalPaneKey
-    ? runtime.getTerminalHandleForPaneKey(run.terminalPaneKey)
-    : null
-  return handle &&
-    run.terminalPtyId &&
-    runtime.getTerminalPtyIdForHandle(handle) === run.terminalPtyId
-    ? handle
-    : null
 }

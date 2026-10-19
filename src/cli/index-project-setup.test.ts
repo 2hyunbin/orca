@@ -45,6 +45,16 @@ import { main } from './index'
 import { okFixture, queueFixtures } from './test-fixtures'
 import { pairRuntimeEnvironment, useWorktreeAwarenessEnvironment } from './index-test-harness'
 
+const ORCA_PROJECT = {
+  id: 'github:stablyai/orca',
+  displayName: 'Orca',
+  badgeColor: '#7c3aed',
+  sourceRepoIds: ['repo-1'],
+  createdAt: 1,
+  updatedAt: 1
+}
+const PROJECT_LIST_FIXTURE = okFixture('req_project_list', { projects: [ORCA_PROJECT] })
+
 describe('orca cli worktree awareness', () => {
   useWorktreeAwarenessEnvironment({
     callMock,
@@ -303,6 +313,7 @@ describe('orca cli worktree awareness', () => {
     pairRuntimeEnvironment(listEnvironmentsMock, 'env-uuid-1', 'awin')
     queueFixtures(
       callMock,
+      PROJECT_LIST_FIXTURE,
       okFixture('req_project_setup_create', {
         result: {
           project: {
@@ -389,6 +400,7 @@ describe('orca cli worktree awareness', () => {
   it('sets up an existing project folder with a path resolved against the local cli cwd', async () => {
     queueFixtures(
       callMock,
+      PROJECT_LIST_FIXTURE,
       okFixture('req_project_setup', {
         result: {
           project: {
@@ -587,6 +599,7 @@ describe('orca cli worktree awareness', () => {
     pairRuntimeEnvironment(listEnvironmentsMock, 'awin')
     queueFixtures(
       callMock,
+      PROJECT_LIST_FIXTURE,
       okFixture('req_project_setup_clone', {
         result: {
           project: {
@@ -714,6 +727,7 @@ describe('orca cli worktree awareness', () => {
     pairRuntimeEnvironment(listEnvironmentsMock, 'gpu')
     queueFixtures(
       callMock,
+      PROJECT_LIST_FIXTURE,
       okFixture('req_project_setup_create', {
         result: {
           project: {
@@ -776,7 +790,10 @@ describe('orca cli worktree awareness', () => {
     })
   })
 
-  it('deletes project host setup metadata through the project-first runtime API', async () => {
+  it.each([
+    { flags: [], force: false },
+    { flags: ['--force'], force: true }
+  ])('deletes project host setup metadata with force=$force', async ({ flags, force }) => {
     queueFixtures(
       callMock,
       okFixture('req_project_setup_delete', {
@@ -806,10 +823,11 @@ describe('orca cli worktree awareness', () => {
     )
     vi.spyOn(console, 'log').mockImplementation(() => {})
 
-    await main(['project', 'setup-delete', '--setup', 'setup-gpu', '--json'], '/tmp/repo')
+    await main(['project', 'setup-delete', '--setup', 'setup-gpu', ...flags, '--json'], '/tmp/repo')
 
     expect(callMock).toHaveBeenCalledWith('projectHostSetup.delete', {
-      setupId: 'setup-gpu'
+      setupId: 'setup-gpu',
+      force
     })
   })
 })

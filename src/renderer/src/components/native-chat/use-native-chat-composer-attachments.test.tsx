@@ -13,6 +13,7 @@ import type { NativeChatResolvedTarget } from './native-chat-composer-target'
 import { nativeChatPendingAttachmentSnapshot } from './native-chat-pending-attachment-cache'
 import { readNativeChatDraftCache } from './native-chat-draft-cache'
 import { NATIVE_FILE_DROP_MAX_PATHS } from '../../../../shared/native-file-drop'
+import { imageReferenceToken } from '../../../../shared/native-chat-image-reference'
 
 vi.mock('@/i18n/i18n', () => ({
   translate: (_key: string, fallback: string) => fallback
@@ -26,8 +27,7 @@ type AttachmentApi = ReturnType<typeof useNativeChatComposerAttachments>
 type ProbeApi = AttachmentApi & { adoptDraft: (draft: string) => void }
 
 const target: NativeChatResolvedTarget = {
-  ptyId: 'pty-1',
-  settings: { activeRuntimeEnvironmentId: null }
+  ptyId: 'pty-1'
 }
 
 function Probe({
@@ -50,6 +50,7 @@ function Probe({
   const api = useNativeChatComposerAttachments({
     attachmentScopeKey: scopeKey,
     allowWithoutTarget: structured,
+    imageReferences: structured,
     caret,
     disabled,
     isComposing,
@@ -170,6 +171,38 @@ describe('useNativeChatComposerAttachments', () => {
       { path: '/tmp/orca-native-chat-attach-test.png' }
     ])
     act(() => second.root.unmount())
+  })
+
+  it.each([false, true])(
+    'marks each image in the prompt only in a structured chat (structured=%s)',
+    async (structured) => {
+      const scope = structured ? 'structured-1' : 'pty-1'
+      const probe = await renderProbe(scope, structured)
+      await act(async () => probe.latest().attachResolvedPaths(['/tmp/attached.png']))
+      act(() => {
+        probe.latest().beginPendingImageAttachment()
+      })
+
+      const ids = probe.latest().imageAttachments.map(({ id }) => id)
+      expect(ids).toHaveLength(2)
+      expect(readNativeChatDraftCache(scope)).toBe(
+        structured ? ids.map(imageReferenceToken).join('\n\n') : ''
+      )
+      act(() => probe.root.unmount())
+    }
+  )
+
+  it('takes the chip of an image still on its way out of the prompt when the composer is disabled', async () => {
+    const probe = await renderProbe('structured-1', true)
+    act(() => {
+      probe.latest().beginPendingImageAttachment()
+    })
+    expect(readNativeChatDraftCache('structured-1')).not.toBe('')
+
+    await probe.rerender('structured-1', true)
+    expect(probe.latest().imageAttachments).toEqual([])
+    expect(readNativeChatDraftCache('structured-1')).toBe('')
+    act(() => probe.root.unmount())
   })
 
   it('accepts host-readable image paths without a PTY for structured transport', async () => {
@@ -477,13 +510,14 @@ describe('useNativeChatComposerAttachments', () => {
   it('keeps an upload that finishes while the composer is unmounted, for when it returns', async () => {
     const probe = await renderProbe('pty-gone')
     const chips = probe.latest().pendingChips
-    const begun: { image?: string | null; removed?: string | null } = {}
+    const begun: { image?: string | null; removed?: string | null; reference?: string | null } = {}
     act(() => {
       begun.image = chips.begin(undefined, 'shot.png')
       begun.removed = chips.begin(undefined, 'old.png')
+      begun.reference = chips.begin(undefined, 'notes.pdf')
     })
-    const { image, removed } = begun
-    if (!image || !removed) {
+    const { image, removed, reference } = begun
+    if (!image || !removed || !reference) {
       throw new Error('expected pending chips')
     }
     act(() => probe.latest().removeImageAttachment(removed))
@@ -492,7 +526,7 @@ describe('useNativeChatComposerAttachments', () => {
 
     chips.resolve(image, '/srv/agent-session-attachments/u1/shot.png')
     chips.resolve(removed, '/srv/agent-session-attachments/u2/old.png')
-    chips.attachReferences(['/srv/agent-session-attachments/u3/notes.pdf'])
+    chips.attachReferences([{ id: reference, path: '/srv/agent-session-attachments/u3/notes.pdf' }])
 
     expect(readNativeChatAttachmentCache('pty-gone')).toEqual([
       { id: image, path: '/srv/agent-session-attachments/u1/shot.png' }
@@ -531,11 +565,33 @@ describe('useNativeChatComposerAttachments', () => {
     act(() => back.root.unmount())
   })
 
+  it('gives uploads unique IDs across composers remounted in the same clock tick', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    try {
+      const first = await renderProbe('pty-ids', true)
+      const ids: (string | null)[] = []
+      act(() => ids.push(first.latest().pendingChips.begin(undefined, 'first.pdf')))
+      act(() => first.root.unmount())
+      const next = await renderProbe('pty-ids', true)
+      act(() => ids.push(next.latest().pendingChips.begin(undefined, 'second.pdf')))
+      expect(new Set(ids).size).toBe(2)
+      expect(nativeChatPendingAttachmentSnapshot('pty-ids')).toHaveLength(2)
+      act(() => next.root.unmount())
+    } finally {
+      now.mockRestore()
+    }
+  })
+
   it('inserts a stored file at the caret while the composer is showing and not composing', async () => {
     const probe = await renderProbe('pty-caret', true)
-    act(() =>
-      probe.latest().pendingChips.attachReferences(['/srv/agent-session-attachments/u6/a.pdf'])
-    )
+    act(() => {
+      const chips = probe.latest().pendingChips
+      const id = chips.begin(undefined, 'a.pdf')
+      if (!id) {
+        throw new Error('expected pending chip')
+      }
+      chips.attachReferences([{ id, path: '/srv/agent-session-attachments/u6/a.pdf' }])
+    })
     expect(probe.draft()).toBe('@/srv/agent-session-attachments/u6/a.pdf ')
     expect(readNativeChatDraftCache('pty-caret')).toBe('')
     act(() => probe.root.unmount())
@@ -555,8 +611,7 @@ describe('useNativeChatComposerAttachments', () => {
     const id: string = chipId
     // The upload finishes mid-composition: the reference waits for the composition to settle.
     act(() => {
-      expect(chips.drop(id)).toBe(true)
-      chips.attachReferences(['/srv/agent-session-attachments/u4/notes.pdf'])
+      chips.attachReferences([{ id, path: '/srv/agent-session-attachments/u4/notes.pdf' }])
     })
     // A prompt card takes the composer's place before the composition settles.
     act(() => probe.root.unmount())
@@ -567,24 +622,55 @@ describe('useNativeChatComposerAttachments', () => {
     )
   })
 
-  it('keeps a pending chip in the pending cache, without its preview, and the settled one in the draft', async () => {
+  it('keeps a pending chip in the pending cache, without its preview, and an image attached after it behind it', async () => {
     const probe = await renderProbe('pty-1')
     let pendingId: string | null = null
     act(() => {
       pendingId = probe.latest().beginPendingImageAttachment('blob:preview-1')
     })
     await act(async () => {
-      probe.latest().attachResolvedPaths(['/tmp/settled.png'])
+      probe.latest().attachResolvedPaths(['/tmp/later.png'])
     })
 
-    // A composer that comes back must still wait for the pending one, which no draft saves.
-    expect(nativeChatPendingAttachmentSnapshot('pty-1')).toEqual([
-      { id: pendingId, path: '', pending: true }
+    // A composer that comes back must still wait for the pending one, which no draft saves; the
+    // later image is saved at once, and shows behind it.
+    expect(nativeChatPendingAttachmentSnapshot('pty-1')).toMatchObject([
+      { id: pendingId, path: '', pending: true },
+      { path: '/tmp/later.png' }
     ])
-    expect(readNativeChatAttachmentCache('pty-1')).toMatchObject([{ path: '/tmp/settled.png' }])
+    expect(readNativeChatAttachmentCache('pty-1')).toMatchObject([{ path: '/tmp/later.png' }])
+    expect(probe.latest().imageAttachments).toMatchObject([
+      { id: pendingId, pending: true },
+      { path: '/tmp/later.png' }
+    ])
     expect(
       probe.latest().imageAttachments.find((attachment) => attachment.id === pendingId)?.previewUrl
     ).toBe('blob:preview-1')
+
+    // Thumbnails keep the order they were attached in, so their numbers don't jump.
+    act(() => probe.latest().resolvePendingImageAttachment(pendingId ?? '', '/tmp/first.png'))
+    expect(readNativeChatAttachmentCache('pty-1')).toMatchObject([
+      { path: '/tmp/first.png' },
+      { path: '/tmp/later.png' }
+    ])
+    act(() => probe.root.unmount())
+  })
+
+  it('removes a finished image from the saved draft while one attached before it is still on its way', async () => {
+    const probe = await renderProbe('pty-1')
+    let firstId: string | null = null
+    let secondId: string | null = null
+    act(() => {
+      firstId = probe.latest().beginPendingImageAttachment()
+      secondId = probe.latest().beginPendingImageAttachment()
+    })
+    act(() => probe.latest().resolvePendingImageAttachment(secondId ?? '', '/tmp/second.png'))
+    act(() => probe.latest().removeImageAttachment(secondId ?? ''))
+
+    expect(readNativeChatAttachmentCache('pty-1')).toEqual([])
+    act(() => probe.latest().resolvePendingImageAttachment(firstId ?? '', '/tmp/first.png'))
+    expect(readNativeChatAttachmentCache('pty-1')).toMatchObject([{ path: '/tmp/first.png' }])
+    expect(probe.latest().imageAttachments).toMatchObject([{ path: '/tmp/first.png' }])
     act(() => probe.root.unmount())
   })
 

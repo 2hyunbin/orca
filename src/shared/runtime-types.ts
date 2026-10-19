@@ -165,6 +165,7 @@ export type {
   RuntimeTerminalPromptStage,
   RuntimeTerminalRead,
   RuntimeTerminalRename,
+  RuntimeTerminalSetPaneTitle,
   RuntimeTerminalResolvePane,
   RuntimeTerminalSend,
   RuntimeTerminalShow,
@@ -200,6 +201,7 @@ export type {
   RuntimeWorktreePsUnchangedResult,
   RuntimeWorktreeRecord,
   RuntimeWorktreeRemoveResult,
+  RuntimeWorktreeSetResult,
   RuntimeWorktreeStatus
 } from './runtime-worktree-contracts'
 export type {

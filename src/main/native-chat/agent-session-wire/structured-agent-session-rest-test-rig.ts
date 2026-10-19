@@ -22,6 +22,7 @@ import type {
 } from './structured-agent-session-adapter'
 import { StructuredAgentSessionHost } from './structured-agent-session-host'
 import { claudeAndCodexAgents } from './structured-agent-session-adapter-router-test-support'
+import { structuredAgentSessionHeldStarts } from './structured-agent-session-held-start.test-support'
 import type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
 import {
   HOST_TEST_NOW,
@@ -49,6 +50,7 @@ export type RestTestAdapter = {
     NonNullable<StructuredAgentSessionAdapter['acknowledgeSessionRelease']>
   >
   holdsDispatch: Mock<NonNullable<StructuredAgentSessionAdapter['holdsDispatch']>>
+  startUnavailable: Mock<NonNullable<StructuredAgentSessionAdapter['startUnavailable']>>
   readOptions: Mock<NonNullable<StructuredAgentSessionAdapter['readOptions']>>
 }
 
@@ -65,6 +67,11 @@ export type RestTestRig = {
     forget: Mock
     readChildWork: Mock<(subject: unknown) => AgentChildWorkView[]>
   }
+  /** Wraps an acquire so its child stays `starting`: every other child proves its start once
+   *  published. */
+  heldStart: (
+    acquire: StructuredAgentSessionAdapter['acquire']
+  ) => StructuredAgentSessionAdapter['acquire']
   /** Opens a fresh host over the same store and journals: what a restart leaves behind. */
   restart: (deps?: Partial<StructuredAgentSessionHostDeps>) => Promise<StructuredAgentSessionHost>
   dispose: () => Promise<void>
@@ -159,20 +166,22 @@ export async function createRestTestRig(
     dispatch: vi.fn(async () => acceptedDispatch()),
     acknowledgeSessionRelease: vi.fn(),
     holdsDispatch: vi.fn(() => false),
+    startUnavailable: vi.fn(() => undefined),
     readOptions: vi.fn(async () => ({ models: [], current: { model: 'gpt-live' } }))
   }
+  const starts = structuredAgentSessionHeldStarts(() => rig.host)
   const hostFor = (overrides: Partial<StructuredAgentSessionHostDeps>) =>
     new StructuredAgentSessionHost({
       agents: claudeAndCodexAgents(),
       logger: createStructuredAgentSessionLogger(),
       store,
-      adapter: {
+      adapter: starts.wrap({
         ...adapter,
         releaseAcquisition: vi.fn(async () => true),
         cancelTurn: async () => ({ cancelled: true }),
         answerPrompt: async ({ commit }) => commit(),
         setOption: async () => undefined
-      },
+      }),
       journalDatabase: openTestJournalHostDatabase(root),
       claimKeyId: 'key-1',
       mintSpawnToken: () => 'spawn-a',
@@ -191,6 +200,7 @@ export async function createRestTestRig(
     clock,
     statusEvents,
     sink,
+    heldStart: starts.held,
     restart: async (overrides = {}) => {
       await rig.host.flushAllStreamedEvents().catch(() => undefined)
       store = await openTestAgentSessionRecordStore(root)

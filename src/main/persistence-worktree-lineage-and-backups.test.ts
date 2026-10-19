@@ -27,7 +27,7 @@ const { loadUserSshConfigMock, sshConfigHostsToTargetsMock } = vi.hoisted(() => 
   sshConfigHostsToTargetsMock: vi.fn()
 }))
 
-vi.mock('./ssh/ssh-config-parser', () => ({
+vi.mock('./ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: loadUserSshConfigMock,
   sshConfigHostsToTargets: sshConfigHostsToTargetsMock
 }))
@@ -213,7 +213,7 @@ describe('Store', () => {
         }
       })
 
-      store.removeProject('r1')
+      store.removeProjectForHost('r1', 'local')
       store.flush()
 
       expect(store.getMobileClientTabSelections()['device-a']).toEqual({

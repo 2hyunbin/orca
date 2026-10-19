@@ -1,11 +1,13 @@
 import { rejectPaneSpawnReservation, reserveIdlePaneSpawn } from '../pane/spawn-reservation'
-import { ptySizes } from '../delivery/visibility-state'
+import { restoreProvisionalPtySize } from '../spawn-options-assembly'
 import {
   beginPtyIpcSpawn,
   resolveEarlyPaneKey,
   resolveEarlyPaneSpawnReservationKey
 } from './spawn-begin'
 import { releaseStoppedPaneBinding, stopReplacedPaneOwner } from '../pane/pane-owner-replacement'
+import { planPaneAgentLaunch } from './spawn-agent-launch'
+import { endPaneAgentLaunch } from './spawn-agent-launch-end'
 import { preparePtyIpcSpawnPreflight } from './spawn-preflight'
 import { assemblePtyIpcSpawnEnv } from './spawn-env'
 import { preparePtyIpcQoderCommand } from './spawn-qoder-command'
@@ -22,18 +24,6 @@ function releaseAbandonedAgentTeamsLeader(ctx: PtyIpcSpawnState): void {
   }
   ctx.deps.runtime?.releaseClaudeAgentTeamsLeaderForHandle?.(ctx.agentTeamsLeaderHandle)
   ctx.agentTeamsLeaderHandle = null
-}
-
-function restoreProvisionalPtySize(ctx: PtyIpcSpawnState): void {
-  if (ctx.effectiveSessionId === undefined) {
-    return
-  }
-  const key = ctx.effectiveSessionAppId ?? ctx.effectiveSessionId
-  if (ctx.hadSessionSizeBeforeAttach && ctx.sessionSizeBeforeAttach) {
-    ptySizes.set(key, ctx.sessionSizeBeforeAttach)
-  } else {
-    ptySizes.delete(key)
-  }
 }
 
 export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArgs) {
@@ -60,11 +50,20 @@ export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArg
     if (early) {
       return early
     }
+    // Awaited only for a launch: an ordinary spawn reaches its provider in the same turn as before.
+    if (ctx.args.agentLaunch !== undefined) {
+      await planPaneAgentLaunch(ctx)
+    }
     await preparePtyIpcSpawnPreflight(ctx)
     await assemblePtyIpcSpawnEnv(ctx)
     await preparePtyIpcQoderCommand(ctx)
     const earlyReserved = await buildPtyIpcSpawnOptions(ctx).catch((error: unknown) => {
-      restoreProvisionalPtySize(ctx)
+      restoreProvisionalPtySize({
+        sessionId: ctx.effectiveSessionId,
+        sessionAppId: ctx.effectiveSessionAppId,
+        hadSessionSizeBeforeAttach: ctx.hadSessionSizeBeforeAttach,
+        sessionSizeBeforeAttach: ctx.sessionSizeBeforeAttach
+      })
       throw error
     })
     if (earlyReserved) {
@@ -75,9 +74,17 @@ export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArg
       releaseAbandonedAgentTeamsLeader(ctx)
       return earlyReserved
     }
+    // Right before the provider spawn, with nothing awaited in between: a closed pane starts nothing.
+    ctx.paneAgentLaunch?.refuseIfClosed()
     await executePtyIpcSpawn(ctx)
-    return await commitPtyIpcSpawn(ctx)
-  } catch (err) {
+    const committed = await commitPtyIpcSpawn(ctx)
+    endPaneAgentLaunch(
+      ctx,
+      ctx.exitedBeforeRegistration ? { exitedDuringStart: true } : { started: true }
+    )
+    return committed
+  } catch (caught) {
+    const err = endPaneAgentLaunch(ctx, { error: caught }) ?? caught
     releaseAbandonedAgentTeamsLeader(ctx)
     if (ctx.preSpawnHiddenMarkId !== null) {
       ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(ctx.preSpawnHiddenMarkId, false)

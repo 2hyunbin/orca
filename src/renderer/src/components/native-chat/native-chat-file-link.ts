@@ -1,9 +1,10 @@
 import { routeNativeChatHref } from '../../../../shared/native-chat-href-routing'
 import {
   parseExplicitFileLinkTarget,
-  resolveExplicitFileLinkTarget
+  resolveExplicitFileLinkTarget,
+  resolveExplicitFileLinkTargetPath
 } from '@/lib/explicit-file-link-target'
-import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
+import { runtimeEnvironmentIdWithLegacyFallbackUnlessTwin } from '@/lib/worktree-runtime-owner'
 import type { AppState } from '@/store/types'
 import { resolveNativeChatTabDirectory } from './native-chat-tab-directory'
 
@@ -11,6 +12,8 @@ export type NativeChatFileLinkContext = {
   worktreeId: string
   worktreePath: string
   runtimeEnvironmentId: string | null
+  /** The chat's own tab (terminal or agent-session); editor opens place beside its group. */
+  sourceTabId?: string
 }
 
 export type NativeChatResolvedFileLink = {
@@ -19,10 +22,11 @@ export type NativeChatResolvedFileLink = {
   column: number | null
 }
 
-type NativeChatFileLinkState = Pick<
+export type NativeChatFileLinkState = Pick<
   AppState,
+  | 'detectedWorktreesByRepo'
   | 'folderWorkspaces'
-  | 'getKnownWorktreeById'
+  | 'floatingWorkspacePath'
   | 'projectGroups'
   | 'repos'
   | 'settings'
@@ -30,7 +34,6 @@ type NativeChatFileLinkState = Pick<
   | 'worktreesByRepo'
 > & {
   unifiedTabsByWorktree?: AppState['unifiedTabsByWorktree']
-  floatingWorkspacePath?: AppState['floatingWorkspacePath']
   structuredSessionLaunchDirectoryByTabId?: AppState['structuredSessionLaunchDirectoryByTabId']
 }
 
@@ -119,7 +122,8 @@ function resolveNativeChatFileLinkContextForOwner(
   return {
     worktreeId,
     worktreePath,
-    runtimeEnvironmentId: getRuntimeEnvironmentIdForWorktree(state, worktreeId)
+    runtimeEnvironmentId: runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(state, worktreeId),
+    sourceTabId: terminalTabId
   }
 }
 
@@ -155,6 +159,10 @@ export function resolveNativeChatFileLink(
   const route = routeNativeChatHref(href)
   if (route.kind !== 'file') {
     return null
+  }
+  if (route.pathKind === 'literal') {
+    const absolutePath = resolveExplicitFileLinkTargetPath(route.pathText, context.worktreePath)
+    return absolutePath ? { absolutePath, line: null, column: null } : null
   }
   return resolvePathText(route.pathText, route.line, context)
 }

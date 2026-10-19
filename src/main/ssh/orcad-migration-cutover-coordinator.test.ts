@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getManagedOrcadFenceEnvironmentId } from '../../shared/managed-orcad-ssh-owner'
 import type { SshTarget } from '../../shared/ssh-types'
 import { closeTestStores, createSqliteTestStore } from '../persistence-test-harness'
@@ -15,7 +15,7 @@ import {
 import { ORCAD_MIGRATION_DESTINATION_UNSUPPORTED } from './orcad-migration-catalog-client'
 import { listOrcadMigrationSourceCutovers } from './orcad-migration-cutover-journal'
 import { fenceOrcadMigrationSource } from './orcad-migration-source-fence'
-import { SshTargetOrcadClaims } from './ssh-target-orcad-claims'
+import { SshTargetOrcadClaims } from './targets/ssh-target-orcad-claims'
 import { fakeOrcadMigrationDestination as fakeDestination } from './orcad-migration-destination-fake'
 
 const TARGET: SshTarget = {
@@ -57,8 +57,7 @@ async function setup() {
     targetId: TARGET.id,
     destinationEnvironmentId: 'env-1',
     destinationName: 'Managed',
-    terminalProof: { verdict: 'exited', provenPtyIds: [] },
-    hasDirectSshAuthority: () => false
+    terminalProof: { verdict: 'exited', provenPtyIds: [] }
   })
   if (fenced.outcome !== 'fenced') {
     throw new Error('expected a fence')
@@ -143,13 +142,17 @@ describe('migration cutover coordinator', () => {
   it.each([
     [
       'a source row changed',
-      (store: Store) => store.updateRepo('repo-1', { displayName: 'Renamed' }),
+      (store: Store) => store.updateRepo(store.getRepo('repo-1')!, { displayName: 'Renamed' }),
       'orcad_migration_source_changed'
     ],
     [
       'a terminal started on the source',
       (store: Store) =>
-        store.upsertSshRemotePtyLease({ targetId: TARGET.id, ptyId: 'late', state: 'attached' }),
+        vi
+          .spyOn(store, 'getSshRemotePtyLeases')
+          .mockReturnValue([
+            { targetId: TARGET.id, ptyId: 'late', state: 'attached', createdAt: 1, updatedAt: 1 }
+          ]),
       'orcad_migration_source_terminals_live'
     ]
   ])('refuses to stage or commit after %s', async (_label, change, code) => {
@@ -162,7 +165,7 @@ describe('migration cutover coordinator', () => {
   it('refuses a commit whose source changed after staging', async () => {
     const h = await setup()
     await stageOrcadMigrationDestination(h.context, h.migrationId)
-    h.store.updateRepo('repo-1', { displayName: 'Renamed' })
+    h.store.updateRepo(h.store.getRepo('repo-1')!, { displayName: 'Renamed' })
     await expect(commitOrcadMigrationDestination(h.context, h.migrationId)).rejects.toThrow(
       'orcad_migration_source_changed'
     )

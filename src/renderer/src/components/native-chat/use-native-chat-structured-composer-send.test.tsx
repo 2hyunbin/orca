@@ -137,10 +137,26 @@ describe('reports the sends that bring the latest into view', () => {
     send('/permissions', [])
     await vi.waitFor(() =>
       expect(structuredTransport.onError).toHaveBeenCalledWith(
-        expect.stringContaining('not available in chat sessions')
+        expect.stringContaining('not available in chat sessions'),
+        undefined
       )
     )
     expect(onSubmitted).not.toHaveBeenCalled()
+  })
+})
+
+// STA-10671: an older paired host would run the turn without the approval the chat asks for.
+describe('a send held by its host', () => {
+  it('starts no turn, but still lets an option command through', async () => {
+    const { send, structuredTransport } = harness('claude')
+    structuredTransport.sendBlockedReason = 'Update Orca on this host to use Ask for approval.'
+    await send('hello', [])
+    await send('/compact', [])
+    expect(structuredTransport.send).not.toHaveBeenCalled()
+    expect(structuredTransport.onError).not.toHaveBeenCalled()
+
+    await send('/model', [])
+    expect(structuredTransport.onError).toHaveBeenCalled()
   })
 })
 
@@ -154,10 +170,9 @@ describe("says a failed send in Orca's words, with the error it hit apart", () =
     })
     send('hello', [])
     await vi.waitFor(() =>
-      expect(structuredTransport.onError).toHaveBeenCalledWith(
-        'Your message was not sent.',
-        'connect ECONNREFUSED /tmp/a.sock'
-      )
+      expect(structuredTransport.onError).toHaveBeenCalledWith('Your message was not sent.', {
+        errorText: 'connect ECONNREFUSED /tmp/a.sock'
+      })
     )
   })
 })

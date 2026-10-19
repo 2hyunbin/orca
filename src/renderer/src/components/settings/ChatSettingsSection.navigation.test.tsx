@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getDefaultSettings } from '../../../../shared/constants'
 import { buildSettingsNavigationMetadata } from '@/hooks/useSettingsNavigationMetadata'
 import { ChatSettingsSection } from './ChatSettingsSection'
+import { TooltipProvider } from '../ui/tooltip'
 import { ActiveSettingsSectionProvider } from './SettingsSection'
 import { getChatAppearanceSearchEntries } from './chat-appearance-search'
 import { getChatNamingSearchEntry } from './chat-naming-search'
@@ -34,12 +35,12 @@ function NavigationHarness({
   targetSection?: string
 }) {
   const [activeSectionId, setActiveSectionId] = useState(initialSection)
-  const settings = { ...getDefaultSettings('/tmp'), experimentalStructuredNativeChat: enabled }
+  const settings = { ...getDefaultSettings('/tmp'), experimentalNativeChat: enabled }
   const sections = buildSettingsNavigationMetadata({
     isMac: false,
     isWindows: false,
     isWebClient: false,
-    experimentalStructuredNativeChat: enabled,
+    nativeChatEnabled: enabled,
     repos: []
   })
   const pendingNavSectionRef = useRef<string | null>('chat')
@@ -91,21 +92,23 @@ function NavigationHarness({
     terminal as SettingsTerminalModel
   )
   return (
-    <ActiveSettingsSectionProvider value={activeSectionId}>
-      <output aria-label="Selected settings page">{activeSectionId}</output>
-      <ChatSettingsSection
-        settings={settings}
-        updateSettings={vi.fn()}
-        writeSourceControlAiSettings={async () => {}}
-        searchEntries={[
-          ...getChatAppearanceSearchEntries(),
-          getChatNamingSearchEntry(),
-          getChatInlineVisualsSearchEntry()
-        ]}
-        showDesktopOnlySettings
-        isMounted
-      />
-    </ActiveSettingsSectionProvider>
+    <TooltipProvider>
+      <ActiveSettingsSectionProvider value={activeSectionId}>
+        <output aria-label="Selected settings page">{activeSectionId}</output>
+        <ChatSettingsSection
+          settings={settings}
+          updateSettings={vi.fn()}
+          writeSourceControlAiSettings={async () => {}}
+          searchEntries={[
+            ...getChatAppearanceSearchEntries(),
+            getChatNamingSearchEntry(),
+            getChatInlineVisualsSearchEntry()
+          ]}
+          showDesktopOnlySettings
+          isMounted
+        />
+      </ActiveSettingsSectionProvider>
+    </TooltipProvider>
   )
 }
 

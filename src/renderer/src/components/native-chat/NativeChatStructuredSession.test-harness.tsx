@@ -1,4 +1,3 @@
-import { act } from '@testing-library/react'
 import { useImperativeHandle } from 'react'
 import { vi } from 'vitest'
 import type { AgentJournalRenderItem } from '../../../../shared/agent-session-journal-types'
@@ -10,7 +9,10 @@ import type { AgentSessionRefusalReference } from '../../../../shared/agent-sess
 import type { NativeChatApprovalCardProps } from './NativeChatApprovalCard'
 import type { NativeChatDeliveryNotice } from './NativeChatMessageRow'
 import type { NativeChatQuestionCardProps } from './NativeChatQuestionCard'
-import type { NativeChatLaunchSeed } from './native-chat-composer-types'
+import type {
+  NativeChatLaunchSeed,
+  NativeChatStructuredComposerTransport
+} from './native-chat-composer-types'
 import type { NativeChatMessageListHandle } from './use-native-chat-reveal-latest'
 import type { NativeChatFileLinkContext } from './native-chat-file-link'
 import type { NativeChatComposerNotice } from './native-chat-composer-notice'
@@ -22,23 +24,11 @@ import type {
   SessionOptionSetResult,
   SessionOptionValue
 } from '../../../../shared/native-chat-session-options'
+import { absent, nullable, widened } from './native-chat-mock-slot-types.test-support'
 
 type StopBackgroundTaskSpy = (sessionId: string, taskId?: string) => unknown
 
-function nullable<T>(): T | null {
-  return null
-}
-
-function widened<T>(value: T): T {
-  return value
-}
-
-function absent<T>(): T | undefined {
-  return undefined
-}
-
-/** Stands in for the transcript: renders only each message's delivery notice, or the row's quiet
- *  "Sending…" while nothing has confirmed it. */
+/** Stands in for the transcript: renders each message's delivery notice or quiet "Sending…". */
 export function DeliveryNoticesMock({
   notices
 }: {
@@ -57,12 +47,6 @@ export function DeliveryNoticesMock({
 
 export function useProbeClock(): void {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
-}
-
-export async function advanceProbeClock(milliseconds: number): Promise<void> {
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(milliseconds)
-  })
 }
 
 export function seededEntry(
@@ -113,7 +97,6 @@ const DEFAULT_FILE_LINK_CONTEXT: NativeChatFileLinkContext = {
 
 const initialMessageListProps: StructuredSessionMessageListProps | null = null
 const initialApprovalCardProps: NativeChatApprovalCardProps | null = null
-type QueueResumeMock = { resume: () => void; resuming: boolean }
 
 /**
  * Shared mock state and `vi.mock` factories for the NativeChatStructuredSession test files.
@@ -141,11 +124,12 @@ export function createStructuredSessionMocks() {
     composerProps: nullable<{
       launchSeed?: NativeChatLaunchSeed
       structuredTransport?: Record<string, unknown> & {
-        queueResume?: QueueResumeMock
-        onError?: (text: string | null, errorText?: string) => void
+        onError?: NativeChatStructuredComposerTransport['onError']
+        optionPickerRequest?: NativeChatStructuredComposerTransport['optionPickerRequest']
       }
       isWorking?: boolean
       isStopping?: boolean
+      unavailableHint?: string
       afterStop?: 'queue' | 'send'
       steerQueued?: () => boolean
       onStop?: () => void
@@ -164,6 +148,7 @@ export function createStructuredSessionMocks() {
     monitoringBackgroundTasks: false,
     showBackgroundTasks: false,
     isWorking: false,
+    sendOut: false,
     turnId: null as string | null,
     // Unset: Stop follows the turn, as against an older host.
     canStop: nullable<boolean>(),
@@ -176,6 +161,7 @@ export function createStructuredSessionMocks() {
     threadGoal: nullable<StructuredAgentSessionThreadGoal>(),
     stopBackgroundTask: vi.fn<StopBackgroundTaskSpy>(),
     hasOlder: false,
+    readCurrent: false,
     loadingOlder: false,
     olderHistoryGeneration: 0,
     loadOlder: vi.fn<() => Promise<NativeChatOlderPageResult>>(),
@@ -184,10 +170,8 @@ export function createStructuredSessionMocks() {
     queuedRemove: vi.fn<(messageId: string) => Promise<void>>(async () => {}),
     queuedEdit: vi.fn<(messageId: string) => Promise<void>>(async () => {}),
     queuedSteerNewest: vi.fn<() => boolean>(() => false),
-    queuedResumable: false,
     queueSendsNext: false,
     unavailable: nullable<AgentSessionUnavailable>(),
-    queuedResume: vi.fn<() => Promise<boolean>>(async () => true),
     revealLatest: vi.fn<() => void>()
   }
 
@@ -225,6 +209,7 @@ export function createStructuredSessionMocks() {
             error: null,
             readRefusal: mocks.readRefusal,
             hasOlder: mocks.hasOlder,
+            readCurrent: mocks.readCurrent,
             loadingOlder: mocks.loadingOlder,
             olderHistoryGeneration: mocks.olderHistoryGeneration,
             loadOlder: mocks.loadOlder,
@@ -233,15 +218,24 @@ export function createStructuredSessionMocks() {
             submissions: mocks.submissions,
             send: mocks.send,
             isWorking: mocks.isWorking,
+            sendOut: mocks.sendOut,
             backgroundTasks: {
               show: mocks.showBackgroundTasks || mocks.monitoringBackgroundTasks,
               isMonitoring: mocks.monitoringBackgroundTasks,
               tasks: mocks.backgroundTasks,
               settledTasks: mocks.settledBackgroundTasks,
               supportsStop: mocks.supportsBackgroundTaskStop,
-              supportsStopAll: mocks.supportsBackgroundTaskStopAll
+              offersStopAll:
+                !mocks.supportsBackgroundTaskStop && mocks.supportsBackgroundTaskStopAll
             },
             turnId: mocks.turnId,
+            commandRefusalCauses: {
+              working: mocks.turnId !== null || mocks.isWorking,
+              prompt: mocks.promptItems.length > 0,
+              background: mocks.showBackgroundTasks || mocks.monitoringBackgroundTasks,
+              sending: false,
+              retry: false
+            },
             epoch: 'epoch-1',
             rewind: { surface: undefined },
             canStop: mocks.canStop ?? mocks.turnId !== null,
@@ -255,10 +249,9 @@ export function createStructuredSessionMocks() {
               steer: mocks.queuedSteer,
               remove: mocks.queuedRemove,
               edit: mocks.queuedEdit,
-              steerNewest: mocks.queuedSteerNewest,
-              queueResume: mocks.queuedResumable
-                ? { resume: mocks.queuedResume, resuming: false }
-                : undefined
+              pending: () => null,
+              queuePending: null,
+              steerNewest: mocks.queuedSteerNewest
             },
             threadGoal: mocks.threadGoal,
             cancel: mocks.cancel,
@@ -337,7 +330,11 @@ export function createStructuredSessionMocks() {
     nativeChatMessageList: () => ({
       NativeChatMessageList: (props: typeof mocks.messageListProps) => {
         mocks.messageListProps = props
-        useImperativeHandle(props?.ref, () => ({ revealLatest: mocks.revealLatest }))
+        useImperativeHandle(props?.ref, () => ({
+          revealLatest: mocks.revealLatest,
+          revealFindMatch: () => {},
+          messageCopyText: () => null
+        }))
         return <DeliveryNoticesMock notices={props?.deliveryNotices} />
       }
     }),
@@ -359,6 +356,7 @@ export function createStructuredSessionMocks() {
 
   const resetStructuredSessionMocks = (): void => {
     mocks.call.mockReset()
+    mocks.fileLinkClick.mockClear()
     mocks.launchLifecycle = null
     mocks.ownerWorktreeId = 'wt-1'
     mocks.fileLinkContext = DEFAULT_FILE_LINK_CONTEXT
@@ -387,6 +385,7 @@ export function createStructuredSessionMocks() {
     mocks.monitoringBackgroundTasks = false
     mocks.showBackgroundTasks = false
     mocks.isWorking = false
+    mocks.sendOut = false
     mocks.turnId = null
     mocks.canStop = null
     mocks.stopPressed = false
@@ -398,11 +397,15 @@ export function createStructuredSessionMocks() {
     mocks.settledBackgroundTasks = []
     mocks.threadGoal = null
     mocks.hasOlder = false
+    mocks.readCurrent = false
     mocks.loadingOlder = false
     mocks.olderHistoryGeneration = 0
     mocks.loadOlder.mockReset()
-    Object.assign(mocks, { queuedResumable: false, queueSendsNext: false, unavailable: null })
-    mocks.queuedResume.mockReset()
+    mocks.queuedCards = []
+    mocks.queuedSteer.mockClear()
+    mocks.queuedRemove.mockClear()
+    mocks.queuedEdit.mockClear()
+    Object.assign(mocks, { queueSendsNext: false, unavailable: null })
     mocks.revealLatest.mockReset()
     mocks.queuedSteerNewest.mockReset()
     mocks.queuedSteerNewest.mockReturnValue(false)

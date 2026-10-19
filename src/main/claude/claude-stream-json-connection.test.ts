@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { providerDiagnosticOf } from '../../shared/agent-session-failure'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { spawnProcess, type SpawnedProcess } from '../../shared/child-process/run-process'
-import type { ProcessSpec } from '../../shared/child-process/process-spec'
+import { spawnProcess } from '@orca/process-host'
+import type { SpawnedProcess, ProcessSpec } from '@orca/process-host/process-spec'
+
 import { query, type CanUseTool, type Options } from '@anthropic-ai/claude-agent-sdk'
 import {
   openClaudeStreamJsonConnection,
@@ -218,6 +219,25 @@ describe('Claude stream-json connection', () => {
     expect(launchedArgv(spawned.at(-1))).toContain(FAKE_CLI)
     expect(report.argv).toContain('--replay-user-messages')
     expect(report.argv).toContain(`--session-id=${SESSION_ID}`)
+  })
+
+  it("strips the launch's inherited keys after Orca's own env is merged in", async () => {
+    vi.stubEnv('ORCA_PANE_KEY', 'tab-1:pane-1')
+    vi.stubEnv('ORCA_AGENT_HOOK_PORT', '4242')
+    vi.stubEnv('ORCA_CONNECTION_MARKER', 'inherited')
+    const scenario = scriptScenario([HOLD_OPEN])
+    await open({
+      ...launchFor(scenario, { ORCA_AGENT_SESSION_ID: 'f7a1c0de-1111-4222-8333-444455556666' }),
+      envToDelete: ['ORCA_PANE_KEY', 'ORCA_AGENT_HOOK_PORT']
+    })
+
+    await until(() => readReportSafely(scenario), 'the scripted CLI report')
+    const env = childEnv()
+    expect(env.ORCA_PANE_KEY).toBeUndefined()
+    expect(env.ORCA_AGENT_HOOK_PORT).toBeUndefined()
+    // Only the listed keys go: the rest of the inherited env and the launch's own still arrive.
+    expect(env.ORCA_CONNECTION_MARKER).toBe('inherited')
+    expect(env.ORCA_AGENT_SESSION_ID).toBe('f7a1c0de-1111-4222-8333-444455556666')
   })
 
   it('leaves the default CLI home unpinned so macOS Keychain OAuth keeps working', async () => {

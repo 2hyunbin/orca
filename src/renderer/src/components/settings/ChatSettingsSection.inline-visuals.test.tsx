@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDefaultSettings } from '../../../../shared/constants'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import { ChatSettingsSection } from './ChatSettingsSection'
+import { TooltipProvider } from '../ui/tooltip'
 import { ActiveSettingsSectionProvider } from './SettingsSection'
 import { getChatInlineVisualsSearchEntry } from './chat-inline-visuals-search'
 import { matchesSettingsSearch } from './settings-search'
@@ -29,7 +30,7 @@ beforeEach(() => {
 function renderChat(nativeChatInlineVisuals: boolean | undefined) {
   const settings = {
     ...getDefaultSettings('/tmp'),
-    experimentalStructuredNativeChat: true,
+    experimentalNativeChat: true,
     nativeChatInlineVisuals
   }
   state.settings = settings
@@ -45,7 +46,8 @@ function renderChat(nativeChatInlineVisuals: boolean | undefined) {
           showDesktopOnlySettings
           isMounted
         />
-      </ActiveSettingsSectionProvider>
+      </ActiveSettingsSectionProvider>,
+      { wrapper: TooltipProvider }
     ),
     updateSettings
   }
@@ -81,7 +83,7 @@ describe('Inline visuals on the Chat settings page', () => {
         isMac: false,
         isWindows: false,
         isWebClient: false,
-        experimentalStructuredNativeChat: true,
+        nativeChatEnabled: true,
         repos: []
       })
       const results = buildCmdJSettingsResults(sections)

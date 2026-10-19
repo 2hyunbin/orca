@@ -3,9 +3,7 @@
 // map to the queued-message RPCs. Stop never touches the queue — its cards
 // stay on the host under a queue-level pause, lifted by Resume, and no text
 // travels back over the wire.
-// Edit copies the card's shown text into the composer before its delete
-// leaves, so no RPC outcome can lose it. An incapable host gets exactly
-// today's requests.
+// Older hosts retain the copy-before-delete fallback; capable hosts edit in place.
 
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
@@ -17,6 +15,16 @@ import type { RpcResponse } from '../transport/types'
 import { markRpcDeliveryUnknown } from '../transport/rpc-delivery-ambiguity'
 import type { StructuredAgentSessionHostSupport } from './mobile-structured-agent-session-host-support'
 import { useMobileStructuredAgentSession } from './use-mobile-structured-agent-session'
+import { agentSessionVisibleFailureFacts } from '../../../src/shared/agent-session-visible-failures'
+import type * as AgentSessionVisibleFailures from '../../../src/shared/agent-session-visible-failures'
+
+vi.mock('../../../src/shared/agent-session-visible-failures', async (importOriginal) => {
+  const original = await importOriginal<typeof AgentSessionVisibleFailures>()
+  return {
+    ...original,
+    agentSessionVisibleFailureFacts: vi.fn(original.agentSessionVisibleFailureFacts)
+  }
+})
 import {
   CAPABLE,
   LEGACY,
@@ -143,6 +151,26 @@ describe('mobile structured queued messages', () => {
   })
 
   describe('capability-gated delivery', () => {
+    it('scans failure facts only when a returned card needs them', async () => {
+      await mountSession(CAPABLE)
+      act(() => listener?.(snapshotEvent({ runningTurn: true })))
+      expect(agentSessionVisibleFailureFacts).not.toHaveBeenCalled()
+      act(() =>
+        listener?.(
+          snapshotEvent({
+            queuedMessages: [
+              queuedDraft({
+                messageId: 'returned',
+                state: 'returned',
+                returnedRejection: { kind: 'notSignedIn' }
+              })
+            ]
+          })
+        )
+      )
+      expect(agentSessionVisibleFailureFacts).toHaveBeenCalledTimes(1)
+      expect(hook!.queued.cards[0]?.caption).toContain('claude auth login')
+    })
     it('sends delivery: queue-if-active — fingerprint included — only on a capable host', async () => {
       sendRequest.mockImplementation(async (method) => {
         if (method === 'agentSession.send') {
@@ -403,6 +431,27 @@ describe('mobile structured queued messages', () => {
       expect(onSendError).toHaveBeenCalledWith('This message was already sent.')
     })
 
+    it('Clear all deletes every shown card on the existing host contract', async () => {
+      const ids = ['draft-1', 'draft-2']
+      sendRequest.mockImplementation(async (method, params) =>
+        method === 'agentSession.queuedMessageDelete'
+          ? fieldsOf(params).messageId === 'draft-1'
+            ? mutationOk({ deleted: true, messageId: 'draft-1' })
+            : mutationOk({ deleted: false, messageId: 'draft-2', disposition: 'missing' })
+          : method === 'agentSession.options'
+            ? ok({ models: [], current: {} })
+            : ok({})
+      )
+      await mountSession(
+        LEGACY,
+        snapshotEvent({ queuedMessages: ids.map((messageId) => queuedDraft({ messageId })) })
+      )
+      expect(hook!.queued.clear).toBeDefined()
+      await act(async () => expect(await hook!.queued.clear(ids)).toBe(true))
+      expect(calls('agentSession.queuedMessageDelete')).toHaveLength(2)
+      expect(requestOf('agentSession.queuedMessageDelete', 1).params.messageId).toBe('draft-2')
+    })
+
     it('Edit copies the card’s shown text into the composer before its delete leaves', async () => {
       sendRequest.mockImplementation(async (method) => {
         if (method === 'agentSession.queuedMessageDelete') {
@@ -411,11 +460,11 @@ describe('mobile structured queued messages', () => {
         return method === 'agentSession.options' ? ok({ models: [], current: {} }) : ok({})
       })
       await mountSession(
-        CAPABLE,
+        LEGACY,
         snapshotEvent({ queuedMessages: [queuedDraft({ messageId: 'draft-1' })] })
       )
       await act(async () => {
-        expect(await hook!.queued.edit('draft-1')).toBe(true)
+        expect(await hook!.queued.edit!('draft-1')).toBe(true)
       })
       // The copy comes from the card the user is looking at, not from any answer.
       expect(appendText.mock.calls).toEqual([['text of draft-1']])
@@ -437,11 +486,11 @@ describe('mobile structured queued messages', () => {
         return method === 'agentSession.options' ? ok({ models: [], current: {} }) : ok({})
       })
       await mountSession(
-        CAPABLE,
+        LEGACY,
         snapshotEvent({ queuedMessages: [queuedDraft({ messageId: 'draft-1' })] })
       )
       await act(async () => {
-        expect(await hook!.queued.edit('draft-1')).toBe(false)
+        expect(await hook!.queued.edit!('draft-1')).toBe(false)
       })
       // The user sees both copies — composer text and the surviving card — and
       // can press Delete again; nothing is lost and nothing is restored twice.
@@ -457,11 +506,11 @@ describe('mobile structured queued messages', () => {
         return method === 'agentSession.options' ? ok({ models: [], current: {} }) : ok({})
       })
       await mountSession(
-        CAPABLE,
+        LEGACY,
         snapshotEvent({ queuedMessages: [queuedDraft({ messageId: 'draft-1' })] })
       )
       await act(async () => {
-        expect(await hook!.queued.edit('draft-1')).toBe(false)
+        expect(await hook!.queued.edit!('draft-1')).toBe(false)
       })
       expect(appendText.mock.calls).toEqual([['text of draft-1']])
       // The copy is still in the composer: say so, or it reads as unsent and goes out twice.
@@ -473,13 +522,13 @@ describe('mobile structured queued messages', () => {
         method === 'agentSession.options' ? ok({ models: [], current: {} }) : ok({})
       )
       await mountSession(
-        CAPABLE,
+        LEGACY,
         snapshotEvent({ queuedMessages: [queuedDraft({ messageId: 'draft-1' })] })
       )
       appendText.mockReturnValueOnce(false)
       const onCopied = vi.fn()
       await act(async () => {
-        expect(await hook!.queued.edit('draft-1', onCopied)).toBe(false)
+        expect(await hook!.queued.edit!('draft-1', onCopied)).toBe(false)
       })
       expect(appendText.mock.calls).toEqual([['text of draft-1']])
       expect(onCopied).not.toHaveBeenCalled()

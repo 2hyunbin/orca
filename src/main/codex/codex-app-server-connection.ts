@@ -1,4 +1,5 @@
-import { spawnProcess } from '../../shared/child-process/run-process'
+import type { PipedProcessSpawner } from '@orca/process-host/process-spec'
+import { spawnProcess } from '@orca/process-host'
 import { spawnManagedProviderProcess } from '../provider-process/managed-provider-process'
 import type { ProviderProcessLaunch } from '../provider-process/provider-process-launch'
 import { buildCodexAppServerExitError } from './codex-app-server-exit-error'
@@ -43,13 +44,14 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
 export async function openCodexAppServerConnection(
   launch: CodexAppServerLaunch,
   handlers: CodexAppServerConnectionHandlers = {},
-  spawnImpl: typeof spawnProcess = spawnProcess
+  spawnImpl: PipedProcessSpawner = spawnProcess
 ): Promise<CodexAppServerConnection> {
   const managed = spawnManagedProviderProcess(launch, {
     spawnImpl,
-    site: 'codex-app-server-teardown'
+    site: 'codex-app-server-teardown',
+    ...(handlers.onOutput ? { onOutput: handlers.onOutput } : {})
   })
-  const { child, terminateTree: terminateProcessTree } = managed
+  const { child } = managed
 
   let nextRequestId = 1
   let closing = false
@@ -69,7 +71,7 @@ export async function openCodexAppServerConnection(
     writeResponse,
     onProtocolFailure: (error) => {
       handleUnexpectedEnd(error)
-      void terminateProcessTree()
+      void managed.close()
     }
   })
 
@@ -106,7 +108,7 @@ export async function openCodexAppServerConnection(
       return
     }
     handleUnexpectedEnd(error)
-    void terminateProcessTree()
+    void managed.close()
   })
 
   const recordReader = createProviderRecordReader({
@@ -127,7 +129,7 @@ export async function openCodexAppServerConnection(
     },
     onFatal: (error) => {
       handleUnexpectedEnd(error)
-      void terminateProcessTree()
+      void managed.close()
     }
   })
 
@@ -149,7 +151,7 @@ export async function openCodexAppServerConnection(
   function request(
     method: string,
     params?: Record<string, unknown>,
-    options: { timeoutMs?: number } = {}
+    options: { timeoutMs?: number; onReply?: () => void } = {}
   ): Promise<unknown> {
     if (closing) {
       return Promise.reject(new Error(`codex app-server connection is closed (${method})`))
@@ -169,7 +171,7 @@ export async function openCodexAppServerConnection(
         dispatcher.timeOutPending(id)
         reject(new CodexAppServerTimeoutError(`codex app-server ${method} exceeded ${timeoutMs}ms`))
       }, timeoutMs)
-      dispatcher.addPending(id, { method, resolve, reject, timer })
+      dispatcher.addPending(id, { method, resolve, reject, timer, onReply: options.onReply })
       try {
         sendLine(params === undefined ? { method, id } : { method, id, params })
       } catch (error) {

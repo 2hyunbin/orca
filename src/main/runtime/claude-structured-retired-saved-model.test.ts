@@ -1,6 +1,5 @@
-// A chat's saved model rides the launch unchecked. When the CLI answers a turn by saying that model
-// does not exist, the record drops it, so the next start runs the CLI's own default; the user's
-// message and the CLI's own answer stay as they are. Against the production runtime, adapter,
+// A chat's saved model rides the launch unchecked. A missing-model reply retires the live child's
+// choice; provider reports leave the saved pick alone. Against the production runtime, adapter,
 // record store and host, with only the CLI process scripted.
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -55,17 +54,23 @@ async function startedWith(options: Record<string, string>): Promise<StructuredA
 }
 
 describe("a Claude chat whose saved model the CLI says doesn't exist", () => {
-  it('drops the model from the record, keeping the rest, so the next start runs the default', async () => {
+  it('keeps the saved pick while the live child retires its missing model', async () => {
     const host = await startedWith({ model: RETIRED, effort: 'high' })
     expect(claude.child(SESSION).launch.options.model).toBe(RETIRED)
     expect(host.deps.store.getRecord(SESSION)?.options?.model).toBe(RETIRED)
 
     claude.child(SESSION).handlers.onMessage?.(modelNotFoundReply('reply-1'))
-
-    await vi.waitFor(() =>
-      expect(host.deps.store.getRecord(SESSION)?.options).not.toHaveProperty('model')
+    await host.flushStreamedEvents(SESSION)
+    expect(host.deps.store.getRecord(SESSION)?.options).toMatchObject({
+      model: RETIRED,
+      effort: 'high'
+    })
+    // The picker shows what the child runs now, so the next send moves the chat off the model.
+    await vi.waitFor(async () =>
+      expect((await host.readOptions(SESSION, { readsWithoutModel: true })).current.model).not.toBe(
+        RETIRED
+      )
     )
-    expect(host.deps.store.getRecord(SESSION)?.options).toMatchObject({ effort: 'high' })
   })
 
   it("keeps a model the reply did not come from: a subagent's own error", async () => {
@@ -97,32 +102,25 @@ describe("a Claude chat whose saved model the CLI says doesn't exist", () => {
     })
     expect(changed, JSON.stringify(changed)).toMatchObject({ ok: true })
     expect(record()?.options?.model).toBe('opus')
-
-    await host.handleAdapterEvent({
-      type: 'options-skipped',
-      sessionId: SESSION,
-      fence: record()?.lease.runtimeFence ?? 0,
-      acquisitionGeneration: 'generation-heal',
-      options: { model: RETIRED }
-    })
-
+    claude.child(SESSION).handlers.onMessage?.(modelNotFoundReply('reply-1'))
+    await host.flushStreamedEvents(SESSION)
     expect(record()?.options?.model).toBe('opus')
   })
 
-  // A slow settings readback lets the turn's error land first; `started` then reports the CLI's
-  // own model, which is still the retired one, and must not write it back.
-  it('does not let a start that lands after the heal write the retired model back', async () => {
+  // A slow settings readback can report the retired live model after the error.
+  it('leaves the saved pick alone when that settings report arrives late', async () => {
     claude.behave(SESSION, {
       sendsNoStartFrame: true,
       startupSettingsReadHangs: true,
       controlTimeoutMs: 300
     })
     const host = await claude.install()
+    const reports = vi.spyOn(host, 'handleAdapterEvent')
     await expect(
       host.attach(CALLER, claude.attachParams(SESSION, null, { options: { model: RETIRED } }))
     ).resolves.toMatchObject({ ok: true })
     await vi.waitFor(() =>
-      expect(host.collaboratorsForTests().sessions.get(SESSION)?.child?.phase).toBe('starting')
+      expect(host.collaboratorsForTests().sessions.get(SESSION)?.child?.phase).toBe('ready')
     )
     claude.child(SESSION).handlers.onMessage?.({
       type: 'system',
@@ -131,11 +129,15 @@ describe("a Claude chat whose saved model the CLI says doesn't exist", () => {
       model: RETIRED
     })
     claude.child(SESSION).handlers.onMessage?.(modelNotFoundReply('reply-1'))
+    await host.flushStreamedEvents(SESSION)
+    expect(host.deps.store.getRecord(SESSION)?.options?.model).toBe(RETIRED)
 
+    // The settings read gives up at its deadline and reports what the child showed.
     await vi.waitFor(
-      () => expect(host.collaboratorsForTests().sessions.get(SESSION)?.child?.phase).toBe('ready'),
+      () => expect(reports.mock.calls.map(([event]) => event.type)).toContain('options-reported'),
       { timeout: 5_000 }
     )
-    expect(host.deps.store.getRecord(SESSION)?.options).not.toHaveProperty('model')
+    await host.flushStreamedEvents(SESSION)
+    expect(host.deps.store.getRecord(SESSION)?.options?.model).toBe(RETIRED)
   })
 })
