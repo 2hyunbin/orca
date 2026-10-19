@@ -8,6 +8,7 @@ import { parseExecutionHostId, type ExecutionHostId } from '../../../../shared/e
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { admitRuntimePane } from '../../runtime-pane-admission'
 import type { RuntimeStore } from '../../runtime-store-contract'
+import type { CommandOf } from '../../../../shared/workspace-layout/workspace-layout-command-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { collectLeafIds } from '../../../../shared/terminal-pane-layout-tree'
 
@@ -52,8 +53,8 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
       const [hostId] = this.getWorkspaceSessionHostIdsForTab(leaf.worktreeId, leaf.tabId)
       if (hostId && parseExecutionHostId(hostId)?.kind !== 'runtime') {
         const newLeafId = randomUUID()
-        // Main keeps the pane however its start goes: one whose terminal never starts is a dead
-        // pane, as any. No pane written, no split: nothing else would put it in main's copy.
+        // No pane written, no split: nothing else would put it in main's copy. A pane whose
+        // terminal never starts is taken back below, so the CLI's failure is the truth.
         const outcome = await admitRuntimePane(
           this.store,
           {
@@ -83,7 +84,21 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
           leaf.tabId,
           newLeafId,
           this.waitForLeafInTab(leaf.tabId, newLeafId)
-        )
+        ).catch(async (error: unknown) => {
+          if (outcome !== 'admitted' || !isSplitWaitTimeout(error)) {
+            throw error
+          }
+          await takeBackUnstartedSplitPane(this.store, hostId, {
+            type: 'closePane',
+            workspace: leaf.worktreeId,
+            tabId: leaf.tabId,
+            leafId: newLeafId
+          })
+          this.notifier?.closeTerminalPane?.(leaf.tabId, newLeafId)
+          throw new Error(
+            "split_pane_not_started: the new pane's terminal did not start within 10 s, so the pane was closed"
+          )
+        })
         return {
           handle: newHandle,
           tabId: leaf.tabId,
@@ -140,4 +155,22 @@ function settledByPaneClose(
     check()
   })
   return Promise.race([waiting, closed]).finally(() => stopWatching?.())
+}
+
+// waitForLeafInTab's timeout (terminal-split-source-authority.ts), shared with the shipped path.
+function isSplitWaitTimeout(error: unknown): boolean {
+  return error instanceof Error && error.message === 'Timed out waiting for split pane handle'
+}
+
+/** Never the user's close: no launch stops and nothing joins the reopen-closed list. */
+async function takeBackUnstartedSplitPane(
+  store: RuntimeStore | null | undefined,
+  hostId: ExecutionHostId,
+  pane: CommandOf<'closePane'>
+): Promise<void> {
+  try {
+    await store?.withdrawTerminalPane?.(pane, hostId)
+  } catch (error) {
+    console.warn('[layout] an unstarted split pane stayed in main:', error)
+  }
 }

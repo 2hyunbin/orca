@@ -138,3 +138,77 @@ test('a CLI split whose tab closes before it mounts answers promptly', async ({
   expect(outcome.ok ? '' : outcome.error).toContain('split_pane_closed')
   expect(elapsedMs).toBeLessThan(6_000)
 })
+
+// The window is too busy to start the split's terminal within the CLI's 10 s: main takes the
+// pane back, so the CLI's failure is the truth and the startup command never runs.
+test('a CLI split whose terminal does not start within 10 s leaves no pane', async ({
+  electronApp,
+  orcaPage
+}, testInfo) => {
+  test.skip(!LAYOUT_OWNER_BUILD, 'layout-owner build only')
+  test.setTimeout(180_000)
+  await waitForSessionReady(orcaPage)
+  const worktreeId = await waitForActiveWorktree(orcaPage)
+  await ensureTerminalVisible(orcaPage)
+  await waitForActiveTerminalManager(orcaPage, 30_000)
+  const userDataDir = await electronApp.evaluate(({ app }) => app.getPath('userData'))
+  const client = new RuntimeClient(userDataDir, 30_000)
+  const tabId = await createActiveTab(orcaPage, worktreeId)
+  const source = await handleFor(client, worktreeId, tabId)
+  await parkHiddenTabBehindDecoy(orcaPage, worktreeId, tabId, { parkDelayMs: PARKING_DELAY_MS })
+  await orcaPage.evaluate(() => {
+    window.addEventListener(
+      'orca-background-mount-terminal-worktree',
+      () => {
+        const until = performance.now() + 11_000
+        while (performance.now() < until) {
+          // Busy renderer.
+        }
+      },
+      { once: true, capture: true }
+    )
+  })
+  const marker = `ORCA_SPLIT_TAKEN_BACK_${Date.now()}`
+  const outcome = await runCliSplit(
+    userDataDir,
+    source,
+    `echo ${marker.slice(0, 6)}''${marker.slice(6)}`
+  )
+  // Past the stall: the window has handled the split and main's take-back.
+  await new Promise((resolve) => setTimeout(resolve, 5_000))
+  const tabTerminals = await client
+    .call<RuntimeTerminalListResult>('terminal.list', { worktree: `id:${worktreeId}`, limit: 200 })
+    .then((listed) => listed.result.terminals.filter((t) => t.tabId === tabId))
+  const tails: string[] = []
+  for (const terminal of tabTerminals) {
+    const read = await client.call<{ terminal: { tail: string[] } }>('terminal.read', {
+      terminal: terminal.handle,
+      limit: 200
+    })
+    tails.push(read.result.terminal.tail.join('\n'))
+  }
+  const windowLeafIds = await orcaPage.evaluate((id) => {
+    const collect = (node: unknown): string[] => {
+      if (typeof node !== 'object' || node === null) {
+        return []
+      }
+      if ('leafId' in node && typeof node.leafId === 'string') {
+        return [node.leafId]
+      }
+      return [
+        ...('first' in node ? collect(node.first) : []),
+        ...('second' in node ? collect(node.second) : [])
+      ]
+    }
+    return collect(window.__store?.getState().terminalLayoutsByTabId[id]?.root)
+  }, tabId)
+  const report = { outcome, tabTerminals: tabTerminals.map((t) => t.leafId), windowLeafIds }
+  await testInfo.attach('split-taken-back.json', {
+    body: JSON.stringify(report, null, 2),
+    contentType: 'application/json'
+  })
+  expect(outcome.ok ? '' : outcome.error).toContain('split_pane_not_started')
+  expect(tabTerminals).toHaveLength(1)
+  expect(windowLeafIds).toEqual([tabTerminals[0]!.leafId])
+  expect(tails.some((tail) => tail.includes(marker))).toBe(false)
+})
