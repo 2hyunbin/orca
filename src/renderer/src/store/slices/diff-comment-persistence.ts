@@ -147,6 +147,7 @@ export function enqueueDiffCommentPersist(
         const { twin, writeHostId } = mutation
         const queued = readQueuedDiffComments(state, worktreeId, {
           twin,
+          hostId: writeHostId,
           latest: lastMutationNextByQueue.get(floorKey)
         })
         // Why: the copy these notes were made on is gone or now unnamed; never send another's list.

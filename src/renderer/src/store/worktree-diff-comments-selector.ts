@@ -79,14 +79,20 @@ export function findDiffCommentRows(
     'worktreesByRepo' | 'activeWorktreeId' | 'activeWorkspaceExecutionHostId'
   >,
   worktreeId: string,
-  hint: { twin?: DiffCommentTwin; commentIds?: ReadonlySet<string> } = {}
+  hint: { twin?: DiffCommentTwin; hostId?: ExecutionHostId; commentIds?: ReadonlySet<string> } = {}
 ): DiffCommentRows | null {
   const rows = (state.worktreesByRepo[getRepoIdFromWorktreeId(worktreeId)] ?? []).filter(
     (row) => row.id === worktreeId
   )
   const { twin: captured, commentIds } = hint
   if (captured) {
-    const worktrees = rows.filter((row) => isTwin(row, captured))
+    const exact = rows.filter((row) => isTwin(row, captured))
+    // Why: a listing may since have stamped an unstamped row with the very host its write names.
+    const stamped =
+      exact.length === 0 && !captured.hostId && hint.hostId
+        ? rows.filter((row) => isTwin(row, { ...captured, hostId: hint.hostId }))
+        : []
+    const worktrees = exact.length > 0 ? exact : stamped
     return worktrees.length > 0 ? { twin: captured, worktrees } : null
   }
   if (rows.length === 0) {
@@ -145,7 +151,7 @@ export function readQueuedDiffComments(
     'worktreesByRepo' | 'activeWorktreeId' | 'activeWorkspaceExecutionHostId'
   >,
   worktreeId: string,
-  chain: { twin?: DiffCommentTwin; latest: DiffComment[] | undefined }
+  chain: { twin?: DiffCommentTwin; hostId?: ExecutionHostId; latest: DiffComment[] | undefined }
 ): { list: DiffComment[] | undefined } | null {
   const rows = state.worktreesByRepo[getRepoIdFromWorktreeId(worktreeId)] ?? []
   if (
@@ -154,7 +160,11 @@ export function readQueuedDiffComments(
   ) {
     return { list: chain.latest }
   }
-  const found = findDiffCommentRows(state, worktreeId, chain.twin ? { twin: chain.twin } : {})
+  const found = findDiffCommentRows(
+    state,
+    worktreeId,
+    chain.twin ? { twin: chain.twin, hostId: chain.hostId } : {}
+  )
   return found ? { list: diffCommentRowNotes(found) } : null
 }
 

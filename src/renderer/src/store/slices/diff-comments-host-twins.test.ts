@@ -445,4 +445,21 @@ describe('diff comments on twin worktrees', () => {
     expect(sent.executionHostId).toBe('local')
     expect(sent.updates.diffComments.map((c: DiffComment) => c.body)).not.toContain('remote')
   })
+
+  it('still saves when a listing stamps the row and rebuilds its notes before the save runs', async () => {
+    const store = createTwinStore('local')
+    store.setState({ worktreesByRepo: { [REPO]: [worktree(undefined), worktree('ssh:box')] } })
+
+    const pending = addNote(store)
+    const [unstamped, ssh] = store.getState().worktreesByRepo[REPO]
+    const rebuilt = {
+      ...unstamped,
+      hostId: 'local' as const,
+      diffComments: [...(unstamped.diffComments ?? [])]
+    }
+    store.setState({ worktreesByRepo: { [REPO]: [rebuilt, ssh] } })
+
+    expect(await pending).not.toBeNull()
+    expect(updateMeta).toHaveBeenCalledTimes(1)
+  })
 })
