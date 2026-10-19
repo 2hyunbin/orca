@@ -1,6 +1,7 @@
 import { toast } from 'sonner'
 import type { TuiAgent } from '../../../shared/tui-agent'
-import { parseExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
+import type { ExecutionHostId } from '../../../shared/execution-host'
+import { parseExecutionHostId } from '../../../shared/execution-host'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import { selectExecutionHostDisplayLabel } from '@/lib/execution-host-display-label'

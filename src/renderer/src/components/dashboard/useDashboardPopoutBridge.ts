@@ -2,6 +2,9 @@ import { createDashboardChatProgramHolds } from './dashboard-chat-program-acquis
 import { useEffect } from 'react'
 import { useAppStore, type AppState } from '@/store'
 import { subscribeChatProgramFacts } from '@/lib/host-chat-program'
+import type { AgentLaunchRouteView } from '@/lib/agent-launch-route-input'
+import { agentLaunchRouteInputsChanged } from '@/lib/agent-launch-route-input'
+import { selectAgentLaunchRouteView } from '@/lib/agent-launch-route-input'
 import { revealDashboardAgent } from './reveal-dashboard-agent'
 import { runSleepWorktree } from '../sidebar/sleep-worktree-flow'
 import type { RepoIcon } from '../../../../shared/repo-icon'
@@ -41,15 +44,15 @@ export function repoIconsUnchanged(
 
 type DashboardSnapshotWatchState = DashboardSnapshotState &
   Pick<AppState, 'agentStatusEpoch'> &
-  Partial<Pick<AppState, 'activeWorktreeId' | 'activeWorkspaceExecutionHostId'>>
+  AgentLaunchRouteView
 
 export function dashboardSnapshotInputsChanged(
   state: DashboardSnapshotWatchState,
   previousState: DashboardSnapshotWatchState
 ): boolean {
   return (
-    state.activeWorktreeId !== previousState.activeWorktreeId ||
-    state.activeWorkspaceExecutionHostId !== previousState.activeWorkspaceExecutionHostId ||
+    // Why: launch options derive from exactly these, and only these, route inputs.
+    agentLaunchRouteInputsChanged(state, previousState) ||
     state.repos !== previousState.repos ||
     state.worktreesByRepo !== previousState.worktreesByRepo ||
     state.tabsByWorktree !== previousState.tabsByWorktree ||
@@ -185,7 +188,7 @@ export function useDashboardPopoutBridge(enabled: boolean): void {
       const state = useAppStore.getState()
       chatOwners.reconcile(state)
       const snapshot = buildDashboardSnapshot(state, lastPublishAt, {
-        launchRouteStore: state,
+        launchRouteStore: selectAgentLaunchRouteView(state),
         rowsCache,
         rowsGeneration: state.agentStatusEpoch
       })

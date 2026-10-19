@@ -14,6 +14,7 @@ import type { SourceControlAgentActionDialogProps } from './SourceControlAgentAc
 import type { UseSourceControlAgentActionDialogResult } from './source-control-agent-action-dialog-result'
 import { sourceControlLaunchAppliesAgentArgs } from './source-control-launch-agent-args-applicability'
 import { useSourceControlLaunchableAgents } from './use-source-control-launchable-agents'
+import { AgentLaunchChoiceCancelled } from '@/lib/host-chat-program-acquisition'
 import { useSavedSourceControlAgentActionAutoStart } from './useSavedSourceControlAgentActionAutoStart'
 import {
   buildSourceControlAgentSaveTargets,
@@ -24,6 +25,7 @@ import {
 import { useSourceControlAgentActionStart } from './useSourceControlAgentActionStart'
 
 const DEFAULT_SAVE_TARGET_VALUE = 'global'
+type DiscoveryOutcome = 'pending' | 'success' | 'cancelled' | 'failed'
 
 export function useSourceControlAgentActionDialog({
   open,
@@ -65,7 +67,8 @@ export function useSourceControlAgentActionDialog({
   const openCycleRef = useRef(0)
   const wasOpenRef = useRef(false)
   const [openCycle, setOpenCycle] = useState(0)
-  const [detectedOpenCycle, setDetectedOpenCycle] = useState<number | null>(null)
+  // The open cycle's current discovery attempt; only its success may auto-pick or auto-start.
+  const [discovery, setDiscovery] = useState<{ cycle: number; outcome: DiscoveryOutcome }>()
   const saveTargets = useMemo(() => buildSourceControlAgentSaveTargets(repoId), [repoId])
   const [saveLaunchRecipe, setSaveLaunchRecipe] = useState(true)
   const [saveTargetValue, setSaveTargetValue] = useState(defaultSaveTargetValue)
@@ -96,7 +99,7 @@ export function useSourceControlAgentActionDialog({
       setOpenCycle(cycle)
     }
     wasOpenRef.current = true
-    setDetectedOpenCycle(null)
+    setDiscovery({ cycle, outcome: 'pending' })
     setCommandTemplate(savedCommandInputTemplate ?? '{basePrompt}')
     setAgentArgs(savedAgentArgs ?? '')
     setSelectedAgent(savedAgentId ?? null)
@@ -106,23 +109,32 @@ export function useSourceControlAgentActionDialog({
     // Why: whether CLI arguments apply is read synchronously from the local runtime's
     // capabilities; settling them alongside detection keeps the field from appearing for a
     // frame on a launch that turns out to be structured.
-    void refreshAgents().then(({ detected, launchable }) => {
-      if (stale || openCycleRef.current !== cycle) {
-        return
+    const isCurrent = (): boolean => !stale && openCycleRef.current === cycle
+    void refreshAgents().then(
+      ({ detected, launchable }) => {
+        if (!isCurrent()) {
+          return
+        }
+        setSelectedAgent(
+          (current) =>
+            current ??
+            pickSourceControlLaunchAgent({
+              savedAgent: savedAgentId,
+              defaultAgent: settings?.defaultTuiAgent,
+              detectedAgents: detected,
+              disabledAgents,
+              chosenOpensAsChat: (agent) => launchable.includes(agent)
+            })
+        )
+        setDiscovery({ cycle, outcome: 'success' })
+      },
+      (error: unknown) => {
+        if (isCurrent()) {
+          const cancelled = error instanceof AgentLaunchChoiceCancelled
+          setDiscovery({ cycle, outcome: cancelled ? 'cancelled' : 'failed' })
+        }
       }
-      setSelectedAgent(
-        (current) =>
-          current ??
-          pickSourceControlLaunchAgent({
-            savedAgent: savedAgentId,
-            defaultAgent: settings?.defaultTuiAgent,
-            detectedAgents: detected,
-            disabledAgents,
-            chosenOpensAsChat: (agent) => launchable.includes(agent)
-          })
-      )
-      setDetectedOpenCycle(cycle)
-    })
+    )
     return () => {
       stale = true
     }
@@ -223,10 +235,12 @@ export function useSourceControlAgentActionDialog({
     [defaultSaveTargetValue, onOpenChange, resetDeliveryPlan]
   )
 
+  const discoveryOutcome = discovery?.cycle === openCycle ? discovery.outcome : 'pending'
   const { autoLaunchPending } = useSavedSourceControlAgentActionAutoStart({
     open,
     openCycle,
-    detectionReady: detectedOpenCycle === openCycle,
+    detectionReady: discoveryOutcome === 'success',
+    detectionFailed: discoveryOutcome === 'cancelled' || discoveryOutcome === 'failed',
     actionId,
     baseCommandInput,
     savedAgentId,

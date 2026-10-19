@@ -9,7 +9,7 @@ import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
 import type { ProspectiveWorkspace } from '@/lib/agent-launch-route-input'
 import { readAgentLaunchChoice } from '@/lib/host-chat-program'
 import { getRepoExecutionHostId } from '../../../shared/execution-host'
-import { workspaceKindForWorktreeId } from '../../../shared/workspace-launch-kind'
+import { worktreeLaunchWorkspace } from '@/lib/agent-launch-route-input'
 import { findGithubPrWorkspaceAttachment } from '@/lib/github-work-item-workspace-attachment'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
@@ -124,7 +124,7 @@ async function resolveSavedAgentOverride(
 }
 
 async function pickExistingWorktreeAgent(worktreeId: string): Promise<TuiAgent | null> {
-  const workspace = { kind: workspaceKindForWorktreeId(worktreeId), worktreeId }
+  const workspace = worktreeLaunchWorkspace(worktreeId)
   const choices = await acquireAgentLaunchChoices(workspace, () =>
     ensureDetectedAgentsForWorktree(useAppStore.getState(), worktreeId)
   )

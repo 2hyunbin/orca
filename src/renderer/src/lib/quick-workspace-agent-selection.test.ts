@@ -78,11 +78,8 @@ describe('resolveQuickWorkspaceAgentSelection', () => {
   })
 })
 
-describe('agents that open as a chat without their CLI', () => {
+it('keeps an explicit or default pick of a chat without its CLI; the automatic pick stays on detected agents', () => {
   const offered = new Set(['claude', 'antigravity'] as const)
-
-  it('keeps an explicit or default pick of one, while the automatic pick stays on detected agents', () => {
-    expect(pickQuickWorkspaceAgent('antigravity', ['claude'], [], offered)).toBe('antigravity')
-    expect(pickQuickWorkspaceAgent(null, [], [], offered)).toBeNull()
-  })
+  expect(pickQuickWorkspaceAgent('antigravity', ['claude'], [], offered)).toBe('antigravity')
+  expect(pickQuickWorkspaceAgent(null, [], [], offered)).toBeNull()
 })

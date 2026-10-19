@@ -5,19 +5,15 @@
 
 import { homedir } from 'node:os'
 import { delimiter, isAbsolute } from 'node:path'
-import type {
-  AgentSessionAgentAvailability,
-  AgentSessionChatProgram
-} from '../../shared/agent-session-agent-availability'
+import type { AgentSessionAgentAvailability } from '../../shared/agent-session-agent-availability'
+import type { AgentSessionChatProgram } from '../../shared/agent-session-agent-availability'
 import type { AgentSessionExecutionLocation } from '../../shared/agent-session-record'
 import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import { onManagedRuntimeReleasesChanged } from '../node-runtime/managed-runtime-installation'
 import { onAgentsRefreshedOnHost } from '../preflight/workspace-agent-detection'
-import {
-  observeStructuredAgentLaunch,
-  resolveHostStructuredAgentLaunchEnvironment
-} from './structured-agent-launch-support'
+import { observeStructuredAgentLaunch } from './structured-agent-launch-support'
+import { resolveHostStructuredAgentLaunchEnvironment } from './structured-agent-launch-support'
 import { STRUCTURED_AGENT_RUNTIME_METADATA } from './structured-agent-runtime-metadata'
 import type { StructuredAgentRuntimeMetadata } from './structured-agent-runtime-registration-types'
 import { recaptureHostShellEnvironment } from './structured-agent-shell-environment'

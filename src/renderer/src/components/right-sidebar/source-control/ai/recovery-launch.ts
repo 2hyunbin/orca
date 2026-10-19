@@ -1,6 +1,7 @@
 import { acquireAgentLaunchChoices } from '@/lib/host-chat-program-acquisition'
 import { toast } from 'sonner'
-import { useAppStore, type AppState } from '@/store'
+import type { AppState } from '@/store'
+import { useAppStore } from '@/store'
 import type { TuiAgent } from '../../../../../../shared/tui-agent'
 import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
@@ -23,7 +24,7 @@ import type {
 import { buildSourceControlRecoveryAgentCommandInput } from '../../../../../../shared/source-control-recovery-agent-command'
 import { translate } from '@/i18n/i18n'
 import { readAgentLaunchChoice } from '@/lib/host-chat-program'
-import { newTabWorkspace } from '@/lib/agent-tab-shortcuts'
+import { worktreeLaunchWorkspace } from '@/lib/agent-launch-route-input'
 
 type SourceControlAiLaunchStoreSnapshot = Pick<AppState, 'settings'> & WorktreeAgentInventoryState
 
@@ -111,7 +112,7 @@ export async function launchSourceControlRecoveryAgentWithDefault({
     return false
   }
 
-  const workspace = newTabWorkspace(activeWorktreeId)
+  const workspace = worktreeLaunchWorkspace(activeWorktreeId)
   const choices = await acquireAgentLaunchChoices(workspace, () =>
     ensureDetectedAgentsForWorktree(getStoreState(), activeWorktreeId)
   )

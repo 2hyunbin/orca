@@ -1,6 +1,6 @@
 import { agentsOfferedForLaunch, agentChoicePending } from '@/lib/host-chat-program'
 import { useChatProgramFacts } from '@/lib/host-chat-program-acquisition'
-import { workspaceKindForWorktreeId } from '../../../../shared/workspace-launch-kind'
+import { worktreeLaunchWorkspace } from '@/lib/agent-launch-route-input'
 import { useEffect, useRef, useState } from 'react'
 import { Loader2, MessageSquarePlus } from 'lucide-react'
 import AgentCombobox from '@/components/agent/AgentCombobox'
@@ -53,10 +53,7 @@ export function AgentSessionContinuationDialog({
   onOpenChange,
   onStarted
 }: AgentSessionContinuationDialogProps): React.JSX.Element {
-  const workspace = {
-    kind: workspaceKindForWorktreeId(request?.worktreeId ?? ''),
-    worktreeId: request?.worktreeId
-  }
+  const workspace = worktreeLaunchWorkspace(request?.worktreeId ?? '')
   useChatProgramFacts(workspace, open && Boolean(request))
   const abortRef = useRef<AbortController | null>(null)
   const settings = useAppStore((state) => state.settings)

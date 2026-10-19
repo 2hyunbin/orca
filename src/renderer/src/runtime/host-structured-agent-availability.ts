@@ -30,8 +30,8 @@ type Resource = {
   executionHostId: string
   holders: number
   model: HostStructuredAgentAvailability
+  first?: Promise<void>
   /** Set while a stream is open; a lost one reopens on the next acquire, keeping the model. */
-  first: Promise<void>
   close: (() => void) | null
 }
 
@@ -116,13 +116,7 @@ export function acquireHostStructuredAgentAvailability(
         resources.delete(staleKey)
       }
     }
-    resource = {
-      executionHostId: owner.executionHostId,
-      holders: 0,
-      model: NOT_READY,
-      first: Promise.resolve(),
-      close: null
-    }
+    resource = { executionHostId: owner.executionHostId, holders: 0, model: NOT_READY, close: null }
     resources.set(key, resource)
   }
   if (!resource.close) {

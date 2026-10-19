@@ -209,10 +209,7 @@ it('publishes real chat options to main and popout, retaining card candidates an
     configurable: true,
     value: {
       dashboard: {
-        onSpawnAgent: () => () => {},
-        onSleepWorkspace: () => () => {},
         onRevealAgent: () => () => {},
-        onAckAgent: () => () => {},
         onPopoutOpenChanged: () => () => {},
         onSnapshotRequested: () => () => {},
         getPopoutOpen: async () => true,
@@ -239,6 +236,13 @@ it('publishes real chat options to main and popout, retaining card candidates an
       'grok'
     ])
   )
+  // Route-only inputs (project runtime, selected host) rebuild both publishers' options.
+  for (const route of [{ projects: [] }, { activeWorkspaceExecutionHostId: 'local' as const }]) {
+    const [live, published] = [view.result.current, publishSnapshot.mock.calls.length]
+    act(() => useAppStore.setState(route))
+    expect(view.result.current).not.toBe(live)
+    await vi.waitFor(() => expect(publishSnapshot.mock.calls.length).toBeGreaterThan(published))
+  }
   act(() => useAppStore.setState({ worktreesByRepo: {}, tabsByWorktree: {}, folderWorkspaces: [] }))
   view.unmount()
   await Promise.resolve()

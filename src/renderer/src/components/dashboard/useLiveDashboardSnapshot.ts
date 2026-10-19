@@ -6,6 +6,7 @@ import type { DashboardSnapshot } from '../../../../shared/dashboard-snapshot'
 import { buildDashboardSnapshot } from './build-dashboard-snapshot'
 import { useChatProgramFactsVersion } from '@/lib/host-chat-program-acquisition'
 import { createWorktreeAgentRowsCache } from './worktree-agent-rows-cache'
+import { selectAgentLaunchRouteView } from '@/lib/agent-launch-route-input'
 
 /**
  * Builds the dashboard snapshot directly from the live renderer store for the
@@ -65,9 +66,8 @@ export function useLiveDashboardSnapshot(): DashboardSnapshot {
   // Why: freshness can flip a bucket without any backing map changing; the epoch
   // ticks on the freshness boundary so the memo re-derives stale-decayed cards.
   const agentStatusEpoch = useAppStore((s) => s.agentStatusEpoch)
-  // Why: the active workspace's selected host owns its launch options.
-  const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
-  const activeWorkspaceExecutionHostId = useAppStore((s) => s.activeWorkspaceExecutionHostId)
+  // Why: launch options read only this view, so any route input change rebuilds them.
+  const launchRouteStore = useAppStore(selectAgentLaunchRouteView)
   // Launch options read host chat facts held outside the store.
   useEffect(() => {
     const holds = createDashboardChatProgramHolds()
@@ -129,7 +129,7 @@ export function useLiveDashboardSnapshot(): DashboardSnapshot {
         {
           rowsCache: rowsCacheRef.current,
           rowsGeneration: agentStatusEpoch,
-          launchRouteStore: useAppStore.getState()
+          launchRouteStore
         }
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -165,10 +165,9 @@ export function useLiveDashboardSnapshot(): DashboardSnapshot {
       detectedAgentIds,
       remoteDetectedAgentIds,
       runtimeDetectedAgentIds,
-      agentStatusEpoch,
       chatProgramFactsVersion,
-      activeWorktreeId,
-      activeWorkspaceExecutionHostId
+      launchRouteStore,
+      agentStatusEpoch
     ]
   )
 }

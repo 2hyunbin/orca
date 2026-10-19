@@ -3,10 +3,9 @@ import { render, cleanup } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { getDefaultSettings } from '../../../../shared/constants'
 import type { ManagedRuntimeInstallObservation } from '@/runtime/use-managed-runtime-install'
-const observation = vi.hoisted(() => {
-  const value: { current: ManagedRuntimeInstallObservation } = { current: { kind: 'pending' } }
-  return value
-})
+const observation = vi.hoisted((): { current: ManagedRuntimeInstallObservation } => ({
+  current: { kind: 'pending' }
+}))
 vi.mock('@/runtime/use-managed-runtime-install', () => ({
   useManagedRuntimeInstall: () => observation.current
 }))
@@ -57,9 +56,8 @@ it('reserves the switch footprint through unknown and failed reads, then shows m
     }
     view.rerender(surface())
     expect(view.getByRole('switch').getAttribute('aria-checked')).toBe('true')
-    expect(
-      view.getByRole('switch').parentElement?.firstElementChild?.classList.contains('size-7')
-    ).toBe(true)
+    const icon = view.getByRole('switch').parentElement?.firstElementChild
+    expect(icon?.classList.contains('size-7')).toBe(true)
   }
   settings.nativeChatProviders = { grok: false }
   view.rerender(surface())

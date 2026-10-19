@@ -282,6 +282,30 @@ describe('SourceControlAgentActionDialog', () => {
     expect(mocks.ensureRuntimeDetectedAgents).toHaveBeenCalledWith('env-1', 'repo-1::wt-1')
     expect(mocks.ensureDetectedAgents).not.toHaveBeenCalled()
   })
+  it('reveals, and never auto-starts, a saved action whose runtime is replaced mid-discovery', async () => {
+    resetStore(settingsWithGlobalRecipe(), [repoWithSavedRecipe('', null, 'runtime:env-1')])
+    const worktree = makeWorktree({ id: 'repo-1::wt-1', repoId: 'repo-1' })
+    useAppStore.setState({ worktreesByRepo: { 'repo-1': [worktree] } })
+    renderControlledDialog({ repoId: 'repo-1', worktreeId: worktree.id, connectionId: null })
+    // Learned r1, then replaced by r2, which still offers the saved agent.
+    for (const runtimeId of ['r1', 'r2']) {
+      await flushEffects()
+      expect(container.textContent).not.toContain('Launch agent')
+      const status = {
+        runtimeId,
+        rendererGraphEpoch: 0,
+        graphStatus: 'ready' as const,
+        authoritativeWindowId: null,
+        liveTabCount: 0,
+        liveLeafCount: 0
+      }
+      const runtimeStatusByEnvironmentId = new Map([['env-1', { status, checkedAt: 1 }]])
+      act(() => useAppStore.setState({ runtimeStatusByEnvironmentId }))
+    }
+    await vi.waitFor(() => expect(container.textContent).toContain('Launch agent'))
+    await flushEffects()
+    expect(mocks.onStart).not.toHaveBeenCalled()
+  })
   it('omits saved arguments from a structured local launch', async () => {
     setLocalRuntimeCapabilitiesForTests([STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY])
     const recipe = {

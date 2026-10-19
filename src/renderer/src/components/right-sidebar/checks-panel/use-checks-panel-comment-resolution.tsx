@@ -18,7 +18,7 @@ import { clearPendingPRCommentAiAck } from '../pr-comments-ai-launch-ack'
 import type { PRComment } from '../../../../../shared/github/comment-types'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
-import { newTabWorkspace } from '@/lib/agent-tab-shortcuts'
+import { worktreeLaunchWorkspace } from '@/lib/agent-launch-route-input'
 
 type ChecksPanelCommentResolutionInput = Pick<
   ChecksPanelControllerState,
@@ -154,7 +154,7 @@ export function useChecksPanelCommentResolution(model: ChecksPanelCommentResolut
   const commentsDisabledReason = canTargetPRComments
     ? undefined
     : 'Commenting requires a GitHub PR repository target.'
-  const workspace = newTabWorkspace(activeWorktreeId ?? '')
+  const workspace = worktreeLaunchWorkspace(activeWorktreeId ?? '')
   useChatProgramFacts(workspace, Boolean(activeWorktreeId) && sourceControlAiActionsVisible)
   const noAgentFor = (actionId: SourceControlActionId): boolean =>
     detectedAgentIds != null &&

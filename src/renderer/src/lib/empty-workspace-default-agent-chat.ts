@@ -14,7 +14,7 @@ import {
 } from '@/lib/agent-detection-target-inventory'
 import { workspaceKindForWorktreeId } from '@/lib/agent-launch-route-input'
 import { chosenAgentChatUnlearned, agentChoiceOpensAsChat } from '@/lib/host-chat-program'
-import { newTabWorkspace } from '@/lib/agent-tab-shortcuts'
+import { worktreeLaunchWorkspace } from '@/lib/agent-launch-route-input'
 import { planAgentSessionLaunch } from '@/lib/agent-session-launch-plan'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
@@ -50,7 +50,7 @@ export function emptyWorkspaceDefaultChatAwaitsDetection(worktreeId: string): bo
       state,
       state.settings?.defaultTuiAgent,
       detected,
-      newTabWorkspace(worktreeId)
+      worktreeLaunchWorkspace(worktreeId)
     )
   )
 }
@@ -63,7 +63,7 @@ export async function loadEmptyWorkspaceDefaultChatDetection(worktreeId: string)
     return
   }
   await acquireAgentLaunchChoices(
-    newTabWorkspace(worktreeId),
+    worktreeLaunchWorkspace(worktreeId),
     () => ensureDetectedAgentsForTarget(state, target),
     undefined,
     true
@@ -90,7 +90,7 @@ export function openDefaultAgentChatInEmptyWorkspace(
     state.settings?.defaultTuiAgent,
     detected ?? [],
     state.settings?.disabledTuiAgents,
-    (chosen) => agentChoiceOpensAsChat(state, chosen, newTabWorkspace(worktreeId), detected)
+    (chosen) => agentChoiceOpensAsChat(state, chosen, worktreeLaunchWorkspace(worktreeId), detected)
   )
   if (!agent) {
     return null

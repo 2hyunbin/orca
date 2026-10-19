@@ -166,10 +166,8 @@ describe('a structured chat launch on a paired server', () => {
     expect(openTerminal).not.toHaveBeenCalled()
     expect(mocks.launchAgentInNewTab).not.toHaveBeenCalled()
     await useAppStore.getState().refreshDetectedAgents(worktreeId)
-    expect(useAppStore.getState().readLocalAgentInventory(worktreeId)).toEqual({
-      state: 'failed',
-      ids: []
-    })
+    const inventory = useAppStore.getState().readLocalAgentInventory(worktreeId)
+    expect(inventory).toEqual({ state: 'failed', ids: [] })
     await expect(declined()?.structuredSettlement).resolves.toEqual({ kind: 'terminal' })
     mocks.launchAgentInNewTab.mockReturnValue({
       surface: { kind: 'local-terminal', tabId: 'fallback' }

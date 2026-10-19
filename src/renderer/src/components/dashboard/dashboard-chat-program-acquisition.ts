@@ -1,7 +1,7 @@
 import type { AppState } from '@/store'
 import { holdChatProgramFacts } from '@/lib/host-chat-program-acquisition'
 import { resolveChatProgramContext } from '@/lib/host-chat-program'
-import { workspaceKindForWorktreeId } from '../../../../shared/workspace-launch-kind'
+import { selectAgentLaunchRouteView, worktreeLaunchWorkspace } from '@/lib/agent-launch-route-input'
 import { DASHBOARD_MAX_LAUNCH_WORKTREES } from '../../../../shared/dashboard-snapshot'
 import { collectActiveDashboardWorkspaces } from './dashboard-snapshot-workspaces'
 
@@ -11,12 +11,12 @@ export function createDashboardChatProgramHolds() {
   return {
     reconcile(state: AppState): void {
       const next = new Set<string>()
+      const routeStore = selectAgentLaunchRouteView(state)
       for (const { worktree } of collectActiveDashboardWorkspaces(state, false).slice(
         0,
         DASHBOARD_MAX_LAUNCH_WORKTREES
       )) {
-        const workspace = { kind: workspaceKindForWorktreeId(worktree.id), worktreeId: worktree.id }
-        const context = resolveChatProgramContext(state, workspace)
+        const context = resolveChatProgramContext(routeStore, worktreeLaunchWorkspace(worktree.id))
         const key = context.revision
         next.add(key)
         if (!held.has(key)) {

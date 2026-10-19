@@ -9,7 +9,7 @@ import {
   AgentLaunchChoiceCancelled
 } from './host-chat-program-acquisition'
 import { agentChoicePending } from './host-chat-program'
-import { workspaceKindForWorktreeId } from '../../../shared/workspace-launch-kind'
+import { worktreeLaunchWorkspace } from './agent-launch-route-input'
 import { isTuiAgentEnabled } from '../../../shared/tui-agent-selection'
 import type { LaunchSource } from '../../../shared/telemetry-events'
 import type { TuiAgent } from '../../../shared/tui-agent'
@@ -31,9 +31,8 @@ export async function detectAgentSessionContinuationAgents(
   worktreeId: string,
   signal?: AbortSignal
 ) {
-  const workspace = { kind: workspaceKindForWorktreeId(worktreeId), worktreeId }
   return acquireAgentLaunchChoices(
-    workspace,
+    worktreeLaunchWorkspace(worktreeId),
     () => ensureDetectedAgentsForWorktree(useAppStore.getState(), worktreeId),
     signal
   )
@@ -69,12 +68,7 @@ async function ensureAgentAvailable(
   }
   if (
     detectedAgents.includes(agent) ||
-    agentChoicePending(
-      useAppStore.getState(),
-      agent,
-      { kind: workspaceKindForWorktreeId(worktreeId), worktreeId },
-      null
-    )
+    agentChoicePending(useAppStore.getState(), agent, worktreeLaunchWorkspace(worktreeId), null)
   ) {
     return true
   }

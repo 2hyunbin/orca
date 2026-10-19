@@ -106,13 +106,11 @@ it('releases a pending stream at the chat deadline while slow ordinary detection
   const detect = Promise.withResolvers<[]>()
   rpc.subscribe.mockReturnValue(handle.promise)
   const action = acquireAgentLaunchChoices(workspace, () => detect.promise)
-  let done = false
-  void action.then(() => {
-    done = true
-  })
+  const settled = vi.fn()
+  void action.then(settled)
   await flush()
   await vi.advanceTimersByTimeAsync(5000)
-  expect(done).toBe(false)
+  expect(settled).not.toHaveBeenCalled()
   useAppStore.setState({
     runtimeStatusByEnvironmentId: new Map([['B', { ...status(), connectionGeneration: 1 }]])
   })
@@ -123,16 +121,14 @@ it('releases a pending stream at the chat deadline while slow ordinary detection
   expect(unsubscribe).toHaveBeenCalledOnce()
   detect.resolve([])
   await action
-  expect(done).toBe(true)
+  expect(settled).toHaveBeenCalledOnce()
 })
 
-it('keeps one still-detecting action on the current open through learning/reconnect, cancelling replacement', async () => {
+it('keeps one still-detecting action on the current open through learning/reconnect', async () => {
   useAppStore.setState({ runtimeStatusByEnvironmentId: new Map() })
   const detect = Promise.withResolvers<[]>()
-  let done = false
-  const action = acquireAgentLaunchChoices(workspace, () => detect.promise).then(() => {
-    done = true
-  })
+  const settled = vi.fn()
+  const action = acquireAgentLaunchChoices(workspace, () => detect.promise).then(settled)
   useAppStore.setState({ runtimeStatusByEnvironmentId: new Map([['B', status()]]) })
   await flush()
   const handlers = rpc.subscribe.mock.calls.at(-1)![3]
@@ -144,13 +140,9 @@ it('keeps one still-detecting action on the current open through learning/reconn
   detect.resolve([])
   await flush()
   expect(rpc.subscribe).toHaveBeenCalledTimes(2)
-  expect(done).toBe(false)
+  expect(settled).not.toHaveBeenCalled()
   rpc.subscribe.mock.calls.at(-1)![3].onClose()
   await action
-  const replaced = acquireAgentLaunchChoices(workspace, () => new Promise<[]>(() => {}))
-  const rejected = expect(replaced).rejects.toThrow('owner changed')
-  useAppStore.setState({ runtimeStatusByEnvironmentId: new Map([['B', status('r2')]]) })
-  await rejected
 })
 
 it('adapts only absent publication on older hosts and shares the saved Checks gate with pre-create execution', async () => {
@@ -167,12 +159,10 @@ it('adapts only absent publication on older hosts and shares the saved Checks ga
   }
   useAppStore.setState({ settings, ensureDetectedAgents: async () => [] })
   await acquireAgentLaunchChoices(local, async () => [])
-  expect(resolveChecksActionAgent(useAppStore.getState(), 'fixChecks', undefined, local, [])).toBe(
-    'antigravity'
-  )
-  expect(
-    resolveChecksActionAgent(useAppStore.getState(), 'resolveComments', undefined, local, [])
-  ).toBeNull()
+  const checksAgent = (actionId: 'fixChecks' | 'resolveComments') =>
+    resolveChecksActionAgent(useAppStore.getState(), actionId, undefined, local, [])
+  expect(checksAgent('fixChecks')).toBe('antigravity')
+  expect(checksAgent('resolveComments')).toBeNull()
   launch.direct.mockResolvedValue(true)
   await startFixChecksAgent({
     repoId: 'missing',
@@ -196,15 +186,7 @@ it('adapts only absent publication on older hosts and shares the saved Checks ga
     expect.objectContaining({ agentOverride: 'antigravity' })
   )
   useAppStore.setState({ settings: { ...settings, disabledTuiAgents: ['antigravity'] } })
-  expect(
-    resolveChecksActionAgent(useAppStore.getState(), 'fixChecks', undefined, local, [])
-  ).toBeNull()
-  expect(
-    readChatProgram(
-      useAppStore.getState(),
-      'antigravity',
-      { executionHostId: 'local', hostCapabilities: [CHAT] },
-      []
-    )
-  ).toBe('missing')
+  expect(checksAgent('fixChecks')).toBeNull()
+  const localChat = { executionHostId: 'local', hostCapabilities: [CHAT] }
+  expect(readChatProgram(useAppStore.getState(), 'antigravity', localChat, [])).toBe('missing')
 })

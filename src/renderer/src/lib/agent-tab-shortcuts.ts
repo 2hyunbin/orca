@@ -8,9 +8,12 @@ import { ALL_TUI_AGENTS } from '../../../shared/tui-agent-display-names'
 import { normalizeDisabledTuiAgents, pickTuiAgent } from '../../../shared/tui-agent-selection'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import type { AppState } from '@/store/types'
-import { loadDetectedAgentsForWorktree } from '@/lib/agent-detection-target-inventory'
+import {
+  loadDetectedAgentsForWorktree,
+  type WorktreeAgentInventoryState
+} from '@/lib/agent-detection-target-inventory'
 import type { AgentLaunchRouteStore } from '@/lib/agent-launch-route-input'
-import { workspaceKindForWorktreeId } from '../../../shared/workspace-launch-kind'
+import { worktreeLaunchWorkspace } from '@/lib/agent-launch-route-input'
 import { readAgentLaunchChoice } from '@/lib/host-chat-program'
 
 export type BoundAgentTabAction = {
@@ -45,11 +48,6 @@ export function listBoundAgentTabActions(
   return bound
 }
 
-export const newTabWorkspace = (worktreeId: string) => ({
-  kind: workspaceKindForWorktreeId(worktreeId),
-  worktreeId
-})
-
 /**
  * Resolve which agent the `tab.newAgent` chord launches: the configured
  * default agent when it is detected (or opens as a chat in `chatIn`) and enabled, otherwise the shared
@@ -70,7 +68,7 @@ export function resolveDefaultAgentForNewTab(args: {
     readAgentLaunchChoice(
       chatIn.store,
       agent,
-      newTabWorkspace(chatIn.worktreeId),
+      worktreeLaunchWorkspace(chatIn.worktreeId),
       detectedAgentIds ?? null
     ).chatEligibility !== 'no'
   return pickTuiAgent(preferred, args.detectedAgentIds ?? [], args.disabledTuiAgents, chosenUsable)
@@ -78,11 +76,11 @@ export function resolveDefaultAgentForNewTab(args: {
 
 /** The new-tab default agent for a workspace, from the agents its own host reports. */
 export async function resolveDefaultAgentForWorktreeNewTab(
-  getState: () => AppState,
+  getState: () => WorktreeAgentInventoryState & Pick<AppState, 'settings'> & AgentLaunchRouteStore,
   worktreeId: string
 ): Promise<TuiAgent | null> {
   const { detected: detectedAgentIds } = await acquireAgentLaunchChoices(
-    newTabWorkspace(worktreeId),
+    worktreeLaunchWorkspace(worktreeId),
     () => loadDetectedAgentsForWorktree(getState(), worktreeId)
   )
   // Why: settings may change while the host answers; pick with the current ones.

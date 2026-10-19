@@ -3,8 +3,8 @@ import { useAppStore } from '@/store'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import type { AppState } from '@/store/types'
 import { isTuiAgent } from '../../../shared/tui-agent-config'
-import { pickTuiAgent, isTuiAgentEnabled } from '../../../shared/tui-agent-selection'
-import { workspaceKindForWorktreeId } from '../../../shared/workspace-launch-kind'
+import { isTuiAgentEnabled, pickTuiAgent } from '../../../shared/tui-agent-selection'
+import { worktreeLaunchWorkspace } from '@/lib/agent-launch-route-input'
 import { readAgentLaunchChoice } from '@/lib/host-chat-program'
 import { buildDirectWorkItemAgentStartupPlan } from '@/lib/launch-work-item-direct-agent'
 import type { AgentSessionLaunchPlan } from '@/lib/agent-session-launch-plan'
@@ -57,10 +57,7 @@ export async function resolveDirectWorkItemAgent(args: {
   latestStore: AppState
 }): Promise<{ agent: TuiAgent | null; unavailable: boolean }> {
   // Why: the new workspace's own host answers; a paired server's project must not probe this client.
-  const workspace = {
-    kind: workspaceKindForWorktreeId(args.worktreeId),
-    worktreeId: args.worktreeId
-  }
+  const workspace = worktreeLaunchWorkspace(args.worktreeId)
   const ids = (
     args.agentOverride === undefined &&
     args.detectedAgentsPromise &&

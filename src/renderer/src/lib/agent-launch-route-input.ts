@@ -56,6 +56,62 @@ export type AgentLaunchRouteStore = {
   Parameters<typeof getLocalProjectExecutionRuntimeContext>[0] &
   Parameters<typeof getConnectionIdFromState>[0]
 
+/** Every slice the route readers take: a publisher that watches these sees every route change. */
+const AGENT_LAUNCH_ROUTE_KEYS = [
+  'settings',
+  'runtimeStatusByEnvironmentId',
+  'worktreesByRepo',
+  'folderWorkspaces',
+  'repos',
+  'detectedWorktreesByRepo',
+  'projectGroups',
+  'restoredRuntimeHostIdByWorkspaceSessionKey',
+  'activeWorktreeId',
+  'activeWorkspaceExecutionHostId',
+  'runtimeEnvironments',
+  'runtimeEnvironmentCatalogHydrated',
+  'removedRuntimeEnvironmentIds',
+  'activeRepoId',
+  'projects'
+] as const satisfies readonly (keyof AgentLaunchRouteStore)[]
+type AgentLaunchRouteKey = (typeof AGENT_LAUNCH_ROUTE_KEYS)[number]
+// Completeness, not just membership: a reader input missing from the list fails to compile.
+type AssertNoMissingRouteKey<T extends never> = T
+export type AgentLaunchRouteKeysAreComplete = AssertNoMissingRouteKey<
+  Exclude<keyof AgentLaunchRouteStore, AgentLaunchRouteKey>
+>
+export type AgentLaunchRouteView = { [K in AgentLaunchRouteKey]: AppState[K] }
+
+export const agentLaunchRouteInputsChanged = (
+  next: AgentLaunchRouteView,
+  previous: AgentLaunchRouteView
+): boolean => AGENT_LAUNCH_ROUTE_KEYS.some((key) => next[key] !== previous[key])
+
+let lastRouteView: AgentLaunchRouteView | undefined
+/** Same object until a route slice changes, so an unrelated write allocates nothing. */
+export function selectAgentLaunchRouteView(state: AppState): AgentLaunchRouteView {
+  if (!lastRouteView || agentLaunchRouteInputsChanged(state, lastRouteView)) {
+    lastRouteView = {
+      settings: state.settings,
+      runtimeStatusByEnvironmentId: state.runtimeStatusByEnvironmentId,
+      worktreesByRepo: state.worktreesByRepo,
+      folderWorkspaces: state.folderWorkspaces,
+      repos: state.repos,
+      detectedWorktreesByRepo: state.detectedWorktreesByRepo,
+      projectGroups: state.projectGroups,
+      restoredRuntimeHostIdByWorkspaceSessionKey: state.restoredRuntimeHostIdByWorkspaceSessionKey,
+      activeWorktreeId: state.activeWorktreeId,
+      activeWorkspaceExecutionHostId: state.activeWorkspaceExecutionHostId,
+      runtimeEnvironments: state.runtimeEnvironments,
+      runtimeEnvironmentCatalogHydrated: state.runtimeEnvironmentCatalogHydrated,
+      removedRuntimeEnvironmentIds: state.removedRuntimeEnvironmentIds,
+      activeRepoId: state.activeRepoId,
+      projects: state.projects
+    }
+  }
+  return lastRouteView
+}
+
 export type AgentLaunchRouteArgs = {
   agent: TuiAgent
   workspace: ProspectiveWorkspace
@@ -66,6 +122,10 @@ export type AgentLaunchRouteArgs = {
 }
 
 export { workspaceKindForWorktreeId }
+export const worktreeLaunchWorkspace = (worktreeId: string): ProspectiveWorkspace => ({
+  kind: workspaceKindForWorktreeId(worktreeId),
+  worktreeId
+})
 
 function resolveExecutionHostId(store: AgentLaunchRouteStore, workspace: ProspectiveWorkspace) {
   if (workspace.worktreeId) {
