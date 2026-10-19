@@ -71,6 +71,16 @@ function getDrainNow(): number {
   return Date.now()
 }
 
+function hasPendingRendererInput(): boolean {
+  if (typeof navigator === 'undefined') {
+    return false
+  }
+  const inputAwareNavigator: Navigator & {
+    scheduling?: { isInputPending?: () => boolean }
+  } = navigator
+  return inputAwareNavigator.scheduling?.isInputPending?.() === true
+}
+
 export function drainQueuedOutputImpl(): void {
   markTerminalOutputDrainStarted()
   let writes = 0
@@ -101,8 +111,11 @@ export function drainQueuedOutputImpl(): void {
       entry.highPriority = false
       clearForegroundRelease(entry)
     }
-    // Why: xterm parsing and DOM work share the renderer thread with input; keep draining cooperative so WSL/agent output can't pin the UI.
-    if (writes > 0 && getDrainNow() - startedAt >= DRAIN_TIME_BUDGET_MS) {
+    // Yield after making progress so pending input can run ahead of more xterm work.
+    if (
+      writes > 0 &&
+      (getDrainNow() - startedAt >= DRAIN_TIME_BUDGET_MS || hasPendingRendererInput())
+    ) {
       break
     }
   }

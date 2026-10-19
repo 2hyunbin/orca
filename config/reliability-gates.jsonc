@@ -11,6 +11,75 @@
   },
   "gates": [
     {
+      "id": "terminal-input.pending-input-output-yield",
+      "title": "Terminal output yields when renderer input is pending",
+      "maturity": "experimental",
+      "protection": "partial",
+      "owner": "terminal-runtime",
+      "layer": "renderer-unit",
+      "surfaces": ["terminal output scheduling", "Claude Code typing during output bursts"],
+      "platforms": ["macos", "linux", "windows"],
+      "providers": ["local", "daemon", "ssh", "remote-runtime", "wsl", "mobile-relay"],
+      "coveredPlatforms": ["macos"],
+      "coveredProviders": [],
+      "coverageNotes": "Deterministic renderer tests cover pending input, absent browser API, byte order, parse acknowledgements and immediate echo. A hidden, isolated macOS Electron typing smoke also passed, proving CDP keys reach the PTY and echo within its 250 ms median / 1,000 ms worst limits; it does not exercise pending-input pressure. The scheduling code is independent of PTY provider and does not change provider input, identity, liveness or wire contracts. Live input latency under pressure across local/daemon, SSH, WSL and mobile/relay plus Linux/Windows browser behavior remain unmeasured.",
+      "motivatingLinks": [
+        "User report on 2026-10-19: Claude Code typing delayed 40–90 seconds under machine pressure. The original stall cause remains unconfirmed."
+      ],
+      "invariant": "terminal-input.cooperative-output: A shared output drain must yield after making bounded progress when Chromium reports pending input, retain exact output order and parse credit, and restore its normal batch capacity once input clears.",
+      "oracle": "With sixteen queued 16 KiB slices, pending input permits one write per drain; input arriving during the batch stops further submission. Clearing input restores eight writes per drain. All bytes and parse callbacks settle exactly once, and another terminal can echo immediately. Missing APIs retain eight-write batching.",
+      "commands": [
+        "ORCA_BACKGROUND_LAUNCH=1 pnpm test src/renderer/src/lib/pane-manager/pane-terminal-output-input-priority.test.ts --maxWorkers=1"
+      ],
+      "testFiles": [
+        "src/renderer/src/lib/pane-manager/pane-terminal-output-input-priority.test.ts"
+      ],
+      "assertionRefs": [
+        {
+          "file": "src/renderer/src/lib/pane-manager/pane-terminal-output-input-priority.test.ts",
+          "assertions": [
+            "yields after one slice, then resumes full batches when input clears",
+            "preserves parse acknowledgements and byte order across input yields"
+          ]
+        }
+      ],
+      "evidenceRuns": [
+        {
+          "date": "2026-10-19",
+          "runner": "local",
+          "platform": "macos",
+          "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm test src/renderer/src/lib/pane-manager/pane-terminal-output-input-priority.test.ts --maxWorkers=1",
+          "result": "passed",
+          "durationSeconds": 0.211,
+          "summary": "Eight renderer-unit tests pass. Removing the pending-input check fails the two yield assertions: eight writes instead of one/two."
+        }
+      ],
+      "runtimeBudget": {
+        "p95Seconds": 5,
+        "scope": "focused renderer-unit suite; p95 not yet collected"
+      },
+      "flakeHistory": {
+        "status": "not-started",
+        "evidence": "Local deterministic pass only; no CI soak history."
+      },
+      "redGreenEvidence": {
+        "status": "complete",
+        "evidence": "Removing only the pending-input condition causes both yield tests to fail (8 writes versus 1 and 2); the complete fix passes all eight tests."
+      },
+      "performanceBudget": {
+        "required": true,
+        "evidence": "At most one optional constant-time browser query per submitted slice (eight per drain). No new timers, polling, provider calls, scans or subprocesses. Existing scheduler diagnostics expose per-drain write counts in drainWrites. Pending input reduces a batch from eight 16 KiB writes to one; no-input batches remain eight."
+      },
+      "promotionCriteria": [
+        "Collect CI soak history and live input-latency evidence under CPU pressure on desktop platforms."
+      ],
+      "knownGaps": [
+        "Mocked browser input state proves scheduling behavior, not OS keyboard latency or the original 40–90 second stall.",
+        "Live provider/platform matrix remains unmeasured; browsers without isInputPending retain existing behavior."
+      ],
+      "demotionRule": "Keep experimental if byte order, parse credit, output progress or normal batch capacity regresses, or live measurements show input latency/throughput regressions."
+    },
+    {
       "id": "terminal-provider.retired-macos-daemon-recovery",
       "title": "Restart releases retired macOS daemon conversation owners across upgrades",
       "maturity": "experimental",
