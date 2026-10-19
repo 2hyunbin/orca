@@ -18,6 +18,8 @@ import { createPtyIpcSpawnState, type PtyIpcSpawnState } from './spawn-state'
 import { triggerPtySpawnPushTargetMaterialization } from './spawn-push-target-materialization'
 import type { PtySpawnIpcArgs, PtySpawnIpcDeps } from './spawn-types'
 import type { RendererAttachmentBinding } from '../delivery/renderer-attachments'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { refuseClosedPaneSpawn } from './closed-pane-spawn-refusal'
 
 function releaseAbandonedAgentTeamsLeader(ctx: PtyIpcSpawnState): void {
   if (!ctx.agentTeamsLeaderHandle) {
@@ -81,6 +83,10 @@ export async function runPtyIpcSpawn(
     }
     // Right before the provider spawn, with nothing awaited in between: a closed pane starts nothing.
     ctx.paneAgentLaunch?.refuseIfClosed()
+    // Switch point: a pane main closed or took back while this spawn waited starts nothing.
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      refuseClosedPaneSpawn(deps.store, args.tabId, args.leafId)
+    }
     await executePtyIpcSpawn(ctx)
     const committed = await commitPtyIpcSpawn(ctx)
     endPaneAgentLaunch(
