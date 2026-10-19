@@ -1,14 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  REMOTE_FILE_BROWSER_UNSUPPORTED_MESSAGE,
   canShowWorkspaceFileBrowserAction,
   convertBrowserPageToWorkspaceDoc,
-  getWorkspaceFileBrowserOpenTarget,
   getWorkspaceFilePreviewPlan,
-  TWIN_FILE_BROWSER_UNSUPPORTED_MESSAGE,
   openFileInBrowserTab,
   openFilePreviewToSide
 } from './file-preview'
+import {
+  getWorkspaceFileBrowserOpenTarget,
+  REMOTE_FILE_BROWSER_UNSUPPORTED_MESSAGE,
+  TWIN_FILE_BROWSER_UNSUPPORTED_MESSAGE
+} from './workspace-file-browser-open-target'
 import { folderWorkspaceKey } from '../../../shared/workspace-scope'
 import { useAppStore } from '@/store'
 
