@@ -1,0 +1,4494 @@
+{
+  "candidateSourceCommit": "c765bacac804846ad2b642981fcf7bc569796807",
+  "electron": "43.7.8",
+  "chromiumObservedViaCdp": "150.0.7871.250",
+  "platform": "darwin",
+  "arch": "arm64",
+  "rawArtifactSha256": "d7b6f319f657159d5b18f8222477ad5fa11c60b1dd344019e5f03f22091127f6",
+  "normalization": "Loopback ports replaced with PORT; session object replaced by a synthetic session label; fixture parent/chrome events omitted. Original sequence numbers retained. Repeated exposed preference dictionaries interned in preferenceSnapshots; diagnostic additionalArguments separated from option dictionaries; redundant first-navigation observer copies omitted.",
+  "gateVerdicts": {
+    "adoptedAssociation": "BLOCKED: observed natural order only; required adversarial authority binding not implemented/proven",
+    "nativeAssociation": "BLOCKED: unrelated actual window consumed production admission",
+    "adoptedScriptConversion": "BLOCKED: restricted and escape controls indistinguishable before first request",
+    "nativeScriptConversion": "BLOCKED: restricted and escape controls indistinguishable before first request"
+  },
+  "hiddenWindows": true,
+  "presentationCalls": [],
+  "controls": [
+    {
+      "path": "adopted",
+      "kind": "script",
+      "restriction": "restricted",
+      "request": 27,
+      "creationEvent": "createWindow",
+      "contentsId": 48,
+      "requestedGetCount": 1,
+      "formPostCount": 0,
+      "chromiumBlockedForm": true,
+      "exposedOpenerSandboxFlags": null
+    },
+    {
+      "path": "adopted",
+      "kind": "script",
+      "restriction": "escape",
+      "request": 28,
+      "creationEvent": "createWindow",
+      "contentsId": 50,
+      "requestedGetCount": 1,
+      "formPostCount": 1,
+      "chromiumBlockedForm": false,
+      "exposedOpenerSandboxFlags": null
+    },
+    {
+      "path": "adopted",
+      "kind": "script",
+      "restriction": "unsandboxed",
+      "request": 29,
+      "creationEvent": "createWindow",
+      "contentsId": 52,
+      "requestedGetCount": 1,
+      "formPostCount": 1,
+      "chromiumBlockedForm": false,
+      "exposedOpenerSandboxFlags": null
+    },
+    {
+      "path": "adopted",
+      "kind": "link",
+      "restriction": "restricted",
+      "request": 33,
+      "creationEvent": "createWindow-missing",
+      "requestedGetCount": 0,
+      "formPostCount": 0,
+      "chromiumBlockedForm": false,
+      "exposedOpenerSandboxFlags": 4294836015
+    },
+    {
+      "path": "adopted",
+      "kind": "link",
+      "restriction": "escape",
+      "request": 34,
+      "creationEvent": "createWindow-missing",
+      "requestedGetCount": 0,
+      "formPostCount": 0,
+      "chromiumBlockedForm": false,
+      "exposedOpenerSandboxFlags": null
+    },
+    {
+      "path": "adopted",
+      "kind": "link",
+      "restriction": "unsandboxed",
+      "request": 35,
+      "creationEvent": "createWindow-missing",
+      "requestedGetCount": 0,
+      "formPostCount": 0,
+      "chromiumBlockedForm": false,
+      "exposedOpenerSandboxFlags": null
+    },
+    {
+      "path": "native",
+      "kind": "script",
+      "restriction": "restricted",
+      "request": 30,
+      "creationEvent": "did-create-window",
+      "contentsId": 54,
+      "requestedGetCount": 1,
+      "formPostCount": 0,
+      "chromiumBlockedForm": true,
+      "exposedOpenerSandboxFlags": null
+    },
+    {
+      "path": "native",
+      "kind": "script",
+      "restriction": "escape",
+      "request": 31,
+      "creationEvent": "did-create-window",
+      "contentsId": 55,
+      "requestedGetCount": 1,
+      "formPostCount": 1,
+      "chromiumBlockedForm": false,
+      "exposedOpenerSandboxFlags": null
+    },
+    {
+      "path": "native",
+      "kind": "script",
+      "restriction": "unsandboxed",
+      "request": 32,
+      "creationEvent": "did-create-window",
+      "contentsId": 56,
+      "requestedGetCount": 1,
+      "formPostCount": 1,
+      "chromiumBlockedForm": false,
+      "exposedOpenerSandboxFlags": null
+    },
+    {
+      "path": "native",
+      "kind": "link",
+      "restriction": "restricted",
+      "request": 36,
+      "creationEvent": "did-create-window",
+      "contentsId": 60,
+      "requestedGetCount": 1,
+      "formPostCount": 0,
+      "chromiumBlockedForm": true,
+      "exposedOpenerSandboxFlags": 4294836015
+    },
+    {
+      "path": "native",
+      "kind": "link",
+      "restriction": "escape",
+      "request": 37,
+      "creationEvent": "did-create-window",
+      "contentsId": 61,
+      "requestedGetCount": 1,
+      "formPostCount": 1,
+      "chromiumBlockedForm": false,
+      "exposedOpenerSandboxFlags": null
+    },
+    {
+      "path": "native",
+      "kind": "link",
+      "restriction": "unsandboxed",
+      "request": 38,
+      "creationEvent": "did-create-window",
+      "contentsId": 62,
+      "requestedGetCount": 1,
+      "formPostCount": 1,
+      "chromiumBlockedForm": false,
+      "exposedOpenerSandboxFlags": null
+    }
+  ],
+  "tabDispatches": [
+    {
+      "url": "http://127.0.0.1:PORT/baseline-restricted",
+      "activate": true
+    }
+  ],
+  "events": [
+    {
+      "sequence": 22,
+      "event": "admission",
+      "request": 1,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/identical-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "foreground-tab",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 23,
+      "event": "web-contents-created",
+      "contentsId": 9,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 24,
+      "event": "createWindow",
+      "contentsId": 9,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "callbackRequest": 1,
+      "owner": 6,
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 1,
+      "diagnosticArguments": ["--orca-popup-probe=1"]
+    },
+    {
+      "sequence": 27,
+      "event": "observer-attached",
+      "contentsId": 9,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 28,
+      "event": "did-start-navigation",
+      "contentsId": 9,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 30,
+      "event": "will-frame-navigate",
+      "contentsId": 9,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 31,
+      "event": "admission",
+      "request": 2,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/identical-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "foreground-tab",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 32,
+      "event": "web-contents-created",
+      "contentsId": 11,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 33,
+      "event": "createWindow",
+      "contentsId": 11,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "callbackRequest": 2,
+      "owner": 6,
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 1,
+      "diagnosticArguments": ["--orca-popup-probe=2"]
+    },
+    {
+      "sequence": 36,
+      "event": "observer-attached",
+      "contentsId": 11,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 37,
+      "event": "before-request",
+      "contentsId": 9,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 38,
+      "event": "did-start-navigation",
+      "contentsId": 11,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 40,
+      "event": "will-frame-navigate",
+      "contentsId": 11,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 41,
+      "event": "admission",
+      "request": 3,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/identical-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "foreground-tab",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 42,
+      "event": "web-contents-created",
+      "contentsId": 13,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 43,
+      "event": "createWindow",
+      "contentsId": 13,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "callbackRequest": 3,
+      "owner": 6,
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 1,
+      "diagnosticArguments": ["--orca-popup-probe=3"]
+    },
+    {
+      "sequence": 46,
+      "event": "observer-attached",
+      "contentsId": 13,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 47,
+      "event": "before-request",
+      "contentsId": 11,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 48,
+      "event": "did-start-navigation",
+      "contentsId": 13,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 50,
+      "event": "will-frame-navigate",
+      "contentsId": 13,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 51,
+      "event": "before-request",
+      "contentsId": 13,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 52,
+      "event": "loaded",
+      "contentsId": 9,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "original-request-0",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 53,
+      "event": "loaded",
+      "contentsId": 11,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "original-request-1",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 54,
+      "event": "loaded",
+      "contentsId": 13,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "original-request-2",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 55,
+      "event": "admission",
+      "request": 4,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/identical-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "new-window",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 56,
+      "event": "web-contents-created",
+      "contentsId": 15,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 57,
+      "event": "createWindow",
+      "contentsId": 15,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "callbackRequest": 4,
+      "owner": 6,
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 1,
+      "diagnosticArguments": ["--orca-popup-probe=4"]
+    },
+    {
+      "sequence": 60,
+      "event": "observer-attached",
+      "contentsId": 15,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 61,
+      "event": "did-start-navigation",
+      "contentsId": 15,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 63,
+      "event": "will-frame-navigate",
+      "contentsId": 15,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 64,
+      "event": "admission",
+      "request": 5,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/identical-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "new-window",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 65,
+      "event": "web-contents-created",
+      "contentsId": 17,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 66,
+      "event": "createWindow",
+      "contentsId": 17,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "callbackRequest": 5,
+      "owner": 6,
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 1,
+      "diagnosticArguments": ["--orca-popup-probe=5"]
+    },
+    {
+      "sequence": 69,
+      "event": "observer-attached",
+      "contentsId": 17,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 70,
+      "event": "before-request",
+      "contentsId": 15,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 71,
+      "event": "did-start-navigation",
+      "contentsId": 17,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 73,
+      "event": "will-frame-navigate",
+      "contentsId": 17,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 74,
+      "event": "admission",
+      "request": 6,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/identical-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "new-window",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 75,
+      "event": "web-contents-created",
+      "contentsId": 19,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 76,
+      "event": "createWindow",
+      "contentsId": 19,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "callbackRequest": 6,
+      "owner": 6,
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 1,
+      "diagnosticArguments": ["--orca-popup-probe=6"]
+    },
+    {
+      "sequence": 79,
+      "event": "observer-attached",
+      "contentsId": 19,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 80,
+      "event": "before-request",
+      "contentsId": 17,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 81,
+      "event": "did-start-navigation",
+      "contentsId": 19,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 83,
+      "event": "will-frame-navigate",
+      "contentsId": 19,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 84,
+      "event": "before-request",
+      "contentsId": 19,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 85,
+      "event": "loaded",
+      "contentsId": 15,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "original-request-0",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 86,
+      "event": "loaded",
+      "contentsId": 17,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "original-request-1",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 87,
+      "event": "loaded",
+      "contentsId": 19,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "original-request-2",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 88,
+      "event": "admission",
+      "request": 7,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/identical-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "background-tab",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 89,
+      "event": "web-contents-created",
+      "contentsId": 21,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 90,
+      "event": "createWindow",
+      "contentsId": 21,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "callbackRequest": 7,
+      "owner": 6,
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 1,
+      "diagnosticArguments": ["--orca-popup-probe=7"]
+    },
+    {
+      "sequence": 93,
+      "event": "observer-attached",
+      "contentsId": 21,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 94,
+      "event": "did-start-navigation",
+      "contentsId": 21,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 96,
+      "event": "will-frame-navigate",
+      "contentsId": 21,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 97,
+      "event": "admission",
+      "request": 8,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/identical-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "background-tab",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 98,
+      "event": "web-contents-created",
+      "contentsId": 23,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 99,
+      "event": "createWindow",
+      "contentsId": 23,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "callbackRequest": 8,
+      "owner": 6,
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 1,
+      "diagnosticArguments": ["--orca-popup-probe=8"]
+    },
+    {
+      "sequence": 102,
+      "event": "observer-attached",
+      "contentsId": 23,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 103,
+      "event": "before-request",
+      "contentsId": 21,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 104,
+      "event": "did-start-navigation",
+      "contentsId": 23,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 106,
+      "event": "will-frame-navigate",
+      "contentsId": 23,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 107,
+      "event": "admission",
+      "request": 9,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/identical-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "background-tab",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 108,
+      "event": "web-contents-created",
+      "contentsId": 25,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 109,
+      "event": "createWindow",
+      "contentsId": 25,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "callbackRequest": 9,
+      "owner": 6,
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 1,
+      "diagnosticArguments": ["--orca-popup-probe=9"]
+    },
+    {
+      "sequence": 112,
+      "event": "observer-attached",
+      "contentsId": 25,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 113,
+      "event": "before-request",
+      "contentsId": 23,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 114,
+      "event": "did-start-navigation",
+      "contentsId": 25,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 116,
+      "event": "will-frame-navigate",
+      "contentsId": 25,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 117,
+      "event": "before-request",
+      "contentsId": 25,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 118,
+      "event": "loaded",
+      "contentsId": 21,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "original-request-0",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 119,
+      "event": "loaded",
+      "contentsId": 23,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "original-request-1",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 120,
+      "event": "loaded",
+      "contentsId": 25,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "original-request-2",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 121,
+      "event": "admission",
+      "request": 10,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/identical-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "foreground-tab",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 122,
+      "event": "web-contents-created",
+      "contentsId": 27,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 123,
+      "event": "browser-window-created",
+      "contentsId": 27,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 124,
+      "event": "observer-attached",
+      "contentsId": 27,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 125,
+      "event": "did-create-window",
+      "contentsId": 27,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "optionsArguments": ["--orca-popup-probe=10"],
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 2,
+      "diagnosticArguments": ["--orca-popup-probe=10"]
+    },
+    {
+      "sequence": 126,
+      "event": "did-start-navigation",
+      "contentsId": 27,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 128,
+      "event": "will-frame-navigate",
+      "contentsId": 27,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 129,
+      "event": "admission",
+      "request": 11,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/identical-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "foreground-tab",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 130,
+      "event": "web-contents-created",
+      "contentsId": 28,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 131,
+      "event": "browser-window-created",
+      "contentsId": 28,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 132,
+      "event": "observer-attached",
+      "contentsId": 28,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 133,
+      "event": "did-create-window",
+      "contentsId": 28,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "optionsArguments": ["--orca-popup-probe=11"],
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 2,
+      "diagnosticArguments": ["--orca-popup-probe=11"]
+    },
+    {
+      "sequence": 134,
+      "event": "before-request",
+      "contentsId": 27,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 135,
+      "event": "did-start-navigation",
+      "contentsId": 28,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 137,
+      "event": "will-frame-navigate",
+      "contentsId": 28,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 138,
+      "event": "admission",
+      "request": 12,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/identical-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "foreground-tab",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 139,
+      "event": "web-contents-created",
+      "contentsId": 29,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 140,
+      "event": "browser-window-created",
+      "contentsId": 29,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 141,
+      "event": "observer-attached",
+      "contentsId": 29,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 142,
+      "event": "did-create-window",
+      "contentsId": 29,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "optionsArguments": ["--orca-popup-probe=12"],
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 2,
+      "diagnosticArguments": ["--orca-popup-probe=12"]
+    },
+    {
+      "sequence": 143,
+      "event": "before-request",
+      "contentsId": 28,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 144,
+      "event": "did-start-navigation",
+      "contentsId": 29,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 146,
+      "event": "will-frame-navigate",
+      "contentsId": 29,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 147,
+      "event": "before-request",
+      "contentsId": 29,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 148,
+      "event": "loaded",
+      "contentsId": 27,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "original-request-0",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 149,
+      "event": "loaded",
+      "contentsId": 28,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "original-request-1",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 150,
+      "event": "loaded",
+      "contentsId": 29,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "original-request-2",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 151,
+      "event": "admission",
+      "request": 13,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/identical-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "new-window",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 152,
+      "event": "web-contents-created",
+      "contentsId": 30,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 153,
+      "event": "browser-window-created",
+      "contentsId": 30,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 154,
+      "event": "observer-attached",
+      "contentsId": 30,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 155,
+      "event": "did-create-window",
+      "contentsId": 30,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "optionsArguments": ["--orca-popup-probe=13"],
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 2,
+      "diagnosticArguments": ["--orca-popup-probe=13"]
+    },
+    {
+      "sequence": 156,
+      "event": "did-start-navigation",
+      "contentsId": 30,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 158,
+      "event": "will-frame-navigate",
+      "contentsId": 30,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 159,
+      "event": "admission",
+      "request": 14,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/identical-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "new-window",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 160,
+      "event": "web-contents-created",
+      "contentsId": 31,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 161,
+      "event": "browser-window-created",
+      "contentsId": 31,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 162,
+      "event": "observer-attached",
+      "contentsId": 31,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 163,
+      "event": "did-create-window",
+      "contentsId": 31,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "optionsArguments": ["--orca-popup-probe=14"],
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 2,
+      "diagnosticArguments": ["--orca-popup-probe=14"]
+    },
+    {
+      "sequence": 164,
+      "event": "before-request",
+      "contentsId": 30,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 165,
+      "event": "did-start-navigation",
+      "contentsId": 31,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 167,
+      "event": "will-frame-navigate",
+      "contentsId": 31,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 168,
+      "event": "admission",
+      "request": 15,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/identical-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "new-window",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 169,
+      "event": "web-contents-created",
+      "contentsId": 32,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 170,
+      "event": "browser-window-created",
+      "contentsId": 32,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 171,
+      "event": "observer-attached",
+      "contentsId": 32,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 172,
+      "event": "did-create-window",
+      "contentsId": 32,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "optionsArguments": ["--orca-popup-probe=15"],
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 2,
+      "diagnosticArguments": ["--orca-popup-probe=15"]
+    },
+    {
+      "sequence": 173,
+      "event": "before-request",
+      "contentsId": 31,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 174,
+      "event": "did-start-navigation",
+      "contentsId": 32,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 176,
+      "event": "will-frame-navigate",
+      "contentsId": 32,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 177,
+      "event": "before-request",
+      "contentsId": 32,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 178,
+      "event": "loaded",
+      "contentsId": 30,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "original-request-0",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 179,
+      "event": "loaded",
+      "contentsId": 31,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "original-request-1",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 180,
+      "event": "loaded",
+      "contentsId": 32,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "original-request-2",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 181,
+      "event": "admission",
+      "request": 16,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/identical-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "background-tab",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 182,
+      "event": "web-contents-created",
+      "contentsId": 33,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 183,
+      "event": "browser-window-created",
+      "contentsId": 33,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 184,
+      "event": "observer-attached",
+      "contentsId": 33,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 185,
+      "event": "did-create-window",
+      "contentsId": 33,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "optionsArguments": ["--orca-popup-probe=16"],
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 2,
+      "diagnosticArguments": ["--orca-popup-probe=16"]
+    },
+    {
+      "sequence": 186,
+      "event": "did-start-navigation",
+      "contentsId": 33,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 188,
+      "event": "will-frame-navigate",
+      "contentsId": 33,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 189,
+      "event": "admission",
+      "request": 17,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/identical-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "background-tab",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 190,
+      "event": "web-contents-created",
+      "contentsId": 34,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 191,
+      "event": "browser-window-created",
+      "contentsId": 34,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 192,
+      "event": "observer-attached",
+      "contentsId": 34,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 193,
+      "event": "did-create-window",
+      "contentsId": 34,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "optionsArguments": ["--orca-popup-probe=17"],
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 2,
+      "diagnosticArguments": ["--orca-popup-probe=17"]
+    },
+    {
+      "sequence": 194,
+      "event": "before-request",
+      "contentsId": 33,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 195,
+      "event": "did-start-navigation",
+      "contentsId": 34,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 197,
+      "event": "will-frame-navigate",
+      "contentsId": 34,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 198,
+      "event": "admission",
+      "request": 18,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/identical-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "background-tab",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 199,
+      "event": "web-contents-created",
+      "contentsId": 35,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 200,
+      "event": "browser-window-created",
+      "contentsId": 35,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 201,
+      "event": "observer-attached",
+      "contentsId": 35,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 202,
+      "event": "did-create-window",
+      "contentsId": 35,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "optionsArguments": ["--orca-popup-probe=18"],
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 2,
+      "diagnosticArguments": ["--orca-popup-probe=18"]
+    },
+    {
+      "sequence": 203,
+      "event": "before-request",
+      "contentsId": 34,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 204,
+      "event": "did-start-navigation",
+      "contentsId": 35,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 206,
+      "event": "will-frame-navigate",
+      "contentsId": 35,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 207,
+      "event": "loaded",
+      "contentsId": 33,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "original-request-0",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 208,
+      "event": "before-request",
+      "contentsId": 35,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 209,
+      "event": "loaded",
+      "contentsId": 34,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "original-request-1",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 210,
+      "event": "loaded",
+      "contentsId": 35,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "original-request-2",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 211,
+      "event": "admission",
+      "request": 19,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/identical-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "new-window",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 212,
+      "event": "web-contents-created",
+      "contentsId": 36,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 213,
+      "event": "createWindow",
+      "contentsId": 36,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "callbackRequest": 19,
+      "owner": 6,
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 1,
+      "diagnosticArguments": ["--orca-popup-probe=19"]
+    },
+    {
+      "sequence": 216,
+      "event": "observer-attached",
+      "contentsId": 36,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 217,
+      "event": "did-start-navigation",
+      "contentsId": 36,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 219,
+      "event": "will-frame-navigate",
+      "contentsId": 36,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 220,
+      "event": "before-request",
+      "contentsId": 36,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 221,
+      "event": "loaded",
+      "contentsId": 36,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "original-request-0",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 222,
+      "event": "admission",
+      "request": 20,
+      "owner": 8,
+      "details": {
+        "url": "http://127.0.0.1:PORT/identical-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "background-tab",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-two",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 223,
+      "event": "web-contents-created",
+      "contentsId": 38,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-two",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 224,
+      "event": "createWindow",
+      "contentsId": 38,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-two",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "callbackRequest": 20,
+      "owner": 8,
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 1,
+      "diagnosticArguments": ["--orca-popup-probe=20"]
+    },
+    {
+      "sequence": 227,
+      "event": "observer-attached",
+      "contentsId": 38,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-two",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 8,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 228,
+      "event": "did-start-navigation",
+      "contentsId": 38,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-two",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 230,
+      "event": "will-frame-navigate",
+      "contentsId": 38,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-two",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 231,
+      "event": "before-request",
+      "contentsId": 38,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 232,
+      "event": "loaded",
+      "contentsId": 38,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "opener": "http://127.0.0.1:PORT/probe-two",
+      "frameName": "original-request-0",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 8,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 233,
+      "event": "admission",
+      "request": 21,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/identical-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "new-window",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 234,
+      "event": "web-contents-created",
+      "contentsId": 40,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 235,
+      "event": "browser-window-created",
+      "contentsId": 40,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 236,
+      "event": "observer-attached",
+      "contentsId": 40,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 237,
+      "event": "did-create-window",
+      "contentsId": 40,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "optionsArguments": ["--orca-popup-probe=21"],
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 2,
+      "diagnosticArguments": ["--orca-popup-probe=21"]
+    },
+    {
+      "sequence": 238,
+      "event": "admission",
+      "request": 22,
+      "owner": 8,
+      "details": {
+        "url": "http://127.0.0.1:PORT/identical-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "background-tab",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-two",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 239,
+      "event": "web-contents-created",
+      "contentsId": 41,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-two",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 240,
+      "event": "browser-window-created",
+      "contentsId": 41,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-two",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 241,
+      "event": "observer-attached",
+      "contentsId": 41,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-two",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 8,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 242,
+      "event": "did-create-window",
+      "contentsId": 41,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-two",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 8,
+      "optionsArguments": ["--orca-popup-probe=22"],
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 2,
+      "diagnosticArguments": ["--orca-popup-probe=22"]
+    },
+    {
+      "sequence": 243,
+      "event": "did-start-navigation",
+      "contentsId": 40,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 245,
+      "event": "will-frame-navigate",
+      "contentsId": 40,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 246,
+      "event": "before-request",
+      "contentsId": 40,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 247,
+      "event": "did-start-navigation",
+      "contentsId": 41,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-two",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 249,
+      "event": "will-frame-navigate",
+      "contentsId": 41,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-two",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 250,
+      "event": "before-request",
+      "contentsId": 41,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 251,
+      "event": "loaded",
+      "contentsId": 40,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "original-request-0",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 252,
+      "event": "loaded",
+      "contentsId": 41,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "opener": "http://127.0.0.1:PORT/probe-two",
+      "frameName": "original-request-0",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 8,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 253,
+      "event": "admission",
+      "request": 23,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/cancelled-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "new-window",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 254,
+      "event": "web-contents-created",
+      "contentsId": 42,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 255,
+      "event": "createWindow",
+      "contentsId": 42,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "callbackRequest": 23,
+      "owner": 6,
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 1,
+      "diagnosticArguments": ["--orca-popup-probe=23"]
+    },
+    {
+      "sequence": 258,
+      "event": "observer-attached",
+      "contentsId": 42,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 259,
+      "event": "did-start-navigation",
+      "contentsId": 42,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 261,
+      "event": "will-frame-navigate",
+      "contentsId": 42,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 262,
+      "event": "admission",
+      "request": 24,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/reopened-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "new-window",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 263,
+      "event": "web-contents-created",
+      "contentsId": 44,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 264,
+      "event": "createWindow",
+      "contentsId": 44,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "callbackRequest": 24,
+      "owner": 6,
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 1,
+      "diagnosticArguments": ["--orca-popup-probe=24"]
+    },
+    {
+      "sequence": 267,
+      "event": "observer-attached",
+      "contentsId": 44,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 268,
+      "event": "before-request",
+      "contentsId": 42,
+      "url": "http://127.0.0.1:PORT/cancelled-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 269,
+      "event": "did-start-navigation",
+      "contentsId": 44,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 271,
+      "event": "will-frame-navigate",
+      "contentsId": 44,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 272,
+      "event": "before-request",
+      "contentsId": 44,
+      "url": "http://127.0.0.1:PORT/reopened-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 273,
+      "event": "loaded",
+      "contentsId": 44,
+      "url": "http://127.0.0.1:PORT/reopened-child",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "reopened-original",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 274,
+      "event": "admission",
+      "request": 25,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/cancelled-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "new-window",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 275,
+      "event": "web-contents-created",
+      "contentsId": 46,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 276,
+      "event": "browser-window-created",
+      "contentsId": 46,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 277,
+      "event": "observer-attached",
+      "contentsId": 46,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 278,
+      "event": "did-create-window",
+      "contentsId": 46,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "optionsArguments": ["--orca-popup-probe=25"],
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 2,
+      "diagnosticArguments": ["--orca-popup-probe=25"]
+    },
+    {
+      "sequence": 279,
+      "event": "did-start-navigation",
+      "contentsId": 46,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 281,
+      "event": "will-frame-navigate",
+      "contentsId": 46,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 282,
+      "event": "admission",
+      "request": 26,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/reopened-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "new-window",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 283,
+      "event": "web-contents-created",
+      "contentsId": 47,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 284,
+      "event": "browser-window-created",
+      "contentsId": 47,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 285,
+      "event": "observer-attached",
+      "contentsId": 47,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 286,
+      "event": "did-create-window",
+      "contentsId": 47,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "optionsArguments": ["--orca-popup-probe=26"],
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 2,
+      "diagnosticArguments": ["--orca-popup-probe=26"]
+    },
+    {
+      "sequence": 287,
+      "event": "before-request",
+      "contentsId": 46,
+      "url": "http://127.0.0.1:PORT/cancelled-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 288,
+      "event": "did-start-navigation",
+      "contentsId": 47,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 290,
+      "event": "will-frame-navigate",
+      "contentsId": 47,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 291,
+      "event": "before-request",
+      "contentsId": 47,
+      "url": "http://127.0.0.1:PORT/reopened-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 292,
+      "event": "loaded",
+      "contentsId": 47,
+      "url": "http://127.0.0.1:PORT/reopened-child",
+      "opener": "http://127.0.0.1:PORT/probe-one",
+      "frameName": "reopened-original",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 293,
+      "event": "admission",
+      "request": 27,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/sandbox-adopted-script-restricted",
+        "frameName": "",
+        "features": "noopener",
+        "disposition": "foreground-tab",
+        "referrer": {
+          "url": "",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 294,
+      "event": "web-contents-created",
+      "contentsId": 48,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 295,
+      "event": "createWindow",
+      "contentsId": 48,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "callbackRequest": 27,
+      "owner": 6,
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 1,
+      "diagnosticArguments": ["--orca-popup-probe=27"]
+    },
+    {
+      "sequence": 298,
+      "event": "observer-attached",
+      "contentsId": 48,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 299,
+      "event": "did-start-navigation",
+      "contentsId": 48,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 301,
+      "event": "will-frame-navigate",
+      "contentsId": 48,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 302,
+      "event": "before-request",
+      "contentsId": 48,
+      "url": "http://127.0.0.1:PORT/sandbox-adopted-script-restricted",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 303,
+      "event": "loaded",
+      "contentsId": 48,
+      "url": "http://127.0.0.1:PORT/sandbox-adopted-script-restricted",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 304,
+      "event": "sandbox-form-blocked",
+      "contentsId": 48,
+      "url": "http://127.0.0.1:PORT/sandbox-adopted-script-restricted",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "message": "Blocked form submission to 'http://127.0.0.1:PORT/sandbox-form-adopted-script-restricted' because the form's frame is sandboxed and the 'allow-forms' permission is not set.",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 305,
+      "event": "admission",
+      "request": 28,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/sandbox-adopted-script-escape",
+        "frameName": "",
+        "features": "noopener",
+        "disposition": "foreground-tab",
+        "referrer": {
+          "url": "",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 306,
+      "event": "web-contents-created",
+      "contentsId": 50,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 307,
+      "event": "createWindow",
+      "contentsId": 50,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "callbackRequest": 28,
+      "owner": 6,
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 1,
+      "diagnosticArguments": ["--orca-popup-probe=28"]
+    },
+    {
+      "sequence": 310,
+      "event": "observer-attached",
+      "contentsId": 50,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 311,
+      "event": "did-start-navigation",
+      "contentsId": 50,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 313,
+      "event": "will-frame-navigate",
+      "contentsId": 50,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 314,
+      "event": "before-request",
+      "contentsId": 50,
+      "url": "http://127.0.0.1:PORT/sandbox-adopted-script-escape",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 315,
+      "event": "loaded",
+      "contentsId": 50,
+      "url": "http://127.0.0.1:PORT/sandbox-adopted-script-escape",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 316,
+      "event": "before-request",
+      "contentsId": 50,
+      "url": "http://127.0.0.1:PORT/sandbox-form-adopted-script-escape",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 317,
+      "event": "admission",
+      "request": 29,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/sandbox-adopted-script-unsandboxed",
+        "frameName": "",
+        "features": "noopener",
+        "disposition": "foreground-tab",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 318,
+      "event": "web-contents-created",
+      "contentsId": 52,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 319,
+      "event": "createWindow",
+      "contentsId": 52,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "callbackRequest": 29,
+      "owner": 6,
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 1,
+      "diagnosticArguments": ["--orca-popup-probe=29"]
+    },
+    {
+      "sequence": 322,
+      "event": "observer-attached",
+      "contentsId": 52,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 323,
+      "event": "did-start-navigation",
+      "contentsId": 52,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 325,
+      "event": "will-frame-navigate",
+      "contentsId": 52,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 326,
+      "event": "before-request",
+      "contentsId": 52,
+      "url": "http://127.0.0.1:PORT/sandbox-adopted-script-unsandboxed",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 327,
+      "event": "loaded",
+      "contentsId": 52,
+      "url": "http://127.0.0.1:PORT/sandbox-adopted-script-unsandboxed",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 328,
+      "event": "before-request",
+      "contentsId": 52,
+      "url": "http://127.0.0.1:PORT/sandbox-form-adopted-script-unsandboxed",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 329,
+      "event": "admission",
+      "request": 30,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/sandbox-native-script-restricted",
+        "frameName": "",
+        "features": "noopener",
+        "disposition": "foreground-tab",
+        "referrer": {
+          "url": "",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 330,
+      "event": "web-contents-created",
+      "contentsId": 54,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 331,
+      "event": "browser-window-created",
+      "contentsId": 54,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 332,
+      "event": "observer-attached",
+      "contentsId": 54,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 333,
+      "event": "did-create-window",
+      "contentsId": 54,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "owner": 6,
+      "optionsArguments": ["--orca-popup-probe=30"],
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 2,
+      "diagnosticArguments": ["--orca-popup-probe=30"]
+    },
+    {
+      "sequence": 334,
+      "event": "did-start-navigation",
+      "contentsId": 54,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 336,
+      "event": "will-frame-navigate",
+      "contentsId": 54,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 337,
+      "event": "before-request",
+      "contentsId": 54,
+      "url": "http://127.0.0.1:PORT/sandbox-native-script-restricted",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 338,
+      "event": "loaded",
+      "contentsId": 54,
+      "url": "http://127.0.0.1:PORT/sandbox-native-script-restricted",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 339,
+      "event": "sandbox-form-blocked",
+      "contentsId": 54,
+      "url": "http://127.0.0.1:PORT/sandbox-native-script-restricted",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "message": "Blocked form submission to 'http://127.0.0.1:PORT/sandbox-form-native-script-restricted' because the form's frame is sandboxed and the 'allow-forms' permission is not set.",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 340,
+      "event": "admission",
+      "request": 31,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/sandbox-native-script-escape",
+        "frameName": "",
+        "features": "noopener",
+        "disposition": "foreground-tab",
+        "referrer": {
+          "url": "",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 341,
+      "event": "web-contents-created",
+      "contentsId": 55,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 342,
+      "event": "browser-window-created",
+      "contentsId": 55,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 343,
+      "event": "observer-attached",
+      "contentsId": 55,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 344,
+      "event": "did-create-window",
+      "contentsId": 55,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "owner": 6,
+      "optionsArguments": ["--orca-popup-probe=31"],
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 2,
+      "diagnosticArguments": ["--orca-popup-probe=31"]
+    },
+    {
+      "sequence": 345,
+      "event": "did-start-navigation",
+      "contentsId": 55,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 347,
+      "event": "will-frame-navigate",
+      "contentsId": 55,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 348,
+      "event": "before-request",
+      "contentsId": 55,
+      "url": "http://127.0.0.1:PORT/sandbox-native-script-escape",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 349,
+      "event": "loaded",
+      "contentsId": 55,
+      "url": "http://127.0.0.1:PORT/sandbox-native-script-escape",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 350,
+      "event": "before-request",
+      "contentsId": 55,
+      "url": "http://127.0.0.1:PORT/sandbox-form-native-script-escape",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 351,
+      "event": "admission",
+      "request": 32,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/sandbox-native-script-unsandboxed",
+        "frameName": "",
+        "features": "noopener",
+        "disposition": "foreground-tab",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 352,
+      "event": "web-contents-created",
+      "contentsId": 56,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 353,
+      "event": "browser-window-created",
+      "contentsId": 56,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 354,
+      "event": "observer-attached",
+      "contentsId": 56,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 355,
+      "event": "did-create-window",
+      "contentsId": 56,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "owner": 6,
+      "optionsArguments": ["--orca-popup-probe=32"],
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 2,
+      "diagnosticArguments": ["--orca-popup-probe=32"]
+    },
+    {
+      "sequence": 356,
+      "event": "did-start-navigation",
+      "contentsId": 56,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 358,
+      "event": "will-frame-navigate",
+      "contentsId": 56,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 359,
+      "event": "before-request",
+      "contentsId": 56,
+      "url": "http://127.0.0.1:PORT/sandbox-native-script-unsandboxed",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 360,
+      "event": "loaded",
+      "contentsId": 56,
+      "url": "http://127.0.0.1:PORT/sandbox-native-script-unsandboxed",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 361,
+      "event": "before-request",
+      "contentsId": 56,
+      "url": "http://127.0.0.1:PORT/sandbox-form-native-script-unsandboxed",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 362,
+      "event": "admission",
+      "request": 33,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/sandbox-adopted-link-restricted",
+        "frameName": "",
+        "features": "",
+        "referrer": {
+          "url": "",
+          "policy": "strict-origin-when-cross-origin"
+        },
+        "disposition": "new-window"
+      }
+    },
+    {
+      "sequence": 363,
+      "event": "createWindow-missing",
+      "request": 33,
+      "owner": 6,
+      "optionsPreferencesSnapshot": 3,
+      "diagnosticArguments": ["--orca-popup-probe=33"]
+    },
+    {
+      "sequence": 364,
+      "event": "web-contents-created",
+      "contentsId": 57,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 365,
+      "event": "browser-window-created",
+      "contentsId": 57,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 366,
+      "event": "observer-attached",
+      "contentsId": 57,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 367,
+      "event": "admission",
+      "request": 34,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/sandbox-adopted-link-escape",
+        "frameName": "",
+        "features": "",
+        "referrer": {
+          "url": "",
+          "policy": "strict-origin-when-cross-origin"
+        },
+        "disposition": "new-window"
+      }
+    },
+    {
+      "sequence": 368,
+      "event": "createWindow-missing",
+      "request": 34,
+      "owner": 6,
+      "optionsPreferencesSnapshot": 4,
+      "diagnosticArguments": ["--orca-popup-probe=34"]
+    },
+    {
+      "sequence": 369,
+      "event": "web-contents-created",
+      "contentsId": 58,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 370,
+      "event": "browser-window-created",
+      "contentsId": 58,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 371,
+      "event": "observer-attached",
+      "contentsId": 58,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 372,
+      "event": "admission",
+      "request": 35,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/sandbox-adopted-link-unsandboxed",
+        "frameName": "",
+        "features": "",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        },
+        "disposition": "new-window"
+      }
+    },
+    {
+      "sequence": 373,
+      "event": "createWindow-missing",
+      "request": 35,
+      "owner": 6,
+      "optionsPreferencesSnapshot": 4,
+      "diagnosticArguments": ["--orca-popup-probe=35"]
+    },
+    {
+      "sequence": 374,
+      "event": "web-contents-created",
+      "contentsId": 59,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 375,
+      "event": "browser-window-created",
+      "contentsId": 59,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 376,
+      "event": "observer-attached",
+      "contentsId": 59,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 377,
+      "event": "admission",
+      "request": 36,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/sandbox-native-link-restricted",
+        "frameName": "",
+        "features": "",
+        "referrer": {
+          "url": "",
+          "policy": "strict-origin-when-cross-origin"
+        },
+        "disposition": "new-window"
+      }
+    },
+    {
+      "sequence": 378,
+      "event": "web-contents-created",
+      "contentsId": 60,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 379,
+      "event": "browser-window-created",
+      "contentsId": 60,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 380,
+      "event": "did-start-navigation",
+      "contentsId": 60,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 381,
+      "event": "will-frame-navigate",
+      "contentsId": 60,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 382,
+      "event": "observer-attached",
+      "contentsId": 60,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 383,
+      "event": "did-create-window",
+      "contentsId": 60,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "owner": 6,
+      "optionsArguments": ["--orca-popup-probe=36"],
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 3,
+      "diagnosticArguments": ["--orca-popup-probe=36"]
+    },
+    {
+      "sequence": 384,
+      "event": "before-request",
+      "contentsId": 60,
+      "url": "http://127.0.0.1:PORT/sandbox-native-link-restricted",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 385,
+      "event": "loaded",
+      "contentsId": 60,
+      "url": "http://127.0.0.1:PORT/sandbox-native-link-restricted",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 386,
+      "event": "sandbox-form-blocked",
+      "contentsId": 60,
+      "url": "http://127.0.0.1:PORT/sandbox-native-link-restricted",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "message": "Blocked form submission to 'http://127.0.0.1:PORT/sandbox-form-native-link-restricted' because the form's frame is sandboxed and the 'allow-forms' permission is not set.",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 387,
+      "event": "admission",
+      "request": 37,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/sandbox-native-link-escape",
+        "frameName": "",
+        "features": "",
+        "referrer": {
+          "url": "",
+          "policy": "strict-origin-when-cross-origin"
+        },
+        "disposition": "new-window"
+      }
+    },
+    {
+      "sequence": 388,
+      "event": "web-contents-created",
+      "contentsId": 61,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 389,
+      "event": "browser-window-created",
+      "contentsId": 61,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 390,
+      "event": "did-start-navigation",
+      "contentsId": 61,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 391,
+      "event": "will-frame-navigate",
+      "contentsId": 61,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 392,
+      "event": "observer-attached",
+      "contentsId": 61,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 393,
+      "event": "did-create-window",
+      "contentsId": 61,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "owner": 6,
+      "optionsArguments": ["--orca-popup-probe=37"],
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 4,
+      "diagnosticArguments": ["--orca-popup-probe=37"]
+    },
+    {
+      "sequence": 394,
+      "event": "before-request",
+      "contentsId": 61,
+      "url": "http://127.0.0.1:PORT/sandbox-native-link-escape",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 395,
+      "event": "loaded",
+      "contentsId": 61,
+      "url": "http://127.0.0.1:PORT/sandbox-native-link-escape",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 397,
+      "event": "before-request",
+      "contentsId": 61,
+      "url": "http://127.0.0.1:PORT/sandbox-form-native-link-escape",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 398,
+      "event": "admission",
+      "request": 38,
+      "owner": 6,
+      "details": {
+        "url": "http://127.0.0.1:PORT/sandbox-native-link-unsandboxed",
+        "frameName": "",
+        "features": "",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "policy": "strict-origin-when-cross-origin"
+        },
+        "disposition": "new-window"
+      }
+    },
+    {
+      "sequence": 399,
+      "event": "web-contents-created",
+      "contentsId": 62,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 400,
+      "event": "browser-window-created",
+      "contentsId": 62,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 401,
+      "event": "did-start-navigation",
+      "contentsId": 62,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 402,
+      "event": "will-frame-navigate",
+      "contentsId": 62,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 403,
+      "event": "observer-attached",
+      "contentsId": 62,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 404,
+      "event": "did-create-window",
+      "contentsId": 62,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "owner": 6,
+      "optionsArguments": ["--orca-popup-probe=38"],
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 4,
+      "diagnosticArguments": ["--orca-popup-probe=38"]
+    },
+    {
+      "sequence": 405,
+      "event": "before-request",
+      "contentsId": 62,
+      "url": "http://127.0.0.1:PORT/sandbox-native-link-unsandboxed",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 406,
+      "event": "loaded",
+      "contentsId": 62,
+      "url": "http://127.0.0.1:PORT/sandbox-native-link-unsandboxed",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 6,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 408,
+      "event": "before-request",
+      "contentsId": 62,
+      "url": "http://127.0.0.1:PORT/sandbox-form-native-link-unsandboxed",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 409,
+      "event": "admission",
+      "request": 39,
+      "owner": 8,
+      "details": {
+        "url": "http://127.0.0.1:PORT/identical-child",
+        "frameName": "",
+        "features": "",
+        "disposition": "new-window",
+        "referrer": {
+          "url": "http://127.0.0.1:PORT/probe-two",
+          "policy": "strict-origin-when-cross-origin"
+        }
+      }
+    },
+    {
+      "sequence": 410,
+      "event": "web-contents-created",
+      "contentsId": 63,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 411,
+      "event": "production-adapter-created",
+      "contentsId": 63,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "request": 39,
+      "owner": 8,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 412,
+      "event": "browser-window-created",
+      "contentsId": 63,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 413,
+      "event": "unrelated-window",
+      "contentsId": 63,
+      "url": "",
+      "opener": null,
+      "frameName": "",
+      "frameOrigin": "null",
+      "request": 39,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 414,
+      "event": "web-contents-created",
+      "contentsId": 64,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-two",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 415,
+      "event": "browser-window-created",
+      "contentsId": 64,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-two",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 416,
+      "event": "observer-attached",
+      "contentsId": 64,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-two",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 8,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 417,
+      "event": "did-create-window",
+      "contentsId": 64,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-two",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 8,
+      "preferencesSnapshot": 0,
+      "optionsPreferencesSnapshot": 2
+    },
+    {
+      "sequence": 418,
+      "event": "did-start-navigation",
+      "contentsId": 64,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-two",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 420,
+      "event": "will-frame-navigate",
+      "contentsId": 64,
+      "url": "",
+      "opener": "http://127.0.0.1:PORT/probe-two",
+      "frameName": "",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 421,
+      "event": "before-request",
+      "contentsId": 64,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 422,
+      "event": "loaded",
+      "contentsId": 64,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "opener": "http://127.0.0.1:PORT/probe-two",
+      "frameName": "original-request-0",
+      "frameOrigin": "http://127.0.0.1:PORT",
+      "owner": 8,
+      "preferencesSnapshot": 0
+    },
+    {
+      "sequence": 423,
+      "event": "unrelated-destroyed",
+      "request": 39
+    }
+  ],
+  "receipts": [
+    {
+      "path": "/identical-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/identical-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": ""
+    },
+    {
+      "path": "/identical-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": ""
+    },
+    {
+      "path": "/identical-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/identical-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": ""
+    },
+    {
+      "path": "/identical-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": ""
+    },
+    {
+      "path": "/identical-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/identical-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": ""
+    },
+    {
+      "path": "/identical-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": ""
+    },
+    {
+      "path": "/identical-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/identical-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": ""
+    },
+    {
+      "path": "/identical-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": ""
+    },
+    {
+      "path": "/identical-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/identical-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": ""
+    },
+    {
+      "path": "/identical-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": ""
+    },
+    {
+      "path": "/identical-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/identical-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": ""
+    },
+    {
+      "path": "/identical-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": ""
+    },
+    {
+      "path": "/identical-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/identical-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-two",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/identical-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/identical-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-two",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/reopened-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": ""
+    },
+    {
+      "path": "/reopened-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": ""
+    },
+    {
+      "path": "/sandbox-adopted-script-restricted",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "cross-site",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/sandbox-adopted-script-escape",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "cross-site",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/sandbox-form-adopted-script-escape",
+      "method": "POST",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/sandbox-adopted-script-escape",
+      "contentType": "application/x-www-form-urlencoded",
+      "proxied": false,
+      "origin": "http://127.0.0.1:PORT",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/sandbox-adopted-script-unsandboxed",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/sandbox-form-adopted-script-unsandboxed",
+      "method": "POST",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/sandbox-adopted-script-unsandboxed",
+      "contentType": "application/x-www-form-urlencoded",
+      "proxied": false,
+      "origin": "http://127.0.0.1:PORT",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/sandbox-native-script-restricted",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "cross-site",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/sandbox-native-script-escape",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "cross-site",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/sandbox-form-native-script-escape",
+      "method": "POST",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/sandbox-native-script-escape",
+      "contentType": "application/x-www-form-urlencoded",
+      "proxied": false,
+      "origin": "http://127.0.0.1:PORT",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/sandbox-native-script-unsandboxed",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/sandbox-form-native-script-unsandboxed",
+      "method": "POST",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/sandbox-native-script-unsandboxed",
+      "contentType": "application/x-www-form-urlencoded",
+      "proxied": false,
+      "origin": "http://127.0.0.1:PORT",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/sandbox-native-link-restricted",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "cross-site",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/sandbox-native-link-escape",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "cross-site",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/sandbox-form-native-link-escape",
+      "method": "POST",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/sandbox-native-link-escape",
+      "contentType": "application/x-www-form-urlencoded",
+      "proxied": false,
+      "origin": "http://127.0.0.1:PORT",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/sandbox-native-link-unsandboxed",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-one",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/sandbox-form-native-link-unsandboxed",
+      "method": "POST",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/sandbox-native-link-unsandboxed",
+      "contentType": "application/x-www-form-urlencoded",
+      "proxied": false,
+      "origin": "http://127.0.0.1:PORT",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    },
+    {
+      "path": "/identical-child",
+      "method": "GET",
+      "body": "",
+      "cookie": "synthetic_session=local",
+      "referrer": "http://127.0.0.1:PORT/probe-two",
+      "contentType": "",
+      "proxied": false,
+      "origin": "",
+      "fetchSite": "same-origin",
+      "fetchMode": "navigate",
+      "fetchDest": "document",
+      "fetchUser": "?1"
+    }
+  ],
+  "preferenceSnapshots": [
+    {
+      "allowRunningInsecureContent": false,
+      "contextIsolation": true,
+      "disableDialogs": false,
+      "disablePopups": false,
+      "enableBlinkFeatures": "",
+      "experimentalFeatures": false,
+      "javascript": true,
+      "nodeIntegration": false,
+      "nodeIntegrationInSubFrames": false,
+      "nodeIntegrationInWorker": false,
+      "safeDialogs": false,
+      "safeDialogsMessage": "",
+      "sandbox": true,
+      "webSecurity": true,
+      "webviewTag": false
+    },
+    {
+      "contextIsolation": true,
+      "nodeIntegration": false,
+      "nodeIntegrationInWorker": false,
+      "sandbox": true,
+      "webviewTag": false,
+      "nodeIntegrationInSubFrames": false,
+      "session": "synthetic-local-session",
+      "show": false
+    },
+    {
+      "contextIsolation": true,
+      "nodeIntegration": false,
+      "nodeIntegrationInWorker": false,
+      "sandbox": true,
+      "webviewTag": false,
+      "nodeIntegrationInSubFrames": false,
+      "session": "synthetic-local-session",
+      "show": true
+    },
+    {
+      "sandbox": true,
+      "contextIsolation": true,
+      "nodeIntegration": false,
+      "session": "synthetic-local-session",
+      "openerSandboxFlags": 4294836015,
+      "show": true
+    },
+    {
+      "sandbox": true,
+      "contextIsolation": true,
+      "nodeIntegration": false,
+      "session": "synthetic-local-session",
+      "show": true
+    }
+  ]
+}
