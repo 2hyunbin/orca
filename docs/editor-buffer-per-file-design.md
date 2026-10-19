@@ -49,7 +49,7 @@ The **record id** is the execution host plus a normalized path:
   - A WSL distro. `\\wsl$` and `\\wsl.localhost` paths name the same distro and give the same key.
   - An SSH target, keyed by `(runtimeEnvironmentId, targetId)`. Keeping the runtime namespace keeps a direct target and the same target nested under a runtime separate. Reconnect generations and connection ids are not part of the key.
   - A runtime environment.
-- **Path**: separators and drive letters are normalized. Case-sensitivity is detected per volume on the host and cached, not assumed from the OS: APFS can be case-sensitive, and WSL and SSH hosts usually are. Until the probe answers, paths compare exactly.
+- **Path**: separators and drive letters are normalized, and case is kept exactly. Case sensitivity can differ per directory (on Windows, and under WSL), so it is never folded from a cached volume property. Two paths that differ only in case join one record only when the host proves they are the same file, with the same file id or inode from a stat.
 
 The workspace is never part of the id, and the id never goes over the wire.
 
@@ -131,12 +131,16 @@ Version ids restart when a model is recreated, for example after a dispose and r
 | Markdown preview | Read-only text from `model`. Its Save is a record save but never counts as consent to overwrite. |
 | Mobile bridge | Keeps publishing one projection per tab, so the wire format doesn't change. A mobile save becomes an edit plus a save on the record, and a rolled-back save is undone as an edit. |
 
-**Interim adapter (Phases 1–2).** Views that haven't been converted keep their own undo and route only their text through the record:
+**Interim adapter (from 1b until Phase 3).** Views that haven't been converted keep their own undo and route only their text through the record:
 
-- `record.applyText(text, source)` replaces the model's text as one edit. The model's undo stack gets one step per commit, but the view's own undo stays authoritative inside that view.
-- Disk loads (the panel `fileContents` cache and the buffer content sync) go through `record.loadFromDisk(text, signature)` instead.
+- `record.applyText(text, source)` replaces the model's text as one edit.
+  - Because these edits never undo through the model, dirty for them can't come from version ids. If the applied text's signature equals `baseline`, `savedAltVersion` is set to the current id, so undoing to clean in the view reads clean.
+- `record.pending`: views that publish on a delay (rich markdown waits 300 ms) register pending text on the record. The record flushes pending text before any dirty decision, close prompt, autosave or session capture, so exiting before the timer fires keeps the edit.
+- Disk loads go through `record.loadFromDisk(text, signature)`:
+  - Until 1d, the callers are the panel `fileContents` loader and the buffer content sync.
+  - From 1d until Phase 2, the callers are the file loader on open and the existing watcher reload.
 
-This means 1a creates text models for files whose only view is rich, notebook or CSV, with no editor mounted. That costs one string per open file, which the cache deleted in 1d already holds today. The watch exceptions from #30415 stay until Phase 3.
+From 1b until 1d, a file whose only view is rich, notebook or CSV holds its text twice: once in its model and once in the panel cache. The watch exceptions from #30415 stay until Phase 3.
 
 ## Migration plan
 
@@ -144,27 +148,36 @@ This means 1a creates text models for files whose only view is rich, notebook or
 
 Phase 1 ships as four PRs. After each one, behaviour matches main except for the change that PR names.
 
-- **1a. Record per workspace.**
+- **1a. Record as state only (small).**
   - **Change**:
-    - Add the buffer slice, with the workspace still in the key, so behaviour is identical to main.
-    - Per-tab fields become reads from the record.
-    - Every writer goes through the model, `applyText` or `loadFromDisk`.
-    - Dirty stays main's content compare (including the markdown trailing-whitespace leniency), now computed on the record.
-  - **Tests**: existing suites unchanged; key rules (per-volume case, WSL aliases, `(runtimeEnvironmentId, targetId)`); each writer lands in the record.
-  - **From #30714**: keep the URI shape.
-- **1b. Dirty from alternative version ids.**
-  - **Change**: remove the content compare. Recreating a model resets `savedAltVersion` as described above.
-  - **Tests**: undo back to clean; dispose and reopen while dirty.
-- **1c. Sharing across workspaces.**
-  - **Change**: these land together, because sharing without the queue or the close rule would let one workspace's Discard or autosave clobber the other's edits:
-    - Drop the workspace from the key.
+    - Move the per-tab fields (draft, dirty, disk signature, changed-on-disk mark, autosave pauses) into a buffer slice, still keyed per workspace and read through selectors.
+    - Writers update the record instead of the tab.
+    - Text models are untouched. They stay one per URI, shared as on main, and are written only by today's paths, at today's times.
+    - Dirty stays main's content compare (including the markdown trailing-whitespace leniency).
+  - **Tests**: existing suites pass unchanged; each writer lands in the record.
+- **1b. Sharing across workspaces.**
+  - **Change**: these land together, because sharing without the queue or the close rule would let one workspace's Discard or autosave clobber the other's edits, and model writes without one record per model reopen the stale-text path:
+    - Drop the workspace from the key, so there is one record per text model.
     - One save queue and one autosave timer per record.
     - Only closing the last view asks to save.
-    - Owner-resolution merge, with dirty-and-dirty kept unshared.
-  - **Tests**: two workspaces on one record; a view opened later; Discard on a non-last view; one autosave; owner-resolution merging.
-  - **From #30714**: keep the close behaviour and its tests. Drop the per-tab fan-out (`getSameBufferFileIds`).
+    - The interim adapter's `applyText`, `pending` and `loadFromDisk`.
+    - Owner-resolution merge, with two dirty records kept unshared.
+    - The identity rules.
+  - **Tests**:
+    - Two workspaces on one record, and a view opened later.
+    - Discard on a view that isn't the last; one autosave.
+    - A rich edit in A while B's editor is mounted.
+    - Owner-resolution merging.
+    - Key rules: exact case, mixed case sensitivity, WSL aliases, `(runtimeEnvironmentId, targetId)`.
+  - **From #30714**: keep the URI shape, the close behaviour and their tests. Drop the per-tab fan-out (`getSameBufferFileIds`).
+- **1c. Dirty from alternative version ids.**
+  - **Change**: drop the content compare for model edits. Edits from the adapter use the baseline rule above. Recreating a model resets `savedAltVersion`. This comes after 1b because version-based dirty needs exactly one record per model.
+  - **Tests**:
+    - Undo back to clean in the code editor and in rich, notebook and CSV views.
+    - Dispose and reopen while dirty.
+    - Exit before the rich-markdown publish timer fires.
 - **1d. Delete caches and stored drafts.**
-  - **Change**: delete the panel `fileContents` cache for editable tabs and `use-editor-buffer-content-sync`. Drafts are derived at session save. Add the recoverable-copy UI, used for old-format drafts that differ and for dirty owner merges.
+  - **Change**: delete the panel `fileContents` cache for editable tabs and `use-editor-buffer-content-sync`. Drafts are derived at session save, after flushing pending text. Add the recoverable-copy UI, used for old-format drafts that differ and for dirty owner merges.
   - **Tests**: legacy drafts that differ; a session read by an older build.
 
 Code-editor saves stay unguarded through Phase 1, exactly as on main.
