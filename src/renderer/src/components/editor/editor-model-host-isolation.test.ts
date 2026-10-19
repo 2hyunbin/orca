@@ -10,7 +10,7 @@ import {
   modelLifetimeTextModel,
   resetModelLifetimeFixtures
 } from './editor-model-lifetime-fixture'
-import { getEditorModelOwnerKey } from './editor-model-owner'
+import { getEditorModelOwnerKey, localEditorModelOwnerKey } from './editor-model-owner'
 import { toEditorModelUri } from './editor-model-uri'
 import {
   beginProgrammaticContentSync,
@@ -83,9 +83,13 @@ describe('same-path models on different execution hosts', () => {
     async (filePath) => {
       const { owners } = createHostModels(filePath)
       expect(new Set(owners.map((owner) => owner.modelKey)).size).toBe(HOSTS.length)
-      expect(new Set(owners.map((owner) => owner.model.uri.fsPath))).toEqual(
-        new Set([monaco.Uri.file(filePath).fsPath])
-      )
+      // Each owner's file keeps its real name last, so language services read its extension.
+      for (const owner of owners) {
+        // Drive letters fold to lower case in model URIs.
+        expect(
+          owner.model.uri.path.toLowerCase().endsWith(monaco.Uri.file(filePath).path.toLowerCase())
+        ).toBe(true)
+      }
       for (const [index, owner] of owners.entries()) {
         expect(monaco.editor.getModel(monaco.Uri.parse(owner.modelKey))).toBe(owner.model)
         edit(owner.model, `edited host ${index}`)
@@ -221,26 +225,21 @@ describe('same-path models on different execution hosts', () => {
     expect(local.model.getValue()).toBe(local.initial)
   })
 
-  it('preserves local same-path sharing until the final local tab closes', async () => {
+  it('gives the same local file in another workspace its own model', async () => {
+    // Why: each workspace's tab owns its own draft, so text, undo and disk base must not mix.
     const { owners, store, attach } = createHostModels()
     const local = owners[0]!
-    const sharedLocal = {
+    const otherWorkspace = {
       ...local.file,
       id: 'local-other-workspace',
       worktreeId: 'another-workspace'
     }
-    expect(toEditorModelUri(FILE_PATH, getEditorModelOwnerKey(sharedLocal, store.getState()))).toBe(
-      local.modelKey
-    )
-    store.setState({ openFiles: [...store.getState().openFiles, sharedLocal] })
+    expect(
+      toEditorModelUri(FILE_PATH, getEditorModelOwnerKey(otherWorkspace, store.getState()))
+    ).not.toBe(local.modelKey)
+    store.setState({ openFiles: [...store.getState().openFiles, otherWorkspace] })
     attach()
-    edit(local.model, 'shared local edit')
     store.getState().closeFile(local.file.id)
-    await Promise.resolve()
-    expect(local.model.isDisposed()).toBe(false)
-    await local.model.undo()
-    expect(local.model.getValue()).toBe(local.initial)
-    store.getState().closeFile(sharedLocal.id)
     await Promise.resolve()
     expect(local.model.isDisposed()).toBe(true)
     expect(owners.slice(1).every((owner) => !owner.model.isDisposed())).toBe(true)
@@ -291,7 +290,9 @@ describe('same-path models on different execution hosts', () => {
     const ssh = owners[1]!
     const legacyFile = { ...local.file, operationProvenance: undefined }
     store.setState({ openFiles: [legacyFile, ...owners.slice(1).map((owner) => owner.file)] })
-    expect(getEditorModelOwnerKey(legacyFile, store.getState())).toBe('')
+    expect(getEditorModelOwnerKey(legacyFile, store.getState())).toBe(
+      localEditorModelOwnerKey(legacyFile.worktreeId)
+    )
     const openFiles = store.getState().openFiles
     const detach = attachModelLifetimeView(local.model)
     attach()
@@ -321,7 +322,9 @@ describe('same-path models on different execution hosts', () => {
     const local = owners[0]!
     const legacyFile = { ...local.file, operationProvenance: undefined }
     store.setState({ openFiles: [legacyFile, ...owners.slice(1).map((owner) => owner.file)] })
-    expect(getEditorModelOwnerKey(legacyFile, store.getState())).toBe('')
+    expect(getEditorModelOwnerKey(legacyFile, store.getState())).toBe(
+      localEditorModelOwnerKey(legacyFile.worktreeId)
+    )
     attach()
     store.setState({ openFiles: owners.slice(1).map((owner) => owner.file), worktreesByRepo: {} })
     await Promise.resolve()
