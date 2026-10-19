@@ -10,6 +10,7 @@ import type { SessionOptionsSurface } from '../../../../shared/native-chat-sessi
 import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from '../../../../shared/agent-chat-permission-mode'
 import {
   canSetStructuredAgentSessionOption,
+  commitStructuredAgentSessionOptionReply,
   commitStructuredAgentSessionOptionValues,
   lockedStructuredAgentSessionOptionSnapshot,
   structuredAgentSessionOptionPicks,
@@ -156,10 +157,11 @@ export function useStructuredAgentSessionOptions(args: {
         )
         if (result && sameRecord() && currentPick()) {
           const returned = result.options ?? { [id]: encoded }
-          const committed = isCurrent() ? returned : { [id]: returned[id] ?? encoded }
+          const full = isCurrent() ? result.options : undefined
+          const committed = full ?? { [id]: returned[id] ?? encoded }
           updateOptionState((current) =>
             current.record === targetRecord
-              ? commitStructuredAgentSessionOptionValues(current, committed)
+              ? commitStructuredAgentSessionOptionReply(current, id, committed[id] ?? encoded, full)
               : current
           )
           // The launch seed names the model an effort-only pick was made under.

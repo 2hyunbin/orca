@@ -211,21 +211,31 @@ export function commitStructuredAgentSessionOption(
   if (decoded === null) {
     return { ...state, pendingId: null }
   }
+  // Each value is the chat's own: a model pick leaves the others for the host to reconcile.
   state.record.values[id] = { value: decoded, source: 'dispatched' }
-  // Each value is the chat's own; a model pick keeps those the new model offers.
-  if (id === 'model' && typeof decoded === 'string') {
-    for (const [other, tracked] of Object.entries(state.record.values)) {
-      if (!structuredAgentSessionModelOffers(state, decoded, other, tracked.value)) {
-        delete state.record.values[other]
-      }
-    }
-  }
   return { ...state, pendingId: null }
 }
 
-/** Whether a pick of `modelId` keeps the chat's `id` value (decoded or encoded): the model's
- *  controls offer it. A model the list does not describe keeps every value, since nothing says
- *  what it takes. */
+/** A pick's reply. One carrying the host's full value set (`options`) speaks for each of the
+ *  chat's own values, as a read does: a value it reconciled away is gone. */
+export function commitStructuredAgentSessionOptionReply(
+  state: StructuredAgentSessionOptionState,
+  id: string,
+  encoded: string,
+  options: Readonly<Record<string, string>> | undefined
+): StructuredAgentSessionOptionState {
+  const next = commitStructuredAgentSessionOptionValues(state, options ?? { [id]: encoded })
+  for (const key of options ? (['effort', 'fastMode', 'serviceTier'] as const) : []) {
+    if (options?.[key] === undefined && next.record.values[key]?.source !== 'default') {
+      delete next.record.values[key]
+    }
+  }
+  return next
+}
+
+/** Whether a held pick of `modelId`, before any host can reconcile it, keeps the chat's `id` value
+ *  (decoded or encoded): the model's controls offer it. A model the list does not describe keeps
+ *  every value, since nothing says what it takes. */
 export function structuredAgentSessionModelOffers(
   state: Pick<StructuredAgentSessionOptionState, 'catalog' | 'verifiedModelIds'>,
   modelId: string,
