@@ -143,7 +143,8 @@ export function retireRejectedPtyFromRuntimeController(
 }
 
 /**
- * Deliberately records no undelivered-stop intent, unlike `killPtyFromRuntimeController`.
+ * Deliberately records no undelivered-stop intent, unlike `killPtyFromRuntimeController`, except
+ * the legacy relay bridge's for a non-reversible stop (the tab is given up for good).
  *
  * Only a caller that gives the PTY up for good may leave a replayable kill order behind. This one
  * hands its failures back instead: worktree sleep marks these stops reversible and leaves the pane
@@ -164,6 +165,19 @@ export async function stopAndWaitPtyFromRuntimeController(
   } = deps
   runtime?.markPtyStopRequested?.(ptyId)
   const connectionId = getPtySshConnectionId(ptyId)
+  if (connectionId && isLegacyRelayBridgedPty(ptyId)) {
+    // A reversible stop must not leave the bridge's durable stop behind, so the pane stays live.
+    if (opts?.keepHistory) {
+      return false
+    }
+    const closed = closeLegacyRelayPane(ptyId).then((result) => result.status === 'exited')
+    return opts?.deadlineMs === undefined
+      ? await closed
+      : await Promise.race([
+          closed,
+          delay(Math.max(1, opts.deadlineMs - Date.now())).then(() => false)
+        ])
+  }
   // Why: destructive teardown threads one absolute deadline through every await
   // below; each RPC leaf converts it to the remaining time when it issues, so
   // sequential RPCs share the budget and cannot overrun the sweep deadline.

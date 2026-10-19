@@ -7,7 +7,7 @@ import {
 } from '../../../ssh/legacy-relay/legacy-relay-bridge-registry'
 import { stopRendererOwnedPty, type PtyKillIpcDeps } from '../ipc/renderer-kill'
 import type { PtyRuntimeControllerDeps } from './controller-deps'
-import { killPtyFromRuntimeController } from './kill'
+import { killPtyFromRuntimeController, stopAndWaitPtyFromRuntimeController } from './kill'
 
 const TARGET = 'ssh-box'
 const lease: SshRemotePtyLease = {
@@ -94,6 +94,62 @@ describe('a tab close of a terminal an older relay still runs', () => {
     expect(deps.shutdownProviderAndDetectExit).not.toHaveBeenCalled()
     // The transport's own close that follows still reaches a pending stop, not `not-bridged`.
     await expect(closeLegacyRelayPane(ptyId)).resolves.toEqual({ status: 'unverifiable' })
+    installLegacyRelayBridge(null)
+  })
+})
+
+describe('a stop-and-wait of a terminal an older relay still runs', () => {
+  function install(recordStop = vi.fn()) {
+    installLegacyRelayBridge({
+      leases: () => [lease],
+      retireLease: vi.fn(),
+      recordStop,
+      // Disconnected, so no SSH provider is registered for the target.
+      connection: () => null,
+      onPanesChanged: () => {},
+      onData: () => {},
+      onReplay: () => {},
+      onExit: () => {},
+      report: () => {}
+    })
+    const deps = {
+      runtime: null,
+      store: null,
+      getLocalPtyProviderStartupPromise: () => null,
+      shutdownProviderAndDetectExit: vi.fn(),
+      finishPtyShutdown: vi.fn()
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the bridged branch reads only these deps.
+    return deps as unknown as PtyRuntimeControllerDeps & {
+      finishPtyShutdown: ReturnType<typeof vi.fn>
+    }
+  }
+
+  it('records the stop with the bridge instead of tombstoning its lease (CLI close, worktree delete)', async () => {
+    const recordStop = vi.fn()
+    const deps = install(recordStop)
+    const ptyId = toAppSshPtyId(TARGET, lease.ptyId)
+    await expect(
+      stopAndWaitPtyFromRuntimeController(deps, ptyId, { deadlineMs: Date.now() + 1_000 })
+    ).resolves.toBe(false)
+    expect(deps.finishPtyShutdown).not.toHaveBeenCalled()
+    expect(recordStop).toHaveBeenCalledWith(
+      TARGET,
+      lease.ptyId,
+      expect.objectContaining({ attempts: 0 })
+    )
+    installLegacyRelayBridge(null)
+  })
+
+  it('leaves a reversible stop’s pane live, with no durable stop recorded', async () => {
+    const recordStop = vi.fn()
+    const deps = install(recordStop)
+    const ptyId = toAppSshPtyId(TARGET, lease.ptyId)
+    await expect(
+      stopAndWaitPtyFromRuntimeController(deps, ptyId, { keepHistory: true })
+    ).resolves.toBe(false)
+    expect(deps.finishPtyShutdown).not.toHaveBeenCalled()
+    expect(recordStop).not.toHaveBeenCalled()
     installLegacyRelayBridge(null)
   })
 })

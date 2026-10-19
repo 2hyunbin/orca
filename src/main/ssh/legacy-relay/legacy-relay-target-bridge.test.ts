@@ -434,6 +434,27 @@ describe('one target’s legacy relay bridge', () => {
     expect(subject.snapshot()).toEqual([])
   })
 
+  it('never re-aims a repeated close at a process that took the closed tab’s relay id', async () => {
+    relay.incarnations.set('pty-1', 'inc-1')
+    const subject = bridge()
+    await subject.refresh()
+    relay.openError = new Error('ssh down')
+    relay.clients[0].drop()
+    await stops.stop(PTY, subject)
+    // A restarted relay reuses the id for another shell, and the close repeats before any flush.
+    const client = fakeClient(relay)
+    const recycled = {
+      paneState: () => 'live' as const,
+      liveRoute: () => ({ client, relayPtyId: 'pty-1' }),
+      listedIncarnation: () => 'inc-2',
+      refresh: async () => {}
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: stop() reads only these members.
+    await stops.stop(PTY, recycled as unknown as LegacyRelayTargetBridge)
+    expect(relay.shutdowns).toEqual([])
+    expect(leases[0].state).toBe('terminated')
+  })
+
   it('sends a close recorded while disconnected once the next bridge lists the pane', async () => {
     const epochPty = toAppSshPtyId(TARGET, 'pty2:epoch:1')
     leases = [lease({ ptyId: 'pty2:epoch:1' })]

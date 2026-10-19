@@ -58,10 +58,10 @@ export class LegacyRelayPaneStops {
     if (!state && !listedAppPtyIds(this.targetId, this.leases()).has(ptyId)) {
       return { status: 'exited' }
     }
-    // A repeated close while the relay can't be asked keeps the identity the first one saw.
+    // A repeated close keeps the identity the first one saw; the id may now name another process.
     const earlier = this.pending(ptyId)
-    const incarnationId = bridge?.listedIncarnation(ptyId) ?? earlier?.incarnationId
-    const client = bridge?.liveRoute(ptyId)?.client ?? earlier?.client
+    const incarnationId = earlier ? earlier.incarnationId : bridge?.listedIncarnation(ptyId)
+    const client = earlier ? earlier.client : bridge?.liveRoute(ptyId)?.client
     this.closing.set(ptyId, {
       ...(incarnationId ? { incarnationId } : {}),
       ...(client ? { client } : {})
