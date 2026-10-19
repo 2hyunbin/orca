@@ -117,7 +117,10 @@ export function createNestedRepositoryActions(
           ? get().fetchRuntimeEnvironmentRepos(runtimeEnvironmentId)
           : get().fetchRepos(catalogOptions))
         set({ folderWorkspacePathStatuses: {} })
-        return { ...result, executionHostId: getRuntimeTargetHostId(answeredBy) }
+        // Why only off this app: a local answer keeps main's result shape; a server's names its host.
+        return answeredBy.kind === 'local'
+          ? result
+          : { ...result, executionHostId: getRuntimeTargetHostId(answeredBy) }
       } catch (err) {
         console.error('Failed to import nested repos:', err)
         toast.error(

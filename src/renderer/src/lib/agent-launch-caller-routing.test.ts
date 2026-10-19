@@ -115,7 +115,11 @@ describe('agent launch caller routing', () => {
       settlement: new Promise(() => undefined),
       cancel: vi.fn()
     })
-    mockLaunchAgentInWebHostTab.mockResolvedValue({ delivered: true, failureNotified: false })
+    mockLaunchAgentInWebHostTab.mockResolvedValue({
+      delivered: true,
+      failureNotified: false,
+      surfaceOpened: true
+    })
   })
 
   it.each(cases)('routes %s to a local terminal under default settings', async (_id, profile) => {
@@ -236,7 +240,8 @@ describe('agent launch caller routing', () => {
     await expect(result?.structuredSettlement).resolves.toEqual({ kind: 'terminal' })
     await expect(result?.promptDeliveryResult).resolves.toEqual({
       delivered: true,
-      failureNotified: false
+      failureNotified: false,
+      surfaceOpened: true
     })
     expect(mockLaunchAgentInWebHostTab).toHaveBeenCalledOnce()
     expect(mockLaunchAgentInWebHostTab).toHaveBeenCalledWith(
