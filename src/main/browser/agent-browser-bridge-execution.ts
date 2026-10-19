@@ -11,6 +11,7 @@ import {
 } from './agent-browser-bridge-process'
 import { translateResult } from './agent-browser-bridge-result'
 import { AgentBrowserBridgeTabs } from './agent-browser-bridge-tabs'
+import { assertRemoteCliBrowserAccess } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
 import { ORCA_TAB_SESSION_PREFIX } from './agent-browser-orphan-sweep'
 import { canSkipAgentBrowserSessionReset } from './agent-browser-session-reset'
 import {
@@ -19,11 +20,6 @@ import {
   type SessionState,
   type ResolvedBrowserCommandTarget
 } from './agent-browser-bridge-types'
-import {
-  assertRemoteCliBrowserAccess,
-  captureRemoteCliBrowserRevocation,
-  captureRemoteCliBrowserScope
-} from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
 
 export abstract class AgentBrowserBridgeExecution extends AgentBrowserBridgeTabs {
   protected abstract destroySession(
@@ -90,27 +86,6 @@ export abstract class AgentBrowserBridgeExecution extends AgentBrowserBridgeTabs
 
     // Why: a command can spawn several helpers in turn; none may start after a host's revocation.
     assertRemoteCliBrowserAccess(session.webContentsId)
-    const gated = captureRemoteCliBrowserScope().bridged
-    if (gated) {
-      // Why on the proxy: the helper's daemon drives the page step by step through it.
-      const assertNotRevoked = captureRemoteCliBrowserRevocation()
-      session.proxy.setCommandGate(() => assertNotRevoked(session.webContentsId))
-    }
-    try {
-      return await this.runGatedAgentBrowser(sessionName, session, commandArgs, execOptions)
-    } finally {
-      if (gated) {
-        session.proxy.setCommandGate(null)
-      }
-    }
-  }
-
-  private async runGatedAgentBrowser(
-    sessionName: string,
-    session: SessionState,
-    commandArgs: string[],
-    execOptions?: AgentBrowserExecOptions
-  ): Promise<unknown> {
     this.reinitializeIfDaemonIdledOut(sessionName, session)
     session.lastCommandAt = Date.now()
 

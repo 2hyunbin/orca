@@ -30,7 +30,6 @@ const { CdpWsProxyMock } = vi.hoisted(() => {
     this.start = vi.fn(async () => 'ws://127.0.0.1:9222')
     this.stop = vi.fn(async () => {})
     this.getPort = vi.fn(() => 9222)
-    this.setCommandGate = vi.fn()
     instances.push(this)
   })
   return { CdpWsProxyMock: Object.assign(MockClass, { instances }) }
@@ -39,6 +38,7 @@ vi.mock('./cdp-ws-proxy', () => ({ CdpWsProxy: CdpWsProxyMock }))
 
 import { AgentBrowserBridge } from './agent-browser-bridge'
 import { runInRemoteCliBrowserScope } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
+import { assertRemoteCliPageAdmitted } from './remote-cli-page-admission'
 import {
   createFakeAgentBrowserChild,
   mockBrowserManager,
@@ -101,7 +101,7 @@ describe('AgentBrowserBridge under a host revocation', () => {
     expect(dispatchedMouseEvents(wc)).toHaveLength(0)
   })
 
-  it('gates the page proxy against a running helper click once the host is revoked', async () => {
+  it('holds the page against a running helper click once the host is revoked', async () => {
     const helperCallbacks: ExecFileCallback[] = []
     execFileMock.mockImplementation(
       (_bin: string, args: string[], _opts: unknown, cb: ExecFileCallback) => {
@@ -121,14 +121,11 @@ describe('AgentBrowserBridge under a host revocation', () => {
       revoked.signal
     )
     await vi.waitFor(() => expect(helperCallbacks).toHaveLength(1))
-    const proxy = CdpWsProxyMock.instances[0] as { setCommandGate: ReturnType<typeof vi.fn> }
-    const gate = proxy.setCommandGate.mock.calls.at(-1)?.[0] as (() => void) | null
-    expect(gate).toBeTypeOf('function')
-    expect(() => gate!()).not.toThrow()
+    expect(() => assertRemoteCliPageAdmitted(100)).not.toThrow()
 
     revoked.abort()
-    // The helper's next CDP step reaches the proxy and is refused there.
-    expect(() => gate!()).toThrow('stopped sharing')
+    // The helper's next CDP step reaches the page's proxy and is refused there.
+    expect(() => assertRemoteCliPageAdmitted(100)).toThrow('stopped sharing')
     helperCallbacks[0]!(
       null,
       JSON.stringify({ success: false, error: 'The Orca desktop stopped sharing its browser' }),
@@ -136,20 +133,7 @@ describe('AgentBrowserBridge under a host revocation', () => {
     )
 
     await expect(click).rejects.toMatchObject({ code: 'desktop_browser_bridge_unavailable' })
-    expect(proxy.setCommandGate).toHaveBeenLastCalledWith(null)
-  })
-
-  it('leaves a desktop-local command ungated', async () => {
-    execFileMock.mockImplementation(
-      (_bin: string, _args: string[], _opts: unknown, cb: ExecFileCallback) => {
-        cb(null, JSON.stringify({ success: true, data: { clicked: '@e1' } }), '')
-        return createFakeAgentBrowserChild({ stdin: { on: vi.fn(), end: vi.fn() } })
-      }
-    )
-
-    await expect(bridge.click('@e1', undefined, 'tab-1')).resolves.toEqual({ clicked: '@e1' })
-    const proxy = CdpWsProxyMock.instances[0] as { setCommandGate: ReturnType<typeof vi.fn> }
-    expect(proxy.setCommandGate).not.toHaveBeenCalled()
+    expect(() => assertRemoteCliPageAdmitted(100)).not.toThrow()
   })
 
   it('still runs a desktop-local command queued behind a host command that was revoked', async () => {

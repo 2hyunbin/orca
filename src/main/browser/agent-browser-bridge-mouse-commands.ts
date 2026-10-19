@@ -7,8 +7,9 @@ import {
   resolveMobileTouchClickPoint
 } from './agent-browser-bridge-mouse'
 import { acquireElectronDebugger } from './electron-debugger-lease'
-import { AgentBrowserBridgePointerCommands } from './agent-browser-bridge-pointer-commands'
+import { sendGuestCdpCommand } from './guest-cdp-command'
 import { assertRemoteCliBrowserAccess } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
+import { AgentBrowserBridgePointerCommands } from './agent-browser-bridge-pointer-commands'
 
 export abstract class AgentBrowserBridgeMouseCommands extends AgentBrowserBridgePointerCommands {
   // ── Mouse commands ──
@@ -40,8 +41,7 @@ export abstract class AgentBrowserBridgeMouseCommands extends AgentBrowserBridge
         let releaseFocusGuard = (): void => {}
         try {
           releaseFocusGuard = await this.focusPageForPress(wc, target.webContentsId)
-          // Why each step: a host's access can be revoked while an earlier await is pending, and
-          // the hit test below may itself activate the element.
+          // Why: the hit test below can activate the element, and access may be revoked meanwhile.
           assertRemoteCliBrowserAccess(target.webContentsId)
           const point =
             cdpButton === 'left'
@@ -51,8 +51,7 @@ export abstract class AgentBrowserBridgeMouseCommands extends AgentBrowserBridge
           // Why: land the tap as one atomic op — separate move/down/up CLI calls visibly hover and can miss small controls.
           // Why: mobile-emulated BrowserViews can ignore CDP mouse clicks, so the runtime may already have activated DOM controls.
           if (!point.handled) {
-            assertRemoteCliBrowserAccess(target.webContentsId)
-            await wc.debugger.sendCommand('Input.dispatchMouseEvent', {
+            await sendGuestCdpCommand(wc, 'Input.dispatchMouseEvent', {
               type: 'mousePressed',
               x: point.x,
               y: point.y,
@@ -61,8 +60,7 @@ export abstract class AgentBrowserBridgeMouseCommands extends AgentBrowserBridge
               modifiers: cdpModifiers,
               clickCount: 1
             })
-            assertRemoteCliBrowserAccess(target.webContentsId)
-            await wc.debugger.sendCommand('Input.dispatchMouseEvent', {
+            await sendGuestCdpCommand(wc, 'Input.dispatchMouseEvent', {
               type: 'mouseReleased',
               x: point.x,
               y: point.y,

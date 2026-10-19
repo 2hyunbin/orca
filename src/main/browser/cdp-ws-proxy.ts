@@ -12,6 +12,7 @@ import type { CapturePaintHold } from './cdp-screenshot'
 import type { AgentInputFocusGuard } from './agent-input-focus-guard'
 import { CdpPageInputCommands } from './cdp-page-input-commands'
 import { isTrustedCdpLoopbackRequest } from './cdp-loopback-request-guard'
+import { assertRemoteCliPageAdmitted } from './remote-cli-page-admission'
 
 export class CdpWsProxy {
   private httpServer: Server | null = null
@@ -27,7 +28,6 @@ export class CdpWsProxy {
   private readonly domFocusReplay: CdpDomFocusReplay
   private readonly pageCapture: CdpPageCaptureCommands
   private readonly input: CdpPageInputCommands
-  private commandGate: (() => void) | null = null
 
   constructor(
     private readonly webContents: WebContents,
@@ -160,11 +160,6 @@ export class CdpWsProxy {
     client?.close()
   }
 
-  /** While set, every client command must pass it first; a throw refuses the command unsent. */
-  setCommandGate(gate: (() => void) | null): void {
-    this.commandGate = gate
-  }
-
   private clearClientState(): void {
     // Why: session and focus state belongs to one websocket and must not cross client replacement.
     this.domFocusReplay.clear()
@@ -184,8 +179,9 @@ export class CdpWsProxy {
     }
     const clientId = msg.id
     this.responder.recordRequestSessionId(client, clientId, msg)
+    // Why here too: a revoked host's helper is refused even its read-only steps, so it stops at once.
     try {
-      this.commandGate?.()
+      assertRemoteCliPageAdmitted(this.webContents.id)
     } catch (error) {
       this.responder.sendError(
         clientId,

@@ -17,7 +17,6 @@ import { parseCdpKeyEvent, imeFallbackKeyEvent } from './cdp-keyboard-us-layout'
 import { dispatchPageKeyEvent, type GuestCdpSender } from './guest-direct-key-input'
 import { sendGuestCdpCommand } from './guest-cdp-command'
 import { AgentBrowserBridgeCaptureCommands } from './agent-browser-bridge-capture-commands'
-import { assertRemoteCliBrowserAccess } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
 
 export abstract class AgentBrowserBridgeInteractionCommands extends AgentBrowserBridgeCaptureCommands {
   async hover(
@@ -205,28 +204,10 @@ export abstract class AgentBrowserBridgeInteractionCommands extends AgentBrowser
         let releaseDebugger = (): void => {}
         try {
           releaseDebugger = acquireElectronDebugger(wc).release
-          // Why around every await: a host's access can be revoked while one is pending, and
-          // key delivery runs further input and edit commands after each.
-          const assertAccess = (): void => assertRemoteCliBrowserAccess(target.webContentsId)
-          const send: GuestCdpSender = async (method, params, sessionId) => {
-            assertAccess()
-            const result = await sendGuestCdpCommand(wc, method, params, sessionId)
-            assertAccess()
-            return result
-          }
-          const guardFocus = async (): Promise<() => void> => {
-            const release = await this.browserManager.guardUserFocusForAgentInput(
-              target.webContentsId
-            )
-            try {
-              assertAccess()
-            } catch (error) {
-              release()
-              throw error
-            }
-            return release
-          }
-          assertAccess()
+          const send: GuestCdpSender = (method, params, sessionId) =>
+            sendGuestCdpCommand(wc, method, params, sessionId)
+          const guardFocus = (): Promise<() => void> =>
+            this.browserManager.guardUserFocusForAgentInput(target.webContentsId)
           await dispatchPageKeyEvent(
             wc,
             {
@@ -239,7 +220,6 @@ export abstract class AgentBrowserBridgeInteractionCommands extends AgentBrowser
             send,
             guardFocus
           )
-          assertAccess()
           await dispatchPageKeyEvent(
             wc,
             {

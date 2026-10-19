@@ -1,6 +1,6 @@
 import type { InputEvent, KeyboardInputEvent, WebContents } from 'electron'
 import { enablePageFocusEmulation, type AgentInputFocusGuard } from './agent-input-focus-guard'
-import { withAgentInputInjection } from './agent-input-injection'
+import { assertAgentInputAdmitted, withAgentInputInjection } from './agent-input-injection'
 import {
   resolveFocusedFrameRoute,
   settleWithin,
@@ -195,6 +195,8 @@ async function waitForPageToHandleInput(send: GuestCdpSender): Promise<void> {
 }
 
 function runEditCommand(webContents: WebContents, command: GuestEditCommand): void {
+  // Why: it runs after awaiting the page, so a host's access may have been revoked meanwhile.
+  assertAgentInputAdmitted(webContents)
   switch (command) {
     case 'selectAll':
       webContents.selectAll()

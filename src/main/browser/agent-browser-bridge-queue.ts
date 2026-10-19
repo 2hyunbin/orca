@@ -6,6 +6,7 @@ import type {
   EnqueueTargetedCommandOptions,
   ResolvedBrowserCommandTarget
 } from './agent-browser-bridge-types'
+import { runWithRemoteCliPageAdmission } from './remote-cli-page-admission'
 import {
   captureRemoteCliBrowserRevocation,
   captureRemoteCliBrowserScope
@@ -90,7 +91,7 @@ export abstract class AgentBrowserBridgeQueue extends AgentBrowserBridgeShutdown
                 const gate = (): void => assertNotRevoked(target.webContentsId)
                 gate()
                 return origin.bridged
-                  ? this.reportRevocation(gate, () => execute(session, target))
+                  ? this.runAdmitted(target.webContentsId, gate, () => execute(session, target))
                   : execute(session, target)
               },
               options
@@ -120,10 +121,17 @@ export abstract class AgentBrowserBridgeQueue extends AgentBrowserBridgeShutdown
     return execute(sessionName, target)
   }
 
-  /** A host command whose step was refused mid-way by a revocation reports the revocation. */
-  private async reportRevocation<T>(gate: () => void, execute: () => Promise<T>): Promise<T> {
+  /**
+   * Holds the page for a host's command: every later page-affecting step, including the helper's
+   * through the CDP proxy, is refused once the host is revoked, and the command reports that.
+   */
+  private async runAdmitted<T>(
+    webContentsId: number,
+    gate: () => void,
+    execute: () => Promise<T>
+  ): Promise<T> {
     try {
-      return await execute()
+      return await runWithRemoteCliPageAdmission(webContentsId, gate, execute)
     } catch (error) {
       gate()
       throw error
