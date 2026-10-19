@@ -1,5 +1,5 @@
-// A chat with no saved model keeps the options its first turn ran as its own: the message's
-// choices, else what its agent reports running. A default the host filled in is never one.
+// A chat keeps, for each of its options it has none saved for, what its turn ran: the message's
+// choice, else what its agent reports running. A default the host filled in is never one.
 
 import type { AgentSessionOptionsResult } from '../../../shared/agent-session-wire'
 import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
@@ -47,10 +47,8 @@ function reportedRan(reported: AgentSessionOptionsResult['current']): RanOptions
     model,
     ...(effort && !filled.includes('effort') ? { effort } : {}),
     ...(serviceTier ? { serviceTier } : {}),
-    // Fast that is on but not routed fast never ran.
-    ...(fastMode === false || (fastMode && fastModeState === 'on')
-      ? { fastMode: String(fastMode) }
-      : {})
+    // Only Fast routed on ran; an off state may just be Fast unavailable to this account.
+    ...(fastMode && fastModeState === 'on' ? { fastMode: 'true' } : {})
   }
 }
 
@@ -89,7 +87,7 @@ export async function recordStructuredAgentSessionRanOptions(
   const child = currentChild(context, sessionId, fence)
   const { store, logger, agents } = context.deps
   const record = store.getRecord(sessionId)
-  if (!child || !record || record.options?.model !== undefined) {
+  if (!child || !record) {
     return
   }
   const reported = childRuns.get(child)?.reported
@@ -104,18 +102,20 @@ export async function recordStructuredAgentSessionRanOptions(
   for (const [key, value] of Object.entries({
     model,
     effort: message?.effort ?? report.effort,
-    serviceTier: message?.serviceTier ?? report.serviceTier,
-    fastMode: message?.fastMode ?? report.fastMode
+    // A message's own tier or Fast may not have run: a steer runs its turn's.
+    serviceTier: report.serviceTier,
+    fastMode: report.fastMode
   })) {
-    // Never an option every later send would carry and the agent refuse as a choice.
+    // Never over a saved choice, nor one every later send would carry and the agent refuse.
     if (
       value &&
+      record.options?.[key] === undefined &&
       !structuredAgentSessionOptionOverridesRefusal(agents, record.provider, { [key]: value })
     ) {
       ran[key] = value
     }
   }
-  if (!ran.model) {
+  if (Object.keys(ran).length === 0) {
     return
   }
   await store

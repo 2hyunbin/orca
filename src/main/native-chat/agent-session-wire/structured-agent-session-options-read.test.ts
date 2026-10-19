@@ -290,6 +290,21 @@ describe('a chat at rest, read by the host', () => {
       expect(record.options.serviceTier).toBe('flex')
     }
   )
+
+  it('drops a saved effort the newly picked model does not offer', async () => {
+    const record = { ...restingRecord(), options: { model: 'gpt-flex', effort: 'xhigh' } }
+    const persistOptions = vi.fn()
+    await recordStructuredAgentSessionOptionIntent(
+      {
+        store: { getRecord: () => record, replaceSessionOptions: vi.fn() },
+        agents: claudeAndCodexAgents(),
+        modelCatalog: catalog()
+      },
+      { sessionId: SESSION, fence: 1, persistOptions, publish: vi.fn(), now: () => 0 },
+      { key: 'model', value: 'gpt-account' }
+    )
+    expect(persistOptions).toHaveBeenCalledWith({ model: 'gpt-account' })
+  })
 })
 
 describe('live Codex option reads', () => {

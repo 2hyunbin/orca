@@ -8,7 +8,7 @@ import {
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import type { StructuredAgentRegistry } from './structured-agent-registry'
 import type { AgentSessionTurnContext, TurnOutcome } from './structured-agent-session-turns'
-import { restingPickReplyOptions } from './structured-agent-session-pick-reply'
+import { structuredAgentSessionPickOptions } from './structured-agent-session-pick-reply'
 
 /** Whether the agent takes this pick: a permission mode it offers, or an option key it names. */
 function acceptsOptionPick(
@@ -47,7 +47,7 @@ export async function recordStructuredAgentSessionOptionIntent(
   deps: {
     store: Pick<AgentSessionRecordStore, 'getRecord' | 'replaceSessionOptions'>
     agents: Pick<StructuredAgentRegistry, 'definition'>
-  } & Parameters<typeof restingPickReplyOptions>[0],
+  } & Parameters<typeof structuredAgentSessionPickOptions>[0],
   ctx: Pick<AgentSessionTurnContext, 'sessionId' | 'fence' | 'persistOptions' | 'publish' | 'now'>,
   input: { key: string; value: string }
 ): Promise<TurnOutcome<AgentSessionOptionResult>> {
@@ -62,7 +62,13 @@ export async function recordStructuredAgentSessionOptionIntent(
       )
     }
   }
-  const options = { ...record.options, [input.key]: input.value }
+  const { options, replied } = await structuredAgentSessionPickOptions(
+    deps,
+    record,
+    ctx.sessionId,
+    input,
+    () => deps.store.getRecord(ctx.sessionId)?.options
+  )
   // The answer still names the mode among the options, as the wire always has.
   await (input.key === AGENT_CHAT_PERMISSION_MODE_OPTION_ID
     ? deps.store.replaceSessionOptions({
@@ -73,6 +79,5 @@ export async function recordStructuredAgentSessionOptionIntent(
       })
     : ctx.persistOptions(options))
   ctx.publish()
-  const replied = await restingPickReplyOptions(deps, record, ctx.sessionId, options)
   return { ok: true, value: { ...input, options: replied } }
 }

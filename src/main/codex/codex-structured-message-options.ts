@@ -83,10 +83,16 @@ export async function resolvedCodexMessageOptions(
       (choices.serviceTier && choices.serviceTier !== CODEX_DEFAULT_SERVICE_TIER))
   ) {
     await applyCodexStructuredSessionOption(selected, 'model', model)
-    if (choices.effort === undefined && defaultEffort) {
-      await applyCodexStructuredSessionOption(selected, 'effort', defaultEffort)
-    } else if (choices.effort === undefined) {
+    if (!defaultEffort && choices.effort === undefined) {
       selected.options.delete('effort')
+    }
+    // Where the model brought an effort, it is the thread's own for the thread's model.
+    if (
+      choices.effort === undefined &&
+      defaultEffort &&
+      (priorEffort || choices.model || selected.options.has('effort'))
+    ) {
+      await applyCodexStructuredSessionOption(selected, 'effort', defaultEffort)
     }
   }
   for (const key of ['effort', 'personality', 'fastMode', 'serviceTier'] as const) {
