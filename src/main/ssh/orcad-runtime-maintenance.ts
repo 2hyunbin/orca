@@ -21,10 +21,7 @@ import { recoverInterruptedOrcadActivation } from '../managed-server/activation/
 import { probeActiveOrcadReadiness } from './orcad-active-readiness'
 import { materializeOrcadArtifact } from '../orcad/orcad-artifact-materializer'
 import { CURRENT_ORCAD_DAEMON_PROTOCOL } from './orcad-daemon-protocol-crossing'
-import {
-  ensureOrcadManagedTunnel,
-  rebuildOrcadManagedTunnel
-} from '../managed-server/lifecycle/orcad-managed-tunnel'
+import { rebuildOrcadManagedTunnel } from '../managed-server/lifecycle/orcad-managed-tunnel'
 import { wakeAlreadyActiveOrcad } from './orcad-already-active-wake'
 import {
   clearManagedOrcadUpdateDeferral,
@@ -156,8 +153,8 @@ export async function runManagedOrcadUpdate(
     readiness
   })
   const updated = refreshPairing(userDataPath, environment, readiness, deployment.localPort)
-  if (started) {
-    // The started slot may have bound another port than the forward in use.
+  if (started || result.outcome !== 'already-active') {
+    // The launched slot may have bound another port than the forward in use.
     await rebuildOrcadManagedTunnel(userDataPath, environment.id)
   }
   return {
@@ -231,6 +228,7 @@ export function rollbackManagedOrcadEnvironment(
         { buildHash: targetBuildHash, fullVersion: result.target }
       )
       const updated = refreshPairing(userDataPath, environment, readiness, deployment.localPort)
+      await rebuildOrcadManagedTunnel(userDataPath, environment.id)
       return {
         outcome: 'rolled-back',
         environment: redactRuntimeEnvironment(updated),
@@ -262,7 +260,8 @@ export function recoverManagedOrcadEnvironment(
         ? refreshPairing(userDataPath, environment, result.readiness, deployment.localPort)
         : environment
       if (result.activeVersion) {
-        await ensureOrcadManagedTunnel(userDataPath, environment.id)
+        // The restored slot may have bound another port than the forward in use.
+        await rebuildOrcadManagedTunnel(userDataPath, environment.id)
       }
       return {
         outcome: 'recovered',

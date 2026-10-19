@@ -5,6 +5,7 @@
  * Orca would spawn for this same forward and host, and whose parent is gone, qualifies: a user's
  * own ssh and a live Orca's tunnel never match.
  */
+import { parseWindowsCommandLine } from '@orca/process-host/windows-command-line'
 import { getFreshShellForegroundSnapshot } from '../../../shared/process-table-snapshot-reader'
 import { readWindowsProcessTableFresh } from '../../windows/windows-process-table'
 import {
@@ -47,13 +48,13 @@ const KILL_WAIT_MS = 500
 // Init and the per-user subreapers an orphan is handed to.
 const REAPER_NAMES = new Set(['init', 'launchd', 'systemd'])
 
+function programName(executable: string): string {
+  return (executable.replaceAll('"', '').split(/[\\/]/).pop() ?? '').toLowerCase()
+}
+
 function splitExecutable(command: string): { name: string; rest: string } {
   const end = command.startsWith('"') ? command.indexOf('"', 1) + 1 : command.search(/\s|$/)
-  const first = command.slice(0, end).replaceAll('"', '')
-  return {
-    name: (first.split(/[\\/]/).pop() ?? '').toLowerCase(),
-    rest: command.slice(end).trim()
-  }
+  return { name: programName(command.slice(0, end)), rest: command.slice(end).trim() }
 }
 
 function executableName(command: string): string {
@@ -62,19 +63,47 @@ function executableName(command: string): string {
 
 // Why: versions before STA-10471 spawned the same argv with ExitOnForwardFailure=yes, and
 // versions before #24863's fix without LogLevel=INFO.
-function normalizeForwardArgv(text: string): string {
-  return text
-    .replace(' -o LogLevel=INFO', '')
-    .replaceAll(/ExitOnForwardFailure=(?:yes|no)/g, 'ExitOnForwardFailure=*')
+function normalizeForwardArgv(args: readonly string[]): string[] {
+  const normalized: string[] = []
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index] ?? ''
+    if (arg === '-o' && args[index + 1] === 'LogLevel=INFO') {
+      index += 1
+      continue
+    }
+    normalized.push(arg.replace(/^ExitOnForwardFailure=(?:yes|no)$/, 'ExitOnForwardFailure=*'))
+  }
+  return normalized
+}
+
+/** The command's argv after the executable; null when it is not an ssh. */
+function sshArgv(command: string, platform: NodeJS.Platform): string[] | null {
+  if (platform === 'win32') {
+    // Why parse: Windows reports the quoted line, e.g. `-i "C:\Users\Jane Doe\.ssh\id_ed25519"`.
+    const [executable = '', ...args] = parseWindowsCommandLine(command)
+    const name = programName(executable)
+    return name === 'ssh' || name === 'ssh.exe' ? args : null
+  }
+  // Posix tables join argv with single spaces and no quoting, so this split is the inverse join.
+  const { name, rest } = splitExecutable(command)
+  return name === 'ssh' || name === 'ssh.exe' ? rest.split(' ') : null
 }
 
 /** The whole argv after the executable must be Orca's; any extra option is someone else's ssh. */
-function isOrcaForward(command: string, expectedArgs: readonly string[]): boolean {
-  const { name, rest } = splitExecutable(command)
-  return (
-    (name === 'ssh' || name === 'ssh.exe') &&
-    normalizeForwardArgv(rest) === normalizeForwardArgv(expectedArgs.join(' '))
-  )
+function isOrcaForward(
+  command: string,
+  expectedArgs: readonly string[],
+  platform: NodeJS.Platform
+): boolean {
+  const argv = sshArgv(command, platform)
+  if (!argv) {
+    return false
+  }
+  const actual = normalizeForwardArgv(argv)
+  const expected = normalizeForwardArgv(expectedArgs)
+  return platform === 'win32'
+    ? actual.length === expected.length && actual.every((arg, index) => arg === expected[index])
+    : actual.join(' ') === expected.join(' ')
 }
 
 function parentIsGone(
@@ -104,7 +133,8 @@ export function findOrphanedOrcaSshForward(
   const byPid = new Map(rows.map((row) => [row.pid, row]))
   return (
     rows.find(
-      (row) => isOrcaForward(row.command, expectedArgs) && parentIsGone(row, byPid, platform)
+      (row) =>
+        isOrcaForward(row.command, expectedArgs, platform) && parentIsGone(row, byPid, platform)
     ) ?? null
   )
 }
