@@ -27,12 +27,12 @@ import { sidebarWorkspaceRowFilters } from './sidebar-filter-actions'
 import {
   readWindowWorkspaceActivityFacts,
   toLocallyOwnedRows
-} from '@/lib/sidebar-shadow/workspace-activity-shadow'
-import { readWindowDesktopSidebarFacts } from '@/lib/sidebar-shadow/desktop-facts-shadow'
+} from './window-workspace-activity-facts.test-fixture'
+import { readWindowDesktopSidebarFacts } from './window-desktop-sidebar-facts.test-fixture'
 import {
   readWindowPairedServerHosts,
   readWindowPairedServerRows
-} from '@/lib/sidebar-shadow/paired-server-rows-shadow'
+} from './window-paired-server-rows.test-fixture'
 import type { SidebarInputsFeedDomain } from '../../../../main/runtime/sidebar-inputs/sidebar-inputs-feed'
 
 const SERVER_HOST_ID = 'runtime:env-1'
