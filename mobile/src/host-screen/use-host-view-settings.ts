@@ -9,7 +9,7 @@ import {
   type MobileViewState,
   type WorkspaceViewSettings
 } from '../worktree/workspace-view-settings'
-import type { Worktree } from '../worktree/workspace-list-types'
+import type { FilterState, Worktree } from '../worktree/workspace-list-types'
 import {
   changedWorkspaceRowFilters,
   NO_WORKSPACE_ROW_FILTERS
@@ -25,7 +25,6 @@ import { getWorktreeCardModeUpdates } from '../../../src/shared/worktree/card-pr
 import type { HostScreenState } from './use-host-screen-state'
 import { applyCollapse, withPendingViewChanges } from './host-view-pending-changes'
 import { useHostPendingViewChanges } from './use-host-pending-view-changes'
-import type { FilterState } from '../worktree/workspace-list-types'
 
 const REFUSED_NOTE = 'The desktop did not take that change.'
 
