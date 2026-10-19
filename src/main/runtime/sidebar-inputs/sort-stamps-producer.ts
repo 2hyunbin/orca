@@ -1,25 +1,20 @@
-import { resolveAgentStatusWorktreeId } from '../../../shared/agent-status-worktree-attribution'
-import type { AgentStatusIpcPayload } from '../../../shared/agent-status-types'
-import {
-  getConnectionExecutionHostId,
-  LOCAL_EXECUTION_HOST_ID,
-  parseExecutionHostId,
-  type ExecutionHostId
-} from '../../../shared/execution-host'
+import { parseExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
 import type { RuntimeClientEvent } from '../../../shared/runtime-client-events'
+import { titleAgentPhase, type AgentPhase } from '../../../shared/agent-transitions'
 import {
   classifySortStampEvent,
-  hookRowAgentPhase,
   isUnreadNews,
   nextAgentPaneState,
   REST_PANE,
-  titleAgentPhase,
   type AgentPaneState,
-  type AgentPhase,
   type SortStampEvent
 } from '../../../shared/sidebar-list/sort-stamps'
 import type { TerminalSideEffectBatch } from '../../../shared/terminal-side-effect-facts'
-import type { AgentStatusStoreView } from './workspace-activity-facts-producer'
+import {
+  agentPaneWorkspace,
+  type AgentPaneChange,
+  type AgentTransitionDetector
+} from '../../agent-hooks/agent-transition-detector'
 import {
   listTieredWorkspaces,
   readSortStamps,
@@ -45,7 +40,6 @@ export type SortStampsSources = {
   store: () => SortStampsStore | null
   /** A WSL move freezes the project; stamps are background bookkeeping it drops. */
   isWriteFenced: (worktreeId: string) => boolean
-  resolveTabWorktreeId: (tabId: string) => string | undefined
   subscribeToPtyExit: (ptyId: string, listener: () => void) => () => void
   /** Consumes terminal side effects, so the host scans its own bytes for bells and titles. */
   onClientEvent: (
@@ -62,18 +56,13 @@ export type SortStampsSources = {
 type TrackedPane = WorkspaceRef & { state: AgentPaneState }
 type TitlePane = { ptyId: string; releaseExit: () => void }
 
-function sshHostOfConnection(connectionId: string | null | undefined): ExecutionHostId | null {
-  const hostId = getConnectionExecutionHostId(connectionId)
-  return hostId === LOCAL_EXECUTION_HOST_ID ? null : hostId
-}
-
 function sameWorkspace(a: WorkspaceRef | undefined, b: WorkspaceRef | null): boolean {
   return !!a && !!b && a.worktreeId === b.worktreeId && a.sshHostId === b.sshHostId
 }
 
 /**
- * Writes the sort stamps of every workspace this host owns, at the source: hook-store transitions
- * (terminal agents and structured chats), hookless agents' titles, bells, and terminals a CLI
+ * Writes the sort stamps of every workspace this host owns, at the source: the transition
+ * detector's hook panes (terminal agents and structured chats), hookless agents' titles, bells, and terminals a CLI
  * starts. Creation stamps itself where the record is made. Rest panes are not kept. The same news
  * raises the workspace's unread flag unless a client is looking at it; clients clear it.
  */
@@ -81,7 +70,7 @@ export class SortStampsProducer {
   private readonly panes = new Map<string, TrackedPane>()
   /** Hookless panes seen since their PTY started: the first title seeds, it is not a transition. */
   private readonly titlePanes = new Map<string, TitlePane>()
-  private agentStore: AgentStatusStoreView | null = null
+  private transitions: AgentTransitionDetector | null = null
 
   constructor(private readonly sources: SortStampsSources) {
     sources.onClientEvent(
@@ -94,22 +83,13 @@ export class SortStampsProducer {
     )
   }
 
-  attachAgentStatusStore(store: AgentStatusStoreView): () => void {
-    this.agentStore = store
-    // A status present at attach was restored or predates this process: seeded, never stamped.
-    for (const row of store.getStatusSnapshot()) {
-      this.observeHookPane(row.paneKey, true)
-    }
-    const unsubscribe = store.subscribeStatusRowMutations(({ before, after }) => {
-      for (const paneKey of new Set([before?.paneKey, after?.paneKey])) {
-        if (paneKey) {
-          this.observeHookPane(paneKey, false)
-        }
-      }
-    })
+  /** Follows the detector's hook panes; subscribe before the detector attaches to its store. */
+  attachAgentTransitions(transitions: AgentTransitionDetector): () => void {
+    this.transitions = transitions
+    const unsubscribe = transitions.subscribe((change) => this.applyHookPaneChange(change))
     return () => {
       unsubscribe()
-      this.agentStore = null
+      this.transitions = null
     }
   }
 
@@ -125,12 +105,6 @@ export class SortStampsProducer {
    * host's tiers stay: a host not reached yet is not one whose agents died.
    */
   async reconcileStoredTiers(evidence: StoredTierEvidence): Promise<void> {
-    // Hydration fills the store without a row mutation, so its rows are seeded here.
-    for (const row of this.agentStore?.getStatusSnapshot() ?? []) {
-      if (!this.panes.has(row.paneKey)) {
-        this.observeHookPane(row.paneKey, true)
-      }
-    }
     const probes = new Map<string, Promise<boolean>>()
     const isProvenAbsent = (ptyId: string): Promise<boolean> => {
       let probe = probes.get(ptyId)
@@ -169,35 +143,13 @@ export class SortStampsProducer {
     return false
   }
 
-  private observeHookPane(paneKey: string, seed: boolean): void {
-    const latest = this.latestHookRow(paneKey)
-    if (!latest) {
-      this.move(paneKey, null, 'rest', this.sources.now())
-      return
-    }
-    const worktreeId = resolveAgentStatusWorktreeId(latest, {
-      get: this.sources.resolveTabWorktreeId
-    })
-    const workspace = worktreeId
-      ? { worktreeId, sshHostId: sshHostOfConnection(latest.connectionId) }
-      : null
-    const phase = hookRowAgentPhase(latest)
-    if (seed || latest.restoredUnconfirmed || latest.isReplay) {
-      this.seed(paneKey, workspace, phase, latest.stateStartedAt)
+  // A restored status takes its phase as it is; only a live change is a transition.
+  private applyHookPaneChange(change: AgentPaneChange): void {
+    if (change.kind === 'seeded') {
+      this.seed(change.paneKey, change.workspace, change.phase, change.at)
     } else {
-      this.move(paneKey, workspace, phase, this.sources.now())
+      this.move(change.paneKey, change.workspace, change.to, change.at)
     }
-  }
-
-  // The window applies a pane's rows in arrival order, so the newest is the one it holds.
-  private latestHookRow(paneKey: string): AgentStatusIpcPayload | null {
-    let latest: AgentStatusIpcPayload | null = null
-    for (const row of this.agentStore?.getStatusSnapshotForPane(paneKey) ?? []) {
-      if (!row.providerSessionOnly && (!latest || row.receivedAt > latest.receivedAt)) {
-        latest = row
-      }
-    }
-    return latest
   }
 
   private noteTerminalSideEffects(batch: TerminalSideEffectBatch): void {
@@ -205,11 +157,11 @@ export class SortStampsProducer {
     if (!worktreeId) {
       return
     }
-    const workspace = { worktreeId, sshHostId: sshHostOfConnection(batch.connectionId) }
+    const workspace = agentPaneWorkspace(worktreeId, batch.connectionId)
     for (const fact of batch.facts) {
       if (fact.kind === 'bell') {
         this.stamp(workspace, { kind: 'bell' }, this.sources.now(), paneKey ?? null)
-      } else if (fact.kind === 'title' && paneKey && !this.latestHookRow(paneKey)) {
+      } else if (fact.kind === 'title' && paneKey && !this.transitions?.hasHookRow(paneKey)) {
         // Hook authority is per pane, as in Smart's attention. A cleared stale working title is a
         // timer's guess, not a finish.
         const phase = fact.staleWorkingTitleClear ? 'rest' : titleAgentPhase(fact.rawTitle)

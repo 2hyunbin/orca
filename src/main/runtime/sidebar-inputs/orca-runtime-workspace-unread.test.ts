@@ -65,7 +65,7 @@ function createHeadlessHost() {
     ]
   })
   const server = new AgentHookServer()
-  runtime.sidebarFacts?.attachSidebarAgentStatusStore(server)
+  runtime.attachAgentStatusStore(server)
   const dispatcher = new RpcDispatcher({
     runtime,
     methods: [...SIDEBAR_INPUT_METHODS, ...SESSION_TAB_METHODS]

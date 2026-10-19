@@ -17,6 +17,7 @@ import type { Repo } from '../../../shared/repo-types'
 import { SidebarRetentionOwner, type SidebarRetentionCandidates } from './sidebar-retention-owner'
 import type { AgentStatusStoreView } from './workspace-activity-facts-producer'
 import { SortStampsProducer } from './sort-stamps-producer'
+import type { AgentTransitionDetector } from '../../agent-hooks/agent-transition-detector'
 import { writeUnreadFlag } from './sort-stamp-records'
 import { WorkspaceViewers } from './workspace-viewers'
 import { TerminalUseProducer } from './terminal-use-producer'
@@ -45,7 +46,6 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     store: () => this.store,
     isWriteFenced: (worktreeId) =>
       isWslMoveProjectBlocked(this.store ?? undefined, wslMoveProjectRefForWorkspace(worktreeId)),
-    resolveTabWorktreeId: (tabId) => this.tabs.get(tabId)?.worktreeId,
     subscribeToPtyExit: (ptyId, listener) => this.subscribeToPtyExit(ptyId, listener),
     onClientEvent: (listener, options) => this.onClientEvent(listener, options),
     isViewing: (worktreeId, paneKey) => this.workspaceViewers.isViewing(worktreeId, paneKey),
@@ -168,10 +168,13 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     this.notifyWorktreesChanged(getRepoIdFromWorktreeId(worktreeId), { invalidateGitScans: false })
   }
 
-  /** Attaches every sidebar producer that reads the hook server's store. */
-  attachSidebarAgentStatusStore(store: AgentStatusStoreView): () => void {
+  /** Attaches every sidebar producer that reads the hook server's store, or its transitions. */
+  attachSidebarAgentStatusStore(
+    store: AgentStatusStoreView,
+    transitions: AgentTransitionDetector
+  ): () => void {
     const detachActivity = this.workspaceActivityFacts.attachAgentStatusStore(store)
-    const detachStamps = this.sortStamps.attachAgentStatusStore(store)
+    const detachStamps = this.sortStamps.attachAgentTransitions(transitions)
     return () => {
       detachActivity()
       detachStamps()
