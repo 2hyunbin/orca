@@ -194,7 +194,7 @@ class FeedSession {
     this.marks += 1
   }
 
-  /** Resolves once everything dirty at the call is published, waiting on at most two flushes. */
+  /** Resolves once everything dirty at the call has been read, waiting on at most two flushes. */
   private async flushDirty(): Promise<void> {
     if (this.timer) {
       clearTimeout(this.timer)
