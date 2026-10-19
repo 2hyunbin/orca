@@ -18,9 +18,63 @@ import {
 } from '../../agent-hooks/server/cli-writer-observation'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import { CLI_CONVERSATION_ADOPTING_AGENTS } from '../../../shared/structured-agent-cli-conversation-adoption'
-import { recordConversationKey } from '../../native-chat/structured-conversation-key'
+import {
+  recordConversationKey,
+  type ConversationKey
+} from '../../native-chat/structured-conversation-key'
+import { agentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
+import {
+  ManagedConversationStarts,
+  type ManagedConversationStart,
+  type ManagedStartPty
+} from '../managed-conversation-starts'
 
 export abstract class OrcaRuntimeWithStructuredSessionCliWriterHost extends OrcaRuntimeWithGetWorktreePs {
+  private readonly managedConversationStarts = new ManagedConversationStarts()
+
+  /** Registers a terminal start Orca issues of `keys`; `ptyId` binds it now, else its spawn does. */
+  reserveManagedConversationStart(
+    keys: readonly ConversationKey[],
+    ptyId?: string | null
+  ): ManagedConversationStart {
+    const start = this.managedConversationStarts.reserve(keys)
+    if (ptyId !== undefined) {
+      this.bindManagedConversationStart(start, ptyId)
+    }
+    return start
+  }
+
+  bindManagedConversationStart(start: ManagedConversationStart, ptyId: string | null): void {
+    const pty = ptyId ? this.ptysById.get(ptyId) : undefined
+    // Only this host's own panes write its chats' conversations; a remote or WSL pane's is another's.
+    if (!pty || pty.connectionId || pty.isWsl) {
+      start.drop()
+      return
+    }
+    start.bind(pty.ptyId, pty.incarnationId)
+  }
+
+  bindManagedConversationStartToTerminal(
+    start: ManagedConversationStart,
+    handle: string | null | undefined
+  ): void {
+    this.bindManagedConversationStart(
+      start,
+      (handle && this.getLivePtyForHandle(handle)?.pty.ptyId) || null
+    )
+  }
+
+  private managedStartPty(ptyId: string): ManagedStartPty | null {
+    const pty = this.ptysById.get(ptyId)
+    return pty
+      ? {
+          incarnationId: pty.incarnationId,
+          cliConversations: pty.cliConversations,
+          exited: this.getPtyLivenessVerdict(ptyId)?.status === 'exited'
+        }
+      : null
+  }
+
   private cliWriterPtyPane(ptyId: string | null | undefined): CliWriterPane | null {
     const pty = ptyId ? this.ptysById.get(ptyId) : undefined
     return pty?.connected && !pty.connectionId && !pty.isWsl && pty.incarnationId
@@ -83,6 +137,12 @@ export abstract class OrcaRuntimeWithStructuredSessionCliWriterHost extends Orca
     )
     if (!key?.id || !adopts) {
       return
+    }
+    // A start Orca issued that its terminal's hooks haven't reported yet: the census can't see it.
+    if (this.managedConversationStarts.live(key, (ptyId) => this.managedStartPty(ptyId))) {
+      throw agentSessionRefusalError('agent_session_conflict', {
+        reason: 'conversationHeldElsewhere'
+      })
     }
     await this.assertStructuredAdoptionTerminalWritersExited(record.provider, key.id)
   }
