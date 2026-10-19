@@ -46,6 +46,8 @@ describe('findOrphanedOrcaSshForward', () => {
     expect(findOrphanedOrcaSshForward([row(900, 1, newOrphan)], withLogLevel, 'darwin')?.pid).toBe(
       900
     )
+    const extraLogLevel = ORCA_FORWARD.replace(' -T ', ' -o LogLevel=INFO -o LogLevel=INFO -T ')
+    expect(findOrphanedOrcaSshForward([row(900, 1, extraLogLevel)], EXPECTED, 'darwin')).toBeNull()
   })
 
   it("never picks a forward whose Orca is still running (another instance's tunnel)", () => {

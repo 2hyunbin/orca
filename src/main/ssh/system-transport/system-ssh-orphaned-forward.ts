@@ -65,9 +65,11 @@ function executableName(command: string): string {
 // versions before #24863's fix without LogLevel=INFO.
 function normalizeForwardArgv(args: readonly string[]): string[] {
   const normalized: string[] = []
+  let droppedLogLevel = false
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index] ?? ''
-    if (arg === '-o' && args[index + 1] === 'LogLevel=INFO') {
+    if (!droppedLogLevel && arg === '-o' && args[index + 1] === 'LogLevel=INFO') {
+      droppedLogLevel = true
       index += 1
       continue
     }

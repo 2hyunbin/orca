@@ -75,6 +75,20 @@ function refreshPairing(
   )
 }
 
+/** A launched slot may bind another port than the forward in use, so forward anew. */
+async function followLaunchedServerPort(
+  userDataPath: string,
+  environmentId: string
+): Promise<void> {
+  try {
+    await rebuildOrcadManagedTunnel(userDataPath, environmentId)
+  } catch (error) {
+    // Why not fail: the server already launched, and the rebuild dropped the stale forward, so
+    // the next connect forwards to the bound port.
+    console.warn('[ssh] Could not forward to the relaunched managed Orca server:', error)
+  }
+}
+
 export function updateManagedOrcadEnvironment(
   userDataPath: string,
   args: LifecycleArgs & { force?: boolean }
@@ -154,8 +168,7 @@ export async function runManagedOrcadUpdate(
   })
   const updated = refreshPairing(userDataPath, environment, readiness, deployment.localPort)
   if (started || result.outcome !== 'already-active') {
-    // The launched slot may have bound another port than the forward in use.
-    await rebuildOrcadManagedTunnel(userDataPath, environment.id)
+    await followLaunchedServerPort(userDataPath, environment.id)
   }
   return {
     outcome: result.outcome === 'already-active' ? 'already-current' : 'updated',
@@ -228,7 +241,7 @@ export function rollbackManagedOrcadEnvironment(
         { buildHash: targetBuildHash, fullVersion: result.target }
       )
       const updated = refreshPairing(userDataPath, environment, readiness, deployment.localPort)
-      await rebuildOrcadManagedTunnel(userDataPath, environment.id)
+      await followLaunchedServerPort(userDataPath, environment.id)
       return {
         outcome: 'rolled-back',
         environment: redactRuntimeEnvironment(updated),
@@ -260,8 +273,7 @@ export function recoverManagedOrcadEnvironment(
         ? refreshPairing(userDataPath, environment, result.readiness, deployment.localPort)
         : environment
       if (result.activeVersion) {
-        // The restored slot may have bound another port than the forward in use.
-        await rebuildOrcadManagedTunnel(userDataPath, environment.id)
+        await followLaunchedServerPort(userDataPath, environment.id)
       }
       return {
         outcome: 'recovered',
