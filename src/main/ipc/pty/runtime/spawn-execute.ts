@@ -153,7 +153,6 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
       ctx.reportPtySpawnCommitted()
       ctx.stablePaneOwner = null
       ctx.rejectedRegistrationCandidate = ctx.result
-      assertSpawnReplyWasLive(ctx.result)
     }
     ctx.rejectedRegistrationCandidate ??= ctx.result
     if (ctx.pendingRegistrationPtyId !== ctx.result.id) {
@@ -170,6 +169,7 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
       )
       ctx.pendingRegistrationPtyId = ctx.result.id
     }
+    assertSpawnReplyWasLive(ctx.result)
     // Why: admission precedes sequence/context state and every durable publication below.
     if (
       ctx.pendingRegistrationClaim &&
