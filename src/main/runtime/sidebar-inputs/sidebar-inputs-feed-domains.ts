@@ -128,7 +128,10 @@ export function sidebarInputsFeedDomains(
         Object.fromEntries(
           pairedServerRows
             .snapshot()
-            .servers.flatMap(({ rows }) => rows.map((row) => [row.key, row]))
+            // Activity goes out in its own domain, so a terminal count does not resend the row.
+            .servers.flatMap(({ rows }) =>
+              rows.map(({ activity: _activity, ...row }) => [row.key, row])
+            )
         ),
       watch: (changed) => pairedServerRows.revision.onChange(changed)
     },

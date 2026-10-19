@@ -44,7 +44,7 @@ const PairedServerWorkspaceRowSchema = z
   )
   .extend({
     /** The server's own terminals and agents there; older desktops omit it. */
-    activity: HostReportedActivitySchema.optional()
+    activity: HostReportedActivitySchema.optional().catch(undefined)
   })
 
 /** See PairedServerHost; health and compatibility stay open strings, as a reader only compares them. */
@@ -102,7 +102,7 @@ const ServerWorktreePsRowSchema = z.object({
   lastActivityAt: z.number().optional().catch(undefined),
   smartTier: z.enum(SMART_TIERS).optional().catch(undefined),
   smartAt: z.number().optional().catch(undefined),
-  liveTerminalCount: z.number().catch(0),
+  liveTerminalCount: z.number().optional().catch(undefined),
   unverifiableTerminalCount: z.number().optional().catch(undefined),
   status: z.string().optional().catch(undefined),
   workingMode: z.string().optional().catch(undefined)
@@ -112,7 +112,7 @@ function reportedActivity(row: z.infer<typeof ServerWorktreePsRowSchema>): HostR
   const working = row.workingMode === 'monitoring' ? 'monitoring' : 'working'
   return {
     terminal:
-      row.liveTerminalCount > 0
+      (row.liveTerminalCount ?? 0) > 0
         ? 'live'
         : (row.unverifiableTerminalCount ?? 0) > 0
           ? 'unverifiable'

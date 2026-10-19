@@ -11,7 +11,7 @@
  * preflight; host-header health and detail.
  * Known gaps the phone shows differently, so the fixture leaves them out: a creation a paired
  * server runs; a PR unlinked on a server workspace; an SSH workspace reached through a paired
- * server.
+ * server; a server terminal only another client opened (the server counts it, the window does not).
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, renderHook } from '@testing-library/react'

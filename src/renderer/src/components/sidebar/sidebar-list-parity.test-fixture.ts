@@ -184,16 +184,12 @@ export function feedDomainsFromWindowState(state: AppState): SidebarInputsFeedDo
   const worktrees = getAllWorktreesFromState(state)
   const servers = readWindowPairedServerHosts(state, new Set([SERVER_HOST_ID]))
   const windowActivity = readWindowWorkspaceActivityFacts(state, GOLDEN_NOW)
+  const serverRows = readWindowPairedServerRows(state, new Set(servers.keys()))
   // The server reports the terminals and agents the desktop runs in its workspaces.
-  const serverRows = new Map(
-    [...readWindowPairedServerRows(state, new Set(servers.keys()))].map(([key, row]) => {
-      const facts = windowActivity.get(row.worktreeId)
-      return [
-        key,
-        { ...row, activity: { terminal: facts?.terminal ?? null, agent: facts?.agent ?? null } }
-      ]
-    })
-  )
+  const reportedRows = [...serverRows.values()].map((row) => {
+    const facts = windowActivity.get(row.worktreeId)
+    return { ...row, activity: { terminal: facts?.terminal ?? null, agent: facts?.agent ?? null } }
+  })
   const domain = (name: string, read: () => Record<string, unknown>): SidebarInputsFeedDomain => ({
     name,
     read,
@@ -213,7 +209,7 @@ export function feedDomainsFromWindowState(state: AppState): SidebarInputsFeedDo
     domain('activity', () => ({
       // The window's browser and chat tabs, as its saved session for the server holds them.
       ...buildPairedServerActivityFacts(
-        [{ hostId: SERVER_HOST_ID, freshness: 'live', rows: [...serverRows.values()] }],
+        [{ hostId: SERVER_HOST_ID, freshness: 'live', rows: reportedRows }],
         () => ({
           browserTabsByWorktree: state.browserTabsByWorktree,
           unifiedTabs: state.unifiedTabsByWorktree
