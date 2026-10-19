@@ -30,6 +30,8 @@ const ID_KEYS = new Set([
 const OPAQUE_RECORDS = new Set(['file', 'editor view'])
 const OPAQUE_FIELDS = new Set(['sleeping', 'value'])
 const MAX_SHOWN_ID_LENGTH = 80
+/** A daemon terminal id embeds its worktree id, which may be a long path. */
+const MAX_SHOWN_PTY_ID_LENGTH = 256
 const MAX_ITEMS = 8
 const MAX_DEPTH = 6
 /** Changed fields one report line carries values for. */
@@ -60,7 +62,8 @@ function compact(
     return value
   }
   if (typeof value === 'string') {
-    return !opaque && key && ID_KEYS.has(key) && value.length <= MAX_SHOWN_ID_LENGTH
+    const limit = key === 'ptyId' ? MAX_SHOWN_PTY_ID_LENGTH : MAX_SHOWN_ID_LENGTH
+    return !opaque && key && ID_KEYS.has(key) && value.length <= limit
       ? value
       : `<text ${value.length}>`
   }

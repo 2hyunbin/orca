@@ -283,8 +283,77 @@ describe('reportWindowSaveDrift', () => {
             second: { type: 'leaf', leafId: leaf(2) }
           }
         }
+      },
+      {
+        record: 'tab tab-a',
+        field: 'ptys',
+        before: [{ leafId: leaf(1), ptyId: null }],
+        after: [
+          { leafId: leaf(1), ptyId: null },
+          { leafId: leaf(2), ptyId: null }
+        ]
       }
     ])
+  })
+
+  it('logs the terminal each pane is bound to on both sides of a pane change', () => {
+    const logPath = join(logDir!, 'divergence.jsonl')
+    const mainPty = `${GIT_KEY}@@a1b2c3d4`
+    const stored = session([{ id: 'tab-a' }])
+    stored.terminalLayoutsByTabId['tab-a'] = {
+      ...stored.terminalLayoutsByTabId['tab-a']!,
+      ptyIdsByLeafId: { [leaf(1)]: mainPty }
+    }
+    const next = structuredClone(stored)
+    next.terminalLayoutsByTabId['tab-a'] = {
+      ...next.terminalLayoutsByTabId['tab-a']!,
+      chatLeafId: leaf(1),
+      ptyIdsByLeafId: { [leaf(1)]: 'pty-window' }
+    }
+
+    save(stored, next)
+
+    const logged = JSON.parse(readFileSync(logPath, 'utf8').trim())
+    expect(logged.paths).toEqual(['tab tab-a changed: panes'])
+    expect(logged.values).toContainEqual({
+      record: 'tab tab-a',
+      field: 'ptys',
+      before: [{ leafId: leaf(1), ptyId: mainPty }],
+      after: [{ leafId: leaf(1), ptyId: 'pty-window' }]
+    })
+  })
+
+  it('logs a pane main and the save bind to different terminals within a changed tree', () => {
+    const logPath = join(logDir!, 'divergence.jsonl')
+    const stored = session([{ id: 'tab-a' }])
+    stored.terminalLayoutsByTabId['tab-a'] = {
+      ...stored.terminalLayoutsByTabId['tab-a']!,
+      ptyIdsByLeafId: { [leaf(1)]: 'pty-1' }
+    }
+    const next = structuredClone(stored)
+    next.terminalLayoutsByTabId['tab-a'] = {
+      ...next.terminalLayoutsByTabId['tab-a']!,
+      root: {
+        type: 'split',
+        direction: 'vertical',
+        first: { type: 'leaf', leafId: leaf(1) },
+        second: { type: 'leaf', leafId: leaf(2) }
+      },
+      ptyIdsByLeafId: { [leaf(1)]: 'pty-2' }
+    }
+
+    save(stored, next)
+
+    const logged = JSON.parse(readFileSync(logPath, 'utf8').trim())
+    expect(logged.values).toContainEqual({
+      record: 'tab tab-a',
+      field: 'ptys',
+      before: [{ leafId: leaf(1), ptyId: 'pty-1' }],
+      after: [
+        { leafId: leaf(1), ptyId: 'pty-2' },
+        { leafId: leaf(2), ptyId: null }
+      ]
+    })
   })
 
   it('logs a changed title’s length, never its text', () => {
@@ -351,7 +420,7 @@ describe('reportWindowSaveDrift', () => {
 
   it('logs both sides of each change when many panes change at once', () => {
     const logPath = join(logDir!, 'divergence.jsonl')
-    const tabs = Array.from({ length: 5 }, (_, index) => ({ id: `tab-${index}` }))
+    const tabs = Array.from({ length: 4 }, (_, index) => ({ id: `tab-${index}` }))
     const stored = session(tabs)
     const next = structuredClone(stored)
     const split = (id: number) => ({
@@ -370,7 +439,7 @@ describe('reportWindowSaveDrift', () => {
     save(stored, next)
 
     const { values } = JSON.parse(readFileSync(logPath, 'utf8').trim())
-    expect(values).toHaveLength(5)
+    expect(values).toHaveLength(8)
     expect(JSON.stringify(values)).not.toContain('…')
   })
 

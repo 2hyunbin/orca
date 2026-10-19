@@ -21,6 +21,7 @@ import type {
   WorkspaceLayoutModel
 } from '../../shared/workspace-layout/workspace-layout-model'
 import type { TabGroupLayoutNode } from '../../shared/tab-types'
+import type { TerminalPaneLayoutNode } from '../../shared/terminal-tab-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { droppedTabBarEntries, terminalTabBarEntries } from './window-save-raw-session-divergence'
 import { compactFieldChanges, type FieldChange } from './window-save-divergence-values'
@@ -65,10 +66,14 @@ function fieldOf(item: unknown, field: string): unknown {
     : Object.entries(item).find(([key]) => key === field)?.[1]
 }
 
+/** Values logged beside a changed record's own fields, by its id and changed fields. */
+type Alongside = (id: string, fields: string[]) => Omit<FieldChange, 'record'>[]
+
 function diffKeyed(
   prefix: string,
   before: Map<string, unknown>,
-  after: Map<string, unknown>
+  after: Map<string, unknown>,
+  alongside?: Alongside
 ): Difference[] {
   const paths: Difference[] = []
   for (const [id, item] of after) {
@@ -82,13 +87,14 @@ function diffKeyed(
       const record = `${prefix} ${id}`
       paths.push({
         path: `${record} changed: ${fields.join(', ')}`,
-        changes: fields.map((field) => ({
-          kind: prefix,
-          record,
-          field,
-          before: fieldOf(was, field),
-          after: fieldOf(item, field)
-        }))
+        changes: [
+          ...fields.map((field) => ({
+            field,
+            before: fieldOf(was, field),
+            after: fieldOf(item, field)
+          })),
+          ...(alongside?.(id, fields) ?? [])
+        ].map((change) => ({ kind: prefix, record, ...change }))
       })
     }
   }
@@ -102,6 +108,22 @@ function diffKeyed(
 
 function listById<T>(items: readonly T[] | undefined, id: (item: T) => string) {
   return new Map<string, unknown>((items ?? []).map((item) => [id(item), item]))
+}
+
+/** A terminal tab's panes in tree order with the terminal each is bound to, null while unbound. */
+function paneBindings(workspace: WorkspaceLayout, tabId: string) {
+  const tab = workspace.tabs.find((candidate) => candidate.id === tabId)
+  const leafIds: string[] = []
+  const visit = (node: TerminalPaneLayoutNode | null): void => {
+    if (node?.type === 'leaf') {
+      leafIds.push(node.leafId)
+    } else if (node) {
+      visit(node.first)
+      visit(node.second)
+    }
+  }
+  visit(tab?.kind === 'terminal' ? tab.panes.root : null)
+  return leafIds.map((leafId) => ({ leafId, ptyId: workspace.leaves?.[leafId]?.ptyId ?? null }))
 }
 
 function recordById(items: Readonly<Record<string, unknown>> | undefined) {
@@ -183,7 +205,12 @@ function diffWorkspaceLayouts(
     ...diffKeyed(
       'tab',
       listById(before.tabs, (t) => t.id),
-      listById(after.tabs, (t) => t.id)
+      listById(after.tabs, (t) => t.id),
+      // Bindings are main's to write, so they never make a path; they show who holds a changed pane.
+      (id, fields) =>
+        fields.includes('panes')
+          ? [{ field: 'ptys', before: paneBindings(before, id), after: paneBindings(after, id) }]
+          : []
     ),
     ...diffKeyed(
       'file',
