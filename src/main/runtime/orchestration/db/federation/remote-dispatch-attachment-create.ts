@@ -4,6 +4,7 @@ import { ensureMutationReceiptCapacity } from '../../mutation-receipt-capacity'
 import type { OrchestrationDb } from '../orchestration-db'
 import { federatedStubHomeRunId } from '../contract-constants'
 import { insertRemoteDispatchAttachmentRow } from '../dispatch-row-writer'
+import { REMOTE_DISPATCH_ATTACHMENT_COLUMN_LIST } from '../row-column-lists'
 
 export function createRemoteDispatchAttachment(
   this: OrchestrationDb,
@@ -93,7 +94,9 @@ export function getRemoteDispatchAttachment(
   dispatchId: string
 ): RemoteDispatchAttachmentRow | undefined {
   return this.db
-    .prepare('SELECT * FROM remote_dispatch_attachments WHERE dispatch_id = ?')
+    .prepare(
+      `SELECT ${REMOTE_DISPATCH_ATTACHMENT_COLUMN_LIST} FROM remote_dispatch_attachments WHERE dispatch_id = ?`
+    )
     .get(dispatchId) as RemoteDispatchAttachmentRow | undefined
 }
 
