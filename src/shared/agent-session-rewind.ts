@@ -84,14 +84,17 @@ export type AgentSessionRewindRecord = z.infer<typeof AgentSessionRewindRecordSc
 export type AgentSessionRewindFork = NonNullable<AgentSessionRewindRecord['providerFork']>
 
 /** A message a rewind can return to: a user message that opened its own turn. One sent into a
- *  running turn belongs to that turn, whose provider and journal orders it differently, so a rewind
- *  goes back only to whole turns. */
+ *  running turn belongs to that turn, whose provider and journal order it differently, so a rewind
+ *  goes back only to whole turns. `turnOpener` reads the message a turn record names as its opener,
+ *  as restored history scopes its openers to their turns too. */
 export function isAgentSessionRewindTarget(
-  item: Pick<AgentJournalRenderItem, 'body' | 'turnScope'>
+  item: Pick<AgentJournalRenderItem, 'itemId' | 'body' | 'turnScope'>,
+  turnOpener: (turnItemId: string) => string | undefined
 ): boolean {
-  return (
-    item.body.kind === 'message' && item.body.role === 'user' && item.turnScope?.kind !== 'turn'
-  )
+  if (item.body.kind !== 'message' || item.body.role !== 'user') {
+    return false
+  }
+  return item.turnScope?.kind !== 'turn' || turnOpener(item.turnScope.turnItemId) === item.itemId
 }
 
 /**

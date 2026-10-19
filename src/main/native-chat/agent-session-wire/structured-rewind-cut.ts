@@ -46,10 +46,7 @@ export function structuredRewindCut(
     : snapshot.items
   const { providerKey, omitted } = submissionKeys(snapshot.submissions)
   const selected = items.find((item) => item.itemId === target.itemId)
-  if (!selected || !isAgentSessionRewindTarget(selected)) {
-    return null
-  }
-  const key = parseAgentJournalItemKey(providerKey(selected.itemId))
+  const key = selected ? parseAgentJournalItemKey(providerKey(selected.itemId)) : null
   if (key?.provider === 'claude' && target.provider === 'claude') {
     // Any session the chat ran: a message from before an earlier rewind's fork is still cut there.
     const boundary = items.findIndex((item) => item.itemId === target.itemId)
@@ -97,6 +94,19 @@ export function structuredRewindCut(
     ),
     kept: keptRows.map((item) => keptRow(journal, item, providerKey))
   }
+}
+
+/** Whether a new rewind may return to `itemId`. Asked only on admission: a rewind already saved
+ *  completes wherever it cuts. */
+export function isStructuredRewindTarget(journal: AgentSessionJournal, itemId: string): boolean {
+  const item = journal.snapshot().items.find((row) => row.itemId === itemId)
+  return (
+    item !== undefined &&
+    isAgentSessionRewindTarget(
+      item,
+      (turnItemId) => readAgentJournalTurn(journal.itemBody(turnItemId) ?? undefined)?.userItemId
+    )
+  )
 }
 
 function scopedTurn(item: AgentJournalRenderItem): string | undefined {

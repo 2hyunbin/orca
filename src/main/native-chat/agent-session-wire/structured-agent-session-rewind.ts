@@ -19,7 +19,11 @@ import { hostStructuredAgentSessionCurrentWork } from './structured-agent-sessio
 import { conversationCommandBlocked } from './structured-conversation-command-admission'
 import { completedStructuredRewind } from './structured-rewind-replay'
 import { rewindRefusal, rewindRefusalBehindClear } from './structured-rewind-refusal'
-import { providerItemIdOf, structuredRewindCut } from './structured-rewind-cut'
+import {
+  isStructuredRewindTarget,
+  providerItemIdOf,
+  structuredRewindCut
+} from './structured-rewind-cut'
 import { persistRewindRecord, recoverStructuredRewind } from './structured-rewind-recovery'
 import { rewindInDoubt, sendPreparation } from './structured-agent-session-send-preparation'
 
@@ -102,6 +106,9 @@ export async function rewindStructuredAgentSession(
           }
           if (ctx.journal.cursor().epoch !== params.expectedEpoch) {
             return rewindRefusal('stale-epoch')
+          }
+          if (!isStructuredRewindTarget(ctx.journal, params.itemId)) {
+            return rewindRefusal('invalid-target')
           }
           // The head belongs to the record's provider: the record store refuses any other.
           const head = agentSessionProviderHandleChainHead(record.providerHandleChain)?.handle
