@@ -51,7 +51,8 @@ export class BrowserPopupAdapterProbeFixture {
           event: 'before-request',
           contentsId: details.webContentsId,
           url: details.url,
-          observedBeforeRequest: this.observedContents.has(details.webContentsId),
+          observedBeforeRequest:
+            details.webContentsId !== undefined && this.observedContents.has(details.webContentsId),
           webRtcPolicy: details.webContents?.getWebRTCIPHandlingPolicy()
         })
         this.writeStatus()
