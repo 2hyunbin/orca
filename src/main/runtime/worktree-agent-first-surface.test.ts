@@ -234,7 +234,12 @@ it('retries the same positively absent pane and provisions around the actual age
   })
   const launch = beginCreatedWorkspaceLaunch(runtime, 'claude')
   Object.defineProperty(runtime, 'buildTerminalWorkspaceEnv', {
-    value: vi.fn().mockRejectedValueOnce(new Error('env failed')).mockResolvedValue({})
+    value: vi
+      .fn()
+      .mockImplementationOnce(() => {
+        throw new Error('env failed')
+      })
+      .mockReturnValue({})
   })
   const creates = vi.spyOn(runtime, 'createTerminal')
   try {
@@ -278,7 +283,7 @@ it.each([
     runtime.onWorktreeLifecycle(lifecycle)
     let attempts = 0
     Object.defineProperty(runtime, 'buildTerminalWorkspaceEnv', {
-      value: async () => {
+      value: () => {
         if (++attempts <= 2 || recoveryFails) {
           throw new Error('pre-spawn failed')
         }
