@@ -95,6 +95,49 @@ function string(row: SqlRow, field: string): string {
   return value
 }
 
+// A device row's answer to a resume token: null when revoked, or neither hash is still valid.
+function resumeReservation(
+  device: SqlRow,
+  relayHostId: string,
+  tokenHash: string,
+  reservationId: string,
+  now: number
+): CredentialReservation | null {
+  if (optionalNumber(device, 'revoked_at') !== undefined) return null
+  const currentHash = string(device, 'current_hash')
+  const currentExpiresAt = number(device, 'current_expires_at')
+  const graceHash = device.grace_hash
+  const graceExpiresAt = optionalNumber(device, 'grace_expires_at')
+  let acceptedAs: 'current' | 'grace'
+  let acceptedCredentialVersion: number
+  if (equalHash(currentHash, tokenHash) && currentExpiresAt > now) {
+    acceptedAs = 'current'
+    acceptedCredentialVersion = number(device, 'current_version')
+  } else if (
+    typeof graceHash === 'string' &&
+    equalHash(graceHash, tokenHash) &&
+    (graceExpiresAt ?? 0) > now
+  ) {
+    acceptedAs = 'grace'
+    acceptedCredentialVersion = number(device, 'grace_version')
+  } else {
+    return null
+  }
+  return {
+    userId: string(device, 'user_id'),
+    relayHostId,
+    relayDeviceId: string(device, 'relay_device_id'),
+    credentialKind: 'resume',
+    tokenHash,
+    reservationId,
+    leaseExpiresAt: now + RELAY_PROTOCOL_LIMITS.hostAttachDeadlineMs,
+    acceptedCredentialVersion,
+    acceptedAs,
+    resumeExpiresAt: currentExpiresAt,
+    graceExpiresAt
+  }
+}
+
 export class RelayCredentialStore {
   // committed_at has no index, so a LIMIT delete would plan as a sequential scan of the whole table.
   private readonly confirmResultReaper = new HeapWindowReaper(
@@ -216,40 +259,31 @@ export class RelayCredentialStore {
         [relayHostId, tokenHash, tokenHash]
       )
       const device = deviceRows[0]
-      if (!device || optionalNumber(device, 'revoked_at') !== undefined) return null
-      const currentHash = string(device, 'current_hash')
-      const currentExpiresAt = number(device, 'current_expires_at')
-      const graceHash = device.grace_hash
-      const graceExpiresAt = optionalNumber(device, 'grace_expires_at')
-      let acceptedAs: 'current' | 'grace'
-      let acceptedCredentialVersion: number
-      if (equalHash(currentHash, tokenHash) && currentExpiresAt > now) {
-        acceptedAs = 'current'
-        acceptedCredentialVersion = number(device, 'current_version')
-      } else if (
-        typeof graceHash === 'string' &&
-        equalHash(graceHash, tokenHash) &&
-        (graceExpiresAt ?? 0) > now
-      ) {
-        acceptedAs = 'grace'
-        acceptedCredentialVersion = number(device, 'grace_version')
-      } else {
-        return null
-      }
-      return {
-        userId: string(device, 'user_id'),
-        relayHostId,
-        relayDeviceId: string(device, 'relay_device_id'),
-        credentialKind: 'resume',
-        tokenHash,
-        reservationId,
-        leaseExpiresAt: now + RELAY_PROTOCOL_LIMITS.hostAttachDeadlineMs,
-        acceptedCredentialVersion,
-        acceptedAs,
-        resumeExpiresAt: currentExpiresAt,
-        graceExpiresAt
-      }
+      return device ? resumeReservation(device, relayHostId, tokenHash, reservationId, now) : null
     })
+  }
+
+  // Step 6's one-read resume. Only `none` may fall through to the invite path: a device row
+  // that refuses this token closes the phone (4401), as reserveCredential would.
+  async lookupResume(
+    relayHostId: string,
+    token: string,
+    reservationId: string = randomUUID()
+  ): Promise<
+    | { outcome: 'none' }
+    | { outcome: 'refused' }
+    | { outcome: 'resume'; reservation: CredentialReservation }
+  > {
+    const tokenHash = hashCredential(token)
+    const rows = await this.database.query(
+      `SELECT * FROM relay_devices
+       WHERE relay_host_id = ? AND (current_hash = ? OR grace_hash = ?)`,
+      [relayHostId, tokenHash, tokenHash]
+    )
+    const device = rows[0]
+    if (!device) return { outcome: 'none' }
+    const reservation = resumeReservation(device, relayHostId, tokenHash, reservationId, this.now())
+    return reservation ? { outcome: 'resume', reservation } : { outcome: 'refused' }
   }
 
   async recordConnectionBasis(input: CredentialReservation & {
@@ -580,25 +614,9 @@ export class RelayCredentialStore {
     relayHostId: string,
     token: string
   ): Promise<{ userId: string; relayDeviceId: string } | null> {
-    const tokenHash = hashCredential(token)
-    const rows = await this.database.query(
-      `SELECT * FROM relay_devices
-       WHERE relay_host_id = ? AND (current_hash = ? OR grace_hash = ?)`,
-      [relayHostId, tokenHash, tokenHash]
-    )
-    const device = rows[0]
-    if (!device || optionalNumber(device, 'revoked_at') !== undefined) return null
-    const now = this.now()
-    const currentValid =
-      equalHash(string(device, 'current_hash'), tokenHash) &&
-      number(device, 'current_expires_at') > now
-    const graceHash = device.grace_hash
-    const graceValid =
-      typeof graceHash === 'string' &&
-      equalHash(graceHash, tokenHash) &&
-      (optionalNumber(device, 'grace_expires_at') ?? 0) > now
-    return currentValid || graceValid
-      ? { userId: string(device, 'user_id'), relayDeviceId: string(device, 'relay_device_id') }
+    const found = await this.lookupResume(relayHostId, token)
+    return found.outcome === 'resume'
+      ? { userId: found.reservation.userId, relayDeviceId: found.reservation.relayDeviceId }
       : null
   }
 

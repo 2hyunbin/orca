@@ -39,6 +39,7 @@ import { printableCloseReason } from './control-close-reason-text.js'
 import { ControlRenewalBatch } from './control-renewal-batch.js'
 import { RelayCredentialStore, type CredentialReservation } from './credential-store.js'
 import { HostCloseReasonMemory } from './host-close-reason-memory.js'
+import { PhoneAcceptLog } from './phone-accept-log.js'
 import {
   postProofCloseCause,
   PostProofCloseLog,
@@ -132,6 +133,8 @@ type PendingConnection = {
   client: WebSocket
   attachTimer: ReturnType<typeof setTimeout>
   credentialActivityId: string | null
+  // `memory`: a resume admitted from the seat, which writes no activity leases.
+  phonePath: 'db' | 'memory'
   capacityReservation?: PendingHostDataReservation
   timing: ClientAcceptTiming
 }
@@ -300,6 +303,7 @@ export class HostSessionRegistry {
   private readonly drainSentHosts = new Set<string>()
   private readonly seatLog: CellSeatLog
   private readonly postProofCloses: PostProofCloseLog
+  private readonly phoneAccepts: PhoneAcceptLog
   // Seat key -> the demoted control socket. Its own set, not drainSentHosts: it ends with
   // that socket (close, rebind or a new join), so a later booking here is a fresh seat.
   private readonly demotedSeats = new Map<string, WebSocket>()
@@ -444,6 +448,7 @@ export class HostSessionRegistry {
   ) {
     this.seatLog = new CellSeatLog(undefined, now)
     this.postProofCloses = new PostProofCloseLog(observer)
+    this.phoneAccepts = new PhoneAcceptLog(config.cellId)
   }
 
   // Reserve mode is only ever a cell's, and only while its applied switch says so.
@@ -841,34 +846,48 @@ export class HostSessionRegistry {
       stageMs[stage] = at - stageCursor
       stageCursor = at
     }
-    if (this.config.role === 'cell') {
-      // Each lookup is its own pooled round trip; stop between them once the phone
-      // has left instead of running the rest of the chain for nobody.
-      let outerIdentity = await this.store.resolveResume(hostId, credential)
-      if (abandonedByClient('assignment')) return
-      if (!outerIdentity) {
-        outerIdentity = await this.store.resolveInviteForMove(hostId, credential)
-        if (abandonedByClient('assignment')) return
-      }
-      const assignment = outerIdentity
-        ? await this.assignments.resolve({ userId: outerIdentity.userId, relayHostId: hostId })
-        : null
-      if (!assignment || assignment.cellId !== this.config.cellId) {
+    // Step 6: a resume is admitted from one device read and the seat, writing no leases.
+    let memoryReservation: CredentialReservation | null = null
+    let memoryMissedDevice = false
+    if (this.config.role === 'cell' && this.phonePathEffective() === 'memory') {
+      markStage('assignment')
+      let found: Awaited<ReturnType<RelayCredentialStore['lookupResume']>>
+      try {
+        found = await this.store.lookupResume(hostId, credential)
+      } catch (error) {
+        // Never the invite path: an unread device is not a missing one.
         capacityReservation?.release()
-        this.observer.recordAuth(false)
-        this.rejectClient(socket, RELAY_CLOSE_CODE.WRONG_CELL)
+        this.phoneAccepts.databaseError(
+          isRelayDatabaseTransientError(error) ? 'database_transient' : 'error'
+        )
+        this.rejectClient(socket, RELAY_CLOSE_CODE.DRAINING)
         return
       }
-      if (abandonedByClient('assignment')) return
+      if (abandonedByClient('credential')) return
+      // The switch turned off during the read: today's whole path, never a lease-less memory phone.
+      if (this.phonePathEffective() === 'memory') {
+        if (found.outcome === 'refused') {
+          capacityReservation?.release()
+          this.observer.recordAuth(false)
+          this.rejectClient(socket, RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL)
+          return
+        }
+        if (found.outcome === 'resume') memoryReservation = found.reservation
+        else memoryMissedDevice = true
+      }
     }
-    markStage('assignment')
-    const reservation = await this.store.reserveCredential(hostId, credential)
-    if (!reservation) {
-      capacityReservation?.release()
-      this.observer.recordAuth(false)
-      this.rejectClient(socket, RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL)
-      return
-    }
+    const reservation =
+      memoryReservation ??
+      (await this.reserveCredentialFromDatabase(
+        socket,
+        hostId,
+        credential,
+        memoryMissedDevice,
+        capacityReservation,
+        abandonedByClient,
+        markStage
+      ))
+    if (!reservation) return
     this.observer.recordAuth(true)
     if (abandonedByClient('credential', () => this.failReservationBestEffort(reservation))) return
     markStage('credential')
@@ -887,6 +906,10 @@ export class HostSessionRegistry {
       session.socket.readyState !== session.socket.OPEN
     ) {
       capacityReservation?.release()
+      if (memoryReservation) {
+        await this.rejectMissedSeat(socket, reservation, sessionKey)
+        return
+      }
       await this.store.failReservation(reservation)
       // The only rejection that can name a cause: the host is genuinely absent.
       // The attach-deadline 4404 below fires while control is still connected.
@@ -908,7 +931,7 @@ export class HostSessionRegistry {
     const connTicket = randomBytes(32).toString('base64url')
     const identity = { userId: reservation.userId, relayHostId: hostId }
     const credentialActivityId =
-      this.config.role === 'cell'
+      this.config.role === 'cell' && !memoryReservation
         ? `${reservation.credentialKind === 'invite' ? 'invite' : 'confirmation'}:${connId}`
         : null
     if (credentialActivityId) {
@@ -962,6 +985,7 @@ export class HostSessionRegistry {
       client: socket,
       attachTimer,
       credentialActivityId,
+      phonePath: memoryReservation ? 'memory' : 'db',
       capacityReservation,
       // Attach starts where the activity stage ended, so the conn-open send is
       // charged to it and no wall-clock gap goes unattributed.
@@ -988,6 +1012,74 @@ export class HostSessionRegistry {
         }
       }
     })
+  }
+
+  // Today's credential path: invites, and every resume while the phone path is db. `deviceMissed`:
+  // the memory path already found no device row, so only the invite lookup is left.
+  private async reserveCredentialFromDatabase(
+    socket: WebSocket,
+    hostId: string,
+    credential: string,
+    deviceMissed: boolean,
+    capacityReservation: PendingHostDataReservation | undefined,
+    abandonedByClient: (stage: RelayClientAcceptStage, cleanup?: () => void) => boolean,
+    markStage: (stage: RelayClientAcceptStage) => void
+  ): Promise<CredentialReservation | null> {
+    if (this.config.role === 'cell') {
+      // Each lookup is its own pooled round trip; stop between them once the phone
+      // has left instead of running the rest of the chain for nobody.
+      let outerIdentity = deviceMissed ? null : await this.store.resolveResume(hostId, credential)
+      if (abandonedByClient('assignment')) return null
+      if (!outerIdentity) {
+        outerIdentity = await this.store.resolveInviteForMove(hostId, credential)
+        if (abandonedByClient('assignment')) return null
+      }
+      const assignment = outerIdentity
+        ? await this.assignments.resolve({ userId: outerIdentity.userId, relayHostId: hostId })
+        : null
+      if (!assignment || assignment.cellId !== this.config.cellId) {
+        capacityReservation?.release()
+        this.observer.recordAuth(false)
+        this.rejectClient(socket, RELAY_CLOSE_CODE.WRONG_CELL)
+        return null
+      }
+      if (abandonedByClient('assignment')) return null
+    }
+    markStage('assignment')
+    const reservation = await this.store.reserveCredential(hostId, credential)
+    if (!reservation) {
+      capacityReservation?.release()
+      this.observer.recordAuth(false)
+      this.rejectClient(socket, RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL)
+      return null
+    }
+    return reservation
+  }
+
+  // No seat for a memory resume: one assignment read tells "moved" from "offline". A row that
+  // names this cell may be a lost ledger write (stale up to the 10 min reconcile), so it is logged.
+  private async rejectMissedSeat(
+    socket: WebSocket,
+    reservation: CredentialReservation,
+    sessionKey: string
+  ): Promise<void> {
+    let elsewhere: boolean
+    try {
+      const row = await this.assignments.resolve({
+        userId: reservation.userId,
+        relayHostId: reservation.relayHostId
+      })
+      elsewhere = row !== null && row.cellId !== this.config.cellId
+      if (row?.cellId === this.config.cellId) this.phoneAccepts.missRowNamesHere(reservation.relayHostId)
+    } catch (error) {
+      this.phoneAccepts.missReadError(isRelayDatabaseTransientError(error) ? 'database_transient' : 'error')
+      elsewhere = true
+    }
+    if (elsewhere) {
+      this.rejectClient(socket, RELAY_CLOSE_CODE.WRONG_CELL)
+      return
+    }
+    this.rejectClient(socket, RELAY_CLOSE_CODE.HOST_OFFLINE, this.hostCloseReasons.read(sessionKey))
   }
 
   async acceptHostData(
@@ -1049,7 +1141,8 @@ export class HostSessionRegistry {
       userId: pending.reservation.userId,
       relayHostId: pending.reservation.relayHostId
     }
-    const spliceActivityId = this.config.role === 'cell' ? `splice:${connId}` : null
+    const spliceActivityId =
+      this.config.role === 'cell' && pending.phonePath === 'db' ? `splice:${connId}` : null
     try {
       if (spliceActivityId) {
         await this.assignments.acquireActivity(identity, {
