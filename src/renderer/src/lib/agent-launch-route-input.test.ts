@@ -6,6 +6,7 @@ import {
 } from '../../../shared/protocol-version'
 import type { ProjectExecutionRuntimeResolution } from '../../../shared/project-execution-runtime'
 import type * as ConnectionOwnerResolutionModule from './connection-owner-resolution'
+import type * as ResolveOwnerModule from './resolve-owner'
 
 const mocks = vi.hoisted(() => ({
   getExecutionHostIdForWorktree: vi.fn(),
@@ -20,7 +21,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/worktree-runtime-owner', () => ({
   getExecutionHostIdForWorktree: mocks.getExecutionHostIdForWorktree
 }))
-vi.mock('@/lib/resolve-owner', () => ({
+vi.mock('@/lib/resolve-owner', async (importOriginal) => ({
+  ...(await importOriginal<typeof ResolveOwnerModule>()),
   runtimeEnvironmentIdForWorkspaceOwner: mocks.runtimeEnvironmentIdForWorkspaceOwner
 }))
 // Why the partial mock: only the worktree-owner answer is staged here; the repo fallback must be

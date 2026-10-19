@@ -707,8 +707,7 @@ describe('project group store routing', () => {
       mode: 'group' as const,
       ...LOCAL_OWNER
     }
-    const importing = store.getState().importNestedRepos(importArgs)
-    await expect(importing).resolves.toEqual({ ...result, executionHostId: 'local' })
+    await expect(store.getState().importNestedRepos(importArgs)).resolves.toEqual(result)
 
     expect(projectGroupsImportNested).toHaveBeenCalledWith(importArgs)
     expect(projectGroupsList).toHaveBeenCalled()
