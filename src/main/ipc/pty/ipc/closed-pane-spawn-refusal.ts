@@ -18,7 +18,7 @@ export function refuseClosedPaneSpawn(
   }
   const held = (store?.getWorkspaceSessionHostIds() ?? []).some((hostId) =>
     layoutContainsLeafId(
-      store?.getWorkspaceSession(hostId).terminalLayoutsByTabId?.[tabId]?.root ?? null,
+      store?.getWorkspaceSession(hostId)?.terminalLayoutsByTabId?.[tabId]?.root ?? null,
       leafId
     )
   )
