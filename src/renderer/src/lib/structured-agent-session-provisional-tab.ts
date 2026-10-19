@@ -1,6 +1,4 @@
 import type { Tab } from '../../../shared/tab-types'
-import { defaultAgentChatLabel } from '../../../shared/agent-session-chat-label'
-import { structuredAgentSessionTabId } from '../../../shared/structured-agent-session-projection'
 import type {
   AgentSessionLaunchPlan,
   AgentSessionLaunchTarget
@@ -11,7 +9,6 @@ import type {
 } from '@/lib/structured-agent-launch-settlement'
 import { useAppStore } from '@/store'
 import type { ExecutionHostId } from '../../../shared/execution-host'
-import type { TuiAgent } from '../../../shared/tui-agent'
 import {
   beginHostAdmittedStructuredLaunch,
   openDeclinedStructuredLaunchTerminal,
@@ -25,6 +22,12 @@ import {
 } from '@/runtime/structured-agent-session-owner'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import type { NativeChatComposerFocusIntent } from '@/components/native-chat/use-native-chat-composer-reveal-focus'
+import { holdEmptyWorkspaceDefaultSurfaceForLaunch } from './empty-workspace-default-surface-claims'
+import {
+  captureStructuredLaunchSurfaceAddress,
+  openStructuredAgentSessionProvisionalTab
+} from './structured-agent-session-launch-surface'
+export { openStructuredAgentSessionProvisionalTab } from './structured-agent-session-launch-surface'
 
 type LocalProvisionalLaunch = StructuredAgentLaunchHandle & { tab: Tab }
 
@@ -32,63 +35,7 @@ type LocalProvisionalLaunch = StructuredAgentLaunchHandle & { tab: Tab }
 export type StructuredAgentSessionProvisionalLaunch =
   | LocalProvisionalLaunch
   | HostAdmittedStructuredLaunch
-
-export function openStructuredAgentSessionProvisionalTab(args: {
-  worktreeId: string
-  /** The host the chat is created on; every later operation on the tab reads it. */
-  executionHostId: ExecutionHostId
-  sessionId: string
-  agent: TuiAgent
-  targetGroupId?: string
-  activate?: boolean
-  recordFocus?: boolean
-}): Tab {
-  const state = useAppStore.getState()
-  const activate = args.activate !== false && args.recordFocus !== false
-  const tabId = structuredAgentSessionTabId(args.sessionId)
-  const existing = (state.unifiedTabsByWorktree[args.worktreeId] ?? []).find(
-    (candidate) =>
-      candidate.id === tabId &&
-      candidate.contentType === 'agent-session' &&
-      candidate.entityId === args.sessionId
-  )
-  if (existing) {
-    if (activate) {
-      state.focusGroup(args.worktreeId, existing.groupId)
-      state.activateTab(existing.id, { worktreeId: args.worktreeId })
-      state.setActiveTabType('agent-session', args.worktreeId)
-    } else if (args.activate !== false) {
-      showUnchosenWorkspaceSurface(args.worktreeId)
-    }
-    return existing
-  }
-  const tab = state.createUnifiedTab(args.worktreeId, 'agent-session', {
-    id: tabId,
-    entityId: args.sessionId,
-    executionHostId: args.executionHostId,
-    agentSessionAgent: args.agent,
-    label: defaultAgentChatLabel(args.agent),
-    ...(args.targetGroupId ? { targetGroupId: args.targetGroupId } : {}),
-    activate,
-    recordFocus: args.recordFocus
-  })
-  if (activate) {
-    state.setActiveTabType('agent-session', args.worktreeId)
-  } else if (args.activate !== false) {
-    showUnchosenWorkspaceSurface(args.worktreeId)
-  }
-  return tab
-}
-
-/** An automatic chat opens unchosen: the screen shows what the focused group holds, chat included. */
-function showUnchosenWorkspaceSurface(worktreeId: string): void {
-  useAppStore.getState().reconcileWorktreeTabModel(worktreeId)
-  const state = useAppStore.getState()
-  const groupId = state.activeGroupIdByWorktree[worktreeId]
-  if (groupId && state.groupsByWorktree[worktreeId]?.some((group) => group.id === groupId)) {
-    state.focusGroup(worktreeId, groupId)
-  }
-}
+  | (StructuredAgentLaunchHandle & { tab: null })
 
 /** The host a structured launch would run on, which admits the chat before it exists. */
 export function structuredLaunchOwner(
@@ -113,8 +60,11 @@ type ProvisionalLaunchArgs = {
   focusIntent?: NativeChatComposerFocusIntent
   target?: AgentSessionLaunchTarget
   targetGroupId?: string
+  /** The tab the chat opens right after, in that tab's group. */
+  afterTabId?: string
   activate?: boolean
-  recordFocus?: boolean
+  /** Identity-only resumes publish on commit; unknown outcomes keep their recovery tab. */
+  deferPublication?: true
   /** Lets workspace flows reveal before the chat's tab is owned: before its host is asked, when no
    *  session id exists yet. */
   beforeOpen?: (sessionId?: string) => boolean | void
@@ -141,26 +91,37 @@ export function beginStructuredAgentSessionProvisionalLaunch(
       focusIntent?.cancel()
     }
   }
-  const open = (launch: LocalProvisionalLaunch | null): LocalProvisionalLaunch | null => {
-    if (launch) {
+  const open = (
+    launch: ReturnType<typeof beginLocalProvisionalLaunch>
+  ): ReturnType<typeof beginLocalProvisionalLaunch> => {
+    if (launch?.tab) {
       tabOpened = true
       if (args.activate !== false) {
         focusIntent?.request(launch.tab.id)
       }
-    } else {
+    } else if (!launch) {
       cancelIfNoTab()
     }
     return launch
   }
   try {
     const owner = worktreeId ? structuredLaunchOwner(args.plan, worktreeId, args.target) : null
-    if (owner && worktreeId && args.beforeOpen?.() === false) {
+    if (owner && worktreeId && !args.deferPublication && args.beforeOpen?.() === false) {
       cancelIfNoTab()
       return null
     }
     if (!owner || !worktreeId) {
       // No host to ask: the launch path refuses it with its own message.
       return open(beginLocalProvisionalLaunch(args))
+    }
+    if (args.deferPublication && !args.target?.surfaceAddress) {
+      args = {
+        ...args,
+        target: {
+          ...args.target,
+          surfaceAddress: captureStructuredLaunchSurfaceAddress(worktreeId, args.targetGroupId)
+        }
+      }
     }
     const launch = beginHostAdmittedStructuredLaunch({
       plan: args.plan,
@@ -199,8 +160,13 @@ export function beginStructuredAgentSessionProvisionalLaunch(
   }
 }
 
-function beginLocalProvisionalLaunch(args: ProvisionalLaunchArgs): LocalProvisionalLaunch | null {
-  const handle = args.plan.begin(args.hooks, { ...args.target, recordFocus: args.recordFocus })
+function beginLocalProvisionalLaunch(
+  args: ProvisionalLaunchArgs
+): LocalProvisionalLaunch | (StructuredAgentLaunchHandle & { tab: null }) | null {
+  if (args.deferPublication) {
+    return beginDeferredPublication(args)
+  }
+  const handle = args.plan.begin(args.hooks, args.target)
   if (!handle) {
     return null
   }
@@ -218,8 +184,8 @@ function beginLocalProvisionalLaunch(args: ProvisionalLaunchArgs): LocalProvisio
       executionHostId: handle.executionHostId,
       sessionId: handle.sessionId,
       agent: args.plan.agent,
-      recordFocus: args.recordFocus,
       ...(args.targetGroupId ? { targetGroupId: args.targetGroupId } : {}),
+      ...(args.afterTabId ? { afterTabId: args.afterTabId } : {}),
       ...(args.activate !== undefined ? { activate: args.activate } : {})
     })
     return { ...handle, tab }
@@ -227,5 +193,31 @@ function beginLocalProvisionalLaunch(args: ProvisionalLaunchArgs): LocalProvisio
     // Why: a launch without its owning surface would strand a late publication.
     handle.cancel()
     throw error
+  }
+}
+
+function beginDeferredPublication(
+  args: ProvisionalLaunchArgs
+): (StructuredAgentLaunchHandle & { tab: null }) | null {
+  const worktreeId = args.target?.worktreeId ?? args.plan.worktreeId
+  if (!worktreeId || !args.plan.resumeFrom || args.plan.prompt) {
+    throw new Error('Deferred publication requires an identity-only resume.')
+  }
+  const releaseHold = holdEmptyWorkspaceDefaultSurfaceForLaunch(worktreeId)
+  let handle: StructuredAgentLaunchHandle | null
+  try {
+    handle = args.plan.begin(args.hooks, args.target)
+  } catch (error) {
+    releaseHold()
+    throw error
+  }
+  if (!handle) {
+    releaseHold()
+    return null
+  }
+  return {
+    ...handle,
+    tab: null,
+    settlement: handle.settlement.finally(releaseHold)
   }
 }

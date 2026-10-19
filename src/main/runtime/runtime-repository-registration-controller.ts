@@ -11,7 +11,8 @@ import {
 import type { Repo } from '../../shared/repo-types'
 import { gitExecFileAsync, awaitWindowsHostGitEnvironmentReady } from '../git/runner'
 import { getRepoName, inspectGitRepoForRegistrationAsync } from '../git/repo'
-import { invalidateAuthorizedRootsCache, isENOENT } from '../ipc/filesystem-auth'
+import { invalidateAuthorizedRootsCache } from '../ipc/registered-worktree-roots-cache'
+import { isENOENT } from '../ipc/filesystem-path-containment'
 import { findProjectAtSameRealPath } from '../project-realpath-identity'
 import { detectRepoIconAndUpstream } from '../repo-icon-autodetect'
 import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
@@ -65,7 +66,7 @@ export class RuntimeRepositoryRegistrationController {
         parseExecutionHostId(executionHostId)?.kind === 'runtime'
       ) {
         const adopted =
-          store.updateRepo(existing.id, { executionHostId }) ??
+          store.updateRepo(existing, { executionHostId }) ??
           ({ ...existing, executionHostId } as Repo)
         this.invalidate(existing.id)
         return adopted

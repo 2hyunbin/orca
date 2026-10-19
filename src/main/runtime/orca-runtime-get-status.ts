@@ -8,7 +8,7 @@ import {
 import { isBrowserIdentityModeStoreInitialized } from '../browser/browser-identity-mode-store'
 import { servesLocalWslMigrationSource } from '../orcad/orcad-migration-wsl-destination'
 import { ORCAD_MIGRATION_LOCAL_WSL_SOURCE_RUNTIME_CAPABILITY } from '../../shared/orcad-runtime-capabilities'
-import { advertisedOrcadMigrationBlobCapabilities } from '../../shared/orcad-migration-blob-transfer'
+import { advertisedOrcadMigrationBlobCapabilities } from '../../shared/orcad-migration/orcad-migration-blob-transfer'
 import type { RuntimeCapability } from '../../shared/protocol-version'
 import {
   BROWSER_CERTIFICATE_TRUST_RUNTIME_CAPABILITY,

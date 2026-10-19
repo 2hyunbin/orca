@@ -191,6 +191,9 @@ export type UiCommandEventApi = {
       launchToken?: string
       launchAgent?: TuiAgent
       viewMode?: 'terminal' | 'chat'
+      targetGroupId?: string
+      afterTabId?: string
+      shellOverride?: string
       title?: string
       ptyId?: string
       activate?: boolean
@@ -231,6 +234,9 @@ export type UiCommandEventApi = {
   ) => () => void
   onRenameTerminal: (
     callback: (data: { tabId: string; title: string | null; recordInteraction?: false }) => void
+  ) => () => void
+  onSetPaneTitle?: (
+    callback: (data: { tabId: string; leafId: string; title: string | null }) => void
   ) => () => void
   onFocusTerminal: (
     callback: (data: {

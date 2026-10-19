@@ -54,6 +54,8 @@ export type RuntimeManagedWorktreeCreateArgs = {
   awaitTerminalProvisioning?: boolean
   observeSetupCompletion?: boolean
   createdWithAgent?: TuiAgent
+  /** Keys the host's in-progress creation; minted when the caller sends none. */
+  creationId?: string
   /** Main-internal launch registration before catalog notification or activation. */
   onWorkspaceCreated?: (worktreeId: string) => void
   onPreTerminalFailure?: (worktreeId: string, error: unknown) => void

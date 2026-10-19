@@ -4,10 +4,12 @@ import { OrcaRuntimeWithStopExplicitlyClosedTabPtys } from '../../session-tabs/e
 import type { TerminalPaneSplitSource } from '../../../../shared/feature-education-telemetry'
 import type { RuntimeTerminalSplit } from '../../../../shared/runtime-types'
 import { randomUUID } from 'node:crypto'
-import { parseExecutionHostId } from '../../../../shared/execution-host'
+import { parseExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { startInAdmittedPane } from '../../runtime-pane-admission'
+import { admitRuntimePane } from '../../runtime-pane-admission'
+import type { RuntimeStore } from '../../runtime-store-contract'
 import type { Worktree } from '../../../../shared/worktree/types'
+import { collectLeafIds } from '../../../../shared/terminal-pane-layout-tree'
 
 export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopExplicitlyClosedTabPtys {
   protected abstract splitPtyBackedTerminal(
@@ -50,7 +52,9 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
       const [hostId] = this.getWorkspaceSessionHostIdsForTab(leaf.worktreeId, leaf.tabId)
       if (hostId && parseExecutionHostId(hostId)?.kind !== 'runtime') {
         const newLeafId = randomUUID()
-        const { result: newHandle } = await startInAdmittedPane(
+        // Main keeps the pane however its start goes: one whose terminal never starts is a dead
+        // pane, as any. No pane written, no split: nothing else would put it in main's copy.
+        const outcome = await admitRuntimePane(
           this.store,
           {
             type: 'splitPane',
@@ -60,25 +64,25 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
             direction,
             newLeafId
           },
-          hostId,
-          // No pane written, no split: nothing else would put it in main's copy.
-          (outcome) => {
-            if (outcome !== 'admitted' && outcome !== 'exists') {
-              throw new Error(`split_not_written: ${outcome ?? 'unknown'}`)
-            }
-            this.notifier?.splitTerminal(leaf.tabId, leaf.paneRuntimeId, {
-              direction,
-              command: opts.command,
-              worktreeId: leaf.worktreeId,
-              sourceLeafId: leaf.leafId,
-              telemetrySource: opts.telemetrySource,
-              newLeafId
-            })
-            return this.waitForLeafInTab(leaf.tabId, newLeafId)
-          },
-          // Main keeps the pane however its start goes. One whose terminal never starts is a dead
-          // pane, as any.
-          { shown: () => true }
+          hostId
+        )
+        if (outcome !== 'admitted' && outcome !== 'exists') {
+          throw new Error(`split_not_written: ${outcome ?? 'unknown'}`)
+        }
+        this.notifier?.splitTerminal(leaf.tabId, leaf.paneRuntimeId, {
+          direction,
+          command: opts.command,
+          worktreeId: leaf.worktreeId,
+          sourceLeafId: leaf.leafId,
+          telemetrySource: opts.telemetrySource,
+          newLeafId
+        })
+        const newHandle = await settledByPaneClose(
+          this.store,
+          () => this.getWorkspaceSessionHostIdsForTab(leaf.worktreeId, leaf.tabId),
+          leaf.tabId,
+          newLeafId,
+          this.waitForLeafInTab(leaf.tabId, newLeafId)
         )
         return {
           handle: newHandle,
@@ -108,4 +112,32 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
       leafId: newLeafId
     }
   }
+}
+
+/** Main's own close of the pane settles the wait at once: no terminal will start there. */
+function settledByPaneClose(
+  store: RuntimeStore | null | undefined,
+  hostIds: () => readonly ExecutionHostId[],
+  tabId: string,
+  leafId: string,
+  waiting: Promise<string>
+): Promise<string> {
+  if (!store?.getWorkspaceSession || !store.onWorkspaceSessionWritten) {
+    return waiting
+  }
+  const getSession = store.getWorkspaceSession.bind(store)
+  let stopWatching: (() => void) | undefined
+  const closed = new Promise<never>((_resolve, reject) => {
+    const check = (): void => {
+      const held = hostIds().some((hostId) =>
+        collectLeafIds(getSession(hostId)?.terminalLayoutsByTabId?.[tabId]?.root).includes(leafId)
+      )
+      if (!held) {
+        reject(new Error('split_pane_closed'))
+      }
+    }
+    stopWatching = store.onWorkspaceSessionWritten?.(check)
+    check()
+  })
+  return Promise.race([waiting, closed]).finally(() => stopWatching?.())
 }

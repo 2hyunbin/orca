@@ -70,7 +70,10 @@ export function attachStructuredAgentSessionUnderSerialize(
   params: AgentSessionAttachParams,
   options: StructuredAgentSessionAttachOptions = {}
 ): Promise<AgentSessionMutationResult<AgentSessionAttachResult>> {
-  return context.tasks.trackAttach(runAttach(context, callerKey, params, options))
+  return context.tasks.trackAttach(runAttach(context, callerKey, params, options), {
+    sessionId: params.envelope.sessionId,
+    location: params.location
+  })
 }
 
 export function attachStructuredAgentSession(
@@ -86,7 +89,8 @@ export function attachStructuredAgentSession(
     context.tasks.trackAttach(
       context.serialize(sessionId, () =>
         runAttach(context, callerKey, params, { ...options, recordPhase })
-      )
+      ),
+      { sessionId, location: params.location }
     )
   if (params.envelope.expectedRuntimeFence !== null) {
     return run()
@@ -259,7 +263,8 @@ async function runAttachUnderAbort(
             // An acquire reports its phase; a re-attach keeps what its child already proved.
             phase: owner === 'acquired' ? providerChildPhase : (current?.phase ?? 'ready'),
             ...(startedFor === undefined ? {} : { startedFor }),
-            ...(permissionMode === undefined ? {} : { permissionMode })
+            ...(permissionMode === undefined ? {} : { permissionMode }),
+            heldSends: () => context.deps.adapter.heldSends?.(sessionId)
           }
         }
         // Only a proven child has the protocol session recovery asks; a starting one recovers in
@@ -270,8 +275,7 @@ async function runAttachUnderAbort(
             sessionId,
             attached.journal,
             fence,
-            context.deps.adapter,
-            context.now
+            context.deps.adapter
           )
         }
         if (fenceBefore !== null && fence !== fenceBefore) {

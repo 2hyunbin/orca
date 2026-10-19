@@ -13,6 +13,7 @@ import type {
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import {
   warnStructuredLaunchDowngrade,
+  type readAgentLaunchModeSettings,
   type AgentLaunchModeReceipt,
   type AgentLaunchModeVocabulary
 } from './agent-launch-mode'
@@ -30,7 +31,8 @@ import type {
 export type AgentLaunchPublishedSurface = AgentLaunchResult
 
 type AgentLaunchExecutionBase = {
-  runtime: Pick<OrcaRuntimeService, 'getStructuredAgentSessionCreateSupport' | 'getClientSettings'>
+  runtime: Pick<OrcaRuntimeService, 'getStructuredAgentSessionCreateSupport'> &
+    Parameters<typeof readAgentLaunchModeSettings>[0]
   vocabulary?: AgentLaunchModeVocabulary
   /** False when the calling client cannot show the agent's chat; absent for the host's own callers. */
   callerRendersStructured?: boolean
