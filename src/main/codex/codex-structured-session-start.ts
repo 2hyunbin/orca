@@ -76,7 +76,10 @@ export async function openCodexStructuredSession(
     assertCodexConnectionOpen(connection, sessionId)
   }
   current()
-  await waitForPromiseWithSignal(initializeCodexAppServerConnection(connection), openInput.signal)
+  await waitForPromiseWithSignal(
+    initializeCodexAppServerConnection(connection, null),
+    openInput.signal
+  )
   current()
   const threadLaunch = await waitForPromiseWithSignal(
     withCodexVisualsThreadConfig(connection, launch, {

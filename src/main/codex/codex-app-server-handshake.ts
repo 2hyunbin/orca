@@ -1,9 +1,9 @@
 import type { CodexAppServerConnection } from './codex-app-server-connection-types'
 
-/** No deadline of its own: a cold Codex can take its time, and the start that opened it bounds
- *  the wait with its signal. */
+/** The caller owns the bound; null leaves cancellation to its startup signal. */
 export async function initializeCodexAppServerConnection(
-  connection: CodexAppServerConnection
+  connection: CodexAppServerConnection,
+  timeoutMs: number | null
 ): Promise<void> {
   await connection.request(
     'initialize',
@@ -16,7 +16,7 @@ export async function initializeCodexAppServerConnection(
         extensions: {}
       }
     },
-    { timeoutMs: null }
+    { timeoutMs }
   )
   connection.notify('initialized')
 }
