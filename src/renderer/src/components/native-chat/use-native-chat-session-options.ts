@@ -19,8 +19,7 @@ import {
 } from './native-chat-session-option-enrichment'
 import {
   discoverNativeChatCatalogModels,
-  resolveNativeChatModelDiscoveryContext,
-  type NativeChatModelDiscoveryContext
+  resolveNativeChatModelDiscoveryContext
 } from './native-chat-session-option-discovery'
 import { readClaudeSessionOptionsFromTerminalScreen } from './claude-terminal-session-options'
 
@@ -32,11 +31,18 @@ const getEmptySnapshot = (): SessionOptionDescriptor[] => EMPTY_SNAPSHOT
 
 const CLIENT_SETTINGS_TARGET = { kind: 'local' } as const
 
-function ensureHostModels(agent: AgentType, context: NativeChatModelDiscoveryContext): void {
+function ensureHostModels(agent: AgentType, terminalTabId: string, hostKey: string): void {
   ensureNativeChatModelEnrichment({
     agent,
-    hostKey: context.hostKey,
-    discover: () => discoverNativeChatCatalogModels(agent, context.runtime, context.hostKey)
+    hostKey,
+    // Why: a re-ask must use the current launch command and routing, not the ones
+    // captured when the tab mounted; a moved host is not this cache entry's answer.
+    discover: async () => {
+      const current = resolveNativeChatModelDiscoveryContext(terminalTabId)
+      return current?.hostKey === hostKey
+        ? discoverNativeChatCatalogModels(agent, current.runtime, hostKey)
+        : null
+    }
   })
 }
 
@@ -136,7 +142,7 @@ export function useNativeChatSessionOptions(args: {
       canSwitchOmpModel,
       onAgentPicker,
       ...(discoveryContext
-        ? { refreshModels: () => ensureHostModels(agent, discoveryContext) }
+        ? { refreshModels: () => ensureHostModels(agent, terminalTabId, discoveryContext.hostKey) }
         : {}),
       persistSelection: ({ modelId, optionId, value, adoptModelAsLaunchDefault }) =>
         // Paired PTY launches still assemble their launch preferences from client settings.
@@ -188,13 +194,13 @@ export function useNativeChatSessionOptions(args: {
         if (!reportedValues) {
           continue
         }
-        // Why: discovery can land after this read. Keeping the screen that
-        // parsed lets it re-resolve against the host's real ids later, when the
-        // frame itself may have already scrolled out of the buffer.
+        // Why: discovery can land after this read. Keeping a screen parsed before
+        // any listing lets it re-resolve against the host's real ids later, when
+        // the frame itself may have already scrolled out of the buffer.
         if (cancelled) {
           return
         }
-        reportedScreenRef.current = screen
+        reportedScreenRef.current = models ? null : screen
         surface.reportSessionOptions(reportedValues)
         return
       }
@@ -246,6 +252,8 @@ export function useNativeChatSessionOptions(args: {
       (models) => {
         surface.replaceModels(models)
         const screen = agent === 'claude' ? reportedScreenRef.current : null
+        // Once only: a later list change must not replay this frame over newer picks.
+        reportedScreenRef.current = null
         const reportedValues = screen
           ? readClaudeSessionOptionsFromTerminalScreen(screen, models)
           : null
@@ -262,9 +270,9 @@ export function useNativeChatSessionOptions(args: {
     if (cached) {
       void retirePersistedModelMissingFromDiscovery(agent, cached).catch(() => undefined)
     }
-    ensureHostModels(agent, discoveryContext)
+    ensureHostModels(agent, terminalTabId, discoveryContext.hostKey)
     return unsubscribe
-  }, [agent, discoveryContext, surface])
+  }, [agent, discoveryContext, surface, terminalTabId])
 
   const snapshot = useSyncExternalStore(
     surface?.subscribe ?? subscribeEmpty,

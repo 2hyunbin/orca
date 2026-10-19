@@ -155,12 +155,13 @@ describe('native chat session option enrichment', () => {
       await ensureAfter(0)
       await ensureAfter(1)
       expect(discover).toHaveBeenCalledOnce()
-      // A failed probe is retried, not latched.
+      // A failed probe is retried, not latched; a fresh success is not re-asked.
+      await ensureAfter(NATIVE_CHAT_MODEL_LIST_STALE_MS)
+      await ensureAfter(1)
+      expect(discover).toHaveBeenCalledTimes(2)
       await ensureAfter(NATIVE_CHAT_MODEL_LIST_STALE_MS)
       expect(ids()).toContain('model-a')
       await ensureAfter(NATIVE_CHAT_MODEL_LIST_STALE_MS)
-      await ensureAfter(NATIVE_CHAT_MODEL_LIST_STALE_MS)
-      expect(ids()).toContain('model-a')
       expect(listener).toHaveBeenCalledOnce()
       await ensureAfter(NATIVE_CHAT_MODEL_LIST_STALE_MS)
       expect(ids()).toContain('model-b')
