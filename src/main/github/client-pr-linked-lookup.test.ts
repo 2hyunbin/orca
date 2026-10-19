@@ -592,7 +592,6 @@ describe('getPRForBranch', () => {
 
   it('falls back to gh pr view when the remote cannot be resolved to GitHub', async () => {
     getOwnerRepoMock.mockResolvedValueOnce(null)
-    // Why: a CONFLICTING PR derives a local conflict summary, which awaits these git calls.
     gitExecFileAsyncMock.mockResolvedValue({ stdout: '', stderr: '' })
     ghExecFileAsyncMock.mockResolvedValueOnce({
       stdout: JSON.stringify({

@@ -24,7 +24,7 @@ vi.mock('../git/runner', async (importOriginal) => {
 // normally — none of them trigger IO until a runtime method is called.
 import { OrcaRuntimeService } from './orca-runtime'
 import { RuntimeRemoteFetchController } from './runtime-remote-fetch-controller'
-import { getPRConflictSummary } from '../github/conflict-summary'
+import * as conflicts from '../github/conflict-summary'
 
 function isFetchArgs(argv: unknown): argv is string[] {
   if (!Array.isArray(argv)) {
@@ -118,6 +118,7 @@ describe('OrcaRuntimeService.fetchRemoteWithCache', () => {
   )
 
   beforeEach(() => {
+    conflicts.__resetPRConflictSummaryCachesForTests()
     gitExecFileAsyncMock.mockReset()
   })
 
@@ -367,41 +368,62 @@ describe('OrcaRuntimeService.fetchRemoteWithCache', () => {
     expect(fetchCallCount()).toBe(1)
   })
 
-  it('shares one base fetch between a PR conflict preview and a create refresh', async () => {
-    let resolveFetch!: () => void
-    const pending = new Promise<{ stdout: string; stderr: string }>((resolve) => {
-      resolveFetch = () => resolve({ stdout: '', stderr: '' })
-    })
-    const outputs: Record<string, string> = {
-      'rev-parse': 'live-base-tip\n',
-      'merge-base': 'merge-base-oid\n',
-      'rev-list': '2\n',
-      'merge-tree': 'tree-oid\u0000src/conflict.ts\u0000'
+  it.each(['create-first', 'success', 'main', 'other'])(
+    'shares successful work while keeping Create independent: %s',
+    async (scenario) => {
+      vi.useFakeTimers()
+      let finishFetch = () => {}
+      const outputs: Record<string, string> = {
+        'rev-parse': 'live-base-tip',
+        'merge-base': 'merge-base',
+        'rev-list': '2',
+        'merge-tree': 'tree\u0000src/conflict.ts\u0000'
+      }
+      gitExecFileAsyncMock.mockImplementation((argv: string[], options) => {
+        return !isFetchArgs(argv)
+          ? Promise.resolve({ stdout: outputs[argv[0]] ?? '' })
+          : fetchCallCount() > 1
+            ? Promise.resolve({ stdout: '' })
+            : new Promise((resolve, reject) => {
+                finishFetch = () => resolve({ stdout: '' })
+                options.signal?.addEventListener('abort', () => reject(new Error('expired')), {
+                  once: true
+                })
+              })
+      })
+      const runtime = new OrcaRuntimeService(null)
+      const base = {
+        remote: 'origin',
+        branch: 'main',
+        ref: 'refs/remotes/origin/main',
+        base: 'origin/main'
+      }
+      const firstCreate =
+        scenario === 'create-first'
+          ? runtime.getOrStartRemoteTrackingBaseRefresh('/repo/pr', base)
+          : null
+      const preview = conflicts.getPRConflictSummary('/repo/pr', 'main', 'github-base', 'head-oid')
+      await vi.waitFor(() => expect(fetchCallCount()).toBe(1))
+      setTimeout(() => finishFetch(), scenario === 'success' ? 5_000 : 15_000)
+      await vi.advanceTimersByTimeAsync(scenario === 'success' ? 0 : 11_000)
+      const next =
+        scenario === 'other' ? { ...base, branch: 'other', ref: 'refs/remotes/origin/other' } : base
+      const create =
+        firstCreate ??
+        runtime.getOrStartRemoteTrackingBaseRefresh('/repo/pr', next, {
+          admissionTier: 'interactive'
+        })
+      const sibling = runtime.getOrStartRemoteTrackingBaseRefresh('/repo/pr', next)
+      await vi.advanceTimersByTimeAsync(scenario === 'success' ? 5_000 : 4_000)
+      await expect(preview).resolves.toMatchObject({
+        baseCommit: 'live-ba',
+        files: ['src/conflict.ts']
+      })
+      await expect(create).resolves.toEqual({ ok: true })
+      await expect(sibling).resolves.toEqual({ ok: true })
+      expect(fetchCallCount()).toBe(scenario === 'main' || scenario === 'other' ? 2 : 1)
     }
-    gitExecFileAsyncMock.mockImplementation((argv: string[]) =>
-      isFetchArgs(argv) ? pending : Promise.resolve({ stdout: outputs[argv[0]] ?? '', stderr: '' })
-    )
-    const runtime = new OrcaRuntimeService(null)
-    const base = {
-      remote: 'origin',
-      branch: 'main',
-      ref: 'refs/remotes/origin/main',
-      base: 'origin/main'
-    }
-
-    const create = runtime.getOrStartRemoteTrackingBaseRefresh('/repo/pr', base)
-    const preview = getPRConflictSummary('/repo/pr', 'main', 'github-base-oid', 'head-oid')
-    await vi.waitFor(() => expect(fetchCallCount()).toBe(1))
-    expect(gitExecFileAsyncMock.mock.calls.some(([argv]) => argv[0] === 'merge-base')).toBe(false)
-    resolveFetch()
-
-    await expect(create).resolves.toEqual({ ok: true })
-    await expect(preview).resolves.toMatchObject({
-      baseCommit: 'live-ba',
-      files: ['src/conflict.ts']
-    })
-    expect(fetchCallCount()).toBe(1)
-  })
+  )
 
   it('does not advance exact-base freshness when a remote-tracking refresh fails', async () => {
     mockFetchResults([Promise.reject(new Error('network down')), { stdout: '', stderr: '' }])

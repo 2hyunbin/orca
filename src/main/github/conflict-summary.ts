@@ -7,11 +7,7 @@ import { gitExecFileAsync } from '../git/runner'
 import { gitOptionsForWorktree, type GitRuntimeOptions } from '../git/git-runtime-options'
 import { createLocalGitObjectQuarantine } from '../git/local-git-object-quarantine'
 import { _resetCanonicalRepoKeyCacheForTests } from '../git/canonical-repo-key'
-import {
-  RuntimeRemoteFetchController,
-  type RemoteFetchResult
-} from '../runtime/runtime-remote-fetch-controller'
-import { withTimeout } from '../../shared/promise-timeout-fallback'
+import { RuntimeRemoteFetchController } from '../runtime/runtime-remote-fetch-controller'
 import {
   clearGitCapabilityStateForTests,
   withLocalGitCapabilityCacheForExecution
@@ -32,11 +28,8 @@ import {
 type LocalGitExecOptions = Pick<GitRuntimeOptions, 'wslDistro' | 'admissionTier'>
 type BaseRefreshController = Pick<
   RuntimeRemoteFetchController,
-  'getOrStartRemoteTrackingBaseRefresh'
+  'refreshRemoteTrackingBaseForPreview'
 >
-
-// Why: the PR card waits on this fetch; a slow remote falls back to the last fetched base tip.
-const BASE_REFRESH_WAIT_MS = 10_000
 
 let remoteFetches: BaseRefreshController | null = null
 
@@ -181,19 +174,15 @@ async function resolveLatestBaseOid(
   // Why: fetching the base ref keeps the conflict list aligned with GitHub's
   // live mergeability view, but the card must still render offline. A failed
   // or slow fetch falls back to the local ref, then to GitHub's base OID.
-  await withTimeout<RemoteFetchResult | null>(
-    remoteFetches.getOrStartRemoteTrackingBaseRefresh(
-      repoPath,
-      {
-        remote: remoteName,
-        branch: baseRefName,
-        ref: trackingRef,
-        base: `${remoteName}/${baseRefName}`
-      },
-      localGitOptions
-    ),
-    BASE_REFRESH_WAIT_MS,
-    null
+  await remoteFetches.refreshRemoteTrackingBaseForPreview(
+    repoPath,
+    {
+      remote: remoteName,
+      branch: baseRefName,
+      ref: trackingRef,
+      base: `${remoteName}/${baseRefName}`
+    },
+    localGitOptions
   )
 
   for (const ref of [trackingRef, `${remoteName}/${baseRefName}`]) {
