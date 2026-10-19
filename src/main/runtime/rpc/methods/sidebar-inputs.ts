@@ -1,5 +1,4 @@
 import { defineMethod } from '../core'
-import { requireSwitchedOn } from '../../sidebar-inputs/require-switched-on'
 import { readRuntimeDesktopSidebarFacts } from '../../sidebar-inputs/sidebar-inputs-feed-domains'
 import { isHostOwnPhone } from '../host-own-phone'
 import { SidebarInputsReadParams } from '../../../../shared/sidebar-list/sidebar-inputs-feed-contract'
@@ -9,21 +8,19 @@ import { SetCollapsedParams } from '../../../../shared/rpc-contract/workspace-vi
 import { setCollapsedSection } from '../../workspace-view-collapse-writes'
 import { ClientWorkspaceViewParams } from '../../../../shared/rpc-contract/client-workspace-view-params'
 
-// Registered only with ORCA_SIDEBAR_INPUTS=main, so the producers below always exist.
-
 export const SIDEBAR_INPUT_METHODS = [
   defineMethod({
     name: 'sidebarInputs.activityFacts',
     permission: 'workspace',
     params: null,
     handler: async (_params, { runtime }) =>
-      requireSwitchedOn(runtime.sidebarFacts).getWorkspaceActivityFacts()
+      runtime.sidebarFacts.getWorkspaceActivityFacts()
   }),
   defineMethod({
     name: 'sidebarInputs.repoIcons',
     permission: 'workspace',
     params: RepoIconDataUrlsParams,
-    handler: async ({ ids }, { runtime }) => requireSwitchedOn(runtime.repoIconDataUrls).read(ids)
+    handler: async ({ ids }, { runtime }) => runtime.repoIconDataUrls.read(ids)
   }),
   defineMethod({
     name: 'sidebarInputs.desktopFacts',
@@ -35,27 +32,27 @@ export const SIDEBAR_INPUT_METHODS = [
     name: 'sidebarInputs.pairedServerRows',
     permission: 'workspace',
     params: null,
-    handler: async (_params, { runtime }) => requireSwitchedOn(runtime.pairedServerRows).snapshot()
+    handler: async (_params, { runtime }) => runtime.pairedServerRows.snapshot()
   }),
   defineMethod({
     name: 'sidebarInputs.workspaceRows',
     permission: 'workspace',
     params: null,
-    handler: async (_params, { runtime }) => requireSwitchedOn(runtime.workspaceRows).snapshot()
+    handler: async (_params, { runtime }) => runtime.workspaceRows.snapshot()
   }),
   defineMethod({
     name: 'sidebarInputs.reviewFacts',
     permission: 'workspace',
     params: null,
     handler: async (_params, { runtime }) =>
-      requireSwitchedOn(runtime.sidebarFacts).getWorkspaceReviewFacts()
+      runtime.sidebarFacts.getWorkspaceReviewFacts()
   }),
   defineMethod({
     name: 'sidebarInputs.temporal',
     permission: 'workspace',
     params: null,
     handler: async (_params, { runtime }) =>
-      requireSwitchedOn(runtime.sidebarFacts).getSidebarTemporalSnapshot()
+      runtime.sidebarFacts.getSidebarTemporalSnapshot()
   }),
   defineMethod({
     name: 'sidebarInputs.read',
@@ -64,7 +61,7 @@ export const SIDEBAR_INPUT_METHODS = [
     // The feed is this host's own view: its desktop window and its own phone read it. A delegated
     // phone lists through its own desktop's feed; other desktops and web clients build their own.
     handler: async (params, context) => {
-      const feed = requireSwitchedOn(context.runtime.sidebarInputsFeed)
+      const feed = context.runtime.sidebarInputsFeed
       const { connectionId } = context
       const ownView = isHostOwnPhone(context) || context.caller?.kind === 'desktop'
       if (!ownView || connectionId === undefined) {
@@ -95,7 +92,7 @@ export const SIDEBAR_INPUT_METHODS = [
     permission: 'workspace',
     params: SidebarSessionBeginParams,
     handler: async ({ sessionId }, { runtime }) => {
-      requireSwitchedOn(runtime.sidebarFacts).beginSidebarListSession(sessionId)
+      runtime.sidebarFacts.beginSidebarListSession(sessionId)
       return { ok: true }
     }
   }),
@@ -104,7 +101,7 @@ export const SIDEBAR_INPUT_METHODS = [
     permission: 'workspace',
     params: null,
     handler: async (_params, { runtime }) =>
-      requireSwitchedOn(runtime.workspaceCreations).snapshot()
+      runtime.workspaceCreations.snapshot()
   }),
   defineMethod({
     name: 'sidebarInputs.reportView',
@@ -112,7 +109,7 @@ export const SIDEBAR_INPUT_METHODS = [
     params: ClientWorkspaceViewParams,
     // What a client window shows, so this host raises no unread flag on it; held until it closes.
     handler: async (params, { runtime, connectionId, signal }) => {
-      const viewers = requireSwitchedOn(runtime.sidebarFacts).workspaceViewers
+      const viewers = runtime.sidebarFacts.workspaceViewers
       // A view outlives the call, so it needs a connection whose close drops it.
       if (connectionId === undefined || signal?.aborted) {
         throw new Error('client_disconnected')
@@ -133,6 +130,6 @@ export const SIDEBAR_INPUT_METHODS = [
     params: SetCollapsedParams,
     // Why the same callers as ui.set: collapsedGroups is not pairing-local, so both writes share one view.
     handler: (params, { runtime }) =>
-      setCollapsedSection(runtime, requireSwitchedOn(runtime.collapseWriteOrder), params)
+      setCollapsedSection(runtime, runtime.collapseWriteOrder, params)
   })
 ]

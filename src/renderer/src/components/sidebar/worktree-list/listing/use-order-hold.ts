@@ -1,5 +1,4 @@
 import { useState, useSyncExternalStore } from 'react'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../../../shared/sidebar-inputs-switch'
 import type { SortBy } from '../../../../../../shared/sidebar-list/smart-sort'
 import { mergeHeldOrder } from './held-order'
 
@@ -65,7 +64,6 @@ function subscribe(listener: () => void): () => void {
   }
 }
 
-const noSubscription = (): (() => void) => () => {}
 const notEngaged = (): boolean => false
 
 /**
@@ -73,12 +71,8 @@ const notEngaged = (): boolean => false
  * drag, so a click never lands on a row that just moved; the new order applies on leave or drag end.
  */
 export function useOrderHeldWhileEngaged(ids: string[], sortBy: SortBy): string[] {
-  // Switch point: the stamp-sorted list moves on events, so it holds; today's list settles itself.
-  const engaged = useSyncExternalStore(
-    ORCA_SIDEBAR_INPUTS_IS_MAIN ? subscribe : noSubscription,
-    ORCA_SIDEBAR_INPUTS_IS_MAIN ? isEngaged : notEngaged,
-    notEngaged
-  )
+  // The stamp-sorted list moves on events, so it holds.
+  const engaged = useSyncExternalStore(subscribe, isEngaged, notEngaged)
   const [shown, setShown] = useState({ ids, sortBy })
   // Only Recent and Smart move on their own; a mode switch applies at once, like adds and removals.
   const holds = engaged && (sortBy === 'recent' || sortBy === 'smart')
@@ -87,8 +81,8 @@ export function useOrderHeldWhileEngaged(ids: string[], sortBy: SortBy): string[
       ? { ids: mergeHeldOrder(shown.ids, ids), sortBy }
       : { ids, sortBy }
   const changed = next.ids !== shown.ids || next.sortBy !== shown.sortBy
-  if (ORCA_SIDEBAR_INPUTS_IS_MAIN && changed) {
+  if (changed) {
     setShown(next)
   }
-  return ORCA_SIDEBAR_INPUTS_IS_MAIN ? next.ids : ids
+  return next.ids
 }

@@ -5,7 +5,6 @@ import {
 import type { ProjectHostSetupProjection } from '../../../../shared/project-host-setup-projection'
 import { getProjectHostSetupProjectionFromState } from '@/store/project-host-setup-selector'
 import type { AppState } from '@/store/types'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
 
 type CatalogSource = {
   repos: AppState['repos']
@@ -41,8 +40,8 @@ export function getProjectSectionCatalogFromState(
     state.repos,
     projection,
     state.projectOrderBy,
-    // Switch point: a phone reading the feed lists folder workspaces under these.
-    ORCA_SIDEBAR_INPUTS_IS_MAIN ? state.projectGroups : undefined
+    // A phone reading the feed lists folder workspaces under these.
+    state.projectGroups
   )
   cachedCatalogSource = {
     repos: state.repos,

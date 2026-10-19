@@ -11,7 +11,6 @@ import type { AppState } from '../../types'
 import { persistPassiveWorktreeMetaForOwner } from '../worktrees/listing/worktree-owner-settings'
 import type { WorkspaceAttentionGet, WorkspaceAttentionSet } from './workspace-attention-contract'
 import { workspaceHasLiveMarker } from './workspace-live-markers'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../../shared/sidebar-inputs-switch'
 import { ownerHostOwnsSidebarInputs } from '../worktrees/listing/owner-host-sidebar-inputs'
 
 // The persisted workspace flag `isUnread`. Only the workspace-attention module writes it.
@@ -21,11 +20,7 @@ export function markWorkspaceUnreadFlag(
   get: WorkspaceAttentionGet,
   worktreeId: string
 ): void {
-  if (!ORCA_SIDEBAR_INPUTS_IS_MAIN) {
-    raiseWorkspaceUnreadFlag(set, get, worktreeId)
-    return
-  }
-  // Switch point: the owning host raises the flag from the same news, unless it is older.
+  // The owning host raises the flag from the same news, unless it is older.
   const clearsBefore = clearsByWorkspace.get(worktreeId) ?? 0
   void ownerRaisesUnreadFlag(get(), worktreeId).then((ownerRaises) => {
     // A read while the owner was being asked already covers this news.

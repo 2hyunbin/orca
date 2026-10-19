@@ -11,7 +11,6 @@ import { folderWorkspaceKey } from '../../../shared/workspace-scope'
 import { removeWorkspaceSessionOwnerEverywhere } from './session-owner-removal'
 import type { WorkspaceAttachmentMutation } from '../../../shared/workspace-attachment-mutation'
 import { normalizeWorkspaceAttachmentUpdate } from '../../../shared/workspace-attachments'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
 
 export type FolderWorkspaceMutationOperations = {
   state: PersistedState
@@ -111,8 +110,8 @@ export class FolderWorkspacePersistenceOperations {
       ...(input.pendingFirstAgentMessageRename === true && input.createdWithAgent
         ? { pendingFirstAgentMessageRename: true }
         : {}),
-      // Switch point: creation is the workspace's first Recent stamp.
-      lastActivityAt: ORCA_SIDEBAR_INPUTS_IS_MAIN ? now : 0,
+      // Creation is the workspace's first Recent stamp.
+      lastActivityAt: now,
       createdAt: now,
       updatedAt: now
     }

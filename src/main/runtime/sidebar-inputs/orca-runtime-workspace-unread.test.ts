@@ -10,7 +10,6 @@ import { RpcDispatcher } from '../rpc/dispatcher'
 import type { RpcDispatchStreamingOptions } from '../rpc/dispatcher-stream-options'
 import { SESSION_TAB_METHODS } from '../rpc/methods/session-tabs'
 import { SIDEBAR_INPUT_METHODS } from '../rpc/methods/sidebar-inputs'
-import { requireSwitchedOn } from './require-switched-on'
 import { ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES } from '../../../shared/electron-remote-runtime-client-capabilities'
 import { remoteRuntimeClientCapabilities } from '../../../shared/remote-runtime-client-capabilities'
 import { WORKSPACE_UNREAD_HOST_RAISES_CAPABILITY } from '../../../shared/workspace-unread-raise-capability'
@@ -211,7 +210,7 @@ describe('workspace unread flag on a headless host', () => {
   it('advertises that it raises the flag, so no socket of a current desktop silences it', () => {
     const host = createHeadlessHost()
     expect(host.runtime.getStatus().capabilities).toContain(WORKSPACE_UNREAD_HOST_RAISES_CAPABILITY)
-    const facts = requireSwitchedOn(host.runtime.sidebarFacts)
+    const facts = host.runtime.sidebarFacts
     for (const [connectionId, capabilities] of Object.entries(currentDesktopSockets())) {
       facts.noteRuntimeClient(connectionId, capabilities)
     }
@@ -224,7 +223,7 @@ describe('workspace unread flag on a headless host', () => {
     // Either its request socket or its browser host lease hosts client pages without the capability.
     const older = (capabilities: readonly string[]) =>
       capabilities.filter((capability) => capability !== WORKSPACE_UNREAD_HOST_RAISES_CAPABILITY)
-    const facts = requireSwitchedOn(host.runtime.sidebarFacts)
+    const facts = host.runtime.sidebarFacts
     facts.noteRuntimeClient('desktop-old', older(currentDesktopSockets().request))
     facts.noteRuntimeClient('desktop-old-lease', older(currentDesktopSockets().lease))
     host.finishTurn()

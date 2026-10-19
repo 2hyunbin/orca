@@ -6,7 +6,6 @@ import { OrcaRuntimeService } from '../orca-runtime'
 import type { ResolvedWorktreeSnapshot } from '../runtime-resolved-worktree-cache'
 import type { RuntimeStore } from '../runtime-store-contract'
 import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
-import { requireSwitchedOn } from './require-switched-on'
 import { TestPhone } from './sidebar-inputs-feed.test-fixture'
 
 vi.mock('../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
@@ -110,7 +109,7 @@ function setup() {
   const runtime = new Probe(store as RuntimeStore)
   return {
     runtime,
-    rows: requireSwitchedOn(runtime.workspaceRows),
+    rows: runtime.workspaceRows,
     listing,
     write: (domains?: readonly string[]) => onWrite(domains)
   }
@@ -165,7 +164,7 @@ describe('WorkspaceRowsProducer', () => {
 
   it('reaches the phone feed as the workspaces domain', async () => {
     const { runtime, listing, write } = setup()
-    const feed = requireSwitchedOn(runtime.sidebarInputsFeed)
+    const feed = runtime.sidebarInputsFeed
     const events: RuntimeClientEvent[] = []
     runtime.onClientEvent((event) => events.push(event))
     const phone = new TestPhone(feed, 'conn-1')
