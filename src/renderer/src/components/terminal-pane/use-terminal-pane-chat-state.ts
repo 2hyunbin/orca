@@ -149,6 +149,7 @@ export function useTerminalPaneChatState(controller: TerminalPaneTitleController
         nativeChatTranscriptIsLocalReadable
       })
     },
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- shellForegroundByLeaf only re-derives eligibility; the body reads the store so a departure sees the shell before React commits.
     [
       tabAgentTypeByLeaf,
       shellForegroundByLeaf,

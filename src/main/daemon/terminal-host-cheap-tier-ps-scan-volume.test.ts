@@ -154,6 +154,7 @@ function createSession(pane: number): Session {
     startupAgentRecognition: null,
     isDead: () => false
   })
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: inspection reads only these members; the daemon session lifecycle is outside this test.
   return {
     pid: shellPid(pane),
     spawn: { shellPath: '/bin/zsh' },
