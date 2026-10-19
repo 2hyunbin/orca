@@ -48,7 +48,11 @@ function pruneCaptures(snapshotsRoot: string, keep: ReadonlySet<string>): void {
   for (const entry of entries) {
     const name = entry.name
     if (entry.isDirectory() && name.startsWith(ORCAD_SNAPSHOT_CAPTURE_PREFIX) && !keep.has(name)) {
-      rmSync(join(snapshotsRoot, name), { recursive: true, force: true })
+      try {
+        rmSync(join(snapshotsRoot, name), { recursive: true, force: true })
+      } catch {
+        // As the shell prune did: a stuck old capture must not block this one; the room check decides.
+      }
     }
   }
 }

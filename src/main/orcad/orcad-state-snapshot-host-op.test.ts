@@ -76,6 +76,17 @@ describe.skipIf(process.platform === 'win32')('orcad --orcad-state-snapshot capt
     ])
   })
 
+  it.skipIf(ROOT_USER)('still captures when an old capture cannot be pruned', async () => {
+    writeFileSync(join(snapshots, 'pre-0.1.0+aa01-1', 'state.tar'), 'old')
+    chmodSync(join(snapshots, 'pre-0.1.0+aa01-1'), 0o500)
+    const snapshot = join(snapshots, 'pre-0.2.0+cc03-4')
+    try {
+      expect(parseOrcadSnapshotCapture(await run('capture', root, snapshot))).toBe('captured')
+    } finally {
+      chmodSync(join(snapshots, 'pre-0.1.0+aa01-1'), 0o700)
+    }
+  })
+
   it('answers EMPTY for a root that holds no member', async () => {
     const empty = join(base, 'empty')
     mkdirSync(empty)
