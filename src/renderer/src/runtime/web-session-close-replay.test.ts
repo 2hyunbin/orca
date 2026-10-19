@@ -155,6 +155,38 @@ describe('web session close replay', () => {
     expect(isWebSessionCloseIntentPending(OWNER, WT, 'host-tab-0', NOW)).toBe(false)
   })
 
+  it('shows again a tab whose expired close another settlement prunes', () => {
+    vi.useFakeTimers({ now: NOW })
+    holdWebSessionCloseForReplay(STORE, OWNER, 'other-worktree', ['host-tab-9'])
+    vi.setSystemTime(NOW + PAIRED_TERMINAL_TAB_CLOSE_INTENT_MAX_AGE_MS + 1)
+    holdWebSessionCloseForReplay(STORE, OWNER, WT, ['host-tab-1'])
+    const [due] = takeDueWebSessionCloseReplays(STORE, ENV, WT, PRESENT)
+
+    expect(settleWebSessionCloseReplay(STORE, due!, true)).toBe('done')
+
+    expect(heldHostTabIds()).toEqual([])
+    expect(isWebSessionCloseIntentPending(OWNER, 'other-worktree', 'host-tab-9', Date.now())).toBe(
+      false
+    )
+    // The delivered close keeps hiding its tab until the host's snapshot drops it.
+    expect(isWebSessionCloseIntentPending(OWNER, WT, 'host-tab-1', Date.now())).toBe(true)
+  })
+
+  it('shows the tab again once the host keeps refusing the close', () => {
+    holdWebSessionCloseForReplay(STORE, OWNER, WT, ['host-tab-1'])
+    for (let attempt = 1; attempt < MAX_WEB_SESSION_CLOSE_REPLAY_ATTEMPTS; attempt += 1) {
+      settleWebSessionCloseReplay(
+        STORE,
+        takeDueWebSessionCloseReplays(STORE, ENV, WT, PRESENT)[0]!,
+        false
+      )
+    }
+    const [last] = takeDueWebSessionCloseReplays(STORE, ENV, WT, PRESENT)
+
+    expect(settleWebSessionCloseReplay(STORE, last!, false)).toBe('gave-up')
+    expect(isWebSessionCloseIntentPending(OWNER, WT, 'host-tab-1', NOW)).toBe(false)
+  })
+
   it('drops a close past the age bound instead of sending it', () => {
     vi.useFakeTimers({ now: NOW })
     holdWebSessionCloseForReplay(STORE, OWNER, WT, ['host-tab-1'])

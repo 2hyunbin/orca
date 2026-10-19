@@ -160,10 +160,7 @@ export async function replayWebSessionTabCloses(
     if (settled === 'done') {
       continue
     }
-    // The host kept failing the close; show the tab again rather than hide a live one forever.
-    for (const hostTabId of replay.hostTabIds) {
-      clearWebSessionCloseIntent(replay.owner, replay.worktreeId, hostTabId)
-    }
+    // The host kept failing the close and its tab is shown again rather than hidden forever.
     // The unchanged snapshot that made this replay due would otherwise be refused as stale.
     await refreshWebRuntimeSessionTabsSnapshot(environmentId, replay.worktreeId, {
       acceptCurrentSnapshot: true

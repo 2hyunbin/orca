@@ -80,6 +80,32 @@ function revealHeldClose(
   }
 }
 
+/**
+ * The one way a held close leaves the store. Whatever the change removed -- the named intents, a
+ * cap eviction, or anything past the age bound that the store prunes on the way -- is never sent
+ * again, so it stops hiding its tab, except a delivered close the host's next snapshot will settle.
+ */
+function changeHeldIntents(
+  store: PairedTerminalTabCloseIntentStore,
+  environmentId: string,
+  change: () => void,
+  stillHidden: ReadonlySet<string> = new Set()
+): void {
+  const before = listHeldIntents(store, environmentId)
+  change()
+  const kept = new Set(listHeldIntents(store, environmentId).map(pairedTerminalTabCloseIntentKey))
+  for (const intent of before) {
+    const key = pairedTerminalTabCloseIntentKey(intent)
+    if (kept.has(key)) {
+      continue
+    }
+    attemptsByIntent.delete(attemptKey(environmentId, key))
+    if (!stillHidden.has(key)) {
+      revealHeldClose(intentOwner(environmentId, intent), intent.worktreeId, intent.hostTabIds)
+    }
+  }
+}
+
 /** Keeps an unsent user close, hiding its tab; a repeat for the same tab keeps its attempt count. */
 export function holdWebSessionCloseForReplay(
   store: PairedTerminalTabCloseIntentStore,
@@ -92,22 +118,14 @@ export function holdWebSessionCloseForReplay(
     return
   }
   const { environmentId } = owner
-  const before = listHeldIntents(store, environmentId)
-  store.record(environmentId, {
-    hostTabIds: [...hostTabIds],
-    worktreeId,
-    closedAt: Date.now(),
-    ...(owner.pairingRevision !== undefined ? { pairingRevision: owner.pairingRevision } : {})
-  })
-  const kept = new Set(listHeldIntents(store, environmentId).map(pairedTerminalTabCloseIntentKey))
-  for (const intent of before) {
-    const key = pairedTerminalTabCloseIntentKey(intent)
-    if (!kept.has(key)) {
-      // An evicted close is never sent again, so it must stop hiding its tab.
-      attemptsByIntent.delete(attemptKey(environmentId, key))
-      revealHeldClose(intentOwner(environmentId, intent), intent.worktreeId, intent.hostTabIds)
-    }
-  }
+  changeHeldIntents(store, environmentId, () =>
+    store.record(environmentId, {
+      hostTabIds: [...hostTabIds],
+      worktreeId,
+      closedAt: Date.now(),
+      ...(owner.pairingRevision !== undefined ? { pairingRevision: owner.pairingRevision } : {})
+    })
+  )
 }
 
 /**
@@ -142,8 +160,6 @@ export function takeDueWebSessionCloseReplays(
       now - intent.closedAt > PAIRED_TERMINAL_TAB_CLOSE_INTENT_MAX_AGE_MS
     ) {
       dropped.push(intentKey)
-      attemptsByIntent.delete(key)
-      revealHeldClose(intentOwner(environmentId, intent), intent.worktreeId, intent.hostTabIds)
       continue
     }
     const owner = intentOwner(environmentId, intent)
@@ -160,12 +176,12 @@ export function takeDueWebSessionCloseReplays(
     due.push({ owner, worktreeId: intent.worktreeId, hostTabIds: intent.hostTabIds, intentKey })
   }
   if (dropped.length > 0) {
-    store.clear(environmentId, dropped)
+    changeHeldIntents(store, environmentId, () => store.clear(environmentId, dropped))
   }
   return due
 }
 
-/** 'gave-up' means the caller must stop hiding the tab: the host kept refusing the close. */
+/** 'gave-up' means the host kept refusing the close; its tab is shown again. */
 export function settleWebSessionCloseReplay(
   store: PairedTerminalTabCloseIntentStore,
   replay: WebSessionCloseReplay,
@@ -183,8 +199,12 @@ export function settleWebSessionCloseReplay(
   }
   attempt.inFlight = false
   if (delivered || attempt.attempts >= MAX_WEB_SESSION_CLOSE_REPLAY_ATTEMPTS) {
-    attemptsByIntent.delete(key)
-    store.clear(environmentId, [replay.intentKey])
+    changeHeldIntents(
+      store,
+      environmentId,
+      () => store.clear(environmentId, [replay.intentKey]),
+      delivered ? new Set([replay.intentKey]) : undefined
+    )
     return delivered ? 'done' : 'gave-up'
   }
   return 'retry'
