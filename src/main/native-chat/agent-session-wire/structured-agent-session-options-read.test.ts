@@ -23,6 +23,7 @@ function restingRecord(): AgentSessionRecord {
   return {
     provider: 'codex',
     accountHome: { variable: 'CODEX_HOME', path: '/homes/a' },
+    providerHandleChain: [],
     location: { executionHostId: 'local', wslDistro: null },
     options: {}
   } as unknown as AgentSessionRecord
@@ -46,7 +47,12 @@ describe('options at rest', () => {
     const starting = {
       child: { phase: 'starting' },
       params: { provider: 'codex' },
-      journal: { threadGoal: () => null, context: { floor: () => null } }
+      journal: {
+        threadGoal: () => null,
+        newestTurn: () => null,
+        submissions: () => [],
+        context: { floor: () => null }
+      }
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
     const context = {
@@ -69,10 +75,10 @@ describe('options at rest', () => {
     const older = await readStructuredAgentSessionOptions(context, SESSION, {
       readsWithoutModel: false
     })
-    // The account default an older client needs is marked as one, which that client ignores.
+    // A new chat that has sent nothing runs that default, which its first send pins.
     expect(older.current).toEqual({
       model: 'gpt-account',
-      defaulted: ['model'],
+      defaulted: [],
       permissionMode: 'ask'
     })
     expect(read).toHaveBeenLastCalledWith({ agent: 'codex', sessionId: SESSION, savedOnly: true })
@@ -85,7 +91,12 @@ describe('options at rest', () => {
     const conversation = () => ({
       child: live ? { fence: 7 } : null,
       params: { provider: 'codex' },
-      journal: { threadGoal: () => null, context: { floor: () => null } }
+      journal: {
+        threadGoal: () => null,
+        newestTurn: () => null,
+        submissions: () => [],
+        context: { floor: () => null }
+      }
     })
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
     const context = {
@@ -133,7 +144,12 @@ describe('options at rest', () => {
       const resting = {
         child: null,
         params: { provider: 'codex' },
-        journal: { threadGoal: () => null, context: { floor: () => null } }
+        journal: {
+          threadGoal: () => null,
+          newestTurn: () => null,
+          submissions: () => [],
+          context: { floor: () => null }
+        }
       }
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: options reads touch only these context members.
       const context = {
@@ -186,6 +202,43 @@ describe('options at rest', () => {
   )
 })
 
+describe('a chat that has sent nothing', () => {
+  it.each([
+    ['started here names its default as its own', [], null, []],
+    ['taken from history still marks it', [{ origin: 'adopted' }], null, ['model']],
+    ['with a turn still marks it', [], { turnId: 'turn-1' }, ['model']]
+  ])('%s', async (_name, chain, turn, defaulted) => {
+    const record = { ...restingRecord(), providerHandleChain: chain }
+    const resting = {
+      child: null,
+      params: { provider: 'codex' },
+      journal: {
+        threadGoal: () => null,
+        newestTurn: () => turn,
+        submissions: () => [],
+        context: { floor: () => null }
+      }
+    }
+    const listed = { id: 'gpt-account', label: 'Model', isDefault: true, efforts: [] }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
+    const context = {
+      deps: {
+        adapter: {},
+        agents: NO_STRUCTURED_AGENTS,
+        store: { getRecord: () => record },
+        modelCatalog: { read: async () => ({ origin: 'probe', models: [listed], fetchedAt: 1 }) }
+      },
+      serialize: (_sessionId: string, task: () => Promise<unknown>) => task(),
+      openConversation: async () => resting,
+      conversation: async () => resting
+    } as unknown as StructuredAgentSessionMutationContext
+    const read = await readStructuredAgentSessionOptions(context, SESSION, {
+      readsWithoutModel: false
+    })
+    expect(read.current).toMatchObject({ model: 'gpt-account', defaulted })
+  })
+})
+
 describe('live Codex option reads', () => {
   it('keeps newer saved picks after a cold live listing waits without holding the session lane', async () => {
     const listing = Promise.withResolvers<void>()
@@ -203,7 +256,13 @@ describe('live Codex option reads', () => {
     const live = {
       child,
       params: { provider: 'codex' },
-      journal: { threadGoal: () => null, contextUsage: () => null, context: { floor: () => null } }
+      journal: {
+        threadGoal: () => null,
+        newestTurn: () => null,
+        submissions: () => [],
+        contextUsage: () => null,
+        context: { floor: () => null }
+      }
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
     const context = {
@@ -239,7 +298,12 @@ describe('live Codex option reads', () => {
     const live = {
       child: { fence: 7 },
       params: { provider: 'codex' },
-      journal: { threadGoal: () => null, context: { floor: () => null } }
+      journal: {
+        threadGoal: () => null,
+        newestTurn: () => null,
+        submissions: () => [],
+        context: { floor: () => null }
+      }
     }
     const failure = new Error('model/list unavailable')
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the failed read ends before touching the remaining context fields.
@@ -277,7 +341,12 @@ describe('live Codex option reads', () => {
     const live = {
       child: { fence: 7 },
       params: { provider: 'codex' },
-      journal: { threadGoal: () => null, context: { floor: () => null } }
+      journal: {
+        threadGoal: () => null,
+        newestTurn: () => null,
+        submissions: () => [],
+        context: { floor: () => null }
+      }
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
     const context = {

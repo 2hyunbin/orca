@@ -69,6 +69,8 @@ function persistedTarget(
       }) satisfies StructuredAgentSessionLinkageJournal['visitItemsWithLinkage'],
       itemBody: (itemId: string) => persisted.get(itemId) ?? null,
       threadGoal: () => null,
+      newestTurn: () => null,
+      submissions: () => [],
       threadGoalSource: () => ({ goal: null, row: null }),
       epoch: 'test'
     }) as unknown as AgentSessionJournal

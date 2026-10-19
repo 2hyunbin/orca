@@ -286,8 +286,16 @@ export async function readStructuredAgentSessionOptions(
     ...(shownSaved('effort') ? { effort: selected.current.effort } : {})
   }
   // A chat that saved a value has no default for it: the saved value shows, or the child it
-  // refused runs what it reports, which the next send records.
-  const defaulted = (options.current.defaulted ?? []).filter((key) => saved?.[key] === undefined)
+  // refused runs what it reports, which the next send records. A chat started here that has sent
+  // nothing runs the default it shows, which its first send pins; one taken from history may not.
+  const neverSent =
+    record !== undefined &&
+    record.providerHandleChain[0]?.origin !== 'adopted' &&
+    session.journal.newestTurn() === null &&
+    session.journal.submissions().length === 0
+  const defaulted = neverSent
+    ? []
+    : (options.current.defaulted ?? []).filter((key) => saved?.[key] === undefined)
   const confirmed = current.confirmed?.filter((key) =>
     key === 'model'
       ? current.model === options.current.model

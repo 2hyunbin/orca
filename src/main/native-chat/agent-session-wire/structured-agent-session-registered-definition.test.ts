@@ -75,7 +75,14 @@ function readAtRest(agents: StructuredAgentRegistry, live?: StructuredAgentSessi
   const resting = {
     child: live ? { fence: 1 } : null,
     params: { provider: RECORD.provider },
-    journal: { threadGoal: () => null, contextUsage: () => null, context: { floor: () => null } }
+    journal: {
+      threadGoal: () => null,
+      newestTurn: () => null,
+      // A chat that has sent, so a value it never saved reads as a default.
+      submissions: () => [{}],
+      contextUsage: () => null,
+      context: { floor: () => null }
+    }
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the read touches only these members.
   const context = {

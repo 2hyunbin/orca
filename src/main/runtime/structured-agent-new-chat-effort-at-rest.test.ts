@@ -158,6 +158,7 @@ function newChatRecord(
     sessionId: `${agent}-new`,
     provider: agent,
     accountHome: HOMES[agent]!,
+    providerHandleChain: [],
     launchDirectory: workspacePath,
     location: {
       executionHostId: 'local',
@@ -197,7 +198,13 @@ function host(agent: string, record: AgentSessionRecord) {
   const resting = {
     child: null,
     params: { provider: agent },
-    journal: { threadGoal: () => null, contextUsage: () => null, context: { floor: () => null } }
+    journal: {
+      threadGoal: () => null,
+      newestTurn: () => null,
+      submissions: () => [],
+      contextUsage: () => null,
+      context: { floor: () => null }
+    }
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the at-rest read touches only these members.
   const context = {
@@ -266,7 +273,7 @@ describe("a new chat's effort pill before its agent starts", () => {
       expect(atRest.current).toEqual({
         model,
         effort,
-        defaulted: ['model', 'effort'],
+        defaulted: [],
         ...modeOf(agent)
       })
     }
@@ -298,7 +305,7 @@ describe("a new chat's effort pill before its agent starts", () => {
     // The account default is not what this repo runs, so its effort is never claimed.
     expect(atRest.current).toEqual({
       model: 'gpt-5.5',
-      defaulted: ['model'],
+      defaulted: [],
       permissionMode: 'ask'
     })
     expect(atRest.conversationCommands).toEqual(['clear', 'compact'])
@@ -310,7 +317,7 @@ describe("a new chat's effort pill before its agent starts", () => {
     expect(atRest.current).toEqual({
       model: 'gpt-5.5',
       effort: 'medium',
-      defaulted: ['model', 'effort'],
+      defaulted: [],
       permissionMode: 'ask'
     })
   })
@@ -321,7 +328,7 @@ describe("a new chat's effort pill before its agent starts", () => {
     expect(atRest.current).toEqual({
       model: 'grok-4',
       effort: 'high',
-      defaulted: ['model'],
+      defaulted: [],
       ...modeOf('grok')
     })
     expect(settled.effort?.value).toBe('high')
