@@ -25,7 +25,7 @@ import { TerminalUseProducer } from './terminal-use-producer'
 import { createKeyedTrailingEdgeCoalescer } from '../keyed-trailing-edge-coalescer'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
-import { sleepKeysNameWorktree } from '../terminal/stop/worktree-terminal-sleep-key'
+import { anySleepKeyNames } from '../terminal/stop/worktree-terminal-sleep-key'
 import { resolveAgentWorkspaceExecutionHostId } from '../../agent-hooks/restored-status-dead-terminal-sweep'
 import {
   isWslMoveProjectBlocked,
@@ -229,7 +229,7 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
       ids: Object.keys(facts),
       isActive: (worktreeId) => worktreeId in facts,
       isUnverifiableGap: (worktreeId) =>
-        !sleepKeysNameWorktree(this.terminalSleepByWorktreeId.keys(), worktreeId) &&
+        !anySleepKeyNames(this.terminalSleepByHostWorktree.keys(), worktreeId) &&
         (this.mobileSessionTabsByWorktree
           .get(worktreeId)
           ?.tabs.some((tab) => tab.type === 'terminal') ??
