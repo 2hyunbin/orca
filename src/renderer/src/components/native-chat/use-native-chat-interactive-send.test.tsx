@@ -38,9 +38,6 @@ vi.mock('@/runtime/runtime-terminal-inspection', () => ({
 vi.mock('@/runtime/runtime-terminal-verified-input', () => ({
   sendRuntimePtyInputVerified: (...args: unknown[]) => mocks.sendRuntimePtyInputVerified(...args)
 }))
-vi.mock('@/runtime/runtime-terminal-verified-input', () => ({
-  sendRuntimePtyInputVerified: (...args: unknown[]) => mocks.sendRuntimePtyInputVerified(...args)
-}))
 
 vi.mock('./native-chat-runtime-send', () => ({
   sendNativeChatAskAnswer: (...args: unknown[]) => mocks.sendNativeChatAskAnswer(...args),
