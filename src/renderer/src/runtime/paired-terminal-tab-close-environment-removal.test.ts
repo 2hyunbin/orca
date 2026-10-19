@@ -22,6 +22,10 @@ import { resetWebSessionTabsSyncTestState } from './web-session-tabs-sync-test-h
 vi.mock('@/hooks/agent-hook-completion-notifications', () => ({
   observeAgentHookCompletionForNotification: vi.fn()
 }))
+const refreshSnapshot = vi.hoisted(() => vi.fn(async () => {}))
+vi.mock('./web-runtime-session-snapshot', () => ({
+  refreshWebRuntimeSessionTabsSnapshot: refreshSnapshot
+}))
 
 const WT = 'repo::/wt'
 const TAB = 'host-tab-1'
@@ -133,7 +137,7 @@ describe('held paired-host closes when a server is removed', () => {
     ])
   })
 
-  it("holds a managed re-pair's closes, unsent, until its host key decides the machine", () => {
+  it("holds a managed re-pair's closes, unsent, until its host key decides the machine", async () => {
     useAppStore.getState().setRuntimeEnvironments([managed('env-a', 1, 'key-a')])
     hold('env-a')
     // The re-pair lands before the catalog carries the host's key.
@@ -143,9 +147,16 @@ describe('held paired-host closes when a server is removed', () => {
     expect(heldRevisions('env-a')).toEqual([1])
     expect(hidden('env-a', 2)).toBe(true)
 
+    refreshSnapshot.mockClear()
     useAppStore.getState().setRuntimeEnvironments([managed('env-a', 2, 'key-a')])
 
     expect(heldRevisions('env-a')).toEqual([2])
+    // An idle host may publish nothing more, so the decision itself asks for the snapshot.
+    await vi.waitFor(() =>
+      expect(refreshSnapshot).toHaveBeenCalledWith('env-a', WT, {
+        expectedEnvironmentPairingRevision: 2
+      })
+    )
     const due = takeDueWebSessionCloseReplays(STORE, 'env-a', WT, new Set([TAB]))
     expect(due.map((replay) => replay.owner)).toEqual([
       { environmentId: 'env-a', pairingRevision: 2 }

@@ -306,6 +306,18 @@ export function reconcileWebSessionCloseReplaysWithCatalog(
     for (const intent of rebased) {
       hideHeldClose(intentOwner(environmentId, intent), intent.worktreeId, intent.hostTabIds)
     }
+    // Why: a close held while the re-pair was undecided waits for a snapshot, and an idle host may
+    // publish none; ask for one so the moved close is sent now.
+    const worktreeIds = [...new Set(rebased.map((intent) => intent.worktreeId))]
+    // Lazy: the snapshot module reaches the store, which loads this module.
+    void import('./web-runtime-session-snapshot').then(({ refreshWebRuntimeSessionTabsSnapshot }) =>
+      worktreeIds.forEach(
+        (worktreeId) =>
+          void refreshWebRuntimeSessionTabsSnapshot(environmentId, worktreeId, {
+            expectedEnvironmentPairingRevision: toRevision
+          })
+      )
+    )
   }
 }
 
