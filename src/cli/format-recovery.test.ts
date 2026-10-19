@@ -46,6 +46,13 @@ describe('ambiguous selector recovery', () => {
         code: 'selector_ambiguous',
         data: {
           ambiguousSelectors: [{ flag: '--worktree', selector: 'name:feature' }],
+          nextSteps: expect.arrayContaining([expect.stringContaining('identity:<identity.key>')])
+        }
+      }
+    })
+    expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toMatchObject({
+      error: {
+        data: {
           nextSteps: expect.arrayContaining([
             'List the exact values with `orca worktree list --json`.'
           ])

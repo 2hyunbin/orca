@@ -14,7 +14,9 @@ const EXACT_FORMS = {
     noun: 'project'
   },
   worktree: {
-    forms: 'id:<repo-id>::<absolute-path> or path:<absolute-path>',
+    // Why identity first: a local and an SSH checkout can share both repo id and path.
+    forms:
+      'identity:<identity.key> (host-qualified), or id:<repo-id>::<absolute-path> when only one host has that checkout',
     list: 'orca worktree list --json',
     noun: 'workspace'
   }
