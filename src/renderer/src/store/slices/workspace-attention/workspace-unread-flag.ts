@@ -35,8 +35,13 @@ export function markWorkspaceUnreadFlag(
   })
 }
 
-/** Clears seen per workspace, so a raise still waiting on its owner check yields to a read. */
+/** Reads seen per workspace, so a raise still waiting on its owner check yields to a read. */
 const clearsByWorkspace = new Map<string, number>()
+
+/** A read of the workspace by any path; a raise still waiting on its owner check drops. */
+export function noteWorkspaceRead(worktreeId: string): void {
+  clearsByWorkspace.set(worktreeId, (clearsByWorkspace.get(worktreeId) ?? 0) + 1)
+}
 
 /** Whether the owning host raises the flag itself; a folder row names its own host. */
 function ownerRaisesUnreadFlag(state: AppState, worktreeId: string): Promise<boolean> {
@@ -144,7 +149,7 @@ export function clearWorkspaceUnreadFlag(
   /** Folder rows share an id across hosts: the on-screen host's row, or null for every row. */
   executionHostId?: ExecutionHostId | null
 ): void {
-  clearsByWorkspace.set(worktreeId, (clearsByWorkspace.get(worktreeId) ?? 0) + 1)
+  noteWorkspaceRead(worktreeId)
   const workspaceScope = parseWorkspaceKey(worktreeId)
   if (workspaceScope?.type === 'folder') {
     const folderWorkspaceId = workspaceScope.folderWorkspaceId

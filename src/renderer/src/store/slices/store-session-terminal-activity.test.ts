@@ -663,44 +663,6 @@ describe('terminal slice behaviors', () => {
     // Flag is consumed — later legitimate respawns still bump.
     expect(store.getState().tabsByWorktree[worktreeId][0].pendingActivationSpawn).toBeUndefined()
   })
-
-  // Why: real background events (agent output, OSC titles) must still bump activity; only activation-driven spawns are suppressed.
-  it('bumps lastActivityAt for a fresh spawn with no activation tag', async () => {
-    const store = createTestStore()
-    const worktreeId = 'repo1::/path/wt1'
-
-    store.setState({
-      repos: [
-        { id: 'repo1', path: '/repo1', displayName: 'Repo 1', badgeColor: '#000', addedAt: 0 }
-      ],
-      worktreesByRepo: {
-        repo1: [
-          makeWorktree({
-            id: worktreeId,
-            repoId: 'repo1',
-            path: '/path/wt1',
-            hostId: 'local',
-            lastActivityAt: 1000
-          })
-        ]
-      },
-      tabsByWorktree: {
-        [worktreeId]: [makeTab({ id: 'tab-1', worktreeId, ptyId: null })]
-      }
-    })
-
-    store.getState().updateTabPtyId('tab-1', 'pty-fresh')
-
-    await settleOwnerAnswer()
-    const worktree = store.getState().worktreesByRepo.repo1[0]
-    expect(worktree.lastActivityAt).toBeGreaterThan(1000)
-    expect(mockApi.worktrees.updateMeta).toHaveBeenCalledWith(
-      expect.objectContaining({
-        worktreeId,
-        updates: expect.objectContaining({ lastActivityAt: expect.any(Number) })
-      })
-    )
-  })
 })
 
 // ─── Reconnect persisted terminals ──────────────────────────────────

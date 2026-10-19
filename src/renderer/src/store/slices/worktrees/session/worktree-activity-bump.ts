@@ -12,7 +12,6 @@ import { getFolderWorkspaceActivityPersistence } from './folder-workspace-activi
 import { warnAmbiguousOwnerOnce } from '@/lib/ambiguous-owner-warning'
 import { persistWorktreeMeta } from '../metadata/worktree-meta-persist'
 import { isRuntimeSelectorNotFoundError } from '../listing/runtime-worktree-rpc-errors'
-import { ownerHostOwnsSidebarInputs } from '../listing/owner-host-sidebar-inputs'
 
 export function createBumpWorktreeActivity(
   set: WorktreeSliceSet,
@@ -20,99 +19,85 @@ export function createBumpWorktreeActivity(
 ): WorktreeSlice['bumpWorktreeActivity'] {
   return (worktreeId) => {
     // Switch point: the owning host writes Recent stamps; terminal start and exit are not events.
-    // An older paired server writes none, so its rows keep this window's stamps.
     if (ORCA_SIDEBAR_INPUTS_IS_MAIN) {
-      void ownerHostOwnsSidebarInputs(get(), worktreeId).then((hostStamps) => {
-        if (!hostStamps) {
-          stampRecentActivity(set, get, worktreeId)
-        }
-      })
       return
     }
-    stampRecentActivity(set, get, worktreeId)
-  }
-}
-
-function stampRecentActivity(
-  set: WorktreeSliceSet,
-  get: WorktreeSliceGet,
-  worktreeId: string
-): void {
-  const now = Date.now()
-  const workspaceScope = parseWorkspaceKey(worktreeId)
-  if (workspaceScope?.type === 'folder') {
-    // Why: folder meta lives on the FolderWorkspace record — persistWorktreeMeta would write a
-    // worktreeMeta['folder:…'] row that folderWorkspaces:list never reads back (#10251).
-    const folderWorkspaceId = workspaceScope.folderWorkspaceId
+    const now = Date.now()
+    const workspaceScope = parseWorkspaceKey(worktreeId)
+    if (workspaceScope?.type === 'folder') {
+      // Why: folder meta lives on the FolderWorkspace record — persistWorktreeMeta would write a
+      // worktreeMeta['folder:…'] row that folderWorkspaces:list never reads back (#10251).
+      const folderWorkspaceId = workspaceScope.folderWorkspaceId
+      let shouldPersist = false
+      set((s) => {
+        if (!s.folderWorkspaces.some((workspace) => workspace.id === folderWorkspaceId)) {
+          return s
+        }
+        shouldPersist = true
+        const isActive = s.activeWorktreeId === worktreeId
+        return {
+          folderWorkspaces: s.folderWorkspaces.map((workspace) =>
+            workspace.id === folderWorkspaceId ? { ...workspace, lastActivityAt: now } : workspace
+          ),
+          // Why: active-workspace PTY events are click side-effects, so they must not reorder it.
+          ...(isActive ? {} : { sortEpoch: s.sortEpoch + 1 })
+        }
+      })
+      if (shouldPersist) {
+        getFolderWorkspaceActivityPersistence(get).record(folderWorkspaceId, now)
+      }
+      return
+    }
     let shouldPersist = false
     set((s) => {
-      if (!s.folderWorkspaces.some((workspace) => workspace.id === folderWorkspaceId)) {
+      const worktree = findKnownWorktreeById(s, worktreeId)
+      if (!worktree) {
         return s
       }
       shouldPersist = true
+      // Why: skip sortEpoch bump for the active worktree — its PTY events are click side-effects (reorder-on-click bug, PR #209).
+      // lastActivityAt is still persisted so the next background-driven sortEpoch bump includes this worktree's score.
       const isActive = s.activeWorktreeId === worktreeId
-      return {
-        folderWorkspaces: s.folderWorkspaces.map((workspace) =>
-          workspace.id === folderWorkspaceId ? { ...workspace, lastActivityAt: now } : workspace
-        ),
-        // Why: active-workspace PTY events are click side-effects, so they must not reorder it.
-        ...(isActive ? {} : { sortEpoch: s.sortEpoch + 1 })
-      }
-    })
-    if (shouldPersist) {
-      getFolderWorkspaceActivityPersistence(get).record(folderWorkspaceId, now)
-    }
-    return
-  }
-  let shouldPersist = false
-  set((s) => {
-    const worktree = findKnownWorktreeById(s, worktreeId)
-    if (!worktree) {
-      return s
-    }
-    shouldPersist = true
-    // Why: skip sortEpoch bump for the active worktree — its PTY events are click side-effects (reorder-on-click bug, PR #209).
-    // lastActivityAt is still persisted so the next background-driven sortEpoch bump includes this worktree's score.
-    const isActive = s.activeWorktreeId === worktreeId
-    const nextWorktrees = applyWorktreeUpdates(s.worktreesByRepo, worktreeId, {
-      lastActivityAt: now
-    })
-    const nextDetectedWorktrees = applyDetectedWorktreeUpdates(
-      s.detectedWorktreesByRepo,
-      worktreeId,
-      {
+      const nextWorktrees = applyWorktreeUpdates(s.worktreesByRepo, worktreeId, {
         lastActivityAt: now
+      })
+      const nextDetectedWorktrees = applyDetectedWorktreeUpdates(
+        s.detectedWorktreesByRepo,
+        worktreeId,
+        {
+          lastActivityAt: now
+        }
+      )
+      return {
+        ...(nextWorktrees !== s.worktreesByRepo
+          ? {
+              worktreesByRepo: nextWorktrees,
+              ...(isActive ? {} : { sortEpoch: s.sortEpoch + 1 })
+            }
+          : {}),
+        ...(nextDetectedWorktrees !== s.detectedWorktreesByRepo
+          ? { detectedWorktreesByRepo: nextDetectedWorktrees }
+          : {})
       }
-    )
-    return {
-      ...(nextWorktrees !== s.worktreesByRepo
-        ? {
-            worktreesByRepo: nextWorktrees,
-            ...(isActive ? {} : { sortEpoch: s.sortEpoch + 1 })
-          }
-        : {}),
-      ...(nextDetectedWorktrees !== s.detectedWorktreesByRepo
-        ? { detectedWorktreesByRepo: nextDetectedWorktrees }
-        : {})
-    }
-  })
+    })
 
-  if (!shouldPersist) {
-    return
-  }
-
-  const ownerTarget = tryRuntimeTargetForWorktreeOwner(get(), worktreeId)
-  if (!ownerTarget) {
-    warnAmbiguousOwnerOnce(worktreeId, 'persist worktree activity timestamp')
-    return
-  }
-  void persistWorktreeMeta(ownerTarget, worktreeId, {
-    lastActivityAt: now
-  }).catch((err) => {
-    if (isRuntimeSelectorNotFoundError(err)) {
+    if (!shouldPersist) {
       return
     }
-    console.error('Failed to persist worktree activity timestamp:', err)
-    void get().fetchWorktrees(getRepoIdFromWorktreeId(worktreeId))
-  })
+
+    const ownerTarget = tryRuntimeTargetForWorktreeOwner(get(), worktreeId)
+    if (!ownerTarget) {
+      warnAmbiguousOwnerOnce(worktreeId, 'persist worktree activity timestamp')
+      return
+    }
+    void persistWorktreeMeta(ownerTarget, worktreeId, {
+      lastActivityAt: now
+    }).catch((err) => {
+      if (isRuntimeSelectorNotFoundError(err)) {
+        return
+      }
+      console.error('Failed to persist worktree activity timestamp:', err)
+      void get().fetchWorktrees(getRepoIdFromWorktreeId(worktreeId))
+    })
+  }
 }

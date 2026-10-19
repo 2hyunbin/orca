@@ -45,8 +45,7 @@ export function HostWorkspaceListStates(
   return null
 }
 
-/** The host serves a list this page cannot build: a page from the host's own build can. */
-/** Above the rows the page already holds, so a host it cannot read never blanks the list. */
+/** A list this page cannot build; shown above the rows it already holds, so it never blanks. */
 export function HostWorkspaceListReopen({ aboveRows }: { aboveRows: boolean }) {
   return (
     <View style={aboveRows ? styles.aboveRows : styles.centered}>

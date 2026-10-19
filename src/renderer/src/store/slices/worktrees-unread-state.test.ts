@@ -27,7 +27,7 @@ vi.mock('@/components/worktree-base-fallback-notice', () => ({
   requestWorktreeBaseFallbackNotice
 }))
 
-// The window writes the flag and Recent stamps only for an older paired server's rows; these tests pin that path.
+// The window raises the flag only for an older paired server's rows; these tests pin that path.
 vi.mock('./worktrees/listing/owner-host-sidebar-inputs', () => ({
   ownerHostOwnsSidebarInputs: async () => false
 }))
@@ -200,34 +200,6 @@ describe('worktree unread (show-until-interact)', () => {
         mockApi.worktrees.updateMeta,
         `${label} persisted to a guessed host`
       ).not.toHaveBeenCalled()
-    }
-  })
-
-  it('warns once per workspace rather than on every activity event (#10634)', async () => {
-    // Why: activity bumps fire on every PTY event; an unbounded warn would flood the console.
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    try {
-      const worktreeId = 'repo-spam::/same/path'
-      const store = createTestStore()
-      store.setState({
-        settings: { activeRuntimeEnvironmentId: 'hub-c' } as never,
-        worktreesByRepo: {
-          'repo-spam': [
-            makeWorktree({ id: worktreeId, repoId: 'repo-spam', hostId: 'ssh:ssh-a' }),
-            makeWorktree({ id: worktreeId, repoId: 'repo-spam', hostId: 'ssh:ssh-b' })
-          ]
-        }
-      } as Partial<AppState>)
-
-      const before = warn.mock.calls.length
-      for (let i = 0; i < 5; i++) {
-        store.getState().bumpWorktreeActivity(worktreeId)
-      }
-      await settleOwnerAnswer()
-
-      expect(warn.mock.calls.length - before).toBe(1)
-    } finally {
-      warn.mockRestore()
     }
   })
 
