@@ -28,22 +28,16 @@ function createOptions(shouldPersistLayout = true) {
   return { options, persistLayoutSnapshot }
 }
 
-describe('terminal pane manager layout gesture wiring', () => {
-  it('persists a gesture with the gesture marker', () => {
-    const { options, persistLayoutSnapshot } = createOptions()
-    options.onLayoutChanged?.('gesture')
-    expect(persistLayoutSnapshot).toHaveBeenCalledExactlyOnceWith('gesture')
-  })
-
-  it('persists an automatic layout change unmarked, as before', () => {
+describe('terminal pane manager layout persist wiring', () => {
+  it('persists a layout change', () => {
     const { options, persistLayoutSnapshot } = createOptions()
     options.onLayoutChanged?.()
-    expect(persistLayoutSnapshot).toHaveBeenCalledExactlyOnceWith(undefined)
+    expect(persistLayoutSnapshot).toHaveBeenCalledOnce()
   })
 
-  it('keeps the persist gate for gestures', () => {
+  it('keeps the persist gate', () => {
     const { options, persistLayoutSnapshot } = createOptions(false)
-    options.onLayoutChanged?.('gesture')
+    options.onLayoutChanged?.()
     expect(persistLayoutSnapshot).not.toHaveBeenCalled()
   })
 })

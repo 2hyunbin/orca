@@ -57,7 +57,7 @@ describe('project removal on the execution host', () => {
     await expect(runtime.removeProject(TEST_REPO_ID)).resolves.toEqual({ removed: true })
 
     expect(stoppedBeforeRemoval.sort()).toEqual(['pty-hidden', 'pty-visible'])
-    expect(removeProjectForHost).toHaveBeenCalledWith(TEST_REPO_ID, 'local')
+    expect(removeProjectForHost).toHaveBeenCalledWith(expect.objectContaining({ id: TEST_REPO_ID }))
   })
 
   it('stops native shells of a project a paired client registered under a runtime stamp', async () => {

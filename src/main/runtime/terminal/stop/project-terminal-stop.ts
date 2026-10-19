@@ -2,10 +2,13 @@ import { OrcaRuntimeWithStopExactTerminalsForWorktree } from './worktree-termina
 import {
   getRepoExecutionHostId,
   getRepoSshConnectionId,
-  normalizeHostPart
+  normalizeHostPart,
+  parseExecutionHostId
 } from '../../../../shared/execution-host'
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
 import type { Repo } from '../../../../shared/repo-types'
+import { getRuntimeBrowserPageRegistry } from '../../runtime-browser-page-registry'
+import { listFailedAgentLaunchWorktreeIds } from '../../../agent-launch/agent-launch-pane-attachment'
 import {
   closeStructuredSessionsForWorktree,
   createStructuredSweepProgress,
@@ -101,17 +104,44 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
           console.warn('[runtime] project agent session close failed', error)
         })
       : null
+    let worktreeIds: readonly string[] = []
     try {
-      return await this.stopProjectPtys(repo, stopOptions)
+      const result = await this.stopProjectPtys(repo, stopOptions)
+      worktreeIds = result.worktreeIds
+      return { stopped: result.stopped }
     } finally {
       await chats
+      if (closeStructuredSessions) {
+        this.releaseProjectHostSessions(repo.id, worktreeIds)
+      }
+    }
+  }
+
+  /** Browser pages and failed-launch records of a removed project's workspaces on this host. */
+  private releaseProjectHostSessions(repoId: string, knownWorktreeIds: readonly string[]): void {
+    // Why: page records carry no host, so a surviving same-id row's pages are indistinguishable.
+    if (this.rowsRunHere().some((row) => row.id === repoId)) {
+      return
+    }
+    const pageOwners = [
+      ...getRuntimeBrowserPageRegistry(this)
+        .listPages()
+        .map((page) => page.workspaceId),
+      ...listFailedAgentLaunchWorktreeIds(),
+      ...(this.agentBrowserBridge?.tabWorktreeIds?.() ?? []).map((id) => id ?? '')
+    ]
+    const worktreeIds = new Set(
+      [...knownWorktreeIds, ...pageOwners].filter((id) => getRepoIdFromWorktreeId(id) === repoId)
+    )
+    for (const worktreeId of worktreeIds) {
+      this.releaseRemovedWorktreeHostSessions(worktreeId, 'project-removal')
     }
   }
 
   private async stopProjectPtys(
     repo: Pick<Repo, 'id' | 'connectionId' | 'executionHostId'>,
     options: { deadline?: number }
-  ): Promise<{ stopped: number }> {
+  ): Promise<{ stopped: number; worktreeIds: readonly string[] }> {
     // Why: after a restart, surviving daemon sessions are in the provider inventory before ptysById.
     // Bounded so a slow worktree scan cannot spend the budget the known PTYs' stops need.
     const refreshDeadline = Math.min(
@@ -138,16 +168,17 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
     removedFences.add(fence.resolvedConnectionId)
     this.removedProjectFences.set(repo.id, removedFences)
     if (this.projectSiblingSharesFence(repo)) {
-      return { stopped: 0 }
+      return { stopped: 0, worktreeIds: [] }
     }
-    let stopped = 0
     for (const id of listProjectTerminalWorktreeIds(repo.id, this.leaves, this.ptysById)) {
       projectWorktreeIds.add(id)
     }
-    for (const id of projectWorktreeIds) {
-      const opts = { resolvedWorktreeId: id, ...fence, ...options }
+    // Why all at once: one deadline covers the project, so a slow worktree must not spend the
+    // budget its siblings' stops need; each still holds only its own worktree's lock.
+    const stopWorktree = async (id: string): Promise<number> => {
+      const opts = { resolvedWorktreeId: id, ...fence, ...options, requestStopsPastDeadline: true }
       // Why exclusive: it waits out a spawn that holds the shared lease, so its PTY is registered
-      // and stopped. Bounded by the deadline so repo.rm still answers; past it the stop is skipped.
+      // and stopped. Bounded by the deadline so repo.rm still answers; past it PTYs are only asked.
       // A timed-out waiter is dequeued by the lock, so it cannot hold later spawns back.
       const release = await this.acquireWorktreeTerminalMutation(
         id,
@@ -160,12 +191,33 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
           this.stopTerminalsForWorktree(`id:${id}`, opts),
           options.deadline
         )
-        stopped += result?.stopped ?? 0
+        return result?.stopped ?? 0
       } finally {
         release?.()
       }
     }
-    return { stopped }
+    // Why rounds: the inventory refresh may still add workspaces after its own budget gave up.
+    const started = new Set<string>()
+    const stops: PromiseSettledResult<number>[] = []
+    for (;;) {
+      const added = [...projectWorktreeIds].filter((id) => !started.has(id))
+      if (added.length === 0) {
+        break
+      }
+      for (const id of added) {
+        started.add(id)
+      }
+      stops.push(...(await Promise.allSettled(added.map(stopWorktree))))
+    }
+    const failure = stops.find((stop) => stop.status === 'rejected')
+    if (failure) {
+      throw failure.reason
+    }
+    const stopped = stops.reduce(
+      (total, stop) => total + (stop.status === 'fulfilled' ? stop.value : 0),
+      0
+    )
+    return { stopped, worktreeIds: [...projectWorktreeIds] }
   }
 
   /**
@@ -211,12 +263,19 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
     return survivors.some((row) => getRepoSshConnectionId(row) === connectionId)
   }
 
+  /** A paired server's row is residue here: its sessions run on that server, never in this process. */
+  private rowsRunHere(): Repo[] {
+    return (this.store?.getRepos?.() ?? []).filter(
+      (row) => parseExecutionHostId(getRepoExecutionHostId(row))?.kind !== 'runtime'
+    )
+  }
+
   /** A same-id sibling row with the same fence owns sessions this host cannot tell apart. */
   private projectSiblingSharesFence(
     repo: Pick<Repo, 'id' | 'connectionId' | 'executionHostId'>
   ): boolean {
     const connectionId = getRepoSshConnectionId(repo)
-    return (this.store?.getRepos?.() ?? []).some(
+    return this.rowsRunHere().some(
       (row) =>
         row.id === repo.id &&
         getRepoExecutionHostId(row) !== getRepoExecutionHostId(repo) &&
