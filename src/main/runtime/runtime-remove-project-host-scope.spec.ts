@@ -105,6 +105,24 @@ export function registerRuntimeRemoveProjectHostScopeTests(): void {
 
       expect(repos.map((repo) => repo.projectGroupId)).toEqual([undefined, 'group-1'])
     })
+
+    it('moves the local row a name selector picked, not its SSH sibling', async () => {
+      const { runtime, repos } = createRuntime()
+
+      const moved = await runtime.moveProjectToGroup('name:Dup Local', 'group-1')
+
+      expect(moved).toMatchObject({ path: '/laptop/dup', projectGroupId: 'group-1' })
+      expect(repos.map((repo) => repo.projectGroupId)).toEqual(['group-1', undefined])
+    })
+
+    it('refuses a bare duplicated id rather than guessing a host', async () => {
+      const { runtime, repos } = createRuntime()
+
+      await expect(runtime.moveProjectToGroup('dup', 'group-1')).rejects.toThrow(
+        'selector_ambiguous'
+      )
+      expect(repos.map((repo) => repo.projectGroupId)).toEqual([undefined, undefined])
+    })
   })
 
   describe('repo.update with the same repo id on two execution hosts', () => {

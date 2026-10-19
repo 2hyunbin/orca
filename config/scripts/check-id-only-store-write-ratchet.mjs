@@ -8,32 +8,52 @@ import { runEntryRatchet } from './ratchet-baseline.mjs'
 // row can share an id, so an id-only write lands on whichever row matches first. Writes take the
 // row's identity instead: `RepoHostTarget` (src/shared/repo-host-identity.ts) or
 // `HostWorktreeTarget` (src/shared/worktree/host-qualified-identity.ts). Entries may only go away.
+// Matched by the first parameter's NAME, whatever its type (`string`, `Repo['id']`, a brand), so a
+// retyped id still counts. Known limit: an id inside an object parameter (`{ projectId }`) is not seen.
 
 const BASELINE_PATH = 'config/id-only-store-write-baseline.txt'
 const COMPOSITION = 'src/main/persistence/loading-store/store-domain-composition.ts'
-const ID_PARAM =
-  /^(?:id|\w*(?:Repo|Worktree|Workspace|Project|Group)Id|(?:repo|worktree|workspace|project|group)Id)$/
+// The only type names that make an id-named parameter host-carrying.
+const HOST_TARGET_TYPE = /^(?:RepoHostTarget|HostWorktreeTarget)\b/
+const ID_PARAM = /^(?:id|ids|\w*Ids?|(?:\w*(?:Worktree|Workspace)|worktree|workspace)Keys?)$/
 const READ_METHOD = /^(?:get|list|has|peek|read|is|select|find|automation)[A-Z]/
-// First parameter, after optional whitespace/newline: `name: string` or `name?: string`.
-const METHOD = /^ {2}(?:async )?(\w+)\(\s*(\w+)\??:\s*string\s*[,)]/gm
+// A public method or arrow property with its first parameter's name and type. `private`,
+// `protected` and `#` members don't match: they aren't on the Store's surface.
+const MEMBER =
+  /^ {2}(?:(?:public|override|static|async|readonly)\s+)*(\w+)\s*(?:<[^>\n]*>)?(?:\s*=\s*(?:async\s*)?(?:<[^>\n]*>)?)?\(\s*(\w+)\??\s*:\s*([^,)=]+)/gm
 
-/** Matches whose id has no host twin, with the reason. Keep each reason true. */
+/** First-parameter names whose id has no host twin, with the reason. */
+export const NOT_HOST_TWINNED_PARAMS = new Map([
+  ['automationId', 'automation ids are minted UUIDs'],
+  ['environmentId', 'the id names the host itself'],
+  ['hostId', 'the id names the host itself'],
+  ['oldTargetId', 'the id names the host itself'],
+  ['targetId', 'the id names the host itself']
+])
+
+/** Matches exempt by method, with the reason. Keep each reason true. */
 export const NOT_HOST_TWINNED = new Map([
   ['AutomationPersistence.advanceAutomationNextRun', 'automation ids are minted UUIDs'],
   ['AutomationPersistence.deleteAutomation', 'automation ids are minted UUIDs'],
   ['AutomationPersistence.updateAutomation', 'automation ids are minted UUIDs'],
+  ['ProfilePreferences.recordFeatureInteraction', 'a feature id, not a row'],
   ['ProjectCollectionOperations.updateProject', 'one Project row spans every host'],
   [
+    'RepoLifecycleOperations.reorderRepos',
+    'a whole-catalog permutation: a duplicated id fails its check, so it refuses instead of guessing'
+  ],
+  ['RepoLifecycleOperations.reorderReposForHost', 'its second parameter scopes it to one host'],
+  [
     'RetiredWorktreeNamePersistence.addRetiredWorktreeName',
-    'an id-keyed bucket, not a row; re-keying is a non-goal (D7)'
+    'twins share one id-keyed bucket by design; re-keying it is a non-goal (D7)'
   ],
   [
     'RetiredWorktreeNamePersistence.mergeRetiredWorktreeNames',
-    'an id-keyed bucket, not a row; re-keying is a non-goal (D7)'
+    'twins share one id-keyed bucket by design; re-keying it is a non-goal (D7)'
   ],
   [
     'SparsePresetPersistence.removeSparsePreset',
-    'an id-keyed bucket, not a row; re-keying is a non-goal (D7)'
+    'twins share one id-keyed bucket by design; re-keying it is a non-goal (D7)'
   ],
   ['SshProfileOperations.removeSshTarget', 'the id names the host itself'],
   ['SshProfileOperations.updateSshTarget', 'the id names the host itself']
@@ -72,9 +92,14 @@ export function findIdOnlyWrites(className, source) {
   const end = rest.search(/^\}/m)
   const body = end < 0 ? rest : rest.slice(0, end)
   const found = []
-  for (const match of body.matchAll(METHOD)) {
-    const [, method, param] = match
-    if (!READ_METHOD.test(method) && ID_PARAM.test(param)) {
+  for (const [, method, param, type] of body.matchAll(MEMBER)) {
+    if (
+      method !== 'constructor' &&
+      !READ_METHOD.test(method) &&
+      ID_PARAM.test(param) &&
+      !NOT_HOST_TWINNED_PARAMS.has(param) &&
+      !HOST_TARGET_TYPE.test(type.trim())
+    ) {
       found.push(`${className}.${method}`)
     }
   }

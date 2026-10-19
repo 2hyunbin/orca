@@ -28,6 +28,20 @@ const SOURCE = `export class RowOps {
   setRemoteLayoutSnapshot(environmentId: string): void {}
 
   private writeRow(repoId: string): void {}
+
+  public renameRepo(repoId: Repo['id']): void {}
+
+  override setLineage<T>(worktreeKey: WorktreeKey, value: T): void {}
+
+  removeWorkspaceLineage(childWorkspaceKey: WorkspaceKey): void {}
+
+  dropRow = (id: BrandedRepoId): void => {}
+
+  moveRow(target: RepoHostTarget): void {}
+
+  dropWorktree(worktreeId: HostWorktreeTarget): void {}
+
+  removeSessionHost(hostId: ExecutionHostId): void {}
 }
 
 export class Other {
@@ -36,11 +50,16 @@ export class Other {
 `
 
 describe('findIdOnlyWrites', () => {
-  it('lists public writes whose first parameter is a bare repo or worktree id', () => {
+  it('lists public writes whose first parameter is an id by name, whatever its type', () => {
     expect(findIdOnlyWrites('RowOps', SOURCE)).toEqual([
       'RowOps.moveProjectToGroup',
       'RowOps.updateFolderWorkspace',
-      'RowOps.removeWorktreeMeta'
+      'RowOps.removeWorktreeMeta',
+      'RowOps.reorderRepos',
+      'RowOps.renameRepo',
+      'RowOps.setLineage',
+      'RowOps.removeWorkspaceLineage',
+      'RowOps.dropRow'
     ])
   })
 

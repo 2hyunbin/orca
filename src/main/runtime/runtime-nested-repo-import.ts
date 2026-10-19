@@ -8,6 +8,7 @@ import type {
   ProjectGroupImportResult
 } from '../../shared/project-group-types'
 import type { Repo } from '../../shared/repo-types'
+import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
 import { awaitWindowsHostGitEnvironmentReady } from '../git/runner'
 import { getRepoName, isGitRepoAsync } from '../git/repo'
 import { scanNestedRepos } from '../project-groups/nested-repo-discovery'
@@ -92,9 +93,14 @@ export class RuntimeNestedRepoImport {
           })
           continue
         }
+        // Why host-filtered: an SSH row can sit at the same path, and this import adds local rows.
         const existing = store
           .getRepos()
-          .find((repo) => normalizeRuntimePathForComparison(repo.path) === normalizedImportRepoPath)
+          .find(
+            (repo) =>
+              getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID &&
+              normalizeRuntimePathForComparison(repo.path) === normalizedImportRepoPath
+          )
         const group = groupResolver.getGroupForRepo(repoPath)
         if (existing) {
           if (group) {

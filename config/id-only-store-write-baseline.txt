@@ -3,6 +3,7 @@
 # Prune after a fix: pnpm check:id-only-store-write-ratchet --prune
 AutomationPersistence.snapshotAutomationRunWorkspaceDisplayName
 MetadataLineageOperations.migrateWorktreeIdentity
+MetadataLineageOperations.removeWorkspaceLineage
 MetadataLineageOperations.removeWorktreeLineage
 MetadataLineageOperations.removeWorktreeMeta
 MetadataLineageOperations.setWorktreeLineage
