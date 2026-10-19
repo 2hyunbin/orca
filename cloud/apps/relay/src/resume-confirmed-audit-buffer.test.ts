@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { openInMemoryRelayDatabase, type RelayDatabase, type SqlRow } from './database.js'
 import {
   RESUME_AUDIT_BUFFER_MAX_ROWS,
+  RESUME_AUDIT_FLUSH_MS,
   RESUME_AUDIT_FLUSH_ROWS,
   RESUME_AUDIT_MAX_AGE_MS,
   ResumeConfirmedAuditBuffer
@@ -101,4 +102,28 @@ describe('the batched resume-confirmed audit', () => {
     expect(lines).toHaveLength(2)
     buffer.stop()
   })
+
+  it('sends one early batch on crossing the batch size, and leaves retries to the timer', async () => {
+    const { database, buffer } = await setup()
+    database.failing = () => true
+    for (let index = 0; index < RESUME_AUDIT_FLUSH_ROWS + 50; index += 1) buffer.add(event(`r${index}`))
+    await buffer.flush()
+    // The 50 adds past the batch size sent nothing more: no insert per confirm into a failing database.
+    expect(database.statements).toHaveLength(1)
+    buffer.stop()
+  })
+
+  it('writes nothing more once stopped', async () => {
+    vi.useFakeTimers()
+    try {
+      const { database, buffer } = await setup()
+      buffer.stop()
+      buffer.add(event('late'))
+      await vi.advanceTimersByTimeAsync(RESUME_AUDIT_FLUSH_MS * 3)
+      expect(database.statements).toEqual([])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
+
