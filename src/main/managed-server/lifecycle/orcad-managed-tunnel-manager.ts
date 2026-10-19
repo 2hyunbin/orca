@@ -7,7 +7,6 @@ import {
   type KnownRuntimeEnvironment
 } from '../../../shared/runtime-environments'
 import type { SshTarget } from '../../../shared/ssh-types'
-import { getManagedOrcadFenceEnvironmentId } from '../../../shared/managed-orcad-ssh-owner'
 import type { SshConnection } from '../../ssh/connection/ssh-connection'
 import { isAuthError } from '../../ssh/ssh-reconnect-error-classification'
 import type { SshConnectionManager } from '../../ssh/connection/ssh-connection-manager'
@@ -24,6 +23,7 @@ import {
   dropActiveOrcadTunnel,
   managedTunnelAccess,
   recordActiveOrcadTunnel,
+  resolveManagedTunnelBinding,
   supersededTunnelError,
   type ActiveOrcadTunnel
 } from './orcad-managed-tunnel-active'
@@ -51,6 +51,8 @@ export class OrcadManagedTunnelManager {
   private readonly active = new Map<string, ActiveOrcadTunnel>()
   private readonly inFlight = new Map<string, Promise<void>>()
   private readonly ownershipGenerations = new Map<string, number>()
+  // The SSH target each environment's latest build dialled, so its Disconnect can supersede it.
+  private readonly buildTargets = new Map<string, string>()
   private readonly forwards: SshPortForwardManager
   private readonly resumeRecovery: OrcadManagedTunnelResumeRecovery
   private readonly targeting: OrcadManagedTunnelTargeting
@@ -134,6 +136,7 @@ export class OrcadManagedTunnelManager {
     if (!target.generation) {
       throw new Error('Managed Orca SSH target has no registration generation.')
     }
+    this.buildTargets.set(environmentId, target.id)
     const managerGeneration = this.managerGeneration
     const ownershipGeneration = (this.ownershipGenerations.get(environmentId) ?? 0) + 1
     const transportGeneration = connection.getConnectGeneration()
@@ -156,7 +159,9 @@ export class OrcadManagedTunnelManager {
       verify: checks.verify,
       stillCurrent
     })
-    if (!forward) {
+    // Why re-check: a teardown can land between the build's last check and this record.
+    if (!forward || !stillCurrent()) {
+      await (forward && this.forwards.removeForwardAndWait(forward.id))
       throw supersededTunnelError()
     }
     recordActiveOrcadTunnel(this.active, environmentId, forward, {
@@ -182,6 +187,19 @@ export class OrcadManagedTunnelManager {
     await this.forwards.removeForwardAndWait(active.forwardId)
   }
 
+  /** The host's SSH session ends: every managed tunnel it carried, built or building, goes. */
+  async closeTarget(targetId: string): Promise<void> {
+    const environmentIds = new Set([...this.buildTargets.keys(), ...this.active.keys()])
+    const carried = [...environmentIds].filter(
+      (id) => this.buildTargets.get(id) === targetId || this.active.get(id)?.targetId === targetId
+    )
+    // Why both: a build's forward is unrecorded while its identity check runs, or still starting.
+    await Promise.all([
+      ...carried.map((environmentId) => this.close(environmentId)),
+      this.forwards.removeAllForwards(targetId)
+    ])
+  }
+
   /** Quit: supersedes every build in flight and waits for each forward process to exit. */
   async shutdown(): Promise<void> {
     this.managerGeneration += 1
@@ -194,6 +212,7 @@ export class OrcadManagedTunnelManager {
     this.active.clear()
     this.inFlight.clear()
     this.ownershipGenerations.clear()
+    this.buildTargets.clear()
     this.resumeRecovery.dispose()
     this.forwards.dispose()
   }
@@ -232,25 +251,11 @@ export class OrcadManagedTunnelManager {
     resolveCurrent: () => KnownRuntimeEnvironment | null,
     rebound = false
   ): Promise<void> {
-    const deployment = getRuntimeSshAccess(environment)
-    if (!deployment || environment.connectionDependency !== 'ssh-tunnel') {
-      throw new Error('Managed orcad environment is missing its SSH tunnel dependency.')
-    }
-    const targetStore = this.dependencies.getTargetStore()
-    const connectionManager = this.dependencies.getConnectionManager()
-    if (!targetStore || !connectionManager) {
-      throw new Error('SSH is unavailable on this client; the managed Orca server is unverifiable.')
-    }
-    const target = targetStore.getTarget(deployment.sshTargetId)
-    if (!target || target.generation !== deployment.sshTargetGeneration) {
-      throw new Error(
-        'The SSH registration for this managed Orca server was removed or re-created.'
-      )
-    }
-    if (getManagedOrcadFenceEnvironmentId(target) !== environment.id) {
-      throw new Error('The SSH target is no longer owned by this managed Orca server.')
-    }
-
+    const { deployment, targetStore, connectionManager, target } = resolveManagedTunnelBinding(
+      environment,
+      this.dependencies
+    )
+    this.buildTargets.set(environment.id, target.id)
     const managerGeneration = this.managerGeneration
     const ownershipGeneration = this.ownershipGenerations.get(environment.id) ?? 0
     const expected = { environmentId: environment.id, ...deployment }
@@ -307,7 +312,7 @@ export class OrcadManagedTunnelManager {
     recordActiveOrcadTunnel(this.active, environment.id, forward, {
       connection,
       preferredPort: deployment.remotePort,
-      sshTargetGeneration: target.generation,
+      sshTargetGeneration: deployment.sshTargetGeneration,
       targetId: target.id,
       transportGeneration
     })
