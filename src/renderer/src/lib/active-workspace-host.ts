@@ -12,3 +12,18 @@ export function getActiveWorkspaceExecutionHostId(
     ? (state.activeWorkspaceExecutionHostId ?? null)
     : null
 }
+
+/** Re-selects `worktreeId`; when it is already active, keeps the selected copy of a same-id twin. */
+export function reselectWorkspaceKeepingHost(
+  state: Parameters<typeof getActiveWorkspaceExecutionHostId>[0] & {
+    setActiveWorktree: (worktreeId: string, executionHostId?: ExecutionHostId) => unknown
+  },
+  worktreeId: string
+): void {
+  const hostId = getActiveWorkspaceExecutionHostId(state, worktreeId)
+  if (hostId) {
+    state.setActiveWorktree(worktreeId, hostId)
+  } else {
+    state.setActiveWorktree(worktreeId)
+  }
+}

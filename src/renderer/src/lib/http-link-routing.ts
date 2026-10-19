@@ -8,7 +8,7 @@ import type { GlobalSettings } from '../../../shared/global-settings-types'
 import type { WorkspacePort, WorkspacePortScanResult } from '../../../shared/workspace-ports'
 import { toast } from 'sonner'
 import type { ExecutionHostId } from '../../../shared/execution-host'
-import { getActiveWorkspaceExecutionHostId } from './active-workspace-host'
+import { reselectWorkspaceKeepingHost } from './active-workspace-host'
 
 export type OpenHttpLinkOptions = {
   worktreeId?: string | null
@@ -184,11 +184,7 @@ export function openHttpLink(url: string, opts: OpenHttpLinkOptions = {}): void 
     if (!isFloatingWorkspaceId(worktreeId)) {
       // Why: the floating workspace uses a synthetic worktree id. Promoting it
       // to the global activeWorktreeId deselects the real repo workspace.
-      // Why the host: an id alone clears the selected copy of a same-id twin.
-      state.setActiveWorktree(
-        worktreeId,
-        getActiveWorkspaceExecutionHostId(state, worktreeId) ?? undefined
-      )
+      reselectWorkspaceKeepingHost(state, worktreeId)
     }
     const localhostRoute = localhostLabelRouteForHttpLink(url, state, sourceOwner)
     if (!localhostRoute) {
