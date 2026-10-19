@@ -1,4 +1,5 @@
 import { useMemo, useSyncExternalStore } from 'react'
+import { isAgentSessionHandleProvider } from '../../../shared/agent-session-provider-handle'
 import { parseExecutionHostId } from '../../../shared/execution-host'
 import { MANAGED_RUNTIME_INSTALL_RUNTIME_CAPABILITY } from '../../../shared/managed-runtime-install'
 import { STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY as CATALOG } from '../../../shared/protocol-version'
@@ -108,7 +109,10 @@ export function agentsOfferedForLaunch(
 ): TuiAgent[] {
   const offered = [...(detected ?? [])]
   const host = resolveChatProgramHost(store, workspace)
-  for (const agent of chatProviderAgents(host.executionHostId, store.runtimeStatusByEnvironmentId)) {
+  for (const agent of chatProviderAgents(
+    host.executionHostId,
+    store.runtimeStatusByEnvironmentId
+  )) {
     if (!offered.includes(agent) && agentChoiceOpensAsChat(store, agent, workspace, detected)) {
       offered.push(agent)
     }
@@ -160,7 +164,13 @@ export function chosenAgentChatUnlearned(
   detected: readonly TuiAgent[] | null,
   workspace: ProspectiveWorkspace
 ): boolean {
-  if (!chosen || chosen === 'blank' || detected?.includes(chosen)) {
+  // Claude and Codex have no managed program, so waiting could not change their answer.
+  if (
+    !chosen ||
+    chosen === 'blank' ||
+    detected?.includes(chosen) ||
+    isAgentSessionHandleProvider(chosen)
+  ) {
     return false
   }
   const input = buildAgentLaunchRouteInput(store, { agent: chosen, workspace })
