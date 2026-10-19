@@ -30,6 +30,7 @@ type Condition =
   | 'no-live-pty'
   | 'kill-fails'
   | 'nothing-published'
+  | 'pane-unlisted'
 
 /** The desktop renderer's split tab as it publishes it, with the given PTY bindings. */
 function syncRendererSplit(
@@ -136,6 +137,49 @@ function arrange(entry: Entry, condition: Condition): CloseContinuityHarness {
       ]
     })
   }
+  if (condition === 'pane-unlisted') {
+    // The renderer's list lags main: it shows the sibling alone, so the closed pane has no row.
+    const siblingLayout = {
+      root: { type: 'leaf' as const, leafId: SIBLING_LEAF_ID },
+      activeLeafId: SIBLING_LEAF_ID,
+      expandedLeafId: null,
+      ptyIdsByLeafId: { [SIBLING_LEAF_ID]: SIBLING_PTY_ID }
+    }
+    harness.runtime.syncWindowGraph(1, {
+      tabs: [
+        {
+          tabId: TAB_ID,
+          worktreeId: WORKTREE_ID,
+          title: 'Fixture shell',
+          activeLeafId: SIBLING_LEAF_ID,
+          layout: siblingLayout.root
+        }
+      ],
+      leaves: [],
+      mobileSessionTabs: [
+        {
+          worktree: WORKTREE_ID,
+          publicationEpoch: 'renderer:pane-unlisted',
+          snapshotVersion: 4,
+          activeGroupId: null,
+          activeTabId: `${TAB_ID}::${SIBLING_LEAF_ID}`,
+          activeTabType: 'terminal' as const,
+          tabs: [
+            {
+              type: 'terminal' as const,
+              id: `${TAB_ID}::${SIBLING_LEAF_ID}`,
+              parentTabId: TAB_ID,
+              leafId: SIBLING_LEAF_ID,
+              ptyId: SIBLING_PTY_ID,
+              title: 'Fixture shell',
+              parentLayout: siblingLayout,
+              isActive: true
+            }
+          ]
+        }
+      ]
+    })
+  }
   if (condition === 'kill-fails') {
     harness.kill.mockReturnValue(false)
   }
@@ -221,6 +265,7 @@ const rows: [Entry, Condition][] = [
   ['cli-pty', 'unbound-sibling'],
   // An owner copy with no panes once read as "one pane", so the close took the whole tab.
   ['cli-pty', 'nothing-published'],
+  ['cli-pty', 'pane-unlisted'],
   ['phone-desktop', 'normal'],
   ['phone-desktop', 'pinned'],
   ['phone-desktop', 'unbound-sibling'],

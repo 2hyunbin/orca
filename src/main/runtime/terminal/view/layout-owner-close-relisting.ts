@@ -6,6 +6,8 @@ import type { WorkspaceSessionState } from '../../../../shared/workspace-session
 import { makePaneKey, parsePaneKey } from '../../../../shared/stable-pane-id'
 import { terminalLayoutContainsLeaf } from '../../../../shared/workspace-session-pane-ownership'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
+import type { RuntimeMobileSessionTabsSnapshot } from '../../../../shared/runtime-types'
+import type { TerminalLayoutSnapshot } from '../../../../shared/terminal-tab-types'
 
 type RelistedPane = {
   tabId: string
@@ -28,7 +30,11 @@ export function relistPaneMainBinds(
   host: {
     hostId: (tabId: string) => ExecutionHostId | undefined
     session: (hostId: ExecutionHostId) => WorkspaceSessionState | null | undefined
-    relist: (pty: RuntimePtyWorktreeRecord, pane: RelistedPane) => void
+    relist: (
+      pty: RuntimePtyWorktreeRecord,
+      pane: RelistedPane,
+      layout: TerminalLayoutSnapshot
+    ) => void
   }
 ): void {
   if (
@@ -55,12 +61,33 @@ export function relistPaneMainBinds(
   ) {
     return
   }
-  host.relist(pty, {
-    tabId: pane.tabId,
-    leafId: pane.leafId,
-    title: null,
-    activate: false,
-    selectIfNoActiveTab: false,
-    notify: false
-  })
+  host.relist(
+    pty,
+    {
+      tabId: pane.tabId,
+      leafId: pane.leafId,
+      title: null,
+      activate: false,
+      selectIfNoActiveTab: false,
+      notify: false
+    },
+    layout
+  )
+}
+
+/**
+ * Every row of the relisted pane's tab takes main's layout. A row built for the pane alone holds
+ * only that pane, and a close reading it would take the pane for the tab's last.
+ */
+export function withMainTabLayout(
+  snapshot: RuntimeMobileSessionTabsSnapshot,
+  tabId: string,
+  layout: TerminalLayoutSnapshot
+): RuntimeMobileSessionTabsSnapshot {
+  return {
+    ...snapshot,
+    tabs: snapshot.tabs.map((row) =>
+      row.type === 'terminal' && row.parentTabId === tabId ? { ...row, parentLayout: layout } : row
+    )
+  }
 }
