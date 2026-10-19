@@ -30,9 +30,6 @@ import {
 } from './structured-agent-session-runtime'
 import { createStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import { scriptedCodexTransport } from './scripted-codex-transport.test-fixture'
-import { JournalHostDatabase } from '../native-chat/agent-session-journal/journal-host-database'
-import { liveTestJournalRows } from '../native-chat/agent-session-journal/journal-host-database-test-support'
-import type Database from '../sqlite/sync-database'
 
 const CALLER = { callerKey: 'codex-held-sends-test' }
 
@@ -41,7 +38,6 @@ let host: StructuredAgentSessionHost
 let fence: number
 let handlers: CodexAppServerConnectionHandlers | undefined
 let answers: number
-let steers: number
 let turns: ReturnType<typeof codexTurnLifecycleFake>
 let operations = 0
 const events: AgentSessionSubscribeEvent[] = []
@@ -100,7 +96,6 @@ async function rawSubmission(clientMessageId: string): Promise<AgentJournalSubmi
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-codex-held-sends-'))
   answers = 0
-  steers = 0
   events.length = 0
   turns = codexTurnLifecycleFake(
     THREAD,
@@ -123,7 +118,6 @@ beforeEach(async () => {
           return turns.routes['turn/start']()
         }
         if (method === 'turn/steer') {
-          steers += 1
           return turns.routes['turn/steer'](params)
         }
         return {}
@@ -162,33 +156,9 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  vi.restoreAllMocks()
   await stopStructuredAgentSessionRuntime()
   await rm(root, { recursive: true, force: true })
 })
-
-/** Fails every journal transaction `fails` picks, by the rows it would commit for the chat. */
-function failJournalWrites(fails: (rows: Record<string, unknown>[]) => boolean): void {
-  const transaction = JournalHostDatabase.prototype.transaction
-  vi.spyOn(JournalHostDatabase.prototype, 'transaction').mockImplementation(function <T>(
-    this: JournalHostDatabase,
-    run: (db: Database.Database) => T,
-    streamed?: boolean
-  ): T {
-    const checked = (db: Database.Database): T => {
-      const before = liveTestJournalRows(db, SESSION).length
-      const result = run(db)
-      const rows = liveTestJournalRows(db, SESSION)
-        .slice(before)
-        .map((row): Record<string, unknown> => JSON.parse(row.rowJson))
-      if (fails(rows)) {
-        throw new Error('journal write failed')
-      }
-      return result
-    }
-    return transaction.bind(this)(checked, streamed)
-  })
-}
 
 describe('a Codex send whose turn completes without taking it', () => {
   it('allows /compact afterwards without returning or publishing an unconfirmed command', async () => {
@@ -312,38 +282,30 @@ describe('a Codex send whose turn completes without taking it', () => {
 })
 
 describe('a Codex receipt whose first save fails', () => {
-  it('saves from the second echo, after the send was released, by exact id', async () => {
-    const a = await send('the same words')
+  it('saves from the second echo of the same message', async () => {
+    const sent = await send('look around')
     await vi.waitFor(() => expect(answers).toBe(1))
     turns.start()
-    const b = await send('the same words')
-    await vi.waitFor(() => expect(steers).toBe(1))
-    let receiptWrites = 0
-    failJournalWrites((rows) => {
-      const receipt = rows.some(
-        (row) => row.kind === 'dispatch' && row.state === 'accepted' && row.clientMessageId === b
-      )
-      return receipt && ++receiptWrites === 1
-    })
-
+    const journal = host.collaboratorsForTests().sessions.get(SESSION)!.journal
+    const accept = vi.spyOn(journal, 'acceptLate').mockRejectedValueOnce(new Error('disk full'))
     const echo = {
       threadId: THREAD,
-      turnId: 'turn-1',
-      item: { type: 'userMessage', id: 'item-b', clientId: b, content: [] }
+      turnId: turns.turnId,
+      item: { type: 'userMessage', id: 'item-user', clientId: sent, content: [] }
     }
+
+    // Codex echoes a recorded message as its item starts and again as it completes.
     handlers?.onNotification?.('item/started', echo)
-    await vi.waitFor(() => expect(receiptWrites).toBe(1))
-    expect((await rawSubmission(b)).dispatchState).toBe('pending')
-    // The first echo released B's armed entry, so only the journal still says its receipt is owed.
+    await vi.waitFor(() => expect(accept).toHaveBeenCalledOnce())
+    expect((await rawSubmission(sent)).dispatchState).toBe('pending')
     handlers?.onNotification?.('item/completed', echo)
-    turns.end('completed')
+
     await vi.waitFor(async () =>
-      expect(await rawSubmission(b)).toMatchObject({
+      expect(await rawSubmission(sent)).toMatchObject({
         dispatchState: 'accepted',
         providerItemId: expect.stringMatching(/^codex:/)
       })
     )
-    expect(lastPublished(b)).toMatchObject({ dispatchState: 'accepted' })
-    expect((await rawSubmission(a)).dispatchState).not.toBe('accepted')
+    expect(lastPublished(sent)).toMatchObject({ dispatchState: 'accepted' })
   })
 })

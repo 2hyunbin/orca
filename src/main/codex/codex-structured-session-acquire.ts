@@ -86,8 +86,6 @@ export async function acquireCodexStructuredSession(input: {
     account: () => account,
     sessionId,
     acquisitionId: acquisitionGeneration,
-    fence: acquireInput.fence,
-    journal: () => acquireInput.events?.journalItems?.() ?? null,
     deps,
     primaryThreadId: () => primaryThreadId,
     dispatchEchoes,

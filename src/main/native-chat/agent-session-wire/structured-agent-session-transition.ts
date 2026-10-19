@@ -23,13 +23,11 @@ import type {
 import type { StructuredAgentSessionSinkQueue } from './structured-agent-session-event-sink-queue'
 import { structuredAgentSessionJournalAppendOptions } from './structured-agent-session-journal-append-options'
 
-/** What a transition step reads: rows by key, every row, and the turns they joined; and, from a
- *  bound journal, a send's submission. */
+/** What a transition step reads: rows by key, every row, and the turns they joined. */
 export type StructuredAgentSessionTransitionJournal = Pick<
   AgentSessionJournal,
   'epoch' | 'visitItems' | 'itemBody' | 'item' | 'visitItemsWithLinkage'
-> &
-  Partial<Pick<AgentSessionJournal, 'submission'>>
+>
 
 export type StructuredAgentSessionTransitionStep =
   | {
