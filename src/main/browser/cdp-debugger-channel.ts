@@ -1,7 +1,6 @@
 import { WebSocket } from 'ws'
 import type { WebContents } from 'electron'
 import { acquireElectronDebugger, type ElectronDebuggerLease } from './electron-debugger-lease'
-import { assertRemoteCliPageAdmitted } from './remote-cli-page-admission'
 import type { CdpClientResponseWriter } from './cdp-client-response-writer'
 import type { CdpSyntheticSessionRegistry } from './cdp-synthetic-session-registry'
 import { sendGuestCdpCommand } from './guest-cdp-command'
@@ -94,12 +93,6 @@ export class CdpDebuggerChannel {
     params: Record<string, unknown>,
     sessionId?: string
   ): Promise<unknown> {
-    // Why: the proxy's queued input outlives the message's admission; a revoked host's must not land.
-    try {
-      assertRemoteCliPageAdmitted(this.webContents.id)
-    } catch (error) {
-      return Promise.reject(error)
-    }
     return sessionId
       ? sendGuestCdpCommand(this.webContents, method, params, sessionId)
       : sendGuestCdpCommand(this.webContents, method, params)

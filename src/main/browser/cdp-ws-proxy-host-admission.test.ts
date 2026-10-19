@@ -104,7 +104,7 @@ describe('CdpWsProxy under a host command', () => {
         }
       },
       () => new Promise<void>((resolve) => (finish = resolve)),
-      (release) => releaseHeldPageInput(page, release, () => guardFocus())
+      { releaseHeld: (release) => releaseHeldPageInput(page, release, () => guardFocus()) }
     )
     return {
       revoke: () => (revoked = true),
