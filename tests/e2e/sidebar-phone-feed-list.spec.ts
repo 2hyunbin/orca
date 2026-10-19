@@ -9,7 +9,7 @@ import path from 'node:path'
 import type { Page } from '@stablyai/playwright-test'
 import { z } from 'zod'
 import { test, expect } from './helpers/orca-app'
-import { SIDEBAR_INPUTS_BUILD, expectNoSidebarShadowMismatches } from './helpers/sidebar-shadow'
+import { SIDEBAR_INPUTS_BUILD } from './helpers/sidebar-inputs-build'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { createDesktopMobilePairingOffer } from './helpers/paired-electron-client'
 import { pairMobileClient } from './helpers/paired-mobile-client'
@@ -129,7 +129,6 @@ test.describe('switch on', () => {
       await runtimeCall(orcaPage, 'worktree.set', { worktree: `id:${activeId}`, isPinned: false })
       const unpinned = await expectPhoneMatchesDesktop(orcaPage, list)
       expect(unpinned.filter((line) => line.endsWith(' ACTIVE'))).toHaveLength(1)
-      await expectNoSidebarShadowMismatches(orcaPage)
     } finally {
       list.close()
       phone.dispose()
@@ -185,7 +184,6 @@ test.describe('switch on', () => {
       }
       const shown = await expectPhoneMatchesDesktop(desktop.page, list)
       expect(shown.some((line) => line.includes('server-a'))).toBe(true)
-      await expectNoSidebarShadowMismatches(desktop.page)
     } finally {
       list.close()
       await dispose()

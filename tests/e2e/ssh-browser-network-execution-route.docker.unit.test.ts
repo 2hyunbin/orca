@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { Client } from 'ssh2'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import type { SshConnection } from '../../src/main/ssh/ssh-connection'
+import type { SshConnection } from '../../src/main/ssh/connection/ssh-connection'
 import type { SshProviderEpoch } from '../../src/shared/ssh-types'
 import { ensureDockerSshHostImage } from './helpers/docker-ssh-host-image'
 import {

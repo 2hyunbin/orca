@@ -23,8 +23,8 @@ import {
   type OrcadMigrationCatalogIds
 } from './orcad-migration-manifest-export'
 import type { OrcadMigrationSnapshotSource } from './orcad-migration-snapshot-coordinator'
-import { collectUntransferredDependentBlockers } from './ssh-target-orcad-dependents'
-import type { OrcadMigrationPreflightStore } from './ssh-target-orcad-preflight'
+import { collectUntransferredDependentBlockers } from './targets/ssh-target-orcad-dependents'
+import type { OrcadMigrationPreflightStore } from './targets/ssh-target-orcad-preflight'
 
 export type OrcadDeltaSourceStore = OrcadMigrationPreflightStore & OrcadMigrationSnapshotSource
 

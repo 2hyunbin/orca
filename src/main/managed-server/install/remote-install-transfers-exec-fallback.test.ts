@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { SshConnection } from '../../ssh/ssh-connection'
+import type { SshConnection } from '../../ssh/connection/ssh-connection'
 import { createSshOperationAbortError } from '../../ssh/ssh-connection-utils'
 import {
   uploadDirectoryViaExecStdin,

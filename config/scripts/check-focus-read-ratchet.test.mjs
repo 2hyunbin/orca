@@ -197,6 +197,23 @@ describe('countFocusSettingReads', () => {
     expect(countFocusSettingReads('linearConnect(defaultScopeSource(get().settings), key)')).toBe(1)
   })
 
+  it('counts the legacy-fallback owner adapter and a wrapper that returns its result', () => {
+    const readers = discoverFocusReaders(
+      new Map([
+        [
+          'src/renderer/src/owner.ts',
+          [
+            'export function envUnlessTwin(state, id) {',
+            '  const match = resolveOwnerWithLegacyFallback(state, { workspaceId: id })',
+            "  return match.kind === 'resolved' ? match.owner : null",
+            '}'
+          ].join('\n')
+        ]
+      ])
+    )
+    expect(readers.has('envUnlessTwin')).toBe(true)
+  })
+
   it('counts destructuring reads', () => {
     expect(countFocusSettingReads('const { activeRuntimeEnvironmentId } = s')).toBe(1)
     expect(

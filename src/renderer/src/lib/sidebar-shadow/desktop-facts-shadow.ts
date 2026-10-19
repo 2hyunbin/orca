@@ -1,4 +1,4 @@
-import { useAppStore, type AppState } from '@/store'
+import type { AppState } from '@/store'
 import { getAllWorktreesFromState } from '@/store/selectors'
 import {
   getRepoExecutionHostId,
@@ -6,14 +6,8 @@ import {
   toRuntimeExecutionHostId,
   toSshExecutionHostId
 } from '../../../../shared/execution-host'
-import {
-  DesktopSidebarFactsSchema,
-  type DesktopSidebarFacts
-} from '../../../../shared/sidebar-list/desktop-sidebar-facts'
+import type { DesktopSidebarFacts } from '../../../../shared/sidebar-list/desktop-sidebar-facts'
 import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
-import { getHostDisplayLabelOverrides } from '../../../../shared/host-setting-overrides'
-import { defineSidebarShadowDomain } from './sidebar-shadow-comparison'
-import { toLocallyOwnedRows } from './workspace-activity-shadow'
 
 type WindowFactsState = Pick<
   AppState,
@@ -26,13 +20,9 @@ type WindowFactsState = Pick<
   | 'sshTargetLabels'
   | 'sshConnectionStates'
   | 'wslHostStatuses'
-  | 'settings'
 >
 
-/**
- * The same facts from the window's own store, in main's shape, for the rows the local runtime owns.
- * Not focusedHostId: renderer focus reads are ratcheted, so main's unit test covers it.
- */
+/** The same facts from the window's own store, in main's shape, for the rows the local runtime owns. */
 export function readWindowDesktopSidebarFacts(state: WindowFactsState): DesktopSidebarFacts {
   const pinned = [
     ...getAllWorktreesFromState(state)
@@ -63,47 +53,6 @@ export function readWindowDesktopSidebarFacts(state: WindowFactsState): DesktopS
         toRuntimeExecutionHostId(status.environmentId),
         { distro: status.distro, state: status.state }
       ])
-    ),
-    hostLabels: Object.fromEntries(getHostDisplayLabelOverrides(state.settings)),
-    showPinnedInGroups: state.settings?.showPinnedWorktreesInGroups === true
+    )
   }
 }
-
-// One key per fact, so a mismatch names the fact; pins key per workspace the window lists locally.
-function toComparedFacts(state: AppState, facts: DesktopSidebarFacts): Map<string, string> {
-  const compared = new Map<string, string>([
-    ['desktopActive', JSON.stringify(facts.desktopActive)],
-    ['repoOrder', JSON.stringify(facts.repoOrder)],
-    ['workspaceHostOrder', JSON.stringify(facts.workspaceHostOrder)],
-    ['hostLabels', JSON.stringify(facts.hostLabels ?? {})],
-    ['showPinnedInGroups', JSON.stringify(facts.showPinnedInGroups === true)]
-  ])
-  const pinned = toLocallyOwnedRows(
-    state,
-    new Map(facts.pinnedWorkspaceIds.map((id) => [id, 'pinned']))
-  )
-  for (const [id, value] of pinned) {
-    compared.set(`pinned:${id}`, value)
-  }
-  for (const [hostId, host] of Object.entries({ ...facts.sshHosts, ...facts.wslHosts })) {
-    compared.set(`host:${hostId}`, JSON.stringify(host))
-  }
-  return compared
-}
-
-export const desktopFactsShadow = defineSidebarShadowDomain<string>({
-  name: 'desktop-facts',
-  readWindow: () => {
-    const state = useAppStore.getState()
-    return toComparedFacts(state, readWindowDesktopSidebarFacts(state))
-  },
-  readMain: async () => {
-    const response = await window.api.runtime.call({ method: 'sidebarInputs.desktopFacts' })
-    const parsed = response.ok ? DesktopSidebarFactsSchema.safeParse(response.result) : null
-    if (!parsed?.success) {
-      return null
-    }
-    return { values: toComparedFacts(useAppStore.getState(), parsed.data) }
-  },
-  equals: (window, main) => window === main
-})

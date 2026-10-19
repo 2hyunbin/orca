@@ -21,7 +21,7 @@
  *   kernel may hold it, and this machine's connect and `lsof` cannot see that machine.
  */
 import { RELAY_LSOF_PROBE_JS } from '@orca/process-host/posix-lsof-probe'
-import type { SshConnection } from '../ssh-connection'
+import type { SshConnection } from '../connection/ssh-connection'
 import { shellEscape } from '../ssh-connection-utils'
 import {
   RELAY_CHILD_COUNT_VAR,
