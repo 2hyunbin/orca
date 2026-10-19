@@ -221,11 +221,12 @@ describe('workspace unread flag on a headless host', () => {
 
   it('leaves raising to an older desktop while it is connected, and still clears on the phone', async () => {
     const host = createHeadlessHost()
-    // Its browser host lease is enough: that socket hosts client pages without the capability.
-    const olderLease = currentDesktopSockets().lease.filter(
-      (capability) => capability !== WORKSPACE_UNREAD_HOST_RAISES_CAPABILITY
-    )
-    requireSwitchedOn(host.runtime.sidebarFacts).noteRuntimeClient('desktop-old', olderLease)
+    // Either its request socket or its browser host lease hosts client pages without the capability.
+    const older = (capabilities: readonly string[]) =>
+      capabilities.filter((capability) => capability !== WORKSPACE_UNREAD_HOST_RAISES_CAPABILITY)
+    const facts = requireSwitchedOn(host.runtime.sidebarFacts)
+    facts.noteRuntimeClient('desktop-old', older(currentDesktopSockets().request))
+    facts.noteRuntimeClient('desktop-old-lease', older(currentDesktopSockets().lease))
     host.finishTurn()
     expect(host.meta[WT].isUnread).toBe(false)
 
@@ -236,6 +237,9 @@ describe('workspace unread flag on a headless host', () => {
     host.runtime.cleanupSubscriptionsForConnection('phone-1')
 
     host.runtime.cleanupSubscriptionsForConnection('desktop-old')
+    host.finishTurn()
+    expect(host.meta[WT].isUnread).toBe(false)
+    host.runtime.cleanupSubscriptionsForConnection('desktop-old-lease')
     host.finishTurn()
     expect(host.meta[WT].isUnread).toBe(true)
   })

@@ -7,6 +7,7 @@ import { WORKSPACE_UNREAD_HOST_RAISES_CAPABILITY } from '../../../../../shared/w
 import { createTestStore, makeWorktree, TEST_REPO } from '../store-test-helpers'
 import { makeFolderWorkspace } from '../worktrees-slice-test-fixtures'
 import { clearWorkspaceUnreadFlag, markWorkspaceUnreadFlag } from './workspace-unread-flag'
+import { runtimeEnvironmentSupportsCapability } from '@/runtime/runtime-rpc-client'
 
 // With the switch on, the window raises the flag exactly where the owning host does not.
 
@@ -25,13 +26,13 @@ vi.mock('@/runtime/runtime-rpc-client', () => ({
   readCachedRuntimeEnvironmentCapability: (environmentId: string, capability: string) =>
     cachedStatus.get(environmentId)?.includes(capability) ?? null,
   // Settles with the environment's status probe; rejects when it cannot be read.
-  runtimeEnvironmentSupportsCapability: async (environmentId: string, capability: string) => {
+  runtimeEnvironmentSupportsCapability: vi.fn(async (environmentId: string, capability: string) => {
     const capabilities = await hostCapabilities.get(environmentId)
     if (!capabilities) {
       throw new Error('runtime unreachable')
     }
     return capabilities.includes(capability)
-  }
+  })
 }))
 vi.mock('../worktrees/listing/worktree-owner-target', () => ({
   // `/server-<env>/` paths and `runtime:<env>` hosts belong to that paired server; the rest to this app.
@@ -116,12 +117,12 @@ describe('the window raises the unread flag only where its host does not', () =>
   it('answers from the cached status without probing again', async () => {
     const { mark, isUnread } = createStore()
     cachedStatus.set('slow', [WORKSPACE_UNREAD_HOST_RAISES_CAPABILITY])
-    hostCapabilities.set('slow', new Promise(() => {}))
     await mark(SLOW_SERVER_WT)
     expect(isUnread(SLOW_SERVER_WT)).toBe(false)
     cachedStatus.set('slow', [])
     await mark(SLOW_SERVER_WT)
     expect(isUnread(SLOW_SERVER_WT)).toBe(true)
+    expect(runtimeEnvironmentSupportsCapability).not.toHaveBeenCalled()
   })
 
   it('waits for a server’s first status, and raises it when the status cannot be read', async () => {
