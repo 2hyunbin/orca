@@ -258,8 +258,8 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
     removedHosts: ReadonlySet<ExecutionHostId>,
     spawnHostId: ExecutionHostId
   ): boolean {
-    // Why rowsRunHere: a paired server's residue row with this id runs nothing in this process.
-    const survivors = this.rowsRunHere().filter((row) => row.id === repoId)
+    // Why every row: a `runtime:` stamp can name files registered here (repo-execution-host.ts).
+    const survivors = (this.store?.getRepos?.() ?? []).filter((row) => row.id === repoId)
     if (!removedHosts.has(spawnHostId)) {
       return survivors.length > 0
     }

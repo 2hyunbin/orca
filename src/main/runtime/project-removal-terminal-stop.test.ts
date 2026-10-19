@@ -194,16 +194,17 @@ describe('project removal on the execution host', () => {
     releaseLocal()
   })
 
-  it("refuses a local spawn after removal when only a paired server's same-id row survives", async () => {
-    const localRow = store.getRepo(TEST_REPO_ID)!
-    const residueRow: Repo = { ...localRow, executionHostId: 'runtime:env-other' }
-    let rows = [localRow, residueRow]
+  it('keeps admitting a self-stamped row after its SSH twin is removed', async () => {
+    const sshRow: Repo = { ...store.getRepo(TEST_REPO_ID)!, connectionId: 'ssh-target' }
+    // A paired client's registration: the runtime stamp names files on this host.
+    const selfRow: Repo = { ...store.getRepo(TEST_REPO_ID)!, executionHostId: 'runtime:env-self' }
+    let rows = [sshRow, selfRow]
     const runtime = new OrcaRuntimeService({
       ...store,
       getRepo: (id: string) => rows.find((row) => row.id === id),
       getRepos: () => rows,
       removeProjectForHost: () => {
-        rows = [residueRow]
+        rows = [selfRow]
       }
     })
     runtime.setPtyController({
@@ -215,11 +216,15 @@ describe('project removal on the execution host', () => {
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
 
-    await runtime.removeProject(localRow)
+    await runtime.removeProject(sshRow)
 
     await expect(
-      runtime.acquireWorktreeTerminalSpawn(spawnWorktreeTarget(TEST_WORKTREE_ID, null))
+      runtime.acquireWorktreeTerminalSpawn(spawnWorktreeTarget(TEST_WORKTREE_ID, 'ssh-target'))
     ).rejects.toThrow('repo_not_found')
+    const releaseLocal = await runtime.acquireWorktreeTerminalSpawn(
+      spawnWorktreeTarget(TEST_WORKTREE_ID, null)
+    )
+    releaseLocal()
   })
 
   it('refuses a spawn on any host once no row with the removed id survives', async () => {

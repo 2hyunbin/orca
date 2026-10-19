@@ -1,5 +1,6 @@
 import {
   getConnectionExecutionHostId,
+  normalizeHostPart,
   parseExecutionHostId,
   type ExecutionHostId
 } from '../execution-host'
@@ -49,7 +50,10 @@ export function spawnWorktreeTarget(
   connectionId: string | null | undefined
 ): HostWorktreeTarget | undefined {
   return worktreeId
-    ? hostWorktreeTarget({ id: worktreeId, hostId: getConnectionExecutionHostId(connectionId) })
+    ? hostWorktreeTarget({
+        id: worktreeId,
+        hostId: getConnectionExecutionHostId(normalizeHostPart(connectionId))
+      })
     : undefined
 }
 
