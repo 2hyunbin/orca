@@ -93,6 +93,7 @@ async function adoptAfterAttachRefusal(error: unknown): Promise<{
     .fn()
     .mockRejectedValueOnce(error)
     .mockResolvedValueOnce({ id: 'ssh:conn-1@@pty2:epoch-b:1', isReattach: false })
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: refusal exits attachment before any provider method other than spawn is used.
   vi.spyOn(providers, 'getProvider').mockReturnValue({ spawn } as unknown as IPtyProvider)
   await adoptStablePane(runtime, store, {
     cols: 80,
@@ -122,6 +123,7 @@ describe('a stable pane whose reattach was refused', () => {
     const runtime = runtimeOwning(store)
     const spawn = vi.fn().mockRejectedValue(new Error(`PTY "pty2:epoch-a:1" not found`))
 
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the rejected attachment calls only spawn and never admits this provider.
     vi.spyOn(providers, 'getProvider').mockReturnValue({ spawn } as unknown as IPtyProvider)
     await expect(
       adoptStablePane(runtime, store, {

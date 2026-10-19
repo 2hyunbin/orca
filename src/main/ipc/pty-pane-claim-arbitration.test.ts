@@ -317,6 +317,7 @@ describe('registerPtyHandlers', () => {
 
     expect(onPtySpawnCommitted).toHaveBeenCalledOnce()
     expect(persistPtyBinding).not.toHaveBeenCalled()
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this test reads existing private maps only to verify rejected admission leaves no state.
     const internals = runtime as unknown as {
       handleByPtyId: Map<string, string>
       providerSequenceInitializedPtys: Set<string>

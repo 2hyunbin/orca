@@ -54,6 +54,7 @@ function spawnAfterAttachRejection(
 /** Real binding retirement against an in-memory session. */
 function sessionStore(leaves: string[]): { store: Store; read: () => WorkspaceSessionState } {
   const store = createPaneBindingStore()
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the legacy split fixture supplies the topology and binding fields read by adoption and retirement.
   const session = {
     ...store.getWorkspaceSession(),
     tabsByWorktree: {
