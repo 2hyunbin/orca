@@ -7,7 +7,13 @@ const mocks = vi.hoisted(() => ({
   toastInfo: vi.fn(),
   toastError: vi.fn(),
   launchAgentInNewTab: vi.fn(),
-  hostPermission: vi.fn()
+  hostPermission: vi.fn(),
+  detected: null as string[] | null
+}))
+
+vi.mock('@/lib/agent-detection-target-inventory', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  readDetectedAgentsForWorktree: () => mocks.detected
 }))
 
 vi.mock('sonner', () => ({ toast: { info: mocks.toastInfo, error: mocks.toastError } }))
@@ -36,6 +42,7 @@ import { getStructuredAgentLaunchStatus } from './structured-agent-session-launc
 import { getStructuredAgentSessionLaunchSelection } from './structured-agent-session-launch-options'
 import { peekWebSessionFocusIntent } from '@/runtime/web-session-focus-intent'
 import { LOCAL_ADMISSION_WAIT_MS } from './structured-agent-session-host-admission'
+import { launchStructuredAgentFromNewTab } from './launch-agent-in-new-tab-structured-route'
 import { structuredAgentSessionFocusOwner } from '@/runtime/structured-agent-session-owner'
 
 const WORKTREE = 'repo-1::/srv/app'
@@ -71,6 +78,7 @@ function expectNoChatCommitted(): void {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.detected = null
   mocks.hostPermission.mockResolvedValue({ kind: 'allowed' })
   localStorage.clear()
   useAppStore.setState({
@@ -133,6 +141,40 @@ describe('a structured chat launch on a paired server', () => {
         agentSessionLaunchPlan: expect.objectContaining({ route: 'terminal-tui' })
       })
     )
+    expectNoChatCommitted()
+  })
+
+  // A chat can be offered without its CLI, so a "no" must not start a terminal for a missing one.
+  it("reports the host's refusal instead of a terminal when the agent's CLI is not installed", async () => {
+    mocks.detected = ['codex']
+    mocks.createSupport.mockResolvedValue({ supported: false })
+    const result = beginDirectWorkItemStructuredLaunch({
+      plan: pairedPlan(),
+      primaryTabId: null,
+      beforeOpen: vi.fn(),
+      declinedTerminal: { launchSource: 'task_page' }
+    })
+    expect(result.completed).toBe(true)
+    await vi.waitFor(() => expect(mocks.toastError).toHaveBeenCalledOnce())
+    const openTerminal = vi.fn()
+    const newTab = launchStructuredAgentFromNewTab({
+      plan: pairedPlan(),
+      worktreeId: WORKTREE,
+      openTerminal
+    })
+    await expect(newTab?.structuredSettlement).resolves.toMatchObject({ kind: 'failed' })
+    expect(openTerminal).not.toHaveBeenCalled()
+    expect(mocks.launchAgentInNewTab).not.toHaveBeenCalled()
+    // The caller's own fallback, an empty workspace's shell, needs no CLI.
+    const seedShell = vi.fn(() => ({ opened: true }))
+    const shell = launchStructuredAgentFromNewTab({
+      plan: pairedPlan(),
+      worktreeId: WORKTREE,
+      onHostDeclined: seedShell,
+      openTerminal
+    })
+    await expect(shell?.structuredSettlement).resolves.toEqual({ kind: 'terminal' })
+    expect(seedShell).toHaveBeenCalledOnce()
     expectNoChatCommitted()
   })
 
