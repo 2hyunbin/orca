@@ -39,15 +39,14 @@ function getItemContentIndent(item: RegExpExecArray): number {
 function sliceBeforeOuterQuote(source: string): string {
   const lines = source.split('\n')
   let contentIndent = 0
+  let outerQuoteLine = /^>/
   for (const [index, line] of lines.entries()) {
     const item = EXTENDED_LIST_ITEM.exec(line)
     const lineIndent = expandColumns(/^\s*/.exec(line)?.[0] ?? '')
     if (item && (index === 0 || lineIndent < contentIndent)) {
       contentIndent = getItemContentIndent(item)
-    } else if (
-      index > 0 &&
-      new RegExp(`^ {0,${Math.max(0, Math.min(3, contentIndent - 1))}}>`).test(line)
-    ) {
+      outerQuoteLine = new RegExp(`^ {0,${Math.max(0, Math.min(3, contentIndent - 1))}}>`)
+    } else if (index > 0 && outerQuoteLine.test(line)) {
       return lines.slice(0, index).join('\n')
     }
   }
@@ -59,8 +58,8 @@ function isListToken(token: Tokens.Generic | undefined): token is Tokens.List {
 }
 
 class BlockquoteListTokenizer extends Tokenizer {
-  // Why: blockquote lazy continuation re-lexes a list via this.list(), skipping the
-  // registered extended-marker (a., iii)) tokenizers, then reads `.raw` of the miss.
+  // Why: Marked's blockquote() lazy continuation calls `this.list(newText)!` (still so in
+  // v18), skipping the registered extended-marker (a., iii)) tokenizers, then reads `.raw`.
   list(source: string): Tokens.List | undefined {
     const token = super.list(source)
     if (token || !EXTENDED_LIST_ITEM.test(source)) {
