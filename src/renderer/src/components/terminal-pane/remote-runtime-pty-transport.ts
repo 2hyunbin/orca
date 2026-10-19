@@ -1529,9 +1529,12 @@ export function createRemoteRuntimePtyTransport(
     ownerRecovery = (async () => {
       try {
         const resolution = await resolvePersistedHostPane()
-        if (!current()) return undefined
-        if (resolution.kind !== 'resolved' || !recovery.isCurrent(epoch))
+        if (!current()) {
+          return undefined
+        }
+        if (resolution.kind !== 'resolved' || !recovery.isCurrent(epoch)) {
           throw new Error(ownerChanged)
+        }
         const result = await adoptResolvedHostPane(
           resolution.terminal,
           options,
@@ -1539,9 +1542,12 @@ export function createRemoteRuntimePtyTransport(
           generation,
           epoch
         )
-        if (!current()) return undefined
-        if (!result || ownerChangedAgain || recovery.currentPhase === 'disconnected')
+        if (!current()) {
+          return undefined
+        }
+        if (!result || ownerChangedAgain || recovery.currentPhase === 'disconnected') {
           throw new Error(ownerChanged)
+        }
         return result
       } catch {
         if (current()) {
@@ -1556,7 +1562,9 @@ export function createRemoteRuntimePtyTransport(
         return undefined
       } finally {
         ownerRecovery = null
-        if (current()) emitRecoveryState(true)
+        if (current()) {
+          emitRecoveryState(true)
+        }
       }
     })()
     emitRecoveryState(true)
@@ -3344,8 +3352,9 @@ export function createRemoteRuntimePtyTransport(
       if (!destroyed && lifecycleEpoch === connectLifecycleEpoch) {
         connecting = false
         const message = runtimeTerminalErrorMessage(error)
-        if (message.includes(ownerChanged))
+        if (message.includes(ownerChanged)) {
           return await reconcilePaneOwner(options, connectLifecycleEpoch)
+        }
         const deferral = readTerminalSpawnDeferral(error)
         if (deferral) {
           recovery.cancel()
@@ -3549,7 +3558,9 @@ export function createRemoteRuntimePtyTransport(
     },
 
     retryRecovery() {
-      if (surfacedErrorMessages.has(ownerChanged)) return recovery.retryNow()
+      if (surfacedErrorMessages.has(ownerChanged)) {
+        return recovery.retryNow()
+      }
       if (
         !destroyed &&
         !terminalEnded &&

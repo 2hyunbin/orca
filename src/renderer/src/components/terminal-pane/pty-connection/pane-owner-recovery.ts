@@ -12,14 +12,17 @@ export function armPaneOwnerRetry(
   generation: number,
   retry: () => unknown
 ): void {
-  if (session.runtimeEnvironmentId) return
+  if (session.runtimeEnvironmentId) {
+    return
+  }
   session.transport.retryRecovery = () => {
     if (
       session.disposed ||
       generation !== session.transportStreamGeneration ||
       session.deps.paneTransportsRef.current.get(session.pane.id) !== session.transport
-    )
+    ) {
       return false
+    }
     void retry()
     return true
   }

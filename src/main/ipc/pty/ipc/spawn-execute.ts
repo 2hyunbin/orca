@@ -27,7 +27,9 @@ export async function executePtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<void> {
         ctx.replacedPaneOwner
       )
     const stablePaneOwnerCandidate = resolveOwner()
-    if (stablePaneOwnerCandidate) throw new PaneOwnerContentionError()
+    if (stablePaneOwnerCandidate) {
+      throw new PaneOwnerContentionError()
+    }
     if (ctx.paneSpawnOperation?.mustExist && args.worktreeId && args.tabId && args.leafId) {
       assertPaneStillExists(
         ctx.deps.store,

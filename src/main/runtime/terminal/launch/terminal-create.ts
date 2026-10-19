@@ -1,3 +1,5 @@
+import { revealCreatedTerminal } from './terminal-create-reveal'
+import type { PaneSpawnOperation } from '../../../ipc/pty/pane/pane-spawn-operation'
 import { OrcaRuntimeWithTerminalCreateDeduplication } from './terminal-create-deduplication'
 import * as dependencies from '../../orca-runtime-create-terminal-dependencies'
 import { createDesktopTerminal } from '../../orca-runtime-create-terminal-desktop'
@@ -67,9 +69,7 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
       const launchToken = agentLaunchTokenFor(launchOpts, dependencies.randomUUID)
       let effectiveLaunchConfig = launchOpts.launchConfig
       let result!: Awaited<ReturnType<NonNullable<dependencies.RuntimePtyController['spawn']>>>
-      const spawnFresh = async (
-        operation: import('../../../ipc/pty/pane/pane-spawn-operation').PaneSpawnOperation
-      ) => {
+      const spawnFresh = async (operation: PaneSpawnOperation) => {
         const baseEnv = {
           ...launchOpts.env,
           ...(launchToken ? { ORCA_AGENT_LAUNCH_TOKEN: launchToken } : {})
@@ -197,15 +197,7 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
           signal: launchOpts.signal
         })
         if (adoptedBeforeLaunch) {
-          const owner = adoptedBeforeLaunch.owner
-          result = {
-            ...adoptedBeforeLaunch.result,
-            stablePaneOwner: {
-              handle: owner.handle ?? preAllocatedHandle,
-              tabId: owner.tabId,
-              leafId: owner.leafId
-            }
-          }
+          result = dependencies.materializedStablePaneReply(adoptedBeforeLaunch, preAllocatedHandle)
         } else if (!this.ptyController.adoptStablePane) {
           result = await spawnFresh({ mustExist: false })
         }
@@ -281,32 +273,21 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
             ...(cwd !== workspace.path ? { startupCwd: cwd } : {})
           })
         }
-        let surface: dependencies.RuntimeTerminalCreate['surface'] = 'background'
-        let warning: string | undefined
-        if (presentation !== 'background' && this.notifier?.revealTerminalSession) {
-          try {
-            await this.notifier.revealTerminalSession(workspace.id, {
-              ptyId: result.id,
-              title: launchOpts.title ?? null,
-              ...(cwd !== workspace.path ? { cwd } : {}),
-              ...(effectiveLaunchConfig ? { launchConfig: effectiveLaunchConfig } : {}),
-              ...(launchToken ? { launchToken } : {}),
-              ...(launchOpts.launchAgent ? { launchAgent: launchOpts.launchAgent } : {}),
-              ...(launchOpts.viewMode ? { viewMode: launchOpts.viewMode } : {}),
-              activate: presentation === 'focused',
-              ...(presentation ? { presentation } : {}),
-              ...dependencies.terminalRevealViewerOptions(opts),
-              tabId,
-              leafId
-            })
-            surface = 'visible'
-          } catch (err) {
-            console.warn(`[terminal-create] failed to create inactive tab for ${result.id}:`, err)
-            warning = dependencies.createTerminalRevealWarning(handle, err)
-          }
-        } else if (presentation !== 'background') {
-          warning = dependencies.createTerminalRevealWarning(handle)
-        }
+        const reveal = revealCreatedTerminal({
+          notifier: this.notifier,
+          workspace,
+          ptyId: result.id,
+          handle,
+          cwd,
+          launchOpts,
+          effectiveLaunchConfig,
+          launchToken,
+          presentation,
+          opts,
+          tabId,
+          leafId
+        })
+        const { surface, warning } = reveal instanceof Promise ? await reveal : reveal
         return {
           handle,
           tabId,

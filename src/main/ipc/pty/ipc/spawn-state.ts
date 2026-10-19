@@ -1,3 +1,4 @@
+import type { PaneSpawnOperation } from '../pane/pane-spawn-operation'
 import type {
   IPtyProvider,
   PtySpawnOptions,
@@ -34,7 +35,7 @@ export type PtyIpcSpawnState = {
   replacedPaneOwner: ReplacedPaneOwner | null
   finishTerminalInstall: () => void
   result: PtySpawnResult
-  paneSpawnOperation?: import('../pane/pane-spawn-operation').PaneSpawnOperation
+  paneSpawnOperation?: PaneSpawnOperation
   stablePaneOwner: StablePaneOwner | null
   stablePaneBindingPersisted: boolean
   rejectedRegistrationCandidate: PtySpawnResult | null

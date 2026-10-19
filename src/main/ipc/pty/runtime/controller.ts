@@ -51,10 +51,11 @@ export function installPtyRuntimeController(deps: PtyRuntimeControllerDeps): voi
     },
     adoptStablePane: async (args) => {
       const adopted = await adoptStablePane(args)
-      if (adopted)
+      if (adopted) {
         await adoptMaterializedRuntimePtySpawn(
           createRuntimePtySpawnState(deps, { ...args, adoptedStablePane: adopted })
         )
+      }
       return adopted
     },
     spawn: async (args) => spawnPtyFromRuntimeController(deps, args),

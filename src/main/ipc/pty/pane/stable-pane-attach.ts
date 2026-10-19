@@ -92,13 +92,19 @@ export async function reconcilePaneOwner<T>(args: {
     try {
       if (owner) {
         const attached = await args.attach(owner)
-        if (attached !== null) return attached
+        if (attached !== null) {
+          return attached
+        }
       }
       return await args.fresh()
     } catch (error) {
-      if (!(error instanceof PaneOwnerContentionError) || losses++ >= 1) throw error
+      if (!(error instanceof PaneOwnerContentionError) || losses++ >= 1) {
+        throw error
+      }
       owner = args.resolveOwner()
-      if (!owner) throw error
+      if (!owner) {
+        throw error
+      }
     }
   }
 }
@@ -110,9 +116,13 @@ export async function spawnForStablePane(
     owner: args.owner,
     resolveOwner: () => args.resolveOwner?.() ?? null,
     attach: async (owner) => {
-      if (owner !== args.owner) args.onOwnerReresolved?.(owner)
+      if (owner !== args.owner) {
+        args.onOwnerReresolved?.(owner)
+      }
       const attempt = await attemptStablePaneAttach({ ...args, owner })
-      if ('lostTo' in attempt) throw new PaneOwnerContentionError()
+      if ('lostTo' in attempt) {
+        throw new PaneOwnerContentionError()
+      }
       return 'attached' in attempt ? attempt.attached : null
     },
     fresh: async () => {

@@ -1,3 +1,4 @@
+import type { PaneSpawnOperation } from '../pane/pane-spawn-operation'
 import type { AgentLaunchRuntime } from '../../../../shared/agent-launch-runtime'
 import type { SpawnIntent } from '../../../../shared/host-spawn-admission'
 import type {
@@ -131,7 +132,7 @@ export type RuntimePtySpawnArgs = {
   signal?: AbortSignal
   refuseSleptWorktree?: boolean
   onPtySpawnCommitted?: () => void
-  paneSpawnOperation?: import('../pane/pane-spawn-operation').PaneSpawnOperation
+  paneSpawnOperation?: PaneSpawnOperation
   adoptedStablePane?: {
     result: PtySpawnResult
     owner: {

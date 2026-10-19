@@ -262,7 +262,9 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
       })
       .catch(async (error: unknown) => {
         const message = error instanceof Error ? error.message : String(error)
-        if (!ownerRefused && isPaneOwnerRefusal(message)) outputCallbacks.callbacks.onError(message)
+        if (!ownerRefused && isPaneOwnerRefusal(message)) {
+          outputCallbacks.callbacks.onError(message)
+        }
         releaseDeferredCwdFence()
         session.finishReattachLiveDataDeferral(false, outputCallbacks.generation)
         if (

@@ -40,7 +40,9 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
             args.worktreeId,
             args.connectionId
           )
-    if (stablePaneOwnerCandidate) throw new PaneOwnerContentionError()
+    if (stablePaneOwnerCandidate) {
+      throw new PaneOwnerContentionError()
+    }
     if (args.paneSpawnOperation?.mustExist && args.worktreeId && args.tabId && args.leafId) {
       assertPaneStillExists(
         ctx.deps.store,

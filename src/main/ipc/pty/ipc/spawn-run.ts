@@ -104,7 +104,9 @@ export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArg
         renderer: true,
         spawnFresh: async (scope) => (completed = await complete(scope))
       })
-      if (adopted) releaseAbandonedAgentTeamsLeader(ctx)
+      if (adopted) {
+        releaseAbandonedAgentTeamsLeader(ctx)
+      }
       return adopted?.result ?? completed!
     }
     return complete(operation)
@@ -143,8 +145,9 @@ export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArg
     })
     if (adopted) {
       releaseAbandonedAgentTeamsLeader(ctx)
-      if (ctx.preSpawnHiddenMarkId !== null)
+      if (ctx.preSpawnHiddenMarkId !== null) {
         deps.transitionSpawnHiddenRendererPtyDeliveryState(ctx.preSpawnHiddenMarkId, false)
+      }
       deps.options?.onCodexHomePtySpawned?.({
         id: adopted.result.id,
         codexHomePath: null,

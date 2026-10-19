@@ -77,7 +77,9 @@ export async function spawnPtyFromRuntimeController(
       return freshResult
     }
   })
-  if (!adopted) return toRuntimeSpawnReply(freshResult!)
+  if (!adopted) {
+    return toRuntimeSpawnReply(freshResult!)
+  }
   const completed = await adoptMaterializedRuntimePtySpawn(
     createRuntimePtySpawnState(deps, { ...args, adoptedStablePane: adopted })
   )

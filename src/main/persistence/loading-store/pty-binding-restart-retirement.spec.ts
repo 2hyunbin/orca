@@ -99,16 +99,17 @@ export function registerPtyBindingRestartRetirementTests(): void {
       gate.finish.resolve()
       await predecessor
       await refused
-      if (change === 'closed')
+      if (change === 'closed') {
         expect(() =>
           assertPaneStillExists(store, binding.worktreeId, binding.tabId, binding.leafId)
         ).toThrow('terminal_pane_owner_changed')
-      else
+      } else {
         expect(
           store.getWorkspaceSession().terminalLayoutsByTabId[binding.tabId].ptyIdsByLeafId?.[
             binding.leafId
           ]
         ).toBe(binding.ptyId)
+      }
     }
   )
 

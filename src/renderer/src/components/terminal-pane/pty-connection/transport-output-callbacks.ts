@@ -49,8 +49,9 @@ export function bindCaptureTransportOutputCallbacks(session: ConnectPanePtySessi
         },
         onConnect: (): void => {
           if (isCurrent()) {
-            for (const message of ownerErrors)
+            for (const message of ownerErrors) {
               session.deps.onPtyErrorClearedRef?.current?.(session.pane.id, message)
+            }
             ownerErrors.clear()
             session.startupTiming?.mark('connected')
             session.reportRemoteRendererSerializerReady()
@@ -80,7 +81,9 @@ export function bindCaptureTransportOutputCallbacks(session: ConnectPanePtySessi
         onError: (message: string): void => {
           if (isCurrent()) {
             for (const line of message.split('\n')) {
-              if (isPaneOwnerRefusal(line)) ownerErrors.add(line)
+              if (isPaneOwnerRefusal(line)) {
+                ownerErrors.add(line)
+              }
             }
             session.startupTiming?.finish('error')
             onError(message)

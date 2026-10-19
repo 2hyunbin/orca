@@ -53,7 +53,9 @@ export async function completePaneAdoption(
       return null
     }
     const result = attempt.attached.result
-    if (args.spawnOptions.signal?.aborted) throw new Error('client_disconnected')
+    if (args.spawnOptions.signal?.aborted) {
+      throw new Error('client_disconnected')
+    }
     incarnationId = result.incarnationId
     assertSpawnReplyWasLive(result)
     runtime?.assertPtyRegistrationAllowed?.(result.id, result.incarnationId)
@@ -71,8 +73,9 @@ export async function completePaneAdoption(
     if (
       !result.wslDistro &&
       isNativeWindowsLocalPtySpawn({ connectionId: args.connectionId, cwd: args.spawnOptions.cwd })
-    )
+    ) {
       markNativeWindowsConptyPty(result.id)
+    }
     seedHeadlessTerminalFromSpawnResult(runtime, result, paneKey)
     seedTerminalRestoreRecordsFromSpawnResult(runtime, result)
     try {
@@ -118,14 +121,16 @@ export async function completePaneAdoption(
           !args.renderer ||
           !(error instanceof Error) ||
           error.message !== 'agent_session_exited_during_start'
-        )
+        ) {
           throw error
+        }
         return { result, owner, materialized: true as const }
       }
     }
     runtime?.noteTerminalSpawnCommit?.(result)
-    if (!owner.handle && terminalHandle)
+    if (!owner.handle && terminalHandle) {
       runtime?.registerPreAllocatedHandleForPty?.(result.id, terminalHandle)
+    }
     const committedSize = resolveCommittedPtySize({
       result,
       requested: args.spawnOptions,
@@ -151,7 +156,9 @@ export async function completePaneAdoption(
       result.id,
       !pending && rendererSerializerReadiness.has(result.id)
     )
-    if (pending) pendingPtyIdBySerializerGeneration.set(pending.gen, result.id)
+    if (pending) {
+      pendingPtyIdBySerializerGeneration.set(pending.gen, result.id)
+    }
     return {
       result: {
         ...result,

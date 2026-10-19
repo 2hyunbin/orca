@@ -490,10 +490,11 @@ export function registerPtyConnectionSessionLivenessTests(): void {
         )
         expect(deps.clearExitedPanePtyLayoutBinding).not.toHaveBeenCalled()
         expect(deps.clearTabPtyId).not.toHaveBeenCalled()
-        if (!fresh)
+        if (!fresh) {
           expect(mockStoreState.terminalLayoutsByTabId?.['tab-1']?.ptyIdsByLeafId).toEqual({
             [LEAF_2]: 'unverifiable-pty'
           })
+        }
         const stale = transport.connect.mock.calls[0]?.[0].callbacks
         transport.connect.mockImplementation(async ({ callbacks }) => {
           callbacks?.onError?.('unrelated diagnostic')

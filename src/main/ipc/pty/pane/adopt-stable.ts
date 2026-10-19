@@ -23,7 +23,9 @@ export async function adoptStablePane(
   store: Store | undefined,
   args: AdoptStablePaneArgs
 ): Promise<AdoptStablePaneResult | null> {
-  if (args.signal?.aborted) throw new Error('client_disconnected')
+  if (args.signal?.aborted) {
+    throw new Error('client_disconnected')
+  }
   const paneKey = makePaneKey(args.tabId, args.leafId)
   const key = makePaneSpawnReservationKey(args.worktreeId, args.connectionId, paneKey)!
   const resolveOwner = () => {
@@ -39,14 +41,18 @@ export async function adoptStablePane(
   let remaining = 1
   if (args.completed?.materialized) {
     const owner = resolveOwner()
-    if (!owner) throw new Error('terminal_pane_owner_changed')
-    if (typeof store?.getWorkspaceSession === 'function')
+    if (!owner) {
+      throw new Error('terminal_pane_owner_changed')
+    }
+    if (typeof store?.getWorkspaceSession === 'function') {
       assertPaneStillExists(store, args.worktreeId, args.tabId, args.leafId, args.connectionId)
+    }
     if (
       owner.ptyId === args.completed.result.id &&
       owner.incarnationId === args.completed.result.incarnationId
-    )
+    ) {
       return args.completed
+    }
     remaining = 0
   }
   let reservation = args.reservation
@@ -58,30 +64,42 @@ export async function adoptStablePane(
         break
       }
       const joined = await joinPaneSpawn(pending)
-      if (args.signal?.aborted) throw new Error('client_disconnected')
-      if (!joined) continue
+      if (args.signal?.aborted) {
+        throw new Error('client_disconnected')
+      }
+      if (!joined) {
+        continue
+      }
       const owner = resolveOwner()
-      if (!owner) throw new Error('terminal_pane_owner_changed')
-      if (typeof store?.getWorkspaceSession === 'function')
+      if (!owner) {
+        throw new Error('terminal_pane_owner_changed')
+      }
+      if (typeof store?.getWorkspaceSession === 'function') {
         assertPaneStillExists(store, args.worktreeId, args.tabId, args.leafId, args.connectionId)
+      }
       if (owner.ptyId === joined.id && owner.incarnationId === joined.incarnationId) {
         return { result: { ...joined, isReattach: true }, owner, materialized: true }
       }
-      if (remaining-- <= 0) throw new Error('terminal_pane_owner_changed')
+      if (remaining-- <= 0) {
+        throw new Error('terminal_pane_owner_changed')
+      }
       // Recheck after the await; a new holder may already have reserved the pane.
     }
   }
   let mustExist = false
   try {
-    if (args.signal?.aborted) throw new Error('client_disconnected')
+    if (args.signal?.aborted) {
+      throw new Error('client_disconnected')
+    }
     return await reconcilePaneOwner<AdoptStablePaneResult | null>({
       owner: resolveOwner(),
       resolveOwner,
       losses: 1 - remaining,
       attach: async (owner) => {
         mustExist = true
-        if (typeof store?.getWorkspaceSession === 'function')
+        if (typeof store?.getWorkspaceSession === 'function') {
           assertPaneStillExists(store, args.worktreeId, args.tabId, args.leafId, args.connectionId)
+        }
         const adopted = await completePaneAdoption({
           runtime,
           store,
@@ -101,9 +119,12 @@ export async function adoptStablePane(
         return adopted
       },
       fresh: async () => {
-        if (args.signal?.aborted) throw new Error('client_disconnected')
-        if (mustExist)
+        if (args.signal?.aborted) {
+          throw new Error('client_disconnected')
+        }
+        if (mustExist) {
           assertPaneStillExists(store, args.worktreeId, args.tabId, args.leafId, args.connectionId)
+        }
         if (!args.spawnFresh) {
           rejectPaneSpawnReservation(key, reservation, new Error('terminal_pane_unbound'))
           return null

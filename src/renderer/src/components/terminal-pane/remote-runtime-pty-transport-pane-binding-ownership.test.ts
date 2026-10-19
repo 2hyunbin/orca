@@ -77,9 +77,11 @@ describe('remote runtime pane binding ownership', () => {
         leafId: 'pane:1'
       })
       const callbacks = { onError: vi.fn() }
-      if (boundary === 'attach')
+      if (boundary === 'attach') {
         transport.attach({ existingPtyId: 'remote:env-1@@terminal-1', callbacks })
-      else await transport.connect({ url: '', callbacks })
+      } else {
+        await transport.connect({ url: '', callbacks })
+      }
       await vi.waitFor(() => expect(runtimeSubscribe).toHaveBeenCalled())
       if (boundary === 'stream') {
         resolvedPaneHandle = 'terminal-2'
