@@ -13,7 +13,10 @@ import { detectAgentStatusFromTitle } from './agent-detection'
 /** One agent pane's phase. A pane at rest has no agent turn to report. */
 export type AgentPhase = 'needs-you' | 'done' | 'working' | 'rest'
 
-/** A change worth telling someone about. Resuming after an approval is none: it is the same turn. */
+/**
+ * A change worth telling someone about. `errored` is a turn that failed or was cut off, not one the
+ * user stopped. Resuming after an approval is no change: it is the same turn.
+ */
 export type AgentTransition = 'prompt-submitted' | 'turn-finished' | 'errored' | 'needs-input'
 
 /** A hook row's phase. A turn the user stopped is not news, so it rests. */
@@ -48,8 +51,10 @@ export function nextAgentPhase(previous: AgentPhase, observed: AgentPhase): Agen
   return observed === 'done' && previous === 'rest' ? 'rest' : observed
 }
 
-/** The news in a phase change, or null when there is none. A failed turn is only `errored` from
- *  {@link hookRowTransition}: phases alone cannot tell it from a finish. */
+/**
+ * The news in a phase change, or null when there is none. Phases alone cannot tell a failed turn
+ * from a finish; {@link hookRowTransition} can.
+ */
 export function agentPhaseTransition(from: AgentPhase, to: AgentPhase): AgentTransition | null {
   if (from === to) {
     return null

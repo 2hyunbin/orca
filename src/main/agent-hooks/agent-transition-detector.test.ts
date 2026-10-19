@@ -141,6 +141,25 @@ describe('AgentTransitionDetector', () => {
     ])
   })
 
+  it('still tells every reader when one throws', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const detector = new AgentTransitionDetector({
+      resolveTabWorktreeId: () => undefined,
+      now: () => NOW
+    })
+    const received: AgentPaneChange[] = []
+    detector.subscribe(() => {
+      throw new Error('reader failed')
+    })
+    detector.subscribe((change) => received.push(change))
+    const server = new AgentHookServer()
+    detector.attach(server)
+    ingest(server, { state: 'working' })
+    expect(received).toHaveLength(1)
+    expect(error).toHaveBeenCalledTimes(1)
+    error.mockRestore()
+  })
+
   it('stops observing once detached', () => {
     const h = createHarness()
     h.detector.attach(h.server)()

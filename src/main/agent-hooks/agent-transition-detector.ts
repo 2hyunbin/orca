@@ -179,7 +179,12 @@ export class AgentTransitionDetector {
 
   private emit(change: AgentPaneChange): void {
     for (const listener of this.listeners) {
-      listener(change)
+      // One reader's failure must not cost the others the change.
+      try {
+        listener(change)
+      } catch (error) {
+        console.error('[agent-transitions] listener threw', error)
+      }
     }
   }
 }
