@@ -1,4 +1,5 @@
 import { toast } from 'sonner'
+import { useAppStore } from '@/store'
 import type { AppState } from '@/store'
 import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
@@ -154,6 +155,8 @@ export async function launchSourceControlRecoveryAgentWithDefault({
     toast.error(copy.noEnabledAgent)
     return false
   }
+  // An agent the user launches is this window's choice of tab (desktop-tab-choice).
+  useAppStore.getState().recordDesktopTabChoice?.(activeWorktreeId)
   const result = launchAgentInNewTab({
     requestId: newAgentLaunchRequestId(),
     agent,
