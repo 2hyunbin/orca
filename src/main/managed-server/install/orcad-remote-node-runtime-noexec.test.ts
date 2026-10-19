@@ -1,5 +1,5 @@
 import type * as ExecCommandModule from '../../ssh/remote-exec/remote-exec-command'
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -10,7 +10,6 @@ import {
   ensureRemoteOrcadNodeRuntime
 } from './orcad-remote-node-runtime'
 import {
-  assertRemoteNodeRuntimePromoted,
   REMOTE_NODE_RUNTIME_MISSING,
   REMOTE_NODE_RUNTIME_NOEXEC
 } from '../../ssh/orcad-remote-node-runtime-report'
@@ -29,8 +28,11 @@ vi.mock('./remote-install-transfers', () => ({ uploadRelayDirectory: vi.fn(async
 const conn = {} as OrcadHostTransport
 const host = getRemoteHostPlatform('linux-x64')
 // What dash printed for the probe on a Docker host whose /root is a `noexec` tmpfs.
-const NOEXEC_SHELL_WORDS =
-  'exit 126: /bin/sh: 1: /root/.orca-remote/runtimes/.stage-node-x-1/.exec-probe: Permission denied'
+const NOEXEC_PROBE_REPLY = [
+  REMOTE_NODE_RUNTIME_NOEXEC,
+  'ORCA_RUNTIME_EXIT=126',
+  '/bin/sh: 1: /root/.orca-remote/runtimes/.stage-node-x-1/.exec-probe: Permission denied'
+].join('\n')
 
 const directories: string[] = []
 afterEach(() => {
@@ -66,7 +68,7 @@ describe('pinned-Node runtime store on a host that refuses to run programs', () 
         return REMOTE_NODE_RUNTIME_MISSING
       }
       if (command.includes('.exec-probe')) {
-        return `${REMOTE_NODE_RUNTIME_NOEXEC}\n${NOEXEC_SHELL_WORDS}`
+        return NOEXEC_PROBE_REPLY
       }
       return ''
     })
@@ -84,29 +86,37 @@ describe('pinned-Node runtime store on a host that refuses to run programs', () 
     expect(String(failure)).toContain('/root/.orca-remote/runtimes')
     expect(archivePath).not.toHaveBeenCalled()
     expect(uploadRelayDirectory).not.toHaveBeenCalled()
+    const commands = vi.mocked(execCommand).mock.calls.map(([, command]) => command)
+    expect(commands.at(-1)).toMatch(/^rm -rf '\/root\/\.orca-remote\/runtimes\/\.stage-/)
   })
 
-  it('reads an exec refusal at the self-test as noexec, not an unsupported runtime', () => {
-    const refused = () =>
-      assertRemoteNodeRuntimePromoted(
-        'ORCA_NODE_RUNTIME_SELFTEST_FAILED\nORCA_RUNTIME_EXIT=126\n' +
-          'sh: 1: /root/.orca-remote/runtimes/.stage/node-v24/bin/node: Permission denied'
-      )
-    const wrongLibc = () =>
-      assertRemoteNodeRuntimePromoted(
-        'ORCA_NODE_RUNTIME_SELFTEST_FAILED\nORCA_RUNTIME_EXIT=127\n' +
-          'Error loading shared library libstdc++.so.6: No such file or directory'
-      )
-    expect(classifyOrcadHostUnavailable(catchError(refused))).toBe('runtime_noexec')
-    expect(classifyOrcadHostUnavailable(catchError(wrongLibc))).toBe('runtime_self_test')
+  it('leaves any other probe failure to the self-test after the upload', async () => {
+    vi.mocked(execCommand).mockImplementation(async (_conn, command) => {
+      if (command.includes('tar -xzf')) {
+        return 'ORCA_NODE_RUNTIME_READY'
+      }
+      if (command.includes(REMOTE_NODE_RUNTIME_MISSING)) {
+        return REMOTE_NODE_RUNTIME_MISSING
+      }
+      if (command.includes('.exec-probe')) {
+        return `${REMOTE_NODE_RUNTIME_NOEXEC}\nORCA_RUNTIME_EXIT=127\n/bin/sh: bad interpreter`
+      }
+      return command.includes('2>/dev/null') ? 'OK' : ''
+    })
+    await ensureRemoteOrcadNodeRuntime({
+      conn,
+      host,
+      slotDir: '/root/.orca-remote/orcad-0.1.0+abc',
+      target: 'linux-x64-glibc',
+      archivePath: async () => archive()
+    })
+    expect(uploadRelayDirectory).toHaveBeenCalledTimes(1)
   })
 })
 
-function catchError(run: () => void): unknown {
-  try {
-    run()
-  } catch (error) {
-    return error
-  }
-  return null
+function archive(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'orcad-runtime-noexec-archive-'))
+  directories.push(dir)
+  writeFileSync(join(dir, 'node.tar.gz'), 'archive')
+  return join(dir, 'node.tar.gz')
 }

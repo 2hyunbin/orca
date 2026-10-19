@@ -40,14 +40,18 @@ function isExecRefused(exitStatus: number | null, output: string): boolean {
   return exitStatus === 126 && /permission denied/i.test(output)
 }
 
-/** Throws when the store probe that precedes the upload says the store can't run programs. */
+/**
+ * Throws only for the shell's exec refusal; any other probe failure falls through to the upload,
+ * whose self-test classifies it with the loader's own words.
+ */
 export function assertRemoteNodeRuntimeStoreExecutable(probe: string, storeDir: string): void {
   const index = probe.indexOf(REMOTE_NODE_RUNTIME_NOEXEC)
-  if (index !== -1) {
-    throw new RemoteNodeRuntimeNoexecError(
-      probe.slice(index + REMOTE_NODE_RUNTIME_NOEXEC.length).trim(),
-      storeDir
-    )
+  if (index === -1) {
+    return
+  }
+  const report = parseRemoteRuntimeExitReport(probe.slice(index))
+  if (isExecRefused(report.exitStatus, report.output)) {
+    throw new RemoteNodeRuntimeNoexecError(report.output, storeDir)
   }
 }
 
@@ -84,9 +88,6 @@ export function assertRemoteNodeRuntimePromoted(promoted: string): void {
   const selfTestFailure = promoted.indexOf(REMOTE_NODE_RUNTIME_SELFTEST_FAILED)
   if (selfTestFailure !== -1) {
     const report = parseRemoteRuntimeExitReport(promoted.slice(selfTestFailure))
-    if (isExecRefused(report.exitStatus, report.output)) {
-      throw new RemoteNodeRuntimeNoexecError(report.output)
-    }
     throw new RemoteNodeRuntimeSelfTestError(report.exitStatus, report.output)
   }
   const modified = promoted

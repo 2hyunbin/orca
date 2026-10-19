@@ -115,10 +115,10 @@ export function createExecProbedStageCommand(host: RemoteHostPlatform, stageDir:
   const stage = quotePosixShell(stageDir)
   const probe = quotePosixShell(joinRemotePath(host, stageDir, '.exec-probe'))
   return (
-    `mkdir -p ${stage} && printf '#!/bin/sh\necho ok\n' > ${probe} && chmod 700 ${probe} && ` +
+    `mkdir -p ${stage} && printf '#!/bin/sh\\necho ok\\n' > ${probe} && chmod 700 ${probe} && ` +
     `{ orca_x=$(${probe} 2>&1); orca_x_status=$?; rm -f ${probe}; ` +
-    `[ "$orca_x" = ok ] || { echo ${REMOTE_NODE_RUNTIME_NOEXEC}; ` +
-    `echo "exit $orca_x_status: $orca_x" | head -c 2000; }; }`
+    `[ "$orca_x_status" = 0 ] || { echo ${REMOTE_NODE_RUNTIME_NOEXEC}; ` +
+    `echo "${REMOTE_NODE_RUNTIME_EXIT_PREFIX}$orca_x_status"; printf '%s\\n' "$orca_x" | head -c 2000; }; }`
   )
 }
 

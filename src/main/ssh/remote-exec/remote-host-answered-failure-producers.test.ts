@@ -13,6 +13,7 @@ import { runProcess, runProcessSync } from '@orca/process-host'
 import {
   REMOTE_NODE_RUNTIME_READY,
   REMOTE_NODE_RUNTIME_VERIFIED_MARKER,
+  RemoteNodeRuntimeSelfTestError,
   assertRemoteNodeRuntimePromoted
 } from '../orcad-remote-node-runtime-report'
 import { remoteNodeRuntimePresentCommand } from '../../managed-server/install/orcad-remote-node-runtime'
@@ -181,14 +182,14 @@ describe.runIf(posix)('warm runtime check on a cached install', () => {
     [
       'a shared library removed since the install',
       'echo "node: error while loading shared libraries: libatomic.so.1: cannot open shared object file" >&2\nexit 127',
-      'RemoteNodeRuntimeSelfTestError'
+      127
     ],
     [
       'an exec policy that now denies uploaded binaries',
       'echo "sh: node: Permission denied" >&2\nexit 126',
-      'RemoteNodeRuntimeNoexecError'
+      126
     ]
-  ])('reports %s as an answered refusal before launch', async (_label, body, errorName) => {
+  ])('reports %s as an answered refusal before launch', async (_label, body, exitStatus) => {
     const runtimeDir = await cachedRuntime(body)
     // Without running it, presence alone still says READY: the gap this check closes.
     expect(runCheck(runtimeDir, false).trim()).toBe(REMOTE_NODE_RUNTIME_READY)
@@ -199,7 +200,10 @@ describe.runIf(posix)('warm runtime check on a cached install', () => {
     } catch (error) {
       thrown = error
     }
-    expect(thrown).toMatchObject({ name: errorName })
+    if (!(thrown instanceof RemoteNodeRuntimeSelfTestError)) {
+      throw new Error(`expected a self-test refusal, got ${String(thrown)}`)
+    }
+    expect(thrown.exitStatus).toBe(exitStatus)
     expect(isAnsweredHostFailure(thrown)).toBe(true)
   })
 })
