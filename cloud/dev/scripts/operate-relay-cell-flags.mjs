@@ -43,7 +43,9 @@ export const CELL_FLAG_SPECS = {
   // Absent keeps the cell's boot value.
   readTimeoutMarginMs: { parse: numberIn(1_000, 60_000, true) },
   // Flip-back leases in flight; absent is a third of the cell's pool.
-  reregisterInFlight: { parse: numberIn(1, 16, true) }
+  reregisterInFlight: { parse: numberIn(1, 16, true) },
+  // Step 6: acts only while the cell is reserve.
+  phonePath: { parse: enumOf('db', 'memory'), default: 'db' }
 }
 
 export const RESERVE_CONFIRMATION = 'RESERVE'
@@ -134,6 +136,24 @@ export function assertReserveKeepsLocalReadiness(flags, changes) {
       '(e.g. --set readinessLocal=true,admitMode=reserve): with SQL readiness the load balancer drops the cell ' +
       "in a database outage and the directors' polls can no longer feed its dead-man"
   )
+}
+
+// The cell ignores phonePath=memory outside reserve, so writing it there only arms a later
+// admitMode=reserve flip to turn phones over unnamed. Rolling back with admitMode=db stays allowed.
+export function assertPhonePathNeedsReserve(flags, changes) {
+  if ((flags.phonePath ?? 'db') !== 'memory') return
+  if ((flags.admitMode ?? 'db') === 'reserve') {
+    if (changes.admitMode === 'reserve' && !('phonePath' in changes)) {
+      throw new Error(
+        'the object still says phonePath=memory: name phonePath in the same write ' +
+          '(e.g. --set admitMode=reserve,phonePath=db), so a reserve flip never turns phones over unnamed'
+      )
+    }
+    return
+  }
+  if ('phonePath' in changes) {
+    throw new Error("phonePath=memory requires admitMode=reserve on the cell, already written or in the same write")
+  }
 }
 
 // `key=value,key=value`; `key=default` removes the key so the cell uses its default.
@@ -453,6 +473,7 @@ export async function operateCellFlags(request, dependencies) {
     )
   }
   assertReserveKeepsLocalReadiness(object.flags, request.changes)
+  assertPhonePathNeedsReserve(object.flags, request.changes)
   const plan = {
     event: 'orca_relay_cell_flags_plan',
     mode: request.mode,
