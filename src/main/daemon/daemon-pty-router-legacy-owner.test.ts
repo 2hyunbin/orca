@@ -42,6 +42,12 @@ describe('DaemonPtyRouter keeps live sessions on their older daemon', () => {
     const legacy = createAdapter('legacy', ['claude-session'])
     vi.mocked(legacy.listProcesses).mockRejectedValue(new Error('wedged'))
     vi.mocked(legacy.probePtyLiveness).mockResolvedValue(null)
+    // Why: exit proof checks this pid, so a wedged daemon must name a process that exists.
+    vi.mocked(legacy.getLastAuthenticatedDaemonIdentity).mockReturnValue({
+      pid: process.pid,
+      startedAtMs: 0,
+      launchNonce: 'legacy'
+    })
     const router = new DaemonPtyRouter({ current, legacy: [legacy] })
     await router.discoverLegacySessions()
 
