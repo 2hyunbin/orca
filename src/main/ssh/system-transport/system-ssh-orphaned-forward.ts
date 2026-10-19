@@ -86,7 +86,6 @@ function sshArgv(command: string, platform: NodeJS.Platform): string[] | null {
     const name = programName(executable)
     return name === 'ssh' || name === 'ssh.exe' ? args : null
   }
-  // Posix tables join argv with single spaces and no quoting, so this split is the inverse join.
   const { name, rest } = splitExecutable(command)
   return name === 'ssh' || name === 'ssh.exe' ? rest.split(' ') : null
 }
@@ -101,11 +100,12 @@ function isOrcaForward(
   if (!argv) {
     return false
   }
+  // Why split: posix tables join argv with single spaces and no quoting, so argument boundaries
+  // are lost; both sides are tokenized alike so a spaced value normalizes identically.
+  const expectedTokens = platform === 'win32' ? expectedArgs : expectedArgs.join(' ').split(' ')
   const actual = normalizeForwardArgv(argv)
-  const expected = normalizeForwardArgv(expectedArgs)
-  return platform === 'win32'
-    ? actual.length === expected.length && actual.every((arg, index) => arg === expected[index])
-    : actual.join(' ') === expected.join(' ')
+  const expected = normalizeForwardArgv(expectedTokens)
+  return actual.length === expected.length && actual.every((arg, index) => arg === expected[index])
 }
 
 function parentIsGone(

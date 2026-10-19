@@ -98,6 +98,13 @@ describe('findOrphanedOrcaSshForward', () => {
     ).toBeNull()
   })
 
+  it('on posix, matches a spaced option value that itself holds a normalized option', () => {
+    const proxy = 'ProxyCommand=ssh -o ExitOnForwardFailure=yes -W %h:%p jump'
+    const expected = ['-o', proxy, ...EXPECTED]
+    const command = `/usr/bin/ssh -o ${proxy} ${EXPECTED.join(' ')}`
+    expect(findOrphanedOrcaSshForward([row(900, 1, command)], expected, 'linux')?.pid).toBe(900)
+  })
+
   it('on Windows, matches the quoted command line of an argument with spaces', () => {
     const keyPath = 'C:\\Users\\neil\\AppData\\Local\\Temp\\orca-a7c5-win12\\Jane Doe\\id_ed25519'
     const head = ['-o', 'BatchMode=no', '-o', 'LogLevel=INFO', '-T', '-S', 'none', '-p', '22']
