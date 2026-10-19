@@ -6,7 +6,7 @@ const { execFileMock, webContentsFromIdMock, existsSyncMock, readFileSyncMock, s
     webContentsFromIdMock: vi.fn(),
     existsSyncMock: vi.fn(() => false),
     readFileSyncMock: vi.fn(() => Buffer.from('')),
-    stdinWrites: [] as string[]
+    stdinWrites: new Array<string>()
   }))
 
 vi.mock('child_process', () => ({ execFile: execFileMock }))
@@ -24,8 +24,10 @@ vi.mock('electron', () => ({
 }))
 const { CdpWsProxyMock } = vi.hoisted(() => {
   const instances: unknown[] = []
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const MockClass = vi.fn().mockImplementation(function (this: any, _wc: unknown) {
+  const MockClass = vi.fn().mockImplementation(function (
+    this: Record<string, unknown>,
+    _wc: unknown
+  ) {
     this._wc = _wc
     this.start = vi.fn(async () => 'ws://127.0.0.1:9222')
     this.stop = vi.fn(async () => {})

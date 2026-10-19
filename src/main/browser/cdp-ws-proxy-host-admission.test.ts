@@ -32,8 +32,8 @@ describe('CdpWsProxy under a host command', () => {
     mock = createMockWebContents()
     guardFocus = async () => () => {}
     const page = { ...mock.webContents, id: PAGE_ID }
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mock implements every WebContents member the proxy calls.
     proxy = new CdpWsProxy(
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mock implements every WebContents member the proxy calls.
       page as never,
       () => () => {},
       () => guardFocus()
