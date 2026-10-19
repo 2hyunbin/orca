@@ -4,7 +4,6 @@ import type {
   AgentSessionOptionResult
 } from '../../../shared/agent-session-wire'
 import { STRUCTURED_LAUNCH_OPTION_IDS } from '../../../shared/native-chat-session-option-defaults'
-import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from '../../../shared/agent-chat-permission-mode'
 import {
   createStructuredAgentSessionOperationId,
   structuredAgentSessionPayloadFingerprint
@@ -69,18 +68,10 @@ export function holdStructuredAgentSessionLaunchOption(
     return null
   }
   const replies = repliesFor(state)
-  const held = { ...state.selection.held }
-  // A model pick drops picks held under the model it replaces; the permission mode is the chat's.
-  const dropped =
-    id === 'model'
-      ? Object.keys(held).filter((key) => key !== AGENT_CHAT_PERMISSION_MODE_OPTION_ID)
-      : [id]
-  for (const key of dropped) {
-    replies.get(key)?.({ kind: 'superseded' })
-    replies.delete(key)
-    delete held[key]
-  }
-  state.selection = { ...state.selection, held: { ...held, [id]: encoded } }
+  // Each held value is the chat's own: a pick supersedes only an earlier pick of the same option.
+  replies.get(id)?.({ kind: 'superseded' })
+  replies.delete(id)
+  state.selection = { ...state.selection, held: { ...state.selection.held, [id]: encoded } }
   notifyStructuredLaunchListeners()
   return new Promise((resolve) => replies.set(id, resolve))
 }

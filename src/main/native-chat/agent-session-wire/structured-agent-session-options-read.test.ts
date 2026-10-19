@@ -64,16 +64,21 @@ describe('options at rest', () => {
     const current = await readStructuredAgentSessionOptions(context, SESSION, {
       readsWithoutModel: true
     })
-    expect(current.current).toEqual({ permissionMode: 'ask' })
+    expect(current.current).toEqual({ defaulted: [], permissionMode: 'ask' })
     expect(read).toHaveBeenCalledTimes(1)
     const older = await readStructuredAgentSessionOptions(context, SESSION, {
       readsWithoutModel: false
     })
-    expect(older.current).toEqual({ model: 'gpt-account', permissionMode: 'ask' })
+    // The account default an older client needs is marked as one, which that client ignores.
+    expect(older.current).toEqual({
+      model: 'gpt-account',
+      defaulted: ['model'],
+      permissionMode: 'ask'
+    })
     expect(read).toHaveBeenLastCalledWith({ agent: 'codex', sessionId: SESSION, savedOnly: true })
   })
 
-  it("names the saved listing's ids for a live child with no listing of its own, as at rest", async () => {
+  it("names the saved listing's ids and model for a live child that fell back to its default", async () => {
     const record = { ...restingRecord(), options: { model: 'gpt-unlisted', effort: 'high' } }
     const listed = { id: 'gpt-5.5', label: 'GPT-5.5', isDefault: true, efforts: [] }
     let live = false
@@ -88,7 +93,7 @@ describe('options at rest', () => {
         adapter: {
           readOptions: async () => ({
             models: [listed, { ...listed, id: 'gpt-unlisted', isDefault: false }],
-            current: { model: 'gpt-unlisted', effort: 'high' }
+            current: { model: 'gpt-5.5', effort: 'high', defaulted: ['model'] }
           })
         },
         agents: NO_STRUCTURED_AGENTS,
@@ -103,8 +108,11 @@ describe('options at rest', () => {
       readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true })
     const resting = await read()
     live = true
-    expect((await read()).listedModelIds).toEqual(resting.listedModelIds)
+    const running = await read()
+    expect(running.listedModelIds).toEqual(resting.listedModelIds)
     expect(resting.listedModelIds).toEqual(['gpt-5.5'])
+    // The saved model shows over the child's fallback, and is the chat's own.
+    expect(running.current).toMatchObject({ model: 'gpt-unlisted', defaulted: [] })
   })
 
   it.each(['codex', 'omp', 'grok', 'opencode'] as const)(
@@ -151,6 +159,7 @@ describe('options at rest', () => {
       expect((await read()).current).toEqual({
         model: 'later-model',
         effort: 'off',
+        defaulted: [],
         ...(provider === 'codex' ? { permissionMode: 'ask' } : {})
       })
       for (const emptyStart of [false, true]) {

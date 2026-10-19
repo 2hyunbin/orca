@@ -4,6 +4,7 @@ import type { AgentSessionModelCatalogResult } from './agent-session-wire'
 import {
   applyStructuredAgentSessionModelCatalog,
   applyStructuredAgentSessionOptions,
+  commitStructuredAgentSessionOption,
   createStructuredAgentSessionOptionState,
   structuredAgentSessionOptionSnapshot,
   type StructuredAgentSessionOptionState
@@ -55,11 +56,7 @@ const carried = (
   state: StructuredAgentSessionOptionState,
   seed?: Readonly<Record<string, string>>,
   picks: Readonly<Record<string, string>> = {}
-) =>
-  structuredAgentSessionSendSelection(
-    state.record.agent,
-    structuredAgentSessionOptionSnapshot(structuredAgentSessionOptionView(state, seed, picks))
-  )
+) => structuredAgentSessionSendSelection(structuredAgentSessionOptionView(state, seed, picks))
 
 describe('a Claude model its CLI no longer lists', () => {
   it('stays the chat model through a refresh and every send, its effort read-only', () => {
@@ -99,10 +96,11 @@ describe('a Claude model its CLI no longer lists', () => {
 })
 
 describe('what a send carries', () => {
-  it('carries the default it shows when nothing names a model', () => {
+  it('carries no default it shows: the agent runs it anyway, and the chat never chose it', () => {
     const named = { ...SONNET, isDefault: true }
     const listing = { ...LISTED, models: [OPUS, named], listingNamesConfiguredModel: true }
-    expect(carried(withHostList(fresh(), listing))).toEqual({ model: 'sonnet' })
+    expect(shown(withHostList(fresh(), listing), undefined, {}).model).toBe('sonnet')
+    expect(carried(withHostList(fresh(), listing))).toBeUndefined()
   })
 
   it('carries a pick on its way as given', () => {
@@ -121,5 +119,65 @@ describe('what a send carries', () => {
       { models: [OPUS], current: { model: 'opus[1m]' } }
     )
     expect(carried(codex)).toBeUndefined()
+  })
+})
+
+describe("a chat's model and effort, apart from the defaults filling them in", () => {
+  const listed = CLI302.map((row) => row.id)
+  // A resumed chat at rest that never picked a model: its host fills in the listing's default.
+  const resumed = (defaulted?: readonly ('model' | 'effort')[]) =>
+    applyStructuredAgentSessionOptions(
+      applyStructuredAgentSessionModelCatalog(
+        fresh(),
+        CLAUDE_SESSION_OPTION_CATALOG,
+        { ...LISTED, models: CLI302 },
+        { newLaunch: false }
+      ),
+      CLAUDE_SESSION_OPTION_CATALOG,
+      {
+        models: CLI302,
+        listedModelIds: listed,
+        current: { model: 'opus', effort: 'low', ...(defaulted ? { defaulted } : {}) }
+      }
+    )
+
+  it("never names or sends a default as a resumed chat's own, and keeps its picks through a restart", () => {
+    const state = resumed(['model', 'effort'])
+    expect(shown(state, undefined, {})).toEqual({ model: undefined, effort: 'low' })
+    expect(
+      structuredAgentSessionShownSnapshot(state).find((entry) => entry.id === 'effort')
+    ).toMatchObject({ settable: true, kind: { choices: levels('low', 'xhigh') } })
+    expect(carried(state)).toBeUndefined()
+    const effort = commitStructuredAgentSessionOption(state, 'effort', 'xhigh')
+    expect(carried(effort)).toEqual({ effort: 'xhigh' })
+    // A model pick leaves the effort for the host to reconcile.
+    const model = commitStructuredAgentSessionOption(effort, 'model', 'sonnet')
+    expect(carried(model)).toEqual({ model: 'sonnet', effort: 'xhigh' })
+    const restarted = applyStructuredAgentSessionOptions(fresh(), CLAUDE_SESSION_OPTION_CATALOG, {
+      models: CLI302,
+      listedModelIds: listed,
+      current: { model: 'sonnet', effort: 'high', defaulted: [] }
+    })
+    expect(shown(restarted, undefined, {})).toEqual({ model: 'sonnet', effort: 'high' })
+    expect(carried(restarted)).toEqual({ model: 'sonnet', effort: 'high' })
+  })
+
+  it("reads an older host's answer, which marks no default, as it always has", () => {
+    const state = resumed()
+    expect(shown(state, undefined, {})).toEqual({ model: 'opus', effort: 'low' })
+    expect(carried(state)).toEqual({ model: 'opus', effort: 'low' })
+  })
+
+  it('lets a new chat pick its effort before its first message, under the default it shows', () => {
+    const state = withHostList(fresh(), {
+      ...LISTED,
+      models: CLI302,
+      listingNamesConfiguredModel: true
+    })
+    expect(
+      structuredAgentSessionShownSnapshot(state).find((entry) => entry.id === 'effort')
+    ).toMatchObject({ settable: true, kind: { choices: levels('low', 'xhigh') } })
+    expect(shown(state, undefined, { effort: 'xhigh' })).toEqual({ model: 'opus', effort: 'xhigh' })
+    expect(carried(state, undefined, { effort: 'xhigh' })).toEqual({ effort: 'xhigh' })
   })
 })

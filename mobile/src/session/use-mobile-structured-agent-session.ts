@@ -198,7 +198,7 @@ export function useMobileStructuredAgentSession(
     commandPending: commandPendingRef,
     controller: sendController,
     onSendError,
-    carriesOptions: hostSupport?.sendOptions === true
+    sendOptions: hostSupport?.sendOptions === true ? options.sendSelection : undefined
   })
   const turnIndicator = useMemo(
     () => ({

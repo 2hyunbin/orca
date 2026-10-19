@@ -142,6 +142,9 @@ async function readStructuredAgentSessionOptionsAtRest(
     (rules?.effortDefaultsToModel || (saved.model === undefined && folderDefault)
       ? models.find((entry) => entry.id === model)?.defaultEffort
       : undefined)
+  const defaulted = (['model', 'effort'] as const).filter(
+    (key) => saved[key] === undefined && Boolean(key === 'model' ? model : effort)
+  )
   return {
     models: listed ? structuredAgentSessionOptionModels(listed, model, (row) => row) : [],
     ...(listedModelIds ? { listedModelIds } : {}),
@@ -152,7 +155,8 @@ async function readStructuredAgentSessionOptionsAtRest(
       ...(model ? { model } : {}),
       ...(effort ? { effort } : {}),
       ...(typeof fastMode === 'boolean' ? { fastMode } : {}),
-      ...(saved.serviceTier ? { serviceTier: saved.serviceTier } : {})
+      ...(saved.serviceTier ? { serviceTier: saved.serviceTier } : {}),
+      defaulted
     }
   }
 }
@@ -281,6 +285,8 @@ export async function readStructuredAgentSessionOptions(
     ...(shownSaved('model') ? { model: selected.current.model } : {}),
     ...(shownSaved('effort') ? { effort: selected.current.effort } : {})
   }
+  // A saved value shown over the child's is the chat's own, never the default the child fell back to.
+  const defaulted = (options.current.defaulted ?? []).filter((key) => !(live && shownSaved(key)))
   const confirmed = current.confirmed?.filter((key) =>
     key === 'model'
       ? current.model === options.current.model
@@ -290,6 +296,7 @@ export async function readStructuredAgentSessionOptions(
     ...options,
     current: {
       ...current,
+      defaulted,
       ...(confirmed ? { confirmed } : {}),
       ...(permissionMode ? { permissionMode } : {})
     },

@@ -263,7 +263,12 @@ describe("a new chat's effort pill before its agent starts", () => {
       expect(first.model?.value).toBe(model)
       expect(first.effort?.value).toBe(effort)
       expect(settled).toEqual(first)
-      expect(atRest.current).toEqual({ model, effort, ...modeOf(agent) })
+      expect(atRest.current).toEqual({
+        model,
+        effort,
+        defaulted: ['model', 'effort'],
+        ...modeOf(agent)
+      })
     }
   )
 
@@ -280,7 +285,7 @@ describe("a new chat's effort pill before its agent starts", () => {
       expect(first.model?.value).toBeUndefined()
       expect(first.effort).toBeNull()
       expect(settled).toEqual(first)
-      expect(atRest.current).toEqual(modeOf(agent))
+      expect(atRest.current).toEqual({ defaulted: [], ...modeOf(agent) })
     }
   )
 
@@ -291,26 +296,44 @@ describe("a new chat's effort pill before its agent starts", () => {
     })
 
     // The account default is not what this repo runs, so its effort is never claimed.
-    expect(atRest.current).toEqual({ model: 'gpt-5.5', permissionMode: 'ask' })
+    expect(atRest.current).toEqual({
+      model: 'gpt-5.5',
+      defaulted: ['model'],
+      permissionMode: 'ask'
+    })
     expect(atRest.conversationCommands).toEqual(['clear', 'compact'])
   })
 
   it('names the folder’s default effort for a client that needs a model too', async () => {
     const { atRest } = await newChatFrames('codex', { readsWithoutModel: false })
 
-    expect(atRest.current).toEqual({ model: 'gpt-5.5', effort: 'medium', permissionMode: 'ask' })
+    expect(atRest.current).toEqual({
+      model: 'gpt-5.5',
+      effort: 'medium',
+      defaulted: ['model', 'effort'],
+      permissionMode: 'ask'
+    })
   })
 
   it('keeps a saved effort over the default model’s', async () => {
     const { atRest, settled } = await newChatFrames('grok', { saved: { effort: 'high' } })
 
-    expect(atRest.current).toEqual({ model: 'grok-4', effort: 'high', ...modeOf('grok') })
+    expect(atRest.current).toEqual({
+      model: 'grok-4',
+      effort: 'high',
+      defaulted: ['model'],
+      ...modeOf('grok')
+    })
     expect(settled.effort?.value).toBe('high')
   })
 
   it('leaves the effort of a saved model to the agent, as its running child reports it', async () => {
     const { atRest } = await newChatFrames('codex', { saved: { model: 'gpt-5.5-mini' } })
 
-    expect(atRest.current).toEqual({ model: 'gpt-5.5-mini', permissionMode: 'ask' })
+    expect(atRest.current).toEqual({
+      model: 'gpt-5.5-mini',
+      defaulted: [],
+      permissionMode: 'ask'
+    })
   })
 })

@@ -18,6 +18,7 @@ import {
 } from '../../../src/shared/structured-agent-session-options'
 import {
   structuredAgentSessionOptionView,
+  structuredAgentSessionSendSelection,
   structuredAgentSessionShownSnapshot
 } from '../../../src/shared/structured-agent-session-option-view'
 import {
@@ -289,6 +290,11 @@ export function useMobileStructuredAgentOptions(args: {
     [agent, client, mutate, optionCatalog, sessionId, updateOptionState]
   )
 
+  // Read, not rendered: what the chat holds when the send goes out.
+  const sendSelection = useCallback(
+    () => structuredAgentSessionSendSelection(optionStateRef.current),
+    []
+  )
   const { optionPickerRequest, invokeStructuredOption, optionSurface } =
     useMobileStructuredOptionSurface({
       optionSnapshot,
@@ -308,6 +314,7 @@ export function useMobileStructuredAgentOptions(args: {
     optionSurface,
     pendingOptionId: optionState.pendingId,
     setStructuredOption,
-    invokeStructuredOption
+    invokeStructuredOption,
+    sendSelection
   }
 }

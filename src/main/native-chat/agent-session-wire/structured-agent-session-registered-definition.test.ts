@@ -129,6 +129,7 @@ describe('a registered definition', () => {
     expect(options.current).toEqual({
       model: 'pilot-model',
       effort: 'low',
+      defaulted: ['effort'],
       permissionMode: 'ask'
     })
     expect(options.threadGoal).toEqual({ current: null })
@@ -152,7 +153,7 @@ describe('a registered definition', () => {
     expect(refused.persistOptions).not.toHaveBeenCalled()
     const options = await readAtRest(agents)
     expect(options.models).toEqual([])
-    expect(options.current).toEqual({ model: 'pilot-model' })
+    expect(options.current).toEqual({ model: 'pilot-model', defaulted: [] })
     expect(options.conversationCommands).toEqual(['clear'])
     expect(options.acceptsImages).toBe(false)
   })
