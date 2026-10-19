@@ -1,9 +1,7 @@
-import {
-  readStructuredRewindRecovery,
-  type StructuredRewindRecoveryEvidence
-} from './structured-rewind-recovery'
+import type { StructuredRewindRecoveryEvidence } from './structured-rewind-recovery'
 import {
   publishAttachedChild,
+  readBoundChildRewind,
   type AttachCandidate,
   type BoundAttach
 } from './structured-agent-session-attach-publish'
@@ -294,7 +292,8 @@ async function runAttachUnderAbort(
           fence,
           publish: (activity) => context.subscribers.publish(sessionId, attached.journal, activity)
         })
-        attempt.bound = { acquisitionGeneration, owner, fence, current, eventSink }
+        const { journal } = attached
+        attempt.bound = { acquisitionGeneration, owner, fence, journal, current, eventSink }
       },
       // Outside the commits: the barrier the host publishes behind, and for a proven child the
       // provider's word on a rewind in doubt (a starting one recovers in its open step).
@@ -304,12 +303,7 @@ async function runAttachUnderAbort(
           throw barrier.error
         }
         if (owner === 'kept' && attempt.bound?.current?.phase === 'ready') {
-          attempt.rewind = await readStructuredRewindRecovery(
-            context.deps,
-            sessionId,
-            attempt.bound?.fence ?? 0,
-            context.deps.adapter
-          )
+          attempt.rewind = await readBoundChildRewind(context, sessionId, attempt.bound)
         }
       },
       onPublish: async (attached, recordOutcome) => {

@@ -29,7 +29,10 @@ import {
 } from '../../../../../../shared/sidebar-list/host-section-collapse'
 import { addHostSectionRows } from '../../../../../../shared/sidebar-list/host-section-rows'
 import { collectRenderedSidebarRowKeys } from './rendered-row-keys'
-import { orderHostSectionOptions } from '../../../../../../shared/sidebar-list/host-section-order'
+import {
+  mergeDraggedHostSectionOrder,
+  orderHostSectionOptions
+} from '../../../../../../shared/sidebar-list/host-section-order'
 import { buildSidebarHostOptions } from '../../sidebar-host-options'
 import { selectPendingWorktreeCreationKeys } from './pending-worktree-creation-keys'
 
@@ -228,22 +231,14 @@ export function useSidebarSectionRows(args: SectionRowsArgs) {
   )
   const [hostDragActive, setHostDragActive] = useState(false)
   const handleReorderHostSections = useCallback(
-    (orderedVisibleHostIds: ExecutionHostId[]) => {
-      const visibleHostIds = new Set(orderedVisibleHostIds)
-      const hostOptionIds = orderedHostOptions.map((host) => host.id)
-      const knownHostIds = new Set(hostOptionIds)
-      const nextOrder: ExecutionHostId[] = [...orderedVisibleHostIds]
-      const seen = new Set(nextOrder)
-      // Why: dragging only covers rendered hosts; keep non-rendered SSH/runtime hosts in the saved order so they return in place.
-      for (const hostId of [...workspaceHostOrder, ...hostOptionIds]) {
-        if (!knownHostIds.has(hostId) || visibleHostIds.has(hostId) || seen.has(hostId)) {
-          continue
-        }
-        nextOrder.push(hostId)
-        seen.add(hostId)
-      }
-      setWorkspaceHostOrder(nextOrder)
-    },
+    (orderedVisibleHostIds: ExecutionHostId[]) =>
+      setWorkspaceHostOrder(
+        mergeDraggedHostSectionOrder(
+          orderedVisibleHostIds,
+          workspaceHostOrder,
+          orderedHostOptions.map((host) => host.id)
+        )
+      ),
     [orderedHostOptions, setWorkspaceHostOrder, workspaceHostOrder]
   )
   const sectionRows = useMemo(() => {

@@ -184,15 +184,17 @@ function openDocPreviewTab(
   }
   // Why reuse and not a second tab: previewing a document already on screen is a request to look at
   // it, and two tabs of one document would each hold their own grant on the same file.
-  const existing = (state.browserTabsByWorktree[params.worktreeId] ?? []).find((tab) =>
-    browserPageDocLocationsEqual(tab.docLocation ?? null, docLocation)
-  )
+  const existing = findWorkspaceShowingDoc(state, docLocation)
   if (existing) {
     if (
       !params.activate ||
-      !activateBrowserWorkspaceTab({ worktreeId: params.worktreeId, workspaceId: existing.id })
+      !activateBrowserWorkspaceTab({
+        worktreeId: params.worktreeId,
+        ...existing
+      })
     ) {
-      state.setActiveBrowserTab(existing.id)
+      state.setActiveBrowserTab(existing.workspaceId)
+      state.setActiveBrowserPage(existing.workspaceId, existing.pageId)
     }
     return
   }
@@ -212,6 +214,7 @@ function openDocPreviewTab(
 export function openFileInBrowserTab(params: {
   filePath: string
   worktreeId: string
+  targetGroupId?: string
 }): WorkspaceFilePreviewPlan {
   const state = useAppStore.getState()
   const plan = getWorkspaceFilePreviewPlan(state, params.worktreeId, params.filePath)
@@ -219,12 +222,13 @@ export function openFileInBrowserTab(params: {
     return plan
   }
   if (plan.status === 'doc-preview') {
-    openDocPreviewTab(state, { ...params, activate: true })
+    openDocPreviewTab(state, { ...params, activate: true }, { targetGroupId: params.targetGroupId })
     return plan
   }
 
   state.createBrowserTab(params.worktreeId, plan.url, {
     title: plan.title,
+    ...(params.targetGroupId ? { targetGroupId: params.targetGroupId } : {}),
     activate: true
   })
   return plan

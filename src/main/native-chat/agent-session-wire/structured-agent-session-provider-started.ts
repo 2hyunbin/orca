@@ -104,10 +104,15 @@ async function readRewindAtStart(
   sessionId: string,
   signal?: AbortSignal
 ): Promise<StructuredRewindRecoveryEvidence | 'failed'> {
+  const journal = context.sessions.get(sessionId)?.journal
+  if (!journal) {
+    return null
+  }
   try {
     return await readStructuredRewindRecovery(
       context.deps,
       sessionId,
+      journal,
       structuredAgentSessionConversationFence(context.deps.store, sessionId),
       context.deps.adapter,
       signal
@@ -132,8 +137,7 @@ async function applyRewindAtStart(
       sessionId,
       session.journal,
       structuredAgentSessionConversationFence(context.deps.store, sessionId),
-      evidence,
-      context.now
+      evidence
     )
     return true
   } catch (error) {

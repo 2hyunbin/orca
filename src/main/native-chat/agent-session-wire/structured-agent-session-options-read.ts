@@ -231,10 +231,19 @@ export async function readStructuredAgentSessionOptions(
             })
           )
         : null
+  let rested: RestingOptions | undefined
+  const atRest = async (): Promise<RestingOptions> =>
+    (rested ??= await readStructuredAgentSessionOptionsAtRest(context.deps, sessionId, reader))
   let options: Omit<AgentSessionOptionsResult, 'rewind'>
   if (live) {
     const { catalogListing, ...answer } = live
     options = answer
+    // A child with no listing of its own reads the saved one, as at rest, so a row reads the same.
+    // With no record there is nothing saved to read, and the answer stays the child's own.
+    if (!catalogListing && !answer.listedModelIds && store.getRecord(sessionId)) {
+      const { listedModelIds } = await atRest()
+      options = listedModelIds ? { ...answer, listedModelIds } : answer
+    }
     if (catalogListing) {
       // Check prior membership before saving: a launch-added row cannot verify itself.
       const listedModelIds = context.deps.modelCatalog
@@ -244,7 +253,7 @@ export async function readStructuredAgentSessionOptions(
       options = { ...answer, listedModelIds }
     }
   } else {
-    options = await readStructuredAgentSessionOptionsAtRest(context.deps, sessionId, reader)
+    options = await atRest()
   }
   // Re-acquired after the reads above: the handle they saw may have closed and reopened since.
   const session = await context.conversation(sessionId)
@@ -258,16 +267,18 @@ export async function readStructuredAgentSessionOptions(
   const permissionMode = record
     ? await structuredAgentSessionLaunchPermission(context.deps, record)
     : null
-  const selected = live
-    ? await readStructuredAgentSessionOptionsAtRest(context.deps, sessionId, reader)
-    : options
+  const selected = live ? await atRest() : options
+  // The saved pick shows, except one the running child could not take (a model its provider says
+  // does not exist): that shows what the child runs instead.
+  const refused = live ? (adapter.readOptionRestoreFailures?.(sessionId) ?? []) : []
   const saved = record?.options ?? {}
-  const model = saved.model ?? (options.current.model || selected.current.model)
+  const shownSaved = (key: 'model' | 'effort') => (refused.includes(key) ? undefined : saved[key])
+  const model = shownSaved('model') ?? (options.current.model || selected.current.model)
   const current = {
     ...selected.current,
     ...options.current,
     ...(model !== undefined ? { model } : {}),
-    effort: saved.effort ?? options.current.effort,
+    effort: shownSaved('effort') ?? options.current.effort,
     fastMode:
       saved.fastMode !== undefined
         ? selected.current.fastMode

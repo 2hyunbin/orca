@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { agentSessionFailureSentence } from '../../shared/agent-session-failure-words'
 import { agentSessionFailureFact, providerDiagnosticOf } from '../../shared/agent-session-failure'
 import { closeProviderTimelineRigs } from '../native-chat/agent-session-timeline/provider-timeline-assembler-test-support'
-import { AcpAuthRequiredError } from './acp-errors'
+import { AcpSignInPromptError } from './acp-errors'
 import { ACP_LAUNCH_SPECS } from './acp-launch-specs'
 import { AcpSessionRuntime } from './acp-session-runtime'
 import {
@@ -82,7 +82,8 @@ it('ends a running turn signed out when the connection closes for sign-in', asyn
   await sendHello(rig, 'first')
   await rig.frame('session/prompt')
   // The protocol close the real connection makes at a sign-in prompt line on stderr.
-  AcpSessionRuntime.prototype.close.call(rig.child(), new AcpAuthRequiredError('Sign in'))
+  const internal = 'The agent asked to sign in in a browser'
+  AcpSessionRuntime.prototype.close.call(rig.child(), new AcpSignInPromptError(internal))
   await rig.settle()
   expect(rig.settled).toContainEqual(
     expect.objectContaining({
@@ -91,6 +92,21 @@ it('ends a running turn signed out when the connection closes for sign-in', asyn
       rejection: expect.objectContaining({ kind: 'notSignedIn' })
     })
   )
+  // Orca's own words for the prompt are for logs; the chat says only how to sign in.
+  const rejected = rig.settled.find((item) => 'state' in item && item.state === 'rejected')
+  expect(rejected && 'reason' in rejected ? rejected.reason : '').not.toContain(internal)
+})
+
+it('starts signed out without Orca words when the connection closes for sign-in', async () => {
+  const rig = await openAcpAdapterRig({ script: (agent) => agent.on('session/new', () => {}) })
+  const acquired = rig.acquire().catch((failure: unknown) => failure)
+  await rig.frame('session/new')
+  const internal = 'The agent asked to sign in in a browser'
+  AcpSessionRuntime.prototype.close.call(rig.child(), new AcpSignInPromptError(internal))
+  const error = await acquired
+  // Session setup re-types sign-in answers; this close must stay Orca's, words and all.
+  expect(error).toMatchObject({ reason: 'notSignedIn' })
+  expect(providerDiagnosticOf(error)).toBeUndefined()
 })
 
 it.each(ACP_LAUNCH_SPECS)(

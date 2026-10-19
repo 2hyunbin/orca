@@ -10,7 +10,7 @@ import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { resolveAgentStatusTerminalTitle } from '@/lib/agent-status-terminal-title'
 import { track } from '@/lib/telemetry'
 import { resolveAgentPaneAuthorityKey } from '@/store/slices/agent-pane-authority'
-import type { AgentStatusBatchUpdate, AgentStatusUpdate } from '@/store/slices/agent-status'
+import type { AgentStatusUpdate } from '@/store/slices/agent-status'
 import { observeAgentHookCompletionForNotification } from '../agent-hook-completion-notifications'
 import { useAppStore } from '../../store'
 import {
@@ -35,6 +35,7 @@ import {
   normalizeAgentStatusEvent,
   normalizeAgentStatusMetadata
 } from './normalize-agent-status-event'
+import { applyProviderSessionOnlyUpdate } from './agent-status-partial-updates'
 
 export function createAgentStatusEventApplicator(args: {
   pendingAgentStatusEvents: PendingAgentStatusEvent[]
@@ -154,34 +155,17 @@ export function createAgentStatusEventApplicator(args: {
       return 'dropped'
     }
     if (data.providerSessionOnly) {
-      if (!data.providerSession || data.agentType !== 'pi') {
-        return 'dropped'
-      }
-      const providerSessionUpdate: AgentStatusBatchUpdate = {
-        kind: 'providerSession',
+      return applyProviderSessionOnlyUpdate({
+        store,
+        batch: options?.batch,
+        data,
         paneKey,
-        agent: 'pi',
-        providerSession: data.providerSession,
-        timing: { updatedAt: data.receivedAt },
         routing: {
           tabId: ownerTabId,
           worktreeId: data.worktreeId ?? owningWorktreeId,
           ...(ownershipConnectionId !== undefined ? { connectionId: ownershipConnectionId } : {})
-        },
-        metadata: data.launchToken ? { launchToken: data.launchToken } : undefined
-      }
-      if (options?.batch) {
-        return options.batch.transaction.apply(providerSessionUpdate) ? 'applied' : 'dropped'
-      }
-      store.recordAgentProviderSession(
-        providerSessionUpdate.paneKey,
-        providerSessionUpdate.agent,
-        providerSessionUpdate.providerSession,
-        providerSessionUpdate.timing,
-        providerSessionUpdate.routing,
-        providerSessionUpdate.metadata
-      )
-      return 'applied'
+        }
+      })
     }
     const resolvedPayload = resolveHookPayloadAgentType(payload, identityTitle ?? title)
     const statusPayload = data.orchestration

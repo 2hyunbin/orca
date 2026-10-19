@@ -2,6 +2,7 @@
 // the session's events go through, and its open begins.
 
 import type { AttachedJournal } from './structured-agent-session-attach'
+import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import type { AttachedOwner } from './structured-agent-session-attach-flow'
 import type { StructuredAgentSessionAttachContext } from './structured-agent-session-attach-context'
 import type { StructuredAgentSessionProviderChild } from './structured-agent-session-host-types'
@@ -12,6 +13,7 @@ import type { StructuredAgentSessionStartupAttempt } from './structured-agent-se
 import { structuredAgentSessionEndedEventExit } from './structured-agent-session-child-exit'
 import {
   applyStructuredRewindRecovery,
+  readStructuredRewindRecovery,
   type StructuredRewindRecoveryEvidence
 } from './structured-rewind-recovery'
 
@@ -24,8 +26,25 @@ export type BoundAttach = {
   acquisitionGeneration: string | null
   owner: AttachedOwner
   fence: number
+  journal: AgentSessionJournal
   current: StructuredAgentSessionProviderChild | null
   eventSink: DeferredStructuredAgentSessionEventSink
+}
+
+/** The provider's word on a rewind in doubt for the child this attach bound, read outside the
+ *  commits so no send waits behind it. */
+export function readBoundChildRewind(
+  context: StructuredAgentSessionAttachContext,
+  sessionId: string,
+  bound: BoundAttach
+): Promise<StructuredRewindRecoveryEvidence> {
+  return readStructuredRewindRecovery(
+    context.deps,
+    sessionId,
+    bound.journal,
+    bound.fence,
+    context.deps.adapter
+  )
 }
 
 /** The attach's last commit: its child, if it has one, becomes the session's. */
@@ -81,8 +100,7 @@ export async function publishAttachedChild(
       sessionId,
       attached.journal,
       fence,
-      attempt.rewind,
-      context.now
+      attempt.rewind
     )
   }
   if (input.fenceBefore !== null && fence !== input.fenceBefore) {

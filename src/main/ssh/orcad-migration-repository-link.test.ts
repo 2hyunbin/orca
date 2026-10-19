@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getManagedOrcadFenceEnvironmentId } from '../../shared/managed-orcad-ssh-owner'
 import { encodePairingOffer, PAIRING_OFFER_VERSION } from '../../shared/pairing'
-import type { OrcadMigrationManifest } from '../../shared/orcad-migration-manifest'
+import type { OrcadMigrationManifest } from '../../shared/orcad-migration/orcad-migration-manifest'
 import {
   addManagedOrcadEnvironment,
   removeManagedOrcadEnvironment
@@ -30,13 +30,13 @@ import {
   type OrcadServerFolderCatalog
 } from './orcad-server-folder-workspaces'
 import { reconcileManagedOrcadSshTargets, visibleRepos } from './orcad-retained-source'
-import { SshConnectionStore } from './ssh-connection-store'
+import { SshConnectionStore } from './connection/ssh-connection-store'
 
 const mocks = vi.hoisted(() => {
   const state: { targetStore: unknown } = { targetStore: null }
   return { state, deploy: vi.fn(), ensureTunnel: vi.fn() }
 })
-vi.mock('./ssh-target-registry', () => ({
+vi.mock('./targets/ssh-target-registry', () => ({
   getSshConnectionManager: () => ({}),
   getSshTargetRegistryStore: () => mocks.state.targetStore
 }))
