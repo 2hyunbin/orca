@@ -375,8 +375,9 @@ it.each(['joined', 'fresh'] as const)(
     vi.spyOn(providerRegistry, 'getProvider').mockReturnValue(provider)
     const shutdown = vi.spyOn(provider, 'shutdown').mockResolvedValue()
     const spawn = vi.spyOn(provider, 'spawn').mockImplementation(async (args) => {
-      if (args.attachOnly && args.sessionId === binding.ptyId)
+      if (args.attachOnly && args.sessionId === binding.ptyId) {
         throw new SessionNotFoundError(binding.ptyId)
+      }
       return args.attachOnly
         ? {
             id: 'winner-B',
@@ -435,12 +436,14 @@ it.each(['joined', 'fresh'] as const)(
     await store.flushPendingOrThrowAsync()
     expect(readState().settings.theme).toBe('dark')
     expect(authority.close).not.toHaveBeenCalled()
-    if (boundary === 'fresh')
+    if (boundary === 'fresh') {
       expect(shutdown).toHaveBeenCalledExactlyOnceWith('fresh-A', {
         immediate: true,
         expectedIncarnationId: 'inc-A'
       })
-    else expect(shutdown).not.toHaveBeenCalled()
+    } else {
+      expect(shutdown).not.toHaveBeenCalled()
+    }
     expect(
       spawn.mock.calls
         .filter(([args]) => args.attachOnly)

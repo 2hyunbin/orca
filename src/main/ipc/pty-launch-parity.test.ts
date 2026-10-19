@@ -309,16 +309,14 @@ describe('launch facts outside the tables', () => {
           throw new SessionNotFoundError('old')
         })
         .mockResolvedValueOnce({ id: 'winner', incarnationId: 'winner-inc', isReattach: true })
-      if (lane === 'ipc') {
-        await expect(lanes.spawnWindow({ ...pane, cols: 80, rows: 24 })).resolves.toMatchObject({
-          id: 'winner'
-        })
-      } else {
-        await lanes.runtime.createTerminal(`id:${pane.worktreeId}`, {
-          tabId: pane.tabId,
-          leafId: pane.leafId
-        })
-      }
+      await (lane === 'ipc'
+        ? expect(lanes.spawnWindow({ ...pane, cols: 80, rows: 24 })).resolves.toMatchObject({
+            id: 'winner'
+          })
+        : lanes.runtime.createTerminal(`id:${pane.worktreeId}`, {
+            tabId: pane.tabId,
+            leafId: pane.leafId
+          }))
       expect(
         lanes.runtime.resolveTerminalPane(`${pane.tabId}:${pane.leafId}`, pane.worktreeId)
       ).toMatchObject({ ptyId: 'winner', connected: true })

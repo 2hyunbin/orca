@@ -1,3 +1,5 @@
+import type { AppState } from '@/store/types'
+import type { ConnectPanePtySession } from './pty-connection/connect-pane-pty-session'
 import { REMOTE_RUNTIME_AUTO_RECOVERY_TIMEOUT_MS } from './remote-runtime-pty-recovery-state'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -8,7 +10,7 @@ import {
 
 // These transport fixtures never read abandoned-launch ownership from the app store.
 const appStore = vi.hoisted(() => ({
-  getState: vi.fn<() => import('@/store/types').AppState>(() => {
+  getState: vi.fn<() => AppState>(() => {
     throw new Error('These transport fixtures must not read app-store ownership')
   })
 }))
@@ -17,7 +19,9 @@ vi.mock('@/store', () => ({ useAppStore: { getState: appStore.getState } }))
 
 let composedStore = false
 afterEach(() => {
-  if (!composedStore) expect(appStore.getState).not.toHaveBeenCalled()
+  if (!composedStore) {
+    expect(appStore.getState).not.toHaveBeenCalled()
+  }
 })
 
 let subscriptionCallbacks: MultiplexSubscriptionCallbacks = null
@@ -286,7 +290,7 @@ describe('remote runtime pane binding ownership', () => {
       syncHiddenRendererPtyDelivery: vi.fn(),
       syncPanePtyLayoutBinding: vi.fn(),
       agentCompletionCoordinator: { startProcessTracking: vi.fn() }
-    } as unknown as import('./pty-connection/connect-pane-pty-session').ConnectPanePtySession
+    } as unknown as ConnectPanePtySession
     installPanePtyVisibilityBind(session)
     try {
       transport.attach({ existingPtyId: old, callbacks: {} })
@@ -312,12 +316,15 @@ describe('remote runtime pane binding ownership', () => {
     const defaultCall = runtimeCall.getMockImplementation()
     let reachable = false
     runtimeCall.mockImplementation(async (args: { method: string }) => {
-      if (args.method === 'terminal.create')
+      if (args.method === 'terminal.create') {
         return {
           ok: false,
           error: { code: 'runtime_error', message: 'terminal_pane_owner_changed' }
         }
-      if (!reachable) throw unreachable()
+      }
+      if (!reachable) {
+        throw unreachable()
+      }
       return defaultCall?.(args)
     })
     const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
