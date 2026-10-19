@@ -24,16 +24,30 @@ export function nativeChatPastedTextState(scope: string, token: string): string 
   )
 }
 
-export function resolveNativeChatPastedText(scope: string, text: string): string {
-  return text
-    .split(NATIVE_CHAT_PASTED_TEXT_TOKEN)
-    .map((part, index) => {
-      const state = index % 2 === 1 ? nativeChatPastedTextState(scope, part) : null
-      return state && state !== 'saving' && state !== 'unsaved'
-        ? formatNativeChatFileReference(state)
-        : part
-    })
-    .join('')
+/** Only completed paths need boundaries; copied source bytes remain literal. */
+export function resolveNativeChatPastedText(scope: string, text: string, copy = false): string {
+  let resolved = ''
+  let pathBefore = false
+  text.split(NATIVE_CHAT_PASTED_TEXT_TOKEN).forEach((part, index) => {
+    const state = index % 2 === 1 ? nativeChatPastedTextState(scope, part) : null
+    const path = state !== null && state !== 'saving' && state !== 'unsaved'
+    const piece = path
+      ? formatNativeChatFileReference(state)
+      : !copy || state === null
+        ? part
+        : state === 'saving'
+          ? (operations.get(nativeChatPastedTextId(part) ?? '')?.text ?? '')
+          : translate('components.native-chat.composer.pasteNotSavedLabel', 'Paste not saved')
+    if (!piece) {
+      return
+    }
+    if ((path || pathBefore) && /\S$/.test(resolved) && /^\S/.test(piece)) {
+      resolved += ' '
+    }
+    resolved += piece
+    pathBefore = path
+  })
+  return resolved
 }
 
 /** Both the actual candidate and its original scope must be free of unavailable identities. */
@@ -81,17 +95,4 @@ export function settleNativeChatPastedText(id: string, path?: string): boolean {
     notifyScope(scopeKey)
   }
   return present
-}
-
-export function nativeChatPastedTextClipboardText(scope: string, token: string): string {
-  const state = nativeChatPastedTextState(scope, token)
-  if (state === null) {
-    return token
-  }
-  if (state === 'saving') {
-    return operations.get(nativeChatPastedTextId(token) ?? '')?.text ?? ''
-  }
-  return state === 'unsaved'
-    ? translate('components.native-chat.composer.pasteNotSavedLabel', 'Paste not saved')
-    : formatNativeChatFileReference(state)
 }

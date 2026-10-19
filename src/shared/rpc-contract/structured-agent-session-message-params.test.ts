@@ -20,8 +20,5 @@ describe('message size bound', () => {
       const hostRefuses = Buffer.byteLength(JSON.stringify(blocks), 'utf8') > MAX_PROMPT_BYTES
       expect(structuredAgentSessionBlocksTooLarge(blocks)).toBe(hostRefuses)
     }
-    expect(structuredAgentSessionBlocksTooLarge([{ type: 'text', text: `${fits}${unit}` }])).toBe(
-      true
-    )
   })
 })

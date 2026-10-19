@@ -194,7 +194,7 @@ it('checks both the picked command and its draft, and projects completed paths',
     { pastedTextFiles: { [id]: '/p/saved.txt' } },
     'immediate'
   )
-  await send(token, [])
-  expect(structuredTransport.send).toHaveBeenCalledWith('@/p/saved.txt', [])
+  await send(`a${token}${token}b`, [])
+  expect(structuredTransport.send).toHaveBeenCalledWith('a @/p/saved.txt @/p/saved.txt b', [])
   clearNativeChatComposerDraftsForTests()
 })

@@ -69,8 +69,8 @@ it.each([
   { draft: '', text: 'c'.repeat(20 * 1024), image: 'p'.repeat(240 * 1024) },
   {
     draft: nativeChatPastedTextToken(ID),
-    text: 'q'.repeat(20 * 1024),
-    path: `/p/${'a'.repeat(250 * 1024)}`
+    text: 'q',
+    path: `/p/${'a'.repeat(256 * 1024 - 32)}`
   }
 ])(
   'matches the actual JSON/UTF-8 send body, including selection and path bytes',
@@ -98,7 +98,7 @@ it.each([
     const input = promptValue(view.getByRole('textbox'))
     const candidate = replace ? text + input.slice(replace) : input + text
     const projected = path
-      ? candidate.replace(nativeChatPastedTextToken(ID), () => `@${path}`)
+      ? candidate.replace(nativeChatPastedTextToken(ID), () => `@${path} `)
       : candidate
     const body = structuredAgentSessionSendBody(
       imageReferencesToPromptMarkers(projected, ['i1']),

@@ -1,11 +1,12 @@
-import { nativeChatPastedTextClipboardText } from './native-chat-composer-pasted-text-references'
+import { createNativeChatPastedTextHistory } from './native-chat-pasted-text-history'
+import { resolveNativeChatPastedText } from './native-chat-composer-pasted-text-references'
 import { NativeChatPastedTextScopeProvider } from './native-chat-pasted-text-state'
 import {
   readNativeChatDraftDocument,
   writeNativeChatDraftDocument
 } from './native-chat-draft-cache'
 import {
-  readNativeChatComposerDraft,
+  subscribeToNativeChatComposerDraft,
   hasUnsavedNativeChatComposerDraftChange
 } from './native-chat-composer-draft-store'
 import { closeHistory } from '@tiptap/pm/history'
@@ -61,7 +62,7 @@ export function NativeChatPromptEditor({
   className,
   ...events
 }: Props): React.JSX.Element {
-  const historyPaths = useRef<Readonly<Record<string, string>>>({})
+  const historyPaths = useMemo(() => createNativeChatPastedTextHistory(scopeKey ?? ''), [scopeKey])
   const placeholderRef = useRef(placeholder)
   placeholderRef.current = placeholder
   const editor = useEditor(
@@ -123,11 +124,16 @@ export function NativeChatPromptEditor({
           return true
         },
         clipboardTextSerializer: (slice) =>
-          slice.content.textBetween(0, slice.content.size, '\n', (node) =>
-            nativeChatPastedTextClipboardText(scopeKey ?? '', promptLeafText(node))
+          resolveNativeChatPastedText(
+            scopeKey ?? '',
+            slice.content.textBetween(0, slice.content.size, '\n', promptLeafText),
+            true
           )
       },
       onTransaction: ({ editor: current, transaction }) => {
+        const pastedTextFiles = transaction.docChanged
+          ? historyPaths(current.state.doc, transaction.docs)
+          : undefined
         // Why: a value set from the store with no change of this window behind it (another
         // window's draft, a late load) is already saved; saving it back would make it one. A
         // value this window just set keeps its document, skill chips included.
@@ -137,15 +143,11 @@ export function NativeChatPromptEditor({
           (!transaction.getMeta('preventUpdate') ||
             hasUnsavedNativeChatComposerDraftChange(scopeKey))
         ) {
-          historyPaths.current = {
-            ...historyPaths.current,
-            ...readNativeChatComposerDraft(scopeKey).pastedTextFiles
-          }
           writeNativeChatDraftDocument(
             scopeKey,
             promptText(current.state.doc),
             current.getJSON(),
-            historyPaths.current
+            pastedTextFiles
           )
         }
       },
@@ -162,6 +164,15 @@ export function NativeChatPromptEditor({
     },
     []
   )
+
+  useLayoutEffect(() => {
+    if (!editor || !scopeKey) {
+      return
+    }
+    const capture = () => historyPaths(editor.state.doc)
+    capture()
+    return subscribeToNativeChatComposerDraft(scopeKey, capture)
+  }, [editor, scopeKey, historyPaths])
 
   useLayoutEffect(() => {
     editor?.setEditable(!disabled, false)
