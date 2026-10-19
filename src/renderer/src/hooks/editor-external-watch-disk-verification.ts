@@ -28,22 +28,26 @@ export type EditorExternalWatchNotification = {
 }
 
 // Why: atomic writes burst same-path events; one reload dispatch each fans out into N EditorPanel rebuilds that can wedge the renderer (issue #826), so debounce per owner+path.
+// Never push an armed dispatch back: same-path events under sustained writes would starve it.
 const EXTERNAL_RELOAD_DEBOUNCE_MS = 75
-const pendingExternalReloadTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const pendingExternalReloads = new Map<string, EditorExternalWatchNotification>()
 
 export function scheduleDebouncedEditorExternalReload(
   notification: EditorExternalWatchNotification
 ): void {
   const key = `${notification.worktreeId}::${notification.runtimeEnvironmentId ?? 'client'}::${notification.relativePath}`
-  const existing = pendingExternalReloadTimers.get(key)
-  if (existing !== undefined) {
-    globalThis.clearTimeout(existing)
+  const armed = pendingExternalReloads.has(key)
+  pendingExternalReloads.set(key, notification)
+  if (armed) {
+    return
   }
-  const handle = globalThis.setTimeout(() => {
-    pendingExternalReloadTimers.delete(key)
-    notifyEditorExternalFileChange(notification)
+  globalThis.setTimeout(() => {
+    const latest = pendingExternalReloads.get(key)
+    pendingExternalReloads.delete(key)
+    if (latest) {
+      notifyEditorExternalFileChange(latest)
+    }
   }, EXTERNAL_RELOAD_DEBOUNCE_MS)
-  pendingExternalReloadTimers.set(key, handle)
 }
 
 const inFlightEchoVerificationReads = new Map<string, ReturnType<typeof readRuntimeFileContent>>()

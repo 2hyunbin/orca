@@ -65,30 +65,33 @@ export function useEditorPanelExternalContentEvents({
 }: UseEditorPanelExternalContentEventsParams): void {
   useEffect(() => {
     const reloads = createEditorWatcherReloadCoalescer()
-    // Why: a coalesced follow-up starts later; re-check the tab is still open, clean and on screen.
-    const currentReloadTarget = (fileId: string): OpenFile | null => {
+    // Why: a coalesced follow-up starts later; re-check the tab. A closed or edited tab is skipped;
+    // one that left the screen is marked stale so its queued change reloads on reveal.
+    const resolveReloadTarget = (fileId: string): OpenFile | 'stale' | null => {
       const file = openFilesRef.current.find((candidate) => candidate.id === fileId)
-      return file &&
-        !file.isDirty &&
-        isVisibleRef.current &&
-        file.id === activeContentFileIdRef.current
-        ? file
-        : null
+      if (!file || file.isDirty) {
+        return null
+      }
+      return isVisibleRef.current && file.id === activeContentFileIdRef.current ? file : 'stale'
     }
-    const runContentReload = (fileId: string, eventGeneration: number): Promise<void> => {
-      const file = currentReloadTarget(fileId)
-      return file
-        ? loadFileContent(file.filePath, file.id, file.worktreeId, file.relativePath, {
-            force: true,
-            externalEventGeneration: eventGeneration
-          })
-        : Promise.resolve()
+    const runContentReload = async (fileId: string, eventGeneration: number): Promise<void> => {
+      const target = resolveReloadTarget(fileId)
+      if (target === 'stale') {
+        invalidateContent([fileId])
+      } else if (target) {
+        await loadFileContent(target.filePath, target.id, target.worktreeId, target.relativePath, {
+          force: true,
+          externalEventGeneration: eventGeneration
+        })
+      }
     }
-    const runDiffReload = (fileId: string, eventGeneration: number): Promise<void> => {
-      const file = currentReloadTarget(fileId)
-      return file
-        ? loadDiffContent(file, { force: true, externalEventGeneration: eventGeneration })
-        : Promise.resolve()
+    const runDiffReload = async (fileId: string, eventGeneration: number): Promise<void> => {
+      const target = resolveReloadTarget(fileId)
+      if (target === 'stale') {
+        invalidateDiffContent([fileId])
+      } else if (target) {
+        await loadDiffContent(target, { force: true, externalEventGeneration: eventGeneration })
+      }
     }
     const handler = (event: Event): void => {
       const detail = (event as CustomEvent<EditorPathMutationTarget>).detail

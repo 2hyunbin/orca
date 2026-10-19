@@ -318,4 +318,41 @@ describe('useEditorPanelExternalContentEvents', () => {
     await act(async () => settles[0]())
     expect(calls.loadFile).toHaveBeenCalledTimes(1)
   })
+
+  it.each([
+    ['content', 'edit', 'loadFile', 'invalidate'],
+    ['diff', 'diff', 'loadDiff', 'invalidateDiff']
+  ] as const)(
+    'invalidates %s when the tab is switched away while a follow-up is queued',
+    async (_label, mode, loader, invalidator) => {
+      const changedFile = makeFile(
+        'changed',
+        mode === 'diff' ? { mode, diffSource: 'unstaged' } : {}
+      )
+      const otherFile = makeFile('other')
+      const calls = makeCalls()
+      const settles: (() => void)[] = []
+      calls[loader].mockImplementation(() => new Promise<void>((resolve) => settles.push(resolve)))
+      const renderProbe = (activeFileId: string): void => {
+        act(() => {
+          root.render(
+            <ExternalContentProbe
+              activeFileId={activeFileId}
+              calls={calls}
+              isVisible
+              openFiles={[changedFile, otherFile]}
+            />
+          )
+        })
+      }
+      renderProbe(changedFile.id)
+      dispatchExternalChange(changedFile.relativePath)
+      dispatchExternalChange(changedFile.relativePath)
+      renderProbe(otherFile.id)
+      await act(async () => settles[0]())
+      // The queued change must not be lost: the reveal path reloads stale content.
+      expect(calls[loader]).toHaveBeenCalledTimes(1)
+      expect(calls[invalidator]).toHaveBeenCalledWith([changedFile.id])
+    }
+  )
 })

@@ -5,7 +5,7 @@ import {
   type CombinedDiffLoadScheduler
 } from './combined-diff-load-scheduler'
 
-// Why: git rewrites a path several times during a rebase; refetch once the writes stop.
+// Why: git rewrites a path several times during a rebase; refetch at most once per window.
 export const COMBINED_DIFF_SECTION_RELOAD_COALESCE_MS = 300
 
 export function clearPendingSectionReloadTimers(timers: Map<number, number>): void {
