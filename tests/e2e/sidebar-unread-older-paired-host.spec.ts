@@ -109,7 +109,10 @@ test('the window raises and clears the flag on an older paired host that raises 
         const row = Object.values(state.worktreesByRepo)
           .flat()
           .find((worktree) => worktree.id === id)
-        state.setWorkspaceUnreadByUser(id, false, row?.hostId ?? undefined)
+        if (!row?.hostId) {
+          throw new Error('server workspace row has no host')
+        }
+        state.setWorkspaceUnreadByUser(id, false, row.hostId)
       }, worktreeId)
       await expect.poll(() => hostFlag(host, worktreeId), { timeout: 30_000 }).toBe(false)
     } finally {
