@@ -53,6 +53,22 @@ export function observeClaudeSettingsApplied(session: ClaudeSession, settings: u
   }
 }
 
+/** Applied effort describes execution; effective effort describes the underlying settings. */
+export function observeClaudeSettingsExecutionEffort(
+  session: ClaudeSession,
+  settings: unknown
+): void {
+  const applied = readClaudeSettingsApplied(settings)
+  const effort = applied ? applied.effort : readClaudeSettingsEffort(settings)
+  if (session.reusableOptions.get('effort') !== 'max') {
+    if (effort) {
+      session.reusableOptions.set('effort', effort)
+    } else if (applied) {
+      session.reusableOptions.delete('effort')
+    }
+  }
+}
+
 export function readClaudeSettingsFastMode(settings: unknown): boolean | null {
   const value = record(record(settings)?.effective)?.fastMode
   return typeof value === 'boolean' ? value : null
@@ -218,14 +234,10 @@ export async function readClaudeStructuredSessionOptions(
   timeoutMs: number | undefined
 ): Promise<StructuredAgentSessionLiveOptions> {
   const readMutationSequence = session.optionMutationSequence
-  // Before startup both requests would wait on initialize; answer from the saved options.
-  const [catalog, settings] =
-    session.startup.state === 'proven'
-      ? await Promise.all([
-          session.connection.supportedModels({ timeoutMs }).catch(() => null),
-          session.connection.getSettings({ timeoutMs }).catch(() => null)
-        ])
-      : [null, null]
+  const [catalog, settings] = await Promise.all([
+    session.connection.supportedModels({ timeoutMs }).catch(() => null),
+    session.connection.getSettings({ timeoutMs }).catch(() => null)
+  ])
   observeClaudeSettingsReadback(session, settings, readMutationSequence)
   return claudeStructuredSessionOptionsFrom(session, catalog, readMutationSequence)
 }
@@ -240,10 +252,12 @@ function observeClaudeSettingsReadback(
     const fastMode = readClaudeSettingsFastMode(settings)
     const perSessionOptIn = readClaudeSettingsFastModePerSessionOptIn(settings)
     observeClaudeSettingsApplied(session, settings)
+    observeClaudeSettingsExecutionEffort(session, settings)
     if (effort) {
       session.reportedOptions.effort = effort
     }
     if (fastMode !== null) {
+      session.reusableOptions.set('fastMode', String(fastMode))
       session.reportedOptions.fastMode = fastMode
       if (decodedFastMode(session) !== undefined) {
         session.options.set('fastMode', String(fastMode))
@@ -270,10 +284,8 @@ export function claudeResolvedCatalogListing(
   return listing ? { catalogListing: listing } : {}
 }
 
-/** The options as main already holds them, over `catalog`; asks the CLI nothing. Startup's
- *  settings readback is applied by the time a start proves, and the SDK answers `list_models`
- *  from its initialize result, so a started session's snapshot passes that result here rather
- *  than paying two round trips for what it already read. */
+/** The options already held in memory, over `catalog`; asks the CLI nothing. The SDK answers
+ *  `list_models` from initialize, so open passes that result without another round trip. */
 export function claudeStructuredSessionOptionsFrom(
   session: ClaudeSession,
   catalog: unknown[] | null,
@@ -299,6 +311,7 @@ export function claudeStructuredSessionOptionsFrom(
     readMutationSequence === session.optionMutationSequence
   ) {
     session.options.set('fastMode', 'false')
+    session.reusableOptions.delete('fastMode')
     session.confirmedOptions.delete('fastMode')
     desiredFastMode = false
   }

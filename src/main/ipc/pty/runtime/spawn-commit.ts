@@ -1,9 +1,4 @@
 import { isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
-import {
-  ptyOwnership,
-  ptyIncarnationById,
-  setAdoptedPtyOwnership
-} from '../provider/ownership-state'
 import { ptySizes } from '../delivery/visibility-state'
 import { commitRuntimePtySize } from './spawn-commit-pty-size'
 import {
@@ -19,6 +14,7 @@ import {
   rendererSerializerReadiness
 } from '../pane/serializer-state'
 import { seedTerminalRestoreRecordsFromSpawnResult } from '../pane/agent-session-owners'
+import { seedResumeLaunchIdentityFromSpawn } from '../pane/resume-launch-identity'
 import { seedHeadlessTerminalFromSpawnResult } from '../pane/terminal-spawn-restore'
 import { recordPtySpawnTelemetry } from '../pane/spawn-telemetry'
 import { persistAdmittedStablePaneBinding } from '../pane/stable-owner'
@@ -26,7 +22,6 @@ import {
   isNativeWindowsLocalPtySpawn,
   markNativeWindowsConptyPty
 } from '../../../runtime/terminal-model-query-authority'
-import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import { createTerminalSessionStateSaveFailureMessage } from '../../../../shared/terminal-session-state-save-failure'
 import { resolvePaneSpawnReservation } from '../pane/spawn-reservation'
 import { admitProviderReattachLaunchIdentity } from '../pane/launch-authority'
@@ -34,7 +29,7 @@ import { spawnCommitBindingOrigin } from '../../../persistence/loading-store/pty
 import type { RuntimePtySpawnState } from './spawn-state'
 import { commitPtyWithOpenCodePromptIntent } from '../../../opencode/opencode-startup-prompt-owner'
 import {
-  admitPtyReattachOwnership,
+  admitPtySpawnOwnership,
   discardUnpersistedPtySpawn,
   registerPersistedPtySpawn
 } from '../pane/spawn-registration'
@@ -45,7 +40,7 @@ export async function commitRuntimePtySpawn(ctx: RuntimePtySpawnState) {
 
 async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
   const args = ctx.args
-  admitPtyReattachOwnership(ctx.deps.runtime, ctx.result)
+  admitPtySpawnOwnership(ctx.deps.runtime, ctx.result)
   const providerReattachLaunchIdentity = admitProviderReattachLaunchIdentity(ctx.result)
   if (
     isNativeWindowsLocalPtySpawn({
@@ -103,11 +98,7 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
       ctx.result,
       ctx.hostSessionBinding?.expectedSourceBinding
     )
-    setAdoptedPtyOwnership(ctx.result.id)
     ctx.deps.runtime?.registerPreAllocatedHandleForPty(ctx.result.id, owner.surface.terminalHandle)
-    if (ctx.result.incarnationId) {
-      ptyIncarnationById.set(ctx.result.id, ctx.result.incarnationId)
-    }
     ctx.deps.options?.onCodexHomePtySpawned?.({
       id: ctx.result.id,
       codexHomePath: ctx.selectedCodexHomePath,
@@ -157,7 +148,7 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
       }
     } catch (err) {
       console.error('[pty] failed to persist runtime PTY binding after spawn:', err)
-      await discardUnpersistedPtySpawn(ctx.provider, ctx.result)
+      await discardUnpersistedPtySpawn(ctx.provider, ctx.result, ctx.deps.runtime)
       if (err instanceof Error && err.message === 'terminal_split_source_not_found') {
         throw err
       }
@@ -204,10 +195,6 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
   if (args.preAllocatedHandle && !ctx.stablePaneOwner?.handle) {
     ctx.deps.runtime?.registerPreAllocatedHandleForPty(ctx.result.id, args.preAllocatedHandle)
   }
-  ptyOwnership.set(ctx.result.id, LOCAL_EXECUTION_HOST_ID)
-  if (ctx.result.incarnationId) {
-    ptyIncarnationById.set(ctx.result.id, ctx.result.incarnationId)
-  }
 
   commitRuntimePtySize(ctx, ctx.result)
   if (ctx.effectiveSessionAppId !== undefined && ctx.effectiveSessionAppId !== ctx.result.id) {
@@ -251,6 +238,17 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
       typeof ctx.result.pid === 'number' && Number.isFinite(ctx.result.pid) && ctx.result.pid > 0
         ? ctx.result.pid
         : null
+  })
+  // Why after commit: a spawn rejected above must not leave a published identity behind.
+  seedResumeLaunchIdentityFromSpawn({
+    paneKey,
+    launchAgent: args.launchAgent,
+    resumeProviderSession: args.resumeProviderSession,
+    connectionId: args.connectionId,
+    worktreeId: args.worktreeId,
+    launchedAt: ctx.codexHomeLaunchStartedAt,
+    resumeArgvDropped: ctx.codexResumeArgvDropped,
+    result: ctx.result
   })
   // Why: runtime-owned/background spawns bypass mounted-pane state, so inventory consumers need an explicit signal.
   ctx.deps.sendPtySpawnedToRenderer(ctx.result.id)

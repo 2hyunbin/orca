@@ -1,15 +1,20 @@
-import {
-  MAX_ORCAD_MIGRATION_STAGED_CATALOGS,
-  ORCAD_MIGRATION_MANIFEST_VERSION,
-  type OrcadMigrationCatalogAbortResult,
-  type OrcadMigrationCatalogState,
-  type OrcadMigrationImportReceipt,
-  type OrcadMigrationManifest
-} from '../../../shared/orcad-migration-manifest'
+import { MAX_ORCAD_MIGRATION_STAGED_CATALOGS } from '../../../shared/orcad-migration/orcad-migration-staged-catalog-validation'
+import { ORCAD_MIGRATION_MANIFEST_VERSION } from '../../../shared/orcad-migration/orcad-migration-manifest-validation'
+import type {
+  OrcadMigrationCatalogAbortResult,
+  OrcadMigrationCatalogState,
+  OrcadMigrationImportReceipt,
+  OrcadMigrationManifest
+} from '../../../shared/orcad-migration/orcad-migration-manifest'
 import type {
   OrcadMigrationSnapshotChunkRequest,
   OrcadMigrationSnapshotChunkResult
-} from '../../../shared/orcad-migration-scrollback'
+} from '../../../shared/orcad-migration/orcad-migration-scrollback'
+import type {
+  OrcadMigrationBlobChunkRequest,
+  OrcadMigrationBlobChunkResult,
+  OrcadMigrationBlobDescriptor
+} from '../../../shared/orcad-migration/orcad-migration-blob-transfer'
 import type { RepoLifecycleOperations } from '../loading-store/repo-lifecycle-operations'
 import type { StoreRuntimeState } from '../loading-store/store-runtime-state'
 import type { WriteSchedulingOperations } from '../loading-store/write-scheduling'
@@ -25,7 +30,9 @@ import {
   expireOrcadMigrationStages,
   findOrcadMigrationImportReceipt,
   isLiveOrcadMigrationStage,
-  recordOrcadMigrationImportReceipt
+  recordOrcadMigrationCommitWriteGeneration,
+  recordOrcadMigrationImportReceipt,
+  type OrcadMigrationCommitGenerationRuntime
 } from './orcad-catalog-receipt-ledger'
 import {
   abortOrcadMigrationSnapshots,
@@ -35,11 +42,20 @@ import {
   pruneOrcadMigrationSnapshotStaging,
   stageOrcadMigrationSnapshotChunk
 } from './orcad-scrollback-snapshot-transfer'
+import {
+  abortOrcadMigrationBlobs,
+  assertOrcadMigrationBlobSetMatches,
+  assertOrcadMigrationBlobsReady,
+  commitOrcadMigrationBlobs,
+  inspectOrcadMigrationBlobUploads,
+  pruneOrcadMigrationBlobStaging,
+  stageOrcadMigrationBlobChunk
+} from './orcad-migration-blob-staging'
+import { assertOrcadMigrationBlobContentsValid } from './orcad-migration-blob-installers'
+import { readDeclaredOrcadMigrationEditorDrafts } from './orcad-destination-editor-drafts'
 
-type OrcadCatalogImportRuntime = Pick<
-  StoreRuntimeState,
-  'state' | 'terminalScrollbackSnapshotStorage'
->
+type OrcadCatalogImportRuntime = OrcadMigrationCommitGenerationRuntime &
+  Pick<StoreRuntimeState, 'state' | 'terminalScrollbackSnapshotStorage' | 'orcadMigrationBlobRoot'>
 
 const orcadCatalogImportContext = Symbol('OrcadCatalogImportPersistence')
 type OrcadCatalogImportContext = {
@@ -73,11 +89,12 @@ export class OrcadCatalogImportPersistence {
       stagedManifests(context.runtime.state),
       context.runtime.terminalScrollbackSnapshotStorage
     )
-    const current = migrationCatalogState(
-      context.runtime.state,
-      manifest,
-      context.runtime.terminalScrollbackSnapshotStorage
+    pruneOrcadMigrationBlobStaging(
+      stagedManifests(context.runtime.state),
+      committedMigrations(context.runtime.state),
+      context.runtime.orcadMigrationBlobRoot
     )
+    const current = migrationCatalogState(context.runtime, manifest)
     if (current.state === 'committed') {
       return current
     }
@@ -99,7 +116,7 @@ export class OrcadCatalogImportPersistence {
       }
     ]
     scheduleSave(context.scheduling)
-    return stagedCatalogState(manifest, stagedAt, context.runtime.terminalScrollbackSnapshotStorage)
+    return stagedCatalogState(manifest, stagedAt, context.runtime)
   }
 
   stageOrcadMigrationSnapshotChunk(
@@ -116,27 +133,52 @@ export class OrcadCatalogImportPersistence {
     })
   }
 
+  stageOrcadMigrationBlobChunk(
+    request: OrcadMigrationBlobChunkRequest
+  ): OrcadMigrationBlobChunkResult {
+    const context = this[orcadCatalogImportContext]
+    return stageOrcadMigrationBlobChunk({
+      stagedManifest:
+        stagedManifests(context.runtime.state).find(
+          (manifest) => manifest.migrationId === request.migrationId
+        ) ?? null,
+      root: context.runtime.orcadMigrationBlobRoot,
+      request
+    })
+  }
+
+  /** `expectedBlobs` absent (SSH, older senders) keeps the pre-blob-set commit unchanged. */
   commitStagedOrcadMigrationCatalog(
     manifest: OrcadMigrationManifest,
-    options: { now?: () => Date } = {}
+    options: { now?: () => Date; expectedBlobs?: readonly OrcadMigrationBlobDescriptor[] } = {}
   ): OrcadMigrationCatalogState {
     const context = this[orcadCatalogImportContext]
-    const current = migrationCatalogState(
-      context.runtime.state,
-      manifest,
-      context.runtime.terminalScrollbackSnapshotStorage
-    )
+    const current = migrationCatalogState(context.runtime, manifest)
     if (current.state === 'committed') {
       return current
     }
     if (current.state !== 'staged') {
       throw new Error('orcad_migration_catalog_not_staged')
     }
-    const prepared = prepareOrcadMigrationCatalog(manifest, context.runtime.state)
+    let prepared = prepareOrcadMigrationCatalog(manifest, context.runtime.state)
+    const blobRoot = context.runtime.orcadMigrationBlobRoot
     assertOrcadMigrationSnapshotsReady(manifest, context.runtime.terminalScrollbackSnapshotStorage)
+    if (options.expectedBlobs) {
+      assertOrcadMigrationBlobSetMatches(manifest, blobRoot, options.expectedBlobs)
+    }
+    assertOrcadMigrationBlobsReady(manifest, blobRoot)
+    assertOrcadMigrationBlobContentsValid(manifest, blobRoot)
+    // Before any blob moves, so a refused draft or conflict leaves staging as it was.
+    const editorDrafts = readDeclaredOrcadMigrationEditorDrafts(manifest, blobRoot)
+    if (editorDrafts) {
+      prepared = prepareOrcadMigrationCatalog(manifest, context.runtime.state, editorDrafts)
+    }
     commitOrcadMigrationSnapshots(manifest, context.runtime.terminalScrollbackSnapshotStorage)
+    commitOrcadMigrationBlobs(manifest, blobRoot)
     const receipt = commitPreparedCatalog(context, manifest, prepared, options.now)
+    const generationBefore = context.runtime.writeGeneration
     scheduleSave(context.scheduling)
+    recordOrcadMigrationCommitWriteGeneration(context.runtime, manifest, generationBefore)
     return committedCatalogState(receipt)
   }
 
@@ -144,11 +186,7 @@ export class OrcadCatalogImportPersistence {
     manifest: OrcadMigrationManifest
   ): OrcadMigrationCatalogAbortResult {
     const context = this[orcadCatalogImportContext]
-    const current = migrationCatalogState(
-      context.runtime.state,
-      manifest,
-      context.runtime.terminalScrollbackSnapshotStorage
-    )
+    const current = migrationCatalogState(context.runtime, manifest)
     if (current.state === 'committed' || current.state === 'absent') {
       return { ...current, aborted: false }
     }
@@ -157,17 +195,14 @@ export class OrcadCatalogImportPersistence {
       context.runtime.state.orcadMigrationStagedCatalogs ?? []
     ).filter((entry) => entry.manifest.migrationId !== manifest.migrationId)
     abortOrcadMigrationSnapshots(manifest, context.runtime.terminalScrollbackSnapshotStorage)
+    abortOrcadMigrationBlobs(manifest, context.runtime.orcadMigrationBlobRoot)
     scheduleSave(context.scheduling)
     return { ...absentCatalogState(manifest), aborted: true }
   }
 
   getOrcadMigrationCatalogState(manifest: OrcadMigrationManifest): OrcadMigrationCatalogState {
     const context = this[orcadCatalogImportContext]
-    return migrationCatalogState(
-      context.runtime.state,
-      manifest,
-      context.runtime.terminalScrollbackSnapshotStorage
-    )
+    return migrationCatalogState(context.runtime, manifest)
   }
 
   /** A migration into this server staged recently and neither committed nor aborted. */
@@ -203,10 +238,10 @@ function commitPreparedCatalog(
 }
 
 function migrationCatalogState(
-  state: StoreRuntimeState['state'],
-  manifest: OrcadMigrationManifest,
-  storage?: StoreRuntimeState['terminalScrollbackSnapshotStorage']
+  runtime: OrcadCatalogImportRuntime,
+  manifest: OrcadMigrationManifest
 ): OrcadMigrationCatalogState {
+  const { state } = runtime
   const receipt = findOrcadMigrationImportReceipt(state, manifest)
   if (receipt) {
     assertCommittedReceipt(receipt, manifest)
@@ -219,11 +254,20 @@ function migrationCatalogState(
     return absentCatalogState(manifest)
   }
   assertSameOrcadMigrationManifest(staged.manifest, manifest)
-  return stagedCatalogState(manifest, staged.stagedAt, storage)
+  return stagedCatalogState(manifest, staged.stagedAt, runtime)
 }
 
 function stagedManifests(state: StoreRuntimeState['state']): OrcadMigrationManifest[] {
   return (state.orcadMigrationStagedCatalogs ?? []).map((entry) => entry.manifest)
+}
+
+function committedMigrations(
+  state: StoreRuntimeState['state']
+): { migrationId: string; manifestSha256: string }[] {
+  return [
+    ...(state.orcadMigrationImportReceipts ?? []),
+    ...(state.orcadMigrationEvictedReceipts ?? [])
+  ]
 }
 
 /**
@@ -251,17 +295,21 @@ function absentCatalogState(manifest: OrcadMigrationManifest): OrcadMigrationCat
 function stagedCatalogState(
   manifest: OrcadMigrationManifest,
   stagedAt: string,
-  storage?: StoreRuntimeState['terminalScrollbackSnapshotStorage']
+  runtime: OrcadCatalogImportRuntime
 ): OrcadMigrationCatalogState {
-  const snapshotUploads = storage
-    ? inspectOrcadMigrationSnapshotUploads(manifest, storage)
-    : undefined
+  const snapshotUploads = inspectOrcadMigrationSnapshotUploads(
+    manifest,
+    runtime.terminalScrollbackSnapshotStorage
+  )
+  // Absent, not empty, when nothing is staged: the shape an older host already answers with.
+  const blobUploads = inspectOrcadMigrationBlobUploads(manifest, runtime.orcadMigrationBlobRoot)
   return {
     state: 'staged',
     migrationId: manifest.migrationId,
     manifestSha256: manifest.manifestSha256,
     stagedAt,
-    ...(snapshotUploads ? { snapshotUploads } : {})
+    ...(snapshotUploads ? { snapshotUploads } : {}),
+    ...(blobUploads ? { blobUploads } : {})
   }
 }
 

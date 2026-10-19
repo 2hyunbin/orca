@@ -1,5 +1,9 @@
+import type { StructuredAgentSessionSendRequest } from './structured-agent-session-send-slot'
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
-import type { AgentJournalSubmission } from '../../../../shared/agent-session-journal-types'
+import type {
+  AgentJournalCursor,
+  AgentJournalSubmission
+} from '../../../../shared/agent-session-journal-types'
 import type { StructuredAgentSessionAttachment } from '../../../../shared/structured-agent-session-send-mutation'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import {
@@ -26,6 +30,7 @@ export function useStructuredAgentSessionSends(args: {
   sessionId: string
   target: RuntimeClientTarget
   fence: number | null
+  cursor?: AgentJournalCursor | null
   submissions: readonly AgentJournalSubmission[]
   queuedMessageIds: readonly string[]
   queue: StructuredAgentSessionQueueDelivery
@@ -39,6 +44,7 @@ export function useStructuredAgentSessionSends(args: {
   sendOptions?: () => Readonly<Record<string, string>> | undefined
 }) {
   const {
+    cursor,
     fence,
     historyLoaded,
     isWorking = false,
@@ -67,8 +73,8 @@ export function useStructuredAgentSessionSends(args: {
   }, [fence, sessionId])
 
   useEffect(() => {
-    settleStructuredAgentSessionSendsFromJournal(sessionId, submissions, queuedMessageIds)
-  }, [pending, queuedMessageIds, sessionId, submissions])
+    settleStructuredAgentSessionSendsFromJournal(sessionId, submissions, queuedMessageIds, cursor)
+  }, [cursor, pending, queuedMessageIds, sessionId, submissions])
 
   const recoverLegacy = historyLoaded && fence !== null
   useEffect(() => {
@@ -88,18 +94,23 @@ export function useStructuredAgentSessionSends(args: {
   const send = useCallback(
     (
       text: string,
-      attachments: readonly StructuredAgentSessionAttachment[] = []
+      attachments: readonly StructuredAgentSessionAttachment[] = [],
+      request?: StructuredAgentSessionSendRequest
     ): boolean | 'queued' => {
       if (!text.trim() && attachments.length === 0) {
         return false
       }
-      const delivery = structuredAgentSessionQueueRequest(queue, attachments)
+      const delivery = structuredAgentSessionQueueRequest(queue)
       const options = sendOptions?.()
       const sent = sendStructuredAgentSessionMessage({
         sessionId,
         target,
         text,
         attachments,
+        ...(request?.callerKeepsText ? { callerKeepsText: request.callerKeepsText } : {}),
+        ...(request?.usageLimitContinuationOfTurnItemId
+          ? { usageLimitContinuationOfTurnItemId: request.usageLimitContinuationOfTurnItemId }
+          : {}),
         ...(delivery ? { delivery } : {}),
         ...(options ? { options } : {}),
         ...(stopping ? { sentWhileStopping: true as const } : {})
@@ -107,6 +118,9 @@ export function useStructuredAgentSessionSends(args: {
       // Refused while the chat's send is out: the text stays in the box.
       if (!sent) {
         return false
+      }
+      if (request?.onSettled) {
+        void sent.outcome.then(request.onSettled)
       }
       // The same projection that draws the transcript decides it.
       const admitted = getStructuredAgentSessionPendingSends(sessionId).filter(
