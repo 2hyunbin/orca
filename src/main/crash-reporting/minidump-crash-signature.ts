@@ -14,6 +14,7 @@
 import { findStream, isMinidump, MinidumpView, type MinidumpSource } from './minidump-stream-reader'
 import { readCrashpadAnnotations } from './minidump-crashpad-annotations'
 import { findEmbeddedCheckMessage } from './minidump-embedded-check'
+import { readMinidumpFaultContext, type MinidumpFaultContext } from './minidump-fault-context'
 
 const STREAM_TYPE_MODULE_LIST = 4
 const STREAM_TYPE_EXCEPTION = 6
@@ -45,6 +46,7 @@ export type MinidumpCrashSignature = {
   /** Module whose image range contains `exceptionAddress`. */
   readonly faultingModule?: string
   readonly faultingModuleOffset?: string
+  readonly fault?: MinidumpFaultContext
   /** Allowlisted Crashpad annotations, verbatim. */
   readonly annotations: Readonly<Record<string, string>>
 }
@@ -187,6 +189,7 @@ export async function parseMinidumpCrashSignature(
         signature.faultingModule = faulting.name
         signature.faultingModuleOffset = faulting.offset
       }
+      signature.fault = await readMinidumpFaultContext(view, exception.rva, code, address)
     }
   }
 
@@ -221,6 +224,19 @@ export function minidumpSignatureDetails(
   }
   if (signature.faultingModuleOffset) {
     details.minidumpFaultingModuleOffset = signature.faultingModuleOffset
+  }
+  const fault = signature.fault
+  if (fault?.access) {
+    details.minidumpExceptionAccess = fault.access
+  }
+  if (fault?.faultAddress) {
+    details.minidumpFaultAddress = fault.faultAddress
+  }
+  if (fault?.faultStackPointerDelta !== undefined) {
+    details.minidumpFaultStackPointerDelta = fault.faultStackPointerDelta
+  }
+  if (fault?.codeBytes) {
+    details.minidumpCodeBytes = fault.codeBytes
   }
   for (const [key, value] of Object.entries(signature.annotations)) {
     if (key === 'LOG_FATAL' || key === 'abort-message' || key === 'ptype') {
