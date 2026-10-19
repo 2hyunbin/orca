@@ -154,27 +154,24 @@ export function resolveTerminalPtyOwner(
   if (!worktreeId) {
     return NON_RUNTIME_PTY_OWNER
   }
-  if (isEphemeralSetupTerminalWorktreeId(worktreeId)) {
-    const ownership = resolveTerminalHostOwnership(state, worktreeId, purpose)
-    return ownership.kind === 'runtime'
-      ? { kind: 'runtime', environmentId: ownership.runtimeEnvironmentId }
-      : NON_RUNTIME_PTY_OWNER
-  }
+  const setup = isEphemeralSetupTerminalWorktreeId(worktreeId)
   if (
+    !setup &&
     !namedHostForOwnerRef(state, { workspaceId: worktreeId }) &&
     isUnattributedTwinWorktree(state, worktreeId)
   ) {
     return AMBIGUOUS_PTY_OWNER
   }
-  const ownership = resolveTerminalHostOwnership(state, worktreeId, 'spawn')
+  const ownership = resolveTerminalHostOwnership(state, worktreeId, setup ? purpose : 'spawn')
   switch (ownership.kind) {
     case 'runtime':
       return { kind: 'runtime', environmentId: ownership.runtimeEnvironmentId }
     case 'local-or-ssh':
       return NON_RUNTIME_PTY_OWNER
     case 'unresolved':
-      return parseWorkspaceKey(worktreeId)?.type !== 'folder' &&
-        resolveGitWorktreeRoute(state, worktreeId).kind === 'missing'
+      return setup ||
+        (parseWorkspaceKey(worktreeId)?.type !== 'folder' &&
+          resolveGitWorktreeRoute(state, worktreeId).kind === 'missing')
         ? NON_RUNTIME_PTY_OWNER
         : AMBIGUOUS_PTY_OWNER
   }
