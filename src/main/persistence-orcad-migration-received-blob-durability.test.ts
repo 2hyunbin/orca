@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createHash } from 'node:crypto'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import {
+  ORCAD_MIGRATION_BLOB_CHUNK_BYTES,
+  type OrcadMigrationBlobDescriptor
+} from '../shared/orcad-migration/orcad-migration-blob-transfer'
 import type { OrcadMigrationManifest } from '../shared/orcad-migration/orcad-migration-manifest'
 import { getOrcadMigrationReceivedBlobPath } from './persistence/migrating-orcad-catalog/orcad-migration-blob-staging'
 import {
@@ -9,20 +14,7 @@ import {
   getOrcadMigrationCatalogState
 } from './runtime/orcad-migration-catalog-import'
 import {
-  DRAFT_A,
-  FILE_A,
-  HINTED_PANE,
-  commitDurably,
-  declaredManifest,
-  draftOf,
-  encodeDrafts,
-  encodeHints,
-  openFile,
-  receivedDraftsPath,
-  stageBlob,
-  type Store
-} from './persistence-orcad-migration-editor-drafts-fixture'
-import {
+  DORMANT_LEAF_ID,
   DORMANT_WORKTREE_ID,
   dormantState,
   manifest
@@ -40,7 +32,23 @@ vi.mock('electron', () => ({
 
 vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
 
+type Store = ReturnType<typeof createStore>
+
+const HINTED_PANE = `tab-dormant:${DORMANT_LEAF_ID}`
 const noLiveShells = (): boolean => false
+
+function encodeHints(cwd: string): { bytes: Buffer; descriptor: OrcadMigrationBlobDescriptor } {
+  const bytes = Buffer.from(JSON.stringify({ version: 1, hints: [{ paneKey: HINTED_PANE, cwd }] }))
+  return {
+    bytes,
+    descriptor: {
+      blobKind: 'terminal-restore-hints',
+      key: 'migration',
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+      byteLength: bytes.length
+    }
+  }
+}
 
 function receivedHintsPath(input: OrcadMigrationManifest): string {
   return getOrcadMigrationReceivedBlobPath(join(testState.dir, 'orcad-migration-blobs'), input, {
@@ -53,16 +61,33 @@ function hint(store: Store): string | null {
   return store.peekOrcadMigrationTerminalRestoreHint(HINTED_PANE, DORMANT_WORKTREE_ID)
 }
 
-/** Drafts plus restore hints staged and durable; returns the disk state before any commit. */
-async function stageDraftsAndHints(store: Store) {
-  const drafts = encodeDrafts([DRAFT_A])
+function commitDurably(store: Store, input: OrcadMigrationManifest) {
+  return commitStagedOrcadMigrationCatalogDurably({
+    store,
+    manifest: input,
+    onDurableCommit: () => {}
+  })
+}
+
+/** Restore hints staged and durable; returns the disk state before any commit. */
+async function stageHints(store: Store) {
   const hints = encodeHints('/home/me/src')
-  const input = declaredManifest(drafts.descriptor)
+  const base = manifest()
+  const input = manifest({ payload: { ...base.payload, dormantState: dormantState() } })
   store.stageOrcadMigrationCatalog(input)
-  stageBlob(store, input, drafts)
-  stageBlob(store, input, hints)
+  for (let offset = 0; offset < hints.bytes.length; offset += ORCAD_MIGRATION_BLOB_CHUNK_BYTES) {
+    store.stageOrcadMigrationBlobChunk({
+      migrationId: input.migrationId,
+      manifestSha256: input.manifestSha256,
+      blob: hints.descriptor,
+      offset,
+      bytesBase64: hints.bytes
+        .subarray(offset, offset + ORCAD_MIGRATION_BLOB_CHUNK_BYTES)
+        .toString('base64')
+    })
+  }
   await store.flushPendingOrThrowAsync()
-  return { input, expectedBlobs: [drafts.descriptor, hints.descriptor], stagedDisk: readDataFile() }
+  return { input, expectedBlobs: [hints.descriptor], stagedDisk: readDataFile() }
 }
 
 async function commitWithFailedFlush(store: Store, input: OrcadMigrationManifest) {
@@ -72,7 +97,7 @@ async function commitWithFailedFlush(store: Store, input: OrcadMigrationManifest
 
 describe('orcad migration received blobs wait for a durable commit', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-migration-drafts-durable-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'orca-migration-blobs-durable-'))
   })
 
   afterEach(() => {
@@ -80,14 +105,13 @@ describe('orcad migration received blobs wait for a durable commit', () => {
     rmSync(testState.dir, { recursive: true, force: true })
   })
 
-  it('keeps every received blob through a failed flush and a state query, for the retry after restart', async () => {
+  it('keeps the received blob through a failed flush and a state query, for the retry after restart', async () => {
     const store = createStore()
-    const { input, expectedBlobs, stagedDisk } = await stageDraftsAndHints(store)
+    const { input, expectedBlobs, stagedDisk } = await stageHints(store)
     await commitWithFailedFlush(store, input)
 
     // The in-memory receipt answers "committed", but nothing it received may be consumed yet.
     expect(getOrcadMigrationCatalogState({ store, manifest: input }).state).toBe('committed')
-    expect(existsSync(receivedDraftsPath(input))).toBe(true)
     expect(existsSync(receivedHintsPath(input))).toBe(true)
     expect(hint(store)).toBeNull()
 
@@ -101,28 +125,25 @@ describe('orcad migration received blobs wait for a durable commit', () => {
       onDurableCommit: () => {}
     })
     expect(result.state).toBe('committed')
-    expect(draftOf(restarted, FILE_A)).toBe(DRAFT_A.content)
     expect(hint(restarted)).toBe('/home/me/src')
-    expect(existsSync(receivedDraftsPath(input))).toBe(false)
     expect(existsSync(receivedHintsPath(input))).toBe(false)
   })
 
   it('never consumes an in-memory-only commit in the post-attach pass', async () => {
     const store = createStore()
-    const { input } = await stageDraftsAndHints(store)
+    const { input } = await stageHints(store)
     await commitWithFailedFlush(store, input)
 
     store.installPendingOrcadMigrationReceivedBlobs({ worktreeHasLiveShells: noLiveShells })
     store.installDeferredOrcadMigrationShellHistory(DORMANT_WORKTREE_ID, {
       worktreeHasLiveShells: noLiveShells
     })
-    expect(existsSync(receivedDraftsPath(input))).toBe(true)
     expect(existsSync(receivedHintsPath(input))).toBe(true)
   })
 
-  it('releases the blobs when a same-process retry flushes the commit', async () => {
+  it('installs the blob when a same-process retry flushes the commit', async () => {
     const store = createStore()
-    const { input, expectedBlobs } = await stageDraftsAndHints(store)
+    const { input, expectedBlobs } = await stageHints(store)
     await commitWithFailedFlush(store, input)
 
     const retried = await commitStagedOrcadMigrationCatalogDurably({
@@ -132,39 +153,20 @@ describe('orcad migration received blobs wait for a durable commit', () => {
       onDurableCommit: () => {}
     })
     expect(retried.state).toBe('committed')
-    expect(existsSync(receivedDraftsPath(input))).toBe(false)
     expect(existsSync(receivedHintsPath(input))).toBe(false)
     expect(hint(store)).toBe('/home/me/src')
-    expect(draftOf(createStore(), FILE_A)).toBe(DRAFT_A.content)
   })
 
   it('treats any successful write of the commit as proof, and a load from disk as proof', async () => {
     const store = createStore()
-    const { input } = await stageDraftsAndHints(store)
+    const { input } = await stageHints(store)
     store.commitStagedOrcadMigrationCatalog(input)
     expect(getOrcadMigrationCatalogState({ store, manifest: input }).state).toBe('committed')
-    expect(existsSync(receivedDraftsPath(input))).toBe(true)
+    expect(existsSync(receivedHintsPath(input))).toBe(true)
     await store.flushPendingOrThrowAsync()
 
     const restarted = createStore()
-    expect(existsSync(receivedDraftsPath(input))).toBe(false)
     expect(existsSync(receivedHintsPath(input))).toBe(false)
-    expect(draftOf(restarted, FILE_A)).toBe(DRAFT_A.content)
     expect(hint(restarted)).toBe('/home/me/src')
-  })
-
-  it('commits an older desktop inline draft unchanged', async () => {
-    const dormant = dormantState()
-    dormant.workspaceSession = {
-      ...dormant.workspaceSession!,
-      openFilesByWorktree: { [DORMANT_WORKTREE_ID]: [openFile(FILE_A, DRAFT_A.content)] }
-    }
-    const base = manifest()
-    const input = manifest({ payload: { ...base.payload, dormantState: dormant } })
-    const store = createStore()
-    store.stageOrcadMigrationCatalog(input)
-
-    expect((await commitDurably(store, input)).state).toBe('committed')
-    expect(draftOf(createStore(), FILE_A)).toBe(DRAFT_A.content)
   })
 })
