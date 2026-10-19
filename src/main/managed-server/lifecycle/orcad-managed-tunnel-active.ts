@@ -99,6 +99,26 @@ export async function dropActiveOrcadTunnel(
   }
 }
 
+/** The recorded tunnel already rides this transport to this deployment, so a build can reuse it. */
+export function activeTunnelMatches(
+  active: ActiveOrcadTunnel | undefined,
+  current: {
+    connection: SshConnection
+    transportGeneration: number
+    target: SshTarget
+    deployment: RuntimeSshTunnelLink
+  }
+): boolean {
+  return (
+    active?.connection === current.connection &&
+    active.transportGeneration === current.transportGeneration &&
+    active.targetId === current.target.id &&
+    active.sshTargetGeneration === current.target.generation &&
+    active.localPort === current.deployment.localPort &&
+    active.preferredPort === current.deployment.remotePort
+  )
+}
+
 export function recordActiveOrcadTunnel(
   active: Map<string, ActiveOrcadTunnel>,
   environmentId: string,
