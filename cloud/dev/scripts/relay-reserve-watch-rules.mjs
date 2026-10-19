@@ -6,9 +6,9 @@ import { backgroundOf, SHADOW_GATE_THRESHOLDS } from './relay-same-cap-shadow-ga
 const MINUTE_MS = 60_000
 
 export const RESERVE_WATCH_RULES = {
-  // The roll ladder's warn line: max(1.5x, background + 20), so a zero background is not tripped
-  // by one 503. Three complete minutes in a row, not two. The read spans more minutes than that so
-  // a late publishing front still leaves three published minutes to judge.
+  // The roll ladder's warn line on non-drain 503s: max(1.5x, background + 20), so a zero background
+  // is not tripped by one 503. Three complete minutes in a row, not two. The read spans more minutes
+  // than that so a late publishing front still leaves three published minutes to judge.
   director503: {
     multiple: SHADOW_GATE_THRESHOLDS.nonDrain503Budget.warnMultiple,
     marginPerMinute: SHADOW_GATE_THRESHOLDS.nonDrain503Budget.warnMarginPerMinute,
@@ -54,12 +54,15 @@ export function initialWatchState({ cellId, startedAt, durationMinutes, backgrou
   }
 }
 
-// The background from the per-minute 503 counts before the flip. `publishedThrough` is the newest
-// minute any response code has a point for: a 503 minute at or before it with no point had none,
-// and the background waits (null) until it covers the last minute.
-export function measuredBackground(perMinute, minutes, publishedThrough) {
+// The background from the per-minute non-drain 503s before the flip, the live samples' measure.
+// `publishedThrough` is the newest minute any response code has a point for: a 503 minute at or
+// before it with no point had none, and the background waits (null) until it covers the last
+// minute. Unmetered minutes are left out; under half the minutes metered is no background.
+export function measuredBackground({ perMinute, minutes, publishedThrough, unmetered }) {
   if (minutes.length === 0 || publishedThrough === null || publishedThrough < minutes.at(-1)) return null
-  const background = backgroundOf({ minutes, series: minutes.map((minute) => perMinute[minute] ?? 0), unverified: false })
+  const metered = minutes.filter((minute) => !unmetered.includes(minute))
+  if (metered.length * 2 < minutes.length) return null
+  const background = backgroundOf({ minutes: metered, series: metered.map((minute) => perMinute[minute] ?? 0), unverified: false })
   return { medianPerMinute: background.medianPerMinute, minutes: background.minutes, source: 'measured' }
 }
 
@@ -96,8 +99,8 @@ function judgeOverrun(cell) {
   return pass({ enforcedUnits: cell.enforcedUnits, hardCap: cell.hardCap })
 }
 
-// Fleet-wide director 503s: no existing signal attributes a 503 to the cell a host was bound for,
-// so a problem local to one cell can stay under the fleet's line. This proxy can miss.
+// Fleet-wide non-drain director 503s: no existing signal attributes a 503 to the cell a host was
+// bound for, so a problem local to one cell can stay under the fleet's line. This proxy can miss.
 function judgeDirector503(read, state, at) {
   const { multiple, marginPerMinute, consecutiveMinutes, publishDelayMs } = RESERVE_WATCH_RULES.director503
   const { background } = state
@@ -116,6 +119,8 @@ function judgeDirector503(read, state, at) {
   if (recent.length < consecutiveMinutes) {
     return unverifiable(`director requests are published only through ${read.publishedThrough}`)
   }
+  const unmetered = recent.filter((minute) => read.unmetered.includes(minute))
+  if (unmetered.length > 0) return unverifiable(`no director runtime metrics for ${unmetered.join(', ')}`)
   const counts = recent.map((minute) => read.perMinute[minute] ?? 0)
   const detail = { backgroundPerMinute: perMinute, above, recent: Object.fromEntries(recent.map((m, i) => [m, counts[i]])) }
   if (counts.every((count) => count > above)) {
@@ -183,7 +188,8 @@ function judgeLedgerDrift(cell, ledger, aboveSince, at) {
 
 /**
  * One sample. `sample.cell` is the cell's runtime-status, `director503` the complete minutes of
- * director 503s with the request series' publishing front (`publishedThrough`), `ledger` the placing directors' newest ledger summaries, `seatBehindRow` this
+ * non-drain director 503s with the request series' publishing front (`publishedThrough`) and the
+ * minutes no runtime metrics cover (`unmetered`), `ledger` the placing directors' newest ledger summaries, `seatBehindRow` this
  * cell's reconcile reports in the lookback. Each is `{ ok: false, error }` when it could not be read.
  */
 export function evaluateWatchSample(state, sample, { unverifiableLimit }) {
