@@ -60,6 +60,7 @@ import { AGENT_SESSION_PERMISSION_MODES_RUNTIME_CAPABILITY } from './agent-sessi
 import { ORCAD_RUNTIME_CAPABILITIES } from './orcad-runtime-capabilities'
 import { DEVICE_KEY_RUNTIME_CAPABILITIES } from './device-key-capability'
 import { TERMINAL_QUICK_COMMAND_RUNTIME_CAPABILITIES } from './terminal-quick-command-capabilities'
+import { FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY } from './file-write-disk-precondition'
 // Why a star: every resume capability is part of the runtime contract this module re-exports.
 export * from './agent-session-resume-runtime-capabilities'
 import { AGENT_SESSION_BACKGROUND_TASK_CHILD_VIEWS_CAPABILITY } from './agent-session-background-task-child-views-capability'
@@ -191,6 +192,7 @@ export const RUNTIME_CAPABILITIES = [
   ANTIGRAVITY_CONFIGURED_MODEL_RUNTIME_CAPABILITY,
   'files.pathsExist',
   'files.resolve-terminal-path.cross-workspace.v1',
+  FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY,
   'runtime.status.compat.v1',
   'runtime.environments.v1',
   REMOTE_RUNTIME_SHARED_CONTROL_CAPABILITY,

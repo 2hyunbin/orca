@@ -345,7 +345,7 @@ describe('moving onto a server another desktop already added the same project to
     })
     await expect(convert()).rejects.toThrow('socket closed')
     otherDesktopAddsSameCheckout()
-    store.updateRepo('desktop-only', { displayName: 'Renamed' })
+    store.updateRepo(store.getRepo('desktop-only')!, { displayName: 'Renamed' })
     await expect(convert()).rejects.toThrow('orcad_migration_source_changed')
     expect(listOrcadMigrationSourceCutovers(userDataPath)[0]?.linkedRepositoryIds).toBeUndefined()
   })
