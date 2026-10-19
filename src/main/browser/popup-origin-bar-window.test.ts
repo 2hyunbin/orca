@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 type Handler = (...args: unknown[]) => void
 
 type FakeWebContents = {
+  mainFrame: { url: string }
   on: ReturnType<typeof vi.fn>
   once: ReturnType<typeof vi.fn>
   off: ReturnType<typeof vi.fn>
@@ -21,7 +22,9 @@ const { fakeElectron } = vi.hoisted(() => {
     const add = (event: string, handler: Handler): void => {
       handlers.set(event, [...(handlers.get(event) ?? []), handler])
     }
+    const mainFrame = { url: '' }
     return {
+      mainFrame,
       on: vi.fn(add),
       once: vi.fn(add),
       off: vi.fn((event: string, handler: Handler) => {
@@ -38,6 +41,9 @@ const { fakeElectron } = vi.hoisted(() => {
       // 'destroyed' handler, which is what the double-close guard relies on.
       isDestroyed: vi.fn(() => destroyed),
       emit: (event: string, ...args: unknown[]) => {
+        if (event === 'did-navigate' || (event === 'did-navigate-in-page' && args[2])) {
+          mainFrame.url = String(args[1])
+        }
         if (event === 'destroyed') {
           destroyed = true
         }
@@ -304,20 +310,22 @@ describe('openPopupWithOriginBar', () => {
     })
   })
 
-  it('renders only the origin in the bar, never path or query', () => {
+  it('renders only the committed origin in the bar, never path or query', () => {
+    const adopted = createFakeWebContents()
+    adopted.mainFrame.url = 'https://accounts.example.com/oauth?code=SECRET'
     openPopupWithOriginBar(
-      { webContents: createFakeWebContents() as never },
+      { webContents: adopted as never },
       'https://accounts.example.com/oauth?code=SECRET'
     )
     const { bar } = lastViews()
     bar.webContents.emit('did-finish-load')
 
-    expect(bar.webContents.executeJavaScript).toHaveBeenCalledTimes(1)
+    expect(bar.webContents.executeJavaScript).toHaveBeenCalledTimes(2)
     const script = bar.webContents.executeJavaScript.mock.calls[0][0] as string
     expect(script).toContain('"https://accounts.example.com"')
     expect(script).not.toContain('SECRET')
     expect(script).not.toContain('/oauth')
-    expect(lastWindow().options.title).toBe('https://accounts.example.com')
+    expect(lastWindow().options.title).toBe('about:blank')
   })
 
   it('updates the origin bar and title when the popup navigates', () => {
@@ -342,8 +350,10 @@ describe('openPopupWithOriginBar', () => {
       { webContents: adopted as never },
       'https://accounts.example.com/oauth?code=SECRET'
     )
-    // Until the page supplies a title, the window title is the origin.
-    expect(lastWindow().options.title).toBe('https://accounts.example.com')
+    expect(lastWindow().options.title).toBe('about:blank')
+    adopted.emit('page-title-updated', {}, 'Uncommitted destination')
+    expect(lastWindow().setTitle).toHaveBeenLastCalledWith('about:blank')
+    adopted.emit('did-navigate', {}, 'https://accounts.example.com/oauth')
 
     adopted.emit('page-title-updated', {}, 'Sign in to Example')
     expect(lastWindow().setTitle).toHaveBeenLastCalledWith('Sign in to Example')
@@ -351,6 +361,53 @@ describe('openPopupWithOriginBar', () => {
     // A stale title must not survive a cross-origin navigation.
     adopted.emit('did-navigate', {}, 'https://evil.example.net/')
     expect(lastWindow().setTitle).toHaveBeenLastCalledWith('https://evil.example.net')
+  })
+
+  it('keeps opener-written blank content neutral across failed navigation and delayed bar loading', () => {
+    const adopted = createFakeWebContents()
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The fixture implements the presenter's WebContents surface.
+    openPopupWithOriginBar({ webContents: adopted as never }, 'https://requested.example/auth')
+    const { bar } = lastViews()
+    adopted.emit('page-title-updated', {}, 'https://requested.example')
+    adopted.emit('did-start-navigation', {}, 'https://requested.example/auth')
+    adopted.emit('will-redirect', {}, 'https://redirect.example/auth')
+    adopted.emit('did-fail-load', {}, -3, 'ERR_ABORTED', 'https://redirect.example/auth', true)
+    adopted.emit('did-finish-load')
+    bar.webContents.emit('did-finish-load')
+    expect(lastWindow().setTitle).toHaveBeenLastCalledWith('about:blank')
+    expect(bar.webContents.executeJavaScript.mock.calls.at(-1)?.[0]).toContain('"about:blank"')
+    expect(bar.webContents.executeJavaScript.mock.calls.flat().join('')).not.toContain(
+      'requested.example'
+    )
+  })
+
+  it('retains the committed origin through pending redirects and renders the latest commit when the bar loads', () => {
+    const adopted = createFakeWebContents()
+    adopted.mainFrame.url = 'https://committed.example/private'
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The fixture implements the presenter's WebContents surface.
+    openPopupWithOriginBar({ webContents: adopted as never }, 'https://requested.example/')
+    const { bar } = lastViews()
+    adopted.emit('will-redirect', {}, 'https://pending.example/')
+    adopted.emit('did-fail-load', {}, -3, 'ERR_ABORTED', 'https://pending.example/', true)
+    adopted.emit('did-finish-load')
+    expect(bar.webContents.executeJavaScript.mock.calls.at(-1)?.[0]).toContain(
+      '"https://committed.example"'
+    )
+    adopted.emit('did-navigate', {}, 'http://next.example/path?secret=synthetic')
+    bar.webContents.emit('did-finish-load')
+    expect(bar.webContents.executeJavaScript.mock.calls.at(-1)?.[0]).toContain(
+      '"http://next.example"'
+    )
+    adopted.mainFrame.url = 'chrome-error://chromewebdata/'
+    adopted.emit(
+      'did-fail-load',
+      {},
+      -105,
+      'ERR_NAME_NOT_RESOLVED',
+      'https://failed.example/',
+      true
+    )
+    expect(bar.webContents.executeJavaScript.mock.calls.at(-1)?.[0]).toContain('"chrome-error:"')
   })
 
   it('closes the window when the popup content is destroyed, without re-closing the contents', () => {
@@ -374,6 +431,8 @@ describe('openPopupWithOriginBar', () => {
     bar.webContents.emit('did-finish-load')
     bar.webContents.executeJavaScript.mockClear()
 
+    adopted.emit('did-navigate', {}, 'https://example.com/login')
+    bar.webContents.executeJavaScript.mockClear()
     adopted.emit('did-finish-load')
 
     expect(bar.webContents.executeJavaScript).toHaveBeenCalledTimes(1)

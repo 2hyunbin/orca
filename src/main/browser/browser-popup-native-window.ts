@@ -1,12 +1,13 @@
 import { app, type BrowserWindow, type WebContents } from 'electron'
 import { isBackgroundLaunch } from '../window/foreground-activation-policy'
-import { safeOrigin } from './browser-manager-types'
 import type { PopupChildWindowOptions, PopupOriginBarWindow } from './popup-origin-bar-window'
 import {
   isNativeBrowserPopupWindow,
   markNativeBrowserPopupWindow
 } from './native-browser-popup-windows'
 import { MIN_POPUP_CONTENT_HEIGHT, MIN_POPUP_CONTENT_WIDTH } from './popup-window-minimum-size'
+import { popupCommittedDocumentUrl } from './popup-committed-document-url'
+import { describePopupOrigin } from './popup-origin-description'
 
 const rejectedNativePopups = new WeakSet<BrowserWindow>()
 // Why: like Electron, an opener's latest script admission answers the next child it shows.
@@ -90,7 +91,7 @@ export function allowNativeBrowserPopup(input: {
     action: 'allow',
     overrideBrowserWindowOptions: {
       ...input.options,
-      title: safeOrigin(input.targetUrl),
+      title: 'about:blank',
       fullscreenable: false,
       show: mayPresent && !input.background,
       // Content-sized like origin-bar popups, so resizeTo cannot hide the origin title.
@@ -159,7 +160,7 @@ function rejectNativeBrowserPopup(window: BrowserWindow): void {
 /** The native frame is the trust surface; public APIs cannot reparent its primary contents. */
 export function prepareNativeBrowserPopup(
   window: BrowserWindow,
-  initialUrl: string,
+  _initialUrl: string,
   prepareContent?: (contents: WebContents) => boolean
 ): PopupOriginBarWindow {
   const contents = window.webContents
@@ -197,7 +198,7 @@ export function prepareNativeBrowserPopup(
   }
   const updateOrigin = (url: string): void => {
     if (!window.isDestroyed()) {
-      window.setTitle(safeOrigin(url))
+      window.setTitle(describePopupOrigin(url).label)
     }
   }
   window.on('page-title-updated', (event) => event.preventDefault())
@@ -208,6 +209,7 @@ export function prepareNativeBrowserPopup(
       updateOrigin(url)
     }
   })
-  updateOrigin(initialUrl)
+  contents.on('did-fail-load', () => updateOrigin(popupCommittedDocumentUrl(contents)))
+  updateOrigin(popupCommittedDocumentUrl(contents))
   return popup
 }

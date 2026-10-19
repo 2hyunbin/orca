@@ -21,6 +21,7 @@ afterEach(() => {
 function nativeWindow() {
   const contents = Object.assign(new EventEmitter(), {
     session: {},
+    mainFrame: { url: '' },
     isDestroyed: vi.fn(() => false),
     close: vi.fn(),
     setWindowOpenHandler: vi.fn()
@@ -72,7 +73,7 @@ describe('native popup admission', () => {
     expect(response.overrideBrowserWindowOptions).toMatchObject({
       show: false,
       fullscreenable: false,
-      title: 'https://example.com',
+      title: 'about:blank',
       useContentSize: true,
       minWidth: 360,
       minHeight: 200,
@@ -340,9 +341,32 @@ describe('native popup admission', () => {
     expect(closed).toHaveBeenCalledOnce()
   })
 
+  it('initializes only from the committed frame and retains it through failed redirects', () => {
+    const { browserWindow, contents, window } = nativeWindow()
+    contents.mainFrame.url = 'https://committed.example/private?secret=synthetic'
+    prepareNativeBrowserPopup(browserWindow, 'https://requested.example/auth')
+    expect(window.setTitle).toHaveBeenLastCalledWith('https://committed.example')
+    contents.emit('did-start-navigation', {}, 'https://requested.example/auth')
+    contents.emit('will-redirect', {}, 'https://redirect.example/auth')
+    contents.emit('did-fail-load', {}, -3, 'ERR_ABORTED', 'https://redirect.example/auth', true)
+    contents.emit('did-finish-load')
+    expect(window.setTitle).toHaveBeenLastCalledWith('https://committed.example')
+    contents.mainFrame.url = 'chrome-error://chromewebdata/'
+    contents.emit(
+      'did-fail-load',
+      {},
+      -105,
+      'ERR_NAME_NOT_RESOLVED',
+      'https://failed.example/',
+      true
+    )
+    expect(window.setTitle).toHaveBeenLastCalledWith('chrome-error:')
+  })
+
   it('protects the title and updates only main-frame origins, including redirects', () => {
     const { browserWindow, contents, window } = nativeWindow()
     prepareNativeBrowserPopup(browserWindow, 'https://example.com/post?code=synthetic', () => true)
+    expect(window.setTitle).toHaveBeenLastCalledWith('about:blank')
     const preventDefault = vi.fn()
     window.emit('page-title-updated', { preventDefault }, 'Spoofed title')
     expect(preventDefault).toHaveBeenCalledOnce()
