@@ -6,6 +6,7 @@ import {
 } from '../../../../shared/execution-host'
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
 import type { Repo } from '../../../../shared/repo-types'
+import { getRuntimeBrowserPageRegistry } from '../../runtime-browser-page-registry'
 import {
   closeStructuredSessionsForWorktree,
   createStructuredSweepProgress,
@@ -105,6 +106,32 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
       return await this.stopProjectPtys(repo, stopOptions)
     } finally {
       await chats
+      if (closeStructuredSessions) {
+        this.releaseProjectHostSessions(repo.id)
+      }
+    }
+  }
+
+  /** Browser pages and launch records of a removed project's workspaces on this host. */
+  private releaseProjectHostSessions(repoId: string): void {
+    // Why: page records carry no host, so a surviving same-id row's pages are indistinguishable.
+    if ((this.store?.getRepos?.() ?? []).some((row) => row.id === repoId)) {
+      return
+    }
+    const worktreeIds = new Set<string>()
+    const pageOwners = [
+      ...getRuntimeBrowserPageRegistry(this)
+        .listPages()
+        .map((page) => page.workspaceId),
+      ...(this.agentBrowserBridge?.tabList?.().tabs ?? []).map((tab) => tab.worktreeId)
+    ]
+    for (const worktreeId of pageOwners) {
+      if (worktreeId && getRepoIdFromWorktreeId(worktreeId) === repoId) {
+        worktreeIds.add(worktreeId)
+      }
+    }
+    for (const worktreeId of worktreeIds) {
+      this.releaseRemovedWorktreeHostSessions(worktreeId, 'project-removal')
     }
   }
 

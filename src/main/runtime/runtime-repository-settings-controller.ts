@@ -7,6 +7,7 @@ import { invalidateAuthorizedRootsCache } from '../ipc/registered-worktree-roots
 import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
 import type { RuntimeStore } from './runtime-store-contract'
 import { assertWslMoveRepoWritable } from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
+import { teardownStops } from './owned-session-teardown-policy'
 
 const PROJECT_TERMINAL_STOP_BUDGET_MS = 10_000
 
@@ -147,7 +148,7 @@ export class RuntimeRepositorySettingsController {
     // Why again: a terminal spawned while the first stop ran is past that sweep's snapshot, and
     // nothing can spawn into the project once it is gone. Chats only now: retiring their tabs is
     // irreversible, and the WSL fence above can still refuse the removal.
-    await stopProjectTerminals(true)
+    await stopProjectTerminals(teardownStops('project-removal', 'structured-chat'))
     this.deps.forgetTerminalTopology(repo.id)
     this.deps.invalidateResolvedWorktrees()
     this.deps.invalidateWorktreeScan(repo.id)
