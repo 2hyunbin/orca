@@ -145,7 +145,7 @@ describe('updateManagedOrcadEnvironment', () => {
     expect(status.deferredUpdate).toBeNull()
   })
 
-  it('counts again just before the stop, so a terminal opened during the upload defers it', async () => {
+  it('hands the deploy a recount that counts again, so a terminal opened during the upload counts', async () => {
     const opened = { ...idle, liveSessions: 1, inProcessSessions: 1 }
     mocks.census.mockResolvedValueOnce(idle).mockResolvedValue(opened)
     mocks.deploy.mockResolvedValueOnce({ outcome: 'installed-and-activated', fullVersion: 'v3' })

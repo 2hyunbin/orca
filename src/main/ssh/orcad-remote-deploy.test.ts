@@ -644,7 +644,8 @@ describe('deployOrcad', () => {
   it.each([
     [LIVE, false, 'orcad_update_terminals_running'],
     [{ ...LIVE, inProcessSessions: 1 }, true, 'orcad_update_ends_in_process_terminals'],
-    [UNREAD, true, 'orcad_update_daemon_protocol_unverifiable']
+    [UNREAD, true, 'orcad_update_daemon_protocol_unverifiable'],
+    [new Error('tunnel closed'), false, 'orcad_update_terminal_census_unavailable']
   ])('defers on a recount of %j just before the stop (force: %s)', async (recount, force, code) => {
     const script: HostScript = {
       activationRecord: ACTIVE_OLD,
@@ -652,7 +653,12 @@ describe('deployOrcad', () => {
       log: []
     }
     scriptHost(script)
-    const recountCensus = vi.fn(async () => recount)
+    const recountCensus = vi.fn(async () => {
+      if (recount instanceof Error) {
+        throw recount
+      }
+      return recount
+    })
     const counted = { censusRecord: JSON.parse(ACTIVE_OLD), recountCensus, force }
     expect(await deployOrcad(options(counted))).toMatchObject({
       outcome: 'installed-not-activated',

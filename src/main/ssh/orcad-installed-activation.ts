@@ -185,7 +185,7 @@ export async function activateInstalledOrcad(
       record,
       candidateVersion: fullVersion,
       census: countedLockedRecord(options, record)
-        ? await options.recountCensus()
+        ? await options.recountCensus().catch(() => UNVERIFIABLE_CENSUS)
         : UNVERIFIABLE_CENSUS,
       candidateDaemonProtocol: CURRENT_ORCAD_DAEMON_PROTOCOL,
       ...(options.force !== undefined ? { force: options.force } : {})
