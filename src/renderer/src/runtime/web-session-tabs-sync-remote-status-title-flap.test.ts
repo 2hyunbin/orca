@@ -546,7 +546,6 @@ describe('remote-paired pane: host snapshot mirror vs client byte-derived status
       )
       replayClientOscWorking(store, T0 + 500)
       const epochBeforeHostStatus = store.getState().agentStatusEpoch
-      const sortEpochBeforeHostStatus = store.getState().sortEpoch
 
       applyHostSnapshot(
         store,
@@ -570,7 +569,6 @@ describe('remote-paired pane: host snapshot mirror vs client byte-derived status
         updatedAt: T0 + 500
       })
       expect(store.getState().agentStatusEpoch).toBe(epochBeforeHostStatus + 1)
-      expect(store.getState().sortEpoch).toBe(sortEpochBeforeHostStatus)
 
       applyHostSnapshot(
         store,
@@ -590,7 +588,6 @@ describe('remote-paired pane: host snapshot mirror vs client byte-derived status
       })
       expect(store.getState().agentStatusByPaneKey[MIRROR_PANE_KEY]?.workingMode).toBeUndefined()
       expect(store.getState().agentStatusEpoch).toBe(epochBeforeHostStatus + 2)
-      expect(store.getState().sortEpoch).toBe(sortEpochBeforeHostStatus)
     })
   })
 })

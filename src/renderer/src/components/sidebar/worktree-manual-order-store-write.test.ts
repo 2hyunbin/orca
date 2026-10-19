@@ -101,7 +101,6 @@ describe('sidebar manual-order drop', () => {
     const worktrees = seedManualOrderedRows(3)
     const ids = worktrees.map((worktree) => worktree.id)
     const reorder = renderReorder(worktrees)
-    const epochBeforeDrop = useAppStore.getState().sortEpoch
 
     await act(async () => {
       reorder.current.reorderWorktrees({
@@ -114,7 +113,6 @@ describe('sidebar manual-order drop', () => {
 
     expect(manualOrderedIds()).toEqual(ids)
     expect(useAppStore.getState().sortBy).toBe('smart')
-    expect(useAppStore.getState().sortEpoch).toBe(epochBeforeDrop)
     expect(updateMeta).not.toHaveBeenCalled()
     expect(toastInfo).not.toHaveBeenCalled()
   })

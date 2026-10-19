@@ -16,8 +16,6 @@ export const worktreeSliceInitialState: Pick<
   | 'deleteStateByWorktreeId'
   | 'baseStatusByWorktreeId'
   | 'remoteBranchConflictByWorktreeId'
-  | 'sortEpoch'
-  | 'sortOrderEpoch'
   | 'everActivatedWorktreeIds'
   | 'lastVisitedAtByWorktreeId'
   | 'hasHydratedWorktreePurge'
@@ -37,8 +35,6 @@ export const worktreeSliceInitialState: Pick<
   deleteStateByWorktreeId: {},
   baseStatusByWorktreeId: {},
   remoteBranchConflictByWorktreeId: {},
-  sortEpoch: 0,
-  sortOrderEpoch: 0,
   everActivatedWorktreeIds: new Set<string>(),
   lastVisitedAtByWorktreeId: {},
   hasHydratedWorktreePurge: false,

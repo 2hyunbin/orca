@@ -52,8 +52,7 @@ describe('fetchWorktrees', () => {
     const refreshed = { ...initial, lineage }
     store.setState({
       settings: { activeRuntimeEnvironmentId: 'env-1' } as never,
-      worktreesByRepo: { repo1: [initial] },
-      sortEpoch: 7
+      worktreesByRepo: { repo1: [initial] }
     } as Partial<AppState>)
     runtimeEnvironmentCall.mockImplementation(({ method }: RuntimeEnvironmentCallRequest) => {
       const result =
@@ -72,7 +71,6 @@ describe('fetchWorktrees', () => {
 
     expect(store.getState().worktreesByRepo.repo1).toEqual([refreshed])
     expect(store.getState().worktreeLineageById).toEqual({ [lineage.worktreeId]: lineage })
-    expect(store.getState().sortEpoch).toBe(8)
   })
 
   it('updates worktree records when only GitLab link metadata changes', async () => {
@@ -86,14 +84,12 @@ describe('fetchWorktrees', () => {
     const refreshed = { ...initial, linkedGitLabIssue: 321 }
     mockApi.worktrees.list.mockResolvedValue([refreshed])
     store.setState({
-      worktreesByRepo: { repo1: [initial] },
-      sortEpoch: 7
+      worktreesByRepo: { repo1: [initial] }
     } as Partial<AppState>)
 
     await store.getState().fetchWorktrees('repo1')
 
     expect(store.getState().worktreesByRepo.repo1).toEqual([refreshed])
-    expect(store.getState().sortEpoch).toBe(8)
   })
 
   it('refreshes remote lineage when the worktree payload is otherwise unchanged', async () => {
@@ -117,8 +113,7 @@ describe('fetchWorktrees', () => {
     store.setState({
       settings: { activeRuntimeEnvironmentId: 'env-1' } as never,
       worktreesByRepo: { repo1: [worktree] },
-      worktreeLineageById: { [worktree.id]: staleLineage },
-      sortEpoch: 7
+      worktreeLineageById: { [worktree.id]: staleLineage }
     } as Partial<AppState>)
     runtimeEnvironmentCall.mockImplementation(({ method }: RuntimeEnvironmentCallRequest) => {
       const result =
@@ -139,7 +134,6 @@ describe('fetchWorktrees', () => {
     expect(store.getState().worktreeLineageById).toEqual({
       [freshLineage.worktreeId]: freshLineage
     })
-    expect(store.getState().sortEpoch).toBe(7)
   })
 
   it('keeps remote lineage map identity when a cloned payload is unchanged', async () => {
@@ -177,8 +171,7 @@ describe('fetchWorktrees', () => {
       worktreeLineageById: { [lineage.worktreeId]: lineage },
       workspaceLineageByChildKey: {
         [workspaceLineage.childWorkspaceKey]: workspaceLineage
-      },
-      sortEpoch: 7
+      }
     } as Partial<AppState>)
     runtimeEnvironmentCall.mockImplementation(({ method }: RuntimeEnvironmentCallRequest) => {
       const result =
@@ -495,8 +488,7 @@ describe('fetchWorktrees', () => {
     store.setState({
       settings: { activeRuntimeEnvironmentId: 'env-1' } as never,
       worktreesByRepo: {},
-      worktreeLineageById: { [staleLineage.worktreeId]: staleLineage },
-      sortEpoch: 7
+      worktreeLineageById: { [staleLineage.worktreeId]: staleLineage }
     } as Partial<AppState>)
     runtimeEnvironmentCall.mockImplementation(({ method }: RuntimeEnvironmentCallRequest) => {
       if (method === 'worktree.lineageList') {
@@ -523,6 +515,5 @@ describe('fetchWorktrees', () => {
     expect(store.getState().worktreeLineageById).toEqual({
       [staleLineage.worktreeId]: staleLineage
     })
-    expect(store.getState().sortEpoch).toBe(8)
   })
 })

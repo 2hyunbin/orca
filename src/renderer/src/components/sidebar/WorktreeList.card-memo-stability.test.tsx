@@ -235,7 +235,6 @@ function setFlatWorktreeState(): void {
     settings: null,
     showSleepingWorkspaces: true,
     sortBy: 'manual',
-    sortEpoch: 0,
     sshConnectedGeneration: 0,
     sshConnectionStates: new Map(),
     sshTargetLabels: new Map(),
@@ -288,7 +287,7 @@ describe('WorktreeCard memo bail-out across epoch bumps', () => {
     document.body.innerHTML = ''
   })
 
-  it('does not re-render cards on an order-preserving sortEpoch bump', async () => {
+  it('does not re-render cards on a store write that changes no row', async () => {
     const container = document.createElement('div')
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -303,8 +302,8 @@ describe('WorktreeCard memo bail-out across epoch bumps', () => {
     await renderList(root)
     expect(cardRenderSpy.mock.calls.length).toBe(countAfterMount)
 
-    // Order-preserving epoch bump: same worktrees, same order, new epoch.
-    mockStore.state = { ...mockStore.state, sortEpoch: 1 }
+    // Same worktrees, same order, new state object.
+    mockStore.state = { ...mockStore.state }
     await renderList(root)
 
     expect(cardRenderSpy.mock.calls.length).toBe(countAfterMount)
@@ -322,7 +321,6 @@ describe('WorktreeCard memo bail-out across epoch bumps', () => {
     const worktrees = (mockStore.state.worktreesByRepo as Record<string, Worktree[]>)['repo-1']!
     mockStore.state = {
       ...mockStore.state,
-      sortEpoch: 2,
       worktreesByRepo: {
         'repo-1': [{ ...worktrees[0]!, displayName: 'alpha renamed' }, worktrees[1]!]
       }

@@ -83,8 +83,7 @@ function raiseWorkspaceUnreadFlag(
     set((s) => ({
       folderWorkspaces: s.folderWorkspaces.map((workspace) =>
         workspace === marked ? { ...workspace, isUnread: true, ...stamp } : workspace
-      ),
-      sortEpoch: s.sortEpoch + 1
+      )
     }))
     // Why the row's own host: the row flipped here is the owner updateFolderWorkspace writes.
     void get().updateFolderWorkspace(
@@ -116,9 +115,7 @@ function raiseWorkspaceUnreadFlag(
       }
     )
     return {
-      ...(nextWorktrees !== s.worktreesByRepo
-        ? { worktreesByRepo: nextWorktrees, sortEpoch: s.sortEpoch + 1 }
-        : {}),
+      ...(nextWorktrees !== s.worktreesByRepo ? { worktreesByRepo: nextWorktrees } : {}),
       ...(nextDetectedWorktrees !== s.detectedWorktreesByRepo
         ? { detectedWorktreesByRepo: nextDetectedWorktrees }
         : {})

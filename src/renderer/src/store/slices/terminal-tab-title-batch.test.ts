@@ -75,7 +75,6 @@ describe('terminal tab title batches', () => {
       unifiedTabsByWorktree: fixture.unifiedTabsByWorktree
     })
     const untouchedTabs = fixture.tabsByWorktree['wt-100']
-    const baselineSortEpoch = store.getState().sortEpoch
     fixture.resetIdReads()
     let publications = 0
     const unsubscribe = store.subscribe(() => {
@@ -93,7 +92,6 @@ describe('terminal tab title batches', () => {
     expect(publications).toBe(1)
     expect(fixture.getIdReads()).toBeLessThanOrEqual(305)
     expect(store.getState().tabsByWorktree['wt-100']).toBe(untouchedTabs)
-    expect(store.getState().sortEpoch).toBe(baselineSortEpoch + 100)
     for (let index = 0; index < 100; index += 1) {
       expect(store.getState().tabsByWorktree[`wt-${index}`]?.[0]?.title).toBe(
         `Remote agent ${index}`
@@ -278,7 +276,6 @@ describe('terminal tab title batches', () => {
     expect(batchStore.getState().unifiedTabsByWorktree).toEqual(
       sequentialStore.getState().unifiedTabsByWorktree
     )
-    expect(batchStore.getState().sortEpoch).toBe(sequentialStore.getState().sortEpoch)
   })
 
   it('coalesces generated titles while preserving first-write and replacement semantics', () => {

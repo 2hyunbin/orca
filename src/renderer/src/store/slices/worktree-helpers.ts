@@ -128,15 +128,6 @@ export type WorktreeSlice = {
   baseStatusByWorktreeId: Record<string, WorktreeBaseStatusEvent>
   remoteBranchConflictByWorktreeId: Record<string, WorktreeRemoteBranchConflictEvent>
   /**
-   * Monotonically increasing counter that signals when the sidebar sort order
-   * should be recomputed.  Only bumped by events that represent meaningful
-   * external changes (worktree add/remove, terminal activity, backend refresh)
-   * — NOT by selection-triggered side-effects like clearing `isUnread`.
-   */
-  sortEpoch: number
-  /** Bumped by sortOrder-only changes, which skip sortEpoch so live Smart can't loop on its own saves. */
-  sortOrderEpoch: number
-  /**
    * Worktree IDs that have been activated at least once during this app
    * session. The first activation of a worktree is special: its
    * TerminalPane mounts for the first time, tabs reattach or fresh-spawn

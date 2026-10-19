@@ -57,7 +57,6 @@ describe('fetchWorktrees', () => {
     mockApi.worktrees.list.mockResolvedValue([surviving])
     store.setState({
       worktreesByRepo: { repo1: [removed, surviving] },
-      sortEpoch: 7,
       rightSidebarTabByWorktree: {
         [removed.id]: 'search' as never,
         [surviving.id]: 'checks'
@@ -75,7 +74,6 @@ describe('fetchWorktrees', () => {
     expect(store.getState().rightSidebarExplorerViewByWorktree).toEqual({
       [surviving.id]: 'files'
     })
-    expect(store.getState().sortEpoch).toBe(8)
   })
 
   it('keeps pr-checks and plugin panel tabs for surviving worktrees after an authoritative purge', async () => {
@@ -94,7 +92,6 @@ describe('fetchWorktrees', () => {
     mockApi.worktrees.list.mockResolvedValue([surviving])
     store.setState({
       worktreesByRepo: { repo1: [removed, surviving] },
-      sortEpoch: 7,
       rightSidebarTabByWorktree: {
         [removed.id]: 'search' as never,
         [surviving.id]: 'pr-checks' as never
@@ -174,7 +171,6 @@ describe('fetchWorktrees', () => {
     store.setState({
       worktreesByRepo: { repo1: [visible] },
       detectedWorktreesByRepo: { repo1: previousDetected },
-      sortEpoch: 7,
       rightSidebarTabByWorktree: {
         [visible.id]: 'checks',
         [hidden.id]: 'search' as never
@@ -199,7 +195,6 @@ describe('fetchWorktrees', () => {
     expect(store.getState().rightSidebarTabByWorktree).toEqual({ [visible.id]: 'checks' })
     expect(store.getState().rightSidebarExplorerViewByWorktree).toEqual({ [visible.id]: 'files' })
     expect(store.getState().tabsByWorktree[hidden.id]).toBeUndefined()
-    expect(store.getState().sortEpoch).toBe(7)
     expect(hasDismissedHugeRepoWarning(beginHugeRepoWarningProbe(hidden))).toBe(false)
   })
 
@@ -378,8 +373,7 @@ describe('fetchWorktrees', () => {
         'tab-surviving': { root: null, activeLeafId: null, expandedLeafId: null }
       },
       activeWorktreeId: deleted.id,
-      activeTabId: 'tab-deleted',
-      sortEpoch: 7
+      activeTabId: 'tab-deleted'
     } as unknown as Partial<AppState>)
 
     await store.getState().fetchWorktrees('repo1')
@@ -393,7 +387,6 @@ describe('fetchWorktrees', () => {
     })
     expect(store.getState().activeWorktreeId).toBeNull()
     expect(store.getState().activeTabId).toBeNull()
-    expect(store.getState().sortEpoch).toBe(8)
   })
 
   it('does not purge remembered state from a non-authoritative partial refresh', async () => {
@@ -417,7 +410,6 @@ describe('fetchWorktrees', () => {
     )
     store.setState({
       worktreesByRepo: { repo1: [missingFromFallback, fallback] },
-      sortEpoch: 7,
       rightSidebarTabByWorktree: {
         [missingFromFallback.id]: 'search' as never,
         [fallback.id]: 'checks'
@@ -437,7 +429,6 @@ describe('fetchWorktrees', () => {
       { id: 'tab-missing', worktreeId: missingFromFallback.id }
     ])
     expect(store.getState().worktreesByRepo.repo1).toEqual([fallback])
-    expect(store.getState().sortEpoch).toBe(8)
     expect(result).toBe(false)
     expect(mockApi.runtime.call).not.toHaveBeenCalled()
   })
@@ -454,7 +445,6 @@ describe('fetchWorktrees', () => {
     )
     store.setState({
       worktreesByRepo: { repo1: [existing] },
-      sortEpoch: 7,
       rightSidebarTabByWorktree: { [existing.id]: 'search' as never }
     } as Partial<AppState>)
 
@@ -462,7 +452,6 @@ describe('fetchWorktrees', () => {
 
     expect(store.getState().worktreesByRepo.repo1).toEqual([existing])
     expect(store.getState().rightSidebarTabByWorktree).toEqual({ [existing.id]: 'search' })
-    expect(store.getState().sortEpoch).toBe(7)
     expect(result).toBe(false)
   })
 
@@ -470,11 +459,10 @@ describe('fetchWorktrees', () => {
     const store = createTestStore()
 
     mockApi.worktrees.list.mockResolvedValue([])
-    store.setState({ worktreesByRepo: {}, sortEpoch: 7 } as Partial<AppState>)
+    store.setState({ worktreesByRepo: {} } as Partial<AppState>)
 
     await store.getState().fetchWorktrees('repo1')
 
     expect(store.getState().worktreesByRepo.repo1).toEqual([])
-    expect(store.getState().sortEpoch).toBe(8)
   })
 })

@@ -18,8 +18,7 @@ function buildState(openFiles: OpenFile[]): AppState {
     openFiles,
     everActivatedWorktreeIds: new Set<string>(),
     lastVisitedAtByWorktreeId: {},
-    deleteStateByWorktreeId: {},
-    sortEpoch: 0
+    deleteStateByWorktreeId: {}
   } as unknown as AppState
 }
 
