@@ -106,6 +106,10 @@ export const ORCAD_MIGRATION_PATH_FIELDS: readonly {
     at: 'dormantState.workspaceSession.clientHostedBrowserCloseIntentsByEnvironment{}[].worktreeId',
     kind: 'worktree-id'
   },
+  {
+    at: 'dormantState.workspaceSession.pairedTerminalTabCloseIntentsByEnvironment{}[].worktreeId',
+    kind: 'worktree-id'
+  },
   { at: 'dormantState.workspaceSession.activeTabTypeByWorktree{key}', kind: 'owner-key' },
   { at: 'dormantState.workspaceSession.browserUrlHistory[].url', kind: 'url' },
   ...docLocationFields('dormantState.workspaceSession.workspaceDocHistory[].docLocation'),

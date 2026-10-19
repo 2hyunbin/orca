@@ -113,6 +113,7 @@ export const WORKSPACE_SESSION_DISPOSITIONS = {
   workspaceDocHistory: moveDisposition(30),
   activeConnectionIdsAtShutdown: notApplicableDisposition(60),
   clientHostedBrowserCloseIntentsByEnvironment: moveDisposition(29),
+  pairedTerminalTabCloseIntentsByEnvironment: moveDisposition(29),
   tabsByWorktree: moveDisposition(22),
   openFilesByWorktree: moveDisposition(26),
   activeFileIdByWorktree: moveDisposition(27),

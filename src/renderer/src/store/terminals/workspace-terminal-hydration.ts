@@ -178,6 +178,10 @@ export function createWorkspaceTerminalHydrationActions(
           // pull merge's session does not, so re-hydrating from it must not clear the mirror.
           closedTerminalTabTombstonesByTabId:
             session.closedTerminalTabTombstonesByTabId ?? s.closedTerminalTabTombstonesByTabId,
+          // Why keep the store's when absent: as above, a pull merge's session carries no intents.
+          pairedTerminalTabCloseIntentsByEnvironment:
+            session.pairedTerminalTabCloseIntentsByEnvironment ??
+            s.pairedTerminalTabCloseIntentsByEnvironment,
           automaticAgentResumeClaimsByTabId: {},
           sleepingAgentSessionsByPaneKey,
           pendingReconnectWorktreeIds,

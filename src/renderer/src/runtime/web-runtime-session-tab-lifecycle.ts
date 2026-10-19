@@ -13,10 +13,11 @@ import {
   recordWebSessionCloseIntent
 } from './web-session-close-intent'
 import {
-  queueWebSessionCloseReplay,
+  holdWebSessionCloseForReplay,
   settleWebSessionCloseReplay,
   type WebSessionCloseReplay
 } from './web-session-close-replay'
+import { appPairedTerminalTabCloseIntentStore } from './paired-terminal-tab-close-intent-store'
 import {
   clearWebSessionFocusIntent,
   clearWebSessionFocusIntentIfMatches,
@@ -108,11 +109,12 @@ function holdUndeliveredUserClose(
   worktreeId: string,
   hostTabIds: readonly string[]
 ): void {
-  for (const hostTabId of hostTabIds) {
-    recordWebSessionCloseIntent(intentOwner, worktreeId, hostTabId, Date.now())
-    makeWebSessionCloseIntentDurable(intentOwner, worktreeId, hostTabId)
-  }
-  queueWebSessionCloseReplay(intentOwner, worktreeId, hostTabIds)
+  holdWebSessionCloseForReplay(
+    appPairedTerminalTabCloseIntentStore,
+    intentOwner,
+    worktreeId,
+    hostTabIds
+  )
   scheduleWebSessionCloseReplayRelist(intentOwner.environmentId, worktreeId)
 }
 
@@ -134,7 +136,7 @@ export async function replayWebSessionTabCloses(
   for (const replay of replays) {
     // Why: the close was the old pairing's; a replacement host must never receive it.
     if (!matchesWebSessionIntentOwner(replay.owner)) {
-      settleWebSessionCloseReplay(replay, true)
+      settleWebSessionCloseReplay(appPairedTerminalTabCloseIntentStore, replay, true)
       continue
     }
     const outcome = await closeWebRuntimeSessionTab({
@@ -146,7 +148,11 @@ export async function replayWebSessionTabCloses(
         ? { expectedPairingRevision: replay.owner.pairingRevision }
         : {})
     })
-    const settled = settleWebSessionCloseReplay(replay, outcome !== 'failed')
+    const settled = settleWebSessionCloseReplay(
+      appPairedTerminalTabCloseIntentStore,
+      replay,
+      outcome !== 'failed'
+    )
     if (settled === 'retry') {
       scheduleWebSessionCloseReplayRelist(environmentId, replay.worktreeId)
       continue

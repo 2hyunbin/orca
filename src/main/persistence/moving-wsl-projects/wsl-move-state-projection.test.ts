@@ -38,14 +38,16 @@ describe('projectWslMoveState', () => {
       .filter(([, row]) => row.disposition === 'move')
       .map(([field]) => field)
       // Focus is re-projected on the host; client-hosted pages and their close intents are
-      // runtime-authored, so a bridge project's partition never holds them.
+      // runtime-authored, and paired-host close intents are owed to a paired host, so a bridge
+      // project's partition never holds them.
       .filter(
         (field) =>
           ![
             'activeWorktreeId',
             'activeWorkspaceKey',
             'clientHostedBrowserCloseIntentsByEnvironment',
-            'clientHostedBrowserPagesByWorktree'
+            'clientHostedBrowserPagesByWorktree',
+            'pairedTerminalTabCloseIntentsByEnvironment'
           ].includes(field)
       )
     const empty = movedFields.filter((field) => {
