@@ -68,6 +68,7 @@ export function rejectClaudeDispatchWaiters(
       onSettledLate?.({
         clientMessageId: waiter.clientMessageId,
         state: 'rejected',
+        unrun: true,
         ...claudeDispatchRejection(fact)
       })
     }

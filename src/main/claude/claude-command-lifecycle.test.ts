@@ -253,6 +253,7 @@ async function replayCapture(
 
 const WITHDRAWN = {
   state: 'rejected',
+  unrun: true,
   reason: DISPATCH_REJECTED_CANCELLED,
   rejection: { kind: 'cancelled' }
 }
@@ -516,7 +517,7 @@ describe('a send the CLI ended before starting it', () => {
     })
 
     expect(replay.settlementsFor('client-B')).toEqual([
-      { state: 'rejected', ...claudeDispatchRejection(agentSessionFailureFact(kind)) }
+      { state: 'rejected', unrun: true, ...claudeDispatchRejection(agentSessionFailureFact(kind)) }
     ])
     expect(replay.settlementsFor('client-A')).toEqual([acceptedAs(replay.liveUuid('client-A'))])
   })
