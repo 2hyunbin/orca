@@ -10,6 +10,7 @@ import {
   setBoundedSessionTabsReceipt,
   trackedSessionTabsWorktreeIdsByEnvironment,
   nextReceivedSessionTabsFrame,
+  replayableSessionTabsSnapshotByWorktree,
   type SnapshotFreshness,
   type SessionTabsListAllResult,
   type TrackedWebSessionTabsWorktree
@@ -117,11 +118,17 @@ export function recordReceivedWebSessionTabsSnapshot(
   // snapshot is unchanged precisely when the host never received the close. Only a frame that
   // states the worktree's contents may prove the host still holds, or no longer holds, the tab.
   if (!isRetraction && hostSnapshotAffirmsWorktreeContents(snapshot)) {
-    replayWebSessionClosesDueForSnapshot(
+    const revealed = replayWebSessionClosesDueForSnapshot(
       environmentId,
       snapshot,
       appPairedTerminalTabCloseIntentStore
     )
+    // Why: the tab was hidden when the current snapshot applied, so an unchanged frame must still
+    // apply or the tab stays hidden until the host publishes a change.
+    const applied = latestSessionTabsSnapshotByWorktree.get(key)
+    if (revealed && applied) {
+      replayableSessionTabsSnapshotByWorktree.set(key, applied)
+    }
   }
   // Neither a retraction nor a "nothing published yet" placeholder takes over publishing this
   // worktree, so neither may be noted as current: doing so retires the generation that is still

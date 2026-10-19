@@ -10,7 +10,10 @@ import {
   type PairedTerminalTabCloseIntent
 } from '../../../shared/paired-terminal-tab-close-intent'
 import type { PairedTerminalTabCloseIntentsByEnvironment } from './paired-terminal-tab-close-intents'
-import { getRuntimeEnvironmentRevision } from './runtime-environment-revision'
+import {
+  getRuntimeEnvironmentRevision,
+  isRuntimeEnvironmentContinuationPending
+} from './runtime-environment-revision'
 import {
   clearWebSessionCloseIntent,
   makeWebSessionCloseIntentDurable,
@@ -90,10 +93,11 @@ function changeHeldIntents(
   environmentId: string,
   change: () => void,
   stillHidden: ReadonlySet<string> = new Set()
-): void {
+): boolean {
   const before = listHeldIntents(store, environmentId)
   change()
   const kept = new Set(listHeldIntents(store, environmentId).map(pairedTerminalTabCloseIntentKey))
+  let revealed = false
   for (const intent of before) {
     const key = pairedTerminalTabCloseIntentKey(intent)
     if (kept.has(key)) {
@@ -102,8 +106,10 @@ function changeHeldIntents(
     attemptsByIntent.delete(attemptKey(environmentId, key))
     if (!stillHidden.has(key)) {
       revealHeldClose(intentOwner(environmentId, intent), intent.worktreeId, intent.hostTabIds)
+      revealed = true
     }
   }
+  return revealed
 }
 
 /** Keeps an unsent user close, hiding its tab; a repeat for the same tab keeps its attempt count. */
@@ -140,6 +146,15 @@ export function takeDueWebSessionCloseReplays(
   worktreeId: string,
   presentHostTabIds: ReadonlySet<string>
 ): WebSessionCloseReplay[] {
+  return collectDueWebSessionCloseReplays(store, environmentId, worktreeId, presentHostTabIds).due
+}
+
+function collectDueWebSessionCloseReplays(
+  store: PairedTerminalTabCloseIntentStore,
+  environmentId: string,
+  worktreeId: string,
+  presentHostTabIds: ReadonlySet<string>
+): { due: WebSessionCloseReplay[]; revealed: boolean } {
   const now = Date.now()
   const currentRevision = getRuntimeEnvironmentRevision(environmentId)
   const dropped: string[] = []
@@ -156,8 +171,15 @@ export function takeDueWebSessionCloseReplays(
     // Why: after a reload a snapshot can land before the environment list publishes revisions.
     // Unknown is not a mismatch: keep hiding the tab (under the key the snapshot apply reads now)
     // and send nothing until the pairing can be checked.
+    // A re-pair still waiting for its host identity is unknown in the same way: it may yet prove to
+    // continue this close's pairing (the catalog then moves it) or to be another machine (dropped).
     const expired = now - intent.closedAt > PAIRED_TERMINAL_TAB_CLOSE_INTENT_MAX_AGE_MS
-    if (!expired && currentRevision === undefined && intent.pairingRevision !== undefined) {
+    if (
+      !expired &&
+      intent.pairingRevision !== undefined &&
+      (currentRevision === undefined ||
+        isRuntimeEnvironmentContinuationPending(environmentId, intent.pairingRevision))
+    ) {
       hideHeldClose({ environmentId }, intent.worktreeId, intent.hostTabIds)
       continue
     }
@@ -180,10 +202,10 @@ export function takeDueWebSessionCloseReplays(
     attemptsByIntent.set(key, attempt)
     due.push({ owner, worktreeId: intent.worktreeId, hostTabIds: intent.hostTabIds, intentKey })
   }
-  if (dropped.length > 0) {
+  const revealed =
+    dropped.length > 0 &&
     changeHeldIntents(store, environmentId, () => store.clear(environmentId, dropped))
-  }
-  return due
+  return { due, revealed }
 }
 
 /** 'gave-up' means the host kept refusing the close; its tab is shown again. */
@@ -274,31 +296,35 @@ export function reconcileWebSessionCloseReplaysWithCatalog(
   }
 }
 
-/** Sends the closes a received host snapshot made due; see `takeDueWebSessionCloseReplays`. */
+/**
+ * Sends the closes a received host snapshot made due; see `takeDueWebSessionCloseReplays`. True when
+ * it un-hid a tab this snapshot lists, which the caller must let the snapshot redraw even unchanged.
+ */
 export function replayWebSessionClosesDueForSnapshot(
   environmentId: string,
   snapshot: RuntimeMobileSessionTabsResult | { worktree: string; removed: true },
   store: PairedTerminalTabCloseIntentStore
-): void {
+): boolean {
   if (!('tabs' in snapshot) || listHeldIntents(store, environmentId).length === 0) {
-    return
+    return false
   }
   const presentHostTabIds = new Set(
     snapshot.tabs.map((tab) => (tab.type === 'terminal' ? tab.parentTabId : tab.id))
   )
-  const due = takeDueWebSessionCloseReplays(
+  const { due, revealed } = collectDueWebSessionCloseReplays(
     store,
     environmentId,
     snapshot.worktree,
     presentHostTabIds
   )
   if (due.length === 0) {
-    return
+    return revealed
   }
   // Lazy: the lifecycle module reaches the store, which loads this module.
   void import('./web-runtime-session-tab-lifecycle').then(({ replayWebSessionTabCloses }) =>
     replayWebSessionTabCloses(environmentId, due)
   )
+  return revealed
 }
 
 export function resetWebSessionCloseReplaysForTests(): void {

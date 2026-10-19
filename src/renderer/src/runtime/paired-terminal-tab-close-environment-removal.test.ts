@@ -41,7 +41,7 @@ function environment(
   }
 }
 
-function managed(id: string, pairingRevision: number, hostKeyFingerprint: string) {
+function managed(id: string, pairingRevision: number, hostKeyFingerprint?: string) {
   return environment(id, {
     pairingRevision,
     hostKeyFingerprint,
@@ -127,6 +127,37 @@ describe('held paired-host closes when a server is removed', () => {
     expect(due.map((replay) => replay.owner)).toEqual([
       { environmentId: 'env-a', pairingRevision: 2 }
     ])
+  })
+
+  it("holds a managed re-pair's closes, unsent, until its host key decides the machine", () => {
+    useAppStore.getState().setRuntimeEnvironments([managed('env-a', 1, 'key-a')])
+    hold('env-a')
+    // The re-pair lands before the catalog carries the host's key.
+    useAppStore.getState().setRuntimeEnvironments([managed('env-a', 2)])
+
+    expect(takeDueWebSessionCloseReplays(STORE, 'env-a', WT, new Set([TAB]))).toEqual([])
+    expect(heldRevisions('env-a')).toEqual([1])
+    expect(hidden('env-a', 2)).toBe(true)
+
+    useAppStore.getState().setRuntimeEnvironments([managed('env-a', 2, 'key-a')])
+
+    expect(heldRevisions('env-a')).toEqual([2])
+    const due = takeDueWebSessionCloseReplays(STORE, 'env-a', WT, new Set([TAB]))
+    expect(due.map((replay) => replay.owner)).toEqual([
+      { environmentId: 'env-a', pairingRevision: 2 }
+    ])
+  })
+
+  it('drops the held closes once the late host key proves another machine', () => {
+    useAppStore.getState().setRuntimeEnvironments([managed('env-a', 1, 'key-a')])
+    hold('env-a')
+    useAppStore.getState().setRuntimeEnvironments([managed('env-a', 2)])
+    expect(takeDueWebSessionCloseReplays(STORE, 'env-a', WT, new Set([TAB]))).toEqual([])
+
+    useAppStore.getState().setRuntimeEnvironments([managed('env-a', 2, 'key-reinstalled')])
+
+    expect(heldRevisions('env-a')).toBeUndefined()
+    expect(takeDueWebSessionCloseReplays(STORE, 'env-a', WT, new Set([TAB]))).toEqual([])
   })
 
   it('drops, at the first catalog, the closes of a server removed while the app was closed', () => {
