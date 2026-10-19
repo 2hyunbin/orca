@@ -217,7 +217,9 @@
         "install": "Install",
         "toggleLabel": "Open {{value0}} as a chat",
         "antigravityDescription": "Antigravity chats run a server Orca downloads to this host, separate from the agy CLI.",
-        "antigravityNotSignedIn": "Not signed in. Chats need an Antigravity sign-in, separate from your agy terminal account."
+        "antigravityNotSignedIn": "Not signed in. Chats need an Antigravity sign-in, separate from your agy terminal account.",
+        "antigravityAccount": "Account",
+        "antigravitySignInNeeded": "Chats need an Antigravity sign-in, separate from your agy terminal account."
       }
     },
     "terminal": {

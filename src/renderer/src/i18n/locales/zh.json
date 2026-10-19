@@ -40,7 +40,9 @@
       "providers": {
         "title": "提供方",
         "antigravityDescription": "Antigravity 聊天运行在 Orca 下载到此主机的服务器上，与 agy CLI 相互独立。",
-        "antigravityNotSignedIn": "未登录。聊天需要单独的 Antigravity 登录，与终端中的 agy 帐户分开。"
+        "antigravityNotSignedIn": "未登录。聊天需要单独的 Antigravity 登录，与终端中的 agy 帐户分开。",
+        "antigravityAccount": "账户",
+        "antigravitySignInNeeded": "聊天需要单独的 Antigravity 登录，与终端中的 agy 帐户分开。"
       }
     },
     "terminal": {
