@@ -38,7 +38,8 @@ export async function retainOrcadMigrationSource(
   await store.runDurableMutation(() => {
     const renamed = renamedDestinationSession(store, cutover)
     if (!renamed) {
-      return { value: undefined, persist: false }
+      // A startup rename may still be only in memory; the retained mark must not outrun it.
+      return { value: undefined, persist: 'if-dirty' }
     }
     writeDestinationSession(store, cutover, renamed.next)
     return {
@@ -67,18 +68,19 @@ export function renameUnretainedOrcadMigrationDrafts(
     'collectOrcadMigrationSourceDrafts' | 'getWorkspaceSession' | 'setWorkspaceSession'
   >
 ): void {
-  for (const cutover of listOrcadMigrationSourceCutovers(userDataPath)) {
-    if (cutover.phase !== 'destination-committed' || cutover.sourceRetainedAt) {
-      continue
-    }
-    try {
+  try {
+    for (const cutover of listOrcadMigrationSourceCutovers(userDataPath)) {
+      if (cutover.phase !== 'destination-committed' || cutover.sourceRetainedAt) {
+        continue
+      }
       const renamed = renamedDestinationSession(store, cutover)
       if (renamed) {
         writeDestinationSession(store, cutover, renamed.next)
       }
-    } catch (error) {
-      console.warn('[ssh] Could not rename a committed migration’s unsaved drafts:', error)
     }
+  } catch (error) {
+    // The connect's retain renames them instead; startup must not fail on an unreadable journal.
+    console.warn('[ssh] Could not rename committed migrations’ unsaved drafts:', error)
   }
 }
 

@@ -191,6 +191,20 @@ describe('renaming unsaved drafts to the server on commit', () => {
     expect(serverFiles()).toEqual([])
   })
 
+  it('makes a startup rename durable before the retained mark, even when retain adds nothing', async () => {
+    saveFiles(SOURCE_HOST, [draftedFile('/srv/app/a.md', 'source A')])
+    writeOrcadMigrationSourceCutover(userDataPath, committed())
+    await restart()
+    renameUnretainedOrcadMigrationDrafts(userDataPath, store)
+    await retainOrcadMigrationSource(userDataPath, 'm-1', store)
+    // A crash now: a second reader sees only what reached disk.
+    const crashed = createSqliteTestStore(Store, { dataFile: join(userDataPath, 'orca-data.json') })
+    expect(
+      crashed.getWorkspaceSession(SERVER_HOST).openFilesByWorktree?.[WORKTREE]?.[0]
+        ?.dirtyDraftContent
+    ).toBe('source A')
+  })
+
   it("leaves another host's file and another project's draft where they are", async () => {
     saveFiles(SOURCE_HOST, [
       { ...draftedFile('/srv/app/remote.md', 'other host'), runtimeEnvironmentId: 'env-9' }
