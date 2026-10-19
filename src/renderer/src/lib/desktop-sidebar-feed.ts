@@ -48,6 +48,9 @@ async function send(request: SidebarInputsFeedRequest): Promise<void> {
     .catch(() => null)
   const reply = response?.ok ? SidebarInputsReadResultSchema.safeParse(response.result) : null
   if (!reply?.success) {
+    if (state.inFlight !== request.id) {
+      return
+    }
     state = sidebarInputsReadFailed(state, request.id)
     retryTimer ??= setTimeout(() => {
       retryTimer = null
@@ -85,9 +88,11 @@ export function onDesktopSidebarFeedInstalled(
 
 /** Reads again now, so the next install reflects every write main has answered so far. */
 export function refreshDesktopSidebarFeed(): number {
-  if (readers > 0) {
-    advance(refreshSidebarInputs(state))
+  if (readers === 0) {
+    // Nothing is read now; the next mount's first read is the earliest that shows the write.
+    return state.lastRequestId + 1
   }
+  advance(refreshSidebarInputs(state))
   return state.lastRequestId
 }
 

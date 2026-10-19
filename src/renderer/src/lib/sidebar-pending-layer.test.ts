@@ -90,7 +90,7 @@ describe('sidebar pending layer', () => {
     const main = domains([rowOf()])
     const write = deferred()
     const running = layer.withPendingSidebarRowWrites(
-      [{ worktreeId: local.id, updates: { manualOrder: 9 }, executionHostId: 'local' }],
+      () => [{ worktreeId: local.id, updates: { manualOrder: 9 }, executionHostId: 'local' }],
       () => write.promise
     )
     const overlaid = () =>
@@ -112,7 +112,9 @@ describe('sidebar pending layer', () => {
     vi.useFakeTimers()
     const layer = await load()
     await layer.withPendingSidebarRowWrites(
-      [{ worktreeId: 'api::/w/x', updates: { manualOrder: 5 }, executionHostId: 'runtime:env-1' }],
+      () => [
+        { worktreeId: 'api::/w/x', updates: { manualOrder: 5 }, executionHostId: 'runtime:env-1' }
+      ],
       async () => {}
     )
     await Promise.resolve()
@@ -133,7 +135,9 @@ describe('sidebar pending layer', () => {
     expect(layer.readSidebarPendingLayer().writes).toEqual([])
 
     await layer.withPendingSidebarRowWrites(
-      [{ worktreeId: 'api::/w/x', updates: { manualOrder: 7 }, executionHostId: 'runtime:env-1' }],
+      () => [
+        { worktreeId: 'api::/w/x', updates: { manualOrder: 7 }, executionHostId: 'runtime:env-1' }
+      ],
       async () => {}
     )
     await Promise.resolve()
@@ -162,10 +166,27 @@ describe('sidebar pending layer', () => {
     expect(layer.readSidebarPendingLayer().created).toEqual([])
   })
 
+  it('lets a newer write to the same paired server row win over an older one', async () => {
+    const layer = await load()
+    const write = (manualOrder: number) =>
+      layer.withPendingSidebarRowWrites(
+        () => [
+          { worktreeId: 'api::/w/x', updates: { manualOrder }, executionHostId: 'runtime:env-1' }
+        ],
+        async () => {}
+      )
+    await write(5)
+    await write(7)
+    await Promise.resolve()
+    // Main shows the newer value: nothing older is left to paint over it.
+    install(domains([], [serverRow(7)]))
+    expect(layer.readSidebarPendingLayer().writes).toEqual([])
+  })
+
   it('leaves a write with no row field to main alone', async () => {
     const layer = await load()
     await layer.withPendingSidebarRowWrites(
-      [{ worktreeId: local.id, updates: { comment: 'note' } }],
+      () => [{ worktreeId: local.id, updates: { comment: 'note' } }],
       async () => {}
     )
     expect(layer.readSidebarPendingLayer()).toEqual({ writes: [], created: [] })

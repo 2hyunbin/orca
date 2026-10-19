@@ -304,7 +304,14 @@ export function createUpdateWorktreeMeta(
     options?.shouldApply
       ? update(worktreeId, updates, options)
       : withPendingSidebarRowWrites(
-          [{ worktreeId, updates, executionHostId: options?.executionHostId }],
+          () => [
+            {
+              worktreeId,
+              updates,
+              executionHostId:
+                options?.executionHostId ?? findKnownWorktreeById(get(), worktreeId)?.hostId
+            }
+          ],
           () => update(worktreeId, updates, options)
         )
 }

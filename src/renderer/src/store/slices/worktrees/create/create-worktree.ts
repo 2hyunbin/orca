@@ -89,17 +89,14 @@ async function runCreateAttempt(
             },
             { timeoutMs: 10 * 60_000 }
           )
-  const outcome = await create(attempt.parentWorkspace).then(
-    (result) => ({ result, droppedParent: false }),
-    async (error: unknown) => {
-      if (!attempt.parentWorkspace || !isRuntimeLineageParentMissingError(error)) {
-        throw error
-      }
-      return { result: await create(undefined), droppedParent: true }
+  try {
+    return { result: await create(attempt.parentWorkspace), droppedParent: false }
+  } catch (error) {
+    if (!attempt.parentWorkspace || !isRuntimeLineageParentMissingError(error)) {
+      throw error
     }
-  )
-  holdCreatedSidebarWorkspace({ worktree: outcome.result.worktree })
-  return outcome
+    return { result: await create(undefined), droppedParent: true }
+  }
 }
 
 /** True when the create landed without the nesting the caller asked for. */
@@ -253,6 +250,10 @@ export function createCreateWorktree(
             warnParentDroppedOnce()
           }
           applyCreatedWorktree(set, repoId, outcome.result, creationHostId)
+          const created = get().getKnownWorktreeById(outcome.result.worktree.id, creationHostId)
+          if (created) {
+            holdCreatedSidebarWorkspace({ worktree: created })
+          }
           const { result } = outcome
           showLocalBaseRefRefreshToast(result.localBaseRefRefresh, result.worktree)
           if (result.baseFallback) {

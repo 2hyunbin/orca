@@ -52,7 +52,8 @@ const NO_FEED: SidebarFeedDomains = {
 // The window renders its own collapse, so planning never re-runs on a toggle.
 const PLANNED_UNCOLLAPSED: ReadonlySet<string> = new Set()
 
-/** Creations still in the window's preflight, or run on a paired server, which main does not list. */
+/** The window's own creations main does not list: preflight, a paired server's, and the window's
+ *  work after main's reply (as the window's own list shows them). */
 function withWindowCreations(
   domains: SidebarFeedDomains,
   pendingCreationKeys: readonly string[]
@@ -209,10 +210,12 @@ export function useMainSidebarListModel(args: SidebarListModelArgs): SidebarList
       [planned.visibleWorktrees, worktreeByIdentity]
     )
   )
-  const visibleFolderWorkspacesForRows = useMemo(
-    () =>
-      planned.visibleFolderWorkspaces.map((folder) => windowFolderRecordOf(folderByKey, folder)),
-    [planned.visibleFolderWorkspaces, folderByKey]
+  const visibleFolderWorkspacesForRows = useReusedArrayIdentity(
+    useMemo(
+      () =>
+        planned.visibleFolderWorkspaces.map((folder) => windowFolderRecordOf(folderByKey, folder)),
+      [planned.visibleFolderWorkspaces, folderByKey]
+    )
   )
 
   const effectiveCollapsedGroups = useEffectiveCollapsedGroups({

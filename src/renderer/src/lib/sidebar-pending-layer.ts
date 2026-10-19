@@ -2,6 +2,7 @@ import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-swit
 import { parseExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
 import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
 import { folderWorkspaceKey } from '../../../shared/workspace-scope'
+import { getFolderWorkspaceWorktreeHostId } from '../../../shared/folder-workspace-worktree'
 import type { Repo } from '../../../shared/repo-types'
 import type { SidebarFeedDomains } from '../../../shared/sidebar-list/sidebar-feed-domains'
 import type { PairedServerWorkspaceRow } from '../../../shared/sidebar-list/paired-server-rows'
@@ -35,8 +36,10 @@ type RowWriteValues = Partial<Pick<WorktreeMeta, RowWriteField>>
 const PENDING_LIMIT_MS = 10_000
 
 type PendingRow = {
+  /** The operation it came from; answering and expiry find it by this, whatever it was trimmed to. */
+  opId: number
   worktreeId: string
-  /** Null: every host's row with this id, as the write itself resolves it. */
+  /** Null: a local row whose metadata names no host, matched on every host. */
   hostId: ExecutionHostId | null
   /** The feed read sent once main answered; null while the operation runs. */
   answeredBy: number | null
@@ -59,6 +62,7 @@ export type SidebarRowWrite = {
 }
 
 let layer: SidebarPendingLayer = { writes: [], created: [] }
+let lastOpId = 0
 const listeners = new Set<() => void>()
 let detachSettlement: (() => void) | null = null
 
@@ -121,30 +125,27 @@ function settle(installed: DesktopSidebarFeed): void {
   }
 }
 
-/** Marks `entries` answered and reads main again; drops whichever main still has not shown later. */
+/** Marks operations answered and reads main again; drops whichever main still has not shown later. */
 function answer<Entry extends PendingRow>(
-  entries: readonly Entry[],
+  opIds: ReadonlySet<number>,
   pick: (pending: SidebarPendingLayer) => readonly Entry[],
   put: (pending: SidebarPendingLayer, next: readonly Entry[]) => SidebarPendingLayer
 ): void {
   const answeredBy = refreshDesktopSidebarFeed()
-  const replaced = new Map(
-    entries.map((entry): [Entry, Entry] => [entry, { ...entry, answeredBy }])
-  )
+  const ours = (entry: Entry): boolean => opIds.has(entry.opId)
   publish(
     put(
       layer,
-      pick(layer).map((entry) => replaced.get(entry) ?? entry)
+      pick(layer).map((entry) => (ours(entry) ? { ...entry, answeredBy } : entry))
     )
   )
   setTimeout(() => {
-    const expired = new Set(replaced.values())
-    if (pick(layer).some((entry) => expired.has(entry))) {
+    if (pick(layer).some(ours)) {
       console.warn('[sidebar] main never showed a pending sidebar change; showing main’s value')
       publish(
         put(
           layer,
-          pick(layer).filter((entry) => !expired.has(entry))
+          pick(layer).filter((entry) => !ours(entry))
         )
       )
     }
@@ -163,11 +164,33 @@ function copyField<Field extends RowWriteField>(
   to[field] = from[field]
 }
 
-function rowWriteValues(updates: Partial<WorktreeMeta>): RowWriteValues | null {
+function pickRowFields(
+  from: RowWriteValues,
+  keep: (field: RowWriteField) => boolean
+): RowWriteValues | null {
   const values: RowWriteValues = {}
-  const fields = ROW_WRITE_FIELDS.filter((field) => field in updates)
-  fields.forEach((field) => copyField(values, updates, field))
+  const fields = ROW_WRITE_FIELDS.filter((field) => field in from && keep(field))
+  fields.forEach((field) => copyField(values, from, field))
   return fields.length > 0 ? values : null
+}
+
+/** Earlier writes give up the fields a newer write to the same row sets, so the newest shows. */
+function supersede(
+  writes: readonly PendingRowWrite[],
+  newer: readonly PendingRowWrite[]
+): PendingRowWrite[] {
+  return writes.flatMap((write) => {
+    const covered = newer.filter(
+      (next) => next.worktreeId === write.worktreeId && next.hostId === write.hostId
+    )
+    if (covered.length === 0) {
+      return [write]
+    }
+    const values = pickRowFields(write.values, (field) =>
+      covered.every((next) => !(field in next.values))
+    )
+    return values ? [{ ...write, values }] : []
+  })
 }
 
 /**
@@ -176,26 +199,30 @@ function rowWriteValues(updates: Partial<WorktreeMeta>): RowWriteValues | null {
  * main took the write or not.
  */
 export function withPendingSidebarRowWrites<T>(
-  writes: readonly SidebarRowWrite[],
+  readWrites: () => readonly SidebarRowWrite[],
   operation: () => Promise<T>
 ): Promise<T> {
   if (!ORCA_SIDEBAR_INPUTS_IS_MAIN) {
     return operation()
   }
-  const added = writes.flatMap((write): PendingRowWrite[] => {
-    const values = rowWriteValues(write.updates)
+  const added = readWrites().flatMap((write): PendingRowWrite[] => {
+    const values = pickRowFields(write.updates, () => true)
     const hostId = parseExecutionHostId(write.executionHostId)?.id ?? null
-    return values ? [{ worktreeId: write.worktreeId, hostId, values, answeredBy: null }] : []
+    return values
+      ? [{ opId: ++lastOpId, worktreeId: write.worktreeId, hostId, values, answeredBy: null }]
+      : []
   })
   if (added.length === 0) {
     return operation()
   }
   startSettling()
-  publish({ ...layer, writes: [...layer.writes, ...added] })
+  publish({ ...layer, writes: [...supersede(layer.writes, added), ...added] })
+  // A write that never answers stays shown, as the store keeps its own optimistic value.
   const running = operation()
+  const opIds = new Set(added.map((write) => write.opId))
   const settleAdded = (): void =>
     answer(
-      added,
+      opIds,
       (pending) => pending.writes,
       (pending, next) => ({ ...pending, writes: next })
     )
@@ -208,23 +235,29 @@ export function holdCreatedSidebarWorkspace(workspace: CreatedWorkspace): void {
   if (!ORCA_SIDEBAR_INPUTS_IS_MAIN) {
     return
   }
-  const [worktreeId, hostId] =
+  const [worktreeId, rawHostId] =
     'worktree' in workspace
       ? [workspace.worktree.id, workspace.worktree.hostId]
       : [
           folderWorkspaceKey(workspace.folderWorkspace.id),
-          workspace.folderWorkspace.executionHostId
+          getFolderWorkspaceWorktreeHostId(workspace.folderWorkspace)
         ]
+  const host = parseExecutionHostId(rawHostId)
+  // A paired server's new row reaches main by the server's change event (pairedServerRows).
+  if (host?.kind === 'runtime') {
+    return
+  }
   const entry = {
+    opId: ++lastOpId,
     worktreeId,
-    hostId: parseExecutionHostId(hostId)?.id ?? null,
+    hostId: host?.id ?? null,
     workspace,
     answeredBy: null
   }
   startSettling()
   publish({ ...layer, created: [...layer.created, entry] })
   answer(
-    [entry],
+    new Set([entry.opId]),
     (pending) => pending.created,
     (pending, next) => ({ ...pending, created: next })
   )
@@ -277,10 +310,12 @@ export function overlaySidebarPendingLayer(
       workspaces.set(identity, patch(row, row.id, rowHostId(row), writes))
     }
   }
-  const pairedServerRows = new Map(domains.pairedServerRows)
-  for (const [key, row] of pairedServerRows) {
+  let pairedServerRows = domains.pairedServerRows
+  for (const [key, row] of domains.pairedServerRows) {
     if (touched.has(row.worktreeId)) {
-      pairedServerRows.set(key, patch(row, row.worktreeId, serverRowHostId(row), writes))
+      const patched = new Map(pairedServerRows)
+      patched.set(key, patch(row, row.worktreeId, serverRowHostId(row), writes))
+      pairedServerRows = patched
     }
   }
   return { ...domains, workspaces, pairedServerRows }

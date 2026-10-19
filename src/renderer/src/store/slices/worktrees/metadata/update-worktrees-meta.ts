@@ -4,6 +4,7 @@ import type { WorktreeSliceGet, WorktreeSliceSet } from '../listing/worktree-sli
 import { applyWorktreeUpdates, getRepoIdFromWorktreeId } from '../../worktree-helpers'
 import {
   applyDetectedWorktreeUpdates,
+  findKnownWorktreeById,
   getFolderWorkspaceMetaUpdates
 } from '../listing/detected-worktree-meta'
 import { persistWorktreeMeta } from './worktree-meta-persist'
@@ -126,5 +127,14 @@ export function createUpdateWorktreesMeta(
       })
     ])
   }
-  return (updates) => withPendingSidebarRowWrites(updates, () => update(updates))
+  return (updates) =>
+    withPendingSidebarRowWrites(
+      () =>
+        updates.map((entry) => ({
+          ...entry,
+          executionHostId:
+            entry.executionHostId ?? findKnownWorktreeById(get(), entry.worktreeId)?.hostId
+        })),
+      () => update(updates)
+    )
 }
