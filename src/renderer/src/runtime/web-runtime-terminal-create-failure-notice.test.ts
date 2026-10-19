@@ -125,6 +125,20 @@ describe('a terminal the host fails to create', () => {
     )
   })
 
+  it('treats a browser client request timeout as unconfirmed, not refused', async () => {
+    stubRuntimeEnvironmentBridge({
+      call: vi.fn().mockRejectedValue(new Error('Request timed out: session.tabs.createTerminal'))
+    })
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+    await createWebRuntimeSessionTerminal({ worktreeId: WORKTREE_ID, activate: true })
+
+    expect(mocks.toastError).toHaveBeenCalledExactlyOnceWith(
+      'Orca lost contact with the host before it confirmed the new terminal.',
+      expect.anything()
+    )
+  })
+
   it('stays quiet for a caller that reports the failure itself', async () => {
     stubRuntimeEnvironmentBridge({
       call: vi.fn().mockResolvedValue({
