@@ -26,7 +26,13 @@ function renderedOrder(page: Page): Promise<string[]> {
 }
 
 /** `sinceInput`: ms since the first pointerup, click or drop after the log started. */
-type Frame = { ids: string[]; shows: boolean; sinceInput: number | null }
+/** `source`: a painted frame, a DOM change between frames, or the final read at stop. */
+type Frame = {
+  ids: string[]
+  shows: boolean
+  sinceInput: number | null
+  source: 'raf' | 'mutation' | 'stop'
+}
 
 type FrameLog = { stop: () => Promise<{ frames: Frame[]; inputs: string[] }> }
 
@@ -50,33 +56,42 @@ async function startFrameLog(page: Page, text = ''): Promise<FrameLog> {
       for (const type of events) {
         window.addEventListener(type, onInput, true)
       }
-      const record = (): void => {
+      const record = (source: Frame['source']): void => {
         const sidebar = document.querySelector('[data-worktree-sidebar]')
         frames.push({
           ids: [...document.querySelectorAll<HTMLElement>(selector)]
             .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)
             .map((row) => row.dataset.worktreeId ?? ''),
           shows: wanted !== '' && (sidebar?.textContent ?? '').includes(wanted),
-          sinceInput: inputAt === null ? null : performance.now() - inputAt
+          sinceInput: inputAt === null ? null : performance.now() - inputAt,
+          source
         })
       }
       const sample = (): void => {
         if (!running) {
           return
         }
-        record()
+        record('raf')
         requestAnimationFrame(sample)
       }
       requestAnimationFrame(sample)
-      const observer = new MutationObserver(record)
-      observer.observe(document.body, { subtree: true, childList: true, attributes: true })
+      const observer = new MutationObserver(() => record('mutation'))
+      const sidebar = document.querySelector('[data-worktree-sidebar]')
+      if (sidebar) {
+        observer.observe(sidebar, {
+          subtree: true,
+          childList: true,
+          attributes: true,
+          characterData: true
+        })
+      }
       return () => {
         running = false
         observer.disconnect()
         for (const type of events) {
           window.removeEventListener(type, onInput, true)
         }
-        record()
+        record('stop')
         return { frames, inputs }
       }
     },
@@ -185,7 +200,7 @@ test('the sidebar lists main’s inputs and keeps drag, create, open and collaps
     // The first frame painted after the click already has no rows.
     expect(
       collapseFrames
-        .find(({ sinceInput }) => sinceInput !== null)
+        .find(({ sinceInput, source }) => sinceInput !== null && source === 'raf')
         ?.ids.some((id) => created.includes(id))
     ).toBe(false)
     await header.first().click()
@@ -213,7 +228,10 @@ test('the sidebar lists main’s inputs and keeps drag, create, open and collaps
     created.push(newId)
     await expect.poll(async () => (await renderedOrder(orcaPage)).includes(newId)).toBe(true)
     await orcaPage.waitForTimeout(300)
-    const { frames: createFrames } = await createLog.stop()
+    // Painted frames only: two commits between paints are one frame to the user.
+    const createFrames = (await createLog.stop()).frames.filter(
+      ({ source }) => source !== 'mutation'
+    )
     const pendingShown = createFrames.findIndex(({ shows }) => shows)
     expect(pendingShown).toBeGreaterThanOrEqual(0)
     const handover = createFrames.slice(pendingShown)
