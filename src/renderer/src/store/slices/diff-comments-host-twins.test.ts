@@ -262,4 +262,26 @@ describe('diff comments on twin worktrees', () => {
       'fresh'
     ])
   })
+
+  it('keeps saves in order when a listing stamps the row mid-burst', async () => {
+    const store = createTwinStore(null)
+    store.setState({ worktreesByRepo: { [REPO]: [worktree(undefined)] } })
+    let releaseFirst = () => {}
+    updateMeta.mockImplementationOnce(
+      () => new Promise((resolve) => (releaseFirst = () => resolve({})))
+    )
+
+    const first = addNote(store)
+    const [row] = store.getState().worktreesByRepo[REPO]
+    store.setState({ worktreesByRepo: { [REPO]: [{ ...row, hostId: 'local' }] } })
+    const second = addNote(store)
+    await Promise.resolve()
+
+    // The second save waits for the first, so the newer list is written last.
+    expect(updateMeta).toHaveBeenCalledTimes(1)
+    releaseFirst()
+    await Promise.all([first, second])
+    expect(updateMeta).toHaveBeenCalledTimes(2)
+    expect(updateMeta.mock.calls[1][0].updates.diffComments).toHaveLength(2)
+  })
 })
