@@ -27,6 +27,7 @@ import {
   listedAppPtyIds,
   listedLeasesByRelayId
 } from './legacy-relay-bridge-leases'
+import { PtyExitProof, type PtyRetirementEvidence } from '../../pty-exit-proof'
 
 /** How long a connect waits for the first look at its relays before publishing the host. */
 const START_BUDGET_MS = 20_000
@@ -38,7 +39,7 @@ type ReportPhase = EventProps<'ssh_host_server_legacy_relay_bridge'>['phase']
 export type LegacyRelayBridgeHost = {
   leases: (targetId: string) => SshRemotePtyLease[]
   /** The relay proved the exit; any stop still recorded for it was delivered. */
-  retireLease: (targetId: string, relayPtyId: string) => void
+  retireLease: (targetId: string, relayPtyId: string, evidence: PtyRetirementEvidence) => void
   /** Persists a closed tab's stop on its lease, so a restart still sends it. */
   recordStop: (targetId: string, relayPtyId: string, pendingKill: SshPendingPtyKill) => void
   connection: (targetId: string) => SshConnection | null
@@ -117,7 +118,8 @@ function bridgeFor(targetId: string): LegacyRelayTargetBridge | null {
   const bridge: LegacyRelayTargetBridge = new LegacyRelayTargetBridge({
     targetId,
     leases: () => installed.leases(targetId),
-    retireLease: (relayPtyId) => installed.retireLease(targetId, relayPtyId),
+    retireLease: (relayPtyId, proof) =>
+      installed.retireLease(targetId, relayPtyId, PtyExitProof.from(proof)),
     listEndpoints: async (signal) => {
       const conn = installed.connection(targetId)
       return conn ? listLegacyRelayEndpoints(conn, targetId, signal) : { kind: 'unverifiable' }

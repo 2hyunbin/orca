@@ -1,0 +1,7 @@
+# PTY retirements without exit proof (PtyRetirementWithoutProof.because) per file.
+# This is a RATCHET: counts may only go DOWN. Retire on a PtyExitProof, or record the stop
+# durably first. Prune after a fix: pnpm check:unproven-pty-retirement-ratchet --prune
+
+1 src/main/ipc/pty/ipc/renderer-kill.ts # SSH provider unregistered: R4-4 tab-close replay
+3 src/main/ipc/pty/runtime/kill.ts # 2x SSH provider unregistered (R4-4); unconfirmed follow-up stop of a rejected spawn
+1 src/main/ssh/legacy-relay/legacy-relay-pane-stops.ts # COMPAT(legacy-relay-bridge): deleted with the folder
