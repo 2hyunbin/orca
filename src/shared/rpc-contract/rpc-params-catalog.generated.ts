@@ -197,7 +197,8 @@ import {
   FileRename,
   FileWrite,
   FileWriteBase64,
-  FileWriteBase64Chunk
+  FileWriteBase64Chunk,
+  FileWriteIfUnchanged
 } from './files-mutation-params'
 import {
   DocPreviewFileRead,
@@ -909,6 +910,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'files.write': FileWrite,
   'files.writeBase64': FileWriteBase64,
   'files.writeBase64Chunk': FileWriteBase64Chunk,
+  'files.writeIfUnchanged': FileWriteIfUnchanged,
   'files.writeTerminalArtifact': TerminalArtifactFileWrite,
   'folderWorkspace.create': FolderWorkspaceCreate,
   'folderWorkspace.delete': FolderWorkspaceSelector,
