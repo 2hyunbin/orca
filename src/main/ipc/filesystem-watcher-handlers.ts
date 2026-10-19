@@ -16,6 +16,7 @@ import {
   scheduleRemoteWatcherRetry
 } from './filesystem-watcher-remote-controller'
 import { rememberDesiredRemoteWatcher } from './filesystem-watcher-remote-desired'
+import { forgetCancelledRemoteInstallWaiter } from './filesystem-watcher-remote-install'
 import {
   subscribeLocalWatcher,
   unsubscribeLocalWatcher
@@ -80,6 +81,7 @@ export function registerFilesystemWatcherHandlers(): void {
         // Why: the caller stopped watching on purpose — drop the intent or a later provider
         // registration would resurrect a watch nobody asked for.
         forgetDesiredRemoteWatcher(key, _event.sender.id)
+        forgetCancelledRemoteInstallWaiter(key, _event.sender.id)
         const suspended = watcherLifecycleState.suspendedRemoteWatcherListeners.get(key)
         suspended?.listeners.delete(_event.sender.id)
         if (suspended?.listeners.size === 0) {
