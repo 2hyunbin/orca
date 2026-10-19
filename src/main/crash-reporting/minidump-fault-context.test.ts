@@ -3,6 +3,9 @@ import { minidumpSignatureDetails, parseMinidumpCrashSignature } from './minidum
 
 const STREAM_TYPE_MODULE_LIST = 4
 const STREAM_TYPE_MEMORY_LIST = 5
+const STREAM_TYPE_SYSTEM_INFO = 7
+const VER_PLATFORM_WIN32_NT = 2
+const CRASHPAD_PLATFORM_MACOS = 0x8101
 const STREAM_TYPE_EXCEPTION = 6
 const CONTEXT_SIZE = 0x4d0
 // Bytes Electron 43.7.8 x64 ships at electron.exe+0x23d3f88: movb %dil, 0x88(%r12) twice.
@@ -16,11 +19,16 @@ type FaultDump = {
   contextFlags?: number
   memory?: { start: bigint; bytes: Buffer }[]
   modules?: { base: bigint; size: number; name: string }[]
+  platformId?: number
 }
 
 /** Exception stream, x64 CONTEXT, MemoryList and ModuleList laid out as Crashpad writes them. */
 function buildFaultDump(options: FaultDump): Buffer {
-  const streamCount = 1 + (options.memory ? 1 : 0) + (options.modules ? 1 : 0)
+  const streamCount =
+    1 +
+    (options.memory ? 1 : 0) +
+    (options.modules ? 1 : 0) +
+    (options.platformId === undefined ? 0 : 1)
   let cursor = 32 + streamCount * 12
   const regions: Buffer[] = []
   const append = (buf: Buffer): number => {
@@ -75,6 +83,12 @@ function buildFaultDump(options: FaultDump): Buffer {
     streams.push({ type: STREAM_TYPE_MODULE_LIST, size: list.length, rva: append(list) })
   }
 
+  if (options.platformId !== undefined) {
+    const systemInfo = Buffer.alloc(56)
+    systemInfo.writeUInt32LE(options.platformId, 20)
+    streams.push({ type: STREAM_TYPE_SYSTEM_INFO, size: 56, rva: append(systemInfo) })
+  }
+
   const header = Buffer.alloc(32 + streamCount * 12)
   header.writeUInt32LE(0x504d444d, 0)
   header.writeUInt32LE(streamCount, 8)
@@ -99,6 +113,7 @@ describe('minidump fault context', () => {
       memory: [
         { start: rip - 1n, bytes: Buffer.concat([Buffer.from([0x80]), CODE, Buffer.from([0x4c])]) }
       ],
+      platformId: VER_PLATFORM_WIN32_NT,
       modules: [{ base: rip - 0x23d3f88n, size: 0x9000000, name: 'C:\\Orca\\Orca.exe' }]
     })
 
@@ -142,6 +157,7 @@ describe('minidump fault context', () => {
           { start: 0x100n, bytes: Buffer.from('aa', 'hex') },
           { start: 0x4ffen, bytes: Buffer.from('9090cc0f0b', 'hex') }
         ],
+        platformId: VER_PLATFORM_WIN32_NT,
         modules: [{ base: 0x4000n, size: 0x2000, name: 'Orca.exe' }]
       })
     )
@@ -156,10 +172,24 @@ describe('minidump fault context', () => {
         rsp: 0x10_0000_0000n,
         params: [0n, 0x20n],
         memory: [{ start: 0x9000n, bytes: CODE }],
+        platformId: VER_PLATFORM_WIN32_NT,
         modules: [{ base: 0x4000n, size: 0x2000, name: 'Orca.exe' }]
       })
     )
     expect(signature?.fault).toEqual({ access: 'read', faultAddress: '0x20' })
+  })
+
+  it('captures no code bytes from a macOS dump, where the address is the touched data', async () => {
+    const signature = await parseMinidumpCrashSignature(
+      buildFaultDump({
+        code: 0x1,
+        rip: 0x5000n,
+        memory: [{ start: 0x5000n, bytes: CODE }],
+        platformId: CRASHPAD_PLATFORM_MACOS,
+        modules: [{ base: 0x4000n, size: 0x2000, name: 'Electron Framework' }]
+      })
+    )
+    expect(signature?.fault).toEqual({})
   })
 
   it('degrades to nothing when the AV parameters or memory list are missing', async () => {
