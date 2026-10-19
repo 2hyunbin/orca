@@ -83,7 +83,18 @@ export function registerLegacyRelayBridgeIpc(args: {
     onPanesChanged: (panes) => send(CHANNELS.panes, panes),
     onData: (ptyId, data) => send(CHANNELS.data, { ptyId, data }),
     onReplay: (ptyId, replay) => send(CHANNELS.replay, { ptyId, replay }),
-    onExit: (ptyId, code) => send(CHANNELS.exit, { ptyId, code }),
+    // Every bridge exit is the relay's proof; no provider listener reports these to the runtime.
+    onExit: (ptyId, code) => {
+      send(CHANNELS.exit, { ptyId, code })
+      try {
+        void Promise.resolve(
+          args.runtime?.()?.onPtyExit(ptyId, code, undefined, { hostExitConfirmed: true })
+        ).catch((error: unknown) => console.warn('[legacy-relay] runtime exit failed:', error))
+      } catch (error) {
+        // The bridge still retires the pane and re-lists.
+        console.warn('[legacy-relay] runtime exit failed:', error)
+      }
+    },
     report: (targetId, phase, terminals) => {
       try {
         track('ssh_host_server_legacy_relay_bridge', {
