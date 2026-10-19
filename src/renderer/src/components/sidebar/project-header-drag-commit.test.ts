@@ -17,11 +17,11 @@ function makeRepo(id: string, overrides: Partial<Repo> = {}): Repo {
 }
 
 function makeSession(
-  repoId: string,
+  repo: Repo,
   sidebarRepoHeaderIds: readonly string[]
 ): ProjectHeaderDragSession {
   return {
-    repoId,
+    repo,
     bucketKey: 'ungrouped',
     sidebarRepoHeaderIds,
     pointerId: 1,
@@ -41,7 +41,7 @@ describe('commitProjectHeaderDragDrop', () => {
     const repoById = new Map(repos.map((repo) => [repo.id, repo]))
 
     commitProjectHeaderDragDrop({
-      session: makeSession('c', ['a', 'b', 'c']),
+      session: makeSession(makeRepo('c'), ['a', 'b', 'c']),
       sidebarDropIndex: 0,
       orderedRepoIds: ['a', 'b', 'c'],
       repoById,
@@ -59,7 +59,7 @@ describe('commitProjectHeaderDragDrop', () => {
     const repoById = new Map(repos.map((repo) => [repo.id, repo]))
 
     commitProjectHeaderDragDrop({
-      session: makeSession('same', ['b', 'same', 'c']),
+      session: makeSession(makeRepo('same'), ['b', 'same', 'c']),
       sidebarDropIndex: 0,
       orderedRepoIds: ['b', 'same', 'c', 'same'],
       repoById,
@@ -77,7 +77,7 @@ describe('commitProjectHeaderDragDrop', () => {
     const repoById = new Map(repos.map((repo) => [repo.id, repo]))
 
     commitProjectHeaderDragDrop({
-      session: makeSession('same', ['b', 'same', 'c']),
+      session: makeSession(makeRepo('same'), ['b', 'same', 'c']),
       sidebarDropIndex: 2,
       orderedRepoIds: ['b', 'same', 'c', 'same'],
       repoById,
@@ -89,17 +89,18 @@ describe('commitProjectHeaderDragDrop', () => {
     expect(onCommitRepoOrder).not.toHaveBeenCalled()
   })
 
-  it('commits projectGroupOrder when project groups are present', () => {
+  it('commits projectGroupOrder for the dragged row, not the id-keyed twin on another host', () => {
     const onCommitProjectGroupOrder = vi.fn()
     const repos = [
       makeRepo('a', { projectGroupId: 'group-1' }),
       makeRepo('b', { projectGroupId: 'group-1' }),
-      makeRepo('c', { projectGroupId: 'group-1', connectionId: 'ssh-1' })
+      makeRepo('c', { projectGroupId: 'group-1', executionHostId: 'local' })
     ]
     const repoById = new Map(repos.map((repo) => [repo.id, repo]))
+    const sshTwin = makeRepo('c', { projectGroupId: 'group-1', connectionId: 'ssh-1' })
 
     commitProjectHeaderDragDrop({
-      session: makeSession('c', ['a', 'b', 'c']),
+      session: makeSession(sshTwin, ['a', 'b', 'c']),
       sidebarDropIndex: 0,
       orderedRepoIds: ['a', 'b', 'c'],
       repoById,
@@ -108,6 +109,6 @@ describe('commitProjectHeaderDragDrop', () => {
       onCommitProjectGroupOrder
     })
 
-    expect(onCommitProjectGroupOrder).toHaveBeenCalledWith('c', 'group-1', -1, 'ssh:ssh-1')
+    expect(onCommitProjectGroupOrder).toHaveBeenCalledWith(sshTwin, 'group-1', -1)
   })
 })

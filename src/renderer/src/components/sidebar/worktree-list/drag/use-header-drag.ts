@@ -160,8 +160,8 @@ export function useWorktreeSidebarHeaderDrag(args: {
     [sidebarProjectGroupHeaderIdsByBucket]
   )
   const commitProjectGroupOrder = useCallback(
-    (repoId: string, projectGroupId: string | null, order: number, hostId: ExecutionHostId) => {
-      void moveProjectToGroup(repoId, projectGroupId, order, hostId)
+    (project: Repo, projectGroupId: string | null, order: number) => {
+      void moveProjectToGroup(project, projectGroupId, order)
     },
     [moveProjectToGroup]
   )
