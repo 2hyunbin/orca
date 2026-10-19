@@ -4132,7 +4132,11 @@
             "97957ad3a3": "Connect your AI provider accounts to see their usage in real time and easily switch between accounts.",
             "9a542f46c7": "Hide from status bar",
             "84c3b15dca": "Agent usage limits",
-            "d663430cf9": "Configure usage tracking"
+            "d663430cf9": "Configure usage tracking",
+            "remoteLabel": "No usage on {{host}}",
+            "remoteTitle": "Usage on {{host}}",
+            "remoteBody": "This workspace runs on {{host}}, so the bar shows that host's usage. Sign in to an agent there, or focus a local workspace to see this computer's usage.",
+            "remoteOpenAccounts": "Open {{host}} accounts"
           },
           "SkillUpdateStatusSegment": {
             "runningLabel": "Updating skills",

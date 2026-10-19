@@ -75,6 +75,8 @@ export type SettingsNavigationTarget = {
   pane: SettingsNavTarget
   repoId: string | null
   hostId?: ExecutionHostId
+  /** Server to select in the page-level Host picker; the project-host `hostId` does not move it. */
+  hostScopeEnvironmentId?: string
   sectionId?: string
   intent?: (typeof SETTINGS_NAV_INTENTS)[number]
 }
@@ -90,6 +92,8 @@ export function isSettingsNavigationTarget(value: unknown): value is SettingsNav
     (typeof target.repoId === 'string' || target.repoId === null) &&
     (target.hostId === undefined ||
       (typeof target.hostId === 'string' && parseExecutionHostId(target.hostId) !== null)) &&
+    (target.hostScopeEnvironmentId === undefined ||
+      typeof target.hostScopeEnvironmentId === 'string') &&
     (target.sectionId === undefined || typeof target.sectionId === 'string') &&
     (target.intent === undefined ||
       (typeof target.intent === 'string' && SETTINGS_NAV_INTENT_SET.has(target.intent)))

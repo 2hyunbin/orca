@@ -30,10 +30,16 @@ type OwnedUsage = {
   failure: OwnerUsageFailureReason | null
 }
 
+/** A remote host (SSH-managed server or paired Orca) that owns the shown usage. */
+export type RemoteUsageOwner = {
+  environmentId: string
+  label: string
+}
+
 export type OwnerUsageRateLimits = {
   rateLimits: RateLimitState
-  /** True when a remote host (SSH-managed server or paired Orca) owns the shown usage. */
-  remoteOwned: boolean
+  /** Null when this device owns the shown usage. */
+  remoteOwner: RemoteUsageOwner | null
   /** Forces the owning host to re-read usage; null when this device owns it. */
   refreshRemote: (() => Promise<void>) | null
 }
@@ -146,19 +152,30 @@ export function useOwnerUsageRateLimits(local: RateLimitState): OwnerUsageRateLi
     }
   }, [ownerId, applySnapshot])
 
+  const remoteOwner = useMemo<RemoteUsageOwner | null>(
+    () =>
+      ownerId
+        ? {
+            environmentId: ownerId,
+            label:
+              ownerName?.trim() ||
+              translate('auto.components.status.bar.StatusBar.remoteServerLabel', 'Remote server')
+          }
+        : null,
+    [ownerId, ownerName]
+  )
+
   const ownerState = useMemo<OwnerUsageState>(() => {
-    if (!ownerId) {
+    if (!remoteOwner) {
       return { kind: 'local' }
     }
-    if (!owned || owned.ownerId !== ownerId) {
+    if (!owned || owned.ownerId !== remoteOwner.environmentId) {
       return { kind: 'remote-pending' }
     }
     if (owned.failure) {
       return {
         kind: 'remote-unverifiable',
-        ownerLabel:
-          ownerName?.trim() ||
-          translate('auto.components.status.bar.StatusBar.remoteServerLabel', 'Remote server'),
+        ownerLabel: remoteOwner.label,
         reason: owned.failure,
         lastKnown: owned.rateLimits
       }
@@ -166,7 +183,7 @@ export function useOwnerUsageRateLimits(local: RateLimitState): OwnerUsageRateLi
     return owned.rateLimits
       ? { kind: 'remote', rateLimits: owned.rateLimits }
       : { kind: 'remote-pending' }
-  }, [ownerId, owned, ownerName])
+  }, [remoteOwner, owned])
 
   const rateLimits = useMemo(
     () => resolveOwnerUsageRateLimits(local, ownerState),
@@ -174,7 +191,7 @@ export function useOwnerUsageRateLimits(local: RateLimitState): OwnerUsageRateLi
   )
   return {
     rateLimits,
-    remoteOwned: ownerId !== null,
+    remoteOwner,
     refreshRemote: ownerId ? refreshRemote : null
   }
 }

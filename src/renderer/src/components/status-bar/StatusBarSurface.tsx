@@ -85,6 +85,7 @@ export function StatusBarSurface({
     isRefreshing,
     overflowing,
     petEnabled,
+    remoteOwner,
     rosterProviders,
     segmentsIconOnly,
     segmentsRef,
@@ -132,7 +133,7 @@ export function StatusBarSurface({
         <div ref={usageRef} className="flex shrink-0 items-center gap-3">
           {isEmptyUsageState ? (
             showEmptyUsageCta ? (
-              <StatusBarUsageEmptyCta />
+              <StatusBarUsageEmptyCta remoteOwner={remoteOwner} />
             ) : null
           ) : hasVisibleUsageMeters ? (
             // Consolidated roster pill → opens the all-agents Usage popover (mock parity).
