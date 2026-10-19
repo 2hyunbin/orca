@@ -5,7 +5,7 @@ import {
   getRepoExecutionHostId,
   getSettingsFocusedExecutionHostId,
   getSshTargetIdForExecutionHost,
-  isRuntimeOwnedSshTargetId,
+  isOwnedSshTargetId,
   normalizeHostPart,
   parseExecutionHostId,
   toRuntimeExecutionHostId,
@@ -259,14 +259,14 @@ export function buildExecutionHostRegistry(args: {
       }
       // Why: a VM-backed repo's executionHostId is `ssh:runtime-ssh-<id>`. Runtime-owned
       // targets are hidden, so they must not become visible SSH run-target hosts here.
-      if (parsedHost?.kind === 'ssh' && !isRuntimeOwnedSshTargetId(parsedHost.targetId)) {
+      if (parsedHost?.kind === 'ssh' && !isOwnedSshTargetId(parsedHost.targetId)) {
         sshTargetIds.add(parsedHost.targetId)
       }
     }
   }
   for (const targetId of args.sshTargetLabels?.keys() ?? []) {
     const normalized = normalizeHostPart(targetId)
-    if (normalized && !isRuntimeOwnedSshTargetId(normalized)) {
+    if (normalized && !isOwnedSshTargetId(normalized)) {
       sshTargetIds.add(normalized)
     }
   }
@@ -275,7 +275,7 @@ export function buildExecutionHostRegistry(args: {
       // Why the host, not `connectionId`: a paired-server repo's `connectionId` is the server's
       // own SSH target, which this client cannot dial.
       const targetId = getSshTargetIdForExecutionHost(getRepoExecutionHostId(repo))
-      if (targetId && !isRuntimeOwnedSshTargetId(targetId)) {
+      if (targetId && !isOwnedSshTargetId(targetId)) {
         sshTargetIds.add(targetId)
       }
     }
