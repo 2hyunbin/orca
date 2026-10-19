@@ -88,10 +88,16 @@ export function findDiffCommentRows(
   if (captured) {
     const exact = rows.filter((row) => isTwin(row, captured))
     // Why: a listing may since have stamped an unstamped row with the very host its write names.
+    // With no host named, only a lone copy can be the one that gained a stamp.
+    const sole = rows.length > 0 && rows.every((row) => isTwin(row, twinOf(rows[0])))
     const stamped =
-      exact.length === 0 && !captured.hostId && hint.hostId
-        ? rows.filter((row) => isTwin(row, { ...captured, hostId: hint.hostId }))
-        : []
+      exact.length > 0 || captured.hostId
+        ? []
+        : hint.hostId
+          ? rows.filter((row) => isTwin(row, { ...captured, hostId: hint.hostId }))
+          : sole && twinOf(rows[0]).runtimeOwnerEnvironmentId === captured.runtimeOwnerEnvironmentId
+            ? rows
+            : []
     const worktrees = exact.length > 0 ? exact : stamped
     return worktrees.length > 0 ? { twin: captured, worktrees } : null
   }

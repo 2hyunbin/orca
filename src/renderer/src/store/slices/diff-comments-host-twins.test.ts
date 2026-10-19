@@ -472,4 +472,20 @@ describe('diff comments on twin worktrees', () => {
     expect(updateMeta).not.toHaveBeenCalled()
     expect(rowNotes(store, 'local')).toEqual(['local note'])
   })
+
+  it('still saves a lone unstamped row a listing stamps and rebuilds before the save runs', async () => {
+    const store = createTwinStore(null)
+    store.setState({ worktreesByRepo: { [REPO]: [worktree(undefined)] } })
+
+    const pending = addNote(store)
+    const [row] = store.getState().worktreesByRepo[REPO]
+    store.setState({
+      worktreesByRepo: {
+        [REPO]: [{ ...row, hostId: 'local', diffComments: [...(row.diffComments ?? [])] }]
+      }
+    })
+
+    expect(await pending).not.toBeNull()
+    expect(updateMeta).toHaveBeenCalledTimes(1)
+  })
 })
