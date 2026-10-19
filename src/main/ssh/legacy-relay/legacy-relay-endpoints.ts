@@ -5,7 +5,7 @@
  * Read-only: lists sockets or pipes and reads each daemon's argv; never starts, stops or removes
  * anything. Another desktop's relay hashes another target id, so it is never listed here.
  */
-import type { SshConnection } from '../ssh-connection'
+import type { SshConnection } from '../connection/ssh-connection'
 import { shellEscape } from '../ssh-connection-utils'
 import { RELAY_REMOTE_DIR } from '../remote-exec/remote-frame-protocol'
 import { SHORT_RELAY_SOCKET_DIR_PREFIX } from '../relay-socket-path-limit'

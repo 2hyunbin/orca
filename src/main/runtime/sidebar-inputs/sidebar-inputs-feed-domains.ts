@@ -1,4 +1,7 @@
-import { getRegisteredSshState, listRegisteredSshTargets } from '../../ssh/ssh-target-registry'
+import {
+  getRegisteredSshState,
+  listRegisteredSshTargets
+} from '../../ssh/targets/ssh-target-registry'
 import { getWslHostService } from '../../wsl/wsl-host-service-instance'
 import type { RuntimeClientEvent } from '../../../shared/runtime-client-events'
 import type { DesktopSidebarFacts } from '../../../shared/sidebar-list/desktop-sidebar-facts'

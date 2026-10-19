@@ -37,7 +37,7 @@ import {
   waitForRelayGcClaimRelease
 } from './remote-install-gc-claim'
 import { getRemoteHostPlatform, type RemoteHostPlatform } from '../../ssh/ssh-remote-platform'
-import type { SshConnection } from '../../ssh/ssh-connection'
+import type { SshConnection } from '../../ssh/connection/ssh-connection'
 
 const conn = {} as SshConnection
 const mockExec = vi.mocked(execCommand)

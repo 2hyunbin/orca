@@ -248,7 +248,7 @@ export const PR_E2E_SOURCE_ROUTES = [
         file
       ) ||
       (isProductSource(file) &&
-        /^src\/(?:main\/(?:ssh|managed-server\/[a-z-]+)\/orcad-managed-|main\/ipc\/(?:ssh\/)?ssh-port-forward|main\/(?:ipc\/(?:(?:ssh\/)?ssh-(?:connect-flow|connection-handlers|host-user-disconnect|session-teardown)|(?:runtime-environments\/)?runtime-environment-(?:connectivity-handlers|manual-disconnect))|ssh\/ssh-(?:connection-manager|user-disconnect))\.ts$|renderer\/src\/startup\/(?:ssh-startup-reconnect|startup-ssh-connection-restore)\.ts$|renderer\/src\/runtime\/(?:web-runtime-session|web-session-close-|runtime-terminal-artifact-read\.ts$)|renderer\/src\/components\/terminal-pane\/(?:remote-runtime-|terminal-host-(?:workspace-file|file-link-existence)\.ts$))/.test(
+        /^src\/(?:main\/(?:ssh|managed-server\/[a-z-]+)\/orcad-managed-|main\/ipc\/(?:ssh\/)?ssh-port-forward|main\/(?:ipc\/(?:(?:ssh\/)?ssh-(?:connect-flow|connection-handlers|host-user-disconnect|session-teardown)|(?:runtime-environments\/)?runtime-environment-(?:connectivity-handlers|manual-disconnect))|ssh\/(?:connection\/ssh-connection-manager|ssh-user-disconnect))\.ts$|renderer\/src\/startup\/(?:ssh-startup-reconnect|startup-ssh-connection-restore)\.ts$|renderer\/src\/runtime\/(?:web-runtime-session|web-session-close-|runtime-terminal-artifact-read\.ts$)|renderer\/src\/components\/terminal-pane\/(?:remote-runtime-|terminal-host-(?:workspace-file|file-link-existence)\.ts$))/.test(
           file
         ))
   },

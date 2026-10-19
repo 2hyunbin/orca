@@ -25,7 +25,7 @@ vi.mock('fs', () => ({
 import { buildConnectConfig } from './ssh-connection-utils'
 import { getPassphrasePrivateKeyPath } from './ssh-private-key-authentication'
 import { buildSshArgs } from './system-transport/system-ssh-args'
-import { walkInitialAuthLadder } from './ssh-connection-test-fixtures'
+import { walkInitialAuthLadder } from './connection/ssh-connection-test-fixtures'
 import type { SshTarget } from '../../shared/ssh-types'
 import type { SshResolvedConfig } from './config/ssh-g-config-resolution'
 

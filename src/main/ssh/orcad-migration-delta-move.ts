@@ -43,7 +43,7 @@ import {
   type CensusHostRelayTerminals
 } from './orcad-migration-terminal-gate'
 import { currentOrcadSourceFingerprint } from './orcad-retained-source'
-import type { SshTargetOrcadClaims } from './ssh-target-orcad-claims'
+import type { SshTargetOrcadClaims } from './targets/ssh-target-orcad-claims'
 import { orcadMigrationRefusalReason } from './orcad-migration-refusal-reason'
 import { errorMessage } from '../../shared/error-message'
 

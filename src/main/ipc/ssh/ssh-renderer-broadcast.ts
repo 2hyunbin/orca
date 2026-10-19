@@ -11,10 +11,10 @@ import {
   enrichSshForwardEntries,
   getWorktreeIdsForConnection
 } from '../../ports/ssh-advertised-url-enrichment'
-import { isRuntimeOwnedSshTarget } from '../../ssh/ssh-connection-store'
+import { isRuntimeOwnedSshTarget } from '../../ssh/connection/ssh-connection-store'
 import { getSshProviderAuthority } from '../../ssh/ssh-provider-authority'
 import { clearSshHostServerStatus, getSshHostServerStatus } from '../../ssh/ssh-host-server-status'
-import { getSshTargetRegistryStore } from '../../ssh/ssh-target-registry'
+import { getSshTargetRegistryStore } from '../../ssh/targets/ssh-target-registry'
 import {
   connectionManager,
   currentRuntime,

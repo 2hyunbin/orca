@@ -21,8 +21,8 @@ import {
   retireProvenExitedLeases,
   type CensusHostRelayTerminals
 } from './orcad-migration-terminal-gate'
-import type { SshTargetOrcadClaims } from './ssh-target-orcad-claims'
-import type { OrcadMigrationPreflightStore } from './ssh-target-orcad-preflight'
+import type { SshTargetOrcadClaims } from './targets/ssh-target-orcad-claims'
+import type { OrcadMigrationPreflightStore } from './targets/ssh-target-orcad-preflight'
 
 type SshRelayCutoverDeps = {
   userDataPath: string
