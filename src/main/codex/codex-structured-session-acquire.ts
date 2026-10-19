@@ -25,6 +25,7 @@ import {
 } from './codex-structured-owner-identity'
 import { openCodexThread } from './codex-structured-thread-open'
 import { withCodexVisualsThreadConfig } from './codex-structured-visuals'
+import { NATIVE_CHAT_SCRATCH_DIR_ENV } from '../native-chat/native-chat-visuals-delivery'
 import {
   closeCodexPublishedSession,
   handleCodexSessionExit
@@ -197,10 +198,14 @@ export async function acquireCodexStructuredSession(input: {
     })
     acquisitions.assertCurrent(sessionId, attempt)
     throwIfSignalAborted(acquireInput.signal)
+    const commandEnv = {
+      ...launch.commandEnv,
+      ...(launch.visuals ? { [NATIVE_CHAT_SCRATCH_DIR_ENV]: launch.visuals.folder } : {})
+    }
     // No deadline of its own: resuming a long rollout or starting MCP servers takes what it takes.
     // The host's start limits, a close and a Stop end the wait through the signal.
     const opened = await waitForPromiseWithSignal(
-      openCodexThread(connection, threadLaunch, deps.requestTimeoutMs ?? null),
+      openCodexThread(connection, { ...threadLaunch, commandEnv }, deps.requestTimeoutMs ?? null),
       acquireInput.signal
     )
     acquisitions.assertCurrent(sessionId, attempt)
@@ -236,7 +241,6 @@ export async function acquireCodexStructuredSession(input: {
     // Where this session's child work goes: the host's records, after each frame is journaled.
     const sink = codexChildWorkSink(sessionId, deps, acquireInput.events)
     const session: CodexSession = {
-      events: acquireInput.events,
       account,
       connection,
       ...codexSessionLifecycle(acquireInput.fence, acquired.acquisitionGeneration as string),

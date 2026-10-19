@@ -38,7 +38,6 @@ import type { StructuredAgentSessionStartupAttempts } from './structured-agent-s
 
 /** How the child's root went: the close this host asked for, or a death of its own. */
 export type StructuredAgentSessionChildExit = {
-  heldSends?: ReadonlySet<string>
   expected: boolean
   /** Log text only; the chat's words come from `failure`. */
   reason: string
@@ -132,8 +131,7 @@ export async function endExitedStructuredAgentSessionChildUnderSerialize<
   const { expected } = exit
   const close = child.close
   // Receipt of the exit is the one end time the host may record for a running turn.
-  const observation = child.exitObservation?.()
-  const observedAt = observation?.observedAt ?? exit.observedAt ?? context.now()
+  const observedAt = exit.observedAt ?? context.now()
   // The host's own phase decides, so a provider that omits the flag still gets a start that
   // failed told as one: the row says so.
   const exitedDuringStartup = exit.startupUnproven === true || child.phase === 'starting'
@@ -239,8 +237,7 @@ export async function endExitedStructuredAgentSessionChildUnderSerialize<
             unfinishedWork,
             session.journal,
             observedAt,
-            watched,
-            observation?.heldSends ?? exit.heldSends
+            watched
           )),
       ...(startFailure ? { exitFailure: startFailure } : {}),
       ...(startFailed && child.generation
