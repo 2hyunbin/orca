@@ -34,11 +34,12 @@ import {
   captureOrcadStateSnapshotCommand,
   clearOrcadStateSnapshotMembersCommand,
   compareOrcadStateSnapshotCommand,
-  newestStateMtimeCommand,
   probeOrcadStateSnapshotCommand,
   restoreOrcadStateSnapshotCommand,
   serializedStateMutationCommand
 } from './host-state/orcad-state-snapshot'
+import { newestStateMtimeCommand } from './host-state/orcad-state-newest-mtime'
+import { orcadSnapshotSpaceCommand } from './host-state/orcad-state-snapshot-space'
 import { posixProcessGroupCommand } from './host-state/orcad-state-mutation-owner-record'
 import { orcadMachineClaimCommand } from './host-state/orcad-machine-claim-command'
 import { orcadMachineHomeProbeCommand } from './host-state/orcad-machine-home'
@@ -54,6 +55,7 @@ import {
   readOrcadReadinessCommand
 } from './install/orcad-remote-launch'
 import {
+  createExecProbedStageCommand,
   installNodeRuntimeFromHostArchiveCommand,
   probeRemoteNodeRuntimeCommand,
   promoteRemoteNodeRuntimeCommand,
@@ -62,6 +64,7 @@ import {
   remoteSha256Command
 } from './install/orcad-remote-node-runtime'
 import { remoteOrcadBuildHashCommand } from './install/orcad-remote-build-hash'
+import { remoteFreeSpaceProbeCommand } from './install/remote-install-out-of-space'
 import { sweepStaleRuntimeStagesCommand } from './install/remote-node-runtime-store-gc'
 import { orcadProfilePreflightCommand } from './install/orcad-remote-preflight'
 import {
@@ -95,7 +98,8 @@ const POSIX_HOST_OP_BYTE_BUDGET = 6 * 1024
 // capture/restore/clear ops leave when they move onto the Node host script (R4-10b, decision D-J);
 // install-lock steal and anything else that runs before a verified Node must shrink in shell.
 const OVER_BUDGET_CEILINGS: Readonly<Record<string, number>> = {
-  captureOrcadStateSnapshotCommand: 15_327,
+  // #30618 added old-snapshot pruning and failure cleanup to the capture; R4-10b moves it to Node.
+  captureOrcadStateSnapshotCommand: 17_407,
   restoreOrcadStateSnapshotCommand: 20_805,
   clearOrcadStateSnapshotMembersCommand: 9_175,
   tryStealInstallLockCommand: 9_022,
@@ -166,6 +170,8 @@ const BUILDERS: Readonly<Record<string, (c: HostCase) => string>> = {
   compareOrcadStateSnapshotCommand: ({ host }) =>
     compareOrcadStateSnapshotCommand(host, userDataDir, snapshotDir, baseDir),
   newestStateMtimeCommand: ({ host }) => newestStateMtimeCommand(host, userDataDir, baseDir),
+  orcadSnapshotSpaceCommand: ({ host }) =>
+    orcadSnapshotSpaceCommand(host, userDataDir, snapshotDir, baseDir, ['keep-a', 'keep-b']) ?? '',
   posixProcessGroupCommand: () => posixProcessGroupCommand('"$pid"'),
   orcadMachineClaimCommand: ({ host }) => orcadMachineClaimCommand(host, home, 'k'.repeat(64)),
   orcadMachineHomeProbeCommand: ({ host }) => orcadMachineHomeProbeCommand(host),
@@ -183,6 +189,9 @@ const BUILDERS: Readonly<Record<string, (c: HostCase) => string>> = {
   readOrcadReadinessCommand: ({ host }) => readOrcadReadinessCommand(host, slotDir),
   orcadLivenessProbeCommand: ({ host }) => orcadLivenessProbeCommand(host, slotDir),
   remoteSha256Command: ({ nodePath }) => remoteSha256Command(`'${nodePath}'`),
+  remoteFreeSpaceProbeCommand: ({ nodePath }) => remoteFreeSpaceProbeCommand(nodePath),
+  createExecProbedStageCommand: ({ host, nodePath }) =>
+    createExecProbedStageCommand(host, `${nodePath}.stage-${token}`),
   probeRemoteNodeRuntimeCommand: ({ host, nodePath, target }) =>
     probeRemoteNodeRuntimeCommand(host, nodePath, target),
   remoteNodeRuntimePresentCommand: ({ host, nodePath }) =>
