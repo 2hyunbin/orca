@@ -1,7 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
 import type { DiffComment } from '../../../../shared/diff-comment-types'
-import { findWorktreeById } from './worktree-helpers'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { findFolderWorkspaceOwner } from '@/lib/folder-workspace-runtime-owner'
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
@@ -11,6 +10,7 @@ import {
   mutateDiffComments,
   normalizeDiffComment
 } from './diff-comment-persistence'
+import { findDiffCommentWorktree } from './diff-comment-worktree-owner'
 
 export type DiffCommentsSlice = {
   getDiffComments: (worktreeId: string | null | undefined) => DiffComment[]
@@ -88,7 +88,7 @@ export const createDiffCommentsSlice: StateCreator<AppState, [], [], DiffComment
     const worktree =
       scope?.type === 'folder'
         ? findFolderWorkspaceOwner(get(), scope.folderWorkspaceId)
-        : findWorktreeById(get().worktreesByRepo, worktreeId)
+        : findDiffCommentWorktree(get(), worktreeId, { lenient: true })?.worktree
     if (!worktree?.diffComments) {
       // Why: cast the frozen sentinel to the mutable return type; runtime freeze makes accidental mutation throw.
       return EMPTY_COMMENTS as DiffComment[]

@@ -1,0 +1,141 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { create } from 'zustand'
+import type { AppState } from '../types'
+import type { DiffComment } from '../../../../shared/diff-comment-types'
+import type { Repo } from '../../../../shared/repo-types'
+import type { Worktree } from '../../../../shared/worktree/types'
+import { createDiffCommentsSlice } from './diffComments'
+
+const updateMeta = vi.fn()
+
+globalThis.window = {
+  api: { worktrees: { updateMeta }, ui: { set: vi.fn() } }
+} as never
+
+const REPO = 'repo-1'
+const WT = `${REPO}::/work/feature`
+
+function worktree(hostId: Worktree['hostId'], diffComments: DiffComment[] = []): Worktree {
+  return {
+    id: WT,
+    repoId: REPO,
+    path: '/work/feature',
+    head: 'abc',
+    branch: 'refs/heads/feature',
+    isBare: false,
+    isMainWorktree: false,
+    displayName: 'feature',
+    comment: '',
+    linkedIssue: null,
+    linkedPR: null,
+    linkedLinearIssue: null,
+    isArchived: false,
+    isUnread: false,
+    isPinned: false,
+    sortOrder: 0,
+    lastActivityAt: 0,
+    hostId,
+    diffComments
+  }
+}
+
+function note(id: string, body: string): DiffComment {
+  return { id, worktreeId: WT, filePath: 'a', lineNumber: 1, body, createdAt: 1, side: 'modified' }
+}
+
+const repoBase = {
+  id: REPO,
+  path: '/work/repo',
+  displayName: 'repo',
+  badgeColor: '#000',
+  addedAt: 0
+}
+
+// Same project and worktree id on this computer and on an SSH host.
+function createTwinStore(activeHostId: Worktree['hostId'] | null) {
+  const repos: Repo[] = [
+    { ...repoBase, executionHostId: 'local' },
+    { ...repoBase, connectionId: 'box', executionHostId: 'ssh:box' }
+  ]
+  return create<AppState>()(
+    (...args) =>
+      ({
+        ...createDiffCommentsSlice(...args),
+        settings: null,
+        activeWorktreeId: activeHostId ? WT : null,
+        activeWorkspaceExecutionHostId: activeHostId,
+        folderWorkspaces: [],
+        projectGroups: [],
+        runtimeEnvironments: [],
+        restoredRuntimeHostIdByWorkspaceSessionKey: {},
+        detectedWorktreesByRepo: {},
+        repos,
+        worktreesByRepo: { [REPO]: [worktree('local'), worktree('ssh:box')] }
+      }) as unknown as AppState
+  )
+}
+
+function rowNotes(store: ReturnType<typeof createTwinStore>, hostId: string): string[] {
+  const row = store.getState().worktreesByRepo[REPO].find((w) => w.hostId === hostId)
+  return (row?.diffComments ?? []).map((comment) => comment.body)
+}
+
+function addNote(store: ReturnType<typeof createTwinStore>) {
+  return store.getState().addDiffComment({
+    worktreeId: WT,
+    filePath: 'README.md',
+    lineNumber: 1,
+    body: 'ssh note',
+    side: 'modified'
+  })
+}
+
+beforeEach(() => {
+  updateMeta.mockReset()
+  updateMeta.mockResolvedValue({})
+})
+
+describe('diff comments on twin worktrees', () => {
+  it('saves to the open twin and names its host', async () => {
+    const store = createTwinStore('ssh:box')
+
+    expect(await addNote(store)).not.toBeNull()
+
+    expect(rowNotes(store, 'ssh:box')).toEqual(['ssh note'])
+    expect(rowNotes(store, 'local')).toEqual([])
+    expect(
+      store
+        .getState()
+        .getDiffComments(WT)
+        .map((c) => c.body)
+    ).toEqual(['ssh note'])
+    expect(updateMeta).toHaveBeenCalledWith(
+      expect.objectContaining({ worktreeId: WT, executionHostId: 'ssh:box' })
+    )
+  })
+
+  it('rolls back only the twin it wrote', async () => {
+    const store = createTwinStore('ssh:box')
+    store.setState({
+      worktreesByRepo: {
+        [REPO]: [worktree('local', [note('l1', 'local note')]), worktree('ssh:box')]
+      }
+    })
+    updateMeta.mockRejectedValueOnce(new Error('write failed'))
+
+    expect(await addNote(store)).toBeNull()
+
+    expect(rowNotes(store, 'ssh:box')).toEqual([])
+    expect(rowNotes(store, 'local')).toEqual(['local note'])
+  })
+
+  it('refuses when no host names the twin instead of editing both', async () => {
+    const store = createTwinStore(null)
+
+    expect(await addNote(store)).toBeNull()
+
+    expect(rowNotes(store, 'ssh:box')).toEqual([])
+    expect(rowNotes(store, 'local')).toEqual([])
+    expect(updateMeta).not.toHaveBeenCalled()
+  })
+})
