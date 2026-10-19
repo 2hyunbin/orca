@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState, type ComponentRef, type RefObject } from 'react'
 import { Pressable, Text, useWindowDimensions, type View } from 'react-native'
 import { AnchoredDetailCard, type DetailCardAnchor } from '../components/AnchoredDetailCard'
 import { StatusDot } from '../components/StatusDot'
@@ -30,7 +30,7 @@ export function MobileSessionTitleBlock({
   showConnectionRetry: boolean
   onRetry: () => void
 }): React.JSX.Element {
-  const blockRef = useRef<View>(null)
+  const titleRef = useRef<ComponentRef<typeof Text>>(null)
   const [anchor, setAnchor] = useState<DetailCardAnchor | null>(null)
   const [open, setOpen] = useState(false)
   const { width } = useWindowDimensions()
@@ -48,12 +48,12 @@ export function MobileSessionTitleBlock({
   }, [close, geometry])
   const show = () => {
     const generation = ++measurement.current
-    blockRef.current?.measureInWindow((x) => {
-      barRef.current?.measureInWindow((_barX, y, _width, height) => {
+    titleRef.current?.measureInWindow((x, y, width, height) => {
+      barRef.current?.measureInWindow((_barX, barY, _barWidth, barHeight) => {
         if (generation !== measurement.current) {
           return
         }
-        setAnchor({ x, y, width: 0, height })
+        setAnchor({ trigger: { x, y, width, height }, top: barY + barHeight })
         setOpen(true)
       })
     })
@@ -61,13 +61,12 @@ export function MobileSessionTitleBlock({
   return (
     <>
       <Pressable
-        ref={blockRef}
         style={[styles.sessionTitleBlock, besideTabs && styles.sessionTitleBlockBesideTabs]}
         onPress={open ? close : show}
         accessibilityRole="button"
         accessibilityHint="Shows the full workspace name and where it is"
       >
-        <Text style={styles.sessionTitle} numberOfLines={1}>
+        <Text ref={titleRef} style={styles.sessionTitle} numberOfLines={1}>
           {title}
         </Text>
         <Pressable
@@ -87,6 +86,7 @@ export function MobileSessionTitleBlock({
         <AnchoredDetailCard
           anchor={anchor}
           open={open}
+          onTriggerPress={open ? close : show}
           onDismiss={close}
           onClosed={unmount}
           title={title}

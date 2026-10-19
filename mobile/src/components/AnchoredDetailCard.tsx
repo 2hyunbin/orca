@@ -9,14 +9,15 @@ import {
   StyleSheet,
   Text,
   View,
-  useWindowDimensions
+  useWindowDimensions,
+  type LayoutRectangle
 } from 'react-native'
 import { useReducedMotionEnabled } from '../platform/use-reduced-motion'
 import { useWindowSafeAreaInsets } from '../layout/side-safe-area'
 import { useBackClaim } from '../navigation/use-back-claim'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 
-export type DetailCardAnchor = { x: number; y: number; width: number; height: number }
+export type DetailCardAnchor = { trigger: LayoutRectangle; top: number }
 
 // Desktop's tab hover card: 256pt wide, under its anchor's left edge, 150ms ease-out entrance.
 const CARD_WIDTH = 256
@@ -29,6 +30,7 @@ const SLIDE_FROM = -6
 export function AnchoredDetailCard({
   anchor,
   open,
+  onTriggerPress,
   onDismiss,
   onClosed,
   title,
@@ -37,6 +39,7 @@ export function AnchoredDetailCard({
 }: {
   anchor: DetailCardAnchor
   open: boolean
+  onTriggerPress: () => void
   onDismiss: () => void
   onClosed: () => void
   title: string
@@ -72,10 +75,10 @@ export function AnchoredDetailCard({
     Math.min(CARD_WIDTH, window.width - insets.left - insets.right - EDGE_INSET * 2)
   )
   const left = Math.min(
-    Math.max(anchor.x, insets.left + EDGE_INSET),
+    Math.max(anchor.trigger.x, insets.left + EDGE_INSET),
     window.width - insets.right - EDGE_INSET - width
   )
-  const top = anchor.y + anchor.height
+  const top = anchor.top
   const maxHeight = Math.max(0, window.height - top - insets.bottom - EDGE_INSET)
   return (
     <Modal
@@ -91,6 +94,19 @@ export function AnchoredDetailCard({
         onPress={onDismiss}
         accessibilityRole="button"
         accessibilityLabel="Close details"
+      />
+      {/* The Modal owns title taps until its exit finishes. */}
+      <Pressable
+        accessible={false}
+        tabIndex={-1}
+        onPress={onTriggerPress}
+        style={{
+          position: 'absolute',
+          left: anchor.trigger.x,
+          top: anchor.trigger.y,
+          width: anchor.trigger.width,
+          height: anchor.trigger.height
+        }}
       />
       <Animated.View
         style={[

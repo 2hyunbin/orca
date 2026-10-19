@@ -48,16 +48,21 @@ vi.mock('react-native', () => {
     Animated: {
       View: 'AnimatedView',
       Value,
-      timing: (_value: unknown, config: { toValue: number }) => ({
-        start: (done: (result: { finished: boolean }) => void) => {
-          if (config.toValue === 0) {
-            overlay.finish = () => done({ finished: true })
-          } else {
-            done({ finished: true })
+      timing: (_value: unknown, config: { toValue: number }) => {
+        let stopped = false
+        return {
+          start: (done: (result: { finished: boolean }) => void) => {
+            if (config.toValue === 0) {
+              overlay.finish = () => done({ finished: !stopped })
+            } else {
+              done({ finished: true })
+            }
+          },
+          stop: () => {
+            stopped = true
           }
-        },
-        stop: () => {}
-      })
+        }
+      }
     }
   }
 })
@@ -114,6 +119,13 @@ describe('session title card', () => {
 
     act(() => root.findByProps({ accessibilityLabel: 'Close details' }).props.onPress())
     expect(overlay.back).not.toBeNull()
+    const trigger = root.findByProps({ accessible: false })
+    expect(trigger.props.style).toMatchObject({ left: 80, top: 20, width: 160, height: 45 })
+    act(() => trigger.props.onPress())
+    act(() => overlay.finish?.())
+    expect(root.findAllByType(Modal)).toHaveLength(1)
+    expect(overlay.back).not.toBeNull()
+    act(() => trigger.props.onPress())
     act(() => overlay.finish?.())
     expect(root.findAllByType(Modal)).toHaveLength(0)
     act(() => titleBlock?.props.onPress())
