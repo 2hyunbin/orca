@@ -6,7 +6,6 @@
 // not known here.
 
 import { createHash } from 'node:crypto'
-import { BoundedMap } from '../../shared/bounded-map'
 import type { AgentChildWorkOutcome } from '../../shared/agent-status-child-work'
 import type {
   AgentChildWorkEvidence,
@@ -19,9 +18,6 @@ import { boundSubagentLabel } from '../native-chat/agent-session-journal/journal
 import type { ProviderTimelineJoin } from '../native-chat/agent-session-timeline/provider-timeline-event'
 import type { AcpSubagentUpdate } from './acp-dialects/acp-dialect'
 import type { AcpTimelineEvent } from './acp-timeline-event'
-
-/** Subagents remembered, so a later report about one is still known as a subagent's. */
-const MAX_KNOWN_SUBAGENTS = 2048
 
 type KnownSubagent = {
   /** Where its reply row goes: the turn that spawned it. */
@@ -50,9 +46,8 @@ export function acpSubagentOutcome(
 }
 
 export class AcpSubagents {
-  private readonly known = new BoundedMap<string, KnownSubagent>({
-    maxEntries: MAX_KNOWN_SUBAGENTS
-  })
+  /** Every subagent this provider child reported, so a later report is still known as one's. */
+  private readonly known = new Map<string, KnownSubagent>()
   private readonly pending: AgentChildWorkEvidence[] = []
 
   /** Known children include settled ones, so they cannot become background tasks. */

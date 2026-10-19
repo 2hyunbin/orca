@@ -9,7 +9,8 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../shared/repo-types'
 import { OrcaRuntimeService } from './orca-runtime'
 import { findRepoRowForHostScopedWrite } from '../persistence/tracking-repos/repo-update-operations'
-import type { ExecutionHostId } from '../../shared/execution-host'
+import { getRepoExecutionHostId } from '../../shared/execution-host'
+import type { RepoHostTarget } from '../../shared/repo-host-identity'
 
 export function registerRuntimeRemoveProjectHostScopeTests(): void {
   function makeRepos(): Repo[] {
@@ -55,8 +56,8 @@ export function registerRuntimeRemoveProjectHostScopeTests(): void {
       removeWorktreeMeta: vi.fn(),
       getGitHubCache: () => null,
       // Same row lookup the real store's host-scoped write uses.
-      updateRepo: (id: string, updates: Partial<Repo>, hostId?: ExecutionHostId) => {
-        const row = findRepoRowForHostScopedWrite(repos, id, hostId)
+      updateRepo: (target: RepoHostTarget, updates: Partial<Repo>) => {
+        const row = findRepoRowForHostScopedWrite(repos, target.id, getRepoExecutionHostId(target))
         return row ? Object.assign(row, updates) : null
       },
       removeProjectForHost

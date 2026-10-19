@@ -182,6 +182,8 @@ export function paramsFor(method: string): unknown {
       return { sessionId: SESSION, direction: 'tail' }
     case ITEM_DETAIL_METHOD:
       return { sessionId: SESSION, itemId: 'item-1' }
+    case 'agentSession.sleepWorkspace':
+      return { workspaceId: WORKSPACE }
     case 'agentSession.currentRequests':
       return { sessionId: SESSION, version: '00000000-0000-4000-8000-000000000001' }
     case 'agentSession.acknowledgeAttention':
@@ -194,6 +196,7 @@ export function paramsFor(method: string): unknown {
     case 'agentSession.release':
       return { sessionId: SESSION, holderId: 'surface-1' }
     case 'agentSession.agents':
+    case 'agentSession.subscribeAvailability':
     case 'agentSession.restartResumable':
     case 'agentSession.restartResumableDismiss':
     case 'agentSession.restartResume':

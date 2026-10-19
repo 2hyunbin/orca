@@ -150,7 +150,7 @@ async function commitDelta(
   const context: OrcadMigrationCutoverContext = {
     userDataPath,
     store: plan.source,
-    freshSource: () => orcadDeltaSourceStore(store, target, plan.moved),
+    freshSource: () => orcadDeltaSourceStore(store, target, plan.moved, cutover.manifest),
     claims: args.claims,
     destination: args.destination,
     now

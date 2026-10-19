@@ -8,7 +8,7 @@ import { basename, getRelativePathInsideRoot } from '@/lib/path'
 import { getConnectionIdForFileFromState } from '@/lib/connection-owner-resolution'
 import { activateBrowserWorkspaceTab } from '@/lib/browser-workspace-tab-activation'
 import { runtimeEnvironmentIdWithLegacyFallbackUnlessTwin } from '@/lib/worktree-runtime-owner'
-import { resolveOwner } from '@/lib/resolve-owner'
+import { isTwinWorkspace } from '@/lib/resolve-owner'
 import {
   REMOTE_FILE_BROWSER_UNSUPPORTED_MESSAGE,
   TWIN_FILE_BROWSER_UNSUPPORTED_MESSAGE
@@ -56,7 +56,7 @@ export function getWorkspaceFilePreviewPlan(
   filePath: string
 ): WorkspaceFilePreviewPlan {
   // Why: a twin reads as "no server" below, which would open this machine's copy of the path.
-  if (resolveOwner(state, { workspaceId: worktreeId }).kind === 'ambiguous') {
+  if (isTwinWorkspace(state, worktreeId)) {
     return {
       status: 'unsupported',
       message: TWIN_FILE_BROWSER_UNSUPPORTED_MESSAGE,
