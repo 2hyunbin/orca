@@ -198,6 +198,11 @@ export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
       if (sleepingRecord && !isHibernationWakeRecord) {
         session.clearSleepingRecordProviderDuplicates(state, sleepingRecord)
       }
+      if (!isHibernationWakeRecord) {
+        // Why: codex/grok leave their OSC title behind, so the title tracker never
+        // reports this exit; without it the chat view stays over the bare shell.
+        session.deps.onAgentExitedRef.current(session.pane.leafId)
+      }
       session.clearStaleAgentTabTitleOnConfirmedShell()
       // Why: a hard-killed agent leaves mouse/focus/kitty modes armed, and the
       // surviving shell then receives pointer moves as typed SGR reports; the

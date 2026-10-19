@@ -1,5 +1,5 @@
 import type * as React from 'react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { toAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
@@ -136,6 +136,7 @@ async function connectAgentPane(args: {
   paneKey: string
   sendData: (data: string) => void
   confirmExit: (agent: TerminalAgent) => void
+  onAgentExited: Mock
 }> {
   const { connectPanePty } = await import('./pty-connection')
   const dataCallbackRef: { current: ((data: string) => void) | null } = { current: null }
@@ -147,14 +148,11 @@ async function connectAgentPane(args: {
   transportFactoryQueue.push(transport)
   const tabId = args.tabId ?? 'tab-1'
   const paneId = args.paneId ?? 1
-  const connectArgs = [
-    createPane(paneId),
-    createManager(paneId),
-    buildPaneConnectionDeps(() => mockStoreState, {
-      tabId,
-      isVisibleRef: { current: args.visible ?? false }
-    })
-  ]
+  const deps = buildPaneConnectionDeps(() => mockStoreState, {
+    tabId,
+    isVisibleRef: { current: args.visible ?? false }
+  })
+  const connectArgs = [createPane(paneId), createManager(paneId), deps]
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures implement the members connectPanePty touches.
   connectPanePty(...(connectArgs as unknown as Parameters<typeof connectPanePty>))
   await vi.advanceTimersByTimeAsync(20)
@@ -163,6 +161,7 @@ async function connectAgentPane(args: {
   return {
     paneKey,
     sendData: (data) => dataCallbackRef.current?.(data),
+    onAgentExited: deps.onAgentExitedRef.current,
     confirmExit: (agent) =>
       coordinatorOptionsByPaneKey.get(paneKey)?.onForegroundAgentExited?.({
         agent,
@@ -229,6 +228,28 @@ describe('connectPanePty confirmed process exit retires the live agent row', () 
     expect(mockStoreState.dropAgentStatus.mock.calls).toEqual([[paneKey]])
     expect(window.api.agentStatus.reconcileEndedProcess).toHaveBeenCalledWith(paneKey)
     expect(mockStoreState.agentStatusByPaneKey[paneKey]).toBeUndefined()
+  })
+
+  it('releases the chat view when Codex quits to the shell and leaves its title behind', async () => {
+    let foreground: string | null = 'codex'
+    let children = true
+    vi.mocked(window.api.pty.getForegroundProcess).mockImplementation(async () => foreground)
+    vi.mocked(window.api.pty.hasChildProcesses).mockImplementation(async () => children)
+    const { onAgentExited, sendData } = await connectAgentPane({
+      ptyId: 'pty-zsh-codex',
+      visible: true
+    })
+    sendData('\x1b]0;codex\x07')
+    await vi.advanceTimersByTimeAsync(3_000)
+    expect(onAgentExited).not.toHaveBeenCalled()
+
+    // Double Ctrl+C: zsh is back, but no shell-title OSC repaints the tab.
+    foreground = 'zsh'
+    children = false
+    await vi.advanceTimersByTimeAsync(10_000)
+    await flushAsyncTicks()
+
+    expect(onAgentExited).toHaveBeenCalledWith(leafIdForPane(1))
   })
 
   it('retires a hook-identified row the foreground tracker never read', async () => {
