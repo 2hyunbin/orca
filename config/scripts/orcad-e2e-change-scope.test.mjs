@@ -161,8 +161,14 @@ it('re-includes the real WSL distro root after excluding unit tests', () => {
 
 // Each remote host lane executes these sources, so a change to one must start the lane.
 describe.each([
-  ['hostileHosts', ['src/main/ssh/ssh-connection.ts', 'src/main/ssh/ssh-connection-utils.ts']],
-  ['windowsHosts', ['src/main/ssh/ssh-connection.ts', 'src/main/ssh/ssh-connection-utils.ts']],
+  [
+    'hostileHosts',
+    ['src/main/ssh/connection/ssh-connection.ts', 'src/main/ssh/ssh-connection-utils.ts']
+  ],
+  [
+    'windowsHosts',
+    ['src/main/ssh/connection/ssh-connection.ts', 'src/main/ssh/ssh-connection-utils.ts']
+  ],
   ['wsl', ['src/main/orcad/orcad-wsl-host-login-environment.ts']]
 ])('%s remote transport routing', (lane, sources) => {
   const paths = workflows[lane].on.pull_request.paths

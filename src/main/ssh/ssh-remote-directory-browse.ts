@@ -1,4 +1,4 @@
-import type { SshConnectionManager } from './ssh-connection-manager'
+import type { SshConnectionManager } from './connection/ssh-connection-manager'
 import type { SshExecOptions } from './ssh-connection-utils'
 import { powerShellCommand } from './ssh-remote-powershell'
 import { quotePowerShellLiteral as powerShellLiteral } from '../../shared/powershell-native-argument'

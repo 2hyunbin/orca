@@ -32,7 +32,7 @@ import {
   folderWorkspacesHeldByServer,
   type OrcadServerFolderCatalog
 } from './orcad-server-folder-workspaces'
-import type { SshTargetOrcadClaims } from './ssh-target-orcad-claims'
+import type { SshTargetOrcadClaims } from './targets/ssh-target-orcad-claims'
 
 export type OrcadServerRepository = Pick<Repo, 'id' | 'path'> & {
   connectionId?: string | null

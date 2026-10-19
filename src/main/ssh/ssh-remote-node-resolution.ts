@@ -1,4 +1,4 @@
-import type { SshConnection } from './ssh-connection'
+import type { SshConnection } from './connection/ssh-connection'
 import { createSshOperationAbortError } from './ssh-connection-utils'
 import type { RemoteHostPlatform } from './ssh-remote-platform'
 import { isWindowsRemoteHost, normalizeWindowsRemotePath } from './ssh-remote-platform'

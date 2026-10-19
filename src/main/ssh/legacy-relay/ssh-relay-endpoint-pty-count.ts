@@ -6,7 +6,7 @@
  * itself knows: its own `relay.js --connect` presents its own build hash, so any client reaches it,
  * and `pty.listProcesses` needs no PTY owner role, so asking never takes over another desktop's.
  */
-import type { SshConnection } from '../ssh-connection'
+import type { SshConnection } from '../connection/ssh-connection'
 import { SshChannelMultiplexer } from '../ssh-channel-multiplexer'
 import { shellEscape } from '../ssh-connection-utils'
 import { SHORT_RELAY_SOCKET_DIR_PREFIX } from '../relay-socket-path-limit'

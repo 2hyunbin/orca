@@ -30,7 +30,7 @@ import {
 } from './ssh-connection-utils'
 import { findDefaultKeyFile, resolveAgentSocket } from './ssh-auth-resolution'
 import { resolveEffectiveProxy } from './ssh-proxy-command'
-import { walkInitialAuthLadder } from './ssh-connection-test-fixtures'
+import { walkInitialAuthLadder } from './connection/ssh-connection-test-fixtures'
 import type { SshTarget } from '../../shared/ssh-types'
 import type { SshResolvedConfig } from './config/ssh-g-config-resolution'
 

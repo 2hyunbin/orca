@@ -6,7 +6,7 @@
  * Loss of contact is never evidence of exit (docs/reference/ssh-execution-boundary.md): a listing
  * that failed, ran out of room, or an endpoint the probe could not classify is `unverifiable`.
  */
-import type { SshConnection } from '../ssh-connection'
+import type { SshConnection } from '../connection/ssh-connection'
 import { shellEscape } from '../ssh-connection-utils'
 import { RELAY_REMOTE_DIR } from '../remote-exec/remote-frame-protocol'
 import { SHORT_RELAY_SOCKET_DIR_PREFIX } from '../relay-socket-path-limit'
