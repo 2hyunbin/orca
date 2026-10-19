@@ -5,7 +5,6 @@ import type { PairedServerWorkspaceRow } from '../../../shared/sidebar-list/pair
 import { makeRepo, makeWorktree } from '@/components/worktree-jump-palette-test-fixtures'
 import type { DesktopSidebarFeed } from './desktop-sidebar-feed'
 
-vi.mock('../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
 const feed = vi.hoisted(() => ({
   lastReadId: 0,
   installListeners: new Set<(installed: DesktopSidebarFeed) => void>()

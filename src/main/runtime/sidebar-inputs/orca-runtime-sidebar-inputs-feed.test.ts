@@ -4,8 +4,6 @@ import type { RuntimeClientEvent } from '../../../shared/runtime-client-events'
 import { OrcaRuntimeService } from '../orca-runtime'
 import { TestPhone } from './sidebar-inputs-feed.test-fixture'
 
-vi.mock('../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
-
 beforeEach(() => {
   vi.useFakeTimers()
   vi.spyOn(console, 'warn').mockImplementation(() => {})

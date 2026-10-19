@@ -37,7 +37,7 @@ export type SortStampEvent =
 
 /**
  * A pane's state after observing `observed` at `now`. Done only follows a turn, and stays until
- * the next prompt or the agent exits (owner decision Q1: no fade; change it here before the flip).
+ * the next prompt or the agent exits (owner decision Q1: no fade).
  * Resuming after an approval is the same turn, so it keeps the time it asked.
  */
 export function nextAgentPaneState(

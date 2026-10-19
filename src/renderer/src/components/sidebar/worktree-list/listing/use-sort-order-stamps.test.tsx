@@ -7,9 +7,6 @@ import type { Worktree } from '../../../../../../shared/worktree/types'
 import { makeRepo, makeWorktree } from '../../../worktree-jump-palette-test-fixtures'
 import { useSidebarWorktreeSortOrder } from './use-sort-order'
 
-vi.mock('../../../../../../shared/sidebar-inputs-switch', () => ({
-  ORCA_SIDEBAR_INPUTS_IS_MAIN: true
-}))
 vi.mock('@/lib/sidebar-list-session', () => ({ useSidebarListSession: () => {} }))
 
 const initialState = useAppStore.getInitialState()
@@ -22,7 +19,7 @@ function setRows(worktrees: Worktree[]): void {
   })
 }
 
-describe('useSidebarWorktreeSortOrder with the switch on', () => {
+describe('useSidebarWorktreeSortOrder by stamps', () => {
   afterEach(() => {
     cleanup()
     useAppStore.setState(initialState, true)

@@ -19,8 +19,6 @@ import {
   BROWSER_NETWORK_TUNNEL_RUNTIME_CAPABILITY
 } from '../../../shared/protocol-version'
 
-vi.mock('../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
-
 const WT = 'repo-1::/tmp/worktree-a'
 const SSH_WT = 'repo-ssh::/home/me/worktree-b'
 const FOLDER_ID = '11111111-1111-4111-8111-111111111111'

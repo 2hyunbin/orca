@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { ProjectGroup } from '../../../../shared/project-group-types'
+import { getProjectSectionCatalogFromState } from './project-section-catalog'
 
 const group: ProjectGroup = {
   id: 'g1',
@@ -14,29 +15,15 @@ const group: ProjectGroup = {
   updatedAt: 0
 }
 
-async function catalogWith(switchedOn: boolean) {
-  vi.resetModules()
-  vi.doMock('../../../../shared/sidebar-inputs-switch', () => ({
-    ORCA_SIDEBAR_INPUTS_IS_MAIN: switchedOn
-  }))
-  const { getProjectSectionCatalogFromState } = await import('./project-section-catalog')
-  return getProjectSectionCatalogFromState({
-    repos: [],
-    projects: [],
-    projectHostSetups: [],
-    projectOrderBy: 'manual',
-    projectGroups: [group]
-  })
-}
-
-afterEach(() => {
-  vi.doUnmock('../../../../shared/sidebar-inputs-switch')
-  vi.resetModules()
-})
-
 describe('the sidebar catalog the window publishes for the phone', () => {
-  it('carries project groups only for a page reading the sidebar feed', async () => {
-    expect(await catalogWith(false)).not.toHaveProperty('projectGroups')
-    expect((await catalogWith(true))?.projectGroups).toEqual([group])
+  it('carries project groups for a page reading the sidebar feed', () => {
+    const catalog = getProjectSectionCatalogFromState({
+      repos: [],
+      projects: [],
+      projectHostSetups: [],
+      projectOrderBy: 'manual',
+      projectGroups: [group]
+    })
+    expect(catalog?.projectGroups).toEqual([group])
   })
 })

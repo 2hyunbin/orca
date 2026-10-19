@@ -8,8 +8,6 @@ import type { RuntimeStore } from '../runtime-store-contract'
 import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
 import { TestPhone } from './sidebar-inputs-feed.test-fixture'
 
-vi.mock('../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
-
 const localRepo: Repo = {
   id: 'repo-1',
   path: '/r',

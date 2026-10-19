@@ -6,8 +6,6 @@ import { AgentHookServer } from '../../agent-hooks/server'
 import { OrcaRuntimeService } from '../orca-runtime'
 import type { RuntimeStore } from '../runtime-store-contract'
 
-vi.mock('../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
-
 const WT = 'repo-1::/tmp/worktree-a'
 
 function createHeadlessRuntime(
