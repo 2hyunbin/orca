@@ -1570,15 +1570,19 @@ jobs:
       needs.code_paths.outputs.dependency_isolation == 'true'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
-    # Job-wide so every pnpm command, including pnpm run's own install check, keeps this layout.
     env:
       ORCA_PNPM_FORCE_GLOBAL_VIRTUAL_STORE_IN_CI: '1'
-      HOME: ${{ runner.temp }}/empty-home
-      pnpm_config_store_dir: ${{ runner.temp }}/isolated-store
 
     steps:
-      - name: Create the empty HOME
-        run: mkdir -p "$HOME"
+      # Job-wide (via GITHUB_ENV, since job env cannot read runner.temp) so every pnpm command,
+      # including pnpm run's own install check, keeps this layout.
+      - name: Point HOME and the pnpm store at empty temp dirs
+        run: |
+          mkdir -p "$RUNNER_TEMP/empty-home"
+          {
+            echo "HOME=$RUNNER_TEMP/empty-home"
+            echo "pnpm_config_store_dir=$RUNNER_TEMP/isolated-store"
+          } >> "$GITHUB_ENV"
 
       - name: Checkout
         uses: actions/checkout@v6
