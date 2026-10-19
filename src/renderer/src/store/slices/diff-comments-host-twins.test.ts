@@ -352,4 +352,32 @@ describe('diff comments on twin worktrees', () => {
       })
     )
   })
+
+  it('sends its own copy when an SSH twin is listed before the queued save runs', async () => {
+    const store = createTwinStore('local')
+    store.setState({ worktreesByRepo: { [REPO]: [worktree('local')] } })
+
+    const pending = addNote(store)
+    const [local] = store.getState().worktreesByRepo[REPO]
+    store.setState({
+      worktreesByRepo: { [REPO]: [local, worktree('ssh:box', [note('s1', 'remote')])] }
+    })
+
+    expect(await pending).not.toBeNull()
+    expect(
+      updateMeta.mock.calls[0][0].updates.diffComments.map((c: DiffComment) => c.body)
+    ).toEqual(['ssh note'])
+  })
+
+  it('still saves a twin whose row a listing stamps before the queued save runs', async () => {
+    const store = createTwinStore('local')
+    store.setState({ worktreesByRepo: { [REPO]: [worktree(undefined), worktree('ssh:box')] } })
+
+    const pending = addNote(store)
+    const [unstamped, ssh] = store.getState().worktreesByRepo[REPO]
+    store.setState({ worktreesByRepo: { [REPO]: [{ ...unstamped, hostId: 'local' }, ssh] } })
+
+    expect(await pending).not.toBeNull()
+    expect(rowNotes(store, 'local')).toEqual(['ssh note'])
+  })
 })

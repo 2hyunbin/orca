@@ -140,8 +140,11 @@ export function enqueueDiffCommentPersist(
       } else {
         const state = get()
         const { twin, twinHostId } = mutation
-        const queued = readQueuedDiffComments(state, worktreeId, twin)
-        // Why: the twin these notes were made on is gone; never send another copy's list instead.
+        const queued = readQueuedDiffComments(state, worktreeId, {
+          twin,
+          latest: lastMutationNextByQueue.get(floorKey)
+        })
+        // Why: the copy these notes were made on is gone or now unnamed; never send another's list.
         if (!queued) {
           throw new Error('The workspace copy is gone; review notes were not saved.')
         }

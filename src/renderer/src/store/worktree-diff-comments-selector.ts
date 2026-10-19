@@ -132,20 +132,27 @@ export function diffCommentRowNotes(found: {
   return found.worktrees.at(-1)?.diffComments
 }
 
-/** What a queued write sends: its twin's notes, else the id's, latest duplicate first. */
+/**
+ * What a queued write sends. The rows still holding the list its chain last produced are its copy
+ * whatever stamps or twins a listing added since; after an out-of-band replacement, its twin's rows
+ * (or the id's, if it was never a twin) as the owner lookup now finds them.
+ */
 export function readQueuedDiffComments(
   state: Pick<
     DiffCommentSelectorState,
     'worktreesByRepo' | 'activeWorktreeId' | 'activeWorkspaceExecutionHostId'
   >,
   worktreeId: string,
-  twin: DiffCommentTwin | undefined
+  chain: { twin?: DiffCommentTwin; latest: DiffComment[] | undefined }
 ): { list: DiffComment[] | undefined } | null {
-  if (!twin) {
-    const rows = state.worktreesByRepo[getRepoIdFromWorktreeId(worktreeId)] ?? []
-    return { list: rows.findLast((row) => row.id === worktreeId)?.diffComments }
+  const rows = state.worktreesByRepo[getRepoIdFromWorktreeId(worktreeId)] ?? []
+  if (
+    chain.latest &&
+    rows.some((row) => row.id === worktreeId && row.diffComments === chain.latest)
+  ) {
+    return { list: chain.latest }
   }
-  const found = findDiffCommentRows(state, worktreeId, { twin })
+  const found = findDiffCommentRows(state, worktreeId, chain.twin ? { twin: chain.twin } : {})
   return found ? { list: diffCommentRowNotes(found) } : null
 }
 
