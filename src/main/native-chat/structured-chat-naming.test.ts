@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentSessionRecord } from '../../shared/agent-session-record'
 import { agentSessionRecordFixture } from '../../shared/agent-session-record.test-fixture'
-import type { AgentSessionStatusSummary } from '../../shared/agent-session-wire'
+import { StructuredAgentSessionStatusFeed } from './agent-session-wire/structured-agent-session-status-feed'
+import type {
+  AgentSessionStatusEvent,
+  AgentSessionStatusSummary
+} from '../../shared/agent-session-wire'
 import { STRUCTURED_CHAT_NAME_PROMPT_LIMIT } from '../../shared/structured-agent-session-first-prompt'
 import { setAgentSessionRecordConversationName } from '../runtime/agent-session-record-conversation-name'
 import {
@@ -82,12 +86,12 @@ describe.each(['claude', 'codex'] as const)('structured %s chat naming', (provid
     expect(state.handle(state.summary, { replay: false })).toBeUndefined()
     await settle()
     expect(state.read()?.conversationName).toBe('Please repair the login flow')
-    expect(state.deps.onNamed).toHaveBeenCalledTimes(1)
+    expect(state.deps.onNamed).toHaveBeenCalledTimes(2)
     expect(state.deps.readFirstPrompt).toHaveBeenCalledWith(state.summary.sessionId, 100)
     generation.resolve({ name: 'auth/login' })
     await settle()
     expect(state.read()?.conversationName).toBe('auth/login')
-    expect(state.deps.onNamed).toHaveBeenCalledTimes(2)
+    expect(state.deps.onNamed).toHaveBeenCalledTimes(4)
   })
 
   it('clips a long first prompt into a short name', async () => {
@@ -136,7 +140,7 @@ describe.each(['claude', 'codex'] as const)('structured %s chat naming', (provid
     state.handle(state.summary, { replay: false })
     await settle()
     expect(state.read()?.conversationName).toBe('PR27814 final readiness review')
-    expect(state.deps.onNamed).toHaveBeenCalledTimes(1)
+    expect(state.deps.onNamed).toHaveBeenCalledTimes(3)
     expect(state.deps.readFirstPrompt).not.toHaveBeenCalled()
     expect(state.deps.generate).not.toHaveBeenCalled()
   })
@@ -197,7 +201,7 @@ describe.each(['claude', 'codex'] as const)('structured %s chat naming', (provid
         forName: 'Please repair the login flow',
         ...(outcome === 'failed' ? { message: 'Invalid API key' } : {})
       })
-      expect(state.deps.onNamed).toHaveBeenCalledTimes(2)
+      expect(state.deps.onNamed).toHaveBeenCalledTimes(4)
     }
   )
 
@@ -239,6 +243,55 @@ describe.each(['claude', 'codex'] as const)('structured %s chat naming', (provid
     expect(state.handle.failure(state.summary.sessionId)).toBeUndefined()
   })
 
+  it.each(['read', 'save'] as const)(
+    'publishes completion after a rejected %s without a summary',
+    async (stage) => {
+      const state = rig(provider)
+      const id = state.summary.sessionId
+      state.deps.generate = vi.fn(async () => ({ error: 'Agent failed' }))
+      state.handle(state.summary, { replay: false })
+      await settle()
+      const failure = state.handle.failure(id)
+      const feed = new StructuredAgentSessionStatusFeed({
+        sessions: new Map(),
+        getRecord: state.getRecord,
+        now: () => 100,
+        logger: state.deps.logger,
+        namingActiveSessionIds: state.handle.activeSessionIds
+      })
+      const events: AgentSessionStatusEvent[] = []
+      feed.subscribe({ id: 'client', emit: (event) => events.push(event) })
+      state.deps.onNamed = (_workspace, session) => feed.publishConversationName(session)
+      const prompt = deferred<string>()
+      state.deps.readJournalFirstPrompt = vi.fn(() =>
+        stage === 'read'
+          ? prompt.promise.then(() => {
+              throw new Error('read failed')
+            })
+          : prompt.promise
+      )
+      state.setConversationName.mockRejectedValueOnce(new Error('save failed'))
+      state.deps.generate = vi.fn(async () => ({ name: 'New name' }))
+      state.handle.regenerate(id)
+      state.handle.regenerate(id)
+      expect(events.at(-1)).toEqual({
+        type: 'snapshot',
+        sessions: [],
+        namingActiveSessionIds: [id]
+      })
+      prompt.resolve('Repair login')
+      await settle()
+      expect(state.deps.readJournalFirstPrompt).toHaveBeenCalledTimes(1)
+      expect(events.at(-1)).toEqual({ type: 'snapshot', sessions: [], namingActiveSessionIds: [] })
+      expect(state.handle.failure(id)).toBe(failure)
+      state.deps.readJournalFirstPrompt = async () => ''
+      state.handle.regenerate(id)
+      expect(state.handle.activeSessionIds()).toEqual([id])
+      await settle()
+      expect(state.handle.activeSessionIds()).toEqual([])
+    }
+  )
+
   it('takes the generated name from a retry after a failed first try', async () => {
     const state = rig(provider)
     state.deps.generate = vi
@@ -265,7 +318,7 @@ describe.each(['claude', 'codex'] as const)('structured %s chat naming', (provid
     generation.resolve({ name: 'Late agent name' })
     await settle()
     expect(state.read()?.conversationName).toBe('User name')
-    expect(state.deps.onNamed).toHaveBeenCalledTimes(1)
+    expect(state.deps.onNamed).toHaveBeenCalledTimes(3)
   })
 
   it('protects a name changed while the first prompt is read', async () => {
@@ -290,6 +343,7 @@ describe.each(['claude', 'codex'] as const)('structured %s chat naming', (provid
     state.deps.readFirstPrompt = vi.fn(() => prompt.promise)
     state.handle(state.summary, { replay: false })
     state.handle(state.summary, { replay: false })
+    await settle()
     expect(state.deps.readFirstPrompt).toHaveBeenCalledTimes(1)
     prompt.resolve('Repair the login flow')
     await settle()

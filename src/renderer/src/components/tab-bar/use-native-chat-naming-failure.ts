@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { StructuredChatTabNamingFailure } from '@/runtime/structured-conversation-name'
 import { structuredAgentSessionTargetForHost } from '@/runtime/structured-agent-session-owner'
-import {
-  regenerateStructuredAgentSessionName,
-  supportsStructuredAgentSessionRegenerateName
-} from '@/runtime/structured-agent-session-client'
+import { regenerateStructuredAgentSessionName } from '@/runtime/structured-agent-session-client'
+import { useStructuredAgentSessionHostCapabilityState } from '@/runtime/structured-agent-session-host-capability'
+import { getStructuredAgentSessionStatusFeed } from '@/runtime/structured-agent-session-status-feed'
+import { STRUCTURED_AGENT_SESSION_REGENERATE_NAME_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
+
+const noSubscription = () => () => {}
 
 export type NativeChatNamingFailureControls = {
   message: string
@@ -24,53 +26,46 @@ export function useNativeChatNamingFailure(
   const executionHostId = failure?.executionHostId ?? null
   const sessionId = failure?.sessionId
   const failedAt = failure?.error.failedAt
-  // Keyed by host so a tab moved to another host never shows the old host's answer.
-  const [support, setSupport] = useState<{ host: string | null; ok: boolean } | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
-  // A click's run is still owed while the failure it answered is still the one shown.
-  const [regeneratingFor, setRegeneratingFor] = useState<number | null>(null)
   const failing = failure !== null && failure !== undefined
-  useEffect(() => {
-    const target = failing ? structuredAgentSessionTargetForHost(executionHostId) : null
-    if (!target) {
-      return
-    }
-    let live = true
-    void supportsStructuredAgentSessionRegenerateName(target).then((ok) => {
-      if (live) {
-        setSupport({ host: executionHostId, ok })
-      }
-    })
-    return () => {
-      live = false
-    }
-  }, [executionHostId, failing])
+  const target = useMemo(
+    () => (failing ? structuredAgentSessionTargetForHost(executionHostId) : null),
+    [executionHostId, failing]
+  )
+  const support = useStructuredAgentSessionHostCapabilityState(
+    target,
+    STRUCTURED_AGENT_SESSION_REGENERATE_NAME_RUNTIME_CAPABILITY
+  )
+  const feed = useMemo(
+    () => (target ? getStructuredAgentSessionStatusFeed(target) : null),
+    [target]
+  )
+  useEffect(() => feed?.activate(), [feed])
+  const regenerating = useSyncExternalStore(
+    feed?.subscribe ?? noSubscription,
+    () => (sessionId ? (feed?.getNamingActive(sessionId) ?? null) : null),
+    () => null
+  )
   const regenerate = useCallback(() => {
-    const target = structuredAgentSessionTargetForHost(executionHostId)
-    if (!target || !sessionId || failedAt === undefined) {
-      return
+    if (target && sessionId && support === 'supported') {
+      void regenerateStructuredAgentSessionName(target, sessionId)
     }
-    setRegeneratingFor(failedAt)
-    void regenerateStructuredAgentSessionName(target, sessionId).then((accepted) => {
-      if (!accepted) {
-        setRegeneratingFor((current) => (current === failedAt ? null : current))
-      }
-    })
-  }, [executionHostId, failedAt, sessionId])
+  }, [target, support, sessionId])
   const readFullOutput = useCallback(async () => {
     // The full output never leaves the host that ran the agent; a paired one shows the message.
     const local = structuredAgentSessionTargetForHost(executionHostId)?.kind === 'local'
     return local && sessionId
       ? window.api.nativeChat.getConversationNameFailureOutput(sessionId)
       : null
-  }, [executionHostId, sessionId])
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- A new diagnostic must reload output even when its message is unchanged.
+  }, [executionHostId, sessionId, failedAt])
   if (!failure) {
     return null
   }
   return {
     message: failure.error.message,
-    canRegenerate: support?.host === executionHostId && support.ok,
-    regenerating: regeneratingFor === failedAt,
+    canRegenerate: support === 'supported',
+    regenerating: regenerating === true,
     regenerate,
     dialogOpen,
     setDialogOpen,

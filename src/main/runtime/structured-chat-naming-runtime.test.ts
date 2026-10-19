@@ -99,23 +99,36 @@ describe('structured chat naming runtime', () => {
     expect(mocks.target).toHaveBeenCalledWith('/workspace/folder', 'codex', state.runtime)
   })
 
-  it('skips an SSH workspace without spawning on the client or reporting a failure', async () => {
-    const state = rig()
-    const remote = structuredChatNamingDeps(
-      () => ({ getSettings: () => state.settings }),
-      {
-        ...state.runtime,
-        resolveWorkspace: async () => ({
-          path: '/remote/workspace',
-          executionHostId: toSshExecutionHostId('target')
-        })
-      },
-      state.logger
-    )
-    expect(await remote.generate(agentSessionRecordFixture(), 'Repair login')).toBeNull()
-    expect(mocks.target).not.toHaveBeenCalled()
-    expect(mocks.generate).not.toHaveBeenCalled()
-  })
+  it.each(['ssh', 'wsl'])(
+    'skips unsupported %s even with invalid native settings',
+    async (kind) => {
+      const state = rig()
+      state.settings.sourceControlAi = {
+        ...normalizeSourceControlAiSettings(state.settings.sourceControlAi),
+        actions: { conversationName: { agentId: 'custom' } },
+        customAgentCommand: ''
+      }
+      const record = agentSessionRecordFixture()
+      if (kind === 'wsl') {
+        record.location.wslDistro = 'Ubuntu'
+      }
+      const remote = structuredChatNamingDeps(
+        () => ({ getSettings: () => state.settings }),
+        {
+          ...state.runtime,
+          resolveWorkspace: async () => ({
+            path: '/remote/workspace',
+            executionHostId: kind === 'ssh' ? toSshExecutionHostId('target') : 'local'
+          })
+        },
+        state.logger
+      )
+      expect(await remote.generate(record, 'Repair login')).toBeNull()
+      expect(state.logger.warn).not.toHaveBeenCalled()
+      expect(mocks.target).not.toHaveBeenCalled()
+      expect(mocks.generate).not.toHaveBeenCalled()
+    }
+  )
 
   it('publishes a new name to the host feed and retitles the open tab', () => {
     const state = rig()

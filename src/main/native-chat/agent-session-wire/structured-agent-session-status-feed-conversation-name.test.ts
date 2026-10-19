@@ -71,7 +71,7 @@ it('publishes a held chat its saved name once, and not again for an unchanged re
   const count = events.length
   feed.publish('session')
   feed.publishConversationName('session')
-  expect(events).toHaveLength(count)
+  expect(events).toHaveLength(count + 1)
 })
 
 it('names a chat whose tab closed before naming finished, and keeps it for later subscribers', async () => {
@@ -95,11 +95,11 @@ it('keeps the name on the summary a closing chat retains', async () => {
   expect(lastName(events)).toBe('Explain the parser')
 })
 
-it('publishes nothing for a chat this host never projected', async () => {
+it('publishes naming activity without needing a chat summary', async () => {
   const { feed, events } = await namedFeed()
   const count = events.length
   feed.publishConversationName('unknown-session')
-  expect(events).toHaveLength(count)
+  expect(events).toHaveLength(count + 1)
 })
 
 it('shows a closed chat its naming failure only while it keeps the name that failed', async () => {

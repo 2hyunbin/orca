@@ -19,9 +19,12 @@ import type { AgentChildWorkEvidence } from '../../../shared/agent-status-child-
 import type { AgentChildWorkRecord } from '../../../shared/agent-status-child-work'
 import type { AgentChildWorkView } from '../../../shared/agent-status-child-work-view'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
-import type {
-  StatusFeedSession,
-  StructuredAgentSessionStatusFeedDeps
+import {
+  structuredAgentSessionNamingSnapshot,
+  type StatusFeedSession,
+  type StatusPublication,
+  type StructuredAgentSessionStatusSubscriber,
+  type StructuredAgentSessionStatusFeedDeps
 } from './structured-agent-session-status-feed-deps'
 import {
   renamedStructuredStatusSummary,
@@ -44,15 +47,7 @@ export type { StructuredAgentSessionStatusFeedDeps } from './structured-agent-se
 
 export type { StructuredAgentSessionStatusState } from './structured-agent-session-status-journal-projection'
 
-export type StructuredAgentSessionStatusSubscriber = {
-  id: string
-  emit: (event: AgentSessionStatusEvent) => void
-}
-
-type StatusPublication = {
-  summary: AgentSessionStatusSummary
-  firstInputSubmissionKey: string | null
-}
+export type { StructuredAgentSessionStatusSubscriber } from './structured-agent-session-status-feed-deps'
 
 export class StructuredAgentSessionStatusFeed {
   private readonly ownership = new StructuredAgentSessionStatusOwnership(() =>
@@ -77,6 +72,10 @@ export class StructuredAgentSessionStatusFeed {
 
   /** Opens with every session this host has projected, live ones re-read, then only changes. */
   subscribe(subscriber: StructuredAgentSessionStatusSubscriber): () => void {
+    // Naming completion must be observable even if a held journal cannot be read.
+    if (this.deps.namingActiveSessionIds) {
+      this.emit(subscriber, structuredAgentSessionNamingSnapshot(this.deps))
+    }
     // Re-project before registering: a change found here has to reach the subscribers that
     // already read the old value, and the arriving one carries it in its snapshot instead.
     for (const [sessionId] of this.deps.sessions) {
@@ -163,6 +162,7 @@ export class StructuredAgentSessionStatusFeed {
   /** The record's name, or its naming failure, changed outside the journal. A closed chat's
    *  retained row follows it too, so every list still showing it learns the name without a tab. */
   publishConversationName(sessionId: string): void {
+    this.broadcast(structuredAgentSessionNamingSnapshot(this.deps))
     if (this.deps.sessions.has(sessionId)) {
       this.publish(sessionId)
       return

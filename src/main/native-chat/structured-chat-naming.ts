@@ -76,22 +76,27 @@ export function createStructuredChatNamingHandler(deps: StructuredChatNamingDeps
       sessionId,
       error
     })
-  const refresh = (record: AgentSessionRecord) => {
+  const refresh = (workspaceId: string, sessionId: string) => {
     try {
-      deps.onNamed(record.location.workspaceId, record.sessionId)
+      deps.onNamed(workspaceId, sessionId)
     } catch (error) {
-      warn(record.sessionId, error)
+      warn(sessionId, error)
     }
   }
-  const run = (sessionId: string, job: () => Promise<void>) => {
+  const run = (sessionId: string, workspaceId: string, job: () => Promise<void>) => {
     if (!jobs.has(sessionId)) {
-      const running = job()
+      const running = Promise.resolve()
+        .then(job)
         .catch((error: unknown) => warn(sessionId, error))
-        .finally(() => jobs.delete(sessionId))
+        .finally(() => {
+          jobs.delete(sessionId)
+          refresh(workspaceId, sessionId)
+        })
       jobs.set(sessionId, running)
+      refresh(workspaceId, sessionId)
     }
   }
-  // Strictly increasing per chat: a client waiting on a regenerate clears when this moves.
+  // Distinguish actual failures even when their short messages are identical.
   const failedAt = (sessionId: string) =>
     Math.max(now(), (failures.get(sessionId)?.failedAt ?? 0) + 1)
   const forget = (sessionId: string) => {
@@ -111,7 +116,7 @@ export function createStructuredChatNamingHandler(deps: StructuredChatNamingDeps
         failureOutputs.delete(oldest)
       }
     }
-    refresh(record)
+    refresh(record.location.workspaceId, record.sessionId)
   }
 
   /** The generated name, or null after recording why it failed (unless the run was moot). */
@@ -159,7 +164,7 @@ export function createStructuredChatNamingHandler(deps: StructuredChatNamingDeps
         : await store.compareAndSetConversationName(record.sessionId, name, expected)
     if (named) {
       forget(record.sessionId)
-      refresh(named)
+      refresh(named.location.workspaceId, named.sessionId)
     }
   }
 
@@ -176,7 +181,7 @@ export function createStructuredChatNamingHandler(deps: StructuredChatNamingDeps
         workerTask.title &&
         (await store.compareAndSetConversationName(summary.sessionId, workerTask.title, null))
       if (named) {
-        refresh(named)
+        refresh(named.location.workspaceId, named.sessionId)
       }
       return
     }
@@ -192,7 +197,7 @@ export function createStructuredChatNamingHandler(deps: StructuredChatNamingDeps
     if (!seeded?.conversationName) {
       return
     }
-    refresh(seeded)
+    refresh(seeded.location.workspaceId, seeded.sessionId)
     const seedName = seeded.conversationName
     const stillSeeded = () =>
       !namingOff() && store.getRecord(seeded.sessionId)?.conversationName === seedName
@@ -216,16 +221,11 @@ export function createStructuredChatNamingHandler(deps: StructuredChatNamingDeps
     const firstPrompt = clampConversationNameFirstPrompt(
       await deps.readJournalFirstPrompt(record.sessionId)
     )
-    const before = failures.get(record.sessionId)
     const chatName = hasStructuredChatPromptText(firstPrompt)
       ? await generateName(record, firstPrompt, current, [], stillCurrent)
       : null
     if (chatName) {
       await setName(store, record, chatName)
-    } else if (before?.forName === current && failures.get(record.sessionId) === before) {
-      // A run that recorded nothing still answers the request, or the tab shows it running forever.
-      failures.set(record.sessionId, { ...before, failedAt: failedAt(record.sessionId) })
-      refresh(record)
     }
   }
 
@@ -242,10 +242,11 @@ export function createStructuredChatNamingHandler(deps: StructuredChatNamingDeps
       return
     }
     attempted.add(summary.sessionId)
-    run(summary.sessionId, () => name(summary))
+    run(summary.sessionId, summary.workspaceId, () => name(summary))
   }
 
   const naming: StructuredAgentSessionConversationNaming = {
+    activeSessionIds: () => [...jobs.keys()],
     failure: (sessionId) => failures.get(sessionId),
     failureOutput: (sessionId) => {
       const output = failureOutputs.get(sessionId)
@@ -259,7 +260,7 @@ export function createStructuredChatNamingHandler(deps: StructuredChatNamingDeps
       }
       // A first name still owed must not start after, and replace, the one asked for.
       attempted.add(sessionId)
-      run(sessionId, () => rename(store, record))
+      run(sessionId, record.location.workspaceId, () => rename(store, record))
       return true
     }
   }

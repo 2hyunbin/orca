@@ -46,6 +46,14 @@ export function structuredChatNamingDeps(
     },
     workerTaskTitle: runtime.workerTaskTitle,
     generate: async (record, firstPrompt) => {
+      // Unsupported execution contexts keep the seed regardless of native naming settings.
+      if (record.location.wslDistro !== null) {
+        return null
+      }
+      const workspace = await runtime.resolveWorkspace(record.location.workspaceId)
+      if (workspace.executionHostId !== LOCAL_EXECUTION_HOST_ID) {
+        return null
+      }
       const settings = resolveTextGenerationParams(
         getStore().getSettings(),
         LOCAL_COMMIT_MESSAGE_HOST_KEY,
@@ -56,15 +64,6 @@ export function structuredChatNamingDeps(
       if (!settings.ok) {
         logger.warn(settings.error, log)
         return { error: settings.error }
-      }
-      const workspace = await runtime.resolveWorkspace(record.location.workspaceId)
-      // Structured chats execute natively on this host; an SSH or WSL workspace has nothing to
-      // fall back to here, so it keeps the first-message name without an error or a retry.
-      if (
-        workspace.executionHostId !== LOCAL_EXECUTION_HOST_ID ||
-        record.location.wslDistro !== null
-      ) {
-        return null
       }
       const target = await resolveGenerationTarget(workspace.path, settings.params.agentId, runtime)
       if (!target) {

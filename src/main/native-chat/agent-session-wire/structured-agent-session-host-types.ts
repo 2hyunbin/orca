@@ -186,6 +186,7 @@ export type StructuredAgentSessionHostDeps = {
 export type StructuredChatNamingFailure = AgentSessionNamingError & { forName: string }
 
 export type StructuredAgentSessionConversationNaming = {
+  activeSessionIds: () => string[]
   failure: (sessionId: string) => StructuredChatNamingFailure | undefined
   /** The failed run's full agent output, for the local user only; never published. */
   failureOutput: (sessionId: string) => string | null
