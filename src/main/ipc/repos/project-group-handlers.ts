@@ -14,7 +14,10 @@ import {
   ProjectGroupUpdateArgs,
   parseProjectGroupIpcArgs
 } from './repo-ipc-arg-schemas'
-import { assertWslMoveProjectWritable } from '../../persistence/moving-wsl-projects/wsl-move-scope-guard'
+import {
+  assertWslMoveProjectWritable,
+  assertWslMoveRepoWritable
+} from '../../persistence/moving-wsl-projects/wsl-move-scope-guard'
 import { activeNestedRepoScans, runNestedRepoScanForIpc } from './nested-repo-scan-ipc'
 import { visibleProjectGroups } from '../../ssh/orcad-retained-source'
 
@@ -70,11 +73,16 @@ export function registerProjectGroupHandlers(mainWindow: BrowserWindow, store: S
       rawArgs,
       'invalid_project_group_move_repo_args'
     )
-    assertWslMoveProjectWritable(store, { repoId: args.projectId })
     const target: RepoHostTarget | undefined = args.hostId
       ? { id: args.projectId, executionHostId: args.hostId }
       : store.getRepo(args.projectId)
-    const moved = target ? store.moveProjectToGroup(target, args.groupId, args.order) : null
+    if (!target) {
+      assertWslMoveProjectWritable(store, { repoId: args.projectId })
+      return null
+    }
+    // Why the target's host: a WSL move fences the local twin only, never its SSH sibling.
+    assertWslMoveRepoWritable(store, target)
+    const moved = store.moveProjectToGroup(target, args.groupId, args.order)
     if (moved) {
       notifyReposChanged(mainWindow)
     }

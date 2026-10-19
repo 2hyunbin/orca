@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as GitRunner from '../git/runner'
 import type * as RepoModule from '../git/repo'
 
@@ -27,6 +27,16 @@ import { clearGitCapabilityStateForTests } from '../git/git-capability-state'
 import { resetSshProviderAuthorities } from '../ssh/ssh-provider-authority'
 import { getGitRepoRoot, isGitRepo } from '../git/repo'
 import { createRepoHandlerHarness, resetProjectGroupMocks } from './repos-remote-test-harness'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { wslMoveCutoverFixture as cutover } from '../persistence/__fixtures__/wsl-mover/wsl-move-cutover-fixture'
+import { seedWslMoveCutover } from '../persistence/__fixtures__/wsl-mover/wsl-move-journal-seeding'
+import {
+  WslMoveProjectFencedError,
+  loadWslMoveFence,
+  resetWslMoveFenceForTests
+} from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
 
 const { handleMock, mockStore } = reposMocks
 
@@ -102,5 +112,43 @@ describe('projectGroups IPC validation', () => {
     ).toThrow('invalid_project_group_move_repo_args')
 
     expect(mockStore.moveProjectToGroup).not.toHaveBeenCalled()
+  })
+
+  describe('while a WSL move fences the local repo-1', () => {
+    let userDataPath: string
+    beforeEach(() => {
+      userDataPath = mkdtempSync(join(tmpdir(), 'wsl-move-project-group-ipc-'))
+      loadWslMoveFence(userDataPath)
+      seedWslMoveCutover(userDataPath, cutover('move-1', 'source-fenced'))
+    })
+    afterEach(() => {
+      resetWslMoveFenceForTests()
+      rmSync(userDataPath, { recursive: true, force: true })
+    })
+
+    it('still moves the SSH twin, which the move does not take', () => {
+      handlers.get('projectGroups:moveProject')!(null, {
+        projectId: 'repo-1',
+        groupId: 'group-1',
+        hostId: 'ssh:ssh-1'
+      })
+
+      expect(mockStore.moveProjectToGroup).toHaveBeenCalledWith(
+        { id: 'repo-1', executionHostId: 'ssh:ssh-1' },
+        'group-1',
+        undefined
+      )
+    })
+
+    it('refuses the local twin', () => {
+      expect(() =>
+        handlers.get('projectGroups:moveProject')!(null, {
+          projectId: 'repo-1',
+          groupId: 'group-1',
+          hostId: 'local'
+        })
+      ).toThrow(WslMoveProjectFencedError)
+      expect(mockStore.moveProjectToGroup).not.toHaveBeenCalled()
+    })
   })
 })
