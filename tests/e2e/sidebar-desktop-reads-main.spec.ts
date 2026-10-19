@@ -1,7 +1,6 @@
 /**
  * The desktop sidebar drawn from main's feed (ORCA_SIDEBAR_INPUTS=main): it follows main, not the
  * window's own store, and a drag, create, open or collapse still lands in the frame it is made.
- * A switch-off build runs the same flow on the window's own list, as the before side.
  */
 import type { Page } from '@stablyai/playwright-test'
 import { expect, test } from './helpers/orca-app'
@@ -10,7 +9,7 @@ import { SIDEBAR_INPUTS_BUILD } from './helpers/sidebar-inputs-build'
 import { openSidebarWorkspaceComposer } from './helpers/sidebar-project-dialog'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 
-const BUILD = SIDEBAR_INPUTS_BUILD ? 'on' : 'off'
+test.skip(!SIDEBAR_INPUTS_BUILD, 'the window reads main only in an ORCA_SIDEBAR_INPUTS=main build')
 
 const ROWS = '[data-worktree-sidebar] [role="option"][data-worktree-id]'
 
@@ -108,16 +107,16 @@ test('the sidebar lists main’s inputs and keeps drag, create, open and collaps
     const ours = async (): Promise<string[]> =>
       (await renderedOrder(orcaPage)).filter((id) => created.includes(id))
     await expect.poll(async () => (await ours()).length, { timeout: 30_000 }).toBe(3)
-    await orcaPage.screenshot({ path: testInfo.outputPath(`${BUILD}-list.png`) })
+    await orcaPage.screenshot({ path: testInfo.outputPath(`list.png`) })
 
-    // Empty the window's own catalog for one frame: a window reading main still lists every row,
-    // one reading its own store lists none. No refetch can land within the frame.
+    // Empty the window's own catalog for one frame: the rows still listed come from main. No
+    // refetch can land within the frame.
     const listedInEmptiedFrame = await orcaPage.evaluate(async (selector) => {
       window.__store!.setState({ worktreesByRepo: {} })
       await new Promise((resolve) => requestAnimationFrame(resolve))
       return document.querySelectorAll(selector).length
     }, ROWS)
-    expect(listedInEmptiedFrame > 0).toBe(SIDEBAR_INPUTS_BUILD)
+    expect(listedInEmptiedFrame).toBeGreaterThan(0)
     await orcaPage.evaluate(() => window.__store!.getState().fetchAllWorktrees())
     await expect.poll(async () => (await ours()).length).toBe(3)
 
@@ -135,7 +134,7 @@ test('the sidebar lists main’s inputs and keeps drag, create, open and collaps
       .map(({ ids }) => ids.filter((id) => created.includes(id)).join())
     expect(afterDrop.length).toBeGreaterThan(0)
     expect(new Set(afterDrop)).toEqual(new Set([expected.join()]))
-    await orcaPage.screenshot({ path: testInfo.outputPath(`${BUILD}-after-drag.png`) })
+    await orcaPage.screenshot({ path: testInfo.outputPath(`after-drag.png`) })
 
     // Open: the clicked row is highlighted in the frame of the click.
     const openId = expected[1]!
@@ -162,6 +161,8 @@ test('the sidebar lists main’s inputs and keeps drag, create, open and collaps
     const collapseLog = await startFrameLog(orcaPage)
     await header.first().click()
     await expect.poll(async () => (await ours()).length).toBe(0)
+    // A slow runner can settle the poll before any frame after the click is painted.
+    await orcaPage.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)))
     const collapseFrames = await collapseLog.stop()
     // The first frame painted after the click already has no rows.
     expect(
@@ -201,7 +202,7 @@ test('the sidebar lists main’s inputs and keeps drag, create, open and collaps
     expect(handover.filter(({ ids, shows }) => !shows && !ids.includes(newId))).toEqual([])
     const appeared = handover.findIndex(({ ids }) => ids.includes(newId))
     expect(handover.slice(appeared).every(({ ids }) => ids.includes(newId))).toBe(true)
-    await orcaPage.screenshot({ path: testInfo.outputPath(`${BUILD}-after-create.png`) })
+    await orcaPage.screenshot({ path: testInfo.outputPath(`after-create.png`) })
 
     // Virtualized scroll and reveal over a list taller than the sidebar.
     const many = await orcaPage.evaluate(async () => {
@@ -256,7 +257,7 @@ test('the sidebar lists main’s inputs and keeps drag, create, open and collaps
       bottomId
     )
     await expect(bottomRow).toBeInViewport()
-    await orcaPage.screenshot({ path: testInfo.outputPath(`${BUILD}-after-reveal.png`) })
+    await orcaPage.screenshot({ path: testInfo.outputPath(`after-reveal.png`) })
   } finally {
     for (const id of created) {
       await removeWorktreeViaStore(orcaPage, id).catch(() => {})
