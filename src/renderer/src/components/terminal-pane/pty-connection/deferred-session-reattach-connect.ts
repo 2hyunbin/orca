@@ -6,7 +6,6 @@ import type { ConnectPanePtySession } from './connect-pane-pty-session'
 import type { HeldPaneReopenOutcome } from '../newer-daemon-hold-state'
 import { holdForNewerDaemon } from './newer-daemon-hold-pane'
 import { NEWER_DAEMON_HOLD_ERROR } from '../../../../../shared/newer-daemon-hold'
-import { abandonSpawnConsumerAttempt } from '../pty-renderer-delivery-claims'
 
 import {
   awaitAgentStatusStartupSnapshot,
@@ -118,7 +117,7 @@ function connectDeferredSessionReattach(
     outputCallbacks.generation === session.transportStreamGeneration
   const startFreshInstead = (): Promise<HeldPaneReopenOutcome> => {
     // Why: the rejected reattach's id will never get this pane's consumer report.
-    abandonSpawnConsumerAttempt(session.transport)
+    session.transport.abandonLocalPtyAttachment?.(deferredReattachSessionId)
     return session
       .startFreshColdRestoreAgentResume(coldRestoreStartup, { forceBlankRestoredViewport: true })
       .then(
@@ -189,7 +188,7 @@ function connectDeferredSessionReattach(
       session.finishReattachLiveDataDeferral(accepted, outputCallbacks.generation)
       const gen = await preSignalPromise
       if (!accepted) {
-        abandonSpawnConsumerAttempt(session.transport)
+        session.transport.abandonLocalPtyAttachment?.(deferredReattachSessionId)
       }
       if (typeof gen === 'number') {
         if (!accepted) {

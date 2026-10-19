@@ -3,25 +3,27 @@ import { getPtyIpc } from '../../pty-host-bindings'
 import { runPtyIpcSpawn } from './spawn-run'
 import type { PtySpawnIpcArgs, PtySpawnIpcDeps } from './spawn-types'
 import { getConnectionExecutionHostId } from '../../../../shared/execution-host'
-import { isMainWindowPtyIpcEvent } from './write-input'
-import { admitRendererDocument } from '../delivery/renderer-document'
-import { openSpawnConsumerClaim, type SpawnConsumerClaim } from '../delivery/spawn-consumer-claims'
+import { isAdmittedRendererPage } from '../delivery/renderer-page'
+import {
+  openRendererAttachment,
+  type RendererAttachmentBinding
+} from '../delivery/renderer-attachments'
 import type { PtyRendererDelivery } from '../session'
 
-/** Only the main window's live document may promise a visible consumer for its spawn. */
-export function openWindowSpawnConsumerClaim(
+/** The open page's connection opens its record here, before the provider can emit. */
+export function openSpawnRendererAttachment(
   event: IpcMainInvokeEvent,
   args: PtySpawnIpcArgs,
   mainWindow: PtyRendererDelivery | undefined
-): SpawnConsumerClaim | null {
-  if (
-    typeof args.consumerClaimToken !== 'number' ||
-    !isMainWindowPtyIpcEvent(event, mainWindow) ||
-    !admitRendererDocument(args.rendererDocumentId)
-  ) {
+): RendererAttachmentBinding | null {
+  const attachment = args.rendererAttachment
+  if (!attachment || !isAdmittedRendererPage(event, mainWindow, attachment.page)) {
     return null
   }
-  return openSpawnConsumerClaim(args.rendererDocumentId, args.consumerClaimToken)
+  return openRendererAttachment(attachment.page, attachment.key, null, {
+    consuming: attachment.consuming === true,
+    visible: attachment.visible === true
+  })
 }
 
 function readSpawnReplyId(reply: unknown): string | null {
@@ -38,8 +40,8 @@ export function installPtySpawnIpcHandler(deps: PtySpawnIpcDeps): void {
   const { getLocalPtyStartupPromise } = deps
 
   ipcMain.handle('pty:spawn', async (event, args: PtySpawnIpcArgs) => {
-    // Why before any await: a settle sent after this request must find the record.
-    const claim = deps.openSpawnConsumerClaim?.(event, args) ?? null
+    // Why before any await: the connection's later reports must find its record.
+    const attachment = deps.openSpawnRendererAttachment?.(event, args) ?? null
     try {
       const startupPromise = getLocalPtyStartupPromise(
         getConnectionExecutionHostId(args.connectionId)
@@ -47,15 +49,15 @@ export function installPtySpawnIpcHandler(deps: PtySpawnIpcDeps): void {
       if (startupPromise) {
         await startupPromise
       }
-      const reply = await runPtyIpcSpawn(deps, args, claim)
+      const reply = await runPtyIpcSpawn(deps, args, attachment)
       // Why: joined and adopted replies bind here; every reply's id reconciles a renamed one.
       const replyId = readSpawnReplyId(reply)
       if (replyId !== null) {
-        claim?.bind(replyId)
+        attachment?.bind(replyId)
       }
       return reply
     } catch (error) {
-      claim?.release()
+      attachment?.release()
       throw error
     }
   })

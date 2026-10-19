@@ -83,10 +83,9 @@ export function bindSerializeHiddenOutputSnapshot(session: ConnectPanePtySession
     }
   }
 
-  // Why: a hidden spawn sends no pending consumer claim, so main owns its
-  // startup queries from byte zero (the spawn-time DA1 loss); a visible one
-  // promises a consumer until the pane reports. Remote-runtime PTYs never
-  // transit local main.
+  // Why: a hidden spawn opens its connection record as not consuming, so main
+  // owns its startup queries from byte zero (the spawn-time DA1 loss).
+  // Remote-runtime PTYs never transit local main.
   session.shouldDeclareHiddenAtSpawn = function (): boolean {
     return (
       session.hiddenDeliveryGateActive &&

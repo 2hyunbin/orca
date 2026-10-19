@@ -24,8 +24,19 @@ import type { PreloadApi } from '../api-types'
 import type { TerminalPanePlacement } from '../../shared/terminal-pane-placement'
 import type { AgentPaneLaunchRequest } from '../../shared/agent-pane-launch-request'
 
-// Why per page load: main fences every renderer claim by this document, so a reload's claims die with it.
-const rendererDocumentId = crypto.randomUUID()
+// Why per page load: main admits this page when it opens, and every attachment or interest message names it.
+const rendererPage = crypto.randomUUID()
+let rendererPageOpened = false
+
+function openRendererPageOnce(): string {
+  if (!rendererPageOpened) {
+    rendererPageOpened = true
+    ipcRenderer.send('pty:openRendererPage', { page: rendererPage })
+  }
+  return rendererPage
+}
+
+type RendererAttachmentState = { consuming?: boolean; visible?: boolean }
 
 export const ptySessionControlApi = {
   spawn: (opts: {
@@ -51,8 +62,8 @@ export const ptySessionControlApi = {
     terminalColorQueryReplies?: { foreground?: string; background?: string }
     // Why: an unmeasured hidden request; main only seeds its provisional size from it.
     initiallyHidden?: boolean
-    // Why: a mounting pane's pending visible consumer, which main holds until the pane reports its own.
-    consumerClaimToken?: number
+    // Why: the requesting connection's record, opened in main before the provider can emit.
+    rendererAttachment?: { key: string; consuming: boolean; visible: boolean }
     // Why: closes the SIGKILL race (INVESTIGATION.md) — main sync-flushes the (worktreeId, tabId, leafId → ptyId) binding before pty:spawn returns.
     tabId?: string
     leafId?: string
@@ -92,7 +103,12 @@ export const ptySessionControlApi = {
   }> =>
     ipcRenderer.invoke(
       'pty:spawn',
-      opts.consumerClaimToken === undefined ? opts : { ...opts, rendererDocumentId }
+      opts.rendererAttachment
+        ? {
+            ...opts,
+            rendererAttachment: { ...opts.rendererAttachment, page: openRendererPageOnce() }
+          }
+        : opts
     ),
   write: (id: string, data: string, inputKind: TerminalInputKind): void => {
     ipcRenderer.send('pty:write', { id, data, inputKind })
@@ -164,17 +180,20 @@ export const ptySessionControlApi = {
   setActiveRendererPty: (id: string, active: boolean): void => {
     ipcRenderer.send('pty:setActiveRendererPty', { id, active })
   },
-  setRendererPtyVisible: (id: string, visible: boolean): void => {
-    ipcRenderer.send('pty:setRendererPtyVisible', { doc: rendererDocumentId, id, visible })
+  openRendererAttachment: (key: string, ptyId: string, state: RendererAttachmentState): void => {
+    const page = openRendererPageOnce()
+    ipcRenderer.send('pty:openRendererAttachment', { ...state, page, key, ptyId })
   },
-  setRendererPtyConsumer: (id: string, consuming: boolean): void => {
-    ipcRenderer.send('pty:setRendererPtyConsumer', { doc: rendererDocumentId, id, consuming })
+  updateRendererAttachment: (key: string, state: RendererAttachmentState): void => {
+    const page = openRendererPageOnce()
+    ipcRenderer.send('pty:updateRendererAttachment', { ...state, page, key })
   },
-  settleSpawnConsumerClaim: (token: number): void => {
-    ipcRenderer.send('pty:settleSpawnConsumerClaim', { doc: rendererDocumentId, token })
+  closeRendererAttachment: (key: string): void => {
+    ipcRenderer.send('pty:closeRendererAttachment', { page: openRendererPageOnce(), key })
   },
   setPtyDeliveryInterest: (id: string, interested: boolean): void => {
-    ipcRenderer.send('pty:setPtyDeliveryInterest', { doc: rendererDocumentId, id, interested })
+    const page = openRendererPageOnce()
+    ipcRenderer.send('pty:setPtyDeliveryInterest', { page, id, interested })
   },
   publishTerminalViewAttributes: (attributes: TerminalViewAttributes): void => {
     ipcRenderer.send('pty:terminalViewAttributes', attributes)

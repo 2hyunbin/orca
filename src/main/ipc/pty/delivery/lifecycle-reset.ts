@@ -12,14 +12,10 @@ import {
 import {
   noteRendererNavigationCommit,
   noteRendererNavigationStart,
-  retireCurrentRendererDocument
-} from './renderer-document'
+  retireCurrentRendererPage
+} from './renderer-page'
 import { mainDeliveryBreadcrumbs, resetRendererDeliveryAccountingForLifecycleReset } from './debug'
-import {
-  activeRendererPtys,
-  invalidatePendingPtyDrainPriority,
-  visibleRendererPtys
-} from './visibility-state'
+import { activeRendererPtys, invalidatePendingPtyDrainPriority } from './visibility-state'
 
 export function clearDidFinishLoadHandler(): void {
   if (didFinishLoadHandler && didFinishLoadWebContents) {
@@ -31,10 +27,9 @@ export function clearDidFinishLoadHandler(): void {
 export function markRendererPtysHiddenForRendererLifecycleReset(): void {
   // A reload/crash in the breadcrumb history is load-bearing context for any freeze report.
   mainDeliveryBreadcrumbs.record('renderer-lifecycle-reset')
-  // Why: renderer-owned hints die with the page; clear visibility so surviving daemon/SSH PTYs fail closed until the new renderer reports.
+  // Why: renderer scheduling hints die with the page; its attachments end at commit, crash or destroy.
   const activePriorityChanged = activeRendererPtys.size > 0
   activeRendererPtys.clear()
-  visibleRendererPtys.clear()
   // Why: the dead page never ACKs its in-flight bytes, so leaked accounting would delivery-gate surviving PTYs forever after a reload/crash.
   resetRendererDeliveryAccountingForLifecycleReset()
   if (activePriorityChanged) {
@@ -75,7 +70,7 @@ export function registerRendererLifecycleResetHandlers(
   }
   const handler = (): void => {
     markRendererPtysHiddenForRendererLifecycleReset()
-    retireCurrentRendererDocument()
+    retireCurrentRendererPage()
   }
   const navigationHandler = (details: { isMainFrame: boolean; isSameDocument: boolean }) => {
     if (!details.isMainFrame || details.isSameDocument) {

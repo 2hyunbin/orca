@@ -46,9 +46,9 @@ import {
   sendPtyExitToRenderer,
   sendPtySpawnedToRenderer
 } from './exit'
-import { changeRendererPtyClaims, retireRendererDocumentClaims } from '../ipc/renderer-consumer-ipc'
-import { setSpawnConsumerClaimChangeHandler } from './spawn-consumer-claims'
-import { setRendererDocumentRetireHandler } from './renderer-document'
+import { changeRendererPtyClaims, retireRendererPageClaims } from '../ipc/renderer-attachment-ipc'
+import { setRendererAttachmentChangeHandler } from './renderer-attachments'
+import { setRendererPageRetireHandler } from './renderer-page'
 import { requestSerializedBuffer } from '../ipc/serialize-buffer'
 import { shutdownProviderAndDetectExit } from '../provider/shutdown-detect'
 import type { PtyIpcSession } from '../session'
@@ -92,8 +92,8 @@ export function wirePtyIpcSession(session: PtyIpcSession): void {
   session.writeOffLostRendererDelivery = (report) => writeOffLostRendererDelivery(session, report)
   session.getRendererInFlightCharsForPty = (id) => getRendererInFlightCharsForPty(session, id)
 
-  setSpawnConsumerClaimChangeHandler((ids, mutate) => changeRendererPtyClaims(session, ids, mutate))
-  setRendererDocumentRetireHandler((doc) => retireRendererDocumentClaims(session, doc))
+  setRendererAttachmentChangeHandler((ids, mutate) => changeRendererPtyClaims(session, ids, mutate))
+  setRendererPageRetireHandler((page) => retireRendererPageClaims(session, page))
   setClearBackgroundedDeliverySyncForPty((id: string) => {
     session.backgroundedDeliverySyncByPty.delete(id)
   })

@@ -39,7 +39,7 @@ export async function preparePtyIpcSpawnPreflight(ctx: PtyIpcSpawnState): Promis
           tabId: ctx.earlyStablePaneOwner.tabId,
           leafId: ctx.earlyStablePaneOwner.leafId,
           ownsPaneSpawnReservation: true,
-          consumerClaim: ctx.consumerClaim
+          rendererAttachment: ctx.rendererAttachment
         })
       : null
   ctx.spawnTiming.mark('stable_adoption')

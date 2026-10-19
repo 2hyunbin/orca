@@ -6,10 +6,7 @@ import {
 } from '../../runtime/agent-session-create-operation'
 import { callRuntimeRpc } from '../../runtime/runtime-rpc-client'
 import { toRuntimeTerminalWorktreeSelector } from '../../runtime/runtime-worktree-selector'
-import {
-  admitSpawnConsumerAttempt,
-  type SpawnConsumerAttempt
-} from './pty-renderer-delivery-claims'
+import type { LocalPtyDeliveryState } from './pty-renderer-delivery-claims'
 
 type PtyConnectOptions = Parameters<PtyTransport['connect']>[0]
 const modelLaunchOperations = new WeakMap<IpcPtyTransportOptions, AgentSessionCreateOperation>()
@@ -26,7 +23,7 @@ export async function spawnIpcPty(
   transportOptions: IpcPtyTransportOptions,
   connectOptions: PtyConnectOptions,
   admittedSessionId?: string,
-  consumerAttempt?: SpawnConsumerAttempt
+  dispatchAttachment?: () => ({ key: string } & LocalPtyDeliveryState) | undefined
 ): Promise<IpcPtySpawnResponse> {
   if (
     !admittedSessionId &&
@@ -72,7 +69,7 @@ export async function spawnIpcPty(
       { ...transportOptions, command: undefined, launchConfig: undefined },
       { ...connectOptions, command: undefined, launchConfig: undefined },
       created.terminal.ptyId,
-      consumerAttempt
+      dispatchAttachment
     )
   }
   const {
@@ -106,10 +103,8 @@ export async function spawnIpcPty(
     resumesAgent && !admittedSessionId ? connectOptions.resumeSpawnIntent : undefined
   // Why: a reattach under an admitted session id must never stop the PTY it is reattaching.
   const replacesPtyId = admittedSessionId ? null : (connectOptions.claimReplacedPtyId?.() ?? null)
-  // Why here: minted only once the request actually leaves, after any awaited preparation.
-  const consumerClaimToken = consumerAttempt
-    ? admitSpawnConsumerAttempt(consumerAttempt)
-    : undefined
+  // Why here: the record leaves with the request itself, after any awaited preparation.
+  const rendererAttachment = dispatchAttachment?.()
   return window.api.pty.spawn({
     cols: connectOptions.cols ?? 80,
     rows: connectOptions.rows ?? 24,
@@ -143,7 +138,7 @@ export async function spawnIpcPty(
     ...(connectionId ? { connectionId } : {}),
     ...(admittedSessionId ? { sessionId: admittedSessionId } : {}),
     ...(connectOptions.initiallyHidden ? { initiallyHidden: true } : {}),
-    ...(consumerClaimToken !== undefined ? { consumerClaimToken } : {}),
+    ...(rendererAttachment ? { rendererAttachment } : {}),
     worktreeId,
     ...(tabId ? { tabId } : {}),
     ...(leafId ? { leafId } : {}),

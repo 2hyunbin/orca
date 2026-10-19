@@ -1,11 +1,7 @@
 import { recordDaemonStreamBacklogEvent } from '../../../daemon/daemon-stream-backlog-probe'
 import { hasLocalRendererConsumer } from '../../pty-hidden-delivery-gate'
 import { closeStartupQueryAuthorityForPty, tryGetProviderForPty } from '../provider/registry'
-import {
-  hasLocalVisibleRendererView,
-  PRODUCER_FLOW_CONTROL_ENABLED,
-  visibleRendererPtys
-} from './visibility-state'
+import { hasLocalVisibleRendererView, PRODUCER_FLOW_CONTROL_ENABLED } from './visibility-state'
 import type { PtyIpcSession } from '../session'
 
 export function updateProducerFlowControl(session: PtyIpcSession, id: string): void {
@@ -21,9 +17,8 @@ export function syncPtyBackgroundedDelivery(
   caller: string
 ): void {
   // Why: no local view on screen paces the producer unless a raw remote viewer still watches it.
-  const background =
-    !hasLocalVisibleRendererView(id) &&
-    !(session.runtime?.hasRawTerminalViewSubscriber?.(id) ?? false)
+  const visible = hasLocalVisibleRendererView(id)
+  const background = !visible && !(session.runtime?.hasRawTerminalViewSubscriber?.(id) ?? false)
   if (session.backgroundedDeliverySyncByPty.get(id) === background) {
     return
   }
@@ -35,7 +30,7 @@ export function syncPtyBackgroundedDelivery(
     sessionIdSuffix: id.slice(-10),
     background,
     caller,
-    visible: visibleRendererPtys.has(id)
+    visible
   })
   const previous = session.backgroundedDeliverySyncByPty.get(id)
   session.backgroundedDeliverySyncByPty.set(id, background)

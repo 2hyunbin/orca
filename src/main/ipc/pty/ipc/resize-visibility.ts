@@ -15,15 +15,14 @@ import {
   activeRendererPtys,
   invalidatePendingPtyDrainPolicy,
   invalidatePendingPtyDrainPriority,
-  ptySizes,
-  visibleRendererPtys
+  ptySizes
 } from '../delivery/visibility-state'
 import { resetRendererDeliveryAccountingForLifecycleReset } from '../delivery/debug'
 import { PTY_DELIVERY_HEAL_MIN_ACK_SILENCE_MS } from '../delivery/constants'
 import { applyCumulativeAck } from '../delivery/accounting'
-import { admitRendererDocument } from '../delivery/renderer-document'
+import { isAdmittedRendererPage } from '../delivery/renderer-page'
 import { isMainWindowPtyIpcEvent } from './write-input'
-import { installRendererConsumerIpc } from './renderer-consumer-ipc'
+import { installRendererAttachmentIpc } from './renderer-attachment-ipc'
 import type { PtyIpcSession } from '../session'
 
 export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
@@ -221,31 +220,18 @@ export function installPtyResizeVisibilityIpc(session: PtyIpcSession): void {
     invalidatePendingPtyDrainPriority(args.id)
   })
 
-  ipcMain.removeAllListeners('pty:setRendererPtyVisible')
-  ipcMain.on(
-    'pty:setRendererPtyVisible',
-    (_event, args: { doc?: unknown; id: string; visible: boolean }) => {
-      if (typeof args.id !== 'string' || !args.id || !admitRendererDocument(args.doc)) {
-        return
-      }
-      if (args.visible) {
-        visibleRendererPtys.add(args.id)
-        closeStartupQueryAuthorityForPty(args.id)
-      } else {
-        visibleRendererPtys.delete(args.id)
-      }
-      session.syncPtyBackgroundedDelivery(args.id, 'visibility-report')
-    }
-  )
-
-  installRendererConsumerIpc(session)
+  installRendererAttachmentIpc(session)
   installTerminalViewAttributesIpc(session)
 
   ipcMain.removeAllListeners('pty:setPtyDeliveryInterest')
   ipcMain.on(
     'pty:setPtyDeliveryInterest',
-    (_event, args: { doc?: unknown; id: string; interested: boolean }) => {
-      if (typeof args.id !== 'string' || !args.id || !admitRendererDocument(args.doc)) {
+    (event, args: { page?: unknown; id: string; interested: boolean }) => {
+      if (
+        typeof args.id !== 'string' ||
+        !args.id ||
+        !isAdmittedRendererPage(event, mainWindow, args.page)
+      ) {
         return
       }
       // Why: any delivery interest suppresses the hidden-delivery gate (raw-byte consumers keep receiving while hidden); not synced to the daemon pacer so interest churn can't un-pace a flood.

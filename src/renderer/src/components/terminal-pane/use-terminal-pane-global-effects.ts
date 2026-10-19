@@ -22,10 +22,6 @@ import {
   type TerminalHiddenReason
 } from './terminal-visibility-resume'
 import { useTerminalWindowWakeRecovery } from './use-terminal-window-wake-recovery'
-import {
-  releaseRendererPtyVisibilityClaim,
-  setRendererPtyVisibilityClaim
-} from './pty-renderer-delivery-claims'
 import { activePaneIsCoveredByNativeChat } from './native-chat-covered-pane'
 
 type UseTerminalPaneGlobalEffectsArgs = {
@@ -51,13 +47,8 @@ function reportRendererPtyVisibility(
   visible: boolean
 ): void {
   for (const transport of paneTransports.values()) {
-    const ptyId = transport.getPtyId()
-    if (!ptyId || isRemoteRuntimePtyId(ptyId)) {
-      // Why: remote-runtime PTYs use a relay path outside main's local
-      // renderer-visibility registry, so reporting them here is misleading.
-      continue
-    }
-    setRendererPtyVisibilityClaim(transport, ptyId, visible)
+    // Why: only local transports keep connection records in main; remote ones relay elsewhere.
+    transport.setLocalPtyDelivery?.({ visible })
   }
 }
 
@@ -129,7 +120,7 @@ export function useTerminalPaneGlobalEffects({
     reportRendererPtyVisibility(paneTransports, rendererVisible)
     return () => {
       for (const transport of paneTransports.values()) {
-        releaseRendererPtyVisibilityClaim(transport)
+        transport.setLocalPtyDelivery?.({ visible: false })
       }
     }
   }, [rendererVisible, paneTransportsRef])

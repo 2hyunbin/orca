@@ -16,7 +16,7 @@ import type { ReplacedPaneOwner } from '../pane/pane-owner-replacement'
 import { localProvider } from '../provider/registry'
 import type { AdoptStablePaneResult, PtySpawnIpcArgs, PtySpawnIpcDeps } from './spawn-types'
 import type { PaneAgentLaunch } from './spawn-agent-launch-end'
-import type { SpawnConsumerClaim } from '../delivery/spawn-consumer-claims'
+import type { RendererAttachmentBinding } from '../delivery/renderer-attachments'
 
 export type PtyIpcSpawnState = {
   deps: PtySpawnIpcDeps
@@ -92,14 +92,14 @@ export type PtyIpcSpawnState = {
   codexResumeHomeSelected: boolean
   hadSessionSizeBeforeAttach: boolean
   sessionSizeBeforeAttach: { cols: number; rows: number } | undefined
-  /** This request's pending visible consumer; bound at the provider boundary. */
-  consumerClaim: SpawnConsumerClaim | null
+  /** The requesting connection's attachment record; bound at the provider boundary. */
+  rendererAttachment: RendererAttachmentBinding | null
 }
 
 export function createPtyIpcSpawnState(
   deps: PtySpawnIpcDeps,
   args: PtySpawnIpcArgs,
-  consumerClaim: SpawnConsumerClaim | null = null
+  rendererAttachment: RendererAttachmentBinding | null = null
 ): PtyIpcSpawnState {
   return {
     deps,
@@ -169,6 +169,6 @@ export function createPtyIpcSpawnState(
     codexResumeHomeSelected: false,
     hadSessionSizeBeforeAttach: false,
     sessionSizeBeforeAttach: undefined,
-    consumerClaim
+    rendererAttachment
   }
 }

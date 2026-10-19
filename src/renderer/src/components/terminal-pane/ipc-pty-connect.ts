@@ -17,13 +17,7 @@ import { isSshSessionGoneError } from './pty-connection/pty-connect-limits'
 import { spawnIpcPty } from './ipc-pty-spawn-request'
 import { settleAgentLaunchPaneStart } from '@/lib/agent-launch-pane-start'
 import type { IpcPtyTransportOptions, PtyConnectResult, PtyTransport } from './pty-transport-types'
-import {
-  createSpawnConsumerAttempt,
-  handOffSpawnConsumerAttempt,
-  settleUnhandedSpawnConsumerAttempt,
-  type RendererPtyVisibilityClaimOwner,
-  type SpawnConsumerAttempt
-} from './pty-renderer-delivery-claims'
+import type { LocalPtyDeliveryState } from './pty-renderer-delivery-claims'
 
 const SSH_PTY_CONNECTION_MISMATCH_MARKER = 'belongs to SSH connection'
 
@@ -41,31 +35,13 @@ type IpcPtyConnectContext = {
   isCurrent: (id: string) => boolean
   setCallbacks: (callbacks: PtyConnectOptions['callbacks']) => void
   getCallbacks: () => PtyConnectOptions['callbacks']
-  /** The transport whose consumer reports take over this connect's spawn claim. */
-  claimOwner: RendererPtyVisibilityClaimOwner
+  /** This connection's record for the spawn request; undefined once the attempt is superseded. */
+  dispatchAttachment: () => ({ key: string } & LocalPtyDeliveryState) | undefined
 }
 
 export async function connectIpcPty(
   options: PtyConnectOptions,
   context: IpcPtyConnectContext
-): Promise<void | string | PtyConnectResult> {
-  // Why: a visible connect promises main a consumer before byte zero; every outcome must end that promise.
-  const attempt = createSpawnConsumerAttempt(
-    context.claimOwner,
-    options.initiallyHidden !== true,
-    () => !context.isDestroyed() && (!options.shouldContinue || options.shouldContinue())
-  )
-  try {
-    return await runIpcPtyConnect(options, context, attempt)
-  } finally {
-    settleUnhandedSpawnConsumerAttempt(attempt)
-  }
-}
-
-async function runIpcPtyConnect(
-  options: PtyConnectOptions,
-  context: IpcPtyConnectContext,
-  attempt: SpawnConsumerAttempt
 ): Promise<void | string | PtyConnectResult> {
   const { transportOptions, handlers } = context
   const { onPtySpawn, retainDisposedSpawn } = transportOptions
@@ -111,7 +87,17 @@ async function runIpcPtyConnect(
     // this spawn can be handed an id a dead PTY used to own. State dated at or below this fence was
     // recorded before we asked for a PTY, so it belongs to that earlier owner, not to us.
     const priorIncarnationFence = currentPreHandlerPtySequence()
-    const spawnResult = await spawnIpcPty(transportOptions, options, admittedSessionId, attempt)
+    // Why a live check at dispatch: a connect abandoned during preparation sends no record.
+    const dispatchAttachment = () =>
+      context.isDestroyed() || (options.shouldContinue && !options.shouldContinue())
+        ? undefined
+        : context.dispatchAttachment()
+    const spawnResult = await spawnIpcPty(
+      transportOptions,
+      options,
+      admittedSessionId,
+      dispatchAttachment
+    )
     settleAgentLaunchPaneStart(transportOptions.tabId, transportOptions.leafId, spawnResult.id)
     const retireDisposedFreshSpawn = async (): Promise<void> => {
       if (context.handleExplicitlyClosedConnect?.(spawnResult.id)) {
@@ -181,7 +167,6 @@ async function runIpcPtyConnect(
     if (context.isDestroyed() || !context.isCurrent(spawnResult.id)) {
       return
     }
-    handOffSpawnConsumerAttempt(attempt, spawnResult.id)
     return projectIpcPtyConnectResult(spawnResult)
   } catch (error) {
     settleAgentLaunchPaneStart(transportOptions.tabId, transportOptions.leafId, null)

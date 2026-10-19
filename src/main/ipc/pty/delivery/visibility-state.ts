@@ -1,4 +1,4 @@
-import { hasSpawnConsumerClaim } from './spawn-consumer-claims'
+import { hasVisibleRendererAttachment } from './renderer-attachments'
 
 export const SYNTHETIC_KILL_EXIT_DUPLICATE_WINDOW_MS = 30_000
 // Why: kill switch — flip to disable producer flow control (pause/resume) without untangling the wiring.
@@ -9,11 +9,10 @@ export const ptySizes = new Map<string, { cols: number; rows: number }>()
 export const lastInputAtByPty = new Map<string, number>()
 export const interactiveOutputCharsByPty = new Map<string, number>()
 export const activeRendererPtys = new Set<string>()
-export const visibleRendererPtys = new Set<string>()
 
-/** A local view is on screen, or a window spawn is about to mount one. */
+/** A local view is on screen, or a visible window spawn is about to mount one. */
 export function hasLocalVisibleRendererView(id: string): boolean {
-  return visibleRendererPtys.has(id) || hasSpawnConsumerClaim(id)
+  return hasVisibleRendererAttachment(id)
 }
 // Why null-init + wrapper fns: see debug.ts — rolldown const-folds `export let fn = noop` bridges (STA-5661).
 let invalidatePendingPtyDrainPriorityImpl: ((id?: string, schedule?: boolean) => void) | null = null

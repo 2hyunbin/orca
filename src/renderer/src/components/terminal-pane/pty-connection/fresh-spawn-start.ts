@@ -19,7 +19,6 @@ import type {
 
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 import { findTerminalTabForPane } from './terminal-tab-id'
-import { abandonSpawnConsumerAttempt } from '../pty-renderer-delivery-claims'
 
 export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
   session.startFreshSpawn = (
@@ -178,7 +177,9 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
           if (!accepted) {
             // A rejected reattach ends this spawn; nothing later clears the fence or reports its id.
             releaseDeferredCwdFence()
-            abandonSpawnConsumerAttempt(session.transport)
+            if (resolvedPtyId) {
+              session.transport.abandonLocalPtyAttachment?.(resolvedPtyId)
+            }
           }
           return accepted ? resolvedPtyId : null
         }

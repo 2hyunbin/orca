@@ -2,33 +2,30 @@
  * Main-side hidden-delivery gate for renderer PTY byte delivery (Phase 4 of
  * the terminal model/view architecture).
  *
- * Delivery is derived from positive claims: a local view that consumes the
- * PTY's bytes (renderer consumer report or a window spawn's pending claim), or
- * a raw-byte sidecar's delivery interest. With neither, main drops
+ * Delivery is derived from positive claims: a renderer connection whose view
+ * consumes the PTY's bytes (from its spawn on), or a raw-byte sidecar's
+ * delivery interest. With neither, main drops
  * renderer-bound delivery AFTER model ingestion and answers the PTY's queries;
  * reveal restores from the model snapshot via the seq-guarded machinery.
  */
 import type { GlobalSettings } from '../../shared/global-settings-types'
-import { _resetRendererDocumentForTest } from './pty/delivery/renderer-document'
 import {
-  _resetSpawnConsumerClaimsForTest,
-  hasSpawnConsumerClaim
-} from './pty/delivery/spawn-consumer-claims'
+  _resetRendererAttachmentsForTest,
+  hasConsumingRendererAttachment
+} from './pty/delivery/renderer-attachments'
 
 export type HiddenPtyDeliveryGateSettings = Pick<
   GlobalSettings,
   'terminalMainSideEffectAuthority' | 'terminalHiddenDeliveryGate'
 >
 
-// Why: the renderer's aggregate per-owner consumer claim; absence means no local view consumes bytes.
-const rendererConsumerPtys = new Set<string>()
 // Why: sidecar consumers (paste-draft pacing, background agent launches,
 // automation observers) need live bytes even while no visible view exists. Any
 // registered interest suppresses the gate for that PTY.
 const deliveryInterestRendererPtys = new Set<string>()
 // Why: reveal must restore from the model only when bytes were actually
 // dropped. Doubles as the marker latch: the first gated drop emits a restore
-// marker and every new consumer report re-emits one. It retires only when the
+// marker and every new consuming view re-emits one. It retires only when the
 // renderer acks the restore painted, or on PTY teardown — a replacement view may
 // take the marker handler while the old one still consumes, so spending it on a
 // report loses the gap. 'awaiting-paint' = a report re-emitted the marker; a drop
@@ -54,15 +51,9 @@ export function isHiddenPtyDeliveryGateEnabled(
   )
 }
 
-/** One view newly consumes (or the last view stopped consuming) this PTY's
- *  bytes. A consuming report returns the outstanding drop episode so the newest
- *  marker handler can pull the restore; it reads the latch without spending it. */
-export function setRendererPtyConsumer(id: string, consuming: boolean): number | undefined {
-  if (!consuming) {
-    rendererConsumerPtys.delete(id)
-    return undefined
-  }
-  rendererConsumerPtys.add(id)
+/** A view now consumes this PTY: returns the outstanding drop episode so its
+ *  marker handler can pull the restore. Reads the latch without spending it. */
+export function rearmHiddenRendererPtyRestore(id: string): number | undefined {
   const latch = droppedSinceHiddenPtys.get(id)
   if (!latch) {
     return undefined
@@ -82,22 +73,16 @@ export function consumeHiddenRendererPtyDropMemory(id: string, hiddenDropEpisode
 }
 
 export function hasLocalRendererConsumer(id: string): boolean {
-  return rendererConsumerPtys.has(id) || hasSpawnConsumerClaim(id)
+  return hasConsumingRendererAttachment(id)
 }
 
 export function hasRendererPtyDeliveryInterest(id: string): boolean {
   return deliveryInterestRendererPtys.has(id)
 }
 
-/** For diagnostics and document retire: every PTY with renderer claim or drop state. */
+/** For diagnostics and page retire: every PTY with interest or drop state. */
 export function getRendererDeliveryGatePtyIds(): string[] {
-  return [
-    ...new Set([
-      ...rendererConsumerPtys,
-      ...deliveryInterestRendererPtys,
-      ...droppedSinceHiddenPtys.keys()
-    ])
-  ]
+  return [...new Set([...deliveryInterestRendererPtys, ...droppedSinceHiddenPtys.keys()])]
 }
 
 /** Renderer-side ref-counted interest, surfaced as boolean transitions. */
@@ -137,17 +122,14 @@ export function recordHiddenRendererPtyDataDrop(
   return { shouldEmitRestoreMarker: true, hiddenDropEpisode: episode }
 }
 
-/** The renderer document died: its consumer reports and interest holds died
- *  with it. Drop memory is preserved for the successor's restore. */
-export function clearRendererScopedPtyDeliveryClaims(): void {
-  rendererConsumerPtys.clear()
+/** The renderer page died with its interest holds; drop memory stays for the successor's restore. */
+export function clearRendererPtyDeliveryInterest(): void {
   deliveryInterestRendererPtys.clear()
 }
 
 /** Full per-PTY teardown — wired into clearProviderPtyState so every exit
  *  path (local, daemon, SSH, connection teardown) releases gate state. */
 export function clearHiddenRendererPtyDeliveryState(id: string): void {
-  rendererConsumerPtys.delete(id)
   deliveryInterestRendererPtys.delete(id)
   droppedSinceHiddenPtys.delete(id)
 }
@@ -173,10 +155,8 @@ export function resetHiddenRendererPtyDeliveryDebugCounters(): void {
 
 /** Test seam: reset all module state between tests. */
 export function _resetHiddenRendererPtyDeliveryGateForTest(): void {
-  rendererConsumerPtys.clear()
   deliveryInterestRendererPtys.clear()
   droppedSinceHiddenPtys.clear()
   resetHiddenRendererPtyDeliveryDebugCounters()
-  _resetSpawnConsumerClaimsForTest()
-  _resetRendererDocumentForTest()
+  _resetRendererAttachmentsForTest()
 }

@@ -11,7 +11,7 @@ import {
   hasLocalRendererConsumer,
   hasRendererPtyDeliveryInterest
 } from '../../pty-hidden-delivery-gate'
-import { unbindSpawnConsumerClaimsForPty } from '../delivery/spawn-consumer-claims'
+import { unbindRendererAttachmentsForPty } from '../delivery/renderer-attachments'
 import { agentSessionOwners } from '../pane/agent-session-owners'
 import { paneKeyPtyId, paneKeyTeardownListeners, ptyPaneKey } from '../pane/key-state'
 import { getPtyIdsForConnection, ptyIncarnationById, ptyOwnership } from './ownership-state'
@@ -23,8 +23,7 @@ import {
   invalidatePendingPtyDrainPriority,
   lastInputAtByPty,
   providerSnapshotRequiredPtys,
-  ptySizes,
-  visibleRendererPtys
+  ptySizes
 } from '../delivery/visibility-state'
 
 /**
@@ -54,11 +53,10 @@ export function clearProviderPtyState(
   lastInputAtByPty.delete(id)
   interactiveOutputCharsByPty.delete(id)
   const activeChanged = activeRendererPtys.delete(id)
-  visibleRendererPtys.delete(id)
   // Why: every teardown path funnels through here — consumer/interest claims must not outlive the PTY or a reused id could silently receive a dead view's bytes.
   const deliveryPolicyChanged = hasLocalRendererConsumer(id) || hasRendererPtyDeliveryInterest(id)
   // Why unbind, not delete: a dead-owner replacement re-binds the same request's claim.
-  unbindSpawnConsumerClaimsForPty(id)
+  unbindRendererAttachmentsForPty(id)
   clearHiddenRendererPtyDeliveryState(id)
   if (activeChanged) {
     invalidatePendingPtyDrainPriority(id, false)

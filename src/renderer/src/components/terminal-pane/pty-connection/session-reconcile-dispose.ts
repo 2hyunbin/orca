@@ -5,7 +5,6 @@ import { cancelPendingSafeFitContinuations } from '@/lib/pane-manager/pane-tree-
 import { PANE_PTY_RESIZE_HOLD_FLUSH_EVENT } from '@/lib/pane-manager/pane-pty-resize-hold'
 import { discardTerminalOutput } from '@/lib/pane-manager/pane-terminal-output-scheduler'
 import { getProviderSessionClaimKey } from '@/lib/sleeping-agent-pane-ownership'
-import { releaseRendererPtyOwnerClaims } from '../pty-renderer-delivery-claims'
 
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
 import { SHIFT_ENTER_RECONFIRM_IDLE_MS } from './foreground-output-scan'
@@ -238,7 +237,8 @@ export function installSessionReconcileDispose(session: ConnectPanePtySession): 
       session.unregisterBacklogRecovery = null
       session.unregisterDocumentVisibilityRecovery?.()
       session.unregisterDocumentVisibilityRecovery = null
-      releaseRendererPtyOwnerClaims(session.transport)
+      // Why: a disposed view consumes nothing; the transport's own detach or destroy ends its records.
+      session.transport.setLocalPtyDelivery?.({ consuming: false, visible: false })
       // Why: the pane's fact consumer must be gone before a parked-tab watcher takes over this PTY's facts in the same effect flush.
       session.dropSideEffectFactConsumer()
       session.clearPanePtyFitBinding()

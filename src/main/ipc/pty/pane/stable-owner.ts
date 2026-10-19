@@ -20,9 +20,9 @@ import {
 import { ptyIncarnationById } from '../provider/ownership-state'
 import { releaseAbsentPaneOwner } from './absent-pane-owner'
 import {
-  withSpawnConsumerClaimBinding,
-  type SpawnConsumerClaim
-} from '../delivery/spawn-consumer-claims'
+  withRendererAttachmentBinding,
+  type RendererAttachmentBinding
+} from '../delivery/renderer-attachments'
 import { spawnCommitBindingOrigin } from '../../../persistence/loading-store/pty-binding-span'
 
 export type StablePaneOwner = {
@@ -183,8 +183,8 @@ export type StablePaneSpawnContext = {
   connectionId?: string | null
   resolveOwner?: () => StablePaneOwner | null
   onFreshSpawn?: (result: PtySpawnResult) => void
-  /** A window request's pending visible consumer, bound before the provider can emit. */
-  consumerClaim?: SpawnConsumerClaim | null
+  /** The requesting window connection's record, bound before the provider can emit. */
+  rendererAttachment?: RendererAttachmentBinding | null
 }
 
 export function stablePanePersistenceFence(
@@ -231,7 +231,7 @@ export async function attachStablePaneOwner(
   const { owner, provider, spawnOptions } = args
   let result: PtySpawnResult
   try {
-    args.consumerClaim?.bind(owner.ptyId)
+    args.rendererAttachment?.bind(owner.ptyId)
     result = await provider.spawn({
       ...spawnOptions,
       sessionId: owner.ptyId,
@@ -300,7 +300,7 @@ export async function spawnForStablePane(
     }
   }
   const result = await args.provider.spawn(
-    withSpawnConsumerClaimBinding(args.spawnOptions, args.consumerClaim)
+    withRendererAttachmentBinding(args.spawnOptions, args.rendererAttachment)
   )
   args.onFreshSpawn?.(result)
   return { result, owner: null }

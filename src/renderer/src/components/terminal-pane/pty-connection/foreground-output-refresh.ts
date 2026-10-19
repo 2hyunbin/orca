@@ -12,10 +12,6 @@ import { recordTerminalOutput } from '@/lib/pane-manager/pane-scroll'
 import { ensureArabicShapingJoinerForText } from '@/lib/pane-manager/terminal-arabic-shaping-joiner'
 import { registerPtyModelRestoreNeededHandler } from '../pty-model-restore-channel'
 import type { PtyModelRestoreNeededEvent } from '../../../../../shared/pty-model-restore-marker'
-import {
-  clearRendererPtyConsumerClaim,
-  setRendererPtyConsumerClaim
-} from '../pty-renderer-delivery-claims'
 
 import { HIDDEN_OUTPUT_RESTORE_FLOOD_SUPPRESS_MS } from './hidden-output-restore-limits'
 import {
@@ -104,9 +100,10 @@ export function bindForegroundOutputRefresh(session: ConnectPanePtySession): voi
     }
   }
 
-  function syncModelRestoreNeededSubscription(ptyId: string | null): void {
+  /** Returns whether a restore handler was newly registered for this PTY. */
+  function syncModelRestoreNeededSubscription(ptyId: string | null): boolean {
     if (session.modelRestoreSubscribedPtyId === ptyId) {
-      return
+      return false
     }
     session.unregisterModelRestoreNeeded?.()
     session.unregisterModelRestoreNeeded = null
@@ -117,12 +114,13 @@ export function bindForegroundOutputRefresh(session: ConnectPanePtySession): voi
     // Why: markers exist only for PTYs whose bytes transit local main;
     // remote-runtime transports are structurally unaffected.
     if (!ptyId || isRemoteRuntimePtyId(ptyId)) {
-      return
+      return false
     }
     session.unregisterModelRestoreNeeded = registerPtyModelRestoreNeededHandler(
       ptyId,
       handleModelRestoreNeededMarker
     )
+    return true
   }
 
   session.handleRemoteOutputPauseChanged = (paused, supported, dropsReported): void => {
@@ -172,7 +170,7 @@ export function bindForegroundOutputRefresh(session: ConnectPanePtySession): voi
 
   session.syncHiddenRendererPtyDelivery = (): void => {
     const ptyId = session.transport.getPtyId()
-    syncModelRestoreNeededSubscription(ptyId)
+    const restoreHandlerRegistered = syncModelRestoreNeededSubscription(ptyId)
     if (session.remoteOutputGatedPtyId !== null && session.remoteOutputGatedPtyId !== ptyId) {
       session.remoteOutputGatedPtyId = null
       if (!session.mainSideEffectAuthority) {
@@ -192,16 +190,18 @@ export function bindForegroundOutputRefresh(session: ConnectPanePtySession): voi
       )
       return
     }
-    if (!ptyId || isRemoteRuntimePtyId(ptyId)) {
+    if (isRemoteRuntimePtyId(ptyId)) {
       return
     }
     // Why: a pane created with the gate off keeps feeding its byte parsers, so it always consumes.
-    setRendererPtyConsumerClaim(
-      session.transport,
-      ptyId,
-      !session.disposed &&
-        (!session.hiddenDeliveryGateActive ||
-          shouldWritePtyOutputForeground(session.deps.isVisibleRef.current))
+    session.transport.setLocalPtyDelivery?.(
+      {
+        consuming:
+          !session.disposed &&
+          (!session.hiddenDeliveryGateActive ||
+            shouldWritePtyOutputForeground(session.deps.isVisibleRef.current))
+      },
+      restoreHandlerRegistered
     )
   }
   session.releaseHiddenRendererPtyDelivery = (): void => {
@@ -212,7 +212,6 @@ export function bindForegroundOutputRefresh(session: ConnectPanePtySession): voi
         session.dropSideEffectFactConsumer()
       }
     }
-    clearRendererPtyConsumerClaim(session.transport)
     session.unregisterModelRestoreNeeded?.()
     session.unregisterModelRestoreNeeded = null
     session.modelRestoreSubscribedPtyId = null

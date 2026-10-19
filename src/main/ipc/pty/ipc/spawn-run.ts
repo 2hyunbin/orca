@@ -17,7 +17,7 @@ import { commitPtyIpcSpawn } from './spawn-commit'
 import { createPtyIpcSpawnState, type PtyIpcSpawnState } from './spawn-state'
 import { triggerPtySpawnPushTargetMaterialization } from './spawn-push-target-materialization'
 import type { PtySpawnIpcArgs, PtySpawnIpcDeps } from './spawn-types'
-import type { SpawnConsumerClaim } from '../delivery/spawn-consumer-claims'
+import type { RendererAttachmentBinding } from '../delivery/renderer-attachments'
 
 function releaseAbandonedAgentTeamsLeader(ctx: PtyIpcSpawnState): void {
   if (!ctx.agentTeamsLeaderHandle) {
@@ -30,9 +30,9 @@ function releaseAbandonedAgentTeamsLeader(ctx: PtyIpcSpawnState): void {
 export async function runPtyIpcSpawn(
   deps: PtySpawnIpcDeps,
   args: PtySpawnIpcArgs,
-  consumerClaim: SpawnConsumerClaim | null = null
+  rendererAttachment: RendererAttachmentBinding | null = null
 ) {
-  const ctx = createPtyIpcSpawnState(deps, args, consumerClaim)
+  const ctx = createPtyIpcSpawnState(deps, args, rendererAttachment)
   const replacedPaneKey =
     args.replacesPtyId !== undefined ? resolveEarlyPaneSpawnReservationKey(args) : null
   if (replacedPaneKey) {

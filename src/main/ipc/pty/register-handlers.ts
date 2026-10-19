@@ -19,7 +19,7 @@ import {
   type PtyKillIpcDeps
 } from './ipc/renderer-kill'
 import { installPtyWriteIpcHandlers } from './ipc/write'
-import { installPtySpawnIpcHandler, openWindowSpawnConsumerClaim } from './ipc/spawn'
+import { installPtySpawnIpcHandler, openSpawnRendererAttachment } from './ipc/spawn'
 import { installPtyLeafMoveIpcHandler } from './ipc/leaf-move'
 import { installPtyRuntimeController } from './runtime/controller'
 import { installPtySnapshotIpcHandlers } from './ipc/snapshot'
@@ -259,7 +259,8 @@ export function registerPtyHandlers(
     resolveCodexResumeLaunch,
     reconcileSharedRuntimeResumeHome,
     stripSequencedStartupResumeArgv,
-    openSpawnConsumerClaim: (event, args) => openWindowSpawnConsumerClaim(event, args, mainWindow),
+    openSpawnRendererAttachment: (event, args) =>
+      openSpawnRendererAttachment(event, args, mainWindow),
     trustedTerminalHandleEnv: session.trustedTerminalHandleEnv,
     sendPtySpawnedToRenderer: session.sendPtySpawnedToRenderer,
     syncPtyBackgroundedDelivery: session.syncPtyBackgroundedDelivery,

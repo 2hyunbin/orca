@@ -53,8 +53,8 @@ export type PtyApi = {
     terminalColorQueryReplies?: { foreground?: string; background?: string }
     // Why: an unmeasured hidden request; main only seeds its provisional size from it.
     initiallyHidden?: boolean
-    /** A mounting pane's pending visible consumer, held by main until the pane reports its own. */
-    consumerClaimToken?: number
+    /** The requesting connection's record, opened in main before the provider can emit. */
+    rendererAttachment?: { key: string; consuming: boolean; visible: boolean }
     // Why: main sync-flushes the (worktreeId,tabId,leafId→ptyId) binding before pty:spawn returns to close a SIGKILL race (INVESTIGATION.md).
     tabId?: string
     leafId?: string
@@ -130,12 +130,15 @@ export type PtyApi = {
    *  main can release sends held during the load/reload boot window. */
   rendererDispatcherReady: () => void
   setActiveRendererPty: (id: string, active: boolean) => void
-  setRendererPtyVisible: (id: string, visible: boolean) => void
-  /** Hidden-delivery gate (Phase 4): with no consuming view main drops
-   *  renderer byte delivery after model ingestion; reveal restores from snapshots. */
-  setRendererPtyConsumer: (id: string, consuming: boolean) => void
-  /** Ends a spawn's pending consumer claim once the pane reported its own. */
-  settleSpawnConsumerClaim: (token: number) => void
+  /** One local transport connection's delivery facts. Main derives drop, reply and
+   *  pacing policy from every open connection; the connection's retirement closes it. */
+  openRendererAttachment: (
+    key: string,
+    ptyId: string,
+    state: { consuming?: boolean; visible?: boolean }
+  ) => void
+  updateRendererAttachment: (key: string, state: { consuming?: boolean; visible?: boolean }) => void
+  closeRendererAttachment: (key: string) => void
   /** Ref-counted-on-the-renderer delivery-interest signal that suppresses
    *  the hidden-delivery gate while any raw-byte consumer is registered. */
   setPtyDeliveryInterest: (id: string, interested: boolean) => void

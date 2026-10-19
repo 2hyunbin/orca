@@ -5,6 +5,7 @@ import { createIpcPtySessionHandlers } from './ipc-pty-session-handlers'
 import { createPtyInputWriteQueue } from './pty-input-write-queue'
 import { createPtyOutputProcessor } from './pty-output-processor'
 import { createPtyPreconnectInputBuffer } from './pty-preconnect-input-buffer'
+import { createLocalPtyAttachmentLifecycle } from './pty-renderer-delivery-claims'
 import type { IpcPtyTransportOptions, PtyTransport } from './pty-transport-types'
 import type { TerminalInputKind } from '../../../../shared/terminal-input-kind'
 
@@ -29,6 +30,8 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
   let lastExitGeneration: number | null = null
   let suppressAttentionEvents = false
   let storedCallbacks: Parameters<PtyTransport['connect']>[0]['callbacks'] = {}
+  // Why: main derives local delivery from this connection's record, so every lifecycle edge below updates it.
+  const attachments = createLocalPtyAttachmentLifecycle()
   const preconnectInputBuffer =
     opts.bufferInputUntilConnect || opts.preconnectInput?.length
       ? createPtyPreconnectInputBuffer(opts.preconnectInput)
@@ -72,11 +75,13 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
       lastExitGeneration = lifecycleGeneration
       connected = false
       ptyId = null
+      attachments.release()
       preconnectInputBuffer?.clear()
     },
     onPtyExit
   })
   const bind = (id: string): void => {
+    attachments.bind()
     ptyId = id
     connected = true
   }
@@ -118,11 +123,13 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
     })
   }
 
-  const transport: PtyTransport = {
+  return {
     getPendingEscapeTailAnsi: outputProcessor.getPendingEscapeTailAnsi,
     connect: async (options) => {
       const connectGeneration = advancePtyLifecycle()
       pendingConnectGeneration = connectGeneration
+      const hidden = options.initiallyHidden === true
+      const attachment = attachments.begin({ consuming: !hidden, visible: !hidden })
       try {
         return await connectIpcPty(options, {
           transportOptions: opts,
@@ -138,9 +145,10 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
           isCurrent: (id) => lifecycleGeneration === connectGeneration && connected && ptyId === id,
           setCallbacks,
           getCallbacks: () => storedCallbacks,
-          claimOwner: transport
+          dispatchAttachment: () => attachments.dispatch(attachment)
         })
       } finally {
+        attachments.finish(attachment)
         if (pendingConnectGeneration === connectGeneration) {
           pendingConnectGeneration = null
         }
@@ -155,6 +163,7 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
 
     attach: (options) => {
       const attachGeneration = advancePtyLifecycle()
+      const attachment = attachments.begin()
       try {
         attachIpcPty(options, {
           handlers,
@@ -170,6 +179,8 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
       } catch (error) {
         preconnectInputBuffer?.clear()
         throw error
+      } finally {
+        attachments.finish(attachment, ptyId ?? undefined)
       }
       if (lifecycleGeneration === attachGeneration) {
         void flushPreconnectInput()
@@ -186,6 +197,7 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
       const id = ptyId
       connected = false
       ptyId = null
+      attachments.release()
       handlers.clearAccumulatedState()
       if (id) {
         try {
@@ -211,7 +223,16 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
       }
       connected = false
       ptyId = null
+      attachments.release()
       storedCallbacks = {}
+    },
+
+    setLocalPtyDelivery: attachments.setDesired,
+
+    abandonLocalPtyAttachment(id) {
+      if (ptyId === id) {
+        attachments.abandonBound()
+      }
     },
 
     sendInput(data, inputKind) {
@@ -291,5 +312,4 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
       }
     }
   }
-  return transport
 }
