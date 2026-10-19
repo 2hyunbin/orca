@@ -9,7 +9,7 @@ export function SourceControlActionOptionsPlaceholder({
 }): React.JSX.Element {
   const count = value ? 1 + sourceControlActionChatOptions(value.agentId, value.model).length : 1
   return (
-    <div aria-hidden="true" className="grid grid-cols-2 gap-2">
+    <div aria-hidden="true" className="grid auto-rows-[minmax(56.5px,auto)] grid-cols-2 gap-2">
       {Array.from({ length: count }, (_, index) => (
         <div key={index} className="space-y-2">
           <Label>{'\u00a0'}</Label>

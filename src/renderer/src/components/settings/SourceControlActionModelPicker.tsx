@@ -39,7 +39,7 @@ export function SourceControlActionModelPicker({
   const unlisted = selected && !findCatalogModel(catalog, selected.model)
   const options = selected ? sourceControlActionChatOptions(agent, selected.model) : []
   return (
-    <div className="grid grid-cols-2 gap-2">
+    <div className="grid auto-rows-[minmax(56.5px,auto)] grid-cols-2 gap-2">
       <div className="space-y-2">
         <Label>{translate('settings.sourceControl.actionModel.model', 'Model')}</Label>
         <Select
