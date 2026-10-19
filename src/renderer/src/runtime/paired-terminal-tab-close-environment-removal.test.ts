@@ -3,7 +3,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PublicKnownRuntimeEnvironment } from '../../../shared/runtime-environments'
 import { getDefaultWorkspaceSession } from '../../../shared/constants'
-import type { PairedTerminalTabCloseIntent } from '../../../shared/paired-terminal-tab-close-intent'
+import {
+  PAIRED_TERMINAL_TAB_CLOSE_INTENT_MAX_AGE_MS,
+  type PairedTerminalTabCloseIntent
+} from '../../../shared/paired-terminal-tab-close-intent'
 import { useAppStore, type AppState } from '@/store'
 import { resetDeferredPeerChecksForTests } from '@/store/slices/runtime-environment-peer-replacement'
 import { replaceRuntimeEnvironmentRevisions } from './runtime-environment-revision'
@@ -81,6 +84,7 @@ beforeEach(() => {
   initialState = useAppStore.getState()
 })
 afterEach(() => {
+  vi.useRealTimers()
   useAppStore.setState(initialState, true)
   replaceRuntimeEnvironmentRevisions([])
   resetDeferredPeerChecksForTests()
@@ -154,10 +158,27 @@ describe('held paired-host closes when a server is removed', () => {
     useAppStore.getState().setRuntimeEnvironments([managed('env-a', 2)])
     expect(takeDueWebSessionCloseReplays(STORE, 'env-a', WT, new Set([TAB]))).toEqual([])
 
+    expect(hidden('env-a', 2)).toBe(true)
+
     useAppStore.getState().setRuntimeEnvironments([managed('env-a', 2, 'key-reinstalled')])
 
     expect(heldRevisions('env-a')).toBeUndefined()
+    expect(hidden('env-a', 2)).toBe(false)
     expect(takeDueWebSessionCloseReplays(STORE, 'env-a', WT, new Set([TAB]))).toEqual([])
+  })
+
+  it('shows the tab again when a close held through an undecided re-pair expires', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    useAppStore.getState().setRuntimeEnvironments([managed('env-a', 1, 'key-a')])
+    hold('env-a')
+    useAppStore.getState().setRuntimeEnvironments([managed('env-a', 2)])
+    expect(takeDueWebSessionCloseReplays(STORE, 'env-a', WT, new Set([TAB]))).toEqual([])
+    vi.setSystemTime(Date.now() + PAIRED_TERMINAL_TAB_CLOSE_INTENT_MAX_AGE_MS + 1)
+
+    expect(takeDueWebSessionCloseReplays(STORE, 'env-a', WT, new Set([TAB]))).toEqual([])
+
+    expect(heldRevisions('env-a')).toBeUndefined()
+    expect(hidden('env-a', 2)).toBe(false)
   })
 
   it('drops, at the first catalog, the closes of a server removed while the app was closed', () => {

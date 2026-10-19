@@ -96,7 +96,11 @@ function changeHeldIntents(
 ): boolean {
   const before = listHeldIntents(store, environmentId)
   change()
-  const kept = new Set(listHeldIntents(store, environmentId).map(pairedTerminalTabCloseIntentKey))
+  const after = listHeldIntents(store, environmentId)
+  const kept = new Set(after.map(pairedTerminalTabCloseIntentKey))
+  const stillHeldTabs = new Set(
+    after.flatMap((intent) => intent.hostTabIds.map((id) => `${intent.worktreeId}\0${id}`))
+  )
   let revealed = false
   for (const intent of before) {
     const key = pairedTerminalTabCloseIntentKey(intent)
@@ -106,6 +110,12 @@ function changeHeldIntents(
     attemptsByIntent.delete(attemptKey(environmentId, key))
     if (!stillHidden.has(key)) {
       revealHeldClose(intentOwner(environmentId, intent), intent.worktreeId, intent.hostTabIds)
+      // Why: a close waiting on an unknown or undecided pairing also hides under the current one.
+      revealHeldClose(
+        { environmentId },
+        intent.worktreeId,
+        intent.hostTabIds.filter((id) => !stillHeldTabs.has(`${intent.worktreeId}\0${id}`))
+      )
       revealed = true
     }
   }
