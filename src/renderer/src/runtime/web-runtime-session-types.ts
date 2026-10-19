@@ -47,7 +47,7 @@ export type CreateWebRuntimeSessionTerminalArgs = {
 export type CreatedWebRuntimeSessionTerminal = {
   outcome: WebRuntimeTerminalCreateOutcome
   hostTabId?: string
-  /** A create was attempted against a live session and not confirmed, as opposed to no session. */
+  /** A live session existed and the create was not confirmed, as opposed to no session to ask. */
   hostFailed?: true
 }
 

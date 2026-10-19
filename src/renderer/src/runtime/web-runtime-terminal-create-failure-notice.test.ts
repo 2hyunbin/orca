@@ -103,8 +103,12 @@ describe('a terminal the host fails to create', () => {
 
     expect(mocks.toastError).toHaveBeenCalledExactlyOnceWith(
       'Orca couldn’t confirm that the new terminal opened on the host.',
-      { description: expect.stringContaining(HOST_REFUSAL) }
+      expect.objectContaining({ description: expect.stringContaining(HOST_REFUSAL) })
     )
+    // One toast per workspace however often automatic seeding retries.
+    expect(mocks.toastError.mock.calls[0][1]).toMatchObject({
+      id: `web-runtime-terminal-create:active:${WORKTREE_ID}`
+    })
   })
 
   it('says unconfirmed, never failed, when the reply was lost', async () => {
@@ -121,7 +125,7 @@ describe('a terminal the host fails to create', () => {
 
     expect(mocks.toastError).toHaveBeenCalledExactlyOnceWith(
       'Orca couldn’t confirm that the new terminal opened on the host.',
-      { description: expect.stringContaining('Timed out') }
+      expect.objectContaining({ description: expect.stringContaining('Timed out') })
     )
   })
 
@@ -135,7 +139,7 @@ describe('a terminal the host fails to create', () => {
 
     expect(mocks.toastError).toHaveBeenCalledExactlyOnceWith(
       'Orca couldn’t confirm that the new terminal opened on the host.',
-      { description: expect.stringContaining('Request timed out') }
+      expect.objectContaining({ description: expect.stringContaining('Request timed out') })
     )
   })
 
