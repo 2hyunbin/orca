@@ -63,7 +63,8 @@ export function readWindowDesktopSidebarFacts(state: WindowFactsState): DesktopS
       ])
     ),
     focusedHostId: getSettingsFocusedExecutionHostId(state.settings),
-    hostLabels: Object.fromEntries(getHostDisplayLabelOverrides(state.settings))
+    hostLabels: Object.fromEntries(getHostDisplayLabelOverrides(state.settings)),
+    showPinnedInGroups: state.settings?.showPinnedWorktreesInGroups === true
   }
 }
 
@@ -74,7 +75,8 @@ function toComparedFacts(state: AppState, facts: DesktopSidebarFacts): Map<strin
     ['repoOrder', JSON.stringify(facts.repoOrder)],
     ['workspaceHostOrder', JSON.stringify(facts.workspaceHostOrder)],
     ['focusedHostId', JSON.stringify(facts.focusedHostId ?? null)],
-    ['hostLabels', JSON.stringify(facts.hostLabels ?? {})]
+    ['hostLabels', JSON.stringify(facts.hostLabels ?? {})],
+    ['showPinnedInGroups', JSON.stringify(facts.showPinnedInGroups === true)]
   ])
   const pinned = toLocallyOwnedRows(
     state,

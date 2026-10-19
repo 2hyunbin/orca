@@ -162,6 +162,7 @@ export type RuntimeStore = {
     worktreeVisibilityDefaults?: GlobalSettings['worktreeVisibilityDefaults']
     hostSettingOverrides?: GlobalSettings['hostSettingOverrides']
     activeRuntimeEnvironmentId?: GlobalSettings['activeRuntimeEnvironmentId']
+    showPinnedWorktreesInGroups?: GlobalSettings['showPinnedWorktreesInGroups']
     agentSkillSharingEnabled?: GlobalSettings['agentSkillSharingEnabled']
     nativeChatSessionOptions?: GlobalSettings['nativeChatSessionOptions']
     nativeChatPermissionMode?: GlobalSettings['nativeChatPermissionMode']

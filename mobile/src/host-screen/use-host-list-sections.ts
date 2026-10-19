@@ -118,11 +118,10 @@ function useFeedHostListSections({
       buildHostFeedView({
         view: state.view,
         projectOrderBy,
-        showPinnedInGroups: state.showPinnedInGroups,
         desktop: domains?.desktop ?? null,
         hostPlatform: state.hostPlatform
       }),
-    [state.view, projectOrderBy, state.showPinnedInGroups, domains, state.hostPlatform]
+    [state.view, projectOrderBy, domains, state.hostPlatform]
   )
   const built = useMemo(
     () => (domains ? buildSidebarFeedRows(domains, catalog, view) : null),

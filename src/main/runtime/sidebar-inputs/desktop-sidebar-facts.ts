@@ -34,7 +34,10 @@ export type DesktopSidebarFactSources = {
       hostId: ExecutionHostId
     ) => Pick<WorkspaceSessionState, 'activeWorktreeId' | 'activeWorkspaceExecutionHostId'>
     getUI?: () => Pick<PersistedUIState, 'manualRepoOrder' | 'workspaceHostOrder'>
-    getSettings?: () => Pick<GlobalSettings, 'activeRuntimeEnvironmentId' | 'hostSettingOverrides'>
+    getSettings?: () => Pick<
+      GlobalSettings,
+      'activeRuntimeEnvironmentId' | 'hostSettingOverrides' | 'showPinnedWorktreesInGroups'
+    >
   }
   /** The registry's list, which leaves out targets a paired server owns; the window lists the same. */
   sshTargets: readonly Pick<SshTarget, 'id' | 'label'>[]
@@ -91,6 +94,7 @@ export function readDesktopSidebarFacts(sources: DesktopSidebarFactSources): Des
       ])
     ),
     focusedHostId: getSettingsFocusedExecutionHostId(settings),
-    hostLabels: Object.fromEntries(getHostDisplayLabelOverrides(settings))
+    hostLabels: Object.fromEntries(getHostDisplayLabelOverrides(settings)),
+    showPinnedInGroups: settings?.showPinnedWorktreesInGroups === true
   }
 }

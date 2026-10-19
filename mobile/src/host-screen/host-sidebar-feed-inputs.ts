@@ -25,8 +25,7 @@ import type { SectionRepo } from '../worktree/workspace-list-types'
 export function buildHostFeedView(args: {
   view: MobileViewState
   projectOrderBy: ProjectOrderBy
-  showPinnedInGroups: boolean
-  /** The feed's desktop facts: its focused host and its own names for its hosts. */
+  /** The feed's desktop facts: its focused host, its names for its hosts, pinned placement. */
   desktop: DesktopSidebarFacts | null
   /** The desktop's platform names its own host; the phone's must never. */
   hostPlatform: NodeJS.Platform | null
@@ -50,7 +49,7 @@ export function buildHostFeedView(args: {
     workspaceHostScope: ALL_EXECUTION_HOSTS_SCOPE,
     visibleWorkspaceHostIds: view.filters.visibleHostIds,
     workspaceStatuses: view.workspaceStatuses,
-    pinnedDisplayPolicy: args.showPinnedInGroups ? 'duplicate-in-groups' : 'single-location',
+    pinnedDisplayPolicy: desktop?.showPinnedInGroups ? 'duplicate-in-groups' : 'single-location',
     defaultHostId: normalizeExecutionHostId(desktop?.focusedHostId) ?? LOCAL_EXECUTION_HOST_ID,
     hostLabelOverrides
   }

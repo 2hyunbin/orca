@@ -16,8 +16,7 @@ function phoneFeedView(view: MobileViewState, showPinnedInGroups = false): Sideb
   return buildHostFeedView({
     view,
     projectOrderBy: 'manual',
-    showPinnedInGroups,
-    desktop: feedDomains().desktop,
+    desktop: { ...feedDomains().desktop!, showPinnedInGroups },
     hostPlatform: 'darwin'
   })
 }

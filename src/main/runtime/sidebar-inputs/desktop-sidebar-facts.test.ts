@@ -97,12 +97,14 @@ describe('readDesktopSidebarFacts', () => {
         ...base.store,
         getSettings: () => ({
           activeRuntimeEnvironmentId: 'env-1',
+          showPinnedWorktreesInGroups: true,
           hostSettingOverrides: { 'ssh:box': { displayLabel: ' GPU ' }, local: {} }
         })
       }
     })
     expect(facts.focusedHostId).toBe('runtime:env-1')
     expect(facts.hostLabels).toEqual({ 'ssh:box': 'GPU' })
+    expect(facts.showPinnedInGroups).toBe(true)
     expect(readDesktopSidebarFacts(sources({})).focusedHostId).toBe('local')
   })
 

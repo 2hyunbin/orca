@@ -24,7 +24,9 @@ export const DesktopSidebarFactsSchema = z.object({
   /** The host the desktop has focused, where its sidebar files rows that name no owner. */
   focusedHostId: z.string().optional(),
   /** The user's own names for hosts, by host id. */
-  hostLabels: z.record(z.string(), z.string()).optional()
+  hostLabels: z.record(z.string(), z.string()).optional(),
+  /** "Also show pinned workspaces in their groups"; absent reads as off. */
+  showPinnedInGroups: z.boolean().optional()
 })
 
 export type DesktopSidebarFacts = z.infer<typeof DesktopSidebarFactsSchema>

@@ -47,7 +47,8 @@ describe('readWindowDesktopSidebarFacts', () => {
       sshHosts: { 'ssh:box': { label: 'Build box', status: 'auth-failed' } },
       wslHosts: { 'runtime:env-2': { distro: 'Ubuntu', state: 'ready' } },
       focusedHostId: 'local',
-      hostLabels: {}
+      hostLabels: {},
+      showPinnedInGroups: false
     })
   })
 })
