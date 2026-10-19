@@ -628,6 +628,10 @@ export async function directorSignals(
   for (const { cell, status } of statuses) {
     const prefix = `cell.${cell.cellId}`
     if (status.reserve) {
+      // cell-status carries the live cap; unset in Terraform keeps the evaluator's default, as there.
+      if (cell.connectionHardCap !== null) {
+        addSignal(signals, `${prefix}.connection_hard_cap`, cell.connectionHardCap, nowAt)
+      }
       // Legacy admission needs relay_cells.enabled, which only cell-status reads: left missing.
       if (selector.generation !== 0) {
         addSignal(
