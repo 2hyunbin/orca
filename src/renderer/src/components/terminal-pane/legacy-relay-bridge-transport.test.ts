@@ -387,6 +387,23 @@ describe('a runtime pane bridged to an older relay’s terminal', () => {
     ).toEqual(['ssh:ssh-box@@pty-3'])
   })
 
+  it('hands back every viewer when two attaches for the pane overlap', async () => {
+    let next = 0
+    bridge.attach.mockImplementation(async () => {
+      next += 1
+      return { status: 'attached', replay: '', acquisitionId: next }
+    })
+    const transport = createLegacyRelayBridgeTransport(PTY, innerTransport())
+    // A connect and an attach for the same pane, both answered before either settles.
+    const connecting = transport.connect({ url: '', sessionId: PTY, callbacks: callbacks() })
+    transport.attach({ existingPtyId: PTY, callbacks: callbacks() })
+    await connecting
+    await vi.waitFor(() => expect(bridge.attach).toHaveBeenCalledTimes(2))
+    await Promise.resolve()
+    transport.detach?.()
+    expect(bridge.detach.mock.calls.map(([args]) => args.acquisitionId).sort()).toEqual([1, 2])
+  })
+
   it('hands any other connect straight to the managed server’s transport', async () => {
     const inner = innerTransport()
     const transport = createLegacyRelayBridgeTransport(PTY, inner)

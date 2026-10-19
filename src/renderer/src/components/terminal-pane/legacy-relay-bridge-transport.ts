@@ -42,6 +42,14 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
     viewer = null
   }
 
+  // Overlapping attaches (connect, attach, reattach) each get a viewer; keep one, hand back the rest.
+  const adoptViewer = (acquisitionId: number): void => {
+    if (viewer !== null && viewer !== acquisitionId) {
+      api?.detach({ ptyId, acquisitionId: viewer })
+    }
+    viewer = acquisitionId
+  }
+
   const release = (): void => {
     epoch += 1
     unsubscribe.forEach((dispose) => dispose())
@@ -93,7 +101,7 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
         return
       }
       if (result.status === 'attached') {
-        viewer = result.acquisitionId
+        adoptViewer(result.acquisitionId)
         clearUnreachable()
       } else if (result.status === 'exited' || result.status === 'not-bridged') {
         clearUnreachable()
@@ -184,7 +192,7 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
       showUnreachable()
       return { id: ptyId, isReattach: true, replay: '' }
     }
-    viewer = result.acquisitionId
+    adoptViewer(result.acquisitionId)
     return { id: ptyId, isReattach: true, replay: result.replay }
   }
 
