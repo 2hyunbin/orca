@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { truncateAiVaultListResult } from '../../shared/ai-vault-session-depth'
+import type { AiVaultListResult } from '../../shared/ai-vault-types'
 import { parseSessionCandidates } from './session-scanner-candidate-parse'
 import {
   MAX_UNLISTED_ENTRIES,
@@ -232,11 +233,12 @@ it('admits the newest scoped activity when copied Hermes files have newer mtimes
       .sessions.filter((row) => row.cwd === '/repo')
       .map((row) => row.sessionId)
   ).toEqual(['hermes-16'])
-  expect(
-    truncateAiVaultListResult(await scan(2), 1, ['/repo'])
-      .sessions.filter((row) => row.cwd === '/repo')
-      .map((row) => row.sessionId)
-  ).toEqual(['hermes-16'])
+  const deeper = await scan(2)
+  const scopedIds = (rows: AiVaultListResult) =>
+    rows.sessions.filter((row) => row.cwd === '/repo').map((row) => row.sessionId)
+  expect(scopedIds(deeper)[0]).toBe('hermes-16')
+  // A deeper cached scan serving depth 1 keeps every scoped row it found.
+  expect(scopedIds(truncateAiVaultListResult(deeper, 1, ['/repo']))).toEqual(scopedIds(deeper))
 })
 
 it('delivers cancellation while traversing unchanged cached candidates', async () => {
