@@ -253,8 +253,11 @@ export function reconcileWebSessionCloseReplaysWithCatalog(
     }
   }
   for (const { id: environmentId, fromRevision, toRevision } of catalog.sameHost) {
+    const now = Date.now()
     const moved = listHeldIntents(store, environmentId).filter(
-      (intent) => intent.pairingRevision === fromRevision
+      (intent) =>
+        intent.pairingRevision === fromRevision &&
+        now - intent.closedAt <= PAIRED_TERMINAL_TAB_CLOSE_INTENT_MAX_AGE_MS
     )
     if (moved.length === 0) {
       continue
