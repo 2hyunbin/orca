@@ -389,6 +389,7 @@ describe('Store', () => {
       })
     )
 
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: feeds the sanitizer a value its type forbids, on purpose.
     const updated = store.updateRepo({ id: 'r1' }, { sourceControlAi: 'bad' as never })
 
     expect(updated!.sourceControlAi).toEqual({

@@ -689,6 +689,7 @@ describe('Store', () => {
     const store = await createStore()
     store.addRepo(makeRepo({ forkSyncMode: 'ask' }))
 
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: feeds the sanitizer a value its type forbids, on purpose.
     const updated = store.updateRepo({ id: 'r1' }, { forkSyncMode: 'always' as never })
 
     expect(updated!.forkSyncMode).toBe('ask')

@@ -255,10 +255,13 @@ describe('Store', () => {
     const group = store.createProjectGroup({ name: 'Platform', createdFrom: 'manual' })
     store.addRepo(makeRepo({ id: 'r1', projectGroupId: group.id, projectGroupOrder: 1 }))
 
-    const updated = store.updateRepo({ id: 'r1' }, {
-      projectGroupId: '',
-      projectGroupOrder: Number.POSITIVE_INFINITY
-    } as never)
+    const updated = store.updateRepo(
+      { id: 'r1' },
+      {
+        projectGroupId: '',
+        projectGroupOrder: Number.POSITIVE_INFINITY
+      }
+    )
 
     expect(updated?.projectGroupId).toBeNull()
     expect(updated?.projectGroupOrder).toBe(1)
