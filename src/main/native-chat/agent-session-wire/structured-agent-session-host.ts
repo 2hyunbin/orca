@@ -6,7 +6,6 @@ import { StructuredConversationCommandController } from './structured-conversati
 // only through `conversation`, which opens it at rest; an agent is started only by work that needs
 // it, and the idle sweep is the one thing that puts it to rest.
 
-import type * as SessionWire from '../../../shared/agent-session-wire'
 import { createRestartReconciler } from './structured-agent-session-restart-reconcile'
 import type { AgentSessionSubscribeInput } from './structured-agent-session-subscribers'
 import { StructuredAgentSessionTaskQueue } from './structured-agent-session-task-queue'
@@ -16,6 +15,7 @@ import { StructuredAgentSessionHostRuntimeState } from './structured-agent-sessi
 import { structuredAgentSessionEntryDelegates } from './structured-agent-session-entry-delegates'
 import type { StructuredAgentSessionLifetimeContext } from './structured-agent-session-host-lifetime'
 import * as agentStart from './structured-agent-session-agent-start'
+import { createStructuredAgentSessionHostMutationContext } from './structured-agent-session-host-mutation-wiring'
 import {
   createStructuredAgentSessionConversationLifetime,
   type StructuredAgentSessionConversationLifetime
@@ -40,6 +40,7 @@ import { structuredAgentSessionRestartResumeSurfaces } from './structured-agent-
 import * as conversation from './structured-agent-session-host-delivery'
 import { wireStructuredAgentSessionQueuedMessages } from './structured-agent-session-queued-wiring'
 import * as sessionLogger from './structured-agent-session-logger'
+import { sleepStructuredAgentSessionWorkspace } from './structured-agent-session-workspace-sleep'
 export type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
 
 export class StructuredAgentSessionHost {
@@ -211,6 +212,20 @@ export class StructuredAgentSessionHost {
   close: StructuredAgentSessionConversationLifetime['close'] = (sessionId, cause) =>
     this.lifetime.close(sessionId, cause)
 
+  /** One bounded host-owned snapshot; a tab need not be visible for its child to be stopped. */
+  sleepWorkspace = (workspaceId: string): Promise<{ stoppedSessionIds: string[] }> =>
+    sleepStructuredAgentSessionWorkspace(
+      {
+        deps: this.deps,
+        tasks: this.tasks,
+        lifetime: this.lifetime,
+        sessions: this.sessions,
+        deliveryRunning: (sessionId) => this.conversationDelivery.loop.isRunning(sessionId),
+        childWorkIncomplete: this.clientDelivery.childWorkIncomplete
+      },
+      workspaceId
+    )
+
   private readonly tabs = createTabs(this, this.sessions, this.clientDelivery.forgetStatus)
   listSessionTabs = this.tabs.listSessionTabs
   getPersistedVisibleSessionTabIndex = this.tabs.getPersistedVisibleSessionTabIndex
@@ -263,32 +278,20 @@ export class StructuredAgentSessionHost {
     }).finally(() => this.clientDelivery.closeAll())
   }
 
-  private mutationContext(): StructuredAgentSessionMutationContext {
-    return {
+  private mutationContext = (): StructuredAgentSessionMutationContext =>
+    createStructuredAgentSessionHostMutationContext({
       deps: this.deps,
       sessions: this.sessions,
-      publish: (sessionId, journal) => this.subscribers.publish(sessionId, journal),
-      conversation: this.lifetime.conversation,
-      readChildWork: this.clientDelivery.readChildWork,
-      publishChildWork: this.clientDelivery.publishChildWork,
-      captureChildWorkStops: this.clientDelivery.captureChildWorkStops,
-      childWorkOpen: this.clientDelivery.childWorkOpen,
-      childWorkIncomplete: this.clientDelivery.childWorkIncomplete,
+      subscribers: this.subscribers,
+      lifetime: this.lifetime,
+      clientDelivery: this.clientDelivery,
+      conversationDelivery: this.conversationDelivery,
+      queued: this.queued,
+      runtimeState: this.runtimeState,
+      attachContext: () => this.attachContext(),
       serialize: (sessionId, task) => this.serialize(sessionId, task),
-      openConversation: this.conversationDelivery.open,
-      ensureAgent: (sessionId) =>
-        agentStart.ensureStructuredAgentSessionAgentForOperation(this.attachContext(), sessionId),
-      startupAttempts: this.runtimeState.startupAttempts,
-      deliveryOrder: this.runtimeState.deliveryOrder,
-      joinChildClose: (sessionId) =>
-        agentStart.joinClosingStructuredAgentSessionChild(this.attachContext(), sessionId),
-      wakeDelivery: (sessionId) => this.conversationDelivery.loop.wake(sessionId),
-      stopAgent: (sessionId, ending) => this.lifetime.stopAgent(sessionId, ending),
-      wakeQueuedDrain: (sessionId) => this.queued.drain.schedule(sessionId),
-      acquireAborts: this.runtimeState.acquireAborts,
       now: () => this.now()
-    }
-  }
+    })
 
   send = this.conversationCommands.send
 
@@ -315,8 +318,7 @@ export class StructuredAgentSessionHost {
   readCommands = (sessionId: string) => ({ commands: this.clientDelivery.readCommands(sessionId) })
 
   /** From the record store, never the session map: an idle-released chat has no map entry. */
-  handoffStatus = (sessionId: string): SessionWire.AgentSessionHandoffStatus =>
-    structuredAgentSessionOwnerStatus(this.deps, sessionId)
+  handoffStatus = (sessionId: string) => structuredAgentSessionOwnerStatus(this.deps, sessionId)
 
   history: StructuredAgentSessionBackgroundTaskChannel['history'] = (request, scope) =>
     this.backgroundTasks.history(request, scope)

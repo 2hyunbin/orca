@@ -1147,6 +1147,8 @@ jobs:
       # probe carries its own in-process deadline. Four at once on a 4-vCPU runner starve each other
       # past those deadlines; serial, every probe owns the runner.
       - name: Test Linux Electron lifecycle boundary
+        env:
+          ORCA_BACKGROUND_LAUNCH: '1'
         run: >-
           xvfb-run --auto-servernum pnpm exec vitest run --config config/vitest.config.ts
           --no-file-parallelism
@@ -1157,6 +1159,7 @@ jobs:
           src/main/browser/browser-route-dns-prefetch.electron.test.ts
           src/main/persistence/profile-state/profile-state-writer-stall.electron.test.ts
           src/main/browser/browser-popup-compatibility.electron.test.ts
+          src/main/browser/browser-popup-adapter-compatibility.electron.test.ts
           src/main/browser/browser-popup-native-compatibility.electron.test.ts
           src/main/browser/browser-popup-background-compatibility.electron.test.ts
 

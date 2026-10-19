@@ -2,6 +2,7 @@ import { SQLITE_RUNTIME_INCLUDE } from './vitest-sqlite-runtime-files.mjs'
 
 // SQLite publication, native bindings, worker IPC, socket liveness, and V8 retention use Node.
 export const NODE_RUNTIME_INCLUDE = [
+  'src/main/runtime/structured-agent-cli-writers.test.ts',
   'config/scripts/vitest-sqlite-runtime-boundary.test.ts',
   'config/scripts/cloud-security-history-workflow.test.mjs',
   'config/scripts/skill-recipe-shell.test.mjs',
@@ -61,6 +62,7 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/main/foreign-sqlite-readers/**/*.test.ts',
   'src/main/browser/*cookie*.test.ts',
   // Playwright's CDP transport needs Node's WebSocket implementation.
+  'src/main/browser/browser-popup-adapter-compatibility.electron.test.ts',
   'src/main/browser/browser-popup-compatibility.electron.test.ts',
   'src/main/browser/browser-popup-native-compatibility.electron.test.ts',
   'src/main/browser/browser-popup-background-compatibility.electron.test.ts',

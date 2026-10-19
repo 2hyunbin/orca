@@ -80,7 +80,7 @@ test('the host raises the unread flag where the window’s user is not looking, 
   await expect.poll(unread).toBe(true)
 })
 
-test('the host raises no flag for a workspace the Filters hide while hidden workspaces stay quiet', async ({
+test('the host raises the flag even for a workspace the Filters hide while hidden workspaces stay quiet', async ({
   orcaPage,
   electronApp
 }) => {
@@ -94,20 +94,15 @@ test('the host raises no flag for a workspace the Filters hide while hidden work
   const rowKey = `local|${pane.worktreeId}`
   const unread = async (): Promise<boolean | undefined> =>
     (await readHostRow(orcaPage, rowKey))?.isUnread
-  const setNotifyHidden = (notify: boolean): Promise<void> =>
-    orcaPage.evaluate(async (value) => {
-      const state = window.__store!.getState()
-      await state.updateSettings({
-        notifications: { ...state.settings!.notifications, notifyHiddenWorkspaces: value }
-      })
-    }, notify)
   // The seeded workspace is the primary checkout, which "Hide default branch" hides.
-  await orcaPage.evaluate(() => {
+  await orcaPage.evaluate(async () => {
     const state = window.__store!.getState()
     state.setHideDefaultBranchWorkspace(true)
     state.setActiveView('tasks')
+    await state.updateSettings({
+      notifications: { ...state.settings!.notifications, notifyHiddenWorkspaces: false }
+    })
   })
-  await setNotifyHidden(false)
   // The host reads the persisted switch, not the window's copy.
   await expect
     .poll(() =>
@@ -116,14 +111,20 @@ test('the host raises no flag for a workspace the Filters hide while hidden work
     .toBe(true)
   await expect.poll(unread).toBe(false)
 
+  // The flag is shared by every client, whatever its Filters; only banners and sounds are muted.
   await postClaudeHook(endpoint, pane, { hook_event_name: 'UserPromptSubmit', prompt: 'go' })
-  await expect.poll(async () => (await readHostRow(orcaPage, rowKey))?.smartTier).toBe('working')
-  await postClaudeHook(endpoint, pane, { hook_event_name: 'Stop', last_assistant_message: 'ok' })
-  await expect.poll(async () => (await readHostRow(orcaPage, rowKey))?.smartTier).toBe('done')
-  expect(await unread()).toBe(false)
-
-  await setNotifyHidden(true)
-  await postClaudeHook(endpoint, pane, { hook_event_name: 'UserPromptSubmit', prompt: 'more' })
   await postClaudeHook(endpoint, pane, { hook_event_name: 'Stop', last_assistant_message: 'ok' })
   await expect.poll(unread).toBe(true)
+  // The window keeps the host's dot; its Filters mute only its own banner and sound.
+  await expect
+    .poll(() =>
+      orcaPage.evaluate(
+        (id) =>
+          Object.values(window.__store?.getState().worktreesByRepo ?? {})
+            .flat()
+            .find((worktree) => worktree.id === id)?.isUnread,
+        pane.worktreeId
+      )
+    )
+    .toBe(true)
 })
