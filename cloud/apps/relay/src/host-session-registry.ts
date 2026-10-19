@@ -42,7 +42,7 @@ import { ControlRenewalBatch } from './control-renewal-batch.js'
 import { RelayCredentialStore, RelayStoreError, type CredentialReservation } from './credential-store.js'
 import { HostCloseReasonMemory } from './host-close-reason-memory.js'
 import { MemoryResumeConfirmations } from './memory-resume-confirmations.js'
-import { PhoneConnectionLog } from './phone-connection-log.js'
+import { PhoneConnectionLog, type PhoneDatabaseCause } from './phone-connection-log.js'
 import {
   postProofCloseCause,
   PostProofCloseLog,
@@ -453,7 +453,9 @@ export class HostSessionRegistry {
     this.seatLog = new CellSeatLog(undefined, now)
     this.postProofCloses = new PostProofCloseLog(observer)
     this.phoneConnections = new PhoneConnectionLog(config.cellId)
-    this.memoryConfirmations = new MemoryResumeConfirmations(store, now)
+    this.memoryConfirmations = new MemoryResumeConfirmations(store, now, (error) =>
+      this.recordRenewalFailure(error)
+    )
   }
 
   // Reserve mode is only ever a cell's, and only while its applied switch says so.
@@ -863,21 +865,22 @@ export class HostSessionRegistry {
         // Never the invite path: an unread device is not a missing one.
         capacityReservation?.release()
         this.observer.recordPhoneAcceptDatabaseError?.()
-        this.phoneConnections.databaseError(
-          isRelayDatabaseTransientError(error) ? 'database_transient' : 'error'
-        )
+        this.phoneConnections.databaseError(databaseCause(error))
         this.rejectClient(socket, RELAY_CLOSE_CODE.DRAINING)
         return
       }
       if (abandonedByClient('credential')) return
-      if (found.outcome === 'refused') {
-        capacityReservation?.release()
-        this.observer.recordAuth(false)
-        this.rejectClient(socket, RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL)
-        return
+      // The switch turned off during the read: today's whole path, never a lease-less memory phone.
+      if (this.phonePathEffective() === 'memory') {
+        if (found.outcome === 'refused') {
+          capacityReservation?.release()
+          this.observer.recordAuth(false)
+          this.rejectClient(socket, RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL)
+          return
+        }
+        if (found.outcome === 'resume') memoryReservation = found.reservation
+        else memoryMissedDevice = true
       }
-      if (found.outcome === 'resume') memoryReservation = found.reservation
-      else memoryMissedDevice = true
     }
     const reservation =
       memoryReservation ??
@@ -1080,7 +1083,8 @@ export class HostSessionRegistry {
       })
       elsewhere = row !== null && row.cellId !== this.config.cellId
       if (row?.cellId === this.config.cellId) this.phoneConnections.missRowNamesHere(reservation.relayHostId)
-    } catch {
+    } catch (error) {
+      this.phoneConnections.missReadError(databaseCause(error))
       elsewhere = true
     }
     if (elsewhere) {
@@ -2493,18 +2497,21 @@ export class HostSessionRegistry {
         const request = DeviceResumeConfirmSchema.parse(payload(raw, type))
         const confirm = { ...identity, ...request, owningControlGeneration: session.generation }
         const phonePath = this.memoryConfirmations.owns(confirm) ? 'memory' : 'db'
+        let result
         try {
-          if (phonePath === 'memory') {
-            send(session.socket, 'device-resume-confirmed', await this.memoryConfirmations.confirm(confirm))
-            return
-          }
-          const result = await this.store.confirmResume(confirm)
-          await this.assignments.releaseActivity(identity, `confirmation:${request.basisConnId}`)
-          send(session.socket, 'device-resume-confirmed', result)
+          result =
+            phonePath === 'memory'
+              ? await this.memoryConfirmations.confirm(confirm)
+              : await this.store.confirmResume(confirm)
         } catch (error) {
           this.recordConfirmFailure(error, phonePath)
           throw error
         }
+        // After a committed confirm: a failed release is not a failed confirm.
+        if (phonePath === 'db') {
+          await this.assignments.releaseActivity(identity, `confirmation:${request.basisConnId}`)
+        }
+        send(session.socket, 'device-resume-confirmed', result)
         return
       }
       if (type === 'device-revoke') {
@@ -2529,14 +2536,14 @@ export class HostSessionRegistry {
     }
   }
 
+  private recordRenewalFailure(error: unknown): void {
+    this.observer.recordResumeRenewalFailure?.()
+    this.phoneConnections.renewalFailed(databaseCause(error))
+  }
+
   // Never the raw message as a key: pg errors can carry the database URL.
   private recordConfirmFailure(error: unknown, phonePath: 'db' | 'memory'): void {
-    const code =
-      error instanceof RelayStoreError
-        ? error.code
-        : isRelayDatabaseTransientError(error)
-          ? 'database_transient'
-          : 'error'
+    const code = error instanceof RelayStoreError ? error.code : databaseCause(error)
     this.observer.recordResumeConfirmFailure?.(code)
     this.phoneConnections.confirmFailed(code, phonePath)
   }
@@ -2632,3 +2639,7 @@ export class HostSessionRegistry {
 }
 
 export type RelayIdentityKey = { userId: string; relayHostId: string }
+
+function databaseCause(error: unknown): PhoneDatabaseCause {
+  return isRelayDatabaseTransientError(error) ? 'database_transient' : 'error'
+}

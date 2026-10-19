@@ -62,6 +62,14 @@ const DATABASE_PATH_CONFIRM = [
   'COMMIT'
 ]
 
+async function until(check: () => Promise<boolean>, timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (!(await check())) {
+    if (Date.now() > deadline) throw new Error('condition not reached')
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+}
+
 describe('the memory phone path', () => {
   const cleanup: Array<() => Promise<void> | void> = []
 
@@ -242,6 +250,23 @@ describe('the memory phone path', () => {
     const host = await reserve.host()
     await reserve.installDevice(host.hostId, TOKEN)
     expect((await (await reserve.dialPhone(host.hostId, TOKEN)).closed).code).toBe(4409)
+    expect(warnings('orca_relay_client_miss_read_error')).toEqual([
+      { event: 'orca_relay_client_miss_read_error', cause: 'error', cellId: reserve.config.cellId }
+    ])
+  })
+
+  it('takes the database path for a phone whose switch turned off during its device read', async () => {
+    const { reserve, seated } = await seatedPhoneHost('memory')
+    const lookup = reserve.relay.store.lookupResume.bind(reserve.relay.store)
+    vi.spyOn(reserve.relay.store, 'lookupResume').mockImplementation(async (...args) => {
+      const found = await lookup(...args)
+      reserve.setAdmitMode('reserve', { phonePath: 'db' })
+      return found
+    })
+    const connOpen = nextFrame(seated.socket, 'conn-open')
+    await reserve.dialPhone(seated.identity.hostId, TOKEN)
+    expect(await connOpen).toMatchObject({ kind: 'resume' })
+    expect((await reserve.activityLeases()).map((lease) => lease.activity_kind)).toEqual(['confirmation'])
   })
 
   it('confirms from the memory basis with one fresh read, renewing a device due for it', async () => {
@@ -286,6 +311,33 @@ describe('the memory phone path', () => {
     failing.reserve.database.failing = (sql) => sql.startsWith('UPDATE relay_devices')
     expect(await failing.confirm('confirm-1')).toMatchObject({ renewed: true, resumeExpiresAt: due })
     expect(Number((await deviceRow(failing.reserve))?.current_expires_at)).toBe(due)
+    // Never silent: a renewal left failing ages phones toward re-pairing.
+    expect(warnings('orca_relay_resume_renewal_failed')).toEqual([
+      { event: 'orca_relay_resume_renewal_failed', cause: 'error', cellId: failing.reserve.config.cellId }
+    ])
+  })
+
+  it('confirms from memory after the switch turned off between accept and confirm, taking no lease', async () => {
+    const { reserve, confirm } = await splicedPhone('memory')
+    reserve.setAdmitMode('reserve', { phonePath: 'db' })
+    expect(await confirm('confirm-1')).toMatchObject({ type: 'device-resume-confirmed', renewed: true })
+    expect(reserve.phoneStatements()[0]).toBe(CONFIRM_DEVICE_READ)
+    expect(await reserve.activityLeases()).toEqual([])
+  })
+
+  it('replays a stored answer after its splice closed, and drops the basis itself', async () => {
+    const { reserve, phone, confirm } = await splicedPhone('memory')
+    const answer = await confirm('confirm-1')
+    phone.socket.close()
+    await phone.closed
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    reserve.database.statements.length = 0
+    expect(await confirm('confirm-1')).toEqual(answer)
+    expect(await confirm('confirm-1', 'another-basis')).toMatchObject({ code: 'confirmation_tuple_mismatch' })
+    expect(reserve.phoneStatements()).toEqual([])
+    // A new request on the closed basis finds none in memory, so it goes to the database.
+    expect(await confirm('confirm-2')).toMatchObject({ code: 'confirmation_not_active' })
+    expect(reserve.phoneStatements()[0]).toBe('BEGIN')
   })
 
   it('answers a grace-version confirm renewed:false with its expiry unchanged, as today', async () => {
@@ -343,6 +395,14 @@ describe('the memory phone path', () => {
     ])
   })
 
+  it('does not count a lease release that failed after a committed confirm as a failed confirm', async () => {
+    const { reserve, confirm } = await splicedPhone('db')
+    vi.spyOn(reserve.relay.assignments, 'releaseActivity').mockRejectedValueOnce(new Error('connection terminated'))
+    // As today, the desktop still hears the release failure.
+    expect(await confirm('confirm-1')).toMatchObject({ type: 'control-error' })
+    expect(warnings('orca_relay_resume_confirm_failed')).toEqual([])
+  })
+
   it('keeps the database confirm statement for statement while phonePath is db', async () => {
     const { reserve, confirm } = await splicedPhone('db')
     expect(await confirm('confirm-1')).toMatchObject({ type: 'device-resume-confirmed', renewed: true })
@@ -396,8 +456,14 @@ describe('the memory phone path', () => {
         ).rejects.toThrow('cell_in_reserve_mode')
         // The splice still runs, and closing it releases nothing it never took.
         expect(spliced.phone.socket.readyState).toBe(spliced.phone.socket.OPEN)
+        // Let a flip back finish leasing its control (and fold its relay_cells write) first.
+        await until(async () => reserve.relay.sessions.reregistrationPending() === 0)
+        await new Promise((resolve) => setTimeout(resolve, 250))
+        reserve.database.statements.length = 0
         spliced.phone.socket.close()
         await spliced.phone.closed
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        expect(reserve.phoneStatements()).toEqual([])
         expect((await leases()).filter((kind) => kind !== 'control')).toEqual([])
       })
     }

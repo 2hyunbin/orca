@@ -112,6 +112,7 @@ export interface RelayRuntimeObserver {
   recordPhoneAttachDeadline?(): void
   recordPhoneAcceptDatabaseError?(): void
   recordResumeConfirmFailure?(code: string): void
+  recordResumeRenewalFailure?(): void
   recordControlRtt?(rttMs: number): void
   recordHostPreAuth?(path: HostPreAuthPath, outcome: HostPreAuthOutcome, durationMs: number): void
 }
@@ -220,6 +221,7 @@ type RelayMetricDeltas = {
   phoneAttachDeadlines: number
   phoneAcceptDatabaseErrors: number
   resumeConfirmFailuresByCode: Record<string, number>
+  resumeRenewalFailures: number
   controlRttSamplesMs: number[]
   controlRttObserved: number
   controlRenewalLatenciesMs: number[]
@@ -320,6 +322,7 @@ const emptyDeltas = (): RelayMetricDeltas => ({
   phoneAttachDeadlines: 0,
   phoneAcceptDatabaseErrors: 0,
   resumeConfirmFailuresByCode: {},
+  resumeRenewalFailures: 0,
   controlRttSamplesMs: [],
   controlRttObserved: 0,
   controlRenewalLatenciesMs: [],
@@ -591,6 +594,10 @@ export class RelayObservability implements RelayRuntimeObserver {
     increment(this.deltas.resumeConfirmFailuresByCode, code)
   }
 
+  recordResumeRenewalFailure(): void {
+    this.deltas.resumeRenewalFailures += 1
+  }
+
   recordControlRtt(rttMs: number): void {
     const observedBefore = this.deltas.controlRttObserved++
     keepInReservoir(
@@ -724,6 +731,7 @@ export class RelayObservability implements RelayRuntimeObserver {
       phoneAttachDeadlinesDelta: deltas.phoneAttachDeadlines,
       phoneAcceptDatabaseErrorsDelta: deltas.phoneAcceptDatabaseErrors,
       resumeConfirmFailuresByCodeDelta: deltas.resumeConfirmFailuresByCode,
+      resumeRenewalFailuresDelta: deltas.resumeRenewalFailures,
       // Accepts are sparse: publishing a zero percentile for every empty window
       // would pin the p50 at 0 forever and collapse the p95 at low accept rates.
       ...(deltas.clientAcceptTotalsMs.length === 0
