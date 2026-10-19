@@ -47,22 +47,22 @@ const PANE = { id: 1, leafId: '11111111-1111-4111-8111-111111111111', container:
 function createController(): TerminalPaneCloseController {
   const manager = { getPanes: () => [PANE], setActivePane: vi.fn() }
   const transport = { getPtyId: () => 'pty-1', destroy: vi.fn() }
-  const controller = {
-    managerRef: { current: manager },
-    paneTransportsRef: { current: new Map([[PANE.id, transport]]) },
-    panePtyBindingsRef: { current: new Map() },
-    savedLayout: { ptyIdsByLeafId: { [PANE.leafId]: 'pty-1' } },
-    tabId: 'tab-1',
-    worktreeId: 'wt-1',
-    consumePendingPaneAccountRestart: () => mocks.pendingAgent,
-    setPaneProcessExitsByPaneId: vi.fn(),
-    setTerminalErrorsByPaneId: vi.fn()
-  }
+  const members = new Map<PropertyKey, unknown>(
+    Object.entries({
+      managerRef: { current: manager },
+      paneTransportsRef: { current: new Map([[PANE.id, transport]]) },
+      panePtyBindingsRef: { current: new Map() },
+      savedLayout: { ptyIdsByLeafId: { [PANE.leafId]: 'pty-1' } },
+      tabId: 'tab-1',
+      worktreeId: 'wt-1',
+      consumePendingPaneAccountRestart: () => mocks.pendingAgent,
+      setPaneProcessExitsByPaneId: vi.fn(),
+      setTerminalErrorsByPaneId: vi.fn()
+    })
+  )
   // Why: every other controller member is a no-op callback for these restart paths.
   const noop = vi.fn()
-  const stub = new Proxy(controller, {
-    get: (target, key) => (key in target ? Reflect.get(target, key) : noop)
-  })
+  const stub = new Proxy({}, { get: (_, key) => (members.has(key) ? members.get(key) : noop) })
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the hook only reads the members stubbed above plus callbacks the proxy fills with no-ops.
   return stub as unknown as TerminalPaneCloseController
 }
