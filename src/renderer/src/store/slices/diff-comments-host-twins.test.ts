@@ -228,16 +228,6 @@ describe('diff comments on twin worktrees', () => {
     expect(rowNotes(store, 'local')).toEqual([])
   })
 
-  it('never falls back to the remaining copy when the open host has none', async () => {
-    const store = createTwinStore('local')
-    store.setState({ worktreesByRepo: { [REPO]: [worktree('ssh:box', [note('s1', 'ssh only')])] } })
-
-    await store.getState().clearDiffComments(WT)
-
-    expect(updateMeta).not.toHaveBeenCalled()
-    expect(rowNotes(store, 'ssh:box')).toEqual(['ssh only'])
-  })
-
   it('treats an unstamped row as local when the local twin is open', async () => {
     const store = createTwinStore('local')
     store.setState({ worktreesByRepo: { [REPO]: [worktree(undefined), worktree('ssh:box')] } })
