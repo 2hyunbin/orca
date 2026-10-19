@@ -1551,8 +1551,8 @@ jobs:
     uses: ./.github/workflows/e2e.yml
     with:
       ref: ${{ github.sha }}
-      # Throwaway full-suite run: empty test_files selects every shard and dedicated lane.
-      test_files: ''
+      # Throwaway follow-up: the four switch-on-only failures alone, with traces.
+      test_files: '["tests/e2e/terminal-tab-close-restart-persistence.spec.ts","tests/e2e/workspace-layout-oracle.spec.ts","tests/e2e/wsl-host-fake-transport.spec.ts","tests/e2e/artificial-opencode-terminal-load.spec.ts"]'
       run_changed_e2e: true
       needs_build: true
       artifact_suffix: -layout-owner-switch-on
