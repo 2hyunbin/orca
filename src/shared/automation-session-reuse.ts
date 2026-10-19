@@ -28,7 +28,7 @@ export function findReusableAutomationRun<Session>(args: {
 }): Session | null {
   const ownRuns = args.runs
     .filter((run) => run.id !== args.currentRunId && run.automationId === args.automationId)
-    .toSorted((left, right) => automationRunRecency(right) - automationRunRecency(left))
+    .sort((left, right) => automationRunRecency(right) - automationRunRecency(left))
   const seenPaneKeys = new Set<string>()
   for (const run of ownRuns) {
     // A pane belongs to its newest run: an older record of it is never a candidate.
