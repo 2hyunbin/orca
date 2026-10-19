@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { isPaneResumingInPlace } from '@/lib/pane-spawn-deferral-registry'
-import type { ConnectPanePtySession } from './connect-pane-pty-session'
 import type { ColdRestoreAgentResumeStartup } from './fresh-spawn-types'
 import { holdInPlaceResumeUntilSettled } from './in-place-resume-hold'
 
@@ -9,8 +8,8 @@ function startupFor(paneKey: string): ColdRestoreAgentResumeStartup {
   return { sleepingRecordEntry: { paneKey } } as ColdRestoreAgentResumeStartup
 }
 
-function sessionWith(disposed: boolean): Pick<ConnectPanePtySession, 'disposed'> {
-  return { disposed }
+function isLiveUnless(disposed: boolean): () => boolean {
+  return () => !disposed
 }
 
 function deferred(): { promise: Promise<unknown>; resolve: () => void; reject: () => void } {
@@ -27,8 +26,8 @@ describe('holdInPlaceResumeUntilSettled', () => {
   it('owns the record while the start runs, through a nested start, and releases on settle', async () => {
     const outer = deferred()
     const inner = deferred()
-    holdInPlaceResumeUntilSettled(sessionWith(false), startupFor('tab:a'), outer.promise)
-    holdInPlaceResumeUntilSettled(sessionWith(false), startupFor('tab:a'), inner.promise)
+    holdInPlaceResumeUntilSettled(isLiveUnless(false), startupFor('tab:a'), outer.promise)
+    holdInPlaceResumeUntilSettled(isLiveUnless(false), startupFor('tab:a'), inner.promise)
     expect(isPaneResumingInPlace('tab:a')).toBe(true)
     inner.reject()
     await inner.promise.catch(() => undefined)
@@ -40,8 +39,8 @@ describe('holdInPlaceResumeUntilSettled', () => {
 
   it('holds nothing for a start not resuming a record, or once the pane is disposed', () => {
     const pending = deferred()
-    holdInPlaceResumeUntilSettled(sessionWith(false), null, pending.promise)
-    holdInPlaceResumeUntilSettled(sessionWith(true), startupFor('tab:b'), pending.promise)
+    holdInPlaceResumeUntilSettled(isLiveUnless(false), null, pending.promise)
+    holdInPlaceResumeUntilSettled(isLiveUnless(true), startupFor('tab:b'), pending.promise)
     expect(isPaneResumingInPlace('tab:b')).toBe(false)
     pending.resolve()
   })

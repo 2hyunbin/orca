@@ -241,7 +241,7 @@ function connectDeferredSessionReattach(
     })
   // Switch point: main clears the gone terminal's binding before this reattach's fresh start.
   if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-    holdInPlaceResumeUntilSettled(session, coldRestoreStartup, outcome)
+    holdInPlaceResumeUntilSettled(() => !session.disposed, coldRestoreStartup, outcome)
   }
   return outcome
 }

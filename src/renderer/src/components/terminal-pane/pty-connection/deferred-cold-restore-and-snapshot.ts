@@ -78,7 +78,7 @@ export function bindDeferredColdRestoreAndSnapshot(session: ConnectPanePtySessio
     const spawned = session.startFreshSpawn(startup, options)
     // Switch point: main's layout shows this pane unbound while the start runs.
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-      holdInPlaceResumeUntilSettled(session, startup, spawned)
+      holdInPlaceResumeUntilSettled(() => !session.disposed, startup, spawned)
     }
     return spawned
   }

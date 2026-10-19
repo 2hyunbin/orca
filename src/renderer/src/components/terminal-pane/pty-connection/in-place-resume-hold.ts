@@ -1,10 +1,9 @@
 import { holdPaneResumeInPlace } from '@/lib/pane-spawn-deferral-registry'
-import type { ConnectPanePtySession } from './connect-pane-pty-session'
 import type { ColdRestoreAgentResumeStartup } from './fresh-spawn-types'
 
-/** While `attempt` runs, the pane owns the resume record `startup` came from. */
+/** While `attempt` runs and `isLive`, the pane owns the resume record `startup` came from. */
 export function holdInPlaceResumeUntilSettled(
-  session: Pick<ConnectPanePtySession, 'disposed'>,
+  isLive: () => boolean,
   startup: ColdRestoreAgentResumeStartup | null | undefined,
   attempt: Promise<unknown>
 ): void {
@@ -12,6 +11,6 @@ export function holdInPlaceResumeUntilSettled(
   if (!recordEntry) {
     return
   }
-  const release = holdPaneResumeInPlace(recordEntry.paneKey, () => !session.disposed)
+  const release = holdPaneResumeInPlace(recordEntry.paneKey, isLive)
   void attempt.then(release, release)
 }
