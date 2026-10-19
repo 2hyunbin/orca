@@ -74,6 +74,8 @@ type ProvisionalLaunchArgs = {
   ) => Promise<StructuredLaunchTerminal> | StructuredLaunchTerminal
   /** What that default terminal carries from the caller, e.g. a recipe's saved CLI arguments. */
   declinedTerminal?: DeclinedStructuredLaunchTerminalOptions
+  /** `onHostDeclined` opens a surface of the caller's own (a shell) rather than the agent's CLI. */
+  declinedOpensCallerSurface?: true
 }
 
 /** Binds the launch to a chat tab once its host, this machine included, admits the chat. */
@@ -150,7 +152,8 @@ export function beginStructuredAgentSessionProvisionalLaunch(
             worktreeId,
             ...(args.targetGroupId ? { targetGroupId: args.targetGroupId } : {}),
             ...(args.declinedTerminal ? { terminal: args.declinedTerminal } : {})
-          }))
+          })),
+      ...(args.declinedOpensCallerSurface ? { declinedOpensCallerSurface: true as const } : {})
     })
     void launch.settlement.then(cancelIfNoTab, cancelIfNoTab)
     return launch

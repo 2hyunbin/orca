@@ -25,6 +25,7 @@ import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { toRuntimeWorktreeSelector } from '@/runtime/runtime-worktree-selector'
 import { readStructuredChatHostPermissionVerdict } from '@/runtime/structured-chat-host-permission'
 import { notifyHostPermissionRefused } from '@/lib/structured-agent-session-launch-permission-notice'
+import { readDetectedAgentsForWorktree } from '@/lib/agent-detection-target-inventory'
 
 /** What a host's "no" opens instead: the terminal the launch would have opened had it known. */
 export type StructuredLaunchTerminal = {
@@ -157,12 +158,19 @@ export async function openDeclinedStructuredLaunchTerminal(args: {
   }
 }
 
+/** A declined chat falls back to its agent's terminal only where that CLI may be installed: a chat
+ *  can be offered without it, and its terminal would only fail to start. */
+function declinedAgentTerminalHasCli(agent: TuiAgent, worktreeId: string): boolean {
+  return readDetectedAgentsForWorktree(useAppStore.getState(), worktreeId)?.includes(agent) !== false
+}
+
 /**
  * Asks the host that would run a chat, this machine or a paired server, before committing any of it
  * here: no tab, launch record, queued prompt or focus intent exists until it answers. Admitted opens
- * the chat; declined opens the caller's terminal (a resume, which has no terminal equivalent,
- * fails); an unreachable server opens nothing and says so. There is nothing to undo either way.
- * This machine's "can't answer" or "not resolvable yet" opens the chat, whose own create reports.
+ * the chat; declined opens the caller's terminal (a resume, which has no terminal equivalent, and
+ * an agent whose CLI is not installed fail with the host's reason); an unreachable server opens
+ * nothing and says so. There is nothing to undo either way. This machine's "can't answer" or "not
+ * resolvable yet" opens the chat, whose own create reports.
  */
 export function beginHostAdmittedStructuredLaunch(args: {
   plan: AgentSessionLaunchPlan & { agent: TuiAgent }
@@ -177,6 +185,8 @@ export function beginHostAdmittedStructuredLaunch(args: {
   onHostDeclined: (
     target: RuntimeClientTarget
   ) => Promise<StructuredLaunchTerminal> | StructuredLaunchTerminal
+  /** `onHostDeclined` opens the caller's own surface (a shell), never the agent's CLI. */
+  declinedOpensCallerSurface?: true
 }): HostAdmittedStructuredLaunch {
   const { plan } = args
   const paired = args.target.kind === 'environment'
@@ -190,8 +200,12 @@ export function beginHostAdmittedStructuredLaunch(args: {
         resolveDelivery = resolve
       })
     : undefined
-  const failBeforeSurface = (error: unknown, reason?: string): StructuredAgentLaunchSettlement => {
-    if (plan.requestedSurface === 'chat' && !admitted) {
+  const failBeforeSurface = (
+    error: unknown,
+    reason?: string,
+    notify = plan.requestedSurface === 'chat'
+  ): StructuredAgentLaunchSettlement => {
+    if (notify && !admitted) {
       notifyExplicitChatFailure(plan.agent, reason)
       resolveDelivery(NOT_DELIVERED_NOTIFIED)
       return { kind: 'failed', error, notified: true }
@@ -230,10 +244,14 @@ export function beginHostAdmittedStructuredLaunch(args: {
         }
       }
       if (admission.kind === 'declined') {
-        if (plan.resumeFrom || plan.requestedSurface === 'chat') {
+        const noCli =
+          !args.declinedOpensCallerSurface &&
+          !declinedAgentTerminalHasCli(plan.agent, args.worktreeId)
+        if (plan.resumeFrom || plan.requestedSurface === 'chat' || noCli) {
           return failBeforeSurface(
             new StructuredAgentSessionCreateRefusalError('structured_agent_session_unsupported'),
-            admission.reason
+            admission.reason,
+            plan.requestedSurface === 'chat' || noCli
           )
         }
         const terminal = await args.onHostDeclined(args.target)
