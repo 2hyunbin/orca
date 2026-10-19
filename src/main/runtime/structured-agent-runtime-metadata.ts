@@ -40,7 +40,10 @@ function acpChatProgram(spec: AcpLaunchSpec): StructuredAgentChatProgram {
     resolve: (shellEnv, commandSettings) => {
       const env = { ...shellEnv, ...spec.env }
       const dataDirectory = getProfileUserDataPath()
-      return { command: resolveAcpLaunchCommand(spec, env, { commandSettings, dataDirectory }), env }
+      return {
+        command: resolveAcpLaunchCommand(spec, env, { commandSettings, dataDirectory }),
+        env
+      }
     },
     ...(managedRuntime ? { installable: () => managedRuntime.pin() !== null } : {})
   }
