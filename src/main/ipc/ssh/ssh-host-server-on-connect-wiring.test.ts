@@ -9,6 +9,7 @@ import { OrcadHostUnsupportedError } from '../../orcad/orcad-host-unavailable'
 import { RemoteNodeRuntimeNoexecError } from '../../ssh/orcad-remote-node-runtime-report'
 import { allowsDirectSshRelay, SshConnectionStore } from '../../ssh/connection/ssh-connection-store'
 import { resolveHostServerOnConnect } from '../../ssh/ssh-host-server-on-connect'
+import { unservedHostServerMessage } from '../../ssh/ssh-host-unserved-status'
 
 const mocks = vi.hoisted(() => {
   const registry: { current: unknown } = { current: null }
@@ -107,10 +108,20 @@ describe('connect-time server decision against the real profile', () => {
   it('does not remember a noexec home, so a connect after the remount deploys', async () => {
     mocks.deploy.mockRejectedValue(new RemoteNodeRuntimeNoexecError('exit 126: Permission denied'))
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
-    await expect(
-      resolveHostServerOnConnect(target(), hostServerOnConnectDeps(userDataPath))
-    ).resolves.toEqual({ route: 'unserved', reason: 'orcad_unavailable', detail: 'runtime_noexec' })
+    const decision = await resolveHostServerOnConnect(
+      target(),
+      hostServerOnConnectDeps(userDataPath)
+    )
     warn.mockRestore()
+    expect(decision).toEqual({
+      route: 'unserved',
+      reason: 'orcad_unavailable',
+      detail: 'runtime_noexec'
+    })
+    // The connect's own error, which the host row shows, names noexec rather than "unsupported".
+    expect(decision.route === 'unserved' && unservedHostServerMessage(decision)).toMatch(
+      /noexec.*connect again/
+    )
     expect(target().managedServerUnavailable).toBeUndefined()
 
     mocks.deploy.mockClear()
