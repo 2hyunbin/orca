@@ -1168,11 +1168,6 @@ jobs:
         env:
           ORCA_BACKGROUND_LAUNCH: '1'
         run: >-
-          echo "caches:"; du -sh ~/.cache/* /var/cache/fontconfig 2>&1 || true;
-          for i in 1 2 3 4 5 6 7 8; do echo "iteration $i";
-          case $i in 2|3|4) rm -rf ~/.cache/mesa_shader_cache ~/.cache/mesa_shader_cache_db; echo "dropped mesa cache";; 5|6|7) rm -rf ~/.cache/fontconfig; echo "dropped user fontconfig cache";; 8) rm -rf ~/.cache/mesa_shader_cache ~/.cache/mesa_shader_cache_db ~/.cache/fontconfig; echo "dropped both";; esac;
-          xvfb-run --auto-servernum pnpm exec vitest run --config config/vitest.config.ts
-          src/main/browser/browser-popup-native-compatibility.electron.test.ts 2>&1 | grep -E 'popup-flake|Shift POST|Tests  |gpu|GPU|GL' || true; du -sh ~/.cache/* 2>&1 || true; done;
           xvfb-run --auto-servernum pnpm exec vitest run --config config/vitest.config.ts
           --no-file-parallelism
           src/main/browser/browser-client-page-renderer-lifecycle.electron.test.ts

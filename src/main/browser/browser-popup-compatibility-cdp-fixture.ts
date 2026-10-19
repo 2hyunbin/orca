@@ -7,12 +7,12 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { chromium, type Browser, type Page } from 'playwright'
-import { afterAll, afterEach, beforeAll, beforeEach, expect, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, expect, vi } from 'vitest'
 import { build as buildVite } from 'vite'
 import { waitForBrowserCdpEndpoint } from './browser-session-ua-cdp-collector'
 import { popupFixtureHtml } from './browser-popup-compatibility-page-fixture'
 import { resolveElectronProbeLaunch } from './electron-probe-display-launch'
-import { startDiagnosedFrameCapture } from './popup-flake-diagnostic-fixture'
+import { startHiddenRendererFrameCapture } from './hidden-renderer-frame-capture-fixture'
 
 // Hidden renderer startup and CDP events can exceed the default one-second poll on CI.
 vi.setConfig({ expect: { poll: { timeout: 10_000 } } })
@@ -104,8 +104,8 @@ async function reservePort(): Promise<number> {
   return address.port
 }
 
-async function waitForFixture(predicate: () => boolean): Promise<void> {
-  const deadline = Date.now() + 20_000
+async function waitForFixture(predicate: () => boolean, timeoutMs = 20_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
   while (!predicate()) {
     if (Date.now() > deadline) {
       throw new Error(`Popup fixture did not become ready: ${stderr}`)
@@ -209,17 +209,14 @@ beforeAll(async () => {
       throw new Error('Missing guest page')
     }
     pages.set(name, page)
+    // A fresh runner's first launch can take tens of seconds to start Chromium's compositor, and
+    // no hidden page paints until it does; charge that to startup, not the first test's poll.
+    stopFrameCaptures.set(
+      page,
+      await startHiddenRendererFrameCapture(page, (hasFrame) => waitForFixture(hasFrame, 45_000))
+    )
   }
-}, 60_000)
-
-beforeEach(async () => {
-  for (const page of pages.values()) {
-    if (!stopFrameCaptures.has(page)) {
-      // DIAGNOSTIC(popup-flake): temporary timing probe, removed before merge.
-      stopFrameCaptures.set(page, await startDiagnosedFrameCapture(page))
-    }
-  }
-})
+}, 90_000)
 
 afterEach(async () => {
   const route = pages.get('route')
@@ -233,14 +230,6 @@ afterEach(async () => {
 })
 
 afterAll(async () => {
-  // DIAGNOSTIC(popup-flake)
-  process.stdout.write(
-    `${stderr
-      .split('\n')
-      .filter((line) => line.includes('popup-flake-main') || /gpu|GPU|GL|egl|Vulkan|viz/.test(line))
-      .slice(0, 60)
-      .join('\n')}\n`
-  )
   cdpConnected.resolve()
   await Promise.allSettled([...stopFrameCaptures.values()].map((stop) => stop()))
   if (artifactDir && existsSync(statusPath)) {
