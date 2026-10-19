@@ -209,11 +209,15 @@ beforeAll(async () => {
       throw new Error('Missing guest page')
     }
     pages.set(name, page)
-    // A fresh runner's first launch can take tens of seconds to start Chromium's compositor, and
+    // A fresh runner's first launch can take tens of seconds to start Chromium's GPU process, and
     // no hidden page paints until it does; charge that to startup, not the first test's poll.
     stopFrameCaptures.set(
       page,
-      await startHiddenRendererFrameCapture(page, (hasFrame) => waitForFixture(hasFrame, 45_000))
+      await startHiddenRendererFrameCapture(page, (hasFrame) =>
+        waitForFixture(hasFrame, 45_000).catch((error: unknown) => {
+          throw new Error(`No first frame for ${name}`, { cause: error })
+        })
+      )
     )
   }
 }, 90_000)
