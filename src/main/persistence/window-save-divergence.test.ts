@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { SleepingAgentSessionRecord } from '../../shared/agent-session-resume'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import {
   addWorkspace,
@@ -313,13 +314,13 @@ describe('reportWindowSaveDrift', () => {
       ...next.terminalLayoutsByTabId['tab-a']!,
       titlesByLeafId: { [leaf(1)]: 'build' }
     }
-    const record = {
+    const record: SleepingAgentSessionRecord = {
       paneKey: `tab-a:${leaf(1)}`,
       worktreeId: GIT_KEY,
-      agent: 'claude' as const,
-      providerSession: { key: 'claude' as const, id: 'session-secret-id' },
+      agent: 'claude',
+      providerSession: { key: 'session_id', id: 'session-secret-id' },
       prompt: 'fix the login bug',
-      state: 'done' as const,
+      state: 'done',
       capturedAt: 1,
       updatedAt: 1,
       launchConfig: { agentArgs: '', agentEnv: { type: 'env-secret-value' } }

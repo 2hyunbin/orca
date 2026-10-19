@@ -40,10 +40,6 @@ export type FieldChange = { record: string; field: string; before: unknown; afte
 
 type Budget = { left: number }
 
-function sizeOf(value: object): string {
-  return Array.isArray(value) ? `<${value.length} items>` : `<${Object.keys(value).length} keys>`
-}
-
 function compact(
   value: unknown,
   key: string | undefined,
@@ -69,16 +65,19 @@ function compact(
   if (typeof value !== 'object') {
     return `<${typeof value}>`
   }
-  if (opaque || depth >= MAX_DEPTH) {
-    return sizeOf(value)
-  }
   if (Array.isArray(value)) {
+    if (opaque || depth >= MAX_DEPTH) {
+      return `<${value.length} items>`
+    }
     const shown = value
       .slice(0, MAX_ITEMS)
       .map((item) => compact(item, key, budget, depth + 1, false))
     return value.length > MAX_ITEMS ? [...shown, `+${value.length - MAX_ITEMS} more`] : shown
   }
   const entries = Object.entries(value).filter(([, item]) => item !== undefined)
+  if (opaque || depth >= MAX_DEPTH) {
+    return `<${entries.length} keys>`
+  }
   const shown = Object.fromEntries(
     entries
       .slice(0, MAX_ITEMS)

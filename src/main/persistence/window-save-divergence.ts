@@ -234,7 +234,7 @@ export function windowSaveDivergences(
   // Ignored, as main's own writes: pane bindings, resume records, default-tab marks, closed-tab records, row owners,
   // clientHostedBrowserPagesByWorkspace and the topology revision.
   for (const workspace of workspaces) {
-    const differences = [
+    const differences: Difference[] = [
       ...diffWorkspaceLayouts(was?.workspaces[workspace], now?.workspaces[workspace]),
       ...(rawPaths.get(workspace) ?? []).map((path) => ({ path }))
     ].slice(0, MAX_PATHS)
