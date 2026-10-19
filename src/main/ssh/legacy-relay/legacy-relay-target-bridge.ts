@@ -24,8 +24,8 @@ import {
   type LegacyRelayPty,
   PROVEN_EXITED,
   relistedPane,
+  seededPanes,
   servedBridgedPanes,
-  toPane,
   type Pane
 } from './legacy-relay-bridge-leases'
 
@@ -67,6 +67,8 @@ export class LegacyRelayTargetBridge {
   /** Whether a relay lists a pane now, including one whose stop is owed; undefined when untracked. */
   readonly paneState = (ptyId: string) => this.panes.get(ptyId)?.state
   private readonly attached = new Map<string, Set<number>>()
+  /** Exits reported for a pane no relay owns yet, by endpoint; the listing that picks one reads them. */
+  private readonly unownedExits = new Map<string, number>()
   private readonly waiters = new LegacyRelayWaiters()
   private readonly retry = new LegacyRelayRetry(() => void this.refresh())
   private refreshing: Promise<void> | null = null
@@ -187,14 +189,8 @@ export class LegacyRelayTargetBridge {
     }
     // Every leased pane is published before the slow look, so a tab that mounts meanwhile waits on
     // its relay terminal rather than starting a second shell. Only proof of exit removes it.
-    const seeded = new Map(this.panes)
-    for (const [relayPtyId, lease] of leases) {
-      const ptyId = toAppSshPtyId(this.deps.targetId, relayPtyId)
-      if (!seeded.has(ptyId)) {
-        seeded.set(ptyId, toPane(lease, relayPtyId, null, 'unverifiable'))
-      }
-    }
-    if (seeded.size !== this.panes.size) {
+    const seeded = seededPanes(this.deps.targetId, this.panes, leases)
+    if (seeded) {
       this.replacePanes(seeded)
     }
     const listing = await this.deps.listEndpoints(this.abort.signal)
@@ -221,16 +217,23 @@ export class LegacyRelayTargetBridge {
       const ptyId = toAppSshPtyId(this.deps.targetId, relayPtyId)
       const prior = this.panes.get(ptyId)
       const pane = relistedPane(lease, relayPtyId, listedRows, prior, complete)
-      if (pane !== 'absent') {
+      // A listing taken before the owner's exit report must not bring the pane back live.
+      const exitCode =
+        pane === 'absent' || prior?.ownerEndpoint
+          ? undefined
+          : this.unownedExits.get(`${pane.ownerEndpoint}\n${ptyId}`)
+      if (pane !== 'absent' && exitCode === undefined) {
         next.set(ptyId, pane)
       } else {
-        this.deps.retireLease(relayPtyId, 'absent')
-        this.emitExit(ptyId, -1, Boolean(prior?.endpoint))
+        this.deps.retireLease(relayPtyId, exitCode === undefined ? 'absent' : 'exit-observed')
+        this.emitExit(ptyId, exitCode ?? -1, exitCode !== undefined || Boolean(prior?.endpoint))
       }
     }
+    this.unownedExits.clear()
     this.closeIdleClients(new Set([...next.values()].map((pane) => pane.endpoint ?? '')))
     this.replacePanes(next)
-    if (!complete) {
+    // A contested pane is unverifiable under a complete listing too; only a later one resolves it.
+    if (!complete || [...next.values()].some((pane) => pane.state === 'unverifiable')) {
       this.retry.schedule()
     } else if (!this.attachFailing) {
       this.retry.reset()
@@ -278,6 +281,8 @@ export class LegacyRelayTargetBridge {
       const pane = this.panes.get(ptyId)
       if (pane?.ownerEndpoint === endpoint) {
         this.retire(ptyId, pane, code)
+      } else if (pane && !pane.ownerEndpoint) {
+        this.unownedExits.set(`${endpoint}\n${ptyId}`, code)
       }
     })
     client.onClose(() => {

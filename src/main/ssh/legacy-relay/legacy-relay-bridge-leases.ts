@@ -101,6 +101,22 @@ export function toPane(
   }
 }
 
+/** Every leased pane not yet tracked, as unverifiable; null when all already are. */
+export function seededPanes(
+  targetId: string,
+  panes: ReadonlyMap<string, Pane>,
+  leases: ReadonlyMap<string, SshRemotePtyLease>
+): Map<string, Pane> | null {
+  const seeded = new Map(panes)
+  for (const [relayPtyId, lease] of leases) {
+    const ptyId = toAppSshPtyId(targetId, relayPtyId)
+    if (!seeded.has(ptyId)) {
+      seeded.set(ptyId, toPane(lease, relayPtyId, null, 'unverifiable'))
+    }
+  }
+  return seeded.size !== panes.size ? seeded : null
+}
+
 /**
  * A leased pane after a listing, or `absent` once every relay that could run it answered without
  * it. Relay ids repeat across relays: once a relay ran the pane only that relay speaks for it, and

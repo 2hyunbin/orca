@@ -774,6 +774,31 @@ describe('one target’s legacy relay bridge', () => {
       await subject.refresh()
       expect(subject.snapshot()).toEqual([expect.objectContaining({ state: 'unverifiable' })])
       expect(leases[0].state).toBe('detached')
+      // A later listing settles it: here the stranger's process is gone.
+      other.ptys.delete('pty-1')
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(subject.snapshot()).toEqual([expect.objectContaining({ state: 'live' })])
+    })
+
+    it('keeps an exit the relay reported while its listing was in flight', async () => {
+      const subject = bridge({
+        openClient: async () => {
+          const client = fakeClient(relay)
+          const list = client.list.bind(client)
+          client.list = async () => {
+            const rows = await list()
+            // The shell exits after the relay answered but before the pane has an owner.
+            client.emitExit('pty-1', 3)
+            return rows
+          }
+          relay.clients.push(client)
+          return client
+        }
+      })
+      await subject.refresh()
+      expect(events.exits).toEqual([PTY])
+      expect(leases[0].state).toBe('terminated')
+      expect(subject.snapshot()).toEqual([])
     })
   })
 
