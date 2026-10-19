@@ -119,10 +119,6 @@ export async function commitOrcadMigrationDestination(
   context: OrcadMigrationCutoverContext,
   migrationId: string
 ): Promise<OrcadMigrationSourceCutover> {
-  restoreSignedOrcadMigrationJournal(
-    context.userDataPath,
-    requireCutover(context.userDataPath, migrationId)
-  )
   try {
     return await stageAndCommit(context, migrationId)
   } catch (error) {
@@ -226,7 +222,8 @@ function requireCutover(userDataPath: string, migrationId: string): OrcadMigrati
   if (!cutover) {
     throw new Error('orcad_migration_source_cutover_not_found')
   }
-  return cutover
+  // Every stage, commit and abort asks the host by this manifest, so it must be the signed one.
+  return restoreSignedOrcadMigrationJournal(userDataPath, cutover)
 }
 
 function committedRefusal(): OrcadMigrationAbortResult {

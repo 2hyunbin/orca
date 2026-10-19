@@ -5,6 +5,7 @@ import { parseOrcadMigrationEditorDraftsBytes } from '../../shared/orcad-migrati
 import { closeTestStores } from '../persistence-test-harness'
 import type { Store } from '../persistence/loading-store/store'
 import {
+  abortOrcadMigrationCutover,
   commitOrcadMigrationDestination,
   stageOrcadMigrationDestination,
   type OrcadMigrationCutoverContext
@@ -246,6 +247,18 @@ describe('a journal an older desktop rewrote', () => {
     const restored = restoreSignedOrcadMigrationJournal(h.userDataPath, h.journal())
     expect(restored.manifest.payload.dormantState?.editorDraftsBlob).toBeDefined()
     expect(h.journal().manifest).toEqual(restored.manifest)
+  })
+
+  it('can still be abandoned: the abort asks the host by its signed copy', async () => {
+    const h = await fenced({ 'a.ts': 'rolled back' })
+    const signed = h.journal().manifest
+    await stageOrcadMigrationDestination(h.context, h.migrationId)
+    rollBack(h)
+    await expect(abortOrcadMigrationCutover(h.context, h.migrationId)).resolves.toMatchObject({
+      outcome: 'released'
+    })
+    expect(h.destination.abort.mock.calls[0]?.[0]).toEqual(signed)
+    expect(listOrcadMigrationSourceCutovers(h.userDataPath)).toEqual([])
   })
 
   it('stays unverifiable, with nothing aborted, when the signed copy is gone too', async () => {
