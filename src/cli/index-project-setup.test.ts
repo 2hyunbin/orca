@@ -43,6 +43,7 @@ vi.mock('child_process', async () => {
 
 import { main } from './index'
 import { okFixture, queueFixtures } from './test-fixtures'
+import { PROJECT_HOST_SETUP_HOST_TARGET_RUNTIME_CAPABILITY } from '../shared/runtime-capability-constants'
 import { pairRuntimeEnvironment, useWorktreeAwarenessEnvironment } from './index-test-harness'
 
 const ORCA_PROJECT = {
@@ -798,6 +799,7 @@ describe('orca cli worktree awareness', () => {
   ])('deletes project host setup metadata with $flags', async ({ flags, force, hostId }) => {
     queueFixtures(
       callMock,
+      ...(hostId ? [hostTargetStatusFixture(true)] : []),
       okFixture('req_project_setup_delete', {
         result: {
           project: {
@@ -833,4 +835,22 @@ describe('orca cli worktree awareness', () => {
       force
     })
   })
+
+  it('refuses --host on a server that would ignore it and act on the first same-id twin', async () => {
+    queueFixtures(callMock, hostTargetStatusFixture(false))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await main(
+      ['project', 'setup-delete', '--setup', 'dup', '--host', 'local', '--force', '--json'],
+      '/tmp/repo'
+    )
+
+    expect(callMock).not.toHaveBeenCalledWith('projectHostSetup.delete', expect.anything())
+  })
 })
+
+function hostTargetStatusFixture(supported: boolean) {
+  return okFixture('req_status', {
+    capabilities: supported ? [PROJECT_HOST_SETUP_HOST_TARGET_RUNTIME_CAPABILITY] : []
+  })
+}
