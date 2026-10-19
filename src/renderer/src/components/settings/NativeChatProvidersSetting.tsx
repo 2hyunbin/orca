@@ -10,7 +10,11 @@ import { isTuiAgentEnabled } from '../../../../shared/tui-agent-selection'
 import { translate } from '@/i18n/i18n'
 import { AgentIcon, getAgentCatalog, getAgentLabel } from '@/lib/agent-catalog'
 import { chatProviderAgents, useHostStructuredAgentsVersion } from '@/lib/chat-provider-agents'
-import { useManagedRuntimeInstall } from '@/runtime/use-managed-runtime-install'
+import {
+  useManagedRuntimeInstall,
+  type ManagedRuntimeInstallObservation
+} from '@/runtime/use-managed-runtime-install'
+import { readHostStructuredAgents } from '@/runtime/host-structured-agents'
 import { useAppStore } from '../../store'
 import { readNativeDetectedAgents } from '@/store/slices/local-detected-agent-store-state'
 import { createAgentSettingsUpdateQueue } from './agent-availability-settings'
@@ -85,8 +89,9 @@ function ProviderDetail(props: {
   label: string
   installed: readonly TuiAgent[] | null
   enabledInAgents: boolean
+  runtime: ManagedRuntimeInstallObservation
 }): React.JSX.Element {
-  const runtime = useManagedRuntimeInstall(CHAT_HOST, props.agent, props.enabledInAgents)
+  const { runtime } = props
   // Install and Remove wait for a running sign-in, which runs the installed server.
   const signIn = useAntigravityChatSignIn(
     props.agent === 'antigravity' && props.enabledInAgents && runtime.kind === 'active'
@@ -139,6 +144,72 @@ function AntigravityChatProviderSignIn(): React.JSX.Element | null {
   )
 }
 
+/** One provider's switch. Unchosen, it shows on when the agent is installed here: its CLI, or the
+ *  chat program Orca runs for it (Orca's download or a copy found outside it). */
+function ProviderRow({
+  agent,
+  settings,
+  updateSettings,
+  detectedIds
+}: {
+  agent: TuiAgent
+  settings: GlobalSettings
+  updateSettings: (updates: Partial<GlobalSettings>) => void | Promise<void>
+  detectedIds: readonly TuiAgent[] | null
+}): React.JSX.Element {
+  const label = getAgentLabel(agent)
+  const enabledInAgents = isTuiAgentEnabled(agent, settings.disabledTuiAgents)
+  const runtime = useManagedRuntimeInstall(CHAT_HOST, agent, enabledInAgents)
+  const runtimeState =
+    runtime.kind === 'active' && runtime.snapshot.kind === 'known' ? runtime.snapshot.state : null
+  const installedHere = [...(detectedIds ?? []), ...(runtimeState?.source ? [agent] : [])]
+  const on = isNativeChatProviderDisplayedOn(settings, agent, installedHere)
+  // Held until the runtime answers, so an installed one does not show off first.
+  const unsettled =
+    !on &&
+    settings.nativeChatProviders?.[agent] === undefined &&
+    (runtime.kind === 'pending' || (runtime.kind === 'active' && runtime.snapshot.kind === 'unknown'))
+  return (
+    <div className="space-y-3 py-3">
+      <div className="flex items-center gap-3">
+        <div className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border/50 bg-background/50">
+          <AgentIcon agent={agent} size={16} />
+        </div>
+        <ProviderDetail
+          agent={agent}
+          label={label}
+          installed={detectedIds}
+          enabledInAgents={enabledInAgents}
+          runtime={runtime}
+        />
+        <SettingsSwitch
+          checked={on}
+          disabled={!enabledInAgents || unsettled}
+          ariaLabel={translate(
+            'settings.chat.providers.toggleLabel',
+            'Open {{value0}} as a chat',
+            { value0: label }
+          )}
+          onChange={() => {
+            const next = !on
+            return enqueueProviderUpdate({
+              getSettings: () => useAppStore.getState().settings,
+              fallbackSettings: settings,
+              updateSettings,
+              buildUpdate: (latest) =>
+                buildNativeChatProviderUpdate(latest, agent, next)
+            })
+          }}
+        />
+      </div>
+      {/* Chats sign in on the host they run on, under the program that serves them. */}
+      {agent === 'antigravity' && enabledInAgents ? (
+        <AntigravityChatProviderSignIn />
+      ) : null}
+    </div>
+  )
+}
+
 export function NativeChatProvidersSetting({
   settings,
   updateSettings,
@@ -152,11 +223,13 @@ export function NativeChatProvidersSetting({
   useHostStructuredAgentsVersion()
   const agents = chatProviderAgents(LOCAL_EXECUTION_HOST_ID, undefined)
   const detectedIds = useAppStore(readNativeDetectedAgents)
+  const managed = readHostStructuredAgents(LOCAL_EXECUTION_HOST_ID, undefined)
   const visibleAgents = agents.filter(
     (agent) =>
       detectedIds !== null ||
       BUILT_IN_CHAT_AGENTS.includes(agent) ||
-      settings.nativeChatProviders?.[agent] !== undefined
+      settings.nativeChatProviders?.[agent] !== undefined ||
+      managed?.some((row) => row.agent === agent && row.managedRuntime)
   )
   return (
     <SearchableSetting
@@ -169,49 +242,15 @@ export function NativeChatProvidersSetting({
       <Card>
         <CardContent>
           <div className="divide-y divide-border/40">
-            {visibleAgents.map((agent) => {
-              const label = getAgentLabel(agent)
-              const enabledInAgents = isTuiAgentEnabled(agent, settings.disabledTuiAgents)
-              const on = isNativeChatProviderDisplayedOn(settings, agent, detectedIds)
-              return (
-                <div key={agent} className="space-y-3 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border/50 bg-background/50">
-                      <AgentIcon agent={agent} size={16} />
-                    </div>
-                    <ProviderDetail
-                      agent={agent}
-                      label={label}
-                      installed={detectedIds}
-                      enabledInAgents={enabledInAgents}
-                    />
-                    <SettingsSwitch
-                      checked={on}
-                      disabled={!enabledInAgents}
-                      ariaLabel={translate(
-                        'settings.chat.providers.toggleLabel',
-                        'Open {{value0}} as a chat',
-                        { value0: label }
-                      )}
-                      onChange={() => {
-                        const next = !on
-                        return enqueueProviderUpdate({
-                          getSettings: () => useAppStore.getState().settings,
-                          fallbackSettings: settings,
-                          updateSettings,
-                          buildUpdate: (latest) =>
-                            buildNativeChatProviderUpdate(latest, agent, next)
-                        })
-                      }}
-                    />
-                  </div>
-                  {/* Chats sign in on the host they run on, under the program that serves them. */}
-                  {agent === 'antigravity' && enabledInAgents ? (
-                    <AntigravityChatProviderSignIn />
-                  ) : null}
-                </div>
-              )
-            })}
+            {visibleAgents.map((agent) => (
+              <ProviderRow
+                key={agent}
+                agent={agent}
+                settings={settings}
+                updateSettings={updateSettings}
+                detectedIds={detectedIds}
+              />
+            ))}
           </div>
         </CardContent>
       </Card>

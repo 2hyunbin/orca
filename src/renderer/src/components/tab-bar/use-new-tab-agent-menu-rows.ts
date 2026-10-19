@@ -44,6 +44,7 @@ import {
   type UseDetectedAgentsResult
 } from '@/hooks/useDetectedAgents'
 import { readDetectedAgentsForTarget } from '@/lib/agent-detection-target-inventory'
+import { readChatProgram } from '@/lib/host-chat-program'
 
 function hostChatAnswer(input: AgentLaunchRoutingInput): HostChatAnswer {
   const support = structuredAgentLaunchSupport(input)
@@ -182,10 +183,14 @@ export function useNewTabAgentMenuRows(
     localCapabilities.state === 'unlearned' || localCapabilities.state === 'pending'
   const capabilityPending =
     input.hostCapabilities == null && (local ? localAcquiring : facts.checking)
+  // Read even beside a roster: an agent that roster cannot answer is read from the host's mark.
+  const hostCatalogUnlearned = catalogUnlearned(
+    facts.executionHostId,
+    facts.runtimeId,
+    input.hostCapabilities
+  )
   const hostCatalogPending =
-    !roster &&
-    availability?.state !== 'pending' &&
-    catalogUnlearned(facts.executionHostId, facts.runtimeId, input.hostCapabilities)
+    !roster && availability?.state !== 'pending' && hostCatalogUnlearned
   const localCatalogPending =
     !local &&
     catalogUnlearned(
@@ -194,13 +199,14 @@ export function useNewTabAgentMenuRows(
       localCapabilities.state === 'known' ? localCapabilities.capabilities : null
     )
   useEffect(() => {
-    if ((!open && !worktreeShown) || plain || inventoryFailed) {
+    // A failed CLI inventory still loads the facts a chat row is read from.
+    if ((!open && !worktreeShown) || plain) {
       return
     }
     if (localCapabilities.state === 'unlearned') {
       void ensureLocalRuntimeCapabilities()
     }
-    if (hostCatalogPending && facts.runtimeId !== undefined) {
+    if (hostCatalogUnlearned && facts.runtimeId !== undefined) {
       void loadHostStructuredAgents(facts.executionHostId, input.hostCapabilities, facts.runtimeId)
     }
     if (localCatalogPending && localCapabilities.state === 'known') {
@@ -210,23 +216,22 @@ export function useNewTabAgentMenuRows(
     open,
     worktreeShown,
     plain,
-    inventoryFailed,
     localCapabilities,
-    hostCatalogPending,
+    hostCatalogUnlearned,
     localCatalogPending,
     facts,
     input.hostCapabilities
   ])
-  // Only dependencies that can enable an action hold the cold fill; a failed inventory is terminal.
+  // Only dependencies that can enable an action hold the cold fill; a failed inventory ends only
+  // its own wait, since chat rows do not need it.
   if (
-    !inventoryFailed &&
-    ((detection.detectedIds === null && detectionTarget !== undefined) ||
-      (!plain &&
-        (capabilityPending ||
-          (!local && localAcquiring) ||
-          availability?.state === 'pending' ||
-          hostCatalogPending ||
-          localCatalogPending)))
+    (detection.detectedIds === null && detectionTarget !== undefined && !inventoryFailed) ||
+    (!plain &&
+      (capabilityPending ||
+        (!local && localAcquiring) ||
+        availability?.state === 'pending' ||
+        hostCatalogPending ||
+        localCatalogPending))
   ) {
     return {
       state: 'loading',
@@ -237,6 +242,7 @@ export function useNewTabAgentMenuRows(
     settings,
     detectedOnHost: detection.detectedIds,
     chatAgents,
+    chatProgram: (agent) => readChatProgram(state, agent, input, detection.detectedIds),
     hostChatAnswer: (agent) => {
       const route = buildAgentLaunchRouteInput(state, { agent, workspace })
       const preliminary = hostChatAnswer(

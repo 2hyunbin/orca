@@ -1,6 +1,7 @@
 /**
  * Unchosen agents route to chat when Chat UI is on; only explicit choices are saved.
- * Settings displays unchosen non-built-ins from this computer's native installation inventory.
+ * Settings displays unchosen non-built-ins as on when installed on this computer: the agent's CLI,
+ * or the chat program Orca runs for it, which for some agents is not their CLI.
  */
 
 import { isAgentSessionHandleProvider } from './agent-session-provider-handle'
@@ -25,7 +26,8 @@ export function normalizeNativeChatProviderChoices(value: unknown): NativeChatPr
   return choices
 }
 
-/** The switch's displayed value, independent of launch feasibility. */
+/** The switch's displayed value, independent of launch feasibility; `installedHere` lists the
+ *  agents whose CLI or chat program is installed. */
 export function isNativeChatProviderDisplayedOn(
   settings: Partial<NativeChatProviderSettings> | null | undefined,
   agent: TuiAgent,

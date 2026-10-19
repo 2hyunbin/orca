@@ -8,6 +8,7 @@ import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import { filterEnabledTuiAgents } from '../../../shared/tui-agent-selection'
 import { orderTabLaunchAgents as orderAgents } from '@/components/tab-bar/tab-agent-launch-options'
+import { chatProgramOffered, type ChatProgramObservation } from '@/lib/host-chat-program'
 
 /** What the workspace's machine says about opening an agent as a chat, installation aside. */
 export type HostChatAnswer = 'yes' | 'not-yet-known' | 'ssh' | 'wsl' | 'not-on-host' | 'no-chats'
@@ -26,11 +27,13 @@ export type NewTabAgentMenuSettings = NativeChatDefaultSettings &
 
 export function buildNewTabAgentMenuRows(args: {
   settings: NewTabAgentMenuSettings | null | undefined
-  /** The agents detected on the workspace's machine. */
+  /** The agents whose CLI is detected on the workspace's machine: its "(CLI)" rows. */
   detectedOnHost: readonly TuiAgent[] | null
   /** The agents Orca can open as a chat. */
   chatAgents: readonly TuiAgent[]
   hostChatAnswer: (agent: TuiAgent) => HostChatAnswer
+  /** Whether the chat's own program runs there, which for some agents is not their CLI. */
+  chatProgram: (agent: TuiAgent) => ChatProgramObservation
 }): NewTabAgentMenuRow[] {
   const { settings } = args
   const defaultAgent = settings?.defaultTuiAgent
@@ -40,20 +43,26 @@ export function buildNewTabAgentMenuRows(args: {
   }
   const runnable: TuiAgent[] = []
   const unavailable = new Map<TuiAgent, ChatUnavailableReason>()
-  for (const agent of filterEnabledTuiAgents(args.chatAgents, settings?.disabledTuiAgents)) {
-    if (!isNativeChatProviderDisplayedOn(settings, agent, args.detectedOnHost)) {
+  const chatAgents = filterEnabledTuiAgents(args.chatAgents, settings?.disabledTuiAgents)
+  // An unchosen provider is on wherever its chat program is, whether or not its CLI is.
+  const providedHere = chatAgents.filter((agent) => chatProgramOffered(args.chatProgram(agent)))
+  for (const agent of chatAgents) {
+    if (!isNativeChatProviderDisplayedOn(settings, agent, providedHere)) {
       continue
     }
     const answer = args.hostChatAnswer(agent)
-    if (answer === 'yes' && installed.includes(agent)) {
+    const program = args.chatProgram(agent)
+    if (answer === 'yes' && chatProgramOffered(program)) {
       runnable.push(agent)
     } else {
       unavailable.set(
         agent,
-        args.detectedOnHost === null
-          ? 'check-failed'
-          : answer === 'yes'
+        answer === 'yes'
+          ? program === 'missing'
             ? 'not-installed'
+            : 'check-failed'
+          : args.detectedOnHost === null
+            ? 'check-failed'
             : answer === 'not-yet-known'
               ? 'check-failed'
               : answer === 'no-chats'

@@ -1,10 +1,13 @@
-import { useSyncExternalStore } from 'react'
+import { useMemo, useSyncExternalStore } from 'react'
 import { parseExecutionHostId } from '../../../shared/execution-host'
 import { MANAGED_RUNTIME_INSTALL_RUNTIME_CAPABILITY } from '../../../shared/managed-runtime-install'
 import { STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY as CATALOG } from '../../../shared/protocol-version'
 import { lastVerifiedRuntimeStatus } from '../../../shared/runtime-host-status'
 import type { TuiAgent } from '../../../shared/tui-agent'
+import { isTuiAgent } from '../../../shared/tui-agent-config'
 import { isTuiAgentEnabled, pickTuiAgent } from '../../../shared/tui-agent-selection'
+import { useAppStore } from '@/store'
+import { chatProviderAgents } from '@/lib/chat-provider-agents'
 import { resolveAgentLaunchRoute } from '@/lib/agent-launch-routing'
 import {
   buildAgentLaunchRouteInput,
@@ -96,20 +99,34 @@ export function agentChoiceOpensAsChat(
   )
 }
 
-/** The agents a picker offers: the detected ones, then the enabled `candidates` that open as a chat. */
+/** The agents a picker offers: the detected ones, then the agents the host registered for chat
+ *  that open as a chat there without their CLI. */
 export function agentsOfferedForLaunch(
   store: AgentLaunchRouteStore,
   workspace: ProspectiveWorkspace,
-  detected: readonly TuiAgent[] | null,
-  candidates: readonly TuiAgent[]
+  detected: readonly TuiAgent[] | null
 ): TuiAgent[] {
   const offered = [...(detected ?? [])]
-  for (const agent of candidates) {
+  const host = resolveChatProgramHost(store, workspace)
+  for (const agent of chatProviderAgents(host.executionHostId, store.runtimeStatusByEnvironmentId)) {
     if (!offered.includes(agent) && agentChoiceOpensAsChat(store, agent, workspace, detected)) {
       offered.push(agent)
     }
   }
   return offered
+}
+
+/** `agentsOfferedForLaunch` for a picker; null while detection is pending, where pickers keep
+ *  their catalog fallback. */
+export function useAgentsOfferedForLaunch(
+  workspace: ProspectiveWorkspace,
+  detected: ReadonlySet<TuiAgent> | null
+): ReadonlySet<TuiAgent> | null {
+  useChatProgramFactsVersion()
+  const key = useAppStore((state) =>
+    detected === null ? null : agentsOfferedForLaunch(state, workspace, [...detected]).join(',')
+  )
+  return useMemo(() => (key === null ? null : new Set(key.split(',').filter(isTuiAgent))), [key])
 }
 
 /** A choice the user made (default, saved action, override) may be an agent that opens as a chat
@@ -133,6 +150,29 @@ export function pickChosenOrDetectedAgent(
     return chosen
   }
   return pickTuiAgent(chosen, detected ?? [], disabled)
+}
+
+/** Whether a chosen agent whose CLI is not detected waits on facts that decide if it opens as a
+ *  chat, so a pick now could pass over it. */
+export function chosenAgentChatUnlearned(
+  store: AgentLaunchRouteStore,
+  chosen: TuiAgent | 'blank' | null | undefined,
+  detected: readonly TuiAgent[] | null,
+  workspace: ProspectiveWorkspace
+): boolean {
+  if (!chosen || chosen === 'blank' || detected?.includes(chosen)) {
+    return false
+  }
+  const input = buildAgentLaunchRouteInput(store, { agent: chosen, workspace })
+  return readChatProgram(store, chosen, input, detected) === 'unlearned'
+}
+
+/** The host a launch in `workspace` would run on, with what it advertises. */
+export function resolveChatProgramHost(
+  store: AgentLaunchRouteStore,
+  workspace: ProspectiveWorkspace
+): { executionHostId: string; hostCapabilities: readonly string[] | null } {
+  return buildAgentLaunchRouteInput(store, { agent: 'claude', workspace })
 }
 
 /** Loads what the compatibility rule reads for a host; never rejects. */
