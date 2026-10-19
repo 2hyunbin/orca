@@ -351,9 +351,7 @@ describe('getPRConflictSummary caching', () => {
     expect(spawnCount('fetch')).toBe(2)
     expect(
       gitExecFileAsyncMock.mock.calls.filter(
-        ([argv, options]) =>
-          commandKey(argv) === 'fetch' &&
-          (options as { wslDistro?: string })?.wslDistro === 'Ubuntu'
+        ([argv, options]) => commandKey(argv) === 'fetch' && options?.wslDistro === 'Ubuntu'
       )
     ).toHaveLength(1)
   })
