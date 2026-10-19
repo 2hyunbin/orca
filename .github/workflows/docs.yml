@@ -55,7 +55,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version-file: docs/site/package.json
           # setup-node probes the store from the repository root, not this app.
           package-manager-cache: false
 
@@ -227,7 +227,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version-file: docs/site/package.json
           package-manager-cache: false
 
       - name: Install site dependencies

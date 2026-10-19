@@ -19,7 +19,10 @@ import type { AgentStatusStoreView } from './workspace-activity-facts-producer'
 import { SortStampsProducer } from './sort-stamps-producer'
 import { writeUnreadFlag } from './sort-stamp-records'
 import { WorkspaceViewers } from './workspace-viewers'
+import { clientRaisesUnreadFlagItself } from '../../../shared/workspace-unread-raise-capability'
+import type { RuntimeCapability } from '../../../shared/protocol-version'
 import { TerminalUseProducer } from './terminal-use-producer'
+import { createKeyedTrailingEdgeCoalescer } from '../keyed-trailing-edge-coalescer'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 import { resolveAgentWorkspaceExecutionHostId } from '../../agent-hooks/restored-status-dead-terminal-sweep'
@@ -41,6 +44,12 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     retentionCandidates: () => this.readSidebarRetentionCandidates()
   })
   readonly workspaceViewers = new WorkspaceViewers(Date.now)
+  // A streaming agent can flip its title many times a second; each notice makes every client
+  // re-list the repo, so a burst is announced once. The store is already written.
+  private readonly sortStampNotices = createKeyedTrailingEdgeCoalescer(
+    (worktreeId) => this.notifySortStampsChanged(worktreeId),
+    { flushMs: 50, maxWaitMs: 250 }
+  )
   readonly sortStamps = new SortStampsProducer({
     store: () => this.store,
     isWriteFenced: (worktreeId) =>
@@ -48,7 +57,10 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     subscribeToPtyExit: (ptyId, listener) => this.subscribeToPtyExit(ptyId, listener),
     onClientEvent: (listener, options) => this.onClientEvent(listener, options),
     isViewing: (worktreeId, paneKey) => this.workspaceViewers.isViewing(worktreeId, paneKey),
-    onStampsWritten: (worktreeId) => this.notifySortStampsChanged(worktreeId),
+    onStampsWritten: (worktreeId) => {
+      this.invalidateResolvedWorktreeCache()
+      this.sortStampNotices.schedule(worktreeId)
+    },
     now: Date.now
   })
   readonly terminalUse = new TerminalUseProducer({
@@ -132,6 +144,19 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
       .catch((error: unknown) => console.warn('[sidebar] sort tier reconcile failed:', error))
   }
 
+  /** A paired desktop connected; while one that raises the unread flag itself is here, this host doesn't. */
+  noteRuntimeClient(connectionId: string, capabilities: readonly RuntimeCapability[]): void {
+    if (!clientRaisesUnreadFlagItself(capabilities)) {
+      return
+    }
+    this.workspaceViewers.noteSelfRaisingClient(connectionId)
+    this.registerSubscriptionCleanup(
+      `sidebar-self-raising-${connectionId}`,
+      () => this.workspaceViewers.dropClient(connectionId),
+      connectionId
+    )
+  }
+
   /** A phone holding the workspace's session open has it on screen: its flag is read and stays down. */
   readAndHoldPhoneSession(worktreeId: string): () => void {
     const hostId = this.workspaceHostId(worktreeId)
@@ -140,6 +165,7 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
       sshHostId: hostId && parseExecutionHostId(hostId)?.kind === 'ssh' ? hostId : null
     }
     if (writeUnreadFlag(this.store, workspace, false)) {
+      this.sortStampNotices.cancel(worktreeId)
       this.notifySortStampsChanged(worktreeId)
     }
     return this.workspaceViewers.openPhoneSession(worktreeId)
@@ -177,6 +203,7 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
       detachActivity()
       detachStamps()
       this.sidebarTemporal.dispose()
+      this.sortStampNotices.dispose()
     }
   }
 

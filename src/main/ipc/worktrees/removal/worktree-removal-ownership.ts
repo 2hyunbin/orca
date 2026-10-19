@@ -16,6 +16,7 @@ import { pruneWorktreePRRefreshAliases } from '../../../github/pr-refresh-coordi
 import { recordWorkspaceCleanupRemovalSnapshotPrune } from '../../../workspace-cleanup-removal-snapshot-prune'
 import { pruneWorkspaceCleanupScanSnapshot } from '../../../workspace-cleanup-scan-snapshot'
 import { pruneWorkspaceSpaceAnalysisSnapshot } from '../../../workspace-space-analysis-snapshot'
+import { removeWorktreeMetaRow } from '../../../persistence/host-qualified-worktree-meta'
 
 export async function stopPtysForDestructiveWorktreeRemoval(
   runtime: OrcaRuntimeService,
@@ -70,7 +71,15 @@ export function resolveWorktreeRemovalOwnerHostId(
 }
 
 export function removeWorktreeMetadataAndTransientState(
-  store: Store,
+  {
+    store,
+    runtime,
+    entryPoint = 'worktree-removal'
+  }: {
+    store: Store
+    runtime: Pick<OrcaRuntimeService, 'releaseRemovedWorktreeHostSessions'>
+    entryPoint?: 'worktree-removal' | 'folder-removal'
+  },
   worktreeId: string,
   hostId?: ExecutionHostId,
   snapshotPruneBatchId?: string
@@ -83,11 +92,7 @@ export function removeWorktreeMetadataAndTransientState(
       hasWorktreeRemovalRepoOwnerOnOtherHost(store, repoId, hostId))
   )
   // Why: worktree IDs are path-derived and reusable; drop process-local caches before the same ID can map to a new workspace.
-  if (hostId) {
-    store.removeWorktreeMeta(worktreeId, hostId)
-  } else {
-    store.removeWorktreeMeta(worktreeId)
-  }
+  removeWorktreeMetaRow(store, worktreeId, hostId)
   // Why outside the same-id gate: retirement is per host and per pane, so a surviving owner keeps its own.
   agentHookServer.dropStatusEntriesForRemovedWorktree(worktreeId, hostId ?? persistedHostId)
   if (!preservesSameIdOwner) {
@@ -98,6 +103,8 @@ export function removeWorktreeMetadataAndTransientState(
     deleteWorktreeHistoryDir(worktreeId)
     // Why: release the removed worktree's PR-refresh aliases so coalesced queue entries don't retain it all session (memory creep).
     pruneWorktreePRRefreshAliases(worktreeId)
+    // Why: the desktop also hosts browser pages for paired clients; the runtime path closes them too.
+    runtime.releaseRemovedWorktreeHostSessions(worktreeId, entryPoint)
   }
   // Why: removed workspaces must never resurrect from the persisted cleanup/space scan snapshots.
   const snapshotDirectory = store.getProfileStorageDirectory()

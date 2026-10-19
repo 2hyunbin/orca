@@ -3762,7 +3762,17 @@
             "e518f544b1": "No agents detected",
             "8dea9b5cdf": "No enabled agents",
             "needsServerUpdate": "Update Orca on this server to list this workspace’s agents",
-            "hostUnreachable": "Can’t reach this workspace’s host to list its agents"
+            "hostUnreachable": "Can’t reach this workspace’s host to list its agents",
+            "chatNotInstalled": "Not installed",
+            "chatNotOverSsh": "No chat over SSH",
+            "chatNotInWsl": "No chat in WSL",
+            "chatNotOnHost": "No chat on this host",
+            "chatCheckFailed": "Couldn’t check chat availability",
+            "chatLoading": "Checking chat support…",
+            "chatUnavailableAfterSelection": "Couldn't start a {{value0}} chat.",
+            "startChat": "Start a chat with {{value0}}",
+            "cliTag": "(CLI)",
+            "agentsLoading": "Loading agents"
           },
           "RecentTabSwitcher": {
             "329638ff6f": "Switch Tab",
@@ -6353,7 +6363,10 @@
               "host": {
                 "unverified": "The host could not confirm terminal shutdown. The workspace was kept open; check the connection and try again."
               },
-              "retry": "The workspace was kept open. Try again; if the problem continues, check the host connection."
+              "retry": "The workspace was kept open. Try again; if the problem continues, check the host connection.",
+              "chat": {
+                "partial": "The host could not confirm the chat stopped. Other panels may have closed; check the connection and try again."
+              }
             }
           }
         },
@@ -12806,7 +12819,9 @@
           "behindRolledBack": "Runs an older managed Orca server than this app; the last update was rolled back. Use Update server to try again.",
           "behindNoTemplate": "Runs a managed Orca server this app can’t update; this build has no server for this host.",
           "behindMigrating": "Runs a managed Orca server that updates after its project move finishes.",
-          "behindCheckFailed": "Runs a managed Orca server; Orca couldn’t check whether it is behind this app."
+          "behindCheckFailed": "Runs a managed Orca server; Orca couldn’t check whether it is behind this app.",
+          "runtimeNoexec": "This host doesn’t allow running programs from ~/.orca-remote, so Orca can’t start its server there. This usually means the home folder is mounted with noexec. Ask the host’s administrator to allow running programs there, then connect again.",
+          "setupContactLost": "Orca lost contact with this host while setting up its server. Nothing on the host was stopped. Connect again to continue."
         },
         "ZcodeCliSetupSection": {
           "title": "Use GLM with ZCode",
@@ -18066,6 +18081,16 @@
           "externalLinkTitle": "Open link to {{host}}?",
           "externalLinkConfirm": "Open link",
           "externalLinkCancel": "Cancel"
+        },
+        "externalApp": {
+          "title": "Open {{app}}?",
+          "schemeTitle": "Open this {{scheme}} link?",
+          "description": "{{origin}} wants to open another application.",
+          "anonymousDescription": "A page in the browser wants to open another application.",
+          "confirm": "Open {{app}}",
+          "confirmLink": "Open link",
+          "cancel": "Cancel",
+          "launchFailed": "Couldn't open an app for this {{scheme}} link. It may not be installed."
         }
       },
       "HostedReviewUnlinkMenuItem": {
@@ -18205,7 +18230,8 @@
         "reconnectTimeout": "The server did not reconnect on the updated version."
       },
       "webRuntimeSession": {
-        "remoteHostDisconnected": "The workspace is not connected to a remote Orca host."
+        "remoteHostDisconnected": "The workspace is not connected to a remote Orca host.",
+        "terminalCreateUnconfirmed": "Orca couldn’t confirm that the new terminal opened on the host."
       },
       "gitlabJobTraceClient": {
         "loadFailed": "Failed to load the GitLab job log.",
@@ -18801,6 +18827,8 @@
         "showTerminal": "Show terminal"
       },
       "resumeInNewChat": {
+        "exitUnconfirmedFromTerminal": "Orca can't confirm {{agent}} has exited in its terminal. Stop what's running there or close the terminal, then open this conversation from Session History.",
+        "exitUnconfirmed": "Orca can't confirm {{agent}} has exited in its terminal. Stop what's running there or close the terminal, then try again.",
         "notSavedYet": "{{agent}} hasn't saved this conversation yet. Try again after it replies.",
         "cannotResume": "This {{agent}} conversation can't be resumed in a native chat."
       },
@@ -19014,6 +19042,9 @@
       },
       "thought": "Thought",
       "thoughtForDuration": "Thought for {{duration}}",
+      "explicitChatWsl": "Chat is not available in WSL. Open the agent in a terminal instead.",
+      "explicitChatSsh": "Chat is not available over SSH. Open the agent in a terminal instead.",
+      "explicitChatUnavailable": "This workspace cannot run the chat. Check the agent installation or open it in a terminal.",
       "structuredSessionHostDeclined": "Opened {{value0}} in a terminal",
       "structuredSessionHostDeclinedDescription": "This server can't run a {{value0}} chat in this workspace.",
       "structuredSessionHostUnreachable": "Could not reach {{value0}}",
