@@ -44,7 +44,9 @@ export const PHONE_WATCH_RULES = {
   // 4 Poisson deviations so a busy cell's ordinary noise stays under it (c7 lesson, 10-19).
   credentialRefusals: { margin: 5, share: 0.5 },
   confirmFailures: { margin: 5, share: 0.5 },
-  attachDeadlines: { margin: 3, share: 0.5 },
+  // 3 was enough for Poisson noise, but replayed on c29's bursty auth failures it false-tripped
+  // 29% of 300-minute watches (10-18/19); 5 tripped none.
+  attachDeadlines: { margin: 5, share: 0.5 },
   acceptDatabaseErrors: { margin: 5, share: 0 },
   noiseDeviations: 4,
   // Page only: confirms still work, only their audit rows or renewals are lost.

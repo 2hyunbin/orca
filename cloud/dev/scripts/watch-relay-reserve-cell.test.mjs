@@ -1123,7 +1123,7 @@ test('phone rules: Poisson noise at any background trips under 1% of 300-minute 
     }
   }
   // The floors: 1 a minute over a zero background is not a trip.
-  assert.equal(phoneRuleLine('attachDeadlines', 0), 3)
+  assert.equal(phoneRuleLine('attachDeadlines', 0), 5)
   assert.equal(phoneRuleLine('credentialRefusals', 0), 5)
 })
 
@@ -1324,4 +1324,27 @@ test('a failed phone flip back and the phone pages say what is still on', async 
   assert.match(lines[0], /may still have phonePath=memory/)
   assert.doesNotMatch(lines[0], /reserve mode/)
   assert.match(lines[1], /cannot renew phone credentials/)
+})
+
+// Recorded, not synthetic: 26 h of c7 and c29 runtime metrics (read-only, 10-18/19). The phone
+// counters are not on those images yet, so the burstiest counters they do carry stand in.
+test('phone rules: 26 recorded hours of c7 and c29 trip no rule in any 60- or 300-minute watch', () => {
+  const recorded = JSON.parse(readFileSync(new URL('./relay-phone-watch-recorded-quiet-minutes.json', import.meta.url), 'utf8'))
+  for (const [cell, signals] of Object.entries(recorded.cells)) {
+    for (const [proxy, values] of Object.entries(signals)) {
+      for (const signal of ['credentialRefusals', 'confirmFailures', 'attachDeadlines', 'acceptDatabaseErrors']) {
+        for (const watchMinutes of [60, 300]) {
+          for (let start = 10; start + watchMinutes <= values.length; start += 5) {
+            const background = values.slice(start - 10, start)
+            const line = phoneRuleLine(signal, background.reduce((sum, count) => sum + count, 0) / background.length)
+            let run = 0
+            for (const count of values.slice(start, start + watchMinutes)) {
+              run = count > line ? run + 1 : 0
+              assert.ok(run < 3, `${cell} ${proxy} as ${signal}: a ${watchMinutes}-min watch from minute ${start} trips`)
+            }
+          }
+        }
+      }
+    }
+  }
 })
