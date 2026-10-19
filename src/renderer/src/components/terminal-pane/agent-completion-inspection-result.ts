@@ -133,30 +133,34 @@ export function handleAgentCompletionInspectionResult(args: {
     handleRecognizedProcess(recognizedRemote)
     return true
   }
-  state.consecutiveInspectionErrors = 0
+  const childProcessesUnverifiable = result.childProcessEvidence === 'unverifiable'
+  state.consecutiveInspectionErrors = childProcessesUnverifiable
+    ? state.consecutiveInspectionErrors + 1
+    : 0
   const recognized = recognizeAgentProcess(result.foregroundProcess)
   if (recognized) {
     handleRecognizedProcess(recognized)
-    return true
-  }
-  if (
+  } else if (
     state.lastForegroundAgent &&
     result.foregroundProcess !== null &&
     isShellProcess(result.foregroundProcess)
   ) {
     options.onForegroundShellObserved?.(state.lastForegroundAgent)
   }
+  if (childProcessesUnverifiable) {
+    state.pendingProcessExit = null
+    scheduleNextPoll()
+    return false
+  }
+  if (recognized) {
+    return true
+  }
   if (hasPendingHookDone()) {
     scheduleNextPoll()
     return false
   }
   if (state.lastForegroundAgent && state.hasAgentRunEvidence) {
-    // Why: a stopped (Ctrl+Z) agent is still child work; an older host without table evidence
-    // keeps its name-derived answer rather than never confirming any exit.
-    if (
-      result.hasChildProcesses ||
-      (result.childProcessEvidence !== undefined && result.childProcessEvidence !== 'no-children')
-    ) {
+    if (result.hasChildProcesses) {
       state.pendingProcessExit = null
       scheduleNextPoll()
       return false

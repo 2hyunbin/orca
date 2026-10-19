@@ -54,7 +54,6 @@ it.each(['stopped', 'background', 'idle', 'unreadable'] as const)(
       subprocess: {
         pid: 100,
         processNameIsSpawnFile: true,
-        shellPath: '/bin/zsh',
         getForegroundProcess: () => 'zsh',
         write() {},
         resize() {},

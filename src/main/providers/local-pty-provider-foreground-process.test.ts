@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type * as SnapshotReader from '../../shared/process-table-snapshot-reader'
 import type * as MacosTccLoginShell from './macos-tcc-login-shell'
 
 const {
@@ -42,19 +41,6 @@ vi.mock('fs', () => ({
   renameSync: vi.fn(),
   rmSync: vi.fn(),
   constants: { X_OK: 1 }
-}))
-
-vi.mock('../../shared/process-table-snapshot-reader', async (importOriginal) => ({
-  ...(await importOriginal<typeof SnapshotReader>()),
-  getStrictProcessTableSnapshotWithAge: async () => ({
-    capturedAgeMs: 0,
-    rows: [
-      { pid: 12345, ppid: 1, stat: 'Ss+', tty: 'ttys004', command: '-zsh' },
-      ...(mockProc.process === 'zsh'
-        ? []
-        : [{ pid: 12346, ppid: 12345, stat: 'S+', tty: 'ttys004', command: mockProc.process }])
-    ]
-  })
 }))
 
 vi.mock('electron', () => ({
@@ -136,10 +122,9 @@ import {
   type LocalPtyMockProcess
 } from './local-pty-provider-test-harness'
 
-let mockProc: LocalPtyMockProcess
-
 describe('LocalPtyProvider', () => {
   let provider: LocalPtyProvider
+  let mockProc: LocalPtyMockProcess
   let exitCb: ((info: { exitCode: number }) => void) | undefined
 
   installLocalPtyProviderEnvSandbox()

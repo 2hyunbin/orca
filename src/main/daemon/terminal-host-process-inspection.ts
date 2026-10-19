@@ -1,4 +1,3 @@
-import { getCommandTokenPathBasename } from '../../shared/command-token-scanner'
 import { isShellProcess } from '../../shared/agent-detection'
 import { recognizeAgentProcess } from '../../shared/agent-process-recognition'
 import type { PtyChildProcessVerdict } from '../../shared/terminal-process-inspection'
@@ -85,15 +84,14 @@ export async function inspectTerminalHostProcess(args: {
   args.onTier?.('full')
 
   let foregroundProcess = session.getForegroundProcess()
-  let childProcessEvidence: PtyChildProcessVerdict | undefined = session.spawn
-    .processNameIsSpawnFile
+  let childProcessEvidence: PtyChildProcessVerdict | undefined = session.processNameIsSpawnFile
     ? 'unverifiable'
     : undefined
   let evidence: RemoteForegroundEvidence
   if (!incarnationMatches) {
     evidence = unverifiableEvidence(args, session, 'incarnation_mismatch')
   } else if (process.platform === 'win32') {
-    if (session.spawn.processNameIsSpawnFile) {
+    if (session.processNameIsSpawnFile) {
       foregroundProcess = await session.confirmForegroundProcess()
     }
     // A steady-state poll never decides adoption or close, so it may read the cached process table.
@@ -106,18 +104,17 @@ export async function inspectTerminalHostProcess(args: {
   } else {
     try {
       const snapshot = await getStrictProcessTableSnapshotWithAge()
-      const observed = resolveSpawnFileForegroundFromRows(snapshot.rows, session.pid)
-      if (session.spawn.processNameIsSpawnFile && observed.available) {
-        foregroundProcess = observed.processName
-      }
-      // Every POSIX session reads child work from the table: a stopped (Ctrl+Z) job is still a child.
-      childProcessEvidence = inspectSpawnFileChildProcessesFromRows(
-        snapshot.rows,
-        session.pid,
-        session.spawn.shellPath ? getCommandTokenPathBasename(session.spawn.shellPath) : null
-      )
-      if (observed.available && observed.processName && !isShellProcess(observed.processName)) {
-        childProcessEvidence = 'children'
+      if (session.processNameIsSpawnFile) {
+        const observed = resolveSpawnFileForegroundFromRows(snapshot.rows, session.pid)
+        foregroundProcess = observed.available ? observed.processName : foregroundProcess
+        childProcessEvidence = inspectSpawnFileChildProcessesFromRows(
+          snapshot.rows,
+          session.pid,
+          session.getForegroundProcess({ rawFallback: true })
+        )
+        if (observed.available && observed.processName && !isShellProcess(observed.processName)) {
+          childProcessEvidence = 'children'
+        }
       }
       evidence = resolveRemoteForegroundEvidence(
         { rootPid: session.pid, fallbackProcess: foregroundProcess },
@@ -133,7 +130,6 @@ export async function inspectTerminalHostProcess(args: {
       )
       await rememberSteadyStateAnchor(session, evidence, snapshot.rows)
     } catch {
-      childProcessEvidence = 'unverifiable'
       evidence = unverifiableEvidence(args, session, 'process_table_unreadable')
       clearSteadyStateAnchor(session)
     }

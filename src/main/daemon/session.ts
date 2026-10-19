@@ -26,8 +26,7 @@ export class Session {
   readonly terminalHandle: string | null
   readonly launchAgent: TuiAgent | null
   readonly wslDistro: string | null
-  /** How the subprocess was launched; process inspection needs the configured shell. */
-  readonly spawn: Pick<SubprocessHandle, 'processNameIsSpawnFile' | 'shellPath'>
+  readonly processNameIsSpawnFile: boolean
   private _state: SessionState = 'running'
   private _exitCode: number | null = null
   private _disposed = false
@@ -47,7 +46,7 @@ export class Session {
     this.launchAgent = opts.launchAgent ?? null
     this.wslDistro = opts.wslDistro ?? null
     this.subprocess = opts.subprocess
-    this.spawn = opts.subprocess
+    this.processNameIsSpawnFile = opts.subprocess.processNameIsSpawnFile === true
     this.onSessionExit = opts.onExit
     const pipeline = createSessionOutputPipeline({
       cols: opts.cols,

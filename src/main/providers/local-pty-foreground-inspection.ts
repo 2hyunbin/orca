@@ -60,10 +60,22 @@ export async function inspectLocalPtyChildProcesses(
       )
       return ptyProcesses.get(id) === proc ? verdict : 'unverifiable'
     }
-    const snapshot = await getStrictProcessTableSnapshotWithAge()
-    return ptyProcesses.get(id) === proc
-      ? inspectSpawnFileChildProcessesFromRows(snapshot.rows, proc.pid, getPtyShellName(id) ?? null)
-      : 'unverifiable'
+    if (ptyProcessNameIsSpawnFile(proc)) {
+      const snapshot = await getStrictProcessTableSnapshotWithAge()
+      return ptyProcesses.get(id) === proc
+        ? inspectSpawnFileChildProcessesFromRows(
+            snapshot.rows,
+            proc.pid,
+            getPtyShellName(id) ?? null
+          )
+        : 'unverifiable'
+    }
+    const foreground = proc.process
+    const shell = getPtyShellName(id)
+    if (!shell) {
+      return 'children'
+    }
+    return foreground === shell ? 'no-children' : 'children'
   } catch {
     // An unreadable PTY is not evidence that its children exited.
     return 'unverifiable'

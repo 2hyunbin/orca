@@ -1,30 +1,6 @@
 import * as pty from 'node-pty'
-import type * as SnapshotReader from '../../shared/process-table-snapshot-reader'
-import type { ProcessTableRow } from '../../shared/process-table-snapshot'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { snapshotMock } = vi.hoisted(() => ({ snapshotMock: vi.fn() }))
-vi.mock('../../shared/process-table-snapshot-reader', async (importOriginal) => ({
-  ...(await importOriginal<typeof SnapshotReader>()),
-  getStrictProcessTableSnapshotWithAge: snapshotMock
-}))
-const shellRow: ProcessTableRow = {
-  pid: 4242,
-  ppid: 1,
-  pgid: 4242,
-  tpgid: 4242,
-  stat: 'Ss+',
-  tty: 'ttys004',
-  command: '-zsh'
-}
-const stoppedRow: ProcessTableRow = {
-  ...shellRow,
-  pid: 4243,
-  ppid: 4242,
-  pgid: 4243,
-  stat: 'T',
-  command: 'codex'
-}
 const { resolveForegroundMock } = vi.hoisted(() => ({ resolveForegroundMock: vi.fn() }))
 const jobMembers = vi.hoisted(() => vi.fn())
 vi.mock('./windows-pty-job-membership', () => ({
@@ -108,8 +84,6 @@ async function registerRetiredPane(id: string): Promise<pty.IPty> {
 beforeEach(() => {
   // These fake foreground names model POSIX; Windows uses the owned-job fixture below.
   vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
-  snapshotMock.mockReset()
-  snapshotMock.mockResolvedValue({ rows: [shellRow], capturedAgeMs: 0 })
   jobMembers.mockReset()
   resolveForegroundMock.mockReset()
   resolveForegroundMock.mockResolvedValue({ available: true, processName: '/bin/zsh' })
@@ -145,7 +119,6 @@ describe('inspectLocalPtyChildProcesses', () => {
       },
       '/bin/zsh'
     )
-    snapshotMock.mockRejectedValueOnce(new Error('process table unreadable'))
     expect(await inspectLocalPtyChildProcesses('pty-closed')).toBe('unverifiable')
   })
 
@@ -154,9 +127,8 @@ describe('inspectLocalPtyChildProcesses', () => {
     expect(await inspectLocalPtyChildProcesses('pty-idle')).toBe('no-children')
   })
 
-  it('retains a stopped child even while the shell owns the foreground', async () => {
-    registerPane('pty-busy', 'zsh', '/bin/zsh')
-    snapshotMock.mockResolvedValue({ rows: [shellRow, stoppedRow], capturedAgeMs: 0 })
+  it('answers children when something else is in the foreground', async () => {
+    registerPane('pty-busy', 'vim', '/bin/zsh')
     expect(await inspectLocalPtyChildProcesses('pty-busy')).toBe('children')
   })
 
@@ -165,9 +137,18 @@ describe('inspectLocalPtyChildProcesses', () => {
   })
 
   it('preserves uncertainty conservatively in the boolean adapter', async () => {
-    registerPane('pty-closed', 'zsh', '/bin/zsh')
-    snapshotMock.mockRejectedValueOnce(new Error('process table unreadable'))
+    let reads = 0
+    registerPane(
+      'pty-closed',
+      () => {
+        reads += 1
+        throw new Error('EBADF: bad file descriptor')
+      },
+      '/bin/zsh'
+    )
     await expect(hasLocalPtyChildProcesses('pty-closed')).resolves.toBe(true)
+    // The result must come from the failed read, not from an earlier short-circuit.
+    expect(reads).toBe(1)
   })
 })
 
@@ -230,7 +211,6 @@ describe('inspectPtyProviderProcess child-process evidence', () => {
       },
       '/bin/zsh'
     )
-    snapshotMock.mockRejectedValueOnce(new Error('process table unreadable'))
     await expect(inspectPtyProviderProcess(provider, 'pty-closing')).resolves.toEqual({
       foregroundProcess: '/bin/zsh',
       hasChildProcesses: true,
@@ -242,7 +222,6 @@ describe('inspectPtyProviderProcess child-process evidence', () => {
     let reads = 0
     registerPane('pty-became-busy', () => (reads++ === 0 ? '/bin/zsh' : 'vim'), '/bin/zsh')
 
-    snapshotMock.mockResolvedValueOnce({ rows: [shellRow, stoppedRow], capturedAgeMs: 0 })
     const inspection = await inspectPtyProviderProcess(provider, 'pty-became-busy')
     expect(inspection.hasChildProcesses).toBe(true)
     expect(inspection.childProcessEvidence).toBe('children')

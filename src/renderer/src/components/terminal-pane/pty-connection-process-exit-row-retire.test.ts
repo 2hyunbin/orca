@@ -173,7 +173,7 @@ async function connectAgentPane(args: {
 
 async function seedHookRow(
   paneKey: string,
-  agentType: 'claude' | 'codex',
+  agentType: TerminalAgent,
   state: 'working' | 'done' = 'done'
 ): Promise<AgentStatusEntry> {
   // Why the real slice: the row must carry the acceptedStatusSeq a real accepted hook stamps.
@@ -253,7 +253,7 @@ describe('connectPanePty confirmed process exit retires the live agent row', () 
     expect(onAgentExited).toHaveBeenCalledWith(leafIdForPane(1))
   })
 
-  it('releases suspended input, recognizes live/null root exec and retires only real exit', async () => {
+  it('confirms root foreground, releases suspended input and uses main lifetime settlement', async () => {
     let foreground = 'opencode'
     let children = true
     vi.mocked(window.api.pty.getForegroundProcess).mockImplementation(async () => foreground)
@@ -270,33 +270,33 @@ describe('connectPanePty confirmed process exit retires the live agent row', () 
     }
     await vi.advanceTimersByTimeAsync(3_000)
     vi.mocked(window.api.pty.inspectProcess).mockResolvedValue(ambiguousLocalProcessResult())
-    foreground = 'zsh'
     await vi.advanceTimersByTimeAsync(3_000)
+    expect(onAgentExited).not.toHaveBeenCalled()
+    expect(window.api.pty.confirmForegroundProcess).toHaveBeenCalled()
+    const suspended = ambiguousLocalProcessResult()
+    suspended.hasChildProcesses = false
+    delete suspended.childProcessEvidence
+    vi.mocked(window.api.pty.inspectProcess).mockResolvedValue(suspended)
+    foreground = 'zsh'
+    await vi.advanceTimersByTimeAsync(750)
     expect(onAgentExited).toHaveBeenCalledWith(leafIdForPane(1))
     expect(mockStoreState.agentStatusByPaneKey[paneKey]).toBe(row)
     expect(mockStoreState.agentLaunchConfigByPaneKey[paneKey]).toBeDefined()
     expect(mockStoreState.paneForegroundAgentByPaneKey[paneKey]?.shellForeground).toBe(true)
     const releases = onAgentExited.mock.calls.length
-    await vi.advanceTimersByTimeAsync(3_000)
+    await vi.advanceTimersByTimeAsync(750)
     expect(onAgentExited).toHaveBeenCalledTimes(releases)
-    foreground = 'opencode'
-    await vi.advanceTimersByTimeAsync(3_000)
-    expect(mockStoreState.paneForegroundAgentByPaneKey[paneKey]?.agent).toBe('opencode')
-    expect(mockStoreState.agentStatusByPaneKey[paneKey]).toBe(row)
-    vi.mocked(window.api.pty.inspectProcess).mockImplementation(async () => ({
-      foregroundProcess: foreground,
-      hasChildProcesses: children,
-      childProcessEvidence: children ? 'children' : 'no-children'
-    }))
-    foreground = 'zsh'
-    children = false
     await vi.advanceTimersByTimeAsync(10_000)
     expect(mockStoreState.dropAgentStatus).toHaveBeenCalledWith(paneKey)
-    expect(mockStoreState.paneForegroundAgentByPaneKey[paneKey]?.shellForeground).toBe(true)
+    expect(mockStoreState.agentStatusByPaneKey[paneKey]).toBeUndefined()
+    vi.mocked(window.api.pty.inspectProcess).mockImplementation(async () => ({
+      foregroundProcess: foreground,
+      hasChildProcesses: children
+    }))
     foreground = 'opencode'
-    children = true
     await vi.advanceTimersByTimeAsync(5_000)
     expect(mockStoreState.paneForegroundAgentByPaneKey[paneKey]?.agent).toBe('opencode')
+    expect(mockStoreState.paneForegroundAgentByPaneKey[paneKey]?.shellForeground).toBe(false)
   })
 
   it('keeps registered launch intent through reveal before exec, then observes a real departure', async () => {

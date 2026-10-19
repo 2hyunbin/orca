@@ -162,10 +162,8 @@ function createSession(processName: () => string): Session {
     startupAgentRecognition: null,
     isDead: () => dead
   })
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: inspection reads only these members; the daemon session lifecycle is outside this test.
   return {
     pid: SHELL_PID,
-    spawn: { shellPath: '/bin/zsh' },
     incarnationId: 'inc-1',
     get isAlive() {
       return !dead
@@ -330,15 +328,7 @@ describe.each(['darwin', 'linux'])('daemon cheap-tier process inspection (%s)', 
     expect((await inspect(session, { steadyState: true })).tier).toBe('cheap')
     table = next
     await advance(2_000)
-    const observed = await inspect(session, { steadyState: true })
-    expect(observed.tier).toBe('full')
-    if (next.agent === 'stopped') {
-      // A stopped agent is still child work, never an exit.
-      expect(observed.result).toMatchObject({
-        childProcessEvidence: 'children',
-        hasChildProcesses: true
-      })
-    }
+    expect((await inspect(session, { steadyState: true })).tier).toBe('full')
   })
 
   it('escalates when node-pty reports a different foreground name, without waiting on ps', async () => {

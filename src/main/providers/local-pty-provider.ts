@@ -1,5 +1,4 @@
 import type * as pty from 'node-pty'
-import { recognizeAgentProcess } from '../../shared/agent-process-recognition'
 import type {
   IPtyProvider,
   PtyProcessInfo,
@@ -165,16 +164,11 @@ export class LocalPtyProvider implements IPtyProvider {
     }
     const foregroundProcess = await getLocalPtyForegroundProcess(id)
     // A steady-state poll never decides adoption or close, so it may read the cached process table.
-    const childProcessEvidence =
-      process.platform !== 'win32' &&
-      options?.steadyState === true &&
-      recognizeAgentProcess(foregroundProcess)
-        ? undefined
-        : await inspectLocalPtyChildProcesses(
-            id,
-            options?.steadyState !== true,
-            options?.ignoreDetached === true
-          )
+    const childProcessEvidence = await inspectLocalPtyChildProcesses(
+      id,
+      options?.steadyState !== true,
+      options?.ignoreDetached === true
+    )
     // Neither asynchronous inspection may publish a replacement pane's identity.
     if (ptyProcesses.get(id) !== proc || ptyIncarnations.get(id) !== incarnation) {
       return {
@@ -186,7 +180,7 @@ export class LocalPtyProvider implements IPtyProvider {
     return {
       foregroundProcess,
       hasChildProcesses: childProcessEvidence !== 'no-children',
-      ...(childProcessEvidence === undefined ? {} : { childProcessEvidence })
+      childProcessEvidence
     }
   }
 
