@@ -1,9 +1,9 @@
 // The save-divergence log's before (main's) and after (the save's) values of each changed field,
-// bounded per line and stripped of content: ids, numbers and flags as they are, any other text
-// only as its length, since titles, labels, paths and records can hold what a user typed or an
-// agent wrote.
+// bounded and stripped of content: ids (an editor tab's is its file path, as `paths` already
+// shows), numbers and flags as they are, any other text only as its length, since titles, labels
+// and records can hold what a user typed or an agent wrote.
 
-/** Keys whose text is an id or a fixed name, read only inside the layout's own records. */
+/** Keys whose text is an id or a fixed name, read only inside the layout's own records; an array's items take its key. */
 const ID_KEYS = new Set([
   'id',
   'entityId',
@@ -32,8 +32,10 @@ const OPAQUE_FIELDS = new Set(['sleeping', 'value'])
 const MAX_ID_LENGTH = 80
 const MAX_ITEMS = 8
 const MAX_DEPTH = 6
-/** Values one report line may carry in all, counted per array, object and scalar. */
-const LINE_BUDGET = 120
+/** Changed fields one report line carries values for. */
+const MAX_CHANGES = 8
+/** Values each side of one change may carry, counted per array, object and scalar. */
+const SIDE_BUDGET = 32
 
 /** One changed field of one record (`<kind> <id>`), as main holds it and as the save writes it. */
 export type FieldChange = { record: string; field: string; before: unknown; after: unknown }
@@ -92,14 +94,13 @@ function compact(
 export function compactFieldChanges(
   changes: readonly (FieldChange & { kind: string })[]
 ): FieldChange[] {
-  const budget = { left: LINE_BUDGET }
-  return changes.map(({ kind, record, field, before, after }) => {
+  return changes.slice(0, MAX_CHANGES).map(({ kind, record, field, before, after }) => {
     const opaque = OPAQUE_RECORDS.has(kind) || OPAQUE_FIELDS.has(field)
     return {
       record,
       field,
-      before: compact(before, field, budget, 0, opaque),
-      after: compact(after, field, budget, 0, opaque)
+      before: compact(before, field, { left: SIDE_BUDGET }, 0, opaque),
+      after: compact(after, field, { left: SIDE_BUDGET }, 0, opaque)
     }
   })
 }

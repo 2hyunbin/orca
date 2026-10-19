@@ -349,6 +349,31 @@ describe('reportWindowSaveDrift', () => {
     )
   })
 
+  it('logs both sides of each change when many panes change at once', () => {
+    const logPath = join(logDir!, 'divergence.jsonl')
+    const tabs = Array.from({ length: 5 }, (_, index) => ({ id: `tab-${index}` }))
+    const stored = session(tabs)
+    const next = structuredClone(stored)
+    const split = (id: number) => ({
+      type: 'split' as const,
+      direction: 'vertical' as const,
+      first: { type: 'leaf' as const, leafId: leaf(id) },
+      second: { type: 'leaf' as const, leafId: `${id}-b` }
+    })
+    for (const [index, tab] of tabs.entries()) {
+      next.terminalLayoutsByTabId[tab.id] = {
+        ...next.terminalLayoutsByTabId[tab.id]!,
+        root: { type: 'split', direction: 'horizontal', first: split(index + 1), second: split(9) }
+      }
+    }
+
+    save(stored, next)
+
+    const { values } = JSON.parse(readFileSync(logPath, 'utf8').trim())
+    expect(values).toHaveLength(5)
+    expect(JSON.stringify(values)).not.toContain('…')
+  })
+
   it('cuts a long tab order down to its first ids and a count', () => {
     const logPath = join(logDir!, 'divergence.jsonl')
     const tabs = Array.from({ length: 30 }, (_, index) => ({ id: `tab-${index}` }))

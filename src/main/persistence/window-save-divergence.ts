@@ -62,7 +62,7 @@ function changedFields(before: unknown, after: unknown): string[] {
 function fieldOf(item: unknown, field: string): unknown {
   return field === 'value' || typeof item !== 'object' || !item
     ? item
-    : new Map(Object.entries(item)).get(field)
+    : Object.entries(item).find(([key]) => key === field)?.[1]
 }
 
 function diffKeyed(
