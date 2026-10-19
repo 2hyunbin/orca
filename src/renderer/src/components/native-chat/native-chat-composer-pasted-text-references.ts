@@ -16,17 +16,35 @@ import {
   nativeChatPastedTextOperations as operations,
   nativeChatPastedTextId,
   nativeChatPastedTextToken,
-  replaceNativeChatPastedTextNodes
+  replaceNativeChatPastedTextNodes,
+  nativeChatPasteNotSavedNotice
 } from './native-chat-pasted-text-reference'
 
-/** `saving`: a paste in the scope's draft is on its way; `unsaved`: a restart lost one. */
-export function nativeChatPastedTextAdmission(scopeKey: string): 'saving' | 'unsaved' | null {
-  const tokens = readNativeChatComposerDraft(scopeKey).text.split(NATIVE_CHAT_PASTED_TEXT_TOKEN)
+/** Both the candidate and the draft must be free of provisional paste identities. */
+export function nativeChatPastedTextAdmission(
+  scopeKey: string,
+  candidate = ''
+): 'saving' | 'unsaved' | null {
+  const tokens = [readNativeChatComposerDraft(scopeKey).text, candidate]
+    .join('\n')
+    .split(NATIVE_CHAT_PASTED_TEXT_TOKEN)
   const ids = tokens.filter((_, index) => index % 2 === 1).map(nativeChatPastedTextId)
   if (ids.some((id) => id !== null && operations.get(id)?.scopeKey === scopeKey)) {
     return 'saving'
   }
   return ids.length > 0 ? 'unsaved' : null
+}
+
+export function admitNativeChatPastedText(
+  scopeKey: string,
+  candidate: string,
+  onError: (notice: string) => void
+): boolean {
+  const admission = nativeChatPastedTextAdmission(scopeKey, candidate)
+  if (admission === 'unsaved') {
+    onError(nativeChatPasteNotSavedNotice())
+  }
+  return admission === null
 }
 
 /** Send waits for the composer's images and for any paste in its draft still saving. */

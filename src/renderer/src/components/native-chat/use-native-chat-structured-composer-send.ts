@@ -19,8 +19,7 @@ import {
   updateNativeChatComposerDraft
 } from './native-chat-composer-draft-store'
 import { nativeChatComposerDraftLeftAfterSend } from './native-chat-composer-draft-comparison'
-import { nativeChatPastedTextAdmission } from './native-chat-composer-pasted-text-references'
-import { nativeChatPasteNotSavedNotice } from './native-chat-pasted-text-reference'
+import { admitNativeChatPastedText } from './native-chat-composer-pasted-text-references'
 
 export type UseNativeChatStructuredComposerSendArgs = {
   agent: AgentType
@@ -68,12 +67,7 @@ export function useNativeChatStructuredComposerSend({
       if (!structuredTransport || attachments.some((attachment) => attachment.pending)) {
         return
       }
-      // A paste still saving holds it as an uploading image does; one a restart lost is never sent.
-      const pasted = nativeChatPastedTextAdmission(draftScopeKey)
-      if (pasted) {
-        if (pasted === 'unsaved') {
-          structuredTransport.onError(nativeChatPasteNotSavedNotice())
-        }
+      if (!admitNativeChatPastedText(draftScopeKey, text, structuredTransport.onError)) {
         return
       }
       const hostCommand = isNativeChatStructuredHostCommand(text, agent, structuredTransport)

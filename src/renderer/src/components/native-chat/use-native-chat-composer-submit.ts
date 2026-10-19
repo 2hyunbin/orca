@@ -16,6 +16,8 @@ import {
   structuredAgentSessionGoalObjective
 } from '../../../../shared/structured-agent-session-composer'
 
+import { admitNativeChatPastedText } from './native-chat-composer-pasted-text-references'
+
 const GOAL_COMMAND = 'goal'
 
 export type NativeChatComposerGoalMode = {
@@ -108,6 +110,12 @@ export function useNativeChatComposerSubmit(args: {
     if (consumeOrcaCommand?.(draft)) {
       return
     }
+    if (
+      structuredTransport &&
+      !admitNativeChatPastedText(draftScopeKey, draft, structuredTransport.onError)
+    ) {
+      return
+    }
     if (nativeChatImagesHoldSend(imageAttachments)) {
       return
     }
@@ -131,6 +139,7 @@ export function useNativeChatComposerSubmit(args: {
     consumeOrcaCommand,
     disabled,
     draft,
+    draftScopeKey,
     imageAttachments,
     sendPty,
     sendStructured,

@@ -76,6 +76,22 @@ function harness(options: {
 }
 
 describe('composer goal mode', () => {
+  it.each([false, true])('refuses an orphan without clearing the draft, goal=%s', (goal) => {
+    const { hook, calls, onError, type } = harness({
+      draft: '/go',
+      threadGoal: { setObjective: vi.fn() }
+    })
+    if (goal) {
+      act(() => hook.result.current.goalMode.interceptPick(vi.fn())(GOAL_ITEM))
+    }
+    const token = '[Pasted text](orca-paste:00000000-0000-4000-8000-000000000000)'
+    type(token, 0)
+    act(() => hook.result.current.send())
+    expect(onError).toHaveBeenCalledWith('This paste was not saved. Paste it again or remove it.')
+    expect(calls.sendStructured).not.toHaveBeenCalled()
+    expect(readNativeChatDraftCache(SCOPE)).toBe(token)
+  })
+
   it('enters goal mode on a /goal pick and drops the token from the draft', () => {
     const { hook, calls } = harness({ draft: '/go', threadGoal: { setObjective: vi.fn() } })
     const pick = vi.fn()

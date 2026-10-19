@@ -79,6 +79,7 @@ async function savePastedTextFile(
  */
 export function useNativeChatPastedTextFile(args: {
   scopeKey: string
+  pastesInline?: () => boolean
   /** Null: not a structured chat. Else the editor while it shows this scope. */
   scopeEditor: (() => NativeChatComposerInput | null) | null
   resolveAttachmentOwner: () => NativeChatAttachmentOwner
@@ -86,10 +87,11 @@ export function useNativeChatPastedTextFile(args: {
   setNotice: (notice: string | null, errorText?: string) => void
 }): (text: string) => boolean {
   const { scopeKey, scopeEditor, resolveAttachmentOwner, insertTypedText, setNotice } = args
+  const { pastesInline } = args
   return useCallback(
     (text: string): boolean => {
       const input = scopeEditor?.()
-      if (!scopeEditor || !input?.stagePastedText || input.disabled) {
+      if (pastesInline?.() || !scopeEditor || !input?.stagePastedText || input.disabled) {
         return insertTypedText(text)
       }
       const { value, selectionStart, selectionEnd } = input
@@ -131,7 +133,7 @@ export function useNativeChatPastedTextFile(args: {
           // A server that keeps no files takes the paste inline wherever it still fits.
           const inline = readNativeChatComposerDraft(scopeKey).text.replaceAll(
             nativeChatPastedTextToken(id),
-            text
+            () => text
           )
           if (saved.unsupported && !nativeChatDraftTooLarge(scopeKey, inline)) {
             settle('inline')
@@ -146,6 +148,6 @@ export function useNativeChatPastedTextFile(args: {
       )
       return true
     },
-    [insertTypedText, resolveAttachmentOwner, scopeEditor, scopeKey, setNotice]
+    [insertTypedText, pastesInline, resolveAttachmentOwner, scopeEditor, scopeKey, setNotice]
   )
 }

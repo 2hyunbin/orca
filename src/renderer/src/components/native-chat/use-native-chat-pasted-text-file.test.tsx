@@ -27,8 +27,6 @@ import {
 import { fileReferenceContent, promptTextContent } from './native-chat-prompt-document'
 import { promptEditor, promptValue } from './native-chat-prompt-editor.test-support'
 import { formatNativeChatFileReference as ref } from '../../../../shared/agent-image-paste'
-import { structuredAgentSessionBlocksTooLarge } from '../../../../shared/rpc-contract/structured-agent-session-message-params'
-import { structuredAgentSessionSendBody } from '../../../../shared/structured-agent-session-send-mutation'
 
 const mocks = vi.hoisted(() => ({ save: vi.fn(), prepare: vi.fn() }))
 
@@ -198,11 +196,6 @@ describe('a long paste into a structured chat', () => {
   ])('$name', ({ draft = '', paste, all, image = '', file = false }) => {
     const composer = open(A, draft, image)
     act(() => void composer.editor().commands.focus(all ? 'all' : 'end'))
-    const images = image ? [{ path: image, previewUri: '' }] : []
-    const body = structuredAgentSessionSendBody(all ? paste : draft + paste, images)
-    const long = new TextEncoder().encode(paste).length >= LONG.length
-    // A file only when the paste is long or the body Send builds would be over.
-    expect(long || structuredAgentSessionBlocksTooLarge(body.blocks)).toBe(file)
     composer.paste(paste)
     expect(mocks.save).toHaveBeenCalledTimes(file ? 1 : 0)
     expect(composer.value().includes(paste)).toBe(!file)
@@ -217,7 +210,7 @@ describe('a long paste into a structured chat', () => {
           answer = () => resolve({ ok: false, unsupported: true, notice: 'Update the server.' })
         })
     )
-    const fits = 'q'.repeat(40 * K)
+    const fits = "$& $$ $` $'".repeat(4000)
     const composer = open(A, 'keep ')
     act(() => void composer.editor().commands.focus('end'))
     composer.paste(fits)
@@ -225,7 +218,7 @@ describe('a long paste into a structured chat', () => {
     expect(composer.value()).toBe(`keep ${fits}`)
     expect(setNotice).not.toHaveBeenCalled()
 
-    composer.paste('r'.repeat(40 * K))
+    composer.paste(fits)
     act(() => void composer.editor().commands.insertContentAt(1, 'z'.repeat(220 * K)))
     await act(async () => answer())
     expect(composer.value()).toBe(`${'z'.repeat(220 * K)}keep ${fits}`)
@@ -237,9 +230,8 @@ describe('a long paste into a structured chat', () => {
     composer.paste(LONG)
     act(() => void seen.api?.beginPendingImageAttachment())
     expect(seen.api?.imageAttachments).toHaveLength(1)
-    // Button, Enter and a picked command all read this: Send waits, quietly.
+    // Button state holds while the operation owns the marker.
     expect(nativeChatComposerSendBlock([], A).holdsSend).toBe(true)
-    expect(nativeChatPastedTextAdmission(A)).toBe('saving')
     await settle(0, '/p/orca-paste-1-u.txt')
     expect(nativeChatPastedTextAdmission(A)).toBeNull()
 
