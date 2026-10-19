@@ -133,6 +133,7 @@ export function createPtyIpcProviderFixtures(ctx: { mainWindow: unknown }) {
       | ((payload: { id: string; kind: 'dataGap'; droppedChars: number }) => void)
       | null = null
     const getBufferSnapshot = vi.fn()
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This suite provider implements the PTY operations exercised by its registered handlers.
     setLocalPtyProvider({
       spawn,
       write,
