@@ -73,8 +73,8 @@ export function readWorktreeMetaForRepo(
 }
 
 /**
- * The row an id-only caller (an agent hook, a sort list) means: its repo's only host, else the
- * id's own host stamp. Undefined when same-id twins leave it ambiguous: callers skip, never guess.
+ * The row an id-only caller (an agent hook, a sort list) means: the id's own host stamp, else its
+ * repo's only host. Undefined when same-id twins leave it ambiguous: callers skip, never guess.
  */
 export function resolveWorktreeMetaOwner(
   store: {
