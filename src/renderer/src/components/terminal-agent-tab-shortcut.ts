@@ -4,9 +4,11 @@ import { useAppStore } from '../store'
 import { readDetectedAgentsForWorktree } from '@/lib/agent-detection-target-inventory'
 import {
   listBoundAgentTabActions,
+  newTabWorkspace,
   resolveDefaultAgentForNewTab,
   resolveDefaultAgentForWorktreeNewTab
 } from '@/lib/agent-tab-shortcuts'
+import { chosenAgentChatUnlearned } from '@/lib/host-chat-program'
 
 export type TerminalAgentTabShortcut = {
   actionId: KeybindingActionId | null
@@ -26,14 +28,17 @@ export function resolveTerminalAgentTabShortcut({
 }): TerminalAgentTabShortcut {
   const state = useAppStore.getState()
   if (matchShortcut('tab.newAgent')) {
-    const agent = resolveDefaultAgentForNewTab({
-      defaultTuiAgent: state.settings?.defaultTuiAgent,
-      detectedAgentIds: readDetectedAgentsForWorktree(state, activeWorktreeId),
-      disabledTuiAgents: state.settings?.disabledTuiAgents
-    })
+    const detectedAgentIds = readDetectedAgentsForWorktree(state, activeWorktreeId)
+    const chosen = state.settings?.defaultTuiAgent
+    const agent = resolveDefaultAgentForNewTab(
+      { defaultTuiAgent: chosen, detectedAgentIds, disabledTuiAgents: state.settings?.disabledTuiAgents },
+      { store: state, worktreeId: activeWorktreeId }
+    )
+    const workspace = newTabWorkspace(activeWorktreeId)
     // Why: the cached list is empty until the host's probe lands (e.g. a paired server's
-    // workspace right after it opens); ask that host instead of reporting no agent.
-    return agent
+    // workspace right after it opens), and a default that opens as a chat without its CLI may not
+    // be known yet; ask that host instead of reporting no agent or passing the default over.
+    return agent && !chosenAgentChatUnlearned(state, chosen, detectedAgentIds, workspace)
       ? { actionId: 'tab.newAgent', agent }
       : {
           actionId: 'tab.newAgent',

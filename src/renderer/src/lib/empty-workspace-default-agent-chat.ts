@@ -1,5 +1,4 @@
 import { isNativeChatEnabled } from '../../../shared/structured-native-chat-launch-route'
-import { pickTuiAgent } from '../../../shared/tui-agent-selection'
 import { withTimeout } from '../../../shared/promise-timeout-fallback'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
@@ -13,11 +12,17 @@ import {
   readDetectedAgentsForTarget
 } from '@/lib/agent-detection-target-inventory'
 import { workspaceKindForWorktreeId } from '@/lib/agent-launch-route-input'
+import {
+  acquireChatProgramFacts,
+  chosenAgentChatUnlearned,
+  pickChosenOrDetectedAgent,
+  resolveChatProgramHost
+} from '@/lib/host-chat-program'
 import { planAgentSessionLaunch } from '@/lib/agent-session-launch-plan'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 
-// Why bounded: detection only decides chat vs shell, so a slow host must not hold the workspace empty.
+// Why bounded: these facts only decide chat vs shell, so a slow host must not hold the workspace empty.
 const DEFAULT_CHAT_DETECTION_TIMEOUT_MS = 5_000
 
 /**
@@ -36,24 +41,46 @@ function defaultChatDetectionTarget(
   return parseAgentDetectionTargetKey(getAgentDetectionTargetKeyForWorktree(state, worktreeId))
 }
 
-/** True when the default chat could open here but the workspace host's agent list has not loaded. */
+const workspaceOf = (worktreeId: string) => ({
+  kind: workspaceKindForWorktreeId(worktreeId),
+  worktreeId
+})
+
+/** True when the default chat could open here but the workspace host's agent list, or for a
+ *  default whose CLI is not detected, whether its chat program runs there, has not loaded. */
 export function emptyWorkspaceDefaultChatAwaitsDetection(worktreeId: string): boolean {
   const state = useAppStore.getState()
   const target = defaultChatDetectionTarget(state, worktreeId)
-  return target !== undefined && readDetectedAgentsForTarget(state, target) === null
+  if (!target) {
+    return false
+  }
+  const detected = readDetectedAgentsForTarget(state, target)
+  return (
+    detected === null ||
+    chosenAgentChatUnlearned(
+      state,
+      state.settings?.defaultTuiAgent,
+      detected,
+      workspaceOf(worktreeId)
+    )
+  )
 }
 
-/** Loads the workspace host's agent list; resolves on success, failure, or timeout. */
+/** Loads the workspace host's agent list and chat facts; resolves on success, failure, or timeout. */
 export async function loadEmptyWorkspaceDefaultChatDetection(worktreeId: string): Promise<void> {
   const state = useAppStore.getState()
   const target = defaultChatDetectionTarget(state, worktreeId)
   if (!target) {
     return
   }
+  const host = resolveChatProgramHost(state, workspaceOf(worktreeId))
   await withTimeout(
-    ensureDetectedAgentsForTarget(state, target),
+    Promise.all([
+      ensureDetectedAgentsForTarget(state, target).catch(() => []),
+      acquireChatProgramFacts(state, host.executionHostId, host.hostCapabilities)
+    ]),
     DEFAULT_CHAT_DETECTION_TIMEOUT_MS,
-    []
+    undefined
   )
 }
 
@@ -71,11 +98,13 @@ export function openDefaultAgentChatInEmptyWorkspace(
   if (!target) {
     return null
   }
-  const agent = pickTuiAgent(
-    state.settings?.defaultTuiAgent,
-    readDetectedAgentsForTarget(state, target) ?? [],
-    state.settings?.disabledTuiAgents
-  )
+  // The default may open as a chat without its CLI; automatic picks stay on detected agents.
+  const agent = pickChosenOrDetectedAgent(state, {
+    chosen: state.settings?.defaultTuiAgent,
+    detected: readDetectedAgentsForTarget(state, target),
+    disabled: state.settings?.disabledTuiAgents,
+    workspace: workspaceOf(worktreeId)
+  })
   if (!agent) {
     return null
   }
@@ -83,7 +112,7 @@ export function openDefaultAgentChatInEmptyWorkspace(
   const agentSessionLaunchPlan = planAgentSessionLaunch(state, {
     requestId: newAgentLaunchRequestId(),
     agent,
-    workspace: { kind: workspaceKindForWorktreeId(worktreeId), worktreeId }
+    workspace: workspaceOf(worktreeId)
   })
   // Why: an agent that can only open as a TUI here would replace the shell with a process nobody asked for.
   if (agentSessionLaunchPlan.route === 'terminal-tui') {
