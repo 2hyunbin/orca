@@ -162,6 +162,7 @@ describe('web session close replay', () => {
 
     expect(takeDueWebSessionCloseReplays(STORE, ENV, WT, PRESENT)).toEqual([])
     expect(heldHostTabIds()).toEqual([])
+    expect(isWebSessionCloseIntentPending(OWNER, WT, 'host-tab-1', Date.now())).toBe(false)
   })
 
   it('sends the held close when a host snapshot arrives, while keeping the tab hidden', async () => {

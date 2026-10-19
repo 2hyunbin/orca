@@ -143,6 +143,7 @@ export function takeDueWebSessionCloseReplays(
     ) {
       dropped.push(intentKey)
       attemptsByIntent.delete(key)
+      revealHeldClose(intentOwner(environmentId, intent), intent.worktreeId, intent.hostTabIds)
       continue
     }
     const owner = intentOwner(environmentId, intent)
