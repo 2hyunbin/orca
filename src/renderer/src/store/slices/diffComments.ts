@@ -2,15 +2,13 @@ import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
 import type { DiffComment } from '../../../../shared/diff-comment-types'
 import { createBrowserUuid } from '@/lib/browser-uuid'
-import { findFolderWorkspaceOwner } from '@/lib/folder-workspace-runtime-owner'
-import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { isMarkdownComment } from '@/lib/diff-comment-compat'
 import {
   enqueueDiffCommentPersist,
   mutateDiffComments,
   normalizeDiffComment
 } from './diff-comment-persistence'
-import { findDiffCommentWorktree } from './diff-comment-worktree-owner'
+import { selectWorktreeDiffCommentsOrEmpty } from '../worktree-diff-comments-selector'
 
 export type DiffCommentsSlice = {
   getDiffComments: (worktreeId: string | null | undefined) => DiffComment[]
@@ -63,9 +61,6 @@ function deliverySnapshotMatches(
   )
 }
 
-// Why: a frozen shared sentinel avoids selector re-renders and mutation.
-const EMPTY_COMMENTS: readonly DiffComment[] = Object.freeze([])
-
 // Why: best-effort telemetry runs only after the note is on disk, so a throw here must not report a failed save.
 function recordReviewNoteInteraction(get: () => AppState): void {
   try {
@@ -79,22 +74,8 @@ export const createDiffCommentsSlice: StateCreator<AppState, [], [], DiffComment
   set,
   get
 ) => ({
-  getDiffComments: (worktreeId) => {
-    // Why: return the stable sentinel for a missing worktree so optional-worktree callers don't allocate a fresh [] and trigger re-renders.
-    if (!worktreeId) {
-      return EMPTY_COMMENTS as DiffComment[]
-    }
-    const scope = parseWorkspaceKey(worktreeId)
-    const worktree =
-      scope?.type === 'folder'
-        ? findFolderWorkspaceOwner(get(), scope.folderWorkspaceId)
-        : findDiffCommentWorktree(get(), worktreeId, { lenient: true })?.worktree
-    if (!worktree?.diffComments) {
-      // Why: cast the frozen sentinel to the mutable return type; runtime freeze makes accidental mutation throw.
-      return EMPTY_COMMENTS as DiffComment[]
-    }
-    return worktree.diffComments
-  },
+  // Why the shared selector: rendered surfaces and actions must read the same twin's notes.
+  getDiffComments: (worktreeId) => selectWorktreeDiffCommentsOrEmpty(get(), worktreeId),
 
   addDiffComment: async (input) => {
     const comment: DiffComment = normalizeDiffComment({

@@ -1,16 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { create } from 'zustand'
-import type { AppState } from '../types'
 import type { DiffComment } from '../../../../shared/diff-comment-types'
 import type { Repo } from '../../../../shared/repo-types'
 import type { Worktree } from '../../../../shared/worktree/types'
-import { createDiffCommentsSlice } from './diffComments'
+import { createTestStore } from './store-test-helpers'
+import { selectWorktreeDiffCommentsOrEmpty } from '../worktree-diff-comments-selector'
+
+vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
 
 const updateMeta = vi.fn()
 
-globalThis.window = {
+vi.stubGlobal('window', {
   api: { worktrees: { updateMeta }, ui: { set: vi.fn() } }
-} as never
+})
 
 const REPO = 'repo-1'
 const WT = `${REPO}::/work/feature`
@@ -57,22 +58,14 @@ function createTwinStore(activeHostId: Worktree['hostId'] | null) {
     { ...repoBase, executionHostId: 'local' },
     { ...repoBase, connectionId: 'box', executionHostId: 'ssh:box' }
   ]
-  return create<AppState>()(
-    (...args) =>
-      ({
-        ...createDiffCommentsSlice(...args),
-        settings: null,
-        activeWorktreeId: activeHostId ? WT : null,
-        activeWorkspaceExecutionHostId: activeHostId,
-        folderWorkspaces: [],
-        projectGroups: [],
-        runtimeEnvironments: [],
-        restoredRuntimeHostIdByWorkspaceSessionKey: {},
-        detectedWorktreesByRepo: {},
-        repos,
-        worktreesByRepo: { [REPO]: [worktree('local'), worktree('ssh:box')] }
-      }) as unknown as AppState
-  )
+  const store = createTestStore()
+  store.setState({
+    activeWorktreeId: activeHostId ? WT : null,
+    activeWorkspaceExecutionHostId: activeHostId,
+    repos,
+    worktreesByRepo: { [REPO]: [worktree('local'), worktree('ssh:box')] }
+  })
+  return store
 }
 
 function rowNotes(store: ReturnType<typeof createTwinStore>, hostId: string): string[] {
@@ -103,12 +96,10 @@ describe('diff comments on twin worktrees', () => {
 
     expect(rowNotes(store, 'ssh:box')).toEqual(['ssh note'])
     expect(rowNotes(store, 'local')).toEqual([])
-    expect(
-      store
-        .getState()
-        .getDiffComments(WT)
-        .map((c) => c.body)
-    ).toEqual(['ssh note'])
+    // What the notes panel and diff gutters render.
+    expect(selectWorktreeDiffCommentsOrEmpty(store.getState(), WT).map((c) => c.body)).toEqual([
+      'ssh note'
+    ])
     expect(updateMeta).toHaveBeenCalledWith(
       expect.objectContaining({ worktreeId: WT, executionHostId: 'ssh:box' })
     )
@@ -137,5 +128,21 @@ describe('diff comments on twin worktrees', () => {
     expect(rowNotes(store, 'ssh:box')).toEqual([])
     expect(rowNotes(store, 'local')).toEqual([])
     expect(updateMeta).not.toHaveBeenCalled()
+  })
+
+  it('drops a queued save whose twin left, instead of writing the other copy under its host', async () => {
+    const store = createTwinStore('ssh:box')
+    store.setState({
+      worktreesByRepo: {
+        [REPO]: [worktree('local', [note('l1', 'local note')]), worktree('ssh:box')]
+      }
+    })
+
+    const pending = addNote(store)
+    store.setState({ worktreesByRepo: { [REPO]: [worktree('local', [note('l1', 'local note')])] } })
+
+    expect(await pending).toBeNull()
+    expect(updateMeta).not.toHaveBeenCalled()
+    expect(rowNotes(store, 'local')).toEqual(['local note'])
   })
 })

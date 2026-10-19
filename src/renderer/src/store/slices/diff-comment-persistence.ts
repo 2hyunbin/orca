@@ -6,7 +6,7 @@ import type { Worktree } from '../../../../shared/worktree/types'
 import { getRepoIdFromWorktreeId } from './worktree-helpers'
 import { callRuntimeRpc } from '../../runtime/runtime-rpc-client'
 import { runtimeTargetForWorkspaceOwner } from '@/lib/resolve-owner'
-import { findDiffCommentWorktree } from './diff-comment-worktree-owner'
+import { findDiffCommentWorktree } from '../worktree-diff-comments-selector'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { toRuntimeWorktreeSelector } from '../../runtime/runtime-worktree-selector'
 import {
@@ -184,8 +184,13 @@ export function enqueueDiffCommentPersist(
         )
       } else {
         const state = get()
-        stateList = findDiffCommentWorktree(state, worktreeId, { executionHostId })?.worktree
-          .diffComments
+        const owner = findDiffCommentWorktree(state, worktreeId, executionHostId)
+        // Why: the copy these notes were made on is gone or now shares its id; writing another
+        // copy's list under this host would overwrite it.
+        if (!owner) {
+          throw new Error('The workspace copy is gone or ambiguous; review notes were not saved.')
+        }
+        stateList = owner.worktree.diffComments
         await persist(
           state,
           worktreeId,
@@ -305,7 +310,7 @@ function rollback(
     if (!repoList) {
       return s
     }
-    const target = findDiffCommentWorktree(s, worktreeId, { executionHostId })?.worktree
+    const target = findDiffCommentWorktree(s, worktreeId, executionHostId)?.worktree
     // Why: worktree gone since the mutation; bail before remapping so we don't allocate a new array identity and fire spurious notifications.
     if (!target) {
       return s
