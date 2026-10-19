@@ -43,34 +43,40 @@ async function collectPhoneAlerts(
 const agentAlerts = (alerts: PhoneAlert[]): string[] =>
   alerts.filter((alert) => alert.source === 'agent-task-complete').map((a) => a.agentState ?? '')
 
+type WindowDispatchRecorder = typeof globalThis & {
+  __orcaE2eWindowDispatches?: { source?: string }[]
+}
+
 /** Records each agent request the window sends main, then hands it to the real handler. */
 async function recordWindowDispatches(electronApp: ElectronApplication): Promise<void> {
   await electronApp.evaluate(({ ipcMain }) => {
     type InvokeHandler = (event: unknown, ...args: unknown[]) => unknown
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Electron keeps invoke handlers in this private map; the throw below covers its absence.
     const registry = (ipcMain as unknown as { _invokeHandlers?: Map<string, InvokeHandler> })
       ._invokeHandlers
     const productionHandler = registry?.get('notifications:dispatch')
     if (!productionHandler) {
       throw new Error('notifications:dispatch handler was not registered in the main process')
     }
-    const recorded: unknown[] = []
-    ;(
-      globalThis as typeof globalThis & { __orcaE2eWindowDispatches?: unknown[] }
-    ).__orcaE2eWindowDispatches = recorded
+    const recorded: { source?: string }[] = []
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a test-only slot on the main process global, read back below.
+    ;(globalThis as WindowDispatchRecorder).__orcaE2eWindowDispatches = recorded
     ipcMain.removeHandler('notifications:dispatch')
-    ipcMain.handle('notifications:dispatch', (event, ...args) => {
-      recorded.push(args[0])
-      return productionHandler(event, ...args)
+    ipcMain.handle('notifications:dispatch', (event, request: { source?: string }, ...rest) => {
+      recorded.push(request)
+      return productionHandler(event, request, ...rest)
     })
   })
 }
 
-async function windowAgentDispatches(electronApp: ElectronApplication): Promise<string[]> {
-  return electronApp.evaluate(() =>
-    (
-      (globalThis as typeof globalThis & { __orcaE2eWindowDispatches?: { source?: string }[] })
-        .__orcaE2eWindowDispatches ?? []
-    ).flatMap((request) => (request.source === 'agent-task-complete' ? [request.source] : []))
+/** How many agent requests (finish or needs input) the window has sent main. */
+async function windowAgentDispatchCount(electronApp: ElectronApplication): Promise<number> {
+  return electronApp.evaluate(
+    () =>
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the slot recordWindowDispatches set.
+      ((globalThis as WindowDispatchRecorder).__orcaE2eWindowDispatches ?? []).filter(
+        (request) => request.source === 'agent-task-complete'
+      ).length
   )
 }
 
@@ -136,7 +142,7 @@ test('a desktop with a window pushes its phone once, from the window, for a term
     const alerts = await collectPhoneAlerts(phone, streamErrors)
     await postClaudeHook(endpoint, pane, { hook_event_name: 'UserPromptSubmit', prompt: 'go' })
     await postClaudeHook(endpoint, pane, { hook_event_name: 'Stop', last_assistant_message: 'ok' })
-    await expect.poll(() => windowAgentDispatches(electronApp)).toHaveLength(1)
+    await expect.poll(() => windowAgentDispatchCount(electronApp)).toBe(1)
     await expect.poll(() => agentAlerts(alerts)).toEqual(['done'])
     // Past the 1.5 s quiet window main would have waited, had it pushed too.
     await new Promise((resolve) => setTimeout(resolve, 3_000))
