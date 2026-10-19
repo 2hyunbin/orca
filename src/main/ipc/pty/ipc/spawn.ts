@@ -17,7 +17,11 @@ export function openSpawnRendererAttachment(
   mainWindow: PtyRendererDelivery | undefined
 ): RendererAttachmentBinding | null {
   const attachment = args.rendererAttachment
-  if (!attachment || !isAdmittedRendererPage(event, mainWindow, attachment.page)) {
+  if (
+    !attachment ||
+    typeof attachment.key !== 'string' ||
+    !isAdmittedRendererPage(event, mainWindow, attachment.page)
+  ) {
     return null
   }
   return openRendererAttachment(attachment.page, attachment.key, null, {

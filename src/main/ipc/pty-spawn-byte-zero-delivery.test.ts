@@ -6,6 +6,7 @@ import { shouldDropRendererPtyData } from './pty-hidden-delivery-gate'
 import { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { registerPtyHandlers } from './pty/register-handlers'
 import { join } from 'node:path'
+import { getTestPageTransport } from './pty-ipc-test-pane-attachments'
 // Why resolved rather than hardcoded: the wrapper tree is content-addressed.
 import { getShellReadyWrapperRoot } from '../providers/local-pty-shell-ready-wrapper-root'
 
@@ -79,6 +80,31 @@ describe('registerPtyHandlers', () => {
         registerPreAllocatedHandleForPty: vi.fn()
       }
     }
+
+    it('keeps a live connection when a later spawn omits its attachment key', async () => {
+      installObservableDaemonTestProvider()
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the suite window implements the renderer delivery surface used by these handlers.
+      registerPtyHandlers(mainWindow as never)
+      const { page } = getTestPageTransport()
+      const spawn = handlers.get('pty:spawn')!
+      await spawn(mainWindowIpcEvent, {
+        cols: 80,
+        rows: 24,
+        sessionId: 'visible-connection',
+        rendererAttachment: { page, key: 'undefined', consuming: true, visible: true }
+      })
+      expect(shouldDropRendererPtyData('visible-connection', {})).toBe(false)
+
+      await spawn(mainWindowIpcEvent, {
+        cols: 80,
+        rows: 24,
+        sessionId: 'malformed-connection',
+        rendererAttachment: { page, consuming: true, visible: true }
+      })
+
+      expect(shouldDropRendererPtyData('visible-connection', {})).toBe(false)
+      expect(shouldDropRendererPtyData('malformed-connection', {})).toBe(true)
+    })
 
     it('gates a hidden daemon spawn before spawn resolves so main owns byte zero', async () => {
       vi.useFakeTimers()
