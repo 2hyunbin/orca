@@ -169,7 +169,7 @@ describe('OrcadManagedTunnelManager.closeTarget (the SSH session teardown)', () 
     const teardown = state.manager.closeTarget('ssh-1').then(() => {
       closed = true
     })
-    await Promise.resolve()
+    await new Promise((resolve) => setTimeout(resolve, 0))
     expect(closed).toBe(false)
     release()
     await teardown

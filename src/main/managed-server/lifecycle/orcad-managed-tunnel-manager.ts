@@ -159,7 +159,9 @@ export class OrcadManagedTunnelManager {
       verify: checks.verify,
       stillCurrent
     })
-    if (!forward) {
+    // Why re-check: a teardown can land between the build's last check and this record.
+    if (!forward || !stillCurrent()) {
+      await (forward && this.forwards.removeForwardAndWait(forward.id))
       throw supersededTunnelError()
     }
     recordActiveOrcadTunnel(this.active, environmentId, forward, {
