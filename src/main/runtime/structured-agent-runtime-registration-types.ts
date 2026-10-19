@@ -77,6 +77,14 @@ export type StructuredAgentLaunchCheck = {
   supportsVersion: (version: string) => boolean
 }
 
+export type StructuredAgentChatProgram = {
+  /** The binary a chat start from `env` runs, resolved as the launch resolves it, spawning nothing;
+   *  throws the launch's own pre-spawn refusal. */
+  resolve: StructuredAgentLaunchCheck['resolveLaunch']
+  /** Whether Orca can download this program on this host when none is found. */
+  installable?: () => boolean
+}
+
 export type StructuredAgentRuntimeMetadata = StructuredAgentCliConversations & {
   definition: StructuredAgentDefinition
   /** How this agent's models are listed before any session of it runs. Required: an agent that
@@ -87,6 +95,8 @@ export type StructuredAgentRuntimeMetadata = StructuredAgentCliConversations & {
   /** How create asks whether the agent installed on this host runs a structured chat, with the
    *  environment a launch starts from; absent when the location alone decides. */
   launchCheck?: StructuredAgentLaunchCheck
+  /** How the host health snapshot finds this agent's chat program; absent answers unknown. */
+  chatProgram?: StructuredAgentChatProgram
   /** The account a chat of this agent pins; see `StructuredAgentAccountHomeRequest`. */
   resolveAccountHome: (
     request: StructuredAgentAccountHomeRequest,
