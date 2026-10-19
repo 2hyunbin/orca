@@ -54,24 +54,44 @@ export function useMarkdownDocumentWatchRefresh({
       return
     }
     let timer: ReturnType<typeof setTimeout> | undefined
+    let latestChangeAt = 0
+    let scanInFlight = false
+    let changedDuringScan = false
+    let disposed = false
+    const scheduleScan = (): void => {
+      // Why: never push an armed scan back; watch batches arrive faster than the debounce under sustained writes.
+      if (timer !== undefined) {
+        return
+      }
+      timer = setTimeout(() => {
+        timer = undefined
+        scanInFlight = true
+        changedDuringScan = false
+        // Each pane can join a scan begun after the latest change, while bypassing an older snapshot.
+        void refresh(false, latestChangeAt).finally(() => {
+          scanInFlight = false
+          // Why: one scan at a time — overlapping scans supersede each other and publish nothing.
+          if (changedDuringScan && !disposed) {
+            scheduleScan()
+          }
+        })
+      }, DOCUMENT_WATCH_DEBOUNCE_MS)
+    }
     const handleChange = (event: WindowEventMap[typeof ORCA_WORKTREE_FILE_CHANGE_EVENT]): void => {
       const { payload, runtimeEnvironmentId: eventOwner } = event.detail
       if (eventOwner !== owner || !changesDocumentMembership(payload, worktreePath)) {
         return
       }
-      // Why: never push an armed refresh back; watch batches arrive faster than the debounce under sustained writes.
-      if (timer !== undefined) {
+      latestChangeAt = performance.now()
+      if (scanInFlight) {
+        changedDuringScan = true
         return
       }
-      const changedAt = performance.now()
-      // Each pane can join a scan begun after this burst, while bypassing an older snapshot.
-      timer = setTimeout(() => {
-        timer = undefined
-        void refresh(false, changedAt)
-      }, DOCUMENT_WATCH_DEBOUNCE_MS)
+      scheduleScan()
     }
     window.addEventListener(ORCA_WORKTREE_FILE_CHANGE_EVENT, handleChange)
     return () => {
+      disposed = true
       if (timer !== undefined) {
         clearTimeout(timer)
       }

@@ -28,8 +28,9 @@ export function watchWindowsRuntimeFileExplorer(
     if (disposed) {
       return
     }
+    // Why: never push an armed refresh back; a resetting debounce never fires under sustained writes.
     if (timer) {
-      clearTimeout(timer)
+      return
     }
     timer = setTimeout(emitOverflow, WINDOWS_RUNTIME_FILE_WATCH_DEBOUNCE_MS)
   }

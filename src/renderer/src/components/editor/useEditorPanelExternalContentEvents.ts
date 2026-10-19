@@ -10,6 +10,7 @@ import {
 } from './editor-autosave'
 import type { DiffContent, FileContent } from './editor-panel-content-types'
 import { isReloadableSingleFileDiffTab } from './editor-panel-diff-reload'
+import { createEditorWatcherReloadCoalescer } from './editor-watcher-reload-coalescer'
 
 type EditorViewModeByFile = ReturnType<typeof useAppStore.getState>['editorViewMode']
 
@@ -63,6 +64,7 @@ export function useEditorPanelExternalContentEvents({
   setDiffContents
 }: UseEditorPanelExternalContentEventsParams): void {
   useEffect(() => {
+    const reloads = createEditorWatcherReloadCoalescer()
     const handler = (event: Event): void => {
       const detail = (event as CustomEvent<EditorPathMutationTarget>).detail
       if (!detail) {
@@ -85,23 +87,23 @@ export function useEditorPanelExternalContentEvents({
         if (file.mode === 'edit' || file.mode === 'markdown-preview') {
           // Why: external writes must replace any in-flight pre-change read so
           // the tab shows the new on-disk content, not a stale dedupe result.
-          void loadFileContent(file.filePath, file.id, file.worktreeId, file.relativePath, {
-            force: true,
-            externalEventGeneration: eventGeneration
-          })
-          if (editorViewModeRef.current[file.id] === 'changes') {
-            void loadDiffContent(file, {
+          reloads.run(`content:${file.id}`, () =>
+            loadFileContent(file.filePath, file.id, file.worktreeId, file.relativePath, {
               force: true,
               externalEventGeneration: eventGeneration
             })
+          )
+          if (editorViewModeRef.current[file.id] === 'changes') {
+            reloads.run(`diff:${file.id}`, () =>
+              loadDiffContent(file, { force: true, externalEventGeneration: eventGeneration })
+            )
           } else {
             invalidatedDiffFileIds.push(file.id)
           }
         } else if (isReloadableSingleFileDiffTab(file)) {
-          void loadDiffContent(file, {
-            force: true,
-            externalEventGeneration: eventGeneration
-          })
+          reloads.run(`diff:${file.id}`, () =>
+            loadDiffContent(file, { force: true, externalEventGeneration: eventGeneration })
+          )
         }
       }
       if (invalidatedFileIds.length > 0) {
@@ -112,8 +114,10 @@ export function useEditorPanelExternalContentEvents({
       }
     }
     window.addEventListener(ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT, handler as EventListener)
-    return () =>
+    return () => {
+      reloads.dispose()
       window.removeEventListener(ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT, handler as EventListener)
+    }
   }, [
     activeContentFileIdRef,
     editorViewModeRef,

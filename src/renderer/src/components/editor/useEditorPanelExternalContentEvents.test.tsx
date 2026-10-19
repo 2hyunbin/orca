@@ -239,4 +239,55 @@ describe('useEditorPanelExternalContentEvents', () => {
     expect(sourceOptions?.externalEventGeneration).toBeTypeOf('number')
     expect(previewOptions?.externalEventGeneration).toBe(sourceOptions?.externalEventGeneration)
   })
+
+  it('keeps one slow watcher read in flight and follows up once with the latest change', async () => {
+    const changedFile = makeFile('changed')
+    const calls = makeCalls()
+    const settles: (() => void)[] = []
+    calls.loadFile.mockImplementation(() => new Promise<void>((resolve) => settles.push(resolve)))
+    act(() => {
+      root.render(
+        <ExternalContentProbe
+          activeFileId={changedFile.id}
+          calls={calls}
+          isVisible
+          openFiles={[changedFile]}
+        />
+      )
+    })
+    // Watch batches outpace a slow SSH read: restarting each time would discard every result.
+    for (let i = 0; i < 5; i++) {
+      dispatchExternalChange(changedFile.relativePath)
+    }
+    expect(calls.loadFile).toHaveBeenCalledTimes(1)
+    await act(async () => settles[0]())
+    expect(calls.loadFile).toHaveBeenCalledTimes(2)
+    const firstGeneration = calls.loadFile.mock.calls[0][4].externalEventGeneration
+    expect(calls.loadFile.mock.calls[1][4].externalEventGeneration).toBe(firstGeneration + 4)
+    await act(async () => settles[1]())
+    expect(calls.loadFile).toHaveBeenCalledTimes(2)
+  })
+
+  it('coalesces slow watcher diff reloads separately from content reads', async () => {
+    const diffTab = makeFile('diff', { mode: 'diff', diffSource: 'unstaged' })
+    const calls = makeCalls()
+    const settles: (() => void)[] = []
+    calls.loadDiff.mockImplementation(() => new Promise<void>((resolve) => settles.push(resolve)))
+    act(() => {
+      root.render(
+        <ExternalContentProbe
+          activeFileId={diffTab.id}
+          calls={calls}
+          isVisible
+          openFiles={[diffTab]}
+        />
+      )
+    })
+    for (let i = 0; i < 3; i++) {
+      dispatchExternalChange(diffTab.relativePath)
+    }
+    expect(calls.loadDiff).toHaveBeenCalledTimes(1)
+    await act(async () => settles[0]())
+    expect(calls.loadDiff).toHaveBeenCalledTimes(2)
+  })
 })
