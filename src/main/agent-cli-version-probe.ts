@@ -87,7 +87,7 @@ export async function readAgentCliVersion(
     warnRefused(input.program, why, output)
     return { version: null }
   }
-  const version = parseVersion(parseVersion === parseCliVersion ? result.stdout : output)
+  const version = parseVersion(output)
   if (version === null) {
     warnRefused(input.program, 'printed no version', output)
     return { version: null }

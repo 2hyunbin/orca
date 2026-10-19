@@ -60,6 +60,15 @@ describe('checkAgentCliVersion', () => {
     )
   })
 
+  it('reads a version printed only on stderr, as Pi 0.73 does', async () => {
+    prints('', { stderr: '0.73.1\n' })
+    expect(await checkAgentCliVersion(INPUT, ['0.84.0'])).toEqual({
+      status: 'tooOld',
+      version: '0.73.1',
+      minimumVersion: '0.84.0'
+    })
+  })
+
   it.each([
     ['a non-zero exit', { code: 1 }],
     ['a timeout', { timedOut: true }],
