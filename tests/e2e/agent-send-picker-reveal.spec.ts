@@ -1,4 +1,5 @@
 import { expect, test } from './helpers/orca-app'
+import { evaluatePolled } from './helpers/page-evaluate-polled'
 import { launchWithUnreachableSshWorkspaces } from './helpers/seeded-ssh-workspaces'
 
 for (const host of ['local', 'ssh'] as const) {
@@ -17,7 +18,8 @@ for (const host of ['local', 'ssh'] as const) {
       try {
         const { page, ssh, localWorktreeId } = launched
         await page.emulateMedia({ reducedMotion: 'reduce' })
-        const ids = await page.evaluate(
+        const ids = await evaluatePolled(
+          page,
           async ({ host, hiddenBy, ssh, localWorktreeId }) => {
             const store = window.__store!
             const state = store.getState()
@@ -32,7 +34,7 @@ for (const host of ['local', 'ssh'] as const) {
             }
             const target = hiddenBy === 'parent' ? child! : parent
             const now = Date.now()
-            await state.updateWorktreeMeta(
+            const noted = await state.updateWorktreeMeta(
               target,
               {
                 ...(hiddenBy === 'parent' ? { displayName: 'Child workspace' } : {}),
@@ -52,6 +54,9 @@ for (const host of ['local', 'ssh'] as const) {
               },
               { executionHostId: hostId }
             )
+            if (!noted.ok) {
+              throw new Error(`Writing the note failed: ${noted.error}`)
+            }
             if (hiddenBy === 'parent') {
               await state.assignWorktreeParent(target, { parentWorktreeId: parent })
             }

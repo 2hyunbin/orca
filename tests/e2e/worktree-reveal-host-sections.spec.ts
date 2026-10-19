@@ -6,6 +6,7 @@ import { expect, test } from './helpers/orca-app'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
 import { launchPairedElectronClient } from './helpers/paired-electron-client'
 import { attachRepoAndOpenTerminal } from './helpers/orca-restart'
+import { evaluatePolled } from './helpers/page-evaluate-polled'
 import { launchWithUnreachableSshWorkspaces } from './helpers/seeded-ssh-workspaces'
 import { waitForSessionReady, waitForStartupWorktreeRefresh } from './helpers/store'
 import { toRuntimeExecutionHostId, type ExecutionHostId } from '../../src/shared/execution-host'
@@ -21,6 +22,31 @@ const sections = [
   },
   { groupBy: 'pr-status', key: 'pr:in-progress', label: 'In progress', pinned: false }
 ] as const
+
+/** Pins through main and waits for its answer. */
+async function pinWorkspace(
+  page: Page,
+  worktreeId: string,
+  isPinned: boolean,
+  executionHostId: ExecutionHostId
+): Promise<void> {
+  await evaluatePolled(
+    page,
+    async (args) => {
+      const written = await window.__store!.getState().updateWorktreeMeta(
+        args.worktreeId,
+        { isPinned: args.isPinned },
+        {
+          executionHostId: args.executionHostId
+        }
+      )
+      if (!written.ok) {
+        throw new Error(`Pinning failed: ${written.error}`)
+      }
+    },
+    { worktreeId, isPinned, executionHostId }
+  )
+}
 
 /** A desktop whose main holds a local workspace and one on another host, as a user's would. */
 type RevealTopology = {
@@ -40,17 +66,8 @@ async function expectRevealsWithinHost(
       const scenario = `${section.key}-collapsed-${collapsedHost}`
       await test.step(scenario, async () => {
         await setRemotePinned(section.pinned)
-        // Writes start without awaiting across CDP, which can collect the pending page promise.
-        await page.evaluate(
-          (args) => {
-            void window.__store!.getState().updateWorktreeMeta(args.local, {
-              isPinned: args.pinned,
-              displayName: 'Local workspace'
-            })
-          },
-          { local, pinned: section.pinned }
-        )
-        // Both pins must land before the reveal, or the row opens in the other section.
+        await pinWorkspace(page, local, section.pinned, 'local')
+        // The window must show both pins before the reveal, or the row opens in the other section.
         await expect
           .poll(() =>
             page.evaluate(
@@ -63,8 +80,14 @@ async function expectRevealsWithinHost(
             )
           )
           .toEqual([section.pinned, section.pinned])
-        await page.evaluate(
-          async ({ remote, remoteHostId, collapsedHost, section }) => {
+        const collapsedGroups = [
+          section.key,
+          `${section.key}:host:${remoteHostId}`,
+          ...(collapsedHost ? [`host:${remoteHostId}`] : [])
+        ]
+        await evaluatePolled(
+          page,
+          async ({ remote, remoteHostId, collapsedGroups, section }) => {
             const store = window.__store!
             const state = store.getState()
             const remoteRepoId = Object.values(state.worktreesByRepo)
@@ -75,11 +98,6 @@ async function expectRevealsWithinHost(
             state.setShowSleepingWorkspaces(true)
             state.setHideDefaultBranchWorkspace(false)
             state.setFilterRepoIds([])
-            const collapsedGroups = [
-              section.key,
-              `${section.key}:host:${remoteHostId}`,
-              ...(collapsedHost ? [`host:${remoteHostId}`] : [])
-            ]
             await window.api.ui.set({ groupBy: section.groupBy, collapsedGroups })
             store.setState({
               groupBy: section.groupBy,
@@ -93,7 +111,7 @@ async function expectRevealsWithinHost(
               collapsedGroups: new Set(collapsedGroups)
             })
           },
-          { remote, remoteHostId, collapsedHost, section }
+          { remote, remoteHostId, collapsedGroups, section }
         )
         const headers = page.getByRole('button', { name: new RegExp(`^${section.label}`) })
         const localRow = page.locator(
@@ -186,16 +204,7 @@ test("reveals an unreachable SSH host's workspaces without expanding another hos
         local: localWorktreeId,
         remote,
         remoteHostId: ssh.hostId,
-        setRemotePinned: async (isPinned) => {
-          await page.evaluate(
-            ({ remote, hostId, isPinned }) => {
-              void window
-                .__store!.getState()
-                .updateWorktreeMeta(remote, { isPinned }, { executionHostId: hostId })
-            },
-            { remote, hostId: ssh.hostId, isPinned }
-          )
-        }
+        setRemotePinned: (isPinned) => pinWorkspace(page, remote, isPinned, ssh.hostId)
       },
       testInfo
     )
