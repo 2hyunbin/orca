@@ -13,7 +13,6 @@ import { tmpdir } from 'node:os'
 import type { TerminalTab } from '../shared/terminal-tab-types'
 import { getDefaultWorkspaceSession } from '../shared/constants'
 import { toRuntimeExecutionHostId } from '../shared/execution-host'
-import { hostWorktreeTarget } from '../shared/worktree/host-qualified-identity'
 import { removeWorktreeMetaRow } from './persistence/host-qualified-worktree-meta'
 
 let hasCreatedStoreInCase = false

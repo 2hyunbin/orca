@@ -21,7 +21,6 @@ import { getDefaultWorkspaceSession } from '../shared/constants'
 import { isTerminalLeafId } from '../shared/stable-pane-id'
 
 import { worktreeWorkspaceKey } from '../shared/workspace-scope'
-import { hostWorktreeTarget } from '../shared/worktree/host-qualified-identity'
 import { removeWorktreeMetaRow } from './persistence/host-qualified-worktree-meta'
 
 // Stub the ~/.ssh/config parser so the SSH-import test drives the real Store with deterministic hosts, not the operator's actual ~/.ssh/config.
