@@ -288,7 +288,8 @@ it('pins every foreground and background step to its selected phase', () => {
 })
 
 it.each([
-  { changed: ['README.md'], static_analysis: false, typecheck: false, mobile_dependencies: false },
+  { changed: ['LICENSE'], static_analysis: false, typecheck: false, mobile_dependencies: false },
+  { changed: ['README.md'], static_analysis: true, typecheck: false, mobile_dependencies: false },
   {
     changed: ['mobile/src/App.tsx'],
     static_analysis: true,
