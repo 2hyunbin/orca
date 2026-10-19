@@ -7,6 +7,7 @@ import {
   getFolderWorkspaceMetaUpdates
 } from '../listing/detected-worktree-meta'
 import { persistWorktreeMeta } from './worktree-meta-persist'
+import { withPendingSidebarRowWrites } from '@/lib/sidebar-pending-layer'
 import { isRuntimeSelectorNotFoundError } from '../listing/runtime-worktree-rpc-errors'
 import { parseWorkspaceKey } from '../../../../../../shared/workspace-scope'
 import { parseExecutionHostId, type ExecutionHostId } from '../../../../../../shared/execution-host'
@@ -29,7 +30,7 @@ export function createUpdateWorktreesMeta(
   set: WorktreeSliceSet,
   get: WorktreeSliceGet
 ): WorktreeSlice['updateWorktreesMeta'] {
-  return async (updates) => {
+  const update: WorktreeSlice['updateWorktreesMeta'] = async (updates) => {
     if (updates.length === 0) {
       return
     }
@@ -125,4 +126,5 @@ export function createUpdateWorktreesMeta(
       })
     ])
   }
+  return (updates) => withPendingSidebarRowWrites(updates, () => update(updates))
 }

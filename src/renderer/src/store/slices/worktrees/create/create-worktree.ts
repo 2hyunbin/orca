@@ -29,8 +29,6 @@ import { showLocalBaseRefUpdateSuggestionToast } from '@/components/sidebar/loca
 import { requestWorktreeBaseFallbackNotice } from '@/components/worktree-base-fallback-notice'
 import { showLocalBaseRefRefreshToast } from './local-base-ref-refresh-toast'
 import { applyCreatedWorktree } from './created-worktree-state-merge'
-import { requestCreationFromHost } from '@/lib/sidebar-shadow/host-creation-requests'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../../../shared/sidebar-inputs-switch'
 import { adoptRuntimeProvisionedRoot } from './runtime-provisioned-root-adoption'
 import { isRuntimeLineageParentMissingError } from '../listing/runtime-worktree-rpc-errors'
 import {
@@ -39,6 +37,7 @@ import {
   type WorktreeCreateAttempt,
   type WorktreeCreateRequest
 } from './worktree-create-payload'
+import { holdCreatedSidebarWorkspace } from '@/lib/sidebar-pending-layer'
 import {
   notifyWorktreeParentDropped,
   resolveWorktreeCreateParent,
@@ -77,16 +76,9 @@ async function runCreateAttempt(
           })
       : target.kind === 'local'
         ? // Why local can still reject on the parent: paired web clients route this API to their host.
-          // Switch point: only a build where main lists creations tracks the requests it serves.
-          ORCA_SIDEBAR_INPUTS_IS_MAIN
-          ? await requestCreationFromHost(request, () =>
-              window.api.worktrees.create(
-                buildLocalWorktreeCreateArgs(request, { ...attempt, parentWorkspace })
-              )
-            )
-          : await window.api.worktrees.create(
-              buildLocalWorktreeCreateArgs(request, { ...attempt, parentWorkspace })
-            )
+          await window.api.worktrees.create(
+            buildLocalWorktreeCreateArgs(request, { ...attempt, parentWorkspace })
+          )
         : await callRuntimeRpc<CreateWorktreeResult>(
             target,
             'worktree.create',
@@ -97,14 +89,17 @@ async function runCreateAttempt(
             },
             { timeoutMs: 10 * 60_000 }
           )
-  try {
-    return { result: await create(attempt.parentWorkspace), droppedParent: false }
-  } catch (error) {
-    if (!attempt.parentWorkspace || !isRuntimeLineageParentMissingError(error)) {
-      throw error
+  const outcome = await create(attempt.parentWorkspace).then(
+    (result) => ({ result, droppedParent: false }),
+    async (error: unknown) => {
+      if (!attempt.parentWorkspace || !isRuntimeLineageParentMissingError(error)) {
+        throw error
+      }
+      return { result: await create(undefined), droppedParent: true }
     }
-    return { result: await create(undefined), droppedParent: true }
-  }
+  )
+  holdCreatedSidebarWorkspace({ worktree: outcome.result.worktree })
+  return outcome
 }
 
 /** True when the create landed without the nesting the caller asked for. */

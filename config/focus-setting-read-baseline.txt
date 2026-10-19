@@ -163,7 +163,7 @@
 1 src/renderer/src/components/sidebar/WorkspaceAttachmentSearch.tsx
 1 src/renderer/src/components/sidebar/WorkspaceKanbanDrawer.tsx
 1 src/renderer/src/components/sidebar/WorktreeCardPorts.tsx
-2 src/renderer/src/components/sidebar/WorktreeList.tsx
+1 src/renderer/src/components/sidebar/WorktreeList.tsx
 1 src/renderer/src/components/sidebar/WorktreeRowOpenInSubMenu.tsx
 1 src/renderer/src/components/sidebar/WorktreeVisibilityDialog.tsx
 2 src/renderer/src/components/sidebar/delete-worktree-flow.ts
