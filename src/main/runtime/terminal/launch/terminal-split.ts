@@ -92,9 +92,7 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
           if (
             outcome !== 'admitted' ||
             !(error instanceof Error) ||
-            error.message !== SPLIT_PANE_WAIT_TIMEOUT_MESSAGE ||
-            // A start under way (a slow SSH host) keeps its pane: its binding or failure settles it.
-            isPaneSpawnInFlight(leaf.worktreeId, makePaneKey(leaf.tabId, newLeafId))
+            error.message !== SPLIT_PANE_WAIT_TIMEOUT_MESSAGE
           ) {
             throw error
           }
@@ -109,14 +107,21 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
               newLeafId
             },
             hostId,
-            true
+            // Read in the write queue: a start under way (a slow SSH host) keeps its pane.
+            () => isPaneSpawnInFlight(leaf.worktreeId, makePaneKey(leaf.tabId, newLeafId))
           ).catch((withdrawError: unknown) => {
             console.warn('[layout] an unstarted split pane stayed in main:', withdrawError)
             return 'threw' as const
           })
           if (taken === 'bound') {
             // Bound just before the take-back: the window's late report brings its handle.
-            return this.waitForLeafInTab(leaf.tabId, newLeafId, SPLIT_PANE_START_TIMEOUT_MS)
+            return settledByPaneClose(
+              this.store,
+              () => this.getWorkspaceSessionHostIdsForTab(leaf.worktreeId, leaf.tabId),
+              leaf.tabId,
+              newLeafId,
+              this.waitForLeafInTab(leaf.tabId, newLeafId, SPLIT_PANE_START_TIMEOUT_MS)
+            )
           }
           if (taken !== null) {
             throw error

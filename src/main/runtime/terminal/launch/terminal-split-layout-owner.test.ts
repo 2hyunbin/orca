@@ -162,26 +162,29 @@ describe('a split of a pane the window draws, in a layout-owner build', () => {
 
   it('keeps the pane of a start still under way when the wait runs out, with the plain timeout', async () => {
     const { runtime, handle, splitTerminal, leafIds, notifier } = setup()
+    const reservations: (() => void)[] = []
 
     vi.useFakeTimers()
-    const split = runtime.splitTerminal(handle, { direction: 'vertical' })
-    const rejected = expect(split).rejects.toThrow(/^Timed out waiting for split pane handle$/)
-    await vi.waitFor(() => expect(splitTerminal).toHaveBeenCalledTimes(1))
-    const newLeafId = splitTerminal.mock.calls[0]![2]!.newLeafId!
-    // A slow (SSH-style) start of the pane's terminal is under way and has not bound yet.
-    const reservationKey = makePaneSpawnReservationKey(
-      TEST_WORKTREE_ID,
-      null,
-      makePaneKey(TAB_ID, newLeafId)
-    )!
-    const reservation = reservePaneSpawn(reservationKey)
     try {
+      const split = runtime.splitTerminal(handle, { direction: 'vertical' })
+      const rejected = expect(split).rejects.toThrow(/^Timed out waiting for split pane handle$/)
+      await vi.waitFor(() => expect(splitTerminal).toHaveBeenCalledTimes(1))
+      const newLeafId = splitTerminal.mock.calls[0]![2]!.newLeafId!
+      // A slow (SSH-style) start of the pane's terminal is under way and has not bound yet.
+      const reservationKey = makePaneSpawnReservationKey(
+        TEST_WORKTREE_ID,
+        'ssh-1',
+        makePaneKey(TAB_ID, newLeafId)
+      )!
+      const reservation = reservePaneSpawn(reservationKey)
+      reservations.push(() => clearPaneSpawnReservation(reservationKey, reservation))
+
       await vi.advanceTimersByTimeAsync(11_000)
       await rejected
       expect(leafIds()).toEqual([HEADLESS_LEAF_ID, newLeafId])
       expect(notifier.closeTerminalPane).not.toHaveBeenCalled()
     } finally {
-      clearPaneSpawnReservation(reservationKey, reservation)
+      reservations.forEach((release) => release())
       vi.useRealTimers()
     }
   })

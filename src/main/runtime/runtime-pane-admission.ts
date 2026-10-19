@@ -68,15 +68,15 @@ export async function withdrawRuntimePane(
 }
 
 /**
- * Never the user's close: main stops no launch for it, unlike a window's closePane. `unboundOnly`
- * keeps a pane whose terminal bound first ('bound').
+ * Never the user's close: main stops no launch for it, unlike a window's closePane. With
+ * `stillStarting`, a pane whose terminal bound or is starting stays ('bound' / 'starting').
  */
 export async function withdrawAdmittedPane(
   store: RuntimeStore | null | undefined,
   admission: TerminalPaneAdmission,
   hostId: string | undefined,
-  unboundOnly = false
-): Promise<LayoutRefusalCode | 'bound' | null | undefined> {
+  stillStarting?: () => boolean
+): Promise<LayoutRefusalCode | 'bound' | 'starting' | null | undefined> {
   const leafId = admission.type === 'createTerminalTab' ? admission.leafId : admission.newLeafId
   const pane = {
     type: 'closePane' as const,
@@ -84,7 +84,7 @@ export async function withdrawAdmittedPane(
     tabId: admission.tabId,
     leafId
   }
-  return store?.withdrawTerminalPane?.(pane, hostId, unboundOnly)
+  return store?.withdrawTerminalPane?.(pane, hostId, stillStarting)
 }
 
 /** Writes a pane the runtime asks for into main's copy; what fills it is the caller's. */

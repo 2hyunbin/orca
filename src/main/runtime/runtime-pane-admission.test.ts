@@ -50,7 +50,7 @@ describe('startInAdmittedPane', () => {
     expect(store.withdrawTerminalPane).toHaveBeenCalledWith(
       { type: 'closePane', workspace: 'wt-1', tabId: 'tab-1', leafId: 'leaf-new' },
       undefined,
-      false
+      undefined
     )
   })
 

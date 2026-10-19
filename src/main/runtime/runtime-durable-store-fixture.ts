@@ -108,12 +108,14 @@ export function withRuntimePaneAdmission<
     withdrawTerminalPane: async (
       pane: CommandOf<'closePane'>,
       hostId?: string,
-      unboundOnly = false
-    ): Promise<LayoutRefusalCode | 'bound' | null> =>
+      stillStarting?: () => boolean
+    ): Promise<LayoutRefusalCode | 'bound' | 'starting' | null> =>
       commit(hostId, (session) =>
-        unboundOnly && session.terminalLayoutsByTabId?.[pane.tabId]?.ptyIdsByLeafId?.[pane.leafId]
+        stillStarting && session.terminalLayoutsByTabId?.[pane.tabId]?.ptyIdsByLeafId?.[pane.leafId]
           ? { value: 'bound' as const, session: null }
-          : withdrawPaneFromSession(resolveHostId(hostId), session, pane)
+          : stillStarting?.()
+            ? { value: 'starting' as const, session: null }
+            : withdrawPaneFromSession(resolveHostId(hostId), session, pane)
       )
   })
 }
