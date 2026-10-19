@@ -153,12 +153,13 @@ function newChatRecord(
   workspacePath: string,
   options: Record<string, string>
 ): AgentSessionRecord {
+  const providerHandleChain: AgentSessionRecord['providerHandleChain'] = []
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the catalog service and the at-rest read touch only these fields.
   return {
     sessionId: `${agent}-new`,
     provider: agent,
     accountHome: HOMES[agent]!,
-    providerHandleChain: [],
+    providerHandleChain,
     launchDirectory: workspacePath,
     location: {
       executionHostId: 'local',

@@ -289,7 +289,7 @@ export async function readStructuredAgentSessionOptions(
   // refused runs what it reports, which the next send records. A chat started here that has sent
   // nothing runs the default it shows, which its first send pins; one taken from history may not.
   const neverSent =
-    record !== undefined &&
+    record !== null &&
     record.providerHandleChain[0]?.origin !== 'adopted' &&
     session.journal.newestTurn() === null &&
     session.journal.submissions().length === 0
