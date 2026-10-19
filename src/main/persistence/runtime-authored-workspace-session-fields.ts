@@ -41,13 +41,15 @@ function keepPtyIncarnationsForUnchangedBindings(
   prior: WorkspaceSessionState | null | undefined
 ): WorkspaceSessionState {
   const priorIncarnations = prior?.terminalPtyIncarnationsByPaneKey
-  if (!prior || !priorIncarnations || next.terminalPtyIncarnationsByPaneKey !== undefined) {
+  if (!prior || !priorIncarnations) {
     return next
   }
+  const incoming = next.terminalPtyIncarnationsByPaneKey
+  // Per pane: a write may carry only some panes' incarnations.
   const kept: Record<string, string> = {}
   for (const [paneKey, incarnationId] of Object.entries(priorIncarnations)) {
     const parsed = parsePaneKey(paneKey)
-    if (!parsed) {
+    if (!parsed || (incoming && Object.hasOwn(incoming, paneKey))) {
       continue
     }
     const bindingOf = (session: WorkspaceSessionState): string | undefined =>
@@ -57,7 +59,9 @@ function keepPtyIncarnationsForUnchangedBindings(
       kept[paneKey] = incarnationId
     }
   }
-  return Object.keys(kept).length > 0 ? { ...next, terminalPtyIncarnationsByPaneKey: kept } : next
+  return Object.keys(kept).length > 0
+    ? { ...next, terminalPtyIncarnationsByPaneKey: { ...kept, ...incoming } }
+    : next
 }
 
 export function preserveRuntimeAuthoredWorkspaceSessionFields(
