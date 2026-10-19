@@ -201,8 +201,19 @@ export function captureOrcadStateSnapshotCommand(
 
 export type OrcadSnapshotCapture = 'captured' | 'empty' | 'failed'
 
+/**
+ * The last line that is one of `verdicts`. Why not simply the last line: a gateway that merges
+ * stderr into stdout can append shell noise after the verdict (#30491).
+ */
+function lastVerdict(output: string, verdicts: readonly string[]): string | undefined {
+  return output
+    .split('\n')
+    .map((line) => line.trim())
+    .findLast((line) => verdicts.includes(line))
+}
+
 export function parseOrcadSnapshotCapture(output: string): OrcadSnapshotCapture {
-  const value = output.trim().split('\n').pop()?.trim()
+  const value = lastVerdict(output, ['CAPTURED', 'EMPTY', 'FAILED'])
   if (value === 'CAPTURED') {
     return 'captured'
   }
@@ -226,7 +237,7 @@ export type OrcadSnapshotPresence = 'present' | 'absent' | 'unverifiable'
 
 /** A lost probe is `unverifiable`, never `absent`. */
 export function parseOrcadSnapshotPresence(output: string): OrcadSnapshotPresence {
-  const value = output.trim().split('\n').pop()?.trim()
+  const value = lastVerdict(output, ['PRESENT', 'ABSENT', 'UNKNOWN'])
   if (value === 'PRESENT') {
     return 'present'
   }
@@ -310,7 +321,7 @@ function removeMembersCommand(root: string): string {
 export type OrcadSnapshotRestore = 'restored' | 'missing' | 'failed'
 
 export function parseOrcadSnapshotRestore(output: string): OrcadSnapshotRestore {
-  const value = output.trim().split('\n').pop()?.trim()
+  const value = lastVerdict(output, ['RESTORED', 'MISSING', 'FAILED'])
   if (value === 'RESTORED') {
     return 'restored'
   }
@@ -354,7 +365,7 @@ export function compareOrcadStateSnapshotCommand(
 }
 
 export function orcadSnapshotIsUnchanged(output: string): boolean {
-  return output.trim().split('\n').pop()?.trim() === 'UNCHANGED'
+  return lastVerdict(output, ['UNCHANGED', 'CHANGED', 'UNKNOWN']) === 'UNCHANGED'
 }
 
 /**

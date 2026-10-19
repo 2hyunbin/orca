@@ -30,8 +30,15 @@ function encodeRemoteCommandForPrintf(command: string): string[] {
   return chunks
 }
 
+/** The compressed wrapper's exit when the host has no base64 or gzip; nothing ran. */
+export const REMOTE_COMMAND_DECODER_UNAVAILABLE_EXIT = 125
+export const REMOTE_COMMAND_DECODER_UNAVAILABLE = 'ORCA_COMMAND_DECODER_UNAVAILABLE'
+
 /** Wrap a POSIX snippet into one line that non-POSIX SSH login shells can forward. */
-export function wrapRemoteCommandForPosixShell(command: string): string {
+export function wrapRemoteCommandForPosixShell(
+  command: string,
+  options: { compress?: boolean } = {}
+): string {
   // Why: csh/tcsh split multiline SSH exec strings before /bin/sh sees them.
   // POSIX printf rebuilds bounded argument chunks without consuming relay stdin.
   const encodedChunks = encodeRemoteCommandForPrintf(command)
@@ -39,7 +46,10 @@ export function wrapRemoteCommandForPosixShell(command: string): string {
   const decodeAndRun = `decoded=$(printf %b "$@" && printf _) || exit $?; ${runDecoded}`
   const chunkArguments = encodedChunks.map(quotePosixShell).join(' ')
   const wrapped = `exec /bin/sh -c ${quotePosixShell(decodeAndRun)} orca-command ${chunkArguments}`
-  if (Buffer.byteLength(wrapped) <= REMOTE_COMMAND_COMPRESSION_THRESHOLD_BYTES) {
+  if (
+    options.compress === false ||
+    Buffer.byteLength(wrapped) <= REMOTE_COMMAND_COMPRESSION_THRESHOLD_BYTES
+  ) {
     return wrapped
   }
 
@@ -49,7 +59,13 @@ export function wrapRemoteCommandForPosixShell(command: string): string {
     .map(quotePosixShell)
     .join(' ')
   // Keep stdin for relay/upload bytes, and only execute after gzip validates the whole script.
-  const decompressAndRun = `decoded=$(printf %s "$@" | base64 -d | gzip -dc && printf _) || exit $?; ${runDecoded}`
+  // A host without the decoders exits before reading anything, so execCommand resends it plain.
+  // `base64 -D` is macOS before 13, whose `base64` rejects `-d` before reading stdin.
+  const decompressAndRun =
+    'command -v base64 >/dev/null 2>&1 && command -v gzip >/dev/null 2>&1 || ' +
+    `{ echo ${REMOTE_COMMAND_DECODER_UNAVAILABLE} >&2; exit ${REMOTE_COMMAND_DECODER_UNAVAILABLE_EXIT}; }; ` +
+    'decoded=$(printf %s "$@" | { base64 -d 2>/dev/null || base64 -D; } | gzip -dc && printf _) || ' +
+    `exit $?; ${runDecoded}`
   const compressedWrapped = `exec /bin/sh -c ${quotePosixShell(decompressAndRun)} orca-command ${compressedArguments}`
   return Buffer.byteLength(compressedWrapped) < Buffer.byteLength(wrapped)
     ? compressedWrapped

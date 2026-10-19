@@ -1,9 +1,25 @@
-import { existsSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
+import { chmodSync, existsSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { quotePosixShell } from '../../shared/shell-argument-quoting'
-import { wrapRemoteCommandForPosixShell } from './ssh-posix-command-wrapper'
+import {
+  REMOTE_COMMAND_DECODER_UNAVAILABLE,
+  REMOTE_COMMAND_DECODER_UNAVAILABLE_EXIT,
+  wrapRemoteCommandForPosixShell
+} from './ssh-posix-command-wrapper'
+
+/** A PATH directory whose tools shadow the host's. */
+function shimDir(tools: Record<string, string>): string {
+  const bin = mkdtempSync(join(tmpdir(), 'orca-wrapper-shims-'))
+  for (const [name, script] of Object.entries(tools)) {
+    writeFileSync(join(bin, name), `#!/bin/sh\n${script}\n`)
+    chmodSync(join(bin, name), 0o755)
+  }
+  return bin
+}
 
 describe('wrapRemoteCommandForPosixShell', () => {
   it('emits one physical line without requiring a remote decoder binary', () => {
@@ -106,7 +122,7 @@ describe('wrapRemoteCommandForPosixShell', () => {
   })
 
   it.skipIf(process.platform === 'win32')(
-    'fails without running the script if decoding fails',
+    'reports a host without the decoders before running anything',
     () => {
       const command = `# ${'padding'.repeat(2_000)}\nprintf 'must not run'`
       const result = spawnSync('/bin/sh', ['-c', wrapRemoteCommandForPosixShell(command)], {
@@ -114,11 +130,52 @@ describe('wrapRemoteCommandForPosixShell', () => {
         env: { ...process.env, PATH: '' }
       })
 
-      expect(result.status).not.toBe(0)
-      expect(result.stderr).toContain('gzip')
+      expect(result.status).toBe(REMOTE_COMMAND_DECODER_UNAVAILABLE_EXIT)
+      expect(result.stderr).toContain(REMOTE_COMMAND_DECODER_UNAVAILABLE)
       expect(result.stdout).toBe('')
     }
   )
+
+  it.skipIf(process.platform === 'win32')(
+    'fails without running the script if the payload does not decode',
+    () => {
+      const bin = shimDir({ base64: "cat >/dev/null; printf 'not gzip'" })
+      const command = `# ${'padding'.repeat(2_000)}\nprintf 'must not run'`
+      const result = spawnSync('/bin/sh', ['-c', wrapRemoteCommandForPosixShell(command)], {
+        encoding: 'utf8',
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}` }
+      })
+
+      expect(result.status).not.toBe(0)
+      expect(result.stdout).toBe('')
+    }
+  )
+
+  it.skipIf(process.platform === 'win32')(
+    'decodes with `base64 -D` where `-d` is refused, as on macOS before 13',
+    () => {
+      const real = spawnSync('/bin/sh', ['-c', 'command -v base64'], { encoding: 'utf8' })
+      const bin = shimDir({
+        base64: `[ "$1" = -D ] || { echo "base64: invalid option -- d" >&2; exit 64; }; exec ${real.stdout.trim()} -d`
+      })
+      const command = `# ${'padding'.repeat(2_000)}\nprintf 'ran'`
+      const result = spawnSync('/bin/sh', ['-c', wrapRemoteCommandForPosixShell(command)], {
+        encoding: 'utf8',
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}` }
+      })
+
+      expect(result.stdout).toBe('ran')
+      expect(result.status).toBe(0)
+    }
+  )
+
+  it('sends a long command plain when asked to', () => {
+    const wrapped = wrapRemoteCommandForPosixShell(`# ${'padding'.repeat(2_000)}`, {
+      compress: false
+    })
+    expect(wrapped).toContain('printf %b "$@"')
+    expect(wrapped).not.toContain('base64')
+  })
 
   it.skipIf(process.platform === 'win32' || !existsSync('/bin/tcsh'))(
     'keeps every login-shell word bounded for long metacharacter-heavy commands',
