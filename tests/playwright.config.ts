@@ -36,6 +36,8 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   forbidOnly: !!process.env.CI,
   retries: 0,
+  // Throwaway trace run: ten passes of each selected spec.
+  repeatEach: process.env.CI ? 10 : undefined,
   reporter: 'list',
   use: {
     // Why: this suite intentionally runs with retries disabled so first-failure
