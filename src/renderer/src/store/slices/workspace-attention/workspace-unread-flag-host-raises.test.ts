@@ -143,7 +143,7 @@ describe('the window raises the unread flag only where its host does not', () =>
     let answer: (capabilities: readonly string[]) => void = () => {}
     hostCapabilities.set('slow', new Promise((resolve) => (answer = resolve)))
     await mark(SLOW_SERVER_WT)
-    store.getState().setWorkspaceUnreadByUser(SLOW_SERVER_WT, false)
+    store.getState().setWorkspaceUnreadByUser(SLOW_SERVER_WT, false, 'runtime:slow')
     answer([])
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(isUnread(SLOW_SERVER_WT)).toBe(false)
