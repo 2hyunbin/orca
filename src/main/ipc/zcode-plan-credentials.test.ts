@@ -15,7 +15,15 @@ vi.mock('../zcode/zcode-plan-api-key-store', () => ({
   getZcodePlanApiKeyProtection: mocks.protection,
   saveZcodePlanApiKey: mocks.save,
   clearZcodePlanApiKey: mocks.clear,
-  readZcodePlanApiKey: () => 'synthetic-key'
+  API_KEY_ENVELOPE_PREFIX: 'zcode:',
+  getZcodePlanApiKeyPath: () => 'zcode-key-path'
+}))
+// The files are mocked away; readability has its own coverage in the RPC test.
+vi.mock('../credentials/saved-credential-readability', () => ({
+  savedCredentialUnreadable: () => undefined,
+  refuseCredentialSealedElsewhere: () => {
+    throw new Error('unused')
+  }
 }))
 vi.mock('../rate-limits/zcode-usage-fetcher', () => ({ hasZcodeCliPlanCredentials: mocks.hasCli }))
 
@@ -44,7 +52,7 @@ describe('GLM credential IPC', () => {
       apiKeyConfigured: true,
       zcodeCliConfigured: true,
       apiKeyProtection: 'sealed',
-      apiKeySealedElsewhere: false
+      apiKeyUnreadable: undefined
     })
   })
 
@@ -60,13 +68,13 @@ describe('GLM credential IPC', () => {
       apiKeyConfigured: true,
       zcodeCliConfigured: false,
       apiKeyProtection: null,
-      apiKeySealedElsewhere: false
+      apiKeyUnreadable: undefined
     })
     expect(handler('zcodePlanCredentials:clearApiKey')()).toEqual({
       apiKeyConfigured: false,
       zcodeCliConfigured: false,
       apiKeyProtection: null,
-      apiKeySealedElsewhere: false
+      apiKeyUnreadable: undefined
     })
   })
 })

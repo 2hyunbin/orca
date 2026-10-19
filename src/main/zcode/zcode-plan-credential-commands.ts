@@ -6,13 +6,14 @@ import {
   clearZcodePlanApiKey,
   getZcodePlanApiKeyProtection,
   hasZcodePlanApiKey,
-  readZcodePlanApiKey,
+  API_KEY_ENVELOPE_PREFIX,
+  getZcodePlanApiKeyPath,
   saveZcodePlanApiKey
 } from './zcode-plan-api-key-store'
 import {
-  credentialSealedElsewhere,
-  refuseCredentialSealedElsewhere
-} from '../credentials/credential-sealed-elsewhere'
+  refuseCredentialSealedElsewhere,
+  savedCredentialUnreadable
+} from '../credentials/saved-credential-readability'
 import { hasZcodeCliPlanCredentials } from '../rate-limits/zcode-usage-fetcher'
 import { refreshAfterCredentialChange } from '../ipc/credential-change-rate-limit-refresh'
 import type { RateLimitService } from '../rate-limits/service'
@@ -26,13 +27,20 @@ export function getZcodePlanCredentialsStatus(): ZcodePlanCredentialsStatus {
     apiKeyConfigured,
     zcodeCliConfigured: hasZcodeCliPlanCredentials(),
     apiKeyProtection: getZcodePlanApiKeyProtection(),
-    apiKeySealedElsewhere: credentialSealedElsewhere(() => apiKeyConfigured, readZcodePlanApiKey)
+    apiKeyUnreadable: apiKeyConfigured ? apiKeyUnreadable() : undefined
   }
 }
 
-/** For a paired client, before it saves or forgets: see refuseCredentialSealedElsewhere. */
+function apiKeyUnreadable(): ReturnType<typeof savedCredentialUnreadable> {
+  return savedCredentialUnreadable({
+    path: getZcodePlanApiKeyPath(),
+    envelopePrefix: API_KEY_ENVELOPE_PREFIX
+  })
+}
+
+/** For a paired client's save; forgetting is always allowed, since nobody here can read the file. */
 export function assertZcodePlanApiKeyOpensHere(): void {
-  if (credentialSealedElsewhere(hasZcodePlanApiKey, readZcodePlanApiKey)) {
+  if (apiKeyUnreadable() === 'sealed-elsewhere') {
     refuseCredentialSealedElsewhere('GLM Coding Plan API key')
   }
 }

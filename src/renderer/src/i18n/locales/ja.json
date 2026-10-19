@@ -12687,7 +12687,8 @@
           "miniMaxStorage": "{{host}} に保存され、使用量の更新時にそこから選択した MiniMax エンドポイントへ送信されます。",
           "cookieNeedsDesktop": "{{host}} にはセッション Cookie を送信する Orca デスクトップアプリがありません。代わりに API キーを保存してください。",
           "checking": "{{host}} を確認しています…",
-          "sealedElsewhere": "{{host}} の別の Orca アプリで保存されており、このアプリでは読み取れません。そのアプリで変更してください。"
+          "sealedElsewhereForgettable": "{{host}} の別の Orca アプリで保存されており、このアプリでは読み取れません。そのアプリで変更するか、ここで削除してください。",
+          "unreadableKey": "{{host}} の Orca は保存済みのキーを読み取れません。置き換えるか削除してください。"
         },
         "useUsageHostSettings": {
           "updateFailed": "{{host}} の設定を更新できませんでした。"

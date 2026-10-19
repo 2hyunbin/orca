@@ -12,7 +12,8 @@ import { UnsealedCredentialNotice } from './UnsealedCredentialNotice'
 import type { ProviderRateLimits } from '../../../../shared/rate-limit-types'
 import type { MiniMaxCredentialsModel } from './use-minimax-credentials'
 import {
-  usageCredentialSealedElsewhereNotice,
+  usageCredentialSealedElsewhere,
+  usageCredentialUnreadableNotice,
   type UsageCredentialHost
 } from './usage-credential-host'
 
@@ -105,8 +106,8 @@ export function MiniMaxCredentials({
   const {
     editable,
     sessionCookieSupported,
-    miniMaxCookieSealedElsewhere,
-    miniMaxApiKeySealedElsewhere,
+    miniMaxCookieUnreadable,
+    miniMaxApiKeyUnreadable,
     miniMaxCookieDraft,
     setMiniMaxCookieDraft,
     miniMaxConfigured,
@@ -122,11 +123,16 @@ export function MiniMaxCredentials({
     clearMiniMaxApiKey
   } = credentials
   const now = useNow(60_000)
-  const cookieNotice = usageCredentialSealedElsewhereNotice(host, miniMaxCookieSealedElsewhere)
-  const apiKeyNotice = usageCredentialSealedElsewhereNotice(host, miniMaxApiKeySealedElsewhere)
-  const cookieLocked = !editable || cookieNotice !== null
-  const cookieEditable = !cookieLocked && sessionCookieSupported
-  const apiKeyLocked = miniMaxCredentialBusy || !editable || apiKeyNotice !== null
+  const cookieNotice = usageCredentialUnreadableNotice(host, miniMaxCookieUnreadable)
+  const apiKeyNotice = usageCredentialUnreadableNotice(host, miniMaxApiKeyUnreadable)
+  const cookieEditable =
+    editable &&
+    sessionCookieSupported &&
+    !usageCredentialSealedElsewhere(host, miniMaxCookieUnreadable)
+  // Why Forget stays open: deleting a file nobody on that host can read loses nothing.
+  const apiKeyLocked = miniMaxCredentialBusy || !editable
+  const apiKeyReplaceLocked =
+    apiKeyLocked || usageCredentialSealedElsewhere(host, miniMaxApiKeyUnreadable)
   return (
     <>
       <SearchableSetting
@@ -213,7 +219,7 @@ export function MiniMaxCredentials({
               variant="ghost"
               size="xs"
               onClick={() => void clearMiniMaxCookie()}
-              disabled={miniMaxCredentialBusy || cookieLocked}
+              disabled={miniMaxCredentialBusy || !editable}
               className="h-7 shrink-0 text-xs text-muted-foreground hover:text-foreground"
             >
               {translate('auto.components.settings.AccountsPane.316ca4e610', 'Forget cookie')}
@@ -297,7 +303,7 @@ export function MiniMaxCredentials({
           <Input
             id="minimax-api-key"
             type="password"
-            disabled={apiKeyLocked}
+            disabled={apiKeyReplaceLocked}
             value={miniMaxApiKeyDraft}
             onChange={(e) => setMiniMaxApiKeyDraft(e.target.value)}
             placeholder={translate(
@@ -310,7 +316,7 @@ export function MiniMaxCredentials({
           <Button
             size="xs"
             onClick={() => void saveMiniMaxApiKey()}
-            disabled={apiKeyLocked || !miniMaxApiKeyDraft.trim()}
+            disabled={apiKeyReplaceLocked || !miniMaxApiKeyDraft.trim()}
             className="h-7 shrink-0 text-xs"
           >
             {miniMaxCredentialBusy ? <Loader2 className="size-3 animate-spin" /> : null}

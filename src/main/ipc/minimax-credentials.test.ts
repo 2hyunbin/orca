@@ -32,7 +32,8 @@ vi.mock('../minimax/minimax-cookie-store', () => ({
   saveMiniMaxSessionCookie: saveMiniMaxSessionCookieMock,
   clearMiniMaxSessionCookie: clearMiniMaxSessionCookieMock,
   hasMiniMaxSessionCookie: hasMiniMaxSessionCookieMock,
-  readMiniMaxSessionCookie: () => 'session=synthetic'
+  COOKIE_ENVELOPE_PREFIX: 'cookie:',
+  getMiniMaxCookiePath: () => 'cookie-path'
 }))
 
 vi.mock('../minimax/minimax-api-key-store', () => ({
@@ -40,9 +41,16 @@ vi.mock('../minimax/minimax-api-key-store', () => ({
   saveMiniMaxApiKey: saveMiniMaxApiKeyMock,
   clearMiniMaxApiKey: clearMiniMaxApiKeyMock,
   hasMiniMaxApiKey: hasMiniMaxApiKeyMock,
-  readMiniMaxApiKey: () => 'synthetic-key'
+  miniMaxApiKeyEnvelopeFile: () => ({ path: 'key-path', envelopePrefix: 'key:' })
 }))
 
+// The files are mocked away; readability has its own coverage in the RPC test.
+vi.mock('../credentials/saved-credential-readability', () => ({
+  savedCredentialUnreadable: () => undefined,
+  refuseCredentialSealedElsewhere: () => {
+    throw new Error('unused')
+  }
+}))
 vi.mock('../rate-limits/minimax/minimax-request-context', () => ({
   clearMiniMaxSessionCookieJar: clearMiniMaxSessionCookieJarMock
 }))
@@ -123,8 +131,8 @@ describe('registerMiniMaxCredentialsHandlers', () => {
       // Null, not 'sealed': nothing is stored, so there is nothing to make a claim about.
       apiKeyProtection: null,
       sessionCookieSupported: true,
-      cookieSealedElsewhere: false,
-      apiKeySealedElsewhere: false
+      cookieUnreadable: undefined,
+      apiKeyUnreadable: undefined
     })
   })
 
@@ -143,8 +151,8 @@ describe('registerMiniMaxCredentialsHandlers', () => {
       cookieProtection: null,
       apiKeyProtection: 'sealed',
       sessionCookieSupported: true,
-      cookieSealedElsewhere: false,
-      apiKeySealedElsewhere: false
+      cookieUnreadable: undefined,
+      apiKeyUnreadable: undefined
     })
   })
 

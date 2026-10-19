@@ -22,7 +22,8 @@ import { ZcodeCliSetupSection } from './ZcodeCliSetupSection'
 import { UnsealedCredentialNotice } from './UnsealedCredentialNotice'
 import {
   usageCredentialAccessNotice,
-  usageCredentialSealedElsewhereNotice,
+  usageCredentialSealedElsewhere,
+  usageCredentialUnreadableNotice,
   type UsageCredentialHost
 } from './usage-credential-host'
 import type { UsageHostSettingsModel } from './use-usage-host-settings'
@@ -72,11 +73,9 @@ export function ZcodePlanAccountsSection({
   const site =
     usageSettings.settings?.zcodePlanSite ?? (!webClient && hostLabel === null ? 'zai' : undefined)
   const siteEditable = credentialEditable && usageSettings.settings !== null
-  const sealedElsewhereNotice = usageCredentialSealedElsewhereNotice(
-    host,
-    status?.apiKeySealedElsewhere === true
-  )
-  const keyEditable = credentialEditable && sealedElsewhereNotice === null
+  const unreadableNotice = usageCredentialUnreadableNotice(host, status?.apiKeyUnreadable)
+  const keyEditable =
+    credentialEditable && !usageCredentialSealedElsewhere(host, status?.apiKeyUnreadable)
   const detailsUnavailable = webClient || status?.detailsUnavailable === true
   const consoleUrl = site ? ZCODE_PLAN_SITE_CONSOLE_URLS[site] : undefined
   const apiKeyConfigured = status?.apiKeyConfigured === true
@@ -327,8 +326,8 @@ export function ZcodePlanAccountsSection({
             'GLM Coding Plan'
           )}
         />
-        {sealedElsewhereNotice ? (
-          <p className="text-xs text-muted-foreground">{sealedElsewhereNotice}</p>
+        {unreadableNotice ? (
+          <p className="text-xs text-muted-foreground">{unreadableNotice}</p>
         ) : null}
         <div className="flex gap-2">
           <Input
@@ -360,7 +359,7 @@ export function ZcodePlanAccountsSection({
               variant="ghost"
               size="xs"
               onClick={() => void clearApiKey()}
-              disabled={credentialBusy || !keyEditable}
+              disabled={credentialBusy || !credentialEditable}
               className="shrink-0"
             >
               {translate(

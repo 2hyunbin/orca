@@ -6,20 +6,21 @@ import {
   clearMiniMaxSessionCookie,
   getMiniMaxSessionCookieProtection,
   hasMiniMaxSessionCookie,
-  readMiniMaxSessionCookie,
+  COOKIE_ENVELOPE_PREFIX,
+  getMiniMaxCookiePath,
   saveMiniMaxSessionCookie
 } from './minimax-cookie-store'
 import {
   clearMiniMaxApiKey,
   getMiniMaxApiKeyProtection,
   hasMiniMaxApiKey,
-  readMiniMaxApiKey,
+  miniMaxApiKeyEnvelopeFile,
   saveMiniMaxApiKey
 } from './minimax-api-key-store'
 import {
-  credentialSealedElsewhere,
-  refuseCredentialSealedElsewhere
-} from '../credentials/credential-sealed-elsewhere'
+  refuseCredentialSealedElsewhere,
+  savedCredentialUnreadable
+} from '../credentials/saved-credential-readability'
 import { clearMiniMaxSessionCookieJar } from '../rate-limits/minimax/minimax-request-context'
 import { refreshAfterCredentialChange } from '../ipc/credential-change-rate-limit-refresh'
 import { getMainHttpClient } from '../network/http-client'
@@ -38,24 +39,31 @@ export function getMiniMaxCredentialsStatus(): MiniMaxCredentialsStatus {
     cookieProtection: cookieConfigured ? getMiniMaxSessionCookieProtection() : null,
     apiKeyProtection: apiKeyConfigured ? getMiniMaxApiKeyProtection() : null,
     sessionCookieSupported: getMainHttpClient().partitionSession !== undefined,
-    cookieSealedElsewhere: credentialSealedElsewhere(
-      () => cookieConfigured,
-      readMiniMaxSessionCookie
-    ),
-    apiKeySealedElsewhere: credentialSealedElsewhere(() => apiKeyConfigured, readMiniMaxApiKey)
+    cookieUnreadable: cookieConfigured ? cookieUnreadable() : undefined,
+    apiKeyUnreadable: apiKeyConfigured
+      ? savedCredentialUnreadable(miniMaxApiKeyEnvelopeFile())
+      : undefined
   }
 }
 
-/** For a paired client, before it saves or forgets: see refuseCredentialSealedElsewhere. */
+function cookieUnreadable(): ReturnType<typeof savedCredentialUnreadable> {
+  return savedCredentialUnreadable({
+    path: getMiniMaxCookiePath(),
+    envelopePrefix: COOKIE_ENVELOPE_PREFIX,
+    legacyRaw: true
+  })
+}
+
+/** For a paired client's save; forgetting is always allowed, since nobody here can read the file. */
 export function assertMiniMaxCredentialOpensHere(credential: 'apiKey' | 'cookie'): void {
-  if (credential === 'apiKey' && credentialSealedElsewhere(hasMiniMaxApiKey, readMiniMaxApiKey)) {
-    refuseCredentialSealedElsewhere('MiniMax API key')
-  }
-  if (
-    credential === 'cookie' &&
-    credentialSealedElsewhere(hasMiniMaxSessionCookie, readMiniMaxSessionCookie)
-  ) {
-    refuseCredentialSealedElsewhere('MiniMax session cookie')
+  const unreadable =
+    credential === 'apiKey'
+      ? savedCredentialUnreadable(miniMaxApiKeyEnvelopeFile())
+      : cookieUnreadable()
+  if (unreadable === 'sealed-elsewhere') {
+    refuseCredentialSealedElsewhere(
+      credential === 'apiKey' ? 'MiniMax API key' : 'MiniMax session cookie'
+    )
   }
 }
 

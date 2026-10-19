@@ -12795,7 +12795,8 @@
           "miniMaxStorage": "Enregistrée sur {{host}} et envoyée depuis cet hôte au point de terminaison MiniMax sélectionné pour actualiser l’utilisation.",
           "cookieNeedsDesktop": "{{host}} n’a pas l’application de bureau Orca pour envoyer un cookie de session. Enregistrez plutôt une clé API.",
           "checking": "Vérification de {{host}}…",
-          "sealedElsewhere": "Enregistrée par une autre application Orca sur {{host}}, que celle-ci ne peut pas lire. Modifiez-la dans cette application."
+          "sealedElsewhereForgettable": "Enregistrée par une autre application Orca sur {{host}}, que celle-ci ne peut pas lire. Modifiez-la dans cette application ou oubliez-la ici.",
+          "unreadableKey": "Orca sur {{host}} ne peut pas lire la clé enregistrée. Remplacez-la ou oubliez-la."
         },
         "useUsageHostSettings": {
           "updateFailed": "Impossible de mettre à jour le réglage sur {{host}}."

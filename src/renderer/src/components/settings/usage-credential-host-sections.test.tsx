@@ -112,17 +112,30 @@ describe('usage keys on the Settings host', () => {
     expect(screen.getByPlaceholderText('Paste your MiniMax API key')).toBeEnabled()
   })
 
-  it('locks a key the other Orca app on the host sealed, and says where to change it', async () => {
-    mocks.callMiniMax.mockResolvedValue({ ...miniMaxStatus, apiKeySealedElsewhere: true })
+  it('locks replacing a key the other Orca app on the host sealed, but still allows forgetting it', async () => {
+    mocks.callMiniMax.mockResolvedValue({ ...miniMaxStatus, apiKeyUnreadable: 'sealed-elsewhere' })
     renderMiniMax()
 
     expect(
       await screen.findByText(
-        'Saved by another Orca app on Build box, which this one cannot read. Change it in that app.'
+        'Saved by another Orca app on Build box, which this one cannot read. Change it in that app, or forget it here.'
       )
     ).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Paste your MiniMax API key')).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Forget key' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Forget key' })).toBeEnabled()
+  })
+
+  it('keeps an unreadable key replaceable and says so', async () => {
+    mocks.callMiniMax.mockResolvedValue({ ...miniMaxStatus, apiKeyUnreadable: 'unreadable' })
+    renderMiniMax()
+
+    expect(
+      await screen.findByText(
+        'Orca on Build box cannot read the saved key. Replace it or forget it.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Paste your MiniMax API key')).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Forget key' })).toBeEnabled()
   })
 
   it('asks to update an older host and offers no save', async () => {

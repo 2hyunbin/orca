@@ -55,18 +55,33 @@ export function usageCredentialAccessNotice(
   return null
 }
 
-/** Why: the desktop app and orcad on one machine cannot read each other's keys; never clobber one. */
-export function usageCredentialSealedElsewhereNotice(
+/** A remote host's saved key it cannot use: sealed by its other Orca app, or just unreadable. */
+export function usageCredentialUnreadableNotice(
   host: UsageCredentialHost,
-  sealedElsewhere: boolean
+  unreadable: 'sealed-elsewhere' | 'unreadable' | undefined
 ): string | null {
-  return host.label !== null && sealedElsewhere
+  if (host.label === null || unreadable === undefined) {
+    return null
+  }
+  return unreadable === 'sealed-elsewhere'
     ? translate(
-        'auto.components.settings.usageCredentialHost.sealedElsewhere',
-        'Saved by another Orca app on {{host}}, which this one cannot read. Change it in that app.',
+        'auto.components.settings.usageCredentialHost.sealedElsewhereForgettable',
+        'Saved by another Orca app on {{host}}, which this one cannot read. Change it in that app, or forget it here.',
         { host: host.label }
       )
-    : null
+    : translate(
+        'auto.components.settings.usageCredentialHost.unreadableKey',
+        'Orca on {{host}} cannot read the saved key. Replace it or forget it.',
+        { host: host.label }
+      )
+}
+
+/** Why: the other app on that machine still reads a key it sealed, so only it may replace one. */
+export function usageCredentialSealedElsewhere(
+  host: UsageCredentialHost,
+  unreadable: 'sealed-elsewhere' | 'unreadable' | undefined
+): boolean {
+  return host.label !== null && unreadable === 'sealed-elsewhere'
 }
 
 /** The storage line under a saved key: this computer, or the selected host. */

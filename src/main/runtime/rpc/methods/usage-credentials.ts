@@ -21,7 +21,7 @@ import {
 // Why on the host: its own usage poller reads these keys, so a paired client saves them here.
 // Statuses carry presence and protection only; a key never travels back to a client. A host with
 // no poller (a WSL host, whose desktop owns its accounts) refuses every call instead, and a key the
-// other Orca app on this machine sealed is never overwritten or deleted from here.
+// other Orca app on this machine sealed is never overwritten from here (forgetting it is allowed).
 export const USAGE_CREDENTIAL_METHODS = [
   defineMethod({
     name: 'accounts.minimaxCredentialsStatus',
@@ -48,7 +48,6 @@ export const USAGE_CREDENTIAL_METHODS = [
     params: null,
     handler: async (_, { runtime }) => {
       const rateLimits = runtime.requireUsageRateLimits()
-      assertMiniMaxCredentialOpensHere('apiKey')
       return clearMiniMaxApiKeyCredential(rateLimits)
     }
   }),
@@ -68,7 +67,6 @@ export const USAGE_CREDENTIAL_METHODS = [
     params: null,
     handler: async (_, { runtime }) => {
       const rateLimits = runtime.requireUsageRateLimits()
-      assertMiniMaxCredentialOpensHere('cookie')
       return clearMiniMaxSessionCookieCredential(rateLimits)
     }
   }),
@@ -97,7 +95,6 @@ export const USAGE_CREDENTIAL_METHODS = [
     params: null,
     handler: async (_, { runtime }) => {
       const rateLimits = runtime.requireUsageRateLimits()
-      assertZcodePlanApiKeyOpensHere()
       return clearZcodePlanApiKeyCredential(rateLimits)
     }
   })
