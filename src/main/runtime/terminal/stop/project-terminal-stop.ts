@@ -7,7 +7,6 @@ import {
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
 import type { Repo } from '../../../../shared/repo-types'
 import { getRuntimeBrowserPageRegistry } from '../../runtime-browser-page-registry'
-import { browserManager } from '../../../browser/browser-manager'
 import { listFailedAgentLaunchWorktreeIds } from '../../../agent-launch/agent-launch-pane-attachment'
 import {
   closeStructuredSessionsForWorktree,
@@ -128,10 +127,7 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
         .listPages()
         .map((page) => page.workspaceId),
       ...listFailedAgentLaunchWorktreeIds(),
-      // Headless pages: the bridge's raw list carries no worktree, the browser manager does.
-      ...(this.agentBrowserBridge?.tabList?.().tabs ?? []).map(
-        (tab) => browserManager.getWorktreeIdForTab(tab.browserPageId) ?? ''
-      )
+      ...(this.agentBrowserBridge?.tabWorktreeIds?.() ?? []).map((id) => id ?? '')
     ]
     const worktreeIds = new Set(
       [...knownWorktreeIds, ...pageOwners].filter((id) => getRepoIdFromWorktreeId(id) === repoId)

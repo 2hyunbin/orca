@@ -227,7 +227,11 @@ export abstract class OrcaRuntimeWithListManagedWorktrees extends OrcaRuntimeWit
       this.notifier.sleepWorktree(worktree.id)
     } else if (teardownStops('sleep', 'pty')) {
       // No renderer (headless serve, or the window is gone): the host sleeps its own terminals.
-      await this.sleepTerminalsForWorktree(worktreeSelector)
+      const slept = await this.sleepTerminalsForWorktree(worktreeSelector)
+      if (slept.postStopVerified !== true) {
+        // An unproven stop is never reported as asleep.
+        throw new Error(slept.postStopFailure ?? 'terminal_worktree_sleep_unverified')
+      }
     }
     return { worktreeId: worktree.id }
   }

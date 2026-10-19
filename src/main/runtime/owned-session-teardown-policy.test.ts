@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest'
 import type { RuntimeClientEvent } from '../../shared/runtime-client-events'
 import type { RuntimeNotifier } from './runtime-notifier-contract'
 import type { AgentBrowserBridge } from '../browser/agent-browser-bridge'
-import { browserManager } from '../browser/browser-manager'
 import { OWNED_SESSION_KINDS, OWNED_SESSION_TEARDOWN } from './owned-session-teardown-policy'
 import {
   getRuntimeBrowserPageRegistry,
@@ -80,6 +79,22 @@ describe('owned-session teardown policy', () => {
     ).rejects.toThrow()
   })
 
+  it('never reports a headless sleep whose stop is unproven as done', async () => {
+    const { runtime } = makeRuntime()
+    vi.spyOn(runtime, 'sleepTerminalsForWorktree').mockResolvedValue({
+      stopped: 0,
+      stoppedPtyIds: [],
+      livePtyIds: ['pty-1'],
+      postStopVerified: false,
+      postStopFailure: 'terminal_worktree_sleep_still_live',
+      remainingLivePtyIds: ['pty-1']
+    })
+
+    await expect(runtime.sleepManagedWorktree(`id:${TEST_WORKTREE_ID}`)).rejects.toThrow(
+      'terminal_worktree_sleep_still_live'
+    )
+  })
+
   it('leaves the sleep to an attached renderer', async () => {
     const { runtime, sleepPhases } = makeRuntime()
     const sleepWorktree = vi.fn()
@@ -92,15 +107,14 @@ describe('owned-session teardown policy', () => {
     expect(sleepPhases()).toEqual([])
   })
 
-  it("project removal finds a headless page's workspace through the browser manager", async () => {
+  it("project removal finds a headless page's workspace through the browser bridge", async () => {
     const { runtime, runtimeStore } = makeRuntime()
     const [repo] = runtimeStore.getRepos()
     vi.spyOn(runtimeStore, 'getRepos').mockReturnValue([])
     vi.spyOn(getRuntimeBrowserPageRegistry(runtime), 'listPages').mockReturnValue([])
-    vi.spyOn(browserManager, 'getWorktreeIdForTab').mockReturnValue(TEST_WORKTREE_ID)
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: release reads only tabList.
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: release reads only tabWorktreeIds.
     runtime.setAgentBrowserBridge({
-      tabList: () => ({ tabs: [{ browserPageId: 'headless-1' }] })
+      tabWorktreeIds: () => [TEST_WORKTREE_ID]
     } as unknown as AgentBrowserBridge)
     const release = vi.spyOn(runtime, 'releaseRemovedWorktreeHostSessions')
 
