@@ -169,7 +169,7 @@ describe('electron-builder packaging wiring', () => {
 
   it('verifies a dark page build, and refuses to package it', async () => {
     await withBundle(async ({ bundleDir }) => {
-      const [marker] = darkBuildMarkers({ ORCA_SIDEBAR_INPUTS: 'main' })
+      const [marker] = darkBuildMarkers({ ORCA_LAYOUT_OWNER: 'main' })
       await writeFile(join(bundleDir, marker.fileName), marker.text, 'utf8')
       expect(() => assertMobileWebBundleBuilt(bundleDir)).not.toThrow()
       expect(() =>
@@ -177,7 +177,7 @@ describe('electron-builder packaging wiring', () => {
           { electronPlatformName: process.platform, arch: process.arch === 'arm64' ? 3 : 1 },
           bundleDir
         )
-      ).toThrow(`${bundleDir} holds an ORCA_SIDEBAR_INPUTS=main build`)
+      ).toThrow(`${bundleDir} holds an ORCA_LAYOUT_OWNER=main build`)
     })
   })
 

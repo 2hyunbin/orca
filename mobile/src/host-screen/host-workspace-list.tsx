@@ -133,7 +133,7 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
 
       {/* A feed this page cannot read: the host is older or newer than the page. */}
       {controller.feed?.kind === 'reopen' ? (
-        <HostWorkspaceListReopen />
+        <HostWorkspaceListReopen aboveRows={sections.length > 0} />
       ) : (
         <HostWorkspaceListStates
           connState={connState}
@@ -150,7 +150,7 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
         />
       )}
 
-      {sections.length > 0 && controller.feed?.kind !== 'reopen' && (
+      {sections.length > 0 && (
         <SectionList
           ref={activeWorktreeScroll.sectionListRef}
           sections={sections}

@@ -181,9 +181,12 @@ export function parityServerBrowserTabState(): Partial<AppState> {
  * The feed domains main would publish for this store, read through the window-side projections
  * the shadow comparison held equal to main's producers before the window read main's feed.
  */
-export function feedDomainsFromWindowState(state: AppState): SidebarInputsFeedDomain[] {
+export function feedDomainsFromWindowState(
+  state: AppState,
+  serverHostIds: ReadonlySet<string> = new Set([SERVER_HOST_ID])
+): SidebarInputsFeedDomain[] {
   const worktrees = getAllWorktreesFromState(state)
-  const servers = readWindowPairedServerHosts(state, new Set([SERVER_HOST_ID]))
+  const servers = readWindowPairedServerHosts(state, serverHostIds)
   const windowActivity = readWindowWorkspaceActivityFacts(state, GOLDEN_NOW)
   const serverRows = readWindowPairedServerRows(state, new Set(servers.keys()))
   // The server reports the terminals and agents the desktop runs in its workspaces.
@@ -191,6 +194,9 @@ export function feedDomainsFromWindowState(state: AppState): SidebarInputsFeedDo
     const facts = windowActivity.get(row.worktreeId)
     return { ...row, activity: { terminal: facts?.terminal ?? null, agent: facts?.agent ?? null } }
   })
+  // Each server reports only its own rows, keyed `hostId|worktreeId`.
+  const rowsOf = <Row extends { key: string }>(rows: readonly Row[], hostId: string): Row[] =>
+    rows.filter((row) => row.key.startsWith(`${hostId}|`))
   const domain = (name: string, read: () => Record<string, unknown>): SidebarInputsFeedDomain => ({
     name,
     read,
@@ -210,7 +216,11 @@ export function feedDomainsFromWindowState(state: AppState): SidebarInputsFeedDo
     domain('activity', () => ({
       // The window's browser and chat tabs, as its saved session for the server holds them.
       ...buildPairedServerActivityFacts(
-        [{ hostId: SERVER_HOST_ID, freshness: 'live', rows: reportedRows }],
+        [...servers.keys()].map((hostId) => ({
+          hostId,
+          freshness: 'live' as const,
+          rows: rowsOf(reportedRows, hostId)
+        })),
         () => ({
           browserTabsByWorktree: state.browserTabsByWorktree,
           unifiedTabs: state.unifiedTabsByWorktree
@@ -220,7 +230,10 @@ export function feedDomainsFromWindowState(state: AppState): SidebarInputsFeedDo
     })),
     domain('review', () => ({
       ...buildPairedServerReviewFacts(
-        [{ hostId: SERVER_HOST_ID, rows: [...serverRows.values()] }],
+        [...servers.keys()].map((hostId) => ({
+          hostId,
+          rows: rowsOf([...serverRows.values()], hostId)
+        })),
         state.prCache
       ),
       ...Object.fromEntries(

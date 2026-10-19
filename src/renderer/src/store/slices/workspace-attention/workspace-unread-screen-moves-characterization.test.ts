@@ -20,6 +20,11 @@ import {
 
 // What counts as the screen moving, what is on it, and who is looking at it.
 
+// The window raises the flag only for an older paired server's rows; these suites pin that path.
+vi.mock('../worktrees/listing/owner-host-sidebar-inputs', () => ({
+  ownerHostOwnsSidebarInputs: vi.fn(async () => false)
+}))
+
 vi.mock('sonner', () => ({
   toast: { info: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn(), dismiss: vi.fn() }
 }))
@@ -55,8 +60,17 @@ function seedSameIdFolders(store: AttentionStore, unread: { local: boolean; ssh:
   })
 }
 
+/** Observes once the owning host's answer has settled the deferred flag raise. */
+async function observeSettled(
+  store: Parameters<typeof observe>[0],
+  persists: Parameters<typeof observe>[1]
+): Promise<string[]> {
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  return observe(store, persists)
+}
+
 describe('arrival without a terminal or chat on screen', () => {
-  it('reads a restart flag on a workspace with no tabs, but not from Settings', () => {
+  it('reads a restart flag on a workspace with no tabs, but not from Settings', async () => {
     const { store, persists } = createAttentionStore()
     store.setState({
       activeView: 'settings',
@@ -65,10 +79,10 @@ describe('arrival without a terminal or chat on screen', () => {
       }
     })
     store.getState().setActiveWorktree(WS_A)
-    expect(observe(store, persists)[0]).toContain('a@local:UNREAD')
+    expect((await observeSettled(store, persists))[0]).toContain('a@local:UNREAD')
 
     store.setState({ activeView: 'terminal' })
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:0 sortEpoch=0",
         "tabs -",
@@ -87,11 +101,11 @@ describe('presence', () => {
     const pane = addLiveTerminalTab(store, WS_A, 'tab-a1')
     store.getState().setActiveWorktree(WS_A)
     await flushPresenceCheck()
-    observe(store, persists)
+    await observeSettled(store, persists)
 
     ringBell(store, pane)
     await flushPresenceCheck()
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=1",
         "tabs tab-a1=terminal-bell",
@@ -103,7 +117,7 @@ describe('presence', () => {
     `)
 
     pointerDownInTab(store, { ...pane, paneKey: null })
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:1000 b@local:read:0 sortEpoch=1",
         "tabs -",
@@ -116,7 +130,7 @@ describe('presence', () => {
   })
 })
 
-describe('presence evidence', () => {
+describe('presence evidence', async () => {
   it('main saying not away does not count as presence for a later bell', async () => {
     let away = false
     const { store, persists } = createAttentionStore({ desktopAway: () => away })
@@ -129,14 +143,14 @@ describe('presence evidence', () => {
     store.getState().setActiveWorktree(WS_A)
     await flushPresenceCheck()
     // Main answered "not away" for this arrival, so the restart flag was read.
-    expect(observe(store, persists)[0]).toContain('a@local:read')
+    expect((await observeSettled(store, persists))[0]).toContain('a@local:read')
 
     // Why 100s, not 200s: stamping main's answer as presence would wrongly cover only < 180s.
     away = true
     vi.setSystemTime(101_000)
     ringBell(store, pane)
     await flushPresenceCheck()
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:UNREAD:101000 sortEpoch=1",
         "tabs tab-a1=terminal-bell",
@@ -148,26 +162,26 @@ describe('presence evidence', () => {
     `)
   })
 
-  it('a completion with no subject on the active workspace marks while Settings is showing', () => {
+  it('a completion with no subject on the active workspace marks while Settings is showing', async () => {
     const { store, persists } = createAttentionStore()
     addLiveTerminalTab(store, WS_A, 'tab-a1')
     store.getState().setActiveWorktree(WS_A)
     store.setState({ activeView: 'settings' })
-    observe(store, persists)
+    await observeSettled(store, persists)
 
     completeAgentTurn(store, { worktreeId: WS_A, paneKey: null })
-    expect(observe(store, persists)[0]).toContain('a@local:UNREAD')
+    expect((await observeSettled(store, persists))[0]).toContain('a@local:UNREAD')
   })
 })
 
 describe('hosts and groups', () => {
-  it('switching between same-id folder rows on two hosts is an arrival on the new host only', () => {
+  it('switching between same-id folder rows on two hosts is an arrival on the new host only', async () => {
     const { store, persists } = createAttentionStore()
     const key = folderWorkspaceKey('folder-1')
     seedSameIdFolders(store, { local: false, ssh: true })
 
     store.getState().setActiveWorktree(key, 'local')
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:0 b@local:read:0 folder-1@local:read:0 folder-1@ssh:remote:UNREAD:0 sortEpoch=0",
         "tabs -",
@@ -178,7 +192,7 @@ describe('hosts and groups', () => {
     `)
 
     store.getState().setActiveWorktree(key, 'ssh:remote')
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:0 b@local:read:0 folder-1@local:read:0 folder-1@ssh:remote:read:0 sortEpoch=0",
         "tabs -",
@@ -190,16 +204,16 @@ describe('hosts and groups', () => {
     `)
   })
 
-  it('closing the last marked tab lowers every same-id folder row and persists each host', () => {
+  it('closing the last marked tab lowers every same-id folder row and persists each host', async () => {
     const { store, persists } = createAttentionStore()
     const key = folderWorkspaceKey('folder-1')
     const pane = addLiveTerminalTab(store, key, 'tab-f1')
     seedSameIdFolders(store, { local: true, ssh: true })
     ringBell(store, pane)
-    observe(store, persists)
+    await observeSettled(store, persists)
 
     store.getState().closeTab(pane.tabId)
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:0 b@local:read:0 folder-1@local:read:0 folder-1@ssh:remote:read:0 sortEpoch=0",
         "tabs -",
@@ -212,7 +226,7 @@ describe('hosts and groups', () => {
     `)
   })
 
-  it('a folder row with no host of its own marks and persists under its project group’s host', () => {
+  it('a folder row with no host of its own marks and persists under its project group’s host', async () => {
     const { store, persists } = createAttentionStore()
     store.setState({
       projectGroups: [
@@ -233,15 +247,15 @@ describe('hosts and groups', () => {
       folderWorkspaces: [makeFolderWorkspace()]
     })
     const pane = addLiveTerminalTab(store, folderWorkspaceKey('folder-1'), 'tab-f1')
-    observe(store, persists)
+    await observeSettled(store, persists)
 
     ringBell(store, pane)
-    expect(observe(store, persists).at(-1)).toMatchInlineSnapshot(
+    expect((await observeSettled(store, persists)).at(-1)).toMatchInlineSnapshot(
       `"persist folder folder-1 {"isUnread":true,"lastActivityAt":1000} host=ssh:ssh-1"`
     )
   })
 
-  it('a runtime host purge keeps the surviving host row’s manual unread', () => {
+  it('a runtime host purge keeps the surviving host row’s manual unread', async () => {
     const { store, persists } = createAttentionStore()
     const key = folderWorkspaceKey('folder-1')
     store.setState({
@@ -252,13 +266,13 @@ describe('hosts and groups', () => {
     })
     const pane = addLiveTerminalTab(store, key, 'tab-f1')
     ringBell(store, pane)
-    observe(store, persists)
+    await observeSettled(store, persists)
 
     store.getState().purgeStaleRuntimeHostState(['env-1'])
-    expect(observe(store, persists)[0]).toContain('folder-1@local:UNREAD')
+    expect((await observeSettled(store, persists))[0]).toContain('folder-1@local:UNREAD')
   })
 
-  it('a bell in the unfocused side-by-side group is on screen and leaves no marker', () => {
+  it('a bell in the unfocused side-by-side group is on screen and leaves no marker', async () => {
     const { store, persists } = createAttentionStore()
     addLiveTerminalTab(store, WS_A, 'tab-a1')
     const leftGroupId = store.getState().groupsByWorktree[WS_A]![0]!.id
@@ -266,10 +280,10 @@ describe('hosts and groups', () => {
     const right = addLiveTerminalTab(store, WS_A, 'tab-a2', LEAF_2, rightGroupId)
     store.getState().setActiveWorktree(WS_A)
     store.getState().focusGroup(WS_A, leftGroupId)
-    observe(store, persists)
+    await observeSettled(store, persists)
 
     ringBell(store, right)
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:0 b@local:read:0 sortEpoch=0",
         "tabs -",
@@ -280,7 +294,7 @@ describe('hosts and groups', () => {
     `)
   })
 
-  it('closing the floating panel moves the screen and reads a manual unread behind it', () => {
+  it('closing the floating panel moves the screen and reads a manual unread behind it', async () => {
     const { store, persists } = createAttentionStore()
     addLiveTerminalTab(store, WS_A, 'tab-a1')
     store.setState({
@@ -289,10 +303,10 @@ describe('hosts and groups', () => {
     })
     store.getState().setActiveWorktree(WS_A)
     toggleUnreadByUser(store, store.getState().worktreesByRepo.repo1[0]!)
-    expect(observe(store, persists)[0]).toContain('a@local:UNREAD')
+    expect((await observeSettled(store, persists))[0]).toContain('a@local:UNREAD')
 
     store.setState({ floatingWorkspacePanelOpen: false })
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:0 b@local:read:0 sortEpoch=1",
         "tabs -",

@@ -28,6 +28,11 @@ vi.mock('@/components/worktree-base-fallback-notice', () => ({
   requestWorktreeBaseFallbackNotice
 }))
 
+// The window writes the flag and Recent stamps only for an older paired server's rows; these tests pin that path.
+vi.mock('./worktrees/listing/owner-host-sidebar-inputs', () => ({
+  ownerHostOwnsSidebarInputs: async () => false
+}))
+
 beforeEach(resetWorktreeSliceModuleMemory)
 
 describe('worktree remote runtime mutations', () => {
@@ -167,9 +172,9 @@ describe('worktree remote runtime mutations', () => {
     const sortEpochBefore = store.getState().sortEpoch
 
     expect(() => store.getState().bumpWorktreeActivity(folderKey)).not.toThrow()
+    await new Promise((resolve) => setTimeout(resolve, 0))
     expect(store.getState().folderWorkspaces[0]?.lastActivityAt).toEqual(expect.any(Number))
     expect(store.getState().sortEpoch).toBe(sortEpochBefore + 1)
-    await new Promise((resolve) => setTimeout(resolve, 0))
 
     expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
     // Why: worktreeMeta['folder:…'] rows are write-only — folder meta must land on the FolderWorkspace record.
@@ -236,10 +241,10 @@ describe('worktree remote runtime mutations', () => {
       groupId: null,
       reason: 'agent-completion'
     })
+    await new Promise((resolve) => setTimeout(resolve, 0))
     expect(store.getState().folderWorkspaces[0]).toEqual(
       expect.objectContaining({ isUnread: true, lastActivityAt: expect.any(Number) })
     )
-    await new Promise((resolve) => setTimeout(resolve, 0))
 
     expect(store.getState().updateFolderWorkspace).toHaveBeenCalledWith(
       folderWorkspace.id,
@@ -249,7 +254,7 @@ describe('worktree remote runtime mutations', () => {
     expect(mockApi.worktrees.updateMeta).not.toHaveBeenCalled()
   })
 
-  it('clears a folder unread mark even when persistence has not settled yet', () => {
+  it('drops a folder raise still waiting on its owner check once the folder is read', async () => {
     const store = createTestStore()
     const folderWorkspace = makeFolderWorkspace({ id: 'folder-racing-unread' })
     const folderKey = folderWorkspaceKey(folderWorkspace.id)
@@ -264,19 +269,13 @@ describe('worktree remote runtime mutations', () => {
     store
       .getState()
       .readOnScreenAttention({ workspaceIds: [folderKey], targets: [] }, { screenArrived: true })
+    await new Promise((resolve) => setTimeout(resolve, 0))
 
     expect(store.getState().folderWorkspaces[0]?.isUnread).toBe(false)
-    expect(store.getState().updateFolderWorkspace).toHaveBeenNthCalledWith(
-      1,
+    expect(store.getState().updateFolderWorkspace).not.toHaveBeenCalledWith(
       folderWorkspace.id,
       expect.objectContaining({ isUnread: true }),
-      { executionHostId: 'local' }
-    )
-    expect(store.getState().updateFolderWorkspace).toHaveBeenNthCalledWith(
-      2,
-      folderWorkspace.id,
-      { isUnread: false },
-      { executionHostId: 'local' }
+      expect.anything()
     )
   })
 
@@ -326,6 +325,7 @@ describe('worktree remote runtime mutations', () => {
     } as Partial<AppState>)
 
     store.getState().bumpWorktreeActivity(hidden.id)
+    await new Promise((resolve) => setTimeout(resolve, 0))
 
     expect(
       store.getState().detectedWorktreesByRepo.repo1.worktrees[0].lastActivityAt

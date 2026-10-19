@@ -1,13 +1,6 @@
-// The one read of the ORCA_SIDEBAR_INPUTS build switch: 'main' turns on the dark path where main
-// produces the sidebar's inputs. Off in every shipped build; deleted once the sidebar reads main.
-// Every switch point branches on ORCA_SIDEBAR_INPUTS_IS_MAIN, so grep finds them all. A new main
-// producer is a runtime field, `ORCA_SIDEBAR_INPUTS_IS_MAIN ? new Producer() : null` (a layer class
-// only if it must override runtime hooks); its RPC joins SIDEBAR_INPUT_METHODS and its domain joins
-// the feed the window's sidebar reads (sidebar-inputs-feed-domains.ts).
+// Main produces the sidebar's inputs in every build; the window and the phone page read its feed.
+// Every former switch point still branches on ORCA_SIDEBAR_INPUTS_IS_MAIN so the follow-up that
+// deletes the switch-off paths can find them; until then each branch keeps its on side.
 
-/** Substituted by electron.vite.config.ts; absent (off) in tests, the CLI and the web client. */
-declare const ORCA_SIDEBAR_INPUTS: 'window' | 'main' | undefined
-
-export const ORCA_SIDEBAR_INPUTS_IS_MAIN =
-  // oxlint-disable-next-line unicorn/no-typeof-undefined -- undeclared outside electron-vite builds; a bare read throws.
-  typeof ORCA_SIDEBAR_INPUTS !== 'undefined' && ORCA_SIDEBAR_INPUTS === 'main'
+// Why `boolean`: a literal `true` would mark every switch-off branch as a type error before it is deleted.
+export const ORCA_SIDEBAR_INPUTS_IS_MAIN: boolean = true

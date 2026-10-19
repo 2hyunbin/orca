@@ -52,9 +52,19 @@ describe('revealWorkspaceSurface', () => {
     expect(dispatchEvent).not.toHaveBeenCalled()
     expect(state.setActiveView).toHaveBeenCalledWith('terminal')
     expect(state.setActiveWorktree).toHaveBeenCalledWith(id)
-    expect(state.markWorktreeVisited).toHaveBeenCalledWith(id)
+    expect(state.markWorktreeVisited).toHaveBeenCalledExactlyOnceWith(id, expect.any(Number))
     expect(state.recordWorktreeVisit).toHaveBeenCalledWith(id)
     expect(state.revealWorktreeInSidebar).toHaveBeenCalledWith(id)
+  })
+
+  it('marks the workspace it leaves visited just before the one it opens', () => {
+    const state = { ...revealState(), activeWorktreeId: 'repo::/old' }
+
+    revealWorkspaceSurface(state, 'repo::/wt')
+
+    const [left, opened] = state.markWorktreeVisited.mock.calls
+    expect(left).toEqual(['repo::/old', expect.any(Number), undefined])
+    expect(opened).toEqual(['repo::/wt', left[1] + 1])
   })
 
   it('passes created tabs through and skips the history entry while navigating history', () => {
@@ -65,7 +75,7 @@ describe('revealWorkspaceSurface', () => {
     expect(state.setActiveWorktree).toHaveBeenCalledWith('repo::/wt', undefined, {
       createdTabIds: ['tab-1']
     })
-    expect(state.markWorktreeVisited).toHaveBeenCalledWith('repo::/wt')
+    expect(state.markWorktreeVisited).toHaveBeenCalledWith('repo::/wt', expect.any(Number))
     expect(state.recordWorktreeVisit).not.toHaveBeenCalled()
   })
 })

@@ -11,6 +11,10 @@ import {
 import { clearRuntimeCompatibilityCacheForTests } from '../../runtime/runtime-rpc-client'
 import { createTestStore } from './store-test-helpers'
 
+// The window stamps Recent only for an older paired server's rows; the activity tests pin that path.
+const ownerHostOwnsSidebarInputs = vi.hoisted(() => vi.fn(async () => false))
+vi.mock('./worktrees/listing/owner-host-sidebar-inputs', () => ({ ownerHostOwnsSidebarInputs }))
+
 const folderWorkspacesUpdate = vi.fn()
 const folderWorkspacesList = vi.fn()
 const runtimeEnvironmentCall = vi.fn()
@@ -240,6 +244,18 @@ describe('folder workspace generic activation and activity', () => {
     expect(store.getState().activeFileId).toBe('fallback-file')
   })
 
+  it('leaves Recent to an owning host that stamps it', async () => {
+    ownerHostOwnsSidebarInputs.mockResolvedValueOnce(true)
+    const folderWorkspace = makeFolderWorkspace()
+    const store = seedLocalFolderStore(folderWorkspace)
+
+    store.getState().bumpWorktreeActivity(folderWorkspaceKey(folderWorkspace.id))
+    await Promise.resolve()
+
+    expect(store.getState().folderWorkspaces[0]?.lastActivityAt).toBe(0)
+    expect(folderWorkspacesUpdate).not.toHaveBeenCalled()
+  })
+
   it('coalesces repeated activity persistence while keeping local activity current', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(1_000)
@@ -261,6 +277,7 @@ describe('folder workspace generic activation and activity', () => {
     store.getState().bumpWorktreeActivity(workspaceKey)
     await vi.advanceTimersByTimeAsync(100)
     store.getState().bumpWorktreeActivity(workspaceKey)
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(store.getState().folderWorkspaces[0]?.lastActivityAt).toBe(1_200)
     expect(folderWorkspacesUpdate).toHaveBeenCalledTimes(1)
@@ -316,6 +333,7 @@ describe('folder workspace generic activation and activity', () => {
       store.getState().bumpWorktreeActivity(workspaceKey)
       await vi.advanceTimersByTimeAsync(100)
       store.getState().bumpWorktreeActivity(workspaceKey)
+      await vi.advanceTimersByTimeAsync(0)
       expect(store.getState().folderWorkspaces[0]?.lastActivityAt).toBe(1_100)
 
       rejectFirst(new Error('persist failed'))

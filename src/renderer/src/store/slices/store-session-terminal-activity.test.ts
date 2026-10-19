@@ -15,7 +15,17 @@ vi.mock('@/lib/agent-status', async (importOriginal) => {
   }
 })
 
+// The window stamps Recent only for an older paired server's rows; these tests pin that path.
+vi.mock('./worktrees/listing/owner-host-sidebar-inputs', () => ({
+  ownerHostOwnsSidebarInputs: async () => false
+}))
+
 const mockApi = createStoreSessionMockApi()
+
+/** Lets the deferred owner check run, so a window stamp would have landed. */
+function settleOwnerAnswer(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
 
 describe('terminal slice behaviors', () => {
   beforeEach(() => {
@@ -142,7 +152,7 @@ describe('terminal slice behaviors', () => {
     expect(after[otherWorktreeId]).toBe(beforeOtherTabs)
   })
 
-  it('does not persist worktree activity when attaching a mirrored remote runtime PTY', () => {
+  it('does not persist worktree activity when attaching a mirrored remote runtime PTY', async () => {
     const store = createTestStore()
     const worktreeId = 'repo1::/path/wt1'
 
@@ -162,6 +172,7 @@ describe('terminal slice behaviors', () => {
 
     store.getState().updateTabPtyId('tab-1', 'remote:web-env@@terminal-1')
 
+    await settleOwnerAnswer()
     expect(store.getState().worktreesByRepo.repo1[0].lastActivityAt).toBe(1000)
     expect(mockApi.worktrees.updateMeta).not.toHaveBeenCalled()
   })
@@ -251,7 +262,7 @@ describe('terminal slice behaviors', () => {
     expect(changedWorktreeIds).toEqual([`repo1::/path/wt-${targetIndex}`])
   })
 
-  it('does not persist worktree activity when clearing a mirrored remote runtime PTY', () => {
+  it('does not persist worktree activity when clearing a mirrored remote runtime PTY', async () => {
     const store = createTestStore()
     const worktreeId = 'repo1::/path/wt1'
 
@@ -280,12 +291,13 @@ describe('terminal slice behaviors', () => {
 
     store.getState().clearTabPtyId('tab-1', 'remote:web-env@@terminal-1')
 
+    await settleOwnerAnswer()
     expect(store.getState().worktreesByRepo.repo1[0].lastActivityAt).toBe(1000)
     expect(mockApi.worktrees.updateMeta).not.toHaveBeenCalled()
   })
 
   // Why: a click's fresh spawn on dead-PTY tabs would bump activity and float the worktree up Recent; pendingActivationSpawn prevents it (PR 310e9daf).
-  it('does not bump lastActivityAt when a click-driven fresh spawn follows setActiveWorktree', () => {
+  it('does not bump lastActivityAt when a click-driven fresh spawn follows setActiveWorktree', async () => {
     const store = createTestStore()
     const worktreeId = 'repo1::/path/wt1'
     const originalLastActivityAt = 1000
@@ -338,6 +350,7 @@ describe('terminal slice behaviors', () => {
     // Simulate the fresh spawn coming back from TerminalPane's remount.
     store.getState().updateTabPtyId('tab-1', 'pty-fresh')
 
+    await settleOwnerAnswer()
     const worktree = store.getState().worktreesByRepo.repo1[0]
     expect(worktree.lastActivityAt).toBe(originalLastActivityAt)
     expect(mockApi.worktrees.updateMeta).not.toHaveBeenCalledWith(
@@ -453,7 +466,7 @@ describe('terminal slice behaviors', () => {
   })
 
   // Why: re-activating dead-PTY worktrees triggers the allDead respawn (a click side-effect, not activity) that first-activation tagging misses, so tag it too.
-  it('does not bump lastActivityAt when a re-activation respawns dead PTYs', () => {
+  it('does not bump lastActivityAt when a re-activation respawns dead PTYs', async () => {
     const store = createTestStore()
     const worktreeId = 'repo1::/path/wt1'
     const originalLastActivityAt = 1000
@@ -513,6 +526,7 @@ describe('terminal slice behaviors', () => {
     // Simulate the fresh spawn coming back from TerminalPane's remount.
     store.getState().updateTabPtyId('tab-1', 'pty-fresh')
 
+    await settleOwnerAnswer()
     const worktree = store.getState().worktreesByRepo.repo1[0]
     expect(worktree.lastActivityAt).toBe(originalLastActivityAt)
     expect(store.getState().sortEpoch).toBe(sortEpochBeforeSpawn)
@@ -525,7 +539,7 @@ describe('terminal slice behaviors', () => {
     expect(store.getState().tabsByWorktree[worktreeId][0].pendingActivationSpawn).toBeUndefined()
   })
 
-  it('suppresses every pane spawn from a click-driven split-layout remount', () => {
+  it('suppresses every pane spawn from a click-driven split-layout remount', async () => {
     const store = createTestStore()
     const worktreeId = 'repo1::/path/wt1'
     const originalLastActivityAt = 1000
@@ -591,6 +605,7 @@ describe('terminal slice behaviors', () => {
 
     store.getState().updateTabPtyId('tab-1', 'pty-pane-2')
 
+    await settleOwnerAnswer()
     const worktree = store.getState().worktreesByRepo.repo1[0]
     expect(worktree.lastActivityAt).toBe(originalLastActivityAt)
     expect(mockApi.worktrees.updateMeta).not.toHaveBeenCalledWith(
@@ -602,7 +617,7 @@ describe('terminal slice behaviors', () => {
   })
 
   // Why: first-visit worktrees auto-create a pendingActivationSpawn tab so the spawn doesn't stamp lastActivityAt and bounce Recent.
-  it('does not bump lastActivityAt when createTab auto-creates for a first-visit worktree', () => {
+  it('does not bump lastActivityAt when createTab auto-creates for a first-visit worktree', async () => {
     const store = createTestStore()
     const worktreeId = 'repo1::/path/wt1'
     const originalLastActivityAt = 1000
@@ -637,6 +652,7 @@ describe('terminal slice behaviors', () => {
     // PTY comes back from the newly-mounted TerminalPane.
     store.getState().updateTabPtyId(newTab.id, 'pty-fresh')
 
+    await settleOwnerAnswer()
     const worktree = store.getState().worktreesByRepo.repo1[0]
     expect(worktree.lastActivityAt).toBe(originalLastActivityAt)
     expect(mockApi.worktrees.updateMeta).not.toHaveBeenCalledWith(
@@ -649,7 +665,7 @@ describe('terminal slice behaviors', () => {
   })
 
   // Why: real background events (agent output, OSC titles) must still bump activity; only activation-driven spawns are suppressed.
-  it('bumps lastActivityAt for a fresh spawn with no activation tag', () => {
+  it('bumps lastActivityAt for a fresh spawn with no activation tag', async () => {
     const store = createTestStore()
     const worktreeId = 'repo1::/path/wt1'
 
@@ -675,6 +691,7 @@ describe('terminal slice behaviors', () => {
 
     store.getState().updateTabPtyId('tab-1', 'pty-fresh')
 
+    await settleOwnerAnswer()
     const worktree = store.getState().worktreesByRepo.repo1[0]
     expect(worktree.lastActivityAt).toBeGreaterThan(1000)
     expect(mockApi.worktrees.updateMeta).toHaveBeenCalledWith(

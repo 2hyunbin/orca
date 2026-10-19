@@ -31,6 +31,11 @@ beforeEach(() => setPresenceGated(false))
 afterEach(() => setPresenceGated(true))
 
 vi.mock('@/store', () => ({ useAppStore: { getState: () => store.getState() } }))
+// The window raises the bold row only for an older paired server's workspace; most tests pin that.
+const ownerHostOwnsSidebarInputs = vi.hoisted(() => vi.fn(async () => false))
+vi.mock('@/store/slices/worktrees/listing/owner-host-sidebar-inputs', () => ({
+  ownerHostOwnsSidebarInputs
+}))
 // The two client-side follow-ups of a delivery are leaf side effects with their own tests; this
 // file is about the request that reaches main and the markers left behind.
 vi.mock('@/lib/desktop-notification-sound', () => ({
@@ -172,6 +177,11 @@ const NOTHING_LIT = {
   surfaceDot: undefined
 }
 
+/** Lets the deferred owner check run, so the window's bold raise has landed. */
+function settleOwnerAnswer(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
 describe('dispatchStructuredTurnCompletionAttention', () => {
   beforeEach(() => {
     dispatched.length = 0
@@ -235,8 +245,9 @@ describe('dispatchStructuredTurnCompletionAttention', () => {
     expect(onlyDispatch().notificationSourceId).toBe('runtime:env-1')
   })
 
-  it('lights workspace bold, the amber pane dot and the tab dot for a successful turn', () => {
+  it('lights workspace bold, the amber pane dot and the tab dot for a successful turn', async () => {
     dispatchStructuredTurnCompletionAttention(structuredTab(), completion())
+    await settleOwnerAnswer()
     expect(indicators()).toEqual({
       workspaceBold: true,
       paneDot: 'agent-completion',
@@ -245,10 +256,23 @@ describe('dispatchStructuredTurnCompletionAttention', () => {
     })
   })
 
+  it('leaves the bold row of a host that raises it to that host, still lighting the dots', async () => {
+    ownerHostOwnsSidebarInputs.mockResolvedValueOnce(true)
+    dispatchStructuredTurnCompletionAttention(structuredTab(), completion())
+    await settleOwnerAnswer()
+    expect(indicators()).toEqual({
+      workspaceBold: false,
+      paneDot: 'agent-completion',
+      tabDot: 'agent-completion',
+      surfaceDot: 'agent-completion'
+    })
+  })
+
   it.each(['failure', 'cancellation'] as const)(
     'lights the same indicators for a %s outcome, because the user is still being called back',
-    (outcome) => {
+    async (outcome) => {
       dispatchStructuredTurnCompletionAttention(structuredTab(), completion({ outcome }))
+      await settleOwnerAnswer()
       expect(indicators()).toEqual({
         workspaceBold: true,
         paneDot: 'agent-completion',
@@ -425,10 +449,11 @@ describe('dispatchStructuredTurnCompletionAttention', () => {
     expect(indicators()).toEqual(NOTHING_LIT)
   })
 
-  it('withholds only the tab dot when group attention is off, keeping the pane dot', () => {
+  it('withholds only the tab dot when group attention is off, keeping the pane dot', async () => {
     // Same presentation gate the PTY lane reads, from the same setting rather than a second one.
     seed({ groupAttention: false })
     dispatchStructuredTurnCompletionAttention(structuredTab(), completion())
+    await settleOwnerAnswer()
     expect(indicators()).toEqual({
       workspaceBold: true,
       paneDot: 'agent-completion',
@@ -437,7 +462,7 @@ describe('dispatchStructuredTurnCompletionAttention', () => {
     })
   })
 
-  it('lights a folder workspace, which is not a git worktree', () => {
+  it('lights a folder workspace, which is not a git worktree', async () => {
     const folderWorkspaceId = 'folder:fw-1'
     seed({
       workspaceId: folderWorkspaceId,
@@ -461,6 +486,7 @@ describe('dispatchStructuredTurnCompletionAttention', () => {
       ]
     })
     dispatchStructuredTurnCompletionAttention(structuredTab(folderWorkspaceId), completion())
+    await settleOwnerAnswer()
     expect(indicators(folderWorkspaceId)).toEqual({
       workspaceBold: true,
       paneDot: 'agent-completion',

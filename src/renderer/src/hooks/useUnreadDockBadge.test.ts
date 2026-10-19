@@ -111,13 +111,9 @@ describe('useUnreadDockBadge', () => {
     expect(getUnreadBadgeCount).toHaveBeenCalledTimes(2)
     expect(setUnreadDockBadgeCount).toHaveBeenLastCalledWith(0)
 
+    // The owning host raises the flag; it arrives as a row update.
     act(() =>
-      useAppStore.getState().markAgentAttentionUnread({
-        workspaceId: worktree.id,
-        subjectKey: null,
-        groupId: null,
-        reason: 'agent-completion'
-      })
+      useAppStore.setState({ worktreesByRepo: { repo: [{ ...worktree, isUnread: true }] } })
     )
     expect(getUnreadBadgeCount).toHaveBeenCalledTimes(3)
     expect(setUnreadDockBadgeCount).toHaveBeenLastCalledWith(1)
@@ -163,12 +159,16 @@ describe('useUnreadDockBadge', () => {
     expect(useAppStore.getState().tabsByWorktree).not.toBe(tabsByWorktree)
     expect(renders).toBe(rendersAfterMount)
 
+    // The owning host raises the flag; it arrives as a row update.
     act(() =>
-      useAppStore.getState().markAgentAttentionUnread({
-        workspaceId: 'repo::worktree-0',
-        subjectKey: null,
-        groupId: null,
-        reason: 'agent-completion'
+      useAppStore.setState({
+        worktreesByRepo: {
+          repo: useAppStore
+            .getState()
+            .worktreesByRepo.repo.map((worktree, index) =>
+              index === 0 ? { ...worktree, isUnread: true } : worktree
+            )
+        }
       })
     )
     expect(renders).toBe(rendersAfterMount + 1)

@@ -27,6 +27,16 @@ vi.mock('@/components/worktree-base-fallback-notice', () => ({
   requestWorktreeBaseFallbackNotice
 }))
 
+// The window writes the flag and Recent stamps only for an older paired server's rows; these tests pin that path.
+vi.mock('./worktrees/listing/owner-host-sidebar-inputs', () => ({
+  ownerHostOwnsSidebarInputs: async () => false
+}))
+
+/** Lets the deferred owner check run, so the window's write has landed. */
+function settleOwnerAnswer(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
 beforeEach(resetWorktreeSliceModuleMemory)
 
 // Why: ghostty "show until interact" — attention raises the dot even on the active worktree; only engagement clears it.
@@ -50,6 +60,7 @@ describe('worktree unread (show-until-interact)', () => {
       groupId: null,
       reason: 'agent-completion'
     })
+    await settleOwnerAnswer()
 
     const after = store.getState().worktreesByRepo.repo1[0]
     expect(after.isUnread).toBe(true)
@@ -61,7 +72,7 @@ describe('worktree unread (show-until-interact)', () => {
     )
   })
 
-  it('routes multi-host project unread persistence by the worktree host (#10634)', () => {
+  it('routes multi-host project unread persistence by the worktree host (#10634)', async () => {
     const store = createTestStore()
     const wt = makeWorktree({
       id: 'repo-shared::/home/user/wt',
@@ -92,6 +103,7 @@ describe('worktree unread (show-until-interact)', () => {
         reason: 'agent-completion'
       })
     ).not.toThrow()
+    await settleOwnerAnswer()
 
     expect(store.getState().worktreesByRepo['repo-shared'][0].isUnread).toBe(true)
     expect(mockApi.worktrees.updateMeta).toHaveBeenCalledWith(
@@ -102,7 +114,7 @@ describe('worktree unread (show-until-interact)', () => {
     )
   })
 
-  it('keeps unread state local instead of throwing for genuinely ambiguous owners (#10634)', () => {
+  it('keeps unread state local instead of throwing for genuinely ambiguous owners (#10634)', async () => {
     const store = createTestStore()
     const worktreeId = 'repo-shared::/same/path'
     store.setState({
@@ -133,13 +145,14 @@ describe('worktree unread (show-until-interact)', () => {
         reason: 'agent-completion'
       })
     ).not.toThrow()
+    await settleOwnerAnswer()
 
     expect(store.getState().worktreesByRepo['repo-shared'][0].isUnread).toBe(true)
     expect(mockApi.worktrees.updateMeta).not.toHaveBeenCalled()
     expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
   })
 
-  it('never throws from any passive path for a genuinely ambiguous owner (#10634)', () => {
+  it('never throws from any passive path for a genuinely ambiguous owner (#10634)', async () => {
     // Why every passive path, not just marking: each one runs from a background
     // notification, so any that still throws reproduces the uncaught renderer error.
     const worktreeId = 'repo-shared::/same/path'
@@ -182,6 +195,7 @@ describe('worktree unread (show-until-interact)', () => {
       mockApi.worktrees.updateMeta.mockClear()
 
       expect(() => run(store.getState()), `${label} threw for an ambiguous owner`).not.toThrow()
+      await settleOwnerAnswer()
       expect(
         mockApi.worktrees.updateMeta,
         `${label} persisted to a guessed host`
@@ -189,7 +203,7 @@ describe('worktree unread (show-until-interact)', () => {
     }
   })
 
-  it('warns once per workspace rather than on every activity event (#10634)', () => {
+  it('warns once per workspace rather than on every activity event (#10634)', async () => {
     // Why: activity bumps fire on every PTY event; an unbounded warn would flood the console.
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     try {
@@ -209,6 +223,7 @@ describe('worktree unread (show-until-interact)', () => {
       for (let i = 0; i < 5; i++) {
         store.getState().bumpWorktreeActivity(worktreeId)
       }
+      await settleOwnerAnswer()
 
       expect(warn.mock.calls.length - before).toBe(1)
     } finally {
@@ -257,7 +272,7 @@ describe('worktree unread (show-until-interact)', () => {
     expect(mockApi.worktrees.updateMeta).not.toHaveBeenCalled()
   })
 
-  it('updates unread state for hidden detected worktrees', () => {
+  it('updates unread state for hidden detected worktrees', async () => {
     const store = createTestStore()
     const hidden = makeWorktree({
       id: 'repo1::/path/hidden',
@@ -277,6 +292,7 @@ describe('worktree unread (show-until-interact)', () => {
       groupId: null,
       reason: 'agent-completion'
     })
+    await settleOwnerAnswer()
     expect(store.getState().detectedWorktreesByRepo.repo1.worktrees[0].isUnread).toBe(true)
 
     store

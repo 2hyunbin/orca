@@ -1,5 +1,5 @@
-import React from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
+import React, { act } from 'react'
+import { createRoot } from 'react-dom/client'
 import { vi } from 'vitest'
 import { ConfirmationDialogContext } from '@/components/confirmation-dialog-context'
 import type { Repo } from '../../../../shared/repo-types'
@@ -19,22 +19,41 @@ export async function loadWorktreeList(): Promise<void> {
   WorktreeList = module.default as WorktreeListComponent
 }
 
+// Client-rendered: the list reads stores through useSyncExternalStore, which server rendering refuses.
 export async function renderWorktreeListMarkup(): Promise<string> {
-  return renderToStaticMarkup(
-    React.createElement(
-      ConfirmationDialogContext.Provider,
-      { value: async () => false },
-      React.createElement(WorktreeList!, {
-        scrollOffsetRef: { current: 0 },
-        scrollAnchorRef: { current: null }
-      })
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true
+  const container = document.createElement('div')
+  const root = createRoot(container)
+  await act(async () => {
+    root.render(
+      React.createElement(
+        ConfirmationDialogContext.Provider,
+        { value: async () => false },
+        React.createElement(WorktreeList!, {
+          scrollOffsetRef: { current: 0 },
+          scrollAnchorRef: { current: null }
+        })
+      )
     )
+  })
+  const markup = container.innerHTML
+  act(() => root.unmount())
+  return compactInlineStyles(markup)
+}
+
+// The DOM serializes `a: 1px; b: 2px;`; assertions read the server form `a:1px;b:2px`.
+function compactInlineStyles(markup: string): string {
+  return markup.replace(
+    /style="([^"]*)"/g,
+    (_, style: string) => `style="${style.replace(/\s*([:;])\s*/g, '$1').replace(/;$/, '')}"`
   )
 }
 
 export function createAppStoreModuleMock(): Record<string, unknown> {
   const getMockState = (): Record<string, unknown> => ({
     detectedWorktreesByRepo: {},
+    // Read by the list's mount effects, which a client render runs.
+    setVisibleReviewCardWorktreeIds: () => {},
     ...mockStore.state
   })
   const useAppStore = ((selector: (state: Record<string, unknown>) => unknown) =>
@@ -186,7 +205,8 @@ export function createWorktreeCardAgentsModuleMock(): Record<string, unknown> {
         'div',
         { role: 'group', 'aria-label': 'Agents', 'data-agent-worktree-id': worktreeId },
         'Review fixture prompt'
-      )
+      ),
+    SUPPRESS_WORKTREE_LIST_SCROLL_ADJUSTMENT_EVENT: 'orca:test-suppress-scroll-adjustment'
   }
 }
 

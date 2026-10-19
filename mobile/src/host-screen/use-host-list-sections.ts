@@ -130,7 +130,8 @@ function useFeedHostListSections({
     () => (domains ? buildSidebarFeedRows(domains, catalog, view) : null),
     [domains, catalog, view]
   )
-  const loading = feed?.kind === 'loading'
+  // Before the first read, and under a feed this page cannot read, the rows it already holds.
+  const preFeed = feed?.kind === 'loading' || feed?.kind === 'reopen'
   const sections = useMemo(
     () =>
       built
@@ -141,7 +142,7 @@ function useFeedHostListSections({
             repoHostIdByRepoId: state.repoHostIdByRepoId,
             search: state.search
           })
-        : loading
+        : preFeed
           ? buildPreFeedSections({
               rows: displayWorktrees,
               view: state.view,
@@ -149,7 +150,7 @@ function useFeedHostListSections({
               repoHostIdByRepoId: state.repoHostIdByRepoId
             })
           : NO_SECTIONS,
-    [built, loading, displayWorktrees, state.view, state.repoHostIdByRepoId, state.search]
+    [built, preFeed, displayWorktrees, state.view, state.repoHostIdByRepoId, state.search]
   )
 
   const iconIds = useMemo(() => [...new Set(domains?.repoIcons.values() ?? [])], [domains])
