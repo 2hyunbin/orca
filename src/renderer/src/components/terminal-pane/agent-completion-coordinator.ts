@@ -58,6 +58,7 @@ export function createAgentCompletionCoordinator(
     hasAgentRunEvidence: false,
     pendingProcessExit: null,
     lastForegroundAgent: null as RecognizedAgentProcess | null,
+    lastForegroundAgentSeenAtMonotonic: 0,
     processSession: 0
   }
   let processMonitor!: ReturnType<typeof createAgentCompletionProcessMonitor>
@@ -318,6 +319,7 @@ export function createAgentCompletionCoordinator(
     seedHookStatus: hookObserver.seedHookStatus,
     startProcessTracking: () => processMonitor.start(),
     observeForegroundAgentProcess: processMonitor.observeRecognizedProcess,
+    invalidateProcessInspection: processMonitor.incrementGeneration,
     hasPendingHookDoneCompletion: lifecycle.hasPendingHookDoneCompletion,
     resetCompletionState: lifecycle.resetCompletionState,
     dispose: lifecycle.dispose

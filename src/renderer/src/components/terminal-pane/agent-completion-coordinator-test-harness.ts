@@ -15,7 +15,11 @@ export function processResult(
   foregroundProcess: string | null,
   hasChildProcesses = foregroundProcess !== null
 ): RuntimeTerminalProcessInspection {
-  return { foregroundProcess, hasChildProcesses }
+  return {
+    foregroundProcess,
+    hasChildProcesses,
+    childProcessEvidence: hasChildProcesses ? 'children' : 'no-children'
+  }
 }
 
 export function createDeferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {

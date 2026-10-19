@@ -1,4 +1,5 @@
 import type { RecognizedAgentProcess } from '../../../../shared/agent-process-recognition'
+import { isShellProcess } from '../../../../shared/shell-process-detection'
 import { recognizeAgentProcess } from '../../../../shared/agent-process-recognition'
 import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import { admitRemoteForegroundEvidence } from '../../../../shared/remote-foreground-evidence-admission'
@@ -56,10 +57,7 @@ export function handleAgentCompletionInspectionResult(args: {
     remoteInspection
   } = args
   const remote = options.isRemotePtyId?.(options.getPtyId() ?? '') === true
-  if (
-    isClientOnlyUnverifiableInspection(result) ||
-    (!remote && result.childProcessEvidence === 'unverifiable')
-  ) {
+  if (isClientOnlyUnverifiableInspection(result)) {
     state.pendingProcessExit = null
     state.consecutiveInspectionErrors += 1
     scheduleNextPoll()
@@ -141,12 +139,23 @@ export function handleAgentCompletionInspectionResult(args: {
     handleRecognizedProcess(recognized)
     return true
   }
+  if (
+    state.lastForegroundAgent &&
+    localShellIsForeground(result, requestStartedAtMonotonic, state)
+  ) {
+    options.onForegroundShellObserved?.(state.lastForegroundAgent)
+  }
   if (hasPendingHookDone()) {
     scheduleNextPoll()
     return false
   }
   if (state.lastForegroundAgent && state.hasAgentRunEvidence) {
-    if (result.hasChildProcesses) {
+    // Why: a stopped (Ctrl+Z) agent is still child work; an older host without table evidence
+    // keeps its name-derived answer rather than never confirming any exit.
+    if (
+      result.hasChildProcesses ||
+      (result.childProcessEvidence !== undefined && result.childProcessEvidence !== 'no-children')
+    ) {
       state.pendingProcessExit = null
       scheduleNextPoll()
       return false
@@ -197,4 +206,22 @@ export function handleAgentCompletionInspectionResult(args: {
     clearAgentRunEvidence()
   }
   return false
+}
+
+/** Local only: a shell name, or a daemon's live read naming nothing in front, from a snapshot
+ *  taken after the agent was last seen there. */
+function localShellIsForeground(
+  result: RuntimeTerminalProcessInspection,
+  requestStartedAtMonotonic: number,
+  state: { lastForegroundAgentSeenAtMonotonic: number }
+): boolean {
+  if (result.foregroundProcess !== null) {
+    return isShellProcess(result.foregroundProcess)
+  }
+  const evidence = result.foregroundProcessEvidence
+  return (
+    evidence?.verdict === 'live' &&
+    evidence.processName === null &&
+    requestStartedAtMonotonic - evidence.capturedAgeMs > state.lastForegroundAgentSeenAtMonotonic
+  )
 }

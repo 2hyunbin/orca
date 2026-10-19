@@ -43,7 +43,8 @@ export abstract class DaemonPtyProcessInspection extends DaemonPtyBufferSnapshot
       }>('getForegroundProcess', { sessionId: id })
       return {
         foregroundProcess,
-        hasChildProcesses: this.hasChildProcessesFromForeground(foregroundProcess)
+        hasChildProcesses: this.hasChildProcessesFromForeground(foregroundProcess),
+        childProcessEvidence: 'unverifiable'
       }
     }
     return this.client.request<PtyProcessInspection>('inspectProcess', {

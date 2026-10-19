@@ -11,6 +11,39 @@ import type { RuntimeTerminalProcessInspection } from '@/runtime/runtime-termina
 describe('agent completion coordinator queued inspections', () => {
   useAgentCompletionCoordinatorLifecycle()
 
+  it.each(['command', 'binding', 'owner'])(
+    'rejects shell observations superseded by a new %s',
+    async (change) => {
+      const read = createDeferred<RuntimeTerminalProcessInspection>()
+      let ptyId = 'pty-1'
+      let owner = 'codex'
+      const onForegroundShellObserved = vi.fn()
+      const coordinator = createAgentCompletionCoordinator({
+        paneKey: 'tab-1:leaf-1',
+        getPtyId: () => ptyId,
+        getObservationOwner: () => owner,
+        inspectProcess: () => read.promise,
+        dispatchCompletion: vi.fn(),
+        onForegroundShellObserved,
+        isLive: () => true
+      })
+      coordinator.observeForegroundAgentProcess({ agent: 'codex', processName: 'codex' })
+      coordinator.startProcessTracking()
+      await vi.advanceTimersByTimeAsync(1_000)
+      if (change === 'command') {
+        coordinator.invalidateProcessInspection()
+      } else if (change === 'binding') {
+        ptyId = 'replacement'
+      } else {
+        owner = 'claude'
+      }
+      read.resolve(processResult('zsh', false))
+      await flushAsyncTicks()
+      expect(onForegroundShellObserved).not.toHaveBeenCalled()
+      coordinator.dispose()
+    }
+  )
+
   it('drops inspections queued by a disposed coordinator before starting live work', async () => {
     const blockers = Array.from({ length: 4 }, () =>
       createDeferred<RuntimeTerminalProcessInspection>()

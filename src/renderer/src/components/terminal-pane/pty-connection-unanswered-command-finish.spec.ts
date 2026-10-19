@@ -53,7 +53,7 @@ export function registerPtyConnectionUnansweredCommandFinishTests(): void {
     })
 
     it.each([
-      ['clears', 'a row without a process identity', false],
+      ['keeps', 'a row without a process identity', false],
       ['keeps', 'a row whose agent process the host can check', true]
     ])(
       '%s %s when an SSH pane finishes and the shell check cannot answer',
@@ -107,12 +107,8 @@ export function registerPtyConnectionUnansweredCommandFinishTests(): void {
         await vi.advanceTimersByTimeAsync(350 + 1200 + 6000)
         await flushAsyncTicks()
 
-        expect(hasVerifiableAgentProcess).toHaveBeenCalledWith(paneKey)
-        if (verifiable) {
-          expect(mockStoreState.dropAgentStatus).not.toHaveBeenCalled()
-        } else {
-          expect(mockStoreState.dropAgentStatus).toHaveBeenCalledWith(paneKey)
-        }
+        expect(hasVerifiableAgentProcess).not.toHaveBeenCalled()
+        expect(mockStoreState.dropAgentStatus).not.toHaveBeenCalled()
       }
     )
   })

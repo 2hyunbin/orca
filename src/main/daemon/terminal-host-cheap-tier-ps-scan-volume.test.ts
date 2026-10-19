@@ -156,6 +156,7 @@ function createSession(pane: number): Session {
   })
   return {
     pid: shellPid(pane),
+    spawn: { shellPath: '/bin/zsh' },
     incarnationId: `inc-${pane}`,
     isAlive: true,
     getForegroundProcess: (options?: { rawFallback?: boolean }) =>

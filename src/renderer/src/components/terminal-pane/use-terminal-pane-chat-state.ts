@@ -74,6 +74,16 @@ export function useTerminalPaneChatState(controller: TerminalPaneTitleController
     return [...new Set([...expectedLayoutLeafIds, ...mountedLeafIds])]
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- Preserve the pre-split dependency contract.
   }, [expectedLayoutLeafIds])
+  const shellForegroundByLeaf = useAppStore(
+    useShallow((store) =>
+      Object.fromEntries(
+        getNativeChatLeafIds().map((leafId) => [
+          leafId,
+          store.paneForegroundAgentByPaneKey[`${tabId}:${leafId}`]?.shellForeground === true
+        ])
+      )
+    )
+  )
   const getTabWideAgentHintLeafId = useCallback((): string | null => {
     if (tabWideAgentHintLeafId !== undefined) {
       return tabWideAgentHintLeafId
@@ -128,6 +138,11 @@ export function useTerminalPaneChatState(controller: TerminalPaneTitleController
       })
       return canToggleNativeChat({
         contentType: 'terminal',
+        // Departure callbacks can run before React commits the foreground subscription update.
+        shellForeground:
+          leafId !== null &&
+          useAppStore.getState().paneForegroundAgentByPaneKey[`${tabId}:${leafId}`]
+            ?.shellForeground === true,
         launchAgent: detectedAgent ? null : launchAgent,
         detectedAgent,
         resolvedAgent: detectedAgent ? null : resolveTitleAgentForLeaf(leafId),
@@ -136,6 +151,8 @@ export function useTerminalPaneChatState(controller: TerminalPaneTitleController
     },
     [
       tabAgentTypeByLeaf,
+      shellForegroundByLeaf,
+      tabId,
       nativeChatTranscriptIsLocalReadable,
       terminalTab?.launchAgent,
       getNativeChatLeafIds,

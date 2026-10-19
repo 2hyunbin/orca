@@ -229,8 +229,12 @@ export function useTabBarRuntimeModel({
   // Why: tab-wide launch/title hints are safe only before split; gate the view-mode toggle to the active leaf's agent.
   const toggleTabViewMode = useAppStore((s) => s.toggleTabViewMode)
   // Why: every retained TabBar observes the same hot maps; one selector shares their projections.
-  const { nativeChatEnabled, tabAgentTypesByTabId, nativeChatTabWideFallbackUnsafeTabsById } =
-    useAppStore(useShallow(selectTabBarAgentProjections))
+  const {
+    nativeChatEnabled,
+    tabAgentTypesByTabId,
+    nativeChatTabWideFallbackUnsafeTabsById,
+    nativeChatShellForegroundTabsById
+  } = useAppStore(useShallow(selectTabBarAgentProjections))
   const nativeChatTranscriptIsLocalReadable = useAppStore((s) =>
     isNativeChatTranscriptLocalReadable(getConnectionIdFromState(s, worktreeId))
   )
@@ -261,6 +265,7 @@ export function useTabBarRuntimeModel({
     nativeChatEnabled,
     tabAgentTypesByTabId,
     nativeChatTabWideFallbackUnsafeTabsById,
+    nativeChatShellForegroundTabsById,
     nativeChatTranscriptIsLocalReadable,
     managedBrowserCreationEnabled,
     mobileEmulatorCreationEnabled

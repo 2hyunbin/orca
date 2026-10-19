@@ -62,7 +62,15 @@ function unreadableTableRecord(): RuntimeTerminalProcessInspection {
   }
 }
 
-function inspect(result: RuntimeTerminalProcessInspection, roundTripMs = 20): ProcessMonitorState {
+function inspect(
+  result: RuntimeTerminalProcessInspection,
+  roundTripMs = 20,
+  callbacks: Pick<
+    AgentCompletionCoordinatorOptions,
+    'onForegroundShellObserved' | 'onForegroundAgentExited'
+  > = {},
+  local?: { agentSeenAgoMs: number }
+): ProcessMonitorState {
   const state: ProcessMonitorState = {
     disposed: false,
     inspectionInFlight: false,
@@ -72,9 +80,10 @@ function inspect(result: RuntimeTerminalProcessInspection, roundTripMs = 20): Pr
     pollTimer: null,
     pollTimerTier: null,
     lastPaneActivityAt: null,
-    hasAgentRunEvidence: false,
+    hasAgentRunEvidence: true,
     pendingProcessExit: null,
-    lastForegroundAgent: null,
+    lastForegroundAgent: { agent: 'claude', processName: 'claude' },
+    lastForegroundAgentSeenAtMonotonic: 0,
     processSession: 1
   }
   const remoteInspection: RemoteInspectionState = {
@@ -84,6 +93,9 @@ function inspect(result: RuntimeTerminalProcessInspection, roundTripMs = 20): Pr
     knownAuthorityGenerations: new Set<string>()
   }
   const started = performance.now()
+  if (local) {
+    state.lastForegroundAgentSeenAtMonotonic = started - local.agentSeenAgoMs
+  }
   vi.spyOn(performance, 'now').mockReturnValue(started + roundTripMs)
   handleAgentCompletionInspectionResult({
     result,
@@ -91,9 +103,13 @@ function inspect(result: RuntimeTerminalProcessInspection, roundTripMs = 20): Pr
     options: {
       paneKey: 'tab-1:leaf-1',
       getPtyId: () => SSH_PTY_ID,
-      isRemotePtyId: () => true,
-      getExpectedIncarnationId: () => INCARNATION
-    } as unknown as AgentCompletionCoordinatorOptions,
+      isRemotePtyId: () => !local,
+      getExpectedIncarnationId: () => INCARNATION,
+      isLive: () => true,
+      inspectProcess: vi.fn(),
+      dispatchCompletion: vi.fn(),
+      ...callbacks
+    },
     state,
     identityScope: {} as never,
     clearAgentRunEvidence: vi.fn(),
@@ -108,6 +124,60 @@ function inspect(result: RuntimeTerminalProcessInspection, roundTripMs = 20): Pr
 }
 
 describe('agent completion polling under a host capture it cannot use', () => {
+  it.each(['live', 'exited'] as const)(
+    'separates remote %s from local shell ownership',
+    (verdict) => {
+      const record = liveRecord(0)
+      const live = record.foregroundProcessEvidence
+      if (live?.verdict !== 'live') {
+        throw new Error('Expected live fixture')
+      }
+      const onForegroundShellObserved = vi.fn()
+      const onForegroundAgentExited = vi.fn()
+      const result = inspect(
+        {
+          ...record,
+          foregroundProcess: 'zsh',
+          foregroundProcessEvidence:
+            verdict === 'live'
+              ? { ...live, processName: null }
+              : { ...live, verdict: 'exited', reason: 'pty_exit_0' }
+        },
+        0,
+        { onForegroundShellObserved, onForegroundAgentExited }
+      )
+      expect(onForegroundShellObserved).not.toHaveBeenCalled()
+      expect(onForegroundAgentExited).toHaveBeenCalledTimes(verdict === 'exited' ? 1 : 0)
+      expect(result.lastForegroundAgent?.agent ?? null).toBe(verdict === 'live' ? 'claude' : null)
+    }
+  )
+
+  it.each([
+    ['captured after the agent was last seen', 100, 1],
+    ['captured before the agent was last seen', 600, 0]
+  ])(
+    'reads a local daemon live read naming nothing as the shell, %s',
+    (_label, capturedAgeMs, calls) => {
+      const record = liveRecord(capturedAgeMs)
+      const live = record.foregroundProcessEvidence
+      if (live?.verdict !== 'live') {
+        throw new Error('Expected live fixture')
+      }
+      const onForegroundShellObserved = vi.fn()
+      inspect(
+        {
+          ...record,
+          foregroundProcess: null,
+          foregroundProcessEvidence: { ...live, processName: null }
+        },
+        0,
+        { onForegroundShellObserved },
+        { agentSeenAgoMs: 500 }
+      )
+      expect(onForegroundShellObserved).toHaveBeenCalledTimes(calls)
+    }
+  )
+
   it('counts no error for the prompt unverifiable a capture over budget produces', () => {
     expect(inspect(unreadableTableRecord()).consecutiveInspectionErrors).toBe(0)
   })

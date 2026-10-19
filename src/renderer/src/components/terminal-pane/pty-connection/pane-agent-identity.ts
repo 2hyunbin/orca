@@ -3,7 +3,6 @@ import { dismissRetainedProgramResult } from '@/lib/program-status/result-retent
 import { isRetainedProgramResult } from '@/lib/program-status/row'
 import { useAppStore } from '@/store'
 import { getConnectionId } from '@/lib/connection-context'
-import { CONFIRMED_SHELL_MODE_RESET } from '../../../../../shared/terminal-mode-reset-profiles'
 import {
   isLocalNativeWindowsConpty,
   resolveWindowsShellOverride
@@ -24,6 +23,7 @@ import {
 } from './pane-launch-agent-candidate'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 import { clearStaleAgentTabTitleOnConfirmedShell } from './confirmed-shell-agent-title'
+import { installAgentDeparture, readPaneObservationOwner } from './agent-departure'
 
 /** Pane agent identity, foreground-agent sampling, and command lifecycle handling. */
 export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
@@ -60,37 +60,16 @@ export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
   // startup ingress already skips it, the renderer must skip the answer too).
   session.shouldAnswerPaneOscColorQueries = (): boolean =>
     paneShouldAnswerOscColorQueries(useAppStore.getState(), panePane())
-  // Why: a launched/hook-known agent pane must confirm — not trust — a 133;D so a
-  // full-screen agent's leaked nested-shell 133;D can't clear its tab identity,
-  // even on a restore where no command-start read has recorded evidence yet.
+  // Launch and restored display hints request discovery; only live hooks establish history here.
   session.paneHasKnownAgentIdentity = (): boolean => {
     const state = useAppStore.getState()
-    const registeredLaunchAgent =
-      state.agentLaunchConfigByPaneKey[session.cacheKey]?.identity?.agentType
-    return (
-      Boolean(state.paneForegroundAgentByPaneKey[session.cacheKey]?.agent) ||
-      session.paneHasLiveHookAgentIcon(state) ||
-      isTuiAgent(registeredLaunchAgent)
-    )
+    return session.paneHasLiveHookAgentIcon(state)
   }
   session.clearStaleAgentTabTitleOnConfirmedShell = () =>
     clearStaleAgentTabTitleOnConfirmedShell(session)
   session.deferredCommandFinishedStatusDrop = null
   session.deferredConfirmedShellReconcile = null
-  /** The pane's foreground was proven to be a shell, so its agent exited. Unlike a user dismissal,
-   *  this must also retire the main-side per-pane caches — a surviving Claude latch resolves the
-   *  next event straight back to `working`.
-   *
-   *  Ordered by the row's `acceptedStatusSeq`, not by row identity or `updatedAt`: the confirming
-   *  process read can take seconds, an unrelated field moving in that window is not evidence the
-   *  agent is alive, and a genuinely newer row can share the anchor's millisecond. Reading the token
-   *  off the row is what makes the ordering safe — the paired drop runs FIRST and removes the row,
-   *  and a removed row means nothing reported, not "the anchor is gone".
-   *
-   *  Residual: a row deleted by some OTHER path mid-window and then rebuilt restarts its count, so a
-   *  pane armed at 1 that reports exactly once more compares equal. It needs a foreign drop inside
-   *  the confirm window; the relaunch case that would otherwise hit it is already discarded by
-   *  onCommandStarted, and the cost is retiring a pane the process table just proved is a shell. */
+  // Accepted status sequence fences async row retirement against a newer owner.
   session.reconcileEndedProcessIfPaneQuiet = (armedAcceptedStatusSeq: number | undefined): void => {
     const current = useAppStore.getState().agentStatusByPaneKey[session.cacheKey]
     if (current && current.acceptedStatusSeq !== armedAcceptedStatusSeq) {
@@ -109,22 +88,15 @@ export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
   session.visibleForegroundSamplePending = false
   session.visibleForegroundSampleSettled = false
   session.settleDeferredCommandFinishedStatusDrop = (
-    options: { confirmedShell?: boolean; processExitConfirmed?: boolean } = {}
+    options: { processExitConfirmed?: boolean } = {}
   ): void => {
     const dropStatus = session.deferredCommandFinishedStatusDrop
     const reconcile = session.deferredConfirmedShellReconcile
     session.deferredConfirmedShellReconcile = null
-    if (options.confirmedShell || !dropStatus) {
+    if (!options.processExitConfirmed || !dropStatus) {
       session.deferredCommandFinishedStatusDrop = null
-      if (options.confirmedShell) {
-        dropStatus?.()
-        reconcile?.()
-      }
       return
     }
-    // Why: only a pane whose agent process the host can check keeps its row on an unanswered read;
-    // every other pane keeps today's cleanup until the renderer reads the owner record (step 2).
-    // The drop stays armed while main answers, so a new command start still cancels it.
     const dropUnlessVerifiable = (verifiable: boolean): void => {
       if (session.deferredCommandFinishedStatusDrop !== dropStatus) {
         return
@@ -142,6 +114,7 @@ export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
       .then((verifiable) => dropUnlessVerifiable(verifiable === true))
       .catch(() => dropUnlessVerifiable(false))
   }
+  installAgentDeparture(session)
   session.isForegroundTrackingAllowed = (id: string): boolean => {
     if (isRemoteExecutionHostPtyId(id)) {
       return true
@@ -185,41 +158,15 @@ export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
     onAgentProcessRead: (process) =>
       session.agentCompletionCoordinator?.observeForegroundAgentProcess(process),
     hasKnownAgentIdentity: session.paneHasKnownAgentIdentity,
-    onConfirmedShellForeground: (reason) => {
-      // Retire stale agent occupancy when a normal exit returns to the shell.
+    hasAgentExpectation: () => {
       const state = useAppStore.getState()
-      const sleepingRecord = session.getSleepingRecordForPane(state)
-      const ptyId = session.transport.getPtyId()
-      const wake = session.hibernatedWakeTarget
-      // A delayed shell read can settle after exit consumes suppression; preserve only that PTY's exact wake record.
-      const isHibernationWakeRecord =
-        (ptyId && state.suppressedPtyExitIds[ptyId]) ||
-        (wake && wake.record === sleepingRecord?.record && (ptyId === null || wake.ptyId === ptyId))
-      if (sleepingRecord && !isHibernationWakeRecord) {
-        session.clearSleepingRecordProviderDuplicates(state, sleepingRecord)
-      }
-      if (!isHibernationWakeRecord) {
-        // Why: codex/grok leave their OSC title behind, so the title tracker never
-        // reports this exit; without it the chat view stays over the bare shell.
-        session.deps.onAgentExitedRef.current(session.pane.leafId)
-      }
-      session.clearStaleAgentTabTitleOnConfirmedShell()
-      // Why: a hard-killed agent leaves mouse/focus/kitty modes armed, and the
-      // surviving shell then receives pointer moves as typed SGR reports; the
-      // replay guard keeps xterm's auto-replies from leaking to the shell.
-      session.writeInputModeGround(CONFIRMED_SHELL_MODE_RESET)
-      // Why: no 133;D backs these proofs, so a deferred command-finished drop keeps its own read.
-      if (reason === 'process-exit') {
-        // Why: reopen the one-shot visible sample so the next agent typed here is identified.
-        session.visibleForegroundSamplePending = false
-        session.visibleForegroundSampleSettled = false
-      }
-      if (reason === 'visible-pty' || reason === 'process-exit') {
-        state.clearAgentLaunchConfig(session.cacheKey)
-        return
-      }
-      session.settleDeferredCommandFinishedStatusDrop({ confirmedShell: true })
+      return (
+        session.paneExpectsLaunchAgent(state) ||
+        Boolean(state.paneForegroundAgentByPaneKey[session.cacheKey]?.agent)
+      )
     },
+    getObservationOwner: () => readPaneObservationOwner(session),
+    onConfirmedShellForeground: () => session.acceptAgentDeparture('foreground-release'),
     // Why wrapped: passed bare, a caller-supplied argument would be read as `options` and could
     // reconcile on the unavailable path, which has no proof the agent exited.
     onCommandFinishedUnavailable: () => session.settleDeferredCommandFinishedStatusDrop(),
@@ -304,9 +251,7 @@ export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
       return
     }
     const expectsAgent = session.paneExpectsLaunchAgent(state)
-    // Why: a completed local process ladder is stronger than stale tab/startup
-    // launch metadata. Command-start clears this mark if the pane becomes busy.
-    if (foreground?.shellForeground) {
+    if (!forceRoutingConfirmation && foreground?.shellForeground) {
       return
     }
     // Why: tab launch metadata can leak across split panes; rebuild pane-scoped
@@ -315,6 +260,7 @@ export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
       session.paneForegroundAgentTracker.onVisiblePtyBound(expectsAgent)
   }
   session.startAcceptedInferredCommand = (agent) => {
+    session.agentCompletionCoordinator?.invalidateProcessInspection()
     session.paneForegroundAgentTracker.onCommandStarted(agent)
   }
   session.requestKnownWindowsShiftEnterReconfirmation = () => {
@@ -356,8 +302,9 @@ export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
   }
   session.commandLifecycle = createTerminalCommandLifecycle({
     onCommandStarted: () => {
+      session.agentCompletionCoordinator?.invalidateProcessInspection()
       // Why: a new command invalidates cleanup waiting on the previous D; only
-      // a later confirmed shell boundary may retire this pane's live identity.
+      // a later confirmed process exit may retire this pane's live identity.
       session.deferredCommandFinishedStatusDrop = null
       dismissRetainedProgramResult(session.cacheKey, useAppStore.getState())
       session.visibleForegroundSamplePending = false

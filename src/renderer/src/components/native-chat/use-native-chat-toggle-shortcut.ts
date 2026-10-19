@@ -9,6 +9,7 @@ import { isMacPlatform, matchesNativeChatToggleShortcut } from './native-chat-sh
 import { getConnectionIdFromState } from '@/lib/connection-context'
 import { resolveKeyboardWorkspaceId } from '@/lib/floating-workspace-terminal-actions'
 import {
+  isNativeChatActiveLeafShellForeground,
   isNativeChatTabWideFallbackSafe,
   resolveNativeChatActiveLayoutLeafId
 } from './native-chat-leaf-routing'
@@ -95,7 +96,12 @@ export function useNativeChatToggleShortcut(worktreeId: string, isWorktreeActive
           nativeChatTranscriptIsLocalReadable: isNativeChatTranscriptLocalReadable(
             getConnectionIdFromState(state, worktreeId)
           ),
-          isChatViewMode: tab.viewMode === 'chat'
+          isChatViewMode: tab.viewMode === 'chat',
+          shellForeground: isNativeChatActiveLeafShellForeground(
+            tab.entityId,
+            terminalLayout,
+            state.paneForegroundAgentByPaneKey
+          )
         })
       ) {
         return

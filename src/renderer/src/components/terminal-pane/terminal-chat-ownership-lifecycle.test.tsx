@@ -9,11 +9,15 @@ import { resolveNativeChatLeafRoute } from '../native-chat/native-chat-leaf-rout
 import { detachTerminalLayoutLeaf } from './terminal-layout-leaf-detach'
 import { parseWorkspaceSession } from '../../../../shared/workspace-session-schema'
 import type { RemotePaneLayoutPusher } from './remote-pane-layout-push'
+import { useAppStore } from '../../store'
+import type { PaneForegroundAgentEntry } from '../../store/slices/pane-foreground-agent'
+import { makePaneKey } from '../../../../shared/stable-pane-id'
 
 const LEFT = '11111111-1111-4111-8111-111111111111'
 const RIGHT = '22222222-2222-4222-8222-222222222222'
 const mocks = vi.hoisted(() => {
   const layouts: Record<string, TerminalLayoutSnapshot> = {}
+  const foreground: Record<string, PaneForegroundAgentEntry> = {}
   const tab = { id: 'tab', entityId: 'tab', contentType: 'terminal', viewMode: 'chat' }
   const state = {
     terminalLayoutsByTabId: layouts,
@@ -23,7 +27,7 @@ const mocks = vi.hoisted(() => {
     pendingPaneAccountRestarts: [],
     runtimePaneTitlesByTabId: { tab: { 1: 'codex', 2: 'codex' } },
     agentStatusByPaneKey: {},
-    paneForegroundAgentByPaneKey: {},
+    paneForegroundAgentByPaneKey: foreground,
     setTabLayout: (_id: string, layout: TerminalLayoutSnapshot) => {
       layouts.tab = layout
     },
@@ -137,6 +141,7 @@ function useFixture(fixture: ReturnType<typeof makeFixture>, initialOwner: strin
 }
 
 beforeEach(() => {
+  useAppStore.setState({ paneForegroundAgentByPaneKey: {} })
   mocks.state.settings.experimentalNativeChat = true
   mocks.state.runtimePaneTitlesByTabId.tab = { 1: 'codex', 2: 'codex' }
   mocks.state.setTabViewMode('tab', 'chat')
@@ -155,6 +160,34 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('terminal chat ownership lifecycle', () => {
+  it('releases suspended chat, rejects a shell sibling, and restores eligibility after fg', () => {
+    const fixture = makeFixture()
+    const hook = renderHook(() => useFixture(fixture, RIGHT))
+    act(() => {
+      useAppStore.setState({
+        paneForegroundAgentByPaneKey: {
+          [makePaneKey('tab', LEFT)]: { agent: null, shellForeground: true },
+          [makePaneKey('tab', RIGHT)]: { agent: null, shellForeground: true }
+        }
+      })
+      fixture.onAgentExitedRef.current(RIGHT)
+    })
+    expect(hook.result.current.chatLeafId).toBeNull()
+    expect(mocks.state.unifiedTabsByWorktree.wt[0].viewMode).toBe('terminal')
+    expect(hook.result.current.canToggleChatForLeaf(RIGHT)).toBe(false)
+    expect(hook.result.current.canToggleChatForLeaf(LEFT)).toBe(false)
+    act(() =>
+      useAppStore.setState({
+        paneForegroundAgentByPaneKey: {
+          [makePaneKey('tab', RIGHT)]: { agent: 'codex', shellForeground: false }
+        }
+      })
+    )
+    expect(hook.result.current.canToggleChatForLeaf(RIGHT)).toBe(true)
+    expect(hook.result.current.chatLeafId).toBeNull()
+    expect(mocks.state.unifiedTabsByWorktree.wt[0].viewMode).toBe('terminal')
+  })
+
   it('batches a pane toggle into chat and back without selecting the active sibling', () => {
     mocks.state.setTabViewMode('tab', 'terminal')
     const fixture = makeFixture()

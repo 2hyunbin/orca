@@ -45,6 +45,7 @@ async function inspect(rawName: string, command: string | null) {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This unmarked-foreground fixture supplies the members inspection exercises; daemon lifecycle is outside this test.
     session: {
       pid: 100,
+      spawn: { shellPath: '/bin/bash' },
       incarnationId: 'incarnation-1',
       isAlive: true,
       inspectChildProcesses: () => 'unverifiable' as const,
