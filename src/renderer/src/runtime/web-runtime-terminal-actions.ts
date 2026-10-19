@@ -7,7 +7,7 @@ import type { PaneLayoutEditIntent } from '../../../shared/rpc-contract/session-
 import { runtimeEnvironmentIdUnlessTwin } from '../lib/resolve-owner'
 import { useAppStore } from '../store'
 import { unwrapRuntimeRpcResult } from './runtime-rpc-result'
-import { parseRemoteRuntimePtyId } from './runtime-terminal-stream'
+import { parseRemoteRuntimePtyId } from '../../../shared/remote-runtime-pty-id'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 import { isWebTerminalSurfaceTabId, toHostSessionTabId } from '../../../shared/terminal-surface-id'
 import {
