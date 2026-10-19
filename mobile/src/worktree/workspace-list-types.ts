@@ -86,8 +86,8 @@ export type FilterState = WorkspaceRowFilters
 // repoIcon stays unread wire data until drawn (readMobileRepoIcon).
 export type SectionRepo = ProjectSectionRepo & { badgeColor?: string; repoIcon?: unknown }
 
-/** A workspace the host is still creating; the feed names only its project. */
-export type SectionPendingCreation = { key: string; repoName: string }
+/** A workspace the host is still creating; the feed names only its project, null under its own header. */
+export type SectionPendingCreation = { key: string; repoName: string | null }
 
 export type Section = {
   key: string

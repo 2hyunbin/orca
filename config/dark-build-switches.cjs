@@ -50,14 +50,8 @@ function darkBuildMarkers(env = process.env) {
   }))
 }
 
-function assertNotDarkBuild(outputDirs, env = process.env) {
-  const [asked] = turnedOn(env)
-  if (asked) {
-    throw new Error(
-      `${asked.variable}=main is for dark test builds; unset it to package a release.`
-    )
-  }
-  for (const darkSwitch of DARK_BUILD_SWITCHES) {
+function assertUnmarked(outputDirs, switches) {
+  for (const darkSwitch of switches) {
     const marked = outputDirs.find((dir) => existsSync(join(dir, markerFileName(darkSwitch))))
     if (marked) {
       throw new Error(
@@ -67,7 +61,27 @@ function assertNotDarkBuild(outputDirs, env = process.env) {
   }
 }
 
+function assertNotDarkBuild(outputDirs, env = process.env) {
+  const [asked] = turnedOn(env)
+  if (asked) {
+    throw new Error(
+      `${asked.variable}=main is for dark test builds; unset it to package a release.`
+    )
+  }
+  assertUnmarked(outputDirs, DARK_BUILD_SWITCHES)
+}
+
+/** For a build that may itself be dark: refuses only outputs marked by a switch this build has off. */
+function assertNoDarkOutputOfOffSwitches(outputDirs, env = process.env) {
+  const on = turnedOn(env)
+  assertUnmarked(
+    outputDirs,
+    DARK_BUILD_SWITCHES.filter((darkSwitch) => !on.includes(darkSwitch))
+  )
+}
+
 module.exports = {
+  assertNoDarkOutputOfOffSwitches,
   assertNotDarkBuild,
   darkBuildDefines,
   darkBuildMarkerFileNames,

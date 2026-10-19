@@ -12,6 +12,8 @@ import type { Worktree as HostWorktree } from '../../../src/shared/worktree/type
 import { composeWorktreeHostIdentity } from '../../../src/shared/worktree/host-qualified-identity'
 import type { Section, Worktree } from '../worktree/workspace-list-types'
 import { resolveWorktreeHostId } from '../worktree/worktree-host-context-labels'
+import { filterWorktrees } from '../worktree/workspace-list-sections'
+import { rowFiltersForView, type MobileViewState } from '../worktree/workspace-view-settings'
 
 /** What the host screen draws from a feed-built list, besides its rows' own live content. */
 export type HostFeedListSources = {
@@ -173,7 +175,14 @@ export function buildHostFeedSections(sources: HostFeedListSources): Section[] {
       case 'pending-creation': {
         const section = current()
         section.pendingCreations ??= []
-        section.pendingCreations.push({ key: row.key, repoName: row.repo?.displayName ?? '' })
+        section.pendingCreations.push({
+          key: row.key,
+          // A project header already names it.
+          repoName:
+            section.repo && section.repo.id === row.repo?.id
+              ? null
+              : (row.repo?.displayName ?? null)
+        })
         break
       }
       // The desktop-only cards draw nothing on the phone.
@@ -187,15 +196,22 @@ export function buildHostFeedSections(sources: HostFeedListSources): Section[] {
 
 /**
  * Before the first feed read: the rows this page last listed (worktree.ps, or the cache the screen
- * opened with), in their served order under no header, so an offline open is not blank.
+ * opened with) under the view's filters, in their served order and no header, so an offline open
+ * is not blank.
  */
-export function buildPreFeedSections(rows: readonly Worktree[], search: string): Section[] {
-  if (rows.length === 0) {
-    return []
-  }
-  const sections: Section[] = [{ key: 'all', title: '', data: [...rows] }]
-  const query = search.trim().toLowerCase()
-  return query ? narrowSections(sections, query) : sections
+export function buildPreFeedSections(sources: {
+  rows: Worktree[]
+  view: MobileViewState
+  search: string
+  repoHostIdByRepoId: ReadonlyMap<string, ExecutionHostId>
+}): Section[] {
+  const rows = filterWorktrees(
+    sources.rows,
+    rowFiltersForView(sources.view),
+    sources.search,
+    sources.repoHostIdByRepoId
+  )
+  return rows.length > 0 ? [{ key: 'all', title: '', data: rows }] : []
 }
 
 /** A section whose title matches keeps every row; otherwise only matching rows, counted as shown. */
@@ -205,9 +221,12 @@ function narrowSections(sections: readonly Section[], query: string): Section[] 
       return [section]
     }
     const data = section.data.filter((row) => matchesSearch(row, query))
-    // An unnamed creation can match no search.
-    return data.length > 0
-      ? [{ ...section, data, count: data.length, pendingCreations: undefined }]
+    // A creation has no name yet: only its project can match, as a row's can.
+    const pendingCreations = section.pendingCreations?.filter((creation) =>
+      creation.repoName?.toLowerCase().includes(query)
+    )
+    return data.length > 0 || pendingCreations?.length
+      ? [{ ...section, data, count: data.length, pendingCreations }]
       : []
   })
 }

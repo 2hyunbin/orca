@@ -3,14 +3,7 @@ import { colors, spacing, typography } from '../theme/mobile-theme'
 import type { SectionPendingCreation } from '../worktree/workspace-list-types'
 
 /** A workspace the host is creating, where the desktop's sidebar shows its pending row. */
-export function HostPendingCreationRow({
-  creation,
-  showRepo
-}: {
-  creation: SectionPendingCreation
-  /** Off under a project header, which already names it. */
-  showRepo: boolean
-}) {
+export function HostPendingCreationRow({ creation }: { creation: SectionPendingCreation }) {
   return (
     <View style={styles.row} accessibilityRole="progressbar">
       <View style={styles.indicator}>
@@ -20,7 +13,7 @@ export function HostPendingCreationRow({
         <Text style={styles.title} numberOfLines={1}>
           Creating workspace…
         </Text>
-        {showRepo && creation.repoName ? (
+        {creation.repoName ? (
           <Text style={styles.meta} numberOfLines={1}>
             {creation.repoName}
           </Text>

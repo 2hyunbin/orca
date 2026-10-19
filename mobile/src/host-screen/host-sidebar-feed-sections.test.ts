@@ -189,7 +189,7 @@ describe('the phone list from the sidebar feed', () => {
         }),
         phoneView()
       ).find((section) => section.title === 'lab')!
-    expect(creating().pendingCreations).toEqual([{ key: 'pending:c1', repoName: 'lab' }])
+    expect(creating().pendingCreations).toEqual([{ key: 'pending:c1', repoName: null }])
     expect(creating().data.map((row) => row.worktreeId)).toEqual(['lab::/w/gpu'])
     // Once the host names a workspace it lists, only the workspace shows.
     expect(creating('lab::/w/gpu').pendingCreations).toBeUndefined()
@@ -201,6 +201,22 @@ describe('the phone list from the sidebar feed', () => {
       phoneView({ groupBy: 'none' })
     )
     expect(first).toMatchObject({ title: '', pendingCreations: [{ repoName: 'orca' }] })
+  })
+
+  it('keeps a creation through search only when its project matches', () => {
+    const domains = feedDomains({ creations: new Map([['c1', { repoId: 'orca' }]]) })
+    const view = phoneView({ groupBy: 'none' })
+    const built = buildSidebarFeedRows(domains, catalog, phoneFeedView(view))
+    const search = (query: string) =>
+      buildHostFeedSections({
+        rows: built.sectionRows,
+        activeRowKeys: built.activeRowKeys,
+        liveRows: [],
+        repoHostIdByRepoId: new Map(),
+        search: query
+      }).flatMap((section) => section.pendingCreations ?? [])
+    expect(search('orc')).toHaveLength(1)
+    expect(search('gpu')).toHaveLength(0)
   })
 
   it('narrows rows by search and drops sections left with none', () => {
@@ -215,17 +231,18 @@ describe('the phone list from the sidebar feed', () => {
 describe('the phone list before the first feed read', () => {
   const cached = [
     liveRow({ worktreeId: 'orca::/w/b', displayName: 'beta' }),
-    liveRow({ worktreeId: 'orca::/w/a', displayName: 'alpha' })
+    liveRow({ worktreeId: 'orca::/w/a', displayName: 'alpha' }),
+    liveRow({ worktreeId: 'orca::/w/old', displayName: 'old', isArchived: true })
   ]
+  const preFeed = (search: string, rows = cached) =>
+    buildPreFeedSections({ rows, view: phoneView(), search, repoHostIdByRepoId: new Map() })
 
-  it('shows the rows the page last listed, in their order, under no header', () => {
-    expect(buildPreFeedSections(cached, '')).toEqual([{ key: 'all', title: '', data: cached }])
+  it('shows the rows the page last listed, in their order under no header, filtered as the view is', () => {
+    expect(preFeed('')).toEqual([{ key: 'all', title: '', data: cached.slice(0, 2) }])
   })
 
   it('narrows them by search, and draws nothing with none', () => {
-    expect(buildPreFeedSections(cached, 'alp')[0]?.data.map((row) => row.worktreeId)).toEqual([
-      'orca::/w/a'
-    ])
-    expect(buildPreFeedSections([], '')).toEqual([])
+    expect(preFeed('alp')[0]?.data.map((row) => row.worktreeId)).toEqual(['orca::/w/a'])
+    expect(preFeed('', [])).toEqual([])
   })
 })

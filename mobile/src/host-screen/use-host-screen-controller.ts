@@ -18,7 +18,7 @@ import {
   useReconnectAttempt,
   useRelayRecoveryStatus
 } from '../transport/client-context-connection-metrics'
-import { useHostDisplayWorktrees } from './use-host-display-worktrees'
+import { useHostDisplayWorktrees, useResolvedHostPlatform } from './use-host-display-worktrees'
 import { useHostListSections } from './use-host-list-sections'
 import { useSwitchedHostSidebarFeed } from './use-host-sidebar-feed'
 import { useHostProjectSections } from './use-host-project-sections'
@@ -122,7 +122,14 @@ export function useHostScreenController({
 
   const displayWorktrees = useHostDisplayWorktrees(connState, state, hostId)
   const feed = sidebarFeed?.feed ?? null
-  const sectionsResult = useHostListSections({ client, feed, displayWorktrees, state })
+  const hostPlatform = useResolvedHostPlatform(state, hostId)
+  const sectionsResult = useHostListSections({
+    client,
+    feed,
+    displayWorktrees,
+    hostPlatform,
+    state
+  })
   const { collapsedGroups, projectOrderBy } = sectionsResult
   const { uniqueRepos } = sectionsResult
   const activeFilterCount = useMemo(

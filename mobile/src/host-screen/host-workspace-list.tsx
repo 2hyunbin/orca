@@ -171,11 +171,7 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
           ]}
           renderSectionHeader={({ section }) => {
             const pendingCreations = section.pendingCreations?.map((creation) => (
-              <HostPendingCreationRow
-                key={creation.key}
-                creation={creation}
-                showRepo={state.view.groupBy !== 'repo'}
-              />
+              <HostPendingCreationRow key={creation.key} creation={creation} />
             ))
             if (!section.title) {
               return pendingCreations ? <>{pendingCreations}</> : null

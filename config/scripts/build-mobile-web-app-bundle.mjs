@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { readRouteSnapshot } from './mobile-web-app-route-snapshot.mjs'
 import { realpathSync } from 'node:fs'
 import { basename, extname, join, resolve } from 'node:path'
@@ -35,9 +35,7 @@ const { MOBILE_WEB_BUNDLE_DIR: defaultOutDir } = createRequire(import.meta.url)(
   './verify-packaged-mobile-web-bundle.cjs'
 )
 // The desktop serves this page, so a dark switch the desktop was built with reaches it too.
-const { darkBuildMarkers, turnedOnDarkBuildDefines } = createRequire(import.meta.url)(
-  '../dark-build-switches.cjs'
-)
+const { turnedOnDarkBuildDefines } = createRequire(import.meta.url)('../dark-build-switches.cjs')
 
 /**
  * Every shim the app bundle needs, each one a documented Metro/RN-Web gap. `appliesTo` reads the
@@ -663,10 +661,6 @@ export async function buildMobileWebAppBundle({
     protocolWindow,
     routes: resolveMobileWebPageRoutes(routeKeys, pageRoutes)
   })
-  // Outside the manifest, so the page's bytes and buildId stay what the switch compiled.
-  for (const marker of darkBuildMarkers()) {
-    await writeFile(join(outDir, marker.fileName), marker.text, 'utf8')
-  }
   return {
     manifest,
     outDir,
