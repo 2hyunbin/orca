@@ -295,8 +295,8 @@ describe("a Stop's event", () => {
     // Stop and the drain share one serialized lane, so this interleaving is forced: a pause
     // written after the drain chose the card must still hold it in the claim's transaction.
     vi.spyOn(open, 'appendSubmission').mockImplementation(async (input, consume) => {
-      // The queue's own claim is the one no operation settles.
-      if (consume?.settledByOp === null && consume.messageId === draftId && !injected) {
+      // The queue's own claim is the one that yields to a pause.
+      if (consume?.yieldsToPause && consume.messageId === draftId && !injected) {
         injected = true
         await open.appendStopEvent({ reason: 'user-stop' }, input.fence)
       }

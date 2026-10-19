@@ -177,6 +177,7 @@ export function registerCommandReceiptTransactionTests(): void {
         fence: 0,
         items: [],
         queuePause: { lifted: false, liveStop: null, reopened: false },
+        queue: { cards: [], receipt: { write: () => {}, committed: () => {} } },
         now: () => 2000,
         mintEpoch: () => 'epoch-2',
         onPublished: () => undefined

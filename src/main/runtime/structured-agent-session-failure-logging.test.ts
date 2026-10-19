@@ -188,11 +188,19 @@ describe('host collaborators log with their own scope', () => {
 
   it('the queued-message drain logs a step that fails', async () => {
     const log = recordingStructuredAgentSessionLogger()
-    const journal = { queuedMessages: { settlementOwed: () => true } }
+    const card = { messageId: 'card', state: 'waiting', holdReason: null, queuedAt: null }
+    const journal = {
+      queuedMessages: {
+        list: () => [card],
+        pauses: () => [],
+        editLeases: { heldIds: () => new Set<string>() }
+      }
+    }
     const drain = new StructuredAgentSessionQueuedMessageDrain(
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a schedule past the owed-settlement check reads only these members.
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a schedule past the sendable-card check reads only these members.
       {
         sessions: new Map([[SESSION, { journal }]]),
+        currentWork: () => ({ working: () => false }),
         serialize: rejectingSerialize,
         logger: log.logger
       } as unknown as QueuedMessageDrainDeps
