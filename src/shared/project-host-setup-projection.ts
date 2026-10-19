@@ -59,6 +59,13 @@ export function getProjectProviderIdentity(
       }
     }
   }
+  return getGitRemoteProviderIdentity(repo)
+}
+
+/** The GitHub identity the folder's own primary remote names, ignoring stamped `upstream`. */
+export function getGitRemoteProviderIdentity(
+  repo: Pick<Repo, 'gitRemoteIdentity'>
+): ProjectProviderIdentity | null {
   // Why: the remote URL retains HTTP(S) endpoint ports that the canonical
   // key omits, so prefer it when reconstructing a host-qualified GHES identity.
   return (

@@ -21,6 +21,7 @@ import {
 } from '../../shared/execution-host'
 import { getProjectIdForProviderIdentity } from '../../shared/project-host-setup-projection'
 import { getProjectHostSetupForRepo } from '../../shared/project-host-setup-lookup'
+import { assertImportedFolderRemoteMatchesProject } from '../../shared/imported-folder-project-identity'
 import { invalidateAuthorizedRootsCache } from '../ipc/registered-worktree-roots-cache'
 import {
   SshHostNotServedError,
@@ -290,6 +291,7 @@ export class RuntimeProjectHostSetupController {
       if (!identity || getProjectIdForProviderIdentity(identity) !== args.projectId) {
         throw new Error('Imported folder does not match the selected project identity.')
       }
+      assertImportedFolderRemoteMatchesProject(repo, identity)
       const updated = store.updateRepo(repo, {
         upstream: {
           owner: identity.owner,

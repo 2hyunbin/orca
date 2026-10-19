@@ -342,6 +342,37 @@ describe('repos:add + repos:clone', () => {
     expect(invalidateAuthorizedRootsCacheMock).toHaveBeenCalled()
   })
 
+  it('refuses to relabel a folder whose own GitHub remote names another repository (#30663)', async () => {
+    const added: Record<string, unknown>[] = []
+    mockStore.getRepos.mockImplementation(() => added)
+    mockStore.addRepo.mockImplementation((repo: Record<string, unknown>) => added.push(repo))
+    reposMocks.gitExecFileAsyncMock.mockImplementation(async (argv: string[]) =>
+      argv[0] === 'remote' && argv[1] === '-v'
+        ? {
+            stdout:
+              'origin\thttps://github.com/acme/repo-b.git (fetch)\norigin\thttps://github.com/acme/repo-b.git (push)\n'
+          }
+        : { stdout: '' }
+    )
+
+    try {
+      await expect(
+        handlers.get('projectHostSetups:setupExistingFolder')!(null, {
+          projectId: 'github:acme/repo-a',
+          projectProviderIdentity: { provider: 'github', owner: 'acme', repo: 'repo-a' },
+          hostId: 'local',
+          path: '/tmp/repo-b',
+          kind: 'git'
+        })
+      ).rejects.toThrow(/points at acme\/repo-b, not acme\/repo-a/)
+    } finally {
+      reposMocks.gitExecFileAsyncMock.mockReset()
+    }
+
+    expect(mockStore.updateRepo).not.toHaveBeenCalled()
+    expect(mockStore.removeProjectForHost).toHaveBeenCalledWith(added[0]?.id, 'local')
+  })
+
   it('refuses project setup on an SSH target with the not-connected text and adds no repo', async () => {
     await expect(
       handlers.get('projectHostSetups:setupExistingFolder')!(null, {
