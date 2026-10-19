@@ -2,8 +2,7 @@
 // written the same way for every agent, which the fold never hides.
 
 import type { AgentJournalPlainStatusItem } from './agent-session-journal-types'
-
-export const AGENT_SESSION_HOOK_OUTCOME_PRESENTATION = 'hook-outcome'
+import { AGENT_SESSION_TURN_NOTICE_PRESENTATION } from './agent-session-turn-notice'
 
 export type AgentSessionHookOutcome = 'blocked' | 'stopped'
 
@@ -16,7 +15,7 @@ export function hookOutcomeRowBody(
   return {
     kind: 'status',
     tone: 'warning',
-    presentation: AGENT_SESSION_HOOK_OUTCOME_PRESENTATION,
+    presentation: AGENT_SESSION_TURN_NOTICE_PRESENTATION,
     text:
       lines.length === 0
         ? `${header}.`

@@ -27,7 +27,7 @@ import {
 import type { ProviderTimelineEvent } from '../agent-session-timeline/provider-timeline-event'
 
 const row = (text: string) =>
-  expect.objectContaining({ tone: 'warning', presentation: 'hook-outcome', text })
+  expect.objectContaining({ tone: 'warning', presentation: 'turn-notice', text })
 const DEPLOYS_FROZEN = row('Blocked by hook: Deploys are frozen')
 const CODEX_CHAT = { agent: 'codex' as const, providerHandle: codexProviderHandle('t') }
 const CLAUDE_CHAT = { agent: 'claude' as const, providerHandle: claudeProviderHandle('p', 'l') }

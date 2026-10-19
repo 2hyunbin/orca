@@ -2,10 +2,10 @@
 // words; `info`, `notice` (a hook's systemMessage) and `suggestion` are session chrome, not chat rows.
 
 import {
-  AGENT_SESSION_HOOK_OUTCOME_PRESENTATION,
   hookOutcomeRowBody,
   type AgentSessionHookOutcome
 } from '../../shared/agent-session-hook-outcome'
+import { AGENT_SESSION_TURN_NOTICE_PRESENTATION } from '../../shared/agent-session-turn-notice'
 import type { AgentJournalStatusItem } from '../../shared/agent-session-journal-types'
 import {
   boundInlineText,
@@ -58,7 +58,7 @@ export function claudeInformationalRowBody(
     kind: 'status' as const,
     tone: 'warning',
     text,
-    ...(halts ? { presentation: AGENT_SESSION_HOOK_OUTCOME_PRESENTATION } : {})
+    ...(halts ? { presentation: AGENT_SESSION_TURN_NOTICE_PRESENTATION } : {})
   }
   return { ...row, text: boundInlineText(row.text, DEFAULT_JOURNAL_PAYLOAD_LIMITS).text }
 }

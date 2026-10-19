@@ -7,8 +7,8 @@
 // error, and an error the agent recovered from folds behind the answer after it.
 
 import { AGENT_SESSION_COMPACTION_SKIPPED_PRESENTATION } from './agent-session-compaction'
-import { AGENT_SESSION_HOOK_OUTCOME_PRESENTATION } from './agent-session-hook-outcome'
 import { AGENT_SESSION_ORCA_STOP_PRESENTATION } from './agent-session-orca-stop'
+import { AGENT_SESSION_TURN_NOTICE_PRESENTATION } from './agent-session-turn-notice'
 import { nativeChatRowRendersContent } from './native-chat-row-content'
 import { isStoppedBeforeStartBlock } from './native-chat-stopped-before-start'
 import { nativeChatRowRendersProse } from './native-chat-trailing-run'
@@ -39,8 +39,8 @@ export type NativeChatTurnFoldRow = {
    *  turn's answer, so a turn that failed shows the error as its end. */
   reportsFailure: boolean
   /** Whether the row explains what became of the turn: a compaction's result, that
-   *  the response was interrupted, or that a hook blocked the message. It never
-   *  folds: hiding it would leave the turn's status as the only trace of it. */
+   *  the response was interrupted, or any turn notice. It never folds: hiding it
+   *  would leave the turn's status as the only trace of it. */
   explainsTurn: boolean
 }
 
@@ -76,7 +76,7 @@ export function nativeChatTurnFoldRow(
         (block.presentation === 'compaction' ||
           block.presentation === AGENT_SESSION_COMPACTION_SKIPPED_PRESENTATION ||
           block.presentation === AGENT_SESSION_ORCA_STOP_PRESENTATION ||
-          block.presentation === AGENT_SESSION_HOOK_OUTCOME_PRESENTATION)
+          block.presentation === AGENT_SESSION_TURN_NOTICE_PRESENTATION)
     )
   }
 }
