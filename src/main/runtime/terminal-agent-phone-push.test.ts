@@ -251,6 +251,16 @@ describe('TerminalAgentPhonePush', () => {
     expect(sent).toHaveLength(1)
   })
 
+  it('waits out the quiet window for a pane restored mid-work, as the window seeds it', () => {
+    const { push, sent, advance, finish } = harness({ hookRow: row({ state: 'working' }) })
+    const workspace = { worktreeId: WT, sshHostId: null }
+    push.observe({ kind: 'seeded', paneKey: PANE, workspace, phase: 'working', at: 1 })
+    finish()
+    expect(sent).toEqual([])
+    advance(AGENT_DONE_QUIET_MS)
+    expect(sent).toHaveLength(1)
+  })
+
   it('announces no finish restored with the pane', () => {
     const { push, sent, advance, working, finish } = harness({
       hookRow: row({ state: 'working', turnCompletedAt: 7_000 })

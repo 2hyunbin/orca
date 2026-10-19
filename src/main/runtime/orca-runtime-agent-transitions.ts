@@ -21,9 +21,12 @@ export abstract class OrcaRuntimeWithAgentTransitions extends OrcaRuntimeWithMig
     now: Date.now
   })
   private readonly terminalAgentPhonePush = new TerminalAgentPhonePush({
+    // A desktop that has not shown its window yet counts as having one: that window seeds what it
+    // missed rather than announcing it, so the phone hears no more than it does today.
     hasWindow: () =>
-      this.authoritativeWindowId !== null &&
-      this.authoritativeWindowId !== HEADLESS_RUNTIME_WINDOW_ID,
+      this.authoritativeWindowId === null
+        ? this.rendererGraphEpoch === 0
+        : this.authoritativeWindowId !== HEADLESS_RUNTIME_WINDOW_ID,
     readNotificationSettings: () => this.store?.getSettings().notifications,
     readWorkspaceLabels: (worktreeId, paneKey) =>
       this.readTerminalAgentWorkspaceLabels(worktreeId, paneKey),
@@ -71,13 +74,13 @@ export abstract class OrcaRuntimeWithAgentTransitions extends OrcaRuntimeWithMig
       return { repoLabel: group?.name, worktreeLabel: folder?.name || fallback }
     }
     const id = scope?.type === 'worktree' ? scope.worktreeId : worktreeId
-    const worktree = this.resolvedWorktrees.peek()?.worktrees.find((item) => item.id === id)
-    const repo = worktree
-      ? store?.getRepo(worktree.repoId ?? getRepoIdFromWorktreeId(id))
-      : undefined
+    // The listing is a cache a catalog change empties; the persisted record names it meanwhile.
+    const listed = this.resolvedWorktrees.peek()?.worktrees.find((item) => item.id === id)
+    const meta = listed ? undefined : store?.getWorktreeMeta(id)
+    const repo = listed || meta ? store?.getRepo(getRepoIdFromWorktreeId(id)) : undefined
     return {
       repoLabel: repo?.displayName,
-      worktreeLabel: worktree?.displayName || worktree?.branch || fallback
+      worktreeLabel: listed?.displayName || listed?.branch || meta?.displayName || fallback
     }
   }
 }

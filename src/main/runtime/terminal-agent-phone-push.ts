@@ -61,7 +61,7 @@ export class TerminalAgentPhonePush {
     const { paneKey } = change
     if (change.kind === 'seeded') {
       if (change.phase !== 'rest') {
-        this.rememberFinishedTurn(paneKey)
+        this.seed(paneKey)
       }
       return
     }
@@ -114,23 +114,27 @@ export class TerminalAgentPhonePush {
     }
     // The lead agent finished while background work keeps the pane working: as the window does,
     // that is the turn's finish, named by its `turnCompletedAt` and announced at once, once.
-    if (
-      this.finishedTurnByPane.get(paneKey) === turnCompletedAt ||
-      !this.workingSeen.has(paneKey)
-    ) {
+    if (this.finishedTurnByPane.get(paneKey) === turnCompletedAt) {
       return
     }
     this.finishedTurnByPane.set(paneKey, turnCompletedAt)
+    // A finish of work this host never saw is the window's to drop too; it still marks the turn told.
+    if (!this.workingSeen.has(paneKey)) {
+      return
+    }
     this.workingSeen.delete(paneKey)
     this.cancelPending(paneKey)
     const finish = { ...row, state: 'done' as const, stateStartedAt: turnCompletedAt }
     this.announce(paneKey, worktreeId, finish, false)
   }
 
-  private rememberFinishedTurn(paneKey: string): void {
-    const turnCompletedAt = this.deps.readHookRow(paneKey)?.turnCompletedAt
-    if (turnCompletedAt !== undefined) {
-      this.finishedTurnByPane.set(paneKey, turnCompletedAt)
+  // As the window seeds a restored pane: a working one counts as work seen, a stamped turn as told.
+  private seed(paneKey: string): void {
+    const row = this.deps.readHookRow(paneKey)
+    if (row?.turnCompletedAt !== undefined) {
+      this.finishedTurnByPane.set(paneKey, row.turnCompletedAt)
+    } else if (row?.state === 'working') {
+      this.workingSeen.add(paneKey)
     }
   }
 

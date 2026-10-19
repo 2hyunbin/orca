@@ -10,7 +10,7 @@ import type { RuntimeStore } from './runtime-store-contract'
 const WT = 'repo-1::/tmp/worktree-a'
 const PANE = 'tab-1:11111111-1111-4111-8111-111111111111'
 
-function createHost(windowId = HEADLESS_RUNTIME_WINDOW_ID) {
+function createHost(windowId: number | null = HEADLESS_RUNTIME_WINDOW_ID) {
   const store = {
     getRepos: () => [],
     getRepo: (id: string) =>
@@ -23,7 +23,9 @@ function createHost(windowId = HEADLESS_RUNTIME_WINDOW_ID) {
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the push path reads only these members.
   const runtime = new OrcaRuntimeService(store as unknown as RuntimeStore)
-  runtime.syncWindowGraph(windowId, { tabs: [], leaves: [] })
+  if (windowId !== null) {
+    runtime.syncWindowGraph(windowId, { tabs: [], leaves: [] })
+  }
   const server = new AgentHookServer()
   runtime.attachAgentStatusStore(server)
   const alerts: MobileNotificationEvent[] = []
@@ -95,5 +97,22 @@ describe('terminal agent phone push on a headless host', () => {
     report('done', undefined, 'folder:f1')
     vi.advanceTimersByTime(AGENT_DONE_QUIET_MS)
     expect(alerts[0]).toMatchObject({ title: 'Research / Notes - Claude finished' })
+  })
+
+  it('stays silent on a desktop whose window has not shown yet: that window seeds what it missed', () => {
+    const { report, agentAlerts } = createHost(null)
+    report('working')
+    report('done')
+    vi.advanceTimersByTime(AGENT_DONE_QUIET_MS)
+    expect(agentAlerts()).toEqual([])
+  })
+
+  it('pushes once the desktop’s window has closed', () => {
+    const { runtime, report, agentAlerts } = createHost(1)
+    runtime.markGraphUnavailable(1)
+    report('working')
+    report('done')
+    vi.advanceTimersByTime(AGENT_DONE_QUIET_MS)
+    expect(agentAlerts()).toEqual(['done'])
   })
 })
