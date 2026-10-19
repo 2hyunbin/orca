@@ -4,33 +4,16 @@ import {
   seedNativeChatLaunchDraftForAgentTab
 } from '../lib/agent-launch-prompt-delivery'
 import { createWebRuntimeSessionTerminalResult } from './web-runtime-terminal-create-operation'
-import { notifyWebRuntimeTerminalCreateFailure } from './web-runtime-terminal-create-failure-notice'
 import { toWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
 import type {
   CreateWebRuntimeSessionTerminalArgs,
   WebRuntimeTerminalCreateOutcome
 } from './web-runtime-session-types'
 
-/**
- * A host-side failure is toasted here because the host never mirrors a tab for it, so no pane
- * exists to show the error. `notifyFailure: false` is for callers that report it themselves.
- */
 export async function createWebRuntimeSessionTerminal(
-  args: CreateWebRuntimeSessionTerminalArgs,
-  options: { notifyFailure?: boolean } = {}
+  args: CreateWebRuntimeSessionTerminalArgs
 ): Promise<WebRuntimeTerminalCreateOutcome> {
-  const created = await createWebRuntimeSessionTerminalResult(args)
-  if (
-    created.hostFailed &&
-    created.outcome.status === 'failed' &&
-    options.notifyFailure !== false
-  ) {
-    notifyWebRuntimeTerminalCreateFailure(created.outcome.message, {
-      environmentId: args.environmentId ?? null,
-      worktreeId: args.worktreeId
-    })
-  }
-  return created.outcome
+  return (await createWebRuntimeSessionTerminalResult(args)).outcome
 }
 
 export async function createWebRuntimeAgentSessionTerminal(

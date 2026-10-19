@@ -70,15 +70,7 @@ export function resolveWorktreeRemovalOwnerHostId(
 }
 
 export function removeWorktreeMetadataAndTransientState(
-  {
-    store,
-    runtime,
-    entryPoint = 'worktree-removal'
-  }: {
-    store: Store
-    runtime: Pick<OrcaRuntimeService, 'releaseRemovedWorktreeHostSessions'>
-    entryPoint?: 'worktree-removal' | 'folder-removal'
-  },
+  store: Store,
   worktreeId: string,
   hostId?: ExecutionHostId,
   snapshotPruneBatchId?: string
@@ -106,8 +98,6 @@ export function removeWorktreeMetadataAndTransientState(
     deleteWorktreeHistoryDir(worktreeId)
     // Why: release the removed worktree's PR-refresh aliases so coalesced queue entries don't retain it all session (memory creep).
     pruneWorktreePRRefreshAliases(worktreeId)
-    // Why: the desktop also hosts browser pages for paired clients; the runtime path closes them too.
-    runtime.releaseRemovedWorktreeHostSessions(worktreeId, entryPoint)
   }
   // Why: removed workspaces must never resurrect from the persisted cleanup/space scan snapshots.
   const snapshotDirectory = store.getProfileStorageDirectory()

@@ -123,7 +123,7 @@ export const HOSTILE_HOST_CELLS: readonly HostileHostCell[] = [
         ' && rm -rf /var/lib/apt/lists/*'
     ],
     homeNoexec: true,
-    managed: { outcome: 'unavailable', runtime: 'linux-x64-glibc', reason: 'runtime_noexec' }
+    managed: { outcome: 'unavailable', runtime: 'linux-x64-glibc', reason: 'runtime_self_test' }
   },
   {
     // glibc 2.17 is below the pinned Node's floor, so orcad runs on the glibc 2.17 compat runtime.

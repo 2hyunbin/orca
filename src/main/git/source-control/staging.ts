@@ -25,7 +25,7 @@ export async function stageFile(
   invalidateGitReadCaches()
   try {
     await gitExecFileAsync(
-      ['add', '--', literalPathspec(filePath, worktreePath, options)],
+      ['add', '--', literalPathspec(filePath, options)],
       gitOptionsForWorktree(worktreePath, options)
     )
     await redoWriteForDriveCheckoutSuspects(worktreePath, [filePath], STAGE_WRITE, options)
@@ -45,12 +45,9 @@ export async function unstageFile(
   invalidateGitReadCaches()
   try {
     // Reset treats an unborn HEAD as an empty tree, preserving the working file.
-    await gitExecFileAsync(
-      ['reset', '--quiet', '--', literalPathspec(filePath, worktreePath, options)],
-      {
-        ...gitOptionsForWorktree(worktreePath, options)
-      }
-    )
+    await gitExecFileAsync(['reset', '--quiet', '--', literalPathspec(filePath, options)], {
+      ...gitOptionsForWorktree(worktreePath, options)
+    })
   } finally {
     invalidateGitReadCaches()
   }
@@ -71,9 +68,7 @@ export async function bulkStageFiles(
   try {
     await gitExecFileAsync(['add', '--pathspec-from-file=-', '--pathspec-file-nul'], {
       ...gitOptionsForWorktree(worktreePath, options),
-      stdin: encodeGitPathspecs(
-        filePaths.map((filePath) => literalPathspec(filePath, worktreePath, options))
-      )
+      stdin: encodeGitPathspecs(filePaths.map((filePath) => literalPathspec(filePath, options)))
     })
     await redoWriteForDriveCheckoutSuspects(worktreePath, filePaths, STAGE_WRITE, options)
   } finally {
@@ -128,9 +123,7 @@ export async function bulkUnstageFiles(
   try {
     await gitExecFileAsync(['reset', '--quiet', '--pathspec-from-file=-', '--pathspec-file-nul'], {
       ...gitOptionsForWorktree(worktreePath, options),
-      stdin: encodeGitPathspecs(
-        filePaths.map((filePath) => literalPathspec(filePath, worktreePath, options))
-      )
+      stdin: encodeGitPathspecs(filePaths.map((filePath) => literalPathspec(filePath, options)))
     })
   } finally {
     invalidateGitReadCaches()

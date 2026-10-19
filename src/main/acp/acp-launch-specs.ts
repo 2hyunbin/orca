@@ -88,15 +88,9 @@ export type AcpModelDiscovery =
   | { kind: 'unavailable'; reason: string }
 
 /** What a new chat offers, read from a session opened in the asking chat's folder and then
- *  deleted. An agent that cannot delete one is not asked unless it can keep that session in a
- *  folder Orca removes, and with no chat folder (a prewarm) none is opened, so no conversation or
- *  new project is left in its history. */
-export type AcpSessionModelDiscovery = {
-  kind: 'session'
-  listingNamesConfiguredModel: boolean
-  /** Arguments that keep the listing's session in `folder` instead of the agent's own store. */
-  sessionFolderArgs?(folder: string): string[]
-}
+ *  deleted. An agent that cannot delete one is not asked, and with no chat folder (a
+ *  prewarm) none is opened, so no conversation or new project is left in its history. */
+export type AcpSessionModelDiscovery = { kind: 'session'; listingNamesConfiguredModel: boolean }
 
 /** Whether some release lists in a session in the asking chat's folder, so the listing needs one
  *  and reads that folder's project config. */
@@ -285,12 +279,10 @@ const OMP_LAUNCH_SPEC: AcpLaunchSpec = {
   // Stable releases from 17.0.5, the release verified to serve `omp acp`.
   supportsVersion: (version) => isStableCliVersionFrom(version, '17.0.5'),
   // `omp models --json` lists every model without the `enabledModels` filter a chat applies, so it
-  // could offer models a chat refuses. A session lists exactly what a chat in that folder offers;
-  // `omp acp` cannot delete one, so it is kept out of OMP's store (17.0.5 and 18.12.2 verified).
+  // could offer models a chat refuses; its chats' own listings fill the catalog instead.
   modelDiscovery: {
-    kind: 'session',
-    listingNamesConfiguredModel: false,
-    sessionFolderArgs: (folder) => ['--session-dir', folder]
+    kind: 'unavailable',
+    reason: 'omp has no session-free listing that matches what its chats offer'
   },
   visualsSkill: loadOmpVisualsSkill,
   compaction: true,

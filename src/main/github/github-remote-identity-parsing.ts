@@ -27,22 +27,14 @@ function parseGitHubRemotePath(path: string): Pick<GitHubRemoteIdentity, 'owner'
 export function remoteUrlUsesSshTransport(remoteUrl: string): boolean {
   const trimmed = remoteUrl.trim().toLowerCase()
   return (
-    isScpStyleRemote(trimmed) || trimmed.startsWith('ssh://') || trimmed.startsWith('git+ssh://')
+    trimmed.startsWith('git@') || trimmed.startsWith('ssh://') || trimmed.startsWith('git+ssh://')
   )
-}
-
-/**
- * Why: GitHub SSH certificate organizations hand out `org-<id>@github.com:<owner>/<repo>`,
- * so the SCP user is not always `git`.
- */
-function isScpStyleRemote(remoteUrl: string): boolean {
-  return /^[^@\s/:]+@[^:\s/]+:[^\s]+$/.test(remoteUrl)
 }
 
 /** SSH transport host as written, preserving SCP alias case. */
 export function rawSshTransportHost(remoteUrl: string): string | null {
   const trimmed = remoteUrl.trim()
-  const scpMatch = trimmed.match(/^[^@\s/:]+@([^:]+):/i)
+  const scpMatch = trimmed.match(/^git@([^:]+):/i)
   if (scpMatch) {
     return scpMatch[1]
   }
@@ -71,7 +63,7 @@ export function gitHubSshConfigHostAlias(remoteUrl: string): string | null {
 
 export function parseGitHubRemoteIdentity(remoteUrl: string): GitHubRemoteIdentity | null {
   const trimmed = remoteUrl.trim()
-  const sshMatch = trimmed.match(/^[^@\s/:]+@([^:]+):([^/]+)\/([^/]+?)(?:\.git)?$/i)
+  const sshMatch = trimmed.match(/^git@([^:]+):([^/]+)\/([^/]+?)(?:\.git)?$/i)
   if (sshMatch) {
     return { host: normalizeGitHubRemoteHost(sshMatch[1]), owner: sshMatch[2], repo: sshMatch[3] }
   }

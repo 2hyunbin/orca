@@ -6,8 +6,6 @@ import {
 } from '../../../../shared/execution-host'
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
 import type { Repo } from '../../../../shared/repo-types'
-import { getRuntimeBrowserPageRegistry } from '../../runtime-browser-page-registry'
-import { listFailedAgentLaunchWorktreeIds } from '../../../agent-launch/agent-launch-pane-attachment'
 import {
   closeStructuredSessionsForWorktree,
   createStructuredSweepProgress,
@@ -103,44 +101,17 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
           console.warn('[runtime] project agent session close failed', error)
         })
       : null
-    let worktreeIds: readonly string[] = []
     try {
-      const result = await this.stopProjectPtys(repo, stopOptions)
-      worktreeIds = result.worktreeIds
-      return { stopped: result.stopped }
+      return await this.stopProjectPtys(repo, stopOptions)
     } finally {
       await chats
-      if (closeStructuredSessions) {
-        this.releaseProjectHostSessions(repo.id, worktreeIds)
-      }
-    }
-  }
-
-  /** Browser pages and failed-launch records of a removed project's workspaces on this host. */
-  private releaseProjectHostSessions(repoId: string, knownWorktreeIds: readonly string[]): void {
-    // Why: page records carry no host, so a surviving same-id row's pages are indistinguishable.
-    if ((this.store?.getRepos?.() ?? []).some((row) => row.id === repoId)) {
-      return
-    }
-    const pageOwners = [
-      ...getRuntimeBrowserPageRegistry(this)
-        .listPages()
-        .map((page) => page.workspaceId),
-      ...listFailedAgentLaunchWorktreeIds(),
-      ...(this.agentBrowserBridge?.tabWorktreeIds?.() ?? []).map((id) => id ?? '')
-    ]
-    const worktreeIds = new Set(
-      [...knownWorktreeIds, ...pageOwners].filter((id) => getRepoIdFromWorktreeId(id) === repoId)
-    )
-    for (const worktreeId of worktreeIds) {
-      this.releaseRemovedWorktreeHostSessions(worktreeId, 'project-removal')
     }
   }
 
   private async stopProjectPtys(
     repo: Pick<Repo, 'id' | 'connectionId' | 'executionHostId'>,
     options: { deadline?: number }
-  ): Promise<{ stopped: number; worktreeIds: readonly string[] }> {
+  ): Promise<{ stopped: number }> {
     // Why: after a restart, surviving daemon sessions are in the provider inventory before ptysById.
     // Bounded so a slow worktree scan cannot spend the budget the known PTYs' stops need.
     const refreshDeadline = Math.min(
@@ -167,7 +138,7 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
     removedFences.add(fence.resolvedConnectionId)
     this.removedProjectFences.set(repo.id, removedFences)
     if (this.projectSiblingSharesFence(repo)) {
-      return { stopped: 0, worktreeIds: [] }
+      return { stopped: 0 }
     }
     let stopped = 0
     for (const id of listProjectTerminalWorktreeIds(repo.id, this.leaves, this.ptysById)) {
@@ -194,7 +165,7 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
         release?.()
       }
     }
-    return { stopped, worktreeIds: [...projectWorktreeIds] }
+    return { stopped }
   }
 
   /**

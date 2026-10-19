@@ -32,8 +32,7 @@ export type LegacyRelayTargetBridgeDeps = {
   targetId: string
   /** The target's non-terminated leases. */
   leases: () => SshRemotePtyLease[]
-  /** Only on the relay's word: its exit report, or every relay answered and none holds it. */
-  retireLease: (relayPtyId: string, proof: 'exit-observed' | 'absent') => void
+  retireLease: (relayPtyId: string) => void
   listEndpoints: (signal: AbortSignal) => Promise<LegacyRelayEndpointListing>
   openClient: (
     endpoint: LegacyRelayEndpoint,
@@ -226,7 +225,7 @@ export class LegacyRelayTargetBridge {
       } else if (complete) {
         // Every relay this target could have left answered, and none holds it.
         const wasLive = this.panes.get(ptyId)?.endpoint
-        this.deps.retireLease(relayPtyId, 'absent')
+        this.deps.retireLease(relayPtyId)
         this.emitExit(ptyId, -1, Boolean(wasLive))
       } else {
         // Unreachable: loss of contact is never exit, so the pane waits.
@@ -307,8 +306,7 @@ export class LegacyRelayTargetBridge {
   }
 
   private retire(ptyId: string, pane: Pane, code: number | null): void {
-    // A null code is the relay refusing an attach as proven exited.
-    this.deps.retireLease(pane.relayPtyId, code === null ? 'absent' : 'exit-observed')
+    this.deps.retireLease(pane.relayPtyId)
     this.panes.delete(ptyId)
     this.emitExit(ptyId, code ?? -1)
     this.closeIdleClients(new Set([...this.panes.values()].map((entry) => entry.endpoint ?? '')))

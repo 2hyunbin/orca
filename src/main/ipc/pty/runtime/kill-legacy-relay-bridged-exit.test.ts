@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { toAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import type { PtyRuntimeControllerDeps } from './controller-deps'
-import { PtyExitProof } from '../../../pty-exit-proof'
 
 const bridge = vi.hoisted(() => ({ proven: true }))
 
@@ -36,12 +35,7 @@ describe('a proven stop-and-wait of a terminal an older relay still runs', () =>
         )
       ).resolves.toBe(proven)
       if (proven) {
-        expect(deps.finishPtyShutdown).toHaveBeenCalledWith(
-          ptyId,
-          null,
-          null,
-          PtyExitProof.from('absent')
-        )
+        expect(deps.finishPtyShutdown).toHaveBeenCalledWith(ptyId, null, null)
         expect(deps.runtime.onPtyExit).toHaveBeenCalledWith(ptyId, 0, undefined)
       } else {
         expect(deps.finishPtyShutdown).not.toHaveBeenCalled()

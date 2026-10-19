@@ -8,8 +8,6 @@ import { LEGACY_RELAY_BRIDGE_CHANNELS as CHANNELS } from '../../../shared/legacy
 import { isRemoteCliControlAllowed } from '../../../shared/ssh-remote-cli-control'
 import type { Store } from '../../persistence'
 import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
-import { PtyRetirementWithoutProof } from '../../pty-exit-proof'
-import { toAppSshPtyId } from '../../../shared/ssh-pty-id'
 import { track } from '../../telemetry/client'
 import type { SshConnection } from '../connection/ssh-connection'
 import { knownSshHostPlatform } from '../ssh-host-platform-memo'
@@ -55,18 +53,10 @@ export function registerLegacyRelayBridgeIpc(args: {
   }
   installLegacyRelayBridge({
     leases: (targetId) => args.store.getSshRemotePtyLeases(targetId),
-    retireLease: (targetId, relayPtyId, evidence) => {
-      // Cleared first so the retire can prune the tombstone.
+    retireLease: (targetId, relayPtyId) => {
+      // The exit delivered any recorded stop; cleared first so the retire can prune the tombstone.
       args.store.setSshRemotePtyLeasePendingKill(targetId, relayPtyId, null)
-      args.store.markSshRemotePtyLease(targetId, relayPtyId, evidence)
-      if (evidence instanceof PtyRetirementWithoutProof) {
-        args
-          .runtime?.()
-          ?.markPtyLivenessUnverifiable(
-            toAppSshPtyId(targetId, relayPtyId),
-            evidence.unverifiableReason
-          )
-      }
+      args.store.markSshRemotePtyLease(targetId, relayPtyId, 'terminated')
     },
     recordStop: (targetId, relayPtyId, pendingKill) =>
       args.store.setSshRemotePtyLeasePendingKill(targetId, relayPtyId, pendingKill),

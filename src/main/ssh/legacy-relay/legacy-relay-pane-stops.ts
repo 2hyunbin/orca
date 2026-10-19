@@ -19,7 +19,6 @@ import { LegacyRelayExitProofs, LegacyRelayRetry } from './legacy-relay-bridge-t
 import type { LegacyRelayClient } from './legacy-relay-client'
 import type { LegacyRelayBridgeHost } from './legacy-relay-bridge-registry'
 import type { LegacyRelayTargetBridge } from './legacy-relay-target-bridge'
-import { PtyRetirementWithoutProof } from '../../pty-exit-proof'
 
 type StopTarget = Pick<
   LegacyRelayTargetBridge,
@@ -194,11 +193,7 @@ export class LegacyRelayPaneStops {
     this.closing.delete(ptyId)
     const relayPtyId = parseAppSshPtyId(ptyId)?.relayPtyId
     if (relayPtyId) {
-      this.host()?.retireLease(
-        this.targetId,
-        relayPtyId,
-        PtyRetirementWithoutProof.because('the old relay could not be sent a stop fenced to it')
-      )
+      this.host()?.retireLease(this.targetId, relayPtyId)
     }
     // The next listing drops the pane it still holds for that lease; after an attempted stop, only
     // once the relay's exit report had its chance, since dropping the pane first would hide it.

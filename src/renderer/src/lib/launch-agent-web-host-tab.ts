@@ -122,7 +122,7 @@ export function launchAgentInWebHostTab(args: {
       launchDraft: prompt
     }).then((outcome) => handleCreation({ outcome, promptDelivered: outcome.status === 'created' }))
   }
-  return createWebRuntimeSessionTerminal(launch, { notifyFailure: false }).then((outcome) =>
+  return createWebRuntimeSessionTerminal(launch).then((outcome) =>
     handleCreation({ outcome, promptDelivered: outcome.status === 'created' && hasPrompt })
   )
 }

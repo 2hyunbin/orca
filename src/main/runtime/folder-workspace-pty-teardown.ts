@@ -1,6 +1,5 @@
 import { killAllProcessesForWorktree, type WorktreeTeardownRuntime } from './worktree-teardown'
 import type { IPtyProvider } from '../providers/pty-provider-contract'
-import { teardownStops } from './owned-session-teardown-policy'
 
 export type FolderWorkspacePtyTeardownDeps = {
   runtime: WorktreeTeardownRuntime
@@ -29,7 +28,7 @@ export async function teardownFolderWorkspacePtys(
     onPtyStopped: deps.onPtyStopped ?? undefined,
     // A structured session is on no PTY surface, so the sweeps above leave it attached to a
     // workspace this removal is about to forget. Closed best-effort, exactly like those PTYs.
-    closeStructuredSessions: teardownStops('folder-removal', 'structured-chat'),
+    closeStructuredSessions: true,
     ...(connectionId ? { includeProviderInventory: false, includeLocalRegistry: false } : {})
   }).catch((error) => {
     console.warn(`[worktree-teardown] failed for ${worktreeId}:`, error)

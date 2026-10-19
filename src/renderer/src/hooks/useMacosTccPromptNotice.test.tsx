@@ -89,7 +89,7 @@ it('isolates plugin language-pack discovery from its parent render path', async 
     root?.render(createElement(I18nextProvider, { i18n }, createElement(ParentProbe)))
   })
   await act(async () => {
-    usePluginLanguagePackStore.setState({ entries: [], loaded: true })
+    usePluginLanguagePackStore.setState({ packs: [], loaded: true })
   })
 
   expect(parentRenderCount).toBe(1)

@@ -23,9 +23,6 @@ export function unservedServerStatus(
 const HELD_MOVE_MESSAGE =
   'Orca paused moving this host’s projects to its managed server because it couldn’t confirm the server’s copy. Nothing is lost: the host keeps its projects and stays locked until the move finishes. Connect again to resume. If the server can’t come back, stop or forget it in Settings > Managed servers.'
 
-const NOEXEC_MESSAGE =
-  'This host doesn’t allow running programs from ~/.orca-remote, so Orca can’t start its server there. This usually means the home folder is mounted with noexec. Ask the host’s administrator to allow running programs there, then connect again.'
-
 /** Untranslated twin of the renderer's status line, for logs and callers without the catalog. */
 export function unservedHostServerMessage(decision: UnservedDecision): string {
   if (decision.held && (decision.reason === 'failed' || decision.reason === 'deferred')) {
@@ -33,9 +30,7 @@ export function unservedHostServerMessage(decision: UnservedDecision): string {
   }
   switch (decision.reason) {
     case 'orcad_unavailable':
-      return decision.detail === 'runtime_noexec'
-        ? NOEXEC_MESSAGE
-        : 'This SSH host isn’t supported by this version of Orca. To keep using it, install an older version of Orca.'
+      return 'This SSH host isn’t supported by this version of Orca. To keep using it, install an older version of Orca.'
     case 'relay_terminals_live':
     case 'relay_terminals_unverifiable':
       return 'Terminals started by an older version of Orca are still running on this host, and they don’t stop on their own. Close them in that version of Orca or end them on the host, then reconnect.'

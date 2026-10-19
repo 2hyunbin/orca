@@ -24,25 +24,16 @@ export function focusGuardUnavailableError(): BrowserError {
   )
 }
 
-// Why: blurring the user's open IME composition commits its unfinished text (#28700). Refused
-// rather than held: a held press could outlive its agent or land in the user's next composition.
-function userComposingError(): BrowserError {
-  return new BrowserError(
-    'browser_user_composing',
-    'The user is typing with an input method in Orca, so the input was not sent to keep their unfinished text. Retry in a moment.'
-  )
-}
-
 export async function guardPaneFocusForAgentInput(
   renderer: WebContents,
   browserPageId: string
 ): Promise<() => void> {
   const token = randomUUID()
-  const answer = await new Promise<'ready' | 'unavailable' | 'composing'>((resolve) => {
-    const finish = (outcome: 'ready' | 'unavailable' | 'composing'): void => {
+  const answered = await new Promise<boolean>((resolve) => {
+    const finish = (ready: boolean): void => {
       clearTimeout(timer)
       ipcMain.removeListener(AGENT_INPUT_FOCUS_GUARD_READY_CHANNEL, onReady)
-      resolve(outcome)
+      resolve(ready)
     }
     const onReady = (event: Electron.IpcMainEvent, reply: unknown): void => {
       if (
@@ -52,10 +43,10 @@ export async function guardPaneFocusForAgentInput(
         'token' in reply &&
         reply.token === token
       ) {
-        finish('composing' in reply && reply.composing === true ? 'composing' : 'ready')
+        finish(true)
       }
     }
-    const timer = setTimeout(() => finish('unavailable'), PANE_READY_TIMEOUT_MS)
+    const timer = setTimeout(() => finish(false), PANE_READY_TIMEOUT_MS)
     ipcMain.on(AGENT_INPUT_FOCUS_GUARD_READY_CHANNEL, onReady)
     renderer.send(AGENT_INPUT_FOCUS_GUARD_CHANNEL, { browserPageId, token, active: true })
   })
@@ -69,10 +60,10 @@ export async function guardPaneFocusForAgentInput(
       renderer.send(AGENT_INPUT_FOCUS_GUARD_CHANNEL, { browserPageId, token, active: false })
     }
   }
-  if (answer !== 'ready') {
+  if (!answered) {
     // Why: input sent without a pane holding the user's element would take their focus for good.
     release()
-    throw answer === 'composing' ? userComposingError() : focusGuardUnavailableError()
+    throw focusGuardUnavailableError()
   }
   return release
 }

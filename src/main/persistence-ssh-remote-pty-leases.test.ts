@@ -13,7 +13,6 @@ import { tmpdir } from 'node:os'
 import { getDefaultPersistedState } from '../shared/constants'
 import { sshRemotePtyLeaseAllowsReattach } from '../shared/ssh-types'
 import { TEST_LEAF_1, TEST_LEAF_2 } from './persistence-session-fixtures'
-import { PtyExitProof } from './pty-exit-proof'
 
 // Stub the ~/.ssh/config parser so the SSH-import test drives the real Store with deterministic hosts, not the operator's actual ~/.ssh/config.
 const { loadUserSshConfigMock, sshConfigHostsToTargetsMock } = vi.hoisted(() => ({
@@ -550,11 +549,7 @@ describe('Store', () => {
     const store = await createStore()
 
     expect(() =>
-      store.markSshRemotePtyLease(
-        'ssh-1',
-        'ssh:ssh-2@@remote-pty',
-        PtyExitProof.from('exit-observed')
-      )
+      store.markSshRemotePtyLease('ssh-1', 'ssh:ssh-2@@remote-pty', 'terminated')
     ).toThrow('belongs to SSH connection "ssh-2"')
   })
 
@@ -567,11 +562,7 @@ describe('Store', () => {
       }
     ])
 
-    store.markSshRemotePtyLease(
-      'ssh-1',
-      'ssh:ssh-1@@remote-pty',
-      PtyExitProof.from('exit-observed')
-    )
+    store.markSshRemotePtyLease('ssh-1', 'ssh:ssh-1@@remote-pty', 'terminated')
 
     // An unresolved id would have left the lease `attached`; this unbound row is retired instead.
     expect(store.getSshRemotePtyLeases('ssh-1')).toEqual([])
@@ -580,11 +571,7 @@ describe('Store', () => {
   it('clears workspace bindings when marking an SSH remote PTY lease terminated', async () => {
     const store = await storeWithBoundSshPane()
 
-    store.markSshRemotePtyLease(
-      'ssh-1',
-      'ssh:ssh-1@@remote-pty',
-      PtyExitProof.from('exit-observed')
-    )
+    store.markSshRemotePtyLease('ssh-1', 'ssh:ssh-1@@remote-pty', 'terminated')
 
     const session = store.getWorkspaceSession()
     expect(store.getSshRemotePtyLeases('ssh-1')).toEqual([])

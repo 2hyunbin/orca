@@ -102,15 +102,6 @@ function unavailableLine(reason: string | undefined): SshHostServerStatusLine {
   if (reason === TUNNEL_UNAVAILABLE) {
     return tunnelUnavailableLine()
   }
-  if (reason === 'runtime_noexec') {
-    return {
-      tone: 'destructive',
-      text: translate(
-        'auto.components.settings.sshHostServer.runtimeNoexec',
-        'This host doesn’t allow running programs from ~/.orca-remote, so Orca can’t start its server there. This usually means the home folder is mounted with noexec. Ask the host’s administrator to allow running programs there, then connect again.'
-      )
-    }
-  }
   const cause = reason ? unavailableCause(reason) : null
   if (cause) {
     return {

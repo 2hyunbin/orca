@@ -178,28 +178,24 @@ describe('launchAiVaultSessionInNewTab', () => {
     })
 
     expect(result.tabId).toBeNull()
-    expect(runtimeMocks.createWebRuntimeSessionTerminal).toHaveBeenCalledWith(
-      {
-        worktreeId: 'wt-1',
-        environmentId: 'env-1',
-        targetGroupId: 'group-1',
-        agentSessionKind: 'resume',
-        launchAgent: 'codex',
-        command: "codex resume 'session-1'",
-        env: { CODEX_PROFILE: 'runtime' },
-        envToDelete: ['CODEX_HOME', 'ORCA_CODEX_HOME'],
-        launchConfig: {
-          agentCommand: 'codex',
-          agentArgs: '',
-          agentEnv: { CODEX_PROFILE: 'runtime' }
-        },
-        providerSession: { key: 'session_id', id: 'session-1' },
+    expect(runtimeMocks.createWebRuntimeSessionTerminal).toHaveBeenCalledWith({
+      worktreeId: 'wt-1',
+      environmentId: 'env-1',
+      targetGroupId: 'group-1',
+      agentSessionKind: 'resume',
+      launchAgent: 'codex',
+      command: "codex resume 'session-1'",
+      env: { CODEX_PROFILE: 'runtime' },
+      envToDelete: ['CODEX_HOME', 'ORCA_CODEX_HOME'],
+      launchConfig: {
+        agentCommand: 'codex',
         agentArgs: '',
-        activate: true
+        agentEnv: { CODEX_PROFILE: 'runtime' }
       },
-      // Its callers toast the failure with the agent's own wording.
-      { notifyFailure: false }
-    )
+      providerSession: { key: 'session_id', id: 'session-1' },
+      agentArgs: '',
+      activate: true
+    })
     expect(mockCreateTab).not.toHaveBeenCalled()
     expect(queuedStartups()).toEqual([])
 
@@ -224,8 +220,7 @@ describe('launchAiVaultSessionInNewTab', () => {
 
     expect(mockCreateEmptySplitGroup).toHaveBeenCalledWith('wt-1', 'group-1', 'right')
     expect(runtimeMocks.createWebRuntimeSessionTerminal).toHaveBeenCalledWith(
-      expect.objectContaining({ targetGroupId: 'group-new' }),
-      { notifyFailure: false }
+      expect.objectContaining({ targetGroupId: 'group-new' })
     )
     if (result.tabId === null) {
       await result.runtimeLaunch

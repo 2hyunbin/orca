@@ -138,7 +138,7 @@ export async function executeWorktreeRemoval(
     )
     runtime.clearOptimisticReconcileToken(args.worktreeId)
     removeWorktreeMetadataAndTransientState(
-      { store, runtime },
+      store,
       args.worktreeId,
       removalHostId,
       args.snapshotPruneBatchId

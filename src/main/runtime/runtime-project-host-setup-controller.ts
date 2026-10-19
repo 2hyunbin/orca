@@ -21,7 +21,6 @@ import {
 } from '../../shared/execution-host'
 import { getProjectIdForProviderIdentity } from '../../shared/project-host-setup-projection'
 import { getProjectHostSetupForRepo } from '../../shared/project-host-setup-lookup'
-import { assertImportedFolderRemoteMatchesProject } from '../../shared/imported-folder-project-identity'
 import { invalidateAuthorizedRootsCache } from '../ipc/registered-worktree-roots-cache'
 import {
   SshHostNotServedError,
@@ -32,7 +31,6 @@ import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
 import { updateProjectHostSetupWithProvenKind } from '../folder-repo-git-conversion'
 import type { RuntimeStore } from './runtime-store-contract'
 import { readAllWorktreeMetaForRepo } from '../persistence/host-qualified-worktree-meta'
-import { readCurrentGitRemoteIdentity } from '../repo-git-remote-identity'
 import {
   countRepoWorkspacesWithMetadata,
   describeProjectRemovalRefusal
@@ -130,10 +128,7 @@ export class RuntimeProjectHostSetupController {
       throw sshTargetNotServedError(sshTargetId)
     }
     const repo = await this.deps.addRepo(args.path, kind, args.hostId)
-    const repoWasCreated = !knownRepoIds.has(repo.id)
-    // Why: a registered row's stored remote can predate a remote the user has since added.
-    const folderRemote = repoWasCreated ? repo : await readCurrentGitRemoteIdentity(repo)
-    return this.completeSetup(args, repo, repoWasCreated, folderRemote)
+    return this.completeSetup(args, repo, !knownRepoIds.has(repo.id))
   }
 
   /**
@@ -154,8 +149,7 @@ export class RuntimeProjectHostSetupController {
     return this.completeSetup(
       { ...args, path: repo.path, kind: 'git', setupMethod: 'cloned' },
       repo,
-      !knownRepoIds.has(repo.id),
-      repo
+      !knownRepoIds.has(repo.id)
     )
   }
 
@@ -256,11 +250,10 @@ export class RuntimeProjectHostSetupController {
   private completeSetup(
     args: ProjectHostSetupExistingFolderArgs,
     initialRepo: Repo,
-    repoWasCreated: boolean,
-    folderRemote: Pick<Repo, 'gitRemoteIdentity'>
+    repoWasCreated: boolean
   ): ProjectHostSetupResult {
     try {
-      return this.linkRepo(args, initialRepo, folderRemote)
+      return this.linkRepo(args, initialRepo)
     } catch (error) {
       if (repoWasCreated) {
         // Why: host-scoped so a rollback never takes a same-id row on another host.
@@ -278,8 +271,7 @@ export class RuntimeProjectHostSetupController {
 
   private linkRepo(
     args: ProjectHostSetupExistingFolderArgs,
-    initialRepo: Repo,
-    folderRemote: Pick<Repo, 'gitRemoteIdentity'>
+    initialRepo: Repo
   ): ProjectHostSetupResult {
     const store = this.deps.getStore()
     if (!store) {
@@ -298,7 +290,6 @@ export class RuntimeProjectHostSetupController {
       if (!identity || getProjectIdForProviderIdentity(identity) !== args.projectId) {
         throw new Error('Imported folder does not match the selected project identity.')
       }
-      assertImportedFolderRemoteMatchesProject(folderRemote, identity)
       const updated = store.updateRepo(repo, {
         upstream: {
           owner: identity.owner,

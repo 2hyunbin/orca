@@ -5,7 +5,6 @@ import {
   confirmOrcadMigrationTerminalsUnderFence,
   retireProvenExitedLeases
 } from './orcad-migration-terminal-gate'
-import { PtyExitProof } from '../pty-exit-proof'
 
 type LeaseRow = Pick<SshRemotePtyLease, 'ptyId' | 'state'>
 
@@ -127,9 +126,9 @@ describe('acting on a terminal proof', () => {
       provenPtyIds: ['att', 'det', 'exp', 'ter']
     })
     expect(markSshRemotePtyLease.mock.calls).toEqual([
-      ['ssh-1', 'att', PtyExitProof.from('host-census')],
-      ['ssh-1', 'det', PtyExitProof.from('host-census')],
-      ['ssh-1', 'exp', PtyExitProof.from('host-census')]
+      ['ssh-1', 'att', 'terminated'],
+      ['ssh-1', 'det', 'terminated'],
+      ['ssh-1', 'exp', 'terminated']
     ])
   })
 
