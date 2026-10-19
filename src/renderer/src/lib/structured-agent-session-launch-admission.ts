@@ -23,11 +23,21 @@ import type { StructuredPromptDeliveryResult } from '@/lib/structured-agent-sess
 import type { LaunchAgentInNewTabArgs } from '@/lib/launch-agent-in-new-tab'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { toRuntimeWorktreeSelector } from '@/runtime/runtime-worktree-selector'
+import { readStructuredChatHostPermissionVerdict } from '@/runtime/structured-chat-host-permission'
+import { notifyHostPermissionRefused } from './structured-agent-session-launch-permission-notice'
 import { structuredChatUnavailableText } from '@/lib/structured-agent-session-launch-failure'
+import type { WebRuntimeTerminalCreateOutcome } from '@/runtime/web-runtime-session-types'
+
+export type AgentTerminalLaunchCompletion = {
+  outcome: WebRuntimeTerminalCreateOutcome
+  tabId?: string
+}
 
 /** What a host's "no" opens instead: the terminal the launch would have opened had it known. */
 export type StructuredLaunchTerminal = {
   opened: boolean
+  tabId?: string
+  completion?: Promise<AgentTerminalLaunchCompletion>
   promptDeliveryResult?: Promise<StructuredPromptDeliveryResult>
 }
 
@@ -65,7 +75,7 @@ function notifyExplicitChatFailure(agent: TuiAgent, reason?: string): void {
   )
 }
 
-export function notifyHostDeclined(agent: TuiAgent): void {
+export function notifyHostDeclined(agent: TuiAgent, explain = true): void {
   const agentLabel = structuredAgentLabel(agent)
   toast.info(
     translate(
@@ -73,13 +83,15 @@ export function notifyHostDeclined(agent: TuiAgent): void {
       'Opened {{value0}} in a terminal',
       { value0: agentLabel }
     ),
-    {
-      description: translate(
-        'components.native-chat.structuredSessionHostDeclinedDescription',
-        "This server can't run a {{value0}} chat in this workspace.",
-        { value0: agentLabel }
-      )
-    }
+    explain
+      ? {
+          description: translate(
+            'components.native-chat.structuredSessionHostDeclinedDescription',
+            "This workspace can't run a {{value0}} chat.",
+            { value0: agentLabel }
+          )
+        }
+      : undefined
   )
 }
 
@@ -123,7 +135,7 @@ export async function openDeclinedStructuredLaunchTerminal(args: {
     agent: args.plan.agent,
     worktreeId: args.worktreeId,
     ...(args.targetGroupId ? { groupId: args.targetGroupId } : {}),
-    ...(args.plan.prompt ? { prompt: args.plan.prompt } : {}),
+    ...(args.terminal?.activate !== false && args.plan.prompt ? { prompt: args.plan.prompt } : {}),
     ...(args.plan.promptDelivery ? { promptDelivery: args.plan.promptDelivery } : {}),
     ...(args.plan.onPromptDelivered ? { onPromptDelivered: args.plan.onPromptDelivered } : {}),
     ...(args.plan.promptKeptByCaller ? { promptKeptByCaller: true as const } : {}),
@@ -136,6 +148,8 @@ export async function openDeclinedStructuredLaunchTerminal(args: {
   })
   return {
     opened: result !== null,
+    ...(result?.surface.kind === 'local-terminal' ? { tabId: result.surface.tabId } : {}),
+    ...(result?.terminalCompletion ? { completion: result.terminalCompletion } : {}),
     ...(result?.promptDeliveryResult ? { promptDeliveryResult: result.promptDeliveryResult } : {})
   }
 }
@@ -230,6 +244,23 @@ export function beginHostAdmittedStructuredLaunch(args: {
           Promise.resolve(terminal.opened ? DELIVERED : NOT_DELIVERED)
         ).then(resolveDelivery, () => resolveDelivery(NOT_DELIVERED))
         return terminal.opened ? { kind: 'terminal' } : { kind: 'cancelled', sessionId: null }
+      }
+      // A host that would run the chat with more access than asked for gets nothing to start.
+      const permission = paired
+        ? await readStructuredChatHostPermissionVerdict(args.target, plan.agent)
+        : { kind: 'allowed' as const }
+      if (isCancelled()) {
+        resolveDelivery(NOT_DELIVERED)
+        return { kind: 'cancelled', sessionId: null }
+      }
+      if (permission.kind !== 'allowed') {
+        notifyHostPermissionRefused(plan.agent, permission.kind)
+        resolveDelivery({ delivered: false, failureNotified: true })
+        return {
+          kind: 'failed',
+          error: new Error('structured chat host runs with more access than asked for'),
+          notified: true
+        }
       }
       admitted = args.openAdmitted(
         admission.kind === 'admitted' ? admission.seedOptions : undefined

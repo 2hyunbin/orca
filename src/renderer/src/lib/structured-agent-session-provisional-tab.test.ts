@@ -1,160 +1,207 @@
+// @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Tab } from '../../../shared/tab-types'
+import { useAppStore } from '@/store'
+import type * as launchModule from './launch-structured-agent-session'
 import type { AgentSessionLaunchPlan } from './agent-session-launch-plan'
-import type { StructuredAgentLaunchSettlement } from './structured-agent-launch-settlement'
-
-const mocks = vi.hoisted(() => ({
-  createUnifiedTab: vi.fn(),
-  closeUnifiedTab: vi.fn(),
-  createSupport: vi.fn(),
-  requestFocus: vi.fn(),
-  cancelFocus: vi.fn(),
-  draftText: { value: '' }
-}))
-
-vi.mock('@/store', () => ({
-  useAppStore: {
-    getState: () => ({
-      unifiedTabsByWorktree: {},
-      activeGroupIdByWorktree: {},
-      createUnifiedTab: mocks.createUnifiedTab,
-      closeUnifiedTab: mocks.closeUnifiedTab,
-      setActiveTabType: vi.fn()
-    })
-  }
-}))
-vi.mock('@/runtime/structured-agent-session-client', () => ({
-  callStructuredAgentSession: (_target: unknown, method: string) =>
-    method === 'agentSession.createSupport' ? mocks.createSupport() : new Promise(() => undefined)
-}))
-
-vi.mock('@/components/native-chat/native-chat-composer-draft-store', () => ({
-  readNativeChatComposerDraft: () => ({ text: mocks.draftText.value, images: [] }),
-  resolveNativeChatComposerDraftOwner: () => undefined,
-  structuredAgentSessionDraftScopeKey: (sessionId: string) => `agent-session:${sessionId}`
-}))
-
+import { adoptAgentSessionLaunchVerdict } from './agent-session-launch-plan'
 import { beginStructuredAgentSessionProvisionalLaunch } from './structured-agent-session-provisional-tab'
 import { StructuredAgentSessionCreateRefusalError } from './structured-agent-session-launch-errors'
+import { act, renderHook } from '@testing-library/react'
+import { useNativeChatProvisionalLaunch } from '@/components/native-chat/use-native-chat-provisional-launch'
+import {
+  getStructuredAgentSessionLaunchFailure,
+  resetStructuredAgentLaunchRegistryForTests
+} from './structured-agent-session-launch-registry'
+import { structuredSessionNotices } from '@/components/native-chat/native-chat-structured-session-notices'
+import type { AgentTerminalLaunchCompletion } from './structured-agent-session-launch-admission'
 import {
   addNativeChatPendingAttachment,
   clearNativeChatPendingAttachmentsForTests
 } from '@/components/native-chat/native-chat-pending-attachment-cache'
 
-function planSettlingAs(
-  settlement: StructuredAgentLaunchSettlement,
-  prompt?: string
-): AgentSessionLaunchPlan {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: begin() is the only member this path calls.
-  return {
+const mocks = vi.hoisted(() => ({ text: '', focus: vi.fn(), toast: vi.fn(), launch: vi.fn() }))
+vi.mock('./launch-structured-agent-session', async (original) => ({
+  ...(await original<typeof launchModule>()),
+  launchStructuredAgentSession: mocks.launch
+}))
+vi.mock('sonner', () => ({ toast: { info: mocks.toast, error: vi.fn() } }))
+vi.mock('./focus-terminal-tab-surface', () => ({ focusTerminalTabSurface: vi.fn() }))
+vi.mock('@/components/native-chat/native-chat-composer-draft-store', () => ({
+  readNativeChatComposerDraft: () => ({ text: mocks.text, images: [] }),
+  resolveNativeChatComposerDraftOwner: () => undefined,
+  structuredAgentSessionDraftScopeKey: (id: string) => `agent-session:${id}`
+}))
+
+function planSettlingAs(error: StructuredAgentSessionCreateRefusalError): AgentSessionLaunchPlan {
+  mocks.launch.mockRejectedValue(error)
+  return adoptAgentSessionLaunchVerdict({
+    requestId: 'action',
     route: 'structured-native-chat',
     agent: 'claude',
     worktreeId: 'wt-1',
-    executionHostId: 'local',
-    ...(prompt ? { prompt } : {}),
-    begin: () => ({
-      sessionId: 'claude_1',
-      executionHostId: 'local',
-      settlement: Promise.resolve(settlement),
-      cancel: vi.fn()
-    }),
-    launch: vi.fn()
-  } as unknown as AgentSessionLaunchPlan
+    executionHostId: 'local'
+  })
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.text = ''
+  resetStructuredAgentLaunchRegistryForTests()
   clearNativeChatPendingAttachmentsForTests()
-  mocks.createUnifiedTab.mockImplementation(
-    (worktreeId: string, _type: string, tab: Partial<Tab>) => ({ ...tab, worktreeId })
-  )
-  mocks.createSupport.mockResolvedValue({ supported: true })
-  mocks.draftText.value = ''
+  useAppStore.setState({
+    activeWorktreeId: 'wt-1',
+    unifiedTabsByWorktree: {},
+    groupsByWorktree: {},
+    activeGroupIdByWorktree: {},
+    tabsByWorktree: {},
+    tabBarOrderByWorktree: {}
+  })
 })
 
-const declined = (): StructuredAgentLaunchSettlement => ({
-  kind: 'failed',
-  error: new StructuredAgentSessionCreateRefusalError('no', 'structured_agent_session_unsupported')
-})
+function openChat(requestedSurface?: 'chat') {
+  let complete!: (value: AgentTerminalLaunchCompletion) => void
+  const completion = new Promise<AgentTerminalLaunchCompletion>((resolve) => {
+    complete = resolve
+  })
+  const fallback = vi.fn(() => ({ opened: true, completion }))
+  const launch = beginStructuredAgentSessionProvisionalLaunch({
+    plan: {
+      ...planSettlingAs(new StructuredAgentSessionCreateRefusalError('no')),
+      requestedSurface
+    },
+    hooks: {},
+    focusIntent: { request: mocks.focus, cancel: vi.fn() },
+    onHostDeclined: fallback
+  })
+  const chat = launch?.tab
+  if (!chat) {
+    throw new Error('No immediate chat')
+  }
+  return { launch, chat, fallback, complete }
+}
 
 describe('a provisional structured chat tab', () => {
-  it('opens a New Chat at once and focuses it; the launch asks the host itself', async () => {
-    const launch = beginStructuredAgentSessionProvisionalLaunch({
-      plan: planSettlingAs({ kind: 'structured', sessionId: 'claude_1' }),
-      hooks: {},
-      focusIntent: { request: mocks.requestFocus, cancel: mocks.cancelFocus },
-      targetGroupId: 'group-2'
-    })
-
-    expect(mocks.createUnifiedTab).toHaveBeenCalledWith(
-      'wt-1',
-      'agent-session',
-      expect.objectContaining({ executionHostId: 'local', targetGroupId: 'group-2' })
-    )
-    expect(mocks.requestFocus).toHaveBeenCalledExactlyOnceWith('structured-agent-session-claude_1')
-    await expect(launch?.settlement).resolves.toEqual({ kind: 'structured', sessionId: 'claude_1' })
-    expect(mocks.createSupport).not.toHaveBeenCalled()
-  })
-
   it.each([
-    ['nobody typed: its terminal opens in its place', '', false, undefined, 'front'],
-    [
-      'typed in: the chat keeps it, its terminal opens behind',
-      'half a thought',
-      false,
-      undefined,
-      'back'
-    ],
-    ['pasting an image: the chat keeps it', '', true, undefined, 'back'],
-    ['picked as a chat: it stays a chat and says why', '', false, 'chat' as const, null]
-  ])(
-    'a New Chat its host refuses, %s',
-    async (_name, typed, pasting, requestedSurface, terminal) => {
-      const onHostDeclined = vi.fn(() => ({ opened: true }))
-      const launch = beginStructuredAgentSessionProvisionalLaunch({
-        plan: { ...planSettlingAs(declined()), ...(requestedSurface ? { requestedSurface } : {}) },
-        hooks: {},
-        focusIntent: { request: mocks.requestFocus, cancel: mocks.cancelFocus },
-        onHostDeclined
-      })
-      mocks.draftText.value = typed
-      if (pasting) {
-        addNativeChatPendingAttachment('agent-session:claude_1', {
-          id: 'paste-1',
-          path: '',
-          pending: true
-        })
-      }
-
-      await expect(launch?.settlement).resolves.toMatchObject({
-        kind: terminal === 'front' ? 'terminal' : 'failed'
-      })
-      expect(onHostDeclined.mock.calls).toEqual(
-        terminal === 'back' ? [[{ kind: 'local' }, false]] : terminal ? [[{ kind: 'local' }]] : []
-      )
-      expect(mocks.closeUnifiedTab).toHaveBeenCalledTimes(terminal === 'front' ? 1 : 0)
+    'empty',
+    'typed-before',
+    'typed-during',
+    'pending-chip',
+    'failed',
+    'unreconciled',
+    'closed',
+    'explicit',
+    'away-before',
+    'away-during',
+    'closed-during'
+  ])('owns the destination through terminal completion: %s', async (scenario) => {
+    if (scenario === 'typed-before') {
+      mocks.text = 'keep this'
     }
-  )
-
-  it('asks first for a launch that carries a prompt, so a "no" can hand it on', async () => {
-    const launch = beginStructuredAgentSessionProvisionalLaunch({
-      plan: planSettlingAs({ kind: 'structured', sessionId: 'claude_1' }, 'review this'),
-      hooks: {},
-      focusIntent: { request: mocks.requestFocus, cancel: mocks.cancelFocus },
-      targetGroupId: 'group-2'
-    })
-
-    expect(launch?.tab).toBeNull()
-    expect(mocks.createUnifiedTab).not.toHaveBeenCalled()
-    expect(mocks.requestFocus).not.toHaveBeenCalled()
-    await expect(launch?.settlement).resolves.toEqual({ kind: 'structured', sessionId: 'claude_1' })
-    expect(mocks.createSupport).toHaveBeenCalledOnce()
-    expect(mocks.createUnifiedTab).toHaveBeenCalledWith(
-      'wt-1',
-      'agent-session',
-      expect.objectContaining({ executionHostId: 'local', targetGroupId: 'group-2' })
+    const { launch, chat, fallback, complete } = openChat(
+      scenario === 'explicit' ? 'chat' : undefined
     )
-    expect(mocks.requestFocus).toHaveBeenCalledExactlyOnceWith('structured-agent-session-claude_1')
-    expect(mocks.cancelFocus).not.toHaveBeenCalled()
+    expect(mocks.focus).toHaveBeenCalledWith(chat.id)
+    const view = renderHook(() => {
+      const current = useNativeChatProvisionalLaunch('wt-1', chat.entityId)
+      return structuredSessionNotices({
+        launch: current,
+        agentLabel: 'Claude',
+        sessionError: null,
+        composerError: null
+      })
+    })
+    const away = () => {
+      useAppStore.getState().createUnifiedTab('wt-2', 'agent-session', { entityId: 'other' })
+      useAppStore.setState({ activeWorktreeId: 'wt-2', activeTabType: 'agent-session' })
+    }
+    if (scenario === 'away-before') {
+      away()
+    }
+    if (scenario === 'closed') {
+      useAppStore.getState().closeUnifiedTab(chat.id)
+    }
+    await vi.waitFor(() =>
+      expect(
+        scenario === 'closed' || scenario === 'explicit' || fallback.mock.calls.length
+      ).toBeTruthy()
+    )
+    if (scenario === 'closed' || scenario === 'explicit') {
+      await launch?.settlement
+      expect(fallback).not.toHaveBeenCalled()
+      view.unmount()
+      return
+    }
+    expect(useAppStore.getState().unifiedTabsByWorktree['wt-1']).toContainEqual(chat)
+    // Move the source while its host is preparing the terminal, then invest in the composer.
+    const sibling = useAppStore.getState().createUnifiedTab('wt-1', 'terminal', {
+      entityId: 'sibling',
+      split: { sourceGroupId: chat.groupId, splitDirection: 'right', activate: true }
+    })
+    const groupId = sibling.groupId
+    useAppStore.getState().moveUnifiedTabToGroup(chat.id, groupId)
+    useAppStore.getState().reorderUnifiedTabs(groupId, [chat.id, sibling.id])
+    if (scenario === 'typed-during') {
+      mocks.text = 'new thought'
+    }
+    if (scenario === 'pending-chip') {
+      addNativeChatPendingAttachment(`agent-session:${chat.entityId}`, {
+        id: 'paste',
+        path: '',
+        pending: true
+      })
+    }
+    if (scenario === 'away-during') {
+      away()
+    }
+    if (scenario === 'closed-during') {
+      useAppStore.getState().closeUnifiedTab(chat.id)
+    }
+    const priorFailure = getStructuredAgentSessionLaunchFailure('wt-1', chat.entityId)
+    const selected = useAppStore.getState().getActiveTab('wt-2')
+    const terminal =
+      scenario === 'failed' || scenario === 'unreconciled'
+        ? null
+        : useAppStore
+            .getState()
+            .createUnifiedTab('wt-1', 'terminal', { entityId: 'replacement', activate: false })
+    await act(async () => {
+      complete({
+        outcome:
+          scenario === 'failed' ? { status: 'failed', message: 'offline' } : { status: 'created' },
+        tabId: terminal?.id ?? 'missing'
+      })
+      await launch?.settlement
+    })
+    const state = useAppStore.getState()
+    const tabs = state.unifiedTabsByWorktree['wt-1'] ?? []
+    expect(tabs.some((t) => t.id === chat.id)).toBe(
+      !['empty', 'away-before', 'away-during', 'closed-during'].includes(scenario)
+    )
+    if (terminal) {
+      const order = state.groupsByWorktree['wt-1']?.find((g) => g.id === groupId)?.tabOrder
+      expect(order).toEqual(
+        scenario === 'closed-during'
+          ? [sibling.id, terminal.id]
+          : ['empty', 'away-before', 'away-during'].includes(scenario)
+            ? [terminal.id, sibling.id]
+            : [chat.id, terminal.id, sibling.id]
+      )
+      expect(mocks.toast).toHaveBeenCalledOnce()
+    }
+    expect(view.result.current[0]?.text ?? '').not.toMatch(/open the agent|open it in/i)
+    if (scenario === 'unreconciled') {
+      expect(getStructuredAgentSessionLaunchFailure('wt-1', chat.entityId)).not.toBe(priorFailure)
+      expect(view.result.current[0]?.text).toContain("hasn't appeared")
+      expect(mocks.toast).not.toHaveBeenCalled()
+    }
+    if (scenario.startsWith('away-')) {
+      expect(state.activeWorktreeId).toBe('wt-2')
+      expect(state.activeTabType).toBe('agent-session')
+      expect(state.getActiveTab('wt-2')).toEqual(selected)
+    }
+    view.unmount()
+    expect(mocks.text).toBe(
+      scenario === 'typed-before' ? 'keep this' : scenario === 'typed-during' ? 'new thought' : ''
+    )
   })
 })

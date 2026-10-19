@@ -1,56 +1,24 @@
+import { structuredAgentLabel } from './structured-agent-session-launch-label'
+import { translate } from '@/i18n/i18n'
+import {
+  getStructuredLaunchStateBySessionId,
+  notifyStructuredLaunchListeners
+} from './structured-agent-session-launch-registry'
+import { focusTerminalTabSurface } from './focus-terminal-tab-surface'
 import type { Tab } from '../../../shared/tab-types'
-import type {
-  AgentSessionLaunchPlan,
-  AgentSessionLaunchTarget
-} from '@/lib/agent-session-launch-plan'
-import type {
-  StructuredAgentLaunchHandle,
-  StructuredAgentLaunchHooks,
-  StructuredAgentLaunchSettlement
-} from '@/lib/structured-agent-launch-settlement'
+import type { StructuredAgentLaunchSettlement } from '@/lib/structured-agent-launch-settlement'
+import type { ProvisionalLaunchArgs } from './structured-agent-session-provisional-tab'
+import { insertUnifiedTabAfterAnchor } from './unified-tab-anchor-insertion'
 import { useAppStore } from '@/store'
-import type { ExecutionHostId } from '../../../shared/execution-host'
 import {
   notifyHostDeclined,
   openDeclinedStructuredLaunchTerminal,
-  type DeclinedStructuredLaunchTerminalOptions,
   type StructuredLaunchTerminal
 } from '@/lib/structured-agent-session-launch-admission'
-import { structuredAgentSessionFocusOwner } from '@/runtime/structured-agent-session-owner'
-import { clearWebSessionFocusIntentIfMatches } from '@/runtime/web-session-focus-intent'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
-import type { NativeChatComposerFocusIntent } from '@/components/native-chat/use-native-chat-composer-reveal-focus'
 import { structuredAgentSessionDraftScopeKey } from '@/components/native-chat/native-chat-composer-draft-store'
 import { nativeChatComposerHasUserContent } from '@/components/native-chat/native-chat-pending-attachment-cache'
 import { StructuredAgentSessionCreateRefusalError } from '@/lib/structured-agent-session-launch-errors'
-
-export type LocalProvisionalLaunch = StructuredAgentLaunchHandle & { tab: Tab }
-
-export type ProvisionalLaunchArgs = {
-  plan: AgentSessionLaunchPlan
-  hooks: StructuredAgentLaunchHooks
-  focusIntent?: NativeChatComposerFocusIntent
-  target?: AgentSessionLaunchTarget
-  targetGroupId?: string
-  /** The tab the chat opens right after, in that tab's group. */
-  afterTabId?: string
-  activate?: boolean
-  /** Identity-only resumes publish on commit; unknown outcomes keep their recovery tab. */
-  deferPublication?: true
-  /** Lets workspace flows reveal before the chat's tab is owned: before its host is asked, when no
-   *  session id exists yet. */
-  beforeOpen?: (sessionId?: string) => boolean | void
-  /** The terminal the host's "no" opens; a caller without one gets a new agent tab's. `false`
-   *  opens it behind a chat the user already typed in. */
-  onHostDeclined?: (
-    target: RuntimeClientTarget,
-    activate?: false
-  ) => Promise<StructuredLaunchTerminal> | StructuredLaunchTerminal
-  /** What that default terminal carries from the caller, e.g. a recipe's saved CLI arguments. */
-  declinedTerminal?: DeclinedStructuredLaunchTerminalOptions
-}
-
-export type LaunchOwner = { executionHostId: ExecutionHostId; target: RuntimeClientTarget }
 
 export function openDeclinedTerminal(
   args: ProvisionalLaunchArgs,
@@ -59,7 +27,7 @@ export function openDeclinedTerminal(
   activate?: false
 ): Promise<StructuredLaunchTerminal> | StructuredLaunchTerminal {
   if (args.onHostDeclined) {
-    return activate === false ? args.onHostDeclined(target, false) : args.onHostDeclined(target)
+    return args.onHostDeclined(target, activate)
   }
   const terminal = { ...args.declinedTerminal, ...(activate === false ? { activate } : {}) }
   return openDeclinedStructuredLaunchTerminal({
@@ -70,8 +38,7 @@ export function openDeclinedTerminal(
   })
 }
 
-/** A New Chat the user just asked for opens its chat now, so the next key has a composer; its own
- *  launch asks the host. A prompt to deliver keeps asking first: a "no" hands it to a terminal. */
+/** Only a foreground action without a prompt to deliver may open before admission. */
 export function opensAtAction(args: ProvisionalLaunchArgs): boolean {
   const { plan } = args
   return (
@@ -82,13 +49,11 @@ export function opensAtAction(args: ProvisionalLaunchArgs): boolean {
   )
 }
 
-/** A definite "no" opens the agent's terminal: in place of a chat nobody typed in yet, where
- *  asking first used to land, or behind one with typing, which keeps it. A chat the user picked
- *  by name never becomes a terminal; its own notice says why. */
-async function openTerminalForDeclinedChat(
+/** Prepare the replacement before relinquishing the source and its current composer content. */
+export async function openTerminalForDeclinedChat(
   args: ProvisionalLaunchArgs,
   worktreeId: string,
-  owner: LaunchOwner,
+  target: RuntimeClientTarget,
   tab: Tab,
   settlement: StructuredAgentLaunchSettlement
 ): Promise<StructuredAgentLaunchSettlement> {
@@ -100,45 +65,91 @@ async function openTerminalForDeclinedChat(
   ) {
     return settlement
   }
+  const source = () =>
+    (useAppStore.getState().unifiedTabsByWorktree[worktreeId] ?? []).find(
+      (candidate) => candidate.id === tab.id && candidate.entityId === tab.entityId
+    )
+  const launchState = getStructuredLaunchStateBySessionId(tab.entityId)
+  if (!source() || launchState?.cancelled || args.hooks.signal?.aborted) {
+    return settlement
+  }
   const scopeKey = structuredAgentSessionDraftScopeKey(tab.entityId)
   const typed = nativeChatComposerHasUserContent(scopeKey)
-  const terminal = await openDeclinedTerminal(
-    args,
-    worktreeId,
-    owner.target,
-    typed ? false : undefined
-  )
-  if (!terminal.opened) {
+  const attempt = launchState?.callers
+  const terminal = await openDeclinedTerminal(args, worktreeId, target, false)
+  const completed = terminal.completion
+    ? await terminal.completion
+    : {
+        outcome: { status: terminal.opened ? 'created' : 'failed' },
+        tabId: terminal.tabId
+      }
+  if (completed.outcome.status !== 'created') {
     return settlement
   }
-  if (owner.target.kind === 'environment') {
+  const state = useAppStore.getState()
+  const current = source()
+  const replacement = (state.unifiedTabsByWorktree[worktreeId] ?? []).find(
+    (candidate) => candidate.id === completed.tabId
+  )
+  const ownsFailure =
+    launchState &&
+    getStructuredLaunchStateBySessionId(tab.entityId) === launchState &&
+    launchState.callers === attempt &&
+    attempt?.outcome === 'failed' &&
+    !launchState.cancelled
+  if (current && ownsFailure) {
+    launchState.failure = {
+      ...launchState.failure,
+      kind: 'refused',
+      code: 'structured_agent_session_unsupported',
+      causeText: replacement
+        ? translate(
+            'components.native-chat.structuredSessionHostDeclinedDescription',
+            "This workspace can't run a {{value0}} chat.",
+            { value0: structuredAgentLabel(args.plan.agent) }
+          )
+        : translate(
+            'components.native-chat.structuredSessionTerminalNotVisible',
+            "Orca opened {{value0}} in a terminal, but it hasn't appeared here yet. Your chat draft is still here.",
+            { value0: structuredAgentLabel(args.plan.agent) }
+          )
+    }
+    notifyStructuredLaunchListeners()
+  }
+  if (!replacement) {
+    return settlement
+  }
+  if (!current || args.hooks.signal?.aborted || (launchState && !ownsFailure)) {
     notifyHostDeclined(args.plan.agent)
-  }
-  if (typed || nativeChatComposerHasUserContent(scopeKey)) {
     return settlement
   }
-  useAppStore.getState().closeUnifiedTab(tab.id)
-  return { kind: 'terminal' }
-}
-
-/** Takes a New Chat opened at once: its chat is the visible tab, and a host's "no" may open the
- *  agent's terminal. */
-export function adoptActionLaunch(
-  args: ProvisionalLaunchArgs,
-  worktreeId: string,
-  owner: LaunchOwner,
-  launch: LocalProvisionalLaunch
-): LocalProvisionalLaunch {
-  // The chat is already the visible tab; its host's copy arriving later must not pull focus back.
-  clearWebSessionFocusIntentIfMatches(
-    structuredAgentSessionFocusOwner(owner.target),
-    worktreeId,
-    `agent-session:${launch.sessionId}`
-  )
-  return {
-    ...launch,
-    settlement: launch.settlement.then((settlement) =>
-      openTerminalForDeclinedChat(args, worktreeId, owner, launch.tab, settlement)
-    )
+  state.moveUnifiedTabToGroup(replacement.id, current.groupId, {
+    activate: false,
+    recordInteraction: false
+  })
+  insertUnifiedTabAfterAnchor(worktreeId, replacement.id, current.id)
+  const placed = useAppStore.getState()
+  const group = (placed.groupsByWorktree[worktreeId] ?? []).find((g) => g.id === current.groupId)
+  if (
+    !group ||
+    group.tabOrder.indexOf(replacement.id) !== group.tabOrder.indexOf(current.id) + 1 ||
+    typed ||
+    nativeChatComposerHasUserContent(scopeKey)
+  ) {
+    notifyHostDeclined(args.plan.agent, false)
+    return settlement
   }
+  const foreground =
+    placed.activeWorktreeId === worktreeId &&
+    placed.activeGroupIdByWorktree[worktreeId] === current.groupId &&
+    group.activeTabId === current.id
+  placed.closeUnifiedTab(tab.id)
+  if (foreground) {
+    useAppStore.getState().setActiveTab(replacement.entityId)
+    useAppStore.getState().activateTab(replacement.id)
+    useAppStore.getState().setActiveTabType('terminal', worktreeId)
+    focusTerminalTabSurface(replacement.id)
+  }
+  notifyHostDeclined(args.plan.agent)
+  return { kind: 'terminal' }
 }

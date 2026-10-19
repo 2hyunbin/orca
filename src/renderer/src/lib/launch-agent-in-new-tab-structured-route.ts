@@ -32,6 +32,8 @@ export function launchStructuredAgentFromNewTab(args: {
     terminalPlan: AgentSessionLaunchPlan,
     activate?: false
   ) => {
+    surface: AgentLaunchSurface
+    terminalCompletion?: StructuredLaunchTerminal['completion']
     promptDeliveryResult?: Promise<StructuredPromptDeliveryResult>
   } | null
 }): StructuredFromNewTab | null {
@@ -60,6 +62,8 @@ export function launchStructuredAgentFromNewTab(args: {
       )
       return {
         opened: terminal !== null,
+        ...(terminal?.surface.kind === 'local-terminal' ? { tabId: terminal.surface.tabId } : {}),
+        ...(terminal?.terminalCompletion ? { completion: terminal.terminalCompletion } : {}),
         ...(terminal?.promptDeliveryResult
           ? { promptDeliveryResult: terminal.promptDeliveryResult }
           : {})

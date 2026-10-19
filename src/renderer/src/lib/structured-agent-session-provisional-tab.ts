@@ -1,3 +1,4 @@
+import type { Tab } from '../../../shared/tab-types'
 import type {
   AgentSessionLaunchPlan,
   AgentSessionLaunchTarget
@@ -10,6 +11,8 @@ import { useAppStore } from '@/store'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import {
   beginHostAdmittedStructuredLaunch,
+  type DeclinedStructuredLaunchTerminalOptions,
+  type StructuredLaunchTerminal,
   type HostAdmittedStructuredLaunch
 } from '@/lib/structured-agent-session-launch-admission'
 import {
@@ -18,11 +21,9 @@ import {
 } from '@/runtime/structured-agent-session-owner'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import {
-  adoptActionLaunch,
+  openTerminalForDeclinedChat,
   openDeclinedTerminal,
-  opensAtAction,
-  type LocalProvisionalLaunch,
-  type ProvisionalLaunchArgs
+  opensAtAction
 } from './structured-agent-session-action-launch'
 import { holdEmptyWorkspaceDefaultSurfaceForLaunch } from './empty-workspace-default-surface-claims'
 import {
@@ -30,6 +31,8 @@ import {
   openStructuredAgentSessionProvisionalTab
 } from './structured-agent-session-launch-surface'
 export { openStructuredAgentSessionProvisionalTab } from './structured-agent-session-launch-surface'
+
+type LocalProvisionalLaunch = StructuredAgentLaunchHandle & { tab: Tab }
 
 /** A chat's tab opens once its host admits it; a launch with no host to ask takes the direct path. */
 export type StructuredAgentSessionProvisionalLaunch =
@@ -57,6 +60,29 @@ export function structuredLaunchOwner(
 /** Only a launch that takes the user to its chat may ask host publication to select it. */
 function launchHooks(args: ProvisionalLaunchArgs): StructuredAgentLaunchHooks {
   return args.activate === false ? { ...args.hooks, activate: false } : args.hooks
+}
+
+export type ProvisionalLaunchArgs = {
+  plan: AgentSessionLaunchPlan
+  hooks: StructuredAgentLaunchHooks
+  focusIntent?: NativeChatComposerFocusIntent
+  target?: AgentSessionLaunchTarget
+  targetGroupId?: string
+  /** The tab the chat opens right after, in that tab's group. */
+  afterTabId?: string
+  activate?: boolean
+  /** Identity-only resumes publish on commit; unknown outcomes keep their recovery tab. */
+  deferPublication?: true
+  /** Lets workspace flows reveal before the chat's tab is owned: before its host is asked, when no
+   *  session id exists yet. */
+  beforeOpen?: (sessionId?: string) => boolean | void
+  /** The terminal the host's "no" opens; a caller without one gets a new agent tab's. */
+  onHostDeclined?: (
+    target: RuntimeClientTarget,
+    activate?: false
+  ) => Promise<StructuredLaunchTerminal> | StructuredLaunchTerminal
+  /** What that default terminal carries from the caller, e.g. a recipe's saved CLI arguments. */
+  declinedTerminal?: DeclinedStructuredLaunchTerminalOptions
 }
 
 /** Binds the launch to a chat tab: at once for a New Chat the user asked for, otherwise once its
@@ -102,6 +128,7 @@ export function beginStructuredAgentSessionProvisionalLaunch(
       const launch = open(
         beginLocalProvisionalLaunch({
           ...args,
+          hooks: { ...args.hooks, activate: false },
           target: { ...args.target, worktreeId, executionHostId: owner.executionHostId },
           beforeOpen: undefined
         })
@@ -109,7 +136,13 @@ export function beginStructuredAgentSessionProvisionalLaunch(
       if (!launch || launch.tab === null) {
         return launch
       }
-      return adoptActionLaunch(args, worktreeId, owner, { ...launch, tab: launch.tab })
+      const tab = launch.tab
+      return {
+        ...launch,
+        settlement: launch.settlement.then((settlement) =>
+          openTerminalForDeclinedChat(args, worktreeId, owner.target, tab, settlement)
+        )
+      }
     }
     if (args.deferPublication && !args.target?.surfaceAddress) {
       args = {

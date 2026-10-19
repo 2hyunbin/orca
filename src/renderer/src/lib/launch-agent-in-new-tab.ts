@@ -101,6 +101,7 @@ export type LaunchAgentInNewTabResult = {
   pasteDraftAfterLaunch: boolean
   promptDeliveryResult?: Promise<{ delivered: boolean; failureNotified: boolean }>
   /** Structured route only: what the launch did once it settled. The call stays synchronous. */
+  terminalCompletion?: StructuredLaunchTerminal['completion']
   structuredSettlement?: Promise<StructuredAgentLaunchSettlement>
 } | null
 
@@ -210,16 +211,15 @@ export function launchAgentInNewTab(args: LaunchAgentInNewTabArgs): LaunchAgentI
         launchAgentInNewTab({
           ...args,
           beforeSurfaceOpen: undefined,
+          ...(terminalActivate === false ? { prompt: undefined, activate: false } : {}),
           requestId: undefined,
-          agentSessionLaunchPlan: terminalPlan,
-          ...(terminalActivate === false ? { activate: false } : {})
+          agentSessionLaunchPlan: terminalPlan
         })
     })
     if (!structured) {
       args.focusIntent?.cancel()
-      return null
     }
-    return { ...structured, startupPlan }
+    return structured ? { ...structured, startupPlan } : null
   }
 
   args.focusIntent?.cancel()
@@ -248,6 +248,7 @@ export function launchAgentInNewTab(args: LaunchAgentInNewTabArgs): LaunchAgentI
     })
     return {
       surface: { kind: 'host-published' },
+      terminalCompletion: webHostDelivery,
       startupPlan,
       pasteDraftAfterLaunch: pasteDraftAfterLaunch !== null,
       ...(pasteDraftAfterLaunch !== null && promptDelivery === 'submit-after-ready'

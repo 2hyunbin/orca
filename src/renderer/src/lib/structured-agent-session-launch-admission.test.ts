@@ -105,7 +105,9 @@ describe('a structured chat launch on a paired server', () => {
       failureNotified: false
     })
     expect(onHostDeclined).toHaveBeenCalledOnce()
-    expect(mocks.toastInfo).toHaveBeenCalledOnce()
+    expect(mocks.toastInfo).toHaveBeenCalledWith(expect.any(String), {
+      description: expect.stringContaining("can't run")
+    })
     expect(useAppStore.getState().activeWorktreeId).toBe(WORKTREE)
     expectNoChatCommitted()
   })
@@ -194,6 +196,37 @@ describe('a structured chat launch on a paired server', () => {
     launch?.cancel()
   })
 
+  // An older server ignores the chat's mode and would run Claude with its own bypass flag.
+  it.each(['refused', 'unverified'] as const)(
+    'starts nothing on a server whose permission verdict is %s, and says so once',
+    async (kind) => {
+      mocks.createSupport.mockResolvedValue({ supported: true })
+      mocks.hostPermission.mockResolvedValue(
+        kind === 'refused' ? { kind, hostMode: 'full-access' } : { kind }
+      )
+
+      const launch = beginStructuredAgentSessionProvisionalLaunch({
+        plan: pairedPlan(),
+        hooks: {},
+        onHostDeclined: vi.fn()
+      })
+      const settlement = await launch?.settlement
+
+      expect(mocks.hostPermission).toHaveBeenCalledWith(
+        { kind: 'environment', environmentId: 'server-1' },
+        'claude'
+      )
+      expect(settlement).toEqual(expect.objectContaining({ kind: 'failed', notified: true }))
+      expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining('Claude'), {
+        description: expect.stringMatching(
+          kind === 'unverified' ? /Claude.*didn.t start/ : /older Orca/
+        )
+      })
+      expect(mocks.launchAgentInNewTab).not.toHaveBeenCalled()
+      expectNoChatCommitted()
+    }
+  )
+
   it('opens the chat on the server that admitted it', async () => {
     mocks.createSupport.mockResolvedValue({ supported: true })
 
@@ -238,7 +271,7 @@ describe('a structured chat launch on this machine', () => {
       delivered: true,
       failureNotified: false
     })
-    expect(onHostDeclined).toHaveBeenCalledExactlyOnceWith({ kind: 'local' })
+    expect(onHostDeclined).toHaveBeenCalledExactlyOnceWith({ kind: 'local' }, undefined)
     expect(mocks.toastInfo).not.toHaveBeenCalled()
     expect(mocks.toastError).not.toHaveBeenCalled()
     expectNoChatCommitted()

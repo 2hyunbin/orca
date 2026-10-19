@@ -19035,7 +19035,8 @@
       "explicitChatSsh": "Chat is not available over SSH. Open the agent in a terminal instead.",
       "explicitChatUnavailable": "This workspace cannot run the chat. Check the agent installation or open it in a terminal.",
       "structuredSessionHostDeclined": "Opened {{value0}} in a terminal",
-      "structuredSessionHostDeclinedDescription": "This server can't run a {{value0}} chat in this workspace.",
+      "structuredSessionTerminalNotVisible": "Orca opened {{value0}} in a terminal, but it hasn't appeared here yet. Your chat draft is still here.",
+      "structuredSessionHostDeclinedDescription": "This workspace can't run a {{value0}} chat.",
       "structuredSessionHostUnreachable": "Could not reach {{value0}}",
       "structuredSessionHostUnreachableDescription": "Orca did not open a {{value0}} chat. Check the connection to the server and try again.",
       "hostOutage": {
@@ -19060,9 +19061,11 @@
         "replace": "Replace"
       },
       "hostPermission": {
+        "checkAgain": "Check again",
+        "launchRefused": "Orca did not start a {{value0}} chat",
         "checking": "Checking this host's chat permissions…",
         "outdatedHost": "This host runs an older Orca that ignores chat permissions, so {{value0}} would run here without asking. Update Orca on this host to use {{value1}}.",
-        "unverified": "Orca couldn't confirm this host applies chat permissions. Reconnect to it to send."
+        "unverified": "Orca couldn't confirm the host's permissions for {{value0}}, so the chat didn't start."
       }
     },
     "tab": {

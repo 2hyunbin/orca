@@ -24,7 +24,6 @@ import type { TabBarItemProjection } from './use-tab-bar-item-projection'
 import type { TabBarItemActions } from './use-tab-bar-item-actions'
 import { renderTabBarItems } from './tab-bar-item-surface'
 import { TabBarStaticCreateMenu } from './tab-bar-static-create-menu'
-import { focusChatAtNewTabMenuClose } from './new-tab-menu-chat-focus'
 import ClientHostedBrowserTabRows from './ClientHostedBrowserTabRows'
 import type { ClientHostedBrowserRow } from '../../../../shared/client-hosted-browser-rows'
 
@@ -229,9 +228,7 @@ export function renderTabBarSurface({
           onCloseAutoFocus={(event) => {
             // Why: Radix restores focus to the "+" trigger on close, stealing it from the freshly-mounted terminal.
             event.preventDefault()
-            if (!focusChatAtNewTabMenuClose()) {
-              runPendingNewTabMenuFocusAfterClose()
-            }
+            runPendingNewTabMenuFocusAfterClose()
           }}
         >
           {!terminalOnly && onOpenEntry ? (

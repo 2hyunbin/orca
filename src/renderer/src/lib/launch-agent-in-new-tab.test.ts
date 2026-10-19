@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { setLocalRuntimeCapabilitiesForTests } from '@/runtime/local-runtime-capabilities'
 import { toAppSshPtyId } from '../../../shared/ssh-pty-id'
+import type { Project } from '../../../shared/project-types'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
 
 const mockCreateTab = vi.fn()
@@ -47,13 +48,7 @@ const store = {
       id: 'repo-1',
       localWindowsRuntimePreference: { kind: 'inherit-global' as const }
     }
-  ] as {
-    id: string
-    localWindowsRuntimePreference:
-      | { kind: 'inherit-global' }
-      | { kind: 'windows-host' }
-      | { kind: 'wsl'; distro: string | null }
-  }[],
+  ] as Pick<Project, 'id' | 'localWindowsRuntimePreference'>[],
   repos: [{ id: 'repo-1', connectionId: null as string | null, path: '/repo' }],
   sshConnectionStates: new Map([
     ['ssh-a', { status: 'connected', remotePlatform: 'linux' }],
@@ -142,6 +137,11 @@ const mockCreateWebRuntimeSessionTerminal = vi.fn()
 const mockCreateWebRuntimeAgentSessionTerminalWithLaunchDraft = vi.fn()
 const mockIsWebRuntimeSessionActive = vi.fn(() => false)
 
+vi.mock('@/runtime/web-runtime-terminal-create-operation', () => ({
+  createWebRuntimeSessionTerminalResult: async (args: unknown) => ({
+    outcome: await mockCreateWebRuntimeSessionTerminal(args)
+  })
+}))
 vi.mock('@/runtime/web-runtime-terminal-creation', () => ({
   createWebRuntimeSessionTerminal: mockCreateWebRuntimeSessionTerminal,
   createWebRuntimeAgentSessionTerminalWithLaunchDraft:
@@ -593,9 +593,8 @@ describe('launchAgentInNewTab', () => {
     }
     const { launchAgentInNewTab } = await import('./launch-agent-in-new-tab')
 
-    launchAgentInNewTab({ requestId: 'request-14', agent: 'claude', worktreeId: 'wt-1' })
-
-    await Promise.resolve()
+    await launchAgentInNewTab({ requestId: 'request-14', agent: 'claude', worktreeId: 'wt-1' })
+      ?.terminalCompletion
     expect(mockToastError).toHaveBeenCalledWith(
       'Upgrade the remote Orca host before starting or resuming agent sessions.'
     )

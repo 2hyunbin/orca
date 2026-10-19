@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { agentChatPermissionModes } from '../../../shared/agent-chat-permission-mode'
 import {
   chatPermissionHostVerdict,
@@ -67,7 +67,7 @@ export async function readStructuredChatHostPermissionVerdict(
 export function useStructuredChatHostPermissionVerdict(
   target: RuntimeClientTarget,
   agent: string
-): StructuredChatHostPermissionVerdict | { kind: 'checking' } {
+): (StructuredChatHostPermissionVerdict | { kind: 'checking' }) & { checkAgain: () => void } {
   const gated = target.kind === 'environment' && agentChatPermissionModes(agent) !== null
   const environmentId = target.kind === 'environment' ? target.environmentId : null
   const requested = useAppStore((state) => state.settings?.nativeChatPermissionMode)
@@ -81,6 +81,7 @@ export function useStructuredChatHostPermissionVerdict(
   } | null>(null)
   // Not in the key: a held chat stays held while it asks again.
   const [recheck, setRecheck] = useState(0)
+  const checkAgain = useCallback(() => setRecheck((n) => n + 1), [])
   const held = answer?.key === key && answer.verdict.kind !== 'allowed'
   useEffect(() => {
     if (!held) {
@@ -114,7 +115,7 @@ export function useStructuredChatHostPermissionVerdict(
     }
   }, [agent, contact, environmentId, gated, key, recheck, requested])
   if (!gated) {
-    return { kind: 'allowed' }
+    return { kind: 'allowed', checkAgain }
   }
-  return answer?.key === key ? answer.verdict : { kind: 'checking' }
+  return { ...(answer?.key === key ? answer.verdict : { kind: 'checking' as const }), checkAgain }
 }
