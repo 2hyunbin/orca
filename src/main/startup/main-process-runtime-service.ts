@@ -44,7 +44,6 @@ import {
 import { startAgentStateRulesLiveUpdates } from '../runtime/agent-state-rules/agent-state-rules-live-update'
 import { recordDurableCrashBreadcrumb } from '../crash-reporting/durable-crash-breadcrumb'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
-import { repairDuplicatePtyPanesOnStart } from '../runtime/moved-pane-owner-rekey'
 
 export function getDesktopWindowStatus(): RuntimeDesktopWindowStatus {
   const activation = state.desktopActivationGate
@@ -149,10 +148,6 @@ export function initializeMainProcessRuntime(): OrcaRuntimeService {
     recordDurableCrashBreadcrumb('agent_state_rules_active', rules)
   )
   state.runtime = runtime
-  // Switch point: main's load repair is written only now that a runtime can move pane owners.
-  if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-    void repairDuplicatePtyPanesOnStart(store, runtime)
-  }
   runtime.sidebarFacts?.attachSidebarAgentStatusStore(agentHookServer)
   agentHookServer.subscribeEnrichedStatus((enriched) =>
     recordObservedAgentStatusPaneIdentity(observedPaneIdentities, enriched.paneKey, runtime)

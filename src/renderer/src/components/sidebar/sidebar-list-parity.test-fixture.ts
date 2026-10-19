@@ -131,8 +131,8 @@ export function parityActiveState(
 }
 
 /**
- * The feed domains main would publish for this store, read through the same projections the
- * shadow comparison holds equal to main's producers in every e2e run.
+ * The feed domains main would publish for this store, read through the window-side projections
+ * the shadow comparison held equal to main's producers before the window read main's feed.
  */
 export function feedDomainsFromWindowState(state: AppState): SidebarInputsFeedDomain[] {
   const worktrees = getAllWorktreesFromState(state)

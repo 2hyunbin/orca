@@ -36,7 +36,9 @@ const SEED_FOCUS_READERS = [
   'defaultCreationHost',
   'defaultScopeHost',
   'defaultScopeSource',
-  'rowLessSourceTarget'
+  'rowLessSourceTarget',
+  // Its legacy branch returns the focused runtime inside an object literal, which discovery skips.
+  'resolveOwnerWithLegacyFallback'
 ]
 const FOCUS_SCAN_ROOTS = [SCAN_ROOT, 'src/shared']
 

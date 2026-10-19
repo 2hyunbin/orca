@@ -582,7 +582,8 @@
             "76deec8f58": "切换组织失败",
             "7d4bc516ee": "切换配置文件失败",
             "f518e89aa5": "该项目已存在于那个配置文件中",
-            "f03ae7f27b": "转移项目失败"
+            "f03ae7f27b": "转移项目失败",
+            "signInTimedOut": "登录超时"
           }
         },
         "runtime": {
@@ -3429,7 +3430,9 @@
             "copiedLink": "已复制链接",
             "copyLinkFailed": "复制链接失败",
             "downloadOpenWithDefaultApp": "下载并使用默认应用程序打开",
-            "downloadOpenFailed": "无法下载“{{value0}}”。"
+            "downloadOpenFailed": "无法下载“{{value0}}”。",
+            "openInThisGroup": "在此分组中打开",
+            "openInThisGroupRefused": "无法在此分组中打开 {{value0}}"
           },
           "TerminalQuickCommandsSubmenu": {
             "3ccc7981bb": "主机不可用",
@@ -17946,6 +17949,14 @@
         "a62f9db53d": "Cancel",
         "c77189bc0c": "Update filter",
         "19af906d12": "Save filter"
+      },
+      "OrcaSignInProgress": {
+        "waiting": "正在等待在浏览器中登录",
+        "copyLink": "复制登录链接",
+        "copied": "已复制登录链接",
+        "copyFailed": "无法复制链接。",
+        "signingIn": "正在登录…",
+        "cancel": "取消"
       }
     },
     "i18n": {

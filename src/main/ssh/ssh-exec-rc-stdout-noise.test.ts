@@ -9,7 +9,7 @@ import { runProcess } from '@orca/process-host'
 import { wrapRemoteCommandForPosixShell, type SshExecOptions } from './ssh-connection-utils'
 import { execCommand, isSshCommandExitError } from './remote-exec/remote-exec-command'
 import { readRemoteHomeCommand } from './ssh-remote-commands'
-import type { SshConnection } from './ssh-connection'
+import type { SshConnection } from './connection/ssh-connection'
 import { tryResolveViaLoginShell } from './ssh-remote-node-resolution'
 import {
   normalizeRemoteHome,

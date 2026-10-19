@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
 import type { ClientChannel } from 'ssh2'
 import { runProcess, spawnProcess } from '@orca/process-host'
-import type { SshConnection } from '../../ssh/ssh-connection'
+import type { SshConnection } from '../../ssh/connection/ssh-connection'
 import { shellEscape } from '../../ssh/ssh-connection-utils'
 import { execCommand } from '../../ssh/remote-exec/remote-exec-command'
 

@@ -1,4 +1,4 @@
-import { trackSshConnectionChannelLifetime } from './ssh-connection-channel-lifetime'
+import { trackSshConnectionChannelLifetime } from './connection/ssh-connection-channel-lifetime'
 import { CONNECT_TIMEOUT_MS, createSshOperationAbortError } from './ssh-connection-utils'
 import { isSshSessionLimitError } from './ssh-session-limit-error'
 
