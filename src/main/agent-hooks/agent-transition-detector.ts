@@ -31,6 +31,14 @@ export type AgentPaneChange =
       phase: AgentPhase
       at: number
     }
+  /** Every live look at the pane's hook rows, changed or not; null: no row or no workspace. */
+  | {
+      kind: 'observed'
+      paneKey: string
+      workspace: AgentPaneWorkspace | null
+      phase: AgentPhase
+      at: number
+    }
   /** The pane changed phase at `at`; leaving a workspace rests the pane there. */
   | {
       kind: 'moved'
@@ -52,8 +60,11 @@ export function agentPaneWorkspace(
   return { worktreeId, sshHostId: hostId === LOCAL_EXECUTION_HOST_ID ? null : hostId }
 }
 
-function sameWorkspace(a: AgentPaneWorkspace, b: AgentPaneWorkspace | null): boolean {
-  return !!b && a.worktreeId === b.worktreeId && a.sshHostId === b.sshHostId
+export function sameAgentPaneWorkspace(
+  a: AgentPaneWorkspace | null | undefined,
+  b: AgentPaneWorkspace | null | undefined
+): boolean {
+  return !!a && !!b && a.worktreeId === b.worktreeId && a.sshHostId === b.sshHostId
 }
 
 /**
@@ -119,8 +130,15 @@ export class AgentTransitionDetector {
       ? resolveAgentStatusWorktreeId(row, { get: this.deps.resolveTabWorktreeId })
       : undefined
     const workspace = row && worktreeId ? agentPaneWorkspace(worktreeId, row.connectionId) : null
+    const observed = row ? hookRowAgentPhase(row) : 'rest'
+    const restored = !!row && (seed || !!row.restoredUnconfirmed || !!row.isReplay)
+    if (row && workspace && restored) {
+      this.emit({ kind: 'seeded', paneKey, workspace, phase: observed, at: row.stateStartedAt })
+    } else {
+      this.emit({ kind: 'observed', paneKey, workspace, phase: observed, at: now })
+    }
     const previous = this.panes.get(paneKey)
-    if (previous && !sameWorkspace(previous.workspace, workspace)) {
+    if (previous && !sameAgentPaneWorkspace(previous.workspace, workspace)) {
       this.panes.delete(paneKey)
       this.emit({
         kind: 'moved',
@@ -135,10 +153,8 @@ export class AgentTransitionDetector {
     if (!row || !workspace) {
       return
     }
-    const observed = hookRowAgentPhase(row)
-    if (seed || row.restoredUnconfirmed || row.isReplay) {
+    if (restored) {
       this.track(paneKey, workspace, observed)
-      this.emit({ kind: 'seeded', paneKey, workspace, phase: observed, at: row.stateStartedAt })
       return
     }
     const from = this.panes.get(paneKey)?.phase ?? 'rest'

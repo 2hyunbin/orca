@@ -1,3 +1,4 @@
+import type { AgentPaneWorkspace } from '../../agent-hooks/agent-transition-detector'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import type {
   SmartStampFields,
@@ -36,7 +37,7 @@ export type SortStampsStore = WorkspaceRecordStore<StampedRecord, StampUpdates |
 }
 
 /** A workspace record: its id, and the SSH host whose record it is (null reads by id alone). */
-export type WorkspaceRef = { worktreeId: string; sshHostId: ExecutionHostId | null }
+export type WorkspaceRef = AgentPaneWorkspace
 
 /** The workspace's own record: folder, SSH host, or local. */
 export function readWorkspaceRecord<TRecord>(

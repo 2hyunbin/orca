@@ -17,12 +17,13 @@ const NOW = 1_000_000
 
 function createHarness() {
   const changes: AgentPaneChange[] = []
+  const observations: AgentPaneChange[] = []
   const detector = new AgentTransitionDetector({
     resolveTabWorktreeId: () => undefined,
     now: () => NOW
   })
-  detector.subscribe((change) => changes.push(change))
-  return { detector, changes, server: new AgentHookServer() }
+  detector.subscribe((change) => (change.kind === 'observed' ? observations : changes).push(change))
+  return { detector, changes, observations, server: new AgentHookServer() }
 }
 
 function ingest(
@@ -156,11 +157,31 @@ describe('AgentTransitionDetector', () => {
     detector.attach(server)
     try {
       ingest(server, { state: 'working' })
-      expect(received).toHaveLength(1)
-      expect(error).toHaveBeenCalledTimes(1)
+      expect(received.map((change) => change.kind)).toEqual(['observed', 'moved'])
+      expect(error).toHaveBeenCalledTimes(2)
     } finally {
       error.mockRestore()
     }
+  })
+
+  it('reports every live look at a pane, changed or not, with or without a workspace', () => {
+    const h = createHarness()
+    h.detector.attach(h.server)
+    ingest(h.server, { state: 'working' })
+    ingest(h.server, { state: 'done', interrupted: true })
+    h.server.ingestTerminalStatus({
+      paneKey: PANE,
+      tabId: 'tab-a',
+      payload: { state: 'done', prompt: 'next', agentType: 'codex' }
+    })
+    h.server.clearPaneState(PANE)
+    const workspace = { worktreeId: WT, sshHostId: null }
+    expect(h.observations).toEqual([
+      { kind: 'observed', paneKey: PANE, workspace, phase: 'working', at: NOW },
+      { kind: 'observed', paneKey: PANE, workspace, phase: 'rest', at: NOW },
+      { kind: 'observed', paneKey: PANE, workspace: null, phase: 'done', at: NOW },
+      { kind: 'observed', paneKey: PANE, workspace: null, phase: 'rest', at: NOW }
+    ])
   })
 
   it('stops observing once detached', () => {

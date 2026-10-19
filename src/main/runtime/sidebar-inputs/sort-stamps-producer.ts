@@ -12,6 +12,7 @@ import {
 import type { TerminalSideEffectBatch } from '../../../shared/terminal-side-effect-facts'
 import {
   agentPaneWorkspace,
+  sameAgentPaneWorkspace,
   type AgentPaneChange,
   type AgentTransitionDetector
 } from '../../agent-hooks/agent-transition-detector'
@@ -55,10 +56,6 @@ export type SortStampsSources = {
 
 type TrackedPane = WorkspaceRef & { state: AgentPaneState }
 type TitlePane = { ptyId: string; releaseExit: () => void }
-
-function sameWorkspace(a: WorkspaceRef | undefined, b: WorkspaceRef | null): boolean {
-  return !!a && !!b && a.worktreeId === b.worktreeId && a.sshHostId === b.sshHostId
-}
 
 /**
  * Writes the sort stamps of every workspace this host owns, at the source: the transition
@@ -144,12 +141,12 @@ export class SortStampsProducer {
     return false
   }
 
-  // A restored status takes its phase as it is; only a live change is a transition.
+  // Every observation, not only the detector's transitions: a pane its title tracked may differ.
   private applyHookPaneChange(change: AgentPaneChange): void {
     if (change.kind === 'seeded') {
       this.seed(change.paneKey, change.workspace, change.phase, change.at)
-    } else {
-      this.move(change.paneKey, change.workspace, change.to, change.at)
+    } else if (change.kind === 'observed') {
+      this.move(change.paneKey, change.workspace, change.phase, change.at)
     }
   }
 
@@ -220,7 +217,7 @@ export class SortStampsProducer {
     observedAt: number
   ): void {
     const previous = this.panes.get(paneKey)
-    if (previous && !sameWorkspace(previous, workspace)) {
+    if (previous && !sameAgentPaneWorkspace(previous, workspace)) {
       this.move(paneKey, null, 'rest', this.sources.now())
     }
     if (!workspace) {
@@ -250,14 +247,14 @@ export class SortStampsProducer {
     at: number
   ): void {
     const previous = this.panes.get(paneKey)
-    if (previous && !sameWorkspace(previous, workspace)) {
+    if (previous && !sameAgentPaneWorkspace(previous, workspace)) {
       this.panes.delete(paneKey)
       this.writeAgentChange(previous, previous.state.phase, 'rest', at)
     }
     if (!workspace) {
       return
     }
-    const before = sameWorkspace(previous, workspace) ? previous!.state : REST_PANE
+    const before = sameAgentPaneWorkspace(previous, workspace) ? previous!.state : REST_PANE
     const state = nextAgentPaneState(before, observed, at)
     if (state === before) {
       return
@@ -279,7 +276,7 @@ export class SortStampsProducer {
   ): void {
     const panes: AgentPaneState[] = []
     for (const pane of this.panes.values()) {
-      if (sameWorkspace(pane, workspace)) {
+      if (sameAgentPaneWorkspace(pane, workspace)) {
         panes.push(pane.state)
       }
     }

@@ -410,9 +410,8 @@ describe('SortStampsProducer: terminal events', () => {
     expect(h.meta.get(WT)?.smartTier).toBe('working')
   })
 
-  // Known gap before the sidebar flip: the detector starts a hooked pane at rest, so a first hook
-  // row of done is no change to it, and the title's Working is never replaced by the finish.
-  it.skip('stamps the finish when a title-tracked pane’s first hook row is done', () => {
+  // A pane its title tracked is handed to hooks by their first row, whatever that row says.
+  it('hands a title-tracked pane to its first hook row: a finish stamps Done', () => {
     const h = createHarness()
     h.attach(h.server)
     h.sideEffects([title('⠋ Codex working')], { pane: PANE })
@@ -420,6 +419,39 @@ describe('SortStampsProducer: terminal events', () => {
     const doneAt = advance(20_000)
     hook(h.server, 'done')
     expect(h.meta.get(WT)).toEqual({ lastActivityAt: doneAt, smartTier: 'done', smartAt: doneAt })
+  })
+
+  it('hands a title-tracked pane to its first hook row: a stopped turn rests it', () => {
+    const h = createHarness()
+    h.attach(h.server)
+    h.sideEffects([title('⠋ Codex working')], { pane: PANE })
+    advance(20_000)
+    ingestRow(h.server, { state: 'done', interrupted: true })
+    expect(h.meta.get(WT)?.smartTier).toBeUndefined()
+  })
+
+  it('hands a title-tracked pane to its first hook row: no workspace rests it where it was', () => {
+    const h = createHarness()
+    h.attach(h.server)
+    h.sideEffects([title('⠋ Codex working')], { pane: PANE })
+    advance(20_000)
+    h.server.ingestTerminalStatus({
+      paneKey: PANE,
+      tabId: 'tab-a',
+      payload: { state: 'working', prompt: 'task', agentType: 'codex' }
+    })
+    expect(h.meta.get(WT)?.smartTier).toBeUndefined()
+  })
+
+  it('keeps a pane its first hook row finished in step: a later stop clears Done', () => {
+    const h = createHarness()
+    h.attach(h.server)
+    h.sideEffects([title('⠋ Codex working')], { pane: PANE })
+    advance(20_000)
+    hook(h.server, 'done')
+    advance(20_000)
+    ingestRow(h.server, { state: 'done', interrupted: true })
+    expect(h.meta.get(WT)?.smartTier).toBeUndefined()
   })
 })
 
