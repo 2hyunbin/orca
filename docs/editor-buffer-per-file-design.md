@@ -47,9 +47,9 @@ The **record id** is the execution host plus a normalized path:
 - **Host**:
   - `local`.
   - A WSL distro. `\\wsl$` and `\\wsl.localhost` paths name the same distro and give the same key.
-  - An SSH target, keyed by target id, not by connection id or connection generation.
+  - An SSH target, keyed by `(runtimeEnvironmentId, targetId)`. Keeping the runtime namespace keeps a direct target and the same target nested under a runtime separate. Reconnect generations and connection ids are not part of the key.
   - A runtime environment.
-- **Path**: separators and drive letters are normalized. On volumes that ignore case (the default on macOS and Windows) the path is compared case-insensitively.
+- **Path**: separators and drive letters are normalized. Case-sensitivity is detected per volume on the host and cached, not assumed from the OS: APFS can be case-sensitive, and WSL and SSH hosts usually are. Until the probe answers, paths compare exactly.
 
 The workspace is never part of the id, and the id never goes over the wire.
 
@@ -58,8 +58,10 @@ The **text model URI** is separate. It can't change for the life of a model, and
 - **Owner resolves late**: when the owner isn't known yet, `editor-model-owner.ts` falls back to `unresolved` + worktree + file id. Once the owner resolves, that provisional record joins the real one:
   - If the real record doesn't exist, the provisional record is re-keyed to it.
   - If both exist and only one is dirty, the dirty one wins.
-  - If both are dirty, the other draft is kept as a recoverable copy (see Restore).
-- **Rename**: the record is re-keyed. The URI can't change, so a new model is created from the old model's text, dirty state and baseline, and the old model is disposed. Undo history doesn't survive a rename, which matches today's behaviour.
+  - If both are dirty, the other draft becomes a recoverable copy (see Restore). Until the recovery UI ships in 1d, the two stay as separate, unshared records.
+- **Rename**:
+  - The record is re-keyed. The URI can't change, so a new model is built from the old model's text, dirty state and baseline, and the old model is disposed. Undo history doesn't survive the rename, which matches today's behaviour.
+  - If the target path already has a record, the rename counts as an external change to it. If that record is clean, its views attach to the moved record. If it is dirty, its draft becomes a recoverable copy.
 
 ### Fields
 
@@ -86,22 +88,30 @@ Version ids restart when a model is recreated, for example after a dispose and r
 - **External change**:
   - A watcher event that matches a self-write stamp (an echo of Orca's own save) is ignored.
   - Otherwise, a clean record reloads, and a dirty record sets `conflict.observed`, which shows the banner on every view and pauses autosave.
-- **Reload**:
-  1. Note the alternative version id and the watcher's change counter, then read the file.
-  2. Apply the result only if both are unchanged. It goes in as one undoable programmatic edit, then `savedAltVersion`, `baseline` and `reloadBoundary` are updated and `conflict` is cleared.
-  3. If either changed, discard the result. If the disk text differs from `baseline`, set `conflict.observed` so the banner shows. If the user is still idle, retry, always with the newest change, so a file that keeps changing isn't left stale forever.
+- **Reload**: reloads run on the record's save queue, so a reload and a save never overlap.
+  1. Watcher events are coalesced, the same way the shipped `editor-watcher-reload-coalescer.ts` does it. Note the alternative version id, then read the file.
+  2. If the version is unchanged, apply the snapshot, even if newer watcher events arrived during the read, and schedule one follow-up read for those events. This keeps a file under continuous writes making progress.
+     - The snapshot goes in as one undoable programmatic edit.
+     - Then `savedAltVersion`, `baseline` and `reloadBoundary` are updated and `conflict` is cleared.
+  3. If the user typed during the read, discard the snapshot. The record is dirty now, so set `conflict.observed` if the disk text differs from `baseline`. A clean record never shows the banner from a reload, so the banner doesn't flicker.
   4. Undoing back to the "before" id in `reloadBoundary` pauses autosave until the user saves or redoes.
 - **Keep My Edits**: sets `conflict.consent` to `conflict.observed`, clears the banner and resumes autosave. It doesn't read the disk. The banner names the file but may not show the new content, so Keep is consent to overwrite content the user may not have seen. This is deliberate.
 - **Save**:
   - Capture `{text, altVersion, baseline, consent}` in one tick, then do a guarded write that expects `consent ?? baseline`.
-  - On success, `savedAltVersion` becomes the captured `altVersion` and `baseline` becomes the signature of the written text, unless a reload changed `baseline` while the save was in flight. The file is then dirty exactly when the user has typed since the capture. Undoing back to an older text after a slow save correctly shows dirty.
-  - A refusal sets `conflict.observed` to `currentSignature`.
+  - On success:
+    - `savedAltVersion` becomes the captured `altVersion`.
+    - `baseline` becomes the signature of the written text.
+    - `conflict.consent` is cleared.
+    - No reload can overlap the save, because both run on the queue. The file is then dirty exactly when the user has typed since the capture, so undoing back to an older text after a slow save correctly shows dirty.
+  - A refusal sets `conflict.observed` to `currentSignature`. Some shipped hosts advertise `files.write.disk-precondition.v1` but return no `currentSignature`. For those, Orca does a read pinned to the same connection to learn the disk version, or that the file was deleted, before Keep is offered.
   - Autosave never recreates a deleted file. An explicit save may.
 - **Restore**:
   - Sessions never store drafts. A draft is derived from each dirty record (its text plus `baseline`) when the session is saved, so a clean record can't leave one behind.
   - A restored record starts dirty, with autosave paused until the disk has been checked.
   - Sessions in the old per-tab format can have several drafts for one file with no ordering. Identical drafts are merged. A divergent draft stays as a recoverable copy, offered on the tab, until the user picks one or discards it. Orca never picks the newest by itself.
-  - When an older Orca reads a session written by a newer one, it sees the derived per-tab drafts in the old shape plus optional fields it ignores.
+  - When an older Orca reads a session written by a newer one:
+    - The derived draft is written into every tab showing the file, in the old per-tab shape, with optional fields the older build ignores.
+    - Recoverable copies are lost.
 - **Remote hosts**:
   - The guarded write runs on the host that executes it: the main process for local and WSL, the runtime for SSH and remote hosts. It is pinned to the connection that answered the capability check.
   - A runtime too old to have the capability falls back to the client reading the file and comparing it. That fallback isn't atomic.
@@ -121,35 +131,52 @@ Version ids restart when a model is recreated, for example after a dispose and r
 | Markdown preview | Read-only text from `model`. Its Save is a record save but never counts as consent to overwrite. |
 | Mobile bridge | Keeps publishing one projection per tab, so the wire format doesn't change. A mobile save becomes an edit plus a save on the record, and a rolled-back save is undone as an edit. |
 
-Until Phase 3, the views that haven't been converted write through an **interim adapter**, `record.applyText(text, source)`. It replaces the model's text as one user edit, so even those writers keep the record consistent. The watch exceptions from #30415 that keep these views watched stay until Phase 3.
+**Interim adapter (Phases 1–2).** Views that haven't been converted keep their own undo and route only their text through the record:
+
+- `record.applyText(text, source)` replaces the model's text as one edit. The model's undo stack gets one step per commit, but the view's own undo stays authoritative inside that view.
+- Disk loads (the panel `fileContents` cache and the buffer content sync) go through `record.loadFromDisk(text, signature)` instead.
+
+This means 1a creates text models for files whose only view is rich, notebook or CSV, with no editor mounted. That costs one string per open file, which the cache deleted in 1d already holds today. The watch exceptions from #30415 stay until Phase 3.
 
 ## Migration plan
 
 ### Phase 1: the record
 
-Phase 1 ships as four PRs, each on its own.
+Phase 1 ships as four PRs. After each one, behaviour matches main except for the change that PR names.
 
-- **1a. Record behind selectors.**
-  - **Change**: add the buffer slice. Per-tab fields become values read from the record, and every writer goes through `applyText` or the model. Behaviour is the same, except that two workspaces now share one record.
-  - **Tests**: sharing across workspaces; a view opened later; owner resolution re-keying and merging; host and path key rules (case, WSL aliases, SSH target id).
-  - **From #30714**: keep the URI shape. Drop the per-tab fan-out (`getSameBufferFileIds`).
+- **1a. Record per workspace.**
+  - **Change**:
+    - Add the buffer slice, with the workspace still in the key, so behaviour is identical to main.
+    - Per-tab fields become reads from the record.
+    - Every writer goes through the model, `applyText` or `loadFromDisk`.
+    - Dirty stays main's content compare (including the markdown trailing-whitespace leniency), now computed on the record.
+  - **Tests**: existing suites unchanged; key rules (per-volume case, WSL aliases, `(runtimeEnvironmentId, targetId)`); each writer lands in the record.
+  - **From #30714**: keep the URI shape.
 - **1b. Dirty from alternative version ids.**
-  - **Change**: remove content-compare dirty checking. Recreating a model resets `savedAltVersion` as described above.
+  - **Change**: remove the content compare. Recreating a model resets `savedAltVersion` as described above.
   - **Tests**: undo back to clean; dispose and reopen while dirty.
-- **1c. Save queue per record.**
-  - **Change**: one save queue per record. Only closing the last view asks to save.
-  - **From #30714**: keep the close behaviour and its tests.
+- **1c. Sharing across workspaces.**
+  - **Change**: these land together, because sharing without the queue or the close rule would let one workspace's Discard or autosave clobber the other's edits:
+    - Drop the workspace from the key.
+    - One save queue and one autosave timer per record.
+    - Only closing the last view asks to save.
+    - Owner-resolution merge, with dirty-and-dirty kept unshared.
+  - **Tests**: two workspaces on one record; a view opened later; Discard on a non-last view; one autosave; owner-resolution merging.
+  - **From #30714**: keep the close behaviour and its tests. Drop the per-tab fan-out (`getSameBufferFileIds`).
 - **1d. Delete caches and stored drafts.**
-  - **Change**: delete the panel `fileContents` cache for editable tabs and `use-editor-buffer-content-sync`. Drafts are derived when the session is saved, and old-format drafts are merged.
-  - **Tests**: legacy drafts that differ for one file; a session read by an older version.
+  - **Change**: delete the panel `fileContents` cache for editable tabs and `use-editor-buffer-content-sync`. Drafts are derived at session save. Add the recoverable-copy UI, used for old-format drafts that differ and for dirty owner merges.
+  - **Tests**: legacy drafts that differ; a session read by an older build.
+
+Code-editor saves stay unguarded through Phase 1, exactly as on main.
 
 ### Phase 2: reload and guarded saves
 
-- **Change**: reload applies as a version-checked, undoable edit and retries with the newest change. Keep My Edits records consent. Every save is a guarded write, and a refusal carries `currentSignature`.
+- **Change**: reload applies as a version-checked, coalesced, undoable edit on the save queue. Keep My Edits records consent. Every save is a guarded write, and a refusal carries `currentSignature`.
 - **Deletes**: the Undo toast and its saved snapshot, the `orca:editor-file-reloaded` event, and unguarded code-editor saves.
 - **Tests**:
   - Typing, or a watcher event, during the read.
-  - Retrying under writes that keep coming.
+  - A clean record keeps making progress under writes that keep coming, with no banner.
+  - A refusal with no `currentSignature`, followed by the pinned read.
   - Self-write echoes.
   - Undo and redo across the reload boundary.
   - Keep followed by another write.
