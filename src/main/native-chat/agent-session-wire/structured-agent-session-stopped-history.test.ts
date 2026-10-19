@@ -117,11 +117,13 @@ describe('a Stop withdraws what the agent never got, and the next send delivers 
 
     expect(dispatched()).toEqual([carrying(['first', 'second'], 'what did I send?'), 'after'])
     expect(journal().stoppedHistoryCarried().get(carrier)).toEqual([first, second])
-    // The chat is unchanged: each still reads Stopped manually, the send shows its own words.
+    // The chat is unchanged: each still reads Stopped manually, beside the Stop's accepted request,
+    // and the send shows its own words.
     expect(await transcript()).toEqual([
       'first (stopped)',
       'second (stopped)',
       'Stopped manually',
+      'Cancellation requested.',
       'what did I send?',
       'after'
     ])

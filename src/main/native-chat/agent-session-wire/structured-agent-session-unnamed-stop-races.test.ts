@@ -108,6 +108,16 @@ async function admittedCodexSend() {
   const turns = codexTurnLifecycleFake(CODEX_THREAD, () => notify)
   Object.assign(codex.routes, turns.routes)
   const provider = adapterFor(codex, {}, [], {
+    // A Stop ends Codex's app server, so the next send's child resumes the saved thread.
+    resolveLaunch: async () => ({
+      command: 'codex',
+      args: ['app-server'],
+      cwd: '/work/repo',
+      codexHome: null,
+      resumeThreadId: restRig?.store.getRecord(SESSION)?.providerHandleChain.length
+        ? CODEX_THREAD
+        : null
+    }),
     onDispatchSettledLate: (settlement) => void restRig?.host.settleLateDispatch(settlement),
     onEvent: (event) => {
       if (event.type === 'ended' && 'cause' in event) {
@@ -124,7 +134,9 @@ async function admittedCodexSend() {
   await vi.waitFor(() => expect(turns.turnId).toBe('turn-1'))
   const id = send.envelope.clientOperationId
   const interrupts = () =>
-    codex.connections[0]!.calls.filter((call) => call.method === 'turn/interrupt')
+    codex.connections.flatMap((connection) =>
+      connection.calls.filter((call) => call.method === 'turn/interrupt')
+    )
   return { current, turns, id, interrupts }
 }
 

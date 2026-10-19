@@ -40,7 +40,7 @@ describe('a proven stop-and-wait of a terminal an older relay still runs', () =>
           ptyId,
           null,
           null,
-          PtyExitProof.from('absent')
+          PtyExitProof.from('absent', undefined)
         )
         expect(deps.runtime.onPtyExit).toHaveBeenCalledWith(ptyId, 0, undefined)
       } else {

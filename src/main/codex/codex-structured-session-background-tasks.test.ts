@@ -8,6 +8,7 @@ import type {
   openCodexAppServerConnection
 } from './codex-app-server-connection'
 import { CodexStructuredSessionAdapter } from './codex-structured-session-adapter'
+import { CodexBackgroundTaskTracker } from './codex-background-task-tracker'
 import { CodexJournalItems } from './codex-structured-journal-items'
 import type { CodexStructuredSessionEvent } from './codex-structured-session-state'
 import type { StructuredAgentSessionEndedEvent } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
