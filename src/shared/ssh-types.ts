@@ -34,12 +34,15 @@ export type SshRemoteRuntimeResolution = {
   orcaMajor: number
 }
 
+/** Who created a hidden target as an implementation detail, and so owns its lifecycle. */
+export type SshTargetOwner = { type: 'on-demand-runtime'; runtimeId: string }
+
 export type SshTarget = {
   id: string
   label: string
   /** Internal owner for targets that Orca creates as implementation details.
    *  Owned targets are hidden from normal SSH-host management surfaces. */
-  owner?: { type: 'on-demand-runtime'; runtimeId: string }
+  owner?: SshTargetOwner
   /** Host alias to resolve through OpenSSH config (ssh -G). */
   configHost?: string
   host: string
@@ -281,7 +284,16 @@ export const SSH_MANAGED_SERVER_PHASES = [
   'starting'
 ] as const
 
-export const SSH_MANAGED_SERVER_UPDATE_STATES = ['host-newer', 'deferred', 'failed'] as const
+// Every state but host-newer means the server may be behind this app. Readers drop unknown states.
+export const SSH_MANAGED_SERVER_UPDATE_STATES = [
+  'host-newer',
+  'deferred',
+  'failed',
+  'rolled-back',
+  'no-template',
+  'migrating',
+  'check-failed'
+] as const
 
 /** Why a managed server kept its version on this connect; absent when it is current or updated. */
 export type SshManagedServerUpdateNote = {
