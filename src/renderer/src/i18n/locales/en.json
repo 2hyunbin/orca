@@ -14304,8 +14304,8 @@
             "deleteReasonNonLocalHost": "Only sessions on this device can be deleted.",
             "deleteReasonSyntheticPath": "This session can't be deleted from Orca.",
             "deleteReasonUnsupportedAgent": "{{value0}} sessions can't be deleted from Orca.",
-            "resumeInNewNativeChat": "Switch to Chat",
-            "resumeInNewCli": "Switch to Terminal",
+            "resumeInNewNativeChat": "Resume in New Chat",
+            "resumeInNewCli": "Resume in New Terminal",
             "resumeInNewCliTooltipFork": "Forks this conversation into a new CLI session.",
             "resumeInNewCliTooltipChat": "The native chat stays as it is."
           },

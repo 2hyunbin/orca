@@ -14028,8 +14028,8 @@
             "deleteReasonNonLocalHost": "このデバイス上のセッションのみ削除できます。",
             "deleteReasonSyntheticPath": "このセッションは Orca では削除できません。",
             "deleteReasonUnsupportedAgent": "{{value0}} のセッションは Orca では削除できません。",
-            "resumeInNewNativeChat": "チャットに切り替える",
-            "resumeInNewCli": "ターミナルに切り替える",
+            "resumeInNewNativeChat": "新しいチャットで再開",
+            "resumeInNewCli": "新しいターミナルで再開",
             "resumeInNewCliTooltipFork": "この会話を新しい CLI セッションにフォークします。",
             "resumeInNewCliTooltipChat": "ネイティブチャットはそのまま残ります。"
           },

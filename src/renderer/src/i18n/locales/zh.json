@@ -14028,8 +14028,8 @@
             "deleteReasonNonLocalHost": "只能删除此设备上的会话。",
             "deleteReasonSyntheticPath": "此会话无法在 Orca 中删除。",
             "deleteReasonUnsupportedAgent": "{{value0}} 会话无法在 Orca 中删除。",
-            "resumeInNewNativeChat": "切换到聊天",
-            "resumeInNewCli": "切换到终端",
+            "resumeInNewNativeChat": "在新聊天中恢复",
+            "resumeInNewCli": "在新终端中恢复",
             "resumeInNewCliTooltipFork": "将此对话派生到新的 CLI 会话中。",
             "resumeInNewCliTooltipChat": "本机聊天保持不变。"
           },
