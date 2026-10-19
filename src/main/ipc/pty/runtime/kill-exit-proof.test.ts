@@ -2,38 +2,32 @@ import { describe, expect, it, vi } from 'vitest'
 import { PtyExitProof, PtyRetirementWithoutProof } from '../../../pty-exit-proof'
 import { publishSyntheticExit } from './kill'
 
-function deps() {
+function harness() {
   const calls: string[] = []
-  return {
-    calls,
-    deps: {
-      runtime: {
-        markPtyLivenessUnverifiable: vi.fn((_id: string, reason: string) =>
-          calls.push(`unverifiable:${reason}`)
-        ),
-        onPtyExit: vi.fn(() => {
-          calls.push('exit')
-        })
-      },
-      rememberSyntheticKillExit: vi.fn(),
-      sendPtyExitToRenderer: vi.fn()
+  const runtime = {
+    markPtyLivenessUnverifiable: (_id: string, reason: string) => {
+      calls.push(`unverifiable:${reason}`)
+    },
+    onPtyExit: () => {
+      calls.push('exit')
     }
   }
+  const sendPtyExitToRenderer = vi.fn()
+  const deps = {
+    runtime,
+    rememberSyntheticKillExit: vi.fn(),
+    sendPtyExitToRenderer
+  }
+  return { calls, deps, sendPtyExitToRenderer }
 }
 
 describe('a synthetic PTY exit', () => {
   it('reads unverifiable, before the exit lands, when it rests on no proof', () => {
-    const { calls, deps: d } = deps()
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: publishSyntheticExit reads only these two runtime methods.
-    publishSyntheticExit(
-      d as never,
-      'pty-1',
-      -1,
-      'inc-1',
-      PtyRetirementWithoutProof.because('gone')
-    )
+    const { calls, deps, sendPtyExitToRenderer } = harness()
+    const unproven = PtyRetirementWithoutProof.because('gone')
+    publishSyntheticExit(deps, 'pty-1', -1, 'inc-1', unproven)
     expect(calls).toEqual(['unverifiable:gone', 'exit'])
-    expect(d.sendPtyExitToRenderer).toHaveBeenCalledWith({
+    expect(sendPtyExitToRenderer).toHaveBeenCalledWith({
       id: 'pty-1',
       code: -1,
       incarnationId: 'inc-1'
@@ -41,9 +35,8 @@ describe('a synthetic PTY exit', () => {
   })
 
   it('leaves the liveness verdict to the exit when the host proved it', () => {
-    const { calls, deps: d } = deps()
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: publishSyntheticExit reads only these two runtime methods.
-    publishSyntheticExit(d as never, 'pty-1', 0, undefined, PtyExitProof.from('absent'))
+    const { calls, deps } = harness()
+    publishSyntheticExit(deps, 'pty-1', 0, undefined, PtyExitProof.from('absent'))
     expect(calls).toEqual(['exit'])
   })
 })

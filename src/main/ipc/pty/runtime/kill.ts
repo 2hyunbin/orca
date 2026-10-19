@@ -8,6 +8,7 @@ import {
 } from '../provider/registry'
 import { isPtyAlreadyGoneError, delay, verifyPtyStopped } from '../provider/liveness'
 import type { PtyRuntimeControllerDeps } from './controller-deps'
+import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
 import { errorMessage } from '../../../../shared/error-message'
 import {
   PtyExitProof,
@@ -26,10 +27,9 @@ const OBSERVED_EXIT_RECORD_WAIT_MS = 10_000
 /** Tells the runtime and renderer a PTY ended that no provider exit reported. Without proof its
  *  liveness reads `unverifiable`, never `exited`. */
 export function publishSyntheticExit(
-  deps: Pick<
-    PtyRuntimeControllerDeps,
-    'runtime' | 'rememberSyntheticKillExit' | 'sendPtyExitToRenderer'
-  >,
+  deps: Pick<PtyRuntimeControllerDeps, 'rememberSyntheticKillExit' | 'sendPtyExitToRenderer'> & {
+    runtime?: Pick<OrcaRuntimeService, 'onPtyExit' | 'markPtyLivenessUnverifiable'>
+  },
   ptyId: string,
   code: number,
   incarnationId: string | undefined,
@@ -164,8 +164,7 @@ export function retireRejectedPtyFromRuntimeController(
     runtime?.onPtyExit(ptyId, 0, ptyIncarnationById.get(ptyId))
     return
   }
-  // stopAndWait confirmed it: an observed exit, or absence from the provider's inventory.
-  const proof = PtyExitProof.from('absent')
+  const proof = PtyExitProof.from('stop-confirmed')
   const connectionId = getPtySshConnectionId(ptyId)
   publishSyntheticExit(deps, ptyId, 0, finishPtyShutdown(ptyId, connectionId, store, proof), proof)
 }
@@ -204,8 +203,9 @@ export async function stopAndWaitPtyFromRuntimeController(
       delay(Math.max(1, deadline - Date.now())).then(() => false)
     ])
     if (stopped) {
-      // The bridge already retired the lease on the relay's proof; the runtime learns it here.
-      const proof = PtyExitProof.from('exit-observed')
+      // The bridge retired the lease and holds no pane: the relay reported the exit, or the
+      // listing lacks it. The runtime learns it here.
+      const proof = PtyExitProof.from('absent')
       publishSyntheticExit(deps, ptyId, 0, finishPtyShutdown(ptyId, null, store, proof), proof)
     }
     return stopped

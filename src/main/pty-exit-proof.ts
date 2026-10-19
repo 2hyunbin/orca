@@ -1,9 +1,10 @@
 /**
  * What retiring a PTY rests on. Retiring its ownership, its lease or its runtime record drops the
- * only handle a later stop could use, so every retirement names its evidence: a `PtyExitProof`
- * from the host that owns the process, or a `PtyRetirementWithoutProof` carrying the
- * `unverifiable` reason. Private constructors keep both minted only here, and
- * config/scripts/check-unproven-pty-retirement-ratchet.mjs counts every unproven mint.
+ * only handle a later stop could use, so every retirement declares its evidence: a `PtyExitProof`
+ * naming what the owning host observed, or a `PtyRetirementWithoutProof` carrying the
+ * `unverifiable` reason. A declaration for review, not a capability: what keeps it honest is
+ * config/scripts/check-unproven-pty-retirement-ratchet.mjs, which counts every unproven
+ * retirement and every ownership drop that names no evidence.
  */
 export type PtyExitProofSource =
   /** The owning provider emitted this incarnation's exit, or the legacy relay reported it. */
@@ -14,6 +15,8 @@ export type PtyExitProofSource =
   | 'shutdown-acknowledged'
   /** A host-wide census answered `exited` for it. */
   | 'host-census'
+  /** A stop-and-wait confirmed it: an observed exit, or absence from the owning inventory. */
+  | 'stop-confirmed'
 
 export class PtyExitProof {
   private constructor(readonly source: PtyExitProofSource) {}
