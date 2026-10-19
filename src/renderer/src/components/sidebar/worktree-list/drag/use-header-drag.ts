@@ -23,6 +23,8 @@ import { useProjectGroupHeaderDrag } from '../../project-group-header-drag'
 import { getSidebarOrderedProjectGroupHeaderIdsByBucket } from '../../project-group-header-drop'
 import { USER_SCROLL_MEASUREMENT_ADJUSTMENT_SUPPRESS_MS } from '../viewport/use-scroll-suppression'
 
+const readLiveRepos = (): readonly Repo[] => useAppStore.getState().repos
+
 export type WorktreeSidebarHeaderDrag = ReturnType<typeof useWorktreeSidebarHeaderDrag>
 
 function indexById(byBucket: ReadonlyMap<string, readonly string[]>): Map<string, number> {
@@ -182,7 +184,7 @@ export function useWorktreeSidebarHeaderDrag(args: {
     orderedRepoIds: allRepoIds,
     sidebarRepoHeaderIdsByBucket,
     repoById: repoMap,
-    getLiveRepos: () => useAppStore.getState().repos,
+    getLiveRepos: readLiveRepos,
     usesProjectGroupOrdering: hasProjectGroups,
     onCommitRepoOrder: commitRepoReorder,
     onCommitProjectGroupOrder: commitProjectGroupOrder,

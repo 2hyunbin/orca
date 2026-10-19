@@ -48,8 +48,8 @@ export function useRepoHeaderDrag({
   usesProjectGroupOrderingRef.current = usesProjectGroupOrdering
   const onCommitRepoOrderRef = useRef(onCommitRepoOrder)
   onCommitRepoOrderRef.current = onCommitRepoOrder
+  // Read once: callers pass a stable store reader.
   const getLiveReposRef = useRef(getLiveRepos)
-  getLiveReposRef.current = getLiveRepos
   const onCommitProjectGroupOrderRef = useRef(onCommitProjectGroupOrder)
   onCommitProjectGroupOrderRef.current = onCommitProjectGroupOrder
   const getContainerRef = useRef(getScrollContainer)
