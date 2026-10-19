@@ -35,6 +35,7 @@ import { usePersistedUIWriter } from './app-shell/use-persisted-ui-writer'
 import { useRuntimeGraphSync } from './app-shell/use-runtime-graph-sync'
 import { useWindowVisibilityEffects } from './app-shell/use-window-visibility-effects'
 import { SpaceWindowStatePublisher } from './components/workspace-space/SpaceWindowStatePublisher'
+import { installActiveWorktreeRemovalSuccessor } from './lib/active-worktree-removal-successor'
 
 function App(): React.JSX.Element {
   const layout = useAppChromeLayout()
@@ -52,6 +53,8 @@ function App(): React.JSX.Element {
   useDocumentAppearance()
   useWindowVisibilityEffects()
   useGlobalKeybindings({ layout, floatingWorkspace })
+  // Why App, not store creation: the Space window mirrors this store's selection but owns none.
+  useEffect(() => installActiveWorktreeRemovalSuccessor(), [])
 
   // Why: the same vars are set inline on .app-layout below, but portaled surfaces
   // (sheets, dialogs) mount outside it and would otherwise fall back to 0px and

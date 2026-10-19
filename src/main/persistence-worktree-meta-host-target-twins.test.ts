@@ -175,11 +175,41 @@ describe('worktree meta and lineage writes for same-id twins', () => {
     expect(store.getWorktreeMeta(WORKTREE_ID)?.sortOrder).toBe(1)
   })
 
-  it('resolves an id-only caller to the stamp, and refuses an unstamped twin', async () => {
+  it('refuses an id-only caller for twins, stamped or not', async () => {
     const store = await createTwinStore()
     expect(resolveWorktreeMetaOwner(store, WORKTREE_ID)).toBeUndefined()
 
+    // The raw-id row's stamp names the twin that wrote first, not the one the caller means.
+    store.setWorktreeMeta(SSH, { displayName: 'ssh copy' })
+    expect(resolveWorktreeMetaOwner(store, WORKTREE_ID)).toBeUndefined()
+    store.setWorktreeMeta(LOCAL, { displayName: 'local copy' })
+    expect(resolveWorktreeMetaOwner(store, WORKTREE_ID)).toBeUndefined()
+  })
+
+  it('resolves an id-only caller to the stamp when one host holds the repo', async () => {
+    const store = await createTwinStore({ repos: [twinRepos[1]] })
+    expect(resolveWorktreeMetaOwner(store, WORKTREE_ID)).toEqual(SSH)
+
     store.setWorktreeMeta(SSH, { displayName: 'ssh copy' })
     expect(resolveWorktreeMetaOwner(store, WORKTREE_ID)).toEqual(SSH)
+  })
+
+  it('an id-only sort order never lands on the twin that wrote first', async () => {
+    const solo = hostWorktreeTarget({ id: 'solo::/a', hostId: 'local' })
+    const store = await createTwinStore({
+      repos: [...twinRepos, { ...twinRepos[0], id: 'solo', path: '/a' }]
+    })
+    store.setWorktreeMeta(SSH, { displayName: 'ssh copy', sortOrder: 10 })
+    store.setWorktreeMeta(solo, { sortOrder: 5 })
+
+    const result = persistRuntimeManagedWorktreeSortOrder({
+      orderedIds: [solo.id, WORKTREE_ID],
+      store,
+      invalidateResolved: vi.fn(),
+      notifyChanged: vi.fn()
+    })
+
+    expect(result).toEqual({ updated: 1 })
+    expect(store.getWorktreeMetaForHost(WORKTREE_ID, 'ssh:ssh-1')?.sortOrder).toBe(10)
   })
 })
