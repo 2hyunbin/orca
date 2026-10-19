@@ -4,6 +4,7 @@
 // of the aborted start, so it gets a start of its own rather than that start's refusal.
 
 import { afterEach, expect, it, vi } from 'vitest'
+import { waitForPromiseWithSignal } from '../../../shared/abort-signal-reason'
 import { JournalStopAcceptor } from '../agent-session-journal/journal-stop-acceptance'
 import {
   HOST_TEST_SESSION as SESSION,
@@ -130,32 +131,43 @@ it('answers that it stopped the queued message even when its write throws after 
   expect(await rig.submission(first.id)).toMatchObject({ rejection: { kind: 'cancelled' } })
 })
 
-// A Stop between the hand-off's row and the agent call: Orca still held the card, so it waits again.
-it('returns a queued card to waiting when the Stop lands before Orca hands it to the agent', async () => {
-  rig = await createQueuedMessageTestRig({ restartable: true })
-  const working = await rig.workingSend()
-  const queued = await rig.send('queued behind the turn', 'queue-if-active').result
-  if (!queued.ok || !('queued' in queued.value)) {
-    throw new Error('expected a queued receipt')
-  }
-  const card = queued.value.queued.messageId
-  const journal = rig.host.collaboratorsForTests().sessions.get(SESSION)!.journal
-  const resolve = journal.resolveDispatch.bind(journal)
-  let stopping: ReturnType<QueuedMessageTestRig['stop']> | undefined
-  vi.spyOn(journal, 'resolveDispatch').mockImplementation(async (input) => {
-    const written = await resolve(input)
-    if (input.state === 'pending' && input.clientMessageId !== working && !stopping) {
-      stopping = rig.stop()
+// A Stop before Orca calls the agent, or while the agent still prepares the message (its options,
+// the previous turn opening): the agent never got it, so the card waits again.
+it.each(['before the call', 'while the agent prepares it'] as const)(
+  'returns a queued card to waiting when the Stop lands %s',
+  async (when) => {
+    rig = await createQueuedMessageTestRig({ restartable: true })
+    const working = await rig.workingSend()
+    const queued = await rig.send('queued behind the turn', 'queue-if-active').result
+    if (!queued.ok || !('queued' in queued.value)) {
+      throw new Error('expected a queued receipt')
     }
-    return written
-  })
-  await rig.settleAccepted(working, 'working')
+    const card = queued.value.queued.messageId
+    let stopping: ReturnType<QueuedMessageTestRig['stop']> | undefined
+    if (when === 'before the call') {
+      const journal = rig.host.collaboratorsForTests().sessions.get(SESSION)!.journal
+      const resolve = journal.resolveDispatch.bind(journal)
+      vi.spyOn(journal, 'resolveDispatch').mockImplementation(async (input) => {
+        const written = await resolve(input)
+        if (input.state === 'pending' && input.clientMessageId !== working && !stopping) {
+          stopping = rig.stop()
+        }
+        return written
+      })
+    } else {
+      rig.dispatch.mockImplementationOnce(async (input) => {
+        stopping = rig.stop()
+        return waitForPromiseWithSignal(new Promise<never>(() => {}), input.signal)
+      })
+    }
+    await rig.settleAccepted(working, 'working')
 
-  await eventually(() => expect(stopping).toBeDefined())
-  expect(await stopping).toMatchObject({ ok: true })
-  await eventually(async () =>
-    expect(await rig.drafts()).toEqual([{ messageId: card, state: 'waiting' }])
-  )
-  expect(await rig.queuePause()).toEqual({ reason: 'stopped' })
-  expect(rig.dispatch).toHaveBeenCalledTimes(1)
-})
+    await eventually(() => expect(stopping).toBeDefined())
+    expect(await stopping).toMatchObject({ ok: true })
+    await eventually(async () =>
+      expect(await rig.drafts()).toEqual([{ messageId: card, state: 'waiting' }])
+    )
+    expect(await rig.queuePause()).toEqual({ reason: 'stopped' })
+    expect(rig.dispatch).toHaveBeenCalledTimes(when === 'before the call' ? 1 : 2)
+  }
+)

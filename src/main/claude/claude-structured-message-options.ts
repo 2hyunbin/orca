@@ -5,7 +5,11 @@ import { AgentSessionOptionRejectedError } from '../native-chat/agent-session-wi
 import { listedModels } from './claude-structured-model-catalog'
 import { setClaudeStructuredOption } from './claude-structured-options'
 import type { ClaudeSession } from './claude-structured-session-state'
-import { throwIfSignalAborted, waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
+import {
+  isAbortSignalReason,
+  throwIfSignalAborted,
+  waitForPromiseWithSignal
+} from '../../shared/abort-signal-reason'
 
 /** Applies the accepted message's choices while its prompt is still in the SDK input queue. */
 export async function applyClaudeMessageOptions(
@@ -91,7 +95,8 @@ export function dispatchClaudeMessage(
             await applyClaudeMessageOptions(session, messageOptions, timeoutMs, input.signal)
             input.signal?.throwIfAborted()
           } catch (error) {
-            throw error instanceof AgentSessionOptionRejectedError
+            throw error instanceof AgentSessionOptionRejectedError ||
+              isAbortSignalReason(input.signal, error)
               ? error
               : new AgentSessionOptionRejectedError(error)
           }
