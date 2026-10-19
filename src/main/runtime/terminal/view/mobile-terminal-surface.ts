@@ -151,7 +151,7 @@ export abstract class OrcaRuntimeWithWaitForMobileTerminalSurface extends OrcaRu
           if (relisted) {
             this.storeMobileSessionSnapshot(
               authority.worktreeId,
-              withMainTabLayout(relisted, pane.tabId, layout)
+              withMainTabLayout(relisted, { tabId: pane.tabId, ptyId: pty.ptyId }, layout)
             )
           }
         }

@@ -8,6 +8,7 @@ import { terminalLayoutContainsLeaf } from '../../../../shared/workspace-session
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { RuntimeMobileSessionTabsSnapshot } from '../../../../shared/runtime-types'
 import type { TerminalLayoutSnapshot } from '../../../../shared/terminal-tab-types'
+import { cloneTerminalLayoutSnapshot } from '../../mobile-session-layout-projection'
 
 type RelistedPane = {
   tabId: string
@@ -81,13 +82,23 @@ export function relistPaneMainBinds(
  */
 export function withMainTabLayout(
   snapshot: RuntimeMobileSessionTabsSnapshot,
-  tabId: string,
+  relisted: { tabId: string; ptyId: string },
   layout: TerminalLayoutSnapshot
 ): RuntimeMobileSessionTabsSnapshot {
+  const inTab = (row: RuntimeMobileSessionTabsSnapshot['tabs'][number]): boolean =>
+    row.type === 'terminal' && row.parentTabId === relisted.tabId
+  // A relist the membership gate refused leaves the window's rows as they were.
+  if (
+    !snapshot.tabs.some(
+      (row) => inTab(row) && row.type === 'terminal' && row.ptyId === relisted.ptyId
+    )
+  ) {
+    return snapshot
+  }
   return {
     ...snapshot,
     tabs: snapshot.tabs.map((row) =>
-      row.type === 'terminal' && row.parentTabId === tabId ? { ...row, parentLayout: layout } : row
+      inTab(row) ? { ...row, parentLayout: cloneTerminalLayoutSnapshot(layout) } : row
     )
   }
 }

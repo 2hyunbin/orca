@@ -138,7 +138,7 @@ function arrange(entry: Entry, condition: Condition): CloseContinuityHarness {
     })
   }
   if (condition === 'pane-unlisted') {
-    // The renderer's list lags main: it shows the sibling alone, so the closed pane has no row.
+    // The renderer's list lags main: a sibling row with no layout yet, and none for the closed pane.
     const siblingLayout = {
       root: { type: 'leaf' as const, leafId: SIBLING_LEAF_ID },
       activeLeafId: SIBLING_LEAF_ID,
@@ -172,7 +172,6 @@ function arrange(entry: Entry, condition: Condition): CloseContinuityHarness {
               leafId: SIBLING_LEAF_ID,
               ptyId: SIBLING_PTY_ID,
               title: 'Fixture shell',
-              parentLayout: siblingLayout,
               isActive: true
             }
           ]
