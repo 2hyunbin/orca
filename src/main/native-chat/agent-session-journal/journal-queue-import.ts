@@ -5,6 +5,7 @@
 // bulk import runs once per open and is never retried in a loop: the next open tries again.
 
 import type { AgentJournalSubmission } from '../../../shared/agent-session-journal-types'
+import { journalDispatchRowApplies } from './journal-dispatch-settlement'
 import { journalQueueRowBuilder, type JournalQueuedChange } from './journal-queue-events'
 import { queuedCardFromChange } from './journal-queue-fold'
 import { queuedChangeOf } from './journal-queue-retention'
@@ -50,7 +51,8 @@ export function legacyQueuedChange(
   return unanswered(card, state.submissions) ? change : null
 }
 
-/** Waiting, returned, or handed off as a send still owed an answer, or that nothing can answer. */
+/** Waiting, returned, or handed off as a send a later row may still answer (as the fold keeps it),
+ *  or that nothing can answer. */
 function unanswered(
   card: QueuedMessageRow,
   submissions: ReadonlyMap<string, AgentJournalSubmission>
@@ -59,7 +61,7 @@ function unanswered(
     return card.state !== 'withdrawn'
   }
   const handOff = card.consumedAs === null ? undefined : submissions.get(card.consumedAs)
-  return handOff === undefined || handOff.dispatchState === 'pending'
+  return handOff === undefined || journalDispatchRowApplies(handOff)
 }
 
 /** The legacy rows still on disk for one session, as the queue's view reads them. */
