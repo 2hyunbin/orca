@@ -41,7 +41,7 @@ export const PHONE_WATCH_RULES = {
   consecutiveMinutes: 3,
   readMinutes: 10,
   // Judged as a share of the minute's phone attempts (the signal plus completed accepts), not a
-  // count: a count line false-tripped 30/119 5-hour watches on busy c28 (10-18/19), where bursts
+  // count: a count line false-tripped 33/121 5-hour watches on busy c28 (10-18/19), where bursts
   // of refusals arrive with the evening rise in accepts. A minute with fewer attempts is not judged.
   minAttemptsPerMinute: 4,
   // Over half of the minute's attempts, and 0.25 above the share before the flip, capped so two
