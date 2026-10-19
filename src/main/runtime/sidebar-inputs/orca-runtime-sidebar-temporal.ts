@@ -19,6 +19,8 @@ import type { AgentStatusStoreView } from './workspace-activity-facts-producer'
 import { SortStampsProducer } from './sort-stamps-producer'
 import { writeUnreadFlag } from './sort-stamp-records'
 import { WorkspaceViewers } from './workspace-viewers'
+import { clientRaisesUnreadFlagItself } from '../../../shared/workspace-unread-raise-capability'
+import type { RuntimeCapability } from '../../../shared/protocol-version'
 import { TerminalUseProducer } from './terminal-use-producer'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
@@ -130,6 +132,19 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
         probePtyLiveness: async (ptyId) => (await provider.probePtyLiveness?.(ptyId)) ?? null
       })
       .catch((error: unknown) => console.warn('[sidebar] sort tier reconcile failed:', error))
+  }
+
+  /** A paired desktop connected; while one that raises the unread flag itself is here, this host doesn't. */
+  noteRuntimeClient(connectionId: string, capabilities: readonly RuntimeCapability[]): void {
+    if (!clientRaisesUnreadFlagItself(capabilities)) {
+      return
+    }
+    this.workspaceViewers.noteSelfRaisingClient(connectionId)
+    this.registerSubscriptionCleanup(
+      `sidebar-self-raising-${connectionId}`,
+      () => this.workspaceViewers.dropClient(connectionId),
+      connectionId
+    )
   }
 
   /** A phone holding the workspace's session open has it on screen: its flag is read and stays down. */

@@ -10,6 +10,10 @@ import { RpcDispatcher } from '../rpc/dispatcher'
 import type { RpcDispatchStreamingOptions } from '../rpc/dispatcher-stream-options'
 import { SESSION_TAB_METHODS } from '../rpc/methods/session-tabs'
 import { SIDEBAR_INPUT_METHODS } from '../rpc/methods/sidebar-inputs'
+import { requireSwitchedOn } from './require-switched-on'
+import { ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES } from '../../../shared/electron-remote-runtime-client-capabilities'
+import { remoteRuntimeClientCapabilities } from '../../../shared/remote-runtime-client-capabilities'
+import { WORKSPACE_UNREAD_HOST_RAISES_CAPABILITY } from '../../../shared/workspace-unread-raise-capability'
 
 vi.mock('../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
 
@@ -180,5 +184,41 @@ describe('workspace unread flag on a headless host', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('advertises that it raises the flag, so a current desktop leaves raising to it', () => {
+    const host = createHeadlessHost()
+    expect(host.runtime.getStatus().capabilities).toContain(WORKSPACE_UNREAD_HOST_RAISES_CAPABILITY)
+    requireSwitchedOn(host.runtime.sidebarFacts).noteRuntimeClient(
+      'desktop-new',
+      ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES
+    )
+    // The CLI hosts no client pages and raises nothing itself.
+    requireSwitchedOn(host.runtime.sidebarFacts).noteRuntimeClient(
+      'cli-1',
+      remoteRuntimeClientCapabilities()
+    )
+    host.finishTurn()
+    expect(host.meta[WT].isUnread).toBe(true)
+  })
+
+  it('leaves raising to an older desktop while it is connected, and still clears on the phone', async () => {
+    const host = createHeadlessHost()
+    const olderDesktop = ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES.filter(
+      (capability) => capability !== WORKSPACE_UNREAD_HOST_RAISES_CAPABILITY
+    )
+    requireSwitchedOn(host.runtime.sidebarFacts).noteRuntimeClient('desktop-old', olderDesktop)
+    host.finishTurn()
+    expect(host.meta[WT].isUnread).toBe(false)
+
+    // The older desktop raised it by its own rule; the phone opening it still clears it here.
+    host.meta[WT].isUnread = true
+    await host.openOnPhone(WT)
+    expect(host.meta[WT].isUnread).toBe(false)
+    host.runtime.cleanupSubscriptionsForConnection('phone-1')
+
+    host.runtime.cleanupSubscriptionsForConnection('desktop-old')
+    host.finishTurn()
+    expect(host.meta[WT].isUnread).toBe(true)
   })
 })
