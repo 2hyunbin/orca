@@ -16,6 +16,9 @@ import {
   OPEN_CODE_WRITER_TOPOLOGY,
   cliWriterTopology
 } from '../../agent-hooks/server/cli-writer-observation'
+import type { AgentSessionRecord } from '../../../shared/agent-session-record'
+import { CLI_CONVERSATION_ADOPTING_AGENTS } from '../../../shared/structured-agent-cli-conversation-adoption'
+import { recordConversationKey } from '../../native-chat/structured-conversation-key'
 
 export abstract class OrcaRuntimeWithStructuredSessionCliWriterHost extends OrcaRuntimeWithGetWorktreePs {
   private cliWriterPtyPane(ptyId: string | null | undefined): CliWriterPane | null {
@@ -68,6 +71,20 @@ export abstract class OrcaRuntimeWithStructuredSessionCliWriterHost extends Orca
         (!(OPEN_CODE_WRITER_TOPOLOGY in binding) && previous?.paneOwned === true),
       process: event.agentPresence?.process ?? previous?.process
     })
+  }
+
+  /** Before a chat's agent spawns: refuses while a terminal may still write its head conversation.
+   *  Never enters the session queue, so it can run inside an acquisition. */
+  protected async assertStructuredChatAcquireAdmissible(record: AgentSessionRecord): Promise<void> {
+    const head = record.providerHandleChain.at(-1)
+    const key = head ? recordConversationKey(record, head) : null
+    const adopts = Object.values(CLI_CONVERSATION_ADOPTING_AGENTS).some(
+      (agents: readonly string[]) => agents.includes(record.provider)
+    )
+    if (!key?.id || !adopts) {
+      return
+    }
+    await this.assertStructuredAdoptionTerminalWritersExited(record.provider, key.id)
   }
 
   async assertStructuredAdoptionTerminalWritersExited(

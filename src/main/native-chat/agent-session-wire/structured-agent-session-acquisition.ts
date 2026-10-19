@@ -45,6 +45,15 @@ export async function acquireOwner(
       throw new AgentSessionPreSpawnError(error)
     }
     const permissionMode = await input.launchPermissionMode?.(record)
+    try {
+      await input.assertNoTerminalWriter?.(record)
+    } catch (error) {
+      // Not a code: a code message would travel as the census's own conflict, not this reason.
+      throw new AgentSessionPreSpawnError(error, {
+        reason: 'conversationOpenInTerminal',
+        message: 'a terminal may still be writing this conversation'
+      })
+    }
     // Right before the spawn: a close, Stop or quit that landed during any wait above launches nothing.
     if (input.acquireSignal?.aborted) {
       throw new AgentSessionPreSpawnError(abortSignalReason(input.acquireSignal))

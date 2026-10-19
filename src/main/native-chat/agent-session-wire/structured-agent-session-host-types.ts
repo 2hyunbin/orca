@@ -160,6 +160,8 @@ export type StructuredAgentSessionHostDeps = {
   hasOpenDispatch?: (record: AgentSessionRecord) => boolean
   /** A chat tab left the screen: closed, or its workspace removed. Advisory; a throw is logged. */
   onSessionTabHidden?: (sessionId: string) => void
+  /** Throws while a terminal may still write the record's head conversation; run before a spawn. */
+  assertNoTerminalWriter?: (record: AgentSessionRecord) => Promise<void>
   /** Where every failure the host carries on past is reported. Required: a host without one would
    *  drop exactly the failures nobody sees in the UI. */
   logger: StructuredAgentSessionLogger

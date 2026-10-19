@@ -142,6 +142,12 @@ const PIECES: Record<AgentSessionFailureCopyId, (values: AgentSessionFailureCopy
         COPY.runtimeNotInstalled,
         values
       ),
+    conversationOpenInTerminal: (values) =>
+      translate(
+        'components.native-chat.failureWords.conversationOpenInTerminal',
+        COPY.conversationOpenInTerminal,
+        values
+      ),
     chooseClaudeAccount: () =>
       translate(
         'components.native-chat.failureWords.chooseClaudeAccount',

@@ -130,6 +130,8 @@ export type StructuredAgentSessionRuntimeDeps = StructuredAgentSessionTransportO
   prepareCodexCatalogProbeHome?: (homePath: string) => void
   /** See `StructuredAgentSessionHostDeps.onSessionTabHidden`. */
   onSessionTabHidden?: StructuredAgentSessionHostDeps['onSessionTabHidden']
+  /** See `StructuredAgentSessionHostDeps.assertNoTerminalWriter`. */
+  assertNoTerminalWriter?: StructuredAgentSessionHostDeps['assertNoTerminalWriter']
   /** Host-owned phone delivery and reconciliation from the current journal projection. */
   attentionDelivery?: StructuredAttentionMobileDelivery
   /** The account home a structured launch would pin right now, for catalog
@@ -316,6 +318,7 @@ async function installOnJournal(
     ...(deps.hasOpenDispatch ? { hasOpenDispatch: deps.hasOpenDispatch } : {}),
     ...(deps.startupLimits ? { startupLimits: deps.startupLimits } : {}),
     ...(deps.onSessionTabHidden ? { onSessionTabHidden: deps.onSessionTabHidden } : {}),
+    ...(deps.assertNoTerminalWriter ? { assertNoTerminalWriter: deps.assertNoTerminalWriter } : {}),
     ...(await modelCatalogHostDeps({
       store,
       agents,

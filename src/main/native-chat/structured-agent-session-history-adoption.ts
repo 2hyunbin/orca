@@ -24,6 +24,7 @@ export type StructuredAgentSessionAdoptionOwnership = {
   provider: StructuredAgentId
   providerSessionId: string
   lease: AgentSessionLease
+  role: 'head' | 'earlier'
 }
 
 export type StructuredAgentSessionAdoption = {
@@ -75,10 +76,10 @@ export function findCommittedStructuredAgentSessionAdoptionReplay(input: {
 }
 
 /**
- * A conversation has exactly one writer. Codex takes no lock of its own: a second app-server holding
- * the same thread never errors, it loads history once and then diverges, and the rollout ends up
- * recording a conversation that never happened. So the refusal is the correctness guard, and it has
- * to be able to tell "someone else owns this" from "this very operation owns it".
+ * A conversation has exactly one writer, and an adoption must never mint a second chat for one a
+ * chat continues now (its head link; an earlier link holds nothing). Codex's own writer lock covers
+ * only a running process, so this refusal is the guard for chats at rest, and it has to tell
+ * "someone else owns this" from "this very operation owns it".
  *
  * @param selfSessionId the structured session this create is reserving. A retry of a committed
  * create re-runs every pre-commit check, and by then the record it created is itself in the
@@ -94,6 +95,7 @@ export function findConflictingStructuredAdoption(input: {
     input.ownership.find(
       (owner) =>
         owner.sessionId !== input.selfSessionId &&
+        owner.role === 'head' &&
         chatAgentsShareConversations(owner.provider, input.agent) &&
         owner.providerSessionId === input.providerSessionId
     ) ?? null
