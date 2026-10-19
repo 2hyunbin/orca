@@ -4,7 +4,11 @@ import { runProcess } from '@orca/process-host'
 import type { Page } from '@stablyai/playwright-test'
 import { test, expect } from './helpers/orca-app'
 import { evaluatePolled } from './helpers/page-evaluate-polled'
-import { addRepoWithWorkspaces, writeWorkspaceMeta } from './helpers/repo-with-workspaces'
+import {
+  addRepoWithWorkspaces,
+  bulkWriteTimeout,
+  writeWorkspaceMeta
+} from './helpers/repo-with-workspaces'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 
 async function prepareSidebarForScrollTest(page: Page): Promise<void> {
@@ -297,7 +301,8 @@ test.describe('Reveal active workspace button', () => {
         store.getState().setGroupBy('repo')
         return targetKey
       },
-      { parentPath: realpathSync(groupPath), folderPaths }
+      { parentPath: realpathSync(groupPath), folderPaths },
+      { timeout: bulkWriteTimeout(folderPaths.length) }
     )
 
     const scroller = orcaPage.locator('[data-worktree-sidebar]')

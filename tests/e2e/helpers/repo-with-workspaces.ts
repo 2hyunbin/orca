@@ -7,6 +7,11 @@ import { expect } from './orca-app'
 import { evaluatePolled } from './page-evaluate-polled'
 import { loadWorktreesUntilPathsPresent } from './worktree-registration'
 
+/** Poll budget for setup that makes one main write per item. */
+export function bulkWriteTimeout(items: number): number {
+  return 10_000 + items * 500
+}
+
 export type RepoWithWorkspaces = {
   repoId: string
   /** The repo's own checkout, listed as its main workspace. */
@@ -122,7 +127,8 @@ export async function writeWorkspaceMeta(
         }
       }
     },
-    updates
+    updates,
+    { timeout: bulkWriteTimeout(updates.length) }
   )
 }
 
@@ -140,6 +146,7 @@ export async function linkWorkspaces(
           .assignWorktreeParent(childId, { parentWorktreeId: parentId })
       }
     },
-    links
+    links,
+    { timeout: bulkWriteTimeout(links.length) }
   )
 }
