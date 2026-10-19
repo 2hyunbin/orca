@@ -4,6 +4,7 @@ import { MobileNativeChatView, type MobileNativeChatInputLockReason } from './Mo
 import { foldMobileNativeChatMessages } from './mobile-native-chat-render-data'
 import { useMobileNativeChatFoldReuse } from './mobile-native-chat-fold-reuse'
 import type { MobileNativeChatImageAttachments } from './use-mobile-native-chat-image-attachments'
+import type { MobileQueuedEditComposerImages } from './mobile-queued-edit-images'
 import type { MobileNativeChatController } from './use-mobile-native-chat-controller'
 import type { MobileNativeChatStructuredComposer } from './MobileNativeChatComposer'
 import { useMobileNativeChatStreamingBubble } from './use-mobile-native-chat-streaming-bubble'
@@ -23,7 +24,7 @@ type Props = {
   onOpenFile: (pathText: string) => void
   /** Native-chat image attachments: picking adds a composer chip, and sending
    *  rides the pending images along with the message text (desktop parity). */
-  images: MobileNativeChatImageAttachments
+  images: MobileNativeChatImageAttachments & { forQueuedEdit?: MobileQueuedEditComposerImages }
   /** A structured chat's + sheet, files and skills; null on a terminal-backed chat. */
   structuredComposer?: MobileNativeChatStructuredComposer | null
   onMicPress: () => void
@@ -81,13 +82,16 @@ export function MobileNativeChatOverlay({
     controller.nativeChatStreamLive
   )
   const queued = controller.nativeChatQueued
+  const editQueued = queued.edit
   const composerTray = useMobileNativeChatComposerTray({
     queued: {
       cards: queued.cards,
       onSend: queued.send,
       onDelete: queued.delete,
       onClearAll: queued.clear,
-      onEdit: queued.edit,
+      onEdit: editQueued
+        ? (messageId, onCopied) => editQueued(messageId, onCopied, images.forQueuedEdit)
+        : undefined,
       editor: queued.editor,
       pause: queued.pause,
       onResume: queued.resume,

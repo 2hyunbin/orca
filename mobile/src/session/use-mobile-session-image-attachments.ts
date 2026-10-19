@@ -4,10 +4,7 @@ import type { MobileImageSource } from './mobile-image-source-picker'
 import type { MobileNativeChatSendOutcome } from './mobile-native-chat-send'
 import type { StructuredMobileSendAttachment } from './use-mobile-structured-send-with-outcome'
 import { useMobileImageAttachment } from './use-mobile-image-attachment'
-import {
-  useMobileNativeChatImageAttachments,
-  type MobileNativeChatImageAttachments
-} from './use-mobile-native-chat-image-attachments'
+import { useMobileNativeChatImageAttachments } from './use-mobile-native-chat-image-attachments'
 import {
   useMobileNativeChatFileAttachments,
   type MobileNativeChatFileAttachments
@@ -81,7 +78,7 @@ export function useMobileSessionImageAttachments({
 }: Args): {
   attachImage: (source: MobileImageSource) => Promise<void>
   isAttaching: boolean
-  nativeChatImages: MobileNativeChatImageAttachments
+  nativeChatImages: ReturnType<typeof useMobileNativeChatImageAttachments>
   nativeChatFiles: MobileNativeChatFileAttachments
 } {
   const { attachImage, isAttaching } = useMobileImageAttachment({

@@ -16,6 +16,12 @@ type CurrentRef<T> = { readonly current: T }
 type UploadedNativeChatImage = Omit<PendingNativeChatImage, 'id'>
 type ShowToast = (message: string, durationMs?: number) => void
 
+/** Where an upload's images go: `onStart` once the transfer begins, then each image as it lands. */
+export type MobileNativeChatImageUploadSink = {
+  onStart: () => void
+  onImage: (image: UploadedNativeChatImage) => void
+}
+
 export function useMobileNativeChatImageUpload(args: {
   client: RpcClient | null
   activeHandleRef: CurrentRef<string | null>
@@ -30,6 +36,7 @@ export function useMobileNativeChatImageUpload(args: {
 }): {
   attachImage: (source: MobileImageSource) => Promise<void>
   isAttaching: boolean
+  uploadImages: (source: MobileImageSource, sink: MobileNativeChatImageUploadSink) => Promise<void>
 } {
   const {
     activeHandleRef,
@@ -51,34 +58,75 @@ export function useMobileNativeChatImageUpload(args: {
     connStateRef.current = connState
   }, [connState])
 
-  const attachImage = useCallback(
-    async (source: MobileImageSource): Promise<void> => {
-      const scope = scopeKey
+  /** Picks and uploads; each finished image reaches `sink`, and a failure is told as a toast. */
+  const uploadImages = useCallback(
+    async (source: MobileImageSource, sink: MobileNativeChatImageUploadSink): Promise<void> => {
       if (
         !client ||
-        !scope ||
         connState !== 'connected' ||
         (!activeHandleRef.current && !structuredNativeChat)
       ) {
         return
       }
-      let started = false
-      const uploadedImages: UploadedNativeChatImage[] = []
-      let uploadError: unknown = null
+      let uploaded = false
       try {
         await uploadMobileNativeChatImages(source, {
           client,
           getConnectionId: getActiveWorktreeConnectionId,
           pickImages: picker.pickImages,
-          onImageUploaded: (image) => uploadedImages.push(image),
-          onUploadStart: () => {
+          onImageUploaded: (image) => {
+            uploaded = true
+            sink.onImage(image)
+          },
+          onUploadStart: sink.onStart
+        })
+      } catch (uploadError) {
+        const message = uploadError instanceof Error ? uploadError.message : String(uploadError)
+        onError?.()
+        if (connStateRef.current !== 'connected') {
+          showToast('Attach failed (disconnected)', 1500)
+        } else if (uploadError instanceof ImageLibraryPermissionError) {
+          showToast('Photo permission denied', 1500)
+        } else if (message === CLIPBOARD_IMAGE_TOO_LARGE_ERROR) {
+          showToast('Image too large to attach', 1500)
+        } else {
+          showToast('Attach failed', 1500)
+        }
+      }
+      if (uploaded) {
+        onAttachSuccess?.()
+      }
+    },
+    [
+      activeHandleRef,
+      client,
+      connState,
+      getActiveWorktreeConnectionId,
+      onAttachSuccess,
+      onError,
+      picker,
+      showToast,
+      structuredNativeChat
+    ]
+  )
+
+  const attachImage = useCallback(
+    async (source: MobileImageSource): Promise<void> => {
+      const scope = scopeKey
+      if (!scope) {
+        return
+      }
+      let started = false
+      const uploadedImages: UploadedNativeChatImage[] = []
+      try {
+        await uploadImages(source, {
+          onImage: (image) => uploadedImages.push(image),
+          onStart: () => {
             started = true
             attachingCount.current += 1
             setIsAttaching(true)
           }
         })
-      } catch (error) {
-        uploadError = error
       } finally {
         if (started) {
           attachingCount.current -= 1
@@ -89,40 +137,10 @@ export function useMobileNativeChatImageUpload(args: {
       }
       if (uploadedImages.length > 0) {
         onImagesUploaded(scope, uploadedImages)
-        onAttachSuccess?.()
-      }
-      if (uploadError !== null) {
-        const message = uploadError instanceof Error ? uploadError.message : String(uploadError)
-        onError?.()
-        if (connStateRef.current !== 'connected') {
-          showToast('Attach failed (disconnected)', 1500)
-          return
-        }
-        if (uploadError instanceof ImageLibraryPermissionError) {
-          showToast('Photo permission denied', 1500)
-          return
-        }
-        if (message === CLIPBOARD_IMAGE_TOO_LARGE_ERROR) {
-          showToast('Image too large to attach', 1500)
-          return
-        }
-        showToast('Attach failed', 1500)
       }
     },
-    [
-      activeHandleRef,
-      client,
-      connState,
-      getActiveWorktreeConnectionId,
-      onAttachSuccess,
-      onError,
-      onImagesUploaded,
-      picker,
-      scopeKey,
-      showToast,
-      structuredNativeChat
-    ]
+    [onImagesUploaded, scopeKey, uploadImages]
   )
 
-  return { attachImage, isAttaching }
+  return { attachImage, isAttaching, uploadImages }
 }

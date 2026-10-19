@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { buildAgentTuiClearInputForText } from '../../../src/shared/agent-tui-input-clear'
 import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState } from '../transport/types'
@@ -33,6 +33,10 @@ import {
 import { useMobileNativeChatImageUpload } from './use-mobile-native-chat-image-upload'
 import type { PendingNativeChatFile } from './mobile-native-chat-file-attachment'
 import type { StructuredMobileSendAttachment } from './use-mobile-structured-send-with-outcome'
+import {
+  mobileQueuedEditComposerImages,
+  type MobileQueuedEditComposerImages
+} from './mobile-queued-edit-images'
 
 type CurrentRef<T> = { readonly current: T }
 type ShowToast = (message: string, durationMs?: number) => void
@@ -118,7 +122,10 @@ export function useMobileNativeChatImageAttachments({
   onAttachSuccess,
   onError,
   sleep = defaultSleep
-}: Args): MobileNativeChatImageAttachments {
+}: Args): MobileNativeChatImageAttachments & {
+  /** This chat box's photo upload and attachment list, lent to a queued card's editor. */
+  readonly forQueuedEdit: MobileQueuedEditComposerImages
+} {
   const [attachmentsByScope, setAttachmentsByScope] = useState<MobileNativeChatImagesByScope>({})
   const idCounter = useRef(0)
   const attachments =
@@ -134,7 +141,7 @@ export function useMobileNativeChatImageAttachments({
     []
   )
 
-  const { attachImage, isAttaching } = useMobileNativeChatImageUpload({
+  const { attachImage, isAttaching, uploadImages } = useMobileNativeChatImageUpload({
     client,
     activeHandleRef,
     getActiveWorktreeConnectionId,
@@ -355,5 +362,10 @@ export function useMobileNativeChatImageAttachments({
     ]
   )
 
-  return { attachments, isAttaching, attachImage, removeAttachment, sendNativeChat }
+  const forQueuedEdit = useMemo(
+    () => mobileQueuedEditComposerImages(scopeKey, uploadImages, addUploadedImages),
+    [addUploadedImages, scopeKey, uploadImages]
+  )
+
+  return { attachments, isAttaching, attachImage, removeAttachment, sendNativeChat, forQueuedEdit }
 }

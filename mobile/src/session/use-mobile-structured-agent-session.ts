@@ -246,6 +246,8 @@ export function useMobileStructuredAgentSession(
     enabled: enabled && connected,
     mutate,
     appendComposerText,
+    imagesCapable: hostSupport?.queuedMessageImageEdit === true,
+    acceptsImages: options.acceptsImages,
     onSendError,
     ...(onActionResolved ? { onActionResolved } : {})
   })

@@ -7,6 +7,7 @@ import { queuedMessageWithEdit } from '../../../src/shared/queued-message-edit'
 import type { RpcClient } from '../transport/rpc-client'
 import type { RpcResponse } from '../transport/types'
 import { markRpcDeliveryUnknown } from '../transport/rpc-delivery-ambiguity'
+import type { MobileQueuedEditComposerImages } from './mobile-queued-edit-images'
 import { useMobileStructuredAgentSession } from './use-mobile-structured-agent-session'
 import {
   CAPABLE,
@@ -56,12 +57,14 @@ describe('mobile in-place queued Edit', () => {
   function Harness({
     sessionId = SESSION_ID,
     editSupport = true,
+    imageEdit = false,
     enabled = true,
     connected = true,
     transport = client
   }: {
     sessionId?: string
     editSupport?: boolean | null
+    imageEdit?: boolean
     enabled?: boolean
     connected?: boolean
     transport?: RpcClient | null
@@ -79,7 +82,8 @@ describe('mobile in-place queued Edit', () => {
           : {
               ...CAPABLE,
               queuedMessages: false,
-              queuedMessageEdit: editSupport
+              queuedMessageEdit: editSupport,
+              queuedMessageImageEdit: imageEdit
             },
       appendComposerText: append,
       onSendError: error,
@@ -87,7 +91,12 @@ describe('mobile in-place queued Edit', () => {
     })
     return null
   }
-  async function mount(message: AgentSessionQueuedMessage, editSupport: boolean | null = true) {
+  async function mount(
+    message: AgentSessionQueuedMessage,
+    editSupport: boolean | null = true,
+    imageEdit = false,
+    composerImages?: MobileQueuedEditComposerImages
+  ) {
     vi.clearAllMocks()
     sendRequest.mockImplementation(async (method) =>
       method === 'agentSession.queuedMessageEditHold'
@@ -97,12 +106,12 @@ describe('mobile in-place queued Edit', () => {
           : ok({ models: [], current: {} })
     )
     await act(async () => {
-      renderer = create(createElement(Harness, { editSupport }))
+      renderer = create(createElement(Harness, { editSupport, imageEdit }))
     })
     act(() => listener?.(snapshotEvent({ queuedMessages: [message], runningTurn: true })))
     if (editSupport !== null) {
       await act(async () => {
-        expect(await hook!.queued.edit!(message.messageId)).toBe(true)
+        expect(await hook!.queued.edit!(message.messageId, undefined, composerImages)).toBe(true)
       })
     }
   }
@@ -153,6 +162,8 @@ describe('mobile in-place queued Edit', () => {
       expectedBodyFingerprint: agentSessionSendBodyFingerprint(SESSION_ID, message.body)
     })
     expect(fieldsOf(holdCalls()[1]?.[1])).toMatchObject({ action: 'renew', editId: acquire.editId })
+    // A host that edits text only: today's editor, with no strip and no Attach.
+    expect(hook!.queued.editor!.images).toBeUndefined()
     act(() => hook!.queued.editor!.change('edited'))
     await act(async () => {
       expect(await hook!.queued.editor!.save()).toBe(true)
@@ -166,6 +177,7 @@ describe('mobile in-place queued Edit', () => {
       expectedBodyFingerprint: acquire.expectedBodyFingerprint
     })
     expect(fieldsOf(update?.[1])).not.toHaveProperty('body')
+    expect(fieldsOf(update?.[1])).not.toHaveProperty('images')
     const body = withText(message.body, 'edited')
     act(() => listener?.(batchEvent([{ ...message, body }])))
     expect(hook!.queued.cards).toMatchObject([{ messageId: 'image-card', text: 'edited' }])
@@ -185,6 +197,90 @@ describe('mobile in-place queued Edit', () => {
       sendRequest.mock.calls.some(([method]) => method === 'agentSession.queuedMessageDelete')
     ).toBe(false)
     expect(append).not.toHaveBeenCalled()
+  })
+
+  it('removes and adds images, saves ordered markers, and recovers unsaved edits', async () => {
+    const kept = {
+      type: 'image-ref' as const,
+      path: '/images/kept.png',
+      alt: 'Kept',
+      url: 'https://host/kept.png'
+    }
+    const message = queuedDraft({
+      messageId: 'image-card',
+      position: 7,
+      body: {
+        kind: 'message',
+        role: 'user',
+        blocks: [
+          { type: 'text', text: 'Compare [Image #1] [Image #2]' },
+          { type: 'image-ref', path: '/images/snapshot.png' },
+          kept
+        ]
+      }
+    })
+    const photo = { path: '/tmp/orca-paste-1.png', previewUri: 'data:image/png;base64,AA' }
+    let landPhoto = (): void => {}
+    const appendImages = vi.fn(() => true)
+    const composerImages: MobileQueuedEditComposerImages = {
+      upload: (sink) =>
+        new Promise<void>((resolve) => {
+          sink.onStart()
+          landPhoto = () => {
+            sink.onImage(photo)
+            resolve()
+          }
+        }),
+      append: appendImages
+    }
+    await mount(message, true, true, composerImages)
+    expect(hook!.queued.cards[0]?.images).toEqual([message.body.blocks[1], kept])
+    act(() => hook!.queued.editor!.images!.remove('kept-1'))
+    expect(hook!.queued.editor!.text).toBe('Compare [Image #1]')
+    act(() => hook!.queued.editor!.images!.attach!())
+    expect(hook!.queued.editor).toMatchObject({ canSave: false, images: { uploading: true } })
+    await act(async () => {
+      expect(await hook!.queued.editor!.save()).toBe(false)
+    })
+    await act(async () => landPhoto())
+    expect(hook!.queued.editor!.text).toBe('Compare [Image #1]')
+    await act(async () => {
+      expect(await hook!.queued.editor!.save()).toBe(true)
+    })
+    const update = sendRequest.mock.calls.find(
+      ([method]) => method === 'agentSession.queuedMessageUpdate'
+    )
+    expect(fieldsOf(update?.[1])).toMatchObject({
+      messageId: message.messageId,
+      expectedBodyFingerprint: agentSessionSendBodyFingerprint(SESSION_ID, message.body),
+      text: 'Compare [Image #1] [Image #2] ',
+      images: [kept, { type: 'image-ref', path: photo.path }]
+    })
+    expect(fieldsOf(update?.[1])).not.toHaveProperty('position')
+    for (const departure of ['changed', 'gone'] as const) {
+      await act(async () => {
+        await hook!.queued.edit!('image-card', undefined, composerImages)
+      })
+      act(() => hook!.queued.editor!.change('my text [Image #1]'))
+      act(() => hook!.queued.editor!.images!.attach!())
+      await act(async () => landPhoto())
+      if (departure === 'changed') {
+        sendRequest.mockImplementation(async (method) =>
+          method === 'agentSession.queuedMessageUpdate'
+            ? mutationOk({ status: 'changed', messageId: 'image-card' })
+            : ok({ status: 'held' })
+        )
+        await act(async () => {
+          expect(await hook!.queued.editor!.save()).toBe(false)
+        })
+      } else {
+        act(() => listener?.(batchEvent([])))
+      }
+      expect(append).toHaveBeenLastCalledWith('my text')
+      expect(appendImages).toHaveBeenLastCalledWith([expect.objectContaining(photo)])
+      expect(hook!.queued.editor).toBeUndefined()
+    }
+    expect(appendImages).toHaveBeenCalledTimes(2)
   })
 
   it('hands a stale Save to the composer and reopens on the newer text; keeps an unconfirmed one', async () => {
@@ -345,6 +441,7 @@ describe('mobile in-place queued Edit', () => {
     expect(append).not.toHaveBeenCalled()
     act(() => listener?.(batchEvent([])))
     expect(hook!.queued.editor).toBeUndefined()
+    expect(append).toHaveBeenCalledWith('keep this text')
   })
 
   it('keeps exact typing through disconnect and reacquires the hold on the replacement transport', async () => {

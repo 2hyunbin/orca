@@ -4,7 +4,10 @@ import { ChevronDown, ChevronRight, Pencil, Play, Trash2 } from 'lucide-react-na
 import { ActionSheetModal } from '../components/ActionSheetModal'
 import { colors } from '../theme/mobile-theme'
 import { useLargeSystemText } from '../theme/use-large-system-text'
-import type { MobileQueuedMessageCard } from './mobile-structured-queued-message-cards'
+import {
+  mobileQueuedMessageCardLine,
+  type MobileQueuedMessageCard
+} from './mobile-structured-queued-message-cards'
 import type { MobileQueuePause } from './mobile-structured-queued-message-feed'
 import type { MobileQueuedMessageEdit } from './use-mobile-structured-queued-message-controls'
 import type { MobileQueuedMessageInlineEditor } from './use-mobile-structured-queued-edit'
@@ -197,7 +200,7 @@ export function MobileNativeChatQueuedMessages({
       </View>
       <ActionSheetModal
         visible={menuCard !== undefined}
-        title={menuCard?.text}
+        title={menuCard && mobileQueuedMessageCardLine(menuCard)}
         actions={[
           {
             label: 'Edit message',
