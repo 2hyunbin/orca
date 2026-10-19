@@ -123,7 +123,7 @@
     "postinstall": "pnpm run build:packages && node config/scripts/rebuild-native-deps.mjs",
     "rebuild:electron": "node config/scripts/rebuild-native-deps.mjs",
     "reclaim-space": "node config/scripts/reclaim-worktree-space.mjs",
-    "rebuild:node": "pnpm rebuild node-pty",
+    "rebuild:node": "node config/scripts/ensure-native-runtime.mjs --runtime=node --force",
     "build:unpack": "pnpm run build && pnpm run ensure:electron-runtime && electron-builder --config config/electron-builder.config.cjs --dir",
     "build:win": "pnpm run build:desktop && pnpm run ensure:electron-runtime && electron-builder --config config/electron-builder.config.cjs --win",
     "build:icons": "bash resources/icon-source/generate.sh",
@@ -362,7 +362,7 @@
   "engines": {
     "node": "24"
   },
-  "packageManager": "pnpm@12.8.1+sha512.f64ba907507f5ceafe06c8d38e6052d0179444580ec1279ddd5bfc11cb48aa8a2644b66598e07e761da84872a9fc57d5f902b87fa49d024198d558612aabbe45",
+  "packageManager": "pnpm@12.14.0+sha512.c18ba6d87993d3d164cb5e8948f32b2c06ee854487e06cd8d86781342fb3e5bb4634367034711e86802baa9c37bea906ce1929ad08d70884c97d801df13389a6",
   "reactDoctor": {
     "ignore": {
       "overrides": [
