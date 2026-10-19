@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
+import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import {
   _resetClosedPaneFencesForTests,
   fencedIfLayoutOwner,
   partitionsFence
 } from '../persistence/terminal-topology/closed-pane-binding-fence'
+import { Store } from '../persistence'
 import { spawnMock } from './pty-ipc-mock-registry'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 import { registerPtyHandlers } from './pty/register-handlers'
@@ -90,19 +92,11 @@ describe('a window spawn for a pane main took back while it waited', () => {
       () => partitionsFence(['local'], () => current.value, true),
       () => ((current.value = sessionWith([KEPT])), { value: null })
     )()
-    const store = {
-      getWorkspaceSessionHostIds: () => ['local'],
-      getWorkspaceSession: () => current.value
-    }
+    const store: Store = Object.create(Store.prototype)
+    vi.spyOn(store, 'getWorkspaceSessionHostIds').mockReturnValue([LOCAL_EXECUTION_HOST_ID])
+    vi.spyOn(store, 'getWorkspaceSession').mockImplementation(() => current.value)
     handlers.clear()
-    registerPtyHandlers(
-      mainWindow as never,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      store as never
-    )
+    registerPtyHandlers(mainWindow, undefined, undefined, undefined, undefined, store)
     spawnMock.mockClear()
 
     await expect(
