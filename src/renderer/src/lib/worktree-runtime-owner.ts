@@ -295,8 +295,11 @@ export function resolveOwnerWithLegacyFallback(
  */
 export function runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(
   state: WorktreeRuntimeOwnerState,
-  workspaceId: string
+  workspaceId: string | null | undefined
 ): string | null {
+  if (!workspaceId) {
+    return null
+  }
   const match = resolveOwnerWithLegacyFallback(state, { workspaceId })
   return match.kind === 'resolved' && match.owner.endpoint.kind === 'environment'
     ? match.owner.endpoint.environmentId
