@@ -1,4 +1,4 @@
-import type { z } from 'zod'
+import { z } from 'zod'
 import { DesktopSidebarFactsSchema, type DesktopSidebarFacts } from './desktop-sidebar-facts'
 import type { InstalledSidebarInputs } from './sidebar-inputs-feed-installer'
 import {
@@ -29,6 +29,8 @@ export type SidebarFeedDomains = {
     { freshness: 'live' | 'unverifiable'; host: PairedServerHostFacts | null }
   >
   pairedServerRows: ReadonlyMap<string, PairedServerWorkspaceRow>
+  /** Icon ids by `hostId|repoId` (repoIconFeedKey) for this host's repos; a paired server's have none. */
+  repoIcons: ReadonlyMap<string, string>
   /** Null until the host's desktop facts arrive whole. */
   desktop: DesktopSidebarFacts | null
   retention: SidebarRetention | null
@@ -43,7 +45,8 @@ const entitySchemas = {
     freshness: true,
     host: true
   }),
-  pairedServerRows: PairedServerRowsSnapshotSchema.shape.servers.element.shape.rows.element
+  pairedServerRows: PairedServerRowsSnapshotSchema.shape.servers.element.shape.rows.element,
+  repoIcons: z.string()
 }
 
 function readDomain<Schema extends z.ZodType>(
@@ -97,6 +100,9 @@ export function readSidebarFeedDomains(
     pairedServerRows:
       unchanged('pairedServerRows')?.pairedServerRows ??
       readDomain(installed, 'pairedServerRows', entitySchemas.pairedServerRows),
+    repoIcons:
+      unchanged('repoIcons')?.repoIcons ??
+      readDomain(installed, 'repoIcons', entitySchemas.repoIcons),
     desktop: desktop.success ? desktop.data : null,
     retention: temporal.success ? temporal.data.retention : null
   }

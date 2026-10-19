@@ -40,6 +40,8 @@ export type TerminalCreateOptions = {
   shellOverride?: string
   claudeAgentTeamsSourceCommand?: string
   cwd?: string
+  /** The caller's own measured pane size; wins over the group's measured size and the 120x40 fallback. */
+  initialSize?: { cols: number; rows: number }
   env?: Record<string, string>
   envToDelete?: string[]
   launchConfig?: WorktreeStartupLaunch['launchConfig']

@@ -1,4 +1,7 @@
 import { useCallback } from 'react'
+import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
+import { toVisibleTabType } from '../../../../shared/tab-types'
+import { track } from '@/lib/telemetry'
 import { useAppStore } from '../../store'
 import { captureWorkspaceEmptiedReaction } from './workspace-emptied-reaction'
 import { isEditorTabContentType } from '@/store/slices/editor/tabs/editor-tab-content-type'
@@ -88,18 +91,38 @@ export function useTabGroupCloseScopeCommands({
     [closeMany, confirmBulkClose, selectTabIds]
   )
 
-  const closeToRight = useCallback(
-    (itemId: string) => {
-      confirmBulkClose('right', () => selectTabIds('right', itemId), closeMany)
+  const closeInDirection = useCallback(
+    (itemId: string, direction: 'left' | 'right') => {
+      const state = useAppStore.getState()
+      const group = (state.groupsByWorktree[worktreeId] ?? []).find(
+        (candidate) => candidate.id === groupId
+      )
+      if (!group?.tabOrder.includes(itemId)) {
+        return
+      }
+      const item = (state.unifiedTabsByWorktree[worktreeId] ?? []).find(
+        (candidate) => candidate.groupId === groupId && candidate.id === itemId
+      )
+      if (item) {
+        track('tabs_directional_close_requested', {
+          direction,
+          tab_type: toVisibleTabType(item.contentType),
+          surface: worktreeId === FLOATING_TERMINAL_WORKTREE_ID ? 'floating' : 'workspace',
+          eligible_tab_count: selectTabIds(direction, itemId).length
+        })
+      }
+      confirmBulkClose(direction, () => selectTabIds(direction, itemId), closeMany)
     },
-    [closeMany, confirmBulkClose, selectTabIds]
+    [closeMany, confirmBulkClose, groupId, selectTabIds, worktreeId]
   )
 
+  const closeToRight = useCallback(
+    (itemId: string) => closeInDirection(itemId, 'right'),
+    [closeInDirection]
+  )
   const closeToLeft = useCallback(
-    (itemId: string) => {
-      confirmBulkClose('left', () => selectTabIds('left', itemId), closeMany)
-    },
-    [closeMany, confirmBulkClose, selectTabIds]
+    (itemId: string) => closeInDirection(itemId, 'left'),
+    [closeInDirection]
   )
 
   return { closeGroup, closeAllEditorTabsInGroup, closeOthers, closeToRight, closeToLeft }

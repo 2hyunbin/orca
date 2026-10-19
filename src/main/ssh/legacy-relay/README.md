@@ -23,7 +23,7 @@ nobody is prompted.
 **Touches** `ipc/ssh.ts`, `ipc/ssh-connect-flow.ts`, `ipc/ssh-host-server-on-connect-wiring.ts`,
 `ipc/ssh-session-teardown.ts`, the conversion gate's `bridged` verdict
 (`orcad-migration-terminal-gate.ts`, `-source-fence.ts`, `-source-assertions.ts`,
-`orcad-runtime-conversion.ts`, `shared/orcad-migration-source-cutover.ts`), the preload
+`orcad-runtime-conversion.ts`, `shared/orcad-migration/orcad-migration-source-cutover.ts`), the preload
 `legacy-relay-bridge-api.ts`, and the renderer's `pty-input-recovery.ts` and
 `deferred-session-attach.ts`.
 

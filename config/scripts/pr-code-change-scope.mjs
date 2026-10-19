@@ -33,7 +33,8 @@ export const PR_CHECK_JOBS = [
   'managed_hook_node18',
   'package',
   'package_windows',
-  'layout_oracle'
+  'layout_oracle',
+  'dependency_isolation'
 ]
 
 const ALWAYS_ON_CODE_JOBS = new Set(['static_analysis', 'typecheck', 'test'])
@@ -158,6 +159,18 @@ const ORCAD_BROWSER_PREFIXES = [
 // The page bundle the desktop packages: the builder and verifier, the manifest writer and the
 // packaging guard they share, the entry, the route tree it mounts, the mobile source those routes
 // import, and the shell policy the render check runs the page under.
+// What decides which deps each package sees; package.json and the lockfile already force every job.
+const DEPENDENCY_ISOLATION_PREFIXES = [
+  'pnpm-workspace.yaml',
+  'config/pnpmfile.cjs',
+  'config/scripts/undeclared-dependency-resolution',
+  'config/build-plugins/markdown-parser-exports',
+  'config/tsconfig',
+  'src/packages/',
+  'native/windows-registry/package.json',
+  'native/windows-security/package.json'
+]
+
 const MOBILE_WEB_APP_PREFIXES = [
   'config/scripts/build-mobile-web-app',
   'config/scripts/run-mobile-web-app-checks',
@@ -294,7 +307,7 @@ const NATIVE_CACHE_FILES = new Set([
   '.github/actions/prepare-native-runtime/action.yml',
   'pnpm-workspace.yaml',
   '.npmrc',
-  '.pnpmfile.cjs',
+  'config/pnpmfile.cjs',
   'config/scripts/ensure-native-runtime.mjs',
   'config/scripts/initialize-windows-native-toolchain.mjs',
   'config/scripts/capture-windows-native-environment.cmd',
@@ -553,6 +566,8 @@ function jobDetector(job) {
       return (files) => files.some(isWindowsPackagePath)
     case 'layout_oracle':
       return (files) => files.some(isLayoutOracleSource)
+    case 'dependency_isolation':
+      return (files) => files.some((file) => matchesPrefix(file, DEPENDENCY_ISOLATION_PREFIXES))
     default:
       return () => true
   }

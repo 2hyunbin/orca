@@ -10,6 +10,12 @@ import { splitWorktreeIdForFilesystem } from '../../../../shared/worktree/id'
 import { isWindowsAbsolutePathLike } from '../../../../shared/cross-platform-path'
 import type { ProcessedAgentStatusChunk } from '../../../../shared/agent-status-osc'
 import { mapExplicitAgentStateToRuntimeTerminalStatus } from '../../runtime-worktree-status-projection'
+import type { RuntimeTerminalAgentStatusEvent } from '../../runtime-terminal-contracts'
+
+type TerminalAgentStatusTarget = Pick<
+  RuntimeTerminalAgentStatusEvent,
+  'source' | 'paneKey' | 'tabId' | 'worktreeId' | 'connectionId' | 'terminalHandle'
+>
 
 export abstract class OrcaRuntimeWithCreateTerminalSideEffectCommandCodeDetector extends OrcaRuntimeWithApplyTrackedPtyTitle {
   abstract getAgentStatusTerminalHandleForPaneKey(paneKey: string): string | undefined
@@ -94,17 +100,41 @@ export abstract class OrcaRuntimeWithCreateTerminalSideEffectCommandCodeDetector
     if (chunk.payloads.length === 0) {
       return
     }
-    const targets = new Map<
-      string,
-      {
-        source: 'mounted-leaf' | 'pty-record'
-        paneKey: string
-        tabId?: string
-        worktreeId?: string
-        connectionId?: string | null
-        terminalHandle?: string
+    const targets = this.resolveTerminalAgentStatusTargets(ptyId)
+    for (const payload of chunk.payloads) {
+      // Why not gated on a listener: the prompt lifecycle is main's own state, read by
+      // terminal waits that run with no status consumer attached.
+      this.recordAgentPromptLifecycleState(
+        ptyId,
+        mapExplicitAgentStateToRuntimeTerminalStatus(payload.state)
+      )
+      for (const target of targets) {
+        if (!this.onTerminalAgentStatus) {
+          continue
+        }
+        try {
+          this.onTerminalAgentStatus({
+            ptyId,
+            ...target,
+            payload,
+            ...provenance
+          })
+        } catch (err) {
+          console.error('[runtime] terminal agent status listener threw', {
+            ptyId,
+            paneKey: target.paneKey,
+            state: payload.state,
+            agentType: payload.agentType,
+            err
+          })
+        }
       }
-    >()
+    }
+  }
+
+  /** The panes a PTY's in-band status belongs to: its mounted leaves, else its own pane record. */
+  private resolveTerminalAgentStatusTargets(ptyId: string): TerminalAgentStatusTarget[] {
+    const targets = new Map<string, TerminalAgentStatusTarget>()
     const pty = this.ptysById.get(ptyId)
     const connectionId = pty?.connectionId ?? null
     for (const leaf of this.getLeavesForPty(ptyId)) {
@@ -136,34 +166,6 @@ export abstract class OrcaRuntimeWithCreateTerminalSideEffectCommandCodeDetector
         }
       }
     }
-    for (const payload of chunk.payloads) {
-      // Why not gated on a listener: the prompt lifecycle is main's own state, read by
-      // terminal waits that run with no status consumer attached.
-      this.recordAgentPromptLifecycleState(
-        ptyId,
-        mapExplicitAgentStateToRuntimeTerminalStatus(payload.state)
-      )
-      for (const target of targets.values()) {
-        if (!this.onTerminalAgentStatus) {
-          continue
-        }
-        try {
-          this.onTerminalAgentStatus({
-            ptyId,
-            ...target,
-            payload,
-            ...provenance
-          })
-        } catch (err) {
-          console.error('[runtime] terminal agent status listener threw', {
-            ptyId,
-            paneKey: target.paneKey,
-            state: payload.state,
-            agentType: payload.agentType,
-            err
-          })
-        }
-      }
-    }
+    return [...targets.values()]
   }
 }

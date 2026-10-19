@@ -10,6 +10,7 @@ import type { OrcaRuntimeWithSidebarTemporal } from './orca-runtime-sidebar-temp
 import type { PairedServerRowsProducer } from './paired-server-rows-producer'
 import type { WorkspaceCreationRegistry } from './workspace-creation-registry'
 import type { WorkspaceRowsProducer } from './workspace-rows-producer'
+import type { RepoIconDataUrls } from './repo-icon-data-urls'
 import type { SidebarInputsFeedDomain } from './sidebar-inputs-feed'
 import { readDesktopSidebarFacts } from './desktop-sidebar-facts'
 import { buildPairedServerReviewFacts } from '../../../shared/sidebar-list/workspace-review-facts'
@@ -37,6 +38,7 @@ export type SidebarInputsFeedSources = {
   pairedServerRows: PairedServerRowsProducer
   workspaceCreations: WorkspaceCreationRegistry
   workspaceRows: WorkspaceRowsProducer
+  repoIcons: Pick<RepoIconDataUrls, 'idsByRepo'>
   store: () => RuntimeStore | null
   onClientEvent: (
     listener: (event: RuntimeClientEvent) => void,
@@ -118,11 +120,18 @@ export function sidebarInputsFeedDomains(
         const detaches = [
           watchCatalog(changed),
           store?.onUIChanged?.(changed),
-          store?.onWorkspaceSessionWritten?.(changed)
+          store?.onWorkspaceSessionWritten?.(changed),
+          store?.onSettingsChanged?.(changed)
         ]
         return () => detaches.forEach((detach) => detach?.())
       },
       rereadOnRead: true
+    },
+    {
+      // Ids only: a reader fetches the images through sidebarInputs.repoIcons.
+      name: 'repoIcons',
+      read: () => sources.repoIcons.idsByRepo(),
+      watch: watchCatalog
     },
     {
       name: 'review',
