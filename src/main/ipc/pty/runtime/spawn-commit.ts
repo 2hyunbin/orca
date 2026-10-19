@@ -158,7 +158,7 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
       }
     } catch (err) {
       console.error('[pty] failed to persist runtime PTY binding after spawn:', err)
-      await discardUnpersistedPtySpawn(ctx.provider, ctx.result)
+      await discardUnpersistedPtySpawn(ctx.provider, ctx.result, ctx.deps.runtime)
       if (err instanceof Error && err.message === 'terminal_split_source_not_found') {
         throw err
       }

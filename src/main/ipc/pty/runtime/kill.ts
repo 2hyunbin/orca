@@ -1,6 +1,6 @@
 import type { IPtyProvider } from '../../../providers/pty-provider-contract'
 import { SSH_PROVIDER_UNREGISTERED_REASON } from '../../../../shared/pty-liveness-verdict'
-import { ptyOwnership, ptyIncarnationById } from '../provider/ownership-state'
+import { isCurrentPtyExit, ptyOwnership, ptyIncarnationById } from '../provider/ownership-state'
 import {
   getProviderForPty,
   getPtySshConnectionId,
@@ -25,16 +25,20 @@ import {
 const OBSERVED_EXIT_RECORD_WAIT_MS = 10_000
 
 /** Tells the runtime and renderer a PTY ended that no provider exit reported. Without proof its
- *  liveness reads `unverifiable`, never `exited`. */
+ *  liveness reads `unverifiable`, never `exited`. A `null` incarnation (a proof
+ *  `finishPtyShutdown` refused) publishes nothing: the id belongs to a respawn now. */
 export function publishSyntheticExit(
   deps: Pick<PtyRuntimeControllerDeps, 'rememberSyntheticKillExit' | 'sendPtyExitToRenderer'> & {
     runtime?: Pick<OrcaRuntimeService, 'onPtyExit' | 'markPtyLivenessUnverifiable'>
   },
   ptyId: string,
   code: number,
-  incarnationId: string | undefined,
+  incarnationId: string | undefined | null,
   evidence: PtyRetirementEvidence
 ): void {
+  if (incarnationId === null) {
+    return
+  }
   if (evidence instanceof PtyRetirementWithoutProof) {
     deps.runtime?.markPtyLivenessUnverifiable?.(ptyId, evidence.unverifiableReason)
   }
@@ -104,12 +108,14 @@ export function killPtyFromRuntimeController(
       }
       return false
     }
+    const stoppingIncarnationId = ptyIncarnationById.get(ptyId)
     // Why: controller is synchronous, but keep ownership until async shutdown proves whether the provider emitted an exit.
     void shutdownProviderAndDetectExit(provider, ptyId, { immediate: false })
       .then((providerExitObserved) => {
         const retired = retiredRejectedPtyIds.has(ptyId)
         const proof = PtyExitProof.from(
-          providerExitObserved ? 'exit-observed' : 'shutdown-acknowledged'
+          providerExitObserved ? 'exit-observed' : 'shutdown-acknowledged',
+          stoppingIncarnationId
         )
         const incarnationId = finishPtyShutdown(ptyId, connectionId, store, proof)
         if (!providerExitObserved && !retired) {
@@ -119,7 +125,7 @@ export function killPtyFromRuntimeController(
       .catch((err) => {
         const retired = retiredRejectedPtyIds.has(ptyId)
         if (isPtyAlreadyGoneError(err)) {
-          const proof = PtyExitProof.from('absent')
+          const proof = PtyExitProof.from('absent', stoppingIncarnationId)
           const incarnationId = finishPtyShutdown(ptyId, connectionId, store, proof)
           if (!retired) {
             publishSyntheticExit(deps, ptyId, -1, incarnationId, proof)
@@ -142,9 +148,14 @@ export function killPtyFromRuntimeController(
 export function retireRejectedPtyFromRuntimeController(
   deps: PtyRuntimeControllerDeps,
   ptyId: string,
-  stopConfirmed: boolean
+  stopConfirmed: boolean,
+  incarnationId: string | undefined
 ): void {
   const { runtime, store, rememberRetiredRejectedPty, finishPtyShutdown } = deps
+  // A same-id respawn owns the record now; this verdict is about the rejected incarnation only.
+  if (!isCurrentPtyExit({ id: ptyId, incarnationId })) {
+    return
+  }
   rememberRetiredRejectedPty(ptyId)
   if (!stopConfirmed) {
     const unproven = PtyRetirementWithoutProof.because(
@@ -154,17 +165,17 @@ export function retireRejectedPtyFromRuntimeController(
       runtime?.markPtyLivenessUnverifiable?.(ptyId, unproven.unverifiableReason)
       return
     }
-    publishSyntheticExit(deps, ptyId, -1, ptyIncarnationById.get(ptyId), unproven)
+    publishSyntheticExit(deps, ptyId, -1, incarnationId, unproven)
     return
   }
   // Why: a completed stop already cleared provider state, tombstoned the lease and told the
   // renderer; repeating that double-fires the exit IPC. The runtime still needs code 0 so an
   // SSH pane retires for good instead of staying preserved by the stop's negative exit.
   if (!ptyOwnership.has(ptyId)) {
-    runtime?.onPtyExit(ptyId, 0, ptyIncarnationById.get(ptyId))
+    runtime?.onPtyExit(ptyId, 0, incarnationId)
     return
   }
-  const proof = PtyExitProof.from('stop-confirmed')
+  const proof = PtyExitProof.from('stop-confirmed', incarnationId)
   const connectionId = getPtySshConnectionId(ptyId)
   publishSyntheticExit(deps, ptyId, 0, finishPtyShutdown(ptyId, connectionId, store, proof), proof)
 }
@@ -197,6 +208,7 @@ export async function stopAndWaitPtyFromRuntimeController(
     if (opts?.keepHistory) {
       return false
     }
+    const stoppingIncarnationId = ptyIncarnationById.get(ptyId)
     const deadline = opts?.deadlineMs ?? Date.now() + OBSERVED_EXIT_RECORD_WAIT_MS
     const stopped = await Promise.race([
       stopLegacyRelayPaneAndWait(ptyId, deadline),
@@ -205,7 +217,7 @@ export async function stopAndWaitPtyFromRuntimeController(
     if (stopped) {
       // The bridge retired the lease and holds no pane: the relay reported the exit, or the
       // listing lacks it. The runtime learns it here.
-      const proof = PtyExitProof.from('absent')
+      const proof = PtyExitProof.from('absent', stoppingIncarnationId)
       publishSyntheticExit(deps, ptyId, 0, finishPtyShutdown(ptyId, null, store, proof), proof)
     }
     return stopped
@@ -250,6 +262,7 @@ export async function stopAndWaitPtyFromRuntimeController(
     }
     return false
   }
+  const stoppingIncarnationId = ptyIncarnationById.get(ptyId)
   let providerExitObserved = false
   try {
     providerExitObserved = await shutdownProviderAndDetectExit(provider, ptyId, {
@@ -272,7 +285,10 @@ export async function stopAndWaitPtyFromRuntimeController(
     console.warn(`[pty] Failed to verify PTY ${ptyId} stopped: ${errorMessage(err)}`)
     return false
   }
-  const proof = PtyExitProof.from(providerExitObserved ? 'exit-observed' : 'absent')
+  const proof = PtyExitProof.from(
+    providerExitObserved ? 'exit-observed' : 'absent',
+    stoppingIncarnationId
+  )
   const incarnationId = finishPtyShutdown(ptyId, connectionId, store, proof)
   if (!providerExitObserved) {
     // The owning provider's fresh inventory observed absence, so this is a

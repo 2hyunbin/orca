@@ -4,10 +4,11 @@ import type { IPtyProvider, PtySpawnResult } from '../../../providers/pty-provid
 import {
   isCurrentPtyExit,
   ptyIncarnationById,
-  ptyOwnership,
   setAdoptedPtyOwnership
 } from '../provider/ownership-state'
-import { clearProviderPtyState } from '../provider/state-cleanup'
+import { finishPtyShutdown, isPtyAlreadyGoneError } from '../provider/liveness'
+import { PtyExitProof } from '../../../pty-exit-proof'
+import { errorMessage } from '../../../../shared/error-message'
 import { retirePersistedStablePaneOwner } from './stable-owner'
 
 export function admitPtyReattachOwnership(
@@ -27,7 +28,8 @@ export function admitPtyReattachOwnership(
 
 export async function discardUnpersistedPtySpawn(
   provider: IPtyProvider,
-  result: PtySpawnResult
+  result: PtySpawnResult,
+  runtime: Pick<OrcaRuntimeService, 'markPtyLivenessUnverifiable'> | undefined
 ): Promise<void> {
   if (
     result.isReattach ||
@@ -36,19 +38,27 @@ export async function discardUnpersistedPtySpawn(
   ) {
     return
   }
+  let proof: PtyExitProof
   try {
     await provider.shutdown(result.id, {
       immediate: true,
       ...(result.incarnationId ? { expectedIncarnationId: result.incarnationId } : {})
     })
+    proof = PtyExitProof.from('shutdown-acknowledged', result.incarnationId)
   } catch (error) {
-    console.warn('[pty] failed to clean up PTY after persistence failure:', error)
+    if (!isPtyAlreadyGoneError(error)) {
+      console.warn('[pty] failed to clean up PTY after persistence failure:', error)
+      // Keep ownership: the process may still run, and a later stop needs it to reach it.
+      runtime?.markPtyLivenessUnverifiable?.(
+        result.id,
+        `discard shutdown failed: ${errorMessage(error)}`
+      )
+      return
+    }
+    proof = PtyExitProof.from('absent', result.incarnationId)
   }
-  // A replacement may arrive while the execution host finishes shutting down the predecessor.
-  if (isCurrentPtyExit(result)) {
-    clearProviderPtyState(result.id)
-    ptyOwnership.delete(result.id)
-  }
+  // The proof names this incarnation, so a replacement that arrived meanwhile keeps its own.
+  finishPtyShutdown(result.id, null, undefined, proof)
 }
 
 // Successful registration must not yield before the remaining spawn publication.
