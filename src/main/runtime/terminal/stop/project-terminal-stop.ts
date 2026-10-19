@@ -2,7 +2,8 @@ import { OrcaRuntimeWithStopExactTerminalsForWorktree } from './worktree-termina
 import {
   getRepoExecutionHostId,
   getRepoSshConnectionId,
-  normalizeHostPart
+  normalizeHostPart,
+  parseExecutionHostId
 } from '../../../../shared/execution-host'
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
 import type { Repo } from '../../../../shared/repo-types'
@@ -119,7 +120,7 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
   /** Browser pages and failed-launch records of a removed project's workspaces on this host. */
   private releaseProjectHostSessions(repoId: string, knownWorktreeIds: readonly string[]): void {
     // Why: page records carry no host, so a surviving same-id row's pages are indistinguishable.
-    if ((this.store?.getRepos?.() ?? []).some((row) => row.id === repoId)) {
+    if (this.rowsRunHere().some((row) => row.id === repoId)) {
       return
     }
     const pageOwners = [
@@ -174,9 +175,9 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
       projectWorktreeIds.add(id)
     }
     for (const id of projectWorktreeIds) {
-      const opts = { resolvedWorktreeId: id, ...fence, ...options }
+      const opts = { resolvedWorktreeId: id, ...fence, ...options, requestStopsPastDeadline: true }
       // Why exclusive: it waits out a spawn that holds the shared lease, so its PTY is registered
-      // and stopped. Bounded by the deadline so repo.rm still answers; past it the stop is skipped.
+      // and stopped. Bounded by the deadline so repo.rm still answers; past it PTYs are only asked.
       // A timed-out waiter is dequeued by the lock, so it cannot hold later spawns back.
       const release = await this.acquireWorktreeTerminalMutation(
         id,
@@ -240,12 +241,19 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
     return survivors.some((row) => getRepoSshConnectionId(row) === connectionId)
   }
 
+  /** A paired server's row is residue here: its sessions run on that server, never in this process. */
+  private rowsRunHere(): Repo[] {
+    return (this.store?.getRepos?.() ?? []).filter(
+      (row) => parseExecutionHostId(getRepoExecutionHostId(row))?.kind !== 'runtime'
+    )
+  }
+
   /** A same-id sibling row with the same fence owns sessions this host cannot tell apart. */
   private projectSiblingSharesFence(
     repo: Pick<Repo, 'id' | 'connectionId' | 'executionHostId'>
   ): boolean {
     const connectionId = getRepoSshConnectionId(repo)
-    return (this.store?.getRepos?.() ?? []).some(
+    return this.rowsRunHere().some(
       (row) =>
         row.id === repo.id &&
         getRepoExecutionHostId(row) !== getRepoExecutionHostId(repo) &&
