@@ -1,3 +1,5 @@
+import { quotePosixShell } from '../shared/shell-argument-quoting'
+
 export function quoteCliCommandArgument(value: string): string {
   if (/^[a-zA-Z0-9._:/@-]+$/.test(value)) {
     return value
@@ -7,4 +9,3 @@ export function quoteCliCommandArgument(value: string): string {
   }
   return quotePosixShell(value)
 }
-import { quotePosixShell } from '../shared/shell-argument-quoting'

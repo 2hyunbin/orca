@@ -1,3 +1,5 @@
+import { quotePosixShell } from './shell-argument-quoting'
+
 export type PosixCommandPathLookupTarget =
   | { kind: 'literal'; value: string }
   | { kind: 'shell-variable'; name: string }
@@ -107,4 +109,3 @@ function buildCommandAssignment(target: PosixCommandPathLookupTarget): string {
   }
   return `\${${target.name}-}`
 }
-import { quotePosixShell } from './shell-argument-quoting'
