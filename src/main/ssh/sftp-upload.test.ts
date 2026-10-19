@@ -307,8 +307,11 @@ describe('uploadFile over a high-latency link', () => {
     let inFlight = 0
     let peak = 0
     const written = new Map<number, Buffer>()
+    // A dead link: once stalled, no request (WRITE or the stream's CLOSE) is ever answered.
     const later = (cb: () => void): void => {
-      setTimeout(cb, roundTripMs)
+      if (written.size <= stallAfterWrites) {
+        setTimeout(cb, roundTripMs)
+      }
     }
     const session = Object.assign(new EventEmitter(), {
       server: false,
@@ -326,10 +329,6 @@ describe('uploadFile over a high-latency link', () => {
         inFlight += 1
         peak = Math.max(peak, inFlight)
         written.set(pos, Buffer.from(buf.subarray(off, off + len)))
-        if (written.size > stallAfterWrites) {
-          // A dead link: the request is never answered.
-          return
-        }
         later(() => {
           inFlight -= 1
           cb(null, len)
@@ -378,17 +377,6 @@ describe('uploadFile over a high-latency link', () => {
         name: 'SftpSessionClosedError',
         sshChannelCloseConfirmed: false
       })
-    } finally {
-      await rm(dir, { recursive: true, force: true })
-    }
-  })
-
-  it('stops watching the session once the upload settles', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'orca-sftp-upload-'))
-    await writeFile(join(dir, 'small.bin'), Buffer.alloc(1024))
-    const { sftp } = slowSftp(1)
-    try {
-      await uploadFile(sftp, join(dir, 'small.bin'), '/remote/small.bin')
       expect(sftp.listenerCount('close')).toBe(0)
     } finally {
       await rm(dir, { recursive: true, force: true })

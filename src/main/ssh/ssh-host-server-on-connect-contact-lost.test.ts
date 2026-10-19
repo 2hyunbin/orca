@@ -7,7 +7,7 @@ import type { SshTarget } from '../../shared/ssh-types'
 import { resolveHostServerOnConnect } from './ssh-host-server-on-connect'
 import { hostServerDepsStub } from './ssh-host-server-on-connect-test-deps'
 import { unservedHostServerMessage, unservedServerStatus } from './ssh-host-unserved-status'
-import { sftpSessionClosedError } from './sftp-upload'
+import { sftpSessionClosedError } from './ssh-file-transfer-abort'
 import { admitSshManagedServerStatus } from '../../shared/ssh-managed-server-status-admission'
 
 const target: SshTarget = { id: 'ssh-1', label: 'Box', host: 'box', port: 22, username: 'me' }

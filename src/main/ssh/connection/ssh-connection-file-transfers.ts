@@ -7,7 +7,8 @@ import {
 } from '../sftp-namespace-resolution'
 import {
   createLinkedSshFileTransferSignal,
-  raceSftpFileTransferWithAbort
+  raceSftpFileTransferWithAbort,
+  sftpSessionClosedError
 } from '../ssh-file-transfer-abort'
 import type { RemoteHostPlatform } from '../ssh-remote-platform'
 import {
@@ -161,6 +162,18 @@ async function withLinkedSftpTransfer(
     }
     sftp.on('error', swallowLateSftpError)
     sftp.once('close', () => sftp.removeListener('error', swallowLateSftpError))
+    // Why: when the connection dies ssh2 ends the session, but a request sent or queued after that
+    // is never answered, and a write stream waits on a CLOSE reply, so the transfer would hang.
+    let sessionLost: (error: Error) => void = () => {}
+    const lostSession = new Promise<never>((_resolve, reject) => {
+      sessionLost = reject
+    })
+    const onSessionClose = (): void => {
+      if (!sftpEndRequested) {
+        sessionLost(sftpSessionClosedError())
+      }
+    }
+    sftp.once('close', onSessionClose)
     try {
       // Why: resolve on the same session that transfers — a later one is not authoritative for its namespace.
       const run = (async (): Promise<void> => {
@@ -168,12 +181,16 @@ async function withLinkedSftpTransfer(
         linkedSignal.signal.throwIfAborted()
         await transfer.sftp(sftp, targetPath, linkedSignal.signal)
       })()
-      await raceSftpFileTransferWithAbort(run, linkedSignal.signal, (onClose) => {
-        sftp.once('close', onClose)
-        endSftp()
-        return () => sftp.removeListener('close', onClose)
-      })
+      await Promise.race([
+        raceSftpFileTransferWithAbort(run, linkedSignal.signal, (onClose) => {
+          sftp.once('close', onClose)
+          endSftp()
+          return () => sftp.removeListener('close', onClose)
+        }),
+        lostSession
+      ])
     } finally {
+      sftp.removeListener('close', onSessionClose)
       endSftp()
     }
   } finally {

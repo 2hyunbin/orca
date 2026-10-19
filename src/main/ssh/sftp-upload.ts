@@ -6,36 +6,12 @@ import { finished } from 'node:stream/promises'
 import { promisify } from 'node:util'
 import type { SFTPWrapper } from 'ssh2'
 import { latchLateSftpStreamErrors, type SftpStreamErrorLatch } from './sftp-stream-late-error'
+import { sftpSessionClosedError } from './ssh-file-transfer-abort'
 
 // Why: ssh2's WriteStream waits for each chunk's ack before writing the next, so an upload moves
 // one chunk per round trip. Buffering this much lets its _writev keep that many bytes of WRITE
 // requests in flight, as fastPut's default 64 x 32 KiB does.
 export const SFTP_UPLOAD_IN_FLIGHT_BYTES = 2 * 1024 * 1024
-
-/**
- * Why: when the SSH connection dies, ssh2 ends the SFTP session and fails the requests it had
- * sent, but a write stream whose next chunk waits for channel window is never told, so the
- * transfer would wait forever. Contact was lost, so whether the host kept the bytes is unknown.
- */
-export function sftpSessionClosedError(): Error {
-  return Object.assign(new Error('The SSH connection closed before the transfer finished'), {
-    name: 'SftpSessionClosedError',
-    sshChannelCloseConfirmed: false
-  })
-}
-
-function failStreamOnSessionClose(
-  sftp: SFTPWrapper,
-  stream: { destroy(error?: Error): unknown }
-): () => void {
-  const onClose = (): void => {
-    stream.destroy(sftpSessionClosedError())
-  }
-  sftp.once('close', onClose)
-  return () => {
-    sftp.removeListener('close', onClose)
-  }
-}
 
 export function mkdirSftp(
   sftp: SFTPWrapper,
@@ -96,7 +72,6 @@ export async function uploadFile(
     // Why: the OPEN reply can land after this transfer settles; without a listener that
     // outlives it, ssh2 throws it synchronously into the socket handler (#15479).
     writeStreamErrors = latchLateSftpStreamErrors(writeStream, remotePath)
-    releaseSessionClose = failStreamOnSessionClose(sftp, writeStream)
     readStream = handle.createReadStream({ autoClose: false })
     // Why: `finished` drops its listeners once the read ends; an abort (a quit's disconnect) that
     // destroys the ended stream with the signal's reason would then emit an unhandled 'error' that
@@ -125,7 +100,19 @@ export async function uploadFile(
         throw error
       })
       readStream.pipe(writeStream)
-      const results = await Promise.allSettled([readDone, writeDone])
+      // Why: on a dead connection the write stream waits on a CLOSE reply that never comes; settle
+      // anyway so the local file handle is closed, not left to garbage collection.
+      const sessionClosed = new Promise<'closed'>((resolve) => {
+        releaseSessionClose = (): void => {
+          sftp.removeListener('close', onSessionClose)
+        }
+        const onSessionClose = (): void => resolve('closed')
+        sftp.once('close', onSessionClose)
+      })
+      const results = await Promise.race([Promise.allSettled([readDone, writeDone]), sessionClosed])
+      if (results === 'closed') {
+        throw sftpSessionClosedError()
+      }
       const failure = results.find((result) => result.status === 'rejected')
       if (failure?.status === 'rejected') {
         throw failure.reason
@@ -154,10 +141,8 @@ export function uploadBuffer(
       flags: options?.append ? 'a' : options?.exclusive ? 'wx' : 'w'
     })
     const lateErrors = latchLateSftpStreamErrors(writeStream, remotePath)
-    const releaseSessionClose = failStreamOnSessionClose(sftp, writeStream)
 
     const cleanupListeners = (): void => {
-      releaseSessionClose()
       lateErrors.markTransferSettled()
       writeStream.off('close', onClose)
       writeStream.off('error', onError)
@@ -188,10 +173,8 @@ export function writeStringViaSftp(
   return new Promise((resolve, reject) => {
     const ws = sftp.createWriteStream(remotePath)
     const lateErrors = latchLateSftpStreamErrors(ws, remotePath)
-    const releaseSessionClose = failStreamOnSessionClose(sftp, ws)
     let settled = false
     const cleanup = (): void => {
-      releaseSessionClose()
       lateErrors.markTransferSettled()
       sftp.removeListener('error', onError)
       ws.removeListener('close', onClose)
