@@ -773,11 +773,13 @@ describe('deployOrcad', () => {
       activationRecord: ACTIVE_OLD,
       readiness: { [OLD_VERSION]: readyLine({ version: OLD_VERSION }) },
       log: [],
-      snapshotResult: 'tar: write failed'
+      snapshotResult: 'SNAPSHOT_FAILURE tar: Cannot write: No space left on device\nFAILED'
     }
     scriptHost(script)
 
-    await expect(deployOrcad(options())).rejects.toThrow('incumbent was stopped')
+    await expect(deployOrcad(options())).rejects.toThrow(
+      /activating \S+: tar: Cannot write: No space left on device\. .*incumbent was stopped/u
+    )
     expect(script.log).toEqual([
       'preflight',
       `stop:${OLD_VERSION}`,
