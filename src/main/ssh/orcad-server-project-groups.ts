@@ -15,6 +15,12 @@ export function projectGroupsHeldByServer(
   return incoming.filter((group) => local.has(group.id)).map((group) => group.id)
 }
 
+type ServerRow = {
+  projectGroupId?: string | null
+  connectionId?: string | null
+  executionHostId?: string | null
+}
+
 /**
  * Source groups the server holds or its projects sit in, and their ancestors, renamed there
  * perhaps since: re-importing this desktop's retained copy would conflict with the server's. An
@@ -26,14 +32,22 @@ export function serverHeldProjectGroups(
     'repositories' | 'folderWorkspaces' | 'projectGroups'
   >,
   linked: { repositoryIds: ReadonlySet<string>; folderWorkspaceIds: ReadonlySet<string> },
-  server: readonly { projectGroupId?: string | null }[],
-  serverGroupIds: readonly string[]
+  server: readonly ServerRow[],
+  serverGroups: Pick<OrcadServerFolderCatalog, 'projectGroups'>
 ): string[] {
   const parentById = new Map(payload.projectGroups.map((group) => [group.id, group.parentGroupId]))
-  const held = new Set([
-    ...serverGroupIds,
-    ...server.flatMap((row) => (row.projectGroupId ? [row.projectGroupId] : []))
-  ])
+  // A row or group the server keeps for one of its own hosts is no evidence for this machine's group.
+  const foreign = new Set(
+    serverGroups.projectGroups.filter((group) => !isRepoOnCatalogHost(group)).map((g) => g.id)
+  )
+  const held = new Set(
+    [
+      ...projectGroupsHeldByServer(payload.projectGroups, serverGroups),
+      ...server
+        .filter(isRepoOnCatalogHost)
+        .flatMap((row) => (row.projectGroupId ? [row.projectGroupId] : []))
+    ].filter((id) => !foreign.has(id))
+  )
   const withAncestors = (ids: (string | null | undefined)[], stopAt: ReadonlySet<string>) => {
     const out = new Set<string>()
     while (ids.length > 0) {

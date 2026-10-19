@@ -273,7 +273,7 @@ export async function linkServerHeldRepositories(args: {
           folderWorkspaceIds: new Set(linkedFolderWorkspaceIds)
         },
         [...serverRepositories, ...serverFolders.folderWorkspaces],
-        heldGroups
+        serverFolders
       )
     ])
   ]
