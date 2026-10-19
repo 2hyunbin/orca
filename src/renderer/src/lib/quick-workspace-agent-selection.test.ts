@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { TUI_AGENT_AUTO_PICK_ORDER } from '../../../shared/tui-agent-selection'
-import { pickSourceControlLaunchAgent } from '../../../shared/source-control-launch-agent-selection'
 import { AGENT_CATALOG } from './agent-catalog'
 import {
   pickQuickWorkspaceAgent,
@@ -85,25 +84,5 @@ describe('agents that open as a chat without their CLI', () => {
   it('keeps an explicit or default pick of one, while the automatic pick stays on detected agents', () => {
     expect(pickQuickWorkspaceAgent('antigravity', ['claude'], [], offered)).toBe('antigravity')
     expect(pickQuickWorkspaceAgent(null, [], [], offered)).toBeNull()
-    expect(
-      resolveQuickWorkspaceAgentSelection({
-        quickAgentOverride: 'antigravity',
-        preferredQuickAgent: 'claude',
-        detectedAgentIds: offered
-      })
-    ).toEqual({ quickAgent: 'antigravity', quickAgentOverride: 'antigravity' })
-  })
-
-  it('lets a saved Source Control agent run there, never the automatic pick', () => {
-    const opensAsChat = (agent: string) => agent === 'antigravity'
-    const pick = (savedAgent: 'antigravity' | null) =>
-      pickSourceControlLaunchAgent({
-        savedAgent,
-        defaultAgent: null,
-        detectedAgents: [],
-        chosenOpensAsChat: opensAsChat
-      })
-    expect(pick('antigravity')).toBe('antigravity')
-    expect(pick(null)).toBeNull()
   })
 })

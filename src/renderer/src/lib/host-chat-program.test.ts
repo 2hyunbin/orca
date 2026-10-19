@@ -1,136 +1,211 @@
+import { getDefaultSourceControlAiSettings } from '../../../shared/source-control-ai-settings'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getDefaultSettings } from '../../../shared/constants'
 import { MANAGED_RUNTIME_INSTALL_RUNTIME_CAPABILITY as INSTALL } from '../../../shared/managed-runtime-install'
 import {
   STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY as CATALOG,
-  STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY as CHAT
+  STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY as CHAT,
+  STRUCTURED_AGENT_SESSION_AVAILABILITY_RUNTIME_CAPABILITY as HEALTH,
+  STRUCTURED_AGENT_SESSION_CLIENT_LAUNCH_MODE_CAPABILITY as MODE
 } from '../../../shared/protocol-version'
-
 const rpc = vi.hoisted(() => ({ call: vi.fn(), subscribe: vi.fn() }))
 vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: rpc.call }))
 vi.mock('@/runtime/runtime-rpc-subscribe', () => ({ subscribeRuntimeRpc: rpc.subscribe }))
-
 import { useAppStore } from '@/store'
-import { acquireHostStructuredAgentAvailability } from '@/runtime/host-structured-agent-availability'
-import {
-  loadHostStructuredAgents,
-  resetHostStructuredAgentsForTests
-} from '@/runtime/host-structured-agents'
+import { resetHostStructuredAgentsForTests } from '@/runtime/host-structured-agents'
 import { setLocalRuntimeCapabilitiesForTests } from '@/runtime/local-runtime-capabilities'
-import { buildNewTabAgentMenuRows } from './new-tab-agent-menu-rows'
-import {
-  chosenAgentChatUnlearned,
-  pickChosenOrDetectedAgent,
-  readChatProgram,
-  subscribeChatProgramFacts
-} from './host-chat-program'
-
-const CAPS = [CHAT, CATALOG, INSTALL]
-const LOCAL = { executionHostId: 'local', hostCapabilities: CAPS }
-const WORKSPACE = { kind: 'git-worktree' } as const
-const row = (agent: string, managedRuntime?: true) => ({
-  agent,
-  capabilities: {},
-  ...(managedRuntime ? { managedRuntime } : {})
-})
+import { acquireAgentLaunchChoices, holdChatProgramFacts } from './host-chat-program-acquisition'
+import { agentChoicePending, agentChoiceOpensAsChat, readChatProgram } from './host-chat-program'
+import { resolveQuickWorkspaceAgentSelection } from './quick-workspace-agent-selection'
+import { resolveChecksActionAgent, startFixChecksAgent } from './fix-checks-agent-launch'
+const launch = vi.hoisted(() => ({ direct: vi.fn() }))
+vi.mock('./launch-work-item-direct', () => ({ launchWorkItemDirect: launch.direct }))
+const CAPS = [CHAT, CATALOG, INSTALL, HEALTH, MODE]
+const workspace = { kind: 'git-worktree', runtimeEnvironmentId: 'B' } as const
+const host = { executionHostId: 'runtime:B', hostCapabilities: CAPS }
 const initial = useAppStore.getState()
-
+const status = (runtimeId = 'r1') => ({
+  status: {
+    runtimeId,
+    capabilities: CAPS,
+    rendererGraphEpoch: 0,
+    graphStatus: 'ready' as const,
+    authoritativeWindowId: null,
+    liveTabCount: 0,
+    liveLeafCount: 0
+  },
+  checkedAt: 1
+})
+const catalog = {
+  agents: [
+    { agent: 'antigravity', capabilities: {}, managedRuntime: true },
+    { agent: 'grok', capabilities: {} }
+  ]
+}
+const frame = (agent: string, chatProgram: string) => ({
+  type: 'availability',
+  agents: [{ agent, state: 'available', chatProgram }]
+})
+const flush = () =>
+  Array.from({ length: 12 }).reduce<Promise<void>>((tick) => tick.then(), Promise.resolve())
 beforeEach(() => {
-  rpc.call.mockResolvedValue({ agents: [row('antigravity', true), row('gemini')] })
-  rpc.subscribe.mockResolvedValue({ unsubscribe: () => {} })
+  rpc.call.mockReset().mockResolvedValue(catalog)
+  rpc.subscribe.mockReset().mockResolvedValue({ unsubscribe: vi.fn() })
   setLocalRuntimeCapabilitiesForTests(CAPS)
   useAppStore.setState({
-    settings: { ...getDefaultSettings('/tmp'), experimentalNativeChat: true, defaultTuiAgent: null }
+    settings: {
+      ...getDefaultSettings('/tmp'),
+      experimentalNativeChat: true,
+      defaultTuiAgent: null
+    },
+    runtimeStatusByEnvironmentId: new Map([['B', status()]])
   })
 })
-
 afterEach(() => {
+  vi.useRealTimers()
   resetHostStructuredAgentsForTests()
   setLocalRuntimeCapabilitiesForTests(null)
   useAppStore.setState(initial, true)
 })
 
-// Runs first: the host snapshot the next test publishes outlives it.
-it('opens an explicit default as a chat even when CLI detection failed; automatic and blank picks stay on detected agents', async () => {
-  const pick = (chosen: 'antigravity' | 'blank' | null, detected: [] | null) =>
-    pickChosenOrDetectedAgent(useAppStore.getState(), {
-      chosen,
-      detected,
-      disabled: [],
-      workspace: WORKSPACE
+it('acquires inactive B independently of detection, preserves unknown truth and selected catalog intent', async () => {
+  let catalogReply: (reply: unknown) => void = () => {}
+  rpc.call.mockReturnValue(
+    new Promise((resolve) => {
+      catalogReply = resolve
     })
-  // Cold: the host's agents are not learned yet, so the default waits rather than being passed over.
-  expect(chosenAgentChatUnlearned(useAppStore.getState(), 'antigravity', [], WORKSPACE)).toBe(true)
-  // What the dashboard and its pop-out republish on: these facts live outside the store.
-  const republish = vi.fn()
-  const stop = subscribeChatProgramFacts(republish)
-  await loadHostStructuredAgents('local', CAPS, null)
-  stop()
-  expect(republish).toHaveBeenCalled()
-  expect(chosenAgentChatUnlearned(useAppStore.getState(), 'antigravity', [], WORKSPACE)).toBe(false)
-
-  expect(pick('antigravity', null)).toBe('antigravity')
-  expect(pick(null, [])).toBeNull()
-  expect(pick('blank', [])).toBeNull()
-  const state = useAppStore.getState()
-  // The menu offers that chat with detection failed, and no CLI row or terminal for it.
+  )
+  const action = acquireAgentLaunchChoices(workspace, async () => [])
+  await flush()
+  expect(rpc.subscribe.mock.calls[0][0]).toEqual({ kind: 'environment', environmentId: 'B' })
+  expect(agentChoicePending(useAppStore.getState(), 'antigravity', workspace, [])).toBe(true)
   expect(
-    buildNewTabAgentMenuRows({
-      settings: state.settings,
-      detectedOnHost: null,
-      chatAgents: ['claude', 'antigravity'],
-      hostChatAnswer: () => 'yes',
-      chatProgram: (agent) => readChatProgram(state, agent, LOCAL, null)
-    })
-  ).toEqual([
-    { kind: 'chat', agent: 'antigravity' },
-    { kind: 'chat-unavailable', agent: 'claude', reason: 'check-failed' }
-  ])
-  // A provider switched off routes to a terminal, which needs the CLI.
-  useAppStore.setState({
-    settings: {
-      ...getDefaultSettings('/tmp'),
-      experimentalNativeChat: true,
-      nativeChatProviders: { antigravity: false }
-    }
-  })
-  expect(pick('antigravity', [])).toBeNull()
+    resolveQuickWorkspaceAgentSelection({
+      quickAgentOverride: 'antigravity',
+      preferredQuickAgent: null,
+      detectedAgentIds: [],
+      selectedChoiceUnresolved: true
+    }).quickAgentOverride
+  ).toBe('antigravity')
+  rpc.subscribe.mock.calls[0][3].onEvent(frame('grok', 'available'))
+  catalogReply(catalog)
+  expect((await action).offered).toEqual(['grok'])
+  expect(rpc.call).toHaveBeenCalled()
+  const lease = holdChatProgramFacts(workspace)
+  rpc.subscribe.mock.calls.at(-1)![3].onEvent(frame('grok', 'future-program'))
+  expect(readChatProgram(useAppStore.getState(), 'grok', host, ['grok'])).toBe('unknown')
+  expect(agentChoiceOpensAsChat(useAppStore.getState(), 'grok', workspace, ['grok'])).toBe(true)
+  lease.release()
 })
 
-it("reads the host's published program first, else that same host's managed mark and install capability, else the CLI", async () => {
-  await loadHostStructuredAgents('local', CAPS, null)
-  const state = useAppStore.getState()
-  expect(readChatProgram(state, 'antigravity', LOCAL, [])).toBe('installable')
-  // A host that cannot install keeps the CLI-based offer; another host's mark says nothing.
-  expect(readChatProgram(state, 'antigravity', { ...LOCAL, hostCapabilities: [CHAT] }, [])).toBe(
-    'missing'
+it('releases a pending stream at the chat deadline while slow ordinary detection keeps waiting', async () => {
+  vi.useFakeTimers()
+  let handle: (value: { unsubscribe: () => void }) => void = () => {}
+  let detect: (ids: []) => void = () => {}
+  rpc.subscribe.mockReturnValue(
+    new Promise((resolve) => {
+      handle = resolve
+    })
+  )
+  const action = acquireAgentLaunchChoices(
+    workspace,
+    () =>
+      new Promise<[]>((resolve) => {
+        detect = resolve
+      })
+  )
+  let done = false
+  void action.then(() => {
+    done = true
+  })
+  await flush()
+  await vi.advanceTimersByTimeAsync(5000)
+  expect(done).toBe(false)
+  const unsubscribe = vi.fn()
+  handle({ unsubscribe })
+  await flush()
+  expect(unsubscribe).toHaveBeenCalledOnce()
+  detect([])
+  await action
+  expect(done).toBe(true)
+})
+
+it('waits for each reopened first frame and cancels genuine runtime replacement, not cold learning', async () => {
+  useAppStore.setState({ runtimeStatusByEnvironmentId: new Map() })
+  const abort = new AbortController()
+  const action = acquireAgentLaunchChoices(workspace, async () => [], abort.signal)
+  useAppStore.setState({ runtimeStatusByEnvironmentId: new Map([['B', status()]]) })
+  await flush()
+  const handlers = rpc.subscribe.mock.calls.at(-1)![3]
+  handlers.onEvent(frame('grok', 'available'))
+  await action
+  await flush()
+  let done = false
+  const reopened = acquireAgentLaunchChoices(workspace, async () => []).then(() => {
+    done = true
+  })
+  await flush()
+  expect(done).toBe(false)
+  rpc.subscribe.mock.calls.at(-1)![3].onClose()
+  await reopened
+  const replaced = acquireAgentLaunchChoices(workspace, () => new Promise<[]>(() => {}))
+  const rejected = expect(replaced).rejects.toThrow('owner changed')
+  useAppStore.setState({ runtimeStatusByEnvironmentId: new Map([['B', status('r2')]]) })
+  await rejected
+})
+
+it('adapts only absent publication on older hosts and shares the saved Checks gate with pre-create execution', async () => {
+  setLocalRuntimeCapabilitiesForTests([CHAT, CATALOG, INSTALL])
+  const local = { kind: 'git-worktree' } as const
+  const settings = {
+    ...getDefaultSettings('/tmp'),
+    experimentalNativeChat: true,
+    defaultTuiAgent: null,
+    sourceControlAi: {
+      ...getDefaultSourceControlAiSettings(),
+      actions: { fixChecks: { agentId: 'antigravity', commandInputTemplate: '{basePrompt}' } }
+    }
+  }
+  useAppStore.setState({ settings, ensureDetectedAgents: async () => [] })
+  await acquireAgentLaunchChoices(local, async () => [])
+  expect(resolveChecksActionAgent(useAppStore.getState(), 'fixChecks', undefined, local, [])).toBe(
+    'antigravity'
   )
   expect(
+    resolveChecksActionAgent(useAppStore.getState(), 'resolveComments', undefined, local, [])
+  ).toBeNull()
+  launch.direct.mockResolvedValue(true)
+  await startFixChecksAgent({
+    repoId: 'missing',
+    basePrompt: 'fix checks',
+    item: {
+      number: 1,
+      url: 'https://example.test/1',
+      title: 'PR',
+      id: 'pr1',
+      type: 'pr',
+      state: 'open',
+      labels: [],
+      updatedAt: '',
+      author: null,
+      repoId: 'missing'
+    },
+    launchSource: 'task_page',
+    openModalFallback: vi.fn()
+  })
+  expect(launch.direct).toHaveBeenCalledWith(
+    expect.objectContaining({ agentOverride: 'antigravity' })
+  )
+  useAppStore.setState({ settings: { ...settings, disabledTuiAgents: ['antigravity'] } })
+  expect(
+    resolveChecksActionAgent(useAppStore.getState(), 'fixChecks', undefined, local, [])
+  ).toBeNull()
+  expect(
     readChatProgram(
-      state,
+      useAppStore.getState(),
       'antigravity',
-      { executionHostId: 'runtime:env', hostCapabilities: CAPS },
+      { executionHostId: 'local', hostCapabilities: [CHAT] },
       []
     )
   ).toBe('missing')
-  expect(readChatProgram(state, 'gemini', LOCAL, ['gemini'])).toBe('available')
-
-  acquireHostStructuredAgentAvailability({
-    target: { kind: 'local' },
-    executionHostId: 'local',
-    runtimeId: null,
-    pairingRevision: undefined
-  })
-  rpc.subscribe.mock.calls[0][3].onEvent({
-    type: 'availability',
-    agents: [
-      { agent: 'antigravity', state: 'available', chatProgram: 'available' },
-      // A value this build does not know claims nothing, like a field an older host never sends.
-      { agent: 'gemini', state: 'available', chatProgram: 'from-a-newer-host' },
-      { agent: 'claude', state: 'available' }
-    ]
-  })
-  expect(readChatProgram(state, 'antigravity', LOCAL, [])).toBe('available')
-  expect(readChatProgram(state, 'gemini', LOCAL, [])).toBe('missing')
-  expect(readChatProgram(state, 'claude', LOCAL, ['claude'])).toBe('available')
 })

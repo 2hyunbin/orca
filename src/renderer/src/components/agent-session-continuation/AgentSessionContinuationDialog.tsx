@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { agentsOfferedForLaunch, agentChoicePending } from '@/lib/host-chat-program'
+import { useChatProgramFacts } from '@/lib/host-chat-program-acquisition'
+import { workspaceKindForWorktreeId } from '../../../../shared/workspace-launch-kind'
+import { useEffect, useRef, useState } from 'react'
 import { Loader2, MessageSquarePlus } from 'lucide-react'
 import AgentCombobox from '@/components/agent/AgentCombobox'
 import { Button } from '@/components/ui/button'
@@ -50,6 +53,14 @@ export function AgentSessionContinuationDialog({
   onOpenChange,
   onStarted
 }: AgentSessionContinuationDialogProps): React.JSX.Element {
+  useChatProgramFacts(
+    {
+      kind: workspaceKindForWorktreeId(request?.worktreeId ?? ''),
+      worktreeId: request?.worktreeId
+    },
+    open && Boolean(request)
+  )
+  const abortRef = useRef<AbortController | null>(null)
   const settings = useAppStore((state) => state.settings)
   const [detectedAgents, setDetectedAgents] = useState<TuiAgent[]>([])
   const [selectedAgent, setSelectedAgent] = useState<TuiAgent | null>(null)
@@ -60,12 +71,17 @@ export function AgentSessionContinuationDialog({
   const [showStarting, setShowStarting] = useState(false)
   const disabledAgents = settings?.disabledTuiAgents ?? EMPTY_DISABLED_AGENTS
 
-  const agents = useMemo(
-    () =>
-      getAgentCatalog().filter(
-        (agent) => detectedAgents.includes(agent.id) && isTuiAgentEnabled(agent.id, disabledAgents)
-      ),
-    [detectedAgents, disabledAgents]
+  const workspace = {
+    kind: workspaceKindForWorktreeId(request?.worktreeId ?? ''),
+    worktreeId: request?.worktreeId
+  }
+  const offered = agentsOfferedForLaunch(useAppStore.getState(), workspace, detectedAgents)
+  const agents = getAgentCatalog().filter(
+    (agent) =>
+      (offered.includes(agent.id) ||
+        (selectedAgent === agent.id &&
+          agentChoicePending(useAppStore.getState(), agent.id, workspace, detectedAgents))) &&
+      isTuiAgentEnabled(agent.id, disabledAgents)
   )
   const hasFullContext = request ? hasFullAgentSessionContext(request.source) : false
 
@@ -73,22 +89,26 @@ export function AgentSessionContinuationDialog({
     if (!open || !request) {
       return
     }
+    const abort = new AbortController()
+    abortRef.current = abort
     let cancelled = false
     setDetecting(true)
     setDetectionFailed(false)
     setDetectedAgents([])
     setSelectedAgent(null)
     setContextMode('focused')
-    void detectAgentSessionContinuationAgents(request.worktreeId)
+    void detectAgentSessionContinuationAgents(request.worktreeId, abort.signal)
       .then((detected) => {
         if (cancelled) {
           return
         }
-        const enabled = detected.filter((agent) => isTuiAgentEnabled(agent, disabledAgents))
-        setDetectedAgents(enabled)
+        const enabled = detected.offered.filter((agent) => isTuiAgentEnabled(agent, disabledAgents))
+        setDetectedAgents([...(detected.detected ?? [])])
         setSelectedAgent(
           chooseInitialContinuationAgent({
             availableAgents: enabled,
+            automaticAgents:
+              detected.detected?.filter((agent) => isTuiAgentEnabled(agent, disabledAgents)) ?? [],
             sourceAgent: request.source.sourceAgent,
             defaultAgent: settings?.defaultTuiAgent
           })
@@ -110,8 +130,12 @@ export function AgentSessionContinuationDialog({
 
     return () => {
       cancelled = true
+      abort.abort()
+      abortRef.current = null
     }
-  }, [disabledAgents, open, request, settings?.defaultTuiAgent])
+    // A later settings/default update must not reset a manual choice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, request])
 
   useEffect(() => {
     if (!starting) {
@@ -138,7 +162,8 @@ export function AgentSessionContinuationDialog({
       worktreeId: request.worktreeId,
       groupId: request.groupId,
       initialCwd: request.initialCwd,
-      launchSource: request.launchSource
+      launchSource: request.launchSource,
+      signal: abortRef.current?.signal
     })
     setStarting(false)
     if (launched) {

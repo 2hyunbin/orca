@@ -14,7 +14,7 @@ import type { TuiAgent } from '../../../../shared/tui-agent'
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { getRuntimeAgentInventoryKey } from '@/store/slices/runtime-agent-inventory-key'
 import { workspaceKindForWorktreeId } from '../../../../shared/workspace-launch-kind'
-import { useAppStore } from '@/store'
+import type { AgentLaunchRouteStore } from '@/lib/agent-launch-route-input'
 import { agentsOfferedForLaunch } from '@/lib/host-chat-program'
 
 export type DashboardLaunchDetectionState = Pick<
@@ -99,7 +99,8 @@ function detectedAgentsForWorktree(
 export function buildDashboardWorktreeLaunchOptions(
   state: DashboardLaunchOptionState,
   cards: readonly DashboardCard[],
-  workspaces: readonly DashboardWorkspace[] = []
+  workspaces: readonly DashboardWorkspace[] = [],
+  launchRouteStore?: AgentLaunchRouteStore
 ): Record<string, TuiAgent[]> {
   const catalog = buildDashboardLaunchCatalog(state)
   const cardsByWorktreeId = new Map<string, DashboardCard[]>()
@@ -127,11 +128,13 @@ export function buildDashboardWorktreeLaunchOptions(
     const detected = detectedAgentsForWorktree(state, worktreeId, repoId, catalog)
     // Agents that open as a chat there without their CLI launch from the board too.
     const available = new Set<TuiAgent>(
-      agentsOfferedForLaunch(
-        useAppStore.getState(),
-        { kind: workspaceKindForWorktreeId(worktreeId), worktreeId },
-        detected
-      )
+      launchRouteStore
+        ? agentsOfferedForLaunch(
+            launchRouteStore,
+            { kind: workspaceKindForWorktreeId(worktreeId), worktreeId },
+            detected
+          )
+        : detected
     )
     for (const card of worktreeCards) {
       if (isTuiAgent(card.agentType)) {

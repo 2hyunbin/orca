@@ -30,10 +30,12 @@ export function resolveTerminalAgentTabShortcut({
   if (matchShortcut('tab.newAgent')) {
     const detectedAgentIds = readDetectedAgentsForWorktree(state, activeWorktreeId)
     const chosen = state.settings?.defaultTuiAgent
-    const agent = resolveDefaultAgentForNewTab(
-      { defaultTuiAgent: chosen, detectedAgentIds, disabledTuiAgents: state.settings?.disabledTuiAgents },
-      { store: state, worktreeId: activeWorktreeId }
-    )
+    const agent = resolveDefaultAgentForNewTab({
+      defaultTuiAgent: chosen,
+      detectedAgentIds,
+      disabledTuiAgents: state.settings?.disabledTuiAgents,
+      chatIn: { store: state, worktreeId: activeWorktreeId }
+    })
     const workspace = newTabWorkspace(activeWorktreeId)
     // Why: the cached list is empty until the host's probe lands (e.g. a paired server's
     // workspace right after it opens), and a default that opens as a chat without its CLI may not

@@ -15,6 +15,10 @@ vi.mock('@/lib/agent-catalog', () => ({
 }))
 vi.mock('@/lib/agent-detection-target-inventory', () => ({ ensureDetectedAgentsForWorktree }))
 vi.mock('sonner', () => ({ toast }))
+vi.mock('./host-chat-program-acquisition', () => ({
+  acquireAgentLaunchChoices: async (_: unknown, run: () => unknown) => ({ offered: await run() })
+}))
+vi.mock('./host-chat-program', () => ({ agentChoicePending: () => false }))
 vi.mock('@/i18n/i18n', () => ({
   translate: (_key: string, fallback: string, values?: Record<string, string>) =>
     Object.entries(values ?? {}).reduce(
@@ -71,7 +75,9 @@ describe('launchAgentSessionContinuation', () => {
     const { detectAgentSessionContinuationAgents } =
       await import('./launch-agent-session-continuation')
 
-    await expect(detectAgentSessionContinuationAgents('wt-1')).resolves.toEqual(['claude', 'codex'])
+    await expect(detectAgentSessionContinuationAgents('wt-1')).resolves.toEqual({
+      offered: ['claude', 'codex']
+    })
     expect(ensureDetectedAgentsForWorktree).toHaveBeenCalledWith(store, 'wt-1')
   })
 

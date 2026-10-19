@@ -1,3 +1,4 @@
+import { acquireAgentLaunchChoices } from '@/lib/host-chat-program-acquisition'
 import { toast } from 'sonner'
 import { useAppStore, type AppState } from '@/store'
 import type { TuiAgent } from '../../../../../../shared/tui-agent'
@@ -21,11 +22,7 @@ import type {
 } from '../../../../../../shared/source-control-ai-actions'
 import { buildSourceControlRecoveryAgentCommandInput } from '../../../../../../shared/source-control-recovery-agent-command'
 import { translate } from '@/i18n/i18n'
-import {
-  acquireChatProgramFacts,
-  agentChoiceOpensAsChat,
-  resolveChatProgramHost
-} from '@/lib/host-chat-program'
+import { readAgentLaunchChoice } from '@/lib/host-chat-program'
 import { newTabWorkspace } from '@/lib/agent-tab-shortcuts'
 
 type SourceControlAiLaunchStoreSnapshot = Pick<AppState, 'settings'> & WorktreeAgentInventoryState
@@ -114,6 +111,11 @@ export async function launchSourceControlRecoveryAgentWithDefault({
     return false
   }
 
+  const workspace = newTabWorkspace(activeWorktreeId)
+  const choices = await acquireAgentLaunchChoices(workspace, () =>
+    ensureDetectedAgentsForWorktree(getStoreState(), activeWorktreeId)
+  )
+  const detectedAgents = [...(choices.detected ?? [])]
   const store = getStoreState()
   const savedRecipe = getLaunchActionRecipe(actionId)
   const agentArgsPlan = planAgentCliArgsSuffix(
@@ -121,8 +123,6 @@ export async function launchSourceControlRecoveryAgentWithDefault({
     activeSourceControlLaunchPlatform === 'win32' ? 'powershell' : 'posix'
   )
   if (!agentArgsPlan.ok) {
-    // Why: saved launch recipes are shared with direct launches; reject bad
-    // argv before remote agent detection or terminal creation has side effects.
     toast.error(agentArgsPlan.error)
     return false
   }
@@ -141,15 +141,10 @@ export async function launchSourceControlRecoveryAgentWithDefault({
     return false
   }
 
-  const workspace = newTabWorkspace(activeWorktreeId)
-  const host = resolveChatProgramHost(useAppStore.getState(), workspace)
-  const [detectedAgents] = await Promise.all([
-    ensureDetectedAgentsForWorktree(store, activeWorktreeId),
-    acquireChatProgramFacts(useAppStore.getState(), host.executionHostId, host.hostCapabilities)
-  ])
   // A saved or default agent may open as a chat without its CLI.
   const opensAsChat = (agent: TuiAgent): boolean =>
-    agentChoiceOpensAsChat(useAppStore.getState(), agent, workspace, detectedAgents)
+    readAgentLaunchChoice(useAppStore.getState(), agent, workspace, detectedAgents)
+      .chatEligibility !== 'no'
   const savedAgent = readSourceControlLaunchRecipeAgentId(savedRecipe)
   if (
     savedAgent &&

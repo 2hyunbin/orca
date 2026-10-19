@@ -1,20 +1,20 @@
-import { useMemo, useSyncExternalStore } from 'react'
-import { isAgentSessionHandleProvider } from '../../../shared/agent-session-provider-handle'
+import { isNativeChatDefaultFor } from '../../../shared/structured-native-chat-launch-route'
 import { parseExecutionHostId } from '../../../shared/execution-host'
-import { MANAGED_RUNTIME_INSTALL_RUNTIME_CAPABILITY } from '../../../shared/managed-runtime-install'
-import { STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY as CATALOG } from '../../../shared/protocol-version'
+import { MANAGED_RUNTIME_INSTALL_RUNTIME_CAPABILITY as INSTALL } from '../../../shared/managed-runtime-install'
+import {
+  STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY as CATALOG,
+  STRUCTURED_AGENT_SESSION_AVAILABILITY_RUNTIME_CAPABILITY as AVAILABILITY
+} from '../../../shared/protocol-version'
 import { lastVerifiedRuntimeStatus } from '../../../shared/runtime-host-status'
 import type { TuiAgent } from '../../../shared/tui-agent'
-import { isTuiAgent } from '../../../shared/tui-agent-config'
-import { isTuiAgentEnabled, pickTuiAgent } from '../../../shared/tui-agent-selection'
-import { useAppStore } from '@/store'
-import { chatProviderAgents } from '@/lib/chat-provider-agents'
-import { resolveAgentLaunchRoute } from '@/lib/agent-launch-routing'
+import { chatProviderAgents } from './chat-provider-agents'
+import { resolveAgentLaunchRoute, structuredAgentLaunchSupport } from './agent-launch-routing'
 import {
   buildAgentLaunchRouteInput,
+  resolveAgentLaunchHost,
   type AgentLaunchRouteStore,
   type ProspectiveWorkspace
-} from '@/lib/agent-launch-route-input'
+} from './agent-launch-route-input'
 import {
   readHostStructuredAgentAvailability,
   subscribeHostStructuredAgentAvailability
@@ -22,191 +22,174 @@ import {
 import {
   hostStructuredAgentsReadFailed,
   readHostStructuredAgentsForRuntime,
-  relearnHostStructuredAgents,
   subscribeHostStructuredAgents
 } from '@/runtime/host-structured-agents'
+import { subscribeLocalRuntimeCapabilityObservation } from '@/runtime/local-runtime-capabilities'
 import {
-  ensureLocalRuntimeCapabilities,
-  subscribeLocalRuntimeCapabilityObservation
-} from '@/runtime/local-runtime-capabilities'
-import { getRuntimeEnvironmentRevision } from '@/runtime/runtime-environment-revision'
+  getRuntimeEnvironmentRevision,
+  onRuntimeEnvironmentRevisionsChanged,
+  onRuntimeEnvironmentsRetired
+} from '@/runtime/runtime-environment-revision'
+import { structuredAgentSessionTargetForHost } from '@/runtime/structured-agent-session-owner'
 
-/**
- * Whether an agent's chat program runs on a workspace's host, kept apart from whether its CLI is
- * installed there. `unlearned` is not a no: the facts that decide it have not arrived.
- */
-export type ChatProgramObservation = 'available' | 'installable' | 'missing' | 'unlearned'
-
+export type ChatProgramObservation =
+  | 'available'
+  | 'installable'
+  | 'missing'
+  | 'unknown'
+  | 'unlearned'
 type HostFactsStore = Pick<AgentLaunchRouteStore, 'runtimeStatusByEnvironmentId'>
 
-/** The host's own answer wins. A host that publishes none, or could not tell, is read through the
- *  rule older hosts imply: Orca's managed program where that host installs it, else the CLI. */
+function hostContext(
+  store: HostFactsStore,
+  host: { executionHostId: string; hostCapabilities: readonly string[] | null }
+) {
+  const parsed = parseExecutionHostId(host.executionHostId)
+  const environmentId = parsed?.kind === 'runtime' ? parsed.environmentId : undefined
+  const entry = environmentId ? store.runtimeStatusByEnvironmentId?.get(environmentId) : undefined
+  const runtimeId = parsed?.kind === 'local' ? null : lastVerifiedRuntimeStatus(entry)?.runtimeId
+  const pairingRevision = environmentId ? getRuntimeEnvironmentRevision(environmentId) : undefined
+  const identity = JSON.stringify([host.executionHostId, runtimeId, pairingRevision])
+  return {
+    ...host,
+    environmentId,
+    runtimeId,
+    pairingRevision,
+    identity,
+    target: structuredAgentSessionTargetForHost(host.executionHostId),
+    revision: JSON.stringify([
+      identity,
+      host.hostCapabilities,
+      entry?.connectionGeneration,
+      entry?.hostContactEpoch
+    ])
+  }
+}
+
+/** Ownership is resolved before agent policy; an unresolved workspace never acquires locally. */
+export function resolveChatProgramContext(
+  store: AgentLaunchRouteStore,
+  workspace: ProspectiveWorkspace
+) {
+  const { owner, ...host } = resolveAgentLaunchHost(store, workspace)
+  return hostContext(store, owner === null ? { ...host, executionHostId: '' } : host)
+}
+
+/** Only absent publication uses older-host inference; present unknown wins. */
 export function readChatProgram(
   store: HostFactsStore,
   agent: TuiAgent,
   host: { executionHostId: string; hostCapabilities: readonly string[] | null },
   detected: readonly TuiAgent[] | null
 ): ChatProgramObservation {
-  const parsed = parseExecutionHostId(host.executionHostId)
-  const environmentId = parsed?.kind === 'runtime' ? parsed.environmentId : null
-  const runtimeId =
-    parsed?.kind === 'local'
-      ? null
-      : environmentId
-        ? lastVerifiedRuntimeStatus(store.runtimeStatusByEnvironmentId?.get(environmentId))
-            ?.runtimeId
-        : undefined
-  const pairing = environmentId ? getRuntimeEnvironmentRevision(environmentId) : undefined
-  const snapshot = readHostStructuredAgentAvailability(host.executionHostId, runtimeId, pairing)
+  const context = hostContext(store, host)
+  const snapshot = readHostStructuredAgentAvailability(
+    context.executionHostId,
+    context.runtimeId,
+    context.pairingRevision
+  )
   const published = snapshot.state === 'received' ? snapshot.byAgent.get(agent) : undefined
-  if (published?.chatProgram && published.chatProgram !== 'unknown') {
-    return published.chatProgram
+  const capabilities = context.hostCapabilities
+  // A publishing host's roster answers; an older host's absent field falls to inference below.
+  if (published?.chatProgram || (capabilities?.includes(AVAILABILITY) && !published)) {
+    return (
+      published?.chatProgram ??
+      (snapshot.state === 'received'
+        ? 'missing'
+        : snapshot.state === 'pending'
+          ? 'unlearned'
+          : 'unknown')
+    )
   }
-  if (detected?.includes(agent)) {
-    return 'available'
-  }
-  const registered = readHostStructuredAgentsForRuntime(host.executionHostId, runtimeId)
-  const capabilities = host.hostCapabilities
-  if (
-    registered?.some((row) => row.agent === agent && row.managedRuntime) &&
-    capabilities?.includes(MANAGED_RUNTIME_INSTALL_RUNTIME_CAPABILITY)
-  ) {
-    return 'installable'
-  }
-  const catalogPending =
-    !registered &&
-    capabilities?.includes(CATALOG) === true &&
-    runtimeId !== undefined &&
-    !hostStructuredAgentsReadFailed(host.executionHostId, runtimeId)
-  return detected === null || capabilities === null || catalogPending ? 'unlearned' : 'missing'
+  const catalog = readHostStructuredAgentsForRuntime(context.executionHostId, context.runtimeId)
+  return capabilities === null || context.runtimeId === undefined
+    ? 'unlearned'
+    : detected?.includes(agent)
+      ? 'available'
+      : catalog?.some((row) => row.agent === agent && row.managedRuntime) &&
+          capabilities.includes(INSTALL)
+        ? 'installable'
+        : !catalog && capabilities.includes(CATALOG)
+          ? hostStructuredAgentsReadFailed(context.executionHostId, context.runtimeId)
+            ? 'unknown'
+            : 'unlearned'
+          : detected === null
+            ? 'unknown'
+            : 'missing'
 }
 
 export function chatProgramOffered(program: ChatProgramObservation): boolean {
   return program === 'available' || program === 'installable'
 }
 
-/** Whether choosing `agent` in `workspace` opens it as a chat: it routes to chat there and its
- *  program runs, or installs from the chat, on that host. */
-export function agentChoiceOpensAsChat(
+/** Published program truth and permission to preserve an explicit launch are separate. */
+export function readAgentLaunchChoice(
   store: AgentLaunchRouteStore,
   agent: TuiAgent,
   workspace: ProspectiveWorkspace,
   detected: readonly TuiAgent[] | null
-): boolean {
+) {
+  const context = resolveChatProgramContext(store, workspace)
   const input = buildAgentLaunchRouteInput(store, { agent, workspace })
-  return (
-    resolveAgentLaunchRoute(input) === 'structured-native-chat' &&
-    chatProgramOffered(readChatProgram(store, agent, input, detected))
-  )
+  const program = readChatProgram(store, agent, context, detected)
+  const support = structuredAgentLaunchSupport(input)
+  const catalogReady =
+    context.hostCapabilities !== null &&
+    (!context.hostCapabilities.includes(CATALOG) ||
+      readHostStructuredAgentsForRuntime(context.executionHostId, context.runtimeId) !== undefined)
+  const unresolved =
+    !context.target || program === 'unknown' || program === 'unlearned' || !catalogReady
+  const routePending =
+    !support.supported &&
+    (support.blocker === 'runtime-capability-unknown' ||
+      (support.blocker === 'agent-without-structured-session' && !catalogReady))
+  const chatEligibility =
+    !isNativeChatDefaultFor(store.settings, agent) ||
+    (!support.supported && !routePending) ||
+    program === 'missing'
+      ? 'no'
+      : resolveAgentLaunchRoute(input) === 'structured-native-chat' &&
+          (chatProgramOffered(program) || detected?.includes(agent))
+        ? 'opens'
+        : unresolved
+          ? 'unresolved'
+          : 'no'
+  return { program, chatEligibility, catalogReady }
 }
 
-/** The agents a picker offers: the detected ones, then the agents the host registered for chat
- *  that open as a chat there without their CLI. */
-export function agentsOfferedForLaunch(
-  store: AgentLaunchRouteStore,
-  workspace: ProspectiveWorkspace,
-  detected: readonly TuiAgent[] | null
-): TuiAgent[] {
-  const offered = [...(detected ?? [])]
-  const host = resolveChatProgramHost(store, workspace)
-  for (const agent of chatProviderAgents(
-    host.executionHostId,
-    store.runtimeStatusByEnvironmentId
-  )) {
-    if (!offered.includes(agent) && agentChoiceOpensAsChat(store, agent, workspace, detected)) {
-      offered.push(agent)
-    }
-  }
-  return offered
-}
-
-/** `agentsOfferedForLaunch` for a picker; null while detection is pending, where pickers keep
- *  their catalog fallback. */
-export function useAgentsOfferedForLaunch(
-  workspace: ProspectiveWorkspace,
-  detected: ReadonlySet<TuiAgent> | null
-): ReadonlySet<TuiAgent> | null {
-  useChatProgramFactsVersion()
-  const key = useAppStore((state) =>
-    detected === null ? null : agentsOfferedForLaunch(state, workspace, [...detected]).join(',')
-  )
-  return useMemo(() => (key === null ? null : new Set(key.split(',').filter(isTuiAgent))), [key])
-}
-
-/** A choice the user made (default, saved action, override) may be an agent that opens as a chat
- *  without its CLI; automatic fallback still picks only detected agents. */
-export function pickChosenOrDetectedAgent(
-  store: AgentLaunchRouteStore,
-  pick: {
-    chosen: TuiAgent | 'blank' | null | undefined
-    detected: readonly TuiAgent[] | null
-    disabled: readonly TuiAgent[] | null | undefined
-    workspace: ProspectiveWorkspace
-  }
-): TuiAgent | null {
-  const { chosen, detected, disabled } = pick
-  if (
-    chosen &&
-    chosen !== 'blank' &&
-    isTuiAgentEnabled(chosen, disabled) &&
-    agentChoiceOpensAsChat(store, chosen, pick.workspace, detected)
-  ) {
-    return chosen
-  }
-  return pickTuiAgent(chosen, detected ?? [], disabled)
-}
-
-/** Whether a chosen agent whose CLI is not detected waits on facts that decide if it opens as a
- *  chat, so a pick now could pass over it. */
+type ChoiceArgs = Parameters<typeof readAgentLaunchChoice>
+export const agentChoiceOpensAsChat = (...args: ChoiceArgs): boolean =>
+  readAgentLaunchChoice(...args).chatEligibility === 'opens'
+export const agentChoicePending = (...args: ChoiceArgs): boolean =>
+  readAgentLaunchChoice(...args).chatEligibility === 'unresolved'
 export function chosenAgentChatUnlearned(
   store: AgentLaunchRouteStore,
   chosen: TuiAgent | 'blank' | null | undefined,
   detected: readonly TuiAgent[] | null,
   workspace: ProspectiveWorkspace
 ): boolean {
-  // Claude and Codex have no managed program, so waiting could not change their answer.
-  if (
-    !chosen ||
-    chosen === 'blank' ||
-    detected?.includes(chosen) ||
-    isAgentSessionHandleProvider(chosen)
-  ) {
-    return false
-  }
-  const input = buildAgentLaunchRouteInput(store, { agent: chosen, workspace })
-  return readChatProgram(store, chosen, input, detected) === 'unlearned'
+  return !!chosen && chosen !== 'blank' && agentChoicePending(store, chosen, workspace, detected)
 }
 
-/** The host a launch in `workspace` would run on, with what it advertises. */
-export function resolveChatProgramHost(
+/** Offers may include setup-capable chats; automatic candidates remain the original inventory. */
+export function agentsOfferedForLaunch(
   store: AgentLaunchRouteStore,
-  workspace: ProspectiveWorkspace
-): { executionHostId: string; hostCapabilities: readonly string[] | null } {
-  return buildAgentLaunchRouteInput(store, { agent: 'claude', workspace })
-}
-
-/** Loads what the compatibility rule reads for a host; never rejects. */
-export async function acquireChatProgramFacts(
-  store: HostFactsStore,
-  executionHostId: string,
-  hostCapabilities: readonly string[] | null
-): Promise<void> {
-  const capabilities =
-    hostCapabilities ??
-    (parseExecutionHostId(executionHostId)?.kind === 'local'
-      ? await ensureLocalRuntimeCapabilities()
-      : null)
-  await relearnHostStructuredAgents(
-    executionHostId,
-    capabilities,
-    store.runtimeStatusByEnvironmentId
-  ).catch(() => undefined)
+  workspace: ProspectiveWorkspace,
+  detected: readonly TuiAgent[] | null
+): TuiAgent[] {
+  const context = resolveChatProgramContext(store, workspace)
+  return [
+    ...new Set([
+      ...(detected ?? []),
+      ...chatProviderAgents(context.executionHostId, store.runtimeStatusByEnvironmentId).filter(
+        (agent) => agentChoiceOpensAsChat(store, agent, workspace, detected)
+      )
+    ])
+  ]
 }
 
 let factsVersion = 0
-const readFactsVersion = (): number => factsVersion
-
-/** Calls `listener` whenever any input of `readChatProgram` other than the store may have changed. */
+export const readChatProgramFactsVersion = (): number => factsVersion
 export function subscribeChatProgramFacts(listener: () => void): () => void {
   const notify = (): void => {
     factsVersion += 1
@@ -215,12 +198,9 @@ export function subscribeChatProgramFacts(listener: () => void): () => void {
   const releases = [
     subscribeHostStructuredAgentAvailability(notify),
     subscribeHostStructuredAgents(notify),
-    subscribeLocalRuntimeCapabilityObservation(notify)
+    subscribeLocalRuntimeCapabilityObservation(notify),
+    onRuntimeEnvironmentRevisionsChanged(notify),
+    onRuntimeEnvironmentsRetired(notify)
   ]
   return () => releases.forEach((release) => release())
-}
-
-/** Re-renders the caller when host chat-program facts change. */
-export function useChatProgramFactsVersion(): number {
-  return useSyncExternalStore(subscribeChatProgramFacts, readFactsVersion, readFactsVersion)
 }

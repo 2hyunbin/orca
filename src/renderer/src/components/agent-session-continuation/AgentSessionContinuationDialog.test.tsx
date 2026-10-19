@@ -12,7 +12,14 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/store', () => ({
-  useAppStore: (selector: (state: unknown) => unknown) => selector({ settings: mocks.settings })
+  useAppStore: Object.assign(
+    (selector: (state: unknown) => unknown) => selector({ settings: mocks.settings }),
+    { getState: () => ({}) }
+  )
+}))
+vi.mock('@/lib/host-chat-program-acquisition', () => ({ useChatProgramFacts: () => {} }))
+vi.mock('@/lib/host-chat-program', () => ({
+  agentsOfferedForLaunch: (_state: unknown, _workspace: unknown, detected: unknown) => detected
 }))
 vi.mock('@/lib/launch-agent-session-continuation', () => ({
   detectAgentSessionContinuationAgents: mocks.detectAgents,
@@ -94,7 +101,7 @@ describe('AgentSessionContinuationDialog', () => {
     mocks.detectAgents.mockRejectedValueOnce(new Error('offline')).mockReturnValueOnce(
       new Promise<['codex']>((resolve) => {
         resolveSecond = resolve
-      })
+      }).then((ids) => ({ detected: ids, offered: ids }))
     )
 
     await act(async () => {

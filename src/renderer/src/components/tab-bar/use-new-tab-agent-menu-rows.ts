@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from 'react'
+import { useSyncExternalStore } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import {
   STRUCTURED_AGENT_SESSION_AVAILABILITY_RUNTIME_CAPABILITY as AVAILABILITY,
@@ -23,8 +23,7 @@ import { structuredAgentSessionTargetForHost } from '@/runtime/structured-agent-
 import {
   readHostStructuredAgents,
   readHostStructuredAgentsForRuntime,
-  hostStructuredAgentsReadFailed,
-  loadHostStructuredAgents
+  hostStructuredAgentsReadFailed
 } from '@/runtime/host-structured-agents'
 import { getRuntimeEnvironmentRevision } from '@/runtime/runtime-environment-revision'
 import { useHostStructuredAgentAvailability } from '@/runtime/use-host-structured-agent-availability'
@@ -35,8 +34,7 @@ import {
 } from '@/lib/new-tab-agent-menu-rows'
 import {
   readLocalRuntimeCapabilityObservation,
-  subscribeLocalRuntimeCapabilityObservation,
-  ensureLocalRuntimeCapabilities
+  subscribeLocalRuntimeCapabilityObservation
 } from '@/runtime/local-runtime-capabilities'
 import {
   useDetectedAgents,
@@ -44,6 +42,7 @@ import {
   type UseDetectedAgentsResult
 } from '@/hooks/useDetectedAgents'
 import { readDetectedAgentsForTarget } from '@/lib/agent-detection-target-inventory'
+import { useChatProgramFacts } from '@/lib/host-chat-program-acquisition'
 import { readChatProgram } from '@/lib/host-chat-program'
 
 function hostChatAnswer(input: AgentLaunchRoutingInput): HostChatAnswer {
@@ -150,7 +149,7 @@ export function useNewTabAgentMenuRows(
           runtimeId: facts.runtimeId,
           pairingRevision: facts.pairingRevision,
           contact: facts.contact,
-          hold: worktreeShown || open
+          hold: false
         }
       : null
   )
@@ -189,8 +188,7 @@ export function useNewTabAgentMenuRows(
     facts.runtimeId,
     input.hostCapabilities
   )
-  const hostCatalogPending =
-    !roster && availability?.state !== 'pending' && hostCatalogUnlearned
+  const hostCatalogPending = !roster && availability?.state !== 'pending' && hostCatalogUnlearned
   const localCatalogPending =
     !local &&
     catalogUnlearned(
@@ -198,30 +196,8 @@ export function useNewTabAgentMenuRows(
       null,
       localCapabilities.state === 'known' ? localCapabilities.capabilities : null
     )
-  useEffect(() => {
-    // A failed CLI inventory still loads the facts a chat row is read from.
-    if ((!open && !worktreeShown) || plain) {
-      return
-    }
-    if (localCapabilities.state === 'unlearned') {
-      void ensureLocalRuntimeCapabilities()
-    }
-    if (hostCatalogUnlearned && facts.runtimeId !== undefined) {
-      void loadHostStructuredAgents(facts.executionHostId, input.hostCapabilities, facts.runtimeId)
-    }
-    if (localCatalogPending && localCapabilities.state === 'known') {
-      void loadHostStructuredAgents(LOCAL_EXECUTION_HOST_ID, localCapabilities.capabilities, null)
-    }
-  }, [
-    open,
-    worktreeShown,
-    plain,
-    localCapabilities,
-    hostCatalogUnlearned,
-    localCatalogPending,
-    facts,
-    input.hostCapabilities
-  ])
+  useChatProgramFacts(workspace, (open || worktreeShown) && !plain)
+  useChatProgramFacts({ kind: 'floating' }, (open || worktreeShown) && !plain && !local)
   // Only dependencies that can enable an action hold the cold fill; a failed inventory ends only
   // its own wait, since chat rows do not need it.
   if (

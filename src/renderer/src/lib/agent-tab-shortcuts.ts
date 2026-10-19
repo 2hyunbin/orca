@@ -1,3 +1,4 @@
+import { acquireAgentLaunchChoices } from './host-chat-program-acquisition'
 import {
   agentTabActionId,
   type AgentTabActionId,
@@ -10,11 +11,7 @@ import type { AppState } from '@/store/types'
 import { loadDetectedAgentsForWorktree } from '@/lib/agent-detection-target-inventory'
 import type { AgentLaunchRouteStore } from '@/lib/agent-launch-route-input'
 import { workspaceKindForWorktreeId } from '../../../shared/workspace-launch-kind'
-import {
-  acquireChatProgramFacts,
-  pickChosenOrDetectedAgent,
-  resolveChatProgramHost
-} from '@/lib/host-chat-program'
+import { readAgentLaunchChoice } from '@/lib/host-chat-program'
 
 export type BoundAgentTabAction = {
   agent: TuiAgent
@@ -54,49 +51,46 @@ export const newTabWorkspace = (worktreeId: string) => ({
 })
 
 /**
- * Resolve which agent the `tab.newAgent` chord launches: the configured default agent when it is
- * enabled and detected, or opens as a chat in `chatIn` without its CLI; otherwise the shared
- * auto-pick order over detected agents. A 'blank' default means "open new workspaces without an
- * agent" — an explicit new-agent-tab chord still wants an agent, so it falls through to auto-pick
- * instead of doing nothing.
+ * Resolve which agent the `tab.newAgent` chord launches: the configured
+ * default agent when it is detected (or opens as a chat in `chatIn`) and enabled, otherwise the shared
+ * auto-pick order. A 'blank' default means "open new workspaces without an
+ * agent" — an explicit new-agent-tab chord still wants an agent, so it falls
+ * through to auto-pick instead of doing nothing.
  */
-export function resolveDefaultAgentForNewTab(
-  args: {
-    defaultTuiAgent: TuiAgent | 'blank' | null | undefined
-    detectedAgentIds: readonly TuiAgent[] | null | undefined
-    disabledTuiAgents: readonly TuiAgent[] | null | undefined
-  },
+export function resolveDefaultAgentForNewTab(args: {
+  defaultTuiAgent: TuiAgent | 'blank' | null | undefined
+  detectedAgentIds: readonly TuiAgent[] | null | undefined
+  disabledTuiAgents: readonly TuiAgent[] | null | undefined
   chatIn?: { store: AgentLaunchRouteStore; worktreeId: string }
-): TuiAgent | null {
+}): TuiAgent | null {
   const preferred = args.defaultTuiAgent === 'blank' ? null : args.defaultTuiAgent
-  return chatIn
-    ? pickChosenOrDetectedAgent(chatIn.store, {
-        chosen: preferred,
-        detected: args.detectedAgentIds ?? null,
-        disabled: args.disabledTuiAgents,
-        workspace: newTabWorkspace(chatIn.worktreeId)
-      })
-    : pickTuiAgent(preferred, args.detectedAgentIds ?? [], args.disabledTuiAgents)
+  const { chatIn, detectedAgentIds } = args
+  const chosenUsable = (agent: TuiAgent): boolean =>
+    !!chatIn &&
+    readAgentLaunchChoice(
+      chatIn.store,
+      agent,
+      newTabWorkspace(chatIn.worktreeId),
+      detectedAgentIds ?? null
+    ).chatEligibility !== 'no'
+  return pickTuiAgent(preferred, args.detectedAgentIds ?? [], args.disabledTuiAgents, chosenUsable)
 }
 
-/** The new-tab default agent for a workspace, from what its own host reports. */
+/** The new-tab default agent for a workspace, from the agents its own host reports. */
 export async function resolveDefaultAgentForWorktreeNewTab(
   getState: () => AppState,
   worktreeId: string
 ): Promise<TuiAgent | null> {
-  const host = resolveChatProgramHost(getState(), newTabWorkspace(worktreeId))
-  const [detectedAgentIds] = await Promise.all([
-    loadDetectedAgentsForWorktree(getState(), worktreeId),
-    acquireChatProgramFacts(getState(), host.executionHostId, host.hostCapabilities)
-  ])
+  const { detected: detectedAgentIds } = await acquireAgentLaunchChoices(
+    newTabWorkspace(worktreeId),
+    () => loadDetectedAgentsForWorktree(getState(), worktreeId)
+  )
   // Why: settings may change while the host answers; pick with the current ones.
   const state = getState()
-  return resolveDefaultAgentForNewTab(
-    {
-      defaultTuiAgent: state.settings?.defaultTuiAgent,
-      detectedAgentIds,
-      disabledTuiAgents: state.settings?.disabledTuiAgents
-    },
-    { store: state, worktreeId }
-  )
+  return resolveDefaultAgentForNewTab({
+    defaultTuiAgent: state.settings?.defaultTuiAgent,
+    detectedAgentIds,
+    disabledTuiAgents: state.settings?.disabledTuiAgents,
+    chatIn: { store: state, worktreeId }
+  })
 }

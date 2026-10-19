@@ -12,18 +12,15 @@ export function pickQuickWorkspaceAgent(
   preferred: TuiAgent | 'blank' | null | undefined,
   detectedAgentIds: Iterable<TuiAgent> | null,
   disabledTuiAgents?: Iterable<unknown> | null,
-  offeredAgentIds?: ReadonlySet<TuiAgent> | null
+  offeredAgentIds?: ReadonlySet<TuiAgent> | null,
+  chosenUsable?: (agent: TuiAgent) => boolean
 ): TuiAgent | null {
-  if (
-    preferred &&
-    preferred !== 'blank' &&
-    offeredAgentIds?.has(preferred) &&
-    isTuiAgentEnabled(preferred, disabledTuiAgents)
-  ) {
-    return preferred
-  }
-  const candidates = detectedAgentIds ?? TUI_AGENT_AUTO_PICK_ORDER
-  return pickTuiAgent(preferred, candidates, disabledTuiAgents)
+  return pickTuiAgent(
+    preferred,
+    detectedAgentIds ?? TUI_AGENT_AUTO_PICK_ORDER,
+    disabledTuiAgents,
+    (agent) => offeredAgentIds?.has(agent) === true || chosenUsable?.(agent) === true
+  )
 }
 
 function hasDetectedAgent(detectedAgentIds: Iterable<TuiAgent>, agent: TuiAgent): boolean {
@@ -53,8 +50,12 @@ export function resolveQuickWorkspaceAgentSelection({
   quickAgentOverride,
   preferredQuickAgent,
   detectedAgentIds,
-  disabledTuiAgents
+  disabledTuiAgents,
+  offeredAgentIds,
+  selectedChoiceUnresolved = false
 }: {
+  offeredAgentIds?: ReadonlySet<TuiAgent> | null
+  selectedChoiceUnresolved?: boolean
   quickAgentOverride: TuiAgent | null | undefined
   preferredQuickAgent: TuiAgent | null
   detectedAgentIds: Iterable<TuiAgent> | null
@@ -69,7 +70,12 @@ export function resolveQuickWorkspaceAgentSelection({
       quickAgentOverride
     }
   }
-  if (isQuickWorkspaceAgentAvailable(quickAgentOverride, detectedAgentIds, disabledTuiAgents)) {
+  if (
+    isTuiAgentEnabled(quickAgentOverride, disabledTuiAgents) &&
+    (selectedChoiceUnresolved ||
+      offeredAgentIds?.has(quickAgentOverride) ||
+      isQuickWorkspaceAgentAvailable(quickAgentOverride, detectedAgentIds, disabledTuiAgents))
+  ) {
     return { quickAgent: quickAgentOverride, quickAgentOverride }
   }
   return { quickAgent: preferredQuickAgent, quickAgentOverride: preferredQuickAgent }

@@ -1,0 +1,39 @@
+import type { AppState } from '@/store'
+import { holdChatProgramFacts } from '@/lib/host-chat-program-acquisition'
+import { resolveChatProgramContext } from '@/lib/host-chat-program'
+import { workspaceKindForWorktreeId } from '../../../../shared/workspace-launch-kind'
+import { DASHBOARD_MAX_LAUNCH_WORKTREES } from '../../../../shared/dashboard-snapshot'
+import { collectActiveDashboardWorkspaces } from './dashboard-snapshot-workspaces'
+
+/** Publishers reconcile one hold per represented execution resource before building payloads. */
+export function createDashboardChatProgramHolds() {
+  const held = new Map<string, () => void>()
+  return {
+    reconcile(state: AppState): void {
+      const next = new Set<string>()
+      for (const { worktree } of collectActiveDashboardWorkspaces(state, false).slice(
+        0,
+        DASHBOARD_MAX_LAUNCH_WORKTREES
+      )) {
+        const workspace = { kind: workspaceKindForWorktreeId(worktree.id), worktreeId: worktree.id }
+        const key = resolveChatProgramContext(state, workspace).revision
+        next.add(key)
+        if (!held.has(key)) {
+          // A new hold can notify synchronously and re-enter this reconcile: reserve its key first.
+          held.set(key, () => {})
+          held.set(key, holdChatProgramFacts(workspace).release)
+        }
+      }
+      for (const [key, release] of held) {
+        if (!next.has(key)) {
+          release()
+          held.delete(key)
+        }
+      }
+    },
+    release(): void {
+      held.forEach((release) => release())
+      held.clear()
+    }
+  }
+}

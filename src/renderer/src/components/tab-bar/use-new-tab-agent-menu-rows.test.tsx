@@ -35,11 +35,19 @@ vi.mock('@/runtime/host-structured-agents', () => ({
   readHostStructuredAgentsForRuntime: mocks.catalog,
   hostStructuredAgentsReadFailed: mocks.failed,
   loadHostStructuredAgents: mocks.load,
+  relearnHostStructuredAgents: mocks.load,
   hostStructuredAgentsVersion: () => 0,
   subscribeHostStructuredAgents: () => () => {}
 }))
 vi.mock('@/lib/agent-launch-route-input', () => ({
   workspaceKindForWorktreeId: () => 'git-worktree',
+  resolveAgentLaunchHost: () => ({
+    executionHostId: 'local',
+    hostCapabilities:
+      readLocalRuntimeCapabilitiesOrUnknown() === null
+        ? null
+        : [CHAT, CLIENT, CATALOG, ...(mocks.publishing ? [AVAILABILITY] : [])]
+  }),
   buildAgentLaunchRouteInput: (_state: unknown, { agent }: { agent: string }) => ({
     agent,
     executionHostId: 'local',

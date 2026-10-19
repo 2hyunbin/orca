@@ -131,23 +131,34 @@ function hostStructuredAgentsInput(
   return agents ? { hostStructuredAgents: agents.map((row) => row.agent) } : {}
 }
 
+/** The execution owner is resolved before agent policy. */
+export function resolveAgentLaunchHost(
+  store: AgentLaunchRouteStore,
+  workspace: ProspectiveWorkspace
+) {
+  const owner = workspace.worktreeId
+    ? resolveStructuredAgentSessionOwner(store, workspace.worktreeId)
+    : undefined
+  const executionHostId = owner ?? resolveExecutionHostId(store, workspace)
+  return {
+    owner,
+    executionHostId,
+    hostCapabilities: owner === null ? null : resolveHostCapabilities(store, executionHostId)
+  }
+}
+
 /** The one place that gathers what a launch route decision needs; only the planner resolves on it. */
 export function buildAgentLaunchRouteInput(
   store: AgentLaunchRouteStore,
   args: AgentLaunchRouteArgs
 ): AgentLaunchRoutingInput {
   const { agent, workspace, tuiCustomization } = args
-  // The host a chat here would be created on; a workspace the catalog cannot pin to one host has
-  // no host to answer for it yet.
-  const owner = workspace.worktreeId
-    ? resolveStructuredAgentSessionOwner(store, workspace.worktreeId)
-    : undefined
-  const executionHostId = owner ?? resolveExecutionHostId(store, workspace)
+  const { executionHostId, hostCapabilities } = resolveAgentLaunchHost(store, workspace)
   return {
     agent,
     settings: store.settings,
     executionHostId,
-    hostCapabilities: owner === null ? null : resolveHostCapabilities(store, executionHostId),
+    hostCapabilities,
     ...(parseExecutionHostId(executionHostId)?.kind === 'runtime'
       ? { clientCapabilities: pairedHostClientCapabilities() }
       : {}),

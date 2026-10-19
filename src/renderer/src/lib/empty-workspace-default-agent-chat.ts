@@ -1,5 +1,6 @@
+import { pickTuiAgent } from '../../../shared/tui-agent-selection'
+import { acquireAgentLaunchChoices } from './host-chat-program-acquisition'
 import { isNativeChatEnabled } from '../../../shared/structured-native-chat-launch-route'
-import { withTimeout } from '../../../shared/promise-timeout-fallback'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
 import {
@@ -12,18 +13,10 @@ import {
   readDetectedAgentsForTarget
 } from '@/lib/agent-detection-target-inventory'
 import { workspaceKindForWorktreeId } from '@/lib/agent-launch-route-input'
-import {
-  acquireChatProgramFacts,
-  chosenAgentChatUnlearned,
-  pickChosenOrDetectedAgent,
-  resolveChatProgramHost
-} from '@/lib/host-chat-program'
+import { chosenAgentChatUnlearned, agentChoiceOpensAsChat } from '@/lib/host-chat-program'
 import { planAgentSessionLaunch } from '@/lib/agent-session-launch-plan'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
-
-// Why bounded: these facts only decide chat vs shell, so a slow host must not hold the workspace empty.
-const DEFAULT_CHAT_DETECTION_TIMEOUT_MS = 5_000
 
 /**
  * The host whose agent list picks the default chat; undefined when the workspace opens a shell
@@ -73,15 +66,12 @@ export async function loadEmptyWorkspaceDefaultChatDetection(worktreeId: string)
   if (!target) {
     return
   }
-  const host = resolveChatProgramHost(state, workspaceOf(worktreeId))
-  await withTimeout(
-    Promise.all([
-      ensureDetectedAgentsForTarget(state, target).catch(() => []),
-      acquireChatProgramFacts(state, host.executionHostId, host.hostCapabilities)
-    ]),
-    DEFAULT_CHAT_DETECTION_TIMEOUT_MS,
-    undefined
-  )
+  await acquireAgentLaunchChoices(
+    workspaceOf(worktreeId),
+    () => ensureDetectedAgentsForTarget(state, target),
+    undefined,
+    true
+  ).catch(() => undefined)
 }
 
 /**
@@ -99,12 +89,13 @@ export function openDefaultAgentChatInEmptyWorkspace(
     return null
   }
   // The default may open as a chat without its CLI; automatic picks stay on detected agents.
-  const agent = pickChosenOrDetectedAgent(state, {
-    chosen: state.settings?.defaultTuiAgent,
-    detected: readDetectedAgentsForTarget(state, target),
-    disabled: state.settings?.disabledTuiAgents,
-    workspace: workspaceOf(worktreeId)
-  })
+  const detected = readDetectedAgentsForTarget(state, target)
+  const agent = pickTuiAgent(
+    state.settings?.defaultTuiAgent,
+    detected ?? [],
+    state.settings?.disabledTuiAgents,
+    (chosen) => agentChoiceOpensAsChat(state, chosen, workspaceOf(worktreeId), detected)
+  )
   if (!agent) {
     return null
   }

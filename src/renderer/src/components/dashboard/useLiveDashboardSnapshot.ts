@@ -1,8 +1,10 @@
-import { useMemo, useRef } from 'react'
+import { watchSnapshotInputs } from './useDashboardPopoutBridge'
+import { createDashboardChatProgramHolds } from './dashboard-chat-program-acquisition'
+import { useEffect, useMemo, useRef } from 'react'
 import { useAppStore } from '@/store'
 import type { DashboardSnapshot } from '../../../../shared/dashboard-snapshot'
 import { buildDashboardSnapshot } from './build-dashboard-snapshot'
-import { useChatProgramFactsVersion } from '@/lib/host-chat-program'
+import { useChatProgramFactsVersion } from '@/lib/host-chat-program-acquisition'
 import { createWorktreeAgentRowsCache } from './worktree-agent-rows-cache'
 
 /**
@@ -64,6 +66,16 @@ export function useLiveDashboardSnapshot(): DashboardSnapshot {
   // ticks on the freshness boundary so the memo re-derives stale-decayed cards.
   const agentStatusEpoch = useAppStore((s) => s.agentStatusEpoch)
   // Launch options read host chat facts held outside the store.
+  useEffect(() => {
+    const holds = createDashboardChatProgramHolds()
+    const reconcile = (): void => holds.reconcile(useAppStore.getState())
+    const stopWatching = watchSnapshotInputs(reconcile)
+    reconcile()
+    return () => {
+      stopWatching()
+      holds.release()
+    }
+  }, [])
   const chatProgramFactsVersion = useChatProgramFactsVersion()
 
   return useMemo(
@@ -111,7 +123,11 @@ export function useLiveDashboardSnapshot(): DashboardSnapshot {
         Date.now(),
         // Why: unchanged worktrees reuse their row pipeline; card assembly still runs
         // fresh against the review/host/status slices this memo subscribes to.
-        { rowsCache: rowsCacheRef.current, rowsGeneration: agentStatusEpoch }
+        {
+          rowsCache: rowsCacheRef.current,
+          rowsGeneration: agentStatusEpoch,
+          launchRouteStore: useAppStore.getState()
+        }
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [

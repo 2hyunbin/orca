@@ -36,6 +36,7 @@ export function ChecksPanelActiveContent({
     activeWorktreeId,
     agentComposerState,
     aiActionDisabledReason,
+    fixChecksDisabledReason,
     canTargetPRComments,
     checks,
     checksError,
@@ -213,8 +214,8 @@ export function ChecksPanelActiveContent({
           resolveConflictsDisabledReason={aiActionDisabledReason}
           isFixingChecksWithAI={isFixingChecksWithAI}
           onFixChecksWithAI={() => void handleFixChecksWithAI()}
-          fixChecksDisabled={Boolean(aiActionDisabledReason)}
-          fixChecksDisabledReason={aiActionDisabledReason}
+          fixChecksDisabled={Boolean(fixChecksDisabledReason)}
+          fixChecksDisabledReason={fixChecksDisabledReason}
         />
       )}
       {activeConflictReview && (

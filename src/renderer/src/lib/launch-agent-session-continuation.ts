@@ -5,10 +5,10 @@ import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { useAppStore } from '@/store'
 import {
-  acquireChatProgramFacts,
-  agentsOfferedForLaunch,
-  resolveChatProgramHost
-} from '@/lib/host-chat-program'
+  acquireAgentLaunchChoices,
+  AgentLaunchChoiceCancelled
+} from './host-chat-program-acquisition'
+import { agentChoicePending } from './host-chat-program'
 import { workspaceKindForWorktreeId } from '../../../shared/workspace-launch-kind'
 import { isTuiAgentEnabled } from '../../../shared/tui-agent-selection'
 import type { LaunchSource } from '../../../shared/telemetry-events'
@@ -22,23 +22,28 @@ type LaunchAgentSessionContinuationArgs = {
   groupId?: string | null
   initialCwd?: string | null
   launchSource: LaunchSource
+  signal?: AbortSignal
 }
 
 /** The agents a continuation can start here: detected ones, then those that open as a chat on
  *  the workspace's host without their CLI. */
 export async function detectAgentSessionContinuationAgents(
-  worktreeId: string
-): Promise<TuiAgent[]> {
+  worktreeId: string,
+  signal?: AbortSignal
+) {
   const workspace = { kind: workspaceKindForWorktreeId(worktreeId), worktreeId }
-  const host = resolveChatProgramHost(useAppStore.getState(), workspace)
-  const [detected] = await Promise.all([
-    ensureDetectedAgentsForWorktree(useAppStore.getState(), worktreeId),
-    acquireChatProgramFacts(useAppStore.getState(), host.executionHostId, host.hostCapabilities)
-  ])
-  return agentsOfferedForLaunch(useAppStore.getState(), workspace, detected)
+  return acquireAgentLaunchChoices(
+    workspace,
+    () => ensureDetectedAgentsForWorktree(useAppStore.getState(), worktreeId),
+    signal
+  )
 }
 
-async function ensureAgentAvailable(agent: TuiAgent, worktreeId: string): Promise<boolean> {
+async function ensureAgentAvailable(
+  agent: TuiAgent,
+  worktreeId: string,
+  signal?: AbortSignal
+): Promise<boolean> {
   const state = useAppStore.getState()
   const label = getAgentLabel(agent)
   if (!isTuiAgentEnabled(agent, state.settings?.disabledTuiAgents)) {
@@ -54,12 +59,23 @@ async function ensureAgentAvailable(agent: TuiAgent, worktreeId: string): Promis
 
   let detectedAgents: TuiAgent[]
   try {
-    detectedAgents = await detectAgentSessionContinuationAgents(worktreeId)
+    detectedAgents = (await detectAgentSessionContinuationAgents(worktreeId, signal)).offered
   } catch (error) {
+    if (error instanceof AgentLaunchChoiceCancelled) {
+      return false
+    }
     console.error('Agent detection failed for session continuation', error)
     detectedAgents = []
   }
-  if (detectedAgents.includes(agent)) {
+  if (
+    detectedAgents.includes(agent) ||
+    agentChoicePending(
+      useAppStore.getState(),
+      agent,
+      { kind: workspaceKindForWorktreeId(worktreeId), worktreeId },
+      null
+    )
+  ) {
     return true
   }
 
@@ -79,9 +95,10 @@ export async function launchAgentSessionContinuation({
   worktreeId,
   groupId,
   initialCwd,
-  launchSource
+  launchSource,
+  signal
 }: LaunchAgentSessionContinuationArgs): Promise<boolean> {
-  if (!(await ensureAgentAvailable(agent, worktreeId))) {
+  if (!(await ensureAgentAvailable(agent, worktreeId, signal))) {
     return false
   }
 

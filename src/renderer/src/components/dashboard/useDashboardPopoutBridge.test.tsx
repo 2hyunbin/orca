@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/store', () => ({
   useAppStore: {
     getState: () => ({
+      ...makeSnapshotWatchState(),
       acknowledgeAgents: mocks.acknowledgeAgents,
       setActiveWorktree: mocks.setActiveWorktree
     }),

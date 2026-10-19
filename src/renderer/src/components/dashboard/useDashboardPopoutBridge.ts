@@ -1,3 +1,4 @@
+import { createDashboardChatProgramHolds } from './dashboard-chat-program-acquisition'
 import { useEffect } from 'react'
 import { useAppStore, type AppState } from '@/store'
 import { subscribeChatProgramFacts } from '@/lib/host-chat-program'
@@ -38,13 +39,16 @@ export function repoIconsUnchanged(
   return nextIds.every((id) => id in previous && next[id] === previous[id])
 }
 
-type DashboardSnapshotWatchState = DashboardSnapshotState & Pick<AppState, 'agentStatusEpoch'>
+type DashboardSnapshotWatchState = DashboardSnapshotState &
+  Pick<AppState, 'agentStatusEpoch'> &
+  Partial<Pick<AppState, 'activeWorktreeId'>>
 
 export function dashboardSnapshotInputsChanged(
   state: DashboardSnapshotWatchState,
   previousState: DashboardSnapshotWatchState
 ): boolean {
   return (
+    state.activeWorktreeId !== previousState.activeWorktreeId ||
     state.repos !== previousState.repos ||
     state.worktreesByRepo !== previousState.worktreesByRepo ||
     state.tabsByWorktree !== previousState.tabsByWorktree ||
@@ -93,7 +97,7 @@ export function dashboardSnapshotInputsChanged(
 /** Watches the store for snapshot-relevant writes. Lives outside the effect
  *  because react-doctor's effect-needs-cleanup false-positives on `subscribe`
  *  inside an effect body; the caller's cleanup does unsubscribe. */
-function watchSnapshotInputs(onChanged: () => void): () => void {
+export function watchSnapshotInputs(onChanged: () => void): () => void {
   const unsubscribeStore = useAppStore.subscribe((state, previousState) => {
     // Why: unrelated high-frequency store writes must not rebuild a cross-worktree snapshot.
     if (dashboardSnapshotInputsChanged(state, previousState)) {
@@ -163,6 +167,7 @@ export function useDashboardPopoutBridge(enabled: boolean): void {
     }
     let open = false
     let disposed = false
+    const chatOwners = createDashboardChatProgramHolds()
     let unsubscribeStore: (() => void) | null = null
     let trailingTimer: ReturnType<typeof setTimeout> | null = null
     let lastPublishAt = 0
@@ -177,7 +182,9 @@ export function useDashboardPopoutBridge(enabled: boolean): void {
     const publishNow = (withIcons: boolean): void => {
       lastPublishAt = Date.now()
       const state = useAppStore.getState()
+      chatOwners.reconcile(state)
       const snapshot = buildDashboardSnapshot(state, lastPublishAt, {
+        launchRouteStore: state,
         rowsCache,
         rowsGeneration: state.agentStatusEpoch
       })
@@ -227,6 +234,7 @@ export function useDashboardPopoutBridge(enabled: boolean): void {
         }
         publishNow(true)
       } else {
+        chatOwners.release()
         unsubscribeStore?.()
         unsubscribeStore = null
         if (trailingTimer) {
@@ -253,6 +261,7 @@ export function useDashboardPopoutBridge(enabled: boolean): void {
 
     return () => {
       disposed = true
+      chatOwners.release()
       offOpenChanged?.()
       offRequested?.()
       unsubscribeStore?.()

@@ -1,14 +1,11 @@
+import { acquireAgentLaunchChoices } from './host-chat-program-acquisition'
+import { useAppStore } from '@/store'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import type { AppState } from '@/store/types'
 import { isTuiAgent } from '../../../shared/tui-agent-config'
-import { isTuiAgentEnabled } from '../../../shared/tui-agent-selection'
+import { pickTuiAgent, isTuiAgentEnabled } from '../../../shared/tui-agent-selection'
 import { workspaceKindForWorktreeId } from '../../../shared/workspace-launch-kind'
-import {
-  acquireChatProgramFacts,
-  agentChoiceOpensAsChat,
-  pickChosenOrDetectedAgent,
-  resolveChatProgramHost
-} from '@/lib/host-chat-program'
+import { readAgentLaunchChoice } from '@/lib/host-chat-program'
 import { buildDirectWorkItemAgentStartupPlan } from '@/lib/launch-work-item-direct-agent'
 import type { AgentSessionLaunchPlan } from '@/lib/agent-session-launch-plan'
 import {
@@ -60,17 +57,21 @@ export async function resolveDirectWorkItemAgent(args: {
   latestStore: AppState
 }): Promise<{ agent: TuiAgent | null; unavailable: boolean }> {
   // Why: the new workspace's own host answers; a paired server's project must not probe this client.
-  const detectedAgents: string[] =
-    args.agentOverride === undefined &&
-    args.detectedAgentsPromise &&
-    args.launchConnectionId === args.repoConnectionId
-      ? await args.detectedAgentsPromise
-      : await ensureDetectedAgentsForNewWorktree(args.latestStore, args.worktreeId, args.repoHost)
-  const store = args.latestStore
-  const workspace = { kind: workspaceKindForWorktreeId(args.worktreeId), worktreeId: args.worktreeId }
-  const host = resolveChatProgramHost(store, workspace)
-  await acquireChatProgramFacts(store, host.executionHostId, host.hostCapabilities)
-  const detected = detectedAgents.filter(isTuiAgent)
+  const workspace = {
+    kind: workspaceKindForWorktreeId(args.worktreeId),
+    worktreeId: args.worktreeId
+  }
+  const choices = await acquireAgentLaunchChoices(workspace, async () => {
+    const ids =
+      args.agentOverride === undefined &&
+      args.detectedAgentsPromise &&
+      args.launchConnectionId === args.repoConnectionId
+        ? await args.detectedAgentsPromise
+        : await ensureDetectedAgentsForNewWorktree(args.latestStore, args.worktreeId, args.repoHost)
+    return ids.filter(isTuiAgent)
+  })
+  const store = useAppStore.getState()
+  const detected = [...(choices.detected ?? [])]
   // A chosen agent may open as a chat without its CLI; the automatic pick stays on detected ones.
   if (args.agentOverride !== undefined) {
     return {
@@ -78,16 +79,17 @@ export async function resolveDirectWorkItemAgent(args: {
       unavailable:
         !isTuiAgentEnabled(args.agentOverride, store.settings?.disabledTuiAgents) ||
         (!detected.includes(args.agentOverride) &&
-          !agentChoiceOpensAsChat(store, args.agentOverride, workspace, detected))
+          readAgentLaunchChoice(store, args.agentOverride, workspace, detected).chatEligibility ===
+            'no')
     }
   }
   return {
-    agent: pickChosenOrDetectedAgent(store, {
-      chosen: store.settings?.defaultTuiAgent,
+    agent: pickTuiAgent(
+      store.settings?.defaultTuiAgent,
       detected,
-      disabled: store.settings?.disabledTuiAgents,
-      workspace
-    }),
+      store.settings?.disabledTuiAgents,
+      (chosen) => readAgentLaunchChoice(store, chosen, workspace, detected).chatEligibility !== 'no'
+    ),
     unavailable: false
   }
 }

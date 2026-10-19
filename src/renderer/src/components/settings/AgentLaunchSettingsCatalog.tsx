@@ -1,3 +1,4 @@
+import { useChatProgramFacts } from '@/lib/host-chat-program-acquisition'
 import { useMemo } from 'react'
 import type {
   AgentLaunchSettings,
@@ -13,7 +14,7 @@ import {
 } from '../../../../shared/tui-agent-launch-defaults'
 import { isTuiAgentEnabled } from '../../../../shared/tui-agent-selection'
 import { getAgentCatalog } from '@/lib/agent-catalog'
-import { agentChoiceOpensAsChat, useChatProgramFactsVersion } from '@/lib/host-chat-program'
+import { agentChoiceOpensAsChat } from '@/lib/host-chat-program'
 import { useAppStore } from '@/store'
 import { useDetectedAgents, type AgentDetectionTarget } from '@/hooks/useDetectedAgents'
 import { AgentDefaultSetting } from './AgentDefaultSetting'
@@ -55,19 +56,16 @@ export function AgentLaunchSettingsCatalog({
     refresh
   } = useDetectedAgents(detectionTarget)
   const detectedIds = useMemo(() => (detected ? new Set(detected) : null), [detected])
-  useChatProgramFactsVersion()
+  const workspace =
+    detectionTarget.kind === 'runtime'
+      ? { kind: 'git-worktree' as const, runtimeEnvironmentId: detectionTarget.environmentId }
+      : { kind: 'floating' as const }
+  useChatProgramFacts(workspace, detectionTarget.kind !== 'ssh')
   const chosen = settings.defaultTuiAgent
   // The saved default reads as available where it opens as a chat without its CLI.
   const defaultOpensAsChat = useAppStore((state) =>
     chosen && chosen !== 'blank' && detectionTarget.kind !== 'ssh'
-      ? agentChoiceOpensAsChat(
-          state,
-          chosen,
-          detectionTarget.kind === 'runtime'
-            ? { kind: 'git-worktree', runtimeEnvironmentId: detectionTarget.environmentId }
-            : { kind: 'git-worktree' },
-          detected
-        )
+      ? agentChoiceOpensAsChat(state, chosen, workspace, detected)
       : false
   )
   const catalog = getAgentCatalog()

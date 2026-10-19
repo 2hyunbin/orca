@@ -45,14 +45,17 @@ export function buildNewTabAgentMenuRows(args: {
   const unavailable = new Map<TuiAgent, ChatUnavailableReason>()
   const chatAgents = filterEnabledTuiAgents(args.chatAgents, settings?.disabledTuiAgents)
   // An unchosen provider is on wherever its chat program is, whether or not its CLI is.
-  const providedHere = chatAgents.filter((agent) => chatProgramOffered(args.chatProgram(agent)))
+  const canOpen = (agent: TuiAgent): boolean =>
+    chatProgramOffered(args.chatProgram(agent)) ||
+    (args.chatProgram(agent) === 'unknown' && installed.includes(agent))
+  const providedHere = chatAgents.filter(canOpen)
   for (const agent of chatAgents) {
     if (!isNativeChatProviderDisplayedOn(settings, agent, providedHere)) {
       continue
     }
     const answer = args.hostChatAnswer(agent)
     const program = args.chatProgram(agent)
-    if (answer === 'yes' && chatProgramOffered(program)) {
+    if (answer === 'yes' && canOpen(agent)) {
       runnable.push(agent)
     } else {
       unavailable.set(

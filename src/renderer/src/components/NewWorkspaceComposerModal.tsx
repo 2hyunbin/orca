@@ -1,3 +1,4 @@
+import { agentChoicePending } from '@/lib/host-chat-program'
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '@/store'
 import { lazyWithRetry } from '@/lib/lazy-with-retry'
@@ -18,7 +19,7 @@ import {
   resolveQuickWorkspaceAgentSelection
 } from '@/lib/quick-workspace-agent-selection'
 import type { LinkedWorkItemSummary } from '@/lib/new-workspace'
-import { useAgentsOfferedForLaunch } from '@/lib/host-chat-program'
+import { useAgentsOfferedForLaunch } from '@/lib/host-chat-program-acquisition'
 import { shouldAllowComposerEnterSubmitTarget } from '@/lib/new-workspace-enter-guard'
 import { isScreenSubmitShortcut } from '@/lib/screen-submit-shortcut'
 import type { GitHubWorkItem } from '../../../shared/github/work-item-types'
@@ -183,7 +184,14 @@ function QuickTabBody({
       pref,
       cardProps.detectedAgentIds,
       settings?.disabledTuiAgents,
-      offeredAgentIds
+      offeredAgentIds,
+      (agent) =>
+        agentChoicePending(
+          useAppStore.getState(),
+          agent,
+          composerLaunchWorkspace(cardProps),
+          cardProps.detectedAgentIds ? [...cardProps.detectedAgentIds] : null
+        )
     )
   }, [
     cardProps.detectedAgentIds,
@@ -195,7 +203,17 @@ function QuickTabBody({
   const resolvedQuickAgentSelection = resolveQuickWorkspaceAgentSelection({
     quickAgentOverride,
     preferredQuickAgent,
-    detectedAgentIds: offeredAgentIds,
+    detectedAgentIds: cardProps.detectedAgentIds,
+    offeredAgentIds,
+    selectedChoiceUnresolved: Boolean(
+      quickAgentOverride &&
+      agentChoicePending(
+        useAppStore.getState(),
+        quickAgentOverride,
+        composerLaunchWorkspace(cardProps),
+        cardProps.detectedAgentIds ? [...cardProps.detectedAgentIds] : null
+      )
+    ),
     disabledTuiAgents: settings?.disabledTuiAgents
   })
   if (resolvedQuickAgentSelection.quickAgentOverride !== quickAgentOverride) {

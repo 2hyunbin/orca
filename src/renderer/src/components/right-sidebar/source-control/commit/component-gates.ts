@@ -12,13 +12,11 @@ export function shouldRenderCommitArea(
 export function pickDefaultSourceControlAgent(
   defaultAgent: TuiAgent | 'blank' | null | undefined,
   detectedAgents: TuiAgent[],
-  disabledAgents?: TuiAgent[],
-  chosenOpensAsChat?: (agent: TuiAgent) => boolean
+  disabledAgents?: TuiAgent[]
 ): TuiAgent | null {
   return pickSourceControlLaunchAgent({
     defaultAgent,
     detectedAgents,
-    disabledAgents,
-    ...(chosenOpensAsChat ? { chosenOpensAsChat } : {})
+    disabledAgents
   })
 }

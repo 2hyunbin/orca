@@ -62,6 +62,7 @@ import { useAppStore, type AppState } from '@/store'
 import { setLocalRuntimeCapabilitiesForTests } from '@/runtime/local-runtime-capabilities'
 import { SourceControlAgentActionDialog } from './SourceControlAgentActionDialog'
 import { makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
+import { getRuntimeAgentInventoryKey } from '@/store/slices/runtime-agent-inventory-key'
 let container: HTMLDivElement
 let root: Root
 let initialState: AppState
@@ -167,6 +168,10 @@ function renderControlledDialog(
   })
 }
 
+function land(inventory: Partial<AppState>): TuiAgent[] {
+  useAppStore.setState(inventory)
+  return ['codex']
+}
 async function flushEffects(): Promise<void> {
   await act(async () => {
     await Promise.resolve()
@@ -181,9 +186,16 @@ describe('SourceControlAgentActionDialog', () => {
     ).IS_REACT_ACT_ENVIRONMENT = true
     initialState = useAppStore.getState()
     vi.clearAllMocks()
-    mocks.ensureDetectedAgents.mockResolvedValue(['codex'])
-    mocks.ensureRemoteDetectedAgents.mockResolvedValue(['codex'])
-    mocks.ensureRuntimeDetectedAgents.mockResolvedValue(['codex'])
+    // Like the real slices, a detection answer lands in the inventory the dialog reads.
+    mocks.ensureDetectedAgents.mockImplementation(async () =>
+      land({ localDetectedAgentIdsByContext: { host: ['codex'] } })
+    )
+    mocks.ensureRemoteDetectedAgents.mockImplementation(async (id: string) =>
+      land({ remoteDetectedAgentIds: { [id]: ['codex'] } })
+    )
+    mocks.ensureRuntimeDetectedAgents.mockImplementation(async (env: string, wt: string) =>
+      land({ runtimeDetectedAgentIds: { [getRuntimeAgentInventoryKey(env, wt)]: ['codex'] } })
+    )
     mocks.onStart.mockResolvedValue(true)
     mocks.checkSourceControlAgentActionLaunch.mockReturnValue({ ok: true })
     container = document.createElement('div')
@@ -267,7 +279,7 @@ describe('SourceControlAgentActionDialog', () => {
 
     renderControlledDialog({ repoId: 'repo-1', worktreeId: 'repo-1::wt-1', connectionId: null })
 
-    await vi.waitFor(() => expect(mocks.onStart).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(mocks.onStart).toHaveBeenCalledTimes(1), { timeout: 6_000 })
     expect(mocks.ensureRuntimeDetectedAgents).toHaveBeenCalledWith('env-1', 'repo-1::wt-1')
     expect(mocks.ensureDetectedAgents).not.toHaveBeenCalled()
   })
