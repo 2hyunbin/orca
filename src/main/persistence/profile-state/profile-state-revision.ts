@@ -16,6 +16,9 @@ export function readProfileStateRevision(db: Database.Database): number {
   return revision
 }
 
+/** A row ahead of the profile revision can't say which side is wrong, so it never localizes damage. */
+export class ProfileStateRevisionAheadError extends ProfileStateDocumentCorruptionError {}
+
 /** Unchanged domains may lag the profile revision, but cannot lead it. */
 export function assertProfileStateDocumentRevision(
   revision: number,
@@ -23,7 +26,7 @@ export function assertProfileStateDocumentRevision(
   domain: string
 ): void {
   if (revision > profileRevision) {
-    throw new ProfileStateDocumentCorruptionError(
+    throw new ProfileStateRevisionAheadError(
       `Profile state document revision ${revision} exceeds profile revision ${profileRevision}`,
       domain
     )

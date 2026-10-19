@@ -23,10 +23,13 @@ import {
 import { recordDurableCrashBreadcrumb } from './crash-reporting/durable-crash-breadcrumb'
 import {
   chooseProfileStateCopy,
+  chooseProfileStateRepair,
   presentProfileStateStartupRecoveryDialog,
   readProfileStateCopySavedTimes
 } from './persistence/profile-state/profile-state-startup-recovery-dialog'
 import { profileStateDesktopRecoveryArgs } from './startup/profile-state-recovery-preflight'
+import { ProfileStateRecoveryRequiredError } from './persistence/profile-state/profile-state-recovery-required'
+import { profileHasPendingProjectMove } from './orca-profiles/profile-project-move-record'
 import { leaseAppImageGenerationForCurrentProcess } from './cli/appimage-generation-lease'
 
 function openMainWindow(options: { revealOnDidFinishLoad?: boolean } = {}): BrowserWindow {
@@ -162,6 +165,34 @@ if (preflightReady) {
                 args: profileStateDesktopRecoveryArgs(process.argv, {
                   userDataPath,
                   selector: { kind: choice }
+                })
+              })
+            }
+            app.exit(1)
+            return
+          }
+          const userDataPath = app.getPath('userData')
+          // A pending project move refuses every rollback, so never offer a repair it would refuse.
+          if (
+            error instanceof ProfileStateRecoveryRequiredError &&
+            error.repairableSections !== undefined &&
+            !profileHasPendingProjectMove(error.profileId, userDataPath)
+          ) {
+            const sections = error.repairableSections
+            if (
+              await chooseProfileStateRepair({
+                sections,
+                showMessageBox: (options) => dialog.showMessageBox(options)
+              })
+            ) {
+              app.relaunch({
+                args: profileStateDesktopRecoveryArgs(process.argv, {
+                  userDataPath,
+                  profileId: error.profileId,
+                  selector: {
+                    kind: 'repair',
+                    sections: sections.map(({ domain, backupId }) => ({ domain, backupId }))
+                  }
                 })
               })
             }
