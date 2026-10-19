@@ -25,8 +25,8 @@ export function assertOrcadMigrationSourceUnchanged(
     migrationId: cutover.migrationId,
     destinationEnvironmentId: cutover.destinationEnvironmentId,
     now: () => new Date(cutover.manifest.createdAt),
-    // Drafts are left out of the comparison, so shedding only keeps a large session under the cap.
-    shedDrafts: true
+    // Drafts are left out of the comparison, so neither their content nor their size may count.
+    omitDrafts: true
   })
   if (frozenSourceDigest(current) !== frozenSourceDigest(cutover.manifest)) {
     throw new Error('orcad_migration_source_changed')

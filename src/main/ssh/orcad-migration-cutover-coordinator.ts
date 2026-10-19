@@ -45,6 +45,7 @@ import type { SshTargetOrcadClaims } from './targets/ssh-target-orcad-claims'
 import {
   editorDraftsExpectedBlobs,
   isEditorDraftsUndeliverable,
+  orcadMigrationManifestMatchesDigest,
   transferJournaledEditorDrafts
 } from './orcad-migration-editor-drafts-cutover'
 
@@ -87,7 +88,7 @@ export async function stageOrcadMigrationDestination(
   context: OrcadMigrationCutoverContext,
   migrationId: string
 ): Promise<OrcadMigrationSourceCutover> {
-  let cutover = requireCutover(context.userDataPath, migrationId)
+  let cutover = await settleRolledBackOrcadMigrationJournal(context, migrationId)
   if (cutover.phase === 'destination-committed' || cutover.phase === 'source-retired') {
     return cutover
   }
@@ -113,6 +114,23 @@ export async function stageOrcadMigrationDestination(
     await transferJournaledEditorDrafts(context, cutover)
   }
   return cutover
+}
+
+/**
+ * A journal an older desktop rewrote is never resumed as it was signed: the user may have discarded
+ * a draft since. Its signed copy only lets the host be asked and its staged copy aborted; the live
+ * source is then re-exported, as after any other abort.
+ */
+export async function settleRolledBackOrcadMigrationJournal(
+  context: OrcadMigrationCutoverContext,
+  migrationId: string
+): Promise<OrcadMigrationSourceCutover> {
+  const journaled = requireCutover(context.userDataPath, migrationId)
+  if (isCommitted(journaled) || orcadMigrationManifestMatchesDigest(journaled.manifest)) {
+    return journaled
+  }
+  const signed = restoreSignedOrcadMigrationJournal(context.userDataPath, journaled)
+  return replaceUndeliverableDrafts(context, cutoverSource(context), signed)
 }
 
 export async function commitOrcadMigrationDestination(
@@ -170,7 +188,11 @@ export async function abortOrcadMigrationCutover(
   release: (cutover: OrcadMigrationSourceCutover) => Promise<void> = (cutover) =>
     cutoverSource(context).releaseFence(cutover)
 ): Promise<OrcadMigrationAbortResult> {
-  const cutover = requireCutover(context.userDataPath, migrationId)
+  // Asked by the signed copy: an abort needs the exact manifest the host may hold.
+  const cutover = restoreSignedOrcadMigrationJournal(
+    context.userDataPath,
+    requireCutover(context.userDataPath, migrationId)
+  )
   if (cutover.phase === 'destination-committed' || cutover.phase === 'source-retired') {
     return committedRefusal()
   }
@@ -222,8 +244,7 @@ function requireCutover(userDataPath: string, migrationId: string): OrcadMigrati
   if (!cutover) {
     throw new Error('orcad_migration_source_cutover_not_found')
   }
-  // Every stage, commit and abort asks the host by this manifest, so it must be the signed one.
-  return restoreSignedOrcadMigrationJournal(userDataPath, cutover)
+  return cutover
 }
 
 function committedRefusal(): OrcadMigrationAbortResult {

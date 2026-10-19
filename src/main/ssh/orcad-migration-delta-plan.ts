@@ -94,8 +94,8 @@ export function orcadSourceStoreWithout(
   const ownedNow = createOrcadMigrationManifest(store, target, {
     destinationEnvironmentId,
     onlyCatalog: owned,
-    // Only scopes the view, so a large session's drafts must not trip the manifest cap here.
-    shedDrafts: true
+    // Only scopes the view, so a large session's drafts must not trip a size cap here.
+    omitDrafts: true
   })
   const view = store.createOrcadMigrationDeltaView(ownedNow)
   return {
@@ -125,7 +125,12 @@ export function planOrcadDeltaMove(
   userDataPath: string,
   store: Store,
   target: SshTarget,
-  options: { migrationId?: string; now?: () => Date; shedDrafts?: boolean } = {}
+  options: {
+    migrationId?: string
+    now?: () => Date
+    shedDrafts?: boolean
+    omitDrafts?: boolean
+  } = {}
 ): OrcadDeltaMovePlan {
   const environmentId = target.orcadFence?.environmentId
   if (!environmentId || !target.orcadFence?.sourceChangedAt) {
@@ -149,7 +154,8 @@ export function planOrcadDeltaMove(
         migrationId: options.migrationId,
         now: options.now,
         destinationEnvironmentId: environmentId,
-        shedDrafts: options.shedDrafts
+        shedDrafts: options.shedDrafts,
+        omitDrafts: options.omitDrafts
       })
   const { manifest } = exported
   const current = collectOrcadMigrationSourceCatalog(store, target)

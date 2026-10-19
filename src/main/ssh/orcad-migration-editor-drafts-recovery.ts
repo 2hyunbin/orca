@@ -15,6 +15,7 @@ import {
   journalOrcadMigrationExport,
   orcadMigrationManifestMatchesDigest,
   readsEditorDrafts,
+  unaddressableRolledBackJournal,
   unverifiableEditorDraftsState
 } from './orcad-migration-editor-drafts-cutover'
 import { readOrcadMigrationSignedManifestSidecar } from './orcad-migration-editor-drafts-sidecar'
@@ -64,8 +65,10 @@ export async function replaceUndeliverableDrafts(
 
 /**
  * An older desktop rewriting the journal drops `editorDraftsBlob`, so its manifest no longer matches
- * the digest the host checks. The exact signed copy beside the drafts restores it; without that copy
- * the host can't be asked at all, so nothing is aborted and the move stays unverifiable.
+ * the digest the host checks. The exact signed copy beside the drafts restores it for asking and
+ * aborting. Without it the host can't be asked at all, and releasing the fence locally could leave a
+ * commit on the server beside a live source, so the way out is stopping that server, whose
+ * decommission removes the journal.
  */
 export function restoreSignedOrcadMigrationJournal(
   userDataPath: string,
@@ -80,7 +83,7 @@ export function restoreSignedOrcadMigrationJournal(
   }
   const signed = readOrcadMigrationSignedManifestSidecar(userDataPath, cutover)
   if (!signed) {
-    throw unverifiableEditorDraftsState(new Error('orcad_migration_signed_manifest_missing'))
+    throw unaddressableRolledBackJournal()
   }
   const restored = { ...cutover, manifest: signed }
   writeOrcadMigrationSourceCutover(userDataPath, restored)

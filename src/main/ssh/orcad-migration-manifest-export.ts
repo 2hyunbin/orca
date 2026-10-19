@@ -6,6 +6,7 @@
  * destination has verified and imported this exact manifest.
  */
 import { randomUUID } from 'node:crypto'
+import { translateMain } from '../i18n/main-i18n'
 import {
   MAX_ORCAD_MIGRATION_MANIFEST_BYTES,
   ORCAD_MIGRATION_MANIFEST_VERSION,
@@ -22,6 +23,7 @@ import { collectOrcadMigrationSourceCatalog } from '../persistence/migrating-orc
 import { computeOrcadMigrationManifestSha256 } from '../orcad/orcad-migration-manifest-digest'
 import {
   inlineOrcadMigrationEditorDraftPaths,
+  omitOrcadMigrationEditorDrafts,
   shedOrcadMigrationEditorDrafts,
   type OrcadMigrationEditorDraftsBody
 } from './orcad-migration-editor-drafts-shed'
@@ -55,6 +57,8 @@ export type OrcadMigrationManifestExportOptions = {
    * destination that advertises that kind: an older one would commit the session without them.
    */
   shedDrafts?: boolean
+  /** Drops unsaved buffers outright: for an export only compared or used to scope, never sent. */
+  omitDrafts?: boolean
 }
 
 export type OrcadMigrationExport = {
@@ -104,9 +108,11 @@ export function exportOrcadMigration(
     rewrite
   )
   // After the rewrite: the blob names entries by the paths the destination holds.
-  const shed = options.shedDrafts
-    ? shedOrcadMigrationEditorDrafts(rewritten)
-    : { payload: rewritten, body: null }
+  const shed = options.omitDrafts
+    ? { payload: omitOrcadMigrationEditorDrafts(rewritten), body: null }
+    : options.shedDrafts
+      ? shedOrcadMigrationEditorDrafts(rewritten)
+      : { payload: rewritten, body: null }
   const payload = shed.payload
   const unsigned = {
     version: ORCAD_MIGRATION_MANIFEST_VERSION,
@@ -168,9 +174,15 @@ export function describeOversizedOrcadMigrationPayload(
   // Drafts ride inline only to a server too old for the drafts blob; say which ones to resolve.
   const draftsLine =
     drafts.paths.length > 0
-      ? ` Unsaved changes (${formatKib(drafts.bytes)}) stay on this computer until you save or ` +
-        `discard them: ${drafts.paths.slice(0, 5).join(', ')}` +
-        `${drafts.paths.length > 5 ? ` and ${drafts.paths.length - 5} more` : ''}.`
+      ? ` ${translateMain(
+          'managedServerMigration.inlineDraftsTooLarge',
+          'Unsaved changes ({{size}}) stay on this computer until you save or discard them: {{files}}{{more}}.',
+          {
+            size: formatKib(drafts.bytes),
+            files: drafts.paths.slice(0, 5).join(', '),
+            more: drafts.paths.length > 5 ? ` (+${drafts.paths.length - 5})` : ''
+          }
+        )}`
       : ''
   return (
     `This SSH host's saved state is too large to move to its Orca server (limit ` +

@@ -4,6 +4,7 @@
  * the blob names entries by the destination paths the manifest carries.
  */
 import { createHash } from 'node:crypto'
+import { translateMain } from '../i18n/main-i18n'
 import {
   ORCAD_MIGRATION_BLOB_KIND_CONTRACTS,
   type OrcadMigrationBlobDescriptor
@@ -77,10 +78,14 @@ export function shedOrcadMigrationEditorDrafts(payload: OrcadMigrationCatalogPay
   const bytes = Buffer.from(JSON.stringify(document), 'utf8')
   if (bytes.byteLength > MAX_ORCAD_MIGRATION_EDITOR_DRAFTS_BYTES) {
     throw new Error(
-      `orcad_migration_editor_drafts_too_large:Unsaved changes on this host are larger than ` +
-        `${MAX_ORCAD_MIGRATION_EDITOR_DRAFTS_BYTES / (1024 * 1024)} MB, so they stay on this ` +
-        `computer. Save or discard some of them, then reconnect: ` +
-        `${drafts.map((draft) => draft.filePath).join(', ')}`
+      `orcad_migration_editor_drafts_too_large:${translateMain(
+        'managedServerMigration.draftsTooLarge',
+        'Unsaved changes on this host are larger than {{limit}} MB, so they stay on this computer. Save or discard some of them, then reconnect: {{files}}',
+        {
+          limit: MAX_ORCAD_MIGRATION_EDITOR_DRAFTS_BYTES / (1024 * 1024),
+          files: drafts.map((draft) => draft.filePath).join(', ')
+        }
+      )}`
     )
   }
   const declaration: OrcadMigrationEditorDraftsDeclaration = {
@@ -93,6 +98,24 @@ export function shedOrcadMigrationEditorDrafts(payload: OrcadMigrationCatalogPay
     payload: shed,
     body: { descriptor: orcadMigrationEditorDraftsDescriptor(declaration), bytes }
   }
+}
+
+/** For comparing or scoping only: drafts never count there, so their size must not either. */
+export function omitOrcadMigrationEditorDrafts(
+  payload: OrcadMigrationCatalogPayload
+): OrcadMigrationCatalogPayload {
+  if (!payload.dormantState?.workspaceSession?.openFilesByWorktree) {
+    return payload
+  }
+  const omitted = structuredClone(payload)
+  for (const files of Object.values(
+    omitted.dormantState?.workspaceSession?.openFilesByWorktree ?? {}
+  )) {
+    for (const file of files) {
+      delete file.dirtyDraftContent
+    }
+  }
+  return omitted
 }
 
 /** Every unsaved buffer the payload still carries inline, by path: what an oversize names. */

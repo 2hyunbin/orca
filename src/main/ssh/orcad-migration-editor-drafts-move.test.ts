@@ -30,7 +30,7 @@ import {
   sidecarFiles
 } from './orcad-migration-editor-drafts-fixture'
 import { installOrcadMigrationScrollbackRetention } from './orcad-migration-scrollback-retention-wiring'
-import { runOrcadDeltaMove } from './orcad-migration-delta-move'
+import { previewOrcadDeltaMove, runOrcadDeltaMove } from './orcad-migration-delta-move'
 import { reconcileManagedOrcadSshTargets } from './orcad-retained-source'
 import { runTargetLifecycle } from '../ipc/ssh/ssh-target-lifecycle-queue'
 
@@ -339,6 +339,80 @@ describe('a delta move resumed after an unconfirmed commit', () => {
     await expect(move()).resolves.toMatchObject({ outcome: 'moved' })
     const files = server.getWorkspaceSession().openFilesByWorktree?.['repo-2::/srv/tool'] ?? []
     expect(files.map((file) => file.dirtyDraftContent)).toEqual(['delta draft'])
+  })
+})
+
+describe('a delta move preview', () => {
+  async function changedWithBigDraft(): Promise<void> {
+    await expect(convert()).resolves.toMatchObject({ outcome: 'converted' })
+    desktop.addRepo({
+      id: 'repo-2',
+      path: '/srv/tool',
+      displayName: 'Tool',
+      badgeColor: '#737373',
+      addedAt: 2,
+      kind: 'git',
+      connectionId: DRAFTS_TARGET.id
+    })
+    // Past the 768 KiB manifest: only the drafts blob carries it.
+    saveDrafts(desktop, { 'tool.ts': 'x'.repeat(900 * 1024) }, 'repo-2::/srv/tool')
+    reconcileManagedOrcadSshTargets(userDataPath, desktop, () => new Date('2026-10-19T01:00:00Z'))
+  }
+  const preview = (destination: OrcadMigrationDestinationCatalog, reachable = true) =>
+    previewOrcadDeltaMove({
+      userDataPath,
+      store: desktop,
+      target: desktop.getSshTarget(DRAFTS_TARGET.id)!,
+      destination,
+      ensureTunnel: async () => {
+        if (!reachable) {
+          throw new Error('tunnel down')
+        }
+      }
+    })
+
+  it('agrees with the move: fine where drafts shed, refused by size where they cannot', async () => {
+    await changedWithBigDraft()
+    await expect(preview(serverDestination())).resolves.toMatchObject({
+      added: [expect.objectContaining({ id: 'repo-2' })]
+    })
+    const old = {
+      ...serverDestination(),
+      readCapabilities: async () => [ORCAD_MIGRATION_CATALOG_RUNTIME_CAPABILITY]
+    }
+    await expect(preview(old)).rejects.toThrow('orcad_migration_manifest_too_large')
+    // Unreachable: the rows alone, since the move would fail on the same contact.
+    await expect(preview(old, false)).resolves.toMatchObject({
+      added: [expect.objectContaining({ id: 'repo-2' })]
+    })
+  })
+
+  it('lets the move refuse "nothing new" without reaching the server', async () => {
+    await expect(convert()).resolves.toMatchObject({ outcome: 'converted' })
+    desktop.updateSshTarget(DRAFTS_TARGET.id, {
+      orcadFence: {
+        environmentId: listEnvironments(userDataPath)[0]!.id,
+        sourceChangedAt: '2026-10-19T01:00:00.000Z'
+      }
+    })
+    const ensureTunnel = vi.fn(async () => {
+      throw new Error('tunnel down')
+    })
+    await expect(
+      runOrcadDeltaMove({
+        userDataPath,
+        store: desktop,
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture's target store wraps this desktop store.
+        claims: (mocks.state.targetStore as SshConnectionStore).getOrcadRuntimeClaims(),
+        target: desktop.getSshTarget(DRAFTS_TARGET.id)!,
+        environment: listEnvironments(userDataPath)[0]!,
+        destination: serverDestination(),
+        censusHost: async () => ({ verdict: 'exited', count: 0 }),
+        ensureTunnel,
+        runTargetLifecycle
+      })
+    ).resolves.toMatchObject({ code: 'orcad_delta_nothing_new' })
+    expect(ensureTunnel).not.toHaveBeenCalled()
   })
 })
 

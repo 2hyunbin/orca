@@ -72,6 +72,15 @@ export function unverifiableEditorDraftsState(cause: unknown): Error {
   )
 }
 
+export function unaddressableRolledBackJournal(): Error {
+  return new Error(
+    `${STATE_UNVERIFIABLE}:${translateMain(
+      'managedServerMigration.rolledBackJournalUnaddressable',
+      "An older version of Orca changed this host's move record, so Orca can't ask the managed server about it. Your unsaved changes stay on this computer. To start over, stop this host's managed server in Settings, then reconnect."
+    )} (orcad_migration_signed_manifest_missing)`
+  )
+}
+
 /** Drafts first, then the journal that names them: a journaled manifest always has its bytes. */
 export function journalOrcadMigrationExport(
   userDataPath: string,

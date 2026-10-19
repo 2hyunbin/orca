@@ -23,6 +23,7 @@ import { requireManagedOrcadInfrastructure } from './orcad-managed-runtime-conte
 import { ensureOrcadManagedTunnel } from './orcad-managed-tunnel'
 import {
   commitOrcadMigrationDestination,
+  settleRolledBackOrcadMigrationJournal,
   type OrcadMigrationDestinationCatalog
 } from '../../ssh/orcad-migration-cutover-coordinator'
 import {
@@ -39,7 +40,6 @@ import {
 } from '../../ssh/targets/ssh-target-orcad-preflight'
 import { ORCAD_MIGRATION_LEAVE_BEHIND_TERMINALS_REASON } from '../../ssh/orcad-migration-source-fence'
 import { retainOrcadMigrationSource } from '../../ssh/orcad-migration-source-retention'
-import { restoreSignedOrcadMigrationJournal } from '../../ssh/orcad-migration-editor-drafts-recovery'
 import {
   linkedOrcadMigrationCutoverPort,
   linkedOrcadMigrationProjects,
@@ -107,10 +107,23 @@ export async function convertSshTargetToManagedOrcad(
     'linkedRepositoryIds' | 'linkedFolderWorkspaceIds'
   > = {}
   const committed = await runTargetLifecycle(fenced.sshTargetId, async () => {
-    // Before the relink's first state query: that query needs the exact signed manifest too.
-    const journaled = restoreSignedOrcadMigrationJournal(
-      userDataPath,
-      requireJournaledCutover(userDataPath, fenced)
+    const fencedCutover = requireJournaledCutover(userDataPath, fenced)
+    // Before the relink's first state query, which needs a manifest whose digest holds.
+    const journaled = await settleRolledBackOrcadMigrationJournal(
+      {
+        userDataPath,
+        store,
+        claims,
+        source: linkedOrcadMigrationCutoverPort({
+          userDataPath,
+          store,
+          claims,
+          cutover: fencedCutover
+        }),
+        destination,
+        now: args.now
+      },
+      fencedCutover.migrationId
     )
     const cutover = serverRepositoriesFor
       ? await linkServerHeldRepositories({

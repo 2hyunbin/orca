@@ -19498,6 +19498,9 @@
     }
   },
   "managedServerMigration": {
+    "draftsTooLarge": "Unsaved changes on this host are larger than {{limit}} MB, so they stay on this computer. Save or discard some of them, then reconnect: {{files}}",
+    "inlineDraftsTooLarge": "Unsaved changes ({{size}}) stay on this computer until you save or discard them: {{files}}{{more}}.",
+    "rolledBackJournalUnaddressable": "An older version of Orca changed this host's move record, so Orca can't ask the managed server about it. Your unsaved changes stay on this computer. To start over, stop this host's managed server in Settings, then reconnect.",
     "draftsStateUnverifiable": "Orca can't confirm this host's migration state, so your unsaved changes stay on this computer. Reconnect to retry."
   },
   "runtimeRpc": {

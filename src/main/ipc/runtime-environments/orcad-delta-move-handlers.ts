@@ -7,8 +7,11 @@ import type {
 import { listEnvironments } from '../../../shared/runtime-environment-store'
 import { requireManagedOrcadInfrastructure } from '../../managed-server/lifecycle/orcad-managed-runtime-context'
 import { ensureOrcadManagedTunnel } from '../../managed-server/lifecycle/orcad-managed-tunnel'
-import { keepOrcadServerVersion, runOrcadDeltaMove } from '../../ssh/orcad-migration-delta-move'
-import { planOrcadDeltaMove } from '../../ssh/orcad-migration-delta-plan'
+import {
+  keepOrcadServerVersion,
+  previewOrcadDeltaMove,
+  runOrcadDeltaMove
+} from '../../ssh/orcad-migration-delta-move'
 import { censusHostRelayTerminalsFor } from '../../ssh/legacy-relay/ssh-host-relay-census-for-target'
 import { orcadMigrationDestinationFor } from '../../managed-server/lifecycle/orcad-runtime-conversion-wiring'
 import { requiredString } from './orcad-runtime-lifecycle-handlers'
@@ -18,12 +21,22 @@ import { runTargetLifecycle } from '../ssh/ssh-target-lifecycle-queue'
 export function registerOrcadDeltaMoveHandlers(getUserDataPath: () => string): void {
   ipcMain.handle(
     'runtimeEnvironments:previewOrcadDeltaMove',
-    (_event, args: { sshTargetId: string }): OrcadDeltaMovePreview => {
-      const { store, target } = requireChangedHost(args)
-      // Rows only: the move itself asks the server whether drafts shed, so size can't block here.
-      const plan = planOrcadDeltaMove(getUserDataPath(), store, target, { shedDrafts: true })
-      const { sshTargetId, environmentId, added, notReflected, blockers } = plan
-      return { sshTargetId, environmentId, added, notReflected, blockers }
+    async (_event, args: { sshTargetId: string }): Promise<OrcadDeltaMovePreview> => {
+      const userDataPath = getUserDataPath()
+      const { store, target, environmentId } = requireChangedHost(args)
+      const environment = listEnvironments(userDataPath).find((entry) => entry.id === environmentId)
+      if (!environment) {
+        throw new Error('The managed Orca server for this host is no longer registered.')
+      }
+      return previewOrcadDeltaMove({
+        userDataPath,
+        store,
+        target,
+        destination: orcadMigrationDestinationFor(environment),
+        ensureTunnel: async () => {
+          await ensureOrcadManagedTunnel(userDataPath, environment.id)
+        }
+      })
     }
   )
   ipcMain.handle(

@@ -11,7 +11,10 @@ import {
   ORCAD_MIGRATION_SOURCE_CUTOVER_VERSION,
   type OrcadMigrationSourceCutover
 } from '../../shared/orcad-migration/orcad-migration-source-cutover'
-import type { OrcadDeltaMoveResult } from '../../shared/orcad-managed-runtime'
+import type {
+  OrcadDeltaMovePreview,
+  OrcadDeltaMoveResult
+} from '../../shared/orcad-managed-runtime'
 import { recordManagedOrcadMigration } from '../../shared/runtime-environment-managed-orcad-store'
 import type { KnownRuntimeEnvironment } from '../../shared/runtime-environments'
 import type { SshTarget } from '../../shared/ssh-types'
@@ -69,19 +72,17 @@ export type OrcadDeltaMoveArgs = {
 export async function runOrcadDeltaMove(args: OrcadDeltaMoveArgs): Promise<OrcadDeltaMoveResult> {
   const { userDataPath, store, target } = args
   const now = args.now ?? (() => new Date())
-  // A move to a running server sheds drafts only when that server takes the drafts blob.
-  await args.ensureTunnel()
-  const shedDrafts = await readsEditorDrafts(args.destination)
-  const plan = planOrcadDeltaMove(userDataPath, store, target, { now, shedDrafts })
+  // Offline first: refusals answer without the server; drafts are re-planned once it is asked.
+  const offline = planOrcadDeltaMove(userDataPath, store, target, { now, omitDrafts: true })
   // Taken with the manifest, before any await: the baseline must describe what the server receives.
   const planned = currentOrcadSourceFingerprint(store, target)
-  if (!plan.resumes && plan.added.length === 0) {
+  if (!offline.resumes && offline.added.length === 0) {
     return refuse('orcad_delta_nothing_new', 'An older build added nothing new to move.')
   }
-  if (plan.blockers.length > 0) {
+  if (offline.blockers.length > 0) {
     return {
-      ...refuse('orcad_migration_preflight_blocked', orcadMigrationRefusalReason(plan.blockers)),
-      blockers: plan.blockers
+      ...refuse('orcad_migration_preflight_blocked', orcadMigrationRefusalReason(offline.blockers)),
+      blockers: offline.blockers
     }
   }
   const terminals = await assessOrcadMigrationTerminals(store, target.id, args.censusHost)
@@ -94,20 +95,62 @@ export async function runOrcadDeltaMove(args: OrcadDeltaMoveArgs): Promise<Orcad
     // Why re-checked: another move of this host may have journaled or finished while this waited.
     const changedAt = store.getSshTarget(target.id)?.orcadFence?.sourceChangedAt
     const head = findOrcadMigrationSourceCutoverForTarget(userDataPath, target.id)
-    if (!changedAt || head?.migrationId !== (plan.resumes ?? plan.head).migrationId) {
+    if (!changedAt || head?.migrationId !== (offline.resumes ?? offline.head).migrationId) {
       return refuse('orcad_delta_superseded', 'Another move of this host ran first.')
     }
+    // A new manifest sheds drafts only when the running server takes the drafts blob.
+    const shedDrafts = offline.resumes ? false : await serverTakesDrafts(args)
     // The source stays writable until the fence below: a draft typed while the terminals were
     // checked is newer than the manifest, so it must not become the baseline the server is held to.
-    if (!plan.resumes && planned !== currentOrcadSourceFingerprint(store, target)) {
+    if (!offline.resumes && planned !== currentOrcadSourceFingerprint(store, target)) {
       return refuse(
         'orcad_delta_source_changed',
         'This host changed while the move was starting. Try the move again.'
       )
     }
+    // No await from the check above to the journal: the manifest is the source just compared.
+    const plan = offline.resumes
+      ? offline
+      : planOrcadDeltaMove(userDataPath, store, target, { now, shedDrafts })
     const cutover = plan.resumes ?? journalDelta(args, plan, planned, settled, now)
     return commitDelta(args, plan, cutover, changedAt, now)
   })
+}
+
+/**
+ * What the move would add, planned as the move plans it: with the server's answer on drafts, so a
+ * size the move would refuse is refused here too. Without the server, the rows alone.
+ */
+export async function previewOrcadDeltaMove(
+  args: Pick<
+    OrcadDeltaMoveArgs,
+    'userDataPath' | 'store' | 'target' | 'destination' | 'ensureTunnel'
+  >
+): Promise<OrcadDeltaMovePreview> {
+  const offline = planOrcadDeltaMove(args.userDataPath, args.store, args.target, {
+    omitDrafts: true
+  })
+  let plan = offline
+  if (!offline.resumes && offline.added.length > 0 && offline.blockers.length === 0) {
+    let shedDrafts: boolean | null = null
+    try {
+      shedDrafts = await serverTakesDrafts(args)
+    } catch {
+      // Unreachable: the move fails on the same contact, so the rows are all that can be shown.
+    }
+    if (shedDrafts !== null) {
+      plan = planOrcadDeltaMove(args.userDataPath, args.store, args.target, { shedDrafts })
+    }
+  }
+  const { sshTargetId, environmentId, added, notReflected, blockers } = plan
+  return { sshTargetId, environmentId, added, notReflected, blockers }
+}
+
+async function serverTakesDrafts(
+  args: Pick<OrcadDeltaMoveArgs, 'destination' | 'ensureTunnel'>
+): Promise<boolean> {
+  await args.ensureTunnel()
+  return readsEditorDrafts(args.destination)
 }
 
 type SettledTerminals = Extract<OrcadMigrationTerminalVerdict, { verdict: 'exited' | 'bridged' }>

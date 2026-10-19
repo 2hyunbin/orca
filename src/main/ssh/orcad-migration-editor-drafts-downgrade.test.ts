@@ -1,7 +1,8 @@
 import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { parseOrcadMigrationEditorDraftsBytes } from '../../shared/orcad-migration/orcad-migration-editor-drafts'
+import { ensureMainI18n } from '../i18n/main-i18n'
 import { closeTestStores } from '../persistence-test-harness'
 import type { Store } from '../persistence/loading-store/store'
 import {
@@ -29,6 +30,10 @@ import { fenceOrcadMigrationSource } from './orcad-migration-source-fence'
 import { SshTargetOrcadClaims } from './targets/ssh-target-orcad-claims'
 
 const directories: string[] = []
+// The copy interpolates file names, as it does once the app has started.
+beforeAll(async () => {
+  await ensureMainI18n()
+})
 afterEach(async () => {
   await closeTestStores()
   for (const directory of directories.splice(0)) {
@@ -224,19 +229,29 @@ describe('a journal an older desktop rewrote', () => {
     writeFileSync(path, JSON.stringify(record))
   }
 
-  it('is restored from its signed copy and resumes the manifest the host holds', async () => {
-    const h = await fenced({ 'a.ts': 'rolled back' })
+  it('never brings back a draft discarded while the older desktop ran', async () => {
+    const h = await fenced({ 'a.ts': 'discarded later', 'b.ts': 'kept' })
     const signed = h.journal().manifest
     await stageOrcadMigrationDestination(h.context, h.migrationId)
+    // Downgrade: the older desktop rewrites the journal, and the user discards a.ts's draft.
     rollBack(h)
-    expect(h.journal().manifest.payload.dormantState?.editorDraftsBlob).toBeUndefined()
-
+    saveDrafts(h.store, { 'a.ts': undefined, 'b.ts': 'kept' })
+    // Upgrade again.
     await expect(commitOrcadMigrationDestination(h.context, h.migrationId)).resolves.toMatchObject({
       phase: 'destination-committed'
     })
-    expect(h.destination.abort).not.toHaveBeenCalled()
-    expect(h.journal().manifest).toEqual(signed)
-    expect(h.destination.commit.mock.calls.at(-1)?.[0]).toEqual(signed)
+    // The host's staged copy was asked and aborted by the signed manifest, then replaced live.
+    expect(h.destination.abort.mock.calls[0]?.[0]).toEqual(signed)
+    const committed = h.destination.commit.mock.calls.at(-1)?.[0]
+    expect(committed?.manifestSha256).not.toBe(signed.manifestSha256)
+    expect(
+      draftsOf(
+        parseOrcadMigrationEditorDraftsBytes(
+          h.destination.blobBytes.get(h.migrationId)!,
+          committed!.payload.dormantState!.editorDraftsBlob!
+        )
+      )
+    ).toEqual({ 'b.ts': 'kept' })
   })
 
   it('is restored before a conversion relinks projects, whose first query needs the digest', async () => {
@@ -268,9 +283,34 @@ describe('a journal an older desktop rewrote', () => {
     rmSync(join(h.userDataPath, 'orcad-migration-editor-drafts'), { recursive: true })
 
     await expect(commitOrcadMigrationDestination(h.context, h.migrationId)).rejects.toThrow(
-      'orcad_migration_editor_drafts_state_unverifiable'
+      /orcad_migration_editor_drafts_state_unverifiable:.*stop this host's managed server in Settings/
+    )
+    await expect(abortOrcadMigrationCutover(h.context, h.migrationId)).rejects.toThrow(
+      'orcad_migration_signed_manifest_missing'
     )
     expect(h.destination.abort).not.toHaveBeenCalled()
     expect(h.journal().phase).toBe('destination-staged')
+  })
+})
+
+describe('checks that only compare or scope the source', () => {
+  it('ignore drafts past every size cap, added after the journal was written', async () => {
+    const h = await fenced({ 'a.ts': 'small' })
+    // Larger than the 64 MiB drafts blob: shedding would refuse it, comparing must not.
+    saveDrafts(h.store, { 'a.ts': 'small', 'huge.ts': 'x'.repeat(65 * 1024 * 1024) })
+    const { assertOrcadMigrationSourceUnchanged } =
+      await import('./orcad-migration-source-assertions')
+    expect(() =>
+      assertOrcadMigrationSourceUnchanged(
+        { userDataPath: h.userDataPath, store: h.store },
+        h.journal()
+      )
+    ).not.toThrow()
+    const { createOrcadMigrationManifest } = await import('./orcad-migration-manifest-export')
+    expect(() =>
+      createOrcadMigrationManifest(h.store, h.store.getSshTarget(DRAFTS_TARGET.id)!, {
+        shedDrafts: true
+      })
+    ).toThrow('orcad_migration_editor_drafts_too_large')
   })
 })
