@@ -87,7 +87,7 @@ describe('a terminal the host fails to create', () => {
     resetTerminalCreateEnvironment()
   })
 
-  it('tells the user why the host refused, since no tab or pane will ever show it', async () => {
+  it('passes on the host’s reason, since no tab or pane will ever show it', async () => {
     stubRuntimeEnvironmentBridge({
       call: vi.fn().mockResolvedValue({
         id: 'create',
@@ -102,12 +102,12 @@ describe('a terminal the host fails to create', () => {
     ).resolves.toMatchObject({ status: 'failed' })
 
     expect(mocks.toastError).toHaveBeenCalledExactlyOnceWith(
-      'Couldn’t open a new terminal on the host.',
+      'Orca couldn’t confirm that the new terminal opened on the host.',
       { description: expect.stringContaining(HOST_REFUSAL) }
     )
   })
 
-  it('never calls a lost reply a refusal, since the host may still have made the terminal', async () => {
+  it('says unconfirmed, never failed, when the reply was lost', async () => {
     stubRuntimeEnvironmentBridge({
       call: vi.fn().mockResolvedValue({
         id: 'create',
@@ -120,12 +120,12 @@ describe('a terminal the host fails to create', () => {
     await createWebRuntimeSessionTerminal({ worktreeId: WORKTREE_ID, activate: true })
 
     expect(mocks.toastError).toHaveBeenCalledExactlyOnceWith(
-      'Orca lost contact with the host before it confirmed the new terminal.',
-      { description: expect.stringContaining('may still appear') }
+      'Orca couldn’t confirm that the new terminal opened on the host.',
+      { description: expect.stringContaining('Timed out') }
     )
   })
 
-  it('treats a browser client request timeout as unconfirmed, not refused', async () => {
+  it('says the same for a browser client request timeout', async () => {
     stubRuntimeEnvironmentBridge({
       call: vi.fn().mockRejectedValue(new Error('Request timed out: session.tabs.createTerminal'))
     })
@@ -134,8 +134,8 @@ describe('a terminal the host fails to create', () => {
     await createWebRuntimeSessionTerminal({ worktreeId: WORKTREE_ID, activate: true })
 
     expect(mocks.toastError).toHaveBeenCalledExactlyOnceWith(
-      'Orca lost contact with the host before it confirmed the new terminal.',
-      expect.anything()
+      'Orca couldn’t confirm that the new terminal opened on the host.',
+      { description: expect.stringContaining('Request timed out') }
     )
   })
 

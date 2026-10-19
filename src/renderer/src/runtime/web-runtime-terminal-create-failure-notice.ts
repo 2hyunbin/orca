@@ -3,32 +3,15 @@ import { translate } from '@/i18n/i18n'
 
 /**
  * The user asked for a terminal and the host never mirrored one, so no pane exists to show why.
- * No retry button: a reply lost in transit may still have created it.
+ * "Couldn't confirm" stays true when the reply was lost and the terminal appears later; the reason
+ * carries the host's refusal or the transport failure as reported. No retry: it could duplicate.
  */
-export function notifyWebRuntimeTerminalCreateFailure(
-  kind: 'refused' | 'unconfirmed',
-  message: string
-): void {
-  if (kind === 'unconfirmed') {
-    toast.error(
-      translate(
-        'auto.runtime.webRuntimeSession.terminalCreateUnconfirmed',
-        'Orca lost contact with the host before it confirmed the new terminal.'
-      ),
-      {
-        description: translate(
-          'auto.runtime.webRuntimeSession.terminalCreateUnconfirmedHint',
-          'It may still appear when the host answers again. If it doesn’t, open a new terminal.'
-        )
-      }
-    )
-    return
-  }
+export function notifyWebRuntimeTerminalCreateFailure(reason: string): void {
   toast.error(
     translate(
-      'auto.runtime.webRuntimeSession.terminalCreateFailed',
-      'Couldn’t open a new terminal on the host.'
+      'auto.runtime.webRuntimeSession.terminalCreateUnconfirmed',
+      'Orca couldn’t confirm that the new terminal opened on the host.'
     ),
-    message ? { description: message } : undefined
+    reason ? { description: reason } : undefined
   )
 }

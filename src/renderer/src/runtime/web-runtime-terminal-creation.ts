@@ -25,7 +25,7 @@ export async function createWebRuntimeSessionTerminal(
     created.outcome.status === 'failed' &&
     options.notifyFailure !== false
   ) {
-    notifyWebRuntimeTerminalCreateFailure(created.hostFailed, created.outcome.message)
+    notifyWebRuntimeTerminalCreateFailure(created.outcome.message)
   }
   return created.outcome
 }

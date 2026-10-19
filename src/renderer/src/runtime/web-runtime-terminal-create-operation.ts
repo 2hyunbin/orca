@@ -11,7 +11,7 @@ import {
   withAgentSessionCreateOperationId
 } from './agent-session-create-operation'
 import { runRemoteAgentSessionLaunch } from './remote-agent-session-launch'
-import { RuntimeRpcCallError, unwrapRuntimeRpcResult } from './runtime-rpc-result'
+import { unwrapRuntimeRpcResult } from './runtime-rpc-result'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 import { resolveWebRuntimeSessionEnvironmentId } from './web-runtime-session-workspace-routing'
 import { recordWebSessionFocusIntent } from './web-session-focus-intent'
@@ -45,19 +45,6 @@ import {
 } from './web-runtime-terminal-identity'
 import { settleWebRuntimeTerminalPlacement } from './web-runtime-terminal-placement-settlement'
 import { buildPlainCreateTerminalParams } from './web-runtime-plain-terminal-create-params'
-import {
-  isRecoverableRemoteRuntimeConnectionError,
-  toRemoteRuntimeClientErrorLike
-} from '../../../shared/remote-runtime-client-error-classification'
-
-// Why an allowlist: only the host's own error reply proves it made nothing; a lost, timed-out
-// or locally failed request may still have created the terminal.
-function terminalCreateFailureKind(error: unknown): 'refused' | 'unconfirmed' {
-  return error instanceof RuntimeRpcCallError &&
-    !isRecoverableRemoteRuntimeConnectionError(toRemoteRuntimeClientErrorLike(error))
-    ? 'refused'
-    : 'unconfirmed'
-}
 
 export async function createWebRuntimeSessionTerminalResult(
   args: CreateWebRuntimeSessionTerminalArgs
@@ -310,7 +297,7 @@ export async function createWebRuntimeSessionTerminalResult(
     return {
       outcome: hostCreated ? { status: 'created' } : { status: 'failed', message },
       ...(createdTabId ? { hostTabId: createdTabId } : {}),
-      ...(hostCreated ? {} : { hostFailed: terminalCreateFailureKind(error) })
+      ...(hostCreated ? {} : { hostFailed: true as const })
     }
   }
 }
