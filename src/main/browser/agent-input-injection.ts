@@ -1,5 +1,6 @@
 import type { WebContents } from 'electron'
 import { assertRemoteCliPageAdmitted } from './remote-cli-page-admission'
+import { assertRemoteCliBrowserAccess } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
 
 // Why: Orca's guest shortcut and grab handlers act on keys the page receives, and an unhandled key
 // can reach the app menu. Keys an agent injects must do neither (#20595), whichever path sends them.
@@ -9,8 +10,9 @@ export function isAgentInjectingInput(webContents: WebContents): boolean {
   return (injectionDepth.get(webContents) ?? 0) > 0
 }
 
-/** Refuses agent input to a page a revoked SSH host's command still holds. */
+/** Refuses agent input that a revoked SSH host's command sends, directly or through its helper. */
 export function assertAgentInputAdmitted(webContents: WebContents): void {
+  assertRemoteCliBrowserAccess(webContents.id)
   assertRemoteCliPageAdmitted(webContents.id)
 }
 

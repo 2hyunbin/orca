@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { CdpWsProxy } from './cdp-ws-proxy'
 import { runWithRemoteCliPageAdmission } from './remote-cli-page-admission'
+import { sendGuestCdpCommand } from './guest-cdp-command'
 import {
   connect,
   createMockWebContents,
@@ -134,5 +135,31 @@ describe('CdpWsProxy under a host command', () => {
     expect(response.error).toBeUndefined()
     expect(getSendCommandMethods(mock)).toContain('Accessibility.getFullAXTree')
     client.close()
+  })
+
+  it('never refuses the desktop its own page commands while a revoked host command unwinds', async () => {
+    let finish = (): void => {}
+    const held = runWithRemoteCliPageAdmission(
+      PAGE_ID,
+      () => {
+        throw new Error(REVOKED)
+      },
+      () => new Promise<void>((resolve) => (finish = resolve))
+    )
+
+    await expect(
+      sendGuestCdpCommand(
+        { ...mock.webContents, id: PAGE_ID },
+        'Emulation.setDeviceMetricsOverride',
+        {
+          width: 400,
+          height: 300,
+          deviceScaleFactor: 1,
+          mobile: false
+        }
+      )
+    ).resolves.toEqual({})
+    finish()
+    await held
   })
 })
