@@ -128,6 +128,19 @@ describe('AgentBrowserBridge under a host revocation', () => {
     await vi.waitFor(() => expect(helperCallbacks).toHaveLength(1))
     expect(() => assertRemoteCliPageAdmitted(100)).not.toThrow()
 
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: every instance the hoisted mock constructs has a vi.fn stop.
+    const proxy = CdpWsProxyMock.instances.at(-1) as { stop: ReturnType<typeof vi.fn> }
+    let heldWhenRetired = false
+    proxy.stop.mockImplementation(async () => {
+      heldWhenRetired = (() => {
+        try {
+          assertRemoteCliPageAdmitted(100)
+          return false
+        } catch {
+          return true
+        }
+      })()
+    })
     revoked.abort()
     // The helper's next CDP step reaches the page's proxy and is refused there.
     expect(() => assertRemoteCliPageAdmitted(100)).toThrow('stopped sharing')
@@ -139,6 +152,14 @@ describe('AgentBrowserBridge under a host revocation', () => {
 
     await expect(click).rejects.toMatchObject({ code: 'desktop_browser_bridge_unavailable' })
     expect(() => assertRemoteCliPageAdmitted(100)).not.toThrow()
+    // The helper's daemon outlives its client, so it is retired before the page is let go.
+    expect(heldWhenRetired).toBe(true)
+    expect(execFileMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.arrayContaining(['close']),
+      expect.anything(),
+      expect.anything()
+    )
   })
 
   it('still runs a desktop-local command queued behind a host command that was revoked', async () => {

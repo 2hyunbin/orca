@@ -103,7 +103,10 @@ describe('CdpWsProxy under a host command', () => {
       },
       () => new Promise<void>((resolve) => (finish = resolve)),
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mock implements every WebContents member the release path calls.
-      (release) => releaseHeldPageInput({ ...mock.webContents, id: PAGE_ID } as never, release)
+      (release) =>
+        releaseHeldPageInput({ ...mock.webContents, id: PAGE_ID } as never, release, () =>
+          guardFocus()
+        )
     )
     return {
       revoke: () => (revoked = true),

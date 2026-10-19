@@ -36,7 +36,7 @@ export async function runWithRemoteCliPageAdmission<T>(
     if (admissions.get(webContentsId) === admission) {
       admissions.delete(webContentsId)
     }
-    if (releaseHeld && admission.held.size > 0 && isRevoked(admit)) {
+    if (releaseHeld && admission.held.size > 0 && isAdmissionRevoked(admit)) {
       await runOutsideRemoteCliBrowserScope(() => releaseAll(admission.held, releaseHeld))
     }
   }
@@ -61,7 +61,8 @@ export function noteRemoteCliInput(
   }
 }
 
-function isRevoked(admit: () => void): boolean {
+/** True once the host behind this admission check was revoked. */
+export function isAdmissionRevoked(admit: () => void): boolean {
   try {
     admit()
     return false
@@ -81,6 +82,10 @@ async function releaseAll(
       // Best effort: the page may be gone, and nothing else is waiting on this release.
     }
   }
+}
+
+export function isInputRelease(params: Record<string, unknown>): boolean {
+  return ['mouseReleased', 'keyUp', 'touchEnd', 'touchCancel'].includes(String(params.type))
 }
 
 function trackInput(

@@ -1,5 +1,9 @@
 import type { WebContents } from 'electron'
-import { assertRemoteCliPageAdmitted, noteRemoteCliInput } from './remote-cli-page-admission'
+import {
+  assertRemoteCliPageAdmitted,
+  isInputRelease,
+  noteRemoteCliInput
+} from './remote-cli-page-admission'
 import { assertRemoteCliBrowserAccess } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
 
 // Why: Orca's guest shortcut and grab handlers act on keys the page receives, and an unhandled key
@@ -26,8 +30,9 @@ export async function withAgentInputInjection<T>(
   input?: AgentInputEvent
 ): Promise<T> {
   assertAgentInputAdmitted(webContents)
-  if (input) {
-    // Why before run: widget events land synchronously and nothing else records them.
+  // Why: a press counts as held once it may have landed; a release only once it surely did.
+  const releasing = input !== undefined && isInputRelease(input.params)
+  if (input && !releasing) {
     noteRemoteCliInput(webContents.id, input.method, input.params)
   }
   const depth = injectionDepth.get(webContents) ?? 0
@@ -36,7 +41,11 @@ export async function withAgentInputInjection<T>(
     webContents.setIgnoreMenuShortcuts(true)
   }
   try {
-    return await run()
+    const result = await run()
+    if (input && releasing) {
+      noteRemoteCliInput(webContents.id, input.method, input.params)
+    }
+    return result
   } finally {
     const remaining = (injectionDepth.get(webContents) ?? 1) - 1
     if (remaining > 0) {

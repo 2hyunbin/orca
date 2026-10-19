@@ -9,6 +9,9 @@ import {
 import { sendFrameSessionInput } from './guest-frame-input-sessions'
 import { planCdpKeyEvent, planInsertText, type GuestEditCommand } from './guest-key-event-plan'
 import { sendGuestCdpCommand } from './guest-cdp-command'
+import { acquireElectronDebugger } from './electron-debugger-lease'
+import { normalizeCdpPointerButton } from './agent-browser-bridge-mouse'
+import { cdpPointerStateFor, releaseCdpPointerButton } from './cdp-pointer-input'
 import type { HeldInputRelease } from './remote-cli-page-admission'
 
 // Why: Chromium routes main-session CDP key and text input on a <webview> guest by the
@@ -167,15 +170,28 @@ export async function dispatchPageKeyEvent(
 }
 
 /** Lets go of what a revoked host's command left pressed; a key goes where the focus routes it. */
-export function releaseHeldPageInput(
+export async function releaseHeldPageInput(
   webContents: WebContents,
-  release: HeldInputRelease
+  release: HeldInputRelease,
+  guardFocus: AgentInputFocusGuard
 ): Promise<unknown> {
   const send: GuestCdpSender = (method, params, sessionId) =>
     sendGuestCdpCommand(webContents, method, params, sessionId)
-  return release.method === 'Input.dispatchKeyEvent'
-    ? dispatchPageKeyEvent(webContents, release.params, send)
-    : send(release.method, release.params)
+  // Why: the command's own debugger lease may already be gone, detaching the debugger.
+  const lease = acquireElectronDebugger(webContents)
+  try {
+    if (release.method === 'Input.dispatchKeyEvent') {
+      return await dispatchPageKeyEvent(webContents, release.params, send, guardFocus)
+    }
+    const result = await send(release.method, release.params)
+    if (release.method === 'Input.dispatchMouseEvent') {
+      const button = normalizeCdpPointerButton(String(release.params.button))
+      releaseCdpPointerButton(cdpPointerStateFor(webContents), button)
+    }
+    return result
+  } finally {
+    lease.release()
+  }
 }
 
 export type TextInsertionRoute = {

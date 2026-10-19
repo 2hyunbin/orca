@@ -160,7 +160,9 @@ export abstract class AgentBrowserBridgeLifecycle extends AgentBrowserBridgeRawP
 
     const session = this.sessions.get(sessionName)
     if (!session) {
-      this.rejectQueuedCommandsForClosedSession(sessionName)
+      if (!options.keepQueuedCommands) {
+        this.rejectQueuedCommandsForClosedSession(sessionName)
+      }
       return
     }
 
@@ -168,7 +170,9 @@ export abstract class AgentBrowserBridgeLifecycle extends AgentBrowserBridgeRawP
     this.pendingSessionCreation.delete(sessionName)
 
     // Why: queued commands would hang forever if we just delete the queue — drain and reject them.
-    this.rejectQueuedCommandsForClosedSession(sessionName)
+    if (!options.keepQueuedCommands) {
+      this.rejectQueuedCommandsForClosedSession(sessionName)
+    }
 
     if (session.activeProcess) {
       // Why: rejecting the queue isn't enough for an in-flight command — kill the process so callers don't wait out the exec timeout.
