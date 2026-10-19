@@ -67,15 +67,11 @@ function matches(haystack: string, query: string): boolean {
   return haystack.toLowerCase().includes(query)
 }
 
-/**
- * Ready hosts first, then hosts that still need a connection or a project location. Ready hosts
- * already hold the project, so they are few; the rest can be every configured SSH host, so they
- * are bounded and ranked by name.
- */
+/** Hosts that can run now, and hosts that still need a connection or a project location. */
 function buildHostRows(
   hostOptions: readonly ProjectHostSetupOption[],
   query: string
-): { rows: RunTargetRowModel[]; hiddenHostCount: number } {
+): { ready: RunTargetRowModel[]; needsSetup: RunTargetRowModel[]; hiddenHostCount: number } {
   const hostMatches = (option: ProjectHostSetupOption): boolean =>
     query === '' ||
     matches(option.label, query) ||
@@ -101,19 +97,19 @@ function buildHostRows(
     // Why the query again: ranks an exact name first so typing it always reaches the host.
     { query }
   )
-  const rows: RunTargetRowModel[] = [
-    ...ready.map((option) => ({
+  return {
+    ready: ready.map((option) => ({
       key: `host:${getProjectHostSetupSelectionKey(option)}`,
       kind: 'ready' as const,
       option
     })),
-    ...needsSetup.shown.map(({ id, option }) => ({
+    needsSetup: needsSetup.shown.map(({ id, option }) => ({
       key: `needs:${id}`,
       kind: 'needs-setup' as const,
       option
-    }))
-  ]
-  return { rows, hiddenHostCount: needsSetup.hiddenCount }
+    })),
+    hiddenHostCount: needsSetup.hiddenCount
+  }
 }
 
 function matchRecipes(
@@ -168,11 +164,13 @@ export function buildRunTargetRows({
 } {
   const trimmed = query.trim().toLowerCase()
   const matchedRecipes = matchRecipes(recipes, trimmed)
-  const hostRows = buildHostRows(hostOptions, trimmed)
+  const hosts = buildHostRows(hostOptions, trimmed)
+  // Why: machines can run now, so they sit above hosts that still need a connection.
   const rows: RunTargetRowModel[] = [
-    ...hostRows.rows,
+    ...hosts.ready,
     ...buildMachineRows({ groups: machineGroups, query: trimmed, views: machineViews }),
+    ...hosts.needsSetup,
     ...buildSubmenuRows(matchedRecipes.length > 0, hasAddHost)
   ]
-  return { rows, matchedRecipes, hiddenHostCount: hostRows.hiddenHostCount }
+  return { rows, matchedRecipes, hiddenHostCount: hosts.hiddenHostCount }
 }
