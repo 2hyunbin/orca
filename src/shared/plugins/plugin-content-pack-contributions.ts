@@ -12,6 +12,7 @@ export const PLUGIN_VM_RECIPE_LIMIT = 64
 export const PLUGIN_AGENT_PROFILE_LIMIT = 64
 export const PLUGIN_THEME_LIMIT = 64
 export const PLUGIN_TERMINAL_THEME_LIMIT = 64
+export const PLUGIN_ICON_THEME_LIMIT = 32
 
 // Locale IDs become filenames/i18next keys; a bounded BCP 47 subset excludes path syntax.
 export const pluginLocaleIdSchema = z
@@ -54,7 +55,7 @@ export const pluginAgentProfileContributionSchema = z
   .object({ path: pluginRelativePathSchema })
   .strict()
 
-/** App and terminal themes share one shape: a labelled JSON artifact. */
+/** App, terminal and icon themes share one shape: a labelled JSON artifact. */
 export const pluginThemeContributionSchema = z
   .object({
     id: pluginIdSchema,
