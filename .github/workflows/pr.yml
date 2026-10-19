@@ -1168,6 +1168,8 @@ jobs:
         env:
           ORCA_BACKGROUND_LAUNCH: '1'
         run: >-
+          for i in 1 2 3 4 5 6 7 8; do xvfb-run --auto-servernum pnpm exec vitest run --config config/vitest.config.ts
+          src/main/browser/browser-popup-native-compatibility.electron.test.ts 2>&1 | grep -E 'popup-flake-diag|Shift POST|Tests  ' || true; done;
           xvfb-run --auto-servernum pnpm exec vitest run --config config/vitest.config.ts
           --no-file-parallelism
           src/main/browser/browser-client-page-renderer-lifecycle.electron.test.ts

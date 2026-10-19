@@ -12,7 +12,7 @@ import { build as buildVite } from 'vite'
 import { waitForBrowserCdpEndpoint } from './browser-session-ua-cdp-collector'
 import { popupFixtureHtml } from './browser-popup-compatibility-page-fixture'
 import { resolveElectronProbeLaunch } from './electron-probe-display-launch'
-import { startHiddenRendererFrameCapture } from './hidden-renderer-frame-capture-fixture'
+import { startDiagnosedFrameCapture } from './popup-flake-diagnostic-fixture'
 
 // Hidden renderer startup and CDP events can exceed the default one-second poll on CI.
 vi.setConfig({ expect: { poll: { timeout: 10_000 } } })
@@ -215,10 +215,8 @@ beforeAll(async () => {
 beforeEach(async () => {
   for (const page of pages.values()) {
     if (!stopFrameCaptures.has(page)) {
-      stopFrameCaptures.set(
-        page,
-        await startHiddenRendererFrameCapture(page, (hasFrame) => expect.poll(hasFrame).toBe(true))
-      )
+      // DIAGNOSTIC(popup-flake): temporary timing probe, removed before merge.
+      stopFrameCaptures.set(page, await startDiagnosedFrameCapture(page))
     }
   }
 })
