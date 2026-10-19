@@ -13,6 +13,8 @@ type RelistedPane = {
   title: null
   activate: false
   selectIfNoActiveTab: false
+  /** The close's own record: clients keep the window's list, which catches up on its own. */
+  notify: false
 }
 
 /**
@@ -58,6 +60,7 @@ export function relistPaneMainBinds(
     leafId: pane.leafId,
     title: null,
     activate: false,
-    selectIfNoActiveTab: false
+    selectIfNoActiveTab: false,
+    notify: false
   })
 }
