@@ -4,8 +4,6 @@
 import { savedEffectiveServiceTier } from '../../../shared/structured-agent-session-effective-tier'
 import type { AgentModelCatalogService } from '../agent-model-catalog/agent-model-catalog-service'
 import type { AgentSessionModelOption } from '../../../shared/agent-session-wire'
-import { isNativeLocalLocation } from '../../../shared/execution-host'
-import type { AgentSessionAttachParams } from './structured-agent-session-attach'
 
 /** The chat's saved catalog rows, read without starting discovery for its own folder, or for
  *  `workspacePath` where it has no record yet; none when nothing is saved. */
@@ -29,27 +27,4 @@ export function structuredAgentSessionPickReply(
 ): Record<string, string> {
   const serviceTier = savedEffectiveServiceTier(options, models ?? []) ?? options.serviceTier
   return serviceTier ? { ...options, serviceTier } : { ...options }
-}
-
-/** A new chat's saved rows for the folder it will run in, scoped as its new-chat picker read them:
- *  a local folder, else the account's. */
-export async function savedNewChatCatalogModels(
-  deps: Parameters<typeof savedAgentSessionCatalogModels>[0] & {
-    resolveWorkspacePath?: (workspaceId: string) => Promise<string>
-  },
-  params: Pick<AgentSessionAttachParams, 'provider' | 'location' | 'envelope'>,
-  launchDirectory: string | undefined
-): Promise<readonly AgentSessionModelOption[] | undefined> {
-  const { location } = params
-  const workspacePath = isNativeLocalLocation(location)
-    ? (launchDirectory ??
-      (await deps.resolveWorkspacePath?.(location.workspaceId).catch(() => null)) ??
-      null)
-    : null
-  return savedAgentSessionCatalogModels(
-    deps,
-    params.provider,
-    params.envelope.sessionId,
-    workspacePath
-  )
 }

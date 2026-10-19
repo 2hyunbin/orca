@@ -31,11 +31,12 @@ import { attachStructuredAgentSession } from './structured-agent-session-attach-
 import { readAgentSessionHydrationPage } from './agent-session-history-page'
 import { resolveAgentSessionReplayOutcome } from './structured-agent-session-replay-outcome'
 import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
-import { savedNewChatCatalogModels as savedModels } from './structured-agent-session-pick-reply'
 
 export type StructuredAgentSessionCreateOptions = {
   firstMessage?: { clientMessageId: string; body: AgentJournalMessageItem }
   hostLaunchDirectory?: string
+  /** The saved list the chat's options are admitted against, for the folder its picker read. */
+  catalogModels?: Parameters<typeof reserveRequestFor>[0]['models']
   /** Called after the durable create, before delivery can start the agent. */
   publishTab?: () => Promise<void>
 }
@@ -108,7 +109,7 @@ async function foundConversation(
   const request = reserveRequestFor({
     sessionId,
     params,
-    models: prior ? undefined : await savedModels(deps, params, launchDirectory),
+    models: prior ? undefined : options.catalogModels,
     callerKey,
     fingerprint: params.envelope.payloadFingerprint,
     now: context.now(),
