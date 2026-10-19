@@ -14,6 +14,9 @@ import { useAppStore } from '@/store'
 import { makeWorktree } from '../store/slices/worktrees-slice-test-fixtures'
 import { resumeSleepingAgentSessionsForWorktree } from './resume-sleeping-agent-session'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 const initialAppStoreState = useAppStore.getState()
 
 const TARGET_ID = 'ssh-target-1'

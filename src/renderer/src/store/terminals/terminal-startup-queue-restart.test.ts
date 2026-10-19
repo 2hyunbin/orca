@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { parseWorkspaceSession } from '../../../../shared/workspace-session-schema'
 import { buildWorkspaceSessionPayload } from '@/lib/workspace-session'
 import { createTestStore, makeWorktree, seedStore } from '@/store/slices/store-test-helpers'
+
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const WORKTREE_ID = 'repo1::/wt-1'
 const STARTUP_COMMAND = "claude '--dangerously-skip-permissions'"

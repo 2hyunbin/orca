@@ -14,6 +14,9 @@ import {
 import { makeWorktree } from './slices/store-test-helpers'
 import { makeFolderWorkspace } from './slices/worktrees-slice-test-fixtures'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 const appStore = vi.hoisted((): { current: HostTwinFixture['store'] | null } => ({
   current: null
 }))

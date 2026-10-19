@@ -3,6 +3,9 @@ import type { Worktree } from '../../../shared/worktree/types'
 import { useAppStore } from '@/store'
 import { activateAndRevealWorktree } from './worktree-activation'
 
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 vi.mock('../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
 
 const initialAppStoreState = useAppStore.getState()

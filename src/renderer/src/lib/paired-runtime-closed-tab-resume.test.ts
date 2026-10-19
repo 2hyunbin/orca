@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { applyWebSessionTabsSnapshot } from '@/runtime/web-session-tabs-sync/snapshot-api'
 import {
   makeSnapshot,
@@ -16,6 +16,9 @@ import { makePaneKey } from '../../../shared/stable-pane-id'
 import { toWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
 import { makeCreatedAgentWorktree } from './worktree-activation-created-agent.test-fixture'
 import { resumeSleepingAgentSessionsForWorktree } from './resume-sleeping-agent-session'
+
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 // #21235: a paired client is never the execution host, so no local record can tell "another client
 // closed this tab" from a re-key or a pending handle. Whatever shape the record's pane key has, the

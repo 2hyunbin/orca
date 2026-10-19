@@ -13,7 +13,7 @@
  * still resume everything it cannot positively rule out — a gate that refuses on absent evidence
  * would strand every record captured before the stamp existed.
  */
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-resume'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import { useAppStore } from '@/store'
@@ -25,6 +25,9 @@ import {
   sleepingRecordNamesAnotherExecutionHost
 } from './sleeping-record-execution-host-scope'
 import type { WorktreeRuntimeOwnerState } from './worktree-runtime-owner-state'
+
+// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const initialAppStoreState = useAppStore.getState()
 
