@@ -8,6 +8,7 @@
 import { createServer, type Server, type Socket } from 'node:net'
 import { chmodSync, existsSync, rmSync } from 'node:fs'
 import type { RpcMessageContext, RpcTransport } from './transport'
+import { MAX_LONG_POLLS_PER_CONNECTION } from '../runtime-rpc/runtime-rpc-long-poll'
 
 const MAX_RUNTIME_RPC_MESSAGE_BYTES = 1024 * 1024
 const RUNTIME_RPC_SOCKET_IDLE_TIMEOUT_MS = 30_000
@@ -123,6 +124,8 @@ export class UnixSocketTransport implements RpcTransport {
   private handleConnection(socket: Socket): void {
     this.activeSockets.add(socket)
     const overConnectionBudget = this.activeSockets.size > this.connectionBudget
+    // Why per connection: one socket can pipeline requests, so the socket budget alone doesn't bound held handlers.
+    const longPolls = { held: 0, overConnectionBudget }
     let buffer = ''
     let retainedBytes = 0
     let oversized = false
@@ -185,7 +188,7 @@ export class UnixSocketTransport implements RpcTransport {
         const rawMessage = buffer.slice(0, newlineIndex).trim()
         buffer = buffer.slice(newlineIndex + 1)
         if (rawMessage) {
-          this.dispatchMessage(socket, rawMessage, inflight, rearmIdleTimer, overConnectionBudget)
+          this.dispatchMessage(socket, rawMessage, inflight, rearmIdleTimer, longPolls)
         }
         newlineIndex = buffer.indexOf('\n')
       }
@@ -201,7 +204,7 @@ export class UnixSocketTransport implements RpcTransport {
     rawMessage: string,
     inflight: Set<() => void>,
     rearmIdleTimer: () => void,
-    overConnectionBudget: boolean
+    longPolls: { held: number; overConnectionBudget: boolean }
   ): void {
     let replied = false
     let keepaliveTimer: NodeJS.Timeout | null = null
@@ -210,11 +213,16 @@ export class UnixSocketTransport implements RpcTransport {
     // dispatches that already replied on the same connection.
     const abortController = new AbortController()
     let cleanedUp = false
+    let holdsLongPoll = false
     const cleanupDispatch = (abort: boolean): void => {
       if (cleanedUp) {
         return
       }
       cleanedUp = true
+      if (holdsLongPoll) {
+        holdsLongPoll = false
+        longPolls.held -= 1
+      }
       if (keepaliveTimer) {
         clearInterval(keepaliveTimer)
         keepaliveTimer = null
@@ -237,10 +245,23 @@ export class UnixSocketTransport implements RpcTransport {
       cleanupDispatch(false)
       if (!socket.destroyed && socket.writable) {
         socket.write(`${response}\n`)
-        if (overConnectionBudget) {
+        if (longPolls.overConnectionBudget) {
           socket.end()
         }
       }
+    }
+
+    const holdLongPoll = (): boolean => {
+      if (
+        cleanedUp ||
+        longPolls.overConnectionBudget ||
+        longPolls.held >= MAX_LONG_POLLS_PER_CONNECTION
+      ) {
+        return false
+      }
+      holdsLongPoll = true
+      longPolls.held += 1
+      return true
     }
 
     const startKeepalive = (): void => {
@@ -263,7 +284,7 @@ export class UnixSocketTransport implements RpcTransport {
     this.messageHandler?.(rawMessage, reply, {
       signal: abortController.signal,
       startKeepalive,
-      overConnectionBudget
+      holdLongPoll
     })
   }
 }

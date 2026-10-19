@@ -10,6 +10,11 @@ import type { RpcRequest, RpcResponse } from '../rpc/core'
 import type { WebSocketTransport } from '../rpc/ws-transport'
 import type { DeviceScope } from '../device-registry'
 import { RuntimeRpcMobileDevices } from './runtime-rpc-mobile-devices'
+import {
+  isRuntimeLongPoll,
+  LONG_POLL_BUSY_MESSAGE,
+  MAX_LONG_POLLS_PER_CONNECTION
+} from './runtime-rpc-long-poll'
 import type { RpcBinarySender } from '../rpc/rpc-binary-sender'
 import { limitRuntimeRpcReplySize } from './runtime-rpc-reply-size-limit'
 import { MOBILE_RPC_METHOD_ALLOWLIST } from './runtime-rpc-mobile-method-allowlist'
@@ -186,6 +191,15 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
       wsTransport.setClientId(ws, principal.deviceId)
     }
 
+    const heldLongPoll = ws !== undefined && isRuntimeLongPoll(request)
+    if (heldLongPoll) {
+      const held = this.wsLongPolls.get(ws) ?? 0
+      if (held >= MAX_LONG_POLLS_PER_CONNECTION) {
+        reply(JSON.stringify(this.buildError(request.id, 'runtime_busy', LONG_POLL_BUSY_MESSAGE)))
+        return
+      }
+      this.wsLongPolls.set(ws, held + 1)
+    }
     const abortRegistration = ws ? this.registerWebSocketDispatchAbort(ws) : null
 
     // Why: older pairings may lack scope metadata, so stamp the authenticated scope onto status.get.
@@ -262,6 +276,9 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
       })
     } finally {
       abortRegistration?.dispose()
+      if (heldLongPoll) {
+        this.wsLongPolls.set(ws, (this.wsLongPolls.get(ws) ?? 1) - 1)
+      }
     }
   }
 }

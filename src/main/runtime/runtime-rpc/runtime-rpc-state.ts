@@ -81,6 +81,8 @@ export class RuntimeRpcState {
   protected onUnpairedDeviceAuthFailure: (() => void) | null = null
   protected unpairedDeviceAuthThrottle: UnpairedDeviceAuthThrottle | null = null
   protected readonly binaryMessageRouter = new RuntimeBinaryMessageRouter()
+  // Why: held long-polls per physical WebSocket; never per device, which many CLI connections share.
+  protected readonly wsLongPolls = new WeakMap<WebSocket, number>()
   protected readonly wsDispatchAbortStates = new Map<
     WebSocket,
     { controllers: Set<AbortController>; abortOnClose: () => void }

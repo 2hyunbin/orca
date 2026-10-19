@@ -16,8 +16,9 @@ import { assertPortNotShadowingListener } from './shadowed-port-probe'
 import { REMOTE_RUNTIME_MAX_INBOUND_FRAME_BYTES } from '../../../shared/remote-runtime-memory-limits'
 
 export const WEBSOCKET_TRANSPORT_MAX_MESSAGE_BYTES = REMOTE_RUNTIME_MAX_INBOUND_FRAME_BYTES
-// Why: one desktop remote-host client can hold many concurrent streams, so keep the cap high enough that stale streams don't starve control RPCs.
-const WEBSOCKET_TRANSPORT_MAX_CONNECTIONS = 128
+// Why: each remote CLI call opens its own connection and waits take no slot, so a remote fleet's held
+// waits must not exhaust connections and refuse another client's call; matches the local socket budget.
+const WEBSOCKET_TRANSPORT_MAX_CONNECTIONS = 512
 // Why: bound pre-upgrade descriptor use above the WS cap so raw sockets can't grow without bound.
 const WEBSOCKET_TRANSPORT_MAX_TCP_CONNECTIONS = WEBSOCKET_TRANSPORT_MAX_CONNECTIONS * 2
 

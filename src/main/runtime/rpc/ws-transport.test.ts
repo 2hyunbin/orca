@@ -393,13 +393,13 @@ describe('WebSocketTransport', () => {
 
   it('bounds raw TCP sockets above the WebSocket connection budget', async () => {
     // Why: the WebSocket cap applies only after upgrade, so raw sockets need a
-    // finite independent bound without reducing the 128 legitimate WS slots.
+    // finite independent bound without reducing the 512 legitimate WS slots.
     const { transport } = await createTransport()
     await transport.start()
 
     const httpServer = (transport as unknown as { httpServer: { maxConnections: number } })
       .httpServer
-    expect(httpServer.maxConnections).toBe(256)
+    expect(httpServer.maxConnections).toBe(1024)
   })
 
   it('force-terminates an over-capacity socket that ignores the close frame', async () => {

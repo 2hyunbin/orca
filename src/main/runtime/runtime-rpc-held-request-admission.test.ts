@@ -1,11 +1,15 @@
+import { EventEmitter } from 'node:events'
 import { mkdtempSync, rmSync } from 'node:fs'
+import { createConnection } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import type { WebSocket } from 'ws'
 import { DeviceRegistry } from './device-registry'
 import { OrcaRuntimeService } from './orca-runtime'
 import { OrcaRuntimeRpcServer } from './runtime-rpc'
 import { readRuntimeMetadata } from './runtime-metadata'
+import { MAX_LONG_POLLS_PER_CONNECTION } from './runtime-rpc/runtime-rpc-long-poll'
 import { openFramedSession, sendRequest, waitFor } from './runtime-rpc-test-harness'
 
 // Why: 10-19, ~40 coordinators held check --wait; past 16 every wait and action was refused unread.
@@ -171,4 +175,110 @@ describe('long-polls take no admission slot', () => {
       rmSync(userDataPath, { recursive: true, force: true })
     }
   })
+
+  it('bounds held requests per paired connection, never per device', async () => {
+    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-held-admission-'))
+    const server = new OrcaRuntimeRpcServer({ runtime: new OrcaRuntimeService(), userDataPath })
+    server['deviceRegistry'] = new DeviceRegistry(userDataPath)
+    const device = server['deviceRegistry'].addDevice('test-desktop', 'runtime')
+    const held = deferred()
+    const replies: { id: string; ok: boolean; error?: { code: string } }[] = []
+    vi.spyOn(server['dispatcher'], 'dispatchStreaming').mockImplementation(
+      async (request, reply) => {
+        if (request.method === 'terminal.wait') {
+          await held.promise
+        }
+        reply(JSON.stringify({ id: request.id, ok: true }))
+      }
+    )
+    // Why: two CLI calls from one machine share the device token but each opens its own socket.
+    const [busySocket, otherSocket] = [new FakeWebSocket(), new FakeWebSocket()]
+    const dispatch = (socket: FakeWebSocket, id: string, method: string): Promise<void> =>
+      server['handleWebSocketMessage'](
+        JSON.stringify({ id, method, deviceToken: device.token }),
+        (reply) => replies.push(JSON.parse(reply)),
+        () => {},
+        undefined,
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: dispatch reads only readyState and on/off from the socket.
+        socket as unknown as WebSocket
+      )
+    const waits: Promise<void>[] = []
+    try {
+      for (let index = 0; index < MAX_LONG_POLLS_PER_CONNECTION; index += 1) {
+        waits.push(dispatch(busySocket, `held-${index}`, 'terminal.wait'))
+      }
+      await dispatch(busySocket, 'over', 'terminal.wait')
+      await dispatch(otherSocket, 'worker', 'orchestration.workerStart')
+      await dispatch(busySocket, 'short', 'status.get')
+      expect(replies).toEqual([
+        expect.objectContaining({
+          id: 'over',
+          ok: false,
+          error: expect.objectContaining({ code: 'runtime_busy' })
+        }),
+        { id: 'worker', ok: true },
+        { id: 'short', ok: true }
+      ])
+    } finally {
+      held.resolve()
+      await Promise.all(waits)
+      await server.stop()
+      rmSync(userDataPath, { recursive: true, force: true })
+    }
+  })
+
+  it('bounds held requests pipelined on one local socket', async () => {
+    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-held-admission-'))
+    const runtime = new OrcaRuntimeService()
+    const server = new OrcaRuntimeRpcServer({ runtime, userDataPath })
+    const held = deferred()
+    vi.spyOn(server['dispatcher'], 'dispatch').mockImplementation(async (request) => {
+      if (request.method === 'terminal.wait') {
+        await held.promise
+      }
+      return { id: request.id, ok: true, result: {}, _meta: { runtimeId: runtime.getRuntimeId() } }
+    })
+    await server.start()
+    const metadata = readRuntimeMetadata(userDataPath)
+    if (!metadata?.transports[0]) {
+      throw new Error('Missing test transport')
+    }
+    const socket = createConnection(metadata.transports[0].endpoint)
+    try {
+      const firstReply = new Promise<Record<string, unknown>>((resolve) => {
+        let buffer = ''
+        socket.setEncoding('utf8')
+        socket.on('data', (chunk: string) => {
+          buffer += chunk
+          const newline = buffer.indexOf('\n')
+          if (newline !== -1) {
+            resolve(JSON.parse(buffer.slice(0, newline)))
+          }
+        })
+      })
+      const frames = Array.from({ length: MAX_LONG_POLLS_PER_CONNECTION + 1 }, (_, index) =>
+        JSON.stringify({
+          id: `held-${index}`,
+          authToken: metadata.authToken,
+          method: 'terminal.wait'
+        })
+      )
+      socket.write(`${frames.join('\n')}\n`)
+      await expect(firstReply).resolves.toMatchObject({
+        id: `held-${MAX_LONG_POLLS_PER_CONNECTION}`,
+        ok: false,
+        error: { code: 'runtime_busy' }
+      })
+    } finally {
+      held.resolve()
+      socket.destroy()
+      await server.stop()
+      rmSync(userDataPath, { recursive: true, force: true })
+    }
+  })
 })
+
+class FakeWebSocket extends EventEmitter {
+  readonly OPEN = 1
+  readyState = this.OPEN
+}

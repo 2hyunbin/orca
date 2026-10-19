@@ -3,6 +3,12 @@ import { ORCA_SESSION_ADDRESS_PREFIX } from '../../../shared/orca-session-addres
 
 export const KEEPALIVE_INTERVAL_MS = 10_000
 
+// Why: a backstop per physical connection, never shared across clients, so one runaway client can't
+// grow the host's held handlers without bound; a normal client holds far fewer.
+export const MAX_LONG_POLLS_PER_CONNECTION = 512
+export const LONG_POLL_BUSY_MESSAGE =
+  'Orca has too many waiting requests open right now; retry in a few seconds'
+
 // Why: long-polls get keepalive and an abort signal but no admission slot; a shared slot count refused waits
 // whose answer was already pending and let passive waits refuse actions. Transports bound connections.
 export function isRuntimeLongPoll(request: RpcRequest): boolean {

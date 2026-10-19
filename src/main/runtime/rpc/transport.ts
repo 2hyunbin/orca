@@ -11,11 +11,12 @@
 // when the underlying connection terminates so long-poll handlers can bail
 // out. `startKeepalive` is opt-in per request — only long-poll dispatches
 // call it, so short RPCs pay no timer overhead. See design doc §3.1.
-// `overConnectionBudget` marks a connection accepted past the socket's budget.
+// `holdLongPoll` takes one of the connection's long-poll slots for this dispatch (released when
+// it settles) and returns false when the connection may hold no more.
 export type RpcMessageContext = {
   signal: AbortSignal
   startKeepalive: () => void
-  overConnectionBudget?: boolean
+  holdLongPoll?: () => boolean
 }
 
 export type RpcTransport = {

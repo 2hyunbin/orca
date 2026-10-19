@@ -4,7 +4,7 @@ import type { RpcMessageContext } from '../rpc/transport'
 import type { RpcRequest, RpcResponse } from '../rpc/core'
 import { errorResponse } from '../rpc/errors'
 import { RuntimeRpcBinaryRouting } from './runtime-rpc-binary-routing'
-import { isRuntimeLongPoll } from './runtime-rpc-long-poll'
+import { isRuntimeLongPoll, LONG_POLL_BUSY_MESSAGE } from './runtime-rpc-long-poll'
 import { OWNER_RPC_CALLER_SCOPE, type RpcCallerScope } from '../rpc/rpc-caller-scope'
 
 export class RuntimeRpcRequestAdmission extends RuntimeRpcBinaryRouting {
@@ -25,12 +25,8 @@ export class RuntimeRpcRequestAdmission extends RuntimeRpcBinaryRouting {
     const { request, callerScope } = parsed
 
     const longPoll = isRuntimeLongPoll(request)
-    if (longPoll && context?.overConnectionBudget) {
-      return this.buildError(
-        request.id,
-        'runtime_busy',
-        'Orca has too many open connections right now; retry in a few seconds'
-      )
+    if (longPoll && context?.holdLongPoll && !context.holdLongPoll()) {
+      return this.buildError(request.id, 'runtime_busy', LONG_POLL_BUSY_MESSAGE)
     }
     if (longPoll) {
       // Why: arm keepalive only for long-polls; short RPCs never create the setInterval. See §3.1.
