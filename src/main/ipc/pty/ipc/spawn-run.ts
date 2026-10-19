@@ -46,6 +46,12 @@ export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArg
     ctx.paneSpawnReservationKey = replacedPaneKey
   }
   const fresh = async (operation: PaneSpawnOperation) => {
+    // Retire the previous preparation before replacing its resource slots or reacquiring its lease.
+    releaseAbandonedAgentTeamsLeader(ctx)
+    ctx.finishTerminalInstall()
+    ctx.finishTerminalInstall = () => {}
+    ctx.releaseWorktreeSpawn?.()
+    ctx.releaseWorktreeSpawn = undefined
     ctx.paneSpawnOperation = operation
     ctx.paneSpawnReservation = null
     ctx.earlyStablePaneOwner = null

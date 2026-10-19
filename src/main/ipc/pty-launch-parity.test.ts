@@ -1,6 +1,9 @@
+import * as spawnRouting from './pty/host-env/fresh-spawn-routing'
+import * as teamsShim from '../runtime/claude-agent-teams-shim-env'
+import { WorktreeTerminalMutationLock } from '../runtime/worktree-terminal-mutation-lock'
 import * as teamsPlan from '../runtime/terminal/launch/agent-teams-launch-plan'
 import { SessionNotFoundError } from '../daemon/daemon-errors'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 import { classifyErrorMock, statSyncMock, trackMock } from './pty-ipc-mock-registry'
 import {
@@ -289,14 +292,176 @@ describe('launch facts outside the tables', () => {
   const suite = setupPtyIpcSuite()
   afterEach(() => restoreMainPlatform())
 
-  it.each(['ipc', 'runtime'] as const)(
-    '%s adopts the saved winner without launching again',
+  it.each(['ipc', 'runtime', 'ipc-reentry', 'ipc-reentry-refused'] as const)(
+    '%s reconciles the saved winner with balanced preparation resources',
     async (lane) => {
-      const lanes = startParityLanes(suite, { workspace: POSIX_REPO })
+      const workspace =
+        lane === 'ipc' || lane === 'runtime'
+          ? POSIX_REPO
+          : { kind: 'folder' as const, path: POSIX_PATH }
+      const lanes = startParityLanes(suite, { workspace })
       const pane = {
-        worktreeId: launchWorkspaceId(POSIX_REPO),
+        worktreeId: launchWorkspaceId(workspace),
         tabId: HOST_TAB_ID,
         leafId: HOST_LEAF_ID
+      }
+      if (lane === 'ipc-reentry' || lane === 'ipc-reentry-refused') {
+        const refused = lane === 'ipc-reentry-refused'
+        await lanes.store.admitTerminalPane({
+          type: 'createTerminalTab',
+          workspace: pane.worktreeId,
+          ...pane
+        })
+        const paneKey = makePaneKey(pane.tabId, pane.leafId)
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: exposes the existing selector; empty-inventory Sleep needs only this local workspace identity.
+        const selecting = lanes.runtime as unknown as {
+          resolveWorktreeSelector: () => Promise<{ id: string }>
+        }
+        vi.spyOn(selecting, 'resolveWorktreeSelector').mockResolvedValue({ id: pane.worktreeId })
+        const events: string[] = []
+        const releases: ReturnType<typeof vi.fn>[] = []
+        const finishes: ReturnType<typeof vi.fn>[] = []
+        let firstId: string | undefined
+        let queuedSleep: Promise<void> | undefined
+        let attempts = 0
+        vi.spyOn(teamsShim, 'ensureClaudeAgentTeamsShimDir').mockResolvedValue('/fixture/shim')
+        vi.spyOn(teamsShim, 'resolveClaudeAgentTeamsShimBin').mockReturnValue(null)
+        const prepareTeam = vi.spyOn(lanes.runtime, 'prepareClaudeAgentTeamsLeaderForHandle')
+        const releaseTeam = vi.spyOn(lanes.runtime, 'releaseClaudeAgentTeamsLeaderForHandle')
+        const transferTeam = vi.spyOn(lanes.runtime, 'registerPreAllocatedHandleForPty')
+        const beginRegistration = vi.spyOn(lanes.runtime, 'beginPtyRegistration')
+        const begin = spawnRouting.beginPtySpawnForWorktree
+        const installing = vi
+          .spyOn(spawnRouting, 'beginPtySpawnForWorktree')
+          .mockImplementation((...a) => {
+            const finish = vi.fn(begin(...a))
+            finishes.push(finish)
+            return finish
+          })
+        const acquire = WorktreeTerminalMutationLock.prototype.acquire
+        vi.spyOn(WorktreeTerminalMutationLock.prototype, 'acquire').mockImplementation(
+          async function (this: WorktreeTerminalMutationLock, key, kind, deadline) {
+            if (kind !== 'shared') {
+              return acquire.call(this, key, kind, deadline)
+            }
+            const attempt = ++attempts
+            if (attempt === 2 && refused) {
+              throw new Error('second_preparation_refused')
+            }
+            const release = await acquire.call(this, key, kind, deadline)
+            events.push(`shared-${attempt}`)
+            const receipt = vi.fn(() => {
+              events.push(`release-${attempt}`)
+              release()
+            })
+            releases.push(receipt)
+            if (attempt === 1) {
+              firstId = [...ptySizes.keys()].find((id) => id.startsWith(`${pane.worktreeId}@@`))
+              await lanes.store.persistPtyBinding({
+                ...pane,
+                ptyId: 'winner',
+                incarnationId: 'winner-inc'
+              })
+              queuedSleep = acquire.call(this, key, 'exclusive').then((finishSleep) => {
+                events.push('exclusive')
+                finishSleep()
+              })
+              expect(events).toEqual(['shared-1'])
+            }
+            return receipt
+          }
+        )
+        onTestFinished(async () => {
+          for (const release of [...releases, ...finishes]) {
+            if (release.mock.calls.length === 0) {
+              release()
+            }
+          }
+          await queuedSleep
+          vi.restoreAllMocks()
+        })
+        lanes.provider.mockImplementation(async (args) => {
+          if (args.attachOnly) {
+            throw new SessionNotFoundError(args.sessionId)
+          }
+          return { id: 'fresh-reentry', incarnationId: 'fresh-inc' }
+        })
+        const operation = lanes.spawnWindow({
+          ...pane,
+          cols: 80,
+          rows: 24,
+          cwd: POSIX_PATH,
+          command: 'claude --teammate-mode auto',
+          initiallyHidden: true
+        })
+        if (refused) {
+          await expect(operation).rejects.toThrow('second_preparation_refused')
+        } else {
+          await expect(operation).resolves.toMatchObject({ id: 'fresh-reentry' })
+          expect(
+            lanes.runtime.resolveTerminalPane(`${pane.tabId}:${pane.leafId}`, pane.worktreeId)
+          ).toMatchObject({ ptyId: 'fresh-reentry', connected: true })
+          expect(
+            lanes.store.getWorkspaceSession().terminalLayoutsByTabId[pane.tabId]?.ptyIdsByLeafId?.[
+              pane.leafId
+            ]
+          ).toBe('fresh-reentry')
+        }
+        await queuedSleep
+        const handles = prepareTeam.mock.calls.map(([args]) => args.handle)
+        expect(new Set(handles).size).toBe(2)
+        expect(releaseTeam.mock.calls).toEqual(
+          (refused ? handles : handles.slice(0, 1)).map((handle) => [handle])
+        )
+        expect(transferTeam.mock.calls).toEqual(refused ? [] : [['fresh-reentry', handles[1]]])
+        expect(releaseTeam.mock.invocationCallOrder[0]).toBeLessThan(
+          prepareTeam.mock.invocationCallOrder[1]!
+        )
+        expect(attempts).toBe(2)
+        expect(releases).toHaveLength(refused ? 1 : 2)
+        expect(finishes).toHaveLength(2)
+        for (const receipt of [...releases, ...finishes]) {
+          expect(receipt).toHaveBeenCalledOnce()
+        }
+        expect(finishes[0]!.mock.invocationCallOrder[0]).toBeLessThan(
+          installing.mock.invocationCallOrder[1]!
+        )
+        expect(events).toEqual(
+          refused
+            ? ['shared-1', 'release-1', 'exclusive']
+            : ['shared-1', 'release-1', 'exclusive', 'shared-2', 'release-2']
+        )
+        expect(
+          lanes.provider.mock.calls.map(([args]) => [args.attachOnly === true, args.command])
+        ).toEqual(
+          refused
+            ? [[true, undefined]]
+            : [
+                [true, undefined],
+                [false, 'claude --teammate-mode auto']
+              ]
+        )
+        expect(firstId).toBeDefined()
+        expect(isHiddenRendererPty(firstId!)).toBe(false)
+        expect(ptySizes.has(firstId!)).toBe(false)
+        expect(beginRegistration.mock.calls.some(([id]) => id === firstId)).toBe(false)
+        expect(
+          lanes.store.getWorkspaceSession().terminalLayoutsByTabId[pane.tabId]?.root
+        ).toMatchObject({ type: 'leaf', leafId: pane.leafId })
+        expect(
+          paneSpawnReservationsByOwnerKey.has(
+            makePaneSpawnReservationKey(pane.worktreeId, null, paneKey)!
+          )
+        ).toBe(false)
+        if (!refused) {
+          await lanes.runtime.onPtyExit('fresh-reentry', 0, 'fresh-inc', {
+            providerExitObserved: true
+          })
+        }
+        await expect(
+          lanes.runtime.sleepTerminalsForWorktree(`id:${pane.worktreeId}`)
+        ).resolves.toMatchObject({ stopped: 0, postStopVerified: true })
+        return
       }
       await lanes.store.persistPtyBinding({ ...pane, ptyId: 'old' })
       lanes.provider
