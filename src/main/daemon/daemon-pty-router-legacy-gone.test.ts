@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { DaemonPtyAdapter } from './daemon-pty-adapter'
 import { DaemonPtyRouter } from './daemon-pty-router'
+import { SessionNotFoundError, TerminalSessionOwnerUnverifiedError } from './daemon-errors'
 
 const LIVE_PID = 4242
 const EXITED_PID = 4343
@@ -61,6 +62,44 @@ describe('DaemonPtyRouter legacy socket that can never answer', () => {
       expect(current.onBackgroundStreamEvent).toHaveBeenCalledOnce()
     }
   )
+
+  // #30486: the reattach inventory kept the dead daemon, so every unrouted pane stayed unverifiable.
+  it.skipIf(process.platform === 'win32')(
+    'lets a reattach prove absence once a legacy daemon has exited',
+    async () => {
+      const current = adapter('current', ['current-session'])
+      const exited = adapter('exited')
+      vi.mocked(exited.listProcesses).mockRejectedValue(connectError('ECONNREFUSED', 'connect'))
+      const router = new DaemonPtyRouter({ current, legacy: [exited] })
+      const attach = { cols: 80, rows: 24, sessionId: 'gone-session', attachOnly: true }
+
+      await expect(router.spawn(attach)).rejects.toBeInstanceOf(SessionNotFoundError)
+      // The current daemon is now the only owner, so it answers the next attach directly.
+      Object.assign(current, {
+        spawn: vi.fn(async () => {
+          throw new SessionNotFoundError('gone-session')
+        })
+      })
+      await expect(router.spawn(attach)).rejects.toBeInstanceOf(SessionNotFoundError)
+      expect(current.spawn).toHaveBeenCalledOnce()
+
+      expect(exited.listProcesses).toHaveBeenCalledOnce()
+      expect(exited.disconnectOnly).toHaveBeenCalledOnce()
+      expect(router.getLegacyAdapters()).toEqual([])
+    }
+  )
+
+  it('keeps a reattach unverifiable while a gone legacy daemon process is alive', async () => {
+    const current = adapter('current')
+    const alive = adapter('alive', [], LIVE_PID)
+    vi.mocked(alive.listProcesses).mockRejectedValue(connectError('ECONNREFUSED', 'connect'))
+    const router = new DaemonPtyRouter({ current, legacy: [alive] })
+
+    await expect(
+      router.spawn({ cols: 80, rows: 24, sessionId: 'session', attachOnly: true })
+    ).rejects.toBeInstanceOf(TerminalSessionOwnerUnverifiedError)
+    expect(router.getLegacyAdapters()).toEqual([alive])
+  })
 
   it('keeps a gone legacy socket whose process is alive or unproven', async () => {
     const current = adapter('current', ['current-session'])
