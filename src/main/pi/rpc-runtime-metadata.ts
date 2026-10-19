@@ -1,7 +1,6 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { agentSessionAccountHome } from '../../shared/agent-session-account-home'
-import { launchableRelease } from '../agent-cli-version-probe'
 import { supportsSupervisedProviderChildLocation } from '../provider-process/supervised-provider-child-location'
 import type { StructuredAgentRuntimeMetadata } from '../runtime/structured-agent-runtime-registration-types'
 import { PI_RPC_AGENT } from './rpc-agent-definition'
@@ -33,7 +32,7 @@ export const PI_RPC_RUNTIME_METADATA: StructuredAgentRuntimeMetadata = {
       command: resolvePiRpcCommand(env, commandSettings),
       env
     }),
-    supportsVersion: async (launch) => launchableRelease(await checkPiRpcVersion(launch))
+    checkVersion: (launch) => checkPiRpcVersion(launch)
   },
   resolveAccountHome: async ({ launchEnv }) =>
     agentSessionAccountHome(

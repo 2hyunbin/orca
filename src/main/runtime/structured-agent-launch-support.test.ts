@@ -60,10 +60,8 @@ const settings = {
   nativeChatInheritShellEnvironment: true,
   nativeChatShellEnvironmentVariables: []
 }
-const runtime = {
-  requireStore: () => ({ getSettings: () => settings }),
-  resolveRuntimeFileTarget: vi.fn(async () => ({ worktree: { path: '/repo/worktree' } }))
-}
+const runtime = { requireStore: () => ({ getSettings: () => settings }) }
+const workspace = vi.fn(async () => '/repo/worktree')
 
 beforeEach(async () => {
   asked.length = 0
@@ -77,15 +75,15 @@ beforeEach(async () => {
 })
 afterEach(async () => {
   readVersion.mockReset()
-  runtime.resolveRuntimeFileTarget.mockClear()
+  workspace.mockClear()
   await rm(bin, { recursive: true, force: true })
 })
 
 describe('structuredAgentSupportsLaunch', () => {
   it('asks nothing for an agent whose location alone decides', async () => {
-    expect(await structuredAgentSupportsLaunch('grok', 'id:workspace-1', runtime)).toBe(true)
+    expect(await structuredAgentSupportsLaunch('grok', workspace, runtime)).toBe(true)
     expect(readVersion).not.toHaveBeenCalled()
-    expect(runtime.resolveRuntimeFileTarget).not.toHaveBeenCalled()
+    expect(workspace).not.toHaveBeenCalled()
   })
 
   it('allows OpenCode from its minimums, asking in the workspace with the launch env', async () => {
@@ -98,9 +96,7 @@ describe('structuredAgentSupportsLaunch', () => {
       ['2.0.13', false]
     ] as const) {
       installedVersion(version)
-      expect(await structuredAgentSupportsLaunch('opencode', 'id:workspace-1', runtime)).toBe(
-        supported
-      )
+      expect(await structuredAgentSupportsLaunch('opencode', workspace, runtime)).toBe(supported)
     }
     expect(asked[0]).toMatchObject({
       cwd: '/repo/worktree',
@@ -130,7 +126,7 @@ describe('structuredAgentSupportsLaunch', () => {
       loginShell.spawn.mockReturnValueOnce(reread.promise)
       const askedAt = Date.now()
       const checks = Array.from({ length: 8 }, () =>
-        structuredAgentSupportsLaunch('opencode', 'id:workspace-1', installing)
+        structuredAgentSupportsLaunch('opencode', workspace, installing)
       )
       const launchMiss = launches.refreshAfterMissingProgram(askedAt)
       await vi.waitFor(() => expect(loginShell.spawn).toHaveBeenCalledTimes(2))
@@ -145,8 +141,8 @@ describe('structuredAgentSupportsLaunch', () => {
 
   it('never rereads the shell for an OpenCode that is installed but unsupported', async () => {
     installedVersion('1.18.30')
-    expect(await structuredAgentSupportsLaunch('opencode', 'id:workspace-1', runtime)).toBe(false)
-    expect(await structuredAgentSupportsLaunch('opencode', 'id:workspace-1', runtime)).toBe(false)
+    expect(await structuredAgentSupportsLaunch('opencode', workspace, runtime)).toBe(false)
+    expect(await structuredAgentSupportsLaunch('opencode', workspace, runtime)).toBe(false)
     // Only the first read of the shell; neither refusal asked for another.
     expect(loginShell.spawn).toHaveBeenCalledOnce()
     expect(asked).toHaveLength(2)
@@ -154,16 +150,16 @@ describe('structuredAgentSupportsLaunch', () => {
 
   it('allows a version it cannot read, and refuses a binary that does not start', async () => {
     readVersion.mockResolvedValue({ version: null })
-    expect(await structuredAgentSupportsLaunch('opencode', 'id:workspace-1', runtime)).toBe(true)
+    expect(await structuredAgentSupportsLaunch('opencode', workspace, runtime)).toBe(true)
     readVersion.mockResolvedValue({ version: null, started: false })
-    expect(await structuredAgentSupportsLaunch('opencode', 'id:workspace-1', runtime)).toBe(false)
+    expect(await structuredAgentSupportsLaunch('opencode', workspace, runtime)).toBe(false)
   })
 
   it.skipIf(process.platform === 'win32')(
     'asks about the same binary the launch then spawns',
     async () => {
       installedVersion('1.18.31')
-      await structuredAgentSupportsLaunch('opencode', 'id:workspace-1', runtime)
+      await structuredAgentSupportsLaunch('opencode', workspace, runtime)
       const launch = await createAcpStructuredLaunchResolver(acpLaunchSpecFor('opencode')!, {
         store: {
           getRecord: () => ({

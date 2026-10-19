@@ -1,5 +1,6 @@
 import type { AgentSessionExecutionLocation } from '../../shared/agent-session-record'
 import type { AgentSessionAccountHome } from '../../shared/agent-session-account-home'
+import type { AgentCliVersionCheck } from '../agent-cli-version-probe'
 import type { applyStructuredCodexWorkspaceTrust } from '../agent-workspace-trust-spawn'
 import type { StructuredAgentCliConversations } from '../native-chat/structured-agent-cli-conversations'
 import type {
@@ -73,12 +74,12 @@ export type StructuredAgentLaunchCheck = {
     env: Record<string, string>,
     commandSettings: StructuredAgentCommandSettings
   ) => { command: string; env: Record<string, string> }
-  /** False only for a release older than the agent's chats need; a version it cannot read runs. */
-  supportsVersion: (launch: {
+  /** That binary's release against the minimum the agent's chats need. */
+  checkVersion: (launch: {
     command: string
     cwd: string
     env: Record<string, string>
-  }) => Promise<boolean>
+  }) => Promise<AgentCliVersionCheck>
 }
 
 export type StructuredAgentRuntimeMetadata = StructuredAgentCliConversations & {

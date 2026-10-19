@@ -1,5 +1,4 @@
 import { agentSessionAccountHome } from '../../shared/agent-session-account-home'
-import { launchableRelease } from '../agent-cli-version-probe'
 import { applyStructuredCodexWorkspaceTrust } from '../agent-workspace-trust-spawn'
 import { ACP_LAUNCH_SPECS, type AcpLaunchSpec } from '../acp/acp-launch-specs'
 import { acpStructuredAgentDefinition } from '../acp/acp-structured-agent-definitions'
@@ -49,8 +48,7 @@ function acpMetadata(spec: AcpLaunchSpec): StructuredAgentRuntimeMetadata {
               })
               return { command, env }
             },
-            supportsVersion: async (launch) =>
-              launchableRelease(await checkAcpLaunchVersion(spec, launch, false))
+            checkVersion: (launch) => checkAcpLaunchVersion(spec, launch, false)
           }
         }
       : {}),
