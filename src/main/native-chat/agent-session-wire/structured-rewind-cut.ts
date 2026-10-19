@@ -49,7 +49,14 @@ export function structuredRewindCut(
   if (key?.provider === 'claude' && target.provider === 'claude') {
     // Any session the chat ran: a message from before an earlier rewind's fork is still cut there.
     const boundary = items.findIndex((item) => item.itemId === target.itemId)
-    const keptTurns = new Set(items.slice(0, boundary).flatMap((item) => scopedTurn(item) ?? []))
+    // A message sent into a running turn joins it; the fork forgets the rest of that turn.
+    const cutTurn = selected && scopedTurn(selected)
+    const keptTurns = new Set(
+      items
+        .slice(0, boundary)
+        .flatMap((item) => scopedTurn(item) ?? [])
+        .filter((turn) => turn !== cutTurn)
+    )
     const keptRows = items.filter((item, index) => {
       const turn = scopedTurn(item)
       // A kept turn's row can land after the cut, as a late provider item does.

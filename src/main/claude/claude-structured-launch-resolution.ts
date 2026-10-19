@@ -248,6 +248,16 @@ export function claudeStructuredLaunchPart(
     )
     const launchHome = await resolveClaudeStructuredLaunchHome(router, env, accountHome.path)
     const resumesTranscript = resumedWithoutRouter ?? (await resumes(launchHome))
+    if (fork?.throughEntryId && !resumesTranscript) {
+      // The fork reads its source, so a source only another account holds is refused as a resume is.
+      await claudeLaunchResumesTranscript({
+        router,
+        leafUuid: fork.throughEntryId,
+        providerSessionId: fork.sourceSessionId,
+        claudeConfigDir: launchHome,
+        hasTranscript: deps.hasTranscript
+      })
+    }
     return {
       launch: {
         pathToClaudeCodeExecutable: command,

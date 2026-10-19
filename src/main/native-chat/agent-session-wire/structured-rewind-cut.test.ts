@@ -82,3 +82,33 @@ it("keeps a subagent row with the main turn it arrived in, across the subagent's
   expect(cut!.kept.map(({ body }) => body)).not.toContainEqual(text('child in b'))
   expect(cut!.kept.map(({ body }) => body)).not.toContainEqual(text('main b'))
 })
+
+it('drops the rest of a Claude turn a rewound message was sent into', async () => {
+  const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
+  const turn = { provider: 'orca' as const, clientMessageId: 'turn-1' }
+  await journal.appendItem(
+    turn,
+    { kind: 'turn', turnId: 'turn-1', state: 'completed' },
+    { fence: 1, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
+  )
+  const claude = (uuid: string) => ({ provider: 'claude' as const, sessionId: 'claude-1', uuid })
+  // M2 was sent while Claude was still answering M1, so it joined M1's turn.
+  for (const uuid of ['m1', 'a1', 'm2', 'a2']) {
+    await journal.appendItem(claude(uuid), text(uuid), {
+      fence: 1,
+      turnScope: { kind: 'turn', turnItemId: agentJournalItemKey(turn) }
+    })
+  }
+
+  const cut = structuredRewindCut(journal, {
+    itemId: agentJournalItemKey(claude('m2')),
+    provider: 'claude',
+    nativeId: 'claude-1'
+  })
+
+  expect(cut).toMatchObject({ beforeMessage: { sessionId: 'claude-1', uuid: 'm2' } })
+  const kept = cut!.kept.map(({ body }) => body)
+  expect(kept).toEqual(expect.arrayContaining([text('m1'), text('a1')]))
+  expect(kept).not.toContainEqual(text('m2'))
+  expect(kept).not.toContainEqual(text('a2'))
+})
