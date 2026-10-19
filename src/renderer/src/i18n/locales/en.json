@@ -19748,6 +19748,12 @@
     }
   },
   "sourceControl": {
+    "branchCompare": {
+      "changesVsBase": "Changes vs {{ref}}",
+      "changesVsSelectedBase": "Changes vs base",
+      "workingTreeVsTip": "Working tree vs tip of {{ref}}",
+      "workingTreeVsAncestor": "Working tree vs common ancestor with {{ref}}"
+    },
     "discard": {
       "restoreStagedVersionDescription": "This will restore the last staged version and discard the deletion. This cannot be undone.",
       "unstagedChangesDescription": "This will revert the unstaged changes to this file. This cannot be undone."

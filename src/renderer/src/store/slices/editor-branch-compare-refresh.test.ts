@@ -23,6 +23,41 @@ const initial: GitBranchCompareResult = {
 }
 
 describe('branch comparison refresh', () => {
+  it('replaces counts without replacing an unchanged summary', () => {
+    const store = createEditorStore()
+    store.getState().beginGitBranchCompareRequest('wt-1', 'first', 'parent-one')
+    store.getState().setGitBranchCompareResult('wt-1', 'first', initial)
+    const summaries = store.getState().gitBranchCompareSummaryByWorktree
+    const next: GitBranchCompareResult = {
+      ...initial,
+      entries: [{ ...initial.entries[0], added: 3, removed: 2 }]
+    }
+    store.getState().beginGitBranchCompareRequest('wt-1', 'refresh', 'parent-one', {
+      preserveExistingSummary: true
+    })
+    store.getState().setGitBranchCompareResult('wt-1', 'refresh', next)
+
+    expect(store.getState().gitBranchChangesByWorktree['wt-1']).toEqual(next.entries)
+    expect(store.getState().gitBranchCompareSummaryByWorktree).toBe(summaries)
+  })
+
+  it('replaces the comparison when the same base branch advances and HEAD stays unchanged', () => {
+    const store = createEditorStore()
+    store.getState().beginGitBranchCompareRequest('wt-1', 'first', 'parent-one')
+    store.getState().setGitBranchCompareResult('wt-1', 'first', initial)
+    const next: GitBranchCompareResult = {
+      summary: { ...initial.summary, baseOid: 'base-two', mergeBase: 'base-two' },
+      entries: [{ ...initial.entries[0], removed: 4 }]
+    }
+    store.getState().beginGitBranchCompareRequest('wt-1', 'advanced', 'parent-one', {
+      preserveExistingSummary: true
+    })
+    store.getState().setGitBranchCompareResult('wt-1', 'advanced', next)
+
+    expect(store.getState().gitBranchChangesByWorktree['wt-1']).toEqual(next.entries)
+    expect(store.getState().gitBranchCompareSummaryByWorktree['wt-1']).toEqual(next.summary)
+  })
+
   it('replaces line counts when selecting another base changes the same file', () => {
     const store = createEditorStore()
     store.getState().beginGitBranchCompareRequest('wt-1', 'first', 'parent-one')

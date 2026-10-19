@@ -88,29 +88,37 @@ describe('selected branch tip comparison', () => {
     }
   )
 
-  it('keeps the unavailable-total fix when an untracked file overlaps the selected base', async () => {
-    const repo = await createRepo()
-    await git(repo, 'checkout', '-qb', 'feature')
-    await git(repo, 'checkout', '-q', 'base')
-    await writeFile(join(repo, 'new.txt'), 'same\n')
-    await git(repo, 'add', 'new.txt')
-    await git(repo, 'commit', '-qm', 'base adds file')
-    await git(repo, 'checkout', '-q', 'feature')
-    await writeFile(join(repo, 'new.txt'), 'same\n')
-    const compare = await getBranchCompare(repo, 'base', { compareBaseTip: true })
-    const baseOid = compare.summary.baseOid
-    if (!baseOid) {
-      throw new Error('Missing base tip')
-    }
+  it.each(['added', 'renamed'] as const)(
+    'clears an untracked overlap with a file %s on the base',
+    async (change) => {
+      const repo = await createRepo()
+      await git(repo, 'checkout', '-qb', 'feature')
+      await git(repo, 'checkout', '-q', 'base')
+      await (change === 'renamed'
+        ? git(repo, 'mv', 'file.txt', 'new.txt')
+        : writeFile(join(repo, 'new.txt'), 'same\n'))
+      await git(repo, 'add', 'new.txt')
+      await git(repo, 'commit', '-qm', 'base changes file')
+      await git(repo, 'checkout', '-q', 'feature')
+      await writeFile(join(repo, 'new.txt'), change === 'renamed' ? 'initial\n' : 'same\n')
+      const compare = await getBranchCompare(repo, 'base', { compareBaseTip: true })
+      const baseOid = compare.summary.baseOid
+      if (!baseOid) {
+        throw new Error('Missing base tip')
+      }
 
-    const options = { branchLineTotalMergeBase: compare.summary.mergeBase ?? undefined }
-    const unavailable = await getStatus(repo, options)
-    expect(unavailable.branchLineTotal).toBeUndefined()
-    expect(unavailable.branchLineTotalUnavailable).toBe(baseOid)
-    await git(repo, 'add', 'new.txt')
-    invalidateGitReadCaches()
-    expect((await getStatus(repo, options)).branchLineTotal).toMatchObject({ added: 0, removed: 0 })
-  })
+      const options = { branchLineTotalMergeBase: compare.summary.mergeBase ?? undefined }
+      const unavailable = await getStatus(repo, options)
+      expect(unavailable.branchLineTotal).toBeUndefined()
+      expect(unavailable.branchLineTotalUnavailable).toBe(baseOid)
+      await git(repo, 'add', 'new.txt')
+      invalidateGitReadCaches()
+      expect((await getStatus(repo, options)).branchLineTotal).toMatchObject({
+        added: change === 'renamed' ? 1 : 0,
+        removed: 0
+      })
+    }
+  )
 
   it('compares branch tips without requiring shared history', async () => {
     const repo = await createRepo()

@@ -16,6 +16,7 @@ export const GitStatusParams = WorktreeSelector.extend({
   bypassEffectiveUpstreamNegativeCache: z.boolean().optional(),
   reuseLineStats: z.boolean().optional(),
   // Shape is re-validated host-side before it reaches a git argv.
+  // Legacy wire name for the requested comparison revision, which may be a base tip.
   branchLineTotalMergeBase: z.string().optional()
 })
 

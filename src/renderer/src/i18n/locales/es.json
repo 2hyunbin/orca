@@ -19991,6 +19991,12 @@
     }
   },
   "sourceControl": {
+    "branchCompare": {
+      "changesVsBase": "Cambios respecto a {{ref}}",
+      "changesVsSelectedBase": "Cambios respecto a la base",
+      "workingTreeVsTip": "Árbol de trabajo respecto al último commit de {{ref}}",
+      "workingTreeVsAncestor": "Árbol de trabajo respecto al ancestro común con {{ref}}"
+    },
     "discard": {
       "restoreStagedVersionDescription": "Esto restaurará la última versión preparada y descartará la eliminación. No se puede deshacer.",
       "unstagedChangesDescription": "Esto revertirá los cambios no preparados de este archivo. No se puede deshacer."
