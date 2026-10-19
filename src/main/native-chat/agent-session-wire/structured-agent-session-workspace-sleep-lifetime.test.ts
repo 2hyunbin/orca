@@ -25,6 +25,7 @@ import {
   replaceHostTestState,
   attachParams
 } from './structured-agent-session-host-test-harness'
+import type { StructuredAgentSessionProviderOpen } from './structured-agent-session-provider-open-contract'
 
 it('omits an unverified stop superseded by a newer send while retaining a sibling receipt', async () => {
   const { host, store, acquire } = hostTestState()
@@ -238,9 +239,9 @@ it('stops an agent that is still starting', async () => {
   host.deps.adapter.closeSession = closeSession
   expect(await host.sleepWorkspace('workspace-1')).toEqual({ stoppedSessionIds: [SESSION] })
   let opening = false
-  host.deps.adapter.open = vi.fn(async ({ signal }) => {
+  host.deps.adapter.open = vi.fn<StructuredAgentSessionProviderOpen>(async ({ signal }) => {
     opening = true
-    await new Promise<never>((_, reject) =>
+    return await new Promise<never>((_, reject) =>
       signal.addEventListener('abort', () => reject(signal.reason))
     )
   })
