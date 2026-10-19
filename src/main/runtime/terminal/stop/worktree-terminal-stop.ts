@@ -25,7 +25,8 @@ import { clearClosedWorktreeResumeRecords } from './worktree-sleep-resume-record
 
 export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntimeWithResolveTerminalSplitSourceAuthority {
   protected abstract sleepResolvedWorktreeTerminals(
-    worktree: ResolvedWorktree
+    worktree: ResolvedWorktree,
+    soleLivePtyId?: string
   ): Promise<RuntimeWorktreeTerminalSleepResult>
 
   private collectWorktreePtyIds(
@@ -246,13 +247,19 @@ export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntim
     }
   }
 
+  /** With `soleLivePtyId`, stops nothing unless that PTY is the worktree's only live terminal. */
   async sleepTerminalsForWorktree(
-    worktreeSelector: string
+    worktreeSelector: string,
+    options: { soleLivePtyId?: string } = {}
   ): Promise<RuntimeWorktreeTerminalSleepResult> {
     const worktree = await this.resolveWorktreeSelector(worktreeSelector)
     const existing = this.terminalSleepByWorktreeId.get(worktree.id)
     if (existing) {
       return await existing
+    }
+    if (options.soleLivePtyId) {
+      // Why not shared: a full sleep joining this one would get back a sleep that stopped nothing.
+      return await this.sleepResolvedWorktreeTerminals(worktree, options.soleLivePtyId)
     }
 
     const sleeping = this.sleepResolvedWorktreeTerminals(worktree)

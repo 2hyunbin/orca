@@ -43,6 +43,10 @@ export const NOT_HOST_TWINNED = new Map([
   ['AutomationPersistence.deleteAutomation', 'automation ids are minted UUIDs'],
   ['AutomationPersistence.updateAutomation', 'automation ids are minted UUIDs'],
   [
+    'MetadataLineageOperations.removeUnhostedWorktreeMeta',
+    'acts only on a row no host stamped; it refuses a stamped one'
+  ],
+  [
     'OrcadMigrationBlobInstallPersistence.installDeferredOrcadMigrationShellHistory',
     'a retry trigger: the id only gates a store-wide reinstall; nothing is written under it'
   ],
