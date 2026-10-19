@@ -41,6 +41,7 @@ import {
   initialWatchState,
   measuredBackground,
   measuredPhoneBackground,
+  phoneSinceOf,
   PHONE_WATCH_RULES,
   RESERVE_WATCH_RULES
 } from './relay-reserve-watch-rules.mjs'
@@ -71,9 +72,10 @@ function integerIn(name, raw, min, max) {
 }
 
 // The flip back's request. Its generation is a placeholder: the flip back re-reads the current one.
-// A phone-rule trip turns off only the phone path; anything else flips the whole cell back.
+// A phone-rule trip turns off only the phone path; anything else flips the whole cell back. Both
+// remove the phonePath key, so a cell rolled back to an image without the switch takes the write.
 export function dbFlipRequest(values) {
-  const set = values.flip === 'phonePath' ? 'phonePath=db' : 'admitMode=db'
+  const set = values.flip === 'phonePath' ? 'phonePath=default' : 'admitMode=db,phonePath=default'
   return parseCellFlagsRequest({ ...values, set, 'expected-generation': '0' })
 }
 
@@ -108,6 +110,8 @@ export function parseWatchArguments(values, now = Date.now()) {
   if (!values['state-file']) throw new Error('--state-file is required')
   return {
     request,
+    // The flag tool's own inputs, for turning the phone path off mid-watch.
+    flipValues: values,
     directorService: values['director-service'],
     durationMinutes: integerIn('duration-minutes', values['duration-minutes'], 5, MAX_WATCH_MINUTES),
     segmentMinutes: integerIn('segment-minutes', values['segment-minutes'], 1, MAX_SEGMENT_MINUTES),
@@ -191,7 +195,7 @@ export async function readDirector503Minutes(reader, { projectId, directorServic
 }
 
 const CELL_METRICS_EVENT = 'orca_relay_runtime_metrics'
-const PHONE_SIGNALS = ['credentialRefusals', 'confirmFailures', 'completedAccepts', 'attachDeadlines', 'acceptDatabaseErrors']
+const PHONE_SIGNALS = ['credentialRefusals', 'confirmFailures', 'attachDeadlines', 'acceptDatabaseErrors', 'renewalFailures']
 const sumOf = (counts) => Object.values(counts ?? {}).reduce((sum, count) => sum + Number(count), 0)
 
 // The cell's own runtime metrics lines (one per 30 s) for the `minutes` whole minutes ending at
@@ -209,7 +213,7 @@ export async function readCellPhoneMinutes(reader, { cellId, endedAt, minutes })
     ].join(' AND '),
     projection:
       'json(timestamp,jsonPayload.phoneRejectionsByCodeDelta,jsonPayload.resumeConfirmFailuresByCodeDelta,' +
-      'jsonPayload.clientAcceptCompletedDelta,jsonPayload.phoneAttachDeadlinesDelta,jsonPayload.phoneAcceptDatabaseErrorsDelta)',
+      'jsonPayload.phoneAttachDeadlinesDelta,jsonPayload.phoneAcceptDatabaseErrorsDelta,jsonPayload.resumeRenewalFailuresDelta)',
     limit: LOG_ENTRY_LIMIT
   })
   if (read.failed) return failedRead(read.error)
@@ -222,16 +226,16 @@ export async function readCellPhoneMinutes(reader, { cellId, endedAt, minutes })
     if (!Number.isFinite(at)) return failedRead('cell runtime metrics line with an unparseable timestamp')
     const payload = entry.jsonPayload ?? {}
     if (payload.phoneAttachDeadlinesDelta === undefined) {
-      return failedRead('cell runtime metrics carry no phone counters (an image before step 6)')
+      return { ...failedRead('cell runtime metrics carry no phone counters (an image before step 6)'), permanent: true }
     }
     metered.add(minuteKey(at - DIRECTOR_METRICS_INTERVAL_MS)).add(minuteKey(at - 1))
     const index = keys.indexOf(minuteKey(at - 1))
     if (index < 0) continue
     series.credentialRefusals[index] += Number(payload.phoneRejectionsByCodeDelta?.['4401'] ?? 0)
     series.confirmFailures[index] += sumOf(payload.resumeConfirmFailuresByCodeDelta)
-    series.completedAccepts[index] += Number(payload.clientAcceptCompletedDelta ?? 0)
     series.attachDeadlines[index] += Number(payload.phoneAttachDeadlinesDelta)
     series.acceptDatabaseErrors[index] += Number(payload.phoneAcceptDatabaseErrorsDelta ?? 0)
+    series.renewalFailures[index] += Number(payload.resumeRenewalFailuresDelta ?? 0)
   }
   return { ok: true, minutes: keys, series, unmetered: keys.filter((minute) => !metered.has(minute)) }
 }
@@ -428,13 +432,29 @@ export async function watchSegment(config, dependencies) {
     const reader = createReader(deps, request.projectId)
     // Serialised: concurrent Logging reads are what earn a 429.
     const cell = await readCellSample(deps.fetchImpl, request, dependencies.idToken, sleep)
-    const phoneWatched = cell.ok && cell.phonePathConfigured === 'memory'
-    if (phoneWatched && !state.phoneBackground && baselineEndsAt !== null && at >= baselineEndsAt + METRIC_DELAY_MS) {
+    const phoneWatched = cell.ok && cell.phonePathConfigured === 'memory' && state.phoneOffAt === null
+    const phoneSince = phoneSinceOf(cell, state)
+    const phoneBaselineEndsAt = phoneSince === null ? null : minuteFloor(phoneSince)
+    if (phoneWatched && !state.phoneBackground && phoneBaselineEndsAt !== null && at >= phoneBaselineEndsAt + METRIC_DELAY_MS) {
       const read = await readCellPhoneMinutes(reader, {
         cellId: request.cellId,
-        endedAt: baselineEndsAt,
+        endedAt: phoneBaselineEndsAt,
         minutes: BACKGROUND_MINUTES
       })
+      // A restart or roll in those minutes leaves no background to judge against: no phone
+      // rule could ever pass, so refuse rather than turn the phone path off for certain.
+      const incomplete = read.ok ? read.unmetered.length > 0 && `no metrics for ${read.unmetered.join(', ')}` : read.permanent && read.error
+      if (incomplete) {
+        state = {
+          ...state,
+          state: 'refused',
+          verdict:
+            `${request.cellId}: the phone background, the 10 minutes before ${new Date(phoneBaselineEndsAt).toISOString()}, ` +
+            `is incomplete (${incomplete}), as after a cell restart or roll; start a new watch with a later --flipped-at`
+        }
+        await writeFile(config.stateFile, JSON.stringify(state))
+        break
+      }
       state = { ...state, phoneBackground: measuredPhoneBackground(read) }
     }
     const sample = {
@@ -462,24 +482,32 @@ export async function watchSegment(config, dependencies) {
     const result = evaluateWatchSample(state, sample, { unverifiableLimit: config.unverifiableLimit })
     state = result.state
     log(result.line)
-    if (result.pageAuditDrops) {
+    for (const kind of result.pages) {
       await raiseAlarm(
-        {
-          mode: request.mode,
-          cellId: request.cellId,
-          projectId: request.projectId,
-          kind: 'audit-drops',
-          reason: `the cell dropped resume audit rows for ${PHONE_WATCH_RULES.auditDropPageAfterMs / MINUTE_MS} min`
-        },
+        { mode: request.mode, cellId: request.cellId, projectId: request.projectId, kind, reason: `sustained for ${PHONE_WATCH_RULES.pageAfterMs / MINUTE_MS} min` },
         { runGcloud: dependencies.runGcloud, log }
       )
     }
+    if (state.state === 'watching' && state.phoneTrip) state = await turnPhonePathOff(config, state, at, { ...deps, log })
     await writeFile(config.stateFile, JSON.stringify(state))
     if (state.state !== 'watching') break
     await sleep(Math.max(0, at + SAMPLE_INTERVAL_MS - now()))
   }
   if (config.githubOutput) await writeOutcome(config.githubOutput, state)
   return state
+}
+
+// Writes phonePath=db (the flag tool's CAS write, a plan in dry-run) and keeps watching the
+// reserve rules. If the write fails the watch ends tripped, and the workflow's flip back retries it.
+async function turnPhonePathOff(config, state, at, dependencies) {
+  try {
+    const result = await flipBack({ ...config.flipValues, flip: 'phonePath' }, dependencies)
+    dependencies.log(JSON.stringify({ event: 'orca_relay_reserve_watch_phone_path_off', cellId: state.cellId, verdict: state.phoneTrip, written: result.written }))
+    return { ...state, phoneOffAt: at, phoneTrip: null }
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    return { ...state, state: 'tripped', flip: 'phonePath', verdict: `${state.phoneTrip} (phonePath=db did not land: ${reason})` }
+  }
 }
 
 function writeOutcome(githubOutput, { state, verdict, flip }) {
@@ -583,7 +611,7 @@ export async function flipBack(values, dependencies) {
 
 export const ALARM_EVENT = 'orca_relay_reserve_watch_alarm'
 export const ALARM_LOG_NAME = 'orca-relay-reserve-watch'
-export const ALARM_KINDS = ['refused', 'flip-back-failed', 'audit-drops']
+export const ALARM_KINDS = ['refused', 'flip-back-failed', 'audit-drops', 'renewal-failures']
 
 // GitHub's workflow-command escaping, so a verdict cannot end the annotation or start another.
 export const escapeWorkflowCommand = (text) => text.replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A')
@@ -593,14 +621,18 @@ const escapeWorkflowProperty = (text) => escapeWorkflowCommand(text).replace(/:/
  * Both kinds can leave the cell in reserve with nothing watching it. Only write mode pages: a
  * dry-run watch never flips back, so its refusal or failure changes nothing for the cell.
  */
-export async function raiseAlarm({ mode, cellId, projectId, kind, reason }, { runGcloud, log = console.log }) {
+export async function raiseAlarm({ mode, cellId, projectId, kind, reason, flip }, { runGcloud, log = console.log }) {
   if (!ALARM_KINDS.includes(kind)) throw new Error(`--kind must be one of ${ALARM_KINDS.join(', ')}`)
   const message =
     kind === 'refused'
       ? `${cellId} may be in reserve mode and unwatched: the watch was refused (${reason}). Rerun it, or flip the cell to db with Operate Relay Production Cell Flags.`
       : kind === 'audit-drops'
         ? `${cellId} is losing resume audit rows (${reason}); phones still connect. Check its database writes, or set phonePath=db.`
-        : `${cellId} may still be in reserve mode with no watch: the flip back did not land (${reason}). Flip it to db by hand with Operate Relay Production Cell Flags (set=admitMode=db), or with the break-glass inputs logged above if the cell does not answer.`
+        : kind === 'renewal-failures'
+          ? `${cellId} cannot renew phone credentials (${reason}); phones still connect but age toward re-pairing. Check its database writes, or set phonePath=db.`
+          : flip === 'phonePath'
+            ? `${cellId} may still have phonePath=memory with no watch: turning it off did not land (${reason}). Set phonePath=default by hand with Operate Relay Production Cell Flags.`
+            : `${cellId} may still be in reserve mode with no watch: the flip back did not land (${reason}). Flip it to db by hand with Operate Relay Production Cell Flags (set=admitMode=db), or with the break-glass inputs logged above if the cell does not answer.`
   log(`::error title=${escapeWorkflowProperty(`Reserve watch ${kind} for ${cellId}`)}::${escapeWorkflowCommand(message)}`)
   if (mode !== 'write') return { paged: false }
   const entry = JSON.stringify({ event: ALARM_EVENT, cellId, kind, reason })
@@ -650,7 +682,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   try {
     if (command === 'alarm') {
       await raiseAlarm(
-        { mode: values.mode, cellId: values['cell-id'] ?? '', projectId: values['project-id'], kind: values.kind, reason: values.verdict ?? '' },
+        { mode: values.mode, cellId: values['cell-id'] ?? '', projectId: values['project-id'], kind: values.kind, reason: values.verdict ?? '', flip: values.flip },
         { runGcloud }
       )
       // The alarm step is red, whatever the page did.
@@ -664,6 +696,13 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
       const config = await parseWatchSegment(values)
       const state = await watchSegment(config, {
         idToken,
+        // For turning the phone path off mid-watch; without it that write fails and the workflow's flip back retries.
+        accessToken: process.env.ORCA_RELAY_CONTROL_ACCESS_TOKEN,
+        audit: {
+          writtenBy: `reserve-watch/${process.env.GITHUB_TRIGGERING_ACTOR ?? process.env.GITHUB_ACTOR ?? 'unknown'}`,
+          runId: process.env.GITHUB_RUN_ID ?? 'local',
+          runAttempt: process.env.GITHUB_RUN_ATTEMPT ?? '0'
+        },
         readRolloutLease: readProductionRolloutLease,
         runGcloud
       })
