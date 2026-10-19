@@ -241,4 +241,23 @@ describe('createRemotePaneLayoutPusher', () => {
     expect(sent[1]).toMatchObject({ renamedLeafIds: ['leaf-a'] })
     expect(sent[2]).not.toHaveProperty('renamedLeafIds')
   })
+
+  it('sends a rename back to the title the last push carried', () => {
+    const remote = { 'leaf-b': toRemoteRuntimePtyId('pty-b', 'env-1') }
+    const pusher = createRemotePaneLayoutPusher()
+    const layout = makeLayout()
+    pusher.push({ worktreeId: 'wt-1', tabId: 'tab-1', layout })
+    // The host renamed leaf-b meanwhile; the user names it back to what the last push held.
+    notePendingPaneTitleRename({
+      leafId: 'leaf-b',
+      title: null,
+      layout: makeLayout({ ptyIdsByLeafId: remote, titlesByLeafId: { 'leaf-b': 'host' } })
+    })
+    pusher.push({ worktreeId: 'wt-1', tabId: 'tab-1', layout })
+
+    expect(updateWebRuntimePaneLayout).toHaveBeenCalledTimes(2)
+    expect(updateWebRuntimePaneLayout.mock.calls[1]?.[0]).toMatchObject({
+      renamedLeafIds: ['leaf-b']
+    })
+  })
 })

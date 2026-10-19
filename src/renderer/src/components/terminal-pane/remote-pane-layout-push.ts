@@ -32,7 +32,11 @@ export function createRemotePaneLayoutPusher(): RemotePaneLayoutPusher {
   let nextAttemptId = 0
   return {
     push: ({ worktreeId, tabId, layout, intent }) => {
+      // Why: a resent full title map is not a rename; only these panes were renamed here.
+      // A rename is always sent, even back to a title the last push carried.
+      const renamedLeafIds = takeUnsentPaneTitleRenames(collectLeafIdsInOrder(layout.root))
       if (
+        renamedLeafIds.length === 0 &&
         lastAttempt?.worktreeId === worktreeId &&
         lastAttempt.tabId === tabId &&
         terminalLayoutEqual(lastAttempt.snapshot, layout)
@@ -41,8 +45,6 @@ export function createRemotePaneLayoutPusher(): RemotePaneLayoutPusher {
       }
       const attempt = { id: ++nextAttemptId, worktreeId, tabId, snapshot: layout }
       lastAttempt = attempt
-      // Why: a resent full title map is not a rename; only these panes were renamed here.
-      const renamedLeafIds = takeUnsentPaneTitleRenames(collectLeafIdsInOrder(layout.root))
       void updateWebRuntimePaneLayout({
         worktreeId,
         tabId,
