@@ -98,7 +98,7 @@ function readOptions(journal: AgentSessionJournal, agents: StructuredAgentRegist
         readOptions: async () => ({ models: [], current: { model: 'opus' } })
       },
       agents,
-      store: { getRecord: () => undefined }
+      store: { getRecord: () => null }
     },
     serialize: (_sessionId: string, task: () => Promise<unknown>) => task(),
     openConversation: async () => running,
