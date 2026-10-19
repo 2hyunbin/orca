@@ -35,11 +35,6 @@ export class RemoteNodeRuntimeNoexecError extends RelayHostAnsweredError {
   }
 }
 
-/** Exit 126 with EACCES is the shell's report for an execve the mount or policy refused. */
-function isExecRefused(exitStatus: number | null, output: string): boolean {
-  return exitStatus === 126 && /permission denied/i.test(output)
-}
-
 /**
  * Throws only for the shell's exec refusal; any other probe failure falls through to the upload,
  * whose self-test classifies it with the loader's own words.
@@ -50,7 +45,9 @@ export function assertRemoteNodeRuntimeStoreExecutable(probe: string, storeDir: 
     return
   }
   const report = parseRemoteRuntimeExitReport(probe.slice(index))
-  if (isExecRefused(report.exitStatus, report.output)) {
+  // Why the status alone: 126 is "found but not executable", and the probe is our own 0700 /bin/sh
+  // script, so only an exec refusal is left; the shell's words may be localized.
+  if (report.exitStatus === 126) {
     throw new RemoteNodeRuntimeNoexecError(report.output, storeDir)
   }
 }

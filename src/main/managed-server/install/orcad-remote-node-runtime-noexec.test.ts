@@ -18,6 +18,8 @@ import {
   ensureRemoteOrcadNodeRuntime
 } from './orcad-remote-node-runtime'
 import {
+  assertRemoteNodeRuntimeStoreExecutable,
+  RemoteNodeRuntimeNoexecError,
   REMOTE_NODE_RUNTIME_MISSING,
   REMOTE_NODE_RUNTIME_NOEXEC
 } from '../../ssh/orcad-remote-node-runtime-report'
@@ -113,6 +115,13 @@ describe('pinned-Node runtime store on a host that refuses to run programs', () 
     expect(uploadRelayDirectory).not.toHaveBeenCalled()
     const commands = vi.mocked(execCommand).mock.calls.map(([, command]) => command)
     expect(commands.at(-1)).toMatch(/^rm -rf '\/root\/\.orca-remote\/runtimes\/\.stage-/)
+  })
+
+  it('reads exit 126 as noexec in any locale', () => {
+    const localized = `${REMOTE_NODE_RUNTIME_NOEXEC}\nORCA_RUNTIME_EXIT=126\nsh: 1: .exec-probe: Keine Berechtigung`
+    expect(() =>
+      assertRemoteNodeRuntimeStoreExecutable(localized, '/root/.orca-remote/runtimes')
+    ).toThrow(RemoteNodeRuntimeNoexecError)
   })
 
   it('leaves any other probe failure to the self-test after the upload', async () => {
