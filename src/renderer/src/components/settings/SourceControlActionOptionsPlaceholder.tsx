@@ -11,11 +11,11 @@ export function SourceControlActionOptionsPlaceholder({
 }: {
   value?: SourceControlActionLaunchPreferences
 }): React.JSX.Element {
-  // Unknown agent: Model and Permissions, as most agents show. Both take full rows, as loaded.
+  // Nothing saved: one full row, the terminal and permissions-only footprint; a Model row may add.
   const fullRows = value
     ? (sourceControlActionAgentPicksModel(value.agentId) ? 1 : 0) +
       (sourceControlActionPermissionModes(value.agentId).length > 0 ? 1 : 0)
-    : 2
+    : 1
   const cells =
     value?.model && sourceControlActionAgentPicksModel(value.agentId)
       ? sourceControlActionChatOptions(value.agentId, value.model).length
