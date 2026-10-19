@@ -307,6 +307,7 @@ describe('launch facts outside the tables', () => {
       }
       if (lane === 'ipc-reentry' || lane === 'ipc-reentry-refused') {
         const refused = lane === 'ipc-reentry-refused'
+        classifyErrorMock.mockReturnValue({ error_class: 'unknown' })
         await lanes.store.admitTerminalPane({
           type: 'createTerminalTab',
           workspace: pane.worktreeId,
