@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { getDefaultSettings } from '../../../../shared/constants'
 import type { AppState } from '../types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
@@ -236,7 +237,7 @@ describe('worktree lineage state', () => {
     store.setState({
       worktreeLineageById: { [lineage.worktreeId]: lineage },
       workspaceLineageByChildKey: { [workspaceLineage.childWorkspaceKey]: workspaceLineage }
-    } as Partial<AppState>)
+    })
 
     await store.getState().updateWorktreeLineage(lineage.worktreeId, { noParent: true })
 
@@ -692,10 +693,10 @@ describe('worktree lineage state', () => {
       _meta: { runtimeId: 'runtime-remote' }
     })
     store.setState({
-      settings: { activeRuntimeEnvironmentId: 'env-1' } as never,
+      settings: { ...getDefaultSettings('/tmp'), activeRuntimeEnvironmentId: 'env-1' },
       worktreesByRepo: { repo1: [child] },
       worktreeLineageById: { [lineage.worktreeId]: lineage }
-    } as Partial<AppState>)
+    })
 
     await store.getState().updateWorktreeLineage(lineage.worktreeId, { noParent: true })
 

@@ -356,6 +356,7 @@ describe('fetchWorktrees', () => {
     mockApi.worktrees.listDetected.mockImplementationOnce(async (args) =>
       qualifyDetectedResult(args, makeDetectedResult('repo1', [surviving]))
     )
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the purge reads only these fields of the seeded tabs.
     store.setState({
       worktreesByRepo: { repo1: [] },
       detectedWorktreesByRepo: {
@@ -459,7 +460,7 @@ describe('fetchWorktrees', () => {
     const store = createTestStore()
 
     mockApi.worktrees.list.mockResolvedValue([])
-    store.setState({ worktreesByRepo: {} } as Partial<AppState>)
+    store.setState({ worktreesByRepo: {} })
 
     await store.getState().fetchWorktrees('repo1')
 

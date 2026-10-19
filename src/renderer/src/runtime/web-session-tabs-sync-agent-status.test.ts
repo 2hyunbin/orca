@@ -236,7 +236,7 @@ describe('applyWebSessionTabsSnapshot', () => {
     ) as Partial<WebSessionTabsSyncState>
     const mirroredPaneKey = Object.keys(initial.agentStatusByPaneKey ?? {})[0]!
     const existing = initial.agentStatusByPaneKey![mirroredPaneKey]!
-    const attributionPatch = applyWebSessionTabsSnapshot(
+    const attributionPatch: Partial<WebSessionTabsSyncState> = applyWebSessionTabsSnapshot(
       makeState({
         ...initial,
         agentStatusByPaneKey: {
@@ -251,7 +251,7 @@ describe('applyWebSessionTabsSnapshot', () => {
       { ...snapshot, snapshotVersion: 2 },
       ENV,
       NOW
-    ) as Partial<WebSessionTabsSyncState>
+    )
 
     expect(attributionPatch.agentStatusByPaneKey?.[mirroredPaneKey]).toMatchObject({
       worktreeId: existing.worktreeId,
@@ -259,7 +259,7 @@ describe('applyWebSessionTabsSnapshot', () => {
     })
     expect(attributionPatch.agentStatusEpoch).toBe(8)
 
-    const fresherAttributionPatch = applyWebSessionTabsSnapshot(
+    const fresherAttributionPatch: Partial<WebSessionTabsSyncState> = applyWebSessionTabsSnapshot(
       makeState({
         ...initial,
         agentStatusByPaneKey: {
@@ -276,7 +276,7 @@ describe('applyWebSessionTabsSnapshot', () => {
       { ...snapshot, snapshotVersion: 3 },
       ENV,
       NOW
-    ) as Partial<WebSessionTabsSyncState>
+    )
 
     expect(fresherAttributionPatch.agentStatusByPaneKey?.[mirroredPaneKey]).toMatchObject({
       worktreeId: existing.worktreeId,

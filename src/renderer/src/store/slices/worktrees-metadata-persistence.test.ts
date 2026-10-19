@@ -387,7 +387,7 @@ describe('worktree remote runtime mutations', () => {
     const subscriber = vi.fn()
     store.setState({
       worktreesByRepo: { repo1: [first, second] }
-    } as Partial<AppState>)
+    })
 
     const unsubscribe = store.subscribe(subscriber)
     await store.getState().updateWorktreesMeta([
