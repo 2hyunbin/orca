@@ -451,7 +451,9 @@ export class HostSessionRegistry {
     this.seatLog = new CellSeatLog(undefined, now)
     this.postProofCloses = new PostProofCloseLog(observer)
     this.phoneAccepts = new PhoneAcceptLog(config.cellId)
-    this.memoryConfirmations = new MemoryResumeConfirmations(store, now)
+    this.memoryConfirmations = new MemoryResumeConfirmations(store, now, (error) =>
+      this.phoneAccepts.renewalFailed(isRelayDatabaseTransientError(error) ? 'database_transient' : 'error')
+    )
   }
 
   // Reserve mode is only ever a cell's, and only while its applied switch says so.
@@ -867,14 +869,17 @@ export class HostSessionRegistry {
         return
       }
       if (abandonedByClient('credential')) return
-      if (found.outcome === 'refused') {
-        capacityReservation?.release()
-        this.observer.recordAuth(false)
-        this.rejectClient(socket, RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL)
-        return
+      // The switch turned off during the read: today's whole path, never a lease-less memory phone.
+      if (this.phonePathEffective() === 'memory') {
+        if (found.outcome === 'refused') {
+          capacityReservation?.release()
+          this.observer.recordAuth(false)
+          this.rejectClient(socket, RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL)
+          return
+        }
+        if (found.outcome === 'resume') memoryReservation = found.reservation
+        else memoryMissedDevice = true
       }
-      if (found.outcome === 'resume') memoryReservation = found.reservation
-      else memoryMissedDevice = true
     }
     const reservation =
       memoryReservation ??
@@ -1071,7 +1076,8 @@ export class HostSessionRegistry {
       })
       elsewhere = row !== null && row.cellId !== this.config.cellId
       if (row?.cellId === this.config.cellId) this.phoneAccepts.missRowNamesHere(reservation.relayHostId)
-    } catch {
+    } catch (error) {
+      this.phoneAccepts.missReadError(isRelayDatabaseTransientError(error) ? 'database_transient' : 'error')
       elsewhere = true
     }
     if (elsewhere) {
