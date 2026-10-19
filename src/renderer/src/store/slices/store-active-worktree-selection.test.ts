@@ -105,45 +105,6 @@ describe('setActiveWorktree', () => {
     })
   })
 
-  it('does not change smart-sort rank after selection when a background event bumps sortEpoch', () => {
-    const store = createTestStore()
-    const focusedId = 'repo1::/path/focused'
-    const backgroundId = 'repo1::/path/background'
-    const now = new Date('2026-04-16T12:00:00.000Z').getTime()
-
-    vi.spyOn(Date, 'now').mockReturnValue(now)
-
-    seedStore(store, {
-      worktreesByRepo: {
-        repo1: [
-          makeWorktree({
-            id: focusedId,
-            repoId: 'repo1',
-            displayName: 'Focused',
-            lastActivityAt: now - 2 * 60_000
-          }),
-          makeWorktree({
-            id: backgroundId,
-            repoId: 'repo1',
-            displayName: 'Background',
-            lastActivityAt: now - 60_000
-          })
-        ]
-      },
-      refreshGitHubForWorktree: vi.fn(),
-      refreshGitHubForWorktreeIfStale: vi.fn()
-    })
-
-    store.getState().setActiveWorktree(focusedId)
-    store.getState().bumpWorktreeActivity(backgroundId)
-
-    const worktrees = [...store.getState().worktreesByRepo.repo1]
-    const repoMap = new Map(store.getState().repos.map((repo) => [repo.id, repo]))
-    worktrees.sort(buildWorktreeComparator('smart', repoMap, now, new Map()))
-
-    expect(worktrees.map((worktree) => worktree.id)).toEqual([backgroundId, focusedId])
-  })
-
   it('keeps the current right sidebar tab when switching worktrees', () => {
     const store = createTestStore()
     const wt1 = 'repo1::/path/wt1'

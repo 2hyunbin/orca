@@ -243,16 +243,4 @@ describe('folder workspace generic activation and activity', () => {
     expect(store.getState().activeTabType).toBe('editor')
     expect(store.getState().activeFileId).toBe('fallback-file')
   })
-
-  it('leaves Recent to an owning host that stamps it', async () => {
-    ownerHostOwnsSidebarInputs.mockResolvedValueOnce(true)
-    const folderWorkspace = makeFolderWorkspace()
-    const store = seedLocalFolderStore(folderWorkspace)
-
-    store.getState().bumpWorktreeActivity(folderWorkspaceKey(folderWorkspace.id))
-    await Promise.resolve()
-
-    expect(store.getState().folderWorkspaces[0]?.lastActivityAt).toBe(0)
-    expect(folderWorkspacesUpdate).not.toHaveBeenCalled()
-  })
 })

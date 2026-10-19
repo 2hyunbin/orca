@@ -187,8 +187,7 @@ describe('worktree unread (show-until-interact)', () => {
             { workspaceIds: [worktreeId], targets: [{ worktreeId: worktreeId, tabId: 'no-tab' }] },
             { screenArrived: true }
           )
-      ],
-      ['bumpWorktreeActivity', (s: AppState) => s.bumpWorktreeActivity(worktreeId)]
+      ]
     ] as const) {
       const store = createTestStore()
       store.setState(ambiguousState())

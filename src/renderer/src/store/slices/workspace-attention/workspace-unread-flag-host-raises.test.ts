@@ -138,6 +138,17 @@ describe('the window raises the unread flag only where its host does not', () =>
     expect(isUnread(UNREACHABLE_SERVER_WT)).toBe(true)
   })
 
+  it('drops a raise still waiting on a server’s first status once the user marks it read', async () => {
+    const { store, mark, isUnread } = createStore()
+    let answer: (capabilities: readonly string[]) => void = () => {}
+    hostCapabilities.set('slow', new Promise((resolve) => (answer = resolve)))
+    await mark(SLOW_SERVER_WT)
+    store.getState().setWorkspaceUnreadByUser(SLOW_SERVER_WT, false)
+    answer([])
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(isUnread(SLOW_SERVER_WT)).toBe(false)
+  })
+
   it('decides a folder workspace by the host of the row it raises', async () => {
     const { store, mark, updateFolderWorkspace } = createStore()
     const folder = folderWorkspaceKey(FOLDER_ID)
