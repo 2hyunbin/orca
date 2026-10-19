@@ -200,15 +200,24 @@ async function loseStreamAndChange(
     const state = window.__store!.getState()
     const tab = state.createTab(id)
     state.setActiveTab(tab.id)
+    const startedAt = performance.now()
     const created = await window.api.runtime.call({
       method: 'terminal.create',
       params: { worktree: `id:${id}`, focus: false, activate: false, presentation: 'background' }
     })
     // A reopened stream's snapshot re-arms the hook with a new function.
-    return { tabId: tab.id, created, beforeReopen: window.__endLocalLayoutStreamE2E === end }
+    return {
+      tabId: tab.id,
+      created,
+      createMs: Math.round(performance.now() - startedAt),
+      beforeReopen: window.__endLocalLayoutStreamE2E === end
+    }
   }, worktreeId)
   await expect.poll(() => stops.length, { message: 'the stream never stopped' }).toBe(1)
-  expect(gap.beforeReopen, "main's terminal must start before the 1 s reopen").toBe(true)
+  expect(
+    gap.beforeReopen,
+    `main's terminal must start before the 1 s reopen (its create took ${gap.createMs} ms)`
+  ).toBe(true)
   const mainTerminal = readCreatedTerminal(gap.created)
   await expectSettled(page, worktreeId, {
     tabs: [firstTab, gap.tabId, mainTerminal.tabId],
