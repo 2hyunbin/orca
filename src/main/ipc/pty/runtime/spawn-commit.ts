@@ -1,5 +1,4 @@
 import { isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
-import { ptyIncarnationById, setAdoptedPtyOwnership } from '../provider/ownership-state'
 import { ptySizes } from '../delivery/visibility-state'
 import { commitRuntimePtySize } from './spawn-commit-pty-size'
 import {
@@ -99,11 +98,7 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
       ctx.result,
       ctx.hostSessionBinding?.expectedSourceBinding
     )
-    setAdoptedPtyOwnership(ctx.result.id)
     ctx.deps.runtime?.registerPreAllocatedHandleForPty(ctx.result.id, owner.surface.terminalHandle)
-    if (ctx.result.incarnationId) {
-      ptyIncarnationById.set(ctx.result.id, ctx.result.incarnationId)
-    }
     ctx.deps.options?.onCodexHomePtySpawned?.({
       id: ctx.result.id,
       codexHomePath: ctx.selectedCodexHomePath,

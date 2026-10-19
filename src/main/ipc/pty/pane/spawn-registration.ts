@@ -81,7 +81,8 @@ export async function discardUnpersistedPtySpawn(
       ) {
         return
       }
-      // Keep ownership: the process may still run, and a later stop needs it to reach it.
+      // Keep ownership: the process may still run, so it reads unverifiable until it exits or an
+      // orphan sweep reaps it, never forgotten.
       runtime?.markPtyLivenessUnverifiable?.(
         result.id,
         `discard shutdown failed: ${errorMessage(error)}`

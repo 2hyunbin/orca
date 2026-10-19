@@ -136,12 +136,13 @@ export function killPtyFromRuntimeController(
       })
     return true
   }
+  const killedIncarnationId = ptyIncarnationById.get(ptyId)
   const startupPromise = getLocalPtyProviderStartupPromise(resolvePtyExecutionHost(ptyId))
   if (startupPromise) {
     // Why: select the provider after the daemon swap; the fallback first can report success while orphaning a daemon PTY.
     void startupPromise
       .then(killWithCurrentProvider)
-      .catch((err) => reportStopFailure(err, ptyIncarnationById.get(ptyId)))
+      .catch((err) => reportStopFailure(err, killedIncarnationId))
     return true
   }
   return killWithCurrentProvider()

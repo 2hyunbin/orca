@@ -100,8 +100,9 @@ export async function verifyPtyStopped(
   return true
 }
 
-/** Returns the retired incarnation, or `null` when the proof is about an earlier incarnation than
- *  the record's: a same-id respawn owns it now, so nothing is retired. */
+/** Returns the retired incarnation, or `null` when the proof names a different incarnation than
+ *  the record's: a same-id respawn owns it now, so nothing is retired. A proof naming none still
+ *  retires: owner reconciliation can stamp the same process's incarnation mid-stop. */
 export function finishPtyShutdown(
   id: string,
   connectionId: string | null | undefined,
@@ -110,6 +111,7 @@ export function finishPtyShutdown(
 ): string | undefined | null {
   if (
     evidence instanceof PtyExitProof &&
+    evidence.incarnationId !== undefined &&
     !isCurrentPtyExit({ id, incarnationId: evidence.incarnationId })
   ) {
     return null
