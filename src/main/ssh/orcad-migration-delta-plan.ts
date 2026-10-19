@@ -53,7 +53,9 @@ export function committedOrcadMigrationChain(
 export function orcadDeltaSourceStore(
   store: Store,
   target: SshTarget,
-  moved: readonly OrcadMigrationSourceCutover[]
+  moved: readonly OrcadMigrationSourceCutover[],
+  /** A journaled delta's manifest: an older build may have exported server groups in it. */
+  journaled?: OrcadMigrationManifest
 ): OrcadDeltaSourceStore {
   const ids = orcadMigrationCatalogIds(moved.map((cutover) => cutover.manifest.payload))
   // A linked project or group is the server's already, so a delta never moves it either.
@@ -63,6 +65,7 @@ export function orcadDeltaSourceStore(
   // The server's record of a group it got from a move or link wins: a new row in it references the
   // server's group, since this desktop's retained copy may be stale and would conflict.
   const serverGroups = new Set([...ids.projectGroupIds, ...linkedGroups])
+  const exported = new Set(journaled?.payload.projectGroups.map((group) => group.id))
   return orcadSourceStoreWithout(
     store,
     target,
@@ -73,7 +76,7 @@ export function orcadDeltaSourceStore(
       projectGroupIds: serverGroups
     },
     moved.at(-1)?.destinationEnvironmentId,
-    serverGroups
+    new Set([...serverGroups].filter((id) => !exported.has(id)))
   )
 }
 
@@ -133,7 +136,7 @@ export function planOrcadDeltaMove(
   ) {
     throw new Error('orcad_delta_no_retained_migration')
   }
-  const source = orcadDeltaSourceStore(store, target, moved)
+  const source = orcadDeltaSourceStore(store, target, moved, resumes?.manifest)
   const manifest =
     resumes?.manifest ??
     createOrcadMigrationManifest(source, target, {
