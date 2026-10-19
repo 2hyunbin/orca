@@ -70,10 +70,6 @@ describe('what each composer send carries', () => {
     })
   })
 
-  it('carries a pick on its way without the default model the picker shows', () => {
-    expect(sendOptionsFor(true, { effort: 'low' }, {})()).toEqual({ effort: 'low' })
-  })
-
   it('carries nothing to an older host', () => {
     expect(sendOptionsFor(false, {})()).toBeUndefined()
   })

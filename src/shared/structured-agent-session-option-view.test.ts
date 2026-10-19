@@ -96,11 +96,29 @@ describe('a Claude model its CLI no longer lists', () => {
 })
 
 describe('what a send carries', () => {
-  it('carries no default it shows: the agent runs it anyway, and the chat never chose it', () => {
+  it('carries the default it shows when nothing names a model', () => {
     const named = { ...SONNET, isDefault: true }
     const listing = { ...LISTED, models: [OPUS, named], listingNamesConfiguredModel: true }
-    expect(shown(withHostList(fresh(), listing), undefined, {}).model).toBe('sonnet')
-    expect(carried(withHostList(fresh(), listing))).toBeUndefined()
+    expect(carried(withHostList(fresh(), listing))).toEqual({ model: 'sonnet' })
+  })
+
+  it("pins a new chat's shown default on its first send, which a restart shows as the chat's own", () => {
+    const listing = { ...LISTED, models: CLI302, listingNamesConfiguredModel: true }
+    const first = carried(withHostList(fresh(), listing))
+    expect(first).toEqual({ model: 'opus' })
+    // The host saved what the send carried, so the resumed chat's answer marks no default.
+    const restarted = applyStructuredAgentSessionOptions(
+      applyStructuredAgentSessionModelCatalog(fresh(), CLAUDE_SESSION_OPTION_CATALOG, listing, {
+        newLaunch: false
+      }),
+      CLAUDE_SESSION_OPTION_CATALOG,
+      { models: CLI302, current: { model: first?.model, defaulted: [] } }
+    )
+    expect(shown(restarted, undefined, {}).model).toBe('opus')
+    expect(structuredAgentSessionShownSnapshot(restarted)[0]).toMatchObject({
+      valueSource: 'dispatched'
+    })
+    expect(carried(restarted)).toEqual({ model: 'opus' })
   })
 
   it('carries a pick on its way as given', () => {
@@ -178,6 +196,9 @@ describe("a chat's model and effort, apart from the defaults filling them in", (
       structuredAgentSessionShownSnapshot(state).find((entry) => entry.id === 'effort')
     ).toMatchObject({ settable: true, kind: { choices: levels('low', 'xhigh') } })
     expect(shown(state, undefined, { effort: 'xhigh' })).toEqual({ model: 'opus', effort: 'xhigh' })
-    expect(carried(state, undefined, { effort: 'xhigh' })).toEqual({ effort: 'xhigh' })
+    expect(carried(state, undefined, { effort: 'xhigh' })).toEqual({
+      model: 'opus',
+      effort: 'xhigh'
+    })
   })
 })

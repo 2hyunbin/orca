@@ -10,6 +10,7 @@ import {
   structuredAgentSessionOwnValue
 } from './structured-agent-session-option-state'
 import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from './agent-chat-permission-mode'
+import { structuredAgentSessionShownModel } from './structured-agent-session-option-snapshot'
 
 function catalogListsSeedModel(
   state: StructuredAgentSessionOptionState,
@@ -84,15 +85,29 @@ function modelOptionView(
   return { ...commitStructuredAgentSessionOptionValues(view, held), pendingId: state.pendingId }
 }
 
+/** The default model a new chat's pill names: its first send pins it, so a later CLI default
+ *  never moves the chat. A resumed chat's defaulted model is never named, so never sent. */
+function shownDefaultModel(view: StructuredAgentSessionOptionState): string | undefined {
+  if (!view.catalog || view.catalogSource === 'seed') {
+    return undefined
+  }
+  const { shown, isCliDefault } = structuredAgentSessionShownModel(
+    view.catalog,
+    view.catalog.models,
+    view.record
+  )
+  return isCliDefault ? (shown.currentId ?? undefined) : undefined
+}
+
 /** The Claude model and effort a send carries: the chat's own and the picks over them in `view`,
- *  never a catalog default, which the agent runs anyway and the chat would then claim as its own. */
+ *  else the default model a new chat shows. */
 export function structuredAgentSessionSendSelection(
   view: StructuredAgentSessionOptionState
 ): Record<string, string> | undefined {
   if (view.record.agent !== 'claude') {
     return undefined
   }
-  const model = structuredAgentSessionOwnValue(view.record, 'model')
+  const model = structuredAgentSessionOwnValue(view.record, 'model') ?? shownDefaultModel(view)
   const effort = structuredAgentSessionOwnValue(view.record, 'effort')
   return model || effort
     ? { ...(model ? { model } : {}), ...(effort ? { effort } : {}) }
