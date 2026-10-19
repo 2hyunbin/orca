@@ -40,7 +40,9 @@
       "providers": {
         "title": "プロバイダー",
         "antigravityDescription": "Antigravity チャットは、Orca がこのホストにダウンロードするサーバーで動作します。agy CLI とは別です。",
-        "antigravityNotSignedIn": "サインインしていません。チャットには、ターミナルの agy アカウントとは別の Antigravity サインインが必要です。"
+        "antigravityNotSignedIn": "サインインしていません。チャットには、ターミナルの agy アカウントとは別の Antigravity サインインが必要です。",
+        "antigravityAccount": "アカウント",
+        "antigravitySignInNeeded": "チャットには、ターミナルの agy アカウントとは別の Antigravity サインインが必要です。"
       }
     },
     "terminal": {

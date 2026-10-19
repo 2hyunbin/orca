@@ -144,7 +144,9 @@
       "providers": {
         "title": "Fournisseurs",
         "antigravityDescription": "Les chats Antigravity utilisent un serveur qu’Orca télécharge sur cet hôte, distinct de la CLI agy.",
-        "antigravityNotSignedIn": "Non connecté. Les discussions nécessitent une connexion Antigravity, distincte de votre compte agy du terminal."
+        "antigravityNotSignedIn": "Non connecté. Les discussions nécessitent une connexion Antigravity, distincte de votre compte agy du terminal.",
+        "antigravityAccount": "Compte",
+        "antigravitySignInNeeded": "Les discussions nécessitent une connexion Antigravity, distincte de votre compte agy du terminal."
       }
     },
     "terminal": {
