@@ -322,6 +322,7 @@ describe('launch facts outside the tables', () => {
         const events: string[] = []
         const releases: ReturnType<typeof vi.fn<() => void>>[] = []
         const finishes: ReturnType<typeof vi.fn<() => void>>[] = []
+        const existingSizes = new Set(ptySizes.keys())
         let firstId: string | undefined
         let queuedSleep: Promise<void> | undefined
         let attempts = 0
@@ -329,7 +330,7 @@ describe('launch facts outside the tables', () => {
         vi.spyOn(teamsShim, 'resolveClaudeAgentTeamsShimBin').mockReturnValue(null)
         const prepareTeam = vi.spyOn(lanes.runtime, 'prepareClaudeAgentTeamsLeaderForHandle')
         const releaseTeam = vi.spyOn(lanes.runtime, 'releaseClaudeAgentTeamsLeaderForHandle')
-        const transferTeam = vi.spyOn(lanes.runtime, 'registerPreAllocatedHandleForPty')
+        const registeredHandle = vi.spyOn(lanes.runtime, 'registerPreAllocatedHandleForPty')
         const beginRegistration = vi.spyOn(lanes.runtime, 'beginPtyRegistration')
         const begin = spawnRouting.beginPtySpawnForWorktree
         const installing = vi
@@ -357,7 +358,7 @@ describe('launch facts outside the tables', () => {
             })
             releases.push(receipt)
             if (attempt === 1) {
-              firstId = [...ptySizes.keys()].find((id) => id.startsWith(`${pane.worktreeId}@@`))
+              firstId = [...ptySizes.keys()].find((id) => !existingSizes.has(id))
               await lanes.store.persistPtyBinding({
                 ...pane,
                 ptyId: 'winner',
@@ -414,7 +415,9 @@ describe('launch facts outside the tables', () => {
         expect(releaseTeam.mock.calls).toEqual(
           (refused ? handles : handles.slice(0, 1)).map((handle) => [handle])
         )
-        expect(transferTeam.mock.calls).toEqual(refused ? [] : [['fresh-reentry', handles[1]]])
+        expect(registeredHandle.mock.calls).toEqual(
+          (refused ? [] : [1, 2]).map(() => ['fresh-reentry', handles[1]])
+        )
         expect(releaseTeam.mock.invocationCallOrder[0]).toBeLessThan(
           prepareTeam.mock.invocationCallOrder[1]!
         )
