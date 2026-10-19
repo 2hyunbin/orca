@@ -186,5 +186,22 @@ describe('the memory phone path', () => {
     const host = await reserve.host()
     await reserve.installDevice(host.hostId, TOKEN)
     expect((await (await reserve.dialPhone(host.hostId, TOKEN)).closed).code).toBe(4409)
+    expect(warnings('orca_relay_client_miss_read_error')).toEqual([
+      { event: 'orca_relay_client_miss_read_error', cause: 'error', cellId: reserve.config.cellId }
+    ])
+  })
+
+  it('takes the database path for a phone whose switch turned off during its device read', async () => {
+    const { reserve, seated } = await seatedPhoneHost('memory')
+    const lookup = reserve.relay.store.lookupResume.bind(reserve.relay.store)
+    vi.spyOn(reserve.relay.store, 'lookupResume').mockImplementation(async (...args) => {
+      const found = await lookup(...args)
+      reserve.setAdmitMode('reserve', { phonePath: 'db' })
+      return found
+    })
+    const connOpen = nextFrame(seated.socket, 'conn-open')
+    await reserve.dialPhone(seated.identity.hostId, TOKEN)
+    expect(await connOpen).toMatchObject({ kind: 'resume' })
+    expect((await reserve.activityLeases()).map((lease) => lease.activity_kind)).toEqual(['confirmation'])
   })
 })

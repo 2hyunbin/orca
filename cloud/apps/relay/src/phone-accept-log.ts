@@ -10,6 +10,7 @@ export type PhoneAcceptDatabaseCause = 'database_transient' | 'error'
 type PhoneAcceptAnomaly =
   | { event: 'orca_relay_client_accept_db_error'; cause: PhoneAcceptDatabaseCause }
   | { event: 'orca_relay_client_miss_row_names_here'; relayHostIdDigest: string }
+  | { event: 'orca_relay_client_miss_read_error'; cause: PhoneAcceptDatabaseCause }
 
 export class PhoneAcceptLog {
   private readonly window: AssignmentRejectionLogWindow<PhoneAcceptAnomaly>
@@ -37,6 +38,11 @@ export class PhoneAcceptLog {
       event: 'orca_relay_client_miss_row_names_here',
       relayHostIdDigest: relayHostLogDigest(relayHostId)
     })
+  }
+
+  // The no-seat assignment read failed; the phone was closed 4409 to re-resolve.
+  missReadError(cause: PhoneAcceptDatabaseCause): void {
+    this.record({ event: 'orca_relay_client_miss_read_error', cause })
   }
 
   private record(anomaly: PhoneAcceptAnomaly): void {
