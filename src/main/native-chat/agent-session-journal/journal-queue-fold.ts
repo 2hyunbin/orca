@@ -16,7 +16,10 @@ import { rejectedDraftSettlement } from './journal-dispatch-settlement'
 import type { JournalQueueRow, JournalQueuedChange } from './journal-queue-events'
 import type { JournalReducerState } from './journal-reducer'
 import type { JournalRow } from './journal-row-schema'
-import { draftDeliveredByEcho, draftsDeliveredByAppliedEcho } from './queued-message-delivered-echo'
+import {
+  draftsDeliveredByAppliedEcho,
+  draftsDeliveredByEcho
+} from './queued-message-delivered-echo'
 import type { QueuedMessageRow } from './queued-message-table'
 
 export type JournalQueueState = {
@@ -114,17 +117,18 @@ export function queuedCardFromChange(
   return deliveredWaitingCard(state, card)
 }
 
-/** Before an item or batch applies: a provider echo proving a waiting card's earlier hand-off was
- *  delivered spends the card, so it is never sent twice. */
+/** Before an item or batch applies: each provider echo proving a waiting card's earlier hand-off
+ *  was delivered spends that card, so none is sent twice. */
 export function foldJournalQueueEcho(state: JournalReducerState, row: JournalRow): void {
   const { cards } = state.queue
   if (cards.size === 0 || (row.kind !== 'item' && row.kind !== 'lifecycle-batch')) {
     return
   }
-  const delivered = draftDeliveredByEcho(state, () => [...cards.values()], row)
-  const card = delivered === null ? undefined : cards.get(delivered)
-  if (card) {
-    setCard(state, { ...card, state: 'withdrawn', holdReason: null })
+  for (const delivered of draftsDeliveredByEcho(state, () => [...cards.values()], row)) {
+    const card = cards.get(delivered)
+    if (card) {
+      setCard(state, { ...card, state: 'withdrawn', holdReason: null })
+    }
   }
 }
 

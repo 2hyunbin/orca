@@ -13,14 +13,14 @@ import {
 import type { JournalRow } from './journal-row-schema'
 import type { QueuedMessageRow } from './queued-message-table'
 
-/** The waiting draft this appended row proves was delivered, or null. The fold
- *  calls it before the row applies, for every item row, so a row that is no new
- *  provider echo of a user message returns before anything else is read. */
-export function draftDeliveredByEcho(
+/** The waiting drafts this appended row proves were delivered. The fold calls it before the row
+ *  applies, for every item row, so a row that is no new provider echo of a user message returns
+ *  before anything else is read. */
+export function draftsDeliveredByEcho(
   state: JournalReducerState,
   drafts: () => readonly QueuedMessageRow[],
   row: JournalRow
-): string | null {
+): string[] {
   const echoes = appendedItems(row).filter(
     (item) =>
       isProviderUserMessageEcho(item.itemId, item.body) &&
@@ -29,16 +29,11 @@ export function draftDeliveredByEcho(
       journalEchoClaimant(state, item.itemId, item.body) === null
   )
   if (echoes.length === 0) {
-    return null
+    return []
   }
-  const spent = spentWaitingDrafts(state, drafts())
-  for (const item of echoes) {
-    const delivered = spent.find((draft) => echoProvesDelivered(state, draft, item.body, row.seq))
-    if (delivered) {
-      return delivered.draft.messageId
-    }
-  }
-  return null
+  return spentWaitingDrafts(state, drafts())
+    .filter((spent) => echoes.some((item) => echoProvesDelivered(state, spent, item.body, row.seq)))
+    .map((spent) => spent.draft.messageId)
 }
 
 /**

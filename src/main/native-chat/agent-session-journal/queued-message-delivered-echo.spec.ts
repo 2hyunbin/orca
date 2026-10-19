@@ -69,30 +69,31 @@ export function registerQueuedMessageDeliveredEchoTests(): void {
   async function handOffAndReject(
     journal: AgentSessionJournal,
     text: string,
-    options: { handedOver: boolean } = { handedOver: true }
+    options: { handedOver: boolean } = { handedOver: true },
+    draft = 'draft-1'
   ): Promise<void> {
     const body = message(text)
     const fingerprint = agentSessionSendBodyFingerprint(IDENTITY.sessionId, body)
-    await journal.queuedMessages.insert({ messageId: 'draft-1', body })
+    await journal.queuedMessages.insert({ messageId: draft, body })
     await journal.appendSubmission(
       {
-        clientMessageId: 'sub-draft-1',
+        clientMessageId: `sub-${draft}`,
         payloadFingerprint: fingerprint,
         body,
         fence: 0,
         handoverRecorded: true
       },
-      { messageId: 'draft-1', expect: 'waiting' }
+      { messageId: draft, expect: 'waiting' }
     )
     if (options.handedOver) {
       await journal.resolveDispatch({
-        clientMessageId: 'sub-draft-1',
+        clientMessageId: `sub-${draft}`,
         state: 'pending',
         fence: 0,
         turnScope: AGENT_JOURNAL_THREAD_SCOPE
       })
       await journal.resolveDispatch({
-        clientMessageId: 'sub-draft-1',
+        clientMessageId: `sub-${draft}`,
         state: 'rejected',
         ...STOP_WITHDRAWAL,
         fence: 0
@@ -100,10 +101,7 @@ export function registerQueuedMessageDeliveredEchoTests(): void {
     } else {
       await journal.rejectQueuedSubmissions(0, STOP_WITHDRAWAL)
     }
-    expect(journal.queuedMessages.get('draft-1')).toMatchObject({
-      state: 'waiting',
-      consumedAs: null
-    })
+    expect(journal.queuedMessages.get(draft)).toMatchObject({ state: 'waiting', consumedAs: null })
   }
 
   beforeEach(async () => {
@@ -124,6 +122,24 @@ export function registerQueuedMessageDeliveredEchoTests(): void {
       // The rejection stays terminal: the echo is kept apart, not folded into it.
       expect(journal.submission('sub-draft-1')?.dispatchState).toBe('rejected')
       expect(journal.snapshot().items.map((item) => item.itemId)).toHaveLength(2)
+    })
+
+    it('withdraws every draft one batch echoes, so neither is sent again', async () => {
+      const journal = await withdrawnDraft('first')
+      await handOffAndReject(journal, 'second', { handedOver: true }, 'draft-2')
+      const echoed = (uuid: string, text: string) => ({
+        kind: 'item' as const,
+        identity: { provider: 'claude' as const, sessionId: 'native-1', uuid },
+        body: message(text),
+        turnScope: AGENT_JOURNAL_THREAD_SCOPE
+      })
+      await journal.appendLifecycleBatch({
+        settlementId: 'turn-settled',
+        fence: 0,
+        mutations: [echoed('echo-1', 'first'), echoed('echo-2', 'second')]
+      })
+      expect(journal.queuedMessages.get('draft-1')?.state).toBe('withdrawn')
+      expect(journal.queuedMessages.get('draft-2')?.state).toBe('withdrawn')
     })
 
     it('stays waiting when the rejected hand-off never reached the agent: the echo is some other message', async () => {
