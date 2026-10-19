@@ -18,6 +18,7 @@ import {
   type RemoteInspectionState
 } from './agent-completion-inspection-result'
 
+/** Keeps exit cleanup tied to the agent session that produced the process evidence. */
 export function createAgentCompletionProcessMonitor({
   options,
   state,
@@ -137,7 +138,12 @@ export function createAgentCompletionProcessMonitor({
             !result.hasChildProcesses &&
             !recognizeAgentProcess(result.foregroundProcess)
           ) {
+            const processSessionAtConfirmation = state.processSession
             const foregroundProcess = await options.confirmForegroundProcess(ptyId)
+            // Another foreground reader can replace the agent while this check is pending.
+            if (state.processSession !== processSessionAtConfirmation) {
+              return
+            }
             result =
               foregroundProcess === null
                 ? clientOnlyUnverifiableInspection('foreground_unconfirmed')

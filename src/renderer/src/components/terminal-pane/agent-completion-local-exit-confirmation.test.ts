@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createAgentCompletionCoordinator } from './agent-completion-coordinator'
+import { POLL_TIER_INTERVAL_MS } from './agent-completion-poll-cadence'
 import {
   createDeferred,
   processResult,
@@ -13,6 +14,7 @@ describe('agent completion local exit confirmation', () => {
     ['pwsh.exe', '/usr/bin/bash', '/bin/zsh'].map((shell) => ({ agent, shell }))
   )
 
+  /** Establishes live-agent evidence before injecting conflicting cached and fresh process reads. */
   async function trackAgent(
     confirmForegroundProcess = vi.fn(async (): Promise<string | null> => 'codex'),
     agent = 'codex'
@@ -123,6 +125,57 @@ describe('agent completion local exit confirmation', () => {
     await vi.advanceTimersByTimeAsync(5_000)
     expect(tracked.onForegroundAgentExited).not.toHaveBeenCalled()
     expect(tracked.dispatchCompletion).not.toHaveBeenCalled()
+  })
+
+  it("does not let an old shell confirmation shorten a replacement agent's exit settling", async () => {
+    const pending = createDeferred<string | null>()
+    const tracked = await trackAgent(
+      vi
+        .fn(async (): Promise<string | null> => 'pwsh.exe')
+        .mockImplementationOnce(() => pending.promise)
+    )
+    tracked.setInspection('pwsh.exe', false)
+    await vi.advanceTimersByTimeAsync(3_000)
+    expect(tracked.confirmForegroundProcess).toHaveBeenCalledTimes(1)
+
+    tracked.coordinator.observeForegroundAgentProcess({ agent: 'claude', processName: 'claude' })
+    tracked.dispatchCompletion.mockClear()
+    pending.resolve('pwsh.exe')
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(POLL_TIER_INTERVAL_MS.active * 3)
+
+    expect(tracked.onForegroundAgentExited).not.toHaveBeenCalled()
+    expect(tracked.dispatchCompletion).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(POLL_TIER_INTERVAL_MS.active)
+    expect(tracked.onForegroundAgentExited).toHaveBeenCalledExactlyOnceWith({
+      agent: 'claude',
+      processName: 'claude'
+    })
+    tracked.coordinator.dispose()
+  })
+
+  it('does not restore the old agent when its confirmation arrives after a replacement', async () => {
+    const pending = createDeferred<string | null>()
+    const tracked = await trackAgent(
+      vi
+        .fn(async (): Promise<string | null> => 'pwsh.exe')
+        .mockImplementationOnce(() => pending.promise)
+    )
+    tracked.setInspection('pwsh.exe', false)
+    await vi.advanceTimersByTimeAsync(3_000)
+    expect(tracked.confirmForegroundProcess).toHaveBeenCalledTimes(1)
+
+    tracked.coordinator.observeForegroundAgentProcess({ agent: 'claude', processName: 'claude' })
+    tracked.dispatchCompletion.mockClear()
+    pending.resolve('codex')
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    expect(tracked.onForegroundAgentExited).toHaveBeenCalledExactlyOnceWith({
+      agent: 'claude',
+      processName: 'claude'
+    })
+    tracked.coordinator.dispose()
   })
 
   it('does not query the local foreground confirmation API for remote terminals', async () => {

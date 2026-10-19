@@ -29,6 +29,7 @@ import {
   restoreTerminalTestGlobals
 } from './pty-connection-test-environment'
 
+/** Covers competing completion signals so an agent run cannot notify twice or lose its live state. */
 export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
   let mockStoreState: StoreState
   let transportFactoryQueue: MockTransport[] = []
