@@ -104,13 +104,18 @@ export const pickRepo = (state: State, repoId: string): number =>
     (repo) =>
       repo.id === repoId
   )
+
+function pickOptional(state: State, repoId: string): Repo | undefined {
+  return state.repos?.find(({ id }) => id === repoId)
+}
 `
 
 describe('findIdOnlyLookups', () => {
   it('flags a repo-row lookup by id alone (review-5 #10), by its enclosing function', () => {
     expect(findIdOnlyLookups('ops.ts', LOOKUP_SOURCE)).toEqual([
       'lookup:ops.ts#updateProjectHostSetup',
-      'lookup:ops.ts#pickRepo'
+      'lookup:ops.ts#pickRepo',
+      'lookup:ops.ts#pickOptional'
     ])
   })
 })

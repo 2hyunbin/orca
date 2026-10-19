@@ -127,10 +127,10 @@ export function findIdOnlyWrites(className, source) {
 // Lookups that pick a repo row by id alone. A write fed by one edits whichever twin comes first, even
 // when the method itself takes the row (review-5 #10: an SSH setup edit renamed its local sibling).
 const LOOKUP_ROOT = 'src/main/persistence/'
-const REPO_ROW_LOOKUP = /\brepos\s*\.\s*(?:find|findIndex|findLast|findLastIndex)\s*\(/g
+const REPO_ROW_LOOKUP = /\brepos\s*\??\.\s*(?:find|findIndex|findLast|findLastIndex)\s*\(/g
 // A predicate that names a host (or compares whole rows' host ids) is host-scoped.
 const HOST_SCOPED_PREDICATE = /host|Host|connectionId/
-const ID_COMPARISON = /\.id\s*===|===\s*[\w.]*\.id\b/
+const ID_COMPARISON = /\bid\s*===|===\s*(?:[\w.]*\.)?id\b/
 const DECLARATION =
   /^[ \t]*(?:export\s+)?(?:(?:async|public|private|protected|static|override|readonly)\s+)*(?:function\s+(\w+)|(?:const|let)\s+(\w+)\s*=\s*(?:async\s*)?\([^)]*\)\s*(?::[^=\n]*)?=>|(\w+)\s*(?:<[^>\n]*>)?\s*\([^)]*\)\s*(?::[^{;\n]*)?\{)/gm
 const NOT_A_DECLARATION = new Set(['if', 'for', 'while', 'switch', 'return', 'catch', 'function'])
