@@ -35,6 +35,7 @@ import type { CellAdmitMode, CellReserveBook } from './cell-reserve-book.js'
 import type { DemoteRequest, ReserveOutcome, ReserveRequest } from './cell-reserve-contract.js'
 import { CellSeatLog, type CellSeatChange, type CellSeatFeedPage } from './cell-seat-log.js'
 import { isRelayDatabaseTransientError } from './database.js'
+import { printableCloseReason } from './control-close-reason-text.js'
 import { ControlRenewalBatch } from './control-renewal-batch.js'
 import { RelayCredentialStore, type CredentialReservation } from './credential-store.js'
 import { HostCloseReasonMemory } from './host-close-reason-memory.js'
@@ -56,14 +57,6 @@ import {
 import type { PendingHostDataReservation } from './relay-connection-ledger.js'
 import { closeRelayWebSocket } from './relay-websocket-close.js'
 import { ProcessQueuedByteBudget, wireSplice } from './splice-forwarder.js'
-
-// Peer-supplied close reasons are logged; keep them printable and short.
-export function printableCloseReason(reason: Buffer | string): string {
-  return reason
-    .toString()
-    .replace(/[^\x20-\x7e]/g, '')
-    .slice(0, 80)
-}
 
 type VerifyRelayToken = (token: string) => Promise<RelayTokenClaims | null>
 type HostState = 'proving' | 'active' | 'orphaned' | 'drain-only' | 'closed'
