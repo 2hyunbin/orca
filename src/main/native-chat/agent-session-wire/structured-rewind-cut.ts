@@ -43,7 +43,7 @@ export function structuredRewindCut(
   const items = floor
     ? snapshot.items.filter((item) => item.sequence > floor.sequence)
     : snapshot.items
-  const { providerKey, queued, rejected } = submissionKeys(snapshot.submissions)
+  const { providerKey, omitted } = submissionKeys(snapshot.submissions)
   const selected = items.find((item) => item.itemId === target.itemId)
   const key = selected ? parseAgentJournalItemKey(providerKey(selected.itemId)) : null
   if (key?.provider === 'claude' && target.provider === 'claude') {
@@ -54,7 +54,7 @@ export function structuredRewindCut(
       const turn = scopedTurn(item)
       // A kept turn's row can land after the cut, as a late provider item does.
       return (
-        !queued.has(item.itemId) &&
+        !omitted.has(item.itemId) &&
         (index < boundary || (turn !== undefined && keptTurns.has(turn)))
       )
     })
@@ -77,8 +77,7 @@ export function structuredRewindCut(
     const turnId = turnOf(item)
     // A kept turn's row can land after the cut, as a late provider item does.
     return (
-      !queued.has(item.itemId) &&
-      !rejected.has(item.itemId) &&
+      !omitted.has(item.itemId) &&
       (index < boundary || (turnId !== undefined && keptTurns.has(turnId)))
     )
   })
@@ -130,26 +129,23 @@ export function providerItemIdOf(journal: AgentSessionJournal, itemId: string): 
 }
 
 // Accepted messages keep Orca's key in the journal; the rebuilt epoch has no submission to tie them
-// to, so they take the provider's. Queued ones survive any rewind on their own.
+// to, so they take the provider's.
 function submissionKeys(submissions: readonly AgentJournalSubmission[]): {
   providerKey: (itemId: string) => string
-  queued: ReadonlySet<string>
-  rejected: ReadonlySet<string>
+  /** Messages a rewind never keeps: queued ones survive it on their own, rejected ones never ran. */
+  omitted: ReadonlySet<string>
 } {
   const providerKeys = new Map<string, string>()
-  const queued = new Set<string>()
-  const rejected = new Set<string>()
+  const omitted = new Set<string>()
   for (const submission of submissions) {
     const key = agentJournalSubmissionKey(submission.clientMessageId)
-    if (isQueuedAgentJournalSubmission(submission)) {
-      queued.add(key)
-    } else if (submission.dispatchState === 'rejected') {
-      rejected.add(key)
+    if (isQueuedAgentJournalSubmission(submission) || submission.dispatchState === 'rejected') {
+      omitted.add(key)
     } else if (submission.dispatchState === 'accepted' && submission.providerItemId) {
       providerKeys.set(key, submission.providerItemId)
     }
   }
-  return { providerKey: (itemId) => providerKeys.get(itemId) ?? itemId, queued, rejected }
+  return { providerKey: (itemId) => providerKeys.get(itemId) ?? itemId, omitted }
 }
 
 /** The main conversation turn a row belongs to: its own Codex key on the main thread, else the turn
