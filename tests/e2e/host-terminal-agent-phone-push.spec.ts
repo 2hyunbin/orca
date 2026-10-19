@@ -77,7 +77,9 @@ test('a host with no window pushes its phone when a terminal agent finishes or n
       30_000
     )
     await postClaudeHook(endpoint, pane, { hook_event_name: 'Stop', last_assistant_message: 'ok' })
-    await new Promise((resolve) => setTimeout(resolve, 1_500))
+    // Past the finish's 1.5 s quiet window, so the news is held rather than still pending, and past
+    // the 5 s per-workspace burst gate the first finish set.
+    await new Promise((resolve) => setTimeout(resolve, 6_000))
     expect(agentAlerts(alerts)).toEqual(['done', 'waiting'])
     // As a locked phone's lingering session ends within the minute.
     session.close()
@@ -99,16 +101,26 @@ test('a desktop with a window pushes its phone once for a terminal agent’s fin
   await waitForActiveTerminalManager(orcaPage, 30_000)
   const endpoint = await readHookEndpoint(electronApp)
   const pane = await waitForActivePaneHookDescriptor(orcaPage)
+  const isUnread = (): Promise<boolean | undefined> =>
+    orcaPage.evaluate(
+      (id) =>
+        Object.values(window.__store?.getState().worktreesByRepo ?? {})
+          .flat()
+          .find((worktree) => worktree.id === id)?.isUnread,
+      pane.worktreeId
+    )
   // Off the workspace, so the window raises its own alert for the finish as well.
   await orcaPage.evaluate(() => window.__store?.setState({ activeView: 'tasks' }))
   const phone = pairMobileClient(await createDesktopMobilePairingOffer(orcaPage))
   try {
+    expect(await isUnread()).toBeFalsy()
     const alerts = await collectPhoneAlerts(phone)
     await postClaudeHook(endpoint, pane, { hook_event_name: 'UserPromptSubmit', prompt: 'go' })
     await postClaudeHook(endpoint, pane, { hook_event_name: 'Stop', last_assistant_message: 'ok' })
     await expect.poll(() => agentAlerts(alerts)).toEqual(['done'])
-    // The window's hook lane holds a finish up to 1.5 s for detail; give its copy time to arrive.
-    await new Promise((resolve) => setTimeout(resolve, 4_000))
+    // The window raised its own alert too: its attention path marks unread just before it asks main.
+    await expect.poll(isUnread).toBe(true)
+    await new Promise((resolve) => setTimeout(resolve, 2_000))
     expect(agentAlerts(alerts)).toEqual(['done'])
   } finally {
     phone.dispose()

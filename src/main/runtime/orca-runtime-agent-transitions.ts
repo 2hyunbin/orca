@@ -26,6 +26,12 @@ export abstract class OrcaRuntimeWithAgentTransitions extends OrcaRuntimeWithMig
     translate: (key, fallback) =>
       getRuntimeDesktopSurface().translateNotification?.(key, fallback) ?? fallback,
     dispatch: (event) => this.mobileNotifications.dispatch(event),
+    setTimer: (run, delayMs) => {
+      // A pending finish must never hold the process open at quit.
+      const timer = setTimeout(run, delayMs)
+      timer.unref?.()
+      return { cancel: () => clearTimeout(timer) }
+    },
     now: Date.now
   })
 
@@ -51,7 +57,7 @@ export abstract class OrcaRuntimeWithAgentTransitions extends OrcaRuntimeWithMig
   /** This host's own handling of the terminal-agent news a window's request carries, if any. */
   terminalAgentNewsDeliveredByHost(
     request: NotificationDispatchRequest
-  ): { notificationId: string | null } | null {
+  ): { notificationId: string } | null {
     return this.terminalAgentPhonePush.coveringNews(request)
   }
 

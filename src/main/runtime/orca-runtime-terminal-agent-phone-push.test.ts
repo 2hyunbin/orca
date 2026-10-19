@@ -1,5 +1,6 @@
 // Runs on plain Node, as orcad does: a server with no window pushes its phones from its own hooks.
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { AGENT_DONE_QUIET_MS } from '../../shared/agent-transitions'
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../shared/runtime-session-contracts'
 import { AgentHookServer } from '../agent-hooks/server'
 import { OrcaRuntimeService } from './orca-runtime'
@@ -42,41 +43,53 @@ function createHeadlessHost() {
 }
 
 describe('terminal agent phone push on a headless host', () => {
-  it('pushes a finish and a request for input, and never a prompt', async () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ now: 100_000 })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('pushes a finish once it stays finished, a request for input at once, and never a prompt', () => {
     const { report, agentAlerts, alerts } = createHeadlessHost()
     report('working')
     report('done')
+    vi.advanceTimersByTime(AGENT_DONE_QUIET_MS)
+    vi.advanceTimersByTime(5_000)
     report('working')
     report('waiting')
-    await vi.waitFor(() => expect(agentAlerts()).toEqual(['done', 'waiting']))
+    expect(agentAlerts()).toEqual(['done', 'waiting'])
     expect(alerts[0]).toMatchObject({ title: 'orca / feature - Claude finished', worktreeId: WT })
   })
 
-  it('holds news a phone has open, and pushes it once that phone lets go', async () => {
+  it('holds news a phone has open, and pushes it once that phone lets go', () => {
     const { runtime, report, agentAlerts } = createHeadlessHost()
     const closeSession = runtime.openPhoneWorkspaceSession(WT)
     report('working')
     report('done')
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    vi.advanceTimersByTime(AGENT_DONE_QUIET_MS)
     expect(agentAlerts()).toEqual([])
     closeSession()
-    await vi.waitFor(() => expect(agentAlerts()).toEqual(['done']))
+    expect(agentAlerts()).toEqual(['done'])
   })
 
   it('answers the window’s request for the same news as already delivered', () => {
-    const { runtime, report } = createHeadlessHost()
+    const { runtime, report, alerts } = createHeadlessHost()
     report('working')
     report('done')
-    expect(
-      runtime.terminalAgentNewsDeliveredByHost({
-        source: 'agent-task-complete',
-        paneKey: PANE,
-        agentState: 'done'
-      })
-    ).not.toBeNull()
+    vi.advanceTimersByTime(AGENT_DONE_QUIET_MS)
+    const pushed = alerts[0]
+    const notificationId = pushed?.type === 'notification' ? pushed.notificationId : undefined
+    const windowRequest = {
+      source: 'agent-task-complete',
+      paneKey: PANE,
+      worktreeId: WT,
+      agentState: 'done',
+      notificationId
+    } as const
+    expect(notificationId).toBeTruthy()
+    expect(runtime.terminalAgentNewsDeliveredByHost(windowRequest)).toEqual({ notificationId })
     report('working')
-    expect(
-      runtime.terminalAgentNewsDeliveredByHost({ source: 'agent-task-complete', paneKey: PANE })
-    ).toBeNull()
+    expect(runtime.terminalAgentNewsDeliveredByHost(windowRequest)).toBeNull()
   })
 })

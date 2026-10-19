@@ -191,7 +191,7 @@ export function registerNotificationHandlers(store: Store, runtime?: OrcaRuntime
       if (!hostNews) {
         return deliveryService.dispatch(args)
       }
-      if (hostNews.notificationId && args.paneKey) {
+      if (args.paneKey) {
         // So a read of the pane retires the host's push even if no banner records an id.
         announced.record(args.paneKey, hostNews.notificationId)
       }

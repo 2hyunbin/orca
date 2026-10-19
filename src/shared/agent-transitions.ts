@@ -10,6 +10,10 @@ import { detectAgentStatusFromTitle } from './agent-detection'
  * transition detector and the sidebar's sort stamps both read it.
  */
 
+/** A hook's done that work resumes from within this is a milestone (goal and mission agents report
+ *  them), not a finish: the window and the host both wait it out before announcing one. */
+export const AGENT_DONE_QUIET_MS = 1_500
+
 /** One agent pane's phase. A pane at rest has no agent turn to report. */
 export type AgentPhase = 'needs-you' | 'done' | 'working' | 'rest'
 

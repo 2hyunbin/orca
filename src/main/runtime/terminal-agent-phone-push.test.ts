@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentPaneChange } from '../agent-hooks/agent-transition-detector'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-ipc-payload'
-import type { AgentTransition } from '../../shared/agent-transitions'
+import { AGENT_DONE_QUIET_MS, type AgentTransition } from '../../shared/agent-transitions'
 import type { NotificationSettings } from '../../shared/notification-settings-types'
-import type { MobileNotificationDispatchEvent } from './runtime-mobile-notification-controller'
+import type {
+  MobileNotificationDispatchEvent,
+  MobileNotificationEvent
+} from './runtime-mobile-notification-controller'
 import { createNotificationDeliveryService } from '../notifications/notification-delivery-service'
 import { PHONE_LOOKING_LINGER_MS, TerminalAgentPhonePush } from './terminal-agent-phone-push'
 
@@ -49,6 +52,7 @@ function harness(
   const clock = { now: 10_000 }
   const sent: MobileNotificationDispatchEvent[] = []
   const looking = new Set<string>()
+  const timers: { at: number; run: () => void; cancelled: boolean }[] = []
   const state = { muted: options.muted ?? false, hookRow: options.hookRow ?? row() }
   const push = new TerminalAgentPhonePush({
     readNotificationSettings: () => ({
@@ -68,15 +72,38 @@ function harness(
     isPhoneLooking: (worktreeId) => looking.has(worktreeId),
     readHookRow: () => state.hookRow,
     dispatch: (event) => sent.push(event),
+    setTimer: (run, delayMs) => {
+      const timer = { at: clock.now + delayMs, run, cancelled: false }
+      timers.push(timer)
+      return { cancel: () => (timer.cancelled = true) }
+    },
     now: () => clock.now
   })
-  return { push, sent, clock, looking, state }
+  const advance = (ms: number): void => {
+    clock.now += ms
+    for (const timer of timers.splice(0)) {
+      if (timer.cancelled) {
+        continue
+      }
+      if (timer.at <= clock.now) {
+        timer.run()
+      } else {
+        timers.push(timer)
+      }
+    }
+  }
+  return { push, sent, clock, looking, state, advance }
 }
 
+const ID = `agent:${encodeURIComponent(WT)}:${encodeURIComponent(PANE)}:5000`
+const windowFinish = { source: 'agent-task-complete', paneKey: PANE, worktreeId: WT } as const
+
 describe('TerminalAgentPhonePush', () => {
-  it('pushes a finished turn with the window’s wording and id', () => {
-    const { push, sent } = harness()
+  it('pushes a finished turn once its quiet window passes, with the window’s wording and id', () => {
+    const { push, sent, advance } = harness()
     push.observe(moved('turn-finished'))
+    expect(sent).toEqual([])
+    advance(AGENT_DONE_QUIET_MS)
     expect(sent).toEqual([
       {
         type: 'notification',
@@ -84,15 +111,24 @@ describe('TerminalAgentPhonePush', () => {
         title: 'orca / feature - Claude finished',
         body: 'Fixed it.',
         worktreeId: WT,
-        notificationId: `agent:${encodeURIComponent(WT)}:${encodeURIComponent(PANE)}:5000`,
+        notificationId: ID,
         agentState: 'done',
-        emittedAt: 10_000
+        emittedAt: 11_500
       }
     ])
   })
 
-  it('pushes an agent that needs input, and a failed turn as finished', () => {
-    const { push, sent, state } = harness({
+  it('announces no milestone a goal agent resumes from within the quiet window', () => {
+    const { push, sent, advance } = harness()
+    push.observe(moved('turn-finished'))
+    advance(500)
+    push.observe(moved(null, 'working'))
+    advance(AGENT_DONE_QUIET_MS)
+    expect(sent).toEqual([])
+  })
+
+  it('pushes an agent that needs input at once, and a failed turn as finished', () => {
+    const { push, sent, state, advance } = harness({
       hookRow: row({
         state: 'waiting',
         lastAssistantMessage: undefined,
@@ -101,60 +137,80 @@ describe('TerminalAgentPhonePush', () => {
       })
     })
     push.observe(moved('needs-input', 'needs-you'))
-    state.hookRow = row({ mainAgent: { state: 'done', outcome: 'failure' } })
+    expect(sent).toHaveLength(1)
+    // Past the burst gate the window's fan-out applies per workspace.
+    advance(5_000)
+    state.hookRow = row({ mainAgent: { state: 'done', outcome: 'failure', stateStartedAt: 5_000 } })
     push.observe(moved('errored'))
+    advance(AGENT_DONE_QUIET_MS)
     expect(sent.map((event) => [event.agentState, event.title, event.body])).toEqual([
       ['waiting', 'orca / feature - Claude needs input', 'Using Bash: rm -rf build'],
       ['done', 'orca / feature - Claude failed', 'Fixed it.']
     ])
   })
 
+  it('collapses a burst in one workspace as the window’s fan-out does', () => {
+    const { push, sent, advance } = harness()
+    push.observe(moved('turn-finished'))
+    advance(AGENT_DONE_QUIET_MS)
+    push.observe(moved('prompt-submitted', 'working'))
+    push.observe(moved('turn-finished'))
+    advance(AGENT_DONE_QUIET_MS)
+    expect(sent).toHaveLength(1)
+  })
+
   it('pushes nothing for a prompt, a resume, a rest, or a structured chat’s row', () => {
-    const { push, sent, state } = harness()
+    const { push, sent, state, advance } = harness()
     push.observe(moved('prompt-submitted', 'working'))
     push.observe(moved(null, 'working'))
     push.observe(moved(null, 'rest'))
     push.observe({
       kind: 'seeded',
       paneKey: PANE,
-      workspace: moved(null).workspace,
+      workspace: { worktreeId: WT, sshHostId: null },
       phase: 'done',
       at: 1
     })
-    state.hookRow = row({ structuredHost: { owned: true } })
+    state.hookRow = row({ structuredHost: 'owned' })
     push.observe(moved('turn-finished'))
+    advance(AGENT_DONE_QUIET_MS)
     expect(sent).toEqual([])
   })
 
   it('pushes nothing for a muted workspace, yet still owns that news', () => {
-    const { push, sent } = harness({ muted: true })
+    const { push, sent, advance } = harness({ muted: true })
     push.observe(moved('turn-finished'))
+    advance(AGENT_DONE_QUIET_MS)
     expect(sent).toEqual([])
-    expect(push.coveringNews({ source: 'agent-task-complete', paneKey: PANE })).not.toBeNull()
+    expect(push.coveringNews({ ...windowFinish, notificationId: ID })).not.toBeNull()
   })
 
   it('marks the push not desktop-allowed when agent notifications are off', () => {
-    const { push, sent } = harness({ settings: { agentTaskComplete: false } })
-    push.observe(moved('turn-finished'))
+    const { push, sent } = harness({
+      settings: { agentTaskComplete: false },
+      hookRow: row({ state: 'blocked' })
+    })
+    push.observe(moved('needs-input', 'needs-you'))
     expect(sent[0]?.desktopAllowed).toBe(false)
   })
 
   it('drops news a phone keeps looking at past the linger', () => {
-    const { push, sent, clock, looking } = harness()
+    const { push, sent, looking, advance } = harness()
     looking.add(WT)
     push.observe(moved('turn-finished'))
+    advance(AGENT_DONE_QUIET_MS)
     expect(sent).toEqual([])
-    clock.now += PHONE_LOOKING_LINGER_MS + 1
+    advance(PHONE_LOOKING_LINGER_MS + 1)
     looking.delete(WT)
     push.notePhoneSessionClosed(WT)
     expect(sent).toEqual([])
   })
 
   it('pushes held news once a locked phone’s lingering session ends', () => {
-    const { push, sent, clock, looking } = harness()
+    const { push, sent, looking, advance } = harness()
     looking.add(WT)
     push.observe(moved('turn-finished'))
-    clock.now += 45_000
+    advance(45_000)
     // Another phone is still looking: nothing yet.
     push.notePhoneSessionClosed(WT)
     expect(sent).toEqual([])
@@ -168,7 +224,7 @@ describe('TerminalAgentPhonePush', () => {
   })
 
   it('drops held news when the pane moves on before the phone lets go', () => {
-    const { push, sent, looking } = harness()
+    const { push, sent, looking } = harness({ hookRow: row({ state: 'waiting' }) })
     looking.add(WT)
     push.observe(moved('needs-input', 'needs-you'))
     push.observe(moved(null, 'working'))
@@ -178,9 +234,10 @@ describe('TerminalAgentPhonePush', () => {
   })
 
   it('rechecks the mute before pushing held news', () => {
-    const { push, sent, looking, state } = harness()
+    const { push, sent, looking, state, advance } = harness()
     looking.add(WT)
     push.observe(moved('turn-finished'))
+    advance(AGENT_DONE_QUIET_MS)
     state.muted = true
     looking.delete(WT)
     push.notePhoneSessionClosed(WT)
@@ -188,49 +245,53 @@ describe('TerminalAgentPhonePush', () => {
   })
 
   describe('covering the window’s request for the same news', () => {
-    it('covers this host’s pane while its news stands, by kind', () => {
+    it('covers the request minted from the same hook row, in the request’s own spelling', () => {
       const { push } = harness()
       push.observe(moved('turn-finished'))
-      const id = `agent:${encodeURIComponent(WT)}:${encodeURIComponent(PANE)}:5000`
-      expect(
-        push.coveringNews({ source: 'agent-task-complete', paneKey: PANE, agentState: 'done' })
-      ).toEqual({ notificationId: id })
-      // A title-only completion carries no state and still reads as finished.
-      expect(push.coveringNews({ source: 'agent-task-complete', paneKey: PANE })).toEqual({
-        notificationId: id
+      expect(push.coveringNews({ ...windowFinish, notificationId: ID })).toEqual({
+        notificationId: ID
       })
-      expect(
-        push.coveringNews({ source: 'agent-task-complete', paneKey: PANE, agentState: 'blocked' })
-      ).toBeNull()
-    })
-
-    it('leaves the bell, a paired server’s pane, and news the pane moved past to the window', () => {
-      const { push } = harness()
-      push.observe(moved('turn-finished'))
-      expect(push.coveringNews({ source: 'terminal-bell', paneKey: PANE })).toBeNull()
+      const spelled = 'repo-1::/tmp/wt/'
       expect(
         push.coveringNews({
-          source: 'agent-task-complete',
-          paneKey: PANE,
-          executionHost: 'runtime:env-1'
+          ...windowFinish,
+          worktreeId: spelled,
+          notificationId: `agent:${encodeURIComponent(spelled)}:${encodeURIComponent(PANE)}:5000`
         })
+      ).toEqual({ notificationId: ID })
+    })
+
+    it('leaves the window its own news: another turn, a title or exit completion, the bell, a paired server’s pane', () => {
+      const { push } = harness()
+      push.observe(moved('turn-finished'))
+      expect(
+        push.coveringNews({ ...windowFinish, notificationId: ID.replace(':5000', ':6000') })
+      ).toBeNull()
+      expect(push.coveringNews(windowFinish)).toBeNull()
+      expect(
+        push.coveringNews({ ...windowFinish, source: 'terminal-bell', notificationId: ID })
+      ).toBeNull()
+      expect(
+        push.coveringNews({ ...windowFinish, notificationId: ID, executionHost: 'runtime:env-1' })
       ).toBeNull()
       push.observe(moved('prompt-submitted', 'working'))
-      expect(push.coveringNews({ source: 'agent-task-complete', paneKey: PANE })).toBeNull()
+      expect(push.coveringNews({ ...windowFinish, notificationId: ID })).toBeNull()
     })
 
     it('covers held and looked-at news too, so the window’s copy does not push around it', () => {
-      const { push, looking } = harness()
+      const { push, looking, advance } = harness()
       looking.add(WT)
       push.observe(moved('turn-finished'))
-      expect(push.coveringNews({ source: 'agent-task-complete', paneKey: PANE })).not.toBeNull()
+      advance(AGENT_DONE_QUIET_MS)
+      expect(push.coveringNews({ ...windowFinish, notificationId: ID })).not.toBeNull()
     })
   })
 
   it('sends phones, old ones included, the alert the window’s own request would have', () => {
-    const { push, sent } = harness()
+    const { push, sent, advance } = harness()
     push.observe(moved('turn-finished'))
-    const fromWindow: MobileNotificationDispatchEvent[] = []
+    advance(AGENT_DONE_QUIET_MS)
+    const fromWindow: MobileNotificationEvent[] = []
     const service = createNotificationDeliveryService({
       readNotificationSettings: () => ({
         enabled: false,
@@ -252,7 +313,7 @@ describe('TerminalAgentPhonePush', () => {
       recordDeliveryOutcome: () => {},
       deliverNative: () => ({ delivered: false }),
       platform: 'linux',
-      now: () => 10_000
+      now: () => 11_500
     })
     void service.dispatch({
       source: 'agent-task-complete',
