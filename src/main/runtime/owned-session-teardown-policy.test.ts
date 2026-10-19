@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import { spawnWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 import type { RuntimeClientEvent } from '../../shared/runtime-client-events'
 import type { RuntimeNotifier } from './runtime-notifier-contract'
 import type { AgentBrowserBridge } from '../browser/agent-browser-bridge'
@@ -81,7 +82,9 @@ describe('owned-session teardown policy', () => {
     // Settled: the host now refuses an automatic spawn into the slept worktree.
     expect(sleepPhases()[0]).toBe('started')
     await expect(
-      runtime.acquireWorktreeTerminalSpawn(TEST_WORKTREE_ID, { refuseSleptWorktree: true })
+      runtime.acquireWorktreeTerminalSpawn(spawnWorktreeTarget(TEST_WORKTREE_ID, null), {
+        refuseSleptWorktree: true
+      })
     ).rejects.toThrow()
   })
 

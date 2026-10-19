@@ -8,6 +8,7 @@ import type {
   RuntimeWorktreeTerminalSleepResult
 } from '../../../../shared/runtime-types'
 import type { WorktreeTerminalStopOptions } from './worktree-terminal-stop-options'
+import type { HostWorktreeTarget } from '../../../../shared/worktree/host-qualified-identity'
 import type { WorktreeTerminalMutationKind } from '../../worktree-terminal-mutation-lock'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 import { cloneWorkspaceSessionState } from '../../../persistence/restoring-sessions/session-owner-fields'
@@ -265,13 +266,15 @@ export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntim
     }
   }
 
+  /** `target` is the spawn's own workspace copy: the host whose provider runs it. */
   async acquireWorktreeTerminalSpawn(
-    worktreeId?: string,
+    target: HostWorktreeTarget | undefined,
     opts: { refuseSleptWorktree?: boolean } = {}
   ): Promise<() => void> {
-    if (!worktreeId) {
+    if (!target) {
       return () => {}
     }
+    const worktreeId = target.id
     const release = await this.acquireWorktreeTerminalMutation(worktreeId, 'shared')
     const key = worktreeIdentityKey(worktreeId)
     const sleepState = this.terminalSleepStateByWorktreeId.get(key)
