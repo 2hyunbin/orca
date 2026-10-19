@@ -5,7 +5,6 @@
 
 1 src/main/ipc/pty/ipc/renderer-kill.ts # SSH provider unregistered: R4-4 tab-close replay
 1 src/main/ipc/pty/pane/absent-pane-owner.ts # host-confirmed absence, untyped
-1 src/main/ipc/pty/pane/spawn-registration.ts # drops ownership even when the discard shutdown threw
 1 src/main/ipc/pty/provider/bind-listeners.ts # observed provider exit, untyped
 1 src/main/ipc/pty/provider/local-configure.ts # observed local exit, untyped
 1 src/main/ipc/pty/provider/ownership-state.ts # deletePtyOwnership, test-only caller
