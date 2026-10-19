@@ -65,12 +65,21 @@ describe('disk write precondition', () => {
   it.each([
     "EACCES: permission denied, open '/repo/ENOENT.md'",
     "EACCES: permission denied, open '/repo/ENOENT/notes.md'",
-    "EACCES: permission denied, open '/repo/No such file or directory/notes.md'"
+    "EACCES: permission denied, open '/repo/No such file or directory/notes.md'",
+    "EACCES: permission denied, open '/repo/Error: ENOENT: no such file or directory.txt'",
+    "Error invoking remote method 'fs:readFile': Error: EACCES: permission denied, open '/repo/Error: ENOENT: no such file or directory.txt'"
   ])('never reads a path that merely names ENOENT as a missing file: %s', (message) => {
     const precondition = {
       expectedSignature: getDiskBaselineSignature('base'),
       allowMissing: true
     }
     expect(() => diskConflictFromReadFailure(precondition, new Error(message))).toThrow('EACCES')
+  })
+
+  it('trusts a conflicting errno code over not-found wording', () => {
+    const error = Object.assign(new Error('ENOENT: no such file or directory'), { code: 'EACCES' })
+    expect(() =>
+      diskConflictFromReadFailure({ expectedSignature: getDiskBaselineSignature('base') }, error)
+    ).toThrow('ENOENT')
   })
 })

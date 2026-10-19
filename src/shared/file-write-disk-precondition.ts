@@ -48,16 +48,17 @@ function isConfirmedFileNotFoundError(error: unknown): boolean {
     return false
   }
   // Other codes (an RPC envelope's 'runtime_error') carry no errno, so the wording decides.
-  if ('code' in error && error.code === 'ENOENT') {
-    return true
+  const code = 'code' in error ? error.code : undefined
+  if (typeof code === 'string' && ERRNO_CODE.test(code)) {
+    return code === 'ENOENT'
   }
-  // Why anchored: the wording must open the message (or follow an IPC "Error: " prefix); a path that
-  // merely contains ENOENT, as in an EACCES on '/repo/ENOENT.md', must not read as missing.
-  return NOT_FOUND_MESSAGE.test(error.message)
+  // Why only a leading wrapper is stripped: the rest may quote a path, which can spell anything.
+  return NOT_FOUND_MESSAGE.test(error.message.replace(IPC_ERROR_WRAPPER, ''))
 }
 
-const NOT_FOUND_MESSAGE =
-  /(?:^|Error: )(?:ENOENT: no such file or directory|No such file(?: or directory)?$)/i
+const ERRNO_CODE = /^E[A-Z0-9]+$/
+const IPC_ERROR_WRAPPER = /^Error invoking remote method '[^']*': (?:Error: )?/
+const NOT_FOUND_MESSAGE = /^(?:ENOENT: no such file or directory|No such file(?: or directory)?$)/i
 
 // Why both: hosts answer with the `file_too_large` code (carried as the message); local readers in prose.
 function isFileTooLargeToReadError(error: unknown): boolean {

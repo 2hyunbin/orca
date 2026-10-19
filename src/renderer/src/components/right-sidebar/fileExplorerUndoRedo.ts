@@ -32,7 +32,13 @@ export async function undoFileExplorer(): Promise<boolean> {
   if (!op) {
     return false
   }
-  await op.undo()
+  try {
+    await op.undo()
+  } catch (error) {
+    // Why: a refused step (e.g. undo finding the path recreated) must stay retryable, not vanish.
+    past.push(op)
+    throw error
+  }
   future.push(op)
   return true
 }
@@ -42,7 +48,12 @@ export async function redoFileExplorer(): Promise<boolean> {
   if (!op) {
     return false
   }
-  await op.redo()
+  try {
+    await op.redo()
+  } catch (error) {
+    future.push(op)
+    throw error
+  }
   past.push(op)
   return true
 }

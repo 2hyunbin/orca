@@ -2,6 +2,7 @@ import type { RuntimeStatus } from '../../../shared/runtime-types'
 import { RUNTIME_CONNECTION_CHANGED_MESSAGE } from '../web/web-runtime-request-registry'
 import { assertFileMutationOwnershipCapability } from '../../../shared/file-mutation-ownership'
 import { callRuntimeRpc } from './runtime-rpc-client'
+import { RuntimeRpcCallError } from './runtime-rpc-result'
 import {
   captureRuntimeEnvironmentRequestRevision,
   getRuntimeEnvironmentRevision
@@ -43,10 +44,15 @@ export class RuntimeConnectionChangedError extends Error {
   }
 }
 
-/** The paired web client's transport refuses with the same wording before it sends. */
+/**
+ * The paired web client's transport refuses with the same wording before it sends; the desktop
+ * transport answers `runtime_environment_changed` only before sending, when its socket reached
+ * another runtime than the one probed.
+ */
 export function isRuntimeConnectionChangedError(error: unknown): boolean {
   return (
     error instanceof RuntimeConnectionChangedError ||
+    (error instanceof RuntimeRpcCallError && error.code === 'runtime_environment_changed') ||
     (error instanceof Error && error.message === RUNTIME_CONNECTION_CHANGED_MESSAGE)
   )
 }

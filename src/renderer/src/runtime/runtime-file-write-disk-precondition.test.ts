@@ -365,4 +365,33 @@ describe('writeRuntimeFile disk precondition', () => {
     expect(result).toEqual({ ok: true })
     expect(writeCalls()).toHaveLength(1)
   })
+
+  it('re-probes once when the transport refused to send to a replacement runtime', async () => {
+    let probes = 0
+    serveHost({ enforcesPrecondition: true, onStatus: () => (probes += 1) })
+    runtimeEnvironmentCall
+      .mockResolvedValueOnce({
+        id: 'files.writeIfUnchanged',
+        ok: false,
+        error: {
+          code: 'runtime_environment_changed',
+          message: 'Runtime environment identity changed; refresh and try again'
+        },
+        _meta: { runtimeId: 'remote-runtime' }
+      })
+      .mockResolvedValue(rpcOk({ ok: true }))
+
+    const result = await writeRuntimeFile(
+      remoteContext,
+      '/remote/repo/file.ts',
+      'edited',
+      undefined,
+      precondition
+    )
+
+    expect(result).toEqual({ ok: true })
+    // The retry decides support from a fresh probe of whatever now answers.
+    expect(probes).toBeGreaterThanOrEqual(2)
+    expect(writeCalls()).toHaveLength(2)
+  })
 })

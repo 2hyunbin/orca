@@ -9,12 +9,17 @@ import {
   missingOrIdenticalPrecondition
 } from '../../../../shared/file-write-disk-precondition'
 import { getFileExplorerOperationOwner } from './file-explorer-operation-owner'
+import {
+  clearFileExplorerUndoHistory,
+  fileExplorerHasRedo,
+  fileExplorerHasUndo,
+  undoFileExplorer
+} from './fileExplorerUndoRedo'
 import { useFileDeletion } from './useFileDeletion'
 
 const mocks = vi.hoisted(() => ({
   remove: vi.fn().mockResolvedValue(undefined),
-  write: vi.fn(),
-  commit: vi.fn()
+  write: vi.fn()
 }))
 vi.mock('@/components/confirmation-dialog-context', () => ({
   useConfirmationDialog: () => vi.fn().mockResolvedValue(true)
@@ -31,9 +36,6 @@ vi.mock('@/runtime/runtime-file-mutation-client', () => ({
 vi.mock('@/runtime/runtime-file-read-client', () => ({
   readRuntimeFileContent: vi.fn().mockResolvedValue({ content: 'deleted body', isBinary: false })
 }))
-vi.mock('@/components/right-sidebar/fileExplorerUndoRedo', () => ({
-  commitFileExplorerOp: mocks.commit
-}))
 vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => fallback }))
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
 
@@ -43,6 +45,7 @@ const worktreeId = `repo::${root}`
 
 beforeEach(() => {
   vi.clearAllMocks()
+  clearFileExplorerUndoHistory()
   useAppStore.setState({
     repos: [],
     activeWorktreeId: worktreeId,
@@ -75,9 +78,16 @@ it('undo of a delete never replaces a file recreated at the same path', async ()
       operationOwner: getFileExplorerOperationOwner(worktreeId)
     })
   )
-  await vi.waitFor(() => expect(mocks.commit).toHaveBeenCalledTimes(1))
+  await vi.waitFor(() => expect(fileExplorerHasUndo()).toBe(true))
 
-  const undo: () => Promise<void> = mocks.commit.mock.calls[0]?.[0]?.undo
-  await expect(undo()).rejects.toThrow(FILE_ALREADY_EXISTS_DIFFERENTLY_MESSAGE)
+  await expect(undoFileExplorer()).rejects.toThrow(FILE_ALREADY_EXISTS_DIFFERENTLY_MESSAGE)
   expect(mocks.write.mock.calls[0]?.[4]).toEqual(missingOrIdenticalPrecondition('deleted body'))
+  // The refused step stays on the stack, so the user can undo again once the path is clear.
+  expect(fileExplorerHasUndo()).toBe(true)
+  expect(fileExplorerHasRedo()).toBe(false)
+
+  mocks.write.mockResolvedValue({ ok: true })
+  await expect(undoFileExplorer()).resolves.toBe(true)
+  expect(fileExplorerHasUndo()).toBe(false)
+  expect(fileExplorerHasRedo()).toBe(true)
 })

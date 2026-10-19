@@ -104,7 +104,7 @@ describe('paired web client save precondition', () => {
     expect(calledMethods()).toEqual(['files.readPreview'])
   })
 
-  it('reports a file an older server refuses as file_too_large as changed', async () => {
+  it('reports a too-large file an older server also cannot page as changed', async () => {
     // The paired client surfaces a failed envelope as an Error carrying the wire message.
     const { methods, calledMethods } = methodsFor([], null, 'file_too_large')
 
@@ -115,6 +115,50 @@ describe('paired web client save precondition', () => {
     })
 
     expect(result).toEqual({ ok: false, diskConflict: 'changed' })
-    expect(calledMethods()).toEqual(['files.readPreview'])
+    expect(calledMethods()).not.toContain('files.write')
   })
+
+  it.each([
+    ['writes when the paged disk still matches', 'x'.repeat(4_000_000), { ok: true }],
+    [
+      'refuses when the paged disk differs',
+      'y'.repeat(4_000_000),
+      { ok: false, diskConflict: 'changed' }
+    ]
+  ])(
+    'pages a file past the preview cap through an older server: %s',
+    async (_label, disk, expected) => {
+      // The editor saved this file past one reply's size; the next save's compare must still read it.
+      const { methods, callRuntimeResult, calledMethods } = methodsFor([], null, 'file_too_large')
+      const bytes = Buffer.from(disk, 'utf8')
+      callRuntimeResult.mockImplementation(async (method: string, params: unknown) => {
+        if (method === 'files.readPreview') {
+          throw new Error('file_too_large')
+        }
+        if (method === 'files.stat') {
+          return { size: bytes.length, isDirectory: false, mtime: 1, ctime: 1 }
+        }
+        if (method === 'files.readChunk' && typeof params === 'object' && params !== null) {
+          const offset = 'offset' in params && typeof params.offset === 'number' ? params.offset : 0
+          const length = 'length' in params && typeof params.length === 'number' ? params.length : 0
+          const chunk = bytes.subarray(offset, offset + length)
+          return {
+            contentBase64: chunk.toString('base64'),
+            bytesRead: chunk.length,
+            eof: offset + chunk.length >= bytes.length
+          }
+        }
+        return { ok: true }
+      })
+
+      const result = await methods.writeFile({
+        filePath: '/hub/repo/readme.md',
+        content: 'edited',
+        diskPrecondition: { expectedSignature: getDiskBaselineSignature('x'.repeat(4_000_000)) }
+      })
+
+      expect(result).toEqual(expected)
+      expect(calledMethods().includes('files.write')).toBe(expected.ok)
+    }
+  )
 })

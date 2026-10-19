@@ -178,7 +178,7 @@ export function createFileApi(): NonNullable<Partial<PreloadApi>['fs']> {
 
 export function captureWebFileMutationSession(): {
   resolveFilePath: (filePath: string) => Promise<Awaited<ReturnType<typeof resolveRuntimeFilePath>>>
-  assertMutationSupported: () => Promise<readonly string[]>
+  assertMutationSupported: (options: { pinConnection: boolean }) => Promise<readonly string[]>
   callRuntimeResult: WebRuntimeResultCaller
   getSshState: (targetId: string) => Promise<SshConnectionState | null>
 } {
@@ -228,11 +228,14 @@ export function captureWebFileMutationSession(): {
         false,
         environment.id
       ),
-    assertMutationSupported: async () => {
+    assertMutationSupported: async ({ pinConnection }) => {
       const epochBeforeProbe = client.connectionEpoch
       const status = await callBoundRuntimeResult<RuntimeStatus>('status.get', undefined, 15_000)
       assertFileMutationOwnershipCapability(status)
-      // Why: the same client reconnects internally; the mutation must reach the runtime that answered.
+      if (!pinConnection) {
+        return status.capabilities ?? []
+      }
+      // Why: the same client reconnects internally; a guarded write must reach the runtime that answered.
       if (client.connectionEpoch !== epochBeforeProbe) {
         throw new Error(RUNTIME_CONNECTION_CHANGED_MESSAGE)
       }

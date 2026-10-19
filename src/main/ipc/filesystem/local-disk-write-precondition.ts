@@ -138,10 +138,13 @@ export async function writeLocalTextFileWithDiskPrecondition(
   content: string,
   precondition: FileWriteDiskPrecondition | undefined
 ): Promise<FileWriteResult> {
+  // Why: an unguarded write has nothing to compare, so it skips the locks a stuck guarded save holds.
+  if (!precondition) {
+    await writeFile(filePath, content, 'utf-8')
+    return FILE_WRITE_OK
+  }
   const compareAndWrite = async (): Promise<FileWriteResult> => {
-    const diskConflict = precondition
-      ? await checkLocalDiskWritePrecondition(filePath, precondition)
-      : null
+    const diskConflict = await checkLocalDiskWritePrecondition(filePath, precondition)
     if (diskConflict) {
       return { ok: false, diskConflict }
     }

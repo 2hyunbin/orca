@@ -369,6 +369,24 @@ describe('local provider guarded write', () => {
     expect(outcome).toEqual({ ok: true })
   })
 
+  it('writes a save with no precondition directly, not queued behind a stuck guarded save', async () => {
+    const filePath = join(base, 'stuck.ts')
+    await writeFile(filePath, 'original')
+    fileRead.hangPath = filePath
+
+    void provider().writeFileWithDiskPrecondition(filePath, 'guarded', {
+      expectedSignature: getDiskBaselineSignature('original')
+    })
+    const plainSave = provider().writeFileWithDiskPrecondition(filePath, 'plain', undefined)
+    const outcome = await Promise.race([
+      plainSave,
+      new Promise((resolve) => setTimeout(() => resolve('blocked'), 1_000))
+    ])
+
+    expect(outcome).toEqual({ ok: true })
+    expect(await readFile(filePath, 'utf-8')).toBe('plain')
+  })
+
   it('does not resurrect a deleted file without allowMissing', async () => {
     const filePath = join(base, 'gone.ts')
 
