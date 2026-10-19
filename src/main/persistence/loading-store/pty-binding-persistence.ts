@@ -6,6 +6,7 @@ import { rollbackFailedPtyBinding } from './pty-binding-write-rollback'
 import { cloneWorkspaceSessionState } from '../restoring-sessions/session-owner-fields'
 import { rollbackWorkspaceSessionAfterFailedAsyncWrite } from '../restoring-sessions/workspace-session-write-rollback'
 import { clearReplacedPaneBinding } from './replaced-pane-binding'
+import { assignWorkspaceSessionPartition } from '../terminal-topology/terminal-topology-membership'
 
 import type { PtyBindingSourceExpectation } from './store'
 
@@ -107,17 +108,8 @@ export class PtyBindingPersistenceOperations {
     const { runtime, sessions } = this[ptyBindingPersistenceOperationsContext]
     const resolved = resolveHostId(hostId)
     const publish = (session: WorkspaceSessionState): void => {
-      if (resolved === LOCAL_EXECUTION_HOST_ID) {
-        runtime.state.workspaceSession = session
-      } else {
-        runtime.state.workspaceSessionsByHostId = {
-          ...runtime.state.workspaceSessionsByHostId,
-          [resolved]: session
-        }
-      }
-      runtime.dirtyProfileStateDomains?.add(
-        resolved === LOCAL_EXECUTION_HOST_ID ? 'workspaceSession' : 'workspaceSessionsByHostId'
-      )
+      const domain = assignWorkspaceSessionPartition(runtime.state, resolved, session)
+      runtime.dirtyProfileStateDomains?.add(domain)
     }
     return runtime.runDurableMutation(() => {
       const session = sessions.getWorkspaceSession(resolved)
