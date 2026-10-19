@@ -28,6 +28,7 @@ import {
   servedBridgedPanes,
   type Pane
 } from './legacy-relay-bridge-leases'
+import type { LegacyRelayPaneOwners } from './legacy-relay-pane-owners'
 
 export type LegacyRelayTargetBridgeDeps = {
   targetId: string
@@ -46,6 +47,8 @@ export type LegacyRelayTargetBridgeDeps = {
   onData: (ptyId: string, data: string) => void
   onExit: (ptyId: string, code: number) => void
   onTerminalExited: () => void
+  /** The target's relay-id owners; the registry keeps them across bridges, so a reconnect keeps them. */
+  owners: LegacyRelayPaneOwners
 }
 
 // Unique across bridges, so a viewer acquired on a replaced bridge releases nothing on its successor.
@@ -67,8 +70,6 @@ export class LegacyRelayTargetBridge {
   /** Whether a relay lists a pane now, including one whose stop is owed; undefined when untracked. */
   readonly paneState = (ptyId: string) => this.panes.get(ptyId)?.state
   private readonly attached = new Map<string, Set<number>>()
-  /** Exits reported for a pane no relay owns yet, by endpoint; the listing that picks one reads them. */
-  private readonly unownedExits = new Map<string, number>()
   private readonly waiters = new LegacyRelayWaiters()
   private readonly retry = new LegacyRelayRetry(() => void this.refresh())
   private refreshing: Promise<void> | null = null
@@ -172,6 +173,7 @@ export class LegacyRelayTargetBridge {
     this.closeIdleClients(new Set())
     this.panes.clear()
     this.attached.clear()
+    this.deps.owners.clearExits()
     this.waiters.wake()
     this.deps.onPanesChanged()
   }
@@ -183,6 +185,7 @@ export class LegacyRelayTargetBridge {
     this.looked = true
     const leases = listedLeasesByRelayId(this.deps.leases())
     if (leases.size === 0) {
+      this.deps.owners.clearExits()
       this.closeIdleClients(new Set())
       this.replacePanes(new Map())
       return
@@ -199,13 +202,14 @@ export class LegacyRelayTargetBridge {
     }
     const listedRows: (LegacyRelayPty & { endpoint: string })[] = []
     let complete = listing.kind === 'listed' && listing.exhaustive
+    let answered = listing.kind === 'listed'
     for (const endpoint of listing.kind === 'listed' ? listing.endpoints : []) {
       const listed = await this.listEndpoint(endpoint)
       if (this.disposed) {
         return
       }
       if (listed === null) {
-        complete = false
+        complete = answered = false
         continue
       }
       listedRows.push(...listed.map((row) => ({ ...row, endpoint: endpoint.endpoint })))
@@ -215,21 +219,17 @@ export class LegacyRelayTargetBridge {
     const current = [...listedLeasesByRelayId(this.deps.leases())].filter(([id]) => leases.has(id))
     for (const [relayPtyId, lease] of current) {
       const ptyId = toAppSshPtyId(this.deps.targetId, relayPtyId)
-      const prior = this.panes.get(ptyId)
-      const pane = relistedPane(lease, relayPtyId, listedRows, prior, complete)
-      // A listing taken before the owner's exit report must not bring the pane back live.
-      const exitCode =
-        pane === 'absent' || prior?.ownerEndpoint
-          ? undefined
-          : this.unownedExits.get(`${pane.ownerEndpoint}\n${ptyId}`)
-      if (pane !== 'absent' && exitCode === undefined) {
-        next.set(ptyId, pane)
+      const seen = relistedPane(lease, relayPtyId, listedRows, this.deps.owners, answered, complete)
+      if ('exited' in seen) {
+        const proven = seen.exited !== null
+        const counted = proven || Boolean(this.panes.get(ptyId)?.endpoint)
+        this.deps.retireLease(relayPtyId, proven ? 'exit-observed' : 'absent')
+        this.emitExit(ptyId, seen.exited ?? -1, counted)
       } else {
-        this.deps.retireLease(relayPtyId, exitCode === undefined ? 'absent' : 'exit-observed')
-        this.emitExit(ptyId, exitCode ?? -1, exitCode !== undefined || Boolean(prior?.endpoint))
+        next.set(ptyId, seen)
       }
     }
-    this.unownedExits.clear()
+    this.deps.owners.clearExits()
     this.closeIdleClients(new Set([...next.values()].map((pane) => pane.endpoint ?? '')))
     this.replacePanes(next)
     // A contested pane is unverifiable under a complete listing too; only a later one resolves it.
@@ -272,17 +272,16 @@ export class LegacyRelayTargetBridge {
   private wireClient(endpoint: string, client: LegacyRelayClient): void {
     client.onData((relayPtyId, data) => {
       const ptyId = toAppSshPtyId(this.deps.targetId, relayPtyId)
-      if (this.attached.has(ptyId) && this.panes.get(ptyId)?.ownerEndpoint === endpoint) {
+      if (this.attached.has(ptyId) && this.deps.owners.speaksFor(relayPtyId, endpoint)) {
         this.deps.onData(ptyId, data)
       }
     })
     client.onExit((relayPtyId, code) => {
       const ptyId = toAppSshPtyId(this.deps.targetId, relayPtyId)
       const pane = this.panes.get(ptyId)
-      if (pane?.ownerEndpoint === endpoint) {
+      this.deps.owners.noteExit(relayPtyId, endpoint, code)
+      if (pane && this.deps.owners.speaksFor(relayPtyId, endpoint)) {
         this.retire(ptyId, pane, code)
-      } else if (pane && !pane.ownerEndpoint) {
-        this.unownedExits.set(`${endpoint}\n${ptyId}`, code)
       }
     })
     client.onClose(() => {
@@ -308,6 +307,7 @@ export class LegacyRelayTargetBridge {
 
   private retire(ptyId: string, pane: Pane, code: number | null): void {
     // A null code is the relay refusing an attach as proven exited.
+    this.deps.owners.forget(pane.relayPtyId)
     this.deps.retireLease(pane.relayPtyId, code === null ? 'absent' : 'exit-observed')
     this.panes.delete(ptyId)
     this.emitExit(ptyId, code ?? -1)

@@ -7,6 +7,7 @@ import type { SshRemotePtyLease } from '../../../shared/ssh-types'
 import type { LegacyRelayBridgedPane } from '../../../shared/legacy-relay-bridge-contract'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
 import type { LegacyRelayPty } from './legacy-relay-client'
+import type { LegacyRelayPaneOwners } from './legacy-relay-pane-owners'
 
 export type { LegacyRelayPty }
 
@@ -78,8 +79,6 @@ export type Pane = {
   listed?: LegacyRelayPty
   /** Its tab closed and its stop is still owed: listed for the stop, never served. */
   stopping?: true
-  /** The relay first seen running it; relay ids repeat across relays, so no other speaks for it. */
-  ownerEndpoint?: string
 }
 
 export function toPane(
@@ -87,8 +86,7 @@ export function toPane(
   relayPtyId: string,
   endpoint: string | null,
   state: Pane['state'],
-  listed?: LegacyRelayPty,
-  ownerEndpoint?: string
+  listed?: LegacyRelayPty
 ): Pane {
   return {
     lease,
@@ -96,7 +94,6 @@ export function toPane(
     endpoint,
     state,
     ...(listed ? { listed } : {}),
-    ...(ownerEndpoint ? { ownerEndpoint } : {}),
     ...(lease.pendingKill ? { stopping: true as const } : {})
   }
 }
@@ -118,32 +115,38 @@ export function seededPanes(
 }
 
 /**
- * A leased pane after a listing, or `absent` once every relay that could run it answered without
- * it. Relay ids repeat across relays: once a relay ran the pane only that relay speaks for it, and
- * two relays claiming one nobody owned yet is a conflict, served by neither.
+ * A leased pane after a listing, or the proof it ended: `exited` is its exit code, or `null` once
+ * every relay that could run it answered without it. `answered`: every relay listed was asked;
+ * `complete`: and the host accounted for every relay it runs.
  */
 export function relistedPane(
   lease: SshRemotePtyLease,
   relayPtyId: string,
   listedRows: readonly (LegacyRelayPty & { endpoint: string })[],
-  prior: Pane | undefined,
+  owners: LegacyRelayPaneOwners,
+  answered: boolean,
   complete: boolean
-): Pane | 'absent' {
+): Pane | { exited: number | null } {
   const rows = listedRows.filter((row) => row.relayPtyId === relayPtyId)
-  const owner = prior?.ownerEndpoint
-  const listed = owner
-    ? rows.find((row) => row.endpoint === owner)
-    : rows.length === 1
-      ? rows[0]
-      : undefined
-  if (listed) {
-    return toPane(lease, relayPtyId, listed.endpoint, 'live', listed, listed.endpoint)
+  if (owners.owner(relayPtyId) === undefined && rows.length > 1) {
+    owners.claim(relayPtyId, null)
   }
-  if (complete && (owner || rows.length === 0)) {
-    return 'absent'
+  const owner = owners.owner(relayPtyId)
+  // Why only once every relay answered: one that could not be asked may be the one running it.
+  const adopted = owner === undefined && answered && rows.length === 1 ? rows[0] : undefined
+  const listed = owner ? rows.find((row) => row.endpoint === owner) : adopted
+  // A listing taken before the new owner's exit report must not bring the pane back live.
+  const exitedFirst = adopted && owners.exitBeforeAdoption(relayPtyId, adopted.endpoint)
+  if (exitedFirst !== undefined || (!listed && complete && (owner || rows.length === 0))) {
+    owners.forget(relayPtyId)
+    return { exited: exitedFirst ?? null }
+  }
+  if (listed) {
+    owners.claim(relayPtyId, listed.endpoint)
+    return toPane(lease, relayPtyId, listed.endpoint, 'live', listed)
   }
   // Unreachable or contested: loss of contact is never exit, so the pane waits.
-  return toPane(lease, relayPtyId, null, 'unverifiable', undefined, owner)
+  return toPane(lease, relayPtyId, null, 'unverifiable')
 }
 
 /** The panes a bridge serves; a closed tab's pane, its stop owed or its lease ended, is not one. */

@@ -5,6 +5,7 @@ import { getRemoteHostPlatform } from '../ssh-remote-platform'
 import type { LegacyRelayClient } from './legacy-relay-client'
 import type { LegacyRelayEndpoint, LegacyRelayEndpointListing } from './legacy-relay-endpoints'
 import { LegacyRelayPaneStops } from './legacy-relay-pane-stops'
+import { LegacyRelayPaneOwners } from './legacy-relay-pane-owners'
 import {
   LegacyRelayTargetBridge,
   type LegacyRelayTargetBridgeDeps
@@ -117,6 +118,7 @@ function lease(overrides: Partial<SshRemotePtyLease> = {}): SshRemotePtyLease {
 }
 
 let relay: FakeRelay
+let owners: LegacyRelayPaneOwners
 let leases: SshRemotePtyLease[]
 let listing: LegacyRelayEndpointListing
 let endpointExited: boolean
@@ -173,6 +175,8 @@ function bridge(overrides: Partial<LegacyRelayTargetBridgeDeps> = {}): LegacyRel
     onTerminalExited: () => {
       events.exitedTelemetry += 1
     },
+    // As the registry keeps them: one target's owners outlive each bridge.
+    owners,
     ...overrides
   })
   return subject
@@ -191,6 +195,7 @@ beforeEach(() => {
     exitOnShutdown: true
   }
   stops = paneStops()
+  owners = new LegacyRelayPaneOwners()
   leases = [lease()]
   listing = { kind: 'listed', endpoints: [ENDPOINT], exhaustive: true }
   endpointExited = false
@@ -728,6 +733,9 @@ describe('one target’s legacy relay bridge', () => {
       bridge({
         openClient: async (endpoint) => {
           const owner = endpoint.endpoint === OTHER.endpoint ? other : relay
+          if (owner.openError) {
+            throw owner.openError
+          }
           const client = fakeClient(owner)
           owner.clients.push(client)
           return client
@@ -774,10 +782,44 @@ describe('one target’s legacy relay bridge', () => {
       await subject.refresh()
       expect(subject.snapshot()).toEqual([expect.objectContaining({ state: 'unverifiable' })])
       expect(leases[0].state).toBe('detached')
-      // A later listing settles it: here the stranger's process is gone.
+      // One claimant dropping it settles nothing: the one left may be the stranger.
       other.ptys.delete('pty-1')
       await vi.advanceTimersByTimeAsync(10_000)
-      expect(subject.snapshot()).toEqual([expect.objectContaining({ state: 'live' })])
+      expect(subject.snapshot()).toEqual([expect.objectContaining({ state: 'unverifiable' })])
+      subject.write(PTY, 'ls\r')
+      expect(relay.clients.flatMap((client) => client.writes)).toEqual([])
+      // Once no relay lists it, it is gone.
+      relay.ptys.delete('pty-1')
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(leases[0].state).toBe('terminated')
+    })
+
+    it('never adopts the one relay listing an id while another could not be asked', async () => {
+      other.ptys.add('pty-1')
+      relay.openError = new Error('ssh down')
+      listing = { kind: 'listed', endpoints: [ENDPOINT, OTHER], exhaustive: true }
+      const subject = twoRelays()
+      await subject.refresh()
+      expect(subject.snapshot()).toEqual([expect.objectContaining({ state: 'unverifiable' })])
+      // The unreachable relay answers and both list the id: still nobody's.
+      relay.openError = null
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(subject.snapshot()).toEqual([expect.objectContaining({ state: 'unverifiable' })])
+      expect(other.clients.flatMap((client) => client.writes)).toEqual([])
+    })
+
+    it('keeps the owning relay across a reconnect, when both relays list the id', async () => {
+      const first = twoRelays()
+      await first.refresh()
+      first.dispose()
+      other.ptys.add('pty-1')
+      listing = { kind: 'listed', endpoints: [ENDPOINT, OTHER], exhaustive: true }
+      const successor = twoRelays()
+      await successor.refresh()
+      await expect(successor.attach(PTY)).resolves.toMatchObject({ status: 'attached' })
+      successor.write(PTY, 'ls\r')
+      expect(clientOf(ENDPOINT).writes).toEqual(['ls\r'])
+      expect(clientOf(OTHER).writes).toEqual([])
     })
 
     it('keeps an exit the relay reported while its listing was in flight', async () => {
