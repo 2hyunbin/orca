@@ -116,15 +116,14 @@ export function seededPanes(
 
 /**
  * A leased pane after a listing, or the proof it ended: `exited` is its exit code, or `null` once
- * every relay that could run it answered without it. `answered`: every relay listed was asked;
- * `complete`: and the host accounted for every relay it runs.
+ * every relay that could run it answered without it. `complete`: every relay the host runs was
+ * accounted for and answered.
  */
 export function relistedPane(
   lease: SshRemotePtyLease,
   relayPtyId: string,
   listedRows: readonly (LegacyRelayPty & { endpoint: string })[],
   owners: LegacyRelayPaneOwners,
-  answered: boolean,
   complete: boolean
 ): Pane | { exited: number | null } {
   const rows = listedRows.filter((row) => row.relayPtyId === relayPtyId)
@@ -132,8 +131,9 @@ export function relistedPane(
     owners.claim(relayPtyId, null)
   }
   const owner = owners.owner(relayPtyId)
-  // Why only once every relay answered: one that could not be asked may be the one running it.
-  const adopted = owner === undefined && answered && rows.length === 1 ? rows[0] : undefined
+  // Why only on a complete listing: a relay that could not be asked, or that the host's census
+  // could not account for, may be the one running it, and an owner once pinned is never revisited.
+  const adopted = owner === undefined && complete && rows.length === 1 ? rows[0] : undefined
   const listed = owner ? rows.find((row) => row.endpoint === owner) : adopted
   // A listing taken before the new owner's exit report must not bring the pane back live.
   const exitedFirst = adopted && owners.exitBeforeAdoption(relayPtyId, adopted.endpoint)

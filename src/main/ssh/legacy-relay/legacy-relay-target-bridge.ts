@@ -202,14 +202,13 @@ export class LegacyRelayTargetBridge {
     }
     const listedRows: (LegacyRelayPty & { endpoint: string })[] = []
     let complete = listing.kind === 'listed' && listing.exhaustive
-    let answered = listing.kind === 'listed'
     for (const endpoint of listing.kind === 'listed' ? listing.endpoints : []) {
       const listed = await this.listEndpoint(endpoint)
       if (this.disposed) {
         return
       }
       if (listed === null) {
-        complete = answered = false
+        complete = false
         continue
       }
       listedRows.push(...listed.map((row) => ({ ...row, endpoint: endpoint.endpoint })))
@@ -219,7 +218,7 @@ export class LegacyRelayTargetBridge {
     const current = [...listedLeasesByRelayId(this.deps.leases())].filter(([id]) => leases.has(id))
     for (const [relayPtyId, lease] of current) {
       const ptyId = toAppSshPtyId(this.deps.targetId, relayPtyId)
-      const seen = relistedPane(lease, relayPtyId, listedRows, this.deps.owners, answered, complete)
+      const seen = relistedPane(lease, relayPtyId, listedRows, this.deps.owners, complete)
       if ('exited' in seen) {
         const proven = seen.exited !== null
         const counted = proven || Boolean(this.panes.get(ptyId)?.endpoint)

@@ -540,7 +540,8 @@ describe('one target’s legacy relay bridge', () => {
     const settled = stops.stopAndWait(epochPty, subject, Date.now() + 1_000)
     await vi.advanceTimersByTimeAsync(1_000)
     await expect(settled).resolves.toBeNull()
-    expect(relay.shutdowns).toEqual(['pty2:epoch:1'])
+    // Nor is the one relay listing it proven its owner, so no stop reaches a shell it can't vouch for.
+    expect(relay.shutdowns).toEqual([])
   })
 
   it('never attaches a pane whose tab closed while the attach waited for its relay', async () => {
@@ -806,6 +807,20 @@ describe('one target’s legacy relay bridge', () => {
       await vi.advanceTimersByTimeAsync(10_000)
       expect(subject.snapshot()).toEqual([expect.objectContaining({ state: 'unverifiable' })])
       expect(other.clients.flatMap((client) => client.writes)).toEqual([])
+    })
+
+    it('never adopts the one relay listing an id while the census may have missed another', async () => {
+      listing = { kind: 'listed', endpoints: [ENDPOINT], exhaustive: false }
+      const subject = twoRelays()
+      await subject.refresh()
+      expect(subject.snapshot()).toEqual([expect.objectContaining({ state: 'unverifiable' })])
+      // The census later accounts for every relay, and the missed one runs the same id.
+      other.ptys.add('pty-1')
+      listing = { kind: 'listed', endpoints: [ENDPOINT, OTHER], exhaustive: true }
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(subject.snapshot()).toEqual([expect.objectContaining({ state: 'unverifiable' })])
+      subject.write(PTY, 'ls\r')
+      expect(relay.clients.flatMap((client) => client.writes)).toEqual([])
     })
 
     it('keeps the owning relay across a reconnect, when both relays list the id', async () => {
