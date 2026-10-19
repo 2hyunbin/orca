@@ -23,7 +23,6 @@ async function ipcSpawnEnv(
 ): Promise<Record<string, string> | undefined> {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: buildPtyIpcSpawnOptions only reads the members stubbed here; the rest belong to later spawn stages this test never runs.
   const deps = {
-    transitionSpawnHiddenRendererPtyDeliveryState: vi.fn(),
     getSettings: () => settingsWith(isolation),
     runtime: { registerPreAllocatedHandleForPty: vi.fn() }
   } as unknown as PtySpawnIpcDeps

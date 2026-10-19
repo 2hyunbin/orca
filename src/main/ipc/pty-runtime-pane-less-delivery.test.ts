@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { makeDeferred } from './pty-ipc-test-constants'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
-import { isHiddenRendererPty } from './pty-hidden-delivery-gate'
+import { shouldDropRendererPtyData } from './pty-hidden-delivery-gate'
+import { openTestRendererPage } from './pty-ipc-test-pane-attachments'
 import { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { registerPtyHandlers } from './pty/register-handlers'
 
@@ -50,35 +51,21 @@ vi.mock('../codex/codex-state-db-backfill-recovery', () =>
 )
 
 type RuntimeSpawnController = {
-  spawn: (args: {
-    cols: number
-    rows: number
-    sessionId?: string
-    initiallyHidden?: boolean
-  }) => Promise<{ id: string }>
+  spawn: (args: { cols: number; rows: number; sessionId?: string }) => Promise<{ id: string }>
 }
 
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test doubles implement only the members these spawn paths read.
 const testDouble = <T>(value: unknown): T => value as T
 
-describe('runtime-controller spawn: hidden until a renderer view mounts', () => {
+describe('runtime-controller spawn: main owns delivery until a window connection consumes', () => {
   const {
     mainWindow,
+    mainWindowIpcEvent,
     installObservableDaemonTestProvider,
-    getPtySetHiddenRendererPtyListener,
+    getPtySetRendererPtyConsumerListener,
     getPtySetRendererPtyVisibleListener,
     getPtyDataSendCalls
   } = setupPtyIpcSuite()
-
-  function simulateRendererReload(): void {
-    const reloadHandlers = mainWindow.webContents.on.mock.calls
-      .filter((call: unknown[]) => call[0] === 'did-finish-load')
-      .map((call: unknown[]) => testDouble<() => void>(call[1]))
-    expect(reloadHandlers.length).toBeGreaterThan(0)
-    for (const handler of reloadHandlers) {
-      handler()
-    }
-  }
 
   function createRuntimeMock() {
     return {
@@ -99,7 +86,7 @@ describe('runtime-controller spawn: hidden until a renderer view mounts', () => 
     return testDouble<RuntimeSpawnController>(runtime.setPtyController.mock.calls[0]?.[0])
   }
 
-  it('marks a fresh daemon session hidden before spawn resolves', async () => {
+  it("is main's from before spawn resolves, with no hidden flag to carry", async () => {
     const runtime = createRuntimeMock()
     const daemon = installObservableDaemonTestProvider()
     const spawnGate = makeDeferred()
@@ -111,61 +98,34 @@ describe('runtime-controller spawn: hidden until a renderer view mounts', () => 
     })
     const controller = installController(runtime)
 
-    const spawnPromise = controller.spawn({ cols: 80, rows: 24, initiallyHidden: true })
+    const spawnPromise = controller.spawn({ cols: 80, rows: 24 })
     await vi.waitFor(() => expect(mintedSessionId).toBeDefined())
     // Byte zero (Muse's startup queries) must already be main's to answer.
-    expect(isHiddenRendererPty(mintedSessionId!)).toBe(true)
+    expect(shouldDropRendererPtyData(mintedSessionId!, {})).toBe(true)
 
     spawnGate.resolve()
     const result = await spawnPromise
-    expect(isHiddenRendererPty(result.id)).toBe(true)
+    expect(shouldDropRendererPtyData(result.id, {})).toBe(true)
+    expect(daemon.setPtyBackgrounded).toHaveBeenLastCalledWith(result.id, true)
   })
 
-  it('paces a pane-less background PTY as backgrounded until a view reports visible', async () => {
+  it('delivers to a view that attaches, and returns to main when its page reloads', async () => {
     const runtime = createRuntimeMock()
     const daemon = installObservableDaemonTestProvider()
     const controller = installController(runtime)
 
-    const result = await controller.spawn({ cols: 80, rows: 24, initiallyHidden: true })
-    expect(daemon.setPtyBackgrounded).toHaveBeenLastCalledWith(result.id, true)
-
+    const result = await controller.spawn({ cols: 80, rows: 24 })
     getPtySetRendererPtyVisibleListener()(null, { id: result.id, visible: true })
     expect(daemon.setPtyBackgrounded).toHaveBeenLastCalledWith(result.id, false)
+    expect(shouldDropRendererPtyData(result.id, {})).toBe(false)
+
+    // The reload ends that connection; nothing consumes until the new page attaches.
+    openTestRendererPage(mainWindowIpcEvent, 'reloaded-page')
+    expect(shouldDropRendererPtyData(result.id, {})).toBe(true)
+    expect(daemon.setPtyBackgrounded).toHaveBeenLastCalledWith(result.id, true)
   })
 
-  it('keeps the runtime hidden mark and pacing across a renderer reload', async () => {
-    const runtime = createRuntimeMock()
-    const daemon = installObservableDaemonTestProvider()
-    const controller = installController(runtime)
-
-    const result = await controller.spawn({ cols: 80, rows: 24, initiallyHidden: true })
-    daemon.setPtyBackgrounded.mockClear()
-    simulateRendererReload()
-
-    // No renderer party exists to re-mark it, so main must keep answering its queries.
-    expect(isHiddenRendererPty(result.id)).toBe(true)
-    expect(daemon.setPtyBackgrounded).not.toHaveBeenCalledWith(result.id, false)
-  })
-
-  it('hands the mark to the renderer once a visible view unmarks it', async () => {
-    const runtime = createRuntimeMock()
-    const daemon = installObservableDaemonTestProvider()
-    const controller = installController(runtime)
-
-    const result = await controller.spawn({ cols: 80, rows: 24, initiallyHidden: true })
-    getPtySetRendererPtyVisibleListener()(null, { id: result.id, visible: true })
-    getPtySetHiddenRendererPtyListener()(null, { id: result.id, hidden: false })
-    expect(isHiddenRendererPty(result.id)).toBe(false)
-
-    daemon.setPtyBackgrounded.mockClear()
-    simulateRendererReload()
-
-    // A reload must not resurrect a runtime mark on a PTY a renderer view already owned.
-    expect(isHiddenRendererPty(result.id)).toBe(false)
-    expect(daemon.setPtyBackgrounded).not.toHaveBeenCalledWith(result.id, true)
-  })
-
-  it('does not re-hide a PTY whose view mounted visible before spawn committed', async () => {
+  it('delivers byte one to a view that attached before spawn committed', async () => {
     const runtime = createRuntimeMock()
     const daemon = installObservableDaemonTestProvider()
     const spawnGate = makeDeferred()
@@ -177,15 +137,12 @@ describe('runtime-controller spawn: hidden until a renderer view mounts', () => 
     })
     const controller = installController(runtime)
 
-    const spawnPromise = controller.spawn({ cols: 80, rows: 24, initiallyHidden: true })
+    const spawnPromise = controller.spawn({ cols: 80, rows: 24 })
     await vi.waitFor(() => expect(mintedSessionId).toBeDefined())
-    // The visible mount reports visible and releases the pre-spawn mark.
     getPtySetRendererPtyVisibleListener()(null, { id: mintedSessionId!, visible: true })
-    getPtySetHiddenRendererPtyListener()(null, { id: mintedSessionId!, hidden: false })
     spawnGate.resolve()
     const result = await spawnPromise
 
-    expect(isHiddenRendererPty(result.id)).toBe(false)
     daemon.emitData(result.id, 'visible output')
     await vi.waitFor(() =>
       expect(getPtyDataSendCalls()).toContainEqual([
@@ -195,24 +152,7 @@ describe('runtime-controller spawn: hidden until a renderer view mounts', () => 
     )
   })
 
-  it('clears the pre-spawn mark when the runtime spawn fails', async () => {
-    const runtime = createRuntimeMock()
-    const daemon = installObservableDaemonTestProvider()
-    let mintedSessionId: string | undefined
-    daemon.spawn.mockImplementation(async (options: { sessionId?: string }) => {
-      mintedSessionId = options.sessionId
-      throw new Error('spawn exploded')
-    })
-    const controller = installController(runtime)
-
-    await expect(controller.spawn({ cols: 80, rows: 24, initiallyHidden: true })).rejects.toThrow(
-      'spawn exploded'
-    )
-    expect(mintedSessionId).toBeDefined()
-    expect(isHiddenRendererPty(mintedSessionId!)).toBe(false)
-  })
-
-  it('does not mark a reattach, whose session may already back a visible pane', async () => {
+  it('keeps delivering a reattached session a window connection already consumes', async () => {
     const runtime = createRuntimeMock()
     const daemon = installObservableDaemonTestProvider()
     daemon.spawn.mockImplementation(async (options: { sessionId?: string }) => ({
@@ -220,23 +160,10 @@ describe('runtime-controller spawn: hidden until a renderer view mounts', () => 
       isReattach: true
     }))
     const controller = installController(runtime)
+    getPtySetRendererPtyConsumerListener()(null, { id: 'existing-session', consuming: true })
 
-    const result = await controller.spawn({
-      cols: 80,
-      rows: 24,
-      sessionId: 'existing-session',
-      initiallyHidden: true
-    })
-    expect(isHiddenRendererPty(result.id)).toBe(false)
-  })
-
-  it('leaves spawns without the flag delivering to the renderer', async () => {
-    const runtime = createRuntimeMock()
-    installObservableDaemonTestProvider()
-    const controller = installController(runtime)
-
-    const result = await controller.spawn({ cols: 80, rows: 24 })
-    expect(isHiddenRendererPty(result.id)).toBe(false)
+    const result = await controller.spawn({ cols: 80, rows: 24, sessionId: 'existing-session' })
+    expect(shouldDropRendererPtyData(result.id, {})).toBe(false)
   })
 
   it('answers a startup cursor-position query from the model with no renderer view', async () => {
@@ -268,7 +195,7 @@ describe('runtime-controller spawn: hidden until a renderer view mounts', () => 
     registerPtyHandlers(testDouble(mainWindow), runtime)
     const controller = testDouble<RuntimeSpawnController>(setPtyController.mock.calls[0]?.[0])
 
-    const result = await controller.spawn({ cols: 80, rows: 24, initiallyHidden: true })
+    const result = await controller.spawn({ cols: 80, rows: 24 })
     daemon.emitData(result.id, '\x1b[6n')
     await runtime.serializeMainTerminalBuffer(result.id)
 

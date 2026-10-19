@@ -12,7 +12,7 @@ import {
   IDENTITY_ENV_KEYS,
   type LaunchWorkspace
 } from '../../shared/launch-parity-window-request.test-fixture'
-import { isHiddenRendererPty } from './pty-hidden-delivery-gate'
+import { shouldDropRendererPtyData } from './pty-hidden-delivery-gate'
 import { HOST_TAB_ID } from './pty-launch-parity-host.test-cases'
 
 const WINDOWS_ENV = {
@@ -180,7 +180,7 @@ export function startParityLanes(
     if (args.spawnError) {
       throw args.spawnError
     }
-    // A fresh id per spawn, so one case's hidden mark never reads into the next.
+    // A fresh id per spawn, so one case's connection record never reads into the next.
     return { id: options.sessionId ?? `remote-pty-${++remoteSpawns}` }
   })
   suite.installDaemonTestProvider({ spawn: provider })
@@ -240,7 +240,7 @@ const CASE_ENV_KEYS = ['A', 'CUSTOM_FLAG']
 
 /**
  * The launch facts the plan names at the provider boundary: `orcaEnv` lists identity keys present,
- * `env` the case's own env values, `hidden` whether main marked the PTY hidden before a view.
+ * `env` the case's own env values, `hidden` whether main owns the PTY's bytes and replies (no consuming view).
  */
 export async function providerFacts(provider: Mock): Promise<Record<string, unknown>> {
   const options = recordOf(provider.mock.calls.at(-1)?.[0])
@@ -252,7 +252,7 @@ export async function providerFacts(provider: Mock): Promise<Record<string, unkn
     ),
     orcaEnv: IDENTITY_ENV_KEYS.filter((key) => key in env),
     env: Object.fromEntries(CASE_ENV_KEYS.filter((key) => key in env).map((k) => [k, env[k]])),
-    hidden: isHiddenRendererPty(String(spawned.id))
+    hidden: shouldDropRendererPtyData(String(spawned.id), {})
   }
 }
 

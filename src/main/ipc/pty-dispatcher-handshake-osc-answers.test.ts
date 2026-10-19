@@ -59,7 +59,7 @@ describe('registerPtyHandlers', () => {
     createMockProc,
     getPtyWriteListener,
     getPtySetRendererPtyVisibleListener,
-    getPtySetHiddenRendererPtyListener,
+    getPtySetRendererPtyConsumerListener,
     getPtyRendererDispatcherReadyListener,
     getMainFrameNavigationListener,
     getPtyResizeListener
@@ -182,12 +182,12 @@ describe('registerPtyHandlers', () => {
         cwd: '/tmp'
       })) as { id: string }
       const setRendererPtyVisible = getPtySetRendererPtyVisibleListener()
-      const setHidden = getPtySetHiddenRendererPtyListener()
+      const setConsuming = getPtySetRendererPtyConsumerListener()
       const resizePty = getPtyResizeListener()
       mainWindow.webContents.send.mockClear()
 
       setRendererPtyVisible(null, { id: spawnResult.id, visible: false })
-      setHidden(null, { id: spawnResult.id, hidden: true })
+      setConsuming(null, { id: spawnResult.id, consuming: false })
       resizePty(null, { id: spawnResult.id, cols: 72, rows: 24 })
       mockProc.emitData('\x1b[2Khidden-resize repaint')
       vi.advanceTimersByTime(2)
@@ -196,7 +196,7 @@ describe('registerPtyHandlers', () => {
         expect.objectContaining({ data: '\x1b[2Khidden-resize repaint' })
       )
 
-      setHidden(null, { id: spawnResult.id, hidden: false })
+      setConsuming(null, { id: spawnResult.id, consuming: true })
       setRendererPtyVisible(null, { id: spawnResult.id, visible: true })
       mainWindow.webContents.send.mockClear()
       // The app's post-reveal full repaint: a background tag makes the renderer drop it.

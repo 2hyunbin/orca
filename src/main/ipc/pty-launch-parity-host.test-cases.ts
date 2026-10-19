@@ -25,7 +25,7 @@ export type HostProviderFacts = {
   startupCommandDelivery?: 'shell-ready'
   /** The agent or caller env keys the case set, with their values; default none. */
   env?: Record<string, string>
-  /** Whether main marks the PTY hidden before it has a view; default true on this lane. */
+  /** Whether main owns the PTY's bytes before a view attaches; default true on this lane. */
   hidden?: boolean
 }
 

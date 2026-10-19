@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { existsSyncMock, accessSyncMock, spawnMock } from './pty-ipc-mock-registry'
 import { posixOnlyIt, makeDeferred } from './pty-ipc-test-constants'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
-import { isHiddenRendererPty } from './pty-hidden-delivery-gate'
+import { shouldDropRendererPtyData } from './pty-hidden-delivery-gate'
 import { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { registerPtyHandlers } from './pty/register-handlers'
 import { join } from 'node:path'
@@ -63,8 +63,8 @@ describe('registerPtyHandlers', () => {
     getPtyWriteListener
   } = setupPtyIpcSuite()
 
-  describe('hidden-at-spawn mark (initiallyHidden)', () => {
-    // terminal-query-authority.md §races: hidden-at-spawn marks the PTY before byte one, closing the spawn-time DA1-loss window.
+  describe('window spawn record (byte zero)', () => {
+    // terminal-query-authority.md §races: the spawn request carries its connection's record, so byte zero has one owner.
     function createRuntimeMock() {
       return {
         setPtyController: vi.fn(),
@@ -80,7 +80,7 @@ describe('registerPtyHandlers', () => {
       }
     }
 
-    it('marks a daemon PTY hidden before spawn resolves so byte zero is gated', async () => {
+    it('gates a hidden daemon spawn before spawn resolves so main owns byte zero', async () => {
       vi.useFakeTimers()
       const runtime = createRuntimeMock()
       const daemon = installObservableDaemonTestProvider()
@@ -101,8 +101,8 @@ describe('registerPtyHandlers', () => {
         await Promise.resolve()
         mainWindow.webContents.send.mockClear()
 
-        // Daemon PTYs can emit prompt bytes before spawn() resolves, so the pre-spawn mark must already gate them.
-        expect(isHiddenRendererPty('daemon-session')).toBe(true)
+        // Daemon PTYs can emit prompt bytes before spawn() resolves, so the record must already be bound.
+        expect(shouldDropRendererPtyData('daemon-session', {})).toBe(true)
         daemon.emitData('daemon-session', 'pre-spawn prompt\x1b[c')
         vi.advanceTimersByTime(50)
         expect(runtime.onPtyData).toHaveBeenCalledWith(
@@ -122,29 +122,58 @@ describe('registerPtyHandlers', () => {
 
         spawnGate.resolve()
         const result = await spawnPromise
-        expect(isHiddenRendererPty(result.id)).toBe(true)
+        expect(shouldDropRendererPtyData(result.id, {})).toBe(true)
       } finally {
         vi.useRealTimers()
       }
     })
-    it('clears the pre-spawn hidden mark when the spawn fails', async () => {
+    it("delivers a visible daemon spawn's pre-spawn bytes to its view, with main silent", async () => {
+      vi.useFakeTimers()
+      const daemon = installObservableDaemonTestProvider()
+      const spawnGate = makeDeferred()
+      daemon.spawn.mockImplementation(async (options: { sessionId?: string }) => {
+        await spawnGate.promise
+        return { id: options.sessionId ?? 'daemon-pty' }
+      })
+      try {
+        registerPtyHandlers(mainWindow as never, createRuntimeMock() as never)
+        const spawnPromise = handlers.get('pty:spawn')!(null, {
+          cols: 80,
+          rows: 24,
+          sessionId: 'daemon-session'
+        }) as Promise<{ id: string }>
+        await Promise.resolve()
+        mainWindow.webContents.send.mockClear()
+
+        daemon.emitData('daemon-session', 'pre-spawn prompt\x1b[c')
+        vi.advanceTimersByTime(50)
+        expect(mainWindow.webContents.send).toHaveBeenCalledWith('pty:data', {
+          id: 'daemon-session',
+          data: 'pre-spawn prompt\x1b[c'
+        })
+        expect(mainWindow.webContents.send).not.toHaveBeenCalledWith(
+          'pty:modelRestoreNeeded',
+          expect.anything()
+        )
+        spawnGate.resolve()
+        await spawnPromise
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+    it("releases a failed spawn's record so it cannot keep the session delivering", async () => {
       const daemon = installObservableDaemonTestProvider()
       daemon.spawn.mockRejectedValue(new Error('spawn exploded'))
       registerPtyHandlers(mainWindow as never)
 
       await expect(
-        handlers.get('pty:spawn')!(null, {
-          cols: 80,
-          rows: 24,
-          sessionId: 'daemon-session',
-          initiallyHidden: true
-        })
+        handlers.get('pty:spawn')!(null, { cols: 80, rows: 24, sessionId: 'daemon-session' })
       ).rejects.toThrow('spawn exploded')
 
-      // A later visible attach reusing this session id must not start gated.
-      expect(isHiddenRendererPty('daemon-session')).toBe(false)
+      // No live connection consumes the id, so a later reuse starts main-owned.
+      expect(shouldDropRendererPtyData('daemon-session', {})).toBe(true)
     })
-    it('marks local PTYs hidden after spawn, before their first data task', async () => {
+    it('gates a hidden local spawn before its first data task', async () => {
       vi.useFakeTimers()
       const mockProc = createMockProc()
       spawnMock.mockReturnValue(mockProc.proc)
@@ -158,7 +187,7 @@ describe('registerPtyHandlers', () => {
         })) as { id: string }
         mainWindow.webContents.send.mockClear()
 
-        expect(isHiddenRendererPty(spawnResult.id)).toBe(true)
+        expect(shouldDropRendererPtyData(spawnResult.id, {})).toBe(true)
         mockProc.emitData('first chunk')
         vi.advanceTimersByTime(2)
 
@@ -172,33 +201,39 @@ describe('registerPtyHandlers', () => {
         vi.useRealTimers()
       }
     })
-    it('keeps spawns without the flag delivering to the renderer (visible unchanged)', async () => {
+    it("delivers a visible local spawn's synchronous first chunk to its view", async () => {
       vi.useFakeTimers()
       const mockProc = createMockProc()
+      // Activation subscribes and the shell's first bytes arrive in the same tick, before the reply.
+      mockProc.proc.onData.mockImplementation((handler: (data: string) => void) => {
+        handler('visible output')
+        return { dispose: vi.fn() }
+      })
       spawnMock.mockReturnValue(mockProc.proc)
       try {
         registerPtyHandlers(mainWindow as never)
+        mainWindow.webContents.send.mockClear()
         const spawnResult = (await handlers.get('pty:spawn')!(null, {
           cols: 80,
           rows: 24,
           cwd: '/tmp'
         })) as { id: string }
-        mainWindow.webContents.send.mockClear()
-
-        expect(isHiddenRendererPty(spawnResult.id)).toBe(false)
-        mockProc.emitData('visible output')
         vi.advanceTimersByTime(2)
 
         expect(mainWindow.webContents.send).toHaveBeenCalledWith('pty:data', {
           id: spawnResult.id,
           data: 'visible output'
         })
+        expect(mainWindow.webContents.send).not.toHaveBeenCalledWith(
+          'pty:modelRestoreNeeded',
+          expect.anything()
+        )
       } finally {
         vi.useRealTimers()
       }
     })
-    it('answers DA1 from the model on the first chunk of a hidden-at-spawn PTY', async () => {
-      // End-to-end through a REAL runtime: spawn-marked → first chunk dropped → emulator parses query → replies; main answers, the renderer never saw the bytes.
+    it('answers DA1 from the model on the first chunk of a hidden spawn', async () => {
+      // End-to-end through a REAL runtime: hidden record → first chunk dropped → emulator parses query → replies; main answers, the renderer never saw the bytes.
       const daemon = installObservableDaemonTestProvider()
       const runtime = new OrcaRuntimeService({
         getRepo: () => undefined,

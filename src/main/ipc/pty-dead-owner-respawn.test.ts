@@ -5,7 +5,8 @@ import { SessionNotFoundError } from '../daemon/daemon-errors'
 import { makePaneKey } from '../../shared/stable-pane-id'
 import { registerPtyHandlers } from './pty/register-handlers'
 import { setLocalPtyProvider } from './pty/provider/registry'
-import { isHiddenRendererPty } from './pty-hidden-delivery-gate'
+import { shouldDropRendererPtyData } from './pty-hidden-delivery-gate'
+import { getRendererAttachmentPtyIds } from './pty/delivery/renderer-attachments'
 
 vi.mock('electron', () => import('./pty-ipc-mock-registry').then((m) => m.electronModuleMock()))
 vi.mock('fs', () => import('./pty-ipc-mock-registry').then((m) => m.fsModuleMock()))
@@ -66,7 +67,9 @@ describe('registerPtyHandlers', () => {
           throw new SessionNotFoundError('pty-proven-absent-owner')
         }
         expect(options.sessionId).toBe('pty-proven-absent-owner')
-        expect(isHiddenRendererPty('pty-proven-absent-owner')).toBe(true)
+        // The hidden pane's connection is already bound to the replacement, so main replies from byte zero.
+        expect(getRendererAttachmentPtyIds()).toContain('pty-proven-absent-owner')
+        expect(shouldDropRendererPtyData('pty-proven-absent-owner', {})).toBe(true)
         return { id: 'pty-proven-absent-owner', incarnationId: 'inc-fresh-proven' }
       }
     )

@@ -264,7 +264,7 @@ describe('registerPtyHandlers', () => {
     spawnMock.mockReturnValue(proc)
 
     registerPtyHandlers(mainWindow as never, runtime as never)
-    // Why both: a reload fires the gate reset AND the orphan cleanup, so invoke every registered listener like a real did-finish-load.
+    // Why every listener: invoke the load listeners like a real did-finish-load does.
     const didFinishLoadHandlers = mainWindow.webContents.on.mock.calls
       .filter(([eventName]) => eventName === 'did-finish-load')
       .map(([, handler]) => handler as () => void)
@@ -313,11 +313,11 @@ describe('registerPtyHandlers', () => {
     }
 
     registerPtyHandlers(firstWindow as never)
-    // Two listeners on the first (LocalPtyProvider) window: the renderer-gate reset and the orphan cleanup.
+    // The first (LocalPtyProvider) window's only load listener is the orphan cleanup.
     const firstWindowLoadHandlers = firstWindow.webContents.on.mock.calls.filter(
       ([eventName]) => eventName === 'did-finish-load'
     )
-    expect(firstWindowLoadHandlers).toHaveLength(2)
+    expect(firstWindowLoadHandlers).toHaveLength(1)
 
     setLocalPtyProvider({
       spawn: vi.fn(),
@@ -339,12 +339,12 @@ describe('registerPtyHandlers', () => {
         handler
       )
     }
-    // The non-Local provider keeps orphan cleanup off the second window — only the renderer-gate reset listener remains.
+    // The non-Local provider keeps orphan cleanup off the second window.
     expect(
       secondWindow.webContents.on.mock.calls.filter(
         ([eventName]) => eventName === 'did-finish-load'
       )
-    ).toHaveLength(1)
+    ).toHaveLength(0)
   })
   // Why (#5787): a recovery reload re-fires did-finish-load; suppress the orphan sweep so live LOCAL PTYs survive until session restore re-adopts them.
   it('does not sweep local PTYs during a recovery reload', async () => {
@@ -377,7 +377,7 @@ describe('registerPtyHandlers', () => {
       undefined,
       { isRecoveryReloadInFlight }
     )
-    // Fire both did-finish-load listeners as a real reload does, else the suppression assertion passes vacuously without reaching the sweep.
+    // Fire every did-finish-load listener as a real reload does, else the suppression assertion passes vacuously without reaching the sweep.
     const didFinishLoadHandlers = mainWindow.webContents.on.mock.calls
       .filter(([eventName]) => eventName === 'did-finish-load')
       .map(([, handler]) => handler as () => void)
@@ -435,7 +435,7 @@ describe('registerPtyHandlers', () => {
       undefined,
       { isRecoveryReloadInFlight }
     )
-    // Fire both did-finish-load listeners (gate reset + orphan sweep) as a real reload does.
+    // Fire every did-finish-load listener as a real reload does.
     const didFinishLoadHandlers = mainWindow.webContents.on.mock.calls
       .filter(([eventName]) => eventName === 'did-finish-load')
       .map(([, handler]) => handler as () => void)
@@ -481,7 +481,7 @@ describe('registerPtyHandlers', () => {
       undefined,
       { isRecoveryReloadInFlight }
     )
-    // Fire ALL did-finish-load listeners (gate reset + orphan sweep) as a real reload does; the sweep listener is under test.
+    // Fire ALL did-finish-load listeners as a real reload does; the sweep listener is under test.
     const didFinishLoadHandlers = mainWindow.webContents.on.mock.calls
       .filter(([eventName]) => eventName === 'did-finish-load')
       .map(([, handler]) => handler as () => void)

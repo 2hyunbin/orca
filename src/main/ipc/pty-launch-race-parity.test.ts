@@ -1,7 +1,8 @@
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import type * as JcodeRuntimeDir from '../../shared/jcode-runtime-dir'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
-import { getHiddenRendererPtyIds, isHiddenRendererPty } from './pty-hidden-delivery-gate'
+import { shouldDropRendererPtyData } from './pty-hidden-delivery-gate'
+import { getRendererAttachmentPtyIds } from './pty/delivery/renderer-attachments'
 import { ptySizes } from './pty/delivery/visibility-state'
 import { clearProviderPtyState } from './pty/provider/state-cleanup'
 import * as paneSpawnReservations from './pty/pane/spawn-reservation'
@@ -69,7 +70,10 @@ vi.mock('../../shared/jcode-runtime-dir', async (importOriginal) => {
 })
 
 const mintedFor = (worktreeId: string): string[] =>
-  getHiddenRendererPtyIds().filter((id) => id.startsWith(`${worktreeId}@@`))
+  getRendererAttachmentPtyIds().filter((id) => id.startsWith(`${worktreeId}@@`))
+
+// Only the window lane has a pane connection; the host lane's PTY is main's with no record at all.
+const CONNECTION_RECORDS: Record<LaunchRaceLane, number> = { ipc: 1, runtime: 0 }
 
 // Pins main's window lane (pty:spawn) and host lane (runtime controller) as the spawn-lane merge's baseline.
 describe('launch race parity, both spawn lanes', () => {
@@ -249,9 +253,9 @@ describe('launch race parity, both spawn lanes', () => {
       })
     })
 
-    // C5a and C5e rely on this: a throw after the provider spawn rolls the pre-spawn mark back.
+    // C5a and C5e rely on this: a throw after the provider spawn releases the spawn's connection record.
     it.each(LAUNCH_RACE_LANES)(
-      '%s lane: a throw after the provider spawn rolls the pre-spawn hidden mark back',
+      '%s lane: a throw after the provider spawn releases the pre-spawn connection record',
       async (lane) => {
         const worktreeId = `repo-1::/tmp/race-hidden-rollback-${lane}`
         let markedWhileSpawning: string[] = []
@@ -272,14 +276,14 @@ describe('launch race parity, both spawn lanes', () => {
           lanes.spawn[lane]({ cols: 80, rows: 24, cwd: '/tmp', worktreeId, initiallyHidden: true })
         ).rejects.toThrow('register failed')
 
-        expect(markedWhileSpawning).toHaveLength(1)
+        expect(markedWhileSpawning).toHaveLength(CONNECTION_RECORDS[lane])
         expect(mintedFor(worktreeId)).toEqual([])
       }
     )
 
-    // C5e relies on this: the hidden mark follows the id the provider returned.
+    // C5e relies on this: the connection record follows the id the provider returned.
     it.each(LAUNCH_RACE_LANES)(
-      '%s lane: the hidden mark moves to the id the provider returned',
+      '%s lane: the connection record moves to the id the provider returned',
       async (lane) => {
         installDaemonTestProvider({ spawn: vi.fn(async () => ({ id: `pty-renamed-${lane}` })) })
         const lanes = registerLaunchRaceLanes({
@@ -290,12 +294,14 @@ describe('launch race parity, both spawn lanes', () => {
 
         await lanes.spawn[lane]({ cols: 80, rows: 24, cwd: '/tmp', initiallyHidden: true })
 
-        expect(getHiddenRendererPtyIds()).toEqual([`pty-renamed-${lane}`])
+        expect(getRendererAttachmentPtyIds()).toEqual(
+          CONNECTION_RECORDS[lane] ? [`pty-renamed-${lane}`] : []
+        )
+        expect(shouldDropRendererPtyData(`pty-renamed-${lane}`, {})).toBe(true)
       }
     )
 
-    // C5e and C6 change one cell: the window keeps the hidden mark on a reattach; the host skips it.
-    const HIDDEN_REATTACH: Record<LaunchRaceLane, boolean> = { ipc: true, runtime: false }
+    // C5e-1 converged this cell: with no consuming connection, main owns a reattach on both lanes.
     it.each(LAUNCH_RACE_LANES)('%s lane: a hidden-requested reattach', async (lane) => {
       const sessionId = `race-hidden-reattach-${lane}`
       installDaemonTestProvider({ spawn: vi.fn(async () => ({ id: sessionId, isReattach: true })) })
@@ -307,7 +313,7 @@ describe('launch race parity, both spawn lanes', () => {
 
       await lanes.spawn[lane]({ cols: 80, rows: 24, cwd: '/tmp', sessionId, initiallyHidden: true })
 
-      expect(isHiddenRendererPty(sessionId)).toBe(HIDDEN_REATTACH[lane])
+      expect(shouldDropRendererPtyData(sessionId, {})).toBe(true)
     })
   })
 

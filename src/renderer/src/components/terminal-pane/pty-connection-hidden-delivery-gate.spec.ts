@@ -64,8 +64,11 @@ export function registerPtyConnectionHiddenDeliveryGateTests(): void {
         } as StoreState['settings']
       }
 
-      function getSetHiddenRendererPtyMock(): ReturnType<typeof vi.fn> {
-        return window.api.pty.setHiddenRendererPty as unknown as ReturnType<typeof vi.fn>
+      /** Every consuming state this pane's connection reported to main, in order. */
+      function consumingReports(transport: MockTransport): boolean[] {
+        return (transport.setLocalPtyDelivery?.mock.calls ?? []).flatMap(([state]) =>
+          typeof state?.consuming === 'boolean' ? [state.consuming] : []
+        )
       }
 
       async function connectHiddenPane(deps: ReturnType<typeof createDeps>): Promise<{
@@ -133,8 +136,7 @@ export function registerPtyConnectionHiddenDeliveryGateTests(): void {
       it('marks the PTY hidden on hidden output and clears it before requesting restore on reveal', async () => {
         enableMainAuthority()
         const deps = createDeps({ isVisibleRef: { current: false } })
-        const { pane, dataCallback } = await connectHiddenPane(deps)
-        const setHiddenRendererPty = getSetHiddenRendererPtyMock()
+        const { pane, transport, dataCallback } = await connectHiddenPane(deps)
         const getMainBufferSnapshot = window.api.pty.getMainBufferSnapshot as unknown as ReturnType<
           typeof vi.fn
         >
@@ -147,7 +149,7 @@ export function registerPtyConnectionHiddenDeliveryGateTests(): void {
         pane.terminal.options.scrollback = 50_000
 
         dataCallback('hidden output\r\n', { seq: 16, rawLength: 16 })
-        expect(setHiddenRendererPty).toHaveBeenCalledWith('pty-id', true)
+        expect(consumingReports(transport)).toContain(false)
 
         // Why: with the skip grammar gone, gated drops latch the restore via main's out-of-band marker, not a renderer content scan.
         const { _dispatchPtyModelRestoreNeededForTest } =
@@ -167,10 +169,10 @@ export function registerPtyConnectionHiddenDeliveryGateTests(): void {
         requestTerminalBacklogRecovery(pane.terminal as never)
         await flushAsyncTicks(20)
 
-        expect(setHiddenRendererPty).toHaveBeenLastCalledWith('pty-id', false)
+        expect(consumingReports(transport).at(-1)).toBe(true)
         expect(getMainBufferSnapshot).toHaveBeenCalledWith('pty-id', { scrollbackRows: 50_000 })
-        // The unhide IPC must precede the snapshot request (seq-guard contract).
-        const unhideOrder = setHiddenRendererPty.mock.invocationCallOrder.at(-1)!
+        // The consuming report must precede the snapshot request (seq-guard contract).
+        const unhideOrder = transport.setLocalPtyDelivery!.mock.invocationCallOrder.at(-1)!
         const snapshotOrder = getMainBufferSnapshot.mock.invocationCallOrder[0]!
         expect(unhideOrder).toBeLessThan(snapshotOrder)
         expect(pane.terminal.write).toHaveBeenCalledWith(
@@ -293,32 +295,30 @@ export function registerPtyConnectionHiddenDeliveryGateTests(): void {
         _resetTerminalPaneRecoveryForTests()
       })
 
-      it('clears the hidden bit on visibility flips through syncProcessTracking', async () => {
+      it('reports consuming on visibility flips through syncProcessTracking', async () => {
         enableMainAuthority()
         const deps = createDeps({ isVisibleRef: { current: false } })
-        const { dataCallback, binding } = await connectHiddenPane(deps)
-        const setHiddenRendererPty = getSetHiddenRendererPtyMock()
+        const { transport, dataCallback, binding } = await connectHiddenPane(deps)
 
         dataCallback('hidden output\r\n')
-        expect(setHiddenRendererPty).toHaveBeenLastCalledWith('pty-id', true)
+        expect(consumingReports(transport).at(-1)).toBe(false)
         ;(deps.isVisibleRef as { current: boolean }).current = true
         binding.syncProcessTracking()
-        expect(setHiddenRendererPty).toHaveBeenLastCalledWith('pty-id', false)
+        expect(consumingReports(transport).at(-1)).toBe(true)
 
-        // Hiding again re-marks through the same lifecycle hook.
+        // Hiding again reports through the same lifecycle hook.
         ;(deps.isVisibleRef as { current: boolean }).current = false
         binding.syncProcessTracking()
-        expect(setHiddenRendererPty).toHaveBeenLastCalledWith('pty-id', true)
+        expect(consumingReports(transport).at(-1)).toBe(false)
       })
 
-      it('marks hidden codex panes immediately — no startup renderer-query window remains', async () => {
+      it('stops consuming hidden codex panes immediately — no startup renderer-query window remains', async () => {
         enableMainAuthority()
         const deps = createDeps({
           isVisibleRef: { current: false },
           startup: { command: 'codex' }
         })
         const { transport, dataCallback } = await connectHiddenPane(deps)
-        const setHiddenRendererPty = getSetHiddenRendererPtyMock()
         const transportOptions = createdTransportOptions.at(-1) as {
           onPtySpawn?: (ptyId: string) => void
         }
@@ -327,7 +327,7 @@ export function registerPtyConnectionHiddenDeliveryGateTests(): void {
 
         // Why: Phase 6 deleted the 10s codex window — codex startups gate like any hidden pane; main answers their startup probes.
         dataCallback('startup probe output\r\n')
-        expect(setHiddenRendererPty).toHaveBeenCalledWith('pty-id', true)
+        expect(consumingReports(transport)).toContain(false)
 
         // The fact records the subscription for gate-managed PTYs; it never answers it (#9993).
         factsHandler._dispatchTerminalSideEffectBatchForTest({
@@ -450,11 +450,11 @@ export function registerPtyConnectionHiddenDeliveryGateTests(): void {
         expect(replies).toEqual([])
       })
 
-      it('declares hidden-at-spawn on connect for hidden panes', async () => {
+      it("opens a hidden pane's connection non-consuming from its spawn", async () => {
         enableMainAuthority()
         const deps = createDeps({ isVisibleRef: { current: false } })
         const { transport } = await connectHiddenPane(deps)
-        // Why: mark the PTY hidden before its first byte, closing the spawn-time DA1-loss window where neither side replied.
+        // Why: the spawn carries a non-consuming record, closing the spawn-time DA1-loss window where neither side replied.
         expect(transport.connect).toHaveBeenCalledWith(
           expect.objectContaining({ initiallyHidden: true })
         )
@@ -492,10 +492,9 @@ export function registerPtyConnectionHiddenDeliveryGateTests(): void {
           onPtySpawn?: (ptyId: string) => void
         }
         transportOptions.onPtySpawn?.('pty-id')
-        const setHiddenRendererPty = getSetHiddenRendererPtyMock()
 
         dataCallback('hidden output\r\n')
-        expect(setHiddenRendererPty).not.toHaveBeenCalled()
+        expect(consumingReports(transport)).not.toContain(false)
 
         // Why: gate off keeps the byte-scan responder authoritative — the fact must not produce a second reply.
         const factsHandler = await import('./terminal-side-effect-facts-handler')
@@ -507,17 +506,17 @@ export function registerPtyConnectionHiddenDeliveryGateTests(): void {
         expect(transport.sendInput).not.toHaveBeenCalled()
       })
 
-      it('clears a marked-hidden PTY on dispose so a remount is never gated', async () => {
+      it('stops consuming on dispose; a remount brings its own connection', async () => {
         enableMainAuthority()
-        const deps = createDeps({ isVisibleRef: { current: false } })
-        const { dataCallback, binding } = await connectHiddenPane(deps)
-        const setHiddenRendererPty = getSetHiddenRendererPtyMock()
-
-        dataCallback('hidden output\r\n')
-        expect(setHiddenRendererPty).toHaveBeenLastCalledWith('pty-id', true)
+        const deps = createDeps({ isVisibleRef: { current: true } })
+        const { transport, binding } = await connectHiddenPane(deps)
 
         binding.dispose()
-        expect(setHiddenRendererPty).toHaveBeenLastCalledWith('pty-id', false)
+        expect(transport.setLocalPtyDelivery).toHaveBeenCalledWith({
+          consuming: false,
+          visible: false
+        })
+        expect(consumingReports(transport).at(-1)).toBe(false)
       })
 
       it('never treats a live chunk that strips to empty as a restore marker', async () => {

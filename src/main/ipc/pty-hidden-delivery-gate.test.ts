@@ -5,16 +5,25 @@ import {
   consumeHiddenRendererPtyDropMemory,
   getHiddenRendererPtyDeliveryDebug,
   isHiddenPtyDeliveryGateEnabled,
-  markHiddenRendererPty,
-  markRuntimeOwnedHiddenRendererPty,
+  rearmHiddenRendererPtyRestore,
   recordHiddenRendererPtyDataDrop,
-  resetRendererScopedHiddenPtyDeliveryState,
   setRendererPtyDeliveryInterest,
-  shouldDropHiddenRendererPtyData,
-  unmarkHiddenRendererPty
+  shouldDropRendererPtyData
 } from './pty-hidden-delivery-gate'
+import {
+  closeRendererAttachment,
+  deleteRendererAttachmentsForPage,
+  openRendererAttachment,
+  unbindRendererAttachmentsForPty,
+  updateRendererAttachment
+} from './pty/delivery/renderer-attachments'
 
 const PTY_ID = 'pty-1'
+const PAGE = 'page-1'
+
+function attach(key: string, ptyId: string | null, consuming: boolean) {
+  return openRendererAttachment(PAGE, key, ptyId, { consuming, visible: consuming })
+}
 
 describe('pty hidden delivery gate', () => {
   beforeEach(() => {
@@ -28,169 +37,87 @@ describe('pty hidden delivery gate', () => {
     expect(isHiddenPtyDeliveryGateEnabled({ terminalMainSideEffectAuthority: false })).toBe(false)
   })
 
-  it('drops only hidden PTYs without registered delivery interest', () => {
-    expect(shouldDropHiddenRendererPtyData(PTY_ID, {})).toBe(false)
+  it('delivers only while a consuming connection or raw interest holds the PTY', () => {
+    // No connection consumes: main answers and drops.
+    expect(shouldDropRendererPtyData(PTY_ID, {})).toBe(true)
+    expect(shouldDropRendererPtyData(PTY_ID, { terminalHiddenDeliveryGate: false })).toBe(false)
 
-    markHiddenRendererPty(PTY_ID)
-    expect(shouldDropHiddenRendererPtyData(PTY_ID, {})).toBe(true)
-    expect(shouldDropHiddenRendererPtyData(PTY_ID, { terminalHiddenDeliveryGate: false })).toBe(
-      false
-    )
+    attach('a', PTY_ID, true)
+    expect(shouldDropRendererPtyData(PTY_ID, {})).toBe(false)
+    updateRendererAttachment(PAGE, 'a', { consuming: false })
+    expect(shouldDropRendererPtyData(PTY_ID, {})).toBe(true)
 
     setRendererPtyDeliveryInterest(PTY_ID, true)
-    expect(shouldDropHiddenRendererPtyData(PTY_ID, {})).toBe(false)
+    expect(shouldDropRendererPtyData(PTY_ID, {})).toBe(false)
     setRendererPtyDeliveryInterest(PTY_ID, false)
-    expect(shouldDropHiddenRendererPtyData(PTY_ID, {})).toBe(true)
+    expect(shouldDropRendererPtyData(PTY_ID, {})).toBe(true)
+  })
+
+  it('a stale connection handle can neither hold nor rebind a PTY once closed', () => {
+    const stale = attach('a', null, true)
+    closeRendererAttachment(PAGE, 'a')
+    stale.bind(PTY_ID)
+    expect(shouldDropRendererPtyData(PTY_ID, {})).toBe(true)
+
+    // A newer record reusing the key is not the stale handle's record.
+    attach('a', null, true)
+    stale.release()
+    expect(updateRendererAttachment(PAGE, 'a', {})).toBeNull()
+  })
+
+  it('a retired page releases every connection it opened; PTY teardown keeps the record unbound', () => {
+    const binding = attach('a', PTY_ID, true)
+    unbindRendererAttachmentsForPty(PTY_ID)
+    expect(shouldDropRendererPtyData(PTY_ID, {})).toBe(true)
+    // Dead-owner replacement binds the same live connection to the new PTY.
+    binding.bind('pty-2')
+    expect(shouldDropRendererPtyData('pty-2', {})).toBe(false)
+
+    deleteRendererAttachmentsForPage(PAGE)
+    expect(shouldDropRendererPtyData('pty-2', {})).toBe(true)
   })
 
   it('requests the restore marker exactly once per drop episode, re-armed by the applied ack', () => {
-    markHiddenRendererPty(PTY_ID)
     const drop = recordHiddenRendererPtyDataDrop(PTY_ID, 10)
     expect(drop.shouldEmitRestoreMarker).toBe(true)
     expect(recordHiddenRendererPtyDataDrop(PTY_ID, 10).shouldEmitRestoreMarker).toBe(false)
 
-    // An ack before any reveal belongs to an earlier restore and retires nothing.
+    // An ack before any consuming view belongs to an earlier restore and retires nothing.
     consumeHiddenRendererPtyDropMemory(PTY_ID, drop.hiddenDropEpisode)
     expect(recordHiddenRendererPtyDataDrop(PTY_ID, 10).shouldEmitRestoreMarker).toBe(false)
 
-    // The reveal painted the snapshot: the next episode reports again.
-    unmarkHiddenRendererPty(PTY_ID)
+    // A consuming view painted the snapshot: the next episode reports again.
+    expect(rearmHiddenRendererPtyRestore(PTY_ID)).toBe(drop.hiddenDropEpisode)
     consumeHiddenRendererPtyDropMemory(PTY_ID, drop.hiddenDropEpisode)
-    markHiddenRendererPty(PTY_ID)
+    expect(rearmHiddenRendererPtyRestore(PTY_ID)).toBeUndefined()
     expect(recordHiddenRendererPtyDataDrop(PTY_ID, 10).shouldEmitRestoreMarker).toBe(true)
   })
 
-  it('keeps drop memory across unhide until the renderer acks the paint (STA-4869)', () => {
-    markHiddenRendererPty(PTY_ID)
-    const { hiddenDropEpisode } = recordHiddenRendererPtyDataDrop(PTY_ID, 10)
-
-    // A pane retiring while hidden unhides after unregistering its marker
-    // handler; every later unhide must still be able to re-emit.
-    expect(unmarkHiddenRendererPty(PTY_ID).droppedWhileHidden).toBe(true)
-    expect(unmarkHiddenRendererPty(PTY_ID).droppedWhileHidden).toBe(true)
-
-    // An ack that names no episode cannot prove what it covered.
-    consumeHiddenRendererPtyDropMemory(PTY_ID)
-    expect(unmarkHiddenRendererPty(PTY_ID).droppedWhileHidden).toBe(true)
-
-    consumeHiddenRendererPtyDropMemory(PTY_ID, hiddenDropEpisode)
-    expect(unmarkHiddenRendererPty(PTY_ID).droppedWhileHidden).toBe(false)
-  })
-
   it('a drop after the reveal survives the in-flight restore ack and re-emits its marker', () => {
-    markHiddenRendererPty(PTY_ID)
     const first = recordHiddenRendererPtyDataDrop(PTY_ID, 10).hiddenDropEpisode
-    expect(unmarkHiddenRendererPty(PTY_ID).droppedWhileHidden).toBe(true)
+    expect(rearmHiddenRendererPtyRestore(PTY_ID)).toBe(first)
 
     // The user switches away again before the reveal's snapshot is painted.
-    markHiddenRendererPty(PTY_ID)
     const second = recordHiddenRendererPtyDataDrop(PTY_ID, 10)
     expect(second.shouldEmitRestoreMarker).toBe(true)
+    expect(second.hiddenDropEpisode).not.toBe(first)
     expect(recordHiddenRendererPtyDataDrop(PTY_ID, 10).shouldEmitRestoreMarker).toBe(false)
     // That snapshot may predate the new drop, so its ack must not retire the latch.
     consumeHiddenRendererPtyDropMemory(PTY_ID, first)
-    expect(unmarkHiddenRendererPty(PTY_ID).droppedWhileHidden).toBe(true)
-    // Nor after the second reveal: the older restore still covers only episode one.
+    expect(rearmHiddenRendererPtyRestore(PTY_ID)).toBe(second.hiddenDropEpisode)
     consumeHiddenRendererPtyDropMemory(PTY_ID, first)
-    expect(unmarkHiddenRendererPty(PTY_ID).droppedWhileHidden).toBe(true)
+    expect(rearmHiddenRendererPtyRestore(PTY_ID)).toBe(second.hiddenDropEpisode)
 
     consumeHiddenRendererPtyDropMemory(PTY_ID, second.hiddenDropEpisode)
-    expect(unmarkHiddenRendererPty(PTY_ID).droppedWhileHidden).toBe(false)
-  })
-
-  it('tags every marker of one drop episode with the same episode id', () => {
-    markHiddenRendererPty(PTY_ID)
-    const first = recordHiddenRendererPtyDataDrop(PTY_ID, 10).hiddenDropEpisode
-    expect(recordHiddenRendererPtyDataDrop(PTY_ID, 10).hiddenDropEpisode).toBe(first)
-    expect(unmarkHiddenRendererPty(PTY_ID).hiddenDropEpisode).toBe(first)
-    expect(unmarkHiddenRendererPty(PTY_ID).hiddenDropEpisode).toBe(first)
-
-    markHiddenRendererPty(PTY_ID)
-    const second = recordHiddenRendererPtyDataDrop(PTY_ID, 10).hiddenDropEpisode
-    expect(second).not.toBe(first)
-    expect(unmarkHiddenRendererPty(PTY_ID).hiddenDropEpisode).toBe(second)
-  })
-
-  it('retires drop memory on teardown', () => {
-    markHiddenRendererPty(PTY_ID)
-    recordHiddenRendererPtyDataDrop(PTY_ID, 10)
-
-    clearHiddenRendererPtyDeliveryState(PTY_ID)
-    markHiddenRendererPty(PTY_ID)
-    expect(unmarkHiddenRendererPty(PTY_ID).droppedWhileHidden).toBe(false)
-  })
-
-  it('consuming drop memory it never had is a no-op for other PTYs', () => {
-    markHiddenRendererPty(PTY_ID)
-    recordHiddenRendererPtyDataDrop(PTY_ID, 10)
-
-    consumeHiddenRendererPtyDropMemory('pty-2', 1)
-    expect(unmarkHiddenRendererPty(PTY_ID).droppedWhileHidden).toBe(true)
-  })
-
-  it('keeps drop memory when an already-dropped PTY is re-marked hidden', () => {
-    // Why: a hidden remount or renderer reload re-marks without an unhide in
-    // between — clearing the latch there would make reveal skip the restore.
-    markHiddenRendererPty(PTY_ID)
-    recordHiddenRendererPtyDataDrop(PTY_ID, 10)
-    markHiddenRendererPty(PTY_ID)
-    expect(unmarkHiddenRendererPty(PTY_ID).droppedWhileHidden).toBe(true)
-  })
-
-  it('reports drops on unhide so reveal can heal a replaced renderer view', () => {
-    markHiddenRendererPty(PTY_ID)
-    expect(unmarkHiddenRendererPty(PTY_ID).droppedWhileHidden).toBe(false)
-
-    markHiddenRendererPty(PTY_ID)
-    recordHiddenRendererPtyDataDrop(PTY_ID, 10)
-    expect(unmarkHiddenRendererPty(PTY_ID).droppedWhileHidden).toBe(true)
-    expect(shouldDropHiddenRendererPtyData(PTY_ID, {})).toBe(false)
-  })
-
-  it('clears renderer-scoped state on reload while preserving drop memory', () => {
-    markHiddenRendererPty(PTY_ID)
-    recordHiddenRendererPtyDataDrop(PTY_ID, 10)
-    setRendererPtyDeliveryInterest('pty-2', true)
-    markHiddenRendererPty('pty-2')
-
-    resetRendererScopedHiddenPtyDeliveryState()
-
-    // Hidden marks and interest holds died with the old renderer process.
-    expect(shouldDropHiddenRendererPtyData(PTY_ID, {})).toBe(false)
-    expect(getHiddenRendererPtyDeliveryDebug()).toMatchObject({
-      hiddenDeliveryGatedPtyCount: 0,
-      deliveryInterestPtyCount: 0
-    })
-    // pty-2's leaked interest is gone: re-marking gates it again.
-    markHiddenRendererPty('pty-2')
-    expect(shouldDropHiddenRendererPtyData('pty-2', {})).toBe(true)
-    // Drop memory survives so the new renderer's first unhide still restores.
-    markHiddenRendererPty(PTY_ID)
-    expect(unmarkHiddenRendererPty(PTY_ID).droppedWhileHidden).toBe(true)
-  })
-
-  it('keeps runtime-owned marks across reload until unmark or teardown', () => {
-    markRuntimeOwnedHiddenRendererPty(PTY_ID)
-    markRuntimeOwnedHiddenRendererPty('pty-2')
-
-    resetRendererScopedHiddenPtyDeliveryState()
-    expect(shouldDropHiddenRendererPtyData(PTY_ID, {})).toBe(true)
-
-    unmarkHiddenRendererPty(PTY_ID)
-    clearHiddenRendererPtyDeliveryState('pty-2')
-    resetRendererScopedHiddenPtyDeliveryState()
-    expect(shouldDropHiddenRendererPtyData(PTY_ID, {})).toBe(false)
-    expect(shouldDropHiddenRendererPtyData('pty-2', {})).toBe(false)
+    expect(rearmHiddenRendererPtyRestore(PTY_ID)).toBeUndefined()
   })
 
   it('clears all per-PTY state on teardown and tracks debug counters', () => {
-    markHiddenRendererPty(PTY_ID)
     setRendererPtyDeliveryInterest('pty-2', true)
     recordHiddenRendererPtyDataDrop(PTY_ID, 7)
     recordHiddenRendererPtyDataDrop(PTY_ID, 5)
 
     expect(getHiddenRendererPtyDeliveryDebug()).toEqual({
-      hiddenDeliveryGatedPtyCount: 1,
       deliveryInterestPtyCount: 1,
       hiddenDeliveryDroppedChars: 12,
       hiddenDeliveryDroppedChunks: 2
@@ -198,10 +125,7 @@ describe('pty hidden delivery gate', () => {
 
     clearHiddenRendererPtyDeliveryState(PTY_ID)
     clearHiddenRendererPtyDeliveryState('pty-2')
-    expect(getHiddenRendererPtyDeliveryDebug()).toMatchObject({
-      hiddenDeliveryGatedPtyCount: 0,
-      deliveryInterestPtyCount: 0
-    })
-    expect(shouldDropHiddenRendererPtyData(PTY_ID, {})).toBe(false)
+    expect(getHiddenRendererPtyDeliveryDebug()).toMatchObject({ deliveryInterestPtyCount: 0 })
+    expect(rearmHiddenRendererPtyRestore(PTY_ID)).toBeUndefined()
   })
 })

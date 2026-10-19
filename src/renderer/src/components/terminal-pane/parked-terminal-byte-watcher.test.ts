@@ -869,32 +869,12 @@ describe('startParkedTerminalByteWatcher', () => {
       dispose()
     })
 
-    it('marks the PTY hidden for delivery on start and clears it on dispose', async () => {
-      enableMainAuthority()
-      const setHiddenRendererPty = vi.fn()
-      ;(
-        window as unknown as { api: { pty: Record<string, unknown> } }
-      ).api.pty.setHiddenRendererPty = setHiddenRendererPty
-      const { dispose } = await startWatcher()
-
-      expect(setHiddenRendererPty).toHaveBeenCalledWith(PTY_ID, true)
-
-      dispose()
-      // Why: the unhide must land before reveal re-registers pane handlers —
-      // the watcher registry disposes watchers before the remount effect runs.
-      expect(setHiddenRendererPty).toHaveBeenLastCalledWith(PTY_ID, false)
-    })
-
-    it('sets no hidden bit and stays silent on 2031 when the gate kill switch is off', async () => {
+    it('stays silent on 2031 when the gate kill switch is off', async () => {
       enableMainAuthority()
       mockStoreState.settings = {
         ...mockStoreState.settings,
         terminalHiddenDeliveryGate: false
       } as MockStoreState['settings']
-      const setHiddenRendererPty = vi.fn()
-      ;(
-        window as unknown as { api: { pty: Record<string, unknown> } }
-      ).api.pty.setHiddenRendererPty = setHiddenRendererPty
       const { dispose, ptyWrite } = await startWatcher()
 
       // Gate off — bytes keep flowing, and they still elicit nothing (#9993).
@@ -903,7 +883,6 @@ describe('startParkedTerminalByteWatcher', () => {
       await dispatchFacts([{ kind: '2031-subscribe' }])
 
       expect(ptyWrite).not.toHaveBeenCalled()
-      expect(setHiddenRendererPty).not.toHaveBeenCalled()
       dispose()
     })
 

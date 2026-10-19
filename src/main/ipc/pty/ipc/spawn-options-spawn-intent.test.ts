@@ -7,7 +7,6 @@ import type { PtySpawnIpcArgs, PtySpawnIpcDeps } from './spawn-types'
 async function resolveSpawnIntent(args: PtySpawnIpcArgs): Promise<unknown> {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: buildPtyIpcSpawnOptions only reads the members stubbed here; the rest belong to later spawn stages this test never runs.
   const deps = {
-    transitionSpawnHiddenRendererPtyDeliveryState: vi.fn(),
     syncPtyBackgroundedDelivery: vi.fn(),
     sendPtySpawnedToRenderer: vi.fn(),
     getSettings: () => getDefaultSettings('/tmp'),

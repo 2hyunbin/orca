@@ -26,7 +26,6 @@ function makeRuntime() {
 
 function makeCtx(args: PtySpawnIpcArgs, runtime: ReturnType<typeof makeRuntime>): PtyIpcSpawnState {
   const deps = {
-    transitionSpawnHiddenRendererPtyDeliveryState: vi.fn(),
     syncPtyBackgroundedDelivery: vi.fn(),
     sendPtySpawnedToRenderer: vi.fn(),
     runtime

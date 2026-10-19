@@ -8,10 +8,8 @@ import {
   markNativeWindowsConptyPty,
   shouldModelAnswerHiddenPtyQueries
 } from './terminal-model-query-authority'
-import {
-  _resetHiddenRendererPtyDeliveryGateForTest,
-  markHiddenRendererPty
-} from '../ipc/pty-hidden-delivery-gate'
+import { _resetHiddenRendererPtyDeliveryGateForTest } from '../ipc/pty-hidden-delivery-gate'
+import { openRendererAttachment } from '../ipc/pty/delivery/renderer-attachments'
 
 const ALL_ON = {
   terminalMainSideEffectAuthority: true,
@@ -41,11 +39,11 @@ describe('shouldModelAnswerHiddenPtyQueries', () => {
       hasRemoteViewSubscriber: false
     })
 
-  it('answers only for hidden-marked PTYs (the delivery decision is the reply decision)', () => {
+  it('answers only for PTYs no connection consumes (the delivery decision is the reply decision)', () => {
+    openRendererAttachment('page', 'a', 'pty-1', { consuming: true, visible: true })
     expect(answer('pty-1')).toBe(false)
-    markHiddenRendererPty('pty-1')
-    expect(answer('pty-1')).toBe(true)
-    expect(answer('pty-other')).toBe(false)
+    expect(answer('pty-other')).toBe(true)
+    expect(answer('pty-other', { terminalModelQueryAuthority: false })).toBe(false)
   })
 })
 

@@ -20,14 +20,14 @@ import { connectMockPanePty } from './pty-connection-test-connect-mock-pane'
 
 // STA-4869 route R6 — the renderer channel has no latch of its own:
 // dispatchPtyModelRestoreNeeded (pty-model-restore-channel.ts) drops a marker
-// for which no handler is registered. A pane that releases the last hidden claim
-// while retiring unhides after unregistering its handler, so a drop latch
-// consumed by unmark would be spent on a marker nobody can receive. The fix
-// keeps the latch armed across unhide and retires it where recovery actually
-// paints the bytes — the renderer's post-apply ack.
+// for which no handler is registered. A replacement view can register its
+// handler while the retiring one still holds the PTY, so a drop latch spent on
+// the first consuming report could go to a marker nobody receives. The fix
+// keeps the latch armed across every consuming report and retires it where
+// recovery actually paints the bytes — the renderer's post-apply ack.
 //
-// This suite drives the REAL renderer channel from behind the
-// setHiddenRendererPty IPC, delivering main's marker one turn later the way
+// This suite drives the REAL renderer channel from behind each pane
+// connection's delivery reports, delivering main's marker one turn later the way
 // Electron does. Main's gate is modelled by mainDropLatch below rather than
 // imported — src/main is outside the renderer tsconfig project — and its two
 // rules are pinned against the real module in
@@ -144,8 +144,8 @@ type PaneDrive = {
 }
 
 /** Main's droppedSinceHiddenPtys latch (pty-hidden-delivery-gate.ts): the first
- *  gated drop arms it, neither re-marking hidden nor unmarking clears it, and
- *  only the renderer's applied-ack (or teardown) retires it. */
+ *  gated drop arms it, no consuming report clears it, and only the renderer's
+ *  applied-ack (or teardown) retires it. */
 const mainDropLatch = {
   hidden: false,
   dropped: false,
@@ -160,8 +160,8 @@ const mainDropLatch = {
     this.dropped = true
     return true
   },
-  /** @returns droppedWhileHidden — read, not spent. */
-  unmarkHidden(): boolean {
+  /** A consuming report. @returns whether a restore is outstanding — read, not spent. */
+  reportConsuming(): boolean {
     this.hidden = false
     return this.dropped
   },
@@ -175,35 +175,36 @@ const mainDropLatch = {
   }
 }
 
-/** Routes the renderer's hidden-state IPC and its applied-ack into main's gate,
- *  delivering main's marker back one turn later as the IPC round trip does. */
+let routeDeliveryReport: ((consuming: boolean) => void) | null = null
+
+/** Routes each pane connection's consuming reports and the applied-ack into main's
+ *  gate, delivering main's marker back one turn later as the IPC round trip does. */
 async function wireMainGateToRendererChannel(): Promise<{
   markersDelivered: () => number
 }> {
   const { _dispatchPtyModelRestoreNeededForTest } = await import('./pty-model-restore-channel')
   let markersDelivered = 0
-  vi.mocked(window.api.pty.setHiddenRendererPty).mockImplementation(
-    (id: string, hidden: boolean) => {
-      if (hidden) {
-        mainDropLatch.markHidden()
-        return
-      }
-      if (!mainDropLatch.unmarkHidden()) {
-        return
-      }
-      markersDelivered += 1
-      // Emit-time seq advances with visible output between reveals; the episode does not.
-      const markerSeq = 4096 + markersDelivered
-      queueMicrotask(() => {
-        _dispatchPtyModelRestoreNeededForTest({
-          id,
-          reason: 'unhide',
-          markerSeq,
-          hiddenDropEpisode: 1
-        })
-      })
+  const id = PTY_ID
+  routeDeliveryReport = (consuming) => {
+    if (!consuming) {
+      mainDropLatch.markHidden()
+      return
     }
-  )
+    if (!mainDropLatch.reportConsuming()) {
+      return
+    }
+    markersDelivered += 1
+    // Emit-time seq advances with visible output between reveals; the episode does not.
+    const markerSeq = 4096 + markersDelivered
+    queueMicrotask(() => {
+      _dispatchPtyModelRestoreNeededForTest({
+        id,
+        reason: 'unhide',
+        markerSeq,
+        hiddenDropEpisode: 1
+      })
+    })
+  }
   vi.mocked(window.api.pty.ackHiddenOutputRestoreApplied).mockImplementation(() => {
     mainDropLatch.consumeDropMemory()
   })
@@ -227,6 +228,15 @@ async function dropHiddenBytesInMain(): Promise<void> {
 
 async function connectPane(visible: boolean): Promise<PaneDrive> {
   const transport = createMockTransport(PTY_ID)
+  let consuming: boolean | undefined
+  // Mirrors the connection record: only a changed or announced consuming state reaches main.
+  transport.setLocalPtyDelivery = vi.fn((state: { consuming?: boolean }, announce = false) => {
+    if (state.consuming === undefined || (state.consuming === consuming && !announce)) {
+      return
+    }
+    consuming = state.consuming
+    routeDeliveryReport?.(consuming)
+  })
   const captured: {
     current: ((data: string, meta?: { seq?: number; rawLength?: number }) => void) | null
   } = { current: null }
@@ -293,9 +303,7 @@ describe('hidden-output restore marker handoff (STA-4869 R6)', () => {
 
   afterEach(async () => {
     await restoreTerminalTestGlobals()
-    const { _resetPtyRendererDeliveryClaimsForTest } =
-      await import('./pty-renderer-delivery-claims')
-    _resetPtyRendererDeliveryClaimsForTest()
+    routeDeliveryReport = null
   })
 
   it('[mechanism] the renderer channel drops a marker with no registered handler and never replays it', async () => {
@@ -339,13 +347,12 @@ describe('hidden-output restore marker handoff (STA-4869 R6)', () => {
     const retiring = await connectPane(false)
     retiring.deliver(HIDDEN_CHUNK, HIDDEN_CHUNK.length)
     await dropHiddenBytesInMain()
-    expect(vi.mocked(window.api.pty.setHiddenRendererPty)).toHaveBeenCalledWith(PTY_ID, true)
 
-    // The pane retires (tab remount / recovery): releasing the last hidden claim
-    // unhides the PTY in main, which answers with the one restore marker.
+    // The pane retires (tab remount / recovery) without consuming, so main still
+    // owes the restore to whichever view consumes next.
     retiring.binding.dispose()
     await flushAsyncTicks(20)
-    expect(gate.markersDelivered()).toBe(1)
+    expect(gate.markersDelivered()).toBe(0)
 
     // The replacement pane binds the same PTY while visible.
     const replacement = await connectPane(true)
@@ -366,22 +373,22 @@ describe('hidden-output restore marker handoff (STA-4869 R6)', () => {
     replacement.binding.dispose()
   })
 
-  it('[fix] the remount re-emits the unhide marker and the applied ack retires the latch', async () => {
+  it('[fix] the remount pulls the outstanding restore and the applied ack retires the latch', async () => {
     const gate = await wireMainGateToRendererChannel()
     const retiring = await connectPane(false)
     retiring.deliver(HIDDEN_CHUNK, HIDDEN_CHUNK.length)
     await dropHiddenBytesInMain()
     retiring.binding.dispose()
     await flushAsyncTicks(20)
-    expect(gate.markersDelivered()).toBe(1)
+    expect(gate.markersDelivered()).toBe(0)
 
     const replacement = await connectPane(true)
     replacement.binding.syncProcessTracking()
     await flushAsyncTicks(20)
 
-    // The latch outlived the marker nobody received, so the remount's own unhide
-    // re-emits it; the paint that heals the gap is what finally spends it.
-    expect(gate.markersDelivered()).toBe(2)
+    // The latch outlived the retiring view, so the remount's consuming report
+    // emits it; the paint that heals the gap is what finally spends it.
+    expect(gate.markersDelivered()).toBe(1)
     expect(window.api.pty.ackHiddenOutputRestoreApplied).toHaveBeenCalledWith(PTY_ID, 1)
     expect(observeDisclosure(replacement)).toMatchObject({ markerWrites: 1 })
     expect(mainDropLatch.dropped).toBe(false)
@@ -394,7 +401,7 @@ describe('hidden-output restore marker handoff (STA-4869 R6)', () => {
     replacement.binding.syncProcessTracking()
     await flushAsyncTicks(20)
 
-    expect(gate.markersDelivered()).toBe(2)
+    expect(gate.markersDelivered()).toBe(1)
     expect(vi.mocked(window.api.pty.getMainBufferSnapshot).mock.calls.length).toBe(snapshotRequests)
     replacement.binding.dispose()
   })

@@ -87,7 +87,11 @@ export function openRendererAttachment(
         change([record.ptyId, nextPtyId], () => setBinding(record, nextPtyId))
       }
     },
-    release: () => closeRendererAttachment(page, key)
+    release: () => {
+      if (isLive(record)) {
+        change([record.ptyId], () => deleteRecord(record))
+      }
+    }
   }
 }
 

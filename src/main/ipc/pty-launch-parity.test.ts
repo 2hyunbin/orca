@@ -35,7 +35,8 @@ import {
   HOST_TAB_ID,
   type HostLaunchCase
 } from './pty-launch-parity-host.test-cases'
-import { isHiddenRendererPty } from './pty-hidden-delivery-gate'
+import { shouldDropRendererPtyData } from './pty-hidden-delivery-gate'
+import { getRendererAttachmentPtyIds } from './pty/delivery/renderer-attachments'
 import { ptySizes } from './pty/delivery/visibility-state'
 import { agentSessionOwners } from './pty/pane/agent-session-owners'
 import {
@@ -328,7 +329,7 @@ describe('launch facts outside the tables', () => {
       const lanes = startParityLanes(suite, { workspace: POSIX_REPO })
       let hiddenWhileSpawning = false
       lanes.provider.mockImplementationOnce(async (options: { sessionId?: string }) => {
-        hiddenWhileSpawning = isHiddenRendererPty(String(options.sessionId))
+        hiddenWhileSpawning = shouldDropRendererPtyData(String(options.sessionId), {})
         throw new Error('spawn boom')
       })
       const gateReleased = vi.fn()
@@ -361,7 +362,7 @@ describe('launch facts outside the tables', () => {
       const sessionId = String(recordOf(lanes.provider.mock.calls.at(-1)?.[0]).sessionId)
       expect(trackMock.mock.calls).toEqual(FAILED_START_AGENT_ERROR[lane])
       expect(hiddenWhileSpawning).toBe(true)
-      expect(isHiddenRendererPty(sessionId)).toBe(false)
+      expect(getRendererAttachmentPtyIds()).not.toContain(sessionId)
       expect(cancelRegistration.mock.calls).toEqual([[sessionId, undefined]])
       expect(gateReleased).toHaveBeenCalledOnce()
       expect(ptySizes.has(sessionId)).toBe(false)

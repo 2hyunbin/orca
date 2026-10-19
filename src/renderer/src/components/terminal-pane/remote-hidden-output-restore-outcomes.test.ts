@@ -540,7 +540,6 @@ describe('remote hidden-output restore outcomes', () => {
           hasChildProcesses: vi.fn().mockResolvedValue(false),
           write: vi.fn(),
           writeAccepted: vi.fn().mockResolvedValue(true),
-          setHiddenRendererPty: vi.fn(),
           setPtyDeliveryInterest: vi.fn(),
           ackColdRestore: vi.fn(),
           onClearBufferRequest: vi.fn(() => vi.fn()),

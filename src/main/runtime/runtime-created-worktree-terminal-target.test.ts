@@ -131,8 +131,7 @@ describe('created worktree terminal evidence', () => {
       expect.objectContaining({
         cwd: worktree.path,
         worktreeId: worktree.id,
-        connectionId: null,
-        initiallyHidden: true
+        connectionId: null
       })
     )
   })

@@ -53,6 +53,12 @@ import {
 } from '../providers/local-pty-provider'
 import { setLocalPtyProvider } from './pty/provider/registry'
 import { _resetHiddenRendererPtyDeliveryGateForTest } from './pty-hidden-delivery-gate'
+import { _resetRendererPageForTest } from './pty/delivery/renderer-page'
+import {
+  resetTestPaneAttachments,
+  TEST_RENDERER_PAGE,
+  withTestPaneAttachment
+} from './pty-ipc-test-pane-attachments'
 import { __resetShellStartupEnvCache } from '../pty/shell-startup-env'
 import { _resetWslCachesForTests } from '../wsl'
 
@@ -80,7 +86,10 @@ export type PtyIpcTestMainWindow = {
 export type PtyIpcSuiteEnvironment = {
   handlers: Map<string, (event: unknown, args: unknown) => unknown>
   mainWindow: PtyIpcTestMainWindow
-  mainWindowIpcEvent: { sender: PtyIpcTestWebContents }
+  mainWindowIpcEvent: {
+    sender: PtyIpcTestWebContents
+    senderFrame: { parent: null; detached: boolean }
+  }
   foreignWindowIpcEvent: { sender: PtyIpcTestWebContents }
 }
 
@@ -100,7 +109,11 @@ export function createPtyIpcSuiteEnvironment(): PtyIpcSuiteEnvironment {
       isDestroyed: vi.fn(() => false)
     }
   }
-  const mainWindowIpcEvent = { sender: mainWindow.webContents }
+  // Why senderFrame: page admission accepts only the window's live main frame.
+  const mainWindowIpcEvent = {
+    sender: mainWindow.webContents,
+    senderFrame: { parent: null, detached: false }
+  }
   const foreignWindowIpcEvent = {
     sender: {
       id: 2,
@@ -186,6 +199,8 @@ export function createPtyIpcSuiteEnvironment(): PtyIpcSuiteEnvironment {
     mainWindow.webContents.isDestroyed.mockReturnValue(false)
     // Why: hidden-delivery gate state is module-level (PTY-keyed), so tests must not leak hidden bits across cases.
     _resetHiddenRendererPtyDeliveryGateForTest()
+    _resetRendererPageForTest()
+    resetTestPaneAttachments()
     __resetShellStartupEnvCache()
 
     // Why: mirror real Electron — ipcMain.handle throws on a duplicate channel, catching re-registration that forgot removeHandler.
@@ -193,13 +208,20 @@ export function createPtyIpcSuiteEnvironment(): PtyIpcSuiteEnvironment {
       if (handlers.has(channel)) {
         throw new Error(`Attempted to register a second handler for '${channel}'`)
       }
-      handlers.set(channel, handler)
+      // Why: a window spawn comes from a pane connect, which carries its record; tests opt out by passing one.
+      handlers.set(
+        channel,
+        channel === 'pty:spawn' ? withTestPaneAttachment(handler, mainWindowIpcEvent) : handler
+      )
     })
     removeHandlerMock.mockImplementation((channel: string) => {
       handlers.delete(channel)
     })
     // Why: production gates PTY sends on pty:rendererDispatcherReady; model a live page by firing the handshake as soon as it registers.
     onMock.mockImplementation((channel: string, listener: (...args: unknown[]) => void) => {
+      if (channel === 'pty:openRendererPage') {
+        listener(mainWindowIpcEvent, { page: TEST_RENDERER_PAGE })
+      }
       if (channel === 'pty:rendererDispatcherReady') {
         listener(mainWindowIpcEvent)
         // Drain the handshake's empty flush so it can't later perturb send-timing assertions.

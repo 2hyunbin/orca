@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { spawnMock } from './pty-ipc-mock-registry'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
+import { openTestRendererPage } from './pty-ipc-test-pane-attachments'
 import { registerPtyHandlers } from './pty/register-handlers'
 import { getPtyRendererDeliveryDebugSnapshot } from './pty/delivery/debug'
 
@@ -59,7 +60,8 @@ describe('registerPtyHandlers', () => {
     getPtySetRendererPtyVisibleListener,
     getPtyRendererDispatcherReadyListener,
     getMainWindowWebContentsListener,
-    getMainFrameNavigationListener
+    getMainFrameNavigationListener,
+    getMainFrameNavigationCommitListener
   } = setupPtyIpcSuite()
 
   it('batches PTY output when it is not responding to recent input', async () => {
@@ -128,7 +130,7 @@ describe('registerPtyHandlers', () => {
       vi.useRealTimers()
     }
   })
-  it('marks visible renderer PTYs hidden while the renderer lifecycle resets', async () => {
+  it("hands a reloaded page's PTYs to main until the new page attaches", async () => {
     vi.useFakeTimers()
     const mockProc = createMockProc()
     spawnMock.mockReturnValue(mockProc.proc)
@@ -141,29 +143,37 @@ describe('registerPtyHandlers', () => {
         cwd: '/tmp'
       })) as { id: string }
       const setRendererPtyVisible = getPtySetRendererPtyVisibleListener()
-      const handleRendererLoading = getMainFrameNavigationListener()
-      const handleRendererDispatcherReady = getPtyRendererDispatcherReadyListener()
+      setRendererPtyVisible(null, { id: spawnResult.id, visible: true })
+      getMainFrameNavigationListener()()
+      // The commit, not the start, ends the old page: a cancelled navigation keeps it.
+      getMainFrameNavigationCommitListener()()
+      // Reloaded page's dispatcher re-registers, releasing held sends (§1b).
+      getPtyRendererDispatcherReadyListener()()
       mainWindow.webContents.send.mockClear()
 
-      setRendererPtyVisible(null, { id: spawnResult.id, visible: true })
-      handleRendererLoading()
-      // Reloaded page's dispatcher re-registers, releasing held sends (§1b).
-      handleRendererDispatcherReady()
       mockProc.emitData('reload-gap output')
       vi.advanceTimersByTime(2)
-
-      expect(mainWindow.webContents.send).toHaveBeenCalledWith('pty:data', {
+      expect(mainWindow.webContents.send).not.toHaveBeenCalledWith(
+        'pty:data',
+        expect.objectContaining({ data: 'reload-gap output' })
+      )
+      expect(mainWindow.webContents.send).toHaveBeenCalledWith('pty:modelRestoreNeeded', {
         id: spawnResult.id,
-        data: 'reload-gap output',
-        background: true
+        hiddenDropEpisode: expect.any(Number),
+        reason: 'hidden-drop'
       })
 
-      mainWindow.webContents.send.mockClear()
+      // The new page's view attaches: it pulls the restore, then owns live bytes.
+      openTestRendererPage(mainWindowIpcEvent, 'reloaded-page')
       setRendererPtyVisible(null, { id: spawnResult.id, visible: true })
+      expect(mainWindow.webContents.send).toHaveBeenLastCalledWith('pty:modelRestoreNeeded', {
+        id: spawnResult.id,
+        hiddenDropEpisode: expect.any(Number),
+        reason: 'unhide'
+      })
       mockProc.emitData('visible output')
       vi.advanceTimersByTime(2)
-
-      expect(mainWindow.webContents.send).toHaveBeenCalledWith('pty:data', {
+      expect(mainWindow.webContents.send).toHaveBeenLastCalledWith('pty:data', {
         id: spawnResult.id,
         data: 'visible output'
       })

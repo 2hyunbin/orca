@@ -55,7 +55,7 @@ describe('registerPtyHandlers', () => {
     createMockProc,
     getPtyAckDataListener,
     getPtySetActiveRendererPtyListener,
-    getPtySetHiddenRendererPtyListener,
+    getPtySetRendererPtyConsumerListener,
     getPtySetDeliveryInterestListener,
     getPtyDataSendCalls
   } = setupPtyIpcSuite()
@@ -104,9 +104,9 @@ describe('registerPtyHandlers', () => {
         flushScheduled: false
       })
 
-      const setHidden = getPtySetHiddenRendererPtyListener()
+      const setConsuming = getPtySetRendererPtyConsumerListener()
       const setInterest = getPtySetDeliveryInterestListener()
-      setHidden(null, { id: hiddenSpawn.id, hidden: true })
+      setConsuming(null, { id: hiddenSpawn.id, consuming: false })
       setInterest(null, { id: hiddenSpawn.id, interested: true })
       hiddenProc.emitData('drop-without-write')
       heldProc.emitData('held')

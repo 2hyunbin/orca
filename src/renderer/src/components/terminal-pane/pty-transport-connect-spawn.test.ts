@@ -410,7 +410,9 @@ describe('createIpcPtyTransport', () => {
       rows: 40,
       cwd: '/tmp/worktree',
       env: { FOO: 'bar' },
-      command: 'echo hello'
+      command: 'echo hello',
+      // The visible connection's record rides the spawn, so main delivers byte zero to it.
+      rendererAttachment: { key: expect.any(String), consuming: true, visible: true }
     })
     expect(writeMock).not.toHaveBeenCalled()
   })

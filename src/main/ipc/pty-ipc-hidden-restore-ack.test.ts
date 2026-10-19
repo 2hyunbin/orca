@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
+import { getTestPaneKey, sendTestAttachment } from './pty-ipc-test-pane-attachments'
 import { registerPtyHandlers } from './pty/register-handlers'
 
 // STA-4869 — main's hidden-delivery drop latch retires on the renderer's
@@ -57,8 +58,9 @@ describe('registerPtyHandlers hidden-output restore ack', () => {
   const {
     handlers,
     mainWindow,
+    mainWindowIpcEvent,
     installObservableDaemonTestProvider,
-    getPtySetHiddenRendererPtyListener,
+    getPtySetRendererPtyConsumerListener,
     getPtyHiddenOutputRestoreAppliedListener
   } = setupPtyIpcSuite()
 
@@ -127,15 +129,16 @@ describe('registerPtyHandlers hidden-output restore ack', () => {
   /** One gated drop episode on a fresh daemon PTY, with the marker count reset. */
   async function armDropLatch(): Promise<{
     id: string
-    setHidden: (event: unknown, args: { id: string; hidden: boolean }) => void
+    setConsuming: (event: unknown, args: { id: string; consuming: boolean }) => void
     restoreMarkers: () => number
+    daemon: ReturnType<typeof installObservableDaemonTestProvider>
   }> {
     const daemon = installObservableDaemonTestProvider()
     const result = { id: await registerAndSpawnDaemonPty(buildRuntime()) }
-    const setHidden = getPtySetHiddenRendererPtyListener()
+    const setConsuming = getPtySetRendererPtyConsumerListener()
     mainWindow.webContents.send.mockClear()
 
-    setHidden(null, { id: result.id, hidden: true })
+    setConsuming(null, { id: result.id, consuming: false })
     daemon.emitData(result.id, 'hidden output')
     vi.advanceTimersByTime(50)
     const restoreMarkers = (): number =>
@@ -143,21 +146,21 @@ describe('registerPtyHandlers hidden-output restore ack', () => {
         (call: unknown[]) => call[0] === 'pty:modelRestoreNeeded'
       ).length
     expect(restoreMarkers()).toBe(1)
-    return { id: result.id, setHidden, restoreMarkers }
+    return { id: result.id, setConsuming, restoreMarkers, daemon }
   }
 
   it('retires drop memory on the applied ack, not on unhide or on serving the snapshot', async () => {
     vi.useFakeTimers()
     try {
-      const { id, setHidden, restoreMarkers } = await armDropLatch()
+      const { id, setConsuming, restoreMarkers } = await armDropLatch()
       const getSnapshot = handlers.get('pty:getMainBufferSnapshot')!
       const ackApplied = getPtyHiddenOutputRestoreAppliedListener()
 
       // A pane retiring while hidden unhides after unregistering its marker
       // handler, so the first unhide marker reaches nobody. The replacement's
       // own unhide must still be able to ask for the restore.
-      setHidden(null, { id, hidden: false })
-      setHidden(null, { id, hidden: false })
+      setConsuming(null, { id, consuming: true })
+      setConsuming(null, { id, consuming: true })
       expect(restoreMarkers()).toBe(3)
       expect(mainWindow.webContents.send).toHaveBeenLastCalledWith('pty:modelRestoreNeeded', {
         id,
@@ -169,14 +172,49 @@ describe('registerPtyHandlers hidden-output restore ack', () => {
       // Serving the snapshot proves only that main answered — the asking pane
       // can still die before it paints.
       await getSnapshot(null, { id })
-      setHidden(null, { id, hidden: false })
+      setConsuming(null, { id, consuming: true })
       expect(restoreMarkers()).toBe(4)
 
       // The ack says the bytes are on screen: no marker storm afterwards.
       ackApplied(null, { id, hiddenDropEpisode: lastMarkerEpisode() })
-      setHidden(null, { id, hidden: false })
-      setHidden(null, { id, hidden: false })
+      setConsuming(null, { id, consuming: true })
+      setConsuming(null, { id, consuming: true })
       expect(restoreMarkers()).toBe(4)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('hands an overlapping replacement view the restore and the byte stream', async () => {
+    vi.useFakeTimers()
+    try {
+      const { id, restoreMarkers, daemon } = await armDropLatch()
+      const send = (channel: string, args: object) =>
+        sendTestAttachment(mainWindowIpcEvent, channel, args)
+
+      // The replacement opens while the old view's hidden connection still lives.
+      send('pty:openRendererAttachment', { key: 'new', ptyId: id, consuming: true, visible: true })
+      expect(restoreMarkers()).toBe(2)
+      expect(mainWindow.webContents.send).toHaveBeenLastCalledWith(
+        'pty:modelRestoreNeeded',
+        expect.objectContaining({ id, reason: 'unhide' })
+      )
+
+      // The old view retiring changes nothing: the replacement alone receives live bytes.
+      send('pty:closeRendererAttachment', { key: getTestPaneKey(id) })
+      getPtyHiddenOutputRestoreAppliedListener()(null, {
+        id,
+        hiddenDropEpisode: lastMarkerEpisode()
+      })
+      daemon.emitData(id, 'live')
+      vi.advanceTimersByTime(50)
+      expect(mainWindow.webContents.send).toHaveBeenCalledWith('pty:data', { id, data: 'live' })
+
+      // Its own retirement leaves no connection: main drops and owns replies again.
+      send('pty:closeRendererAttachment', { key: 'new' })
+      daemon.emitData(id, 'dropped again')
+      vi.advanceTimersByTime(50)
+      expect(restoreMarkers()).toBe(3)
     } finally {
       vi.useRealTimers()
     }
@@ -187,17 +225,17 @@ describe('registerPtyHandlers hidden-output restore ack', () => {
     try {
       const daemon = installObservableDaemonTestProvider()
       const result = { id: await registerAndSpawnDaemonPty(buildRuntime()) }
-      const setHidden = getPtySetHiddenRendererPtyListener()
+      const setConsuming = getPtySetRendererPtyConsumerListener()
       const ackApplied = getPtyHiddenOutputRestoreAppliedListener()
       mainWindow.webContents.send.mockClear()
 
-      setHidden(null, { id: result.id, hidden: true })
+      setConsuming(null, { id: result.id, consuming: false })
       daemon.emitData(result.id, 'hidden output')
       vi.advanceTimersByTime(50)
-      setHidden(null, { id: result.id, hidden: false })
+      setConsuming(null, { id: result.id, consuming: true })
       ackApplied(null, { id: result.id, hiddenDropEpisode: lastMarkerEpisode() })
 
-      setHidden(null, { id: result.id, hidden: true })
+      setConsuming(null, { id: result.id, consuming: false })
       daemon.emitData(result.id, 'hidden again')
       vi.advanceTimersByTime(50)
 
@@ -215,7 +253,7 @@ describe('registerPtyHandlers hidden-output restore ack', () => {
   it('ignores a repeat ack and an ack for a PTY it knows nothing about', async () => {
     vi.useFakeTimers()
     try {
-      const { id, setHidden, restoreMarkers } = await armDropLatch()
+      const { id, setConsuming, restoreMarkers } = await armDropLatch()
       const ackApplied = getPtyHiddenOutputRestoreAppliedListener()
 
       // Another pane's ack must never retire this PTY's drop memory.
@@ -223,19 +261,19 @@ describe('registerPtyHandlers hidden-output restore ack', () => {
       ackApplied(null, {})
       ackApplied(null, { id: '' })
       ackApplied(null, { id: 42 })
-      setHidden(null, { id, hidden: false })
+      setConsuming(null, { id, consuming: true })
       expect(restoreMarkers()).toBe(2)
 
       // An ack naming no episode, or a stale one, cannot prove it covered this gap.
       ackApplied(null, { id })
       ackApplied(null, { id, hiddenDropEpisode: lastMarkerEpisode() - 1 })
-      setHidden(null, { id, hidden: false })
+      setConsuming(null, { id, consuming: true })
       expect(restoreMarkers()).toBe(3)
 
       const episode = lastMarkerEpisode()
       ackApplied(null, { id, hiddenDropEpisode: episode })
       ackApplied(null, { id, hiddenDropEpisode: episode })
-      setHidden(null, { id, hidden: false })
+      setConsuming(null, { id, consuming: true })
       expect(restoreMarkers()).toBe(3)
     } finally {
       vi.useRealTimers()
@@ -249,10 +287,10 @@ describe('registerPtyHandlers hidden-output restore ack', () => {
       const runtime = buildRuntime()
       runtime.serializeHiddenOutputRecoveryBuffer = vi.fn(async () => null)
       const result = { id: await registerAndSpawnDaemonPty(runtime) }
-      const setHidden = getPtySetHiddenRendererPtyListener()
+      const setConsuming = getPtySetRendererPtyConsumerListener()
       mainWindow.webContents.send.mockClear()
 
-      setHidden(null, { id: result.id, hidden: true })
+      setConsuming(null, { id: result.id, consuming: false })
       daemon.emitData(result.id, 'hidden output')
       vi.advanceTimersByTime(50)
 
@@ -263,7 +301,7 @@ describe('registerPtyHandlers hidden-output restore ack', () => {
           id: result.id
         })
       ).toBeNull()
-      setHidden(null, { id: result.id, hidden: false })
+      setConsuming(null, { id: result.id, consuming: true })
       expect(mainWindow.webContents.send).toHaveBeenLastCalledWith('pty:modelRestoreNeeded', {
         id: result.id,
         hiddenDropEpisode: expect.any(Number),
