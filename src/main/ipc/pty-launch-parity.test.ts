@@ -325,7 +325,7 @@ describe('launch facts outside the tables', () => {
         lanes.provider.mock.calls.every(([args]) => args.attachOnly && args.command === undefined)
       ).toBe(true)
       expect(
-        lanes.store.getWorkspaceSession().terminalLayoutsByTabId[pane.tabId].ptyIdsByLeafId[
+        lanes.store.getWorkspaceSession().terminalLayoutsByTabId[pane.tabId]?.ptyIdsByLeafId?.[
           pane.leafId
         ]
       ).toBe('winner')

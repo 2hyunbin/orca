@@ -428,7 +428,7 @@ it.each(['joined', 'fresh'] as const)(
     ).toMatchObject({ ptyId: 'winner-B', connected: true, incarnationId: 'inc-B' })
     expect((await runtime.serializeMainTerminalBuffer('winner-B'))?.data).toContain('B history')
     expect(
-      store.getWorkspaceSession().terminalLayoutsByTabId[binding.tabId].ptyIdsByLeafId[
+      store.getWorkspaceSession().terminalLayoutsByTabId[binding.tabId]?.ptyIdsByLeafId?.[
         binding.leafId
       ]
     ).toBe('winner-B')
