@@ -874,6 +874,9 @@ export function createRelayServer(
     controls.close()
     clients.close()
     dataSockets.close()
+    store.resumeAudit.stop()
+    // Best effort: a crash loses at most one flush interval of resume audit rows anyway.
+    void store.resumeAudit.flush()
   })
   const runtimeCounts = () => {
     const ledgerCounts = connectionLedger?.counts()

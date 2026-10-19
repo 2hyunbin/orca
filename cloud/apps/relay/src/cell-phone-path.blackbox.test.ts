@@ -254,10 +254,17 @@ describe('the memory phone path', () => {
     expect(answer.resumeExpiresAt).toBe(after)
     expect(reserve.phoneStatements()).toEqual([
       CONFIRM_DEVICE_READ,
-      expect.stringMatching(/^UPDATE relay_devices SET current_expires_at = \?.*RETURNING current_expires_at$/),
-      expect.stringMatching(/^INSERT INTO relay_audit_events/)
+      expect.stringMatching(/^UPDATE relay_devices SET current_expires_at = \?.*RETURNING current_expires_at$/)
     ])
     expect(await reserve.activityLeases()).toEqual([])
+    // Its audit row leaves with the next batch.
+    await reserve.relay.store.resumeAudit.flush()
+    const audits = await reserve.raw.query(
+      `SELECT detail_json FROM relay_audit_events WHERE type = 'resume-confirmed'`
+    )
+    expect(audits.map((row) => JSON.parse(String(row.detail_json)))).toEqual([
+      { reqId: 'confirm-1', basisConnId: expect.any(String), renewed: true }
+    ])
     // A retry of the same request answers from memory; another basis cannot reuse its reqId.
     reserve.database.statements.length = 0
     expect(await confirm('confirm-1')).toEqual(answer)
@@ -272,7 +279,7 @@ describe('the memory phone path', () => {
     const fresh = Date.now() + 29.5 * 24 * 60 * 60 * 1000
     const notDue = await splicedPhone('memory', { expiresAt: fresh })
     expect(await notDue.confirm('confirm-1')).toMatchObject({ renewed: true, resumeExpiresAt: fresh })
-    expect(notDue.reserve.phoneStatements()).toEqual([CONFIRM_DEVICE_READ, expect.stringMatching(/^INSERT INTO relay_audit_events/)])
+    expect(notDue.reserve.phoneStatements()).toEqual([CONFIRM_DEVICE_READ])
 
     const due = Date.now() + 20 * 24 * 60 * 60 * 1000
     const failing = await splicedPhone('memory', { expiresAt: due })
@@ -297,7 +304,7 @@ describe('the memory phone path', () => {
       renewed: false,
       resumeExpiresAt: stored
     })
-    expect(reserve.phoneStatements()).toEqual([CONFIRM_DEVICE_READ, expect.stringMatching(/^INSERT INTO relay_audit_events/)])
+    expect(reserve.phoneStatements()).toEqual([CONFIRM_DEVICE_READ])
   })
 
   it('answers every device change since the accept read as the database confirm does', async () => {
@@ -367,8 +374,7 @@ describe('the memory phone path', () => {
         expect(await spliced.confirm('confirm-1')).toMatchObject({ type: 'device-resume-confirmed', renewed: true })
         expect(reserve.phoneStatements().filter((sql) => !sql.includes('relay_assignment'))).toEqual([
           CONFIRM_DEVICE_READ,
-          expect.stringMatching(/^UPDATE relay_devices SET current_expires_at/),
-          expect.stringMatching(/^INSERT INTO relay_audit_events/)
+          expect.stringMatching(/^UPDATE relay_devices SET current_expires_at/)
         ])
         // Only the control lease a flip back re-registers; nothing for the phone.
         const leases = async () => (await reserve.activityLeases()).map((lease) => lease.activity_kind)
