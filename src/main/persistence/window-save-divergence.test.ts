@@ -298,7 +298,8 @@ describe('reportWindowSaveDrift', () => {
 
   it('logs the terminal each pane is bound to on both sides of a pane change', () => {
     const logPath = join(logDir!, 'divergence.jsonl')
-    const mainPty = `${GIT_KEY}@@a1b2c3d4`
+    // A daemon terminal id carries its worktree id, often longer than other ids.
+    const mainPty = `${GIT_KEY}/${'nested/'.repeat(10)}@@a1b2c3d4`
     const stored = session([{ id: 'tab-a' }])
     stored.terminalLayoutsByTabId['tab-a'] = {
       ...stored.terminalLayoutsByTabId['tab-a']!,
@@ -339,7 +340,7 @@ describe('reportWindowSaveDrift', () => {
         first: { type: 'leaf', leafId: leaf(1) },
         second: { type: 'leaf', leafId: leaf(2) }
       },
-      ptyIdsByLeafId: { [leaf(1)]: 'pty-2' }
+      ptyIdsByLeafId: { [leaf(1)]: 'pty-2', [leaf(2)]: 'p'.repeat(300) }
     }
 
     save(stored, next)
@@ -351,7 +352,7 @@ describe('reportWindowSaveDrift', () => {
       before: [{ leafId: leaf(1), ptyId: 'pty-1' }],
       after: [
         { leafId: leaf(1), ptyId: 'pty-2' },
-        { leafId: leaf(2), ptyId: null }
+        { leafId: leaf(2), ptyId: '<text 300>' }
       ]
     })
   })
