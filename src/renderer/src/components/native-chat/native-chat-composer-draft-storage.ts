@@ -158,12 +158,13 @@ export function parseStoredNativeChatComposerDraft(
   }
   const pastedTextFiles = isRecord(value.pastedTextFiles)
     ? Object.fromEntries(
-        Object.entries(value.pastedTextFiles).filter(
-          ([id, path]) =>
-            /^[0-9a-f-]{36}$/.test(id) &&
-            typeof path === 'string' &&
-            path !== '' &&
-            text.includes(`[Pasted text](orca-paste:${id})`)
+        Object.entries(value.pastedTextFiles).flatMap(([id, path]): [string, string][] =>
+          /^[0-9a-f-]{36}$/.test(id) &&
+          typeof path === 'string' &&
+          path !== '' &&
+          text.includes(`[Pasted text](orca-paste:${id})`)
+            ? [[id, path]]
+            : []
         )
       )
     : undefined
