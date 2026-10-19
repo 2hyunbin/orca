@@ -17,7 +17,6 @@ import {
   orcadMigrationPartitionScope
 } from './orcad-source-scope'
 import { unsavedDraftItems, worktreeLabel } from './orcad-source-workspace-session-eligibility'
-import { isHostBoundOpenFile } from './orcad-source-draft-rename'
 
 // What "Move anyway" does with the desktop's own copy of a moving host's saved session.
 
@@ -28,9 +27,8 @@ export type SessionFragment = {
   sourceHost: boolean
 }
 
-/** Unsaved drafts in this desktop's own session for the source's worktrees that the commit
- *  cannot rename to the server: another host's files. */
-export function uncarriedDesktopDrafts(
+/** Unsaved drafts in this desktop's own session for the source's worktrees. */
+export function desktopDrafts(
   state: PersistedState,
   source: OrcadMigrationManifestSource,
   catalog: OrcadMigrationCatalogPayload
@@ -41,14 +39,8 @@ export function uncarriedDesktopDrafts(
   )
   return Object.entries(state.workspaceSession.openFilesByWorktree ?? {}).flatMap(
     ([ownerKey, files]) =>
-      orcadMigrationOwnerMatchesScope(ownerKey, scope)
-        ? unsavedDraftItems(files.filter(isHostBoundOpenFile), ownerKey)
-        : []
+      orcadMigrationOwnerMatchesScope(ownerKey, scope) ? unsavedDraftItems(files, ownerKey) : []
   )
-}
-
-export function clashingDraftItem(filePath: string, ownerKey: string): string {
-  return `two different unsaved versions of ${filePath} in ${worktreeLabel(ownerKey)}`
 }
 
 /**
@@ -63,8 +55,15 @@ export function resolveCopiesForHost(
   const desktopRows = desktop.map((fragment) =>
     filterWorkspaceRows(fragment.session, (workspaceId) => conflicting.has(workspaceId))
   )
-  // With no host copy the desktop's drafts still reach the server: the commit renames them.
   const clashingDrafts: string[] = []
+  if (!fragments.some((fragment) => fragment.sourceHost)) {
+    // No host copy to carry them, so the desktop's drafts would have nowhere to go.
+    for (const rows of desktopRows) {
+      for (const [ownerKey, files] of Object.entries(rows.openFilesByWorktree ?? {})) {
+        clashingDrafts.push(...unsavedDraftItems(files, ownerKey))
+      }
+    }
+  }
   const resolved = fragments.map((fragment): SessionFragment => {
     if (fragment.local) {
       const session = withoutWorkspaces(fragment.session, conflicting)
@@ -91,7 +90,9 @@ export function resolveCopiesForHost(
             held?.dirtyDraftContent !== undefined &&
             held.dirtyDraftContent !== file.dirtyDraftContent
           ) {
-            clashingDrafts.push(clashingDraftItem(file.filePath, ownerKey))
+            clashingDrafts.push(
+              `two different unsaved versions of ${file.filePath} in ${worktreeLabel(ownerKey)}`
+            )
           }
         }
       }

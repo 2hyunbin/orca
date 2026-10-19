@@ -415,7 +415,7 @@ describe('"Move anyway"', () => {
     expect(result).toMatchObject({ outcome: 'fenced' })
     if ('cutover' in result) {
       expect(
-        loaded.store.collectOrcadMigrationSourceDrafts(result.cutover.manifest).drafts[worktreeId]
+        loaded.store.collectOrcadMigrationSourceDrafts(result.cutover.manifest)[worktreeId]
       ).toEqual([expect.objectContaining({ dirtyDraftContent: 'desktop draft' })])
     }
   })
@@ -439,9 +439,7 @@ describe('"Move anyway"', () => {
     confirmed(loaded)
     await expect(connectMove(loaded)).resolves.toMatchObject({
       outcome: 'refused',
-      reason: expect.stringContaining(
-        'two different unsaved versions of /home/dev/src/project-0/notes.md'
-      )
+      reason: expect.stringContaining('unsaved changes to /home/dev/src/project-0/notes.md')
     })
   })
 
@@ -472,7 +470,7 @@ describe('"Move anyway"', () => {
       expect.not.objectContaining({ dirtyDraftContent: expect.anything() })
     ])
     expect(
-      loaded.store.collectOrcadMigrationSourceDrafts(result.cutover.manifest).drafts[worktreeId]
+      loaded.store.collectOrcadMigrationSourceDrafts(result.cutover.manifest)[worktreeId]
     ).toEqual([expect.objectContaining({ dirtyDraftContent: 'desktop draft' })])
   })
 

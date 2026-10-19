@@ -25,16 +25,10 @@ export function isHostBoundOpenFile(file: PersistedOpenFile): boolean {
   return file.externalSshTargetId !== undefined || Boolean(file.runtimeEnvironmentId)
 }
 
-/** The drafts the commit renames, and each file two partitions hold different drafts of. */
-export type OrcadMigrationSourceDraftCollection = {
-  drafts: OrcadMigrationSourceDrafts
-  clashes: { worktreeKey: string; filePath: string }[]
-}
-
 export function collectOrcadMigrationSourceDrafts(
   state: PersistedState,
   manifest: Pick<OrcadMigrationManifest, 'source' | 'payload'>
-): OrcadMigrationSourceDraftCollection {
+): OrcadMigrationSourceDrafts {
   const sourceScope = createOrcadMigrationSourceScope({
     source: manifest.source,
     catalog: manifest.payload,
@@ -45,7 +39,6 @@ export function collectOrcadMigrationSourceDrafts(
     ([a], [b]) => Number(b === sourceScope.hostId) - Number(a === sourceScope.hostId)
   )
   const drafts = new Map<string, Map<string, PersistedOpenFile>>()
-  const clashes = new Set<string>()
   for (const [partitionId, session] of partitions) {
     const scope = orcadMigrationPartitionScope(sourceScope, partitionId)
     for (const [ownerKey, files] of Object.entries(session.openFilesByWorktree ?? {})) {
@@ -59,22 +52,13 @@ export function collectOrcadMigrationSourceDrafts(
         }
         const byPath = drafts.get(key) ?? new Map<string, PersistedOpenFile>()
         drafts.set(key, byPath)
-        const held = byPath.get(file.filePath)
-        if (!held) {
+        if (!byPath.has(file.filePath)) {
           byPath.set(file.filePath, { ...structuredClone(file), worktreeId: key })
-        } else if (held.dirtyDraftContent !== file.dirtyDraftContent) {
-          clashes.add(`${key}\0${file.filePath}`)
         }
       }
     }
   }
-  return {
-    drafts: Object.fromEntries([...drafts].map(([key, byPath]) => [key, [...byPath.values()]])),
-    clashes: [...clashes].map((entry) => {
-      const [key, filePath] = entry.split('\0')
-      return { worktreeKey: key, filePath }
-    })
-  }
+  return Object.fromEntries([...drafts].map(([key, byPath]) => [key, [...byPath.values()]]))
 }
 
 /**
@@ -83,14 +67,18 @@ export function collectOrcadMigrationSourceDrafts(
  */
 export function withRenamedOrcadMigrationDrafts(
   destination: WorkspaceSessionState,
-  drafts: OrcadMigrationSourceDrafts
+  drafts: OrcadMigrationSourceDrafts,
+  destinationEnvironmentId: string
 ): WorkspaceSessionState | null {
   const openFilesByWorktree = { ...destination.openFilesByWorktree }
   let changed = false
   for (const [key, files] of Object.entries(drafts)) {
     const held = openFilesByWorktree[key] ?? []
     const heldPaths = new Set(held.map((file) => file.filePath))
-    const added = files.filter((file) => !heldPaths.has(file.filePath))
+    // Owned by the server now, so reads, saves and its mirrored tab all resolve to it.
+    const added = files
+      .filter((file) => !heldPaths.has(file.filePath))
+      .map((file) => ({ ...file, runtimeEnvironmentId: destinationEnvironmentId }))
     if (added.length > 0) {
       openFilesByWorktree[key] = [...held, ...added]
       changed = true

@@ -5,6 +5,7 @@
  */
 import { toRuntimeExecutionHostId } from '../../shared/execution-host'
 import type { OrcadMigrationSourceCutover } from '../../shared/orcad-migration/orcad-migration-source-cutover'
+import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import type { Store } from '../persistence'
 import { withRenamedOrcadMigrationDrafts } from '../persistence/migrating-orcad-catalog/orcad-source-draft-rename'
 import {
@@ -34,7 +35,17 @@ export async function retainOrcadMigrationSource(
   if (cutover.sourceRetainedAt) {
     return cutover
   }
-  await renameOrcadMigrationDraftsToDestination(store, cutover)
+  await store.runDurableMutation(() => {
+    const renamed = renamedDestinationSession(store, cutover)
+    if (!renamed) {
+      return { value: undefined, persist: false }
+    }
+    writeDestinationSession(store, cutover, renamed.next)
+    return {
+      value: undefined,
+      rollback: () => writeDestinationSession(store, cutover, renamed.before)
+    }
+  })
   // Why no baseline here: the source may have changed since the commit (a crash, then an older
   // build); only the fence's pre-commit baseline proves what the server holds.
   const retained = {
@@ -43,6 +54,32 @@ export async function retainOrcadMigrationSource(
   }
   writeOrcadMigrationSourceCutover(userDataPath, retained)
   return retained
+}
+
+/**
+ * At startup, before any window reads its sessions: a commit whose retained mark a crash cut off
+ * gets its drafts renamed here, since a renderer that booted without them would overwrite them.
+ */
+export function renameUnretainedOrcadMigrationDrafts(
+  userDataPath: string,
+  store: Pick<
+    OrcadMigrationDraftRenameStore,
+    'collectOrcadMigrationSourceDrafts' | 'getWorkspaceSession' | 'setWorkspaceSession'
+  >
+): void {
+  for (const cutover of listOrcadMigrationSourceCutovers(userDataPath)) {
+    if (cutover.phase !== 'destination-committed' || cutover.sourceRetainedAt) {
+      continue
+    }
+    try {
+      const renamed = renamedDestinationSession(store, cutover)
+      if (renamed) {
+        writeDestinationSession(store, cutover, renamed.next)
+      }
+    } catch (error) {
+      console.warn('[ssh] Could not rename a committed migration’s unsaved drafts:', error)
+    }
+  }
 }
 
 function readCommittedCutover(userDataPath: string, migrationId: string) {
@@ -55,22 +92,31 @@ function readCommittedCutover(userDataPath: string, migrationId: string) {
   return cutover
 }
 
-/** Runs once per migration, before its retained mark: a later run would revive discarded drafts. */
-async function renameOrcadMigrationDraftsToDestination(
-  store: OrcadMigrationDraftRenameStore,
+/** Only files the server partition lacks, so a rerun before the retained mark never clobbers. */
+function renamedDestinationSession(
+  store: Pick<
+    OrcadMigrationDraftRenameStore,
+    'collectOrcadMigrationSourceDrafts' | 'getWorkspaceSession'
+  >,
   cutover: OrcadMigrationSourceCutover
-): Promise<void> {
-  const hostId = toRuntimeExecutionHostId(cutover.destinationEnvironmentId)
-  await store.runDurableMutation(() => {
-    const before = store.getWorkspaceSession(hostId)
-    const next = withRenamedOrcadMigrationDrafts(
-      before,
-      store.collectOrcadMigrationSourceDrafts(cutover.manifest).drafts
-    )
-    if (!next) {
-      return { value: undefined, persist: false }
-    }
-    store.setWorkspaceSession(next, hostId)
-    return { value: undefined, rollback: () => store.setWorkspaceSession(before, hostId) }
-  })
+): { before: WorkspaceSessionState; next: WorkspaceSessionState } | null {
+  const before = store.getWorkspaceSession(
+    toRuntimeExecutionHostId(cutover.destinationEnvironmentId)
+  )
+  const next = withRenamedOrcadMigrationDrafts(
+    before,
+    store.collectOrcadMigrationSourceDrafts(cutover.manifest),
+    cutover.destinationEnvironmentId
+  )
+  return next ? { before, next } : null
+}
+
+function writeDestinationSession(
+  store: Pick<OrcadMigrationDraftRenameStore, 'setWorkspaceSession'>,
+  cutover: OrcadMigrationSourceCutover,
+  session: WorkspaceSessionState
+): void {
+  // Baselined writer: drafts are desktop view state no layout command carries (LayoutEditorFile
+  // omits them), and the tabs themselves reach the server only through the manifest.
+  store.setWorkspaceSession(session, toRuntimeExecutionHostId(cutover.destinationEnvironmentId))
 }

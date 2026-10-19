@@ -30,7 +30,7 @@ import { syncOrcadMigrationScrollbackRetention } from './orcad-source-scrollback
 import { createOrcadMigrationLeaveBehindView } from './orcad-source-leave-behind-view'
 import {
   collectOrcadMigrationSourceDrafts,
-  type OrcadMigrationSourceDraftCollection
+  type OrcadMigrationSourceDrafts
 } from './orcad-source-draft-rename'
 
 type OrcadSourceExportRuntime = Pick<
@@ -63,9 +63,7 @@ export class OrcadSourceExportPersistence {
   }
 
   /** This desktop's drafts for what `manifest` moves, keyed as the server names the worktrees. */
-  collectOrcadMigrationSourceDrafts(
-    manifest: OrcadMigrationManifest
-  ): OrcadMigrationSourceDraftCollection {
+  collectOrcadMigrationSourceDrafts(manifest: OrcadMigrationManifest): OrcadMigrationSourceDrafts {
     return collectOrcadMigrationSourceDrafts(this[orcadSourceExportContext].state, manifest)
   }
 

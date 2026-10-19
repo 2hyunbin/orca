@@ -31,15 +31,11 @@ import {
 } from './orcad-source-workspace-session-layout'
 import { mergeSessionFragments } from './orcad-source-workspace-session-fragments'
 import {
-  clashingDraftItem,
+  desktopDrafts,
   resolveCopiesForHost,
-  uncarriedDesktopDrafts,
   type SessionFragment
 } from './orcad-source-session-copy-resolution'
-import {
-  collectOrcadMigrationSourceDrafts,
-  withoutOrcadMigrationDrafts
-} from './orcad-source-draft-rename'
+import { withoutOrcadMigrationDrafts } from './orcad-source-draft-rename'
 import { hasClosedTerminalTabRecord } from '../../../shared/closed-terminal-tab-tombstones'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { normalizeWorkspaceSessionKeyToWorkspaceId } from '../../../shared/workspace-scope'
@@ -84,14 +80,9 @@ export function collectOrcadMigrationSourceWorkspaceSession(
   if (!leaveBehind || collected.blockedItems.length === 0) {
     return collected
   }
-  // "Move anyway": what still can't move leaves the whole saved session on this desktop. Its drafts
-  // are renamed to the server on commit, unless one is another host's file or two versions clash.
-  const drafts = [
-    ...uncarriedDesktopDrafts(state, source, catalog),
-    ...collectOrcadMigrationSourceDrafts(state, { source, payload: catalog }).clashes.map(
-      ({ worktreeKey, filePath }) => clashingDraftItem(filePath, worktreeKey)
-    )
-  ]
+  // "Move anyway": what still can't move leaves the whole saved session on this desktop, unless an
+  // unsaved draft would go with it. A desktop-side draft has no retained copy once the host moves.
+  const drafts = desktopDrafts(state, source, catalog)
   return drafts.length > 0 || collected.blockedItems.includes(UNREADABLE_SESSION)
     ? { ...collected, blockedItems: drafts.length > 0 ? drafts : collected.blockedItems }
     : {
@@ -250,7 +241,7 @@ function collectWorkspaceSession(
   if (duplicates.length > 0) {
     return { payload: undefined, snapshots: [], blockedItems: duplicates, leftBehindItems }
   }
-  // Drafts stay on this desktop; the server gets the tabs only.
+  // Drafts stay on this desktop; the commit renames them to the server (orcad-source-draft-rename).
   return merged.session
     ? {
         payload: withoutOrcadMigrationDrafts(merged.session),
