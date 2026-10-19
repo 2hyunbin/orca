@@ -66,7 +66,7 @@ Before merging, verify that the required checks and aggregate gate in the full P
 
 Pending, failed, cancelled, or missing required checks block agent merges even when repository settings allow them. `gh pr merge --auto` is not proof that CI passed: GitHub may merge immediately when checks are optional. Never use `--admin` or disable protection to bypass a failed check. An explicit user instruction to make an emergency exception overrides this default; otherwise fix the failure or wait. Use `--match-head-commit` to prevent merging a different commit after validation.
 
-PR Checks also runs on every push to `main` (one run at a time, newest push queued). Before fixing a red main, open the latest `main` run of `.github/workflows/pr.yml` to find the first red commit, and check open PRs for a fix already in flight.
+PR Checks also runs on pushes to `main` (one active run and at most one queued; newer pushes replace the queued run). Before fixing a red main, inspect the latest completed `main` run of `.github/workflows/pr.yml`, its `PR checks passed` aggregate and failing jobs, use history to identify the introducing change, and check open PRs for a fix already in flight.
 
 CI changes must exercise the affected checks in the PR. Required check names must be unique across workflows, and workflow changes must preserve the full aggregate's failure handling and conditional job requirements.
 
