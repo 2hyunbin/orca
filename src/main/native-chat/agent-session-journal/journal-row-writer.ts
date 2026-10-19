@@ -6,11 +6,6 @@ import type { JournalRow } from './journal-row-schema'
 import { assertJournalFence, assertJournalWritable } from './journal-write-guards'
 import type { JournalWriteBody } from './journal-write-queue'
 
-/** Runs between BEGIN IMMEDIATE and COMMIT, on the SAME connection as the row
- *  insert; a throw rolls the whole append back. Synchronous by construction so
- *  nothing can interleave inside the transaction. */
-export type JournalRowTransactionHook = (db: Database.Database, row: JournalRow) => void
-
 /** An operation's receipt, committed with the journal write that makes it true: `write` runs
  *  inside that transaction on the same connection, `committed` synchronously right after its
  *  COMMIT and never after a rollback. */
@@ -62,7 +57,6 @@ export class JournalRowWriter {
 
   enqueue(
     build: (seq: number, ts: number) => JournalRow,
-    hook?: JournalRowTransactionHook,
     receipt?: JournalOperationReceipt
   ): Promise<JournalRow> {
     return this.deps.serialize(() => {
@@ -74,10 +68,9 @@ export class JournalRowWriter {
       this.deps.database().transaction(
         (db) => {
           insertJournalRow(db, this.deps.sessionId, row, savedAt)
-          hook?.(db, row)
           receipt?.write(db, row)
         },
-        !hook && !receipt && this.streamed([row])
+        !receipt && this.streamed([row])
       )
       // COMMIT landed, so the row is durable: adopt it before anything that can
       // fail. Rejecting here instead would leave the next append reusing a
@@ -133,10 +126,9 @@ export class JournalRowWriter {
    *  replay uses — all inside one serialized step — answering where the row landed. */
   append(
     build: (seq: number, ts: number) => JournalRow,
-    hook?: JournalRowTransactionHook,
     receipt?: JournalOperationReceipt
   ): Promise<AgentJournalCursor> {
-    return this.enqueue(build, hook, receipt).then((row) => ({
+    return this.enqueue(build, receipt).then((row) => ({
       epoch: row.epoch,
       sequence: row.seq
     }))

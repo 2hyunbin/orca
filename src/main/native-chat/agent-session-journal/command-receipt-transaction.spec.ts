@@ -108,7 +108,6 @@ export function registerCommandReceiptTransactionTests(): void {
       })
       await writer.enqueue(
         epochRow,
-        undefined,
         buildCommandReceiptTransaction(scope, (row) => {
           if (!row) {
             throw new Error('expected the committed journal row')

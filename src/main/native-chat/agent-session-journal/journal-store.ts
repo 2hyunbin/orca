@@ -130,7 +130,7 @@ export class AgentSessionJournal {
       },
       notifyCommitted: () => this.onCommitted?.(),
       journal: () => this,
-      enqueue: (build, receipt) => this.rowWriter.enqueue(build, undefined, receipt)
+      enqueue: (build, receipt) => this.rowWriter.enqueue(build, receipt)
     })
     this.rowWriter = collaborators.rowWriter
     this.epochController = collaborators.epochController
@@ -314,7 +314,7 @@ export class AgentSessionJournal {
   /** A person's Resume of the queue. */
   appendQueueResume(fence: number, receipt?: JournalOperationReceipt): Promise<AgentJournalCursor> {
     const build = journalQueueResumeRowBuilder(() => this.state, fence)
-    return this.rowWriter.append(build, undefined, receipt)
+    return this.rowWriter.append(build, receipt)
   }
 
   /** This open found waiting cards an earlier handle wrote (`queued-message-pause.ts`). */
