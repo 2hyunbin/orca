@@ -44,8 +44,8 @@ export type FileExplorerOwnerState = Pick<
   Partial<Pick<AppState, 'activeWorktreeId' | 'activeWorkspaceExecutionHostId'>>
 
 /**
- * The owner every File Explorer read and write routes to: the strict owner alone, so a twin or a
- * workspace no row places refuses instead of falling back to focus or this app's own connection.
+ * The owner every File Explorer read and write routes to, from the strict owner: a twin refuses
+ * and focus never decides. Only a folder this app owns reads its host from its repos.
  */
 export function getFileExplorerOperationOwnerFromState(
   state: FileExplorerOwnerState,
