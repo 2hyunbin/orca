@@ -4,6 +4,8 @@
  * to reverse or replay the operation without relying on OS trash restore
  * (which is not exposed in a portable way here).
  */
+import { FileWriteRefusedError } from '../../../../shared/file-write-disk-precondition'
+
 const MAX_STEPS = 50
 
 type ExplorerOp = {
@@ -35,8 +37,11 @@ export async function undoFileExplorer(): Promise<boolean> {
   try {
     await op.undo()
   } catch (error) {
-    // Why: a refused step (e.g. undo finding the path recreated) must stay retryable, not vanish.
-    past.push(op)
+    // Why only a refusal: it wrote nothing, so the step stays retryable; any other failure (a
+    // timeout) may have applied it, and replaying could undo a newer change.
+    if (error instanceof FileWriteRefusedError) {
+      past.push(op)
+    }
     throw error
   }
   future.push(op)
@@ -51,7 +56,9 @@ export async function redoFileExplorer(): Promise<boolean> {
   try {
     await op.redo()
   } catch (error) {
-    future.push(op)
+    if (error instanceof FileWriteRefusedError) {
+      future.push(op)
+    }
     throw error
   }
   past.push(op)

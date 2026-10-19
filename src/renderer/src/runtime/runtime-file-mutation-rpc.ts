@@ -70,9 +70,13 @@ export async function callRuntimeFileMutationWithCapabilities<TResult>(
   target: RuntimeFileMutationTarget,
   method: string,
   plan: (capabilities: readonly string[]) => Promise<RuntimeFileMutationPlan<TResult>>,
-  timeoutMs: number
+  timeoutMs: number,
+  expectedEnvironmentPairingRevision?: number
 ): Promise<TResult> {
-  const requestRevision = captureRuntimeEnvironmentRequestRevision(target.environmentId, undefined)
+  const requestRevision = captureRuntimeEnvironmentRequestRevision(
+    target.environmentId,
+    expectedEnvironmentPairingRevision
+  )
   const connectionGeneration = getRuntimeEnvironmentConnectionGeneration(target.environmentId)
   const status = await getRuntimeFileMutationStatus(target, requestRevision)
   const planned = await plan(status.capabilities ?? [])

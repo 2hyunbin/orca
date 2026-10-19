@@ -23,6 +23,10 @@ import {
 } from './runtime-file-mutation-rpc'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { readRuntimeFileContent } from './runtime-file-read-client'
+import {
+  captureRuntimeEnvironmentRequestRevision,
+  getRuntimeEnvironmentRevision
+} from './runtime-environment-revision'
 import { getRelativePathInsideWorktree } from './runtime-file-routing'
 import type { RuntimeFileOperationArgs } from './runtime-file-client-types'
 
@@ -81,6 +85,8 @@ export async function writeRemoteFileIfUnchanged(
   params: RemoteFileWriteParams,
   precondition: FileWriteDiskPrecondition
 ): Promise<FileWriteResult> {
+  // Why once per save: a retry may follow a reconnect, never a re-pair to another host.
+  const pairingRevision = captureRuntimeEnvironmentRequestRevision(context.target.environmentId)
   const attempt = async (): Promise<FileWriteResult> =>
     parseFileWriteResult(
       await callRuntimeFileMutationWithCapabilities<unknown>(
@@ -100,13 +106,17 @@ export async function writeRemoteFileIfUnchanged(
           )
           return diskConflict ? { result: { ok: false, diskConflict } } : { params }
         },
-        15_000
+        15_000,
+        pairingRevision
       )
     )
   try {
     return await attempt()
   } catch (error) {
-    if (isRuntimeConnectionChangedError(error)) {
+    if (
+      isRuntimeConnectionChangedError(error) &&
+      getRuntimeEnvironmentRevision(context.target.environmentId) === pairingRevision
+    ) {
       // Why: nothing was sent; one retry re-probes the new connection's capabilities.
       return attempt()
     }

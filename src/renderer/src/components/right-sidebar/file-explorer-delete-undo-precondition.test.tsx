@@ -91,3 +91,32 @@ it('undo of a delete never replaces a file recreated at the same path', async ()
   expect(fileExplorerHasUndo()).toBe(false)
   expect(fileExplorerHasRedo()).toBe(true)
 })
+
+it('drops an undo whose failure may have applied it, as before', async () => {
+  // A timed-out reply may follow a write that landed; replaying could replace a newer file.
+  mocks.write.mockRejectedValue(new Error('Timed out waiting for the remote Orca runtime'))
+  const { result } = renderHook(() =>
+    useFileDeletion({
+      activeWorktreeId: worktreeId,
+      openFiles: [],
+      closeFile: vi.fn(),
+      refreshDir: vi.fn().mockResolvedValue(undefined),
+      setSelectedPaths: vi.fn(),
+      isWindows: false
+    })
+  )
+  await act(async () =>
+    result.current.requestDelete({
+      name: 'notes.txt',
+      path: `${root}/notes.txt`,
+      relativePath: 'notes.txt',
+      isDirectory: false,
+      depth: 0,
+      operationOwner: getFileExplorerOperationOwner(worktreeId)
+    })
+  )
+  await vi.waitFor(() => expect(fileExplorerHasUndo()).toBe(true))
+
+  await expect(undoFileExplorer()).rejects.toThrow('Timed out')
+  expect(fileExplorerHasUndo()).toBe(false)
+})

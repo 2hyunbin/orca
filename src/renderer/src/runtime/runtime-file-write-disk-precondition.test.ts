@@ -8,6 +8,7 @@ import {
 import { FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY } from '../../../shared/file-write-disk-precondition'
 import { getDiskBaselineSignature } from '../../../shared/disk-baseline-signature'
 import { advanceRuntimeEnvironmentConnectionGeneration } from '@/store/slices/runtime-status-connection-generation'
+import { replaceRuntimeEnvironmentRevisions } from './runtime-environment-revision'
 import {
   fsWriteFile,
   installRuntimeFileClientEnvironment,
@@ -393,5 +394,29 @@ describe('writeRuntimeFile disk precondition', () => {
     // The retry decides support from a fresh probe of whatever now answers.
     expect(probes).toBeGreaterThanOrEqual(2)
     expect(writeCalls()).toHaveLength(2)
+  })
+
+  it('never retries onto a host the environment was re-paired to mid-save', async () => {
+    replaceRuntimeEnvironmentRevisions([{ id: 'env-1', createdAt: 1, pairingRevision: 1 }])
+    serveHost({ enforcesPrecondition: true })
+    runtimeEnvironmentCall.mockResolvedValue(rpcOk({ ok: true }))
+    runtimeEnvironmentCall.mockImplementationOnce(async () => {
+      // The user re-pairs the environment id to another machine while the first send is refused.
+      replaceRuntimeEnvironmentRevisions([{ id: 'env-1', createdAt: 1, pairingRevision: 2 }])
+      return {
+        id: 'files.writeIfUnchanged',
+        ok: false,
+        error: {
+          code: 'runtime_environment_changed',
+          message: 'Runtime environment pairing changed; refresh and try again'
+        },
+        _meta: { runtimeId: 'remote-runtime' }
+      }
+    })
+
+    await expect(
+      writeRuntimeFile(remoteContext, '/remote/repo/file.ts', 'edited', undefined, precondition)
+    ).rejects.toThrow('pairing changed')
+    expect(writeCalls()).toHaveLength(1)
   })
 })

@@ -96,9 +96,17 @@ export function missingOrIdenticalPrecondition(content: string): FileWriteDiskPr
 export const FILE_ALREADY_EXISTS_DIFFERENTLY_MESSAGE =
   'A different file already exists at this path, so it was left unchanged.'
 
+/** A write the host refused before writing anything, so retrying it later is safe. */
+export class FileWriteRefusedError extends Error {
+  constructor() {
+    super(FILE_ALREADY_EXISTS_DIFFERENTLY_MESSAGE)
+    this.name = 'FileWriteRefusedError'
+  }
+}
+
 /** Turns a refusal into the error a caller's existing failure path already reports. */
 export function assertFileWriteApplied(result: FileWriteResult): void {
   if (!result.ok) {
-    throw new Error(FILE_ALREADY_EXISTS_DIFFERENTLY_MESSAGE)
+    throw new FileWriteRefusedError()
   }
 }
