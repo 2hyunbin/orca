@@ -39,6 +39,7 @@ import { printableCloseReason } from './control-close-reason-text.js'
 import { ControlRenewalBatch } from './control-renewal-batch.js'
 import { RelayCredentialStore, type CredentialReservation } from './credential-store.js'
 import { HostCloseReasonMemory } from './host-close-reason-memory.js'
+import { MemoryResumeConfirmations } from './memory-resume-confirmations.js'
 import { PhoneAcceptLog } from './phone-accept-log.js'
 import {
   postProofCloseCause,
@@ -304,6 +305,7 @@ export class HostSessionRegistry {
   private readonly seatLog: CellSeatLog
   private readonly postProofCloses: PostProofCloseLog
   private readonly phoneAccepts: PhoneAcceptLog
+  private readonly memoryConfirmations: MemoryResumeConfirmations
   // Seat key -> the demoted control socket. Its own set, not drainSentHosts: it ends with
   // that socket (close, rebind or a new join), so a later booking here is a fresh seat.
   private readonly demotedSeats = new Map<string, WebSocket>()
@@ -449,6 +451,7 @@ export class HostSessionRegistry {
     this.seatLog = new CellSeatLog(undefined, now)
     this.postProofCloses = new PostProofCloseLog(observer)
     this.phoneAccepts = new PhoneAcceptLog(config.cellId)
+    this.memoryConfirmations = new MemoryResumeConfirmations(store, now)
   }
 
   // Reserve mode is only ever a cell's, and only while its applied switch says so.
@@ -1147,12 +1150,16 @@ export class HostSessionRegistry {
           cellId: this.config.cellId
         })
       }
-      await this.store.recordConnectionBasis({
-        ...pending.reservation,
-        basisConnId: connId,
-        owningControlGeneration: session.generation,
-        deadline: basisDeadline
-      })
+      if (pending.phonePath === 'memory') {
+        this.openMemoryBasis(pending, connId, session.generation, basisDeadline)
+      } else {
+        await this.store.recordConnectionBasis({
+          ...pending.reservation,
+          basisConnId: connId,
+          owningControlGeneration: session.generation,
+          deadline: basisDeadline
+        })
+      }
     } catch {
       session.activeConnIds.delete(connId)
       await this.store.failReservation(pending.reservation)
@@ -1175,7 +1182,7 @@ export class HostSessionRegistry {
     ) {
       session.activeConnIds.delete(connId)
       pending.capacityReservation?.release()
-      this.deactivateBasisBestEffort(connId)
+      this.closeBasis(pending, connId)
       this.failReservationBestEffort(pending.reservation)
       if (spliceActivityId) this.releaseActivityBestEffort(identity, spliceActivityId)
       if (pending.credentialActivityId) {
@@ -1192,7 +1199,7 @@ export class HostSessionRegistry {
       onClose: () => {
         session.activeConnIds.delete(connId)
         session.activeSplices.delete(connId)
-        this.deactivateBasisBestEffort(connId)
+        this.closeBasis(pending, connId)
         if (spliceActivityId) this.releaseActivityBestEffort(identity, spliceActivityId)
         if (pending.credentialActivityId) {
           this.releaseActivityBestEffort(identity, pending.credentialActivityId)
@@ -2474,11 +2481,12 @@ export class HostSessionRegistry {
       }
       if (type === 'device-resume-confirm') {
         const request = DeviceResumeConfirmSchema.parse(payload(raw, type))
-        const result = await this.store.confirmResume({
-          ...identity,
-          ...request,
-          owningControlGeneration: session.generation
-        })
+        const confirm = { ...identity, ...request, owningControlGeneration: session.generation }
+        if (this.memoryConfirmations.owns(confirm)) {
+          send(session.socket, 'device-resume-confirmed', await this.memoryConfirmations.confirm(confirm))
+          return
+        }
+        const result = await this.store.confirmResume(confirm)
         await this.assignments.releaseActivity(identity, `confirmation:${request.basisConnId}`)
         send(session.socket, 'device-resume-confirmed', result)
         return
@@ -2543,6 +2551,34 @@ export class HostSessionRegistry {
     void this.store.failReservation(reservation).catch(() => {
       console.warn('[orca-relay] reservation release deferred to credential cleanup')
     })
+  }
+
+  // A memory resume's basis is the cell's own record; every other basis is a Postgres row.
+  private openMemoryBasis(
+    pending: PendingConnection,
+    connId: string,
+    owningControlGeneration: number,
+    deadline: number
+  ): void {
+    const { reservation } = pending
+    if (reservation.acceptedCredentialVersion === undefined || reservation.acceptedAs === undefined) {
+      throw new Error('memory basis needs an accepted resume credential')
+    }
+    this.memoryConfirmations.open({
+      basisConnId: connId,
+      userId: reservation.userId,
+      relayHostId: reservation.relayHostId,
+      relayDeviceId: reservation.relayDeviceId,
+      acceptedCredentialVersion: reservation.acceptedCredentialVersion,
+      acceptedAs: reservation.acceptedAs,
+      owningControlGeneration,
+      deadline
+    })
+  }
+
+  private closeBasis(pending: PendingConnection, connId: string): void {
+    if (pending.phonePath === 'memory') this.memoryConfirmations.close(connId)
+    else this.deactivateBasisBestEffort(connId)
   }
 
   private deactivateBasisBestEffort(connId: string): void {

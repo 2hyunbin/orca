@@ -95,6 +95,21 @@ function string(row: SqlRow, field: string): string {
   return value
 }
 
+// Memory confirms renew a device at most this often (design decision 3: at most once a day of use).
+export const RESUME_RENEWAL_INTERVAL_MS = 24 * 60 * 60 * 1000
+
+function tokenFamily(device: SqlRow) {
+  return {
+    currentVersion: number(device, 'current_version'),
+    currentHash: string(device, 'current_hash'),
+    currentExpiresAt: number(device, 'current_expires_at'),
+    graceVersion: optionalNumber(device, 'grace_version'),
+    graceHash: typeof device.grace_hash === 'string' ? device.grace_hash : undefined,
+    graceExpiresAt: optionalNumber(device, 'grace_expires_at'),
+    revokedAt: optionalNumber(device, 'revoked_at')
+  }
+}
+
 // A device row's answer to a resume token: null when revoked, or neither hash is still valid.
 function resumeReservation(
   device: SqlRow,
@@ -517,19 +532,7 @@ export class RelayCredentialStore {
       const device = devices[0]
       if (!device) throw new RelayStoreError('credential_not_found')
       const acceptedVersion = number(basis, 'accepted_credential_version')
-      const decision = decideResumeCommit(
-        {
-          currentVersion: number(device, 'current_version'),
-          currentHash: string(device, 'current_hash'),
-          currentExpiresAt: number(device, 'current_expires_at'),
-          graceVersion: optionalNumber(device, 'grace_version'),
-          graceHash: typeof device.grace_hash === 'string' ? device.grace_hash : undefined,
-          graceExpiresAt: optionalNumber(device, 'grace_expires_at'),
-          revokedAt: optionalNumber(device, 'revoked_at')
-        },
-        acceptedVersion,
-        now
-      )
+      const decision = decideResumeCommit(tokenFamily(device), acceptedVersion, now)
       if (decision.startsWith('reject-')) throw new RelayStoreError(decision)
       const renewed = decision === 'renew-current'
       const resumeExpiresAt = renewed
@@ -579,6 +582,76 @@ export class RelayCredentialStore {
       })
       return result
     })
+  }
+
+  // Step 6's confirm for a basis the cell holds in memory: one fresh device read, and a renewal
+  // write at most once a day per device. A current-version confirm always answers renewed:true
+  // with the expiry the database now holds, so a phone keeps scheduling its renewals.
+  async confirmMemoryResume(input: RelayIdentity & {
+    reqId: string
+    basisConnId: string
+    relayDeviceId: string
+    acceptedCredentialVersion: number
+    acceptedAs: 'current' | 'grace'
+  }): Promise<DeviceResumeConfirmed> {
+    const now = this.now()
+    const devices = await this.database.query(
+      `SELECT * FROM relay_devices
+       WHERE user_id = ? AND relay_host_id = ? AND relay_device_id = ?`,
+      [input.userId, input.relayHostId, input.relayDeviceId]
+    )
+    const device = devices[0]
+    if (!device) throw new RelayStoreError('credential_not_found')
+    const decision = decideResumeCommit(tokenFamily(device), input.acceptedCredentialVersion, now)
+    if (decision.startsWith('reject-')) throw new RelayStoreError(decision)
+    const renewed = decision === 'renew-current'
+    let resumeExpiresAt = number(device, 'current_expires_at')
+    const renewalDue = resumeExpiresAt < now + RELAY_PROTOCOL_LIMITS.resumeTtlMs - RESUME_RENEWAL_INTERVAL_MS
+    if (renewed && renewalDue) {
+      resumeExpiresAt = await this.renewResume(input, device, now).catch(() => resumeExpiresAt)
+    }
+    // Off the answer's critical outcome: an audit row the database refuses is not a failed confirm.
+    await this.auditWith(this.database, {
+      type: 'resume-confirmed',
+      userId: input.userId,
+      relayHostId: input.relayHostId,
+      relayDeviceId: input.relayDeviceId,
+      detail: { reqId: input.reqId, basisConnId: input.basisConnId, renewed }
+    }).catch(() => console.warn('[orca-relay] resume-confirmed audit row not written'))
+    return {
+      v: 1,
+      reqId: input.reqId,
+      currentVersion: number(device, 'current_version'),
+      acceptedAs: input.acceptedAs,
+      renewed,
+      resumeExpiresAt,
+      ...(optionalNumber(device, 'grace_expires_at') === undefined
+        ? {}
+        : { graceExpiresAt: optionalNumber(device, 'grace_expires_at') })
+    }
+  }
+
+  // Guarded by the row just read, so a revoke or install that committed since leaves it alone;
+  // the answer then keeps the expiry that was read, which the database still holds.
+  private async renewResume(
+    identity: RelayIdentity & { relayDeviceId: string },
+    device: SqlRow,
+    now: number
+  ): Promise<number> {
+    const renewedTo = now + RELAY_PROTOCOL_LIMITS.resumeTtlMs
+    const rows = await this.database.query(
+      `UPDATE relay_devices SET current_expires_at = ?, updated_at = ?
+       WHERE user_id = ? AND relay_host_id = ? AND relay_device_id = ?
+         AND current_version = ? AND current_hash = ? AND revoked_at IS NULL
+         AND current_expires_at < ?
+       RETURNING current_expires_at`,
+      [
+        renewedTo, now, identity.userId, identity.relayHostId, identity.relayDeviceId,
+        number(device, 'current_version'), string(device, 'current_hash'),
+        now + RELAY_PROTOCOL_LIMITS.resumeTtlMs - RESUME_RENEWAL_INTERVAL_MS
+      ]
+    )
+    return rows[0] ? number(rows[0], 'current_expires_at') : number(device, 'current_expires_at')
   }
 
   async deactivateBasis(basisConnId: string): Promise<void> {

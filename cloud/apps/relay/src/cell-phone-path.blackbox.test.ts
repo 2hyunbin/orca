@@ -39,6 +39,29 @@ const DATABASE_PATH_ACCEPT = [
   'INSERT INTO relay_connection_bases (basis_conn_id, user_id, relay_host_id, relay_device_id, owning_control_generation, credential_kind, invite_token_hash, accepted_credential_version, accepted_as, deadline, active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
 ]
 
+const CONFIRM_DEVICE_READ =
+  'SELECT * FROM relay_devices WHERE user_id = ? AND relay_host_id = ? AND relay_device_id = ?'
+
+// The flag-off confirm, as main issued it at 9ea54343710.
+const DATABASE_PATH_CONFIRM = [
+  'BEGIN',
+  'SELECT basis_conn_id, result_json FROM relay_confirm_results WHERE user_id = ? AND relay_host_id = ? AND req_id = ?',
+  'SELECT * FROM relay_connection_bases WHERE basis_conn_id = ?',
+  'UPDATE relay_devices SET updated_at = updated_at WHERE user_id = ? AND relay_host_id = ? AND relay_device_id = ?',
+  'SELECT * FROM relay_devices WHERE user_id = ? AND relay_host_id = ? AND relay_device_id = ?',
+  'UPDATE relay_devices SET current_expires_at = ?, updated_at = ? WHERE user_id = ? AND relay_host_id = ? AND relay_device_id = ?',
+  'INSERT INTO relay_confirm_results (user_id, relay_host_id, req_id, basis_conn_id, tuple_json, result_json, committed_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  'INSERT INTO relay_audit_events (id, at, type, user_id, relay_host_id, relay_device_id, detail_json) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  'COMMIT',
+  'BEGIN',
+  'SELECT * FROM relay_assignments WHERE user_id = ? AND relay_host_id = ? [locked]',
+  'SELECT * FROM relay_assignment_activity_leases WHERE user_id = ? AND relay_host_id = ? ORDER BY activity_id ASC [locked]',
+  'DELETE FROM relay_assignment_activity_leases WHERE user_id = ? AND relay_host_id = ? AND activity_id = ?',
+  'UPDATE relay_assignments SET pending_confirmations = CASE WHEN pending_confirmations + ? < 0 THEN 0 ELSE pending_confirmations + ? END, lease_expires_at = CASE WHEN lease_expires_at > ? THEN lease_expires_at ELSE ? END, last_activity_at = ? WHERE user_id = ? AND relay_host_id = ?',
+  'UPDATE relay_cells SET reserved_requests = CASE WHEN reserved_requests + ? < 0 THEN 0 ELSE reserved_requests + ? END, updated_at = ? WHERE cell_id = ? AND (? <= 0 OR reserved_requests + ? <= capacity_requests) RETURNING cell_id',
+  'COMMIT'
+]
+
 describe('the memory phone path', () => {
   const cleanup: Array<() => Promise<void> | void> = []
 
@@ -60,7 +83,8 @@ describe('the memory phone path', () => {
     // The admit-effective writer ticks on its own; every other statement is the phone's.
     const phoneStatements = () =>
       database.statements.filter((sql) => !sql.includes('relay_cell_admit_effective'))
-    return { ...reserve, database, phoneStatements }
+    // The test's own reads and writes go around the recorder.
+    return { ...reserve, database, raw: inner, phoneStatements }
   }
 
   async function seatedPhoneHost(phonePath: 'db' | 'memory') {
@@ -71,6 +95,33 @@ describe('the memory phone path', () => {
     reserve.database.statements.length = 0
     return { reserve, seated }
   }
+
+  // A phone resumed and spliced to its desktop, waiting to confirm.
+  async function splicedPhone(phonePath: 'db' | 'memory', device: { expiresAt?: number } = {}) {
+    const reserve = await cell()
+    reserve.setAdmitMode('reserve', { phonePath })
+    const seated = await reserve.bookedHost(3)
+    await reserve.installDevice(seated.identity.hostId, TOKEN, device)
+    const connOpen = nextFrame(seated.socket, 'conn-open')
+    const phone = await reserve.dialPhone(seated.identity.hostId, TOKEN)
+    const basisConnId = String((await connOpen).connId)
+    await reserve.attachData(await connOpen, seated.ack.generation)
+    expect(await phone.hello).toMatchObject({ ok: true })
+    reserve.database.statements.length = 0
+    // The desktop's confirm, sent in reply to the phone over the end-to-end channel.
+    const confirm = async (reqId: string, basis = basisConnId) => {
+      const answer = Promise.race([
+        nextFrame(seated.socket, 'device-resume-confirmed'),
+        nextFrame(seated.socket, 'control-error')
+      ])
+      seated.socket.send(JSON.stringify({ type: 'device-resume-confirm', v: 1, reqId, basisConnId: basis }))
+      return await answer
+    }
+    return { reserve, seated, phone, basisConnId, confirm }
+  }
+
+  const deviceRow = async (reserve: Awaited<ReturnType<typeof cell>>) =>
+    (await reserve.raw.query(`SELECT current_expires_at FROM relay_devices`))[0]
 
   const warnings = (event: string) =>
     vi
@@ -102,7 +153,7 @@ describe('the memory phone path', () => {
     expect(reserve.phoneStatements()).toEqual([DATABASE_PATH_ACCEPT[0]])
     await reserve.attachData(await connOpen, seated.ack.generation)
     expect(await phone.hello).toMatchObject({ type: 'relay-hello', ok: true, credentialKind: 'resume' })
-    expect(reserve.phoneStatements()).toEqual([DATABASE_PATH_ACCEPT[0], DATABASE_PATH_ACCEPT.at(-1)])
+    expect(reserve.phoneStatements()).toEqual([DATABASE_PATH_ACCEPT[0]])
     expect(await reserve.activityLeases()).toEqual([])
   })
 
@@ -186,5 +237,95 @@ describe('the memory phone path', () => {
     const host = await reserve.host()
     await reserve.installDevice(host.hostId, TOKEN)
     expect((await (await reserve.dialPhone(host.hostId, TOKEN)).closed).code).toBe(4409)
+  })
+
+  it('confirms from the memory basis with one fresh read, renewing a device due for it', async () => {
+    const { reserve, confirm } = await splicedPhone('memory')
+    const before = Number((await deviceRow(reserve))?.current_expires_at)
+    const answer = await confirm('confirm-1')
+    expect(answer).toMatchObject({ type: 'device-resume-confirmed', reqId: 'confirm-1', renewed: true, acceptedAs: 'current' })
+    const after = Number((await deviceRow(reserve))?.current_expires_at)
+    expect(after).toBeGreaterThan(before)
+    expect(answer.resumeExpiresAt).toBe(after)
+    expect(reserve.phoneStatements()).toEqual([
+      CONFIRM_DEVICE_READ,
+      expect.stringMatching(/^UPDATE relay_devices SET current_expires_at = \?.*RETURNING current_expires_at$/),
+      expect.stringMatching(/^INSERT INTO relay_audit_events/)
+    ])
+    expect(await reserve.activityLeases()).toEqual([])
+    // A retry of the same request answers from memory; another basis cannot reuse its reqId.
+    reserve.database.statements.length = 0
+    expect(await confirm('confirm-1')).toEqual(answer)
+    expect(reserve.phoneStatements()).toEqual([])
+    expect(await confirm('confirm-1', 'another-basis')).toMatchObject({
+      type: 'control-error',
+      code: 'confirmation_tuple_mismatch'
+    })
+  })
+
+  it('answers renewed:true with the stored expiry when renewal is not due, or its write fails', async () => {
+    const fresh = Date.now() + 29.5 * 24 * 60 * 60 * 1000
+    const notDue = await splicedPhone('memory', { expiresAt: fresh })
+    expect(await notDue.confirm('confirm-1')).toMatchObject({ renewed: true, resumeExpiresAt: fresh })
+    expect(notDue.reserve.phoneStatements()).toEqual([CONFIRM_DEVICE_READ, expect.stringMatching(/^INSERT INTO relay_audit_events/)])
+
+    const due = Date.now() + 20 * 24 * 60 * 60 * 1000
+    const failing = await splicedPhone('memory', { expiresAt: due })
+    failing.reserve.database.failing = (sql) => sql.startsWith('UPDATE relay_devices')
+    expect(await failing.confirm('confirm-1')).toMatchObject({ renewed: true, resumeExpiresAt: due })
+    expect(Number((await deviceRow(failing.reserve))?.current_expires_at)).toBe(due)
+  })
+
+  it('answers a grace-version confirm renewed:false with its expiry unchanged, as today', async () => {
+    const { reserve, confirm } = await splicedPhone('memory')
+    const stored = Number((await deviceRow(reserve))?.current_expires_at)
+    // An install rotated the credential after the accept read, so the accepted version is grace.
+    await reserve.raw.query(
+      `UPDATE relay_devices SET grace_hash = current_hash, grace_version = 1, grace_expires_at = ?,
+       current_hash = 'rotated', current_version = 2`,
+      [Date.now() + 60_000]
+    )
+    expect(await confirm('confirm-1')).toMatchObject({
+      type: 'device-resume-confirmed',
+      currentVersion: 2,
+      acceptedAs: 'current',
+      renewed: false,
+      resumeExpiresAt: stored
+    })
+    expect(reserve.phoneStatements()).toEqual([CONFIRM_DEVICE_READ, expect.stringMatching(/^INSERT INTO relay_audit_events/)])
+  })
+
+  it('answers every device change since the accept read as the database confirm does', async () => {
+    const changes: Record<string, [string, unknown[]]> = {
+      revoked: ['UPDATE relay_devices SET revoked_at = ?', [Date.now() - 1]],
+      expired: ['UPDATE relay_devices SET current_expires_at = ?', [Date.now() - 1]],
+      retired: ["UPDATE relay_devices SET current_hash = 'rotated-twice', current_version = 3, grace_version = 2", []],
+      unchanged: ['UPDATE relay_devices SET updated_at = updated_at', []]
+    }
+    const outcome = async (phonePath: 'db' | 'memory', [sql, params]: [string, unknown[]]) => {
+      const { reserve, confirm } = await splicedPhone(phonePath)
+      await reserve.raw.query(sql, params)
+      const answer = await confirm('confirm-1')
+      return answer.type === 'control-error' ? answer.code : `${answer.type}:${answer.acceptedAs}:${answer.renewed}`
+    }
+    for (const [name, change] of Object.entries(changes)) {
+      expect(await outcome('memory', change), name).toBe(await outcome('db', change))
+    }
+    expect(await outcome('memory', changes.revoked!)).toBe('reject-revoked')
+  })
+
+  it('sends a confirm with no memory basis to the database, which holds none either', async () => {
+    const { reserve, phone, confirm } = await splicedPhone('memory')
+    phone.socket.close()
+    await phone.closed
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(await confirm('confirm-1')).toMatchObject({ type: 'control-error', code: 'confirmation_not_active' })
+    expect(reserve.phoneStatements()[0]).toBe('BEGIN')
+  })
+
+  it('keeps the database confirm statement for statement while phonePath is db', async () => {
+    const { reserve, confirm } = await splicedPhone('db')
+    expect(await confirm('confirm-1')).toMatchObject({ type: 'device-resume-confirmed', renewed: true })
+    expect(reserve.phoneStatements()).toEqual(DATABASE_PATH_CONFIRM)
   })
 })

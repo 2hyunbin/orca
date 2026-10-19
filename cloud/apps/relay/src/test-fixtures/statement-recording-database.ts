@@ -9,6 +9,8 @@ import type {
 // described. BEGIN and COMMIT are recorded too: each is a trip to a remote database.
 export class StatementRecordingDatabase implements RelayDatabase {
   readonly dialect: RelayDatabase['dialect']
+  // A statement this matches fails as a dropped connection would, before reaching the database.
+  failing: ((sql: string) => boolean) | null = null
 
   constructor(
     private readonly inner: RelayDatabase,
@@ -19,6 +21,7 @@ export class StatementRecordingDatabase implements RelayDatabase {
 
   async query(sql: string, params: unknown[] = []): Promise<SqlRow[]> {
     this.statements.push(normalized(sql))
+    if (this.failing?.(normalized(sql))) throw new Error('Connection terminated unexpectedly')
     return await this.inner.query(sql, params)
   }
 
@@ -34,7 +37,11 @@ export class StatementRecordingDatabase implements RelayDatabase {
     this.statements.push('BEGIN')
     try {
       return await this.inner.transaction(
-        async (transaction) => await operation(new StatementRecordingDatabase(transaction, this.statements)),
+        async (transaction) => {
+          const recording = new StatementRecordingDatabase(transaction, this.statements)
+          recording.failing = this.failing
+          return await operation(recording)
+        },
         options
       )
     } finally {
