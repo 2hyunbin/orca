@@ -133,9 +133,7 @@ export class Store {
     if (!imported) {
       // A committed migration whose blob install failed or was cut short is finished here; shell
       // history waits for the runtime's post-attach pass, which can see live shells.
-      this.domains.orcadMigrationBlobInstalls.installPendingOrcadMigrationReceivedBlobs({
-        receiptsLoadedFromDisk: true
-      })
+      this.domains.orcadMigrationBlobInstalls.installPendingOrcadMigrationReceivedBlobs()
       for (const entry of initial?.unboundPaneAliases ?? []) {
         agentHookServer.registerPaneKeyAlias(
           entry.legacyPaneKey,

@@ -90,11 +90,6 @@ export type OrcadMigrationBlobInstall = {
   deferredShellHistoryWorktreeIds: Set<string>
   /** The worktree that owns the pane on this host, or null when the pane is not here. */
   paneWorktreeId: (paneKey: string) => string | null
-  /**
-   * Whether this commit's receipt is known to be on disk. The drafts already live in the committed
-   * session, so their received file is only the retry's copy until that session is durable.
-   */
-  commitFlushed: boolean
   now: number
 }
 
@@ -138,12 +133,8 @@ function installShellHistory(install: OrcadMigrationBlobInstall): void {
   })
 }
 
-// A state query can run installers off an in-memory receipt whose flush failed; a retry after a
-// restart then re-applies the drafts from this file, so it must outlive any unconfirmed commit.
+// The drafts landed in the committed session; this file only served a commit retry.
 function releaseEditorDrafts(install: OrcadMigrationBlobInstall): void {
-  if (!install.commitFlushed) {
-    return
-  }
   const path = getOrcadMigrationReceivedBlobPath(install.root, install.migration, {
     blobKind: 'editor-drafts',
     key: ORCAD_MIGRATION_EDITOR_DRAFTS_KEY

@@ -43,10 +43,7 @@ export async function commitStagedOrcadMigrationCatalogDurably(args: {
   )
   await flushMigrationState(args.store, args.signal)
   args.onDurableCommit()
-  installReceivedBlobs(args.store, args.manifest, {
-    worktreeHasLiveShells: args.worktreeHasLiveShells,
-    commitFlushed: true
-  })
+  installReceivedBlobs(args.store, args.manifest, args.worktreeHasLiveShells)
   return result
 }
 
@@ -54,10 +51,10 @@ export async function commitStagedOrcadMigrationCatalogDurably(args: {
 function installReceivedBlobs(
   store: Partial<Pick<Store, 'installOrcadMigrationReceivedBlobs'>>,
   manifest: OrcadMigrationManifest,
-  options: { worktreeHasLiveShells: WorktreeHasLiveShells | undefined; commitFlushed?: true }
+  worktreeHasLiveShells: WorktreeHasLiveShells | undefined
 ): void {
   try {
-    store.installOrcadMigrationReceivedBlobs?.(manifest, options)
+    store.installOrcadMigrationReceivedBlobs?.(manifest, { worktreeHasLiveShells })
   } catch (error) {
     // The catalog is committed; a failed install keeps its blob for the next retry.
     console.error('[orcad-migration] installing received blobs failed:', error)
@@ -89,10 +86,7 @@ export function getOrcadMigrationCatalogState(args: {
   // SAFETY: Returned or mutable Store slots retain their original native missing-method failure.
   const result = args.store.getOrcadMigrationCatalogState!(args.manifest)
   if (result.state === 'committed') {
-    // Not `commitFlushed`: this receipt may be in memory only, after a commit whose flush failed.
-    installReceivedBlobs(args.store, args.manifest, {
-      worktreeHasLiveShells: args.worktreeHasLiveShells
-    })
+    installReceivedBlobs(args.store, args.manifest, args.worktreeHasLiveShells)
   }
   return result
 }
