@@ -92,18 +92,14 @@ export function chatModelSupportsAutoMode(
   return listedChatModelRow(models, model)?.supportsAutoMode === true
 }
 
-/** Whether the listing shows the chat's model can't run `auto`; a listing that can't say is not
- *  evidence. Claude marks only the models that run it, so a listing marking none says nothing. */
+/** Whether the listing shows the chat's model can't run `auto`. Claude marks only the models that
+ *  run it, and a CLI that marks none predates `auto`; a model the listing lacks is not evidence. */
 export function chatModelListedWithoutAutoMode(
   models: readonly ListedChatModel[],
   model: string | null | undefined
 ): boolean {
   const row = listedChatModelRow(models, model)
-  return (
-    row !== undefined &&
-    row.supportsAutoMode !== true &&
-    models.some((entry) => entry.supportsAutoMode === true)
-  )
+  return row !== undefined && row.supportsAutoMode !== true
 }
 
 /** Whether the mode a chat runs depends on its model's listed `auto` support. */

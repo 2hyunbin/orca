@@ -89,6 +89,14 @@ describe('the permission mode a chat starts with', () => {
         launchPermission('claude', { permissionMode: 'auto', ...options }, rows).result
       ).resolves.toBe('ask')
     }
+    // A CLI that marks no model predates auto (2.1.71) and would refuse it.
+    await expect(
+      launchPermission(
+        'claude',
+        { permissionMode: 'auto', model: 'opus' },
+        listing([{ id: 'opus' }, { id: 'sonnet' }])
+      ).result
+    ).resolves.toBe('ask')
   })
 
   // #30032: a catalog saved under another account home read as none, and the chat relaunched asking.
@@ -96,9 +104,7 @@ describe('the permission mode a chat starts with', () => {
     for (const answer of [
       { origin: 'unknown' } as const,
       new Error('catalog unavailable'),
-      listing([{ id: 'sonnet', supportsAutoMode: true }]),
-      // A CLI that doesn't mark auto support at all.
-      listing([{ id: 'opus' }, { id: 'sonnet' }])
+      listing([{ id: 'sonnet', supportsAutoMode: true }])
     ]) {
       await expect(
         launchPermission('claude', { permissionMode: 'auto', model: 'opus' }, answer).result
