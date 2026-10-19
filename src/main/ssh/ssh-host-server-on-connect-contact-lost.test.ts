@@ -8,6 +8,7 @@ import { resolveHostServerOnConnect } from './ssh-host-server-on-connect'
 import { hostServerDepsStub } from './ssh-host-server-on-connect-test-deps'
 import { unservedHostServerMessage, unservedServerStatus } from './ssh-host-unserved-status'
 import { sftpSessionClosedError } from './ssh-file-transfer-abort'
+import { sshChannelOpenTimeoutError } from './ssh-channel-open'
 import { admitSshManagedServerStatus } from '../../shared/ssh-managed-server-status-admission'
 
 const target: SshTarget = { id: 'ssh-1', label: 'Box', host: 'box', port: 22, username: 'me' }
@@ -42,6 +43,11 @@ describe('a managed-server install that loses contact with the host', () => {
     expect(admitSshManagedServerStatus(unservedServerStatus(result))).toMatchObject({
       managedServer: { kind: 'relay', reason: 'failed', contactLost: true }
     })
+  })
+
+  it('says contact was lost when the host never answers a channel open', async () => {
+    const unanswered = sshChannelOpenTimeoutError('SSH SFTP channel timed out')
+    await expect(deployFailingWith(unanswered)).resolves.toMatchObject({ contactLost: true })
   })
 
   it('reads lost contact through a wrapping install error', async () => {

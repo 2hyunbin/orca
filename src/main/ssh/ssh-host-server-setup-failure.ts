@@ -21,10 +21,14 @@ export function boundedDetail(text: string): string {
   return text.length > MAX_FAILURE_DETAIL_CHARS ? `…${text.slice(-MAX_FAILURE_DETAIL_CHARS)}` : text
 }
 
-// Why only a closed session: other unconfirmed results (a host's busy or deadline answer) came from
-// a host that answered. Why the cause chain: install steps wrap the transport error they hit.
+// Why only a closed session or an unanswered channel open: other unconfirmed results (a host's
+// busy or deadline answer) came from a host that answered. Why the cause chain: install steps wrap
+// the transport error they hit.
 function lostContact(failure: unknown, depth = 0): boolean {
-  if (isSftpSessionClosedError(failure)) {
+  if (
+    isSftpSessionClosedError(failure) ||
+    (failure instanceof Error && failure.name === 'SshChannelOpenTimeoutError')
+  ) {
     return true
   }
   return depth < 4 && failure instanceof Error && lostContact(failure.cause, depth + 1)
