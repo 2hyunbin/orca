@@ -1,11 +1,10 @@
 import { useContext, useRef } from 'react'
-import { View, Pressable } from 'react-native'
+import { View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { ChevronLeft, Folder, GitBranch, MoreHorizontal, PanelLeftOpen } from 'lucide-react-native'
 import { MobileSessionHeaderIconButton } from './MobileSessionHeaderIconButton'
 import { MobileSessionTabStrip } from './MobileSessionTabStrip'
 import { MobileSessionTitleBlock } from './MobileSessionTitleBlock'
-import { colors } from '../theme/mobile-theme'
 import { styles } from './mobile-session-styles'
 import { useHostSidebarReveal } from '../layout/host-sidebar-reveal'
 import { useResponsiveLayout } from '../layout/responsive-layout'
@@ -47,25 +46,17 @@ export function MobileSessionHeader({ controller }: { controller: MobileSessionC
     <SafeAreaView style={styles.sessionChrome} edges={['top']}>
       <View ref={topBarRef} style={styles.sessionTopBar}>
         {revealSidebar ? (
-          <Pressable
-            style={({ pressed }) => [styles.backButton, pressed && styles.backButtonPressed]}
-            onPress={revealSidebar}
-            hitSlop={8}
-            accessibilityRole="button"
+          <MobileSessionHeaderIconButton
             accessibilityLabel="Show sidebar"
-          >
-            <PanelLeftOpen size={18} color={colors.textSecondary} />
-          </Pressable>
+            icon={PanelLeftOpen}
+            onPress={revealSidebar}
+          />
         ) : null}
-        <Pressable
-          style={({ pressed }) => [styles.backButton, pressed && styles.backButtonPressed]}
-          onPress={requestLeaveSession}
-          hitSlop={8}
-          accessibilityRole="button"
+        <MobileSessionHeaderIconButton
           accessibilityLabel="Back to worktrees"
-        >
-          <ChevronLeft size={22} color={colors.textSecondary} strokeWidth={2.2} />
-        </Pressable>
+          icon={ChevronLeft}
+          onPress={requestLeaveSession}
+        />
 
         <MobileSessionTitleBlock
           title={worktreeName || 'Terminal'}

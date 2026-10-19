@@ -61,6 +61,7 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/main/foreign-sqlite-readers/**/*.test.ts',
   'src/main/browser/*cookie*.test.ts',
   // Playwright's CDP transport needs Node's WebSocket implementation.
+  'src/main/browser/browser-popup-adapter-compatibility.electron.test.ts',
   'src/main/browser/browser-popup-compatibility.electron.test.ts',
   'src/main/browser/browser-popup-native-compatibility.electron.test.ts',
   'src/main/browser/browser-popup-background-compatibility.electron.test.ts',

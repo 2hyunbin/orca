@@ -21,8 +21,19 @@ import {
   readRuntime,
   WRITE_CONFIRMATION
 } from './operate-relay-cell-flags.mjs'
-import { readDirectorRequestsByCodePerMinute, readLogEntries } from './relay-same-cap-shadow-gate.mjs'
-import { minutesOf } from './relay-same-cap-shadow-gate-verdict.mjs'
+import {
+  DIRECTOR_METRICS_LIMIT,
+  readDirectorDrainReturn,
+  readDirectorRequestsByCodePerMinute,
+  readLogEntries
+} from './relay-same-cap-shadow-gate.mjs'
+import {
+  DIRECTOR_METRICS_INTERVAL_MS,
+  drainReturnByMinute,
+  minuteKey,
+  minutesOf,
+  withoutDrainDeferrals
+} from './relay-same-cap-shadow-gate-verdict.mjs'
 import { PRODUCTION_LEASE } from './cloud-sql-rollout-lock-census.mjs'
 import { RELAY_REPOSITORY_ROOT } from './relay-repository.mjs'
 import {
@@ -130,28 +141,46 @@ export async function readCellSample(fetchImpl, request, idToken, wait) {
 }
 
 const minuteFloor = (at) => Math.floor(at / MINUTE_MS) * MINUTE_MS
-const failed503Read = (error) => ({ ok: false, error, perMinute: {}, minutes: [], publishedThrough: null })
+const failed503Read = (error) => ({ ok: false, error, perMinute: {}, minutes: [], publishedThrough: null, unmetered: [] })
 
-// The `minutes` whole minutes that end at the minute boundary `endedAt`: the 503 counts, and the
-// newest minute any response code has a point for. The director always serves something, so that
-// front is how far the 503 series is published; no front at all is no evidence. A code publishing
-// late only delays a trip: a later read sees its points.
+// The `minutes` whole minutes that end at the minute boundary `endedAt`: the director's non-drain
+// 503s, the roll ladder's measure its line comes from. Cloud Run's 503 count less what the
+// director's runtime metrics attribute to drain-return deferrals and to a host re-dialling inside
+// its own retry interval or while its last dial is in flight (10-18: ~98% of 503s), since those
+// grow with traffic, not trouble. `publishedThrough` is the newest minute any response code has a
+// point for (the director always serves something, so no front at all is no evidence); a minute
+// with no metrics line from any instance is `unmetered`, since subtracting nothing there is a guess.
+// Coverage is any instance, not each: one instance's missing lines under-subtract, biased to a trip.
 export async function readDirector503Minutes(reader, { projectId, directorService, endedAt, minutes }) {
   const span = { startedAt: new Date(endedAt - minutes * MINUTE_MS), endedAt: new Date(endedAt) }
+  const config = { projectId, directorService }
   let read
   try {
-    read = await readDirectorRequestsByCodePerMinute(reader, { config: { projectId, directorService }, span })
+    read = await readDirectorRequestsByCodePerMinute(reader, { config, span })
   } catch (error) {
     // A point with an unparseable end time has no minute.
     return failed503Read(`director 503 metric unreadable: ${error instanceof Error ? error.message : error}`)
   }
   if (read.failed) return failed503Read('director 503 metric read failed')
+  // A line covers the 30 s before it, so the last minute's tail is in the next minute's lines.
+  const metrics = await readDirectorDrainReturn(reader, {
+    config,
+    window: { startedAt: span.startedAt, endedAt: new Date(endedAt + DIRECTOR_METRICS_INTERVAL_MS) }
+  })
+  const lineTimes = metrics.flatMap((part) => part.samples.map((sample) => Date.parse(sample.timestamp)))
+  if (lineTimes.some((at) => !Number.isFinite(at))) return failed503Read('director runtime metrics line with an unparseable timestamp')
+  const scheduled = drainReturnByMinute(metrics, DIRECTOR_METRICS_LIMIT)
+  if (scheduled.truncated) return failed503Read('director runtime metrics read failed, truncated, or short')
+  const keys = minutesOf(span)
+  const metered = new Set(lineTimes.flatMap((at) => [minuteKey(at - DIRECTOR_METRICS_INTERVAL_MS), minuteKey(at - 1)]))
+  const nonDrain = withoutDrainDeferrals({ perMinute: read.byCode['503'] ?? {} }, scheduled, keys)
   const published = Object.values(read.byCode).flatMap((perMinute) => Object.keys(perMinute)).sort()
   return {
     ok: true,
-    perMinute: read.byCode['503'] ?? {},
-    minutes: minutesOf(span),
-    publishedThrough: published.at(-1) ?? null
+    perMinute: Object.fromEntries(keys.map((minute, index) => [minute, nonDrain.series[index]])),
+    minutes: keys,
+    publishedThrough: published.at(-1) ?? null,
+    unmetered: keys.filter((minute) => !metered.has(minute))
   }
 }
 
@@ -342,7 +371,7 @@ export async function watchSegment(config, dependencies) {
         endedAt: baselineEndsAt,
         minutes: BACKGROUND_MINUTES
       })
-      state = { ...state, background: read.ok ? measuredBackground(read.perMinute, read.minutes, read.publishedThrough) : null }
+      state = { ...state, background: read.ok ? measuredBackground(read) : null }
     }
     const reader = createReader(deps, request.projectId)
     // Serialised: concurrent Logging reads are what earn a 429.
