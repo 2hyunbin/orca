@@ -285,8 +285,9 @@ export async function readStructuredAgentSessionOptions(
     ...(shownSaved('model') ? { model: selected.current.model } : {}),
     ...(shownSaved('effort') ? { effort: selected.current.effort } : {})
   }
-  // A saved value shown over the child's is the chat's own, never the default the child fell back to.
-  const defaulted = (options.current.defaulted ?? []).filter((key) => !(live && shownSaved(key)))
+  // A chat that saved a value has no default for it: the saved value shows, or the child it
+  // refused runs what it reports, which the next send records.
+  const defaulted = (options.current.defaulted ?? []).filter((key) => saved?.[key] === undefined)
   const confirmed = current.confirmed?.filter((key) =>
     key === 'model'
       ? current.model === options.current.model
