@@ -1,15 +1,12 @@
-// The execution host's own phone push for hook-reported terminal agents: a turn that finished (or
-// failed) and an agent that needs input, the news the transition detector names.
+// The execution host's own phone push for hook-reported terminal agents, while no desktop window
+// runs on it: a turn that finished (or failed) and an agent that needs input.
 //
-// WHY THE HOST: the hooks land in this host's status store, so a phone paired to a server with no
-// window (`orca serve`, `orcad`) must not depend on a desktop window to make the call. On a desktop,
-// main marks its own window's request for the same news `mobileDeliveredByHost`, so the phone is
-// not pushed twice.
+// WHY ONLY WITHOUT A WINDOW: a window runs its own detection and pushes this host's phones through
+// main, as it always has. A host with no window (`orca serve`, `orcad`, a desktop whose window is
+// closed) had nobody to make the call, so the phones heard nothing. Here the host makes it with the
+// window's own rules, timing and wording; while a window owns the host, it stays silent.
 //
-// TIMING: a finish waits out the same quiet window the desktop's does, so a goal agent's milestone
-// is not announced. A phone holding the workspace's session open is looking at it; a locked phone
-// keeps that session for up to a minute, so news landing while a phone holds it waits: pushed if
-// every phone session on the workspace ends within the minute, dropped otherwise.
+// The phone suppresses an alert for what it is showing itself, so the host never guesses who looks.
 import type { AgentPaneChange } from '../agent-hooks/agent-transition-detector'
 import { agentMainAgentVerdict } from '../../shared/agent-main-agent-verdict'
 import { buildAgentNotificationId } from '../../shared/agent-notification-id'
@@ -20,31 +17,26 @@ import type {
   NotificationDispatchRequest,
   NotificationSettings
 } from '../../shared/notification-settings-types'
-import { worktreeIdentityKey } from '../../shared/worktree/id'
+import { isPiCompatibleAgentType } from '../../shared/pi-agent-kind'
 import { buildNotificationOptions } from '../ipc/notification-options'
 import type { MobileNotificationDispatchEvent } from './runtime-mobile-notification-controller'
-import type { StructuredAttentionWorkspaceLabels } from './structured-agent-session-mobile-attention'
 
-/** How long a locked phone can keep its session open; news held for it waits this long. */
-export const PHONE_LOOKING_LINGER_MS = 60_000
+export type TerminalAgentWorkspaceLabels = { repoLabel?: string; worktreeLabel?: string }
 
 type PaneNews = {
   worktreeId: string
-  paneKey: string
-  stateStartedAt: number
   event: MobileNotificationDispatchEvent
   /** Waiting out a finish's quiet window. */
   quiet: { cancel: () => void } | null
-  /** Set while the news waits on a phone that holds the workspace open. */
-  heldUntil: number | null
 }
 
 export type TerminalAgentPhonePushDeps = {
+  /** A desktop window owns this host and pushes its phones itself. */
+  hasWindow: () => boolean
   readNotificationSettings: () => NotificationSettings | undefined
-  /** In-memory only, as the structured lane's: the alert must not wait on a lookup. */
-  readWorkspaceLabels: (worktreeId: string) => StructuredAttentionWorkspaceLabels
+  /** In-memory only, as the window's: the alert must not wait on a lookup. */
+  readWorkspaceLabels: (worktreeId: string, paneKey: string) => TerminalAgentWorkspaceLabels
   isWorkspaceMuted: (worktreeId: string) => boolean
-  isPhoneLooking: (worktreeId: string) => boolean
   readHookRow: (paneKey: string) => AgentStatusIpcPayload | null
   translate?: (key: string, fallback: string) => string
   dispatch: (event: MobileNotificationDispatchEvent) => void
@@ -53,32 +45,36 @@ export type TerminalAgentPhonePushDeps = {
 }
 
 export class TerminalAgentPhonePush {
-  // A pane's current news, until the pane moves on; at most one per pane.
+  // A pane's pending finish, until it is sent or the pane moves on.
   private readonly newsByPane = new Map<string, PaneNews>()
-  // The window's own fan-out keeps this same burst gate.
+  // The burst gate the window's fan-out applies, per workspace.
   private readonly recentDispatches = new Map<string, number>()
   // Per pane, the `turnCompletedAt` of the turn last announced (or restored), until the next turn.
   private readonly finishedTurnByPane = new Map<string, number>()
+  // Panes that reported live work since their last finish: as the window's, only those wait out
+  // the quiet window.
+  private readonly workingSeen = new Set<string>()
 
   constructor(private readonly deps: TerminalAgentPhonePushDeps) {}
 
   observe(change: AgentPaneChange): void {
+    const { paneKey } = change
     if (change.kind === 'seeded') {
       if (change.phase !== 'rest') {
-        this.rememberFinishedTurn(change.paneKey)
+        this.rememberFinishedTurn(paneKey)
       }
       return
     }
     if (change.kind === 'observed') {
       if (change.phase === 'working') {
-        this.observeLeadFinish(change.paneKey, change.workspace?.worktreeId)
+        this.observeWorking(paneKey, change.workspace?.worktreeId)
       }
       return
     }
-    const { transition, paneKey } = change
+    const { transition } = change
     const finished = transition === 'turn-finished' || transition === 'errored'
     const row = finished || transition === 'needs-input' ? this.deps.readHookRow(paneKey) : null
-    // The all-clear of a turn announced when its lead agent finished: that news still stands.
+    // The all-clear of a turn announced when its lead agent finished: that finish still stands.
     if (
       finished &&
       row?.turnCompletedAt !== undefined &&
@@ -86,32 +82,47 @@ export class TerminalAgentPhonePush {
     ) {
       return
     }
-    this.newsByPane.get(paneKey)?.quiet?.cancel()
-    this.newsByPane.delete(paneKey)
+    this.cancelPending(paneKey)
     if (transition === 'prompt-submitted' || change.to === 'rest') {
       this.finishedTurnByPane.delete(paneKey)
     }
-    if (row) {
-      // A finish waits out the quiet window, as the window's does; a request for input does not.
-      this.announce(paneKey, change.workspace.worktreeId, row, finished)
+    if (change.to === 'rest') {
+      this.workingSeen.delete(paneKey)
     }
+    if (!row) {
+      return
+    }
+    if (transition === 'needs-input') {
+      this.announce(paneKey, change.workspace.worktreeId, row, false)
+      return
+    }
+    // Goal and Pi agents report a milestone done mid-run; work resuming within the window cancels it.
+    const waitOutQuiet = this.workingSeen.has(paneKey) || isPiCompatibleAgentType(row.agentType)
+    this.workingSeen.delete(paneKey)
+    this.announce(paneKey, change.workspace.worktreeId, row, waitOutQuiet)
   }
 
-  // The lead agent finished while background work keeps the pane working: as the window does, that
-  // is the turn's finish, named by its `turnCompletedAt`, and announced at once.
-  private observeLeadFinish(paneKey: string, worktreeId: string | undefined): void {
+  private observeWorking(paneKey: string, worktreeId: string | undefined): void {
     const row = this.deps.readHookRow(paneKey)
-    const turnCompletedAt = row?.state === 'working' ? row.turnCompletedAt : undefined
+    if (!row || row.state !== 'working' || !worktreeId) {
+      return
+    }
+    const { turnCompletedAt } = row
+    if (turnCompletedAt === undefined) {
+      this.workingSeen.add(paneKey)
+      return
+    }
+    // The lead agent finished while background work keeps the pane working: as the window does,
+    // that is the turn's finish, named by its `turnCompletedAt` and announced at once, once.
     if (
-      !row ||
-      !worktreeId ||
-      turnCompletedAt === undefined ||
-      this.finishedTurnByPane.get(paneKey) === turnCompletedAt
+      this.finishedTurnByPane.get(paneKey) === turnCompletedAt ||
+      !this.workingSeen.has(paneKey)
     ) {
       return
     }
     this.finishedTurnByPane.set(paneKey, turnCompletedAt)
-    this.newsByPane.get(paneKey)?.quiet?.cancel()
+    this.workingSeen.delete(paneKey)
+    this.cancelPending(paneKey)
     const finish = { ...row, state: 'done' as const, stateStartedAt: turnCompletedAt }
     this.announce(paneKey, worktreeId, finish, false)
   }
@@ -133,87 +144,38 @@ export class TerminalAgentPhonePush {
     if (row.structuredHost) {
       return
     }
-    const muted = this.deps.isWorkspaceMuted(worktreeId)
-    // Muted news is still recorded: it is this host's call, so the window's copy stays silent too.
-    const news = this.buildNews(worktreeId, paneKey, row)
-    this.newsByPane.set(paneKey, news)
-    if (muted) {
-      return
+    const news: PaneNews = {
+      worktreeId,
+      event: this.buildEvent(worktreeId, paneKey, row),
+      quiet: null
     }
     if (!waitOutQuiet) {
-      this.deliverUnlessLooking(news)
+      this.send(news)
       return
     }
+    this.newsByPane.set(paneKey, news)
     news.quiet = this.deps.setTimer(() => {
-      news.quiet = null
-      if (this.newsByPane.get(paneKey) === news && !this.deps.isWorkspaceMuted(worktreeId)) {
-        this.deliverUnlessLooking(news)
-      }
+      this.newsByPane.delete(paneKey)
+      this.send(news)
     }, AGENT_DONE_QUIET_MS)
   }
 
-  /** A phone let go of the workspace; news held for it goes out once no phone holds it. */
-  notePhoneSessionClosed(worktreeId: string): void {
-    if (this.deps.isPhoneLooking(worktreeId)) {
-      return
-    }
-    const key = worktreeIdentityKey(worktreeId)
-    const now = this.deps.now()
-    for (const news of this.newsByPane.values()) {
-      if (news.heldUntil === null || worktreeIdentityKey(news.worktreeId) !== key) {
-        continue
-      }
-      // Held past the linger, the phone was really showing it.
-      const due = now <= news.heldUntil
-      news.heldUntil = null
-      if (due && !this.deps.isWorkspaceMuted(news.worktreeId)) {
-        this.send(news)
-      }
-    }
+  private cancelPending(paneKey: string): void {
+    this.newsByPane.get(paneKey)?.quiet?.cancel()
+    this.newsByPane.delete(paneKey)
   }
 
-  /**
-   * Whether this host has the very news a window's request announces, and the id it pushed it
-   * under. Matched by the id both mint from the hook row, in the request's own workspace spelling;
-   * a request without one (a title or exit completion) is the window's alone.
-   */
-  coveringNews(request: NotificationDispatchRequest): { notificationId: string } | null {
-    if (
-      request.source !== 'agent-task-complete' ||
-      request.executionHost ||
-      !request.paneKey ||
-      !request.notificationId
-    ) {
-      return null
-    }
-    const news = this.newsByPane.get(request.paneKey)
-    const sameNews =
-      news &&
-      buildAgentNotificationId({
-        worktreeId: request.worktreeId,
-        paneKey: request.paneKey,
-        stateStartedAt: news.stateStartedAt
-      }) === request.notificationId
-    return sameNews && news.event.notificationId
-      ? { notificationId: news.event.notificationId }
-      : null
-  }
-
-  private deliverUnlessLooking(news: PaneNews): void {
-    if (this.deps.isPhoneLooking(news.worktreeId)) {
-      news.heldUntil = this.deps.now() + PHONE_LOOKING_LINGER_MS
-    } else {
-      this.send(news)
-    }
-  }
-
-  private buildNews(worktreeId: string, paneKey: string, row: AgentStatusIpcPayload): PaneNews {
+  private buildEvent(
+    worktreeId: string,
+    paneKey: string,
+    row: AgentStatusIpcPayload
+  ): MobileNotificationDispatchEvent {
     const outcome = agentMainAgentVerdict(row)
     const request: NotificationDispatchRequest = {
       source: 'agent-task-complete',
       worktreeId,
       paneKey,
-      ...this.readLabels(worktreeId),
+      ...this.readLabels(worktreeId, paneKey),
       agentState: row.state,
       ...(row.agentType ? { agentType: row.agentType } : {}),
       ...(row.prompt ? { agentPrompt: row.prompt } : {}),
@@ -223,31 +185,27 @@ export class TerminalAgentPhonePush {
       ...(outcome ? { agentTurnOutcome: outcome } : {})
     }
     const { title, body } = buildNotificationOptions(request, this.deps.translate)
-    // The window mints the same id from the same row, so its read retires this push too.
     const notificationId = buildAgentNotificationId({
       worktreeId,
       paneKey,
       stateStartedAt: row.stateStartedAt
     })
     return {
+      type: 'notification',
+      source: 'agent-task-complete',
+      title,
+      body,
       worktreeId,
-      paneKey,
-      stateStartedAt: row.stateStartedAt,
-      quiet: null,
-      heldUntil: null,
-      event: {
-        type: 'notification',
-        source: 'agent-task-complete',
-        title,
-        body,
-        worktreeId,
-        ...(notificationId ? { notificationId } : {}),
-        agentState: row.state
-      }
+      ...(notificationId ? { notificationId } : {}),
+      agentState: row.state
     }
   }
 
   private send(news: PaneNews): void {
+    // Decided when the alert would go out: a window that took over by then announces it itself.
+    if (this.deps.hasWindow() || this.deps.isWorkspaceMuted(news.worktreeId)) {
+      return
+    }
     const settings = this.deps.readNotificationSettings()
     // The window's own fan-out gates the phone on these same preferences.
     const desktopAllowed = settings?.enabled !== false && settings?.agentTaskComplete !== false
@@ -264,9 +222,9 @@ export class TerminalAgentPhonePush {
     })
   }
 
-  private readLabels(worktreeId: string): StructuredAttentionWorkspaceLabels {
+  private readLabels(worktreeId: string, paneKey: string): TerminalAgentWorkspaceLabels {
     try {
-      return this.deps.readWorkspaceLabels(worktreeId)
+      return this.deps.readWorkspaceLabels(worktreeId, paneKey)
     } catch {
       // A label is presentation: without one the alert still goes out, worded generically.
       return {}

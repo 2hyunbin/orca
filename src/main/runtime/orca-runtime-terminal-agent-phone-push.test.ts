@@ -10,28 +10,34 @@ import type { RuntimeStore } from './runtime-store-contract'
 const WT = 'repo-1::/tmp/worktree-a'
 const PANE = 'tab-1:11111111-1111-4111-8111-111111111111'
 
-function createHeadlessHost() {
+function createHost(windowId = HEADLESS_RUNTIME_WINDOW_ID) {
   const store = {
     getRepos: () => [],
     getRepo: (id: string) =>
       id === 'repo-1' ? { id, connectionId: null, displayName: 'orca' } : undefined,
     getSettings: () => ({ notifications: { enabled: true, agentTaskComplete: true } }),
     getWorktreeMeta: (id: string) => (id === WT ? { displayName: 'feature' } : undefined),
-    getAllWorktreeMeta: () => ({})
+    getAllWorktreeMeta: () => ({}),
+    getFolderWorkspaces: () => [{ id: 'f1', name: 'Notes', projectGroupId: 'g1' }],
+    getProjectGroups: () => [{ id: 'g1', name: 'Research' }]
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the push path reads only these members.
   const runtime = new OrcaRuntimeService(store as unknown as RuntimeStore)
-  runtime.syncWindowGraph(HEADLESS_RUNTIME_WINDOW_ID, { tabs: [], leaves: [] })
+  runtime.syncWindowGraph(windowId, { tabs: [], leaves: [] })
   const server = new AgentHookServer()
   runtime.attachAgentStatusStore(server)
   const alerts: MobileNotificationEvent[] = []
   runtime.onNotificationDispatched((event) => alerts.push(event))
-  const report = (state: 'working' | 'done' | 'waiting'): void =>
+  const report = (
+    state: 'working' | 'done' | 'waiting',
+    sessionBoundary?: true,
+    worktreeId = WT
+  ): void =>
     server.ingestTerminalStatus({
       paneKey: PANE,
       tabId: 'tab-1',
-      worktreeId: WT,
-      payload: { state, prompt: 'fix the bug', agentType: 'claude' }
+      worktreeId,
+      payload: { state, prompt: 'fix the bug', agentType: 'claude', sessionBoundary }
     })
   const agentAlerts = (): (string | undefined)[] =>
     alerts.flatMap((event) =>
@@ -51,7 +57,7 @@ describe('terminal agent phone push on a headless host', () => {
   })
 
   it('pushes a finish once it stays finished, a request for input at once, and never a prompt', () => {
-    const { report, agentAlerts, alerts } = createHeadlessHost()
+    const { report, agentAlerts, alerts } = createHost()
     report('working')
     report('done')
     vi.advanceTimersByTime(AGENT_DONE_QUIET_MS)
@@ -59,37 +65,35 @@ describe('terminal agent phone push on a headless host', () => {
     report('working')
     report('waiting')
     expect(agentAlerts()).toEqual(['done', 'waiting'])
-    expect(alerts[0]).toMatchObject({ title: 'orca / feature - Claude finished', worktreeId: WT })
+    expect(alerts[0]).toMatchObject({
+      title: expect.stringContaining('Claude finished'),
+      worktreeId: WT
+    })
   })
 
-  it('holds news a phone has open, and pushes it once that phone lets go', () => {
-    const { runtime, report, agentAlerts } = createHeadlessHost()
-    const closeSession = runtime.openPhoneWorkspaceSession(WT)
+  it('pushes nothing while a desktop window owns the host: the window pushes its phones itself', () => {
+    const { report, agentAlerts } = createHost(1)
     report('working')
     report('done')
+    vi.advanceTimersByTime(AGENT_DONE_QUIET_MS)
+    report('working')
+    report('waiting')
+    expect(agentAlerts()).toEqual([])
+  })
+
+  it('pushes nothing for a session boundary such as a clear or a compaction', () => {
+    const { report, agentAlerts } = createHost()
+    report('working')
+    report('done', true)
     vi.advanceTimersByTime(AGENT_DONE_QUIET_MS)
     expect(agentAlerts()).toEqual([])
-    closeSession()
-    expect(agentAlerts()).toEqual(['done'])
   })
 
-  it('answers the window’s request for the same news as already delivered', () => {
-    const { runtime, report, alerts } = createHeadlessHost()
-    report('working')
-    report('done')
+  it('titles a folder workspace with its project group, as the window does', () => {
+    const { report, alerts } = createHost()
+    report('working', undefined, 'folder:f1')
+    report('done', undefined, 'folder:f1')
     vi.advanceTimersByTime(AGENT_DONE_QUIET_MS)
-    const pushed = alerts[0]
-    const notificationId = pushed?.type === 'notification' ? pushed.notificationId : undefined
-    const windowRequest = {
-      source: 'agent-task-complete',
-      paneKey: PANE,
-      worktreeId: WT,
-      agentState: 'done',
-      notificationId
-    } as const
-    expect(notificationId).toBeTruthy()
-    expect(runtime.terminalAgentNewsDeliveredByHost(windowRequest)).toEqual({ notificationId })
-    report('working')
-    expect(runtime.terminalAgentNewsDeliveredByHost(windowRequest)).toBeNull()
+    expect(alerts[0]).toMatchObject({ title: 'Research / Notes - Claude finished' })
   })
 })

@@ -50,17 +50,12 @@ export class WorkspaceViewers {
     }
   }
 
-  /** A phone holds the workspace's session open; client windows are not asked. */
-  isPhoneViewing(worktreeId: string): boolean {
-    return this.phoneSessions.has(worktreeIdentityKey(worktreeId))
-  }
-
   /** As the window's own rule: a pane is seen when its tab is on screen, else the workspace. */
   isViewing(worktreeId: string, paneKey: string | null): boolean {
-    if (this.isPhoneViewing(worktreeId)) {
+    const key = worktreeIdentityKey(worktreeId)
+    if (this.phoneSessions.has(key)) {
       return true
     }
-    const key = worktreeIdentityKey(worktreeId)
     const tabId = paneKey === null ? null : (parsePaneKey(paneKey)?.tabId ?? null)
     const now = this.now()
     for (const view of this.clients.values()) {

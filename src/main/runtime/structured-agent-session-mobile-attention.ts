@@ -47,30 +47,20 @@ export type StructuredAttentionMobileDelivery = {
   reconcile: (state: StructuredAttentionState) => void
 }
 
-type WorkspaceLabelStore = Pick<RuntimeStore, 'getRepo' | 'getWorktreeMeta' | 'getFolderWorkspaces'>
-
-/** The labels the desktop shows for a chat's workspace, from the host's persisted metadata alone. */
+/** The labels the desktop shows for a workspace, from the host's persisted metadata alone. */
 export function readStructuredAttentionWorkspaceLabels(
-  store: WorkspaceLabelStore,
+  store: Pick<RuntimeStore, 'getRepo' | 'getWorktreeMeta' | 'getFolderWorkspaces'>,
   scope: AgentSessionExecutionLocation
 ): StructuredAttentionWorkspaceLabels {
-  return readWorkspaceNotificationLabels(store, scope.workspaceId)
-}
-
-/** The labels the desktop shows for a workspace, from the host's persisted metadata alone. */
-export function readWorkspaceNotificationLabels(
-  store: WorkspaceLabelStore,
-  workspaceId: string
-): StructuredAttentionWorkspaceLabels {
-  const folderScope = parseWorkspaceKey(workspaceId)
+  const folderScope = parseWorkspaceKey(scope.workspaceId)
   if (folderScope?.type === 'folder') {
     const folder = store
       .getFolderWorkspaces?.()
       .find((item) => item.id === folderScope.folderWorkspaceId)
     return folder ? { worktreeLabel: folder.name } : {}
   }
-  const repo = store.getRepo(getRepoIdFromWorktreeId(workspaceId))
-  const worktreeLabel = store.getWorktreeMeta(workspaceId)?.displayName
+  const repo = store.getRepo(getRepoIdFromWorktreeId(scope.workspaceId))
+  const worktreeLabel = store.getWorktreeMeta(scope.workspaceId)?.displayName
   return {
     ...(repo?.displayName ? { repoLabel: repo.displayName } : {}),
     ...(worktreeLabel ? { worktreeLabel } : {})

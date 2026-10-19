@@ -185,18 +185,8 @@ export function registerNotificationHandlers(store: Store, runtime?: OrcaRuntime
     (
       _event,
       args: NotificationDispatchRequest
-    ): NotificationDispatchResult | Promise<NotificationDispatchResult> => {
-      // This app's own main already decided the phone push for this news from its hook store.
-      const hostNews = runtime?.terminalAgentNewsDeliveredByHost?.(args)
-      if (!hostNews) {
-        return deliveryService.dispatch(args)
-      }
-      if (args.paneKey) {
-        // So a read of the pane retires the host's push even if no banner records an id.
-        announced.record(args.paneKey, hostNews.notificationId)
-      }
-      return deliveryService.dispatch({ ...args, mobileDeliveredByHost: true })
-    }
+    ): NotificationDispatchResult | Promise<NotificationDispatchResult> =>
+      deliveryService.dispatch(args)
   )
 
   registerNotificationSoundHandlers(store)

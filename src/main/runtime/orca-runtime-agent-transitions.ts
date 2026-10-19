@@ -1,27 +1,33 @@
 import { AgentTransitionDetector } from '../agent-hooks/agent-transition-detector'
-import type { NotificationDispatchRequest } from '../../shared/notification-settings-types'
+import { HEADLESS_RUNTIME_WINDOW_ID } from '../../shared/runtime-session-contracts'
+import { parsePaneKey } from '../../shared/stable-pane-id'
+import { parseWorkspaceKey } from '../../shared/workspace-scope'
+import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
 import { OrcaRuntimeWithMigrationCatalog } from './orca-runtime-migration-catalog'
 import { getRuntimeDesktopSurface } from './runtime-desktop-surface'
-import { WorkspaceViewers } from './sidebar-inputs/workspace-viewers'
 import type { AgentStatusStoreView } from './sidebar-inputs/workspace-activity-facts-producer'
-import { readWorkspaceNotificationLabels } from './structured-agent-session-mobile-attention'
-import { TerminalAgentPhonePush } from './terminal-agent-phone-push'
+import {
+  TerminalAgentPhonePush,
+  type TerminalAgentWorkspaceLabels
+} from './terminal-agent-phone-push'
 
 /**
- * Owns the runtime's agent transition detector and the phone push it drives, which run on every
- * host and in every build.
+ * Owns the runtime's agent transition detector, and the phone push it drives while no window
+ * runs here. Both run on every host and in every build.
  */
 export abstract class OrcaRuntimeWithAgentTransitions extends OrcaRuntimeWithMigrationCatalog {
   readonly agentTransitions = new AgentTransitionDetector({
     resolveTabWorktreeId: (tabId) => this.tabs.get(tabId)?.worktreeId,
     now: Date.now
   })
-  readonly workspaceViewers = new WorkspaceViewers(Date.now)
   private readonly terminalAgentPhonePush = new TerminalAgentPhonePush({
+    hasWindow: () =>
+      this.authoritativeWindowId !== null &&
+      this.authoritativeWindowId !== HEADLESS_RUNTIME_WINDOW_ID,
     readNotificationSettings: () => this.store?.getSettings().notifications,
-    readWorkspaceLabels: (worktreeId) => this.readTerminalAgentWorkspaceLabels(worktreeId),
+    readWorkspaceLabels: (worktreeId, paneKey) =>
+      this.readTerminalAgentWorkspaceLabels(worktreeId, paneKey),
     isWorkspaceMuted: (worktreeId) => this.isWorkspaceNotificationMuted(worktreeId),
-    isPhoneLooking: (worktreeId) => this.workspaceViewers.isPhoneViewing(worktreeId),
     readHookRow: (paneKey) => this.agentTransitions.latestRow(paneKey),
     translate: (key, fallback) =>
       getRuntimeDesktopSurface().translateNotification?.(key, fallback) ?? fallback,
@@ -45,34 +51,33 @@ export abstract class OrcaRuntimeWithAgentTransitions extends OrcaRuntimeWithMig
     return this.agentTransitions.attach(store)
   }
 
-  /** A phone holding the workspace's session open is looking at it, until the returned release. */
-  openPhoneWorkspaceSession(worktreeId: string): () => void {
-    const release = this.workspaceViewers.openPhoneSession(worktreeId)
-    return () => {
-      release()
-      this.terminalAgentPhonePush.notePhoneSessionClosed(worktreeId)
-    }
-  }
-
-  /** This host's own handling of the terminal-agent news a window's request carries, if any. */
-  terminalAgentNewsDeliveredByHost(
-    request: NotificationDispatchRequest
-  ): { notificationId: string } | null {
-    return this.terminalAgentPhonePush.coveringNews(request)
-  }
-
-  private readTerminalAgentWorkspaceLabels(worktreeId: string) {
+  // The window's labels (getNotificationWorkspaceLabels), read from this host's own records.
+  private readTerminalAgentWorkspaceLabels(
+    worktreeId: string,
+    paneKey: string
+  ): TerminalAgentWorkspaceLabels {
     const store = this.store
-    if (!store) {
-      return {}
+    const tabId = parsePaneKey(paneKey)?.tabId
+    const fallback =
+      (tabId ? this.tabs.get(tabId)?.title?.trim() : undefined) ||
+      this.agentTransitions.latestRow(paneKey)?.agentType ||
+      'workspace'
+    const scope = parseWorkspaceKey(worktreeId)
+    if (scope?.type === 'folder') {
+      const folder = store?.getFolderWorkspaces?.().find((f) => f.id === scope.folderWorkspaceId)
+      const group = folder
+        ? store?.getProjectGroups?.().find((item) => item.id === folder.projectGroupId)
+        : undefined
+      return { repoLabel: group?.name, worktreeLabel: folder?.name || fallback }
     }
-    const labels = readWorkspaceNotificationLabels(store, worktreeId)
-    if (labels.worktreeLabel) {
-      return labels
+    const id = scope?.type === 'worktree' ? scope.worktreeId : worktreeId
+    const worktree = this.resolvedWorktrees.peek()?.worktrees.find((item) => item.id === id)
+    const repo = worktree
+      ? store?.getRepo(worktree.repoId ?? getRepoIdFromWorktreeId(id))
+      : undefined
+    return {
+      repoLabel: repo?.displayName,
+      worktreeLabel: worktree?.displayName || worktree?.branch || fallback
     }
-    // As the window: an unnamed worktree reads as its branch.
-    const listed = this.resolvedWorktrees.peek()?.worktrees.find((item) => item.id === worktreeId)
-    const worktreeLabel = listed?.displayName || listed?.branch
-    return worktreeLabel ? { ...labels, worktreeLabel } : labels
   }
 }

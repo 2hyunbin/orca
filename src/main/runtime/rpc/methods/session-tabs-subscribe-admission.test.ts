@@ -32,8 +32,6 @@ function makeHost(options: { structuredChat?: boolean } = {}) {
   const listMobileSessionTabs = vi.fn(async (): Promise<RuntimeMobileSessionTabsResult> =>
     visibleSnapshot()
   )
-  const closePhoneSession = vi.fn()
-  const openPhoneWorkspaceSession = vi.fn(() => closePhoneSession)
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the session tab methods reach only these members; a missing one throws and fails the test.
   const runtime = {
     getRuntimeId: () => 'test-runtime',
@@ -42,7 +40,6 @@ function makeHost(options: { structuredChat?: boolean } = {}) {
     }),
     restoreStructuredAgentSessionTabs: restore,
     listMobileSessionTabs,
-    openPhoneWorkspaceSession,
     supportsAuthoritativeSessionTabsInventory: () => false,
     listAllMobileSessionTabsWithChangeSequence: async () => ({
       snapshots: [visibleSnapshot()],
@@ -66,8 +63,6 @@ function makeHost(options: { structuredChat?: boolean } = {}) {
     registry,
     restore,
     listMobileSessionTabs,
-    openPhoneWorkspaceSession,
-    closePhoneSession,
     stopListening,
     tabListeners,
     // A foreign connection never owns the entry, so this probe reads presence without releasing it.
@@ -250,9 +245,6 @@ describe('session.tabs.subscribe registers when the request arrives', () => {
     expect(frames(messages)).toEqual(['snapshot', 'updated', 'end'])
     expect(host.stopListening).toHaveBeenCalledTimes(1)
     expect(host.isRegistered(KEY('sub-1'))).toBe(false)
-    // The phone looked at the workspace for exactly the stream's life.
-    expect(host.openPhoneWorkspaceSession).toHaveBeenCalledWith('wt-1')
-    expect(host.closePhoneSession).toHaveBeenCalledTimes(1)
   })
 
   it('keys a non-id selector by the resolved worktree once it is known', async () => {

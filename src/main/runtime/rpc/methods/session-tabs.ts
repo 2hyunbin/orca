@@ -129,13 +129,11 @@ export const SESSION_TAB_METHODS = [
         // Why: shared-control can carry multiple subscribers for one worktree on
         // one socket; include the RPC id so one subscriber cannot evict another.
         subscriptionId = requestId ? `${cleanupPrefix}:${requestId}` : cleanupPrefix
-        // A phone holding the workspace's session open is looking at it.
+        // Switch point: a phone holding the workspace's session open is looking at it.
         const closePhoneSession =
-          clientKind === 'mobile' ? runtime.openPhoneWorkspaceSession(worktreeId) : undefined
-        // Switch point: the host's unread flag reads as read.
-        if (ORCA_SIDEBAR_INPUTS_IS_MAIN && clientKind === 'mobile') {
-          runtime.sidebarFacts?.markPhoneSessionRead(worktreeId)
-        }
+          ORCA_SIDEBAR_INPUTS_IS_MAIN && clientKind === 'mobile'
+            ? runtime.sidebarFacts?.readAndHoldPhoneSession(worktreeId)
+            : undefined
         runtime.registerSubscriptionCleanup(
           subscriptionId,
           () => {

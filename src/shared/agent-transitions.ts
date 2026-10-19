@@ -75,12 +75,18 @@ export function agentPhaseTransition(from: AgentPhase, to: AgentPhase): AgentTra
   }
 }
 
-/** The news in a hook pane's change, given the row it moved to. */
+/**
+ * The news in a hook pane's change, given the row it moved to. A session boundary (a clear, a
+ * compaction) settles the pane without finishing a turn, so it is no news; its phase still reads done.
+ */
 export function hookRowTransition(
   from: AgentPhase,
   to: AgentPhase,
-  row: AgentMainAgentVerdictSource
+  row: AgentMainAgentVerdictSource & { sessionBoundary?: boolean }
 ): AgentTransition | null {
+  if (to === 'done' && row.sessionBoundary === true) {
+    return null
+  }
   const transition = agentPhaseTransition(from, to)
   return transition === 'turn-finished' && agentVerdictDisplayMark(row) === 'failed'
     ? 'errored'

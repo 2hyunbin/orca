@@ -1,9 +1,9 @@
 /**
- * #24932: the host that runs a hook-reporting terminal agent pushes its phones when the agent
- * finishes or needs input, with no window open; and a desktop with a window pushes its phone
- * once, not once from main and again from the window.
+ * #24932: a host with no window pushes its phones when a hook-reporting terminal agent finishes or
+ * needs input; a desktop with a window still pushes its phone once, from the window, as before.
  */
 import { randomUUID } from 'node:crypto'
+import type { ElectronApplication } from '@stablyai/playwright-test'
 import { expect, test } from './helpers/orca-app'
 import { postClaudeHook, readHookEndpoint } from './helpers/agent-hook-endpoint'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
@@ -43,6 +43,37 @@ async function collectPhoneAlerts(
 const agentAlerts = (alerts: PhoneAlert[]): string[] =>
   alerts.filter((alert) => alert.source === 'agent-task-complete').map((a) => a.agentState ?? '')
 
+/** Records each agent request the window sends main, then hands it to the real handler. */
+async function recordWindowDispatches(electronApp: ElectronApplication): Promise<void> {
+  await electronApp.evaluate(({ ipcMain }) => {
+    type InvokeHandler = (event: unknown, ...args: unknown[]) => unknown
+    const registry = (ipcMain as unknown as { _invokeHandlers?: Map<string, InvokeHandler> })
+      ._invokeHandlers
+    const productionHandler = registry?.get('notifications:dispatch')
+    if (!productionHandler) {
+      throw new Error('notifications:dispatch handler was not registered in the main process')
+    }
+    const recorded: unknown[] = []
+    ;(
+      globalThis as typeof globalThis & { __orcaE2eWindowDispatches?: unknown[] }
+    ).__orcaE2eWindowDispatches = recorded
+    ipcMain.removeHandler('notifications:dispatch')
+    ipcMain.handle('notifications:dispatch', (event, ...args) => {
+      recorded.push(args[0])
+      return productionHandler(event, ...args)
+    })
+  })
+}
+
+async function windowAgentDispatches(electronApp: ElectronApplication): Promise<string[]> {
+  return electronApp.evaluate(() =>
+    (
+      (globalThis as typeof globalThis & { __orcaE2eWindowDispatches?: { source?: string }[] })
+        .__orcaE2eWindowDispatches ?? []
+    ).flatMap((request) => (request.source === 'agent-task-complete' ? [request.source] : []))
+  )
+}
+
 test('a host with no window pushes its phone when a terminal agent finishes or needs input', async ({
   testRepoPath
 }) => {
@@ -62,6 +93,12 @@ test('a host with no window pushes its phone when a terminal agent finishes or n
     const streamErrors: string[] = []
     const alerts = await collectPhoneAlerts(phone, streamErrors)
 
+    // A clear settles the pane without finishing a turn: no alert, as the window sends none.
+    await postClaudeHook(endpoint, pane, { hook_event_name: 'UserPromptSubmit', prompt: '/clear' })
+    await postClaudeHook(endpoint, pane, { hook_event_name: 'SessionStart', source: 'clear' })
+    await new Promise((resolve) => setTimeout(resolve, 3_000))
+    expect(agentAlerts(alerts)).toEqual([])
+
     await postClaudeHook(endpoint, pane, { hook_event_name: 'UserPromptSubmit', prompt: 'go' })
     await postClaudeHook(endpoint, pane, { hook_event_name: 'Stop', last_assistant_message: 'ok' })
     await expect.poll(() => agentAlerts(alerts)).toEqual(['done'])
@@ -74,21 +111,6 @@ test('a host with no window pushes its phone when a terminal agent finishes or n
     })
     await expect.poll(() => agentAlerts(alerts)).toEqual(['done', 'waiting'])
 
-    // A phone holding the workspace open is looking: the news waits until it lets go.
-    const session = await phone.subscribe(
-      'session.tabs.subscribe',
-      { worktree: `id:${worktreeId}` },
-      { onResponse: () => {}, onError: (error) => streamErrors.push(error.message) },
-      30_000
-    )
-    await postClaudeHook(endpoint, pane, { hook_event_name: 'Stop', last_assistant_message: 'ok' })
-    // Past the finish's 1.5 s quiet window, so the news is held rather than still pending, and past
-    // the 5 s per-workspace burst gate the first finish set.
-    await new Promise((resolve) => setTimeout(resolve, 6_000))
-    expect(agentAlerts(alerts)).toEqual(['done', 'waiting'])
-    // As a locked phone's lingering session ends within the minute.
-    session.close()
-    await expect.poll(() => agentAlerts(alerts)).toEqual(['done', 'waiting', 'done'])
     expect(streamErrors).toEqual([])
   } finally {
     phone.dispose()
@@ -96,7 +118,7 @@ test('a host with no window pushes its phone when a terminal agent finishes or n
   }
 })
 
-test('a desktop with a window pushes its phone once for a terminal agent’s finish', async ({
+test('a desktop with a window pushes its phone once, from the window, for a terminal agent’s finish', async ({
   orcaPage,
   electronApp
 }) => {
@@ -107,27 +129,17 @@ test('a desktop with a window pushes its phone once for a terminal agent’s fin
   await waitForActiveTerminalManager(orcaPage, 30_000)
   const endpoint = await readHookEndpoint(electronApp)
   const pane = await waitForActivePaneHookDescriptor(orcaPage)
-  const isUnread = (): Promise<boolean | undefined> =>
-    orcaPage.evaluate(
-      (id) =>
-        Object.values(window.__store?.getState().worktreesByRepo ?? {})
-          .flat()
-          .find((worktree) => worktree.id === id)?.isUnread,
-      pane.worktreeId
-    )
-  // Off the workspace, so the window raises its own alert for the finish as well.
-  await orcaPage.evaluate(() => window.__store?.setState({ activeView: 'tasks' }))
+  await recordWindowDispatches(electronApp)
   const phone = pairMobileClient(await createDesktopMobilePairingOffer(orcaPage))
   try {
-    expect(await isUnread()).toBeFalsy()
     const streamErrors: string[] = []
     const alerts = await collectPhoneAlerts(phone, streamErrors)
     await postClaudeHook(endpoint, pane, { hook_event_name: 'UserPromptSubmit', prompt: 'go' })
     await postClaudeHook(endpoint, pane, { hook_event_name: 'Stop', last_assistant_message: 'ok' })
+    await expect.poll(() => windowAgentDispatches(electronApp)).toHaveLength(1)
     await expect.poll(() => agentAlerts(alerts)).toEqual(['done'])
-    // The window raised its own alert too: its attention path marks unread just before it asks main.
-    await expect.poll(isUnread).toBe(true)
-    await new Promise((resolve) => setTimeout(resolve, 2_000))
+    // Past the 1.5 s quiet window main would have waited, had it pushed too.
+    await new Promise((resolve) => setTimeout(resolve, 3_000))
     expect(agentAlerts(alerts)).toEqual(['done'])
     expect(streamErrors).toEqual([])
   } finally {
