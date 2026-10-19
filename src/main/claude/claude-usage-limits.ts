@@ -21,7 +21,7 @@ const CLAUDE_LIMIT_WINDOWS: Record<string, AgentSessionUsageLimitWindow> = {
 }
 
 /** The ends a result reports when a limit refused its request; any other is a different failure. */
-const LIMIT_TERMINAL_REASONS = ['api_error', 'blocking_limit']
+const LIMIT_TERMINAL_REASONS = ['api_error']
 
 export type ClaudeUsageLimitRow = AgentSessionFailureRowWords & {
   kind: 'status'
@@ -90,7 +90,7 @@ export class ClaudeUsageLimits {
     const reason = claudeText(message.terminal_reason)
     const limited =
       evidence?.cause === 'quota' ||
-      ((evidence?.cause === 'untyped' || reason === 'blocking_limit') &&
+      (evidence?.cause === 'untyped' &&
         (status == null || status === 429) &&
         (reason === null || LIMIT_TERMINAL_REASONS.includes(reason)))
     if (!limited) {

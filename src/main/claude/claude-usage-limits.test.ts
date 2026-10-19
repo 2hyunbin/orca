@@ -132,10 +132,16 @@ describe('a Claude usage limit', () => {
     }, 2_100))
     t.handle(frame({
       ...failedResult('credits', 2_200, 'This model requires usage credits').message,
-      terminal_reason: 'blocking_limit', api_error_status: 429
+      terminal_reason: 'api_error', api_error_status: 429
     }, 2_200))
     expect(statusRows(t).filter((row) => row.failure?.kind === 'usageLimitReached')).toHaveLength(1)
     expect(statusRows(t).some((row) => row.text.includes('requires usage credits'))).toBe(true)
+    t.handle(userFrame('turn-context', 2300))
+    t.handle(frame({ ...refusedFrame('context', 2400, 'Prompt is too long').message,
+      error: 'invalid_request' }, 2400))
+    t.handle(frame({ ...failedResult('context', 2500, 'Prompt is too long').message,
+      terminal_reason: 'blocking_limit', api_error_status: null }, 2500))
+    expect(statusRows(t).at(-1)).toMatchObject({ tone: 'error', text: 'Prompt is too long' })
     t.translator.dispose()
   })
 
