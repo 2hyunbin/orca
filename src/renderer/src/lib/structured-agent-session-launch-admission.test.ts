@@ -1,7 +1,7 @@
-import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
 // @vitest-environment happy-dom
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
 
 const mocks = vi.hoisted(() => ({
   createSupport: vi.fn(),
@@ -150,7 +150,7 @@ describe('a structured chat launch on a paired server', () => {
     })
     await useAppStore.getState().ensureNativeDetectedAgents()
     mocks.createSupport.mockResolvedValue({ supported: false })
-    const openTerminal = vi.fn(() => ({ opened: true }))
+    const openTerminal = vi.fn(() => ({}))
     const declined = () =>
       launchStructuredAgentFromNewTab({ plan: plan(), worktreeId, openTerminal })
     await expect(declined()?.structuredSettlement).resolves.toMatchObject({ kind: 'failed' })

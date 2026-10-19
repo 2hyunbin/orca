@@ -1,6 +1,6 @@
 import { toast } from 'sonner'
 import type { TuiAgent } from '../../../shared/tui-agent'
-import type { ExecutionHostId } from '../../../shared/execution-host'
+import { parseExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import { selectExecutionHostDisplayLabel } from '@/lib/execution-host-display-label'
@@ -25,8 +25,7 @@ import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { toRuntimeWorktreeSelector } from '@/runtime/runtime-worktree-selector'
 import { readStructuredChatHostPermissionVerdict } from '@/runtime/structured-chat-host-permission'
 import { notifyHostPermissionRefused } from '@/lib/structured-agent-session-launch-permission-notice'
-import { resolveStructuredAgentSessionOwner } from '@/runtime/structured-agent-session-owner'
-import { readAgentInventoryForWorktree } from '@/lib/agent-detection-target-inventory'
+import { readAgentInventoryForTarget } from '@/lib/agent-detection-target-inventory'
 
 /** What a host's "no" opens instead: the terminal the launch would have opened had it known. */
 export type StructuredLaunchTerminal = {
@@ -162,22 +161,24 @@ export async function openDeclinedStructuredLaunchTerminal(args: {
 /** A declined chat falls back to its agent's terminal only where that CLI may be installed: a chat
  *  can be offered without it, and its terminal would only fail to start. */
 function declinedAgentTerminalHasCli(agent: TuiAgent, worktreeId: string, host: ExecutionHostId) {
-  const state = useAppStore.getState()
-  const inventory = readAgentInventoryForWorktree(state, worktreeId)
-  return (
-    resolveStructuredAgentSessionOwner(state, worktreeId) !== host ||
-    inventory.state !== 'successful' ||
-    inventory.ids?.includes(agent) !== false
+  const parsed = parseExecutionHostId(host)
+  const inventory = readAgentInventoryForTarget(
+    useAppStore.getState(),
+    parsed?.kind === 'ssh'
+      ? { kind: 'ssh', connectionId: parsed.targetId }
+      : parsed?.kind === 'runtime'
+        ? { kind: 'runtime', environmentId: parsed.environmentId, worktreeId }
+        : { kind: 'local', worktreeId }
   )
+  return inventory.state !== 'successful' || inventory.ids?.includes(agent) !== false
 }
 
 /**
  * Asks the host that would run a chat, this machine or a paired server, before committing any of it
  * here: no tab, launch record, queued prompt or focus intent exists until it answers. Admitted opens
- * the chat; declined opens the caller's terminal (a resume, which has no terminal equivalent, and
- * an agent whose CLI is not installed fail with the host's reason); an unreachable server opens
- * nothing and says so. There is nothing to undo either way. This machine's "can't answer" or "not
- * resolvable yet" opens the chat, whose own create reports.
+ * the chat; declined opens the caller's terminal (a resume, which has no terminal equivalent,
+ * fails); an unreachable server opens nothing and says so. There is nothing to undo either way.
+ * This machine's "can't answer" or "not resolvable yet" opens the chat, whose own create reports.
  */
 export function beginHostAdmittedStructuredLaunch(args: {
   plan: AgentSessionLaunchPlan & { agent: TuiAgent }

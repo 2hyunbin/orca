@@ -30,17 +30,17 @@ it('reserves the switch footprint through unknown and failed reads, then shows m
   const view = render(surface())
   expect(view.queryByRole('switch')).toBeNull()
   expect(view.container.querySelector('.h-5.w-9')).not.toBeNull()
-  observation.current = {
+  const active = {
     kind: 'active',
-    subject: { target: { kind: 'local' }, agent: 'grok' },
-    snapshot: { kind: 'readFailed' },
+    subject: { target: { kind: 'local' }, runtimeId: null, agent: 'grok' },
     removable: false
-  }
+  } as const
+  observation.current = { ...active, snapshot: { kind: 'readFailed' } }
   view.rerender(surface())
   expect(view.queryByRole('switch')).toBeNull()
   for (const source of ['managed', 'external'] as const) {
     observation.current = {
-      ...observation.current,
+      ...active,
       snapshot: {
         kind: 'known',
         state: {

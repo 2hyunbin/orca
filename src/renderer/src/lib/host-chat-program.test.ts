@@ -1,6 +1,7 @@
 import { getDefaultSourceControlAiSettings } from '../../../shared/source-control-ai-settings'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getDefaultSettings } from '../../../shared/constants'
+import type { GlobalSettings } from '../../../shared/global-settings-types'
 import { MANAGED_RUNTIME_INSTALL_RUNTIME_CAPABILITY as INSTALL } from '../../../shared/managed-runtime-install'
 import {
   STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY as CATALOG,
@@ -157,7 +158,7 @@ it('waits for each reopened first frame and cancels genuine runtime replacement,
 it('adapts only absent publication on older hosts and shares the saved Checks gate with pre-create execution', async () => {
   setLocalRuntimeCapabilitiesForTests([CHAT, CATALOG, INSTALL])
   const local = { kind: 'git-worktree' } as const
-  const settings = {
+  const settings: GlobalSettings = {
     ...getDefaultSettings('/tmp'),
     experimentalNativeChat: true,
     defaultTuiAgent: null,
