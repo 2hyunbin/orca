@@ -55,6 +55,7 @@ import {
   readOrcadReadinessCommand
 } from './install/orcad-remote-launch'
 import {
+  createExecProbedStageCommand,
   installNodeRuntimeFromHostArchiveCommand,
   probeRemoteNodeRuntimeCommand,
   promoteRemoteNodeRuntimeCommand,
@@ -189,6 +190,8 @@ const BUILDERS: Readonly<Record<string, (c: HostCase) => string>> = {
   orcadLivenessProbeCommand: ({ host }) => orcadLivenessProbeCommand(host, slotDir),
   remoteSha256Command: ({ nodePath }) => remoteSha256Command(`'${nodePath}'`),
   remoteFreeSpaceProbeCommand: ({ nodePath }) => remoteFreeSpaceProbeCommand(nodePath),
+  createExecProbedStageCommand: ({ host, nodePath }) =>
+    createExecProbedStageCommand(host, `${nodePath}.stage-${token}`),
   probeRemoteNodeRuntimeCommand: ({ host, nodePath, target }) =>
     probeRemoteNodeRuntimeCommand(host, nodePath, target),
   remoteNodeRuntimePresentCommand: ({ host, nodePath }) =>
