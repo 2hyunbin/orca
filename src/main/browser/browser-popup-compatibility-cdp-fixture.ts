@@ -233,6 +233,14 @@ afterEach(async () => {
 })
 
 afterAll(async () => {
+  // DIAGNOSTIC(popup-flake)
+  process.stdout.write(
+    `${stderr
+      .split('\n')
+      .filter((line) => line.includes('popup-flake-main') || /gpu|GPU|GL|egl|Vulkan|viz/.test(line))
+      .slice(0, 60)
+      .join('\n')}\n`
+  )
   cdpConnected.resolve()
   await Promise.allSettled([...stopFrameCaptures.values()].map((stop) => stop()))
   if (artifactDir && existsSync(statusPath)) {

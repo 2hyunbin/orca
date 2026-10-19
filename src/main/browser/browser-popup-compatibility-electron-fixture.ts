@@ -21,6 +21,7 @@ import type {
   BrowserRoutePageGuestIdentity
 } from './browser-route-page-authority'
 import { BrowserPopupAdapterProbeFixture } from './browser-popup-adapter-probe-fixture'
+import { installPopupFlakeMainDiagnostics } from './popup-flake-main-diagnostic'
 
 const origin = process.env.ORCA_POPUP_FIXTURE_ORIGIN
 const statusPath = process.env.ORCA_POPUP_FIXTURE_STATUS
@@ -29,6 +30,7 @@ if (!origin || !statusPath || process.env.ORCA_BACKGROUND_LAUNCH !== '1') {
 }
 const fixtureOrigin = origin
 const fixtureStatusPath = statusPath
+installPopupFlakeMainDiagnostics()
 applyBackgroundActivationPolicy()
 initializeBrowserProcessUserAgent('clean')
 
