@@ -1,6 +1,6 @@
 import { antigravityHookService } from '../antigravity/hook-service'
 import { getRelocatedDaemonHost } from '../daemon/daemon-host-relocation'
-import { app, ipcMain, MessageChannelMain, powerMonitor, session } from 'electron'
+import { app, session } from 'electron'
 import { is } from '@electron-toolkit/utils'
 import os from 'node:os'
 import { join } from 'node:path'
@@ -62,7 +62,7 @@ import { installMainProcessTreeKillGate } from '../own-chromium-tree-kill-guard'
 import { setSecretStore } from '../../shared/secret-store'
 import { ElectronSecretStore } from '../host/electron-secret-store'
 import { selectLinuxKeyringBackend } from './select-linux-keyring-backend'
-import { setPtyHostBindings } from '../ipc/pty-host-bindings'
+import { installElectronPtyHostBindings } from './electron-pty-host-bindings'
 import { electronRuntimeDesktopSurface } from '../host/electron-runtime-desktop-surface'
 import { setRuntimeDesktopSurface } from '../runtime/runtime-desktop-surface'
 import { installElectronBrowserCommands } from '../host/electron-browser-commands'
@@ -303,11 +303,7 @@ function initializeMainProcessPreflight(options: MainProcessPreflightOptions): b
   // whether a window exists is irrelevant. Installing this in attachMainWindowServices
   // meant `orca serve` registered its PTY handlers against no-ops before any window
   // attached, so a paired desktop owner never received them.
-  setPtyHostBindings({
-    ipc: ipcMain,
-    power: powerMonitor,
-    createMessageChannel: () => new MessageChannelMain()
-  })
+  installElectronPtyHostBindings()
   // Why also at process level: the runtime's notification, window-lookup and
   // tab-create-reply channel are desktop-only. A Node host installs none and the
   // runtime routes notifications to paired clients instead.
