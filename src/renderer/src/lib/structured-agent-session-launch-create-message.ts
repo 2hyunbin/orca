@@ -13,8 +13,11 @@ import {
 import { firstFrameOptionState } from '@/components/native-chat/use-structured-agent-session-option-state'
 import {
   applyStructuredLaunchHeldOptions,
+  projectStructuredLaunchHeldOptions,
   settleStructuredLaunchCreateOptions
 } from './structured-agent-session-launch-options'
+import { structuredAgentSessionDrawnValues } from '../../../shared/structured-agent-session-option-snapshot'
+import { encodeStructuredAgentSessionOptionValue } from '../../../shared/structured-agent-session-option-codec'
 
 /** Freeze what create carries once; an ambiguous reply always replays the same payload. */
 export function prepareStructuredLaunchCreateMessage(state: StructuredLaunchState): void {
@@ -62,8 +65,19 @@ function structuredLaunchCreateOptions(
   })
   // Create has always carried options, so any host takes what the chat shows.
   const view = structuredAgentSessionOptionView(firstFrame, intent.seedOptions, selection.held)
+  const drawn = structuredAgentSessionDrawnValues(view)
+  // Each held value as the picker draws it; one drawn as nothing is not carried.
+  const held = Object.fromEntries(
+    Object.entries(selection.held).flatMap(([id, encoded]) => {
+      const value = id === 'model' || !(id in view.record.values) ? encoded : drawn[id]?.value
+      const projected =
+        value === undefined ? null : encodeStructuredAgentSessionOptionValue(id, value)
+      return projected === null ? [] : [[id, projected]]
+    })
+  )
+  projectStructuredLaunchHeldOptions(state, held)
   const options = {
-    ...selection.held,
+    ...held,
     ...structuredAgentSessionSendSelection(view)
   }
   return Object.keys(options).length ? options : undefined

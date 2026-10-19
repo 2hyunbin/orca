@@ -232,6 +232,57 @@ describe('the first message owned by create', () => {
     }
   )
 
+  it.each([
+    ['priority', 'default'],
+    ['flex', 'flex']
+  ])(
+    'carries a held %s as the picker draws it after the default model changes, and never again',
+    async (held, carried) => {
+      const tiers = (...values: string[]) => values.map((value) => ({ value, label: value }))
+      const efforts = tiers('medium', 'high')
+      const list = (defaultId: string) => ({
+        origin: 'probe' as const,
+        fetchedAt: 1,
+        listingNamesConfiguredModel: true,
+        defaultHoldsInEveryWorkspace: true as const,
+        models: [
+          {
+            id: 'm1',
+            label: 'M1',
+            isDefault: defaultId === 'm1',
+            efforts,
+            serviceTiers: tiers('priority', 'flex')
+          },
+          {
+            id: 'm2',
+            label: 'M2',
+            isDefault: defaultId === 'm2',
+            efforts,
+            serviceTiers: tiers('ultrafast')
+          }
+        ]
+      })
+      recordHostModelCatalogSnapshot(target, 'codex', null, list('m1'))
+      const create = deferred<unknown>()
+      mocks.call.mockReturnValue(create.promise)
+      const launch = start()
+      const tierPick = holdStructuredAgentSessionLaunchOption(launch.sessionId, 'serviceTier', held)
+      holdStructuredAgentSessionLaunchOption(launch.sessionId, 'effort', 'high')
+      // The account's default moves before create goes out.
+      recordHostModelCatalogSnapshot(target, 'codex', null, list('m2'))
+      await vi.waitFor(() => expect(mocks.call).toHaveBeenCalledOnce())
+      // Codex runs a tier the model lacks as Standard but passes Flex; effort stays as picked.
+      expect(createParams().options).toEqual({ effort: 'high', serviceTier: carried })
+      create.resolve(created())
+      await launch.launchResult
+      await expect(tierPick).resolves.toEqual({
+        kind: 'accepted',
+        options: { effort: 'high', serviceTier: carried }
+      })
+      expect(mocks.call.mock.calls.map(([, method]) => method)).toEqual(['agentSession.create'])
+    }
+  )
+
   it('returns a refused create once after the new draft, with no later send', async () => {
     const create = deferred<unknown>()
     mocks.call.mockReturnValue(create.promise)

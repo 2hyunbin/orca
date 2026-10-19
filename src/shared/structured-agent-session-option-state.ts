@@ -8,6 +8,8 @@ import type { TrackedNativeChatSessionOption } from './native-chat-session-optio
 export type StructuredAgentSessionOptionRecord = {
   agent: AgentType
   values: Record<string, TrackedNativeChatSessionOption>
+  /** The model is a pick no host answer has spoken for yet, so its other values may not hold. */
+  modelUnresolved?: true
 }
 
 /** The values a complete options answer speaks for. */
@@ -26,7 +28,8 @@ export function cloneStructuredAgentSessionOptionRecord(
     agent: record.agent,
     values: Object.fromEntries(
       Object.entries(record.values).map(([id, tracked]) => [id, { ...tracked }])
-    )
+    ),
+    ...(record.modelUnresolved ? { modelUnresolved: true } : {})
   }
 }
 
@@ -59,6 +62,7 @@ export function replaceStructuredAgentSessionAnsweredValues(
   answered: Readonly<Partial<Record<(typeof ANSWERED_VALUE_IDS)[number], SessionOptionValue>>>,
   sourceFor: (id: string) => TrackedNativeChatSessionOption['source']
 ): void {
+  delete record.modelUnresolved
   for (const id of ANSWERED_VALUE_IDS) {
     const value = answered[id]
     if (value !== undefined) {

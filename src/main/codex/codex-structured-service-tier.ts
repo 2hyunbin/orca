@@ -6,6 +6,7 @@ import type {
 import { readRecord } from './codex-item-field-readers'
 import type { CodexOpenedThread } from './codex-structured-thread-open'
 import type { CodexSession } from './codex-structured-session-state'
+import { codexAcquireCatalogListing } from './codex-structured-catalog-entry'
 
 /** Codex's request value for a model's standard tier. */
 export const CODEX_DEFAULT_SERVICE_TIER = 'default'
@@ -93,7 +94,7 @@ function codexListsServiceTier(
 
 /** Codex also takes the thread's reported tier when no model lists it, such as a configured `flex`. */
 export function codexOffersServiceTier(
-  session: CodexSession,
+  session: Pick<CodexSession, 'reportedOptions'>,
   model: AgentSessionModelOption | undefined,
   models: readonly AgentSessionModelOption[],
   tier: string
@@ -104,6 +105,28 @@ export function codexOffersServiceTier(
     (tier === session.reportedOptions.serviceTier &&
       !models.some((entry) => codexListsServiceTier(entry, tier)))
   )
+}
+
+/** A turn's options: an unoffered tier other than Flex runs as standard; the saved tier is kept. */
+export function codexTurnRequestOptions(
+  session: Pick<CodexSession, 'options' | 'catalogAccess'> & {
+    reportedOptions?: CodexSession['reportedOptions']
+  }
+): Record<string, string> {
+  const options = Object.fromEntries(session.options)
+  const reportedOptions = session.reportedOptions ?? {}
+  const models = codexAcquireCatalogListing(session.catalogAccess)?.models ?? []
+  const model = models.find((entry) => entry.id === (options.model ?? reportedOptions.model))
+  const tier = options.serviceTier
+  if (
+    tier &&
+    tier !== 'flex' &&
+    model?.serviceTiers &&
+    !codexOffersServiceTier({ reportedOptions }, model, models, tier)
+  ) {
+    options.serviceTier = CODEX_DEFAULT_SERVICE_TIER
+  }
+  return options
 }
 
 /** The chat's tier, picked or reported, falls back to standard where the model does not offer it. */

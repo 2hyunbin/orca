@@ -13,6 +13,8 @@ import {
 import { isCodexAppServerUnsupportedError } from './codex-app-server-session'
 import type { CodexDispatchEchoes } from './codex-structured-dispatch-echo'
 import { readCodexTurnId } from './codex-structured-thread-facts'
+import { codexTurnRequestOptions } from './codex-structured-service-tier'
+import type { CodexSession } from './codex-structured-session-state'
 import {
   codexRunningOrOpeningTurn,
   type CodexTurnOpenWaits
@@ -48,7 +50,8 @@ export type CodexTurnHost = {
   connection: Pick<CodexAppServerConnection, 'request'>
   threadId: string
   options: Map<string, string>
-  reportedOptions?: { model?: string }
+  reportedOptions?: CodexSession['reportedOptions']
+  catalogAccess?: CodexSession['catalogAccess']
   dispatchEchoes: CodexDispatchEchoes
   activeTurnIds?: ReadonlySet<string>
   /** Running turns whose interrupt Codex already answered: aborted, so never steered. */
@@ -146,8 +149,7 @@ export async function startCodexTurn(
       threadId: host.threadId,
       clientUserMessageId: input.clientMessageId,
       input: turnInputFor(input.body),
-      // Codex omits a tier the model does not list.
-      ...Object.fromEntries(host.options)
+      ...codexTurnRequestOptions(host)
     },
     { timeoutMs: input.timeoutMs, onReply: input.onReply }
   )

@@ -75,16 +75,18 @@ export function structuredAgentSessionDescribedModel(
     : undefined
 }
 
-/** What the named model's controls draw. A select value another listed model offers but this one
- *  doesn't is what the host replaces with the default, so the row draws that; the record keeps the
- *  host's value. Effort (the host keeps and runs it) and a value no listed model offers stay as
- *  held. A send that ever carries one of these values must read it through here. */
+/** Codex passes Flex whether or not the model advertises it, so only Flex can run unadvertised. */
+const PASSED_SERVICE_TIER = 'flex'
+
+/** What the named model's controls draw: a tier it lacks that another model lists runs as the
+ *  default; established Flex runs as is, and an unanswered model pick leaves it undrawn. */
 function valuesUnderControls(
   catalog: AgentSessionOptionCatalog,
   controls: readonly CatalogOption[],
-  values: Readonly<Record<string, TrackedNativeChatSessionOption>>
+  values: Readonly<Record<string, TrackedNativeChatSessionOption>>,
+  modelUnresolved: boolean
 ): Readonly<Record<string, TrackedNativeChatSessionOption>> {
-  let drawn = values
+  const drawn = { ...values }
   for (const option of controls) {
     const tracked = values[option.id]
     const offers = (entry: CatalogOption): boolean =>
@@ -98,10 +100,44 @@ function valuesUnderControls(
       !offers(option) &&
       catalog.models.some((model) => model.options.some(offers))
     ) {
-      drawn = { ...drawn, [option.id]: { value: option.kind.defaultValue, source: 'default' } }
+      if (option.id !== 'serviceTier' || tracked.value !== PASSED_SERVICE_TIER) {
+        drawn[option.id] = { value: option.kind.defaultValue, source: 'default' }
+      } else if (modelUnresolved) {
+        delete drawn[option.id]
+      }
     }
   }
   return drawn
+}
+
+/** The values the picker draws, which a create carries for picks it holds. */
+export function structuredAgentSessionDrawnValues(
+  state: StructuredAgentSessionOptionState
+): Readonly<Record<string, TrackedNativeChatSessionOption>> {
+  return drawnModelControls(state)?.values ?? state.record.values
+}
+
+/** The named model's controls and the values they draw; null before the host answers. */
+function drawnModelControls(state: StructuredAgentSessionOptionState) {
+  const { catalog, record } = state
+  if (!catalog || state.catalogSource === 'seed') {
+    return null
+  }
+  // A seeded default can name a model the static seed does not list yet.
+  const models = withTrackedNativeChatModel(catalog, catalog.models, { model: record.values.model })
+  const shown = structuredAgentSessionShownModel(catalog, models, record)
+  const controls = shown.controlsModelId
+    ? (models.find((model) => model.id === shown.controlsModelId)?.options ?? [])
+    : modellessControls(catalog, record)
+  // Only the named model's listed controls speak for its values; a stand-in's or an unlisted
+  // model's draw what the host holds.
+  const normalises =
+    shown.shown.currentId !== null &&
+    structuredAgentSessionDescribedModel(state, shown.shown.currentId) !== undefined
+  const values = normalises
+    ? valuesUnderControls(catalog, controls, record.values, record.modelUnresolved === true)
+    : record.values
+  return { catalog, models, ...shown, controls, values }
 }
 
 /** With no model known, a saved speed other than Standard still shows, and Standard turns it off. */
@@ -123,28 +159,16 @@ function modellessControls(
 }
 
 function modelOptionSnapshot(state: StructuredAgentSessionOptionState): SessionOptionDescriptor[] {
-  const { catalog, record } = state
-  if (!catalog) {
+  if (!state.catalog) {
     return []
   }
+  const drawn = drawnModelControls(state)
   // Until the host answers, the built-in list would paint a label its list may replace.
-  if (state.catalogSource === 'seed') {
+  if (!drawn) {
     return [PROVIDER_DEFAULT_MODEL_PLACEHOLDER]
   }
-  // A seeded default can name a model the static seed does not list yet.
-  const models = withTrackedNativeChatModel(catalog, catalog.models, { model: record.values.model })
-  const { shown, controlsModelId, isCliDefault } = structuredAgentSessionShownModel(
-    catalog,
-    models,
-    record
-  )
-  const controls = controlsModelId
-    ? (models.find((model) => model.id === controlsModelId)?.options ?? [])
-    : modellessControls(catalog, record)
-  // Only the named model's listed controls speak for its values; a stand-in's or an unlisted
-  // model's draw what the host holds.
-  const normalises =
-    shown.currentId !== null && structuredAgentSessionDescribedModel(state, shown.currentId)
+  const { catalog, models, shown, controlsModelId, isCliDefault, controls, values } = drawn
+  const { record } = state
   const snapshot =
     models.length === 0
       ? []
@@ -156,9 +180,7 @@ function modelOptionSnapshot(state: StructuredAgentSessionOptionState): SessionO
           liveTransport: 'agent-session',
           model: shown,
           controls,
-          values: normalises
-            ? valuesUnderControls(catalog, controls, record.values)
-            : record.values,
+          values,
           modelIsCliDefault: isCliDefault
         })
   return snapshot.length > 0 || state.catalogSource === 'live'

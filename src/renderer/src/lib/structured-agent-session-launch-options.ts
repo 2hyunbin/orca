@@ -154,6 +154,21 @@ function settleHeldOption(
   state.callers.onSettled()
 }
 
+/** Held picks become what create carries, so none is applied again after publish. */
+export function projectStructuredLaunchHeldOptions(
+  state: StructuredLaunchState,
+  held: Readonly<Record<string, string>>
+): void {
+  const replies = repliesFor(state)
+  for (const id of Object.keys(state.selection.held)) {
+    if (held[id] === undefined) {
+      replies.get(id)?.({ kind: 'superseded' })
+      replies.delete(id)
+    }
+  }
+  state.selection = { ...state.selection, held }
+}
+
 /** Selections included in the durable create are already the host's option intent. */
 export function settleStructuredLaunchCreateOptions(
   state: StructuredLaunchState,

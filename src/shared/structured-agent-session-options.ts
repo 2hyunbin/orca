@@ -216,7 +216,20 @@ export function commitStructuredAgentSessionOption(
   }
   // Each value is the chat's own: a model pick leaves the others for the host to reconcile.
   state.record.values[id] = { value: decoded, source: 'dispatched' }
+  if (id === 'model') {
+    state.record.modelUnresolved = true
+  }
   return { ...state, pendingId: null }
+}
+
+/** A pick's reply: the host has spoken for the model, so its values stand. */
+export function commitStructuredAgentSessionOptionReply(
+  state: StructuredAgentSessionOptionState,
+  values: Readonly<Record<string, string>>
+): StructuredAgentSessionOptionState {
+  const next = commitStructuredAgentSessionOptionValues(state, values)
+  delete next.record.modelUnresolved
+  return next
 }
 
 /** Whether a pick of `modelId` held before launch keeps another held value (decoded or encoded):
