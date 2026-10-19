@@ -1,3 +1,4 @@
+import { toSshExecutionHostId } from '../shared/execution-host'
 import { hostWorktreeTarget } from '../shared/worktree/host-qualified-identity'
 import {
   closeTestStores,
@@ -406,6 +407,7 @@ describe('Store host-partitioned workspace sessions', () => {
 
   it('removes one orphaned worktree with a host-scoped topology fence', async () => {
     const store = await createStore()
+    store.addRepo(makeRepo({ id: 'repo-gone', path: '/repo-gone' }))
     const worktreeId = 'repo-gone::/workspace/stale'
     const session = {
       ...makeHostSession('repo-gone'),
@@ -624,23 +626,23 @@ describe('Store host-partitioned workspace sessions', () => {
     expect(store.getWorkspaceSession('local').tabsByWorktree[worktreeId]).toBeUndefined()
   })
 
-  it("keeps a same-id local twin's tabs when a remote host's copy is removed", async () => {
+  it("removing one SSH host's copy leaves a same-id copy on another SSH host", async () => {
     const store = await createStore()
-    store.addRepo(makeRepo({ id: 'repo-twin', path: '/repo-twin' }))
     const worktreeId = 'repo-twin::/workspace/shared'
     const session = {
       ...makeHostSession('repo-twin'),
       tabsByWorktree: { [worktreeId]: [makeTerminalTab({ id: 'twin-tab', worktreeId })] }
     }
-    store.setWorkspaceSession(session, 'local')
-    store.setWorkspaceSession(session, 'runtime:env-a')
+    store.setWorkspaceSession(session, toSshExecutionHostId('ssh-a'))
+    store.setWorkspaceSession(session, toSshExecutionHostId('ssh-b'))
 
     store.removeWorkspaceSessionStateForWorktree(
-      hostWorktreeTarget({ id: worktreeId, hostId: 'runtime:env-a' })
+      hostWorktreeTarget({ id: worktreeId, hostId: toSshExecutionHostId('ssh-a') })
     )
 
-    expect(store.getWorkspaceSession('runtime:env-a').tabsByWorktree[worktreeId]).toBeUndefined()
-    expect(store.getWorkspaceSession('local').tabsByWorktree[worktreeId]?.[0]?.id).toBe('twin-tab')
+    const tabsOn = (host: string) => store.getWorkspaceSession(host).tabsByWorktree[worktreeId]
+    expect(tabsOn(toSshExecutionHostId('ssh-a'))).toBeUndefined()
+    expect(tabsOn(toSshExecutionHostId('ssh-b'))?.[0]?.id).toBe('twin-tab')
   })
 
   // Trade-off: the fence is repo-wide, so claiming authority over a partition main never wrote would

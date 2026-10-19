@@ -227,7 +227,7 @@ export function snapshotAutomationRunWorkspaceDisplayName(
   if (!normalizedDisplayName) {
     return 0
   }
-  // A minted folder key names one workspace, which may run off its project's host.
+  // Folder ids are minted UUIDs (one row per id), and a run's project host may differ from it.
   const hostScoped = parseWorkspaceKey(target.id)?.type !== 'folder'
   let updatedCount = 0
   operations.state.automationRuns = (operations.state.automationRuns ?? []).map((run) => {
