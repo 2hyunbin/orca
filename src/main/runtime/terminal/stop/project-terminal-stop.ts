@@ -2,6 +2,13 @@ import { OrcaRuntimeWithStopExactTerminalsForWorktree } from './worktree-termina
 import { getRepoExecutionHostId, getRepoSshConnectionId } from '../../../../shared/execution-host'
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
 import type { Repo } from '../../../../shared/repo-types'
+import {
+  closeStructuredSessionsForWorktree,
+  createStructuredSweepProgress,
+  listStructuredSessionsForProject,
+  retireStructuredSessionTabsForWorktree,
+  unclosedStructuredSessions
+} from '../../structured-session-worktree-teardown'
 
 const PROJECT_INVENTORY_REFRESH_BUDGET_MS = 3_000
 
@@ -44,17 +51,25 @@ export function listProjectTerminalWorktreeIds(
 }
 
 export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntimeWithStopExactTerminalsForWorktree {
-  /** Projects this host removed; ids are UUIDs, so a remaining row means a same-id sibling. */
-  private readonly removedProjectIds = new Set<string>()
+  /** Removed projects' PTY fences by id; ids are UUIDs, so a remaining row means a same-id sibling. */
+  private readonly removedProjectFences = new Map<string, Set<string | null>>()
 
   override async acquireWorktreeTerminalSpawn(
     worktreeId?: string,
-    opts: { refuseSleptWorktree?: boolean } = {}
+    opts: { refuseSleptWorktree?: boolean; connectionId?: string | null } = {}
   ): Promise<() => void> {
     const release = await super.acquireWorktreeTerminalSpawn(worktreeId, opts)
     const repoId = worktreeId ? getRepoIdFromWorktreeId(worktreeId) : null
+    const connectionId = opts.connectionId ?? null
     // Why under the lease: a spawn that resolved its workspace before removal queues behind the sweep.
-    if (repoId && this.removedProjectIds.has(repoId) && !this.store?.getRepo?.(repoId)) {
+    // Why the fence: a surviving same-id row on another host must not admit the removed host's spawn.
+    if (
+      repoId &&
+      this.removedProjectFences.get(repoId)?.has(connectionId) &&
+      !(this.store?.getRepos?.() ?? []).some(
+        (row) => row.id === repoId && getRepoSshConnectionId(row) === connectionId
+      )
+    ) {
       release()
       throw new Error('repo_not_found')
     }
@@ -67,8 +82,9 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
    */
   async stopTerminalsForProject(
     repo: Pick<Repo, 'id' | 'connectionId' | 'executionHostId'>,
-    options: { deadline?: number } = {}
+    options: { deadline?: number; closeStructuredSessions?: boolean } = {}
   ): Promise<{ stopped: number }> {
+    const { closeStructuredSessions, ...stopOptions } = options
     // Why: after a restart, surviving daemon sessions are in the provider inventory before ptysById.
     // Bounded so a slow worktree scan cannot spend the budget the known PTYs' stops need.
     const refreshDeadline = Math.min(
@@ -91,15 +107,10 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
     // Why not the row's stamp: a `runtime:` stamp is how paired clients address a project that runs
     // here, natively or over its nested SSH connection.
     const fence = { resolvedConnectionId: getRepoSshConnectionId(repo) }
-    this.removedProjectIds.add(repo.id)
-    // Why: a same-id sibling row with the same fence owns PTYs this table cannot tell apart.
-    const siblingSharesFence = (this.store?.getRepos?.() ?? []).some(
-      (row) =>
-        row.id === repo.id &&
-        getRepoExecutionHostId(row) !== getRepoExecutionHostId(repo) &&
-        getRepoSshConnectionId(row) === fence.resolvedConnectionId
-    )
-    if (siblingSharesFence) {
+    const removedFences = this.removedProjectFences.get(repo.id) ?? new Set<string | null>()
+    removedFences.add(fence.resolvedConnectionId)
+    this.removedProjectFences.set(repo.id, removedFences)
+    if (this.projectSiblingSharesFence(repo)) {
       return { stopped: 0 }
     }
     let stopped = 0
@@ -107,7 +118,7 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
       projectWorktreeIds.add(id)
     }
     for (const id of projectWorktreeIds) {
-      const opts = { resolvedWorktreeId: id, ...fence, ...options }
+      const opts = { resolvedWorktreeId: id, ...fence, ...stopOptions }
       // Why exclusive: it waits out a spawn that holds the shared lease, so its PTY is registered
       // and stopped. Bounded by the deadline so repo.rm still answers; past it the stop is skipped.
       // A timed-out waiter is dequeued by the lock, so it cannot hold later spawns back.
@@ -127,6 +138,48 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
         release?.()
       }
     }
+    if (closeStructuredSessions) {
+      await this.closeStructuredSessionsForProject(repo, options.deadline)
+    }
     return { stopped }
+  }
+
+  /**
+   * Closes a removed project's native chats on this host and retires their chat tabs. They have
+   * no PTY or pane, so the terminal sweep never reaches them. Best-effort: the project is gone.
+   */
+  private async closeStructuredSessionsForProject(
+    repo: Pick<Repo, 'id' | 'connectionId' | 'executionHostId'>,
+    deadline: number | undefined
+  ): Promise<void> {
+    const { members, live } = listStructuredSessionsForProject(repo.id, {
+      resolvedConnectionId: getRepoSshConnectionId(repo)
+    })
+    const progress = createStructuredSweepProgress(live)
+    await raceDeadline(
+      closeStructuredSessionsForWorktree(progress, deadline ?? Infinity, { runtime: this }),
+      deadline
+    )
+    const liveIds = new Set(live.map((session) => session.sessionId))
+    await retireStructuredSessionTabsForWorktree(
+      [
+        ...members.filter((session) => !liveIds.has(session.sessionId)),
+        ...unclosedStructuredSessions(progress)
+      ],
+      this
+    )
+  }
+
+  /** A same-id sibling row with the same fence owns sessions this host cannot tell apart. */
+  private projectSiblingSharesFence(
+    repo: Pick<Repo, 'id' | 'connectionId' | 'executionHostId'>
+  ): boolean {
+    const connectionId = getRepoSshConnectionId(repo)
+    return (this.store?.getRepos?.() ?? []).some(
+      (row) =>
+        row.id === repo.id &&
+        getRepoExecutionHostId(row) !== getRepoExecutionHostId(repo) &&
+        getRepoSshConnectionId(row) === connectionId
+    )
   }
 }
