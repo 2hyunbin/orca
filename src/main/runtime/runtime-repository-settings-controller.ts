@@ -123,12 +123,13 @@ export class RuntimeRepositorySettingsController {
     return updated
   }
 
-  async remove(repoSelector: string): Promise<{ removed: true }> {
+  /** `repo.rm` names a selector; this desktop's own removal names the exact host row. */
+  async remove(target: string | Repo): Promise<{ removed: true }> {
     const store = this.deps.getStore()
     if (!store?.removeProjectForHost) {
       throw new Error('runtime_unavailable')
     }
-    const repo = await this.deps.resolveRepo(repoSelector)
+    const repo = typeof target === 'string' ? await this.deps.resolveRepo(target) : target
     const hostId = getRepoExecutionHostId(repo)
     assertWslMoveRepoWritable(store, repo)
     // Why here: the host owns these shells; a client only stops the workspaces it has loaded,

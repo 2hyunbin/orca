@@ -152,4 +152,35 @@ describe('project removal and native chat sessions', () => {
 
     expect(closed).toEqual(['live-chat'])
   })
+
+  it("closes a local project's chats though a paired server's residue row shares its id", async () => {
+    const localRow = store.getRepo(TEST_REPO_ID)!
+    const residue: Repo = { ...localRow, executionHostId: 'runtime:env-1' }
+    const { closed } = installHost([record('local-chat', TEST_WORKTREE_ID)])
+    const runtime = createRuntime([localRow, residue])
+
+    await runtime.removeProject(localRow)
+
+    expect(closed).toEqual(['local-chat'])
+  })
+
+  it('still asks every terminal to stop once the removal budget is spent', async () => {
+    installHost([])
+    const runtime = createRuntime([store.getRepo(TEST_REPO_ID)!])
+    runtime.registerPty('pty-1', TEST_WORKTREE_ID, null)
+    runtime.registerPty('pty-2', TEST_WORKTREE_ID, null)
+    const kill = vi.fn((_ptyId: string) => true)
+    runtime.setPtyController({
+      write: () => true,
+      kill,
+      stopAndWait: vi.fn(async () => true),
+      getForegroundProcess: async () => null
+    })
+
+    await runtime.stopTerminalsForProject(store.getRepo(TEST_REPO_ID)!, {
+      deadline: Date.now() - 1
+    })
+
+    expect(kill.mock.calls.map(([ptyId]) => ptyId).sort()).toEqual(['pty-1', 'pty-2'])
+  })
 })
