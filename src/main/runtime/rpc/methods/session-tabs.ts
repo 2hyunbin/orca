@@ -130,7 +130,9 @@ export const SESSION_TAB_METHODS = [
         subscriptionId = requestId ? `${cleanupPrefix}:${requestId}` : cleanupPrefix
         // A phone holding the workspace's session open is looking at it.
         const closePhoneSession =
-          clientKind === 'mobile' ? runtime.sidebarFacts.readAndHoldPhoneSession(worktreeId) : undefined
+          clientKind === 'mobile'
+            ? runtime.sidebarFacts.readAndHoldPhoneSession(worktreeId)
+            : undefined
         runtime.registerSubscriptionCleanup(
           subscriptionId,
           () => {

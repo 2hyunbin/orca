@@ -302,7 +302,7 @@ describe('reconnectPersistedTerminals', () => {
 
     await store.getState().reconnectPersistedTerminals()
 
-    // updateMeta should NOT have been called — we bypassed bumpWorktreeActivity
+    // Reconnecting writes no workspace metadata.
     expect(mockApi.worktrees.updateMeta).not.toHaveBeenCalled()
   })
 
