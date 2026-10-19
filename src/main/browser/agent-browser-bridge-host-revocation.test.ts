@@ -101,7 +101,7 @@ describe('AgentBrowserBridge under a host revocation', () => {
     expect(dispatchedMouseEvents(wc)).toHaveLength(0)
   })
 
-  it('closes the page proxy to a running helper click when the host is revoked', async () => {
+  it('gates the page proxy against a running helper click once the host is revoked', async () => {
     const helperCallbacks: ExecFileCallback[] = []
     execFileMock.mockImplementation(
       (_bin: string, args: string[], _opts: unknown, cb: ExecFileCallback) => {
@@ -150,5 +150,74 @@ describe('AgentBrowserBridge under a host revocation', () => {
     await expect(bridge.click('@e1', undefined, 'tab-1')).resolves.toEqual({ clicked: '@e1' })
     const proxy = CdpWsProxyMock.instances[0] as { setCommandGate: ReturnType<typeof vi.fn> }
     expect(proxy.setCommandGate).not.toHaveBeenCalled()
+  })
+
+  it('still runs a desktop-local command queued behind a host command that was revoked', async () => {
+    const wc = mockWebContents(100)
+    let answerHitTest = (): void => {}
+    wc.debugger.sendCommand.mockImplementation(async (method: string) => {
+      if (method === 'Runtime.evaluate') {
+        await new Promise<void>((resolve) => {
+          answerHitTest = resolve
+        })
+        return { result: { value: { x: 10, y: 20, adjusted: false, handled: false } } }
+      }
+      return {}
+    })
+    webContentsFromIdMock.mockReturnValue(wc)
+    const revoked = new AbortController()
+    const hostClick = runInRemoteCliBrowserScope(
+      WORKSPACE,
+      () => bridge.mouseClick(10, 20, 'left', undefined, 'tab-1', 18),
+      revoked.signal
+    )
+    hostClick.catch(() => {})
+    await vi.waitFor(() =>
+      expect(wc.debugger.sendCommand).toHaveBeenCalledWith('Runtime.evaluate', expect.anything())
+    )
+
+    const localMove = bridge.mouseMove(5, 6, undefined, 'tab-1')
+    revoked.abort()
+    answerHitTest()
+
+    await expect(hostClick).rejects.toMatchObject({ code: 'desktop_browser_bridge_unavailable' })
+    await expect(localMove).resolves.toBeDefined()
+    expect(dispatchedMouseEvents(wc)).toEqual([
+      ['Input.dispatchMouseEvent', expect.objectContaining({ type: 'mouseMoved', x: 5, y: 6 })]
+    ])
+  })
+
+  it('never hit-tests (which can activate the element) once revoked during the focus wait', async () => {
+    let grantFocus = (): void => {}
+    const release = vi.fn()
+    const guardUserFocusForAgentInput = vi.fn(
+      () =>
+        new Promise<() => void>((resolve) => {
+          grantFocus = () => resolve(release)
+        })
+    )
+    bridge = new AgentBrowserBridge(
+      mockBrowserManager(undefined, undefined, { guardUserFocusForAgentInput })
+    )
+    bridge.setActiveTab(100)
+    const wc = mockWebContents(100)
+    wc.getType.mockReturnValue('webview')
+    wc.debugger.sendCommand.mockResolvedValue({})
+    webContentsFromIdMock.mockReturnValue(wc)
+    const revoked = new AbortController()
+
+    const click = runInRemoteCliBrowserScope(
+      WORKSPACE,
+      () => bridge.mouseClick(10, 20, 'left', undefined, 'tab-1', 18),
+      revoked.signal
+    )
+    await vi.waitFor(() => expect(guardUserFocusForAgentInput).toHaveBeenCalled())
+    revoked.abort()
+    grantFocus()
+
+    await expect(click).rejects.toMatchObject({ code: 'desktop_browser_bridge_unavailable' })
+    expect(wc.debugger.sendCommand).not.toHaveBeenCalledWith('Runtime.evaluate', expect.anything())
+    expect(dispatchedMouseEvents(wc)).toHaveLength(0)
+    expect(release).toHaveBeenCalled()
   })
 })

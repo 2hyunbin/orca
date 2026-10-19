@@ -64,7 +64,7 @@ export abstract class AgentBrowserBridgeQueue extends AgentBrowserBridgeShutdown
   ): Promise<T> {
     this.assertCommandAdmission()
     const assertNotRevoked = captureRemoteCliBrowserRevocation()
-    const bridged = captureRemoteCliBrowserScope()
+    const origin = captureRemoteCliBrowserScope()
     assertNotRevoked()
     const { browserPageId: pageId } = this.resolveCommandTarget(
       worktreeId,
@@ -89,13 +89,13 @@ export abstract class AgentBrowserBridgeQueue extends AgentBrowserBridgeShutdown
               (session, target) => {
                 const gate = (): void => assertNotRevoked(target.webContentsId)
                 gate()
-                return bridged
-                  ? this.runRevocableCommand(session, gate, () => execute(session, target))
+                return origin.bridged
+                  ? this.reportRevocation(gate, () => execute(session, target))
                   : execute(session, target)
               },
               options
             )
-          return bridged ? bridged(run) : run()
+          return origin.run(run)
         },
         resolve: resolve as (value: unknown) => void,
         reject
@@ -120,24 +120,13 @@ export abstract class AgentBrowserBridgeQueue extends AgentBrowserBridgeShutdown
     return execute(sessionName, target)
   }
 
-  /**
-   * Runs a host's command so a revocation mid-command stops it: the page's CDP proxy refuses every
-   * later step the helper sends, and a step that failed that way reports the revocation.
-   */
-  private async runRevocableCommand<T>(
-    sessionName: string,
-    gate: () => void,
-    execute: () => Promise<T>
-  ): Promise<T> {
-    const proxy = this.sessions.get(sessionName)?.proxy
-    proxy?.setCommandGate(gate)
+  /** A host command whose step was refused mid-way by a revocation reports the revocation. */
+  private async reportRevocation<T>(gate: () => void, execute: () => Promise<T>): Promise<T> {
     try {
       return await execute()
     } catch (error) {
       gate()
       throw error
-    } finally {
-      proxy?.setCommandGate(null)
     }
   }
 

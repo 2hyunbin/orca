@@ -16,6 +16,7 @@ import { BrowserError } from './cdp-bridge'
 import { parseShellArgs, stripAgentBrowserTargetArgs } from './agent-browser-bridge-process'
 import { AgentBrowserBridgeInteractionCommands } from './agent-browser-bridge-interaction-commands'
 import { sendGuestCdpCommand } from './guest-cdp-command'
+import { assertRemoteCliBrowserAccess } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
 
 export abstract class AgentBrowserBridgeStateCommands extends AgentBrowserBridgeInteractionCommands {
   // ── Cookie commands ──
@@ -109,6 +110,7 @@ export abstract class AgentBrowserBridgeStateCommands extends AgentBrowserBridge
         mobile
       })
       // Why: BrowserView's compositor can keep the old host size after a metrics-only resize, cropping remote screencast clients.
+      assertRemoteCliBrowserAccess(target.webContentsId)
       await sendGuestCdpCommand(wc, 'Emulation.setVisibleSize', { width, height }).catch(() => {})
 
       return {

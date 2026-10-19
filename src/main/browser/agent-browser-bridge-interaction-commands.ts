@@ -205,12 +205,28 @@ export abstract class AgentBrowserBridgeInteractionCommands extends AgentBrowser
         let releaseDebugger = (): void => {}
         try {
           releaseDebugger = acquireElectronDebugger(wc).release
-          const send: GuestCdpSender = (method, params, sessionId) =>
-            sendGuestCdpCommand(wc, method, params, sessionId)
-          const guardFocus = (): Promise<() => void> =>
-            this.browserManager.guardUserFocusForAgentInput(target.webContentsId)
-          // Why each step: a host's access can be revoked while an earlier await is pending.
-          assertRemoteCliBrowserAccess(target.webContentsId)
+          // Why around every await: a host's access can be revoked while one is pending, and
+          // key delivery runs further input and edit commands after each.
+          const assertAccess = (): void => assertRemoteCliBrowserAccess(target.webContentsId)
+          const send: GuestCdpSender = async (method, params, sessionId) => {
+            assertAccess()
+            const result = await sendGuestCdpCommand(wc, method, params, sessionId)
+            assertAccess()
+            return result
+          }
+          const guardFocus = async (): Promise<() => void> => {
+            const release = await this.browserManager.guardUserFocusForAgentInput(
+              target.webContentsId
+            )
+            try {
+              assertAccess()
+            } catch (error) {
+              release()
+              throw error
+            }
+            return release
+          }
+          assertAccess()
           await dispatchPageKeyEvent(
             wc,
             {
@@ -223,7 +239,7 @@ export abstract class AgentBrowserBridgeInteractionCommands extends AgentBrowser
             send,
             guardFocus
           )
-          assertRemoteCliBrowserAccess(target.webContentsId)
+          assertAccess()
           await dispatchPageKeyEvent(
             wc,
             {

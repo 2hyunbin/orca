@@ -40,6 +40,9 @@ export abstract class AgentBrowserBridgeMouseCommands extends AgentBrowserBridge
         let releaseFocusGuard = (): void => {}
         try {
           releaseFocusGuard = await this.focusPageForPress(wc, target.webContentsId)
+          // Why each step: a host's access can be revoked while an earlier await is pending, and
+          // the hit test below may itself activate the element.
+          assertRemoteCliBrowserAccess(target.webContentsId)
           const point =
             cdpButton === 'left'
               ? // Why: DOM activation can't carry Cmd/Ctrl/Alt/Shift, so modifier clicks use the adjusted point and let CDP dispatch the event.
@@ -48,7 +51,6 @@ export abstract class AgentBrowserBridgeMouseCommands extends AgentBrowserBridge
           // Why: land the tap as one atomic op — separate move/down/up CLI calls visibly hover and can miss small controls.
           // Why: mobile-emulated BrowserViews can ignore CDP mouse clicks, so the runtime may already have activated DOM controls.
           if (!point.handled) {
-            // Why each step: a host's access can be revoked while an earlier await is pending.
             assertRemoteCliBrowserAccess(target.webContentsId)
             await wc.debugger.sendCommand('Input.dispatchMouseEvent', {
               type: 'mousePressed',
