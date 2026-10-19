@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { buildPosixStdoutFence } from '../../shared/posix-stdout-fence'
 import type { NodeRuntimeTarget } from '../../shared/node-runtime-pin'
 import { initialOrcadActivationAdmissionCommand } from '../ssh/orcad-initial-activation-admission'
 import {
@@ -94,14 +95,14 @@ const POSIX_HOST_OP_BYTE_BUDGET = 6 * 1024
 // capture/restore/clear ops leave when they move onto the Node host script (R4-10b, decision D-J);
 // install-lock steal and anything else that runs before a verified Node must shrink in shell.
 const OVER_BUDGET_CEILINGS: Readonly<Record<string, number>> = {
-  captureOrcadStateSnapshotCommand: 15_152,
-  restoreOrcadStateSnapshotCommand: 20_627,
-  clearOrcadStateSnapshotMembersCommand: 9_000,
-  tryStealInstallLockCommand: 8_847,
-  serializedStateMutationCommand: 6_354,
-  orcadLaunchCommand: 8_006,
-  'orcadLaunchCommand (WSL setsid)': 6_323,
-  probeRemoteInstallCompleteCommand: 12_014
+  captureOrcadStateSnapshotCommand: 15_327,
+  restoreOrcadStateSnapshotCommand: 20_805,
+  clearOrcadStateSnapshotMembersCommand: 9_175,
+  tryStealInstallLockCommand: 9_022,
+  serializedStateMutationCommand: 6_529,
+  orcadLaunchCommand: 8_181,
+  'orcadLaunchCommand (WSL setsid)': 6_498,
+  probeRemoteInstallCompleteCommand: 12_189
 }
 
 type HostCase = { host: RemoteHostPlatform; target: NodeRuntimeTarget; nodePath: string }
@@ -270,13 +271,19 @@ const NOT_POSIX_HOST_OPS: Readonly<Record<string, string>> = {
   powerShellCommand: 'builds the Windows PowerShell exec line',
   spawnProxyCommand: 'spawns a local ProxyCommand process',
   buildSshLoginShellCommand: 'wraps a caller-built op in the login shell',
-  isSnapshotCaptureCommand: 'a predicate over a command, not a builder'
+  isSnapshotCaptureCommand: 'a predicate over a command, not a builder',
+  execCommand: 'the exec entry point every measured op goes through',
+  execHostCommand: 'the exec entry point every measured op goes through',
+  spawnSystemSshCommand: 'spawns the local ssh client'
 }
 
-// Top level only: the legacy relay under ssh/legacy-relay retires 2027-01-15.
+// Not ssh/legacy-relay: the legacy relay retires 2027-01-15.
 const SCANNED_DIRS = [
   ...['host-state', 'install', 'lifecycle', 'activation'].map((dir) => join(__dirname, dir)),
-  join(__dirname, '..', 'ssh')
+  join(__dirname, '..', 'ssh'),
+  ...['system-transport', 'connection', 'remote-exec'].map((dir) =>
+    join(__dirname, '..', 'ssh', dir)
+  )
 ]
 
 function exportedCommandBuilders(): string[] {
@@ -307,9 +314,13 @@ async function sentBytes(build: (c: HostCase) => string): Promise<number> {
   let max = 0
   for (const c of HOST_CASES) {
     const command = await runWithOrcadFence(fence, async () => build(c))
-    const sent = wrapRemoteCommandForPosixShell(`${posixOrcadFenceGuard(fence)} ${command}`, {
-      compress: false
-    })
+    // execCommand frames stdout before the transport wraps; 16 chars is the longest real nonce.
+    const framed = buildPosixStdoutFence(
+      `${posixOrcadFenceGuard(fence)} ${command}`,
+      'SSH',
+      'z'.repeat(16)
+    ).command
+    const sent = wrapRemoteCommandForPosixShell(framed, { compress: false })
     max = Math.max(max, Buffer.byteLength(sent, 'utf8'))
   }
   return max
