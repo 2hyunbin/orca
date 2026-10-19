@@ -174,10 +174,10 @@ describe('daemon PTY upgrade adoption', () => {
     const notify = vi.spyOn(DaemonClient.prototype, 'notify')
     const finished = vi.fn()
     const tracker = createTerminalTitleTracker({ onCommandFinished: finished })
-    let rawChars = 0
-    const unsubscribe = router.onData(({ id, data, sequenceChars }) => {
+    let output = ''
+    const unsubscribe = router.onData(({ id, data }) => {
       if (id === original.id) {
-        rawChars += sequenceChars ?? data.length
+        output += data
         tracker.handleChunk(data)
       }
     })
@@ -191,8 +191,11 @@ describe('daemon PTY upgrade adoption', () => {
         join(__dirname, '../runtime/__fixtures__/omp-user-bubble-osc133-zone.txt'),
         'utf8'
       )
+      // The host answers and removes the fixture's background-colour query before delivery.
+      const expectedOutput = transcript.replaceAll('\x1b]11;?\x07', '')
       legacySubprocesses[0]?.emitData(transcript)
-      await waitFor(() => rawChars >= transcript.length)
+      await waitFor(() => output.length >= expectedOutput.length)
+      expect(output).toBe(expectedOutput)
       expect(finished).not.toHaveBeenCalled()
       legacySubprocesses[0]?.emitData('\x1b]133;D;0\x07\x1b]133;A\x07$ ')
       await waitFor(() => finished.mock.calls.length === 1)
