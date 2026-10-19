@@ -83,8 +83,8 @@ async function followLaunchedServerPort(
   try {
     await rebuildOrcadManagedTunnel(userDataPath, environmentId)
   } catch (error) {
-    // Why not fail: the server already launched, and the rebuild dropped the stale forward, so
-    // the next connect forwards to the bound port.
+    // Why not fail: the server already launched; a rebuild that got past its drop leaves no
+    // forward, so the next connect forwards to the bound port.
     console.warn('[ssh] Could not forward to the relaunched managed Orca server:', error)
   }
 }
