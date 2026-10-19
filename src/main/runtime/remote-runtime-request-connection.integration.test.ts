@@ -1,4 +1,5 @@
 import { pairedRuntimeConnectionFromOffer } from '../../shared/paired-runtime-connection'
+import { createSidebarFactsDouble } from './rpc/sidebar-facts-double.test-fixture'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -46,6 +47,7 @@ describe('remote runtime request connection integration', () => {
       ]
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: repo.list over the real socket only calls the runtime methods defined below.
       const runtime = {
+        sidebarFacts: createSidebarFactsDouble(),
         configureNotificationDismissalStore: () => {},
         getRuntimeId: () => 'fetch-runtime-test',
         getStartedAt: () => 1,
@@ -120,6 +122,7 @@ describe('remote runtime request connection integration', () => {
       const clientEventListeners = new Set<(event: RuntimeClientEvent) => void>()
       const subscriptionCleanups = new Map<string, () => void>()
       const runtime = {
+        sidebarFacts: createSidebarFactsDouble(),
         configureNotificationDismissalStore: () => {},
         getRuntimeId: () => 'events-runtime-test',
         getStartedAt: () => 1,
@@ -288,6 +291,7 @@ describe('remote runtime request connection integration', () => {
         }
       }
       const runtime = {
+        sidebarFacts: createSidebarFactsDouble(),
         configureNotificationDismissalStore: () => {},
         getRuntimeId: () => 'remote-sleep-runtime-test',
         getStartedAt: () => 1,
@@ -518,6 +522,7 @@ describe('remote runtime request connection integration', () => {
       }
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fake carries only the surface the shared-control and status paths under test read.
       const runtime = {
+        sidebarFacts: createSidebarFactsDouble(),
         configureNotificationDismissalStore: () => {},
         getRuntimeId: () => 'shared-runtime-test',
         getStartedAt: () => 1,

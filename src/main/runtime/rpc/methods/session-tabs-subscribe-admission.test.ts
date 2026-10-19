@@ -7,7 +7,7 @@ import { RpcDispatcher } from '../dispatcher'
 import type { RpcRequest } from '../core'
 import { SESSION_TAB_METHODS } from './session-tabs'
 import { visibleSnapshot } from './session-tabs-snapshot.test-fixture'
-import { createSidebarFactsDouble } from '../sidebar-facts-test-double'
+import { createSidebarFactsDouble } from '../sidebar-facts-double.test-fixture'
 
 const CONNECTION = 'conn-1'
 const KEY = (requestId: string): string => `session.tabs:${CONNECTION}:wt-1:${requestId}`

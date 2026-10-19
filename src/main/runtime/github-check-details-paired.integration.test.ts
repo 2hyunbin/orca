@@ -1,4 +1,4 @@
-import { createSidebarFactsDouble } from './rpc/sidebar-facts-test-double'
+import { createSidebarFactsDouble } from './rpc/sidebar-facts-double.test-fixture'
 import './rpc/unused-default-rpc-methods.test-fixture'
 import type { ChildProcess, SpawnOptions } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'

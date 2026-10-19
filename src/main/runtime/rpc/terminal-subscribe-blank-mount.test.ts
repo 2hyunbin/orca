@@ -1,5 +1,5 @@
 import './unused-default-rpc-methods.test-fixture'
-import { runtimeDoubleWithSidebarFacts } from './sidebar-facts-test-double'
+import { runtimeDoubleWithSidebarFacts } from './sidebar-facts-double.test-fixture'
 /** STA-1840 regression: missing mobile terminal models request an exact renderer tab mount. */
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from './dispatcher'

@@ -11,7 +11,7 @@ import {
   encodeTerminalStreamFrame,
   encodeTerminalStreamJson
 } from '../../../shared/terminal-stream-protocol'
-import { createSidebarFactsDouble } from './sidebar-facts-test-double'
+import { createSidebarFactsDouble } from './sidebar-facts-double.test-fixture'
 
 export const SET_OUTPUT_PAUSED_OPCODE = 16 as TerminalStreamOpcode
 export const WRITE_UNAVAILABLE_OPCODE = 17 as TerminalStreamOpcode

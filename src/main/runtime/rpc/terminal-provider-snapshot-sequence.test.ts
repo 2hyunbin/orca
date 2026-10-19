@@ -10,7 +10,7 @@ import {
   decodeTerminalStreamFrame,
   decodeTerminalStreamText
 } from '../../../shared/terminal-stream-protocol'
-import { runtimeDoubleWithSidebarFacts } from './sidebar-facts-test-double'
+import { runtimeDoubleWithSidebarFacts } from './sidebar-facts-double.test-fixture'
 
 const request: RpcRequest = {
   id: 'req-provider-sequence',

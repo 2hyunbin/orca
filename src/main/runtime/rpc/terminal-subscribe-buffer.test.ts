@@ -12,7 +12,7 @@ import {
   decodeTerminalStreamJson,
   decodeTerminalStreamText
 } from '../../../shared/terminal-stream-protocol'
-import { runtimeDoubleWithSidebarFacts } from './sidebar-facts-test-double'
+import { runtimeDoubleWithSidebarFacts } from './sidebar-facts-double.test-fixture'
 
 function stubRuntime(overrides: Partial<OrcaRuntimeService> = {}): OrcaRuntimeService {
   const registry = createSubscriptionRegistryDouble()

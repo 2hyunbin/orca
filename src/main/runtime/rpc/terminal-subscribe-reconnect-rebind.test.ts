@@ -9,7 +9,7 @@ import {
   decodeTerminalStreamFrame
 } from '../../../shared/terminal-stream-protocol'
 import { createSubscriptionRegistryDouble } from './subscription-registry-test-double'
-import { runtimeDoubleWithSidebarFacts } from './sidebar-facts-test-double'
+import { runtimeDoubleWithSidebarFacts } from './sidebar-facts-double.test-fixture'
 
 const makeRequest = (params: unknown): RpcRequest => ({
   id: 'req-1',

@@ -6,7 +6,7 @@ import type { RpcRequest } from './core'
 import { RpcDispatcher } from './dispatcher'
 import { TERMINAL_METHODS } from './methods/terminal'
 import { createSubscriptionRegistryDouble } from './subscription-registry-test-double'
-import { createSidebarFactsDouble } from './sidebar-facts-test-double'
+import { createSidebarFactsDouble } from './sidebar-facts-double.test-fixture'
 
 const SUBSCRIPTION_ID = 'terminal-1:phone-1'
 

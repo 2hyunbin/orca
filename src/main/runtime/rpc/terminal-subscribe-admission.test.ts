@@ -6,7 +6,7 @@ import { RpcDispatcher } from './dispatcher'
 import { TERMINAL_METHODS } from './methods/terminal'
 import { TerminalUnsubscribe } from '../../../shared/rpc-contract/terminal-viewport-schemas-params'
 import { createSubscriptionRegistryDouble } from './subscription-registry-test-double'
-import { createSidebarFactsDouble } from './sidebar-facts-test-double'
+import { createSidebarFactsDouble } from './sidebar-facts-double.test-fixture'
 
 const PTY_ID = 'pty-1'
 const SUBSCRIPTION_ID = 'terminal-1:phone-1'

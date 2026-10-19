@@ -1,4 +1,5 @@
 import { pairedRuntimeConnectionFromOffer } from '../../shared/paired-runtime-connection'
+import { createSidebarFactsDouble } from './rpc/sidebar-facts-double.test-fixture'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -45,6 +46,7 @@ it(
       ]
     })
     const runtime = {
+      sidebarFacts: createSidebarFactsDouble(),
       configureNotificationDismissalStore: () => {},
       getRuntimeId: () => 'close-intent-runtime-test',
       getStartedAt: () => 1,

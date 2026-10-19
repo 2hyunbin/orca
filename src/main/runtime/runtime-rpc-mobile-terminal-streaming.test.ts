@@ -1,4 +1,5 @@
 import { pairedRuntimeConnectionFromOffer } from '../../shared/paired-runtime-connection'
+import { createSidebarFactsDouble } from './rpc/sidebar-facts-double.test-fixture'
 import { mkdtempSync } from 'node:fs'
 import { rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -408,6 +409,7 @@ describe('OrcaRuntimeRpcServer', () => {
     // activateRecentPtyPathCandidateTracking and onReady must not throw.
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the proxy fake carries only the surface the auth and status paths under test read.
     const runtimeProxy = {
+      sidebarFacts: createSidebarFactsDouble(),
       configureNotificationDismissalStore: () => {},
       getRuntimeId: () => 'proxy-runtime-test',
       getStartedAt: () => 1,

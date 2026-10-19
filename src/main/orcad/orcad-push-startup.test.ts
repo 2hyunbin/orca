@@ -1,4 +1,4 @@
-import { createSidebarFactsDouble } from '../runtime/rpc/sidebar-facts-test-double'
+import { createSidebarFactsDouble } from '../runtime/rpc/sidebar-facts-double.test-fixture'
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

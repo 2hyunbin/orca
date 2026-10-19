@@ -16,7 +16,7 @@ import type { RpcRequest, RpcResponse } from '../core'
 import { RpcDispatcher } from '../dispatcher'
 import { AGENT_SESSION_METHODS } from './agent-session'
 import { TERMINAL_METHODS } from './terminal'
-import { createSidebarFactsDouble } from '../sidebar-facts-test-double'
+import { createSidebarFactsDouble } from '../sidebar-facts-double.test-fixture'
 
 function request(method: string, params: unknown): RpcRequest {
   return { id: 'request-1', authToken: 'token', method, params }
