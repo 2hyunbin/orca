@@ -24,7 +24,7 @@ export function isAgentChatPermissionMode(value: unknown): value is AgentChatPer
 /** The modes one agent's chats offer. */
 export type AgentChatPermissionModeSupport = {
   modes: readonly AgentChatPermissionMode[]
-  /** `auto` runs only on a model the agent's listing says supports it. */
+  /** `auto` doesn't run on a model the agent's listing shows without it. */
   autoNeedsModelSupport?: true
 }
 
@@ -70,18 +70,40 @@ export function savedChatPermissionMode(
   return support.modes.find((mode) => mode === intent) ?? 'ask'
 }
 
-/** The one rule for whether the chat's model runs `auto`: its listed row, or the listed CLI default
- *  when it names none. The host launches with it and the menu offers with it. */
-export function chatModelSupportsAutoMode(
-  models: readonly { id: string; isDefault?: boolean; supportsAutoMode?: boolean }[],
+type ListedChatModel = { id: string; isDefault?: boolean; supportsAutoMode?: boolean }
+
+/** The chat's model's listed row, or the listed CLI default when it names none. */
+function listedChatModelRow(
+  models: readonly ListedChatModel[],
   model: string | null | undefined
-): boolean {
-  const row = models.find((entry) =>
+): ListedChatModel | undefined {
+  return models.find((entry) =>
     model === undefined || model === null || model === 'default'
       ? entry.isDefault === true
       : entry.id === model
   )
-  return row?.supportsAutoMode === true
+}
+
+/** Whether the menu offers `auto`: the chat's model is listed as running it. */
+export function chatModelSupportsAutoMode(
+  models: readonly ListedChatModel[],
+  model: string | null | undefined
+): boolean {
+  return listedChatModelRow(models, model)?.supportsAutoMode === true
+}
+
+/** Whether the listing shows the chat's model can't run `auto`; a listing that can't say is not
+ *  evidence. Claude marks only the models that run it, so a listing marking none says nothing. */
+export function chatModelListedWithoutAutoMode(
+  models: readonly ListedChatModel[],
+  model: string | null | undefined
+): boolean {
+  const row = listedChatModelRow(models, model)
+  return (
+    row !== undefined &&
+    row.supportsAutoMode !== true &&
+    models.some((entry) => entry.supportsAutoMode === true)
+  )
 }
 
 /** Whether the mode a chat runs depends on its model's listed `auto` support. */
@@ -94,14 +116,14 @@ export function chatPermissionModeNeedsModelSupport(
   )
 }
 
-/** Saved choice, with `auto` on a model not listed for it read as Ask; never written back. */
+/** Saved choice, with `auto` on a model listed without it read as Ask; never written back. */
 export function effectiveChatPermissionMode(
   support: AgentChatPermissionModeSupport,
   intent: unknown,
-  autoSupported: boolean
+  listedWithoutAuto: boolean
 ): AgentChatPermissionMode {
   const mode = savedChatPermissionMode(support, intent)
-  return mode === 'auto' && support.autoNeedsModelSupport && !autoSupported ? 'ask' : mode
+  return mode === 'auto' && support.autoNeedsModelSupport && listedWithoutAuto ? 'ask' : mode
 }
 
 export function offeredChatPermissionModes(

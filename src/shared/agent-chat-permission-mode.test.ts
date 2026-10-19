@@ -42,15 +42,15 @@ describe('agent chat permission modes', () => {
 })
 
 describe('the mode a chat runs', () => {
-  it('runs Claude auto only on a model listed as supporting it', () => {
-    expect(effectiveChatPermissionMode(CLAUDE_CHAT_PERMISSION_MODES, 'auto', true)).toBe('auto')
-    expect(effectiveChatPermissionMode(CLAUDE_CHAT_PERMISSION_MODES, 'auto', false)).toBe('ask')
+  it('runs Claude auto unless its model is listed without it', () => {
+    expect(effectiveChatPermissionMode(CLAUDE_CHAT_PERMISSION_MODES, 'auto', false)).toBe('auto')
+    expect(effectiveChatPermissionMode(CLAUDE_CHAT_PERMISSION_MODES, 'auto', true)).toBe('ask')
     expect(chatPermissionModeNeedsModelSupport(CLAUDE_CHAT_PERMISSION_MODES, 'auto')).toBe(true)
     expect(chatPermissionModeNeedsModelSupport(CLAUDE_CHAT_PERMISSION_MODES, 'ask')).toBe(false)
   })
 
   it('runs Codex auto on any model', () => {
-    expect(effectiveChatPermissionMode(CODEX_CHAT_PERMISSION_MODES, 'auto', false)).toBe('auto')
+    expect(effectiveChatPermissionMode(CODEX_CHAT_PERMISSION_MODES, 'auto', true)).toBe('auto')
     expect(chatPermissionModeNeedsModelSupport(CODEX_CHAT_PERMISSION_MODES, 'auto')).toBe(false)
   })
 

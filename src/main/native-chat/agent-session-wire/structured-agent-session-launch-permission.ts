@@ -3,7 +3,7 @@
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import {
   agentChatPermissionModes,
-  chatModelSupportsAutoMode,
+  chatModelListedWithoutAutoMode,
   chatPermissionModeNeedsModelSupport,
   effectiveChatPermissionMode,
   type AgentChatPermissionMode
@@ -11,8 +11,9 @@ import {
 import type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
 
 /** Saved catalog only, so a start never waits on a listing; for the chat's own folder, as its
- *  options read names its default. */
-async function listedAutoModeSupport(
+ *  options read names its default. A missing catalog keeps the saved choice: Claude itself starts
+ *  a model that can't run `auto` in its default mode. */
+async function listedWithoutAutoMode(
   catalog: StructuredAgentSessionHostDeps['modelCatalog'],
   record: AgentSessionRecord
 ): Promise<boolean> {
@@ -28,7 +29,7 @@ async function listedAutoModeSupport(
     listing !== null &&
     listing !== undefined &&
     listing.origin !== 'unknown' &&
-    chatModelSupportsAutoMode(listing.models, record.options?.model)
+    chatModelListedWithoutAutoMode(listing.models, record.options?.model)
   )
 }
 
@@ -42,8 +43,8 @@ export async function structuredAgentSessionLaunchPermission(
     return null
   }
   const intent = record.permissionMode
-  const autoSupported =
+  const listedWithoutAuto =
     chatPermissionModeNeedsModelSupport(support, intent) &&
-    (await listedAutoModeSupport(deps.modelCatalog, record))
-  return effectiveChatPermissionMode(support, intent, autoSupported)
+    (await listedWithoutAutoMode(deps.modelCatalog, record))
+  return effectiveChatPermissionMode(support, intent, listedWithoutAuto)
 }

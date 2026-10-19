@@ -326,17 +326,19 @@ describe('retireOutgrownStructuredAgentSessionChild', () => {
         (await retire({ child: childAt({ permissionMode: launched }) }, {}, undefined, current))
           .stopAgent.mock.calls.length > 0
 
-      it('restarts Full access or Accept edits into Ask when auto is not confirmed', async () => {
-        const unconfirmed = [
-          launch({ model: 'haiku', permissionMode: 'auto' }),
-          launch({ permissionMode: 'auto' }, [{ id: 'opus[1m]', isDefault: true }])
-        ]
-        for (const autoPick of unconfirmed) {
-          await expect(autoPick()).resolves.toBe('ask')
-          expect(await stoppedAfterLaunch('full-access', autoPick)).toBe(true)
-          expect(await stoppedAfterLaunch('accept-edits', autoPick)).toBe(true)
-          expect(await stoppedAfterLaunch('ask', autoPick)).toBe(false)
-        }
+      it('restarts Full access or Accept edits into Ask on a model listed without auto', async () => {
+        const autoPick = launch({ model: 'haiku', permissionMode: 'auto' })
+        await expect(autoPick()).resolves.toBe('ask')
+        expect(await stoppedAfterLaunch('full-access', autoPick)).toBe(true)
+        expect(await stoppedAfterLaunch('accept-edits', autoPick)).toBe(true)
+        expect(await stoppedAfterLaunch('ask', autoPick)).toBe(false)
+      })
+
+      it('restarts into auto once the model is no longer listed without it', async () => {
+        const onHaiku = await launch({ model: 'haiku', permissionMode: 'auto' })()
+        const onSonnet = launch({ model: 'sonnet', permissionMode: 'auto' })
+        expect(await stoppedAfterLaunch(onHaiku!, onSonnet)).toBe(true)
+        expect(await stoppedAfterLaunch((await onSonnet())!, onSonnet)).toBe(false)
       })
 
       it('never restarts a child it just started, from an alias or a resolved id', async () => {
@@ -348,21 +350,13 @@ describe('retireOutgrownStructuredAgentSessionChild', () => {
           { model: 'haiku', permissionMode: 'auto' },
           { model: 'claude-opus-5-5[1m]', permissionMode: 'auto' }
         ]
-        const runsAuto = [true, true, true, true, false, false]
+        const runsAuto = [true, true, true, true, false, true]
         for (const [index, options] of records.entries()) {
           const current = launch(options)
           const launched = await current()
           expect(launched).toBe(runsAuto[index] ? 'auto' : 'ask')
           expect(await stoppedAfterLaunch(launched!, current)).toBe(false)
         }
-      })
-
-      // A resolved id launches Ask; the start reports the listed alias, so one restart reaches auto.
-      it('settles after one restart once a resolved id is reported as its alias', async () => {
-        const first = await launch({ model: 'claude-opus-5-5[1m]', permissionMode: 'auto' })()
-        const reported = launch({ model: 'opus[1m]', permissionMode: 'auto' })
-        expect(await stoppedAfterLaunch(first!, reported)).toBe(true)
-        expect(await stoppedAfterLaunch((await reported())!, reported)).toBe(false)
       })
     })
 

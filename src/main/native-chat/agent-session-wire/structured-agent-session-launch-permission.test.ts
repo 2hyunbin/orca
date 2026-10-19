@@ -1,5 +1,5 @@
-// The mode a start launches with: Claude's Approve for me needs its model listed for it in the saved
-// catalog; anything the catalog cannot confirm launches Ask.
+// The mode a start launches with: Claude's Approve for me drops to Ask only on a model the saved
+// catalog lists without it; a catalog that can't say keeps the saved choice.
 
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
@@ -78,29 +78,31 @@ describe('the permission mode a chat starts with', () => {
     expect(supported.read).toHaveBeenCalledWith(expect.objectContaining({ savedOnly: true }))
   })
 
-  it('matches a chat with no model to the listed default', async () => {
-    await expect(
-      launchPermission(
-        'claude',
-        { permissionMode: 'auto' },
-        listing([
-          { id: 'sonnet', isDefault: true, supportsAutoMode: false },
-          { id: 'opus', supportsAutoMode: true }
-        ])
-      ).result
-    ).resolves.toBe('ask')
+  it('asks on a model listed without auto, or a chat with no model whose listed default lacks it', async () => {
+    const rows = listing([
+      { id: 'sonnet', isDefault: true },
+      { id: 'opus', supportsAutoMode: true },
+      { id: 'haiku' }
+    ])
+    for (const options of [{ model: 'haiku' }, {}]) {
+      await expect(
+        launchPermission('claude', { permissionMode: 'auto', ...options }, rows).result
+      ).resolves.toBe('ask')
+    }
   })
 
-  it('asks when the catalog cannot confirm the model runs auto', async () => {
+  // #30032: a catalog saved under another account home read as none, and the chat relaunched asking.
+  it('keeps the saved auto when the catalog cannot say whether the model runs it', async () => {
     for (const answer of [
       { origin: 'unknown' } as const,
-      listing([{ id: 'opus' }]),
+      new Error('catalog unavailable'),
       listing([{ id: 'sonnet', supportsAutoMode: true }]),
-      new Error('catalog unavailable')
+      // A CLI that doesn't mark auto support at all.
+      listing([{ id: 'opus' }, { id: 'sonnet' }])
     ]) {
       await expect(
         launchPermission('claude', { permissionMode: 'auto', model: 'opus' }, answer).result
-      ).resolves.toBe('ask')
+      ).resolves.toBe('auto')
     }
   })
 
