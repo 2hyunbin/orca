@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { getConnectionIdForFileFromState } from '@/lib/connection-owner-resolution'
 import { runtimeEnvironmentIdWithLegacyFallbackUnlessTwin } from '@/lib/worktree-runtime-owner'
+import { resolveOwner } from '@/lib/resolve-owner'
 import { detectLanguage } from '@/lib/language-detect'
 import {
   buildWorkspaceFileContextForFile,
@@ -76,7 +77,11 @@ export function openDocPreviewExternally(document: DocPreviewDocument): void {
   // preview really reaches all three. Only a document proven to live on this machine goes to the
   // OS; a resolved remote owner downloads first, and no owner at all is refused below.
   const ownedByThisMachine =
-    connectionId === null && runtimeEnvironmentId === null && worktreeRoot !== null
+    connectionId === null &&
+    runtimeEnvironmentId === null &&
+    worktreeRoot !== null &&
+    // Why: a twin reads as "no server", which is not proof this machine holds the file.
+    resolveOwner(state, { workspaceId: document.worktreeId }).kind !== 'ambiguous'
   if (ownedByThisMachine && canClientOsOpenWorkspaceFile(fileContext)) {
     void window.api.shell.openFilePath(document.filePath, LOCAL_EXECUTION_HOST_ID)
     return

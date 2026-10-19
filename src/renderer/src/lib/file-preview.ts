@@ -28,7 +28,7 @@ export type PreviewableLanguage = 'html'
 export const REMOTE_FILE_BROWSER_UNSUPPORTED_MESSAGE =
   'Open in Orca Browser is only available for local files.'
 export const TWIN_FILE_BROWSER_UNSUPPORTED_MESSAGE =
-  'Open in Orca Browser is unavailable because this project is on more than one host, so Orca cannot tell which copy to open.'
+  'This project is on more than one host, so Orca cannot tell which copy to open.'
 
 /** Localized lazily: a module constant would freeze the language at import time. */
 function pairedOutsideWorktreeMessage(): string {
@@ -57,6 +57,14 @@ export function getWorkspaceFilePreviewPlan(
   worktreeId: string,
   filePath: string
 ): WorkspaceFilePreviewPlan {
+  // Why: a twin reads as "no server" below, which would open this machine's copy of the path.
+  if (resolveOwner(state, { workspaceId: worktreeId }).kind === 'ambiguous') {
+    return {
+      status: 'unsupported',
+      message: TWIN_FILE_BROWSER_UNSUPPORTED_MESSAGE,
+      reason: 'no-channel'
+    }
+  }
   const connectionId = getConnectionIdForFileFromState(state, worktreeId, filePath)
   if (connectionId === undefined) {
     // Why: an unresolved owner can't pick a channel — reading it locally would hand a

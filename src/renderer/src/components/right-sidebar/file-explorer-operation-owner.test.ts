@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { FolderWorkspace } from '../../../../shared/folder-workspace-types'
 import type { ProjectGroup } from '../../../../shared/project-group-types'
+import { getDefaultSettings } from '../../../../shared/constants'
 import { getFileExplorerOperationOwnerFromState } from './file-explorer-operation-owner'
 
 vi.mock('@/store', () => ({ useAppStore: { getState: vi.fn() } }))
@@ -80,7 +81,7 @@ describe('getFileExplorerOperationOwnerFromState', () => {
 
   it('writes a server-owned folder through that server, and an unstamped one never through focus', () => {
     const state = (folderWorkspaces: FolderWorkspace[], projectGroups: ProjectGroup[]) => ({
-      settings: { activeRuntimeEnvironmentId: 'focused-env' },
+      settings: { ...getDefaultSettings('/home'), activeRuntimeEnvironmentId: 'focused-env' },
       runtimeEnvironments: [{ id: 'focused-env' }, { id: 'env-a' }],
       runtimeEnvironmentCatalogHydrated: true,
       repos: [],

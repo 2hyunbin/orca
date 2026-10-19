@@ -4,11 +4,13 @@ import {
   canShowWorkspaceFileBrowserAction,
   convertBrowserPageToWorkspaceDoc,
   getWorkspaceFileBrowserOpenTarget,
+  getWorkspaceFilePreviewPlan,
   TWIN_FILE_BROWSER_UNSUPPORTED_MESSAGE,
   openFileInBrowserTab,
   openFilePreviewToSide
 } from './file-preview'
 import { folderWorkspaceKey } from '../../../shared/workspace-scope'
+import { useAppStore } from '@/store'
 
 function browserActionState(connectionId: string | null = null): never {
   return {
@@ -517,6 +519,18 @@ describe('getWorkspaceFileBrowserOpenTarget', () => {
       status: 'unsupported',
       reason: 'remote-worktree',
       message: TWIN_FILE_BROWSER_UNSUPPORTED_MESSAGE
+    })
+    mocks.twin = false
+  })
+
+  it('plans no local browser tab for a project two hosts publish', () => {
+    mocks.twin = true
+    expect(
+      getWorkspaceFilePreviewPlan(useAppStore.getState(), 'wt-1', '/srv/repo/report.html')
+    ).toEqual({
+      status: 'unsupported',
+      message: TWIN_FILE_BROWSER_UNSUPPORTED_MESSAGE,
+      reason: 'no-channel'
     })
     mocks.twin = false
   })
