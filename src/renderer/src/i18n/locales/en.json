@@ -409,7 +409,10 @@
         "effort": "Effort",
         "effortDefault": "Default",
         "argsTerminalOnly": "Used only when the agent opens in a terminal; chats ignore them.",
-        "savedModel": "Model from Settings: {{value0}}"
+        "savedModel": "Model from Settings: {{value0}}",
+        "permissionsDefault": "Same as new chats",
+        "chatOptions": "Chat options",
+        "savedChatOptions": "Chat options from Settings: {{value0}}"
       }
     }
   },

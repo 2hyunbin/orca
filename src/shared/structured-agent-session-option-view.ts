@@ -23,7 +23,8 @@ function catalogListsSeedModel(
  * derived on every read, never written into the record. A model the list lacks is kept: a list
  * is no evidence the chat's own model cannot run.
  *
- * The permission mode reads its own way: the held pick, else what the host stated, else the seed.
+ * The permission mode reads its own way: the held pick, else what the host stated, else the
+ * launch's explicit mode, else the seed.
  */
 export function structuredAgentSessionOptionView(
   state: StructuredAgentSessionOptionState,
@@ -32,7 +33,8 @@ export function structuredAgentSessionOptionView(
   explicit?: Readonly<Record<string, string>>
 ): StructuredAgentSessionOptionState {
   const requested = structuredLaunchRequestedOptions({ explicit, seed, held })
-  if (requested) {
+  // Only a requested model replaces the shown selection; a permission mode alone overlays it.
+  if (requested?.model !== undefined) {
     return commitStructuredAgentSessionOptionValues(
       { ...state, record: { agent: state.record.agent, valuesByModel: {} } },
       requested
@@ -41,7 +43,11 @@ export function structuredAgentSessionOptionView(
   const { [AGENT_CHAT_PERMISSION_MODE_OPTION_ID]: heldPermission, ...heldSelection } = held
   const view = modelOptionView(state, seed, heldSelection)
   const permissionMode =
-    heldPermission ?? state.permissionMode ?? seed?.[AGENT_CHAT_PERMISSION_MODE_OPTION_ID] ?? null
+    heldPermission ??
+    state.permissionMode ??
+    requested?.[AGENT_CHAT_PERMISSION_MODE_OPTION_ID] ??
+    seed?.[AGENT_CHAT_PERMISSION_MODE_OPTION_ID] ??
+    null
   return view.permissionMode === permissionMode ? view : { ...view, permissionMode }
 }
 

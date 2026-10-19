@@ -27,7 +27,7 @@ export function useStructuredAgentSessionSendOptions(
       explicit: selection?.explicit ?? launch?.explicitOptions,
       held: { ...(selection?.held ?? launch?.heldOptions), ...pendingOptionsRef.current }
     })
-    if (requested) {
+    if (requested?.model !== undefined) {
       return requested
     }
     // A pick on its way resolves as the picker shows it, keeping the model it names.

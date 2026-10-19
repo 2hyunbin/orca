@@ -232,7 +232,10 @@
         "effort": "추론 수준",
         "effortDefault": "기본값",
         "argsTerminalOnly": "에이전트를 터미널에서 열 때만 사용됩니다. 채팅에서는 무시됩니다.",
-        "savedModel": "설정의 모델: {{value0}}"
+        "savedModel": "설정의 모델: {{value0}}",
+        "permissionsDefault": "새 채팅과 동일",
+        "chatOptions": "채팅 옵션",
+        "savedChatOptions": "설정의 채팅 옵션: {{value0}}"
       }
     }
   },

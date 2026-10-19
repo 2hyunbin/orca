@@ -336,7 +336,10 @@
         "effort": "Effort",
         "effortDefault": "Par défaut",
         "argsTerminalOnly": "Utilisés uniquement quand l'agent s'ouvre dans un terminal ; les chats les ignorent.",
-        "savedModel": "Modèle des Réglages : {{value0}}"
+        "savedModel": "Modèle des Réglages : {{value0}}",
+        "permissionsDefault": "Comme les nouveaux chats",
+        "chatOptions": "Options du chat",
+        "savedChatOptions": "Options du chat des Réglages : {{value0}}"
       }
     }
   },

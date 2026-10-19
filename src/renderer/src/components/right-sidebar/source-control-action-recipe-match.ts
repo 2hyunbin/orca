@@ -41,10 +41,11 @@ function normalizeSourceControlActionRecipeForComparison(
     launchPreferences: recipe?.launchPreferences
       ? JSON.stringify([
           recipe.launchPreferences.agentId,
-          recipe.launchPreferences.model,
+          recipe.launchPreferences.model ?? null,
           Object.entries(recipe.launchPreferences.options ?? {}).sort(([a], [b]) =>
             a.localeCompare(b)
-          )
+          ),
+          recipe.launchPreferences.permissionMode ?? null
         ])
       : ''
   }

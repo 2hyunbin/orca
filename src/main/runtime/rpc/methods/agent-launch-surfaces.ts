@@ -90,7 +90,7 @@ export function agentLaunchSurfaceFactory(
         },
         worktree: `id:${worktreeId}`,
         agent,
-        ...(chatOptions ? { optionsMode: 'replace-model-selection' as const } : {}),
+        ...(chatOptions?.model ? { optionsMode: 'replace-model-selection' as const } : {}),
         ...(seeded ? { options: seeded } : {}),
         ...(tabId ? { tabId } : {}),
         activate:

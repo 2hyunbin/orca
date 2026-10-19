@@ -8,12 +8,27 @@ import { isTuiAgent } from './tui-agent-config'
 import type { TuiAgent } from './tui-agent'
 import { isAgentSessionHandleProvider } from './agent-session-provider-handle'
 import { STRUCTURED_LAUNCH_SEED_OPTION_IDS } from './native-chat-session-option-defaults'
+import {
+  AGENT_CHAT_PERMISSION_MODE_OPTION_ID,
+  agentChatPermissionModes,
+  offeredChatPermissionModes,
+  type AgentChatPermissionMode
+} from './agent-chat-permission-mode'
 
 /** Agents whose model an action can pick: the ones whose session catalog lists models. */
 export function sourceControlActionAgentPicksModel(
   agent: string | null | undefined
 ): agent is TuiAgent {
   return isTuiAgent(agent) && Boolean(getAgentSessionOptionCatalog(agent)?.models.length)
+}
+
+/** Modes an action can save; none hides the control. Settings has no live model list to tell which
+ *  Claude models run Auto, so it is not offered there; the host stays decisive. */
+export function sourceControlActionPermissionModes(
+  agent: string | null | undefined
+): readonly AgentChatPermissionMode[] {
+  const support = isTuiAgent(agent) ? agentChatPermissionModes(agent) : null
+  return support ? offeredChatPermissionModes(support, false) : []
 }
 
 /** Structured controls only; terminal-composed options have no chat implementation. */
@@ -42,7 +57,9 @@ export function resolveSourceControlActionSessionOptions(
     return undefined
   }
   return {
-    ...preferences.options,
-    model: preferences.model
+    ...(preferences.model ? { ...preferences.options, model: preferences.model } : {}),
+    ...(preferences.permissionMode
+      ? { [AGENT_CHAT_PERMISSION_MODE_OPTION_ID]: preferences.permissionMode }
+      : {})
   }
 }

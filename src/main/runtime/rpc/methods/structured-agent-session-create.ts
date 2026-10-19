@@ -142,9 +142,13 @@ export async function prepareStructuredAgentSessionCreateForWorktree(args: {
     ...resolvedAttach
   } = resolved
   // The ledger covers explicit overrides, never defaults that settings can change on replay.
-  // Explicit picks replace the saved selection; the permission default is the chat's own.
+  // Explicit picks replace the saved selection; the permission default is the chat's own, so a
+  // permission mode picked alone overlays the saved selection.
+  const overlays = atRest
+    ? args.optionsMode !== 'replace-model-selection'
+    : Object.keys(args.options ?? {}).every((id) => id === AGENT_CHAT_PERMISSION_MODE_OPTION_ID)
   const picked = args.options
-    ? atRest && args.optionsMode !== 'replace-model-selection'
+    ? overlays
       ? { ...resolved.options, ...args.options }
       : { ...seededPermissionMode(resolved.options), ...args.options }
     : resolved.options

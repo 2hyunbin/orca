@@ -144,6 +144,30 @@ describe('source-control AI launch action defaults', () => {
     })
   })
 
+  it('keeps a permission mode the agent offers, with or without a model', () => {
+    const defaults = normalizeSourceControlAiActionDefaults({
+      fixChecks: { agentId: 'opencode', launchPreferences: { permissionMode: 'full-access' } },
+      fixCommitFailure: { agentId: 'codex', launchPreferences: { permissionMode: 'accept-edits' } },
+      fixPushFailure: {
+        agentId: 'codex',
+        launchPreferences: { model: 'gpt-5.6-terra', options: { permissionMode: 'full-access' } }
+      }
+    })
+    expect(defaults).toEqual({
+      fixChecks: {
+        agentId: 'opencode',
+        launchPreferences: { agentId: 'opencode', permissionMode: 'full-access' }
+      },
+      fixCommitFailure: { agentId: 'codex' },
+      fixPushFailure: { agentId: 'codex' }
+    })
+    expect(resolveSourceControlActionSessionOptions(defaults?.fixChecks ?? {}, 'opencode')).toEqual(
+      {
+        permissionMode: 'full-access'
+      }
+    )
+  })
+
   it('drops the saved model when the action changes agent', () => {
     const defaults = {
       fixChecks: {

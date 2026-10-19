@@ -2,6 +2,10 @@ import { isCustomAgentId, type CustomAgentId } from './commit-message-agent-spec
 import { isTuiAgent } from './tui-agent-config'
 import type { TuiAgent } from './tui-agent'
 import { isAgentSessionOptions } from './agent-session-record'
+import {
+  agentChatPermissionModes,
+  type AgentChatPermissionMode
+} from './agent-chat-permission-mode'
 
 // Why: the variable registry lives in `./source-control-ai-action-variables` for max-lines
 // headroom. It is deliberately not re-exported here — one import path per symbol keeps a
@@ -23,8 +27,11 @@ export type AiActionId = AiTextActionId | SourceControlLaunchActionId
 /** The bound agent namespace is independent of the recipe’s default-agent selection. */
 export type SourceControlActionLaunchPreferences = {
   agentId: TuiAgent
-  model: string
+  /** Absent: the chat starts on the agent's remembered selection. */
+  model?: string
   options?: Record<string, string>
+  /** Absent: the chat takes the new-chat permission default. */
+  permissionMode?: AgentChatPermissionMode
 }
 
 export type SourceControlActionRecipe = {
@@ -147,28 +154,37 @@ export function normalizeSourceControlActionLaunchPreferences(
   value: unknown,
   recipeAgent?: unknown
 ): SourceControlActionLaunchPreferences | undefined {
-  if (!isRecord(value) || typeof value.model !== 'string' || !value.model.trim()) {
+  if (!isRecord(value)) {
     return undefined
   }
   const agentId = value.agentId ?? recipeAgent
   if (!isTuiAgent(agentId)) {
     return undefined
   }
-  const options =
-    value.options ?? (typeof value.effort === 'string' ? { effort: value.effort } : {})
+  const model = typeof value.model === 'string' ? value.model.trim() : ''
+  const permissionMode = agentChatPermissionModes(agentId)?.modes.find(
+    (mode) => mode === value.permissionMode
+  )
+  // Options belong to a model; the permission mode has its own field.
+  const options = model
+    ? (value.options ?? (typeof value.effort === 'string' ? { effort: value.effort } : {}))
+    : {}
   if (
     !isAgentSessionOptions(options) ||
     Object.keys(options).some(
       (key) => !isSafeRecordKey(key) || ['agentId', 'model', 'permissionMode'].includes(key)
-    )
+    ) ||
+    (model && !isAgentSessionOptions({ ...options, model })) ||
+    (!model && !permissionMode)
   ) {
     return undefined
   }
-  const model = value.model.trim()
-  if (!isAgentSessionOptions({ ...options, model })) {
-    return undefined
+  return {
+    agentId,
+    ...(model ? { model } : {}),
+    ...(Object.keys(options).length ? { options } : {}),
+    ...(permissionMode ? { permissionMode } : {})
   }
-  return { agentId, model, ...(Object.keys(options).length ? { options } : {}) }
 }
 
 export function normalizeSourceControlAiActionDefaults(
@@ -239,7 +255,7 @@ export function setSourceControlActionAgentDefault(
   if (current?.agentId === agentId || !current?.launchPreferences) {
     return setSourceControlActionDefault(defaults, actionId, { agentId })
   }
-  // A model id names one agent's model, so it does not survive a change of agent.
+  // A model id and permission mode name one agent's choices, so they do not survive a change of agent.
   const { launchPreferences: _previousAgentModel, ...rest } = current
   return { ...defaults, [actionId]: { ...rest, agentId } }
 }

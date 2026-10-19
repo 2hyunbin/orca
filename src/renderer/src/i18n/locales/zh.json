@@ -232,7 +232,10 @@
         "effort": "推理强度",
         "effortDefault": "默认",
         "argsTerminalOnly": "仅在智能体于终端中打开时使用；聊天会忽略这些参数。",
-        "savedModel": "设置中的模型：{{value0}}"
+        "savedModel": "设置中的模型：{{value0}}",
+        "permissionsDefault": "与新聊天相同",
+        "chatOptions": "聊天选项",
+        "savedChatOptions": "设置中的聊天选项：{{value0}}"
       }
     }
   },

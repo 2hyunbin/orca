@@ -63,14 +63,14 @@ export function prepareStructuredLaunchCreateMessage(
   notifyStructuredLaunchListeners()
 }
 
-/** Picks held so far, and the model and effort the chat shows: a first message starts its turn
- *  on them, as a later send does. */
+/** Picks held so far, the launch's own permission mode, and the model and effort the chat shows:
+ *  a first message starts its turn on them, as a later send does. */
 function structuredLaunchCreateOptions(
   state: StructuredLaunchState
 ): Readonly<Record<string, string>> | undefined {
   const { intent, selection } = state
   const requested = structuredLaunchRequestedOptions(selection)
-  if (requested) {
+  if (requested?.model !== undefined) {
     return requested
   }
   const firstFrame = firstFrameOptionState(intent.agent, intent.target, {
@@ -81,7 +81,7 @@ function structuredLaunchCreateOptions(
   // Create has always carried options, so any host takes what the chat shows.
   const view = structuredAgentSessionOptionView(firstFrame, intent.seedOptions, selection.held)
   const options = {
-    ...selection.held,
+    ...(requested ?? selection.held),
     ...structuredAgentSessionSendSelection(intent.agent, structuredAgentSessionOptionSnapshot(view))
   }
   return Object.keys(options).length ? options : undefined

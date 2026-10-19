@@ -97,7 +97,8 @@ export async function launchStructuredAgentSession(
       supported = await supportsStructuredAgentSessionCreateMessage(intent.target)
       replaceOptions =
         supported &&
-        Boolean(intent.explicitLaunchOptions) &&
+        // A permission mode alone overlays the host's remembered model selection.
+        intent.explicitLaunchOptions?.model !== undefined &&
         (await supportsStructuredAgentSessionCreateOptionsMode(intent.target))
     } catch {
       // Unknown capability stays on the compatible create path.

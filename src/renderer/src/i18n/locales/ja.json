@@ -232,7 +232,10 @@
         "effort": "推論レベル",
         "effortDefault": "既定",
         "argsTerminalOnly": "Agent をターミナルで開くときだけ使われます。チャットでは無視されます。",
-        "savedModel": "設定のモデル: {{value0}}"
+        "savedModel": "設定のモデル: {{value0}}",
+        "permissionsDefault": "新しいチャットと同じ",
+        "chatOptions": "チャットオプション",
+        "savedChatOptions": "設定のチャットオプション: {{value0}}"
       }
     }
   },

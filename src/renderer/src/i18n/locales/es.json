@@ -232,7 +232,10 @@
         "effort": "Esfuerzo",
         "effortDefault": "Predeterminado",
         "argsTerminalOnly": "Solo se usan cuando el agente se abre en una terminal; los chats los ignoran.",
-        "savedModel": "Modelo de Configuración: {{value0}}"
+        "savedModel": "Modelo de Configuración: {{value0}}",
+        "permissionsDefault": "Igual que los chats nuevos",
+        "chatOptions": "Opciones del chat",
+        "savedChatOptions": "Opciones del chat de Configuración: {{value0}}"
       }
     }
   },

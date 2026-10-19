@@ -273,6 +273,34 @@ describe('the first message owned by create', () => {
     }
   )
 
+  it.each([
+    ['a permission-only action leaves the remembered model', undefined, undefined],
+    [
+      'a model picked during launch keeps the action mode',
+      'picked-model',
+      'replace-model-selection'
+    ]
+  ])('%s', async (_name, picked, optionsMode) => {
+    mocks.call.mockImplementation(async () => created())
+    const launch = startStructuredAgentLaunch('workspace-1', 'codex', {
+      requestId: newAgentLaunchRequestId(),
+      executionHostId: 'local',
+      prompt: 'opening text',
+      launchOptions: picked
+        ? { model: 'action-model', effort: 'high', permissionMode: 'full-access' }
+        : { permissionMode: 'full-access' }
+    })
+    if (picked) {
+      holdStructuredAgentSessionLaunchOption(launch.sessionId, 'model', picked)
+    }
+    await launch.launchResult
+    expect(createParams().optionsMode).toBe(optionsMode)
+    expect(createParams().options).toEqual({
+      permissionMode: 'full-access',
+      ...(picked ? { model: picked } : {})
+    })
+  })
+
   it('returns a refused create once after the new draft, with no later send', async () => {
     const create = deferred<unknown>()
     mocks.call.mockReturnValue(create.promise)
