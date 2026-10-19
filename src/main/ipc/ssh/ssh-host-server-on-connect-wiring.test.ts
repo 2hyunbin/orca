@@ -6,6 +6,7 @@ import type { SshTarget } from '../../../shared/ssh-types'
 import { closeTestStores, createSqliteTestStore } from '../../persistence-test-harness'
 import { Store } from '../../persistence/loading-store/store'
 import { OrcadHostUnsupportedError } from '../../orcad/orcad-host-unavailable'
+import { RemoteNodeRuntimeNoexecError } from '../../ssh/orcad-remote-node-runtime-report'
 import { allowsDirectSshRelay, SshConnectionStore } from '../../ssh/connection/ssh-connection-store'
 import { resolveHostServerOnConnect } from '../../ssh/ssh-host-server-on-connect'
 
@@ -101,6 +102,20 @@ describe('connect-time server decision against the real profile', () => {
     mocks.deploy.mockClear()
     await resolveHostServerOnConnect(target(), hostServerOnConnectDeps(userDataPath))
     expect(mocks.deploy).not.toHaveBeenCalled()
+  })
+
+  it('does not remember a noexec home, so a connect after the remount deploys', async () => {
+    mocks.deploy.mockRejectedValue(new RemoteNodeRuntimeNoexecError('exit 126: Permission denied'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    await expect(
+      resolveHostServerOnConnect(target(), hostServerOnConnectDeps(userDataPath))
+    ).resolves.toEqual({ route: 'unserved', reason: 'orcad_unavailable', detail: 'runtime_noexec' })
+    warn.mockRestore()
+    expect(target().managedServerUnavailable).toBeUndefined()
+
+    mocks.deploy.mockClear()
+    await resolveHostServerOnConnect(target(), hostServerOnConnectDeps(userDataPath))
+    expect(mocks.deploy).toHaveBeenCalledTimes(1)
   })
 
   it('retries a host an older build kept on the relay', async () => {
