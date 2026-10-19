@@ -72,9 +72,10 @@ export type DiffCommentMutation = {
   previous: DiffComment[] | undefined
   next: DiffComment[]
   folderExecutionHostId?: ReturnType<typeof getExecutionHostIdForFolderWorkspace>
-  /** Set only when two hosts publish the id: the twin changed, and the host its write names. */
+  /** Set only when two hosts publish the id: the twin changed. */
   twin?: DiffCommentTwin
-  twinHostId?: ExecutionHostId
+  /** The rows' own host, whenever they stamp one; the write names it. */
+  writeHostId?: ExecutionHostId
 }
 
 // Why: one key for the queue and both bookkeeping maps, so they can never drift apart.
@@ -109,7 +110,11 @@ export function enqueueDiffCommentPersist(
   //      (hydration, folderWorkspaces refresh, remote push), so the old floor predates that state and must be re-seeded.
   // Why: seed before the queue entry below, or `has` is always true and the floor is never seeded.
   const chainBroken = lastMutationNextByQueue.get(floorKey) !== mutation.previous
-  if (!persistQueueByWorktree.has(queueKey) || chainBroken) {
+  if (
+    !persistQueueByWorktree.has(queueKey) ||
+    !lastMutationNextByQueue.has(floorKey) ||
+    chainBroken
+  ) {
     lastPersistedByQueue.set(floorKey, mutation.previous)
     floorSeedEpochByQueue.set(floorKey, (floorSeedEpochByQueue.get(floorKey) ?? 0) + 1)
   }
@@ -139,7 +144,7 @@ export function enqueueDiffCommentPersist(
         )
       } else {
         const state = get()
-        const { twin, twinHostId } = mutation
+        const { twin, writeHostId } = mutation
         const queued = readQueuedDiffComments(state, worktreeId, {
           twin,
           latest: lastMutationNextByQueue.get(floorKey)
@@ -154,7 +159,7 @@ export function enqueueDiffCommentPersist(
           worktreeId,
           (stateList ?? []).map(normalizeDiffComment),
           undefined,
-          twinHostId
+          writeHostId
         )
       }
     } catch (err) {
@@ -203,7 +208,7 @@ export function mutateDiffComments(
   let previous: DiffComment[] | undefined
   let next: DiffComment[] | null = null
   let folderExecutionHostId: ReturnType<typeof getExecutionHostIdForFolderWorkspace> | undefined
-  let twin: Pick<DiffCommentMutation, 'twin' | 'twinHostId'> = {}
+  let twin: Pick<DiffCommentMutation, 'twin' | 'writeHostId'> = {}
   set((s) => {
     const scope = parseWorkspaceKey(worktreeId)
     if (scope?.type === 'folder') {
@@ -233,7 +238,10 @@ export function mutateDiffComments(
     if (!repoList || !found) {
       return s
     }
-    twin = found.twin ? { twin: found.twin, twinHostId: found.hostId } : {}
+    twin = {
+      ...(found.twin ? { twin: found.twin } : {}),
+      ...(found.hostId ? { writeHostId: found.hostId } : {})
+    }
     previous = diffCommentRowNotes(found)
     const computed = mutate(previous ?? [])
     if (computed === null) {

@@ -380,4 +380,39 @@ describe('diff comments on twin worktrees', () => {
     expect(await pending).not.toBeNull()
     expect(rowNotes(store, 'local')).toEqual(['ssh note'])
   })
+
+  it("names the row's own host even when only one copy lists the worktree", async () => {
+    // The project is added on both hosts, but this worktree exists only on this computer.
+    const store = createTwinStore(null)
+    store.setState({ worktreesByRepo: { [REPO]: [worktree('local')] } })
+
+    expect(await addNote(store)).not.toBeNull()
+
+    expect(updateMeta).toHaveBeenCalledWith(expect.objectContaining({ executionHostId: 'local' }))
+  })
+
+  it('reports a save main refused as failed and rolls it back', async () => {
+    const store = createTwinStore('ssh:box')
+    updateMeta.mockResolvedValueOnce(null)
+
+    expect(await addNote(store)).toBeNull()
+
+    expect(rowNotes(store, 'ssh:box')).toEqual([])
+  })
+
+  it('refuses a note-id change on an unstamped twin rather than route it by the open one', async () => {
+    const store = createTwinStore('ssh:box')
+    store.setState({
+      worktreesByRepo: {
+        [REPO]: [worktree(undefined, [note('u1', 'unstamped')]), worktree('ssh:box')]
+      }
+    })
+
+    await store.getState().deleteDiffComment(WT, 'u1')
+
+    expect(updateMeta).not.toHaveBeenCalled()
+    expect(store.getState().worktreesByRepo[REPO][0].diffComments?.map((c) => c.body)).toEqual([
+      'unstamped'
+    ])
+  })
 })

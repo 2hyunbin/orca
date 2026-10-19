@@ -19,7 +19,7 @@ export async function writeDiffCommentsToHost(
   worktreeId: string,
   diffComments: DiffComment[],
   folderExecutionHostId?: ReturnType<typeof getExecutionHostIdForFolderWorkspace>,
-  twinHostId?: ExecutionHostId
+  writeHostId?: ExecutionHostId
 ): Promise<void> {
   const scope = parseWorkspaceKey(worktreeId)
   if (scope?.type === 'folder') {
@@ -54,17 +54,21 @@ export async function writeDiffCommentsToHost(
   }
   const target = runtimeTargetForWorkspaceOwner(state, {
     workspaceId: worktreeId,
-    hostId: twinHostId
+    hostId: writeHostId
   })
   if (!target) {
     throw new Error('The workspace host is unresolved; review notes were not saved.')
   }
   if (target.kind === 'local') {
-    await window.api.worktrees.updateMeta({
+    const meta = await window.api.worktrees.updateMeta({
       worktreeId,
-      ...(twinHostId ? { executionHostId: twinHostId } : {}),
+      ...(writeHostId ? { executionHostId: writeHostId } : {}),
       updates: { diffComments }
     })
+    // Why: main answers null when it refuses or drops the write; reporting success would lose the notes.
+    if (!meta) {
+      throw new Error('This computer did not save the review notes.')
+    }
     return
   }
   await callRuntimeRpc(

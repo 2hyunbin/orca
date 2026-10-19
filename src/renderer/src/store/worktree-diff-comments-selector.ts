@@ -43,7 +43,7 @@ function isTwin(row: Worktree, twin: DiffCommentTwin): boolean {
   )
 }
 
-/** `twin` and `hostId` only for a twin: the write's target and the host it names. */
+/** `twin` only for a twin; `hostId` whenever the rows name one: the host the write names. */
 export type DiffCommentRows = {
   twin?: DiffCommentTwin
   hostId?: ExecutionHostId
@@ -98,16 +98,17 @@ export function findDiffCommentRows(
       return null
     }
     const twin = twinOf(row)
-    // Why: an unstamped row the selection names is on that host; the write says so to main.
+    // Why: an unstamped row the selection names is on that host; one only its notes name has no
+    // host to say, and a host-less write would be routed by whatever workspace is open.
     const hostId = diffCommentTwinHostId(twin) ?? named
-    return {
-      twin,
-      ...(hostId ? { hostId } : {}),
-      worktrees: rows.filter((candidate) => isTwin(candidate, twin))
-    }
+    return hostId
+      ? { twin, hostId, worktrees: rows.filter((candidate) => isTwin(candidate, twin)) }
+      : null
   }
   if (rows.every((row) => isTwin(row, twinOf(rows[0])))) {
-    return { worktrees: rows }
+    // Why the stamp even without a twin: main refuses a host-less write while the repo has twins.
+    const hostId = diffCommentTwinHostId(twinOf(rows[0]))
+    return { ...(hostId ? { hostId } : {}), worktrees: rows }
   }
   const holders = commentIds?.size
     ? rows.filter((row) => row.diffComments?.some((comment) => commentIds.has(comment.id)))
