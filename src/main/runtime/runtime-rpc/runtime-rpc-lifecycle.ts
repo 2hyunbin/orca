@@ -48,7 +48,8 @@ export class RuntimeRpcLifecycle extends RuntimeRpcWebSocketDispatch {
     const socketTransport = new UnixSocketTransport({
       endpoint: transportMeta.endpoint,
       kind: transportMeta.kind as 'unix' | 'named-pipe',
-      keepaliveIntervalMs: this.keepaliveIntervalMs
+      keepaliveIntervalMs: this.keepaliveIntervalMs,
+      connectionBudget: this.connectionBudget
     })
 
     // Why: the `.catch` guarantees reply() always fires so a throw can't strand the client or leak the AbortController.

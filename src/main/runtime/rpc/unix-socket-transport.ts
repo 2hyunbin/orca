@@ -1,7 +1,7 @@
 // Why: this is the original Unix socket / named pipe transport extracted from
 // runtime-rpc.ts. It preserves the exact same behavior: newline-delimited JSON,
 // 30s idle timeout (suspended while a dispatch is in flight), 1MB max message,
-// 128 max connections, chmod 0o600 on Unix.
+// 512-connection budget, chmod 0o600 on Unix.
 // It also owns the keepalive timer and per-connection abort signal so the
 // server-side handler can cancel long-poll dispatches when the client goes
 // away. See design doc §3.1.
@@ -11,7 +11,9 @@ import type { RpcMessageContext, RpcTransport } from './transport'
 
 const MAX_RUNTIME_RPC_MESSAGE_BYTES = 1024 * 1024
 const RUNTIME_RPC_SOCKET_IDLE_TIMEOUT_MS = 30_000
-const MAX_RUNTIME_RPC_CONNECTIONS = 128
+// Why: an fd backstop, not a policy: long-polls take no slot, so each held one keeps a socket open. Past this,
+// long-polls get a retryable runtime_busy instead of Node silently dropping the socket ("Restart Orca").
+export const RUNTIME_RPC_CONNECTION_BUDGET = 512
 const DEFAULT_KEEPALIVE_INTERVAL_MS = 10_000
 
 export type UnixSocketTransportOptions = {
@@ -22,6 +24,7 @@ export type UnixSocketTransportOptions = {
   // the client honours them, the client-side idle timer. Tests override this
   // to avoid waiting 10 s for a frame.
   keepaliveIntervalMs?: number
+  connectionBudget?: number
 }
 
 type MessageHandler = (
@@ -34,14 +37,21 @@ export class UnixSocketTransport implements RpcTransport {
   private readonly endpoint: string
   private readonly kind: 'unix' | 'named-pipe'
   private readonly keepaliveIntervalMs: number
+  private readonly connectionBudget: number
   private server: Server | null = null
   private messageHandler: MessageHandler | null = null
   private readonly activeSockets = new Set<Socket>()
 
-  constructor({ endpoint, kind, keepaliveIntervalMs }: UnixSocketTransportOptions) {
+  constructor({
+    endpoint,
+    kind,
+    keepaliveIntervalMs,
+    connectionBudget
+  }: UnixSocketTransportOptions) {
     this.endpoint = endpoint
     this.kind = kind
     this.keepaliveIntervalMs = keepaliveIntervalMs ?? DEFAULT_KEEPALIVE_INTERVAL_MS
+    this.connectionBudget = connectionBudget ?? RUNTIME_RPC_CONNECTION_BUDGET
   }
 
   onMessage(handler: MessageHandler): void {
@@ -60,7 +70,6 @@ export class UnixSocketTransport implements RpcTransport {
     const server = createServer((socket) => {
       this.handleConnection(socket)
     })
-    server.maxConnections = MAX_RUNTIME_RPC_CONNECTIONS
 
     await new Promise<void>((resolve, reject) => {
       server.once('error', reject)
@@ -68,6 +77,11 @@ export class UnixSocketTransport implements RpcTransport {
         server.off('error', reject)
         resolve()
       })
+    })
+    // Why: an accept failure (EMFILE when the process is out of fds) would otherwise be an unhandled
+    // 'error' that crashes the runtime; dropping that one connection is the safe outcome.
+    server.on('error', (error) => {
+      console.warn('[unix-socket-transport] accept failed:', error)
     })
 
     if (this.kind === 'unix') {
@@ -105,6 +119,7 @@ export class UnixSocketTransport implements RpcTransport {
 
   private handleConnection(socket: Socket): void {
     this.activeSockets.add(socket)
+    const overConnectionBudget = this.activeSockets.size > this.connectionBudget
     let buffer = ''
     let retainedBytes = 0
     let oversized = false
@@ -167,7 +182,7 @@ export class UnixSocketTransport implements RpcTransport {
         const rawMessage = buffer.slice(0, newlineIndex).trim()
         buffer = buffer.slice(newlineIndex + 1)
         if (rawMessage) {
-          this.dispatchMessage(socket, rawMessage, inflight, rearmIdleTimer)
+          this.dispatchMessage(socket, rawMessage, inflight, rearmIdleTimer, overConnectionBudget)
         }
         newlineIndex = buffer.indexOf('\n')
       }
@@ -182,7 +197,8 @@ export class UnixSocketTransport implements RpcTransport {
     socket: Socket,
     rawMessage: string,
     inflight: Set<() => void>,
-    rearmIdleTimer: () => void
+    rearmIdleTimer: () => void,
+    overConnectionBudget: boolean
   ): void {
     let replied = false
     let keepaliveTimer: NodeJS.Timeout | null = null
@@ -240,7 +256,8 @@ export class UnixSocketTransport implements RpcTransport {
 
     this.messageHandler?.(rawMessage, reply, {
       signal: abortController.signal,
-      startKeepalive
+      startKeepalive,
+      overConnectionBudget
     })
   }
 }
