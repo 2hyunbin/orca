@@ -396,6 +396,9 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   setOption(
     input: StructuredAgentSessionSetOptionInput
   ): Promise<void | Readonly<Record<string, string>>>
+  /** False while the live child has not answered its start, so it has run nothing it was handed.
+   *  Absent or undefined reads as answered. */
+  startAnswered?(sessionId: string): boolean | undefined
   /** Fetch off the lane, then apply the result under the same child's fence. */
   prepareReadOptions?(input: {
     sessionId: string

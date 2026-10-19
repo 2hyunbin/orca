@@ -193,6 +193,8 @@ export function structuredAgentSessionWorkingAtStop(input: {
   childWork: (sessionId: string) => readonly AgentChildWorkView[] | undefined
   /** Child work the provider reported running and not over, recorded or not. */
   childWorkOpen: (sessionId: string) => boolean
+  /** False when the session's live child never answered its start; the exit reads the same fact. */
+  startAnswered?: (sessionId: string) => boolean | undefined
   trigger: AgentSessionResumeTrigger
   /** Stable teardown identity for continuation deduplication, not launch ancestry. */
   teardownId: string
@@ -206,7 +208,8 @@ export function structuredAgentSessionWorkingAtStop(input: {
   const current = agentSessionCurrentContextRows(snapshot.items, snapshot.submissions)
   // A queued message reached no agent, and one handed to a start that never answered ran nowhere:
   // neither is work to resume. The next open or the exit keeps it as unsent.
-  const unanswered = session.child.phase === 'starting'
+  const unanswered =
+    session.child.phase === 'starting' || input.startAnswered?.(sessionId) === false
   const handedOver = current.submissions.filter(
     (submission) =>
       !isQueuedAgentJournalSubmission(submission) &&

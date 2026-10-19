@@ -25,6 +25,8 @@ export type QueuedRigProviderOptions = {
   starting?: true
   /** The provider's Stop ends its child, as Claude's does. */
   stopEndsSession?: true
+  /** Its child never answers its start, so it runs nothing it is handed. */
+  startUnanswered?: true
 }
 
 export function createQueuedRigProvider(
@@ -97,6 +99,7 @@ export function createQueuedRigProvider(
     compact,
     cancelTurn,
     ...(options.stopEndsSession ? { stopEndsSession: () => true } : {}),
+    ...(options.startUnanswered ? { startAnswered: () => false } : {}),
     answerPrompt: vi.fn(async ({ commit }) => commit()),
     setOption: vi.fn(async () => undefined),
     ...(options.rewind
