@@ -12,7 +12,7 @@ export type RendererAttachmentState = { consuming: boolean; visible: boolean }
 type RendererAttachment = RendererAttachmentState & {
   readonly id: string
   readonly page: string
-  ptyId: string | null
+  boundPtyId: string | null
 }
 
 export type RendererAttachmentBinding = {
@@ -42,14 +42,14 @@ function change(ids: readonly (string | null)[], mutate: () => void): void {
 }
 
 function setBinding(record: RendererAttachment, ptyId: string | null): void {
-  if (record.ptyId !== null) {
-    const bound = attachmentsByPty.get(record.ptyId)
+  if (record.boundPtyId !== null) {
+    const bound = attachmentsByPty.get(record.boundPtyId)
     bound?.delete(record)
     if (bound?.size === 0) {
-      attachmentsByPty.delete(record.ptyId)
+      attachmentsByPty.delete(record.boundPtyId)
     }
   }
-  record.ptyId = ptyId
+  record.boundPtyId = ptyId
   if (ptyId !== null) {
     const bound = attachmentsByPty.get(ptyId) ?? new Set()
     bound.add(record)
@@ -72,9 +72,9 @@ export function openRendererAttachment(
   ptyId: string | null,
   state: RendererAttachmentState
 ): RendererAttachmentBinding {
-  const record: RendererAttachment = { id: `${page}:${key}`, page, ptyId: null, ...state }
+  const record: RendererAttachment = { id: `${page}:${key}`, page, boundPtyId: null, ...state }
   const replaced = attachmentsById.get(record.id)
-  change([replaced?.ptyId ?? null, ptyId], () => {
+  change([replaced?.boundPtyId ?? null, ptyId], () => {
     if (replaced) {
       deleteRecord(replaced)
     }
@@ -83,13 +83,13 @@ export function openRendererAttachment(
   })
   return {
     bind: (nextPtyId) => {
-      if (isLive(record) && record.ptyId !== nextPtyId) {
-        change([record.ptyId, nextPtyId], () => setBinding(record, nextPtyId))
+      if (isLive(record) && record.boundPtyId !== nextPtyId) {
+        change([record.boundPtyId, nextPtyId], () => setBinding(record, nextPtyId))
       }
     },
     release: () => {
       if (isLive(record)) {
-        change([record.ptyId], () => deleteRecord(record))
+        change([record.boundPtyId], () => deleteRecord(record))
       }
     }
   }
@@ -105,14 +105,14 @@ export function updateRendererAttachment(
   if (!record) {
     return undefined
   }
-  change([record.ptyId], () => Object.assign(record, state))
-  return record.ptyId
+  change([record.boundPtyId], () => Object.assign(record, state))
+  return record.boundPtyId
 }
 
 export function closeRendererAttachment(page: string, key: string): void {
   const record = attachmentsById.get(`${page}:${key}`)
   if (record) {
-    change([record.ptyId], () => deleteRecord(record))
+    change([record.boundPtyId], () => deleteRecord(record))
   }
 }
 
