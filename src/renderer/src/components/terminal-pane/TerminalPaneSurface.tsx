@@ -9,6 +9,7 @@ import CloseTerminalDialog from './CloseTerminalDialog'
 import TerminalContextMenu from './TerminalContextMenu'
 import TerminalPaneHeaderOverlay from './TerminalPaneHeaderOverlay'
 import { isPaneOwnerRecoveryError, TerminalErrorToast } from './TerminalErrorToast'
+import { openTerminalBesideTab } from './open-terminal-beside-tab'
 import { AgentLaunchPaneNoticePortal } from './AgentLaunchPaneNotice'
 import { TerminalSessionStateSaveFailureDialog } from './TerminalSessionStateSaveFailureDialog'
 import { LinkActionPopover } from '@/components/link-actions/LinkActionPopover'
@@ -208,6 +209,9 @@ export function TerminalPaneSurface({
                       )
                   : undefined
               }
+              onOpenNewTerminal={() => {
+                openTerminalBesideTab(tabId)
+              }}
             />,
             activePane.container,
             `terminal-error-${activePane.id}`

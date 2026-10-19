@@ -20,8 +20,11 @@ export function markWorkspaceUnreadFlag(
   get: WorkspaceAttentionGet,
   worktreeId: string
 ): void {
-  // Switch point: the owning host stamps bells and finishes; the flag alone is the window's.
-  const stamp = ORCA_SIDEBAR_INPUTS_IS_MAIN ? {} : { lastActivityAt: Date.now() }
+  // Switch point: the owning host raises the flag from the same news.
+  if (ORCA_SIDEBAR_INPUTS_IS_MAIN) {
+    return
+  }
+  const stamp = { lastActivityAt: Date.now() }
   const workspaceScope = parseWorkspaceKey(worktreeId)
   if (workspaceScope?.type === 'folder') {
     const folderWorkspaceId = workspaceScope.folderWorkspaceId

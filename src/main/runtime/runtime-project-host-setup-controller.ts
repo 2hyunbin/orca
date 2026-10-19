@@ -286,7 +286,7 @@ export class RuntimeProjectHostSetupController {
       if (!identity || getProjectIdForProviderIdentity(identity) !== args.projectId) {
         throw new Error('Imported folder does not match the selected project identity.')
       }
-      const updated = store.updateRepo(repo.id, {
+      const updated = store.updateRepo(repo, {
         upstream: {
           owner: identity.owner,
           repo: identity.repo,
@@ -300,7 +300,7 @@ export class RuntimeProjectHostSetupController {
       setup = getProjectHostSetupForRepo(this.listSetups(), repo)
     }
     const setupMethod = args.setupMethod ?? 'imported-existing-folder'
-    const updated = store.updateRepo(repo.id, { projectHostSetupMethod: setupMethod })
+    const updated = store.updateRepo(repo, { projectHostSetupMethod: setupMethod })
     if (!updated) {
       throw new Error(
         `Project setup repo disappeared before setup metadata could be linked: ${repo.id}`

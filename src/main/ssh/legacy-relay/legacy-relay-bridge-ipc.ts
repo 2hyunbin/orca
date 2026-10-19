@@ -9,7 +9,7 @@ import { isRemoteCliControlAllowed } from '../../../shared/ssh-remote-cli-contro
 import type { Store } from '../../persistence'
 import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
 import { track } from '../../telemetry/client'
-import type { SshConnection } from '../ssh-connection'
+import type { SshConnection } from '../connection/ssh-connection'
 import { knownSshHostPlatform } from '../ssh-host-platform-memo'
 import { hostProps } from '../ssh-host-server-telemetry'
 import {
