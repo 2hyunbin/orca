@@ -17,7 +17,9 @@ function describeMatch(match: ExecutionHostOwnerMatch<HostAuthority>): string {
   return `${endpoint.kind === 'self' ? 'self' : `env:${endpoint.environmentId}`}@${at}`
 }
 
-const casesWithIds = OWNER_RESOLUTION_CASES.filter((c) => c.worktreeId !== null)
+const casesWithIds = OWNER_RESOLUTION_CASES.flatMap((c) =>
+  c.worktreeId === null ? [] : [{ ...c, worktreeId: c.worktreeId }]
+)
 
 // Each deliberate change from the deprecated resolver, with the design's reason (§5).
 const DELIBERATE_CHANGES: Record<string, string> = {
@@ -35,7 +37,7 @@ describe('resolveOwnerWithLegacyFallback acceptance (round-3 design §5)', () =>
     const actual = Object.fromEntries(
       casesWithIds.map((c) => [
         c.name,
-        describeMatch(resolveOwnerWithLegacyFallback(c.state, { workspaceId: c.worktreeId! }))
+        describeMatch(resolveOwnerWithLegacyFallback(c.state, { workspaceId: c.worktreeId }))
       ])
     )
     expect(actual).toEqual(LEGACY_FALLBACK_OWNER_ACCEPTANCE)
@@ -43,7 +45,7 @@ describe('resolveOwnerWithLegacyFallback acceptance (round-3 design §5)', () =>
 
   it('differs from the deprecated resolver only in the deliberate cases', () => {
     const changed = casesWithIds.filter((c) => {
-      const owner = resolveOwnerWithLegacyFallback(c.state, { workspaceId: c.worktreeId! })
+      const owner = resolveOwnerWithLegacyFallback(c.state, { workspaceId: c.worktreeId })
       const environmentId =
         owner.kind === 'resolved' && owner.owner.endpoint.kind === 'environment'
           ? owner.owner.endpoint.environmentId
@@ -54,7 +56,7 @@ describe('resolveOwnerWithLegacyFallback acceptance (round-3 design §5)', () =>
       )
     })
     for (const c of changed) {
-      expect(DELIBERATE_CHANGES[c.worktreeId!], c.name).toBeDefined()
+      expect(DELIBERATE_CHANGES[c.worktreeId], c.name).toBeDefined()
     }
     expect(new Set(changed.map((c) => c.worktreeId))).toEqual(
       new Set(Object.keys(DELIBERATE_CHANGES))
@@ -91,12 +93,7 @@ describe('resolveOwnerWithLegacyFallback probes', () => {
       ...single,
       worktreesByRepo: { ...single.worktreesByRepo, 'legacy-repo': [] }
     }
-    expect(ownerOf(noWorktreeRow, 'legacy-repo::wt')).toBe(
-      describeMatch({
-        kind: 'resolved',
-        owner: { endpoint: { kind: 'environment', environmentId: 'focused-env' }, at: 'local' }
-      })
-    )
+    expect(ownerOf(noWorktreeRow, 'legacy-repo::wt')).toBe('env:focused-env@local')
   })
 
   it('lets a named host win over the single focused runtime', () => {

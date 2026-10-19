@@ -22,7 +22,7 @@ import {
   getExecutionHostIdForFolderWorkspace,
   getRuntimeEnvironmentIdForFolderWorkspace
 } from './folder-workspace-runtime-owner'
-import { resolveOwner, type WorkspaceOwnerRef } from './resolve-owner'
+import { namedHostForOwnerRef, resolveOwner, type WorkspaceOwnerRef } from './resolve-owner'
 import { SELF_LOCAL_AUTHORITY, type HostAuthority } from '../../../shared/host-authority'
 import type { ExecutionHostOwnerMatch } from '../../../shared/worktree-execution-host-resolution'
 import {
@@ -228,16 +228,15 @@ export function getExecutionHostIdForWorktree(
   )
 }
 
-function isStampedWorktreeRow(row: { hostId?: string; runtimeOwnerEnvironmentId?: string }) {
-  return Boolean(row.hostId?.trim() || row.runtimeOwnerEnvironmentId?.trim())
-}
-
 function hasRowHost(row: { executionHostId?: string | null; connectionId?: string | null }) {
   return Boolean(row.executionHostId?.trim() || row.connectionId?.trim())
 }
 
 /** A row that names its host; without one the deprecated resolver's guess still applies. */
 function hasHostEvidence(state: WorktreeRuntimeOwnerState, workspaceId: string): boolean {
+  if (getFloatingWorkspaceOperationRoute(workspaceId)) {
+    return true
+  }
   const scope = parseWorkspaceKey(workspaceId)
   if (scope?.type === 'folder') {
     const folder = findFolderWorkspaceOwner(state, scope.folderWorkspaceId)
@@ -250,8 +249,12 @@ function hasHostEvidence(state: WorktreeRuntimeOwnerState, workspaceId: string):
     )
   }
   const repoId = getRepoIdFromWorktreeId(workspaceId)
-  const isStampedCopy = (row: Parameters<typeof isStampedWorktreeRow>[0] & { id: string }) =>
-    row.id === workspaceId && isStampedWorktreeRow(row)
+  const isStampedCopy = (row: {
+    id: string
+    hostId?: string
+    runtimeOwnerEnvironmentId?: string
+  }) =>
+    row.id === workspaceId && Boolean(row.hostId?.trim() || row.runtimeOwnerEnvironmentId?.trim())
   return Boolean(
     state.worktreesByRepo?.[repoId]?.some(isStampedCopy) ||
     state.detectedWorktreesByRepo?.[repoId]?.worktrees.some(isStampedCopy) ||
@@ -269,13 +272,9 @@ export function resolveOwnerWithLegacyFallback(
   ref: WorkspaceOwnerRef
 ): ExecutionHostOwnerMatch<HostAuthority> {
   const match = resolveOwner(state, ref)
-  const hostNamed =
-    Boolean(ref.hostId) ||
-    (state.activeWorktreeId === ref.workspaceId && Boolean(state.activeWorkspaceExecutionHostId))
   if (
-    hostNamed ||
+    namedHostForOwnerRef(state, ref) ||
     match.kind === 'ambiguous' ||
-    getFloatingWorkspaceOperationRoute(ref.workspaceId) ||
     (match.kind === 'resolved' && hasHostEvidence(state, ref.workspaceId))
   ) {
     return match
