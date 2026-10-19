@@ -74,7 +74,7 @@ export function useHostWorktreeCatalog(args: {
           setServerWorkspaces((previous) => applyServerWorkspaces(previous, fetched))
         }
       } catch {
-        // Keeps the rows shown; the next poll retries.
+        // Keeps the rows shown; the next change event, foreground return or feed update retries.
       } finally {
         if (serverFetchInFlightRef.current === requestClient) {
           serverFetchInFlightRef.current = null
@@ -94,7 +94,7 @@ export function useHostWorktreeCatalog(args: {
       if (!options.allowDuringModal && newWorktreeModalVisibleRef.current) {
         return
       }
-      // Why: prevent slow remote hosts from stacking overlapping worktree.ps requests during polling.
+      // Why: prevent slow remote hosts from stacking overlapping worktree.ps requests.
       if (fetchWorktreesInFlightRef.current) {
         fetchWorktreesQueuedRef.current ||= options.queueIfInFlight === true
         return

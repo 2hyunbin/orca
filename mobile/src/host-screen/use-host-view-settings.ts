@@ -35,10 +35,9 @@ export function useHostViewSettings(args: {
   state: HostScreenState
 }) {
   const { client, connState, state } = args
-  const { clientRef, setActionError, setShowPinnedInGroups, setView, viewRef } = state
+  const { clientRef, setActionError, setView, viewRef } = state
 
   const localEditsRef = useRef(0)
-  // The changes the desktop has not answered.
   const pendingViewChanges = useHostPendingViewChanges(client)
   const pendingChanges = pendingViewChanges.controls
 
@@ -70,9 +69,6 @@ export function useHostViewSettings(args: {
         const hostSettings = settingsReply
           ? hostListSettingsRead.interpret(settingsReply)
           : { accepted: false as const }
-        if (hostSettings.accepted) {
-          setShowPinnedInGroups(hostSettings.value.showPinnedWorktreesInGroups)
-        }
         const uiRead = uiReply ? hostViewSettingsRead.interpret(uiReply) : null
         const read = uiRead?.accepted ? uiRead.value : undefined
         // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Preserve the established response shape at this boundary.
