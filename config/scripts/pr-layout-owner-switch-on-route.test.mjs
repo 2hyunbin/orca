@@ -122,5 +122,9 @@ describe('layout save divergence summary', () => {
     expect(divergenceKind('tab picker-agent-tab changed: createdAt, terminal')).toBe(
       'tab <id> changed: createdAt, terminal'
     )
+    expect(divergenceKind('editor view /tmp/a b/c.ts changed: viewState')).toBe(
+      'editor view <id> changed: viewState'
+    )
+    expect(divergenceKind('file /tmp/a b/c.ts added')).toBe('file <id> added')
   })
 })

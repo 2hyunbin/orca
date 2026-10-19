@@ -11,10 +11,10 @@ const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g
 const AFTER_END_MS = 15_000
 const BEFORE_START_MS = 2_000
 
-/** A report path with its record id dropped: `group <id> changed: tabOrder`. */
+/** A report path with its record id (a uuid or a file path) dropped: `group <id> changed: tabOrder`. */
 export function divergenceKind(path) {
   const named =
-    /^(pane tree|[a-z]+) (\S+) (added|removed|changed: .*|tab-bar entry removed|kept over .*)$/s.exec(
+    /^(editor view|pane tree|group|tab|file|browser|leaf|terminal) (.+?) (added|removed|changed: .*|tab-bar entry removed|kept over .*)$/s.exec(
       path
     )
   const kind = named ? `${named[1]} <id> ${named[3]}` : path.replace(/^\d+ /, '<n> ')
