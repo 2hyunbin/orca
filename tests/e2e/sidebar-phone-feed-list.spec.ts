@@ -113,9 +113,20 @@ test.describe('switch on', () => {
       expect(foldedSection?.count).toBeGreaterThan(0)
       expect(folded.length).toBeLessThan(pinned.length + 2)
 
-      // The open workspace moves on the desktop; the phone's one highlight follows.
-      await runtimeCall(orcaPage, 'worktree.set', { worktree: `id:${activeId}`, isPinned: false })
+      // Expanded again by a later op from the same writer.
+      expect(
+        await list.request('ui.setCollapsed', {
+          key: project!.key,
+          collapsed: false,
+          opId: { writer: 'e2e-phone', seq: 2 }
+        })
+      ).toMatchObject({ ok: true })
       await expectPhoneMatchesDesktop(orcaPage, list)
+
+      // Unpinned on the desktop: the Pinned section goes and one highlight is left.
+      await runtimeCall(orcaPage, 'worktree.set', { worktree: `id:${activeId}`, isPinned: false })
+      const unpinned = await expectPhoneMatchesDesktop(orcaPage, list)
+      expect(unpinned.filter((line) => line.endsWith(' ACTIVE'))).toHaveLength(1)
       await expectNoSidebarShadowMismatches(orcaPage)
     } finally {
       list.close()
