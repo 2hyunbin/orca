@@ -2,7 +2,7 @@ import type { AppState } from '../types'
 import type { SshTarget, SshTargetSummary } from '../../../../shared/ssh-types'
 import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import { sanitizeSshTargetGeneration } from '../../../../shared/ssh-target-generation'
-import { resolveDirectSshTargetScope } from '../../lib/direct-ssh-target-scope'
+import { resolveDirectSshTargetWorktreeIds } from '../../lib/direct-ssh-target-scope'
 import { unbindTerminalTabPtys } from './tabs/worktree-layout-lifecycle'
 
 export function sshTargetLabelsEqual(
@@ -44,14 +44,13 @@ export function sshTargetGenerationsEqual(
 }
 
 function collectSshTargetTerminalTabIds(state: AppState, targetId: string): Set<string> {
-  const targetWorktreeIds = resolveDirectSshTargetScope({
+  const targetWorktreeIds = resolveDirectSshTargetWorktreeIds({
     targetId,
-    catalogRevision: 0,
     repos: state.repos,
     worktreesByRepo: state.worktreesByRepo,
     detectedWorktreesByRepo: state.detectedWorktreesByRepo,
     restoredRuntimeHostIdByWorkspaceSessionKey: state.restoredRuntimeHostIdByWorkspaceSessionKey
-  }).gitWorktreeIds
+  })
   const tabIds = new Set<string>()
   for (const worktrees of Object.values(state.worktreesByRepo)) {
     for (const worktree of worktrees) {
@@ -132,15 +131,15 @@ function clearSshTargetTabPtyState(
   | 'tabsByWorktree'
   | 'ptyIdsByTabId'
   | 'lastKnownRelayPtyIdByTabId'
-  | 'pendingCodexPaneRestartIds'
+  | 'pendingPaneAccountRestarts'
   | 'codexRestartNoticeByPtyId'
 > & { changed: boolean } {
   const unboundTabIds = new Set<string>()
   const nextLastKnownRelayPtyIdByTabId = {
     ...state.lastKnownRelayPtyIdByTabId
   }
-  const nextPendingCodexPaneRestartIds = {
-    ...state.pendingCodexPaneRestartIds
+  const nextPendingPaneAccountRestarts = {
+    ...state.pendingPaneAccountRestarts
   }
   const nextCodexRestartNoticeByPtyId = { ...state.codexRestartNoticeByPtyId }
 
@@ -165,7 +164,7 @@ function clearSshTargetTabPtyState(
       unboundTabIds.add(tab.id)
       delete nextLastKnownRelayPtyIdByTabId[tab.id]
       for (const ptyId of ptyIds) {
-        delete nextPendingCodexPaneRestartIds[ptyId]
+        delete nextPendingPaneAccountRestarts[ptyId]
         delete nextCodexRestartNoticeByPtyId[ptyId]
       }
     }
@@ -175,7 +174,7 @@ function clearSshTargetTabPtyState(
     changed: unboundTabIds.size > 0,
     ...unbindTerminalTabPtys(state, unboundTabIds),
     lastKnownRelayPtyIdByTabId: nextLastKnownRelayPtyIdByTabId,
-    pendingCodexPaneRestartIds: nextPendingCodexPaneRestartIds,
+    pendingPaneAccountRestarts: nextPendingPaneAccountRestarts,
     codexRestartNoticeByPtyId: nextCodexRestartNoticeByPtyId
   }
 }

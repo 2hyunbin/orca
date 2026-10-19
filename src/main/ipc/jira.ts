@@ -1,8 +1,10 @@
 import { JiraIssueListFiltersParam } from '../../shared/rpc-contract/jira-quick-filter-params'
+import { JiraFavouriteFilterParams } from '../../shared/rpc-contract/jira-favourite-filter-params'
 import { ipcMain } from 'electron'
 import type { JiraMediaFormat } from '../../shared/jira-attachment-image'
 import { connect, disconnect, getStatus, selectSite, testConnection } from '../jira/client'
-import { _resetPreflightCache } from './preflight'
+import { listFavouriteFilters } from '../jira/favourite-filters'
+import { _resetPreflightCache } from '../preflight/agent-detection'
 import { JiraCancellableRequests } from './jira-cancellable-requests'
 import { registerJiraUserSearchHandlers } from './jira-user-search'
 import { registerJiraProjectMetadataHandlers } from './jira-project-metadata'
@@ -231,6 +233,10 @@ export function registerJiraHandlers(): void {
   )
 
   registerJiraProjectMetadataHandlers(normalizeJiraSiteId)
+
+  ipcMain.handle('jira:listFavouriteFilters', async (_event, args: unknown) => {
+    return listFavouriteFilters(JiraFavouriteFilterParams.parse(args).siteId)
+  })
 
   registerJiraUserSearchHandlers()
 
