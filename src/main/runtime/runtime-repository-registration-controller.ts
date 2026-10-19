@@ -66,7 +66,7 @@ export class RuntimeRepositoryRegistrationController {
         parseExecutionHostId(executionHostId)?.kind === 'runtime'
       ) {
         const adopted =
-          store.updateRepo(existing.id, { executionHostId }) ??
+          store.updateRepo(existing, { executionHostId }) ??
           ({ ...existing, executionHostId } as Repo)
         this.invalidate(existing.id)
         return adopted

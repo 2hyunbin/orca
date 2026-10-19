@@ -255,7 +255,7 @@ describe('Store', () => {
     const group = store.createProjectGroup({ name: 'Platform', createdFrom: 'manual' })
     store.addRepo(makeRepo({ id: 'r1', projectGroupId: group.id, projectGroupOrder: 1 }))
 
-    const updated = store.updateRepo('r1', {
+    const updated = store.updateRepo({ id: 'r1' }, {
       projectGroupId: '',
       projectGroupOrder: Number.POSITIVE_INFINITY
     } as never)
@@ -268,7 +268,7 @@ describe('Store', () => {
     const store = await createStore()
     store.addRepo(makeRepo({ id: 'r1' }))
 
-    const updated = store.updateRepo('r1', { executionHostId: 'runtime:env-1' })
+    const updated = store.updateRepo({ id: 'r1' }, { executionHostId: 'runtime:env-1' })
 
     expect(updated?.executionHostId).toBe('runtime:env-1')
     expect(store.getRepo('r1')?.executionHostId).toBe('runtime:env-1')

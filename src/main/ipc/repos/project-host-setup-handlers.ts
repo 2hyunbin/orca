@@ -64,7 +64,7 @@ function alignRepoWithRequestedProject(
       throw new Error('Imported folder does not match the selected project identity.')
     }
     // Why: stamp the selected project's provider identity when the folder lacks upstream, so projection can merge it.
-    const updated = store.updateRepo(repo.id, {
+    const updated = store.updateRepo(repo, {
       upstream: {
         owner: identity.owner,
         repo: identity.repo,
@@ -77,7 +77,7 @@ function alignRepoWithRequestedProject(
     repo = updated
     setup = getProjectHostSetupForRepo(store.getProjectHostSetups(), repo)
   }
-  const updated = store.updateRepo(repo.id, { projectHostSetupMethod: setupMethod })
+  const updated = store.updateRepo(repo, { projectHostSetupMethod: setupMethod })
   if (!updated) {
     throw new Error(
       `Project setup repo disappeared before setup metadata could be linked: ${repo.id}`
