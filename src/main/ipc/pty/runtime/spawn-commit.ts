@@ -3,7 +3,6 @@ import type { Store } from '../../../persistence'
 import type { PersistPtyBindingArgs } from '../../../persistence/loading-store/pty-binding-persistence'
 import { ptyBindingIsRefused } from '../../../persistence/loading-store/pty-binding-refusals'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
-import { toSshExecutionHostId } from '../../../../shared/execution-host'
 import { PaneOwnerContentionError } from '../pane/pane-spawn-operation'
 import { isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
 import {
@@ -33,7 +32,7 @@ import {
   isNativeWindowsLocalPtySpawn,
   markNativeWindowsConptyPty
 } from '../../../runtime/terminal-model-query-authority'
-import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
+import { LOCAL_EXECUTION_HOST_ID, toSshExecutionHostId } from '../../../../shared/execution-host'
 import { createTerminalSessionStateSaveFailureMessage } from '../../../../shared/terminal-session-state-save-failure'
 import { resolvePaneSpawnReservation } from '../pane/spawn-reservation'
 import { admitProviderReattachLaunchIdentity } from '../pane/launch-authority'

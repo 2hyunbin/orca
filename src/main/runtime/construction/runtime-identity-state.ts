@@ -1,4 +1,3 @@
-import type { PtyRegistrationClaim } from '../runtime-terminal-state-records'
 import { randomUUID } from 'node:crypto'
 import { preserveTerminalRetirementProofs } from '../mobile-session-terminal-retirement-proof'
 import type { TuiAgent } from '../../../shared/tui-agent'
@@ -37,7 +36,7 @@ import type {
   PtyControllerInventory,
   RuntimePtyController
 } from '../runtime-pty-controller-contract'
-import type { RuntimeLeafRecord } from '../runtime-terminal-state-records'
+import type { RuntimeLeafRecord, PtyRegistrationClaim } from '../runtime-terminal-state-records'
 import type { TerminalHandleRecord } from '../runtime-terminal-contracts'
 import type { PtyIncarnationHandleRecord } from '../orca-runtime-core'
 import { MailPointerRepointScheduler } from '../orchestration/mail-pointer-repoint-scheduler'
