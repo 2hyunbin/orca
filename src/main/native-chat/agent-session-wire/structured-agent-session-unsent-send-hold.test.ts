@@ -602,11 +602,11 @@ describe('what is not kept', () => {
     )
   })
 
-  it('the delivery step keeps one the open could not settle, and hands nothing over', async () => {
+  it.each([2, 4])('settles an earlier send after %i failed writes', async (failures) => {
     const id = await acceptWhileStarting(sendRequest('open write failed'))
+    const kept = failures === 2
     const resolve = AgentSessionJournal.prototype.resolveDispatch
-    // The open's keep and its plain-rejection fallback both fail.
-    let failures = 2
+    // The open's two writes fail; with four failures, the loop's two writes fail too.
     vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     vi.spyOn(AgentSessionJournal.prototype, 'resolveDispatch').mockImplementation(function (
       this: AgentSessionJournal,
@@ -622,9 +622,14 @@ describe('what is not kept', () => {
     // The open's write failed; a new send wakes the delivery loop, whose first step settles it.
     const next = rig.send('wakes the loop')
     await next.result
-    await eventually(async () => expect(await rig.drafts()).toEqual([{ messageId: id, ...KEPT }]))
+    await eventually(async () =>
+      expect(await rig.drafts()).toEqual(kept ? [{ messageId: id, ...KEPT }] : [])
+    )
     await eventually(() => expect(dispatchedTexts()).toEqual(['wakes the loop']))
     expect(await rig.submission(id)).toMatchObject({ dispatchState: 'rejected', ...HOST_RESTARTED })
+    if (!kept) {
+      expect(await rig.submission(id)).not.toHaveProperty('keptAsQueuedMessageId')
+    }
   })
 
   it('failed cleanup preserves old sends without giving a new message stale command retry advice', async () => {

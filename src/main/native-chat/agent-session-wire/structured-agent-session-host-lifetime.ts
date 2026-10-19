@@ -11,7 +11,11 @@
 import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
 import { structuredAgentSessionHandsOver } from './structured-agent-session-current-work'
 import type { AgentJournalSubmission } from '../../../shared/agent-session-journal-types'
-import { holdUnsentSends } from '../agent-session-journal/journal-unsent-send-hold'
+import {
+  holdUnsentSends,
+  unsentSendRejection
+} from '../agent-session-journal/journal-unsent-send-hold'
+import { rejectJournalQueuedSubmissions } from '../agent-session-journal/journal-pending-submission-recovery'
 import {
   snapshotBeforeStructuredAgentSessionStop,
   StructuredAgentSessionEvictionError
@@ -124,12 +128,24 @@ export async function holdRestartedStructuredAgentSessionSends(
     fence,
     hostInstance: structuredAgentSessionHostInstance(),
     hold: { cause: 'hostRestarted' }
-  }).catch((error: unknown) => {
+  }).catch(async (error: unknown) => {
     logger.warn('settling sends an earlier process left queued failed', {
       scope: 'loop-leftover-sends',
       sessionId,
       error
     })
+    await rejectJournalQueuedSubmissions(
+      journal,
+      fence,
+      unsentSendRejection('hostRestarted'),
+      (entry) => journal.acceptedBeforeOpen(entry.clientMessageId)
+    ).catch((error: unknown) =>
+      logger.warn('rejecting sends an earlier process left queued failed', {
+        scope: 'loop-leftover-reject',
+        sessionId,
+        error
+      })
+    )
     return null
   })
   if (settled !== null) {

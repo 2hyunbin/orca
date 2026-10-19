@@ -28,6 +28,10 @@ export type UnsentSendHold =
   /** A close of the chat; `which` narrows it to what a close that did not complete closed. */
   | { cause: 'chatClosed'; which?: (submission: AgentJournalSubmission) => boolean }
 
+export function unsentSendRejection(cause: UnsentSendHold['cause']) {
+  return agentSessionFailureWords(agentSessionFailureFact(cause), { surface: 'rejection' })
+}
+
 /** The body an unsent send is kept with, or null when it is rejected instead:
  *  - a card's own hand-off: its rejection already returns the card (`rejectedDraftSettlement`);
  *  - `/compact` and other commands: a command in flight is not resumed, the person re-runs it;
@@ -113,9 +117,7 @@ export async function holdUnsentSends(
     )
   }))
   const positions = headOfQueuePositions(journal, kept)
-  const rejection = agentSessionFailureWords(agentSessionFailureFact(hold.cause), {
-    surface: 'rejection'
-  })
+  const rejection = unsentSendRejection(hold.cause)
   const failures: unknown[] = []
   for (const [index, { submission, body }] of kept.entries()) {
     const { clientMessageId } = submission
