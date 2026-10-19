@@ -7,6 +7,7 @@ import {
 } from './sidebar-inputs/orca-runtime-sidebar-temporal'
 import { OrcaRuntimeWithMigrationCatalog } from './orca-runtime-migration-catalog'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../shared/sidebar-inputs-switch'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import type { RuntimeCommandSurfaceHost } from './orca-runtime-core'
 import type {
   AgentLaunchTabPublished,
@@ -106,6 +107,7 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
             pairedServerRows: requireSwitchedOn(this.pairedServerRows),
             workspaceCreations: requireSwitchedOn(this.workspaceCreations),
             workspaceRows: requireSwitchedOn(this.workspaceRows),
+            repoIcons: requireSwitchedOn(this.repoIconDataUrls),
             store: () => this.store,
             onClientEvent: (listener, options) => this.onClientEvent(listener, options)
           }),
@@ -251,18 +253,24 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
 
   /** A window's layout command (`layout.apply`), applied to the partitions that hold its tab. */
   async applyLayoutCommand(command: WindowLayoutCommand): Promise<LayoutApplyReply> {
-    const reply = await applyWindowLayoutCommand(
-      this.requireStore(),
-      (worktreeId, tabId) => {
-        if (tabId !== null) {
-          return this.getWorkspaceSessionHostIdsForTab(worktreeId, tabId)
-        }
-        const routed = this.tryGetWorkspaceSessionHostIdForWorktree(worktreeId)
-        return routed ? [routed] : []
-      },
-      command,
-      (move) => rekeyMovedPaneOwners(this, move)
-    )
+    const apply = (): Promise<LayoutApplyReply> =>
+      applyWindowLayoutCommand(
+        this.requireStore(),
+        (worktreeId, tabId) => {
+          if (tabId !== null) {
+            return this.getWorkspaceSessionHostIdsForTab(worktreeId, tabId)
+          }
+          const routed = this.tryGetWorkspaceSessionHostIdForWorktree(worktreeId)
+          return routed ? [routed] : []
+        },
+        command,
+        (move) => rekeyMovedPaneOwners(this, move)
+      )
+    // A window's sleep or wake lands after the hook statuses main accepted before it, as in the window.
+    const reply = await (ORCA_LAYOUT_OWNER_IS_MAIN &&
+    (command.type === 'sleep' || command.type === 'wake')
+      ? this.inResumeRecordOrder(apply)
+      : apply())
     // Sent before the reply, so the window can wait for the frame that shows the change.
     return { ...reply, frameSeq: this.workspaceLayoutStream.settledSeq() }
   }

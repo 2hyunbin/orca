@@ -298,7 +298,7 @@ export const SQLITE_RUNTIME_INCLUDE = [
   'src/main/ssh/orcad-migration-stuck-host-profiles.test.ts',
   'src/main/managed-server/lifecycle/orcad-runtime-conversion.test.ts',
   'src/main/ssh/orcad-unreachable-setup-release.test.ts',
-  'src/main/ssh/ssh-target-orcad-preflight.test.ts',
+  'src/main/ssh/targets/ssh-target-orcad-preflight.test.ts',
   'src/main/worktree-identity-persistence.test.ts',
   'src/main/worktree-removal-close-records.test.ts',
   'src/main/worktree-removal-session-partition-fencing.test.ts',

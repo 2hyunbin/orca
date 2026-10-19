@@ -581,7 +581,8 @@
             "76deec8f58": "Error al cambiar organización",
             "7d4bc516ee": "Error al cambiar perfil",
             "f518e89aa5": "El proyecto ya existe en ese perfil",
-            "f03ae7f27b": "Error al transferir proyecto"
+            "f03ae7f27b": "Error al transferir proyecto",
+            "signInTimedOut": "Se agotó el tiempo de inicio de sesión"
           }
         },
         "runtime": {
@@ -3427,7 +3428,9 @@
             "copiedLink": "Enlace copiado",
             "copyLinkFailed": "No se pudo copiar el enlace",
             "downloadOpenWithDefaultApp": "Descargar y abrir con la aplicación predeterminada",
-            "downloadOpenFailed": "No se pudo descargar '{{value0}}'."
+            "downloadOpenFailed": "No se pudo descargar '{{value0}}'.",
+            "openInThisGroup": "Abrir en este grupo",
+            "openInThisGroupRefused": "No se pudo abrir {{value0}} en este grupo"
           },
           "TerminalQuickCommandsSubmenu": {
             "3ccc7981bb": "Anfitrión no disponible",
@@ -3489,7 +3492,7 @@
         "bar": {
           "BrowserTab": {
             "6e0bc8f3a8": "Abrir en el navegador",
-            "9dd880bd56": "Cerrar pestañas a la derecha",
+            "9dd880bd56": "Cerrar todas las pestañas a la derecha",
             "1611a1324b": "Cerrar",
             "5d6e89891f": "Duplicar pestaña",
             "966feb9ad5": "Dividir a la derecha",
@@ -3506,7 +3509,7 @@
             "52ce4f4605": "Copiar ruta relativa",
             "5b85754786": "Copiar ruta",
             "bfd5797ef4": "Abrir vista previa de Markdown",
-            "e5ff31ccaf": "Cerrar pestañas a la derecha",
+            "e5ff31ccaf": "Cerrar todas las pestañas a la derecha",
             "ba1369dd24": "Cerrar todas las pestañas del editor",
             "1ba8492c5b": "Cerrar",
             "68cc610e7f": "Renombrar",
@@ -3539,7 +3542,7 @@
           "SortableTabContextMenu": {
             "35e8892fd0": "Color de pestaña",
             "2f697b3c31": "Cambiar título",
-            "c1ee099c7e": "Cerrar pestañas a la derecha",
+            "c1ee099c7e": "Cerrar todas las pestañas a la derecha",
             "8d16f9cd30": "Cerrar otras",
             "89359a36f7": "Cerrar",
             "21132389e9": "Dividir a la derecha",
@@ -6443,8 +6446,7 @@
         },
         "MarkdownImageLightbox": {
           "image": "Image",
-          "expand": "Expand image",
-          "close": "Close"
+          "expand": "Expand image"
         },
         "WorktreeDeveloperMenu": {
           "developer": "Developer",
@@ -15675,7 +15677,9 @@
           "1829437fce": "Nuevo Markdown"
         },
         "DiagramViewerModal": {
-          "title": "Diagrama",
+          "title": "Diagrama"
+        },
+        "PanZoomImageDialog": {
           "zoomOut": "Alejar",
           "zoomIn": "Acercar",
           "fit": "Ajustar a la pantalla",
@@ -17940,6 +17944,14 @@
         "a62f9db53d": "Cancel",
         "c77189bc0c": "Update filter",
         "19af906d12": "Save filter"
+      },
+      "OrcaSignInProgress": {
+        "waiting": "Esperando el inicio de sesión en tu navegador",
+        "copyLink": "Copiar enlace de inicio de sesión",
+        "copied": "Enlace de inicio de sesión copiado",
+        "copyFailed": "No se pudo copiar el enlace.",
+        "signingIn": "Iniciando sesión…",
+        "cancel": "Cancelar"
       }
     },
     "i18n": {
@@ -18280,7 +18292,6 @@
         "imageSaving": "Guardando la imagen pegada…",
         "pendingAttachmentLimit": "Hay demasiados archivos adjuntos en espera. Termina de redactar antes de adjuntar más.",
         "viewAttachment": "Ver imagen",
-        "imagePreview": "Vista previa de la imagen a tamaño completo",
         "workspaceAttachmentMismatch": "Los archivos solo se pueden adjuntar a su espacio de trabajo de origen.",
         "attachmentOwnerChanged": "Este espacio de trabajo cambió de host durante la conexión; vuelve a soltar los archivos.",
         "attachmentUnreadable": "No se pudieron leer los archivos soltados.",
@@ -18756,15 +18767,15 @@
         "SortableTabContextMenu": {
           "switchToTerminalView": "Cambiar a la vista de terminal",
           "switchToChatView": "Cambiar a vista de chat",
-          "closeTabsToLeft": "Cerrar pestañas a la izquierda"
+          "closeTabsToLeft": "Cerrar todas las pestañas a la izquierda"
         },
         "BrowserTab": {
           "closeOthers": "Cerrar otras",
-          "closeTabsToLeft": "Cerrar pestañas a la izquierda"
+          "closeTabsToLeft": "Cerrar todas las pestañas a la izquierda"
         },
         "EditorFileTabContextMenu": {
           "closeOthers": "Cerrar otras",
-          "closeTabsToLeft": "Cerrar pestañas a la izquierda"
+          "closeTabsToLeft": "Cerrar todas las pestañas a la izquierda"
         },
         "CopyTabIdMenuItem": {
           "copied": "ID de pestaña copiado",

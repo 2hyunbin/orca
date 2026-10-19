@@ -582,7 +582,8 @@
             "76deec8f58": "조직을 전환하지 못했습니다",
             "7d4bc516ee": "프로필을 전환하지 못했습니다",
             "f518e89aa5": "프로젝트가 해당 프로필에 이미 있습니다",
-            "f03ae7f27b": "프로젝트를 전송하지 못했습니다"
+            "f03ae7f27b": "프로젝트를 전송하지 못했습니다",
+            "signInTimedOut": "로그인 시간이 초과되었습니다"
           }
         },
         "runtime": {
@@ -3429,7 +3430,9 @@
             "copiedLink": "복사된 링크",
             "copyLinkFailed": "링크를 복사하지 못했습니다.",
             "downloadOpenWithDefaultApp": "기본 앱 다운로드 및 열기",
-            "downloadOpenFailed": "'{{value0}}'을(를) 다운로드하지 못했습니다."
+            "downloadOpenFailed": "'{{value0}}'을(를) 다운로드하지 못했습니다.",
+            "openInThisGroup": "이 그룹에서 열기",
+            "openInThisGroupRefused": "이 그룹에서 {{value0}}을(를) 열 수 없습니다"
           },
           "TerminalQuickCommandsSubmenu": {
             "3ccc7981bb": "호스트를 사용할 수 없음",
@@ -3494,7 +3497,7 @@
         "bar": {
           "BrowserTab": {
             "6e0bc8f3a8": "브라우저에서 열기",
-            "9dd880bd56": "오른쪽으로 탭 닫기",
+            "9dd880bd56": "오른쪽의 모든 탭 닫기",
             "1611a1324b": "닫기",
             "5d6e89891f": "탭 복제",
             "966feb9ad5": "오른쪽 분할",
@@ -3511,7 +3514,7 @@
             "52ce4f4605": "상대 경로 복사",
             "5b85754786": "경로 복사",
             "bfd5797ef4": "Markdown 미리보기 열기",
-            "e5ff31ccaf": "오른쪽으로 탭 닫기",
+            "e5ff31ccaf": "오른쪽의 모든 탭 닫기",
             "ba1369dd24": "모든 편집기 탭 닫기",
             "1ba8492c5b": "닫기",
             "68cc610e7f": "이름 바꾸기",
@@ -3544,7 +3547,7 @@
           "SortableTabContextMenu": {
             "35e8892fd0": "탭 색상",
             "2f697b3c31": "제목 변경",
-            "c1ee099c7e": "오른쪽으로 탭 닫기",
+            "c1ee099c7e": "오른쪽의 모든 탭 닫기",
             "8d16f9cd30": "다른 탭 닫기",
             "89359a36f7": "닫기",
             "21132389e9": "오른쪽 분할",
@@ -6448,8 +6451,7 @@
         },
         "MarkdownImageLightbox": {
           "image": "Image",
-          "expand": "Expand image",
-          "close": "Close"
+          "expand": "Expand image"
         },
         "WorktreeDeveloperMenu": {
           "developer": "Developer",
@@ -15680,7 +15682,9 @@
           "1829437fce": "새로운 Markdown"
         },
         "DiagramViewerModal": {
-          "title": "다이어그램",
+          "title": "다이어그램"
+        },
+        "PanZoomImageDialog": {
           "zoomOut": "축소",
           "zoomIn": "확대",
           "fit": "화면에 맞추기",
@@ -17945,6 +17949,14 @@
         "a62f9db53d": "Cancel",
         "c77189bc0c": "Update filter",
         "19af906d12": "Save filter"
+      },
+      "OrcaSignInProgress": {
+        "waiting": "브라우저에서 로그인을 기다리는 중",
+        "copyLink": "로그인 링크 복사",
+        "copied": "로그인 링크를 복사했습니다",
+        "copyFailed": "링크를 복사할 수 없습니다.",
+        "signingIn": "로그인 중…",
+        "cancel": "취소"
       }
     },
     "i18n": {
@@ -18315,7 +18327,6 @@
         "imageSaving": "붙여넣은 이미지를 저장하는 중…",
         "pendingAttachmentLimit": "대기 중인 첨부파일이 너무 많습니다. 더 첨부하기 전에 작성을 완료하세요.",
         "viewAttachment": "이미지 보기",
-        "imagePreview": "전체 크기 이미지 미리보기",
         "imagePreviewUnavailable": "미리보기를 사용할 수 없습니다.",
         "copyImage": "이미지 복사",
         "copyImageFailed": "이미지를 복사할 수 없습니다",
@@ -18447,7 +18458,7 @@
         "stopping": "중지하는 중…",
         "queueAfterStop": "중지 후에 실행할 메시지를 대기열에 추가",
         "sendAfterStop": "중지 후에 실행할 메시지 보내기",
-        "thinking": "생각",
+        "thinking": "생각 중",
         "workingFor": "{{value0}} 작업 중",
         "workedFor": "{{value0}} 작업 완료",
         "interruptedAfter": "{{value0}} 후 중단됨",
@@ -18796,15 +18807,15 @@
         "SortableTabContextMenu": {
           "switchToTerminalView": "terminal 보기로 전환",
           "switchToChatView": "채팅 보기로 전환",
-          "closeTabsToLeft": "왼쪽으로 탭 닫기"
+          "closeTabsToLeft": "왼쪽의 모든 탭 닫기"
         },
         "BrowserTab": {
           "closeOthers": "다른 탭 닫기",
-          "closeTabsToLeft": "왼쪽으로 탭 닫기"
+          "closeTabsToLeft": "왼쪽의 모든 탭 닫기"
         },
         "EditorFileTabContextMenu": {
           "closeOthers": "다른 탭 닫기",
-          "closeTabsToLeft": "왼쪽으로 탭 닫기"
+          "closeTabsToLeft": "왼쪽의 모든 탭 닫기"
         },
         "CopyTabIdMenuItem": {
           "copied": "탭 ID 복사됨",
