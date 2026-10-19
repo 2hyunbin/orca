@@ -409,6 +409,18 @@ describe('SortStampsProducer: terminal events', () => {
     expect(h.writes).toHaveLength(writes)
     expect(h.meta.get(WT)?.smartTier).toBe('working')
   })
+
+  // Known gap before the sidebar flip: the detector starts a hooked pane at rest, so a first hook
+  // row of done is no change to it, and the title's Working is never replaced by the finish.
+  it.skip('stamps the finish when a title-tracked pane’s first hook row is done', () => {
+    const h = createHarness()
+    h.attach(h.server)
+    h.sideEffects([title('⠋ Codex working')], { pane: PANE })
+    expect(h.meta.get(WT)?.smartTier).toBe('working')
+    const doneAt = advance(20_000)
+    hook(h.server, 'done')
+    expect(h.meta.get(WT)).toEqual({ lastActivityAt: doneAt, smartTier: 'done', smartAt: doneAt })
+  })
 })
 
 describe('SortStampsProducer: startup reconcile', () => {
