@@ -174,14 +174,28 @@ it('does not label an IPC binding ownership refusal as a storage failure', async
   await expect(commitPtyIpcSpawn(ctx)).rejects.toThrow('terminal_pane_owner_changed')
 })
 
-it.each(['ipc', 'runtime'])(
-  'keeps tracking a %s spawn whose save failed and whose discard shutdown failed',
-  async (controller) => {
+it.each(
+  ['ipc', 'runtime'].flatMap((controller) =>
+    [false, true].map((exitsDuringSave) => ({ controller, exitsDuringSave }))
+  )
+)(
+  'after a failed $controller save and a failed discard shutdown (exit during save: $exitsDuringSave)',
+  async ({ controller, exitsDuringSave }) => {
     const { store } = await fixture()
     const runtime = new OrcaRuntimeService(store)
     runtime.onPtySpawned(binding.ptyId, binding.incarnationId)
     const deps = createPtySpawnCommitDependencies(runtime, store)
-    vi.spyOn(store, 'persistPtyBinding').mockRejectedValue(new Error('disk full'))
+    vi.spyOn(store, 'persistPtyBinding').mockImplementation(async () => {
+      if (exitsDuringSave) {
+        // The provider's exit listener, as local-configure wires it.
+        clearProviderPtyState(binding.ptyId)
+        ptyOwnership.delete(binding.ptyId)
+        await runtime.onPtyExit(binding.ptyId, 0, binding.incarnationId, {
+          providerExitObserved: true
+        })
+      }
+      throw new Error('disk full')
+    })
     let commit: () => Promise<unknown>
     let provider: { shutdown: (...args: never[]) => Promise<void> }
     if (controller === 'ipc') {
@@ -203,8 +217,13 @@ it.each(['ipc', 'runtime'])(
 
     await expect(commit()).rejects.toThrow()
 
-    expect(ptyOwnership.get(binding.ptyId)).toBe(LOCAL_EXECUTION_HOST_ID)
-    expect(ptyIncarnationById.get(binding.ptyId)).toBe(binding.incarnationId)
-    expect(runtime.getPtyLivenessVerdict(binding.ptyId)?.status).toBe('unverifiable')
+    if (exitsDuringSave) {
+      expect(ptyOwnership.has(binding.ptyId)).toBe(false)
+      expect(runtime.getPtyLivenessVerdict(binding.ptyId)?.status).toBe('exited')
+    } else {
+      expect(ptyOwnership.get(binding.ptyId)).toBe(LOCAL_EXECUTION_HOST_ID)
+      expect(ptyIncarnationById.get(binding.ptyId)).toBe(binding.incarnationId)
+      expect(runtime.getPtyLivenessVerdict(binding.ptyId)?.status).toBe('unverifiable')
+    }
   }
 )

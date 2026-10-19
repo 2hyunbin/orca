@@ -8,22 +8,28 @@ import {
   setAdoptedPtyOwnership,
   setPtyOwnership
 } from '../provider/ownership-state'
-import type { ExecutionHostId } from '../../../../shared/execution-host'
+import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import { finishPtyShutdown, isPtyAlreadyGoneError } from '../provider/liveness'
 import { PtyExitProof } from '../../../pty-exit-proof'
 import { errorMessage } from '../../../../shared/error-message'
 import { retirePersistedStablePaneOwner } from './stable-owner'
 
-export function admitPtyReattachOwnership(
+/** Tracks a PTY from its spawn reply, before any save: only an observed exit, or a stop on proof,
+ *  removes it, so a spawn whose save or stop fails is never forgotten. */
+export function admitPtySpawnOwnership(
   runtime: OrcaRuntimeService | undefined,
   result: PtySpawnResult
 ): void {
-  if (!result.isReattach && result.agentSessionEnsure?.disposition !== 'adopted') {
+  if (result.isReattach || result.agentSessionEnsure?.disposition === 'adopted') {
+    runtime?.assertPtyRegistrationAllowed?.(result.id, result.incarnationId)
+    // A failed local save must not strand a live process already admitted by its host.
+    setAdoptedPtyOwnership(result.id)
+  } else if (runtime?.getPtyLivenessVerdict?.(result.id)?.status === 'exited') {
+    // Its exit already arrived (the spawn reset the verdict), so tracking it now would resurrect it.
     return
+  } else {
+    setPtyOwnership(result.id, LOCAL_EXECUTION_HOST_ID)
   }
-  runtime?.assertPtyRegistrationAllowed?.(result.id, result.incarnationId)
-  // A failed local save must not strand a live process already admitted by its host.
-  setAdoptedPtyOwnership(result.id)
   if (result.incarnationId) {
     ptyIncarnationById.set(result.id, result.incarnationId)
   }
@@ -32,8 +38,7 @@ export function admitPtyReattachOwnership(
 export async function discardUnpersistedPtySpawn(
   provider: IPtyProvider,
   result: PtySpawnResult,
-  runtime: Pick<OrcaRuntimeService, 'markPtyLivenessUnverifiable'> | undefined,
-  ownerHostId: ExecutionHostId
+  runtime: Pick<OrcaRuntimeService, 'markPtyLivenessUnverifiable'> | undefined
 ): Promise<void> {
   if (
     result.isReattach ||
@@ -41,12 +46,6 @@ export async function discardUnpersistedPtySpawn(
     !isCurrentPtyExit(result)
   ) {
     return
-  }
-  // Track it as publish would have before stopping it: a failed stop must leave a handle, and an
-  // exit or replacement meanwhile overwrites this.
-  setPtyOwnership(result.id, ownerHostId)
-  if (result.incarnationId) {
-    ptyIncarnationById.set(result.id, result.incarnationId)
   }
   let proof: PtyExitProof
   try {
@@ -58,7 +57,7 @@ export async function discardUnpersistedPtySpawn(
   } catch (error) {
     if (!isPtyAlreadyGoneError(error)) {
       console.warn('[pty] failed to clean up PTY after persistence failure:', error)
-      // An exit observed meanwhile, or a same-id replacement, outranks a lost control reply.
+      // An observed exit, or a same-id replacement, outranks a lost control reply.
       if (
         !ptyOwnership.has(result.id) ||
         ptyIncarnationById.get(result.id) !== result.incarnationId

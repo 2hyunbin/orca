@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import type { IPtyProvider, PtySpawnResult } from '../../../providers/pty-provider-contract'
 import { ptyIncarnationById, ptyOwnership } from '../provider/ownership-state'
-import { discardUnpersistedPtySpawn } from './spawn-registration'
+import { admitPtySpawnOwnership, discardUnpersistedPtySpawn } from './spawn-registration'
 
 const PTY_ID = 'unpersisted-spawn'
 const result: PtySpawnResult = { id: PTY_ID, incarnationId: 'inc-1' }
@@ -12,7 +12,7 @@ function providerWhoseShutdown(shutdown: () => Promise<void>): IPtyProvider {
   return { shutdown } as unknown as IPtyProvider
 }
 
-// Callers discard before publishing the spawn, so no ownership is recorded yet.
+// The commit records ownership at its start, before the save whose failure leads here.
 describe('discarding a spawn whose binding failed to save', () => {
   afterEach(() => {
     ptyOwnership.delete(PTY_ID)
@@ -23,12 +23,10 @@ describe('discarding a spawn whose binding failed to save', () => {
     shutdown: () => Promise<void>,
     runtime = { markPtyLivenessUnverifiable: vi.fn() }
   ): Promise<typeof runtime> {
-    return discardUnpersistedPtySpawn(
-      providerWhoseShutdown(shutdown),
-      result,
-      runtime,
-      LOCAL_EXECUTION_HOST_ID
-    ).then(() => runtime)
+    admitPtySpawnOwnership(undefined, result)
+    return discardUnpersistedPtySpawn(providerWhoseShutdown(shutdown), result, runtime).then(
+      () => runtime
+    )
   }
 
   it('keeps tracking the PTY and reads unverifiable when the shutdown fails', async () => {
