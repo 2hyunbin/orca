@@ -44,7 +44,7 @@ function attemptKey(environmentId: string, intentKey: string): string {
 }
 
 function listHeldIntents(
-  store: PairedTerminalTabCloseIntentStore,
+  store: Pick<PairedTerminalTabCloseIntentStore, 'getIntents'>,
   environmentId: string
 ): readonly PairedTerminalTabCloseIntent[] {
   return store.getIntents()?.[environmentId] ?? []
@@ -86,7 +86,7 @@ function revealHeldClose(
  * again, so it stops hiding its tab, except a delivered close the host's next snapshot will settle.
  */
 function changeHeldIntents(
-  store: PairedTerminalTabCloseIntentStore,
+  store: Pick<PairedTerminalTabCloseIntentStore, 'getIntents'>,
   environmentId: string,
   change: () => void,
   stillHidden: ReadonlySet<string> = new Set()
@@ -213,6 +213,65 @@ export function settleWebSessionCloseReplay(
     return delivered ? 'done' : 'gave-up'
   }
   return 'retry'
+}
+
+/** The held closes of a store whose actions may be absent (minimal test assemblies). */
+export function pairedTerminalTabCloseIntentStoreOf(
+  getState: () => {
+    pairedTerminalTabCloseIntentsByEnvironment?: PairedTerminalTabCloseIntentsByEnvironment
+    recordPairedTerminalTabCloseIntent?: PairedTerminalTabCloseIntentStore['record']
+    clearPairedTerminalTabCloseIntents?: PairedTerminalTabCloseIntentStore['clear']
+  }
+): PairedTerminalTabCloseIntentStore {
+  return {
+    getIntents: () => getState().pairedTerminalTabCloseIntentsByEnvironment,
+    record: (environmentId, intent) =>
+      getState().recordPairedTerminalTabCloseIntent?.(environmentId, intent),
+    clear: (environmentId, intentKeys) =>
+      getState().clearPairedTerminalTabCloseIntents?.(environmentId, intentKeys)
+  }
+}
+
+/**
+ * Brings the held closes in line with a published catalog. A close owed to a server the catalog
+ * lacks or to a retired peer can never be sent, so it goes; the whole catalog, not a diff, so a
+ * server removed while the app was closed goes too. A proven same-machine re-pair moves its closes
+ * to the new pairing, in the saved record, so a reload still sends them.
+ */
+export function reconcileWebSessionCloseReplaysWithCatalog(
+  store: PairedTerminalTabCloseIntentStore,
+  catalog: {
+    listed: ReadonlySet<string>
+    retired: readonly string[]
+    sameHost: readonly { id: string; fromRevision: number; toRevision: number }[]
+  }
+): void {
+  for (const [environmentId, held] of Object.entries(store.getIntents() ?? {})) {
+    if (!catalog.listed.has(environmentId) || catalog.retired.includes(environmentId)) {
+      const keys = held.map(pairedTerminalTabCloseIntentKey)
+      changeHeldIntents(store, environmentId, () => store.clear(environmentId, keys))
+    }
+  }
+  for (const { id: environmentId, fromRevision, toRevision } of catalog.sameHost) {
+    const now = Date.now()
+    const moved = listHeldIntents(store, environmentId).filter(
+      (intent) =>
+        intent.pairingRevision === fromRevision &&
+        now - intent.closedAt <= PAIRED_TERMINAL_TAB_CLOSE_INTENT_MAX_AGE_MS
+    )
+    if (moved.length === 0) {
+      continue
+    }
+    const rebased = moved.map((intent) => ({ ...intent, pairingRevision: toRevision }))
+    // Un-hides under the old pairing; the new one hides the same tabs below.
+    changeHeldIntents(store, environmentId, () => {
+      store.clear(environmentId, moved.map(pairedTerminalTabCloseIntentKey))
+      rebased.forEach((intent) => store.record(environmentId, intent))
+    })
+    for (const intent of rebased) {
+      hideHeldClose(intentOwner(environmentId, intent), intent.worktreeId, intent.hostTabIds)
+    }
+  }
 }
 
 /** Sends the closes a received host snapshot made due; see `takeDueWebSessionCloseReplays`. */

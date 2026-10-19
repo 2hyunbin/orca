@@ -14044,8 +14044,8 @@
             "deleteReasonNonLocalHost": "이 기기에 있는 세션만 삭제할 수 있습니다.",
             "deleteReasonSyntheticPath": "이 세션은 Orca에서 삭제할 수 없습니다.",
             "deleteReasonUnsupportedAgent": "{{value0}} 세션은 Orca에서 삭제할 수 없습니다.",
-            "resumeInNewNativeChat": "새 기본 채팅에서 재개",
-            "resumeInNewCli": "새 CLI에서 재개",
+            "resumeInNewNativeChat": "채팅으로 전환",
+            "resumeInNewCli": "터미널로 전환",
             "resumeInNewCliTooltipFork": "이 대화를 새 CLI 세션으로 포크합니다.",
             "resumeInNewCliTooltipChat": "기본 채팅은 그대로 유지됩니다."
           },
@@ -18832,8 +18832,8 @@
     "tab": {
       "bar": {
         "SortableTabContextMenu": {
-          "switchToTerminalView": "terminal 보기로 전환",
-          "switchToChatView": "채팅 보기로 전환",
+          "switchToTerminalView": "터미널로 전환",
+          "switchToChatView": "채팅으로 전환",
           "closeTabsToLeft": "왼쪽의 모든 탭 닫기"
         },
         "BrowserTab": {

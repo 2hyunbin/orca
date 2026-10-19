@@ -30,6 +30,7 @@ import { createStructuredAgentSessionForWorktree } from './structured-agent-sess
 import { commitStructuredAgentSessionLaunchPrompt } from './agent-launch-structured-prompt'
 import { deliverTerminalAgentLaunchPrompt } from './agent-launch-terminal-prompt'
 import { AgentLaunchSessionAlreadyExistsError } from '../../../../shared/agent-launch-session-already-exists'
+import { AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY } from '../../../../shared/agent-session-create-capabilities'
 import { createStructuredAgentSessionId } from '../../../../shared/structured-agent-session-create'
 import { toAgentLaunchPreferences } from '../../../../shared/agent-launch-preferences'
 import { paneIdentity } from '../../runtime-terminal-pane-identity'
@@ -65,10 +66,16 @@ export function agentLaunchSurfaceFactory(
       options,
       chatOptions,
       sessionId: requested,
-      tabId
+      tabId,
+      withoutPrompt
     }) => {
       const sessionId = requested ?? createStructuredAgentSessionId(agent, randomUUID)
       const seeded = chatOptions ?? narrowStructuredLaunchSeedOptions(options)
+      // A client that creates chats without starting them starts this one on its first message.
+      const atRest =
+        withoutPrompt === true &&
+        context.clientCapabilities?.includes(AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY) ===
+          true
       const created = await createStructuredAgentSessionForWorktree({
         runtime: context.runtime,
         ensureHost: async () => {
@@ -93,6 +100,7 @@ export function agentLaunchSurfaceFactory(
         ...(chatOptions?.model ? { optionsMode: 'replace-model-selection' as const } : {}),
         ...(seeded ? { options: seeded } : {}),
         ...(tabId ? { tabId } : {}),
+        ...(atRest ? { atRest: true as const } : {}),
         activate:
           !callerPresentsSurface &&
           (presentation === undefined || (presentation === 'focused' && movesHostWindow))

@@ -14320,8 +14320,8 @@
             "deleteReasonNonLocalHost": "Only sessions on this device can be deleted.",
             "deleteReasonSyntheticPath": "This session can't be deleted from Orca.",
             "deleteReasonUnsupportedAgent": "{{value0}} sessions can't be deleted from Orca.",
-            "resumeInNewNativeChat": "Resume in New Native Chat",
-            "resumeInNewCli": "Resume in New CLI",
+            "resumeInNewNativeChat": "Switch to Chat",
+            "resumeInNewCli": "Switch to Terminal",
             "resumeInNewCliTooltipFork": "Forks this conversation into a new CLI session.",
             "resumeInNewCliTooltipChat": "The native chat stays as it is."
           },
@@ -19096,8 +19096,8 @@
     "tab": {
       "bar": {
         "SortableTabContextMenu": {
-          "switchToTerminalView": "Switch to terminal view",
-          "switchToChatView": "Switch to chat view",
+          "switchToTerminalView": "Switch to Terminal",
+          "switchToChatView": "Switch to Chat",
           "closeTabsToLeft": "Close All Tabs To The Left"
         },
         "BrowserTab": {
