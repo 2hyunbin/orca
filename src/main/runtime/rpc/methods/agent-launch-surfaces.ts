@@ -110,7 +110,7 @@ export function agentLaunchSurfaceFactory(
         agent,
         ...(seeded ? { options: seeded } : {}),
         ...(tabId ? { tabId } : {}),
-        // A paired device never activates host-wide; it selects the tab for itself.
+        // A paired device never activates host-wide: its pick, or else the creation default, shows it.
         activate:
           context.caller?.kind !== 'paired-device' &&
           (presentation === undefined || (presentation === 'focused' && movesHostWindow))

@@ -165,7 +165,7 @@ export type Worktree = {
   createdAt?: number
   /** Agent selected when Orca originally created the worktree. Seeds a replacement terminal if
    *  the user reopens it after closing every surface, and picks the tab a viewer that has not
-   *  chosen one opens on (`findWorkspaceCreationTab`). */
+   *  chosen one opens on (`resolveWorkspaceViewerTab`). */
   createdWithAgent?: TuiAgent
   /** True while an auto-named workspace is waiting for the first agent message
    *  to drive the branch/title rename. */
