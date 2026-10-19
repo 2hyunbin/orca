@@ -31,6 +31,7 @@ import {
   orcadMigrationCatalogIds
 } from './orcad-migration-manifest-export'
 import { latestOrcadMigrationInto } from './orcad-migration-rollback-mark'
+import { MAX_ORCAD_MIGRATION_MANIFEST_BYTES } from '../../shared/orcad-migration/orcad-migration-manifest-validation'
 import { retainOrcadMigrationSource } from './orcad-migration-source-retention'
 import { reconcileManagedOrcadSshTargets, visibleRepos } from './orcad-retained-source'
 import { SshConnectionStore } from './connection/ssh-connection-store'
@@ -313,6 +314,25 @@ describe('moving what an older build added to a converted host', () => {
     // Back to managed, and a start with nothing new keeps it there.
     reconcileManagedOrcadSshTargets(userDataPath, store, now)
     expect(store.getSshTarget(TARGET.id)?.orcadFence?.sourceChangedAt).toBeUndefined()
+  })
+
+  it('refuses, unjournaled, a delta under the export cap that no request can carry', async () => {
+    await convertedThenChangedOnOlderBuild()
+    const baseline = JSON.stringify(
+      planOrcadDeltaMove(userDataPath, store, store.getSshTarget(TARGET.id)!).manifest
+    ).length
+    // Under the export cap, over the sealed-frame request budget: stage, state and abort all refuse.
+    store.updateRepo(store.getRepo('repo-2')!, {
+      displayName: 'x'.repeat(MAX_ORCAD_MIGRATION_MANIFEST_BYTES - 200 - baseline)
+    })
+    const plan = planOrcadDeltaMove(userDataPath, store, store.getSshTarget(TARGET.id)!)
+    expect(JSON.stringify(plan.manifest).length).toBeLessThanOrEqual(
+      MAX_ORCAD_MIGRATION_MANIFEST_BYTES
+    )
+
+    await expect(deltaMove()).rejects.toThrow(/\(orcad_migration_manifest_too_large\)$/)
+    expect(listOrcadMigrationSourceCutovers(userDataPath)).toHaveLength(1)
+    expect(destination.commits).toBe(1)
   })
 
   it('fails the whole delta when the server already holds a colliding row', async () => {
