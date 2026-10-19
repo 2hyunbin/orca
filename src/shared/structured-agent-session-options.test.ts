@@ -350,7 +350,7 @@ describe('structured agent session options', () => {
     }
   })
 
-  it('names a default model only where the host says this launch runs it, in either order', () => {
+  it("names no default as a resumed chat's own, whichever of its list and answer lands first", () => {
     const models = [{ id: 'gpt-5.5', label: 'GPT-5.5', isDefault: true, efforts: [] }]
     const listing: AgentSessionModelCatalogResult = { origin: 'probe', fetchedAt: 1, models }
     const answer: AgentSessionOptionsResult = {
@@ -358,29 +358,24 @@ describe('structured agent session options', () => {
       current: { model: 'gpt-5.5', defaulted: ['model'] }
     }
     const seed = CODEX_SESSION_OPTION_CATALOG
-    const bothOrders = (newLaunch: boolean) => {
-      const cold = () => createStructuredAgentSessionOptionState('codex', seed)
-      return [
-        applyStructuredAgentSessionOptions(
-          applyStructuredAgentSessionModelCatalog(cold(), seed, listing, { newLaunch }),
-          seed,
-          answer,
-          { newLaunch }
-        ),
-        applyStructuredAgentSessionModelCatalog(
-          applyStructuredAgentSessionOptions(cold(), seed, answer, { newLaunch }),
-          seed,
-          listing,
-          { newLaunch }
-        )
-      ].map((state) => structuredAgentSessionOptionSnapshot(state)[0])
+    const cold = () => createStructuredAgentSessionOptionState('codex', seed)
+    const resumed = { newLaunch: false }
+    for (const state of [
+      applyStructuredAgentSessionOptions(
+        applyStructuredAgentSessionModelCatalog(cold(), seed, listing, resumed),
+        seed,
+        answer
+      ),
+      applyStructuredAgentSessionModelCatalog(
+        applyStructuredAgentSessionOptions(cold(), seed, answer),
+        seed,
+        listing,
+        resumed
+      )
+    ]) {
+      const model = structuredAgentSessionOptionSnapshot(state)[0]
+      expect(model).toMatchObject({ valueSource: 'unknown' })
+      expect(model?.kind).not.toHaveProperty('currentValue')
     }
-    const [newChat, newChatAnswerFirst] = bothOrders(true)
-    expect(newChatAnswerFirst).toEqual(newChat)
-    expect(newChat).toMatchObject({ valueSource: 'default', kind: { currentValue: 'gpt-5.5' } })
-    const [resumed, resumedAnswerFirst] = bothOrders(false)
-    expect(resumedAnswerFirst).toEqual(resumed)
-    expect(resumed).toMatchObject({ valueSource: 'unknown' })
-    expect(resumed?.kind).not.toHaveProperty('currentValue')
   })
 })

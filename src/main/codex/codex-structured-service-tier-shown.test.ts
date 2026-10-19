@@ -2,10 +2,10 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { CODEX_SESSION_OPTION_CATALOG } from '../../shared/agent-session-option-catalog-claude-codex'
+import type { AgentSessionModelOption } from '../../shared/agent-session-wire'
 import {
   applyStructuredAgentSessionOptions,
   commitStructuredAgentSessionOption,
-  commitStructuredAgentSessionOptionReply,
   createStructuredAgentSessionOptionState,
   structuredAgentSessionOptionSnapshot,
   type StructuredAgentSessionOptionState
@@ -17,16 +17,17 @@ import { createCodexDispatchEchoes } from './codex-structured-dispatch-echo'
 import { createCodexTurnOpenWaits } from './codex-structured-turn-open-wait'
 import type { CodexSession } from './codex-structured-session-state'
 import { startCodexTurn } from './codex-structured-turn-start'
+import { dropUnlistedCodexServiceTier } from './codex-structured-service-tier'
 
 const tiers = (...values: string[]) => values.map((value) => ({ value, label: value }))
 // M1 offers Fast and Flex; M2 offers only Ultrafast.
-const MODELS = [
+const MODELS: AgentSessionModelOption[] = [
   { id: 'm1', label: 'M1', isDefault: true, efforts: [], serviceTiers: tiers('priority', 'flex') },
   { id: 'm2', label: 'M2', isDefault: false, efforts: [], serviceTiers: tiers('ultrafast') }
 ]
 
-/** The tier the first turn after a start carries for the chat's saved options. */
-async function firstTurnTier(saved: Record<string, string>): Promise<unknown> {
+/** The tier the first turn after a start carries, and the session's tier after a live read. */
+async function hostRuns(saved: Record<string, string>) {
   const store = new AgentModelCatalogStore()
   store.recordSuccess('codex-account', 'codex', { models: MODELS, origin: 'probe' }, 'discovery')
   const request = vi.fn(async (_method: string, _params?: Record<string, unknown>) => ({
@@ -59,15 +60,17 @@ async function firstTurnTier(saved: Record<string, string>): Promise<unknown> {
     clientMessageId: 'message-1',
     body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'go' }] }
   })
-  return request.mock.calls.find(([method]) => method === 'turn/start')?.[1]?.serviceTier
+  const firstTurn = request.mock.calls.find(([method]) => method === 'turn/start')?.[1]
+  dropUnlistedCodexServiceTier(session, saved.model, MODELS)
+  return { firstTurn: firstTurn?.serviceTier, afterLiveRead: session.options.get('serviceTier') }
 }
 
-/** An older host's answer at rest: the saved values, with no defaults marked. */
-function atRest(saved: Record<string, string>): StructuredAgentSessionOptionState {
+/** A host's answer naming the saved values; an older host marks no defaults. */
+function answered(saved: Record<string, string>, marksDefaults: boolean) {
   return applyStructuredAgentSessionOptions(
     createStructuredAgentSessionOptionState('codex', CODEX_SESSION_OPTION_CATALOG),
     CODEX_SESSION_OPTION_CATALOG,
-    { models: MODELS, current: saved }
+    { models: MODELS, current: { ...saved, ...(marksDefaults ? { defaulted: [] } : {}) } }
   )
 }
 
@@ -79,37 +82,27 @@ function shownTier(state: StructuredAgentSessionOptionState): string | undefined
 }
 
 describe("a Codex chat's speed, shown and sent", () => {
-  it('shows what the first turn runs, and keeps the saved tier for a model that offers it', async () => {
-    // Codex runs a tier the model lacks as Standard, but passes Flex regardless.
-    for (const [saved, runs] of [
-      [{ model: 'm2', serviceTier: 'priority' }, 'default'],
-      [{ model: 'm2', serviceTier: 'flex' }, 'flex'],
-      [{ model: 'm1', serviceTier: 'priority' }, 'priority']
+  it('shows what the host runs, an older host as it sends it, and keeps the saved tier', async () => {
+    // [saved, shown from this host, shown from an older host, what this host's turns run]
+    for (const [saved, shown, olderShown, runs] of [
+      [{ model: 'm2', serviceTier: 'priority' }, 'default', 'default', 'default'],
+      [{ model: 'm2', serviceTier: 'flex' }, 'default', 'flex', 'default'],
+      [{ model: 'm1', serviceTier: 'priority' }, 'priority', 'priority', 'priority']
     ] as const) {
-      expect(shownTier(atRest(saved))).toBe(runs)
-      await expect(firstTurnTier(saved)).resolves.toBe(runs)
+      expect(shownTier(answered(saved, true))).toBe(shown)
+      // An older host sends its Flex unchanged, and Codex passes Flex.
+      expect(shownTier(answered(saved, false))).toBe(olderShown)
+      await expect(hostRuns(saved)).resolves.toEqual({ firstTurn: runs, afterLiveRead: runs })
     }
     // Back on a model that offers it, the saved tier is the chat's again.
     const back = commitStructuredAgentSessionOption(
-      atRest({ model: 'm2', serviceTier: 'priority' }),
+      answered({ model: 'm2', serviceTier: 'flex' }, true),
       'model',
       'm1'
     )
-    expect(shownTier(back)).toBe('priority')
-  })
-
-  it('asserts no Flex after a model pick the host has not answered, until its reply', () => {
-    const picked = commitStructuredAgentSessionOption(
-      atRest({ model: 'm1', serviceTier: 'flex' }),
-      'model',
-      'm2'
-    )
-    expect(shownTier(picked)).toBeUndefined()
-    // At rest the host saves the pick beside the chat's Flex, which the next start passes.
-    const answered = commitStructuredAgentSessionOptionReply(picked, {
-      model: 'm2',
-      serviceTier: 'flex'
+    expect(shownTier(back)).toBe('flex')
+    await expect(hostRuns({ model: 'm1', serviceTier: 'flex' })).resolves.toMatchObject({
+      firstTurn: 'flex'
     })
-    expect(shownTier(answered)).toBe('flex')
   })
 })

@@ -77,7 +77,7 @@ function readAtRest(agents: StructuredAgentRegistry, live?: StructuredAgentSessi
     params: { provider: RECORD.provider },
     journal: {
       threadGoal: () => null,
-      newestTurn: () => null,
+      visitItems: () => {},
       // A chat that has sent, so a value it never saved reads as a default.
       submissions: () => [{}],
       contextUsage: () => null,

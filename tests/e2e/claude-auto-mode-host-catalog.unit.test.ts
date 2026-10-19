@@ -136,7 +136,7 @@ async function hostCatalog(listingLands: Promise<void>) {
     params: { provider: 'claude' },
     journal: {
       threadGoal: () => null,
-      newestTurn: () => null,
+      visitItems: () => {},
       submissions: () => [],
       contextUsage: () => null,
       context: { floor: () => null }

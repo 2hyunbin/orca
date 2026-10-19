@@ -715,14 +715,6 @@ describe('useStructuredAgentSessionOptions', () => {
       reply: { model: 'second', serviceTier: 'default' },
       shown: ['serviceTier', 'default']
     },
-    // Codex's reply leaves out a tier both models offer, which it keeps.
-    {
-      agent: 'codex' as const,
-      tiers: [[{ value: 'priority', label: 'Fast' }], [{ value: 'priority', label: 'Fast' }]],
-      current: { model: 'opus', serviceTier: 'priority' },
-      reply: { model: 'second' },
-      shown: ['serviceTier', 'priority']
-    },
     // A configured tier no model lists (Flex) still runs, so it shows as held.
     {
       agent: 'codex' as const,

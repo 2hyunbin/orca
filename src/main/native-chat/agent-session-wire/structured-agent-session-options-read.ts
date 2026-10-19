@@ -18,6 +18,7 @@ import type {
 } from '../../../shared/agent-session-journal-types'
 import { decodeStructuredAgentSessionOptionValue } from '../../../shared/structured-agent-session-option-codec'
 import { finishedListingIds } from '../../../shared/structured-agent-session-options'
+import { savedEffectiveServiceTier } from '../../../shared/structured-agent-session-effective-tier'
 import {
   AGENT_CHAT_PERMISSION_MODE_OPTION_ID,
   agentChatPermissionModes
@@ -34,6 +35,7 @@ import { structuredAgentSessionOptionModels } from './structured-agent-session-o
 import { structuredAgentSessionLaunchPermission } from './structured-agent-session-launch-permission'
 import type { AgentSessionTurnContext, TurnOutcome } from './structured-agent-session-turns'
 import type { StructuredAgentSessionMutationContext } from './structured-agent-session-host-mutations'
+import { structuredAgentSessionNeverSent } from './structured-agent-session-never-sent'
 
 type RestingOptions = Pick<
   AgentSessionOptionsResult,
@@ -145,6 +147,8 @@ async function readStructuredAgentSessionOptionsAtRest(
   const defaulted = (['model', 'effort'] as const).filter(
     (key) => saved[key] === undefined && Boolean(key === 'model' ? model : effort)
   )
+  // The tier the chat's own model runs; the record keeps the saved one for a model that offers it.
+  const serviceTier = savedEffectiveServiceTier(saved, models)
   return {
     models: listed ? structuredAgentSessionOptionModels(listed, model, (row) => row) : [],
     ...(listedModelIds ? { listedModelIds } : {}),
@@ -155,7 +159,7 @@ async function readStructuredAgentSessionOptionsAtRest(
       ...(model ? { model } : {}),
       ...(effort ? { effort } : {}),
       ...(typeof fastMode === 'boolean' ? { fastMode } : {}),
-      ...(saved.serviceTier ? { serviceTier: saved.serviceTier } : {}),
+      ...(serviceTier ? { serviceTier } : {}),
       defaulted
     }
   }
@@ -286,14 +290,9 @@ export async function readStructuredAgentSessionOptions(
     ...(shownSaved('effort') ? { effort: selected.current.effort } : {})
   }
   // A chat that saved a value has no default for it: the saved value shows, or the child it
-  // refused runs what it reports, which the next send records. A chat started here that has sent
-  // nothing runs the default it shows, which its first send pins; one taken from history may not.
-  const neverSent =
-    record !== null &&
-    record.providerHandleChain[0]?.origin !== 'adopted' &&
-    session.journal.newestTurn() === null &&
-    session.journal.submissions().length === 0
-  const defaulted = neverSent
+  // refused runs what it reports, which the next send records. A chat that has sent nothing runs
+  // the default it shows, which its first send pins.
+  const defaulted = structuredAgentSessionNeverSent(record, session.journal)
     ? []
     : (options.current.defaulted ?? []).filter((key) => saved?.[key] === undefined)
   const confirmed = current.confirmed?.filter((key) =>

@@ -201,7 +201,7 @@ function host(agent: string, record: AgentSessionRecord) {
     params: { provider: agent },
     journal: {
       threadGoal: () => null,
-      newestTurn: () => null,
+      visitItems: () => {},
       submissions: () => [],
       contextUsage: () => null,
       context: { floor: () => null }

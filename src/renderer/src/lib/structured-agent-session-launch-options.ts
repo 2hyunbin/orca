@@ -154,27 +154,25 @@ function settleHeldOption(
   state.callers.onSettled()
 }
 
-/** Held picks become what create carries, so none is applied again after publish. */
-export function projectStructuredLaunchHeldOptions(
+const createHeld = new WeakMap<StructuredLaunchState, Readonly<Record<string, string>>>()
+
+/** The held picks this create attempt carries, in whatever form it carries them. */
+export function holdStructuredLaunchCreatePicks(
   state: StructuredLaunchState,
   held: Readonly<Record<string, string>>
 ): void {
-  const replies = repliesFor(state)
-  for (const id of Object.keys(state.selection.held)) {
-    if (held[id] === undefined) {
-      replies.get(id)?.({ kind: 'superseded' })
-      replies.delete(id)
-    }
-  }
-  state.selection = { ...state.selection, held }
+  createHeld.set(state, held)
 }
 
-/** Selections included in the durable create are already the host's option intent. */
+/** Selections included in the durable create are already the host's option intent; a pick the
+ *  create carried in another form settles too, and a newer pick stays held. */
 export function settleStructuredLaunchCreateOptions(
   state: StructuredLaunchState,
   options: Readonly<Record<string, string>>
 ): void {
-  for (const [id, encoded] of Object.entries(options)) {
+  const carried = { ...options, ...createHeld.get(state) }
+  createHeld.delete(state)
+  for (const [id, encoded] of Object.entries(carried)) {
     settleHeldOption(state, id, encoded, { kind: 'accepted', options })
   }
 }

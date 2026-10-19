@@ -12,6 +12,7 @@ import {
 } from './native-chat-session-option-snapshot'
 import type { SessionOptionDescriptor, SessionOptionValue } from './native-chat-session-options'
 import type { TrackedNativeChatSessionOption } from './native-chat-session-option-state'
+import { effectiveServiceTier } from './structured-agent-session-effective-tier'
 import { serviceTierOption } from './structured-agent-session-discovered-model'
 import {
   structuredAgentSessionModelId,
@@ -75,39 +76,34 @@ export function structuredAgentSessionDescribedModel(
     : undefined
 }
 
-/** Codex passes Flex whether or not the model advertises it, so only Flex can run unadvertised. */
-const PASSED_SERVICE_TIER = 'flex'
+const tierChoices = (option: CatalogOption | undefined): string[] =>
+  option?.id === 'serviceTier' && option.kind.type === 'select'
+    ? option.kind.choices.map((choice) => choice.value)
+    : []
 
-/** What the named model's controls draw: a tier it lacks that another model lists runs as the
- *  default; established Flex runs as is, and an unanswered model pick leaves it undrawn. */
+/** The named model's speed as it runs (the host applies the same rule). An older host's Flex
+ *  shows as it reports it, as that host sends it. */
 function valuesUnderControls(
   catalog: AgentSessionOptionCatalog,
   controls: readonly CatalogOption[],
   values: Readonly<Record<string, TrackedNativeChatSessionOption>>,
-  modelUnresolved: boolean
+  olderHost: boolean
 ): Readonly<Record<string, TrackedNativeChatSessionOption>> {
-  const drawn = { ...values }
-  for (const option of controls) {
-    const tracked = values[option.id]
-    const offers = (entry: CatalogOption): boolean =>
-      entry.id === option.id &&
-      entry.kind.type === 'select' &&
-      entry.kind.choices.some((choice) => choice.value === tracked?.value)
-    if (
-      option.kind.type === 'select' &&
-      option.id !== 'effort' &&
-      tracked &&
-      !offers(option) &&
-      catalog.models.some((model) => model.options.some(offers))
-    ) {
-      if (option.id !== 'serviceTier' || tracked.value !== PASSED_SERVICE_TIER) {
-        drawn[option.id] = { value: option.kind.defaultValue, source: 'default' }
-      } else if (modelUnresolved) {
-        delete drawn[option.id]
-      }
-    }
+  const tier = values.serviceTier?.value
+  const control = controls.find((option) => option.id === 'serviceTier')
+  if (typeof tier !== 'string' || !control || (olderHost && tier === 'flex')) {
+    return values
   }
-  return drawn
+  const effective = effectiveServiceTier({
+    tier,
+    modelTiers: tierChoices(control),
+    listedTiers: catalog.models.flatMap((model) => model.options.flatMap(tierChoices)),
+    // The answer's tier is the agent's own report when no listed model offers it.
+    reported: true
+  })
+  return effective === tier
+    ? values
+    : { ...values, serviceTier: { value: effective, source: 'default' } }
 }
 
 /** The values the picker draws, which a create carries for picks it holds. */
@@ -135,7 +131,7 @@ function drawnModelControls(state: StructuredAgentSessionOptionState) {
     shown.shown.currentId !== null &&
     structuredAgentSessionDescribedModel(state, shown.shown.currentId) !== undefined
   const values = normalises
-    ? valuesUnderControls(catalog, controls, record.values, record.modelUnresolved === true)
+    ? valuesUnderControls(catalog, controls, record.values, state.olderHost === true)
     : record.values
   return { catalog, models, ...shown, controls, values }
 }

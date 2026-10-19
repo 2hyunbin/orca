@@ -2,6 +2,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
+import type { AgentSessionModelOption } from '../../../shared/agent-session-wire'
 import { createAgentModelCatalogService } from '../agent-model-catalog/agent-model-catalog-service'
 import {
   AgentModelCatalogStore,
@@ -49,7 +50,7 @@ describe('options at rest', () => {
       params: { provider: 'codex' },
       journal: {
         threadGoal: () => null,
-        newestTurn: () => null,
+        visitItems: () => {},
         submissions: () => [],
         context: { floor: () => null }
       }
@@ -93,7 +94,7 @@ describe('options at rest', () => {
       params: { provider: 'codex' },
       journal: {
         threadGoal: () => null,
-        newestTurn: () => null,
+        visitItems: () => {},
         submissions: () => [],
         context: { floor: () => null }
       }
@@ -146,7 +147,7 @@ describe('options at rest', () => {
         params: { provider: 'codex' },
         journal: {
           threadGoal: () => null,
-          newestTurn: () => null,
+          visitItems: () => {},
           submissions: () => [],
           context: { floor: () => null }
         }
@@ -202,40 +203,62 @@ describe('options at rest', () => {
   )
 })
 
-describe('a chat that has sent nothing', () => {
-  it.each([
-    ['started here names its default as its own', [], null, []],
-    ['taken from history still marks it', [{ origin: 'adopted' }], null, ['model']],
-    ['with a turn still marks it', [], { turnId: 'turn-1' }, ['model']]
-  ])('%s', async (_name, chain, turn, defaulted) => {
-    const record = { ...restingRecord(), providerHandleChain: chain }
+describe('a chat at rest, read by the host', () => {
+  const created = [{ origin: 'created' }]
+  const turn = { kind: 'turn', turnId: 'turn-1', state: 'completed' }
+  const flex = [{ value: 'flex', label: 'Flex' }]
+  const listed: AgentSessionModelOption[] = [
+    { id: 'gpt-account', label: 'Model', isDefault: true, efforts: [], serviceTiers: [] },
+    { id: 'gpt-flex', label: 'Flex', isDefault: false, efforts: [], serviceTiers: flex }
+  ]
+  function readAtRest(facts: object, items: object[] = [], wroteBeforeOpen = false) {
+    const record = { ...restingRecord(), ...facts }
     const resting = {
       child: null,
       params: { provider: 'codex' },
       journal: {
         threadGoal: () => null,
-        newestTurn: () => turn,
+        visitItems: (visit: (id: string, sequence: number, body: object) => void) =>
+          items.forEach((body, index) => visit(`item-${index}`, index + 1, body)),
+        wroteBeforeOpen: () => wroteBeforeOpen,
         submissions: () => [],
         context: { floor: () => null }
       }
     }
-    const listed = { id: 'gpt-account', label: 'Model', isDefault: true, efforts: [] }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
     const context = {
       deps: {
         adapter: {},
         agents: NO_STRUCTURED_AGENTS,
         store: { getRecord: () => record },
-        modelCatalog: { read: async () => ({ origin: 'probe', models: [listed], fetchedAt: 1 }) }
+        modelCatalog: { read: async () => ({ origin: 'probe', models: listed, fetchedAt: 1 }) }
       },
       serialize: (_sessionId: string, task: () => Promise<unknown>) => task(),
       openConversation: async () => resting,
       conversation: async () => resting
     } as unknown as StructuredAgentSessionMutationContext
-    const read = await readStructuredAgentSessionOptions(context, SESSION, {
-      readsWithoutModel: false
-    })
+    return readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true })
+  }
+
+  it.each([
+    ['started here names its default as its own', {}, [], false, []],
+    ['taken from history', { providerHandleChain: [{ origin: 'adopted' }] }, [], true, ['model']],
+    // A context clear hides the turn from the newest-turn read, not from history.
+    ['with a turn before a context clear', {}, [turn, { kind: 'context-clear' }], true, ['model']],
+    ['after a rewind', { rewind: { phase: 'completed' } }, [], true, ['model']],
+    // A journal founded afresh proves nothing for a chat whose agent already ran.
+    ['whose journal went missing', { providerHandleChain: created }, [], false, ['model']]
+  ])('%s', async (_name, facts, items, wroteBeforeOpen, defaulted) => {
+    const read = await readAtRest(facts, items, wroteBeforeOpen)
     expect(read.current).toMatchObject({ model: 'gpt-account', defaulted })
+  })
+
+  it("names the tier the chat's model runs, and keeps the saved one", async () => {
+    const options = { model: 'gpt-account', serviceTier: 'flex' }
+    await expect(readAtRest({ options })).resolves.toMatchObject({
+      current: { serviceTier: 'default' }
+    })
+    expect(options.serviceTier).toBe('flex')
   })
 })
 
@@ -258,7 +281,7 @@ describe('live Codex option reads', () => {
       params: { provider: 'codex' },
       journal: {
         threadGoal: () => null,
-        newestTurn: () => null,
+        visitItems: () => {},
         submissions: () => [],
         contextUsage: () => null,
         context: { floor: () => null }
@@ -300,7 +323,7 @@ describe('live Codex option reads', () => {
       params: { provider: 'codex' },
       journal: {
         threadGoal: () => null,
-        newestTurn: () => null,
+        visitItems: () => {},
         submissions: () => [],
         context: { floor: () => null }
       }
@@ -343,7 +366,7 @@ describe('live Codex option reads', () => {
       params: { provider: 'codex' },
       journal: {
         threadGoal: () => null,
-        newestTurn: () => null,
+        visitItems: () => {},
         submissions: () => [],
         context: { floor: () => null }
       }

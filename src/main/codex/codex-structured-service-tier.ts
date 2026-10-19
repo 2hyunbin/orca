@@ -7,6 +7,7 @@ import { readRecord } from './codex-item-field-readers'
 import type { CodexOpenedThread } from './codex-structured-thread-open'
 import type { CodexSession } from './codex-structured-session-state'
 import { codexAcquireCatalogListing } from './codex-structured-catalog-entry'
+import { effectiveServiceTier } from '../../shared/structured-agent-session-effective-tier'
 
 /** Codex's request value for a model's standard tier. */
 export const CODEX_DEFAULT_SERVICE_TIER = 'default'
@@ -85,12 +86,8 @@ export function reportedCodexThreadOptions(
   }
 }
 
-function codexListsServiceTier(
-  model: Pick<AgentSessionModelOption, 'serviceTiers'> | undefined,
-  tier: string
-): boolean {
-  return model?.serviceTiers?.some((choice) => choice.value === tier) === true
-}
+const tierValues = (model: Pick<AgentSessionModelOption, 'serviceTiers'> | undefined) =>
+  model?.serviceTiers?.map((choice) => choice.value) ?? []
 
 /** Codex also takes the thread's reported tier when no model lists it, such as a configured `flex`. */
 export function codexOffersServiceTier(
@@ -99,15 +96,14 @@ export function codexOffersServiceTier(
   models: readonly AgentSessionModelOption[],
   tier: string
 ): boolean {
+  const listedTiers = models.flatMap(tierValues)
+  const reported = tier === session.reportedOptions.serviceTier
   return (
-    tier === CODEX_DEFAULT_SERVICE_TIER ||
-    codexListsServiceTier(model, tier) ||
-    (tier === session.reportedOptions.serviceTier &&
-      !models.some((entry) => codexListsServiceTier(entry, tier)))
+    effectiveServiceTier({ tier, modelTiers: tierValues(model), listedTiers, reported }) === tier
   )
 }
 
-/** A turn's options: an unoffered tier other than Flex runs as standard; the saved tier is kept. */
+/** A turn's options: an unoffered tier runs as standard; the chat's saved tier is kept. */
 export function codexTurnRequestOptions(
   session: Pick<CodexSession, 'options' | 'catalogAccess'> & {
     reportedOptions?: CodexSession['reportedOptions']
@@ -120,7 +116,6 @@ export function codexTurnRequestOptions(
   const tier = options.serviceTier
   if (
     tier &&
-    tier !== 'flex' &&
     model?.serviceTiers &&
     !codexOffersServiceTier({ reportedOptions }, model, models, tier)
   ) {

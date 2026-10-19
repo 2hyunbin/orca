@@ -62,6 +62,8 @@ export type StructuredAgentSessionOptionState = {
    *  own model, which no list describes. Absent from an older host. */
   verifiedModelIds?: readonly string[]
   record: StructuredAgentSessionOptionRecord
+  /** The last answer came from a host that marks no defaults, whose own tier rule it shows. */
+  olderHost?: true
   /** The permission mode the host or launch last stated; null shows no picker. */
   permissionMode: string | null
   pendingId: string | null
@@ -184,6 +186,7 @@ export function applyStructuredAgentSessionOptions(
     ...state,
     catalog: structuredAgentSessionOptionCatalog(seed, result, launch.newLaunch),
     catalogSource: 'live',
+    olderHost: current.defaulted === undefined ? true : undefined,
     verifiedModelIds: result.listedModelIds?.length ? result.listedModelIds : undefined,
     permissionMode: result.current.permissionMode ?? null
   }
@@ -216,20 +219,7 @@ export function commitStructuredAgentSessionOption(
   }
   // Each value is the chat's own: a model pick leaves the others for the host to reconcile.
   state.record.values[id] = { value: decoded, source: 'dispatched' }
-  if (id === 'model') {
-    state.record.modelUnresolved = true
-  }
   return { ...state, pendingId: null }
-}
-
-/** A pick's reply: the host has spoken for the model, so its values stand. */
-export function commitStructuredAgentSessionOptionReply(
-  state: StructuredAgentSessionOptionState,
-  values: Readonly<Record<string, string>>
-): StructuredAgentSessionOptionState {
-  const next = commitStructuredAgentSessionOptionValues(state, values)
-  delete next.record.modelUnresolved
-  return next
 }
 
 /** Whether a pick of `modelId` held before launch keeps another held value (decoded or encoded):
