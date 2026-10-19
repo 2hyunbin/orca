@@ -139,7 +139,7 @@ Version ids restart when a model is recreated, for example after a dispose and r
 - `record.pending`: views that publish on a delay (rich markdown waits 300 ms) register pending text on the record.
   - When a view's pending edit starts, the record captures the model's alternative version as that edit's base.
   - The record flushes pending text before any dirty decision, close prompt, autosave or session capture, and before another view on the same record writes. Another view's first edit forces the flush, so exiting before the timer fires keeps the edit.
-  - `applyText` replaces the text only if the model is still at the captured base. Otherwise the stale commit is not applied. It is kept as a recoverable copy and shown to the user.
+  - `applyText` replaces the text only if the model is still at the captured base. Otherwise the stale commit is not applied. It is kept as a recoverable copy and shown to the user. Until 1d it is shown through the existing Compare dialog.
 - Disk loads go through `record.loadFromDisk(text, signature)`:
   - Until 1d, the callers are the panel `fileContents` loader and the buffer content sync.
   - From 1d until Phase 2, the callers are the file loader on open and the existing watcher reload.
