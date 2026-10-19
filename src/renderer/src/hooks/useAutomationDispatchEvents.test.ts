@@ -38,10 +38,14 @@ type TestRepo = {
   path: string
 }
 
+function noSelectedHost(): string | null {
+  return null
+}
+
 const state = {
   activeView: 'terminal' as const,
   activeWorktreeId: 'wt-active',
-  activeWorkspaceExecutionHostId: null as string | null,
+  activeWorkspaceExecutionHostId: noSelectedHost(),
   activeTabId: 'tab-active',
   activeTabType: 'terminal' as const,
   repos: [{ id: 'repo-1', connectionId: null, executionHostId: null, path: '/repo' }] as TestRepo[],
