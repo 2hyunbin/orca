@@ -233,8 +233,9 @@ const card: AgentSessionQueuedMessage = {
     kind: 'message',
     role: 'user',
     blocks: [
-      { type: 'text', text: 'see this' },
-      { type: 'image-ref', path: '/host/old.png' }
+      { type: 'text', text: 'see [Image #1] and [Image #2]' },
+      { type: 'image-ref', path: '/host/old.png' },
+      { type: 'image-ref', path: '/host/kept.png' }
     ]
   }
 }
@@ -276,14 +277,16 @@ function savedParams(): unknown {
 }
 
 describe('queued card image edit', () => {
-  it('removes the kept image, pastes a new one and saves the new set', async () => {
+  it('removes a kept image with its marker, pastes a new one and saves the new set', async () => {
     writeSpy.mockClear()
     render(<EditedCard imagesCapable />)
     const field = await screen.findByRole('textbox', { name: 'Edit message' })
     await waitFor(() => expect(field.getAttribute('readonly')).toBeNull())
     expect(screen.queryByText('1 image')).toBeNull()
     expect(screen.getByText('Paste or drop images')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Remove attachment' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove attachment' })[0]!)
+    // The field shows what the agent will read: the removed image's marker goes, #2 becomes #1.
+    expect(field).toHaveProperty('value', 'see and [Image #1]')
     const data = new DataTransfer()
     data.items.add(new File(['png'], 'new.png', { type: 'image/png' }))
     act(() => {
@@ -293,8 +296,11 @@ describe('queued card image edit', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(writeSpy).toHaveBeenCalledOnce())
     expect(savedParams()).toMatchObject({
-      text: 'see this',
-      images: [{ type: 'image-ref', path: '/tmp/new.png' }]
+      text: 'see and [Image #1]',
+      images: [
+        { type: 'image-ref', path: '/host/kept.png' },
+        { type: 'image-ref', path: '/tmp/new.png' }
+      ]
     })
   })
 

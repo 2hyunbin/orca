@@ -43,7 +43,7 @@ export function movedWithinDropSurface(event: NativeChatPaneDragEvent): boolean 
   return enteredNode instanceof Node && event.currentTarget.contains(enteredNode)
 }
 
-/** An OS file drop owner inside the pane (a queued card being edited) takes drops over it. */
+/** A drop owner inside the pane (a queued card being edited) takes OS and in-app drops over it. */
 function overNestedOwner(event: NativeChatPaneDragEvent): boolean {
   const owner =
     event.target instanceof Element
@@ -52,7 +52,8 @@ function overNestedOwner(event: NativeChatPaneDragEvent): boolean {
   return owner !== null && owner !== event.currentTarget
 }
 
-/** Workspace files keep their provenance-checked lane; OS files use the native owner. */
+/** Workspace files keep their provenance-checked lane; OS files use the native owner. A nested
+ *  owner handles both kinds itself. */
 export function makeNativeChatPaneFileDropHandlers(host: {
   getClaim: () => NativeChatPaneDropClaim | null
   setDragActive: (active: boolean) => void
@@ -64,7 +65,7 @@ export function makeNativeChatPaneFileDropHandlers(host: {
 } {
   const showsDropTarget = (event: NativeChatPaneDragEvent): boolean => {
     const kind = nativeChatPaneDragKind(event.dataTransfer)
-    if (kind === null || (kind === 'os' && overNestedOwner(event))) {
+    if (kind === null || overNestedOwner(event)) {
       return false
     }
     const claim = host.getClaim()
@@ -83,7 +84,7 @@ export function makeNativeChatPaneFileDropHandlers(host: {
       } else if (overNestedOwner(event)) {
         host.setDragActive(false)
       }
-      if (nativeChatPaneDragKind(event.dataTransfer) === 'workspace') {
+      if (nativeChatPaneDragKind(event.dataTransfer) === 'workspace' && !overNestedOwner(event)) {
         host.getClaim()?.onDragOverCapture(event)
       }
     },
@@ -95,7 +96,7 @@ export function makeNativeChatPaneFileDropHandlers(host: {
     },
     onDropCapture(event) {
       host.setDragActive(false)
-      if (nativeChatPaneDragKind(event.dataTransfer) === 'workspace') {
+      if (nativeChatPaneDragKind(event.dataTransfer) === 'workspace' && !overNestedOwner(event)) {
         host.getClaim()?.onDropCapture(event)
       }
     }

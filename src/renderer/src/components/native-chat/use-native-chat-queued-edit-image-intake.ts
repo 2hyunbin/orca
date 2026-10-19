@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type ClipboardEvent,
+  type DragEventHandler,
   type RefObject
 } from 'react'
 import { toast } from 'sonner'
@@ -20,6 +21,7 @@ import type { NativeChatPendingAttachmentChips } from './native-chat-session-att
 import { useNativeChatComposerPaste } from './use-native-chat-composer-paste'
 import { useNativeChatExternalAttachments } from './use-native-chat-external-attachments'
 import { useNativeChatFileAttachmentActions } from './use-native-chat-file-attachment-actions'
+import { useNativeChatWorkspaceFileDrop } from './use-native-chat-workspace-file-drop'
 import type { QueuedMessageInlineEditor } from './use-structured-agent-session-queued-edit'
 
 /** The chat a queued list sits in, which its edits attach files to as its chat box does. */
@@ -41,7 +43,15 @@ export function useNativeChatQueuedEditImageIntake(
   /** The host replaces images and the agent reads them: Attach, paste and drop add to the edit. */
   editable: boolean
   attach: () => void
-  onPasteCapture: (event: ClipboardEvent<HTMLTextAreaElement>) => void
+  /** On the whole card, so a paste with focus on its buttons lands in the edit too. */
+  onPasteCapture: (event: ClipboardEvent<HTMLDivElement>) => void
+  /** A file dragged from Orca's own tree onto the card, which the pane leaves to it. */
+  workspaceDrop:
+    | {
+        onDragOverCapture: DragEventHandler<HTMLDivElement>
+        onDropCapture: DragEventHandler<HTMLDivElement>
+      }
+    | undefined
   hostEnvironmentId: string | undefined
 } {
   const intake = editor.images?.intake
@@ -150,7 +160,7 @@ export function useNativeChatQueuedEditImageIntake(
     setNotice
   })
   const onPasteCapture = useCallback(
-    (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    (event: ClipboardEvent<HTMLDivElement>) => {
       // Text alone pastes natively; a picture or copied files take the chat box's paste flow.
       if (editable && Array.from(event.clipboardData.items).some((item) => item.kind === 'file')) {
         handlePaste(event)
@@ -158,6 +168,13 @@ export function useNativeChatQueuedEditImageIntake(
     },
     [editable, handlePaste]
   )
+  const workspaceDrop = useNativeChatWorkspaceFileDrop({
+    attachResolvedPaths,
+    disabled,
+    setNotice,
+    structuredWorktreeId: transport?.worktreeId,
+    terminalTabId: attachTo?.terminalTabId ?? ''
+  })
   // The editing card is the nearest drop owner, so a drop on it never reaches the chat box's.
   const ownerRef = useRef<HTMLElement | null>(null)
   const [sequence] = useState(createOsFileDropSequence)
@@ -175,7 +192,8 @@ export function useNativeChatQueuedEditImageIntake(
     }
   })
   useLayoutEffect(() => {
-    attachOwner(editable ? (field.current?.closest('li') ?? null) : null)
+    const card = field.current?.closest('[data-queued-message-editor]')
+    attachOwner(editable && card instanceof HTMLElement ? card : null)
     return () => attachOwner(null)
   }, [attachOwner, editable, field])
   const { pickAttachments } = useNativeChatFileAttachmentActions(external.attachExternalPaths)
@@ -183,6 +201,7 @@ export function useNativeChatQueuedEditImageIntake(
     editable,
     attach: pickAttachments,
     onPasteCapture,
+    workspaceDrop: editable ? workspaceDrop : undefined,
     hostEnvironmentId: transport?.runtimeEnvironmentId ?? undefined
   }
 }

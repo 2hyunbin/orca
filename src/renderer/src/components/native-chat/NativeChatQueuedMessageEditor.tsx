@@ -52,7 +52,12 @@ export function NativeChatQueuedMessageEditor({
     }
   }, [editor.acquiring])
   return (
-    <div data-queued-message-editor>
+    <div
+      data-queued-message-editor
+      className="px-2.5 py-1.5"
+      onPasteCapture={intake.onPasteCapture}
+      {...intake.workspaceDrop}
+    >
       <div className="flex min-h-7 items-center gap-1.5 text-xs text-muted-foreground">
         <Pencil className="size-3.5 shrink-0" aria-hidden />
         <span className="shrink-0">
@@ -98,7 +103,6 @@ export function NativeChatQueuedMessageEditor({
         value={editor.text}
         readOnly={editor.acquiring || editor.saving}
         onChange={(event) => editor.change(event.currentTarget.value)}
-        onPasteCapture={intake.onPasteCapture}
         // Enter or Cmd/Ctrl+Enter saves, Shift+Enter is a newline, Escape cancels; an IME's own
         // Enter and Escape never get here (`ImeTextarea`). Handled keys stay out of the prompt.
         onKeyDown={(event) => {
@@ -123,7 +127,8 @@ export function NativeChatQueuedMessageEditor({
       />
       <div className="mt-1.5 flex items-center gap-1.5">
         {intake.editable ? <QueuedEditAttachButton onAttach={intake.attach} /> : null}
-        {empty || intake.editable ? (
+        {/* Without image input an empty edit just disables Save, as a text-only edit does. */}
+        {intake.editable ? (
           <span className="min-w-0 truncate text-xs text-muted-foreground">
             {empty
               ? translate(

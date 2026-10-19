@@ -1,5 +1,10 @@
 import type { AgentJournalMessageItem } from './agent-session-journal-types'
 import { MAX_BLOCKS, MAX_PROMPT_BYTES } from './rpc-contract/structured-agent-session-params'
+import { imageReferenceToken } from './native-chat-image-reference'
+import {
+  imageReferencesToPromptMarkers,
+  promptMarkersToImageReferences
+} from './native-chat-image-transcript-markers'
 
 export type QueuedMessageImageBlock = Extract<
   AgentJournalMessageItem['blocks'][number],
@@ -55,6 +60,39 @@ export function queuedEditKeptImages(
   return body.blocks.flatMap((block, index) =>
     block.type === 'image-ref' ? [{ id: `kept-${index}`, block }] : []
   )
+}
+
+/** The text with its `[Image #k]` markers renumbered from one ordered set of kept images to
+ *  another: a marker of an image that left goes, as the chat box drops a removed image's chip, and
+ *  a number past the images stays as typed. Added images carry no marker, as an image without a
+ *  chip is sent, so they never shift a kept image's number. */
+export function queuedEditTextForKeptImages(
+  text: string,
+  from: readonly string[],
+  to: readonly string[]
+): string {
+  let chips = promptMarkersToImageReferences(text, from)
+  for (const id of from.filter((entry) => !to.includes(entry))) {
+    const token = imageReferenceToken(id)
+    chips = chips.replaceAll(`${token} `, '').replaceAll(token, '')
+  }
+  return imageReferencesToPromptMarkers(chips, to)
+}
+
+/** The text an edit's typing is measured against: the card's own, its markers following the
+ *  images removed so far, so a removal alone is not typing. */
+export function queuedEditBaseText(
+  body: AgentJournalMessageItem,
+  kept: readonly { id: string }[]
+): string | null {
+  const text = queuedMessageEditableText(body)
+  return text === null
+    ? null
+    : queuedEditTextForKeptImages(
+        text,
+        queuedEditKeptImages(body).map(({ id }) => id),
+        kept.map(({ id }) => id)
+      )
 }
 
 function queuedEditImagesChanged(

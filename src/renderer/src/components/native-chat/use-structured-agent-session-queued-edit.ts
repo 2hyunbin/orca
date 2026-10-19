@@ -19,7 +19,7 @@ import {
   queuedMessageEditableText,
   queuedMessageWithEdit
 } from '../../../../shared/queued-message-edit'
-import { queuedEditNotice } from './queued-message-edit-notices'
+import { queuedEditChangedNotice, queuedEditNotice } from './queued-message-edit-notices'
 import {
   handOffQueuedEdit,
   queuedEditImageFields,
@@ -135,7 +135,11 @@ export function useStructuredAgentSessionQueuedEdit(args: {
       if (edit && queuedEditDirty(edit.body, edit)) {
         handOffQueuedEdit(edit)
       }
-      edit?.lease.end()
+      if (edit) {
+        edit.lease.end()
+        // The chat box takes paths, never these previews.
+        releaseQueuedEditImages(edit)
+      }
     }
     window.addEventListener('pagehide', handOff)
     return () => {
@@ -250,11 +254,8 @@ export function useStructuredAgentSessionQueuedEdit(args: {
         gone(edit)
       } else if (status === 'changed') {
         // Someone else's edit landed first: the typing goes to the chat box, and the editor
-        // opens again on the newer text.
-        handOffQueuedEdit(edit)
-        toast.error(
-          queuedEditNotice(latest.current.promptOpen ? 'editChangedPrompt' : 'editChanged')
-        )
+        // opens again on the newer text. A removal alone has nothing to hand off.
+        toast.error(queuedEditChangedNotice(handOffQueuedEdit(edit), latest.current.promptOpen))
         reopen.current = { scope, messageId: edit.messageId, stale: edit.baseFingerprint }
         close()
       } else {

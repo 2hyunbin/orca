@@ -134,10 +134,10 @@ export function NativeChatQueuedMessageList({
                 'Queued messages'
               )}
               // Scrolls on its own so a long queue never squeezes the transcript or the composer;
-              // taller while a card is edited, so its thumbnails and field fit.
+              // taller while an edit shows thumbnails, so they and the field fit.
               className={cn(
                 'scrollbar-sleek divide-y divide-border overflow-y-auto',
-                editingId === undefined ? 'max-h-40' : 'max-h-72'
+                controller.editor?.images?.chips.length ? 'max-h-72' : 'max-h-40'
               )}
             >
               {cards.map((card) => (

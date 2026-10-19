@@ -6,6 +6,11 @@ import { APP_MENU_PASTE_EVENT } from '@/lib/app-menu-paste'
 import { pasteTextIntoTextControl, TEXT_CONTROL_PASTE_MAX_BYTES } from '@/lib/text-control-paste'
 import type { NativeChatComposerHandle } from './NativeChatComposer'
 
+/** An open queued-card edit takes its own pastes, even with focus on its buttons. */
+function inQueuedMessageEditor(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('[data-queued-message-editor]') !== null
+}
+
 type NativeChatPasteBridgeRefs = {
   rootRef: RefObject<HTMLDivElement | null>
   composerRef: RefObject<NativeChatComposerHandle | null>
@@ -49,7 +54,7 @@ export function useNativeChatPasteBridge({
       return
     }
     const onPaste = (event: ClipboardEvent): void => {
-      if (event.defaultPrevented) {
+      if (event.defaultPrevented || inQueuedMessageEditor(event.target)) {
         return
       }
       if (isEditableTarget(event.target)) {
@@ -103,7 +108,12 @@ export function useNativeChatPasteBridge({
       const activeElement = document.activeElement
       // The app-menu paste event is window-scoped; only claim it when focus is
       // inside this chat pane so multiple panes don't all react to one Cmd+V.
-      if (!root || !(activeElement instanceof Element) || !root.contains(activeElement)) {
+      if (
+        !root ||
+        !(activeElement instanceof Element) ||
+        !root.contains(activeElement) ||
+        inQueuedMessageEditor(activeElement)
+      ) {
         return
       }
       if (

@@ -205,11 +205,8 @@ export function NativeChatQueuedMessageCard({
   if (editor) {
     // The editor's own header stands in for the icon, the actions and the caption.
     return (
-      <li
-        data-queued-message-id={card.messageId}
-        data-queued-message-state={card.state}
-        className="px-2.5 py-1.5"
-      >
+      // The editor fills the row, so a drop anywhere on the card reaches it.
+      <li data-queued-message-id={card.messageId} data-queued-message-state={card.state}>
         <NativeChatQueuedMessageEditor
           editor={editor}
           attachTo={editAttachTo}

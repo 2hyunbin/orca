@@ -116,6 +116,25 @@ describe('NativeChatPaneFileDropSurface', () => {
     expect(container.querySelector(OVERLAY)).toBeNull()
   })
 
+  it('leaves an in-app drop on an editing queued card to that card', () => {
+    const composerDrop = vi.fn()
+    const cardDrop = vi.fn()
+    const { container } = renderPane(
+      <>
+        <ClaimingComposer onDropCapture={composerDrop} />
+        <div data-os-file-drop-owner="" onDropCapture={cardDrop}>
+          <span data-testid="card">card</span>
+        </div>
+      </>
+    )
+    const card = screen.getByTestId('card')
+    fireDrag(card, 'dragover', workspaceDrag())
+    expect(container.querySelector(OVERLAY)).toBeNull()
+    fireDrag(card, 'drop', workspaceDrag())
+    expect(composerDrop).not.toHaveBeenCalled()
+    expect(cardDrop).toHaveBeenCalledTimes(1)
+  })
+
   it('owns OS drops without publishing a scope marker', () => {
     const { container } = renderPane(<ClaimingComposer />)
     const surface = container.querySelector('.pane')

@@ -4,8 +4,10 @@
 
 import type { AgentJournalMessageItem } from '../../../../shared/agent-session-journal-types'
 import {
+  queuedEditBaseText,
+  queuedEditImagesPending,
   queuedEditKeptImages,
-  queuedMessageEditableText,
+  queuedEditTextForKeptImages,
   type QueuedMessageEditResult,
   type QueuedMessageImageBlock
 } from '../../../../shared/queued-message-edit'
@@ -42,7 +44,7 @@ export type QueuedEditImageIntake = {
 export type QueuedEditImagesEditor = {
   chips: NativeChatComposerImageAttachment[]
   intake: QueuedEditImageIntake
-  /** Nothing to save: no text and no image. */
+  /** Nothing to save: no text and no image, not even one still uploading. */
   empty: boolean
 }
 
@@ -70,7 +72,7 @@ export function queuedEditImagesEditor(
       ...edit.added
     ],
     intake: edit.intake,
-    empty: !result.ok && result.reason === 'empty'
+    empty: !result.ok && result.reason === 'empty' && !queuedEditImagesPending(edit)
   }
 }
 
@@ -96,7 +98,7 @@ export function releaseQueuedEditImages(edit: QueuedEditImageState): void {
  *  The typing goes without the card's own images, so no marker may name one. An upload still
  *  pending drops, as on the phone: its edit is gone. */
 export function handOffQueuedEdit(edit: QueuedEditImageState): boolean {
-  const unchanged = edit.text === queuedMessageEditableText(edit.body)
+  const unchanged = edit.text === queuedEditBaseText(edit.body, edit.kept)
   const text = unchanged ? '' : stripSentImagePromptMarkers(edit.text)
   const images = edit.added.flatMap((image) => (image.pending ? [] : [settled(image)]))
   appendNativeChatDraftCache(edit.draftKey, text, undefined, images)
@@ -159,7 +161,13 @@ function queuedEditImageIntake(
     remove: (id) => {
       const current = edit()
       current.added.filter((entry) => entry.id === id).forEach(releasePreview)
-      current.kept = current.kept.filter((entry) => entry.id !== id)
+      const kept = current.kept.filter((entry) => entry.id !== id)
+      if (kept.length !== current.kept.length) {
+        // The field shows what the agent will read: the image's markers go, later ones renumber.
+        const ids = (entries: typeof kept) => entries.map((entry) => entry.id)
+        current.text = queuedEditTextForKeptImages(current.text, ids(current.kept), ids(kept))
+        current.kept = kept
+      }
       update(current.added.filter((entry) => entry.id !== id))
     }
   }
