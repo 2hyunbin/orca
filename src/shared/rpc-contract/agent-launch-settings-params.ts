@@ -22,7 +22,13 @@ export const AgentLaunchSettingsMutation = z.discriminatedUnion('type', [
     })
     .strict(),
   z.object({ type: z.literal('availability'), agent: Agent, enabled: z.boolean() }).strict(),
-  z.object({ type: z.literal('permissions'), mode: z.enum(['manual', 'yolo']) }).strict(),
+  z
+    .object({
+      type: z.literal('permissions'),
+      mode: z.enum(['manual', 'yolo', 'auto']),
+      agent: Agent.optional()
+    })
+    .strict(),
   z.object({ type: z.literal('command'), agent: Agent, value: Value }).strict(),
   z.object({ type: z.literal('arguments'), agent: Agent, value: Value }).strict(),
   z.object({ type: z.literal('environment-set'), agent: Agent, name: Name, value: Value }).strict(),

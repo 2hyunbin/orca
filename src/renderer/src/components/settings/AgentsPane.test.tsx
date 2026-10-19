@@ -503,24 +503,20 @@ describe('AgentsPane', () => {
     expect(matchesSettingsSearch('permission', getAgentsPaneSearchEntries())).toBe(true)
     expect(matchesSettingsSearch('yolo', getAgentsPaneSearchEntries())).toBe(true)
     expect(matchesSettingsSearch('manual', getAgentsPaneSearchEntries())).toBe(true)
+    expect(matchesSettingsSearch('approve for me', getAgentsPaneSearchEntries())).toBe(true)
   })
 
-  it('applies the selected agent permission mode from settings without a mixed segment', () => {
+  it('keeps automatic permissions out of the bulk action', () => {
     const onChange = vi.fn()
     const element = AgentPermissionsSetting({ mode: 'mixed', onChange })
-    const props = element.props.children.props.action.props as {
-      value: 'yolo'
-      onChange: (value: 'yolo' | 'manual' | 'mixed') => void
-      options: { value: string }[]
-    }
-
-    expect(props.value).toBe('yolo')
-    expect(props.options.map((option) => option.value)).toEqual(['yolo', 'manual'])
-    props.onChange('mixed')
-    expect(onChange).not.toHaveBeenCalled()
-
-    props.onChange('manual')
-    expect(onChange).toHaveBeenCalledWith('manual')
+    const items = element.props.action.props.children[1].props.children
+    expect(items).toHaveLength(2)
+    items[0].props.onSelect()
+    items[1].props.onSelect()
+    expect(onChange.mock.calls).toEqual([['manual'], ['yolo']])
+    expect(renderToStaticMarkup(<TooltipProvider>{element}</TooltipProvider>)).toContain(
+      'Set defaults…'
+    )
   })
 
   it('keeps catalog agent ids, labels, and commands discoverable in settings search', () => {

@@ -1,7 +1,13 @@
 import { TUI_AGENT_CONFIG } from './tui-agent-config'
 import type { TuiAgent } from './tui-agent'
 
-export type AgentPermissionMode = 'yolo' | 'manual' | 'mixed'
+export type AgentPermissionMode = 'yolo' | 'manual' | 'auto' | 'mixed'
+
+export const AUTO_TUI_AGENT_ARGS: Partial<Record<TuiAgent, string>> = {
+  claude: '--permission-mode auto',
+  'claude-agent-teams': '--permission-mode auto',
+  codex: '--approve-for-me'
+}
 
 export const YOLO_TUI_AGENT_ARGS: Partial<Record<TuiAgent, string>> = {
   claude: '--dangerously-skip-permissions',
@@ -62,11 +68,15 @@ function sameEnv(
   return leftEntries.every(([name, value]) => right?.[name] === value)
 }
 
-function resolveAgentPermissionMode(args: string, yoloArgs: string): AgentPermissionMode {
+function resolveAgentPermissionMode(
+  args: string,
+  yoloArgs: string,
+  autoArgs: string | undefined
+): AgentPermissionMode {
   if (!args) {
     return 'manual'
   }
-  return args === yoloArgs ? 'yolo' : 'mixed'
+  return args === yoloArgs ? 'yolo' : args === autoArgs ? 'auto' : 'mixed'
 }
 
 function resolveAgentEnvPermissionMode(
@@ -80,24 +90,8 @@ function resolveAgentEnvPermissionMode(
 }
 
 function combinePermissionModes(modes: AgentPermissionMode[]): AgentPermissionMode {
-  let sawYolo = false
-  let sawManual = false
-  let sawMixed = false
-
-  for (const mode of modes) {
-    if (mode === 'yolo') {
-      sawYolo = true
-    } else if (mode === 'manual') {
-      sawManual = true
-    } else {
-      sawMixed = true
-    }
-  }
-
-  if (sawMixed || (sawYolo && sawManual)) {
-    return 'mixed'
-  }
-  return sawYolo ? 'yolo' : 'manual'
+  const distinct = new Set(modes)
+  return distinct.size > 1 ? 'mixed' : (modes[0] ?? 'manual')
 }
 
 export function resolveTuiAgentPermissionMode(args: {
@@ -110,7 +104,8 @@ export function resolveTuiAgentPermissionMode(args: {
     modes.push(
       resolveAgentPermissionMode(
         normalizeArgs(args.agentArgs),
-        YOLO_TUI_AGENT_ARGS[args.agent] ?? ''
+        YOLO_TUI_AGENT_ARGS[args.agent] ?? '',
+        AUTO_TUI_AGENT_ARGS[args.agent]
       )
     )
   }
@@ -126,22 +121,30 @@ export function resolveAgentPermissionModeSummary(args: {
   agentDefaultEnv?: Partial<Record<TuiAgent, Record<string, string>>> | null
 }): AgentPermissionMode {
   const modes: AgentPermissionMode[] = []
+  const autoModes: AgentPermissionMode[] = []
 
   for (const agent of PERMISSION_AGENT_IDS) {
-    modes.push(
-      resolveTuiAgentPermissionMode({
-        agent,
-        agentArgs: args.agentDefaultArgs?.[agent],
-        agentEnv: args.agentDefaultEnv?.[agent]
-      })
-    )
+    const mode = resolveTuiAgentPermissionMode({
+      agent,
+      agentArgs: args.agentDefaultArgs?.[agent],
+      agentEnv: args.agentDefaultEnv?.[agent]
+    })
+    modes.push(mode)
+    if (agent in AUTO_TUI_AGENT_ARGS) {
+      autoModes.push(mode)
+    }
   }
 
+  // Auto changes only supporting agents, so the rest keep their existing permission policy.
+  if (autoModes.every((mode) => mode === 'auto') && !modes.includes('mixed')) {
+    return 'auto'
+  }
   return combinePermissionModes(modes)
 }
 
 export function applyAgentPermissionMode(args: {
   mode: Exclude<AgentPermissionMode, 'mixed'>
+  agent?: TuiAgent
   agentDefaultArgs?: Partial<Record<TuiAgent, string>> | null
   agentDefaultEnv?: Partial<Record<TuiAgent, Record<string, string>>> | null
 }): {
@@ -151,12 +154,17 @@ export function applyAgentPermissionMode(args: {
   const nextArgs = { ...args.agentDefaultArgs }
   const nextEnv = { ...args.agentDefaultEnv }
 
-  for (const agent of PERMISSION_AGENT_IDS) {
+  const agents = args.agent ? [args.agent] : PERMISSION_AGENT_IDS
+  for (const agent of agents) {
+    const autoArgs = AUTO_TUI_AGENT_ARGS[agent]
+    if (args.mode === 'auto' && !autoArgs) {
+      continue
+    }
     if (agent in YOLO_TUI_AGENT_ARGS) {
       const yoloArgs = YOLO_TUI_AGENT_ARGS[agent] ?? ''
       const currentArgs = normalizeArgs(nextArgs[agent])
-      if (!currentArgs || currentArgs === yoloArgs) {
-        nextArgs[agent] = args.mode === 'yolo' ? yoloArgs : ''
+      if (!currentArgs || currentArgs === yoloArgs || currentArgs === autoArgs) {
+        nextArgs[agent] = args.mode === 'yolo' ? yoloArgs : args.mode === 'auto' ? autoArgs : ''
       }
     }
 

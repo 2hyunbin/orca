@@ -386,7 +386,15 @@
       "saveFailed": "Couldn’t save agent settings. Check the host connection and try again.",
       "hostDefaults": "Defaults for new agents on the selected host.",
       "save": "Save",
-      "clearDefault": "Clear default agent"
+      "clearDefault": "Clear default agent",
+      "autoPermissions": "Auto",
+      "rowPermissions": "Permissions",
+      "rowPermissionsLabel": "{{agent}} permissions",
+      "customPermissions": "Custom arguments",
+      "permissionsScope": "Defaults for new terminals.",
+      "setAllPermissions": "Set defaults…",
+      "setAllManual": "Manual defaults",
+      "setAllYolo": "Yolo defaults"
     },
     "followSymlinkedDirectoriesKeywords": {
       "symlink": "symlink",

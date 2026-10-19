@@ -4,7 +4,12 @@ import type {
   AgentLaunchSettingsMutation
 } from '../../../../shared/agent-launch-settings'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
-import type { AgentPermissionMode } from '../../../../shared/tui-agent-permissions'
+import {
+  AUTO_TUI_AGENT_ARGS,
+  resolveTuiAgentPermissionMode,
+  type AgentPermissionMode
+} from '../../../../shared/tui-agent-permissions'
+import { AgentRowPermissionControl } from './AgentRowPermissionControl'
 import {
   getTuiAgentDefaultArgs,
   getTuiAgentDefaultEnv,
@@ -23,7 +28,8 @@ import { translate } from '@/i18n/i18n'
 
 export type AgentPermissionsRenderer = (
   mode: AgentPermissionMode,
-  onChange: (mode: Exclude<AgentPermissionMode, 'mixed'>) => void
+  onChange: (mode: Exclude<AgentPermissionMode, 'mixed'>) => void,
+  autoSupported?: boolean
 ) => React.ReactNode
 
 export function AgentLaunchSettingsCatalog({
@@ -33,6 +39,7 @@ export function AgentLaunchSettingsCatalog({
   hostName,
   renderPermissions,
   refreshSettings,
+  autoSupported = true,
   local
 }: {
   settings: AgentLaunchSettings
@@ -41,6 +48,7 @@ export function AgentLaunchSettingsCatalog({
   hostName: string | null
   renderPermissions: AgentPermissionsRenderer
   refreshSettings?: () => void
+  autoSupported?: boolean
   local?: {
     settings: GlobalSettings
     updateSettings: (updates: Partial<GlobalSettings>) => void | Promise<void>
@@ -78,6 +86,18 @@ export function AgentLaunchSettingsCatalog({
     cmdOverride: isDetected ? settings.agentCmdOverrides[agent.id] : undefined,
     argsOverride: resolveTuiAgentLaunchArgs(agent.id, settings.agentDefaultArgs),
     envOverride: local ? resolveTuiAgentLaunchEnv(agent.id, local.settings.agentDefaultEnv) : {},
+    permissionControl:
+      isDetected && autoSupported && agent.id in AUTO_TUI_AGENT_ARGS ? (
+        <AgentRowPermissionControl
+          label={agent.label}
+          mode={resolveTuiAgentPermissionMode({
+            agent: agent.id,
+            agentArgs: resolveTuiAgentLaunchArgs(agent.id, settings.agentDefaultArgs)
+          })}
+          autoSupported={agent.id in AUTO_TUI_AGENT_ARGS}
+          onChange={(mode) => save({ type: 'permissions', agent: agent.id, mode })}
+        />
+      ) : undefined,
     onSetDefault: () =>
       save({
         type: 'default',
@@ -125,7 +145,11 @@ export function AgentLaunchSettingsCatalog({
         )}
         onSetDefault={(agent) => save({ type: 'default', agent })}
       />
-      {renderPermissions(settings.permissionMode, (mode) => save({ type: 'permissions', mode }))}
+      {renderPermissions(
+        settings.autoPermissionMode ? 'auto' : settings.permissionMode,
+        (mode) => save({ type: 'permissions', mode }),
+        autoSupported
+      )}
       <AgentDetectionCatalog
         detectedAgents={detectedAgents}
         undetectedAgents={undetectedAgents}

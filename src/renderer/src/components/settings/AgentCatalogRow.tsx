@@ -8,6 +8,7 @@ import { Button } from '../ui/button'
 import { SettingsBadge, SettingsSegmentedControl } from './SettingsFormControls'
 import type { AgentSessionSourceHomeControl } from './codex-session-source-home-control'
 import { AgentSessionSourceHomeInput } from './codex-session-source-home-control'
+import { resolveTuiAgentPermissionMode } from '../../../../shared/tui-agent-permissions'
 import { stringifyAgentDefaultEnvDraft } from './agent-default-env-draft'
 import {
   AgentCommandOverrideInput,
@@ -75,6 +76,7 @@ export type AgentCatalogRowProps = {
   onSaveEnv: (value: Record<string, string>) => void
   sessionSourceHome?: AgentSessionSourceHomeControl
   environmentNames?: readonly string[]
+  permissionControl?: React.ReactNode
   environmentEditor?: React.ReactNode
 }
 
@@ -98,12 +100,20 @@ export function AgentCatalogRow({
   onSaveEnv,
   sessionSourceHome,
   environmentNames,
-  environmentEditor
+  environmentEditor,
+  permissionControl
 }: AgentCatalogRowProps): React.JSX.Element {
   const envSummary = environmentNames?.join(' ') ?? stringifyAgentDefaultEnvDraft(envOverride)
   const defaultEnvSummary = stringifyAgentDefaultEnvDraft(defaultEnv)
   const [cmdOpen, setCmdOpen] = useState(
-    Boolean(cmdOverride) || argsOverride !== defaultArgs || envSummary !== defaultEnvSummary
+    Boolean(cmdOverride) ||
+      (argsOverride !== defaultArgs &&
+        resolveTuiAgentPermissionMode({
+          agent: agentId,
+          agentArgs: argsOverride,
+          agentEnv: envOverride
+        }) === 'mixed') ||
+      envSummary !== defaultEnvSummary
   )
 
   return (
@@ -112,9 +122,10 @@ export function AgentCatalogRow({
         <div className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border/50 bg-background/50">
           <AgentIcon agent={agentId} size={16} />
         </div>
-        <div className="min-w-0 flex-1 sm:min-w-[12rem]">
-          <div className="flex items-center gap-2">
+        <div className="min-w-48 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium leading-none">{label}</span>
+            {permissionControl}
             {!isEnabled && (
               <SettingsBadge tone="muted">
                 {translate('auto.components.settings.AgentsPane.8dc0192e48', 'Disabled')}

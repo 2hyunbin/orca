@@ -9,14 +9,20 @@ import {
 import { HostAgentLaunchSettings } from './HostAgentLaunchSettings'
 import { TooltipProvider } from '../ui/tooltip'
 import type { AgentPermissionsRenderer } from './AgentLaunchSettingsCatalog'
-import { AgentsPane } from './AgentsPane'
+import { AgentPermissionsSetting, AgentsPane } from './AgentsPane'
 import { useAppStore } from '@/store'
 import { createGlobalSettingsFixture } from '../../../../shared/global-settings-test-fixture'
 
-const transport = vi.hoisted(() => ({ read: vi.fn(), mutate: vi.fn(), detection: vi.fn() }))
+const transport = vi.hoisted(() => ({
+  read: vi.fn(),
+  mutate: vi.fn(),
+  detection: vi.fn(),
+  auto: vi.fn()
+}))
 vi.mock('./agent-launch-settings-transport', () => ({
   readHostAgentLaunchSettings: transport.read,
-  mutateHostAgentLaunchSettings: transport.mutate
+  mutateHostAgentLaunchSettings: transport.mutate,
+  hostSupportsAutoPermissions: transport.auto
 }))
 vi.mock('@/hooks/useDetectedAgents', () => ({
   useDetectedAgents: (target: unknown) => {
@@ -54,9 +60,40 @@ beforeEach(() => {
   transport.read.mockReset().mockResolvedValue(host())
   transport.mutate.mockReset().mockResolvedValue(host())
   transport.detection.mockClear()
+  transport.auto.mockReset().mockResolvedValue(true)
 })
 
 describe('host launch settings form', () => {
+  it.each([true, false])(
+    'offers automatic permissions only when supported: %s',
+    async (supported) => {
+      transport.auto.mockResolvedValue(supported)
+      render(
+        <TooltipProvider>
+          <HostAgentLaunchSettings
+            environmentId="ssh-host"
+            pairingRevision={17}
+            hostName="SSH host"
+            renderPermissions={(mode, onChange, autoSupported) => (
+              <AgentPermissionsSetting
+                mode={mode}
+                onChange={onChange}
+                autoSupported={autoSupported}
+              />
+            )}
+          />
+        </TooltipProvider>
+      )
+      await screen.findByDisplayValue('--host-marker')
+      const control = screen.queryByRole('button', { name: 'Claude permissions' })
+      expect(control !== null).toBe(supported)
+      if (supported) {
+        expect(control?.hasAttribute('disabled')).toBe(true)
+      }
+      expect(screen.queryByRole('radio', { name: /^Auto$/ })).toBeNull()
+    }
+  )
+
   it.each(['pill', 'row'] as const)(
     'clears the selected default through its %s',
     async (surface) => {
@@ -152,11 +189,7 @@ describe('host launch settings form', () => {
       </TooltipProvider>
     )
     const args = await screen.findByDisplayValue('--host-marker')
-    expect(
-      screen.getByText(
-        'Choose whether Orca launches agents with fewer permission prompts or with manual checks.'
-      )
-    ).toBeTruthy()
+    expect(screen.getByText('Defaults for new terminals.')).toBeTruthy()
     expect(screen.queryByDisplayValue('--desktop-marker')).toBeNull()
     fireEvent.change(args, { target: { value: '--r10-marker' } })
     fireEvent.blur(args)
@@ -169,7 +202,8 @@ describe('host launch settings form', () => {
     )
     expect(updateDesktop).not.toHaveBeenCalled()
     expect(desktop.agentDefaultEnv?.claude?.DESKTOP_KEY).toBe('desktop-secret')
-    fireEvent.click(screen.getByRole('radio', { name: 'Manual' }))
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Set defaults…' }), { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Manual defaults' }))
     await waitFor(() =>
       expect(transport.mutate).toHaveBeenCalledWith(
         { environmentId: 'ssh-host', pairingRevision: 17 },
