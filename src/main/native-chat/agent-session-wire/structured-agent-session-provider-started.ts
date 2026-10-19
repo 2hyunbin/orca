@@ -130,7 +130,7 @@ async function readRewindAtStart(
 function recordWithStartedHandle(
   context: StructuredAgentSessionProviderStartedContext,
   { sessionId, fence, link }: OpenedProvider
-): AgentSessionRecord | undefined {
+): AgentSessionRecord | null {
   const record = context.deps.store.getRecord(sessionId)
   try {
     return record && link

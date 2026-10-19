@@ -78,7 +78,7 @@ export type StructuredRewindRecoveryEvidence = {
 // Only this rewind moves a chat to a new epoch once it has history (imports run at creation), so
 // a moved epoch is its own replacement, committed before the crash.
 function rewindJournalCut(
-  record: AgentSessionRecord | undefined,
+  record: AgentSessionRecord | null,
   journal: AgentSessionJournal,
   rewind: AgentSessionRewindRecord
 ): { alreadyReplaced: boolean; cut: StructuredRewindCut | null } {
