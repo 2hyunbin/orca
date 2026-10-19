@@ -72,7 +72,7 @@ describe(`managed orcad conversion read back by ${LAST_RELAY_ONLY_REF}`, () => {
     )
     const connections = await importReleaseCheckoutModule(
       checkout,
-      'src/main/ssh/connection/ssh-connection-store.ts'
+      'src/main/ssh/ssh-connection-store.ts'
     )
     if (
       !isFunction(normalization.normalizeSshTarget) ||
