@@ -91,7 +91,7 @@ export async function launchPopupIdentityProbe(root: string, electronArgs: reado
         await browser.close()
         child.kill()
         await new Promise<void>((resolve) => {
-          if (child.exitCode !== null) {
+          if (child.exitCode !== null || child.signalCode !== null) {
             resolve()
           } else {
             child.once('exit', () => resolve())
