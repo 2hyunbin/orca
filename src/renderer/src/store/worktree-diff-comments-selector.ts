@@ -115,6 +115,17 @@ export function findDiffCommentRows(
     // The identity too, so a queued save never reads a copy listed after it.
     const twin = twinOf(rows[0])
     const hostId = diffCommentTwinHostId(twin)
+    // Why: the open workspace naming another host means its copy isn't listed yet (e.g. a restore
+    // ahead of its host's listing); this copy's stamp says it is not that one. Notes it holds still
+    // name it, and an unstamped row has unknown provenance, not another host's.
+    const named = namedHostForOwnerRef(state, { workspaceId: worktreeId })
+    const holdsNamedNotes = rows.some((row) => row.diffComments?.some((c) => commentIds?.has(c.id)))
+    const owner = named
+      ? findIndexedWorktreeOwnerForHost(state.worktreesByRepo, worktreeId, named)
+      : null
+    if (named && twin.hostId && !holdsNamedNotes && !rows.some((row) => row === owner)) {
+      return null
+    }
     return { twin, ...(hostId ? { hostId } : {}), worktrees: rows }
   }
   const holders = commentIds?.size

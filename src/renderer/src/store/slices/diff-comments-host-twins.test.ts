@@ -462,4 +462,14 @@ describe('diff comments on twin worktrees', () => {
     expect(await pending).not.toBeNull()
     expect(updateMeta).toHaveBeenCalledTimes(1)
   })
+
+  it('refuses a write while the open SSH copy is not listed yet and only its local sibling is', async () => {
+    const store = createTwinStore('ssh:box')
+    store.setState({ worktreesByRepo: { [REPO]: [worktree('local', [note('l1', 'local note')])] } })
+
+    await store.getState().clearDiffComments(WT)
+
+    expect(updateMeta).not.toHaveBeenCalled()
+    expect(rowNotes(store, 'local')).toEqual(['local note'])
+  })
 })
