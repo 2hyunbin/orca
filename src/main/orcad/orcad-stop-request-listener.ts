@@ -90,7 +90,8 @@ function listenForRequest<T>(
   }
 }
 
-/** Only the exact marker stops now; anything else fails toward the chat-safe restart. */
+/** Only the exact marker stops now; other contents take the chat-safe restart, and a directory,
+ *  which cannot be unlinked, is refused and retried. */
 function plainRequestStopsNow(path: string): boolean {
   const stats = lstatSync(path)
   const contents =
