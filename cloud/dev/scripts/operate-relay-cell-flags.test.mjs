@@ -533,6 +533,11 @@ test('phonePath=memory needs reserve, and a reserve flip never turns phones over
   assert.equal((await run(toDatabase, rollback).result).written, true)
   assert.deepEqual(rollback.state.writes[0].object.flags, { ...memory, admitMode: 'db' })
 
+  // phonePath=db removes the key, so an image without the switch still takes later writes.
+  const off = fakeGoogleAndCell({ stored: { ...onDatabase, object: { ...onDatabase.object, flags: memory } } })
+  assert.equal((await run(parseCellFlagsRequest(values({ set: 'phonePath=db', 'expected-generation': '7' })), off).result).written, true)
+  assert.deepEqual(off.state.writes[0].object.flags, reserve)
+
   const lingering = { readinessLocal: true, admitMode: 'db', phonePath: 'memory' }
   const unnamed = fakeGoogleAndCell({ stored: { ...onDatabase, object: { ...onDatabase.object, flags: lingering } } })
   await assert.rejects(

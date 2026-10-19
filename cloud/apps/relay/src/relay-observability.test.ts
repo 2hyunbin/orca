@@ -549,6 +549,7 @@ describe('relay observability', () => {
     observability.recordPhoneAttachDeadline()
     observability.recordPhoneAcceptDatabaseError()
     observability.recordResumeConfirmFailure('reject-revoked')
+    observability.recordResumeRenewalFailure()
     observability.flush({ ...counts, resumeAuditDropped: 3 })
     observability.flush(counts)
     expect(entries[0]).toMatchObject({
@@ -557,6 +558,7 @@ describe('relay observability', () => {
       phoneAttachDeadlinesDelta: 1,
       phoneAcceptDatabaseErrorsDelta: 1,
       resumeConfirmFailuresByCodeDelta: { 'reject-revoked': 1 },
+      resumeRenewalFailuresDelta: 1,
       resumeAuditDropped: 3
     })
     expect(entries[1]).toMatchObject({

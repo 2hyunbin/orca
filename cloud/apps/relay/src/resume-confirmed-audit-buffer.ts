@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto'
 import type { RelayDatabase } from './database.js'
 
 // Step 6 (decision 4): a memory cell's resume-confirmed audit rows leave in batches, off the
-// confirm's round trips. A crash loses at most one flush interval of rows.
+// confirm's round trips. A crash or shutdown loses at most one flush interval of rows: accepted,
+// since a drain at exit would race the database pool closing.
 export const RESUME_AUDIT_FLUSH_MS = 5_000
 export const RESUME_AUDIT_FLUSH_ROWS = 500
 export const RESUME_AUDIT_BUFFER_MAX_ROWS = 5_000
@@ -29,6 +30,7 @@ export class ResumeConfirmedAuditBuffer {
   private timer: ReturnType<typeof setInterval> | null = null
   private readonly dropped: ResumeAuditDrops = { overflow: 0, aged: 0 }
   private reportedDrops = 0
+  private stopped = false
 
   constructor(
     private readonly database: RelayDatabase,
@@ -38,13 +40,13 @@ export class ResumeConfirmedAuditBuffer {
 
   add(event: ResumeConfirmedAudit): void {
     this.rows.push({ ...event, id: randomUUID(), at: this.now() })
-    if (this.rows.length > RESUME_AUDIT_BUFFER_MAX_ROWS) {
-      this.rows.shift()
-      this.dropped.overflow += 1
+    this.trimToCap()
+    if (!this.stopped && !this.timer) {
+      this.timer = setInterval(() => void this.flush(), RESUME_AUDIT_FLUSH_MS)
+      this.timer.unref?.()
     }
-    this.timer ??= setInterval(() => void this.flush(), RESUME_AUDIT_FLUSH_MS)
-    this.timer.unref?.()
-    if (this.rows.length >= RESUME_AUDIT_FLUSH_ROWS) void this.flush()
+    // Only on crossing the batch size: retries of a failing database wait for the timer.
+    if (this.rows.length === RESUME_AUDIT_FLUSH_ROWS) void this.flush()
   }
 
   // Rows lost since boot: the watcher pages on any.
@@ -66,8 +68,17 @@ export class ResumeConfirmedAuditBuffer {
   }
 
   stop(): void {
+    this.stopped = true
     if (this.timer) clearInterval(this.timer)
     this.timer = null
+  }
+
+  // The oldest rows go first; rows back from a failed batch count toward the cap.
+  private trimToCap(): void {
+    const excess = this.rows.length - RESUME_AUDIT_BUFFER_MAX_ROWS
+    if (excess <= 0) return
+    this.rows.splice(0, excess)
+    this.dropped.overflow += excess
   }
 
   private async flushOnce(): Promise<void> {
@@ -90,11 +101,7 @@ export class ResumeConfirmedAuditBuffer {
         )
       } catch {
         this.rows.unshift(...batch)
-        const excess = this.rows.length - RESUME_AUDIT_BUFFER_MAX_ROWS
-        if (excess > 0) {
-          this.rows.splice(0, excess)
-          this.dropped.overflow += excess
-        }
+        this.trimToCap()
       }
     }
     // At most one line per flush, carrying the totals since boot.

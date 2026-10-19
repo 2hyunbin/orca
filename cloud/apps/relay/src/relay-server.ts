@@ -875,8 +875,6 @@ export function createRelayServer(
     clients.close()
     dataSockets.close()
     store.resumeAudit.stop()
-    // Best effort: a crash loses at most one flush interval of resume audit rows anyway.
-    void store.resumeAudit.flush()
   })
   const resumeAuditDropped = (): number => {
     const drops = store.resumeAudit.drops()

@@ -21,6 +21,8 @@ export type AttachDeadlineEvidence = {
 type PhoneConnectionAnomaly =
   | { event: 'orca_relay_client_accept_db_error'; cause: PhoneDatabaseCause }
   | { event: 'orca_relay_client_miss_row_names_here'; relayHostIdDigest: string }
+  | { event: 'orca_relay_client_miss_read_error'; cause: PhoneDatabaseCause }
+  | { event: 'orca_relay_resume_renewal_failed'; cause: PhoneDatabaseCause }
   | ({ event: 'orca_relay_attach_deadline_offline'; relayHostIdDigest: string } & AttachDeadlineEvidence)
   | { event: 'orca_relay_resume_confirm_failed'; code: string; phonePath: 'db' | 'memory' }
 
@@ -50,6 +52,16 @@ export class PhoneConnectionLog {
       event: 'orca_relay_client_miss_row_names_here',
       relayHostIdDigest: relayHostLogDigest(relayHostId)
     })
+  }
+
+  // The no-seat assignment read failed; the phone was closed 4409 to re-resolve.
+  missReadError(cause: PhoneDatabaseCause): void {
+    this.record(cause, { event: 'orca_relay_client_miss_read_error', cause })
+  }
+
+  // A due renewal write failed; the confirm still answered the stored expiry.
+  renewalFailed(cause: PhoneDatabaseCause): void {
+    this.record(cause, { event: 'orca_relay_resume_renewal_failed', cause })
   }
 
   attachDeadline(relayHostId: string, evidence: AttachDeadlineEvidence): void {
