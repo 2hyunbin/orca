@@ -122,7 +122,8 @@ describe('client placement profile switch safety', () => {
     ).resolves.toMatchObject({ profileId: 'default' })
     expect(switchProfile).toHaveBeenCalledWith(
       expect.objectContaining({ browserPageId: 'remote-page', pageHostGeneration: 1 }),
-      { id: 'default', label: 'Default', scope: 'default' }
+      { id: 'default', label: 'Default', scope: 'default' },
+      expect.any(Function)
     )
     expect(pages.getPage('remote-page')).toMatchObject({
       browserProfileId: 'default',

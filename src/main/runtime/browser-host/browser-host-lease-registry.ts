@@ -218,9 +218,11 @@ export class BrowserHostLeaseRegistry {
 
   switchClientPageProfile(
     authority: BrowserClientPageAuthority,
-    profile: Parameters<typeof switchBrowserHostClientProfile>[1]
+    profile: Parameters<typeof switchBrowserHostClientProfile>[1],
+    onLateCommit?: (placement: RuntimeBrowserClientPlacement) => void
   ): Promise<RuntimeBrowserClientPlacement> {
     return switchBrowserHostClientProfile(authority, profile, {
+      onLateCommit,
       registry: this,
       state: (clientId) => this.requireLeaseState(this.select(clientId, [])),
       placements: this.pagePlacements,

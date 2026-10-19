@@ -45,6 +45,8 @@ export async function switchBrowserHostClientProfile(
     grants: Map<string, BrowserClientPageExecutionHostGrant>
     /** The client retired the old guest, so its transfers can never finish under the new generation. */
     onCommitted?: (browserPageId: string, replacedPageHostGeneration: number) => void
+    /** A switch the caller already saw time out, committed once the client finished it. */
+    onLateCommit?: (placement: RuntimeBrowserClientPlacement) => void
   }
 ) {
   const timeoutMs = clientPageCreationTimeout(input.timeoutMs)
@@ -95,6 +97,30 @@ export async function switchBrowserHostClientProfile(
   }
   const pending = pendingBrowserHostProfileSwitches(input.placements)
   pending.set(authority.browserPageId, reservation.placement)
+  const forgetPending = () => {
+    if (pending.get(authority.browserPageId) === reservation.placement) {
+      pending.delete(authority.browserPageId)
+    }
+  }
+  const commit = () => {
+    input.registry.requireClientPage(authority)
+    const placement = input.placements.commitClientPageReplacement(reservation, expected)
+    ledger.advancePageGeneration(
+      authority.browserPageId,
+      expected.pageHostGeneration,
+      placement.pageHostGeneration
+    )
+    input.grants.set(authority.browserPageId, { ...grant, placement })
+    input.onCommitted?.(authority.browserPageId, expected.pageHostGeneration)
+    return placement
+  }
+  // The client retired the old guest once its switch completed, so that placement is gone.
+  const retireSwitchedPage = () => {
+    input.placements.cancelClientPageReservation(reservation)
+    retirePlacement()
+    closeSettledReplacement()
+    releaseGrant()
+  }
   try {
     const issued = ledger.issue({
       browserPageId: authority.browserPageId,
@@ -113,44 +139,40 @@ export async function switchBrowserHostClientProfile(
     if (result.status === 'failed') {
       throw new Error(result.errorCode)
     }
-    input.registry.requireClientPage(authority)
-    const placement = input.placements.commitClientPageReplacement(reservation, expected)
-    ledger.advancePageGeneration(
-      authority.browserPageId,
-      expected.pageHostGeneration,
-      placement.pageHostGeneration
-    )
-    input.grants.set(authority.browserPageId, { ...grant, placement })
-    input.onCommitted?.(authority.browserPageId, expected.pageHostGeneration)
-    return placement
+    return commit()
   } catch (error) {
-    input.placements.cancelClientPageReservation(reservation)
-    // The client retired the old guest once its switch completed, so that placement is gone.
-    const retireSwitchedPage = () => {
-      retirePlacement()
-      closeSettledReplacement()
-      releaseGrant()
-    }
-    if (completed) {
-      retireSwitchedPage()
-    } else if (resultPending) {
-      // Why: until the client settles, the old guest may still be live; a late failure keeps it.
-      void resultPending.then(
-        (result) => {
-          if (result.status === 'completed') {
-            retireSwitchedPage()
+    if (resultPending) {
+      // Why: the client still decides; a late success is adopted, a late failure keeps the old page.
+      void resultPending
+        .then(
+          (result) => {
+            if (result.status !== 'completed') {
+              input.placements.cancelClientPageReservation(reservation)
+              return
+            }
+            try {
+              const placement = commit()
+              input.onLateCommit?.(placement)
+            } catch {
+              retireSwitchedPage()
+            }
+          },
+          () => {
+            input.placements.cancelClientPageReservation(reservation)
+            retirePlacement()
+            releaseGrant()
           }
-        },
-        () => {
-          retirePlacement()
-          releaseGrant()
-        }
-      )
+        )
+        .finally(forgetPending)
+    } else if (completed) {
+      retireSwitchedPage()
+    } else {
+      input.placements.cancelClientPageReservation(reservation)
     }
     throw error
   } finally {
-    if (pending.get(authority.browserPageId) === reservation.placement) {
-      pending.delete(authority.browserPageId)
+    if (!resultPending) {
+      forgetPending()
     }
   }
 }

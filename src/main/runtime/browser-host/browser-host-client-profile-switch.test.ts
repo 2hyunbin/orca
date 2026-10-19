@@ -85,7 +85,7 @@ const isolated = {
 }
 
 describe('negotiated profile switch over the command transport', () => {
-  it('closes a late replacement in sequence through the real ledger and dispatcher', async () => {
+  it('adopts a replacement the client finished after the caller timed out', async () => {
     const f = await fixture()
     vi.useFakeTimers()
     try {
@@ -96,8 +96,9 @@ describe('negotiated profile switch over the command transport', () => {
             finishMount = resolve
           })
       )
+      const lateCommit = vi.fn()
       const rejected = expect(
-        f.leases.switchClientPageProfile(f.authority, isolated)
+        f.leases.switchClientPageProfile(f.authority, isolated, lateCommit)
       ).rejects.toThrow('browser_host_page_creation_timeout')
       await vi.advanceTimersByTimeAsync(DEFAULT_CLIENT_PAGE_CREATION_TIMEOUT_MS + 1)
       await rejected
@@ -106,12 +107,21 @@ describe('negotiated profile switch over the command transport', () => {
       ).toHaveLength(0)
       finishMount({ webContentsId: 99 })
       await vi.advanceTimersByTimeAsync(0)
-      const events = f.delivered.mock.calls.map(([event]) => event)
-      const switchEvent = events.find((event) => event.command.type === 'switchProfile')!
-      const closeEvent = events.find((event) => event.command.type === 'closePage')!
-      expect(closeEvent).toBeDefined()
-      expect(closeEvent.commandSequence).toBe(switchEvent.commandSequence + 1)
-      expect(f.h.executor.snapshotPageInventory()).toEqual([])
+      const switchEvent = f.delivered.mock.calls
+        .map(([event]) => event)
+        .find((event) => event.command.type === 'switchProfile')!
+      if (switchEvent.command.type !== 'switchProfile') {
+        throw new Error('expected a switch command')
+      }
+      const next = switchEvent.command.nextPageHostGeneration
+      expect(
+        f.delivered.mock.calls.filter(([event]) => event.command.type === 'closePage')
+      ).toHaveLength(0)
+      expect(lateCommit).toHaveBeenCalledWith(expect.objectContaining({ pageHostGeneration: next }))
+      expect(f.leases.getPlacement('page-a')).toMatchObject({ pageHostGeneration: next })
+      expect(f.h.executor.snapshotPageInventory()).toMatchObject([
+        { browserProfileId: isolated.id, pageHostGeneration: next, state: 'active' }
+      ])
     } finally {
       vi.useRealTimers()
     }

@@ -27,6 +27,7 @@ import type {
 } from './browser-command-contracts'
 import type { RuntimeBrowserCommandTargets } from './browser-command-targets'
 import type { RuntimeBrowserTabCatalog } from './browser-tab-catalog'
+import type { RuntimeBrowserClientPlacement } from '../../../shared/runtime-browser-placement'
 
 export class RuntimeBrowserProfiles {
   constructor(
@@ -71,6 +72,18 @@ export class RuntimeBrowserProfiles {
         return { browserPageId, profileId: profile.id, profileLabel: profile.label }
       }
       const authority = this.host.getBrowserHostLeaseRegistry()
+      const publish = (placement: RuntimeBrowserClientPlacement): void => {
+        this.host
+          .getRuntimeBrowserPageRegistry()
+          .replaceClientPagePlacement(
+            browserPageId,
+            clientPage.placement,
+            placement,
+            undefined,
+            profile.id
+          )
+        this.host.notifyHeadlessBrowserSessionTabsChanged?.(clientPage.workspaceId)
+      }
       const placement = await authority.switchClientPageProfile(
         {
           authorityRuntimeId: authority.authorityRuntimeId,
@@ -80,18 +93,11 @@ export class RuntimeBrowserProfiles {
           browserHostGeneration: clientPage.placement.browserHostGeneration,
           pageHostGeneration: clientPage.placement.pageHostGeneration
         },
-        { id: profile.id, label: profile.label, scope: profile.scope }
+        { id: profile.id, label: profile.label, scope: profile.scope },
+        // Why: a switch that finished after the caller's timeout still moved the page.
+        publish
       )
-      this.host
-        .getRuntimeBrowserPageRegistry()
-        .replaceClientPagePlacement(
-          browserPageId,
-          clientPage.placement,
-          placement,
-          undefined,
-          profile.id
-        )
-      this.host.notifyHeadlessBrowserSessionTabsChanged?.(clientPage.workspaceId)
+      publish(placement)
       return { browserPageId, profileId: profile.id, profileLabel: profile.label }
     }
 
