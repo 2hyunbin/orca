@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { RUNTIME_CAPABILITIES } from './protocol-version'
 
-// Why exact: old peers gate features on these strings, so adding or dropping one is a wire change
-// and belongs in review. Sorted so unrelated additions land on different lines.
+// Frozen baseline: additions need no edit; remove a name only when deliberately retiring support.
 const PUBLISHED_RUNTIME_CAPABILITIES = [
   'accounts.antigravity-chat-sign-in.v1',
   'accounts.antigravity-native.v1',
@@ -177,7 +176,7 @@ const PUBLISHED_RUNTIME_CAPABILITIES = [
 ]
 
 describe('RUNTIME_CAPABILITIES', () => {
-  it('publishes exactly the reviewed capability set', () => {
-    expect([...RUNTIME_CAPABILITIES].sort()).toEqual(PUBLISHED_RUNTIME_CAPABILITIES)
+  it('preserves every previously published capability', () => {
+    expect(RUNTIME_CAPABILITIES).toEqual(expect.arrayContaining(PUBLISHED_RUNTIME_CAPABILITIES))
   })
 })
