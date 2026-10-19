@@ -6,7 +6,7 @@ import { createDesktopTerminal } from '../../orca-runtime-create-terminal-deskto
 import { buildRuntimeAgentTeamsLaunchPlan } from './agent-teams-launch-plan'
 import { createIdempotentCallback } from '../../orca-runtime-report-pty-spawn-commit'
 import { recordPtySurface, spawnSurfaceClaimSequence } from '../../pty-recorded-surface-topology'
-import { agentLaunchTokenFor } from '../../../agent-launch/agent-launch-token'
+import { agentLaunchTokenFor, withAgentLaunchToken } from '../../../agent-launch/agent-launch-token'
 import { migratedPaneRestoreHint } from '../../migrated-pane-restore-cwd'
 import { resolvePtyFirstSize } from '../../../ipc/pty/pty-first-size'
 
@@ -69,10 +69,7 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
       let effectiveLaunchConfig = launchOpts.launchConfig
       let result!: Awaited<ReturnType<NonNullable<dependencies.RuntimePtyController['spawn']>>>
       const spawnFresh = async (operation: PaneSpawnOperation) => {
-        const baseEnv = {
-          ...launchOpts.env,
-          ...(launchToken ? { ORCA_AGENT_LAUNCH_TOKEN: launchToken } : {})
-        }
+        const baseEnv = withAgentLaunchToken(launchOpts.env, launchToken)
         let agentTeamsPlan: Awaited<ReturnType<typeof buildRuntimeAgentTeamsLaunchPlan>>['plan']
         let sequencedStartupCommand: string | undefined
         try {

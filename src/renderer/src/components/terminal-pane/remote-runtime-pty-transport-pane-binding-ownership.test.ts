@@ -67,7 +67,9 @@ describe('remote runtime pane binding ownership', () => {
   ])(
     'retains one refresh through %s delayed acceptance (%s, %s)',
     async (replacement, nextIncarnation, interruption) => {
-      if (interruption === 'close') vi.useFakeTimers()
+      if (interruption === 'close') {
+        vi.useFakeTimers()
+      }
       composedStore = true
       vi.doMock('@/runtime/sync-runtime-graph', () => ({ scheduleRuntimeGraphSync: vi.fn() }))
       vi.doMock('@/lib/codex-stale-pane-sweep', () => ({
@@ -100,7 +102,9 @@ describe('remote runtime pane binding ownership', () => {
       const delayed = Promise.withResolvers<void>()
       const defaultCall = runtimeCall.getMockImplementation()
       runtimeCall.mockImplementation(async (args: { method: string }) => {
-        if (args.method !== 'terminal.resolvePane') return defaultCall?.(args)
+        if (args.method !== 'terminal.resolvePane') {
+          return defaultCall?.(args)
+        }
         if (delayResolution) {
           delayResolution = false
           await delayed.promise
@@ -205,8 +209,9 @@ describe('remote runtime pane binding ownership', () => {
         // A real multiplexer interruption must not restore the allowance before acceptance.
         if (interruption !== 'direct') {
           const frameCount = subscribeFrameCount()
-          if (interruption === 'close') subscriptionCallbacks?.onClose?.()
-          else
+          if (interruption === 'close') {
+            subscriptionCallbacks?.onClose?.()
+          } else {
             subscriptionCallbacks?.onResponse({
               ok: true,
               result: {
@@ -215,6 +220,7 @@ describe('remote runtime pane binding ownership', () => {
                 verdict: 'unverifiable'
               }
             })
+          }
           await vi.waitFor(() => expect(subscriptionCallbacks).not.toBe(refreshedSubscription))
           await vi.waitFor(() => expect(subscribeFrameCount()).toBeGreaterThan(frameCount))
           await vi.waitFor(() => expect(latestSubscribePayload().terminal).toBe(replacement))
@@ -296,7 +302,9 @@ describe('remote runtime pane binding ownership', () => {
             error: { code: 'runtime_error', message: 'terminal_pane_owner_changed' }
           }
         }
-        if (!reachable) throw unreachable()
+        if (!reachable) {
+          throw unreachable()
+        }
         return defaultCall?.(args)
       })
       const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
@@ -316,7 +324,9 @@ describe('remote runtime pane binding ownership', () => {
         }
         await vi.waitFor(() => expect(latestSubscribePayload().terminal).toBe('terminal-1'))
         emitSnapshot(latestSubscribePayload().streamId, 'recovered$ ')
-        if (!contactLoss) expect(await connecting).toMatchObject({ id: 'remote:env-1@@terminal-1' })
+        if (!contactLoss) {
+          expect(await connecting).toMatchObject({ id: 'remote:env-1@@terminal-1' })
+        }
         await vi.advanceTimersByTimeAsync(20)
         expect(transport.isConnected()).toBe(true)
         expect(transport.getRecoveryState?.().phase).toBe('connected')

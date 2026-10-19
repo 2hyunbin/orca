@@ -89,7 +89,9 @@ function sessionStore(leaves: string[]): { store: Store; read: () => WorkspaceSe
 
 describe('stable pane adoption after the owning host reports the PTY absent', () => {
   beforeEach(() => {
-    for (const id of [OWNER.ptyId, 'ssh:conn-1@@pty-2']) ptyOwnership.set(id, 'ssh:conn-1')
+    for (const id of [OWNER.ptyId, 'ssh:conn-1@@pty-2']) {
+      ptyOwnership.set(id, 'ssh:conn-1')
+    }
   })
   afterEach(() => {
     for (const id of [OWNER.ptyId, 'ssh:conn-1@@pty-2']) {

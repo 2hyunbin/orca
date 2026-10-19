@@ -175,12 +175,19 @@ describe('RemoteRuntimePtyRecoveryState', () => {
         promise: claim?.promise
       })
       const result = { id: 'owner', replay: '', isReattach: true }
-      if (finish === 'healthy') state.markHealthy(result)
-      else if (finish === 'cancelled') state.cancel()
-      else if (finish === 'disposed') state.dispose()
-      else if (finish === 'exhausted') state.markDisconnected()
-      else if (finish === 'contact loss') state.parkOwnerRefresh(epoch)
-      else await vi.advanceTimersByTimeAsync(REMOTE_RUNTIME_AUTO_RECOVERY_TIMEOUT_MS)
+      if (finish === 'healthy') {
+        state.markHealthy(result)
+      } else if (finish === 'cancelled') {
+        state.cancel()
+      } else if (finish === 'disposed') {
+        state.dispose()
+      } else if (finish === 'exhausted') {
+        state.markDisconnected()
+      } else if (finish === 'contact loss') {
+        state.parkOwnerRefresh(epoch)
+      } else {
+        await vi.advanceTimersByTimeAsync(REMOTE_RUNTIME_AUTO_RECOVERY_TIMEOUT_MS)
+      }
       expect(await claim?.promise).toEqual(finish === 'healthy' ? result : undefined)
       if (finish === 'deadline' || finish === 'exhausted' || finish === 'contact loss') {
         expect(state.hasOwnerRefresh).toBe(true)
