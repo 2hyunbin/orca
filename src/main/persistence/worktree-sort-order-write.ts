@@ -64,13 +64,13 @@ export function writeWorktreeSortOrder(
     if (targets.has(worktreeId)) {
       return
     }
-    const hostId = knownHost(store, worktreeId, hostIds?.[index])
-    targets.set(
-      worktreeId,
-      hostId
-        ? hostWorktreeTarget({ id: worktreeId, hostId })
-        : resolveWorktreeMetaOwner(store, worktreeId)
-    )
+    if (!hostIds) {
+      targets.set(worktreeId, resolveWorktreeMetaOwner(store, worktreeId))
+      return
+    }
+    // A named host this store no longer registers is skipped, never redirected to another copy.
+    const hostId = knownHost(store, worktreeId, hostIds[index])
+    targets.set(worktreeId, hostId ? hostWorktreeTarget({ id: worktreeId, hostId }) : undefined)
   })
   const metaFor = (worktreeId: string): WorktreeMeta | undefined => {
     const target = targets.get(worktreeId)

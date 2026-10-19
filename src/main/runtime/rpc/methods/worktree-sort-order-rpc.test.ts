@@ -5,10 +5,10 @@ import type { OrcaRuntimeService } from '../../orca-runtime'
 import { WORKTREE_METHODS } from './worktree'
 
 function dispatcherWith(persistManagedWorktreeSortOrder: ReturnType<typeof vi.fn>) {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the dispatcher reads only these two members for this method.
   const runtime = {
     getRuntimeId: () => 'test-runtime',
     persistManagedWorktreeSortOrder
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the dispatcher reads only these two members for this method.
   } as unknown as OrcaRuntimeService
   return new RpcDispatcher({ runtime, methods: WORKTREE_METHODS })
 }
