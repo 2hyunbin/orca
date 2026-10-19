@@ -167,6 +167,10 @@ for (const { label, bytes } of [
         )
         .toBe('present')
         .catch(() => {})
+      await expect(page.locator('.rich-markdown-editor').first()).toContainText(
+        `${marker} unsaved line 0`,
+        { timeout: 60_000 }
+      )
       // A restart reads the draft back from this desktop's own record, now named for the server.
       const environmentId = await managedEnvironmentId(page, seeded.targetId)
       const restarted = await relaunchManagedApp(fixture)
@@ -182,7 +186,13 @@ for (const { label, bytes } of [
         )
         .toBe('present')
         .catch(() => {})
-      const found = readHostProfiles(fixture).map((state) => findDraft(state, draft, marker))
+      await expect(restarted.locator('.rich-markdown-editor').first()).toContainText(
+        `${marker} unsaved line 0`,
+        { timeout: 60_000 }
+      )
+      const profiles = readHostProfiles(fixture)
+      expect(profiles.length, 'no committed server profile was read').toBeGreaterThan(0)
+      const found = profiles.map((state) => findDraft(state, draft, marker))
       const host: HostVerdict = found.find((entry) => entry.verdict !== 'absent') ?? {
         verdict: 'absent',
         where: []

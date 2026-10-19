@@ -65,7 +65,7 @@ async function renameOrcadMigrationDraftsToDestination(
     const before = store.getWorkspaceSession(hostId)
     const next = withRenamedOrcadMigrationDrafts(
       before,
-      store.collectOrcadMigrationSourceDrafts(cutover.manifest)
+      store.collectOrcadMigrationSourceDrafts(cutover.manifest).drafts
     )
     if (!next) {
       return { value: undefined, persist: false }

@@ -70,7 +70,7 @@ function expectDraftKeptHere(state: PersistedState): void {
   expect(manifest.payload.dormantState?.workspaceSession?.openFilesByWorktree?.[WORKTREE]).toEqual([
     tab
   ])
-  expect(collectOrcadMigrationSourceDrafts(state, manifest)[WORKTREE]).toEqual([draft()])
+  expect(collectOrcadMigrationSourceDrafts(state, manifest).drafts[WORKTREE]).toEqual([draft()])
 }
 
 function sourceState(): PersistedState {

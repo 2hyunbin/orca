@@ -415,7 +415,7 @@ describe('"Move anyway"', () => {
     expect(result).toMatchObject({ outcome: 'fenced' })
     if ('cutover' in result) {
       expect(
-        loaded.store.collectOrcadMigrationSourceDrafts(result.cutover.manifest)[worktreeId]
+        loaded.store.collectOrcadMigrationSourceDrafts(result.cutover.manifest).drafts[worktreeId]
       ).toEqual([expect.objectContaining({ dirtyDraftContent: 'desktop draft' })])
     }
   })
@@ -431,6 +431,10 @@ describe('"Move anyway"', () => {
     })
     state.workspaceSessionsByHostId![HOST]!.openFilesByWorktree![worktreeId]!.push(notes('host'))
     state.workspaceSession.openFilesByWorktree = { [worktreeId]: [notes('desktop')] }
+    // An unrelated project's draft must not let the clash slip past as a left-behind item.
+    state.workspaceSessionsByHostId![HOST]!.openFilesByWorktree!['repo-9::/srv/other'] = [
+      { ...notes('other project'), worktreeId: 'repo-9::/srv/other', filePath: '/srv/other/x.md' }
+    ]
     const loaded = load(state)
     confirmed(loaded)
     await expect(connectMove(loaded)).resolves.toMatchObject({
@@ -468,7 +472,7 @@ describe('"Move anyway"', () => {
       expect.not.objectContaining({ dirtyDraftContent: expect.anything() })
     ])
     expect(
-      loaded.store.collectOrcadMigrationSourceDrafts(result.cutover.manifest)[worktreeId]
+      loaded.store.collectOrcadMigrationSourceDrafts(result.cutover.manifest).drafts[worktreeId]
     ).toEqual([expect.objectContaining({ dirtyDraftContent: 'desktop draft' })])
   })
 

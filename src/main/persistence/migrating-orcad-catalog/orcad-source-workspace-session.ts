@@ -31,12 +31,15 @@ import {
 } from './orcad-source-workspace-session-layout'
 import { mergeSessionFragments } from './orcad-source-workspace-session-fragments'
 import {
-  isClashingDraftItem,
+  clashingDraftItem,
   resolveCopiesForHost,
   uncarriedDesktopDrafts,
   type SessionFragment
 } from './orcad-source-session-copy-resolution'
-import { withoutOrcadMigrationDrafts } from './orcad-source-draft-rename'
+import {
+  collectOrcadMigrationSourceDrafts,
+  withoutOrcadMigrationDrafts
+} from './orcad-source-draft-rename'
 import { hasClosedTerminalTabRecord } from '../../../shared/closed-terminal-tab-tombstones'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { normalizeWorkspaceSessionKeyToWorkspaceId } from '../../../shared/workspace-scope'
@@ -85,7 +88,9 @@ export function collectOrcadMigrationSourceWorkspaceSession(
   // are renamed to the server on commit, unless one is another host's file or two versions clash.
   const drafts = [
     ...uncarriedDesktopDrafts(state, source, catalog),
-    ...collected.blockedItems.filter(isClashingDraftItem)
+    ...collectOrcadMigrationSourceDrafts(state, { source, payload: catalog }).clashes.map(
+      ({ worktreeKey, filePath }) => clashingDraftItem(filePath, worktreeKey)
+    )
   ]
   return drafts.length > 0 || collected.blockedItems.includes(UNREADABLE_SESSION)
     ? { ...collected, blockedItems: drafts.length > 0 ? drafts : collected.blockedItems }

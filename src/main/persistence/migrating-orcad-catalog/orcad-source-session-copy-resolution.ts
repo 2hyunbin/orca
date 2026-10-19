@@ -47,10 +47,8 @@ export function uncarriedDesktopDrafts(
   )
 }
 
-const CLASHING_DRAFT_PREFIX = 'two different unsaved versions of '
-
-export function isClashingDraftItem(item: string): boolean {
-  return item.startsWith(CLASHING_DRAFT_PREFIX)
+export function clashingDraftItem(filePath: string, ownerKey: string): string {
+  return `two different unsaved versions of ${filePath} in ${worktreeLabel(ownerKey)}`
 }
 
 /**
@@ -93,9 +91,7 @@ export function resolveCopiesForHost(
             held?.dirtyDraftContent !== undefined &&
             held.dirtyDraftContent !== file.dirtyDraftContent
           ) {
-            clashingDrafts.push(
-              `${CLASHING_DRAFT_PREFIX}${file.filePath} in ${worktreeLabel(ownerKey)}`
-            )
+            clashingDrafts.push(clashingDraftItem(file.filePath, ownerKey))
           }
         }
       }
