@@ -384,8 +384,13 @@ describe('SshPortForwardManager', () => {
     expect(manager.listForwards('conn-1')).toHaveLength(0)
   })
 
-  it('refuses an add whose connection a teardown already disposed, opening nothing', async () => {
-    const conn = { ...createSystemSshConn(), isDisposed: vi.fn().mockReturnValue(true) }
+  it('refuses an add on a connection its teardown disposed, as a teardown', async () => {
+    // As after disconnect(): disposed, with no client and no system transport left.
+    const conn = {
+      ...createSystemSshConn(),
+      isDisposed: vi.fn().mockReturnValue(true),
+      usesSystemSshTransport: vi.fn().mockReturnValue(false)
+    }
 
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the system SSH provider reads only the members createSystemSshConn stubs.
     const adding = manager.addForward('conn-1', conn as never, 3000, '127.0.0.1', 8080)
@@ -395,7 +400,7 @@ describe('SshPortForwardManager', () => {
     expect(manager.listForwards('conn-1')).toHaveLength(0)
   })
 
-  it('does not reopen an edit whose old forward was still closing when Disconnect landed', async () => {
+  it('reports an edit Disconnect overtook as a teardown, so its saved forwards survive', async () => {
     let resolveClose!: () => void
     const first = createFakeSystemSshForward()
     first.close.mockReturnValue(
@@ -413,6 +418,7 @@ describe('SshPortForwardManager', () => {
     // The teardown snapshots nothing to start, and disposes the connection.
     const teardown = manager.removeAllForwards('conn-1')
     conn.isDisposed.mockReturnValue(true)
+    conn.usesSystemSshTransport.mockReturnValue(false)
     resolveClose()
     await teardown
 
