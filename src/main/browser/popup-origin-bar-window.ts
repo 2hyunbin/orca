@@ -225,7 +225,16 @@ export function openPopupWithOriginBar(
     }
   }
   contentWebContents.on('did-navigate-in-page', handleInPageNavigate)
-  const handleLoadFailure = (): void => {
+  const handleLoadFailure = (
+    _event: Electron.Event,
+    _errorCode: number,
+    _errorDescription: string,
+    _url: string,
+    isMainFrame: boolean
+  ): void => {
+    if (!isMainFrame) {
+      return
+    }
     // Error documents omit did-navigate; read the committed frame, never the failed target.
     currentUrl = popupCommittedDocumentUrl(contentWebContents)
     renderOrigin()

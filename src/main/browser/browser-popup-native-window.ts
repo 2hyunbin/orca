@@ -209,7 +209,11 @@ export function prepareNativeBrowserPopup(
       updateOrigin(popupCommittedDocumentUrl(contents))
     }
   })
-  contents.on('did-fail-load', () => updateOrigin(popupCommittedDocumentUrl(contents)))
+  contents.on('did-fail-load', (_event, _errorCode, _errorDescription, _url, isMainFrame) => {
+    if (isMainFrame) {
+      updateOrigin(popupCommittedDocumentUrl(contents))
+    }
+  })
   updateOrigin(popupCommittedDocumentUrl(contents))
   return popup
 }

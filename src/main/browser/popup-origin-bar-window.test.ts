@@ -410,6 +410,34 @@ describe('openPopupWithOriginBar', () => {
     expect(bar.webContents.executeJavaScript.mock.calls.at(-1)?.[0]).toContain('"chrome-error:"')
   })
 
+  it.each([1, 1000])('preserves the page title through %i subframe failures', (count) => {
+    const adopted = createFakeWebContents()
+    adopted.mainFrame.url = 'https://committed.example/'
+    adopted.mainFrame.origin = 'https://committed.example'
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The fixture implements the presenter's WebContents surface.
+    openPopupWithOriginBar({ webContents: adopted as never }, adopted.mainFrame.url)
+    const { bar } = lastViews()
+    bar.webContents.emit('did-finish-load')
+    adopted.emit('page-title-updated', {}, 'Stable popup title')
+    bar.webContents.executeJavaScript.mockClear()
+    const titleUpdates = lastWindow().setTitle.mock.calls.length
+
+    for (let index = 0; index < count; index += 1) {
+      adopted.emit('did-fail-load', {}, -2, 'ERR_FAILED', 'https://iframe.example/', false)
+    }
+    expect(lastWindow().setTitle).toHaveBeenCalledTimes(titleUpdates)
+    expect(lastWindow().setTitle).toHaveBeenLastCalledWith('Stable popup title')
+    expect(bar.webContents.executeJavaScript).not.toHaveBeenCalled()
+
+    adopted.mainFrame.url = 'https://failed.example/'
+    adopted.mainFrame.origin = 'null'
+    adopted.emit('did-fail-load', {}, -2, 'ERR_FAILED', adopted.mainFrame.url, true)
+    expect(lastWindow().setTitle).toHaveBeenCalledTimes(titleUpdates + 1)
+    expect(lastWindow().setTitle).toHaveBeenLastCalledWith('unknown')
+    expect(bar.webContents.executeJavaScript).toHaveBeenCalledTimes(1)
+    expect(bar.webContents.executeJavaScript.mock.calls[0][0]).toContain('"unknown"')
+  })
+
   it('never labels an opaque committed error or sandboxed document with its network URL', () => {
     const adopted = createFakeWebContents()
     adopted.mainFrame.url = 'https://opaque.example/document'

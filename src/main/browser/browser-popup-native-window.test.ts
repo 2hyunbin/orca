@@ -363,6 +363,27 @@ describe('native popup admission', () => {
     expect(window.setTitle).toHaveBeenLastCalledWith('chrome-error:')
   })
 
+  it.each([1, 1000])(
+    'ignores %i subframe failures but still updates main-frame errors',
+    (count) => {
+      const { browserWindow, contents, window } = nativeWindow()
+      contents.mainFrame.url = 'https://committed.example/'
+      contents.mainFrame.origin = 'https://committed.example'
+      prepareNativeBrowserPopup(browserWindow, contents.mainFrame.url)
+      window.setTitle.mockClear()
+
+      for (let index = 0; index < count; index += 1) {
+        contents.emit('did-fail-load', {}, -2, 'ERR_FAILED', 'https://iframe.example/', false)
+      }
+      expect(window.setTitle).not.toHaveBeenCalled()
+
+      contents.mainFrame.url = 'https://failed.example/'
+      contents.mainFrame.origin = 'null'
+      contents.emit('did-fail-load', {}, -2, 'ERR_FAILED', contents.mainFrame.url, true)
+      expect(window.setTitle).toHaveBeenCalledExactlyOnceWith('unknown')
+    }
+  )
+
   it('uses a neutral title for an opaque network document and retains a surviving origin on abort', () => {
     const { browserWindow, contents, window } = nativeWindow()
     contents.mainFrame.url = 'https://committed.example/'
