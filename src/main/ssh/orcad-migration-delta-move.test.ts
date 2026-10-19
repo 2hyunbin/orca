@@ -25,23 +25,28 @@ import { planOrcadDeltaMove } from './orcad-migration-delta-plan'
 import { latestOrcadMigrationInto } from './orcad-migration-rollback-mark'
 import { retainOrcadMigrationSource } from './orcad-migration-source-retention'
 import { reconcileManagedOrcadSshTargets, visibleRepos } from './orcad-retained-source'
-import { SshConnectionStore } from './ssh-connection-store'
+import { SshConnectionStore } from './connection/ssh-connection-store'
 import { resolveHostServerOnConnect } from './ssh-host-server-on-connect'
 import { hostServerDepsStub } from './ssh-host-server-on-connect-test-deps'
-import { runTargetLifecycle } from '../ipc/ssh-target-lifecycle-queue'
+import { runTargetLifecycle } from '../ipc/ssh/ssh-target-lifecycle-queue'
 
 const mocks = vi.hoisted(() => {
   const state: { targetStore: unknown } = { targetStore: null }
   return { state, deploy: vi.fn(), ensureTunnel: vi.fn() }
 })
-vi.mock('./ssh-target-registry', () => ({
+vi.mock('./targets/ssh-target-registry', () => ({
   getSshConnectionManager: () => ({}),
   getSshTargetRegistryStore: () => mocks.state.targetStore
 }))
-vi.mock('./orcad-runtime-deployment', () => ({ createManagedOrcadEnvironment: mocks.deploy }))
-vi.mock('./orcad-managed-tunnel', () => ({ ensureOrcadManagedTunnel: mocks.ensureTunnel }))
+vi.mock('../managed-server/lifecycle/orcad-runtime-deployment', () => ({
+  createManagedOrcadEnvironment: mocks.deploy
+}))
+vi.mock('../managed-server/lifecycle/orcad-managed-tunnel', () => ({
+  ensureOrcadManagedTunnel: mocks.ensureTunnel
+}))
 
-const { convertSshTargetToManagedOrcad } = await import('./orcad-runtime-conversion')
+const { convertSshTargetToManagedOrcad } =
+  await import('../managed-server/lifecycle/orcad-runtime-conversion')
 
 const TARGET: SshTarget = {
   id: 'ssh-prod',
