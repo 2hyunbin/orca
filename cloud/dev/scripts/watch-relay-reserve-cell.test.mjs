@@ -1384,6 +1384,7 @@ test('phone rules: 26 recorded hours of c7, c28 and c29 trip no attempt rule in 
 const BROKEN_PATHS = {
   'two refusals per accept': ['credentialRefusals', (failed, accepted) => [Math.max(2 * accepted, 4), accepted]],
   'every accept errors on the database, phones give up after one try': ['acceptDatabaseErrors', (failed, accepted) => [accepted, 0]],
+  // Only trips are tested: the auth-failure stand-in cannot measure confirm false trips.
   'every confirm fails': ['confirmFailures', (failed, accepted) => [accepted, accepted]]
 }
 test('phone rules: the same recorded hours trip on each broken path wherever its minutes are judged', () => {
