@@ -25,7 +25,8 @@ export const PAIRED_TERMINAL_TAB_CLOSE_INTENT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1
 
 export const pairedTerminalTabCloseIntentSchema: z.ZodType<PairedTerminalTabCloseIntent> = z.object(
   {
-    hostTabIds: z.array(z.string().min(1).max(256)).min(1).max(8),
+    // Why 4096: a mirrored editor tab is named by its file path, and paths outrun any short cap.
+    hostTabIds: z.array(z.string().min(1).max(4096)).min(1).max(8),
     worktreeId: z.string().min(1).max(1024),
     closedAt: z.number().int().nonnegative(),
     pairingRevision: z.number().int().nonnegative().optional()
