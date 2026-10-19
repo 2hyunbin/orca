@@ -3,6 +3,7 @@ import { mkdirSync, realpathSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { Page, TestInfo } from '@stablyai/playwright-test'
 import type { WorktreeMeta } from '../../../src/shared/worktree/meta-types'
+import { expect } from './orca-app'
 import { evaluatePolled } from './page-evaluate-polled'
 import { loadWorktreesUntilPathsPresent } from './worktree-registration'
 
@@ -45,13 +46,32 @@ export async function addRepoWithWorkspaces(
       if ('error' in added) {
         throw new Error(added.error)
       }
-      const store = window.__store!
-      await store.getState().fetchRepos({ runtimeEnvironmentId: null, throwOnError: true })
-      // Checkouts made outside Orca's workspace root are hidden by default.
-      await store.getState().updateRepo(added.repo.id, { externalWorktreeVisibility: 'show' })
       return added.repo.id
     },
     realRepoPath
+  )
+  // The add's own refresh can supersede a fetch, and updateRepo skips a repo the store lacks.
+  await expect
+    .poll(() =>
+      page.evaluate(async (repoId) => {
+        const store = window.__store!
+        await store.getState().fetchRepos({ runtimeEnvironmentId: null, throwOnError: true })
+        return store.getState().repos.some((repo) => repo.id === repoId)
+      }, repoId)
+    )
+    .toBe(true)
+  await evaluatePolled(
+    page,
+    async (repoId) => {
+      // Checkouts made outside Orca's workspace root are hidden by default.
+      const shown = await window
+        .__store!.getState()
+        .updateRepo(repoId, { externalWorktreeVisibility: 'show' })
+      if (!shown) {
+        throw new Error(`could not show external worktrees for ${repoId}`)
+      }
+    },
+    repoId
   )
   await loadWorktreesUntilPathsPresent(page, repoId, [realRepoPath, ...worktreePaths])
   const idByPath = await page.evaluate(
