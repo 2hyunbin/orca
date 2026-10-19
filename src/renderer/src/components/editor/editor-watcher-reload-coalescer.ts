@@ -10,14 +10,16 @@ export type EditorWatcherReloadCoalescer = {
   dispose: () => void
 }
 
+type InFlightRead = { token: object; startedAt: number; replacedStale: boolean }
+
 export function createEditorWatcherReloadCoalescer(): EditorWatcherReloadCoalescer {
-  const inFlight = new Map<string, { token: object; startedAt: number }>()
+  const inFlight = new Map<string, InFlightRead>()
   const pending = new Map<string, () => Promise<void>>()
   let disposed = false
 
-  const start = (key: string, load: () => Promise<void>): void => {
+  const start = (key: string, load: () => Promise<void>, replacedStale: boolean): void => {
     const token = {}
-    inFlight.set(key, { token, startedAt: performance.now() })
+    inFlight.set(key, { token, startedAt: Date.now(), replacedStale })
     void load()
       .catch(() => {})
       .finally(() => {
@@ -28,7 +30,7 @@ export function createEditorWatcherReloadCoalescer(): EditorWatcherReloadCoalesc
         const next = pending.get(key)
         pending.delete(key)
         if (next && !disposed) {
-          start(key, next)
+          start(key, next, false)
         }
       })
   }
@@ -39,12 +41,16 @@ export function createEditorWatcherReloadCoalescer(): EditorWatcherReloadCoalesc
         return
       }
       const current = inFlight.get(key)
-      if (current && performance.now() - current.startedAt < STALE_WATCHER_READ_MS) {
+      // Why: replace a stale read once; a read that is merely slow must be allowed to land.
+      if (
+        current &&
+        (current.replacedStale || Date.now() - current.startedAt < STALE_WATCHER_READ_MS)
+      ) {
         pending.set(key, load)
         return
       }
       pending.delete(key)
-      start(key, load)
+      start(key, load, current !== undefined)
     },
     dispose() {
       disposed = true

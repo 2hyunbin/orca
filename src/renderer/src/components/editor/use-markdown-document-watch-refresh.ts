@@ -9,6 +9,21 @@ import { hasMarkdownExtension } from './markdown-internal-links'
 
 const DOCUMENT_WATCH_DEBOUNCE_MS = 125
 
+// Why: a remounted pane must not join a scan that predates the latest change its unmounted
+// predecessor saw (that pane's pending follow-up died with it).
+const latestMembershipChangeAt = new Map<string, number>()
+const membershipChangeKey = (owner: string | null, rootPath: string): string =>
+  `${owner ?? ''}::${normalizeRuntimePathForComparison(rootPath)}`
+
+export function getLatestMarkdownMembershipChangeAt(
+  runtimeEnvironmentId: string | null | undefined,
+  rootPath: string
+): number | undefined {
+  return latestMembershipChangeAt.get(
+    membershipChangeKey(runtimeEnvironmentId?.trim() || null, rootPath)
+  )
+}
+
 function changesDocumentMembership(payload: FsChangedPayload, rootPath: string): boolean {
   if (
     normalizeRuntimePathForComparison(payload.worktreePath) !==
@@ -83,6 +98,7 @@ export function useMarkdownDocumentWatchRefresh({
         return
       }
       latestChangeAt = performance.now()
+      latestMembershipChangeAt.set(membershipChangeKey(owner, worktreePath), latestChangeAt)
       if (scanInFlight) {
         changedDuringScan = true
         return

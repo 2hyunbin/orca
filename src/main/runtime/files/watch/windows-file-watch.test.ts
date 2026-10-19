@@ -12,7 +12,10 @@ vi.mock('node:fs', () => ({
   }
 }))
 
-import { watchWindowsRuntimeFileExplorer } from './windows-file-watch'
+import {
+  WINDOWS_RUNTIME_FILE_WATCH_REFRESH_MS,
+  watchWindowsRuntimeFileExplorer
+} from './windows-file-watch'
 
 describe('watchWindowsRuntimeFileExplorer', () => {
   beforeEach(() => {
@@ -26,11 +29,12 @@ describe('watchWindowsRuntimeFileExplorer', () => {
     const callback = vi.fn()
     watchWindowsRuntimeFileExplorer('C:\\repo', callback, vi.fn())
     // Raw events every 50 ms: a resetting debounce would never fire.
-    for (let elapsed = 0; elapsed < 1_000; elapsed += 50) {
+    for (let elapsed = 0; elapsed < 2_000; elapsed += 50) {
       fsWatch.listener?.()
       vi.advanceTimersByTime(50)
     }
-    expect(callback.mock.calls.length).toBeGreaterThanOrEqual(5)
+    // One whole-tree refresh per window, not one per raw event.
+    expect(callback).toHaveBeenCalledTimes(2_000 / WINDOWS_RUNTIME_FILE_WATCH_REFRESH_MS)
     expect(callback).toHaveBeenCalledWith([{ kind: 'overflow', absolutePath: 'C:\\repo' }])
   })
 })

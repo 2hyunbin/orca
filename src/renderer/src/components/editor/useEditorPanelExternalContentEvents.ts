@@ -65,6 +65,31 @@ export function useEditorPanelExternalContentEvents({
 }: UseEditorPanelExternalContentEventsParams): void {
   useEffect(() => {
     const reloads = createEditorWatcherReloadCoalescer()
+    // Why: a coalesced follow-up starts later; re-check the tab is still open, clean and on screen.
+    const currentReloadTarget = (fileId: string): OpenFile | null => {
+      const file = openFilesRef.current.find((candidate) => candidate.id === fileId)
+      return file &&
+        !file.isDirty &&
+        isVisibleRef.current &&
+        file.id === activeContentFileIdRef.current
+        ? file
+        : null
+    }
+    const runContentReload = (fileId: string, eventGeneration: number): Promise<void> => {
+      const file = currentReloadTarget(fileId)
+      return file
+        ? loadFileContent(file.filePath, file.id, file.worktreeId, file.relativePath, {
+            force: true,
+            externalEventGeneration: eventGeneration
+          })
+        : Promise.resolve()
+    }
+    const runDiffReload = (fileId: string, eventGeneration: number): Promise<void> => {
+      const file = currentReloadTarget(fileId)
+      return file
+        ? loadDiffContent(file, { force: true, externalEventGeneration: eventGeneration })
+        : Promise.resolve()
+    }
     const handler = (event: Event): void => {
       const detail = (event as CustomEvent<EditorPathMutationTarget>).detail
       if (!detail) {
@@ -87,23 +112,14 @@ export function useEditorPanelExternalContentEvents({
         if (file.mode === 'edit' || file.mode === 'markdown-preview') {
           // Why: external writes must replace any in-flight pre-change read so
           // the tab shows the new on-disk content, not a stale dedupe result.
-          reloads.run(`content:${file.id}`, () =>
-            loadFileContent(file.filePath, file.id, file.worktreeId, file.relativePath, {
-              force: true,
-              externalEventGeneration: eventGeneration
-            })
-          )
+          reloads.run(`content:${file.id}`, () => runContentReload(file.id, eventGeneration))
           if (editorViewModeRef.current[file.id] === 'changes') {
-            reloads.run(`diff:${file.id}`, () =>
-              loadDiffContent(file, { force: true, externalEventGeneration: eventGeneration })
-            )
+            reloads.run(`diff:${file.id}`, () => runDiffReload(file.id, eventGeneration))
           } else {
             invalidatedDiffFileIds.push(file.id)
           }
         } else if (isReloadableSingleFileDiffTab(file)) {
-          reloads.run(`diff:${file.id}`, () =>
-            loadDiffContent(file, { force: true, externalEventGeneration: eventGeneration })
-          )
+          reloads.run(`diff:${file.id}`, () => runDiffReload(file.id, eventGeneration))
         }
       }
       if (invalidatedFileIds.length > 0) {

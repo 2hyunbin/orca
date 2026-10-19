@@ -290,4 +290,32 @@ describe('useEditorPanelExternalContentEvents', () => {
     await act(async () => settles[0]())
     expect(calls.loadDiff).toHaveBeenCalledTimes(2)
   })
+
+  it.each([
+    ['became dirty', (file: OpenFile) => [{ ...file, isDirty: true }]],
+    ['was closed', () => []]
+  ])('skips the follow-up read when the tab %s meanwhile', async (_label, nextFiles) => {
+    const changedFile = makeFile('changed')
+    const calls = makeCalls()
+    const settles: (() => void)[] = []
+    calls.loadFile.mockImplementation(() => new Promise<void>((resolve) => settles.push(resolve)))
+    const renderProbe = (openFiles: OpenFile[]): void => {
+      act(() => {
+        root.render(
+          <ExternalContentProbe
+            activeFileId={changedFile.id}
+            calls={calls}
+            isVisible
+            openFiles={openFiles}
+          />
+        )
+      })
+    }
+    renderProbe([changedFile])
+    dispatchExternalChange(changedFile.relativePath)
+    dispatchExternalChange(changedFile.relativePath)
+    renderProbe(nextFiles(changedFile))
+    await act(async () => settles[0]())
+    expect(calls.loadFile).toHaveBeenCalledTimes(1)
+  })
 })
