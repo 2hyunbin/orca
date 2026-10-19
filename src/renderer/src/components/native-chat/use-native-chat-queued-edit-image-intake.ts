@@ -49,7 +49,7 @@ export function useNativeChatQueuedEditImageIntake(
   const intake = editor.images?.intake
   const transport = attachTo?.transport
   const editable = Boolean(intake && transport && transport.acceptsImages !== false)
-  const { change } = editor
+  const { change, saving } = editor
   const liveIntake = useRef(intake)
   useLayoutEffect(() => {
     liveIntake.current = intake
@@ -104,7 +104,8 @@ export function useNativeChatQueuedEditImageIntake(
       try {
         const current =
           options.destinationIsCurrent?.() !== false && options.targetOwnerIsCurrent?.() !== false
-        if (!intake || !current) {
+        // A Save in flight sends the images it read; nothing joins them now.
+        if (!intake || !current || saving) {
           return
         }
         if (operation) {
@@ -116,9 +117,9 @@ export function useNativeChatQueuedEditImageIntake(
         operation?.cancel()
       }
     },
-    [insertReferences, intake]
+    [insertReferences, intake, saving]
   )
-  const disabled = !editable || editor.saving
+  const disabled = !editable || saving
   const external = useNativeChatExternalAttachments({
     terminalTabId: attachTo?.terminalTabId ?? '',
     structuredWorktreeId: transport?.worktreeId,

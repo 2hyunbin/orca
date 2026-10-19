@@ -4,11 +4,16 @@ import { isEditableTarget } from '@/lib/editable-target'
 import { NATIVE_CHAT_PASTE_REQUEST_EVENT } from '@/lib/native-chat-paste-request'
 import { APP_MENU_PASTE_EVENT } from '@/lib/app-menu-paste'
 import { pasteTextIntoTextControl, TEXT_CONTROL_PASTE_MAX_BYTES } from '@/lib/text-control-paste'
+import { OS_FILE_DROP_OWNER_ATTRIBUTE } from '../../../../shared/native-file-drop-preparation'
 import type { NativeChatComposerHandle } from './NativeChatComposer'
 
-/** An open queued-card edit takes its own pastes, even with focus on its buttons. */
-function inQueuedMessageEditor(target: EventTarget | null): boolean {
-  return target instanceof Element && target.closest('[data-queued-message-editor]') !== null
+/** A queued-card edit that takes images owns its card, as for drops; its own paste handler
+ *  takes the native paste a menu paste falls back to, even with focus on its buttons. */
+function inImageQueuedEditor(element: Element): boolean {
+  return (
+    element.closest('[data-queued-message-editor]')?.hasAttribute(OS_FILE_DROP_OWNER_ATTRIBUTE) ===
+    true
+  )
 }
 
 type NativeChatPasteBridgeRefs = {
@@ -54,7 +59,7 @@ export function useNativeChatPasteBridge({
       return
     }
     const onPaste = (event: ClipboardEvent): void => {
-      if (event.defaultPrevented || inQueuedMessageEditor(event.target)) {
+      if (event.defaultPrevented) {
         return
       }
       if (isEditableTarget(event.target)) {
@@ -112,7 +117,7 @@ export function useNativeChatPasteBridge({
         !root ||
         !(activeElement instanceof Element) ||
         !root.contains(activeElement) ||
-        inQueuedMessageEditor(activeElement)
+        inImageQueuedEditor(activeElement)
       ) {
         return
       }

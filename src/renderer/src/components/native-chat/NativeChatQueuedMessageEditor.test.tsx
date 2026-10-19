@@ -289,8 +289,10 @@ describe('queued card image edit', () => {
     expect(field).toHaveProperty('value', 'see and [Image #1]')
     const data = new DataTransfer()
     data.items.add(new File(['png'], 'new.png', { type: 'image/png' }))
+    // With focus on the card's Attach button, as after a cancelled picker: the paste is the edit's.
+    const attach = screen.getByRole('button', { name: 'Attach file' })
     act(() => {
-      field.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true }))
+      attach.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true }))
     })
     await waitFor(() => expect(screen.getByRole('button', { name: /View image/ })).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
