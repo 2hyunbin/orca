@@ -143,7 +143,9 @@ function deriveSlashAutocomplete(
     skillsEnabled ? discovery.skills : [],
     query,
     profile?.skillPrefix ?? '/',
-    skillsEnabled ? sessionSkills : []
+    skillsEnabled ? sessionSkills : [],
+    undefined,
+    prefix
   )
   return {
     mode: 'slash',

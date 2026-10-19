@@ -156,6 +156,21 @@ describe('deriveComposerAutocomplete — one grammar for every agent', () => {
       'none'
     )
   })
+
+  it('matches `$` on skill names only, while `/` still searches descriptions', () => {
+    const installer = [
+      skill({
+        name: 'skill-installer',
+        description: 'Install Codex skills into $CODEX_HOME/skills'
+      })
+    ]
+    const dollar = deriveComposerAutocomplete('echo $CODEX_HOME', 16, [], installer, codex)
+    expect(dollar.mode === 'slash' && dollar.items).toEqual([])
+    const slash = deriveComposerAutocomplete('use /codex_home', 15, [], installer, codex)
+    expect(slash.mode === 'slash' && slash.items.map((entry) => entry.name)).toEqual([
+      'skill-installer'
+    ])
+  })
 })
 
 describe('filterSlashCommands', () => {

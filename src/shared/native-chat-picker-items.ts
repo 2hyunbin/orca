@@ -78,7 +78,9 @@ export function buildNativeChatPickerItems(
   skillSigil: '/' | '$',
   sessionSkills?: readonly NativeChatSessionSkill[],
   /** Rows kept per group; a caller that needs every skill passes Infinity. */
-  limit = PICKER_RESULT_LIMIT
+  limit = PICKER_RESULT_LIMIT,
+  /** `$` matches skill names only, so a shell word like `$CODEX_HOME` never hits a description. */
+  trigger: '/' | '$' = '/'
 ): NativeChatPickerItem[] {
   // A name can only collide when both kinds invoke through the same sigil;
   // where skills carry their own, `/review` and `$review` are distinct entries.
@@ -125,7 +127,8 @@ export function buildNativeChatPickerItems(
     mergedSkills
       .filter((skill) => !(sharedSigil && commandNames.has(skill.name)))
       .map((item, index) => ({ item, stableOrder: index })),
-    query
+    query,
+    trigger === '/'
   )
   return [...commandItems.slice(0, limit), ...skillItems.slice(0, limit)]
 }
@@ -200,13 +203,14 @@ function pickerSkill(
 
 function rankItems<T extends NativeChatPickerItem>(
   entries: { item: T; stableOrder: number }[],
-  query: string
+  query: string,
+  matchDescriptions = true
 ): T[] {
   if (!query) {
     return entries.map((entry) => entry.item)
   }
   return entries
-    .map((entry) => ({ ...entry, rank: getMatchRank(entry.item, query) }))
+    .map((entry) => ({ ...entry, rank: getMatchRank(entry.item, query, matchDescriptions) }))
     .filter((entry) => entry.rank !== null)
     .sort((a, b) => a.rank! - b.rank! || a.stableOrder - b.stableOrder)
     .map((entry) => entry.item)
@@ -214,7 +218,8 @@ function rankItems<T extends NativeChatPickerItem>(
 
 function getMatchRank(
   item: Pick<NativeChatPickerItem, 'name' | 'description'>,
-  query: string
+  query: string,
+  matchDescriptions: boolean
 ): number | null {
   const normalizedQuery = query.toLocaleLowerCase()
   const name = item.name.toLocaleLowerCase()
@@ -230,7 +235,7 @@ function getMatchRank(
   if (isSubsequence(normalizedQuery, name)) {
     return 3
   }
-  if (item.description?.toLocaleLowerCase().includes(normalizedQuery)) {
+  if (matchDescriptions && item.description?.toLocaleLowerCase().includes(normalizedQuery)) {
     return 4
   }
   return null
