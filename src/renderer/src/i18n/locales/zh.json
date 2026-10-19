@@ -4093,7 +4093,7 @@
               }
             },
             "remoteOwnerNotSetUp": "未在 {{server}} 上设置",
-            "remoteOwnerKeySavedHere": "其密钥仅保存在此电脑上。",
+            "remoteOwnerSignInSavedHere": "其登录信息仅保存在此电脑上。",
             "notSetUp": "未设置"
           },
           "SshTargetStatusRow": {

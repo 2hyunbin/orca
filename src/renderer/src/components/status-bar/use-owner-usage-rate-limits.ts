@@ -36,6 +36,13 @@ export type RemoteUsageOwner = {
   label: string
 }
 
+/** The Settings host that owns the shown usage, so its accounts open beside the bar's numbers. */
+export function getUsageOwnerHostScope(remoteOwner: RemoteUsageOwner | null): RuntimeClientTarget {
+  return remoteOwner
+    ? { kind: 'environment', environmentId: remoteOwner.environmentId }
+    : LOCAL_TARGET
+}
+
 export type OwnerUsageRateLimits = {
   rateLimits: RateLimitState
   /** Null when this device owns the shown usage. */

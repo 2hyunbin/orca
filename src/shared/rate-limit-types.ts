@@ -73,7 +73,7 @@ export type UsageRateLimitMetadata = {
   /** Renderer-only: the remote host that owns this usage cannot vouch for it. Hosts never set it. */
   unverifiableOwner?: boolean
   /** Renderer-only: set up on this device but not on the remote host that owns usage. Hosts never set it. */
-  ownerNotSetUp?: { keySavedHereOnly: boolean }
+  ownerNotSetUp?: { signInSavedHereOnly: boolean }
 }
 
 export type ProviderRateLimits = {

@@ -7,14 +7,17 @@ describe('isSettingsNavigationTarget', () => {
       isSettingsNavigationTarget({
         pane: 'accounts',
         repoId: null,
-        hostScopeEnvironmentId: 'linux-box'
+        hostScope: { kind: 'environment', environmentId: 'linux-box' }
       })
+    ).toBe(true)
+    expect(
+      isSettingsNavigationTarget({ pane: 'accounts', repoId: null, hostScope: { kind: 'local' } })
     ).toBe(true)
   })
 
-  it('rejects a non-string host scope', () => {
-    expect(
-      isSettingsNavigationTarget({ pane: 'accounts', repoId: null, hostScopeEnvironmentId: 7 })
-    ).toBe(false)
+  it('rejects a malformed host scope', () => {
+    for (const hostScope of ['linux-box', { kind: 'environment' }, { kind: 'ssh' }]) {
+      expect(isSettingsNavigationTarget({ pane: 'accounts', repoId: null, hostScope })).toBe(false)
+    }
   })
 })

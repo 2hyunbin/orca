@@ -4209,7 +4209,7 @@
               }
             },
             "remoteOwnerNotSetUp": "Non configuré sur {{server}}",
-            "remoteOwnerKeySavedHere": "Sa clé est enregistrée uniquement sur cet ordinateur.",
+            "remoteOwnerSignInSavedHere": "Sa connexion est enregistrée uniquement sur cet ordinateur.",
             "notSetUp": "Non configuré"
           },
           "SshTargetStatusRow": {

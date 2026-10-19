@@ -69,7 +69,7 @@ describe('UsageRow', () => {
         state={{
           kind: 'unavailable',
           statusLabel: 'Not set up on devbox',
-          detail: 'Its key is saved on this computer only.'
+          detail: 'Its sign-in is saved on this computer only.'
         }}
         showSignInAction={false}
         now={mocks.now}
@@ -77,7 +77,7 @@ describe('UsageRow', () => {
     )
 
     expect(markup).toContain('Not set up on devbox')
-    expect(markup).toContain('Its key is saved on this computer only.')
+    expect(markup).toContain('Its sign-in is saved on this computer only.')
     expect(markup).not.toContain('Sign in')
   })
 

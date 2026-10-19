@@ -45,7 +45,7 @@ describe('resolveOwnerUsageRateLimits', () => {
     expect(resolved.claude?.session?.usedPercent).toBe(70)
     expect(resolved.codex?.session?.usedPercent).toBe(80)
     // The viewer's Grok login is not the host's.
-    expect(resolved.grok?.session).toBeNull()
+    expect(resolved.grok).toBeNull()
     expect(resolved.grokAuthConfigured).toBe(false)
   })
 
@@ -147,43 +147,72 @@ describe('resolveOwnerUsageRateLimits', () => {
   describe('providers set up here but not on the remote owner', () => {
     const remoteOwner = (rateLimits: RateLimitState) =>
       ({ kind: 'remote', ownerLabel: 'devbox', rateLimits }) as const
+    // A host that finished a fetch reports every provider it lacks as `unavailable`.
+    const hostWithout = (overrides: Partial<RateLimitState> = {}): RateLimitState =>
+      createEmptyRateLimitState({
+        claude: unavailable('claude'),
+        codex: unavailable('codex'),
+        grok: unavailable('grok'),
+        minimax: unavailable('minimax'),
+        cursor: unavailable('cursor'),
+        zcode: unavailable('zcode'),
+        ...overrides
+      })
 
     it('shows a numberless placeholder that names the host', () => {
       const here = createEmptyRateLimitState({
         minimax: { ...provider('minimax', 64), status: 'error', error: 'invalid key' },
         minimaxApiKeyConfigured: true
       })
-      const resolved = resolveOwnerUsageRateLimits(here, remoteOwner(createEmptyRateLimitState()))
+      const resolved = resolveOwnerUsageRateLimits(here, remoteOwner(hostWithout()))
       const minimax = resolved.minimax!
       expect(isOwnerNotSetUpPlaceholder(minimax)).toBe(true)
       expect(hasNoNumbers(minimax)).toBe(true)
       expect(minimax.error).toBe('Not set up on devbox')
       expect(getProviderUsageStatusLabel(minimax)).toBe('Not set up')
-      expect(getOwnerNotSetUpNote(minimax)).toBe('Its key is saved on this computer only.')
+      expect(getOwnerNotSetUpNote(minimax)).toBe('Its sign-in is saved on this computer only.')
       expect(getProviderUsageErrorMessage(minimax)).toBe(
-        'Not set up on devbox\nIts key is saved on this computer only.'
+        'Not set up on devbox\nIts sign-in is saved on this computer only.'
       )
       // Why: the host's setup flags stay the host's.
       expect(resolved.minimaxApiKeyConfigured).toBe(false)
-      expect(
-        isUsageEmptyState(resolved, {
-          ...resolved,
-          antigravityUsageConfigured: false
-        })
-      ).toBe(false)
+      expect(isUsageEmptyState(resolved, { ...resolved, antigravityUsageConfigured: false })).toBe(
+        false
+      )
     })
 
     it('counts a saved key that has not fetched yet as set up here', () => {
       const here = createEmptyRateLimitState({ zcodePlanApiKeyConfigured: true })
-      const resolved = resolveOwnerUsageRateLimits(here, remoteOwner(createEmptyRateLimitState()))
+      const resolved = resolveOwnerUsageRateLimits(here, remoteOwner(hostWithout()))
       expect(isOwnerNotSetUpPlaceholder(resolved.zcode!)).toBe(true)
       expect(getOwnerNotSetUpNote(resolved.zcode!)).not.toBeNull()
     })
 
-    it('adds no key note for a sign-in that is not a saved key', () => {
-      const resolved = resolveOwnerUsageRateLimits(local, remoteOwner(createEmptyRateLimitState()))
+    it('adds the sign-in note only for a sign-in this device saved', () => {
+      const here = createEmptyRateLimitState({
+        minimax: { ...provider('minimax', 10), usageMetadata: { source: 'web' } },
+        grok: provider('grok', 10),
+        grokAuthConfigured: true
+      })
+      const resolved = resolveOwnerUsageRateLimits(here, remoteOwner(hostWithout()))
+      expect(isOwnerNotSetUpPlaceholder(resolved.minimax!)).toBe(true)
+      expect(getOwnerNotSetUpNote(resolved.minimax!)).toBeNull()
       expect(isOwnerNotSetUpPlaceholder(resolved.grok!)).toBe(true)
       expect(getOwnerNotSetUpNote(resolved.grok!)).toBeNull()
+    })
+
+    it('never reads an empty host slot as "not set up there"', () => {
+      // Why: hosts start every slot null and blank a skipped Codex fetch.
+      const resolved = resolveOwnerUsageRateLimits(local, remoteOwner(createEmptyRateLimitState()))
+      expect(resolved.claude).toBeNull()
+      expect(resolved.codex).toBeNull()
+      expect(resolved.grok).toBeNull()
+    })
+
+    it("never labels the host's Claude not set up: API-key billing reads the same", () => {
+      const resolved = resolveOwnerUsageRateLimits(local, remoteOwner(hostWithout()))
+      expect(resolved.claude?.status).toBe('unavailable')
+      expect(isOwnerNotSetUpPlaceholder(resolved.codex!)).toBe(true)
     })
 
     it("keeps the host's own slot, even while it is loading or failing", () => {
@@ -198,25 +227,17 @@ describe('resolveOwnerUsageRateLimits', () => {
       expect(resolved.grok?.error).toBe('offline')
     })
 
-    it('treats a host flag as set up there, so its pending bar is not replaced', () => {
+    it('trusts a host flag over an unavailable slot (signed in, no quota)', () => {
       const here = createEmptyRateLimitState({ cursorAuthConfigured: true })
-      const remote = createEmptyRateLimitState({ cursorAuthConfigured: true })
+      const remote = hostWithout({ cursorAuthConfigured: true })
       const resolved = resolveOwnerUsageRateLimits(here, remoteOwner(remote))
-      expect(resolved.cursor).toBeNull()
-    })
-
-    it('replaces a slot the host reports unavailable', () => {
-      const remote = createEmptyRateLimitState({
-        grok: { ...provider('grok', 0), session: null, status: 'unavailable' }
-      })
-      const resolved = resolveOwnerUsageRateLimits(local, remoteOwner(remote))
-      expect(isOwnerNotSetUpPlaceholder(resolved.grok!)).toBe(true)
+      expect(resolved.cursor?.status).toBe('unavailable')
     })
 
     it('invents nothing for a provider set up on neither machine', () => {
-      const resolved = resolveOwnerUsageRateLimits(local, remoteOwner(createEmptyRateLimitState()))
-      expect(resolved.gemini).toBeNull()
-      expect(resolved.minimax).toBeNull()
+      const resolved = resolveOwnerUsageRateLimits(local, remoteOwner(hostWithout()))
+      expect(resolved.minimax?.status).toBe('unavailable')
+      expect(resolved.cursor?.status).toBe('unavailable')
     })
 
     it('adds no placeholders while the host is pending or unreachable', () => {
@@ -225,7 +246,7 @@ describe('resolveOwnerUsageRateLimits', () => {
         kind: 'remote-unverifiable',
         ownerLabel: 'devbox',
         reason: 'unreachable',
-        lastKnown: createEmptyRateLimitState()
+        lastKnown: hostWithout()
       })
       for (const resolved of [pending, lost]) {
         for (const key of ['claude', 'codex', 'grok'] as const) {
@@ -235,6 +256,10 @@ describe('resolveOwnerUsageRateLimits', () => {
     })
   })
 })
+
+function unavailable(id: ProviderRateLimits['provider']): ProviderRateLimits {
+  return { ...provider(id, 0), session: null, status: 'unavailable', error: 'not signed in' }
+}
 
 function hasNoNumbers(p: ProviderRateLimits): boolean {
   return !p.session && !p.weekly && !p.monthly && !p.fableWeekly && !p.buckets?.length

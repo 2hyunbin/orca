@@ -28,7 +28,12 @@ describe('StatusBarUsageEmptyCta', () => {
   it('teaches setup on this device when this device owns usage', () => {
     renderCta(null)
     fireEvent.click(screen.getByRole('button', { name: 'Configure usage tracking' }))
-    expect(openSettingsTarget).toHaveBeenCalledWith({ pane: 'accounts', repoId: null })
+    // Why explicit: otherwise Settings opens on the "default host for new projects".
+    expect(openSettingsTarget).toHaveBeenCalledWith({
+      pane: 'accounts',
+      repoId: null,
+      hostScope: { kind: 'local' }
+    })
     expect(openSettingsPage).toHaveBeenCalled()
   })
 
@@ -39,7 +44,7 @@ describe('StatusBarUsageEmptyCta', () => {
     expect(openSettingsTarget).toHaveBeenCalledWith({
       pane: 'accounts',
       repoId: null,
-      hostScopeEnvironmentId: 'linux-box'
+      hostScope: { kind: 'environment', environmentId: 'linux-box' }
     })
   })
 })

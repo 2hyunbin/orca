@@ -4088,7 +4088,7 @@
               }
             },
             "remoteOwnerNotSetUp": "No configurado en {{server}}",
-            "remoteOwnerKeySavedHere": "Su clave solo está guardada en este equipo.",
+            "remoteOwnerSignInSavedHere": "Su inicio de sesión solo está guardado en este equipo.",
             "notSetUp": "No configurado"
           },
           "SshTargetStatusRow": {

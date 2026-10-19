@@ -104,8 +104,25 @@ function isSetUpHere(local: RateLimitState, key: UsageProviderKey): boolean {
   )
 }
 
-function isKeySavedHereOnly(local: RateLimitState, key: UsageProviderKey): boolean {
-  return key === 'minimax' || (key === 'zcode' && local.zcodePlanApiKeyConfigured === true)
+// Why: these credentials live in this device's safe storage, so the host cannot reuse them.
+function isSignInSavedHereOnly(local: RateLimitState, key: UsageProviderKey): boolean {
+  return key === 'minimax'
+    ? local.minimaxApiKeyConfigured || local.minimaxCookieConfigured
+    : key === 'zcode' && local.zcodePlanApiKeyConfigured === true
+}
+
+/**
+ * Whether the host positively reports it has no such provider. Null only means the host has
+ * not finished a fetch (or blanked a skipped one), so it never counts.
+ */
+function isMissingOnHost(remote: RateLimitState, key: UsageProviderKey): boolean {
+  return (
+    remote[key]?.status === 'unavailable' &&
+    // Why: the host reports Claude on API-key billing exactly like no Claude login.
+    key !== 'claude' &&
+    // Why: a signed-in Cursor or Grok account with no quota is also `unavailable`; its flag is not.
+    !hasUsageProviderSettingsForProvider(USAGE_PROVIDER_IDS[key], remote)
+  )
 }
 
 // Why: hiding a provider set up here reads as "usage broke"; a numberless placeholder
@@ -118,13 +135,8 @@ function addNotSetUpPlaceholders(
   return {
     ...remote,
     ...mapProviders((key) => {
-      const hostProvider = remote[key]
-      // Why: a slot the host is still fetching or failing is the host's own; leave it be.
-      const hostHasProvider =
-        (hostProvider != null && hostProvider.status !== 'unavailable') ||
-        hasUsageProviderSettingsForProvider(USAGE_PROVIDER_IDS[key], remote)
-      if (hostHasProvider || !isSetUpHere(local, key)) {
-        return hostProvider
+      if (!isMissingOnHost(remote, key) || !isSetUpHere(local, key)) {
+        return remote[key]
       }
       return {
         ...createPendingProviderSnapshot(USAGE_PROVIDER_IDS[key]),
@@ -133,7 +145,9 @@ function addNotSetUpPlaceholders(
           'Not set up on {{server}}',
           { server: ownerLabel }
         ),
-        usageMetadata: { ownerNotSetUp: { keySavedHereOnly: isKeySavedHereOnly(local, key) } },
+        usageMetadata: {
+          ownerNotSetUp: { signInSavedHereOnly: isSignInSavedHereOnly(local, key) }
+        },
         status: 'error'
       }
     })

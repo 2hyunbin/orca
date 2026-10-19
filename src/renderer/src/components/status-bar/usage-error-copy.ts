@@ -99,10 +99,10 @@ export function isClaudeUsageWaitingForClaude(p: ProviderRateLimits): boolean {
 
 /** Why a placeholder's provider is missing on the host, beyond its "Not set up on" label. */
 export function getOwnerNotSetUpNote(p: ProviderRateLimits): string | null {
-  return p.usageMetadata?.ownerNotSetUp?.keySavedHereOnly
+  return p.usageMetadata?.ownerNotSetUp?.signInSavedHereOnly
     ? translate(
-        'auto.components.status.bar.tooltip.remoteOwnerKeySavedHere',
-        'Its key is saved on this computer only.'
+        'auto.components.status.bar.tooltip.remoteOwnerSignInSavedHere',
+        'Its sign-in is saved on this computer only.'
       )
     : null
 }

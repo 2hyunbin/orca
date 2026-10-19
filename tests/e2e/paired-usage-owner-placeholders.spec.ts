@@ -85,7 +85,7 @@ test('a provider set up only on this computer stays visible, greyed, under a ser
     await expect(placeholder).toBeVisible({ timeout: 60_000 })
     await expect(placeholder).toHaveAttribute(
       'title',
-      `Not set up on ${HOST_NAME}\nIts key is saved on this computer only.`
+      `Not set up on ${HOST_NAME}\nIts sign-in is saved on this computer only.`
     )
     await expect(page.getByText('Configure usage tracking')).toHaveCount(0)
     await expect(page.getByText(`No usage on ${HOST_NAME}`)).toHaveCount(0)
@@ -94,7 +94,7 @@ test('a provider set up only on this computer stays visible, greyed, under a ser
     await page.getByRole('button', { name: 'Usage', exact: true }).click()
     const row = page.getByRole('menuitem').filter({ hasText: `Not set up on ${HOST_NAME}` })
     await expect(row).toBeVisible()
-    await expect(row).toContainText('Its key is saved on this computer only.')
+    await expect(row).toContainText('Its sign-in is saved on this computer only.')
     await page
       .getByRole('menu')
       .evaluate((menu) =>

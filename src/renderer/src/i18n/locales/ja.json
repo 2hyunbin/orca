@@ -4093,7 +4093,7 @@
               }
             },
             "remoteOwnerNotSetUp": "{{server}} では未設定",
-            "remoteOwnerKeySavedHere": "キーはこのコンピュータにのみ保存されています。",
+            "remoteOwnerSignInSavedHere": "サインイン情報はこのコンピュータにのみ保存されています。",
             "notSetUp": "未設定"
           },
           "SshTargetStatusRow": {

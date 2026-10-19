@@ -4315,7 +4315,7 @@
             "remoteOwnerUnreachable": "Usage unavailable — cannot reach {{server}}",
             "remoteOwnerNoUsage": "Usage unavailable — {{server}} does not report usage. Update Orca on that host.",
             "remoteOwnerNotSetUp": "Not set up on {{server}}",
-            "remoteOwnerKeySavedHere": "Its key is saved on this computer only.",
+            "remoteOwnerSignInSavedHere": "Its sign-in is saved on this computer only.",
             "notSetUp": "Not set up",
             "3d3c9c0c1f": "Claude usage will refresh after the live Claude terminal rotates its credentials.",
             "42fdd4da1d": "Claude sign-in is being refreshed. Agent sessions may still be signed in.",

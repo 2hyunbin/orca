@@ -7,7 +7,7 @@ import { AgentIcon } from '@/lib/agent-catalog'
 import { useAppStore } from '../../store'
 import { ClaudeIcon, GeminiIcon, OpenAIIcon, OpenCodeGoIcon } from './icons'
 import { translate } from '@/i18n/i18n'
-import type { RemoteUsageOwner } from './use-owner-usage-rate-limits'
+import { getUsageOwnerHostScope, type RemoteUsageOwner } from './use-owner-usage-rate-limits'
 
 // Why: a brand-new user has no configured provider, so the bottom-left would
 // otherwise be empty but for a refresh icon with nothing to refresh. This CTA
@@ -31,7 +31,7 @@ export function StatusBarUsageEmptyCta({
     openSettingsTarget({
       pane: 'accounts',
       repoId: null,
-      ...(remoteOwner ? { hostScopeEnvironmentId: remoteOwner.environmentId } : {})
+      hostScope: getUsageOwnerHostScope(remoteOwner)
     })
     openSettingsPage()
   }, [openSettingsPage, openSettingsTarget, recordFeatureInteraction, remoteOwner])

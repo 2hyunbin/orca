@@ -21,7 +21,7 @@ const placeholder: ProviderRateLimits = {
   updatedAt: 0,
   error: 'Not set up on devbox',
   status: 'error',
-  usageMetadata: { ownerNotSetUp: { keySavedHereOnly: true } }
+  usageMetadata: { ownerNotSetUp: { signInSavedHereOnly: true } }
 }
 
 describe('ProviderSegment owner placeholder', () => {
@@ -31,7 +31,7 @@ describe('ProviderSegment owner placeholder', () => {
     )
     expect(markup).toContain('text-muted-foreground/50')
     expect(markup).toContain(
-      'title="Not set up on devbox\nIts key is saved on this computer only."'
+      'title="Not set up on devbox\nIts sign-in is saved on this computer only."'
     )
     // Why: a placeholder is not a failure, so no warning glyph or refresh-failed copy.
     expect(markup).not.toContain('lucide-triangle-alert')

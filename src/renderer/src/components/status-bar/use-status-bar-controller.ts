@@ -14,7 +14,7 @@ import {
 import { useStatusBarMenuFocusHandoff } from './ProviderDetailsMenu'
 import { CLOSE_ALL_CONTEXT_MENUS_EVENT } from '@/lib/close-all-context-menus'
 import { useStatusBarDensity } from './status-bar-density'
-import { useOwnerUsageRateLimits } from './use-owner-usage-rate-limits'
+import { getUsageOwnerHostScope, useOwnerUsageRateLimits } from './use-owner-usage-rate-limits'
 import { isOwnerNotSetUpPlaceholder } from './owner-usage-rate-limits'
 
 export function useStatusBarController(floatingTerminalOpen: boolean) {
@@ -230,11 +230,11 @@ export function useStatusBarController(floatingTerminalOpen: boolean) {
     // Why: the bar collapses chips from the end, so placeholders give way first.
     .sort((a, b) => Number(isOwnerNotSetUpPlaceholder(a)) - Number(isOwnerNotSetUpPlaceholder(b)))
 
-  // Why: the shown accounts are the owning host's, so Settings must open on that host.
-  const accountsHostScope = remoteOwner ? { hostScopeEnvironmentId: remoteOwner.environmentId } : {}
+  // Why: the shown accounts are the owning host's; without a scope Settings opens on the default host.
+  const hostScope = getUsageOwnerHostScope(remoteOwner)
   const handleManageAccounts = (): void => {
     setUsageMenuOpen(false)
-    openSettingsTarget({ pane: 'accounts', repoId: null, ...accountsHostScope })
+    openSettingsTarget({ pane: 'accounts', repoId: null, hostScope })
     openSettingsPage()
   }
   const handleUsageDetails = (): void => {
@@ -252,8 +252,8 @@ export function useStatusBarController(floatingTerminalOpen: boolean) {
     openSettingsTarget({
       pane: 'accounts',
       repoId: null,
-      ...(sectionId ? { sectionId } : {}),
-      ...accountsHostScope
+      hostScope,
+      ...(sectionId ? { sectionId } : {})
     })
     openSettingsPage()
   }

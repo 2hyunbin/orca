@@ -190,11 +190,8 @@ export function useSettingsPageEffects(
         )
       }
     }
-    if (settingsNavigationTarget.hostScopeEnvironmentId) {
-      setSettingsHostChoice({
-        kind: 'environment',
-        environmentId: settingsNavigationTarget.hostScopeEnvironmentId
-      })
+    if (settingsNavigationTarget.hostScope) {
+      setSettingsHostChoice(settingsNavigationTarget.hostScope)
     }
     pendingNavSectionRef.current = paneSectionId
     pendingScrollTargetRef.current = settingsNavigationTarget.sectionId ?? paneSectionId
