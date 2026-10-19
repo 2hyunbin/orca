@@ -1,5 +1,13 @@
 import type * as ExecCommandModule from '../../ssh/remote-exec/remote-exec-command'
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -59,6 +67,23 @@ describe('pinned-Node runtime store on a host that refuses to run programs', () 
       expect(result.stdout.trim()).toBe('')
       expect(existsSync(stage)).toBe(true)
       expect(readdirSync(stage)).toEqual([])
+    }
+  )
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'skips the probe when the stage can’t be written, leaving a full disk to the upload',
+    () => {
+      const root = mkdtempSync(join(tmpdir(), 'orcad-runtime-noexec-'))
+      directories.push(root)
+      const stage = join(root, '.stage-node-x-1')
+      mkdirSync(stage, { mode: 0o500 })
+      const result = runProcessSync({
+        program: '/bin/sh',
+        args: ['-c', createExecProbedStageCommand(host, stage)],
+        timeoutMs: 30_000
+      })
+      chmodSync(stage, 0o700)
+      expect(result).toMatchObject({ code: 0, stdout: '' })
     }
   )
 

@@ -115,10 +115,12 @@ export function createExecProbedStageCommand(host: RemoteHostPlatform, stageDir:
   const stage = quotePosixShell(stageDir)
   const probe = quotePosixShell(joinRemotePath(host, stageDir, '.exec-probe'))
   return (
-    `mkdir -p ${stage} && printf '#!/bin/sh\\necho ok\\n' > ${probe} && chmod 700 ${probe} && ` +
-    `{ orca_x=$(${probe} 2>&1); orca_x_status=$?; rm -f ${probe}; ` +
+    // Why the probe write may fail quietly: a full disk is diagnosed by the upload that follows.
+    `mkdir -p ${stage} && { if printf '#!/bin/sh\\necho ok\\n' > ${probe} 2>/dev/null && chmod 700 ${probe}; then ` +
+    `orca_x=$(${probe} 2>&1); orca_x_status=$?; rm -f ${probe}; ` +
     `[ "$orca_x_status" = 0 ] || { echo ${REMOTE_NODE_RUNTIME_NOEXEC}; ` +
-    `echo "${REMOTE_NODE_RUNTIME_EXIT_PREFIX}$orca_x_status"; printf '%s\\n' "$orca_x" | head -c 2000; }; }`
+    `echo "${REMOTE_NODE_RUNTIME_EXIT_PREFIX}$orca_x_status"; printf '%s\\n' "$orca_x" | head -c 2000; }; ` +
+    `else rm -f ${probe}; fi; }`
   )
 }
 
