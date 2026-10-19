@@ -487,6 +487,19 @@ describe('one target’s legacy relay bridge', () => {
     await expect(stops.stopAndWait(epochPty, target, Date.now() + 5_000)).resolves.toBe(true)
   })
 
+  it('still settles on an exit report that trails a failed stop reply', async () => {
+    const epochPty = toAppSshPtyId(TARGET, 'pty2:epoch:1')
+    leases = [lease({ ptyId: 'pty2:epoch:1' })]
+    relay.ptys = new Set(['pty2:epoch:1'])
+    relay.shutdownError = new Error('request timed out')
+    const subject = bridge()
+    await subject.refresh()
+    const settled = stops.stopAndWait(epochPty, subject, Date.now() + 5_000)
+    await vi.advanceTimersByTimeAsync(100)
+    relay.clients[0].emitExit('pty2:epoch:1', 0)
+    await expect(settled).resolves.toBe(true)
+  })
+
   it('still sees an unfenced stop’s exit report that trails its reply, never re-serving the pane', async () => {
     relay.exitOnShutdown = false
     const subject = bridge()

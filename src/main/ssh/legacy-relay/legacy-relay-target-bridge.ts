@@ -58,7 +58,8 @@ type EndpointState = {
 export class LegacyRelayTargetBridge {
   private readonly endpoints = new Map<string, EndpointState>()
   private readonly panes = new Map<string, Pane>()
-  readonly livePaneForKey = (paneKey: string) => findLivePane(this.panes, paneKey)
+  readonly livePaneForKey = (paneKey: string) =>
+    findLivePane(this.panes, paneKey, this.deps.leases())
   /** The process identity the relay listed for a pane, which fences a stop against a recycled id. */
   readonly listedIncarnation = (ptyId: string) => this.panes.get(ptyId)?.listed?.incarnationId
   /** Whether a relay lists a pane now, including one whose stop is owed; undefined when untracked. */

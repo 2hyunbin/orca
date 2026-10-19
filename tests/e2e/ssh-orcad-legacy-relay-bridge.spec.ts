@@ -598,8 +598,9 @@ test('a bridged tab closed while disconnected stops its shell even after a resta
     page = restarted.page
     await waitForSessionReady(page)
     await page.evaluate((id) => window.api.ssh.connect({ targetId: id }), targetId)
+    // A failed listing is not absence: only the relay's own empty answer proves the shell stopped.
     await expect
-      .poll(() => listDockerRelayPtys(host!, relay, ours.sockPath).catch(() => []), {
+      .poll(() => listDockerRelayPtys(host!, relay, ours.sockPath).catch(() => ['<unreachable>']), {
         timeout: BRIDGE_TIMEOUT_MS,
         intervals: [2_000]
       })

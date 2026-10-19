@@ -29,10 +29,10 @@ type StopTarget = Pick<
  * Who the closed tab's process was: the relay's incarnation when it reports one, else the live
  * connection that showed it. Neither, for a stop recorded while the relay couldn't be asked.
  */
+type PendingStop = { incarnationId?: string; client?: LegacyRelayClient }
+
 /** How long a sent unfenced stop keeps its pane tracked for the relay's exit report. */
 const UNFENCED_EXIT_WAIT_MS = 5_000
-
-type PendingStop = { incarnationId?: string; client?: LegacyRelayClient }
 
 export class LegacyRelayPaneStops {
   private readonly closing = new Map<string, PendingStop>()
@@ -94,8 +94,10 @@ export class LegacyRelayPaneStops {
   ): Promise<boolean> {
     // Armed before the stop is sent, so an exit that beats its reply, or a lost reply, still counts.
     const exited = this.exits.wait(ptyId, Math.max(1, deadlineMs - Date.now()))
+    // A stop sent to a live pane may still prove out after a failed reply; an unsent one cannot.
+    const sendable = bridge?.paneState(ptyId) === 'live'
     const stopped = this.stop(ptyId, bridge).then((result) =>
-      result.status === 'requested' ? exited : result.status === 'exited'
+      result.status === 'exited' ? true : result.status === 'requested' || sendable ? exited : false
     )
     return Promise.race([exited.then((proven) => proven || stopped), stopped])
   }
