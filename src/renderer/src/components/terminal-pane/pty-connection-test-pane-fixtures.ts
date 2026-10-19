@@ -49,6 +49,7 @@ export type MockTransport = {
 
 export function createMockTransport(initialPtyId: string | null = null): MockTransport {
   let ptyId = initialPtyId
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test-only mock covering the transport members the connection code under test calls.
   const transport = {
     attach: vi.fn(({ existingPtyId }: { existingPtyId: string }) => {
       ptyId = existingPtyId

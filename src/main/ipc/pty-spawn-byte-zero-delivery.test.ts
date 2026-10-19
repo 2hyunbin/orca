@@ -136,7 +136,9 @@ describe('registerPtyHandlers', () => {
         return { id: options.sessionId ?? 'daemon-pty' }
       })
       try {
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the suite's mock window and runtime stub implement every member registration and the spawn path touch.
         registerPtyHandlers(mainWindow as never, createRuntimeMock() as never)
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: pty:spawn's registered handler resolves to the spawn result shape.
         const spawnPromise = handlers.get('pty:spawn')!(null, {
           cols: 80,
           rows: 24,

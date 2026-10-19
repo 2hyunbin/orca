@@ -16,7 +16,7 @@ type LocalPtyAttachment = LocalPtyDeliveryState & {
 let nextAttachmentKey = 1
 
 function ptyApi(): Window['api']['pty'] | undefined {
-  return (globalThis as { window?: Window }).window?.api?.pty
+  return typeof window === 'undefined' ? undefined : window.api?.pty
 }
 
 function createLocalPtyAttachment(state: LocalPtyDeliveryState): LocalPtyAttachment {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLocalPtyAttachmentLifecycle } from './pty-renderer-delivery-claims'
 
 const PTY_ID = 'workspace@@pty-1'
@@ -12,9 +12,13 @@ describe('local PTY attachment lifecycle (one record per connection generation)'
     openRendererAttachment.mockReset()
     updateRendererAttachment.mockReset()
     closeRendererAttachment.mockReset()
-    ;(globalThis as { window: Window }).window = {
+    vi.stubGlobal('window', {
       api: { pty: { openRendererAttachment, updateRendererAttachment, closeRendererAttachment } }
-    } as unknown as Window
+    })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   it('opens the record with the spawn request and updates only that live record', () => {
