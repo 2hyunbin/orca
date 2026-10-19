@@ -1,9 +1,9 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
+import SyncDatabase from '../sqlite/sync-database'
 import {
-  ensureSessionParseCacheLoaded,
   flushSessionParseCachePersist,
   initSessionParseCachePersistence,
   resetSessionParseCachePersistenceForTests
@@ -48,7 +48,6 @@ it('does not reparse an unchanged corpus past the resume bound, across scans or 
   root = await mkdtemp(join(tmpdir(), 'orca-history-no-reparse-'))
   const cacheFile = join(root, 'cache.json')
   initSessionParseCachePersistence({ filePath: cacheFile, appVersion: 'test' })
-  await ensureSessionParseCacheLoaded()
   const candidates: SessionFileCandidate[] = []
   for (let index = 0; index < CANDIDATES; index++) {
     const path = join(root, `session-${index}.jsonl`)
@@ -76,12 +75,12 @@ it('does not reparse an unchanged corpus past the resume bound, across scans or 
   await list(first)
   await list(second)
   await flushSessionParseCachePersist()
-  const snapshot = JSON.parse(await readFile(cacheFile, 'utf8'))
-  expect(snapshot.entries).toHaveLength(CANDIDATES)
+  const db = new SyncDatabase(join(root, 'session-parse-cache.sqlite'))
+  expect(db.prepare('SELECT COUNT(*) AS count FROM rows').get()).toEqual({ count: CANDIDATES })
+  db.close()
   resetSessionParseCachePersistenceForTests()
   resetSessionParseCacheForTests()
   initSessionParseCachePersistence({ filePath: cacheFile, appVersion: 'test' })
-  await ensureSessionParseCacheLoaded()
   expect(getSessionParseCacheEntry(candidates[0]!.file.path)).toBeDefined()
   await list(restarted)
   expect(first.fullParses).toBe(CANDIDATES)

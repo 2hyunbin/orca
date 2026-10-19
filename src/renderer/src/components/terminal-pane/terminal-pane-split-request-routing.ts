@@ -153,6 +153,22 @@ export function cancelQueuedTerminalPaneSplitRequests(tabId: string, worktreeId?
   releaseSplitMountLease(tabId, worktreeId)
 }
 
+/** Drops a waiting split whose pane closed before its tab mounted; the tab's lease goes with its last one. */
+export function cancelQueuedTerminalPaneSplitForLeaf(tabId: string, leafId: string): void {
+  const index = queuedRequests.findIndex(
+    (request) => request.tabId === tabId && request.newLeafId === leafId
+  )
+  if (index === -1) {
+    return
+  }
+  const [{ worktreeId }] = queuedRequests.splice(index, 1)
+  if (
+    !queuedRequests.some((request) => request.tabId === tabId && request.worktreeId === worktreeId)
+  ) {
+    releaseSplitMountLease(tabId, worktreeId)
+  }
+}
+
 export function hasTerminalPaneSplitMountLease(tabId: string, worktreeId?: string): boolean {
   return [...splitMountLeasesByTarget.values()].some(
     (lease) =>

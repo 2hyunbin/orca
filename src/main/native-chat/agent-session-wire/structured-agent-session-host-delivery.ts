@@ -75,7 +75,12 @@ export function createStructuredAgentSessionConversationDelivery(input: {
   mutationContext: () => StructuredAgentSessionMutationContext
   clientDelivery: Pick<
     StructuredAgentSessionClientDelivery,
-    'publishRestored' | 'readChildWork' | 'readStopping' | 'publishStatus'
+    | 'publishRestored'
+    | 'readChildWork'
+    | 'childWorkOpen'
+    | 'readStopping'
+    | 'publishStatus'
+    | 'publishGenerationEnded'
   >
 }): StructuredAgentSessionConversationDelivery {
   const { deps, sessions } = input
@@ -95,6 +100,7 @@ export function createStructuredAgentSessionConversationDelivery(input: {
           currentWork: () =>
             hostStructuredAgentSessionCurrentWork({ store: deps.store, sessions }, sessionId),
           childWork: () => input.clientDelivery.readChildWork(sessionId),
+          childWorkOpen: () => input.clientDelivery.childWorkOpen(sessionId),
           hasOpenDispatch: () => {
             const record = deps.store.getRecord(sessionId)
             return record !== null && deps.hasOpenDispatch?.(record) === true
@@ -136,6 +142,8 @@ export function createStructuredAgentSessionConversationDelivery(input: {
     currentWork: (sessionId) =>
       hostStructuredAgentSessionCurrentWork({ store: deps.store, sessions }, sessionId),
     readChildWork: input.clientDelivery.readChildWork,
+    workChanged: (sessionId) => input.clientDelivery.publishGenerationEnded(sessionId),
+    childWorkOpen: input.clientDelivery.childWorkOpen,
     stopping: input.clientDelivery.readStopping,
     now: () => deps.now?.() ?? Date.now()
   })
@@ -181,7 +189,9 @@ export function createStructuredAgentSessionConversationDelivery(input: {
   // A chat open before its owner's death was proven revises what its open settled. Queued, never
   // awaited: the writer can hold this session's serialize (an attach recovering its lease).
   const stopResettling = deps.store.onDeathEvidence((sessionId) => {
-    if (sessions.has(sessionId)) {
+    const session = sessions.get(sessionId)
+    // A user close already settles and retires this handle; its next open re-derives any proof.
+    if (session && session.child?.close?.cause !== 'user-close') {
       void input
         .trackStart(
           input.serialize(sessionId, () =>

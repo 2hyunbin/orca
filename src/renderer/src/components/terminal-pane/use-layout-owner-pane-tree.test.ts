@@ -14,6 +14,12 @@ vi.mock('./terminal-pane-frame-reconciliation', () => ({
   reconcileMountedPanesToLayout: reconcile
 }))
 
+const pairedServer = vi.hoisted(() => ({ mirrors: false }))
+vi.mock('@/store', () => ({ useAppStore: { getState: () => ({}) } }))
+vi.mock('@/runtime/paired-server-workspace', () => ({
+  pairedServerMirrors: () => () => pairedServer.mirrors
+}))
+
 const { useLayoutOwnerPaneTree } = await import('./use-layout-owner-pane-tree')
 
 const layout = (expandedLeafId: string | null): TerminalLayoutSnapshot => ({
@@ -26,6 +32,7 @@ function controllerWith(restoredLayout: TerminalLayoutSnapshot): TerminalPaneClo
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the hook reads only these fields.
   return {
     tabId: 'tab-1',
+    worktreeId: 'wt-1',
     restoredLayout,
     isolatedPaneKey: null,
     expandedPaneIdRef: { current: null },
@@ -40,6 +47,13 @@ describe('useLayoutOwnerPaneTree', () => {
   beforeEach(() => {
     _resetLayoutOwnerPaneIntentsForTests()
     reconcile.mockClear()
+    pairedServer.mirrors = false
+  })
+
+  it('leaves a paired server’s tab to its host, even before a remote terminal binds', () => {
+    pairedServer.mirrors = true
+    renderHook(() => useLayoutOwnerPaneTree(controllerWith(layout(null))))
+    expect(reconcile).not.toHaveBeenCalled()
   })
 
   it('waits while the window’s own pane command holds the tab, then draws main’s tree', () => {
