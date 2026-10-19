@@ -43,17 +43,20 @@ export class RuntimeNestedRepoImport {
     return scanNestedRepos({ path, options: { timeoutMs: 15_000 } })
   }
 
-  async import(args: {
-    parentPath: string
-    groupName: string
-    projectPaths: string[]
-    mode: ProjectGroupImportMode
-  }): Promise<ProjectGroupImportResult> {
+  async import(
+    args: {
+      parentPath: string
+      groupName: string
+      projectPaths: string[]
+      mode: ProjectGroupImportMode
+    },
+    wslRouting: { fromPairedClient?: boolean } = {}
+  ): Promise<ProjectGroupImportResult> {
     const store = this.deps.getStore()
     if (!store?.createProjectGroup || !store.moveProjectToGroup) {
       throw new Error('runtime_unavailable')
     }
-    const hosted = await importNestedProjectsOnWslHost(store, args)
+    const hosted = await importNestedProjectsOnWslHost(store, args, wslRouting)
     if (hosted) {
       return hosted
     }

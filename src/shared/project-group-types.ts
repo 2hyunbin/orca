@@ -51,6 +51,8 @@ export type ProjectGroupImportProjectResult = {
   projectId?: string
   status: 'imported' | 'already-known' | 'failed'
   error?: string
+  /** Which host owns this row when one import spans two (saved Windows rows beside new WSL ones). */
+  executionHostId?: ExecutionHostId
 }
 
 export type ProjectGroupImportResult = {

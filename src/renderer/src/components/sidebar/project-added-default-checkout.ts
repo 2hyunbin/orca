@@ -7,6 +7,7 @@ import type {
 } from '../../../../shared/telemetry-events'
 import type { DetectedWorktreeListResult, Worktree } from '../../../../shared/worktree/types'
 import { relativePathInsideRoot } from '../../../../shared/cross-platform-path'
+import { parseWslUncPath } from '../../../../shared/wsl-paths'
 import { markOnboardingProjectAdded } from '@/lib/onboarding-project-checklist'
 import { finalizeImportedRepoAfterSkip } from './add-repo-skip-finalization'
 import { parseExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
@@ -165,15 +166,30 @@ async function findDetectedDefaultCheckout(
   }
 }
 
+// Why: a WSL folder picked on Windows lands on its distro's server, whose checkout paths are Linux.
+function selectedPathOnOwner(selectedPath: string, executionHostId?: ExecutionHostId): string {
+  const uncPath = parseWslUncPath(selectedPath)
+  const owner = parseExecutionHostId(executionHostId)
+  const ownerDistro =
+    owner?.kind === 'runtime'
+      ? useAppStore.getState().wslHostStatuses[owner.environmentId]?.distro
+      : undefined
+  return uncPath && ownerDistro?.toLowerCase() === uncPath.distro.toLowerCase()
+    ? uncPath.linuxPath
+    : selectedPath
+}
+
 function resolveInitialCwdForDefaultCheckout(
   defaultCheckout: Worktree,
-  selectedPath: string | undefined
+  selectedPath: string | undefined,
+  executionHostId?: ExecutionHostId
 ): string | undefined {
   if (!selectedPath) {
     return undefined
   }
-  const relativePath = relativePathInsideRoot(defaultCheckout.path, selectedPath)
-  return relativePath && relativePath.length > 0 ? selectedPath : undefined
+  const cwd = selectedPathOnOwner(selectedPath, executionHostId)
+  const relativePath = relativePathInsideRoot(defaultCheckout.path, cwd)
+  return relativePath && relativePath.length > 0 ? cwd : undefined
 }
 
 export async function openProjectDefaultCheckout({
@@ -227,7 +243,11 @@ export async function openProjectDefaultCheckout({
       result: 'opened_default_checkout',
       reason
     })
-    const initialCwd = resolveInitialCwdForDefaultCheckout(defaultCheckout, selectedPath)
+    const initialCwd = resolveInitialCwdForDefaultCheckout(
+      defaultCheckout,
+      selectedPath,
+      executionHostId
+    )
     if (initialCwd || executionHostId) {
       activateAndRevealWorktree(defaultCheckout.id, {
         ...(initialCwd ? { initialCwd } : {}),

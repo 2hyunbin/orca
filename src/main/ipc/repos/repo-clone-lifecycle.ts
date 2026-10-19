@@ -25,7 +25,6 @@ import { invalidateAuthorizedRootsCache } from '../registered-worktree-roots-cac
 import { emitRepoAdded } from './repo-added-telemetry'
 import { notifyReposChanged } from './repos-changed-notification'
 import { runWithClonePathLock } from './clone-path-lock'
-import { registerProjectOnWslHost } from '../../wsl/wsl-project-registration'
 import { resolveClonedFolderConversion } from '../../folder-repo-git-conversion'
 import { findExtraFolderWorkspaceIds } from '../../folder-workspace-meta-presence'
 
@@ -118,13 +117,6 @@ export function registerRepoCloneHandlers(mainWindow: BrowserWindow, store: Stor
   ipcMain.handle(
     'repos:clone',
     async (_event, args: { url: string; destination: string }): Promise<Repo> => {
-      const hosted = await registerProjectOnWslHost(store, {
-        kind: 'clone', path: args.destination.trim(), url: args.url.trim()
-      })
-      if (hosted) {
-        notifyReposChanged(mainWindow)
-        return hosted
-      }
       // Why: derive the repo folder name from the URL's last segment, matching default git clone behavior.
       const clonePath = deriveValidatedClonePath(args)
       const clonePathKey = getClonePathComparisonKey(clonePath)

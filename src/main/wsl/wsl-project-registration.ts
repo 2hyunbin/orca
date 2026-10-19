@@ -9,7 +9,6 @@ import {
 import type { Repo } from '../../shared/repo-types'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import { foldWslUncPathCaseInsensitiveParts, parseWslUncPath } from '../../shared/wsl-paths'
-import { deriveCloneRepoNameFromUrl } from '../git/repo-clone-path'
 import { getWslHostService } from './wsl-host-service-instance'
 import { wslHostsGateOpen } from './wsl-host-gate'
 import type { RpcCallerIdentity } from '../runtime/rpc/rpc-caller-identity'
@@ -33,8 +32,17 @@ export function wslProjectRoutingEnabled(
 
 type WslProjectOperation =
   | { kind: 'add'; path: string; repoKind?: 'git' | 'folder'; displayName?: string }
-  | { kind: 'clone'; path: string; url: string }
   | { kind: 'create'; path: string; name: string; repoKind: 'git' | 'folder' }
+
+export type WslProjectRoutingOptions = {
+  executionHostId?: ExecutionHostId | null
+  /** A paired client cannot address an environment saved only on this Windows desktop. */
+  fromPairedClient?: boolean
+}
+
+export function isPairedWslRoutingCaller(caller: RpcCallerIdentity | undefined): boolean {
+  return caller?.kind !== 'local-cli' && caller?.kind !== 'desktop'
+}
 
 const ProjectReply = z.object({
   repo: z
@@ -49,79 +57,70 @@ const ProjectReply = z.object({
     .passthrough()
 })
 
-/** Null keeps the existing route; a WSL result is owned and registered only by the guest. */
+/** Null keeps the existing route. Callers run their saved-project checks first, so this decides
+ *  only who owns a project that no saved row already claims; the guest registers it. */
 export async function registerProjectOnWslHost(
   store: WslProjectRegistrationStore,
   operation: WslProjectOperation,
-  executionHostId?: ExecutionHostId | null
+  options: WslProjectRoutingOptions = {}
 ): Promise<Repo | null> {
-  if (!wslProjectRoutingEnabled(store, executionHostId)) {
-    return null
-  }
   const path = parseWslUncPath(operation.path)
-  if (!path) {
+  if (!path || !wslProjectRoutingEnabled(store, options.executionHostId)) {
     return null
   }
-  const name =
-    operation.kind === 'clone'
-      ? deriveCloneRepoNameFromUrl(operation.url)
-      : operation.kind === 'create'
-        ? operation.name.trim()
-        : null
-  if (name !== null && (!name || /[\\/]/.test(name) || name === '.' || name === '..')) {
-    throw new Error('Invalid project name')
-  }
-  const targetPath = posix.normalize(name === null ? path.linuxPath : posix.join(path.linuxPath, name))
-  const targetKey = foldWslUncPathCaseInsensitiveParts(
-    `//wsl.localhost/${path.distro}${targetPath}`.replace(/\/+$/, '')
+  const targetPath = posix.normalize(
+    operation.kind === 'create' ? posix.join(path.linuxPath, operation.name) : path.linuxPath
   )
-  const owner = await resolveNewWslProjectHost(store, operation.path, targetKey, executionHostId)
+  const owner = await resolveNewWslProjectHost(store, operation.path, {
+    ...options,
+    targetKey: foldWslUncPathCaseInsensitiveParts(
+      `//wsl.localhost/${path.distro}${targetPath}`.replace(/\/+$/, '')
+    )
+  })
   if (!owner) {
     return null
   }
   if ('repo' in owner) {
     return owner.repo
   }
-  const { environmentId } = owner
-  const method = `repo.${operation.kind}`
-  const params =
+  const result = await callWslProjectHost(
+    owner.environmentId,
+    `repo.${operation.kind}`,
     operation.kind === 'add'
       ? { path: targetPath, kind: operation.repoKind, displayName: operation.displayName }
-      : operation.kind === 'clone'
-        ? { destination: path.linuxPath, url: operation.url }
-        : { parentPath: path.linuxPath, name, kind: operation.repoKind }
-  const result = await callWslProjectHost(environmentId, method, params)
+      : { parentPath: path.linuxPath, name: operation.name, kind: operation.repoKind }
+  )
   if (typeof result === 'object' && result && 'error' in result) {
     throw new Error(String(result.error))
   }
   const { repo } = ProjectReply.parse(result)
-  return { ...repo, executionHostId: toRuntimeExecutionHostId(environmentId) }
+  return { ...repo, executionHostId: toRuntimeExecutionHostId(owner.environmentId) }
 }
 
+/** `targetKey: null` skips the saved-row lookup for callers that already classified their paths. */
 export async function resolveNewWslProjectHost(
   store: WslProjectRegistrationStore,
   uncPath: string,
-  targetKey = foldWslUncPathCaseInsensitiveParts(uncPath.replace(/[\\/]+$/, '')),
-  executionHostId?: ExecutionHostId | null
+  options: WslProjectRoutingOptions & { targetKey?: string | null } = {}
 ): Promise<{ repo: Repo } | { environmentId: string; linuxPath: string } | null> {
-  if (!wslProjectRoutingEnabled(store, executionHostId)) {
-    return null
-  }
   const path = parseWslUncPath(uncPath)
-  const service = getWslHostService()
-  if (!path) {
+  if (!path || !wslProjectRoutingEnabled(store, options.executionHostId)) {
     return null
   }
-  const existing = store.getRepos().find(
-    (repo) =>
-      targetKey !== null &&
-      getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID &&
-      foldWslUncPathCaseInsensitiveParts(repo.path.replace(/[\\/]+$/, '')) === targetKey
-  )
+  const targetKey =
+    options.targetKey === undefined
+      ? foldWslUncPathCaseInsensitiveParts(uncPath.replace(/[\\/]+$/, ''))
+      : options.targetKey
+  const existing =
+    targetKey === null ? undefined : findSavedWindowsProjectAt(store.getRepos(), targetKey)
   // Existing Windows-owned state belongs to the lossless mover, never a second Add.
   if (existing) {
     return { repo: existing }
   }
+  if (options.fromPairedClient) {
+    throw new Error('Add this WSL project from the Windows desktop, then open it on its WSL host.')
+  }
+  const service = getWslHostService()
   if (!service) {
     throw new Error(
       'WSL projects need the desktop app for now. Open Orca on Windows and add this project there.'
@@ -130,18 +129,12 @@ export async function resolveNewWslProjectHost(
   return { environmentId: await service.ensure(path.distro), linuxPath: path.linuxPath }
 }
 
-/** A paired client cannot address an environment saved only on this Windows desktop. */
-export function assertWslProjectRoutingCaller(path: string, caller?: RpcCallerIdentity): void {
-  if (
-    process.platform === 'win32' &&
-    parseWslUncPath(path) &&
-    wslHostsGateOpen() &&
-    getWslHostService()?.isEnabled() &&
-    caller?.kind !== 'local-cli' &&
-    caller?.kind !== 'desktop'
-  ) {
-    throw new Error('Add this WSL project from the Windows desktop, then open it on its WSL host.')
-  }
+export function findSavedWindowsProjectAt(repos: Repo[], targetKey: string): Repo | undefined {
+  return repos.find(
+    (repo) =>
+      getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID &&
+      foldWslUncPathCaseInsensitiveParts(repo.path.replace(/[\\/]+$/, '')) === targetKey
+  )
 }
 
 export function callWslProjectHost(

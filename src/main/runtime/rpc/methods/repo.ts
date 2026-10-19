@@ -1,5 +1,5 @@
 import { defineMethod } from '../core'
-import { assertWslProjectRoutingCaller } from '../../../wsl/wsl-project-registration'
+import { isPairedWslRoutingCaller } from '../../../wsl/wsl-project-registration'
 import { PROJECT_RUNTIME_METHODS } from './project-runtime-rpc-methods'
 import { FOLDER_WORKSPACE_METHODS } from './folder-workspace'
 import {
@@ -100,10 +100,10 @@ export const REPO_METHODS = [
     name: 'projectGroup.importNested',
     permission: 'workspace',
     params: ProjectGroupImportNested,
-    handler: async (params, context) => {
-      assertWslProjectRoutingCaller(params.parentPath, context.caller)
-      return context.runtime.importNestedRepos(params)
-    }
+    handler: async (params, context) =>
+      context.runtime.importNestedRepos(params, {
+        fromPairedClient: isPairedWslRoutingCaller(context.caller)
+      })
   }),
   defineMethod({
     name: 'repo.sparsePresets',
@@ -129,10 +129,14 @@ export const REPO_METHODS = [
     name: 'repo.add',
     permission: 'workspace',
     params: RepoPath,
-    handler: async (params, context) => {
-      assertWslProjectRoutingCaller(params.path, context.caller)
-      return { repo: projectRepoVisibilityForClient(await context.runtime.addRepo(params.path, params.kind, undefined, params.displayName), context) }
-    }
+    handler: async (params, context) => ({
+      repo: projectRepoVisibilityForClient(
+        await context.runtime.addRepo(params.path, params.kind, undefined, params.displayName, {
+          fromPairedClient: isPairedWslRoutingCaller(context.caller)
+        }),
+        context
+      )
+    })
   }),
   // Why a new method, not a field on repo.add: an old host would strip the field and register the
   // path on itself instead of on its SSH target. Gated by ssh.target-management.v1.
@@ -148,12 +152,13 @@ export const REPO_METHODS = [
     name: 'repo.create',
     permission: 'workspace',
     params: RepoCreate,
-    handler: async (params, context) => {
-      assertWslProjectRoutingCaller(params.parentPath, context.caller)
-      return projectRepoResultVisibilityForClient(
-        await context.runtime.createRepo(params.parentPath, params.name, params.kind), context
+    handler: async (params, context) =>
+      projectRepoResultVisibilityForClient(
+        await context.runtime.createRepo(params.parentPath, params.name, params.kind, {
+          fromPairedClient: isPairedWslRoutingCaller(context.caller)
+        }),
+        context
       )
-    }
   }),
   defineMethod({
     name: 'repo.gitAvailable',
@@ -165,10 +170,12 @@ export const REPO_METHODS = [
     name: 'repo.clone',
     permission: 'workspace',
     params: RepoClone,
-    handler: async (params, context) => {
-      assertWslProjectRoutingCaller(params.destination, context.caller)
-      return { repo: projectRepoVisibilityForClient(await context.runtime.cloneRepo(params.url, params.destination), context) }
-    }
+    handler: async (params, context) => ({
+      repo: projectRepoVisibilityForClient(
+        await context.runtime.cloneRepo(params.url, params.destination),
+        context
+      )
+    })
   }),
   defineMethod({
     name: 'repo.show',

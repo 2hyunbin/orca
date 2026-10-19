@@ -170,58 +170,6 @@ describe('useAddRepoCloneFlow', () => {
     expect(mocks.onGitRepoReady).toHaveBeenCalledWith(repo.id, 'clone_url', 'runtime:env-1')
   })
 
-  it('follows the WSL host this computer cloned onto, not the picked local host', async () => {
-    const wslRepo = makeRepo({ path: '/home/me/orca', executionHostId: 'runtime:wsl-ubuntu' })
-    const environments = [{ id: 'wsl-ubuntu', name: 'Ubuntu' }]
-    const setRuntimeEnvironments = vi.fn()
-    const readRuntimeHostStatusSnapshots = vi.fn()
-    Object.assign(mocks.storeState, {
-      runtimeEnvironments: [],
-      runtimeStatusByEnvironmentId: new Map(),
-      setRuntimeEnvironments,
-      readRuntimeHostStatusSnapshots
-    })
-    mocks.stateValues[1] = '\\\\wsl.localhost\\Ubuntu\\home\\me'
-    mocks.cloneLocal.mockResolvedValue(wslRepo)
-    mocks.fetchWorktrees.mockResolvedValue(true)
-    const list = vi.fn().mockResolvedValue(environments)
-    vi.stubGlobal('window', {
-      api: {
-        repos: {
-          clone: mocks.cloneLocal,
-          pickDirectory: mocks.pickDirectory,
-          onCloneProgress: mocks.onCloneProgress
-        },
-        runtimeEnvironments: { list }
-      }
-    })
-    const { useAddRepoCloneFlow } = await import('./useAddRepoCloneFlow')
-
-    const result = useAddRepoCloneFlow({
-      step: 'clone',
-      hostId: 'local',
-      activeRuntimeEnvironmentId: null,
-      workspaceDir: '/local/workspace',
-      fetchWorktrees: mocks.fetchWorktrees,
-      onGitRepoReady: mocks.onGitRepoReady
-    })
-    await result.handleClone()
-
-    expect(mocks.storeState.repos).toEqual([wslRepo])
-    // The new host is listed before anything routes to it.
-    expect(setRuntimeEnvironments).toHaveBeenCalledWith(environments)
-    expect(readRuntimeHostStatusSnapshots).toHaveBeenCalled()
-    expect(mocks.fetchWorktrees).toHaveBeenCalledWith(wslRepo.id, {
-      requireAuthoritative: true,
-      executionHostId: 'runtime:wsl-ubuntu'
-    })
-    expect(mocks.onGitRepoReady).toHaveBeenCalledWith(
-      wslRepo.id,
-      'clone_url',
-      'runtime:wsl-ubuntu'
-    )
-  })
-
   it('never clones onto this computer while the chosen host is unresolved', async () => {
     const { useAddRepoCloneFlow } = await import('./useAddRepoCloneFlow')
 

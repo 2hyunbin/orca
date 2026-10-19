@@ -23,15 +23,6 @@ export async function addLocalRepoFromPath(
   displayName?: string
 ): Promise<{ repo: Repo; alreadyExisted: boolean } | { error: string }> {
   const repoKind = kind === 'folder' ? 'folder' : 'git'
-  const hosted = await registerProjectOnWslHost(store, {
-    kind: 'add', path, repoKind, displayName
-  })
-  if (hosted) {
-    return {
-      repo: hosted,
-      alreadyExisted: getRepoExecutionHostId(hosted) === LOCAL_EXECUTION_HOST_ID
-    }
-  }
   if (repoKind === 'git') {
     await awaitWindowsHostGitEnvironmentReady({ cwd: path })
   }
@@ -93,6 +84,12 @@ export async function addLocalRepoFromPath(
         return { repo: trackedMainRepo, alreadyExisted: true }
       }
     }
+  }
+
+  // Why here: a saved Windows row for this checkout stays its owner; only a new one goes to WSL.
+  const hosted = await registerProjectOnWslHost(store, { kind: 'add', path, repoKind, displayName })
+  if (hosted) {
+    return { repo: hosted, alreadyExisted: false }
   }
 
   const detected = await detectRepoIconAndUpstream({

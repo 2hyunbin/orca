@@ -9,8 +9,9 @@ import {
   type ExecutionHostId
 } from '../../shared/execution-host'
 import type { Repo } from '../../shared/repo-types'
+import { isFolderRepo } from '../../shared/repo-kind'
 import { gitExecFileAsync, awaitWindowsHostGitEnvironmentReady } from '../git/runner'
-import { getRepoName, inspectGitRepoForRegistrationAsync } from '../git/repo'
+import { getGitRepoRootAsync, getRepoName, inspectGitRepoForRegistrationAsync } from '../git/repo'
 import { invalidateAuthorizedRootsCache } from '../ipc/registered-worktree-roots-cache'
 import { isENOENT } from '../ipc/filesystem-path-containment'
 import { findProjectAtSameRealPath } from '../project-realpath-identity'
@@ -19,7 +20,10 @@ import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
 import type { RuntimeStore } from './runtime-store-contract'
 import { runtimePathsEqual } from './runtime-worktree-path-identity'
 import { runtimeRepoMatchesExecutionHost } from './runtime-worktree-selection'
-import { registerProjectOnWslHost } from '../wsl/wsl-project-registration'
+import {
+  registerProjectOnWslHost,
+  type WslProjectRoutingOptions
+} from '../wsl/wsl-project-registration'
 
 type RuntimeRepositoryRegistrationDependencies = {
   getStore: () => RuntimeStore | null
@@ -35,15 +39,10 @@ export class RuntimeRepositoryRegistrationController {
     path: string,
     kind: 'git' | 'folder' = 'git',
     executionHostId?: ExecutionHostId | null,
-    displayName?: string
+    displayName?: string,
+    wslRouting: Pick<WslProjectRoutingOptions, 'fromPairedClient'> = {}
   ): Promise<Repo> {
     const store = this.requireStore()
-    const hosted = await registerProjectOnWslHost(
-      store, { kind: 'add', path, repoKind: kind, displayName }, executionHostId
-    )
-    if (hosted) {
-      return hosted
-    }
     if (!isAbsolute(path)) {
       throw new Error('Project path must be an absolute path')
     }
@@ -57,17 +56,22 @@ export class RuntimeRepositoryRegistrationController {
     // Why: git lists the main checkout at its resolved toplevel; storing a symlink alias or a
     // subdirectory instead hides that checkout as external, so the project shows no workspaces.
     const repoPath = gitInfo?.rootPath ?? path
-    const sameHostRepos = store
-      .getRepos()
-      .filter((repo) => runtimeRepoMatchesExecutionHost(repo, executionHostId))
+    // Why: a linked worktree reports itself as its own toplevel; its project is the main checkout's.
+    const mainRepoPath = gitInfo?.mainRepoPath
+      ? await getGitRepoRootAsync(gitInfo.mainRepoPath)
+      : null
+    const sameHostRepos = () =>
+      store.getRepos().filter((repo) => runtimeRepoMatchesExecutionHost(repo, executionHostId))
+    const sameProject = (repo: Repo): boolean =>
+      runtimePathsEqual(repo.path, path) ||
+      runtimePathsEqual(repo.path, repoPath) ||
+      (mainRepoPath !== null && !isFolderRepo(repo) && runtimePathsEqual(repo.path, mainRepoPath))
     // Why: git's toplevel is already resolved through symlinks, so an alias of a tracked checkout finds it.
     const existing =
-      sameHostRepos.find(
-        (repo) => runtimePathsEqual(repo.path, path) || runtimePathsEqual(repo.path, repoPath)
-      ) ??
+      sameHostRepos().find(sameProject) ??
       (await findProjectAtSameRealPath(
         // Why: SSH rows name paths on another machine; resolving them here could match an unrelated local dir.
-        sameHostRepos.filter(
+        sameHostRepos().filter(
           (repo) => parseExecutionHostId(getRepoExecutionHostId(repo))?.kind !== 'ssh'
         ),
         repoPath
@@ -85,6 +89,15 @@ export class RuntimeRepositoryRegistrationController {
       }
       return existing
     }
+    // Why here: a saved Windows row for this checkout stays its owner; only a new one goes to WSL.
+    const hosted = await registerProjectOnWslHost(
+      store,
+      { kind: 'add', path, repoKind: kind, displayName },
+      { ...wslRouting, executionHostId }
+    )
+    if (hosted) {
+      return hosted
+    }
     // Local on purpose, whatever `executionHostId` stamps on the row: this controller already
     // validated and will read `path` in this process. A `runtime:` stamp is how a paired client
     // addresses the row, not a second machine holding the files.
@@ -93,6 +106,11 @@ export class RuntimeRepositoryRegistrationController {
       kind,
       executionHostId: LOCAL_EXECUTION_HOST_ID
     })
+    // Another registration of the same checkout can finish while icon discovery is pending.
+    const raceWinner = sameHostRepos().find(sameProject)
+    if (raceWinner) {
+      return raceWinner
+    }
     const repo: Repo = {
       id: randomUUID(),
       path: repoPath,
@@ -113,18 +131,13 @@ export class RuntimeRepositoryRegistrationController {
   async create(
     parentPath: string,
     name: string,
-    kind: 'git' | 'folder' = 'git'
+    kind: 'git' | 'folder' = 'git',
+    wslRouting: Pick<WslProjectRoutingOptions, 'fromPairedClient'> = {}
   ): Promise<{ repo: Repo } | { error: string }> {
     const store = this.requireStore()
     const trimmedName = name.trim()
     const trimmedParentPath = parentPath.trim()
     const repoKind: 'git' | 'folder' = kind === 'folder' ? 'folder' : 'git'
-    const hosted = await registerProjectOnWslHost(store, {
-      kind: 'create', path: trimmedParentPath, name: trimmedName, repoKind
-    })
-    if (hosted) {
-      return { repo: hosted }
-    }
     if (!trimmedName) {
       return { error: 'Name cannot be empty' }
     }
@@ -141,6 +154,14 @@ export class RuntimeRepositoryRegistrationController {
     const existing = store.getRepos().find((repo) => runtimePathsEqual(repo.path, targetPath))
     if (existing) {
       return { repo: existing }
+    }
+    const hosted = await registerProjectOnWslHost(
+      store,
+      { kind: 'create', path: trimmedParentPath, name: trimmedName, repoKind },
+      wslRouting
+    )
+    if (hosted) {
+      return { repo: hosted }
     }
 
     let createdDir = false

@@ -16,7 +16,6 @@ import type { Repo } from '../../shared/repo-types'
 import {
   getRepoExecutionHostId,
   getSshTargetIdForExecutionHost,
-  parseExecutionHostId,
   type ExecutionHostId
 } from '../../shared/execution-host'
 import { getProjectIdForProviderIdentity } from '../../shared/project-host-setup-projection'
@@ -32,6 +31,7 @@ import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
 import { updateProjectHostSetupWithProvenKind } from '../folder-repo-git-conversion'
 import type { RuntimeStore } from './runtime-store-contract'
 import { setupProjectOnWslHost } from '../wsl/wsl-project-host-setup'
+import { assertCloneHostIsSupported } from './runtime-repository-clone-controller'
 import { readAllWorktreeMetaForRepo } from '../persistence/host-qualified-worktree-meta'
 import { readCurrentGitRemoteIdentity } from '../repo-git-remote-identity'
 import {
@@ -57,17 +57,6 @@ type RuntimeProjectHostSetupDependencies = {
   invalidateWorktreeScan: (repoId: string) => void
   notifyReposChanged: () => void
   countLiveTerminalsForRepo: (repo: Repo) => number
-}
-
-// Why clone refuses up front: `cloneRepo` runs `git clone` on the client, so accepting `ssh:*`
-// here would register the client's copy as the host's repo — a local answer to a remote question.
-function assertCloneHostIsSupported(hostId: ExecutionHostId | null | undefined): void {
-  if (parseExecutionHostId(hostId)?.kind !== 'ssh') {
-    return
-  }
-  throw new Error(
-    'Cloning onto an SSH host is not supported. Clone the repository on the host, then set the project up from that existing folder.'
-  )
 }
 
 export const SERVER_SSH_PROJECT_ADD_UNAVAILABLE_MESSAGE =
@@ -119,13 +108,14 @@ export class RuntimeProjectHostSetupController {
   }
 
   async setupExistingFolder(
-    args: ProjectHostSetupExistingFolderArgs
+    args: ProjectHostSetupExistingFolderArgs,
+    wslRouting: { fromPairedClient?: boolean } = {}
   ): Promise<ProjectHostSetupResult> {
-    if (!this.deps.getStore()) {
+    const store = this.deps.getStore()
+    if (!store) {
       throw new Error('runtime_unavailable')
     }
-    const store = this.deps.getStore()
-    const hosted = store ? await setupProjectOnWslHost(store, args) : null
+    const hosted = await setupProjectOnWslHost(store, args, wslRouting)
     if (hosted) {
       return hosted
     }
@@ -154,11 +144,6 @@ export class RuntimeProjectHostSetupController {
   }
 
   async setupClone(args: ProjectHostSetupCloneArgs): Promise<ProjectHostSetupResult> {
-    const store = this.deps.getStore()
-    const hosted = store ? await setupProjectOnWslHost(store, args) : null
-    if (hosted) {
-      return hosted
-    }
     assertCloneHostIsSupported(args.hostId)
     const knownRepoIds = new Set(this.deps.listRepos().map((repo) => repo.id))
     const repo = await this.deps.cloneRepo(args.url, args.destination, args.hostId)

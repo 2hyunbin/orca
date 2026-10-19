@@ -4,6 +4,7 @@ import { DEFAULT_REPO_BADGE_COLOR } from '../../shared/constants'
 import {
   getRepoSshConnectionId,
   LOCAL_EXECUTION_HOST_ID,
+  parseExecutionHostId,
   type ExecutionHostId
 } from '../../shared/execution-host'
 import type { Repo } from '../../shared/repo-types'
@@ -24,7 +25,6 @@ import { getRepoName } from '../git/repo'
 import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
 import type { RuntimeStore } from './runtime-store-contract'
 import { runtimeRepoMatchesExecutionHost } from './runtime-worktree-selection'
-import { registerProjectOnWslHost } from '../wsl/wsl-project-registration'
 import { resolveClonedFolderConversion } from '../folder-repo-git-conversion'
 import { findExtraFolderWorkspaceIds } from '../folder-workspace-meta-presence'
 
@@ -33,6 +33,17 @@ type RuntimeRepositoryCloneDependencies = {
   invalidateResolvedWorktrees: () => void
   invalidateWorktreeScan: (repoId: string) => void
   notifyReposChanged: () => void
+}
+
+// Why clone refuses up front: `cloneRepo` runs `git clone` on the client, so accepting `ssh:*`
+// here would register the client's copy as the host's repo — a local answer to a remote question.
+export function assertCloneHostIsSupported(hostId: ExecutionHostId | null | undefined): void {
+  if (parseExecutionHostId(hostId)?.kind !== 'ssh') {
+    return
+  }
+  throw new Error(
+    'Cloning onto an SSH host is not supported. Clone the repository on the host, then set the project up from that existing folder.'
+  )
 }
 
 export class RuntimeRepositoryCloneController {
@@ -45,17 +56,8 @@ export class RuntimeRepositoryCloneController {
     destination: string,
     executionHostId?: ExecutionHostId | null
   ): Promise<Repo> {
-    const store = this.deps.getStore()
-    if (!store) {
+    if (!this.deps.getStore()) {
       throw new Error('runtime_unavailable')
-    }
-    const hosted = await registerProjectOnWslHost(
-      store,
-      { kind: 'clone', path: destination.trim(), url: url.trim() },
-      executionHostId
-    )
-    if (hosted) {
-      return hosted
     }
     const trimmedUrl = url.trim()
     const trimmedDestination = destination.trim()
