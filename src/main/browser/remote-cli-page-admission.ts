@@ -4,45 +4,99 @@
  * edit commands) consults it, so no queued or deferred step of a running command outlives the
  * revocation.
  */
-const admissions = new Map<number, () => void>()
+type Admission = {
+  admit: () => void
+  /** Buttons, keys and touches this command pressed; only their release outlives a revocation. */
+  held: Set<string>
+}
+
+const admissions = new Map<number, Admission>()
 
 export async function runWithRemoteCliPageAdmission<T>(
   webContentsId: number,
   admit: () => void,
   run: () => Promise<T>
 ): Promise<T> {
-  admissions.set(webContentsId, admit)
+  const admission: Admission = { admit, held: new Set() }
+  admissions.set(webContentsId, admission)
   try {
     return await run()
   } finally {
-    if (admissions.get(webContentsId) === admit) {
+    if (admissions.get(webContentsId) === admission) {
       admissions.delete(webContentsId)
     }
   }
 }
 
-/** Throws while a revoked host's command still holds this page; a no-op otherwise. */
+/**
+ * Throws while a revoked host's command still holds this page; a no-op otherwise. Pass the input
+ * being sent so a release of what this command pressed still lands instead of leaving it held.
+ */
 export function assertRemoteCliPageAdmitted(
   webContentsId: number | undefined,
   method?: string,
   params?: Record<string, unknown>
 ): void {
-  if (webContentsId !== undefined && !isInputReleaseCommand(method, params)) {
-    admissions.get(webContentsId)?.()
+  const admission = webContentsId === undefined ? undefined : admissions.get(webContentsId)
+  if (!admission) {
+    return
+  }
+  const input = describeInput(method, params)
+  if (input && !input.press && admission.held.has(input.id)) {
+    return
+  }
+  admission.admit()
+  if (input?.press) {
+    admission.held.add(input.id)
   }
 }
 
-/** Ends input a command already began; refusing it would leave a button or key held on the page. */
-export function isInputReleaseCommand(method?: string, params?: Record<string, unknown>): boolean {
+/** True for a release of something the command now holding this page pressed. */
+export function isHeldRemoteCliInputRelease(
+  webContentsId: number | undefined,
+  method: string,
+  params?: Record<string, unknown>
+): boolean {
+  const input = describeInput(method, params)
+  return (
+    input !== null &&
+    !input.press &&
+    webContentsId !== undefined &&
+    (admissions.get(webContentsId)?.held.has(input.id) ?? false)
+  )
+}
+
+/** Records a press the command holding this page sent outside the admission gates. */
+export function noteRemoteCliInputPress(
+  webContentsId: number | undefined,
+  method: string,
+  params?: Record<string, unknown>
+): void {
+  const input = describeInput(method, params)
+  if (input?.press && webContentsId !== undefined) {
+    admissions.get(webContentsId)?.held.add(input.id)
+  }
+}
+
+function describeInput(
+  method: string | undefined,
+  params: Record<string, unknown> | undefined
+): { id: string; press: boolean } | null {
   const type = params?.type
   switch (method) {
     case 'Input.dispatchMouseEvent':
-      return type === 'mouseReleased'
+      return type === 'mousePressed' || type === 'mouseReleased'
+        ? { id: `mouse:${String(params?.button ?? 'left')}`, press: type === 'mousePressed' }
+        : null
     case 'Input.dispatchKeyEvent':
-      return type === 'keyUp'
+      return type === 'keyDown' || type === 'rawKeyDown' || type === 'keyUp'
+        ? { id: `key:${String(params?.code ?? params?.key ?? '')}`, press: type !== 'keyUp' }
+        : null
     case 'Input.dispatchTouchEvent':
-      return type === 'touchEnd' || type === 'touchCancel'
+      return type === 'touchStart' || type === 'touchEnd' || type === 'touchCancel'
+        ? { id: 'touch', press: type === 'touchStart' }
+        : null
     default:
-      return false
+      return null
   }
 }

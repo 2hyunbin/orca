@@ -213,17 +213,20 @@ describe('AgentBrowserBridge under a host revocation', () => {
   it('still releases a press that reached the page before the host was revoked', async () => {
     const wc = mockWebContents(100)
     const revoked = new AbortController()
-    wc.debugger.sendCommand.mockImplementation(
-      async (method: string, params?: { type?: string }) => {
-        if (method === 'Runtime.evaluate') {
-          return { result: { value: { x: 10, y: 20, adjusted: false, handled: false } } }
-        }
-        if (params?.type === 'mousePressed') {
-          revoked.abort()
-        }
-        return {}
+    wc.debugger.sendCommand.mockImplementation(async (method: string, params?: unknown) => {
+      if (method === 'Runtime.evaluate') {
+        return { result: { value: { x: 10, y: 20, adjusted: false, handled: false } } }
       }
-    )
+      if (
+        typeof params === 'object' &&
+        params !== null &&
+        'type' in params &&
+        params.type === 'mousePressed'
+      ) {
+        revoked.abort()
+      }
+      return {}
+    })
     webContentsFromIdMock.mockReturnValue(wc)
 
     await runInRemoteCliBrowserScope(

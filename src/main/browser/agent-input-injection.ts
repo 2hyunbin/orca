@@ -1,5 +1,8 @@
 import type { WebContents } from 'electron'
-import { assertRemoteCliPageAdmitted } from './remote-cli-page-admission'
+import {
+  assertRemoteCliPageAdmitted,
+  isHeldRemoteCliInputRelease
+} from './remote-cli-page-admission'
 import { assertRemoteCliBrowserAccess } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
 
 // Why: Orca's guest shortcut and grab handlers act on keys the page receives, and an unhandled key
@@ -10,18 +13,24 @@ export function isAgentInjectingInput(webContents: WebContents): boolean {
   return (injectionDepth.get(webContents) ?? 0) > 0
 }
 
+/** The CDP input event being delivered, so a revoked command can still release what it pressed. */
+export type AgentInputEvent = { method: string; params: Record<string, unknown> }
+
 /** Refuses agent input that a revoked SSH host's command sends, directly or through its helper. */
-export function assertAgentInputAdmitted(webContents: WebContents): void {
-  assertRemoteCliBrowserAccess(webContents.id)
-  assertRemoteCliPageAdmitted(webContents.id)
+export function assertAgentInputAdmitted(webContents: WebContents, input?: AgentInputEvent): void {
+  if (!input || !isHeldRemoteCliInputRelease(webContents.id, input.method, input.params)) {
+    assertRemoteCliBrowserAccess(webContents.id)
+  }
+  assertRemoteCliPageAdmitted(webContents.id, input?.method, input?.params)
 }
 
 /** Marks input sent during `run` as the agent's: Orca shortcuts and app menu items ignore it. */
 export async function withAgentInputInjection<T>(
   webContents: WebContents,
-  run: () => Promise<T>
+  run: () => Promise<T>,
+  input?: AgentInputEvent
 ): Promise<T> {
-  assertAgentInputAdmitted(webContents)
+  assertAgentInputAdmitted(webContents, input)
   const depth = injectionDepth.get(webContents) ?? 0
   injectionDepth.set(webContents, depth + 1)
   if (depth === 0) {

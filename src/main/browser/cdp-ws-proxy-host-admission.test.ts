@@ -81,27 +81,74 @@ describe('CdpWsProxy under a host command', () => {
     client.close()
   })
 
-  it('still delivers a release after the revocation, so no button stays held on the page', async () => {
+  function holdPage(): { revoke: () => void; release: () => Promise<void> } {
+    let revoked = false
     let finish = (): void => {}
     const held = runWithRemoteCliPageAdmission(
       PAGE_ID,
       () => {
-        throw new Error(REVOKED)
+        if (revoked) {
+          throw new Error(REVOKED)
+        }
       },
       () => new Promise<void>((resolve) => (finish = resolve))
     )
+    return {
+      revoke: () => (revoked = true),
+      release: async () => {
+        finish()
+        await held
+      }
+    }
+  }
+
+  const MOUSE = 'Input.dispatchMouseEvent'
+  const KEY = 'Input.dispatchKeyEvent'
+  const pressed = { type: 'mousePressed', x: 1, y: 1, button: 'left', clickCount: 1 }
+  const released = { type: 'mouseReleased', x: 1, y: 1, button: 'left', clickCount: 1 }
+  const shiftDown = { type: 'rawKeyDown', key: 'Shift', code: 'ShiftLeft', modifiers: 8 }
+  const shiftUp = { type: 'keyUp', key: 'Shift', code: 'ShiftLeft' }
+
+  it.each(['window', 'webview'])(
+    'still releases a button and key pressed before the revocation (%s page)',
+    async (pageType) => {
+      mock.webContents.getType.mockReturnValue(pageType)
+      const page = holdPage()
+      const client = await connect(endpoint)
+
+      await sendAndReceive(client, { id: 5, method: MOUSE, params: pressed })
+      await sendAndReceive(client, { id: 6, method: KEY, params: shiftDown })
+      page.revoke()
+      const mouseUp = await sendAndReceive(client, { id: 7, method: MOUSE, params: released })
+      const keyUp = await sendAndReceive(client, { id: 8, method: KEY, params: shiftUp })
+
+      expect(mouseUp.error).toBeUndefined()
+      expect(keyUp.error).toBeUndefined()
+      expect(mouseEvents(mock)).toEqual(['mousePressed', 'mouseReleased'])
+      const keyUps = [
+        ...mock.webContents.sendInputEvent.mock.calls.map((call) => call[0].type),
+        ...mock.webContents.debugger.sendCommand.mock.calls
+          .filter((call) => call[0] === KEY)
+          .map((call) => String(call[1]?.type))
+      ].filter((type) => type === 'keyUp')
+      expect(keyUps).toHaveLength(1)
+      await page.release()
+      client.close()
+    }
+  )
+
+  it('refuses a release of something the revoked command never pressed', async () => {
+    const page = holdPage()
     const client = await connect(endpoint)
+    page.revoke()
 
-    const response = await sendAndReceive(client, {
-      id: 5,
-      method: 'Input.dispatchMouseEvent',
-      params: { type: 'mouseReleased', x: 1, y: 1, button: 'left', clickCount: 1 }
-    })
+    const mouseUp = await sendAndReceive(client, { id: 9, method: MOUSE, params: released })
+    const keyUp = await sendAndReceive(client, { id: 10, method: KEY, params: shiftUp })
 
-    expect(response.error).toBeUndefined()
-    expect(mouseEvents(mock)).toEqual(['mouseReleased'])
-    finish()
-    await held
+    expect(mouseUp).toMatchObject({ error: { message: REVOKED } })
+    expect(keyUp).toMatchObject({ error: { message: REVOKED } })
+    expect(mouseEvents(mock)).toEqual([])
+    await page.release()
     client.close()
   })
 
