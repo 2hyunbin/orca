@@ -7,6 +7,7 @@ import type { Locator, Page } from '@stablyai/playwright-test'
 import { expect } from '@stablyai/playwright-test'
 import { ensureTerminalVisible } from './store'
 import { waitForActivePanePtyId, waitForActiveTerminalManager } from './terminal'
+import { uncoverSidebarRow } from './sidebar-setup-prompt'
 
 export type WorkspaceSample = {
   livePtyCount: number
@@ -104,24 +105,6 @@ export async function giveWorkspaceALivePty(page: Page, worktreeId: string): Pro
   await ensureTerminalVisible(page)
   await waitForActiveTerminalManager(page, 30_000)
   return waitForActivePanePtyId(page, 30_000)
-}
-
-/** Dismisses the setup-script prompt when it covers the row, as a user would to reach it. */
-async function uncoverSidebarRow(page: Page, row: Locator): Promise<void> {
-  const prompt = page.locator('[data-setup-script-prompt-layer]').first()
-  if (!(await prompt.isVisible())) {
-    return
-  }
-  const [rowBox, promptBox] = await Promise.all([row.boundingBox(), prompt.boundingBox()])
-  if (
-    rowBox &&
-    promptBox &&
-    rowBox.y + rowBox.height > promptBox.y &&
-    rowBox.y < promptBox.y + promptBox.height
-  ) {
-    await prompt.getByRole('button', { name: 'Dismiss setup scripts' }).click()
-    await expect(prompt).toBeHidden()
-  }
 }
 
 /** The shipping sleep path: right-click the sidebar row, click "Sleep". */
