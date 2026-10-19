@@ -203,7 +203,12 @@ export async function sleepWorktreesReportingFailures(
     for (const worktreeId of failedWorktreeIds) {
       clearWorktreeSleepIntent(worktreeId)
     }
-    if (sleptActiveWorktreeId && failedWorktreeIds.has(sleptActiveWorktreeId)) {
+    // Why still null: a workspace the user picked during the sleep is theirs to keep.
+    if (
+      sleptActiveWorktreeId &&
+      failedWorktreeIds.has(sleptActiveWorktreeId) &&
+      useAppStore.getState().activeWorktreeId === null
+    ) {
       // Why the host: an id alone clears the selected copy and leaves a same-id twin ambiguous.
       setActiveWorktree(sleptActiveWorktreeId, activeWorkspaceExecutionHostId ?? undefined)
     }

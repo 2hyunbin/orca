@@ -198,6 +198,11 @@ describe('remote worktree event lineage refresh', () => {
     store.setState({
       activeWorktreeId: 'repo-rename::/old',
       activeWorkspaceExecutionHostId: 'runtime:env-1',
+      migrateWorktreeIdentity: vi.fn((oldId: string, newId: string) => {
+        if (store.getState().activeWorktreeId === oldId) {
+          store.setState({ activeWorktreeId: newId })
+        }
+      }),
       worktreesByRepo: { 'repo-delete': [deleted] },
       fetchWorktrees: vi.fn().mockImplementation(async (repoId: string) => {
         if (repoId === 'repo-delete') {
@@ -228,6 +233,26 @@ describe('remote worktree event lineage refresh', () => {
       hostWorktreeTarget({ id: deleted.id, hostId: 'runtime:env-1' })
     ])
     expect(store.getState().removeWorkspaceSpaceWorktrees).toHaveBeenCalledWith([deleted.id])
+  })
+
+  it('leaves a workspace the user picked during the rename refresh selected', async () => {
+    store.setState({
+      activeWorktreeId: 'repo-rename::/old',
+      activeWorkspaceExecutionHostId: 'runtime:env-1',
+      fetchWorktrees: vi.fn().mockImplementation(async () => {
+        store.setState({ activeWorktreeId: 'repo-other::/picked' })
+        return true
+      })
+    })
+    const { worktreeChangeRefreshQueue: queue } = createWorktreeEventRuntime(unsubs, () => false)
+    queue.enqueue({
+      repoId: 'repo-rename',
+      executionHostId: 'runtime:env-1',
+      renamed: { oldWorktreeId: 'repo-rename::/old', newWorktreeId: 'repo-rename::/new' }
+    })
+    await flushPromises()
+
+    expect(store.getState().setActiveWorktree).not.toHaveBeenCalled()
   })
 
   it('keeps forced-local and unowned notifications on their existing refresh paths', async () => {

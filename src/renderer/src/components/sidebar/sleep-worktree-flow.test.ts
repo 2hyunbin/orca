@@ -286,6 +286,19 @@ describe('runSleepWorktree', () => {
     expect(mocks.state.setActiveWorktree).toHaveBeenLastCalledWith('wt-1', 'ssh:box')
   })
 
+  it('leaves a workspace the user picked during a failed sleep selected', async () => {
+    mocks.state.activeWorktreeId = 'wt-1'
+    mocks.state.shutdownWorktreeTerminals.mockImplementationOnce(async () => {
+      mocks.state.activeWorktreeId = 'wt-picked'
+      throw new Error('terminal_worktree_sleep_still_live')
+    })
+
+    await runSleepWorktree('wt-1')
+
+    expect(mocks.state.setActiveWorktree.mock.calls).toEqual([[null]])
+    expect(mocks.state.activeWorktreeId).toBe('wt-picked')
+  })
+
   it('continues sleeping later worktrees when one selected worktree fails', async () => {
     mocks.state.shutdownWorktreeBrowsers.mockImplementation((worktreeId: string) => {
       if (worktreeId === 'wt-1') {

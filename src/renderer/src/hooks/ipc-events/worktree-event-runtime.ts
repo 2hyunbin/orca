@@ -144,7 +144,12 @@ export function createWorktreeEventRuntime(
         )
     }
     // Why: an id change unmounts the active pane; re-activate so the tab reconciles, else it vanishes until re-select.
-    if (renamedWasActive && renamed) {
+    // Why still the new id: a workspace the user picked during the refresh is theirs to keep.
+    if (
+      renamedWasActive &&
+      renamed &&
+      useAppStore.getState().activeWorktreeId === renamed.newWorktreeId
+    ) {
       useAppStore.getState().setActiveWorktree(renamed.newWorktreeId, renamedActiveHostId)
     }
     // Sweep expired rename-grace entries before any early return, else forced-local

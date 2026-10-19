@@ -232,8 +232,6 @@ describe('useAutomationDispatchEvents setup launch', () => {
     })
   })
 
-  // The scoped event main publishes with the write is the only one; a local emit
-  // here would name no host and re-invalidate every host in the catalog.
   it('restores the prior workspace on the host it was selected on', async () => {
     state.activeWorkspaceExecutionHostId = 'ssh:box'
     mockLaunchAgentBackgroundSession.mockImplementationOnce(async () => {
@@ -255,6 +253,8 @@ describe('useAutomationDispatchEvents setup launch', () => {
     expect(state.setActiveWorktree).toHaveBeenCalledWith('wt-active', 'ssh:box')
   })
 
+  // The scoped event main publishes with the write is the only one; a local emit
+  // here would name no host and re-invalidate every host in the catalog.
   it('leaves the automationsChanged event to the host that owns the write', async () => {
     await registerAndDispatch()
 
