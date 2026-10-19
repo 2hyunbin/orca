@@ -9,7 +9,7 @@ import type { StablePaneSpawnContext, StablePaneOwner } from './stable-owner'
 import { persistAdmittedStablePaneBinding } from './stable-owner'
 import { attemptStablePaneAttach } from './stable-pane-attach'
 import { PaneOwnerContentionError } from './pane-spawn-operation'
-import { admitPtyReattachOwnership, registerPersistedPtySpawn } from './spawn-registration'
+import { admitPtySpawnOwnership, registerPersistedPtySpawn } from './spawn-registration'
 import {
   assertSpawnReplyWasLive,
   seedTerminalRestoreRecordsFromSpawnResult
@@ -79,7 +79,7 @@ export async function completePaneAdoption(
     runtime?.preparePtyExecutionContext?.(result.id, result.wslDistro ?? null, {
       preserveExisting: result.wslDistro === undefined
     })
-    admitPtyReattachOwnership(runtime, result)
+    admitPtySpawnOwnership(runtime, result)
     if (
       !result.wslDistro &&
       isNativeWindowsLocalPtySpawn({

@@ -11,8 +11,8 @@ function makePane(flex: string): HTMLElement {
   return pane
 }
 
-describe('pane layout gesture marker', () => {
-  it('marks a divider double-click reset as a gesture', () => {
+describe('pane layout change notification', () => {
+  it('reports a divider double-click reset', () => {
     const onLayoutChanged = vi.fn()
     const split = document.createElement('div')
     const divider = createDivider(true, {}, { refitPanesUnder: vi.fn(), onLayoutChanged })
@@ -20,10 +20,10 @@ describe('pane layout gesture marker', () => {
 
     divider.dispatchEvent(new MouseEvent('dblclick'))
 
-    expect(onLayoutChanged).toHaveBeenCalledExactlyOnceWith('gesture')
+    expect(onLayoutChanged).toHaveBeenCalledOnce()
   })
 
-  it('marks an equalize command as a gesture only when it changes sizes', () => {
+  it('reports an equalize command only when it changes sizes', () => {
     const onLayoutChanged = vi.fn()
     const root = document.createElement('div')
     const split = document.createElement('div')
@@ -40,6 +40,6 @@ describe('pane layout gesture marker', () => {
     equalizeManagedPaneSizes(panes, root, onLayoutChanged)
     equalizeManagedPaneSizes(panes, root, onLayoutChanged)
 
-    expect(onLayoutChanged).toHaveBeenCalledExactlyOnceWith('gesture')
+    expect(onLayoutChanged).toHaveBeenCalledOnce()
   })
 })

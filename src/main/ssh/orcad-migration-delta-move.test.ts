@@ -426,9 +426,9 @@ describe('moving what an older build added to a converted host', () => {
       connectionId: TARGET.id,
       createdFrom: 'manual'
     })
-    store.moveProjectToGroup('repo-1', group.id)
+    store.moveProjectToGroup(store.getRepo('repo-1')!, group.id)
     await convertedThenChangedOnOlderBuild()
-    store.moveProjectToGroup('repo-2', group.id)
+    store.moveProjectToGroup(store.getRepo('repo-2')!, group.id)
     const reconnect = loseContactAtDeltaCommit()
     await expect(deltaMove()).rejects.toThrow('socket closed')
     const target = store.getSshTarget(TARGET.id)!
@@ -608,7 +608,7 @@ describe('a retained source is never deleted', () => {
     [
       'a folder workspace on a folder-only host',
       () => {
-        store.removeProjectForHost('repo-1', `ssh:${TARGET.id}`)
+        store.removeProjectForHost({ id: 'repo-1', executionHostId: `ssh:${TARGET.id}` })
         const group = store.createProjectGroup({
           name: 'folders',
           parentPath: '/srv/folders',
@@ -725,7 +725,7 @@ describe('a delta move against a rollback of an update taken before it', () => {
 
   it('protects a folder-only delta the same way', async () => {
     await convertedThenChangedOnOlderBuild()
-    store.removeProjectForHost('repo-2', `ssh:${TARGET.id}`)
+    store.removeProjectForHost({ id: 'repo-2', executionHostId: `ssh:${TARGET.id}` })
     const group = store.createProjectGroup({
       name: 'folders',
       parentPath: '/srv/folders',

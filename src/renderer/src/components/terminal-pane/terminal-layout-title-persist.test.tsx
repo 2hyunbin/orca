@@ -79,8 +79,7 @@ function renderPersistence() {
       controller as unknown as Parameters<typeof useTerminalPaneLayoutPersistence>[0]
     )
   )
-  const pushedIntents = (): unknown[] => push.mock.calls.map(([input]) => input.intent)
-  return { hook, push, setTabLayout, pushedIntents, panes }
+  return { hook, push }
 }
 
 afterEach(() => {
@@ -89,43 +88,15 @@ afterEach(() => {
   mocks.sendLayoutCommandToOwner.mockReset()
 })
 
-describe('terminal layout gesture persist', () => {
-  it('saves the same layout for a gesture and an automatic persist and marks only the push', () => {
-    const { hook, push, setTabLayout } = renderPersistence()
-    setTabLayout.mockClear()
-    push.mockClear()
-
-    hook.result.current.persistLayoutSnapshot()
-    hook.result.current.persistLayoutSnapshot('gesture')
-
-    const [[, automaticLayout], [, gestureLayout]] = setTabLayout.mock.calls
-    expect(gestureLayout).toEqual(automaticLayout)
-    expect(gestureLayout).not.toHaveProperty('intent')
-    const [[automaticPush], [gesturePush]] = push.mock.calls
-    expect(automaticPush.intent).toBeUndefined()
-    expect(gesturePush).toEqual({ ...automaticPush, intent: 'gesture' })
-  })
-
-  it('leaves mount and scrollback-clear persists unmarked', () => {
-    const { hook, pushedIntents, panes } = renderPersistence()
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: clear reads only id, leafId and terminal, all present.
-    const pane = panes[0] as unknown as Parameters<
-      typeof hook.result.current.clearPaneScrollback
-    >[0]
-    hook.result.current.clearPaneScrollback(pane)
-
-    expect(pushedIntents().length).toBeGreaterThanOrEqual(2)
-    expect(pushedIntents().every((intent) => intent === undefined)).toBe(true)
-  })
-
-  it('marks user title clears as gestures', () => {
-    const { hook, push, pushedIntents } = renderPersistence()
+describe('terminal layout title persist', () => {
+  it('pushes the cleared layout when the clear-title shortcut runs', () => {
+    const { hook, push } = renderPersistence()
     push.mockClear()
 
     hook.result.current.handleClearPaneTitleShortcut(1)
-    hook.result.current.removePaneTitle(2)
 
-    expect(pushedIntents()).toEqual(['gesture', 'gesture'])
+    expect(push).toHaveBeenCalledOnce()
+    expect(push.mock.lastCall?.[0].layout.titlesByLeafId).toEqual({})
   })
 
   it('tells the host to drop every title once the last remote pane title is cleared', () => {
@@ -145,19 +116,19 @@ describe('terminal layout gesture persist', () => {
   })
 
   it('a window-owned build saves a renamed pane at once, without asking main', () => {
-    const { hook, pushedIntents, push } = renderPersistence()
+    const { hook, push } = renderPersistence()
     push.mockClear()
 
     hook.result.current.changePaneTitle(2, 'server')
 
     expect(mocks.sendLayoutCommandToOwner).not.toHaveBeenCalled()
-    expect(pushedIntents()).toEqual(['gesture'])
+    expect(push).toHaveBeenCalledOnce()
   })
 
   it('a layout-owner build shows a title change only once main has saved it', () => {
     mocks.layoutOwnerIsMain = true
     mocks.sendLayoutCommandToOwner.mockReturnValue(true)
-    const { hook, pushedIntents, push } = renderPersistence()
+    const { hook, push } = renderPersistence()
     push.mockClear()
 
     hook.result.current.changePaneTitle(2, 'server')
@@ -167,11 +138,11 @@ describe('terminal layout gesture persist', () => {
       { type: 'renamePane', tabId: 'tab', leafId: RIGHT, title: 'server' },
       { type: 'renamePane', tabId: 'tab', leafId: LEFT, title: null }
     ])
-    expect(pushedIntents()).toEqual([])
+    expect(push).not.toHaveBeenCalled()
 
     for (const [, , handlers] of mocks.sendLayoutCommandToOwner.mock.calls) {
       handlers.apply({})
     }
-    expect(pushedIntents()).toEqual(['gesture', 'gesture'])
+    expect(push).toHaveBeenCalledTimes(2)
   })
 })

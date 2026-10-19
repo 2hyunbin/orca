@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { UpdatePaneLayout } from '../../../shared/rpc-contract/session-tabs-schemas-params'
 import { updateWebRuntimePaneLayout } from './web-runtime-terminal-actions'
 import { stubRuntimeEnvironmentBridge } from './runtime-environment-bridge-fixture'
 
@@ -51,29 +50,17 @@ async function sentParams(
   return runtimeCall.mock.calls[0][0].params
 }
 
-describe('updateWebRuntimePaneLayout intent marker', () => {
+describe('updateWebRuntimePaneLayout params', () => {
   beforeEach(() => {
     store.state = ownedBy(`runtime:${ENVIRONMENT_ID}`)
   })
   afterEach(() => vi.unstubAllGlobals())
 
-  it('sends exactly the unmarked params when no intent is given', async () => {
+  it('sends exactly the layout params', async () => {
     const params = await sentParams(LAYOUT)
     expect(Object.keys(params).sort()).toEqual(
       ['chatLeafId', 'expandedLeafId', 'root', 'tabId', 'titlesByLeafId', 'worktree'].sort()
     )
-  })
-
-  it('adds only the intent field for a gesture edit', async () => {
-    const unmarked = await sentParams(LAYOUT)
-    const marked = await sentParams({ ...LAYOUT, intent: 'gesture' })
-    expect(marked).toEqual({ ...unmarked, intent: 'gesture' })
-  })
-
-  it('round-trips the marker through the host params schema', async () => {
-    const marked = await sentParams({ ...LAYOUT, intent: 'gesture' })
-    expect(UpdatePaneLayout.parse(marked).intent).toBe('gesture')
-    expect(UpdatePaneLayout.parse({ ...marked, intent: 'unknown' }).intent).toBeUndefined()
   })
 
   it('refuses a local twin of the paired server and pushes nothing', async () => {

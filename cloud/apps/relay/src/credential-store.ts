@@ -7,6 +7,7 @@ import {
 } from '@orca-cloud/relay-contract'
 import type { RelayDatabase, SqlRow } from './database.js'
 import { HeapWindowReaper } from './heap-window-reaper.js'
+import { ResumeConfirmedAuditBuffer } from './resume-confirmed-audit-buffer.js'
 
 const CREDENTIAL_GRACE_MS = 24 * 60 * 60 * 1000
 // Released desktops validate invite expiry against their own clock with zero
@@ -161,10 +162,15 @@ export class RelayCredentialStore {
     CONFIRM_RESULT_REAP_BUDGET
   )
 
+  // Only memory confirms add to it, so its flush timer never starts on a director.
+  readonly resumeAudit: ResumeConfirmedAuditBuffer
+
   constructor(
     private readonly database: RelayDatabase,
     private readonly now: () => number = Date.now
-  ) {}
+  ) {
+    this.resumeAudit = new ResumeConfirmedAuditBuffer(database, now)
+  }
 
   async createInvite(identity: RelayIdentity, relayDeviceId: string): Promise<{
     inviteToken: string
@@ -618,14 +624,12 @@ export class RelayCredentialStore {
         return resumeExpiresAt
       })
     }
-    // Off the answer's critical outcome: an audit row the database refuses is not a failed confirm.
-    await this.auditWith(this.database, {
-      type: 'resume-confirmed',
+    this.resumeAudit.add({
       userId: input.userId,
       relayHostId: input.relayHostId,
       relayDeviceId: input.relayDeviceId,
       detail: { reqId: input.reqId, basisConnId: input.basisConnId, renewed }
-    }).catch(() => console.warn('[orca-relay] resume-confirmed audit row not written'))
+    })
     return {
       v: 1,
       reqId: input.reqId,
