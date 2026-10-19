@@ -9,7 +9,6 @@ import { findGithubPrWorkspaceAttachment } from '@/lib/github-work-item-workspac
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { launchWorkItemDirect } from '@/lib/launch-work-item-direct'
-import { planAgentCliArgsSuffix } from '@/lib/tui-agent-startup'
 import {
   pickSourceControlLaunchAgent,
   readSourceControlLaunchRecipeAgentId
@@ -176,14 +175,6 @@ export async function startFixChecksAgent(args: StartFixChecksAgentArgs): Promis
       )
       return false
     }
-    const agentArgsPlan = planAgentCliArgsSuffix(
-      recipe.agentArgs,
-      launchPlatform === 'win32' ? 'powershell' : 'posix'
-    )
-    if (!agentArgsPlan.ok) {
-      toast.error(agentArgsPlan.error)
-      return false
-    }
     const sessionOptions = resolveSourceControlActionSessionOptions(recipe, agent)
     let revealFailed = false
     const result = launchAgentInNewTab({
@@ -240,10 +231,6 @@ export async function startFixChecksAgent(args: StartFixChecksAgentArgs): Promis
   if (agentOverride.kind === 'blocked') {
     return false
   }
-  const sessionOptions =
-    agentOverride.kind === 'agent'
-      ? resolveSourceControlActionSessionOptions(recipe, agentOverride.agent)
-      : undefined
 
   return await launchWorkItemDirect({
     item: { ...args.item, pasteContent: commandInput },
@@ -252,7 +239,7 @@ export async function startFixChecksAgent(args: StartFixChecksAgentArgs): Promis
     telemetrySource: args.telemetrySource,
     promptDelivery: 'submit-after-ready',
     agentArgs: recipe.agentArgs,
-    ...(sessionOptions ? { sessionOptions } : {}),
+    resolveSessionOptions: (agent) => resolveSourceControlActionSessionOptions(recipe, agent),
     ...(agentOverride.kind === 'agent' ? { agentOverride: agentOverride.agent } : {}),
     openModalFallback: args.openModalFallback
   })

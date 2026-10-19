@@ -245,7 +245,7 @@ describe('launchWorkItemDirect', () => {
     ).resolves.toBe(false)
 
     expect(mocks.createWorktree).not.toHaveBeenCalled()
-    expect(mocks.ensureDetectedAgents).not.toHaveBeenCalled()
+    expect(mocks.ensureDetectedAgents).toHaveBeenCalled()
     expect(mocks.toastError).toHaveBeenCalledWith(
       'CLI arguments are invalid: Unclosed quote in command template.'
     )

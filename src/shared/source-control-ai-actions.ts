@@ -1,6 +1,7 @@
 import { isCustomAgentId, type CustomAgentId } from './commit-message-agent-spec'
 import { isTuiAgent } from './tui-agent-config'
 import type { TuiAgent } from './tui-agent'
+import { isAgentSessionOptions } from './agent-session-record'
 
 // Why: the variable registry lives in `./source-control-ai-action-variables` for max-lines
 // headroom. It is deliberately not re-exported here — one import path per symbol keeps a
@@ -19,17 +20,18 @@ export type SourceControlLaunchActionId =
 export type SourceControlActionId = SourceControlTextActionId | SourceControlLaunchActionId
 export type AiActionId = AiTextActionId | SourceControlLaunchActionId
 
-/** Structured so every route applies it: a chat has no command line for `agentArgs` to reach. */
+/** The bound agent namespace is independent of the recipe’s default-agent selection. */
 export type SourceControlActionLaunchPreferences = {
+  agentId: TuiAgent
   model: string
-  effort?: string
+  options?: Record<string, string>
 }
 
 export type SourceControlActionRecipe = {
   agentId?: TuiAgent | CustomAgentId | null
   commandInputTemplate?: string
   agentArgs?: string
-  /** Belongs to `agentId`; a launch on any other agent ignores it. */
+  /** Only the bound agent’s chat receives these values. */
   launchPreferences?: SourceControlActionLaunchPreferences
 }
 
@@ -131,7 +133,10 @@ export function normalizeSourceControlActionRecipe(
   if (typeof value.agentArgs === 'string') {
     normalized.agentArgs = value.agentArgs
   }
-  const launchPreferences = normalizeSourceControlActionLaunchPreferences(value.launchPreferences)
+  const launchPreferences = normalizeSourceControlActionLaunchPreferences(
+    value.launchPreferences,
+    agentId
+  )
   if (launchPreferences) {
     normalized.launchPreferences = launchPreferences
   }
@@ -139,13 +144,31 @@ export function normalizeSourceControlActionRecipe(
 }
 
 export function normalizeSourceControlActionLaunchPreferences(
-  value: unknown
+  value: unknown,
+  recipeAgent?: unknown
 ): SourceControlActionLaunchPreferences | undefined {
   if (!isRecord(value) || typeof value.model !== 'string' || !value.model.trim()) {
     return undefined
   }
-  const effort = typeof value.effort === 'string' ? value.effort.trim() : ''
-  return { model: value.model.trim(), ...(effort ? { effort } : {}) }
+  const agentId = value.agentId ?? recipeAgent
+  if (!isTuiAgent(agentId)) {
+    return undefined
+  }
+  const options =
+    value.options ?? (typeof value.effort === 'string' ? { effort: value.effort } : {})
+  if (
+    !isAgentSessionOptions(options) ||
+    Object.keys(options).some(
+      (key) => !isSafeRecordKey(key) || ['agentId', 'model', 'permissionMode'].includes(key)
+    )
+  ) {
+    return undefined
+  }
+  const model = value.model.trim()
+  if (!isAgentSessionOptions({ ...options, model })) {
+    return undefined
+  }
+  return { agentId, model, ...(Object.keys(options).length ? { options } : {}) }
 }
 
 export function normalizeSourceControlAiActionDefaults(

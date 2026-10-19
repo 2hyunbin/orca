@@ -213,3 +213,23 @@ export function updateNativeChatSessionOptionDefaults(args: {
     }
   }
 }
+
+/** A different model drops the prior model’s options, keeping the chat’s permission choice. */
+export function structuredLaunchRequestedOptions(selection: {
+  explicit?: Readonly<Record<string, string>>
+  held: Readonly<Record<string, string>>
+  seed?: Readonly<Record<string, string>>
+}): Readonly<Record<string, string>> | undefined {
+  const { explicit, held, seed } = selection
+  if (!explicit) {
+    return undefined
+  }
+  const changed = held.model !== undefined && held.model !== explicit.model
+  return {
+    ...(seed?.[AGENT_CHAT_PERMISSION_MODE_OPTION_ID]
+      ? { [AGENT_CHAT_PERMISSION_MODE_OPTION_ID]: seed[AGENT_CHAT_PERMISSION_MODE_OPTION_ID] }
+      : {}),
+    ...(changed ? {} : explicit),
+    ...held
+  }
+}

@@ -8,7 +8,6 @@ import {
   ensureDetectedAgentsForWorktree,
   type WorktreeAgentInventoryState
 } from '@/lib/agent-detection-target-inventory'
-import { planAgentCliArgsSuffix } from '@/lib/tui-agent-startup'
 import {
   pickSourceControlLaunchAgent,
   readSourceControlLaunchRecipeAgentId
@@ -110,16 +109,6 @@ export async function launchSourceControlRecoveryAgentWithDefault({
 
   const store = getStoreState()
   const savedRecipe = getLaunchActionRecipe(actionId)
-  const agentArgsPlan = planAgentCliArgsSuffix(
-    savedRecipe.agentArgs,
-    activeSourceControlLaunchPlatform === 'win32' ? 'powershell' : 'posix'
-  )
-  if (!agentArgsPlan.ok) {
-    // Why: saved launch recipes are shared with direct launches; reject bad
-    // argv before remote agent detection or terminal creation has side effects.
-    toast.error(agentArgsPlan.error)
-    return false
-  }
   if (!basePrompt) {
     toast.error(copy.promptUnavailable)
     return false

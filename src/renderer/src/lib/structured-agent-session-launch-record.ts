@@ -55,6 +55,7 @@ export type StructuredAgentLaunchPersistedRecord = {
   expectedRuntimeFence: number | null
   resumeFrom?: StructuredAgentSessionResumeSource
   firstMessage?: StructuredAgentSessionFirstMessage
+  explicitLaunchOptions?: Readonly<Record<string, string>>
   options?: Readonly<Record<string, string>>
   createMessageSupport?: boolean
   /** A paired server's reported seed, which this machine cannot re-derive after a reload. */
@@ -83,6 +84,9 @@ export function structuredAgentLaunchRecordFor(
     ...(resumeFrom ? { resumeFrom } : {}),
     ...(firstMessage ? { firstMessage } : {}),
     ...(options ? { options } : {}),
+    ...(intent.explicitLaunchOptions
+      ? { explicitLaunchOptions: intent.explicitLaunchOptions }
+      : {}),
     ...(intent.createMessageSupport === undefined
       ? {}
       : { createMessageSupport: intent.createMessageSupport }),
@@ -137,6 +141,9 @@ export function validRecord(value: unknown): value is Omit<
     (failedAt === undefined || Number.isFinite(failedAt)) &&
     (firstMessage === undefined || validFirstMessage(firstMessage)) &&
     (options === undefined || isAgentSessionOptions(options)) &&
+    (!('explicitLaunchOptions' in value) ||
+      value.explicitLaunchOptions === undefined ||
+      isAgentSessionOptions(value.explicitLaunchOptions)) &&
     (createMessageSupport === undefined || typeof createMessageSupport === 'boolean') &&
     (resumeFrom === undefined ||
       (typeof resumeFrom === 'object' &&

@@ -213,6 +213,7 @@ function structuredAgentLaunchState(
     options.resumeFrom,
     options.hostSeedOptions
   )
+  intent.explicitLaunchOptions = options.launchOptions ? { ...options.launchOptions } : undefined
   intent.beforeCreate = options.beforeCreate
   intent.surfaceAddress = options.surfaceAddress
   const text = launchPromptText(options)
@@ -234,7 +235,7 @@ function structuredAgentLaunchState(
     cancelled: false,
     onVisibilityChanged: notifyStructuredLaunchListeners,
     callers,
-    selection: { seed: intent.seedOptions, held: { ...options.launchOptions } }
+    selection: { seed: intent.seedOptions, explicit: intent.explicitLaunchOptions, held: {} }
   }
   state.onHostSeed = (seedOptions) => adoptPairedHostSeed(state, seedOptions)
   callers.onSettled = () => maybeCleanupLaunchState(state)

@@ -16,6 +16,7 @@ export type AgentLaunchSurfaceFactory = {
     worktreeId: string
     /** An agent this host registered as structured; the launch mode already checked it. */
     agent: StructuredAgentId
+    chatOptions?: Readonly<Record<string, string>>
     options?: Readonly<Record<string, unknown>>
     /** The caller-minted session id; refused with `AgentLaunchSessionAlreadyExistsError` if taken. */
     sessionId?: string

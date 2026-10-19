@@ -223,6 +223,9 @@
     },
     "sourceControl": {
       "actionModel": {
+        "on": "Activado",
+        "off": "Desactivado",
+        "invalidArgs": "Los argumentos de CLI de {{value0}} no son válidos. Corrígelos en Ajustes → Source Control AI.",
         "model": "Modelo",
         "agentDefault": "Predeterminado del agente",
         "effort": "Esfuerzo",

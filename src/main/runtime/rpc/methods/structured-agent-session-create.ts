@@ -86,7 +86,8 @@ export async function prepareStructuredAgentSessionCreateForWorktree(args: {
   firstMessage?: StructuredAgentSessionFirstMessage
   atRest?: boolean
 }): Promise<PreparedStructuredAgentSessionCreate> {
-  const structuredAgentCliSourceEvidence = args.structuredAgentCliSourceEvidence ??
+  const structuredAgentCliSourceEvidence =
+    args.structuredAgentCliSourceEvidence ??
     (args.resumeFrom?.cliSource
       ? captureStructuredAgentCliSource(() => args.runtime.getAgentProviderSessionRows())
       : undefined)
@@ -145,9 +146,10 @@ export async function prepareStructuredAgentSessionCreateForWorktree(args: {
       // Explicit picks replace the saved selection; the permission default is the chat's own.
       ...(args.options
         ? {
-            options: atRest
-              ? { ...resolved.options, ...args.options }
-              : { ...seededPermissionMode(resolved.options), ...args.options }
+            options:
+              atRest && !args.options.model
+                ? { ...resolved.options, ...args.options }
+                : { ...seededPermissionMode(resolved.options), ...args.options }
           }
         : {}),
       ...(args.tabId ? { surfaceTabId: args.tabId } : {}),

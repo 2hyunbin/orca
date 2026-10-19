@@ -1,3 +1,4 @@
+import { structuredLaunchRequestedOptions } from './native-chat-session-option-defaults'
 import {
   commitStructuredAgentSessionOptionValues,
   structuredAgentSessionOptionSnapshot,
@@ -29,8 +30,16 @@ export function structuredAgentSessionOptionView(
   state: StructuredAgentSessionOptionState,
   seed: Readonly<Record<string, string>> | undefined,
   held: Readonly<Record<string, string>>,
-  takesSendOptions: boolean
+  takesSendOptions: boolean,
+  explicit?: Readonly<Record<string, string>>
 ): StructuredAgentSessionOptionState {
+  const requested = structuredLaunchRequestedOptions({ explicit, seed, held })
+  if (requested) {
+    return commitStructuredAgentSessionOptionValues(
+      { ...state, record: { agent: state.record.agent, valuesByModel: {} } },
+      requested
+    )
+  }
   const { [AGENT_CHAT_PERMISSION_MODE_OPTION_ID]: heldPermission, ...heldSelection } = held
   const replaced = takesSendOptions
     ? structuredAgentSessionListedPicks(state, seed, heldSelection)

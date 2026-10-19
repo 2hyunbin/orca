@@ -191,20 +191,20 @@ it.each(['firstMessage', 'options'] as const)(
   }
 )
 
-it('merges held option overrides with host seeds before the first acquisition', async () => {
+it('replaces unrelated host model defaults before the first acquisition', async () => {
   const input = params({ model: 'held-model' })
   expect(await call('agentSession.create', input, capable)).toMatchObject({
     ok: true,
     result: { ok: true }
   })
-  expect(rig.store.getRecord(SESSION)?.options).toEqual({ model: 'held-model', effort: 'medium' })
+  expect(rig.store.getRecord(SESSION)?.options).toEqual({ model: 'held-model' })
   expect(rig.adapter.acquire).not.toHaveBeenCalled()
   expect(await rig.host.send({ callerKey: 'client-1' }, restTestSend('first work'))).toMatchObject({
     ok: true
   })
   await vi.waitFor(() => expect(rig.adapter.acquire).toHaveBeenCalledOnce())
   expect(rig.adapter.acquire).toHaveBeenCalledWith(
-    expect.objectContaining({ options: { model: 'held-model', effort: 'medium' } })
+    expect.objectContaining({ options: { model: 'held-model' } })
   )
 })
 
@@ -258,7 +258,7 @@ it.each(['options', 'firstMessage'] as const)(
         }
       })
     ).toMatchObject({ ok: true, result: { ok: false } })
-    expect(rig.store.getRecord(SESSION)?.options).toEqual({ model: 'held-model', effort: 'medium' })
+    expect(rig.store.getRecord(SESSION)?.options).toEqual({ model: 'held-model' })
     const first = original.firstMessage
     if (!first) {
       throw new Error('fixture first message missing')

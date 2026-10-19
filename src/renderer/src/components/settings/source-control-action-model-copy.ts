@@ -1,18 +1,11 @@
 import {
   findCatalogModel,
-  findCatalogOption,
   getAgentSessionOptionCatalog
 } from '../../../../shared/agent-session-option-catalog'
 import type { SourceControlActionLaunchPreferences } from '../../../../shared/source-control-ai-actions'
 import type { TuiAgent } from '../../../../shared/tui-agent'
+import { sourceControlActionChatOptions } from '../../../../shared/source-control-action-launch-preferences'
 import { translate } from '@/i18n/i18n'
-
-export function getLaunchActionAgentArgsNote(): string {
-  return translate(
-    'settings.sourceControl.actionModel.argsTerminalOnly',
-    'Used only when the agent opens in a terminal; chats ignore them.'
-  )
-}
 
 /** The saved model the launch runs, named the way the chat picker names it. */
 export function describeSourceControlActionModel(
@@ -23,16 +16,16 @@ export function describeSourceControlActionModel(
     getAgentSessionOptionCatalog(agent) ?? { models: [], modelApply: {} },
     preferences.model
   )
-  const effortOption = findCatalogOption(model, 'effort')
-  const effortLabel =
-    preferences.effort && effortOption?.kind.type === 'select'
-      ? (effortOption.kind.choices.find((choice) => choice.value === preferences.effort)?.label ??
-        preferences.effort)
-      : preferences.effort
+  const labels = sourceControlActionChatOptions(agent, preferences.model).flatMap((option) => {
+    const value = preferences.options?.[option.id]
+    return value && option.kind.type === 'select'
+      ? [option.kind.choices.find((choice) => choice.value === value)?.label ?? value]
+      : []
+  })
   const modelLabel = model?.label ?? preferences.model
   return translate(
     'settings.sourceControl.actionModel.savedModel',
     'Model from Settings: {{value0}}',
-    { value0: effortLabel ? `${modelLabel} · ${effortLabel}` : modelLabel }
+    { value0: [modelLabel, ...labels].join(' · ') }
   )
 }

@@ -32,14 +32,20 @@ function normalizeSourceControlActionRecipeForComparison(
   recipe: PersistedSourceControlActionRecipe | null | undefined
 ): NormalizedSourceControlActionRecipe {
   return {
-    agentId: recipe?.agentId ?? null,
+    agentId: recipe?.agentId ?? recipe?.launchPreferences?.agentId ?? null,
     commandInputTemplate:
       typeof recipe?.commandInputTemplate === 'string'
         ? recipe.commandInputTemplate.trim()
         : DEFAULT_SOURCE_CONTROL_ACTION_COMMAND_TEMPLATES[actionId],
     agentArgs: typeof recipe?.agentArgs === 'string' ? recipe.agentArgs.trim() : '',
     launchPreferences: recipe?.launchPreferences
-      ? `${recipe.launchPreferences.model}\u0000${recipe.launchPreferences.effort ?? ''}`
+      ? JSON.stringify([
+          recipe.launchPreferences.agentId,
+          recipe.launchPreferences.model,
+          Object.entries(recipe.launchPreferences.options ?? {}).sort(([a], [b]) =>
+            a.localeCompare(b)
+          )
+        ])
       : ''
   }
 }

@@ -3,6 +3,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { setLocalRuntimeCapabilitiesForTests } from '@/runtime/local-runtime-capabilities'
+import { adoptAgentSessionLaunchVerdict } from './agent-session-launch-plan'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
 
 const mockCreateTab = vi.fn()
@@ -85,6 +86,13 @@ vi.mock('@/components/native-chat/native-chat-session-option-cache', () => ({
   seedNativeChatAppliedSessionOptions: mockSeedNativeChatAppliedSessionOptions
 }))
 
+vi.mock('@/lib/launch-agent-in-new-tab-structured-route', () => ({
+  launchStructuredAgentFromNewTab: () => ({
+    surface: { kind: 'host-published' },
+    pasteDraftAfterLaunch: false
+  })
+}))
+
 describe('launchAgentInNewTab terminal tab activation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -92,6 +100,24 @@ describe('launchAgentInNewTab terminal tab activation', () => {
     setLocalRuntimeCapabilitiesForTests([])
     store.settings = placementSettings()
     mockCreateTab.mockReturnValue({ id: 'tab-1' })
+  })
+
+  it('ignores hidden malformed arguments for chat and rejects them before any terminal creation', async () => {
+    const { launchAgentInNewTab } = await import('./launch-agent-in-new-tab')
+    const args = { agent: 'codex' as const, worktreeId: 'wt-1', agentArgs: '--model "unfinished' }
+    const result = launchAgentInNewTab({
+      ...args,
+      agentSessionLaunchPlan: adoptAgentSessionLaunchVerdict({
+        route: 'structured-native-chat',
+        requestId: 'chat',
+        agent: 'codex',
+        worktreeId: 'wt-1'
+      })
+    })
+    expect(result?.surface.kind).toBe('host-published')
+    expect(result?.startupPlan).toBeUndefined()
+    expect(launchAgentInNewTab({ ...args, requestId: 'terminal' })).toBeNull()
+    expect(mockCreateTab).not.toHaveBeenCalled()
   })
 
   // Why: the store scopes activation to the launch's own workspace, so the floating panel launches
@@ -144,7 +170,7 @@ describe('launchAgentInNewTab terminal tab activation', () => {
     expect(queuedStartups()[0]).not.toHaveProperty('sessionOptions')
   })
 
-  it("runs an action's model and effort over the same flag in its CLI arguments", async () => {
+  it("keeps a terminal action's CLI model and ignores its saved chat options", async () => {
     const { launchAgentInNewTab } = await import('./launch-agent-in-new-tab')
 
     launchAgentInNewTab({
@@ -156,8 +182,8 @@ describe('launchAgentInNewTab terminal tab activation', () => {
     })
 
     const command = queuedStartups()[0]?.command
-    expect(command).toContain("'-m' 'gpt-5.6-terra'")
-    expect(command).toContain("'model_reasoning_effort=high'")
-    expect(command).not.toContain('old')
+    expect(command).toContain("'--model' 'old'")
+    expect(command).not.toContain('gpt-5.6-terra')
+    expect(queuedStartups()[0]).not.toHaveProperty('sessionOptions')
   })
 })

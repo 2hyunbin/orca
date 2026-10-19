@@ -400,6 +400,9 @@
     },
     "sourceControl": {
       "actionModel": {
+        "on": "On",
+        "off": "Off",
+        "invalidArgs": "The CLI arguments for {{value0}} are invalid. Fix them in Settings → Source Control AI.",
         "model": "Model",
         "agentDefault": "Agent default",
         "effort": "Effort",

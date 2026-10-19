@@ -42,7 +42,8 @@ import { hasOwnActionOverride } from './repository-source-control-ai-draft'
 import { getRepositorySourceControlAiActionRecipeSectionId } from './repository-settings-targets'
 import { translate } from '@/i18n/i18n'
 import { SourceControlActionModelPicker } from './SourceControlActionModelPicker'
-import { getLaunchActionAgentArgsNote } from './source-control-action-model-copy'
+import { useSourceControlActionChatAgent } from './use-source-control-action-chat-agent'
+import { resolveSourceControlActionRecipe } from '../../../../shared/source-control-ai-operation-policy'
 
 type RepositorySourceControlAiActionRowsProps = {
   repoId: string
@@ -65,21 +66,6 @@ type RepositorySourceControlAiActionRowsProps = {
   onActionSave: (actionId: SourceControlActionId) => void
 }
 
-/** What the launch will run: the repo's own model, else the global one while the agent matches. */
-function readEffectiveLaunchPreferences(
-  override: NonNullable<RepoSourceControlAiOverrides['actionOverrides']>[SourceControlActionId],
-  source: SourceControlAiSettings,
-  actionId: SourceControlActionId
-): SourceControlActionLaunchPreferences | undefined {
-  const global = source.actions?.[actionId]
-  if (override?.launchPreferences) {
-    return override.launchPreferences
-  }
-  return override?.agentId === undefined || override.agentId === global?.agentId
-    ? global?.launchPreferences
-    : undefined
-}
-
 export function RepositorySourceControlAiActionRows({
   repoId,
   repoAi,
@@ -96,6 +82,7 @@ export function RepositorySourceControlAiActionRows({
   onActionDiscard,
   onActionSave
 }: RepositorySourceControlAiActionRowsProps): React.JSX.Element {
+  const resolveChatAgent = useSourceControlActionChatAgent(null, defaultTuiAgent).resolve
   return (
     <div className="space-y-3">
       <Label className="text-xs font-medium">
@@ -115,7 +102,13 @@ export function RepositorySourceControlAiActionRows({
             : ''
         const agentArgsValue =
           hasOverride && typeof override?.agentArgs === 'string' ? override.agentArgs : ''
-        const effectiveAgent = hasOverride ? override?.agentId : source.actions?.[actionId]?.agentId
+        const recipe = resolveSourceControlActionRecipe({
+          settings: { sourceControlAi: source },
+          repo: { sourceControlAi: repoAi },
+          actionId
+        })
+        const effectiveAgent = recipe.agentId
+        const actual = resolveChatAgent(effectiveAgent)
         const agentArgsPlaceholder =
           hasOverride && agentArgsValue
             ? ''
@@ -152,13 +145,15 @@ export function RepositorySourceControlAiActionRows({
                   <span>
                     {commandTemplateStateLabel({ hasOverride, inheritedTemplate, actionId })}
                   </span>
-                  <span>
-                    {agentArgsStateLabel({
-                      hasOverride,
-                      inheritedAgentArgs,
-                      repoAgentArgs: agentArgsValue
-                    })}
-                  </span>
+                  {!(isLaunchAction && actual.chat) ? (
+                    <span>
+                      {agentArgsStateLabel({
+                        hasOverride,
+                        inheritedAgentArgs,
+                        repoAgentArgs: agentArgsValue
+                      })}
+                    </span>
+                  ) : null}
                 </div>
               </div>
               <Select
@@ -236,32 +231,31 @@ export function RepositorySourceControlAiActionRows({
                 ) : agentSupportText ? (
                   <p className="text-[11px] text-muted-foreground">{agentSupportText}</p>
                 ) : null}
-                {isLaunchAction ? (
+                {isLaunchAction && actual.chat ? (
                   <SourceControlActionModelPicker
-                    agent={effectiveAgent ?? null}
-                    value={readEffectiveLaunchPreferences(override, source, actionId)}
-                    disabled={!hasOverride}
+                    agent={actual.agent}
+                    value={recipe.launchPreferences}
+                    disabled={!hasOverride || actual.loading}
                     onChange={(value) => onActionLaunchPreferencesChange(actionId, value)}
                   />
                 ) : null}
-                <Label className="text-[11px] text-muted-foreground">
-                  {translate(
-                    'auto.components.settings.RepositorySourceControlAiActionRows.7a3a8e431d',
-                    'CLI arguments'
-                  )}
-                </Label>
-                <Input
-                  value={agentArgsValue}
-                  onChange={(event) => onActionAgentArgsChange(actionId, event.target.value)}
-                  disabled={!hasOverride}
-                  placeholder={agentArgsPlaceholder}
-                  spellCheck={false}
-                  className="h-8 font-mono text-xs disabled:cursor-not-allowed disabled:bg-muted/40"
-                />
-                {isLaunchAction ? (
-                  <p className="text-[11px] text-muted-foreground">
-                    {getLaunchActionAgentArgsNote()}
-                  </p>
+                {!(isLaunchAction && actual.chat) ? (
+                  <>
+                    <Label className="text-[11px] text-muted-foreground">
+                      {translate(
+                        'auto.components.settings.RepositorySourceControlAiActionRows.7a3a8e431d',
+                        'CLI arguments'
+                      )}
+                    </Label>
+                    <Input
+                      value={agentArgsValue}
+                      onChange={(event) => onActionAgentArgsChange(actionId, event.target.value)}
+                      disabled={!hasOverride}
+                      placeholder={agentArgsPlaceholder}
+                      spellCheck={false}
+                      className="h-8 font-mono text-xs disabled:cursor-not-allowed disabled:bg-muted/40"
+                    />
+                  </>
                 ) : null}
               </div>
               <div className="space-y-2">

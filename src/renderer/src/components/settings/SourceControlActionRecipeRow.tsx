@@ -25,7 +25,7 @@ import {
 } from './source-control-action-recipe-options'
 import { translate } from '@/i18n/i18n'
 import { SourceControlActionModelPicker } from './SourceControlActionModelPicker'
-import { getLaunchActionAgentArgsNote } from './source-control-action-model-copy'
+import { useSourceControlActionChatAgent } from './use-source-control-action-chat-agent'
 
 const DEFAULT_AGENT_VALUE = '__default_agent__'
 
@@ -86,6 +86,7 @@ export function SourceControlActionRecipeRow<ActionId extends AiActionId>({
   onDiscard,
   onSave
 }: SourceControlActionRecipeRowProps<ActionId>): React.JSX.Element {
+  const actual = useSourceControlActionChatAgent(selectedAgent, defaultTuiAgent)
   const isLaunchAction = !AI_TEXT_ACTION_ID_SET.has(actionId)
   const templateDirty =
     hasUnsavedChanges ?? JSON.stringify(draftValue) !== JSON.stringify(baseValue)
@@ -147,34 +148,40 @@ export function SourceControlActionRecipeRow<ActionId extends AiActionId>({
           ) : agentSupportText ? (
             <p className="text-[11px] text-muted-foreground">{agentSupportText}</p>
           ) : null}
-          {isLaunchAction && onLaunchPreferencesChange ? (
+          {isLaunchAction && actual.chat && onLaunchPreferencesChange ? (
             <SourceControlActionModelPicker
-              agent={selectedAgent}
+              agent={actual.agent}
+              disabled={actual.loading}
               value={launchPreferences}
               onChange={(value) => onLaunchPreferencesChange(actionId, value)}
             />
           ) : null}
         </div>
       </div>
-      <div className="mt-3 grid gap-3 sm:grid-cols-[220px_1fr]">
-        <div className="space-y-2">
-          <Label className="text-[11px] text-muted-foreground">
-            {translate(
-              'auto.components.settings.SourceControlAiActionRecipeDefaults.2cb4bb7e5d',
-              'CLI arguments'
-            )}
-          </Label>
-          <Input
-            value={draftValue.agentArgs}
-            spellCheck={false}
-            placeholder={agentArgsPlaceholder}
-            onChange={(event) => onAgentArgsChange(actionId, event.target.value)}
-            className="h-8 font-mono text-xs"
-          />
-          {isLaunchAction ? (
-            <p className="text-[11px] text-muted-foreground">{getLaunchActionAgentArgsNote()}</p>
-          ) : null}
-        </div>
+      <div
+        className={
+          isLaunchAction && actual.chat
+            ? 'mt-3 space-y-3'
+            : 'mt-3 grid gap-3 sm:grid-cols-[220px_1fr]'
+        }
+      >
+        {!(isLaunchAction && actual.chat) ? (
+          <div className="space-y-2">
+            <Label className="text-[11px] text-muted-foreground">
+              {translate(
+                'auto.components.settings.SourceControlAiActionRecipeDefaults.2cb4bb7e5d',
+                'CLI arguments'
+              )}
+            </Label>
+            <Input
+              value={draftValue.agentArgs}
+              spellCheck={false}
+              placeholder={agentArgsPlaceholder}
+              onChange={(event) => onAgentArgsChange(actionId, event.target.value)}
+              className="h-8 font-mono text-xs"
+            />
+          </div>
+        ) : null}
         <div className="space-y-2">
           <Label className="text-[11px] text-muted-foreground">
             {translate(

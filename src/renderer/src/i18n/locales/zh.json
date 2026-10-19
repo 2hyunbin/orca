@@ -223,6 +223,9 @@
     },
     "sourceControl": {
       "actionModel": {
+        "on": "开启",
+        "off": "关闭",
+        "invalidArgs": "{{value0}} 的 CLI 参数无效。请在设置 → Source Control AI 中修正。",
         "model": "模型",
         "agentDefault": "智能体默认",
         "effort": "推理强度",

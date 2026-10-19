@@ -223,6 +223,9 @@
     },
     "sourceControl": {
       "actionModel": {
+        "on": "オン",
+        "off": "オフ",
+        "invalidArgs": "{{value0}} の CLI 引数が無効です。設定 → Source Control AI で修正してください。",
         "model": "モデル",
         "agentDefault": "Agent の既定",
         "effort": "推論レベル",

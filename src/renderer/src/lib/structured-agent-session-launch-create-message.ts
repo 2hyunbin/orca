@@ -1,3 +1,4 @@
+import { structuredLaunchRequestedOptions } from '../../../shared/native-chat-session-option-defaults'
 import { structuredAgentSessionCreateFingerprint } from '../../../shared/structured-agent-session-mutation'
 import type { StructuredLaunchState } from './structured-agent-session-launch-registry'
 import { notifyStructuredLaunchListeners } from './structured-agent-session-launch-registry'
@@ -14,6 +15,7 @@ import { structuredAgentSessionOptionSnapshot } from '../../../shared/structured
 import { firstFrameOptionState } from '@/components/native-chat/use-structured-agent-session-option-state'
 import {
   applyStructuredLaunchHeldOptions,
+  applyStructuredLaunchExplicitOptions,
   settleStructuredLaunchCreateOptions
 } from './structured-agent-session-launch-options'
 
@@ -56,6 +58,10 @@ function structuredLaunchCreateOptions(
   state: StructuredLaunchState
 ): Readonly<Record<string, string>> | undefined {
   const { intent, selection } = state
+  const requested = structuredLaunchRequestedOptions(selection)
+  if (requested) {
+    return requested
+  }
   const firstFrame = firstFrameOptionState(intent.agent, intent.target, {
     newLaunch: !intent.params.resumeFrom,
     worktree: intent.params.worktree,
@@ -81,7 +87,7 @@ export function publishStructuredLaunchCreateOptions(
   receipt: StructuredAgentLaunchReceipt
 ): StructuredAgentLaunchReceipt | Promise<StructuredAgentLaunchReceipt> {
   if (state.intent.createMessageSupport !== true) {
-    return applyStructuredLaunchHeldOptions(state, receipt)
+    return applyStructuredLaunchExplicitOptions(state, receipt)
   }
   settleStructuredLaunchCreateOptions(state, state.intent.params.options ?? {})
   void applyStructuredLaunchHeldOptions(state, receipt).catch((error: unknown) => {

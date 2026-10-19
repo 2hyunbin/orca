@@ -77,7 +77,11 @@ describe('source-control AI recipe saves', () => {
   })
 
   it('keeps the action model when saving a repo recipe', () => {
-    const launchPreferences = { model: 'gpt-5.6-terra', effort: 'high' }
+    const launchPreferences = {
+      agentId: 'codex' as const,
+      model: 'gpt-5.6-terra',
+      options: { effort: 'high' }
+    }
     const result = saveSourceControlActionRecipe({
       target: { type: 'repo', repoId: 'repo-1' },
       settings: settings(),

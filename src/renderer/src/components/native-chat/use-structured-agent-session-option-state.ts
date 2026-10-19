@@ -1,3 +1,5 @@
+import type { StructuredAgentSessionMutate } from './use-structured-agent-session-mutate'
+import type { StructuredAgentSessionLaunchView } from './use-native-chat-provisional-launch'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AgentSessionConversationCommand } from '../../../../shared/agent-session-conversation-command'
 import type { AgentSessionOptionsResult } from '../../../../shared/agent-session-wire'
@@ -218,8 +220,9 @@ export function useStructuredAgentSessionOptionState(args: {
     (
       state: StructuredAgentSessionOptionState,
       seed: Readonly<Record<string, string>> | undefined,
-      held: Readonly<Record<string, string>>
-    ) => structuredAgentSessionOptionView(state, seed, held, takesSendOptions),
+      held: Readonly<Record<string, string>>,
+      explicit?: Readonly<Record<string, string>>
+    ) => structuredAgentSessionOptionView(state, seed, held, takesSendOptions, explicit),
     [takesSendOptions]
   )
 
@@ -235,4 +238,21 @@ export function useStructuredAgentSessionOptionState(args: {
     optionMutationGeneration,
     updateOptionState
   }
+}
+
+export type StructuredAgentSessionOptionsArgs = {
+  agent: AgentType
+  sessionId: string
+  target: RuntimeClientTarget
+  transportEnabled: boolean
+  isVisible: boolean
+  providerVisible: boolean
+  providerStarting?: boolean
+  providerRunning?: boolean
+  hostOptionStamp?: string
+  fence: number | null
+  turnId: string | null
+  unloadedTurnRevisions: number | undefined
+  mutate: StructuredAgentSessionMutate
+  launch?: StructuredAgentSessionLaunchView
 }

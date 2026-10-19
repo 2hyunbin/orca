@@ -286,6 +286,7 @@ async function createSurface(
       worktreeId: workspace.worktreeId,
       agent: intent.agent,
       ...(intent.sessionOptions ? { options: intent.sessionOptions } : {}),
+      ...(intent.chatOptions ? { chatOptions: intent.chatOptions } : {}),
       ...(intent.sessionId ? { sessionId: intent.sessionId } : {}),
       ...(reservedTabId ? { tabId: reservedTabId } : {})
     })

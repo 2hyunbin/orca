@@ -1,13 +1,14 @@
 import {
   findCatalogModel,
-  findCatalogOption,
-  getAgentSessionOptionCatalog,
-  type CatalogOption
+  getAgentSessionOptionCatalog
 } from '../../../../shared/agent-session-option-catalog'
 import type { SourceControlActionLaunchPreferences } from '../../../../shared/source-control-ai-actions'
-import { sourceControlActionAgentPicksModel } from '../../../../shared/source-control-action-launch-preferences'
+import {
+  sourceControlActionAgentPicksModel,
+  sourceControlActionChatOptions
+} from '../../../../shared/source-control-action-launch-preferences'
+import { encodeStructuredAgentSessionOptionValue } from '../../../../shared/structured-agent-session-option-codec'
 import type { TuiAgent } from '../../../../shared/tui-agent'
-import type { CustomAgentId } from '../../../../shared/commit-message-agent-spec'
 import { Label } from '../ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { translate } from '@/i18n/i18n'
@@ -15,30 +16,12 @@ import { translate } from '@/i18n/i18n'
 const AGENT_DEFAULT_VALUE = '__agent_default__'
 
 type SourceControlActionModelPickerProps = {
-  agent: TuiAgent | CustomAgentId | null
+  agent: TuiAgent | null | undefined
   value: SourceControlActionLaunchPreferences | undefined
   disabled?: boolean
   onChange: (value: SourceControlActionLaunchPreferences | undefined) => void
 }
 
-function effortOptionFor(
-  agent: TuiAgent,
-  modelId: string | undefined
-): Extract<CatalogOption['kind'], { type: 'select' }> | null {
-  const catalog = getAgentSessionOptionCatalog(agent)
-  if (!catalog || !modelId) {
-    return null
-  }
-  const model = findCatalogModel(catalog, modelId)
-  const option =
-    findCatalogOption(model, 'effort') ??
-    (model
-      ? undefined
-      : catalog.unknownModelOptions?.find((candidate) => candidate.id === 'effort'))
-  return option?.kind.type === 'select' ? option.kind : null
-}
-
-/** The action's model and effort: data both routes apply, unlike CLI arguments. */
 export function SourceControlActionModelPicker({
   agent,
   value,
@@ -48,11 +31,13 @@ export function SourceControlActionModelPicker({
   if (!sourceControlActionAgentPicksModel(agent)) {
     return null
   }
-  const models = getAgentSessionOptionCatalog(agent)?.models ?? []
-  // Keeps a saved id the catalog no longer lists selectable, so the row shows what will run.
-  const savedUnlisted = value && !models.some((model) => model.id === value.model)
-  const effort = effortOptionFor(agent, value?.model)
-
+  const catalog = getAgentSessionOptionCatalog(agent)
+  if (!catalog) {
+    return null
+  }
+  const selected = value?.agentId === agent ? value : undefined
+  const unlisted = selected && !findCatalogModel(catalog, selected.model)
+  const options = selected ? sourceControlActionChatOptions(agent, selected.model) : []
   return (
     <div className="grid grid-cols-2 gap-2">
       <div className="space-y-1">
@@ -60,10 +45,10 @@ export function SourceControlActionModelPicker({
           {translate('settings.sourceControl.actionModel.model', 'Model')}
         </Label>
         <Select
-          value={value?.model ?? AGENT_DEFAULT_VALUE}
+          value={selected?.model ?? AGENT_DEFAULT_VALUE}
           disabled={disabled}
-          onValueChange={(next) =>
-            onChange(next === AGENT_DEFAULT_VALUE ? undefined : { model: next })
+          onValueChange={(model) =>
+            onChange(model === AGENT_DEFAULT_VALUE ? undefined : { agentId: agent, model })
           }
         >
           <SelectTrigger size="sm" className="h-8 w-full text-xs">
@@ -73,47 +58,70 @@ export function SourceControlActionModelPicker({
             <SelectItem value={AGENT_DEFAULT_VALUE}>
               {translate('settings.sourceControl.actionModel.agentDefault', 'Agent default')}
             </SelectItem>
-            {models.map((model) => (
+            {catalog.models.map((model) => (
               <SelectItem key={model.id} value={model.id}>
                 {model.label}
               </SelectItem>
             ))}
-            {savedUnlisted ? <SelectItem value={value.model}>{value.model}</SelectItem> : null}
+            {unlisted ? <SelectItem value={selected.model}>{selected.model}</SelectItem> : null}
           </SelectContent>
         </Select>
       </div>
-      {value && effort ? (
-        <div className="space-y-1">
-          <Label className="text-[11px] text-muted-foreground">
-            {translate('settings.sourceControl.actionModel.effort', 'Effort')}
-          </Label>
-          <Select
-            value={value.effort ?? AGENT_DEFAULT_VALUE}
-            disabled={disabled}
-            onValueChange={(next) =>
-              onChange(
-                next === AGENT_DEFAULT_VALUE
-                  ? { model: value.model }
-                  : { model: value.model, effort: next }
-              )
-            }
-          >
-            <SelectTrigger size="sm" className="h-8 w-full text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={AGENT_DEFAULT_VALUE}>
-                {translate('settings.sourceControl.actionModel.effortDefault', 'Default')}
-              </SelectItem>
-              {effort.choices.map((choice) => (
-                <SelectItem key={choice.value} value={choice.value}>
-                  {choice.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      ) : null}
+      {selected &&
+        options.map((option) => {
+          const choices =
+            option.kind.type === 'select'
+              ? option.kind.choices
+              : [
+                  {
+                    value: 'true',
+                    label: translate('settings.sourceControl.actionModel.on', 'On')
+                  },
+                  {
+                    value: 'false',
+                    label: translate('settings.sourceControl.actionModel.off', 'Off')
+                  }
+                ]
+          const current = selected.options?.[option.id]
+          return (
+            <div key={option.id} className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground">{option.label}</Label>
+              <Select
+                value={current ?? AGENT_DEFAULT_VALUE}
+                disabled={disabled}
+                onValueChange={(next) => {
+                  const { [option.id]: _old, ...rest } = selected.options ?? {}
+                  const encoded =
+                    next === AGENT_DEFAULT_VALUE
+                      ? null
+                      : encodeStructuredAgentSessionOptionValue(
+                          option.id,
+                          option.kind.type === 'boolean' ? next === 'true' : next
+                        )
+                  const values = { ...rest, ...(encoded === null ? {} : { [option.id]: encoded }) }
+                  onChange({ ...selected, options: values })
+                }}
+              >
+                <SelectTrigger size="sm" className="h-8 w-full text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={AGENT_DEFAULT_VALUE}>
+                    {translate('settings.sourceControl.actionModel.effortDefault', 'Default')}
+                  </SelectItem>
+                  {choices.map((choice) => (
+                    <SelectItem key={choice.value} value={choice.value}>
+                      {choice.label}
+                    </SelectItem>
+                  ))}
+                  {current && !choices.some((choice) => choice.value === current) ? (
+                    <SelectItem value={current}>{current}</SelectItem>
+                  ) : null}
+                </SelectContent>
+              </Select>
+            </div>
+          )
+        })}
     </div>
   )
 }

@@ -1,3 +1,4 @@
+import { structuredLaunchRequestedOptions } from '../../../../shared/native-chat-session-option-defaults'
 import { useCallback } from 'react'
 import { structuredAgentSessionOptionSnapshot } from '../../../../shared/structured-agent-session-options'
 import { structuredAgentSessionSendSelection } from '../../../../shared/structured-agent-session-option-view'
@@ -21,6 +22,14 @@ export function useStructuredAgentSessionSendOptions(
     }
     // Read, not rendered: a pick the launch just took is not in this render's props yet.
     const selection = getStructuredAgentSessionLaunchSelection(sessionId)
+    const requested = structuredLaunchRequestedOptions({
+      seed: selection?.seed ?? launch?.seedOptions,
+      explicit: selection?.explicit ?? launch?.explicitOptions,
+      held: { ...(selection?.held ?? launch?.heldOptions), ...pendingOptionsRef.current }
+    })
+    if (requested) {
+      return requested
+    }
     // A pick on its way resolves as the picker shows it, so a gone model it names is replaced too.
     const view = optionView(optionStateRef.current, selection?.seed ?? launch?.seedOptions, {
       ...(selection?.held ?? launch?.heldOptions),

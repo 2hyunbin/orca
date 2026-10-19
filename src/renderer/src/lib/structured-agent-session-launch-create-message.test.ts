@@ -51,7 +51,10 @@ import {
 } from './structured-agent-session-launch'
 import { holdStructuredAgentSessionLaunchOption } from './structured-agent-session-launch-options'
 import { recordHostModelCatalogSnapshot } from '@/runtime/host-model-catalog-snapshots'
-import { resetStructuredAgentLaunchRegistryForTests } from './structured-agent-session-launch-registry'
+import {
+  resetStructuredAgentLaunchRegistryForTests,
+  getStructuredLaunchStateBySessionId
+} from './structured-agent-session-launch-registry'
 import {
   resetStructuredAgentLaunchPersistenceForTests,
   readStructuredAgentLaunchRecord
@@ -65,7 +68,10 @@ import {
   resetStructuredAgentSessionReadOwnersForTests
 } from '@/components/native-chat/structured-agent-session-read-owner'
 import { resetStructuredAgentSessionSendsForTests } from '@/components/native-chat/structured-agent-session-message-sender'
-import { getStructuredAgentSessionPendingSends } from '@/components/native-chat/structured-agent-session-pending-sends'
+import {
+  getStructuredAgentSessionPendingSends,
+  getStructuredAgentSessionSendNotice
+} from '@/components/native-chat/structured-agent-session-pending-sends'
 import { structuredAgentSessionStopControl } from '@/components/native-chat/structured-agent-session-stop-control'
 import {
   clearNativeChatDraftCacheForTests,
@@ -231,26 +237,36 @@ describe('the first message owned by create', () => {
     }
   )
 
-  it("starts the chat on an action's model and effort over the saved default", async () => {
-    mocks.settings = {
-      nativeChatSessionOptions: {
-        codex: { model: 'gpt-5.5', valuesByModel: { 'gpt-5.5': { effort: 'low' } } }
+  it.each(['codex', 'claude'] as const)(
+    'creates %s on an unlisted explicit model without importing saved effort',
+    async (agent) => {
+      mocks.settings = {
+        nativeChatSessionOptions: {
+          [agent]: { model: 'saved-model', valuesByModel: { 'saved-model': { effort: 'low' } } }
+        }
+      }
+      mocks.call.mockImplementation(async () => created())
+      try {
+        const launch = startStructuredAgentLaunch('workspace-1', agent, {
+          requestId: newAgentLaunchRequestId(),
+          executionHostId: 'local',
+          prompt: 'opening text',
+          launchOptions: { model: 'unlisted-action-model' }
+        })
+        expect(readStructuredAgentLaunchRecord(launch.sessionId)?.explicitLaunchOptions).toEqual({
+          model: 'unlisted-action-model'
+        })
+        expect(getStructuredLaunchStateBySessionId(launch.sessionId)?.selection.held).toEqual({})
+        await launch.launchResult
+        expect(createParams().options).toEqual({
+          model: 'unlisted-action-model',
+          permissionMode: 'ask'
+        })
+      } finally {
+        mocks.settings = {}
       }
     }
-    mocks.call.mockImplementation(async () => created())
-    try {
-      const launch = startStructuredAgentLaunch('workspace-1', 'codex', {
-        requestId: newAgentLaunchRequestId(),
-        executionHostId: 'local',
-        prompt: 'opening text',
-        launchOptions: { model: 'gpt-5.6-terra', effort: 'high' }
-      })
-      await launch.launchResult
-      expect(createParams().options).toMatchObject({ model: 'gpt-5.6-terra', effort: 'high' })
-    } finally {
-      mocks.settings = {}
-    }
-  })
+  )
 
   it('returns a refused create once after the new draft, with no later send', async () => {
     const create = deferred<unknown>()
@@ -311,7 +327,12 @@ describe('the first message owned by create', () => {
         }
       }
     })
-    const launch = start()
+    const launch = startStructuredAgentLaunch('workspace-1', 'claude', {
+      requestId: newAgentLaunchRequestId(),
+      executionHostId: 'local',
+      prompt: 'opening text',
+      launchOptions: { fastMode: 'true' }
+    })
     mocks.inventory.mockResolvedValue([
       { worktree: 'workspace-1', tabs: [{ type: 'agent-session', sessionId: launch.sessionId }] }
     ])
@@ -324,6 +345,55 @@ describe('the first message owned by create', () => {
       'agentSession.send'
     ])
   })
+
+  it.each(['model', 'effort'])(
+    'keeps the legacy chat and text when required %s is refused, with no fresh Retry',
+    async (refused) => {
+      mocks.supports.mockResolvedValue(false)
+      mocks.call.mockImplementation(async (_target, method, params) => {
+        if (method === 'agentSession.create') {
+          return created()
+        }
+        const key = params && typeof params === 'object' && 'key' in params ? params.key : null
+        return key === refused
+          ? {
+              ok: false,
+              refusal: {
+                code: 'agent_session_operation_invalid',
+                details: { reason: 'optionRejected' },
+                message: 'unavailable'
+              }
+            }
+          : { ok: true, value: { options: { model: 'action-model' } } }
+      })
+      const launch = startStructuredAgentLaunch('workspace-1', 'codex', {
+        requestId: newAgentLaunchRequestId(),
+        executionHostId: 'local',
+        prompt: 'opening text',
+        launchOptions: { model: 'action-model', effort: 'high' }
+      })
+      mocks.inventory.mockResolvedValue([
+        { worktree: 'workspace-1', tabs: [{ type: 'agent-session', sessionId: launch.sessionId }] }
+      ])
+      const receipt = await launch.launchResult
+      expect(receipt).toMatchObject({ sessionId: launch.sessionId, configurationFailure: {} })
+      await expect(launch.promptDeliveryResult).resolves.toMatchObject({
+        delivered: false,
+        inComposer: true,
+        failureNotified: true
+      })
+      expect(draft(launch.sessionId)).toBe('opening text')
+      expect(getStructuredAgentSessionSendNotice(launch.sessionId)).toContain('Codex')
+      expect(mocks.call.mock.calls.filter(([, method]) => method === 'agentSession.send')).toEqual(
+        []
+      )
+      expect(retryStructuredAgentSessionLaunch('workspace-1', launch.sessionId)).toBe(false)
+      expect(readStructuredAgentLaunchRecord(launch.sessionId)).toBeUndefined()
+      expect(
+        mocks.call.mock.calls.filter(([, method]) => method === 'agentSession.create')
+      ).toHaveLength(1)
+    }
+  )
 
   it('keeps the older host acquisition wait outside the send deadline', async () => {
     const create = deferred<unknown>()

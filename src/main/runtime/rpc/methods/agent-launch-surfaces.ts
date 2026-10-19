@@ -63,11 +63,12 @@ export function agentLaunchSurfaceFactory(
       worktreeId,
       agent,
       options,
+      chatOptions,
       sessionId: requested,
       tabId
     }) => {
       const sessionId = requested ?? createStructuredAgentSessionId(agent, randomUUID)
-      const seeded = narrowStructuredLaunchSeedOptions(options)
+      const seeded = chatOptions ?? narrowStructuredLaunchSeedOptions(options)
       const created = await createStructuredAgentSessionForWorktree({
         runtime: context.runtime,
         ensureHost: async () => {

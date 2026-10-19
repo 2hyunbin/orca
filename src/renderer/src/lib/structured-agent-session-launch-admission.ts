@@ -92,7 +92,7 @@ function notifyHostUnreachable(agent: TuiAgent, executionHostId: ExecutionHostId
 /** What the caller's own terminal launch would have carried beyond the plan's agent and prompt. */
 export type DeclinedStructuredLaunchTerminalOptions = Pick<
   LaunchAgentInNewTabArgs,
-  'agentArgs' | 'sessionOptions' | 'launchPlatform' | 'launchSource' | 'initialCwd'
+  'agentArgs' | 'launchPlatform' | 'launchSource' | 'initialCwd'
 >
 
 /** A caller with no terminal path of its own gets the one a new agent tab would open. */
@@ -103,8 +103,8 @@ export async function openDeclinedStructuredLaunchTerminal(args: {
   terminal?: DeclinedStructuredLaunchTerminalOptions
 }): Promise<StructuredLaunchTerminal> {
   // Loaded late: the new-tab launcher begins these launches.
-  const { launchAgentInNewTab } = await import('@/lib/launch-agent-in-new-tab')
-  const result = launchAgentInNewTab({
+  const { launchAgentInNewTabWithOutcome } = await import('@/lib/launch-agent-in-new-tab')
+  const result = launchAgentInNewTabWithOutcome({
     ...args.terminal,
     agent: args.plan.agent,
     worktreeId: args.worktreeId,
@@ -120,6 +120,9 @@ export async function openDeclinedStructuredLaunchTerminal(args: {
       worktreeId: args.worktreeId
     })
   })
+  if (result && 'refused' in result) {
+    return { opened: false, promptDeliveryResult: Promise.resolve(result.refused) }
+  }
   return {
     opened: result !== null,
     ...(result?.promptDeliveryResult ? { promptDeliveryResult: result.promptDeliveryResult } : {})
@@ -200,10 +203,10 @@ export function beginHostAdmittedStructuredLaunch(args: {
           }
         }
         // The notice explains a server's refusal; on this machine the terminal opening is the answer.
-        if (paired) {
+        const terminal = await args.onHostDeclined(args.target)
+        if (paired && terminal.opened) {
           notifyHostDeclined(plan.agent)
         }
-        const terminal = await args.onHostDeclined(args.target)
         void (
           terminal.promptDeliveryResult ??
           Promise.resolve(terminal.opened ? DELIVERED : NOT_DELIVERED)

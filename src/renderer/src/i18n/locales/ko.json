@@ -223,6 +223,9 @@
     },
     "sourceControl": {
       "actionModel": {
+        "on": "켜짐",
+        "off": "꺼짐",
+        "invalidArgs": "{{value0}}의 CLI 인수가 올바르지 않습니다. 설정 → Source Control AI에서 수정하세요.",
         "model": "모델",
         "agentDefault": "에이전트 기본값",
         "effort": "추론 수준",

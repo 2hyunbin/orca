@@ -1,33 +1,53 @@
-import { getAgentSessionOptionCatalog } from './agent-session-option-catalog'
+import {
+  findCatalogModel,
+  getAgentSessionOptionCatalog,
+  type CatalogOption
+} from './agent-session-option-catalog'
 import type { SourceControlActionRecipe } from './source-control-ai-actions'
 import { isTuiAgent } from './tui-agent-config'
 import type { TuiAgent } from './tui-agent'
+import { isAgentSessionHandleProvider } from './agent-session-provider-handle'
+import { STRUCTURED_LAUNCH_SEED_OPTION_IDS } from './native-chat-session-option-defaults'
 
 /** Agents whose model an action can pick: the ones whose session catalog lists models. */
 export function sourceControlActionAgentPicksModel(
   agent: string | null | undefined
 ): agent is TuiAgent {
-  return (
-    isTuiAgent(agent) &&
-    Boolean(getAgentSessionOptionCatalog(agent)?.supportsWorkerLaunchPreferences)
+  return isTuiAgent(agent) && Boolean(getAgentSessionOptionCatalog(agent)?.models.length)
+}
+
+/** Structured controls only; terminal-composed options have no chat implementation. */
+export function sourceControlActionChatOptions(agent: TuiAgent, modelId: string): CatalogOption[] {
+  const catalog = getAgentSessionOptionCatalog(agent)
+  const options =
+    findCatalogModel(catalog ?? { models: [], modelApply: {} }, modelId)?.options ??
+    catalog?.unknownModelOptions ??
+    []
+  return options.filter(
+    (option) =>
+      !option.apply.composedIntoModel &&
+      (isAgentSessionHandleProvider(agent)
+        ? STRUCTURED_LAUNCH_SEED_OPTION_IDS.some((id) => id === option.id)
+        : option.id === 'effort')
   )
 }
 
-/**
- * The model and effort an action's launch runs on, for whichever route opens it; the execution
- * host validates them. Only the recipe's own agent gets them: another agent would not know the id.
- */
+/** The resolved agent alone can receive its bound action choice. */
 export function resolveSourceControlActionSessionOptions(
   recipe: Pick<SourceControlActionRecipe, 'agentId' | 'launchPreferences'>,
   agent: TuiAgent
 ): Readonly<Record<string, string>> | undefined {
   const preferences = recipe.launchPreferences
-  if (!preferences || recipe.agentId !== agent) {
+  if (
+    !preferences ||
+    preferences.agentId !== agent ||
+    (recipe.agentId != null && recipe.agentId !== agent)
+  ) {
     return undefined
   }
   return {
-    model: preferences.model,
-    ...(preferences.effort ? { effort: preferences.effort } : {})
+    ...preferences.options,
+    model: preferences.model
   }
 }
 
@@ -38,7 +58,7 @@ export function withSavedSourceControlActionLaunchPreferences<
   recipe: T,
   saved: Pick<SourceControlActionRecipe, 'agentId' | 'launchPreferences'>
 ): T & Pick<SourceControlActionRecipe, 'launchPreferences'> {
-  return saved.launchPreferences && saved.agentId === recipe.agentId
+  return saved.launchPreferences && saved.launchPreferences.agentId === recipe.agentId
     ? { ...recipe, launchPreferences: saved.launchPreferences }
     : recipe
 }

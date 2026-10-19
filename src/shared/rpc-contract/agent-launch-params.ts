@@ -12,6 +12,7 @@
  */
 
 import { z } from 'zod'
+import { isAgentSessionOptions } from '../agent-session-record'
 import { parseAgentSessionOperationTimestamp } from '../agent-session-host-authority'
 import { parsePaneKey } from '../stable-pane-id'
 import { isValidHostTerminalTabId } from '../terminal-tab-id'
@@ -86,6 +87,7 @@ export const AgentLaunchFields = z.object({
     .optional(),
   /** A chat seeds the options it accepts; a terminal launch reads the model, effort and mode. */
   sessionOptions: z.record(z.string(), z.string()).optional(),
+  chatOptions: z.record(z.string(), z.string()).refine(isAgentSessionOptions).optional(),
   reuseTerminal: z.object({ handle: z.string().min(1, 'Missing terminal handle') }).optional(),
   /** Nullable on purpose: `null` is "no arguments", absent is "use the settings default". */
   agentArgs: z.string().nullable().optional(),

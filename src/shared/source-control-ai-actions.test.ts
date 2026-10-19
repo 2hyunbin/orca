@@ -133,7 +133,11 @@ describe('source-control AI launch action defaults', () => {
     ).toEqual({
       fixChecks: {
         agentId: 'codex',
-        launchPreferences: { model: 'gpt-5.6-terra', effort: 'high' }
+        launchPreferences: {
+          agentId: 'codex' as const,
+          model: 'gpt-5.6-terra',
+          options: { effort: 'high' }
+        }
       },
       resolveConflicts: { agentId: 'claude' },
       resolveComments: { agentId: 'claude' }
@@ -142,7 +146,10 @@ describe('source-control AI launch action defaults', () => {
 
   it('drops the saved model when the action changes agent', () => {
     const defaults = {
-      fixChecks: { agentId: 'codex' as const, launchPreferences: { model: 'gpt-5.6-terra' } }
+      fixChecks: {
+        agentId: 'codex' as const,
+        launchPreferences: { agentId: 'codex' as const, model: 'gpt-5.6-terra' }
+      }
     }
 
     expect(setSourceControlActionAgentDefault(defaults, 'fixChecks', 'codex')).toEqual(defaults)
@@ -154,7 +161,11 @@ describe('source-control AI launch action defaults', () => {
   it('gives the saved model and effort only to the recipe agent', () => {
     const recipe = {
       agentId: 'codex' as const,
-      launchPreferences: { model: 'gpt-5.6-terra', effort: 'high' }
+      launchPreferences: {
+        agentId: 'codex' as const,
+        model: 'gpt-5.6-terra',
+        options: { effort: 'high' }
+      }
     }
 
     expect(resolveSourceControlActionSessionOptions(recipe, 'codex')).toEqual({

@@ -34,8 +34,12 @@ const CHAT_HOST: RuntimeClientTarget = { kind: 'local' }
 const BUILT_IN_CHAT_AGENTS: readonly TuiAgent[] = ['claude', 'codex']
 
 /** Claude and Codex, then the other agents this computer's host registered for chat. */
-function useLocalChatAgents(): TuiAgent[] {
-  useSyncExternalStore(subscribeHostStructuredAgents, hostStructuredAgentsVersion)
+export function useLocalChatAgents(): TuiAgent[] {
+  useSyncExternalStore(
+    subscribeHostStructuredAgents,
+    hostStructuredAgentsVersion,
+    hostStructuredAgentsVersion
+  )
   const registered = readHostStructuredAgents(LOCAL_EXECUTION_HOST_ID, undefined) ?? []
   return [
     ...new Set([

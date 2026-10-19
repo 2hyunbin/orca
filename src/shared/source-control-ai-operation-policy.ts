@@ -207,8 +207,7 @@ export function resolveSourceControlActionRecipe(input: {
   }
   // A model belongs to its agent, so a repo on another agent never inherits the global model.
   const { launchPreferences: globalLaunchPreferences, ...globalWithoutModel } = globalRecipe
-  const repoKeepsGlobalAgent =
-    repoRecipe.agentId === undefined || repoRecipe.agentId === globalRecipe.agentId
+  const repoKeepsGlobalAgent = repoRecipe.agentId === undefined
   const launchPreferences =
     repoRecipe.launchPreferences ?? (repoKeepsGlobalAgent ? globalLaunchPreferences : undefined)
   return {
