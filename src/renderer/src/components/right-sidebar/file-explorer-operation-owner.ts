@@ -1,4 +1,3 @@
-import { getConnectionIdFromState } from '@/lib/connection-context'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
 import {
@@ -7,16 +6,12 @@ import {
   toSshExecutionHostId,
   type ExecutionHostId
 } from '../../../../shared/execution-host'
-import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
+import type { HostAuthority } from '../../../../shared/host-authority'
 import { translate } from '@/i18n/i18n'
-import { runtimeEnvironmentIdForWorkspaceOwner } from '@/lib/resolve-owner'
+import { resolveOwner } from '@/lib/resolve-owner'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import type { FileExplorerOperationOwner } from './file-explorer-types'
-import {
-  getFloatingWorkspaceOperationRoute,
-  resolveWorktreeOperationRoute,
-  type WorktreeOperationRoute
-} from '@/lib/worktree-operation-route'
+import type { WorktreeOperationRoute } from '@/lib/worktree-operation-route'
 import { captureWorktreeOperationGenerationGuard } from '@/lib/worktree-operation-generation'
 
 const ownerUnresolved = (): Error => new Error(getFileExplorerOwnerUnresolvedMessage())
@@ -46,55 +41,34 @@ export type FileExplorerOwnerState = Pick<
 > &
   Partial<Pick<AppState, 'activeWorktreeId' | 'activeWorkspaceExecutionHostId'>>
 
+/**
+ * The owner every File Explorer read and write routes to: the strict owner alone, so a twin or a
+ * workspace no row places refuses instead of falling back to focus or this app's own connection.
+ */
 export function getFileExplorerOperationOwnerFromState(
   state: FileExplorerOwnerState,
   worktreeId: string | null | undefined
 ): FileExplorerOperationOwner {
-  const floatingRoute = worktreeId ? getFloatingWorkspaceOperationRoute(worktreeId) : null
-  if (floatingRoute?.executionHostId) {
-    return operationOwnerFromHostId(floatingRoute.executionHostId)
+  if (!worktreeId) {
+    return { kind: 'local' }
   }
-  const parsedWorkspace = worktreeId ? parseWorkspaceKey(worktreeId) : null
-  if (worktreeId && parsedWorkspace?.type !== 'folder') {
-    const route = resolveWorktreeOperationRoute(state, worktreeId)
-    if (!route) {
-      return { kind: 'unresolved' }
-    }
-    if (route.runtimeEnvironmentId) {
-      return {
-        kind: 'runtime',
-        environmentId: route.runtimeEnvironmentId,
-        executionHostId:
-          route.executionHostId ?? toRuntimeExecutionHostId(route.runtimeEnvironmentId)
-      }
-    }
-    if (route.executionHostId) {
-      return operationOwnerFromHostId(route.executionHostId)
-    }
-  }
+  const match = resolveOwner(state, { workspaceId: worktreeId })
+  return match.kind === 'resolved'
+    ? operationOwnerFromAuthority(match.owner)
+    : { kind: 'unresolved' }
+}
 
-  const explicitOwner = worktreeId
-    ? runtimeEnvironmentIdForWorkspaceOwner(state, { workspaceId: worktreeId })
-    : null
-  // Why: file writes and deletes must not pick one of two hosts that publish this workspace.
-  if (explicitOwner?.kind === 'ambiguous') {
-    return { kind: 'unresolved' }
-  }
-  const runtimeEnvironmentId = explicitOwner?.environmentId?.trim()
-  if (runtimeEnvironmentId) {
+/** Keeps both halves of the pair: a server's nested SSH target stays the write's host (review-5 #9). */
+function operationOwnerFromAuthority({ endpoint, at }: HostAuthority): FileExplorerOperationOwner {
+  if (endpoint.kind === 'environment') {
     return {
       kind: 'runtime',
-      environmentId: runtimeEnvironmentId,
-      executionHostId: toRuntimeExecutionHostId(runtimeEnvironmentId)
+      environmentId: endpoint.environmentId,
+      executionHostId: at === 'local' ? toRuntimeExecutionHostId(endpoint.environmentId) : at
     }
   }
-  const connectionId = getConnectionIdFromState(state, worktreeId ?? null)
-  // Why: global runtime focus is not ownership evidence while SSH/local
-  // metadata is unresolved; destructive actions must wait for explicit provenance.
-  if (connectionId === undefined) {
-    return { kind: 'unresolved' }
-  }
-  return connectionId ? { kind: 'ssh', connectionId } : { kind: 'local' }
+  const host = parseExecutionHostId(at)
+  return host?.kind === 'ssh' ? { kind: 'ssh', connectionId: host.targetId } : { kind: 'local' }
 }
 
 export function getFileExplorerOperationOwner(
@@ -249,18 +223,4 @@ export function getFileExplorerOwnerUnresolvedMessage(): string {
     'auto.components.right.sidebar.fileExplorerOperationOwner.unresolved',
     "Couldn't determine which host owns this workspace. Check the connection and try again."
   )
-}
-
-function operationOwnerFromHostId(hostId: ExecutionHostId): FileExplorerOperationOwner {
-  const parsed = parseExecutionHostId(hostId)
-  switch (parsed?.kind) {
-    case 'local':
-      return { kind: 'local' }
-    case 'ssh':
-      return { kind: 'ssh', connectionId: parsed.targetId }
-    case 'runtime':
-      return { kind: 'runtime', environmentId: parsed.environmentId, executionHostId: hostId }
-    case undefined:
-      return { kind: 'unresolved' }
-  }
 }
