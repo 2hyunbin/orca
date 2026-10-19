@@ -223,25 +223,29 @@ describe('a journal an older desktop rewrote', () => {
     writeFileSync(path, JSON.stringify(record))
   }
 
-  it('is asked and aborted by its signed copy, then re-exported from the live source', async () => {
+  it('is restored from its signed copy and resumes the manifest the host holds', async () => {
     const h = await fenced({ 'a.ts': 'rolled back' })
+    const signed = h.journal().manifest
     await stageOrcadMigrationDestination(h.context, h.migrationId)
     rollBack(h)
-    saveDrafts(h.store, { 'a.ts': 'after the upgrade' })
+    expect(h.journal().manifest.payload.dormantState?.editorDraftsBlob).toBeUndefined()
 
     await expect(commitOrcadMigrationDestination(h.context, h.migrationId)).resolves.toMatchObject({
       phase: 'destination-committed'
     })
-    expect(h.destination.abort).toHaveBeenCalledTimes(1)
-    // Re-exported for a host that still takes the blob, so the live draft goes shed again.
-    expect(
-      draftsOf(
-        parseOrcadMigrationEditorDraftsBytes(
-          h.destination.blobBytes.get(h.migrationId)!,
-          h.journal().manifest.payload.dormantState!.editorDraftsBlob!
-        )
-      )
-    ).toEqual({ 'a.ts': 'after the upgrade' })
+    expect(h.destination.abort).not.toHaveBeenCalled()
+    expect(h.journal().manifest).toEqual(signed)
+    expect(h.destination.commit.mock.calls.at(-1)?.[0]).toEqual(signed)
+  })
+
+  it('is restored before a conversion relinks projects, whose first query needs the digest', async () => {
+    const h = await fenced({ 'a.ts': 'rolled back' })
+    rollBack(h)
+    const { restoreSignedOrcadMigrationJournal } =
+      await import('./orcad-migration-editor-drafts-recovery')
+    const restored = restoreSignedOrcadMigrationJournal(h.userDataPath, h.journal())
+    expect(restored.manifest.payload.dormantState?.editorDraftsBlob).toBeDefined()
+    expect(h.journal().manifest).toEqual(restored.manifest)
   })
 
   it('stays unverifiable, with nothing aborted, when the signed copy is gone too', async () => {

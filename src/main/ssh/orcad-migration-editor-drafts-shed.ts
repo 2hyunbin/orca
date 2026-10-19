@@ -45,26 +45,28 @@ export function shedOrcadMigrationEditorDrafts(payload: OrcadMigrationCatalogPay
   payload: OrcadMigrationCatalogPayload
   body: OrcadMigrationEditorDraftsBody | null
 } {
-  const session = payload.dormantState?.workspaceSession
-  if (!payload.dormantState || !session?.openFilesByWorktree) {
+  if (!payload.dormantState?.workspaceSession?.openFilesByWorktree) {
+    return { payload, body: null }
+  }
+  // A copy edited in place, as the path rewrite does: the source session is never touched.
+  const shed = structuredClone(payload)
+  const dormant = shed.dormantState
+  if (!dormant) {
     return { payload, body: null }
   }
   const drafts: OrcadMigrationEditorDraft[] = []
-  const openFilesByWorktree = Object.fromEntries(
-    Object.entries(session.openFilesByWorktree).map(([worktreeKey, files]) => [
-      worktreeKey,
-      files.map((file) => {
-        // The declaration names an entry by path, so a path open twice keeps its draft inline.
-        const unique = files.filter((other) => other.filePath === file.filePath).length === 1
-        if (file.dirtyDraftContent === undefined || !unique) {
-          return file
-        }
-        const { dirtyDraftContent: content, ...rest } = file
-        drafts.push({ worktreeKey, filePath: file.filePath, content })
-        return rest
-      })
-    ])
-  )
+  for (const [worktreeKey, files] of Object.entries(
+    dormant.workspaceSession?.openFilesByWorktree ?? {}
+  )) {
+    for (const file of files) {
+      // The declaration names an entry by path, so a path open twice keeps its draft inline.
+      const unique = files.filter((other) => other.filePath === file.filePath).length === 1
+      if (file.dirtyDraftContent !== undefined && unique) {
+        drafts.push({ worktreeKey, filePath: file.filePath, content: file.dirtyDraftContent })
+        delete file.dirtyDraftContent
+      }
+    }
+  }
   if (drafts.length === 0) {
     return { payload, body: null }
   }
@@ -86,15 +88,9 @@ export function shedOrcadMigrationEditorDrafts(payload: OrcadMigrationCatalogPay
     byteLength: bytes.byteLength,
     entries: drafts.map(({ worktreeKey, filePath }) => ({ worktreeKey, filePath }))
   }
+  dormant.editorDraftsBlob = declaration
   return {
-    payload: {
-      ...payload,
-      dormantState: {
-        ...payload.dormantState,
-        workspaceSession: { ...session, openFilesByWorktree },
-        editorDraftsBlob: declaration
-      }
-    },
+    payload: shed,
     body: { descriptor: orcadMigrationEditorDraftsDescriptor(declaration), bytes }
   }
 }

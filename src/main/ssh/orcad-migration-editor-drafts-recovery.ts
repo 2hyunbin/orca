@@ -19,6 +19,7 @@ import {
 } from './orcad-migration-editor-drafts-cutover'
 import { readOrcadMigrationSignedManifestSidecar } from './orcad-migration-editor-drafts-sidecar'
 import type { OrcadMigrationSourceCutoverPort } from './orcad-migration-source'
+import { writeOrcadMigrationSourceCutover } from './orcad-migration-cutover-journal'
 
 /**
  * A drafts-declaring manifest the host can no longer take, whose sidecar is gone, or whose journal
@@ -31,13 +32,7 @@ export async function replaceUndeliverableDrafts(
   cutover: OrcadMigrationSourceCutover
 ): Promise<OrcadMigrationSourceCutover> {
   const { destination, userDataPath } = context
-  const hostManifest = orcadMigrationManifestMatchesDigest(cutover.manifest)
-    ? cutover.manifest
-    : readOrcadMigrationSignedManifestSidecar(userDataPath, cutover)
-  if (!hostManifest) {
-    // Without the signed bytes the host can't be asked, so nothing is aborted.
-    throw unverifiableEditorDraftsState(new Error('orcad_migration_signed_manifest_missing'))
-  }
+  const hostManifest = cutover.manifest
   let state: OrcadMigrationCatalogState
   let shedDrafts: boolean
   try {
@@ -52,7 +47,7 @@ export async function replaceUndeliverableDrafts(
   if (state.state === 'committed') {
     return recordObservedState(
       context,
-      { ...cutover, manifest: hostManifest },
+      cutover,
       await confirmDurableCommit(destination, hostManifest, state)
     )
   }
@@ -65,4 +60,29 @@ export async function replaceUndeliverableDrafts(
     phase: 'source-fenced',
     updatedAt: (context.now ?? (() => new Date()))().toISOString()
   })
+}
+
+/**
+ * An older desktop rewriting the journal drops `editorDraftsBlob`, so its manifest no longer matches
+ * the digest the host checks. The exact signed copy beside the drafts restores it; without that copy
+ * the host can't be asked at all, so nothing is aborted and the move stays unverifiable.
+ */
+export function restoreSignedOrcadMigrationJournal(
+  userDataPath: string,
+  cutover: OrcadMigrationSourceCutover
+): OrcadMigrationSourceCutover {
+  if (
+    cutover.phase === 'destination-committed' ||
+    cutover.phase === 'source-retired' ||
+    orcadMigrationManifestMatchesDigest(cutover.manifest)
+  ) {
+    return cutover
+  }
+  const signed = readOrcadMigrationSignedManifestSidecar(userDataPath, cutover)
+  if (!signed) {
+    throw unverifiableEditorDraftsState(new Error('orcad_migration_signed_manifest_missing'))
+  }
+  const restored = { ...cutover, manifest: signed }
+  writeOrcadMigrationSourceCutover(userDataPath, restored)
+  return restored
 }

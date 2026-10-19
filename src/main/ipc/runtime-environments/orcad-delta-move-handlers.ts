@@ -20,7 +20,8 @@ export function registerOrcadDeltaMoveHandlers(getUserDataPath: () => string): v
     'runtimeEnvironments:previewOrcadDeltaMove',
     (_event, args: { sshTargetId: string }): OrcadDeltaMovePreview => {
       const { store, target } = requireChangedHost(args)
-      const plan = planOrcadDeltaMove(getUserDataPath(), store, target)
+      // Rows only: the move itself asks the server whether drafts shed, so size can't block here.
+      const plan = planOrcadDeltaMove(getUserDataPath(), store, target, { shedDrafts: true })
       const { sshTargetId, environmentId, added, notReflected, blockers } = plan
       return { sshTargetId, environmentId, added, notReflected, blockers }
     }

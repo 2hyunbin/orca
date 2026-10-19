@@ -30,7 +30,10 @@ import {
   confirmDurableCommit,
   recordObservedState
 } from './orcad-migration-cutover-observation'
-import { replaceUndeliverableDrafts } from './orcad-migration-editor-drafts-recovery'
+import {
+  replaceUndeliverableDrafts,
+  restoreSignedOrcadMigrationJournal
+} from './orcad-migration-editor-drafts-recovery'
 import type { OrcadMigrationSourceCutoverPort } from './orcad-migration-source'
 import {
   transferOrcadMigrationSnapshots,
@@ -42,7 +45,6 @@ import type { SshTargetOrcadClaims } from './targets/ssh-target-orcad-claims'
 import {
   editorDraftsExpectedBlobs,
   isEditorDraftsUndeliverable,
-  orcadMigrationManifestMatchesDigest,
   transferJournaledEditorDrafts
 } from './orcad-migration-editor-drafts-cutover'
 
@@ -117,12 +119,10 @@ export async function commitOrcadMigrationDestination(
   context: OrcadMigrationCutoverContext,
   migrationId: string
 ): Promise<OrcadMigrationSourceCutover> {
-  const cutover = requireCutover(context.userDataPath, migrationId)
-  // An older desktop's rewrite drops the drafts declaration, so the host would refuse the digest.
-  if (!isCommitted(cutover) && !orcadMigrationManifestMatchesDigest(cutover.manifest)) {
-    await replaceUndeliverableDrafts(context, cutoverSource(context), cutover)
-    return stageAndCommit(context, migrationId)
-  }
+  restoreSignedOrcadMigrationJournal(
+    context.userDataPath,
+    requireCutover(context.userDataPath, migrationId)
+  )
   try {
     return await stageAndCommit(context, migrationId)
   } catch (error) {
